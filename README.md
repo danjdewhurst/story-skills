@@ -31,6 +31,28 @@ cp -r story-skills/skills/* ~/.config/opencode/skills/
 
 OpenCode also searches `.claude/skills/` paths, so project-level Claude skills are automatically discovered.
 
+### Gemini CLI
+
+[Gemini CLI](https://github.com/google-gemini/gemini-cli) supports the same `SKILL.md` format via the [Agent Skills](https://agentskills.io) standard. Install directly from the repo:
+
+```shell
+# Install all skills globally
+gemini skills install https://github.com/danjdewhurst/story-skills.git
+
+# Or install a specific skill
+gemini skills install https://github.com/danjdewhurst/story-skills.git --path skills/story-init
+gemini skills install https://github.com/danjdewhurst/story-skills.git --path skills/character-management
+gemini skills install https://github.com/danjdewhurst/story-skills.git --path skills/worldbuilding
+gemini skills install https://github.com/danjdewhurst/story-skills.git --path skills/plot-structure
+gemini skills install https://github.com/danjdewhurst/story-skills.git --path skills/chapter-writing
+
+# Or link locally after cloning
+git clone https://github.com/danjdewhurst/story-skills.git
+gemini skills link story-skills/skills
+```
+
+Gemini will auto-discover the skills and activate them when your request matches a skill's description.
+
 ## Skills
 
 ### story-init
