@@ -74,6 +74,16 @@ Every story element is a markdown file with YAML frontmatter. Skills cross-refer
 - `_index.md` files serve as registries for each domain
 - Relationships and references are maintained bidirectionally
 
+## Using Without Claude Code
+
+The plugin system is Claude Code specific, but the skills themselves are just markdown — they work anywhere:
+
+- **Claude.ai Projects** — add the SKILL.md and reference files as project knowledge
+- **Claude API** — include skill content in system prompts
+- **Other LLMs** — the templates, workflows, and story structure are model-agnostic
+
+The automatic skill loading ("say 'create a character' and the right skill activates") only works in Claude Code. Everywhere else, you'd paste the relevant SKILL.md content into your conversation manually.
+
 ## License
 
 MIT
