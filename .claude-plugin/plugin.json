@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "A suite of cross-referenced skills for end-to-end story writing powered by markdown. Covers story initialization, character management, worldbuilding, plot structure, and chapter writing.",
   "author": {
-    "name": "Dan"
+    "name": "Daniel Dewhurst"
   },
   "license": "MIT",
   "keywords": ["story", "writing", "fiction", "characters", "worldbuilding", "chapters"]

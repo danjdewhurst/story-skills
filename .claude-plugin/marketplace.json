@@ -1,0 +1,11 @@
+{
+  "name": "story-skills",
+  "plugins": [
+    {
+      "name": "story-skills",
+      "source": ".",
+      "description": "A suite of cross-referenced skills for end-to-end story writing powered by markdown.",
+      "version": "0.1.0"
+    }
+  ]
+}
