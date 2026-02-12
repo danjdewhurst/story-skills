@@ -53,6 +53,23 @@ gemini skills link story-skills/skills
 
 Gemini will auto-discover the skills and activate them when your request matches a skill's description.
 
+### Codex (OpenAI)
+
+[Codex](https://github.com/openai/codex) uses the same `SKILL.md` format via the [Agent Skills](https://agentskills.io) standard. Copy the skill folders to any of Codex's discovery locations:
+
+```shell
+# Clone the repo
+git clone https://github.com/danjdewhurst/story-skills.git
+
+# Install to your user skills (available across all projects)
+cp -r story-skills/skills/* ~/.agents/skills/
+
+# Or install to a specific repo
+cp -r story-skills/skills/* .agents/skills/
+```
+
+You can also use the built-in installer or symlink the skills directory. Codex detects new skills automatically.
+
 ## Skills
 
 ### story-init
