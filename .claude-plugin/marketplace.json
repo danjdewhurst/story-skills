@@ -1,11 +1,26 @@
 {
   "name": "story-skills",
+  "description": "A suite of cross-referenced skills for end-to-end story writing powered by markdown",
+  "owner": {
+    "name": "Daniel Dewhurst",
+    "url": "https://github.com/danjdewhurst"
+  },
   "plugins": [
     {
       "name": "story-skills",
-      "source": ".",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/danjdewhurst/story-skills.git"
+      },
       "description": "A suite of cross-referenced skills for end-to-end story writing powered by markdown.",
-      "version": "0.1.0"
+      "version": "0.1.0",
+      "author": {
+        "name": "Daniel Dewhurst",
+        "url": "https://github.com/danjdewhurst"
+      },
+      "repository": "https://github.com/danjdewhurst/story-skills",
+      "license": "MIT",
+      "keywords": ["story", "writing", "fiction", "characters", "worldbuilding", "chapters"]
     }
   ]
 }
