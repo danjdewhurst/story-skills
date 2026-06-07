@@ -26,10 +26,10 @@ Port Kestrel is a floating harbor built over the drowned remains of an old coast
 
 | Name | Type | Status | File |
 |------|------|--------|------|
-| *No factions yet* | | | |
+| Harbor Council | Government | active | [harbor-council](factions/harbor-council.md) |
 
 ## Artifacts
 
 | Name | Type | Status | File |
 |------|------|--------|------|
-| *No artifacts yet* | | | |
+| Archive Lantern | Technology | hidden | [archive-lantern](artifacts/archive-lantern.md) |

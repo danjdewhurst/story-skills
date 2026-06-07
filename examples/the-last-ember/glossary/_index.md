@@ -9,4 +9,4 @@ story: the-last-ember
 
 | Term | Category | File |
 |------|----------|------|
-| *No terms yet* | | |
+| Ember-Burn | concept | [ember-burn](terms/ember-burn.md) |

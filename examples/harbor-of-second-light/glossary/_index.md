@@ -9,4 +9,4 @@ story: harbor-of-second-light
 
 | Term | Category | File |
 |------|----------|------|
-| *No terms yet* | | |
+| Second Light | concept | [second-light](terms/second-light.md) |

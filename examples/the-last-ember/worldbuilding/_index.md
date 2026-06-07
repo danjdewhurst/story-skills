@@ -26,10 +26,10 @@ A mountainous, forested region where ember magic once thrived. Now in decline un
 
 | Name | Type | Status | File |
 |------|------|--------|------|
-| *No factions yet* | | | |
+| Maren's Guard | Military | active | [marens-guard](factions/marens-guard.md) |
 
 ## Artifacts
 
 | Name | Type | Status | File |
 |------|------|--------|------|
-| *No artifacts yet* | | | |
+| Blackened Crown | Symbol | active | [blackened-crown](artifacts/blackened-crown.md) |
