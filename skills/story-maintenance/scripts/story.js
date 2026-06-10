@@ -2429,6 +2429,8 @@ Options:
   --category <name>         Category for add term
   --alias <name>            Alias for add term; repeatable
   -h, --help                Show this help
+
+Option values that begin with a dash must use the --option=value form.
 `;
 function runCli(argv, io) {
   const parsed = parseArgs(argv);
