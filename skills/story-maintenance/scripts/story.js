@@ -1643,9 +1643,10 @@ function ensureFile(filePath, contents, changed, root) {
   assertSafeProjectPath(filePath, root);
 }
 function replaceEntityReferences(root, oldId, newId) {
+  const pattern = new RegExp(`(?<![a-z0-9-])${escapeRegExp(oldId)}(?![a-z0-9-])`, "g");
   for (const file of markdownFiles(root)) {
     const text = safeRead(file, root);
-    const updated = text.replaceAll(oldId, newId);
+    const updated = text.replace(pattern, newId);
     if (updated !== text) {
       writeFile(file, updated, { root });
     }

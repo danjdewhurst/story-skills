@@ -2,7 +2,7 @@ import { Buffer } from "node:buffer";
 import fs from "node:fs";
 import path from "node:path";
 import { parseFrontmatter, replaceFrontmatter, stringifyFrontmatter } from "./frontmatter.js";
-import { chapterProse, extractSection, kebabCase, titleCaseSlug, wordCount } from "./markdown.js";
+import { chapterProse, escapeRegExp, extractSection, kebabCase, titleCaseSlug, wordCount } from "./markdown.js";
 
 export const STORY_SCHEMA_VERSION = 2;
 
@@ -1615,9 +1615,12 @@ function ensureFile(filePath, contents, changed, root) {
 }
 
 function replaceEntityReferences(root, oldId, newId) {
+  // Only replace whole ids: an id can be a substring of another id or of a
+  // prose word, so matches adjacent to id characters must be left alone.
+  const pattern = new RegExp(`(?<![a-z0-9-])${escapeRegExp(oldId)}(?![a-z0-9-])`, "g");
   for (const file of markdownFiles(root)) {
     const text = safeRead(file, root);
-    const updated = text.replaceAll(oldId, newId);
+    const updated = text.replace(pattern, newId);
     if (updated !== text) {
       writeFile(file, updated, { root });
     }

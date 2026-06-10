@@ -642,6 +642,25 @@ word-count: 1
     expect(scanProject(created.root).story.data["schema-version"]).toBe(STORY_SCHEMA_VERSION);
   });
 
+  test("rename leaves overlapping entity ids and prose words intact", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Rename Overlap", force: false });
+    createEntity(created.root, { kind: "character", name: "Mara", role: "protagonist" });
+    createEntity(created.root, { kind: "character", name: "Mara Quill", role: "supporting" });
+    createEntity(created.root, { kind: "chapter", name: "Arrival", number: 1, pov: "mara-quill", character: "mara-quill,mara" });
+    const chapterPath = path.join(created.root, "chapters", "chapter-01.md");
+    fs.appendFileSync(chapterPath, "The marathon passed mara on the docks.\n", "utf8");
+
+    renameEntity(created.root, { kind: "character", id: "mara", name: "Tess" });
+
+    const chapterText = fs.readFileSync(chapterPath, "utf8");
+    expect(chapterText).toContain("pov: mara-quill");
+    expect(chapterText).toContain("- tess");
+    expect(chapterText).toContain("The marathon passed tess on the docks.");
+    expect(fs.existsSync(path.join(created.root, "characters", "mara-quill.md"))).toBe(true);
+    expect(validateLinks(created.root)).toEqual({ ok: true, errors: [], warnings: [] });
+  });
+
   test("covers helper errors, fallback branches, and malformed continuity state", () => {
     const cwd = makeTempDir();
     const created = createStoryProject({ cwd, title: "Coverage Branches", force: false });

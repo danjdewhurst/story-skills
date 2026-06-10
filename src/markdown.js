@@ -57,7 +57,7 @@ export function extractSection(markdown, heading) {
   return (next ? rest.slice(0, next.index) : rest).trim();
 }
 
-function escapeRegExp(value) {
+export function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
