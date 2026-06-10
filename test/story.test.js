@@ -852,7 +852,9 @@ word-count: 0
       format: "docx"
     });
     expect(fs.readFileSync(epub.outFile).readUInt32LE(0)).toBe(0x04034b50);
+    expect(fs.readFileSync(epub.outFile).toString("utf8")).toContain("dcterms:modified");
     expect(fs.readFileSync(docx.outFile).toString("utf8")).toContain("word/document.xml");
+    expect(fs.readFileSync(docx.outFile).toString("utf8")).toContain("word/styles.xml");
     expect(() => buildBook(created.root, { format: "pdf" })).toThrow("Unsupported build format: pdf");
   });
 });
