@@ -14,6 +14,7 @@ Initialize a new story project with a structured markdown folder layout. Creates
 - Starting a new story, book, or fiction project
 - Setting up the folder structure for an existing story idea
 - NOT for adding to an existing story project (use the domain-specific skills instead)
+- NOT for converting an existing manuscript or chapter drafts: run `story import <source> --title "{Title}"` instead, then build out the bible from the entity candidates it prints
 
 ## Workflow
 
@@ -241,6 +242,8 @@ These conventions apply across ALL story skills:
 - **`story.md`** is the top-level bible read by all skills for context
 - **Bidirectional cross-links** - when referencing another entity, update both files
 - **Character identifiers** use the kebab-case filename without extension (e.g., `sera-voss`)
+- **Death tracking** - when a character dies on the page, set `status: deceased` and `died-in: chapter-{NN}` so `story continuity` can flag posthumous appearances
+- **`mentions` vs `characters`** - chapter and scene frontmatter lists characters present in-scene under `characters`; characters who are only referenced, remembered, recorded, or seen in flashback go under `mentions`
 - **Scene identifiers** use `chapter-{NN}-scene-{NN}` and live in `scenes/`
 - **Continuity state** lives in `continuity/state.md`, with open questions and promises tracked under `continuity/questions/` and `continuity/promises/`
 - **Markdown-first artifacts** - create and edit story content directly in the target `.md` files. Do not create project-local build scripts, generator scripts, or bulk writer scripts (for example `build-*.js`) to emit story files.

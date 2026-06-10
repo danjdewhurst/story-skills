@@ -628,6 +628,7 @@ word-count: 1
       title: "Empty",
       validation: { ok: true, errors: [], warnings: [] },
       links: { ok: true, errors: [], warnings: [] },
+      continuity: { ok: true, errors: [], warnings: [] },
       actions: []
     })).toContain("No actions found");
 

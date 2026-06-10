@@ -63,11 +63,12 @@ story wordcount . --write
 story reindex .
 story links .
 story validate .
+story continuity .
 story next .
 story doctor .
 ```
 
-Use `story next .` before a drafting session. Use `story doctor .` when something feels inconsistent or stale.
+Use `story next .` before a drafting session. Use `story doctor .` when something feels inconsistent or stale. Use `story continuity .` after every chapter to catch contradictions - dead characters reappearing, payoffs landing before their setup, stale story state - before a reader does.
 
 ## 6. Build The Manuscript
 

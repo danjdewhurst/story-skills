@@ -56,6 +56,7 @@
         "name": { "type": "string" },
         "role": { "enum": ["protagonist", "antagonist", "supporting", "minor", "narrator", "deuteragonist"] },
         "status": { "enum": ["alive", "deceased", "unknown", "missing"] },
+        "died-in": { "type": "string" },
         "locations": { "$ref": "#/$defs/stringList" }
       }
     },
@@ -117,7 +118,10 @@
         "id": { "$ref": "#/$defs/id" },
         "title": { "type": "string" },
         "number": { "type": "integer", "minimum": 1 },
-        "status": { "enum": ["outline", "draft", "revised", "final", "complete"] }
+        "status": { "enum": ["outline", "draft", "revised", "final", "complete"] },
+        "characters": { "$ref": "#/$defs/stringList" },
+        "mentions": { "$ref": "#/$defs/stringList" },
+        "locations": { "$ref": "#/$defs/stringList" }
       }
     },
     "scene": {
@@ -128,7 +132,9 @@
         "title": { "type": "string" },
         "chapter": { "$ref": "#/$defs/id" },
         "scene": { "type": "integer", "minimum": 1 },
-        "status": { "enum": ["outline", "draft", "revised", "final", "complete"] }
+        "status": { "enum": ["outline", "draft", "revised", "final", "complete"] },
+        "characters": { "$ref": "#/$defs/stringList" },
+        "mentions": { "$ref": "#/$defs/stringList" }
       }
     },
     "question": {

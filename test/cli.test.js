@@ -38,6 +38,9 @@ describe("cli", () => {
     expect(invoke(cwd, ["help"]).out).toContain("Commands:");
     const help = invoke(cwd, ["--help"]).out;
     expect(help).toContain("validate");
+    expect(help).toContain("continuity [path]");
+    expect(help).toContain("import <source>");
+    expect(help).toContain("--title <name>");
     expect(help).toContain("--role <name>");
     expect(help).toContain("--introduced <id>");
     expect(help).toContain("--category <name>");
@@ -153,6 +156,42 @@ word-count: 0
     expect(migrated.code).toBe(0);
     expect(migrated.out).toContain("Migrated project");
     expect(fs.existsSync(path.join(root, "scenes", "_index.md"))).toBe(true);
+  });
+
+  test("runs continuity and import commands", () => {
+    const cwd = makeTempDir();
+    expect(invoke(cwd, ["init", "Checked"]).code).toBe(0);
+    const root = path.join(cwd, "checked");
+    addMinimalChapter(root);
+
+    const clean = invoke(cwd, ["continuity", root]);
+    expect(clean.code).toBe(0);
+    expect(clean.out).toContain("Continuity is consistent");
+
+    writeMarkdown(path.join(root, "continuity", "promises", "ghost-payoff.md"), `
+title: Ghost Payoff
+status: paid-off
+planted: ""
+payoff: ""
+`, "# Ghost Payoff\n");
+    const broken = invoke(cwd, ["continuity", root]);
+    expect(broken.code).toBe(1);
+    expect(broken.err).toContain("ghost-payoff.md is paid-off but has no payoff chapter");
+
+    fs.writeFileSync(path.join(cwd, "book.md"), "## Chapter 1: Door\n\nThe door held fast.\n\n## Chapter 2: Smoke\n\nSmoke crept under it.", "utf8");
+    const imported = invoke(cwd, ["import", "book.md", "--title", "Imported Tale", "--genre", "mystery"]);
+    expect(imported.code).toBe(0);
+    expect(imported.out).toContain("Imported 2 chapters");
+    expect(invoke(cwd, ["validate", path.join(cwd, "imported-tale")]).code).toBe(0);
+
+    fs.writeFileSync(path.join(cwd, "names.md"), "## Chapter 1\n\nHe met Vex Marrow. She trusted Vex Marrow. They feared Vex Marrow.", "utf8");
+    const withCandidates = invoke(cwd, ["import", "names.md", "--title", "Named Tale"]);
+    expect(withCandidates.out).toContain("Entity candidates");
+    expect(withCandidates.out).toContain("- Vex Marrow (3 mentions)");
+
+    const failed = invoke(cwd, ["import"]);
+    expect(failed.code).toBe(1);
+    expect(failed.err).toContain("An import source file or directory is required");
   });
 
   test("prints validation warnings on successful validation", () => {

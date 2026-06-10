@@ -1,13 +1,13 @@
 ---
 name: story-maintenance
-description: This skill should be used when the user asks to validate, reindex, repair registries, check links, count words, summarize a story project, export a manuscript, run the story CLI, or perform deterministic maintenance on a Story Skills markdown project.
+description: This skill should be used when the user asks to validate, reindex, repair registries, check links, check continuity, count words, summarize a story project, import an existing manuscript, export a manuscript, run the story CLI, or perform deterministic maintenance on a Story Skills markdown project.
 ---
 
 # Story Maintenance
 
 ## Overview
 
-Run deterministic maintenance for Story Skills projects. Use the CLI for structure validation, registry rebuilds, word counts, link checks, project reports, next-action reports, schema migration, entity helpers, and manuscript export. The creative skills still own story decisions; this skill handles mechanical consistency.
+Run deterministic maintenance for Story Skills projects. Use the CLI for structure validation, registry rebuilds, word counts, link checks, continuity checks, project reports, next-action reports, schema migration, entity helpers, manuscript import, and manuscript export. The creative skills still own story decisions; this skill handles mechanical consistency.
 
 ## CLI Access
 
@@ -30,6 +30,8 @@ story validate .
 story reindex .
 story wordcount . --write
 story links .
+story continuity .
+story import draft.md --title "Title"
 story report .
 story report . --actionable
 story next .
@@ -50,6 +52,8 @@ Use:
 - `reindex` after adding/removing/renaming characters, locations, systems, arcs, or chapters
 - `wordcount --write` after writing or revising chapters
 - `links` after changing character relationships, notable locations, arc participants, or chapter references
+- `continuity` after drafting or revising a chapter, and whenever the user asks about contradictions, dead characters appearing, unfired setups, or stale state; it deterministically checks `died-in` ordering, promise/question chapter ordering, Chekhov gaps, POV/cast consistency, and `continuity/state.md` references
+- `import` when the user has an existing manuscript or chapter drafts and wants a Story Skills project built from them; follow up by creating character and location files from the printed entity candidates
 - `report` when the user asks for project status, inventory, progress, or a quick health summary
 - `next` before a drafting session to identify the next deterministic action
 - `doctor` when the user asks what is stale, broken, or inconsistent

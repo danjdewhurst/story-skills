@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer";
 import fs from "node:fs";
 import path from "node:path";
+import { checkContinuity } from "./continuity.js";
 import { parseFrontmatter, replaceFrontmatter, stringifyFrontmatter } from "./frontmatter.js";
 import { chapterProse, escapeRegExp, extractSection, kebabCase, titleCaseSlug, wordCount } from "./markdown.js";
 
@@ -151,6 +152,7 @@ export function scanProject(root) {
       name: data.name ?? titleCaseSlug(id),
       role: data.role ?? "",
       status: data.status ?? "",
+      diedIn: data["died-in"] ?? "",
       relationships: asArray(data.relationships),
       locations: asArray(data.locations)
     })),
@@ -203,6 +205,7 @@ export function scanProject(root) {
       pov: data.pov ?? "",
       status: data.status ?? "",
       characters: asArray(data.characters),
+      mentions: asArray(data.mentions),
       locations: asArray(data.locations),
       arcsAdvanced: asArray(data["arcs-advanced"]),
       declaredWordCount: Number(data["word-count"] ?? 0),
@@ -218,6 +221,7 @@ export function scanProject(root) {
       location: data.location ?? "",
       status: data.status ?? "",
       characters: asArray(data.characters),
+      mentions: asArray(data.mentions),
       arcsAdvanced: asArray(data["arcs-advanced"]),
       stateChanges: asArray(data["state-changes"])
     })).sort((left, right) => left.chapter.localeCompare(right.chapter) || left.scene - right.scene || left.file.localeCompare(right.file)),
@@ -378,7 +382,7 @@ export function validateLinks(root) {
       errors.push(`${relative(project, chapter.file)} references missing POV character ${chapter.pov}`);
     }
 
-    for (const characterId of chapter.characters) {
+    for (const characterId of chapter.characters.concat(chapter.mentions)) {
       if (!characters.has(characterId)) {
         errors.push(`${relative(project, chapter.file)} references missing character ${characterId}`);
       }
@@ -427,7 +431,7 @@ export function validateLinks(root) {
     if (scene.location && !locations.has(scene.location)) {
       errors.push(`${relative(project, scene.file)} references missing location ${scene.location}`);
     }
-    for (const characterId of scene.characters) {
+    for (const characterId of scene.characters.concat(scene.mentions)) {
       if (!characters.has(characterId)) {
         errors.push(`${relative(project, scene.file)} references missing character ${characterId}`);
       }
@@ -473,10 +477,15 @@ export function validateLinks(root) {
   return { ok: errors.length === 0, errors, warnings };
 }
 
+export function checkProjectContinuity(root) {
+  return checkContinuity(scanProject(root));
+}
+
 export function projectReport(root) {
   const project = scanProject(root);
   const validation = validateProject(project.root);
   const links = validateLinks(project.root);
+  const continuity = checkContinuity(project);
   const totalWords = project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
 
   return {
@@ -518,7 +527,8 @@ export function projectReport(root) {
     })),
     validation,
     links,
-    actions: buildProjectActions(project, validation, links)
+    continuity,
+    actions: buildProjectActions(project, validation, links, continuity)
   };
 }
 
@@ -570,7 +580,8 @@ export function formatProjectReport(report, options = {}) {
     "",
     "Checks:",
     `- Validate: ${formatCheck(report.validation)}`,
-    `- Links: ${formatCheck(report.links)}`
+    `- Links: ${formatCheck(report.links)}`,
+    `- Continuity: ${formatCheck(report.continuity)}`
   );
 
   if (options.actionable) {
@@ -585,13 +596,15 @@ export function projectActions(root) {
   const project = scanProject(root);
   const validation = validateProject(project.root);
   const links = validateLinks(project.root);
+  const continuity = checkContinuity(project);
   return {
     root: project.root,
     title: project.story.data.title,
     storyId: project.storyId,
-    actions: buildProjectActions(project, validation, links),
+    actions: buildProjectActions(project, validation, links, continuity),
     validation,
-    links
+    links,
+    continuity
   };
 }
 
@@ -599,7 +612,7 @@ export function formatActionReport(report) {
   const lines = [
     `# Next Writing Actions: ${report.title}`,
     "",
-    `Checks: validate ${formatCheck(report.validation)}, links ${formatCheck(report.links)}`,
+    `Checks: validate ${formatCheck(report.validation)}, links ${formatCheck(report.links)}, continuity ${formatCheck(report.continuity)}`,
     "",
     "Actions:"
   ];
@@ -616,6 +629,7 @@ export function formatDoctorReport(report) {
     "Checks:",
     `- Validate: ${formatCheck(report.validation)}`,
     `- Links: ${formatCheck(report.links)}`,
+    `- Continuity: ${formatCheck(report.continuity)}`,
     "",
     "Actions:"
   ];
@@ -1098,13 +1112,19 @@ ${rows.join("\n")}
 `;
 }
 
-function buildProjectActions(project, validation, links) {
+function buildProjectActions(project, validation, links, continuity) {
   const actions = [];
   if (validation.errors.length > 0) {
     actions.push(action("P0", "Fix validation errors", `Run story validate . and repair ${validation.errors.length} schema or registry errors.`));
   }
   if (links.errors.length > 0) {
     actions.push(action("P0", "Fix broken references", `Run story links . and repair ${links.errors.length} missing references or backlinks.`));
+  }
+  if (continuity.errors.length > 0) {
+    actions.push(action("P0", "Fix continuity contradictions", `Run story continuity . and repair ${continuity.errors.length} deterministic continuity errors.`));
+  }
+  if (continuity.warnings.length > 0) {
+    actions.push(action("P1", "Review continuity warnings", `Run story continuity . and review ${continuity.warnings.length} continuity warnings.`));
   }
   const staleChapters = [];
   const chaptersWithoutScenes = [];
@@ -1161,7 +1181,7 @@ function buildProjectActions(project, validation, links) {
   if (project.characters.length === 0) {
     actions.push(action("P2", "Create first character", "Use story add character \"Name\" --role protagonist before drafting prose."));
   }
-  if (actions.length === 1 && validation.ok && links.ok && staleChapters.length === 0 && chaptersWithoutScenes.length === 0) {
+  if (actions.length === 1 && validation.ok && links.ok && continuity.ok && continuity.warnings.length === 0 && staleChapters.length === 0 && chaptersWithoutScenes.length === 0) {
     actions.unshift(action("P3", "Project is mechanically healthy", "No deterministic maintenance issues are blocking the next writing pass."));
   }
   return actions;
@@ -2110,6 +2130,9 @@ function validateCharacters(project, errors) {
     requireScalar(data, "status", label, errors);
     validateEnum(data, "role", CHARACTER_ROLES, label, errors);
     validateEnum(data, "status", CHARACTER_STATUSES, label, errors);
+    if (data["died-in"] !== undefined) {
+      requireScalar(data, "died-in", label, errors);
+    }
     validateStringArray(data, "aliases", label, errors);
     validateStringArray(data, "locations", label, errors);
     validateStringArray(data, "tags", label, errors);
@@ -2211,6 +2234,7 @@ function validateChapters(project, errors) {
     validateEnum(data, "status", CHAPTER_STATUSES, label, errors);
     validateStringArray(data, "locations", label, errors);
     validateStringArray(data, "characters", label, errors);
+    validateStringArray(data, "mentions", label, errors);
     validateStringArray(data, "arcs-advanced", label, errors);
     if (data.pov !== undefined) {
       requireScalar(data, "pov", label, errors);
@@ -2252,6 +2276,7 @@ function validateScenes(project, errors) {
     requireInteger(data, "scene", label, errors);
     validateEnum(data, "status", SCENE_STATUSES, label, errors);
     validateStringArray(data, "characters", label, errors);
+    validateStringArray(data, "mentions", label, errors);
     validateStringArray(data, "arcs-advanced", label, errors);
     validateObjectArray(data, "state-changes", label, errors);
     if (data.pov !== undefined) {

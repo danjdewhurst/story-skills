@@ -9,4 +9,4 @@ story: harbor-of-second-light
 
 | Question | Status | Introduced | File |
 |----------|--------|------------|------|
-| *No questions yet* | | | |
+| What Happened On Blackout Night | open | chapter-01 | [what-happened-on-blackout-night](what-happened-on-blackout-night.md) |

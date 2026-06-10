@@ -1,7 +1,7 @@
 ---
 type: continuity-state
 story: the-last-ember
-current-chapter: 0
+current-chapter: 1
 character-state: []
 object-state: []
 knowledge-state: []

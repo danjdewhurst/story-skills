@@ -49,14 +49,17 @@ story wordcount . --write
 story reindex .
 story links .
 story validate .
+story continuity .
 story doctor .
 ```
+
+`story continuity` deterministically checks death ordering (`died-in` vs later appearances), promise/question chapter ordering, unfired setups, POV/cast consistency, and `continuity/state.md` references. For intentional flashbacks, memories, or recordings of dead characters, list them under chapter or scene `mentions` instead of `characters`.
 
 If `story` is not installed, use `bun run story --` from this repository or the bundled `story-maintenance/scripts/story.js` fallback when available.
 
 ## Continuity Audit Checklist
 
-Check for:
+Run `story continuity .` first to collect the deterministic findings, then check for what the CLI cannot judge:
 
 - Character knowledge: no one acts on information they have not learned
 - Character state: injuries, emotions, alliances, location, and status carry forward

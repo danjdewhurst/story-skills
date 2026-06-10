@@ -8,6 +8,7 @@ name: "{Full Name}"
 role: {protagonist|antagonist|supporting|minor}
 age: {age}
 status: {alive|deceased|unknown}
+died-in: {chapter-NN}
 aliases:
   - "{Alias 1}"
 relationships:
@@ -21,6 +22,8 @@ tags:
 arc: {character-arc-theme}
 ---
 ```
+
+`died-in` is optional. Set it (with `status: deceased`) when a character dies on the page so `story continuity` can flag appearances in later chapters; leave it out for characters who died before the story begins. Posthumous appearances in flashbacks, memories, or recordings belong in chapter/scene `mentions`, not `characters`.
 
 ## Appearance
 

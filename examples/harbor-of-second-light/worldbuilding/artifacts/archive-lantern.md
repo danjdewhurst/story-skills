@@ -2,8 +2,8 @@
 name: "Archive Lantern"
 type: technology
 status: hidden
-owner: harbor-council
-location: bellwether-reef
+owner: mara-quill
+location: port-kestrel
 tags:
   - memory-storage
   - evidence

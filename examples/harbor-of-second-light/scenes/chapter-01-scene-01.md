@@ -6,6 +6,7 @@ pov: mara-quill
 location: bellwether-reef
 characters:
   - mara-quill
+mentions:
   - theo-quill
 arcs-advanced:
   - the-drowned-witness

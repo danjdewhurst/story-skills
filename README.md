@@ -6,6 +6,8 @@
 
 Story Skills gives agents a shared project format for fiction: a story bible, character files, worldbuilding notes, factions, artifacts, plot arcs, scene state, continuity questions, promises/payoffs, timelines, and chapter drafts. Everything is plain markdown with YAML frontmatter, packaged as standard Agent Skills with Codex and Claude Code plugin support.
 
+The companion CLI treats the story bible as a checkable contract: a **continuity engine** catches dead characters walking, payoffs that land before their setup, unfired Chekhov guns, and stale story state — deterministically, before a reader ever could.
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Agent Skills](https://img.shields.io/badge/Agent_Skills-SKILL.md-blue)](https://agentskills.io)
 [![Codex](https://img.shields.io/badge/Codex-plugin-10A37F)](https://developers.openai.com/codex)
@@ -39,6 +41,26 @@ bunx skills add danjdewhurst/story-skills
 ```
 
 Then ask **"Start a new story"** to scaffold the project.
+
+## 🔎 The Continuity Engine
+
+Long-range consistency is the thing language models are worst at and prompts cannot fix. Story Skills makes it deterministic: character deaths, promises/payoffs, open questions, scene casts, and durable knowledge/object state live in frontmatter, and `story continuity` treats contradictions like a compiler treats type errors.
+
+[`examples/the-unraveled-thread/`](examples/the-unraveled-thread/) is a deliberately broken mystery. It passes `story validate` and `story links` cleanly — every file is well-formed — but the story itself doesn't hold together:
+
+```text
+$ story continuity examples/the-unraveled-thread
+Continuity check failed: 4 errors, 3 warnings
+error: chapters/chapter-04.md lists edran-vale, who died in chapter-02; move posthumous appearances to mentions
+error: continuity/promises/the-broken-compass.md pays off in chapter-02 before it is planted in chapter-03
+error: continuity/questions/who-burned-the-mill.md resolves in chapter-02 before it is introduced in chapter-03
+error: continuity/state.md knowledge-state[0] references missing chapter chapter-05
+warning: chapters/chapter-03.md POV character nessa-thorn is not listed in characters
+warning: continuity/promises/the-sealed-letter.md was planted in chapter-01, 3 chapters ago, and has no payoff yet
+warning: continuity/state.md object-state[0] status active conflicts with worldbuilding/artifacts/vales-compass.md status destroyed
+```
+
+These findings are exact, file-addressed, and reproducible — CI asserts them on every commit. Intentional flashbacks and posthumous appearances stay legal via the chapter `mentions` field. `story doctor` and `story next` fold the same checks into prioritized repair actions.
 
 ## ✍️ Highly Recommended: Better Writing
 
@@ -225,7 +247,7 @@ For non-agent use:
 | **plot-structure** | Plans arcs with structures like three-act, hero's journey, Save the Cat, and kishotenketsu | *"Create a plot arc"* |
 | **chapter-writing** | Drafts chapters through an outline-first workflow that pulls from story context | *"Write the next chapter"* |
 | **revision-continuity** | Revises drafts, audits continuity, and keeps character state, timeline, and arc changes consistent | *"Continuity-check chapter 3"* |
-| **story-maintenance** | Runs deterministic CLI checks for validation, reports, indexing, links, word counts, and export | *"Validate my story project"* |
+| **story-maintenance** | Runs deterministic CLI checks for validation, continuity, reports, indexing, links, word counts, import, and export | *"Validate my story project"* |
 
 For stronger prose, pair **chapter-writing** with [**better-writing**](https://github.com/forjd/better-writing).
 
@@ -253,6 +275,8 @@ The CLI is for deterministic maintenance only. Agents should write story content
 | `story reindex [path]` | Rebuild registry tables from the current markdown files |
 | `story wordcount [path] --write` | Count chapter prose and update chapter frontmatter plus the chapter registry |
 | `story links [path]` | Check character, location, chapter, and arc cross-references/backlinks |
+| `story continuity [path]` | Check deterministic continuity contracts: deaths, promises/payoffs, questions, casts, and durable state |
+| `story import draft.md --title "The Lost Coast"` | Split an existing manuscript into a new story project and suggest entity candidates |
 | `story report [path] --actionable` | Summarize inventory and optionally include next actions |
 | `story next [path]` | Recommend the next deterministic writing or maintenance actions |
 | `story doctor [path]` | Show health checks with actionable repair steps |
@@ -277,6 +301,25 @@ bun run build:fallback
 bun run check:fallback
 node skills/story-maintenance/scripts/story.js --help
 ```
+
+## 🤖 Write A Book Via Pull Requests
+
+A story project with deterministic checks is a story project an agent can advance unattended. The [`templates/github/`](templates/github/) workflows turn a story repository into a self-drafting book:
+
+- [`story-checks.yml`](templates/github/story-checks.yml) runs `story validate`, `story links`, and `story continuity` on every push and pull request, so a chapter PR cannot merge with a continuity contradiction.
+- [`draft-next-chapter.yml`](templates/github/draft-next-chapter.yml) runs [Claude Code](https://github.com/anthropics/claude-code-action) on a schedule: it asks `story next` for the next deterministic action, drafts the next chapter with the chapter-writing skill, updates scene records and continuity state, runs the maintenance checks, and opens a pull request for review.
+
+Copy both files into `.github/workflows/` in the repository that holds your story project, add an `ANTHROPIC_API_KEY` secret, and review one chapter PR per morning.
+
+## 📥 Import An Existing Manuscript
+
+Most writers don't start from a blank page. `story import` reverse-engineers a Story Skills project from work in progress:
+
+```shell
+story import draft.md --title "The Lost Coast" --genre mystery
+```
+
+It splits the manuscript on chapter headings (or imports a directory of chapter files), creates the full project layout with accurate word counts and registries, and prints recurring proper-name candidates so an agent can follow up with `story add character` and `story add location` to build out the bible.
 
 ## 📁 Project Structure
 
@@ -328,7 +371,8 @@ Every story element is a markdown file with YAML frontmatter. The skills cross-r
 
 - Read [**The Cormorant Tide**](https://github.com/danjdewhurst/the-cormorant-tide), a full story project generated with Story Skills.
 - Explore [`examples/the-last-ember/`](examples/the-last-ember/) for a complete fantasy example: three characters, two locations, a magic system, a plot arc with foreshadowing, and a drafted first chapter.
-- Explore [`examples/harbor-of-second-light/`](examples/harbor-of-second-light/) for a near-future coastal mystery example with memory technology, a posthumous witness arc, and a drafted first chapter.
+- Explore [`examples/harbor-of-second-light/`](examples/harbor-of-second-light/) for a near-future coastal mystery example with memory technology, a posthumous witness arc, populated continuity state, and a drafted first chapter.
+- Explore [`examples/the-unraveled-thread/`](examples/the-unraveled-thread/) for a deliberately broken project that demonstrates every class of finding the continuity engine reports.
 
 ## 🚢 Releasing
 

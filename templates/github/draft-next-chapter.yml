@@ -1,0 +1,75 @@
+# Draft the next chapter - write a book via pull requests.
+#
+# Copy this file to .github/workflows/draft-next-chapter.yml in the repository
+# that holds your story project. On each run (scheduled or manual), Claude reads
+# the story bible, asks the Story CLI for the next deterministic action, drafts
+# the next chapter, runs the maintenance checks, and opens a pull request.
+# You review the chapter like any other PR; the story-checks workflow keeps
+# continuity errors from merging.
+#
+# Setup:
+#   1. Add an ANTHROPIC_API_KEY repository secret.
+#   2. Install the Story Skills plugin files so the agent has the workflows:
+#      npx skills add danjdewhurst/story-skills  (or commit skills/ to .claude/skills/)
+#   3. Adjust STORY_DIR and the cron schedule to taste.
+#
+# See https://github.com/anthropics/claude-code-action for action options.
+
+name: Draft the next chapter
+
+on:
+  schedule:
+    - cron: "0 6 * * 1-5" # weekday mornings
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  STORY_DIR: "."
+
+jobs:
+  draft:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Draft the next chapter
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: |
+            You are drafting the next chapter of the story project in $STORY_DIR.
+            Work on a new branch named draft/chapter-<next-number>.
+
+            1. Run `npx --yes --package story-skills story next "$STORY_DIR"` and
+               read story.md, chapters/_index.md, continuity/state.md, open
+               questions, promises, and the active arc files.
+            2. If the next actions report any P0 maintenance issues, fix those
+               first and stop after opening a maintenance PR.
+            3. Otherwise draft the next chapter following the chapter-writing
+               skill: outline first, then prose under "## Chapter Text", with
+               accurate frontmatter (pov, locations, characters, arcs-advanced).
+               Add matching scene records and update continuity/state.md,
+               promises, questions, and the timeline.
+            4. Run the maintenance commands and make them pass:
+               npx --yes --package story-skills story wordcount "$STORY_DIR" --write
+               npx --yes --package story-skills story reindex "$STORY_DIR"
+               npx --yes --package story-skills story validate "$STORY_DIR"
+               npx --yes --package story-skills story links "$STORY_DIR"
+               npx --yes --package story-skills story continuity "$STORY_DIR"
+            5. Commit, push the branch, and open a pull request titled
+               "Draft chapter <number>: <title>" summarizing the beats, the arcs
+               advanced, and any promises planted or paid off.
+          claude_args: |
+            --allowedTools "Bash(npx:*),Bash(git:*),Bash(gh pr create:*),Read,Write,Edit,Glob,Grep"

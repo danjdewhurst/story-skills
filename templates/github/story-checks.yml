@@ -1,0 +1,42 @@
+# Story checks - CI for a Story Skills project repository.
+#
+# Copy this file to .github/workflows/story-checks.yml in the repository that
+# holds your story project. Every push and pull request then runs the
+# deterministic Story CLI checks, so a chapter PR cannot merge with broken
+# registries, dangling references, or continuity contradictions.
+#
+# If your story project lives in a subdirectory, change STORY_DIR.
+
+name: Story checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  STORY_DIR: "."
+
+jobs:
+  story-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Validate structure, frontmatter, and registries
+        run: npx --yes --package story-skills story validate "$STORY_DIR"
+
+      - name: Check cross-references and backlinks
+        run: npx --yes --package story-skills story links "$STORY_DIR"
+
+      - name: Check continuity contracts
+        run: npx --yes --package story-skills story continuity "$STORY_DIR"
+
+      - name: Report project health
+        run: npx --yes --package story-skills story report "$STORY_DIR" --actionable

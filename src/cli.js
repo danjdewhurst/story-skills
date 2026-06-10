@@ -1,6 +1,8 @@
 import path from "node:path";
+import { importManuscript } from "./import.js";
 import {
   buildBook,
+  checkProjectContinuity,
   computeWordCounts,
   createEntity,
   createStoryProject,
@@ -22,10 +24,13 @@ const HELP = `Usage: story <command> [options]
 
 Commands:
   init <title>       Scaffold a story project
+  import <source>    Split an existing manuscript into a new story project
   validate [path]    Check project structure, frontmatter, and registries
   reindex [path]     Rebuild registry tables from markdown files
   wordcount [path]   Count chapter prose words
   links [path]       Check cross-reference targets and backlinks
+  continuity [path]  Check deterministic continuity contracts: deaths,
+                    promises, questions, casts, and durable state
   report [path]      Summarize project inventory, progress, and checks
   next [path]        Recommend the next writing and maintenance actions
   doctor [path]      Show health checks plus actionable repair steps
@@ -39,7 +44,8 @@ Commands:
   build [path]       Build a disposable book artifact in dist/
 
 Options:
-  --dir <path>              Target directory for init
+  --title <name>            Story title for import
+  --dir <path>              Target directory for init or import
   --genre <name>            Story genre for init
   --sub-genre <name>        Story sub-genre for init
   --setting-era <name>      Setting era for init
@@ -106,13 +112,42 @@ export function runCli(argv, io) {
       return 0;
     }
 
+    if (command === "import") {
+      const result = importManuscript({
+        source: parsed.positionals[1],
+        title: parsed.options.title,
+        cwd,
+        dir: parsed.options.dir,
+        genre: parsed.options.genre,
+        subGenre: parsed.options["sub-genre"],
+        settingEra: parsed.options["setting-era"],
+        themes: collectThemes(parsed.options),
+        pov: parsed.options.pov,
+        tense: parsed.options.tense,
+        synopsis: parsed.options.synopsis,
+        force: Boolean(parsed.options.force)
+      });
+      io.stdout.write(`Imported ${result.chapters} chapters (${result.words} words) into ${result.root}\n`);
+      if (result.candidates.length > 0) {
+        io.stdout.write("Entity candidates (review, then create with story add):\n");
+        for (const candidate of result.candidates) {
+          io.stdout.write(`- ${candidate.name} (${candidate.count} mentions)\n`);
+        }
+      }
+      return 0;
+    }
+
     const root = path.resolve(cwd, parsed.positionals[1] ?? ".");
     if (command === "validate") {
-      return reportResult(io, validateProject(root), "Project is valid");
+      return reportResult(io, validateProject(root), "Project is valid", "Project validation failed");
     }
 
     if (command === "links") {
-      return reportResult(io, validateLinks(root), "Links are valid");
+      return reportResult(io, validateLinks(root), "Links are valid", "Link check failed");
+    }
+
+    if (command === "continuity") {
+      return reportResult(io, checkProjectContinuity(root), "Continuity is consistent", "Continuity check failed");
     }
 
     if (command === "report") {
@@ -257,9 +292,9 @@ function targetRoot(cwd, parsed) {
   return path.resolve(cwd, parsed.options.path ?? ".");
 }
 
-function reportResult(io, result, successMessage) {
+function reportResult(io, result, successMessage, failureMessage) {
   const output = result.ok ? io.stdout : io.stderr;
-  output.write(`${successMessage}: ${result.errors.length} errors, ${result.warnings.length} warnings\n`);
+  output.write(`${result.ok ? successMessage : failureMessage}: ${result.errors.length} errors, ${result.warnings.length} warnings\n`);
 
   for (const error of result.errors) {
     io.stderr.write(`error: ${error}\n`);

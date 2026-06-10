@@ -9,4 +9,4 @@ story: harbor-of-second-light
 
 | Promise | Status | Planted | File |
 |---------|--------|---------|------|
-| *No promises yet* | | | |
+| The Bell Failsafe | planted | chapter-01 | [the-bell-failsafe](the-bell-failsafe.md) |
