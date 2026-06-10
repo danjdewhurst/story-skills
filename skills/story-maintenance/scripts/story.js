@@ -77,6 +77,11 @@ function parseYaml(source) {
       continue;
     }
     const parsed = parseArray(lines, index + 1);
+    if (parsed.nextIndex === index + 1) {
+      data[key] = "";
+      index += 1;
+      continue;
+    }
     data[key] = parsed.items;
     index = parsed.nextIndex;
   }

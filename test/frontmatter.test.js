@@ -29,6 +29,17 @@ Body`);
     expect(parsed.raw).toContain("name:");
   });
 
+  test("parses bare keys with no value as empty strings", () => {
+    const parsed = parseFrontmatter(`---
+introduced:
+aliases: []
+resolved:
+---
+Body`);
+
+    expect(parsed.data).toEqual({ introduced: "", aliases: [], resolved: "" });
+  });
+
   test("stringifies and replaces frontmatter", () => {
     const yaml = stringifyFrontmatter({
       title: "The Last Ember",
