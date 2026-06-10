@@ -642,6 +642,21 @@ word-count: 1
     expect(scanProject(created.root).story.data["schema-version"]).toBe(STORY_SCHEMA_VERSION);
   });
 
+  test("remove scrubs references without rewriting untouched files", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Remove Touch", force: false });
+    createEntity(created.root, { kind: "character", name: "Keeper", role: "supporting" });
+    createEntity(created.root, { kind: "promise", name: "Old Setup", character: "keeper" });
+    const storyPath = path.join(created.root, "story.md");
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("title:", "# hand-written note\ntitle:"), "utf8");
+    const annotated = fs.readFileSync(storyPath, "utf8");
+
+    removeEntity(created.root, { kind: "character", id: "keeper" });
+
+    expect(fs.readFileSync(storyPath, "utf8")).toBe(annotated);
+    expect(fs.readFileSync(path.join(created.root, "continuity", "promises", "old-setup.md"), "utf8")).not.toContain("keeper");
+  });
+
   test("rename leaves overlapping entity ids and prose words intact", () => {
     const cwd = makeTempDir();
     const created = createStoryProject({ cwd, title: "Rename Overlap", force: false });

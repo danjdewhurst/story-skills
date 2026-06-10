@@ -1634,7 +1634,9 @@ function removeEntityReferences(root, id) {
     }
     const markdown = readMarkdown(file, root);
     const data = removeReferenceFromData(markdown.data, id);
-    writeFile(file, replaceFrontmatter(markdown.rawMarkdown, data), { root });
+    if (JSON.stringify(data) !== JSON.stringify(markdown.data)) {
+      writeFile(file, replaceFrontmatter(markdown.rawMarkdown, data), { root });
+    }
   }
 }
 
