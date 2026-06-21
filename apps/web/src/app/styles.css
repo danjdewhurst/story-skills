@@ -44,4 +44,16 @@ h2 { margin-top: 0; }
 .timeline li { border-left: 3px solid #7c3aed; padding-left: 1rem; }
 .eventType { color: #c4b5fd; font-weight: 700; margin-right: .75rem; }
 time { color: #64748b; }
-@media (max-width: 850px) { .grid, .hero, .sectionHeader { grid-template-columns: 1fr; display: grid; } .stats { grid-template-columns: repeat(2, 1fr); } }
+.tabs { display: flex; flex-wrap: wrap; gap: .7rem; margin: 1rem 0; }
+.tabs a { color: #ddd6fe; text-decoration: none; border: 1px solid #312e81; border-radius: 999px; padding: .45rem .75rem; background: #111827; }
+.errorBanner { color: #fecaca; border-color: #7f1d1d; }
+.editorGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: .9rem; }
+.editorGrid label { display: grid; gap: .35rem; color: #cbd5e1; }
+.editorGrid input, .editorGrid textarea { border: 1px solid #334155; border-radius: .75rem; background: #020617; color: #e5e7eb; padding: .7rem; font: inherit; }
+.editorGrid textarea { min-height: 18rem; resize: vertical; }
+.wide { grid-column: 1 / -1; }
+.contextGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: .75rem; }
+.contextFile { background: #020617; border: 1px solid #1f2937; border-radius: .85rem; padding: .8rem; display: grid; gap: .3rem; }
+.contextFile span { color: #94a3b8; font-size: .85rem; }
+pre { overflow: auto; }
+@media (max-width: 850px) { .grid, .hero, .sectionHeader { grid-template-columns: 1fr; display: grid; } .stats, .editorGrid { grid-template-columns: repeat(2, 1fr); } }

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
+    "dev:api": "bun run src/server/main.ts",
     "build": "tsc --noEmit && vite build",
     "test": "bun test src/**/*.test.ts",
     "lint": "tsc --noEmit"

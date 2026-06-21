@@ -14,7 +14,7 @@ export interface StoryProjectSummary {
 export function defaultWorkspaceRoot(cwd = process.cwd()) {
   return process.env.STORY_STUDIO_WORKSPACE
     ? path.resolve(process.env.STORY_STUDIO_WORKSPACE)
-    : path.resolve(cwd, "examples");
+    : path.resolve(import.meta.dir, "../../../../examples");
 }
 
 export function listStoryProjects(workspaceRoot = defaultWorkspaceRoot()): StoryProjectSummary[] {

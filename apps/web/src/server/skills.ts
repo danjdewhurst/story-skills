@@ -24,7 +24,7 @@ export interface LoadedWorkflowSkill {
 
 export function loadWorkflowSkill(name: WorkflowSkillName, options: { includeReferences?: boolean; skillsRoot?: string } = {}): LoadedWorkflowSkill {
   if (!WORKFLOW_SKILLS.includes(name)) throw new Error(`Unknown workflow skill: ${name}`);
-  const root = options.skillsRoot ?? path.resolve(process.cwd(), "skills");
+  const root = options.skillsRoot ?? path.resolve(import.meta.dir, "../../../../skills");
   const skillPath = path.join(root, name, "SKILL.md");
   const content = fs.readFileSync(skillPath, "utf8");
   const frontmatter = parseFrontmatter(content, skillPath).data as Record<string, unknown>;
