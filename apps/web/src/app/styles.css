@@ -1,0 +1,47 @@
+:root {
+  color: #e5e7eb;
+  background: #0f172a;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+body { margin: 0; }
+button, select { font: inherit; }
+button {
+  border: 1px solid #7c3aed;
+  background: #7c3aed;
+  color: white;
+  border-radius: 999px;
+  padding: 0.55rem 0.9rem;
+  cursor: pointer;
+}
+select {
+  border-radius: 0.75rem;
+  border: 1px solid #334155;
+  background: #111827;
+  color: #e5e7eb;
+  padding: 0.5rem;
+}
+.shell { max-width: 1180px; margin: 0 auto; padding: 2rem; }
+.hero, .sectionHeader { display: flex; justify-content: space-between; gap: 1.5rem; align-items: flex-start; }
+.eyebrow { color: #a78bfa; text-transform: uppercase; letter-spacing: .12em; font-size: .78rem; }
+h1 { margin: 0; font-size: clamp(2.2rem, 5vw, 4.5rem); }
+h2 { margin-top: 0; }
+.muted { color: #94a3b8; }
+.projectPicker { display: grid; gap: .4rem; color: #cbd5e1; }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 1rem; margin: 1.5rem 0; }
+.card { background: rgba(15, 23, 42, .92); border: 1px solid #1f2937; border-radius: 1.25rem; padding: 1.25rem; box-shadow: 0 20px 80px rgba(0,0,0,.25); }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: .75rem; }
+.stat { background: #111827; border-radius: 1rem; padding: .85rem; display: grid; gap: .2rem; }
+.stat strong { font-size: 1.6rem; }
+.stat span { color: #94a3b8; font-size: .85rem; }
+.checks, .buttonRow { display: flex; flex-wrap: wrap; gap: .6rem; margin: 1rem 0; }
+.chip, .status { border-radius: 999px; padding: .35rem .7rem; font-size: .85rem; display: inline-block; }
+.ok { background: rgba(22, 163, 74, .16); color: #86efac; }
+.error { background: rgba(220, 38, 38, .16); color: #fca5a5; }
+.actions { color: #cbd5e1; padding-left: 1.2rem; }
+.commandOutput pre, .timeline pre { overflow: auto; background: #020617; color: #d1d5db; border-radius: .85rem; padding: .85rem; white-space: pre-wrap; }
+.timeline { list-style: none; padding: 0; display: grid; gap: .85rem; }
+.timeline li { border-left: 3px solid #7c3aed; padding-left: 1rem; }
+.eventType { color: #c4b5fd; font-weight: 700; margin-right: .75rem; }
+time { color: #64748b; }
+@media (max-width: 850px) { .grid, .hero, .sectionHeader { grid-template-columns: 1fr; display: grid; } .stats { grid-template-columns: repeat(2, 1fr); } }
