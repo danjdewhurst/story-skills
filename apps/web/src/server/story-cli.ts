@@ -12,7 +12,7 @@ import {
   validateProject
 } from "../../../../src/story.js";
 
-export type StoryCommandName = "validate" | "links" | "continuity" | "report" | "next" | "doctor" | "reindex" | "wordcount";
+export type StoryCommandName = "validate" | "links" | "continuity" | "report" | "next" | "doctor" | "reindex" | "wordcount" | "wordcount-write";
 
 export interface StoryOperationResult<T = unknown> {
   command: StoryCommandName;
@@ -56,9 +56,11 @@ export function runStoryOperation(root: string, command: StoryCommandName): Stor
       const stdout = data.changed.length === 0 ? "Registries already up to date\n" : `Updated ${data.changed.length} registries\n`;
       return { command, ok: true, stdout, errors: [], warnings: [], data };
     }
-    const data = computeWordCounts(projectRoot, { write: true });
+    const write = command === "wordcount-write";
+    const data = computeWordCounts(projectRoot, { write });
     const lines = data.chapters.map((chapter: { file: string; wordCount: number }) => `${chapter.file}: ${chapter.wordCount}`);
     lines.push(`Total: ${data.total}`);
+    if (write) lines.push("Updated chapter word-count frontmatter and registries.");
     return { command, ok: true, stdout: `${lines.join("\n")}\n`, errors: [], warnings: [], data };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

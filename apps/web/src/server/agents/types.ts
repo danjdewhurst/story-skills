@@ -15,6 +15,10 @@ export type AgentEventType =
   | "failed"
   | "cancelled";
 
+export interface ApprovalController {
+  waitForApproval(runId: string): Promise<"approved" | "rejected">;
+}
+
 export interface AgentRunRequest {
   id?: string;
   provider: AgentProvider;
@@ -25,6 +29,7 @@ export interface AgentRunRequest {
   allowedPaths: string[];
   contextFiles: string[];
   dryRun?: boolean;
+  approvalController?: ApprovalController;
 }
 
 export interface AgentEvent {

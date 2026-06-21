@@ -20,6 +20,14 @@ export class FakeAgentRunner implements AgentRunner {
     push("prompt", { text: buildAgentPrompt(request) });
     push("stdout", "Fake runner loaded the workflow skill and selected context files.");
     push("needs-approval", { kind: "outline", message: "Approve the proposed outline before prose drafting." });
+
+    const approval = request.approvalController ? await request.approvalController.waitForApproval(runId) : "approved";
+    if (approval === "rejected" || this.cancelled.has(runId)) {
+      push("cancelled", { approvalStatus: approval });
+      return { runId, ok: false, events, summary: "Fake agent run rejected before drafting." };
+    }
+
+    push("stdout", "Approval received. Fake runner would now draft prose and update story state.");
     push("maintenance-result", { command: "validate", ok: true, stdout: "Project is valid\n" });
     push("completed", { changedFiles: [], dryRun: true });
     return { runId, ok: true, events, summary: "Fake agent run completed without changing files." };

@@ -8,10 +8,15 @@ import type { StoryCommandName, StoryOperationResult } from "../server/story-cli
 import "./styles.css";
 
 const apiBase = import.meta.env.VITE_STORY_STUDIO_API ?? "http://127.0.0.1:4174";
-const commands: StoryCommandName[] = ["validate", "links", "continuity", "doctor", "reindex", "wordcount"];
+const commands: StoryCommandName[] = ["validate", "links", "continuity", "doctor", "reindex", "wordcount", "wordcount-write"];
 
 type Project = { id: string; title: string; root: string; status: string; genre: string };
 type StoryDocument = { frontmatter: Record<string, unknown>; body: string };
+
+function mutationHeaders(): Record<string, string> {
+  const token = import.meta.env.VITE_STORY_STUDIO_TOKEN;
+  return token ? { "x-story-studio-token": token } : {};
+}
 
 function App() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -33,7 +38,7 @@ function App() {
 
   useEffect(() => {
     if (!selectedProject) return;
-    refreshProject(selectedProject.id).catch((err) => setError(String(err)));
+    refreshProject(selectedProject.id, { resetCommandOutput: true }).catch((err) => setError(String(err)));
   }, [selectedProject?.id]);
 
   useEffect(() => {
@@ -51,7 +56,7 @@ function App() {
     setSelectedId((current) => current || loaded[0]?.id || "");
   }
 
-  async function refreshProject(id: string) {
+  async function refreshProject(id: string, options: { resetCommandOutput?: boolean } = {}) {
     const [nextHealth, nextStory, nextChapterContext, nextGit] = await Promise.all([
       api<any>(`/api/projects/${encodeURIComponent(id)}/health`),
       api<StoryDocument>(`/api/projects/${encodeURIComponent(id)}/story`),
@@ -62,12 +67,12 @@ function App() {
     setStory(nextStory);
     setChapterContext(nextChapterContext);
     setGit(nextGit);
-    setCommandOutput(nextHealth.report);
+    if (options.resetCommandOutput) setCommandOutput(nextHealth.report);
   }
 
   async function runCommand(command: StoryCommandName) {
     if (!selectedProject) return;
-    const result = await api<StoryOperationResult>(`/api/projects/${encodeURIComponent(selectedProject.id)}/commands/${command}`, { method: "POST" });
+    const result = await api<StoryOperationResult>(`/api/projects/${encodeURIComponent(selectedProject.id)}/commands/${command}`, { method: "POST", headers: mutationHeaders() });
     setCommandOutput(result);
     await refreshProject(selectedProject.id);
   }
@@ -76,7 +81,7 @@ function App() {
     if (!selectedProject || !story) return;
     const saved = await api<any>(`/api/projects/${encodeURIComponent(selectedProject.id)}/story`, {
       method: "PUT",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...mutationHeaders() },
       body: JSON.stringify(story)
     });
     setStory(saved.document);
@@ -86,7 +91,7 @@ function App() {
 
   async function runFakeAgent() {
     if (!selectedProject) return;
-    const run = await api<any>(`/api/projects/${encodeURIComponent(selectedProject.id)}/agent-runs`, { method: "POST" });
+    const run = await api<any>(`/api/projects/${encodeURIComponent(selectedProject.id)}/agent-runs`, { method: "POST", headers: mutationHeaders() });
     setRunId(run.runId);
     setAgentEvents(run.events ?? []);
   }
@@ -95,7 +100,7 @@ function App() {
     if (!runId) return;
     const run = await api<any>(`/api/agent-runs/${runId}/approval`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...mutationHeaders() },
       body: JSON.stringify({ status })
     });
     setAgentEvents(run.events ?? []);
@@ -136,7 +141,7 @@ function App() {
         <section className="card commandCard">
           <h2>Deterministic maintenance</h2>
           <div className="buttonRow">
-            {commands.map((command) => <button key={command} onClick={() => runCommand(command)}>{command}</button>)}
+            {commands.map((command) => <button key={command} onClick={() => runCommand(command)}>{command === "wordcount-write" ? "wordcount --write" : command}</button>)}
           </div>
           {commandOutput ? <CommandOutput result={commandOutput} /> : null}
         </section>

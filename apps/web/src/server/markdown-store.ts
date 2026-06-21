@@ -19,9 +19,15 @@ export function readMarkdownDocument(projectRoot: string, relativePath: string):
 
 export function saveMarkdownDocument(projectRoot: string, relativePath: string, frontmatter: Record<string, unknown>, body: string) {
   const fullPath = safeProjectPath(projectRoot, relativePath, { mustExist: true });
+  const previous = fs.readFileSync(fullPath, "utf8");
   const next = `${stringifyFrontmatter(frontmatter)}${body.replace(/^\n+/, "")}`;
   fs.writeFileSync(fullPath, next, "utf8");
-  return { document: readMarkdownDocument(projectRoot, relativePath), validation: runStoryOperation(projectRoot, "validate") };
+  const validation = runStoryOperation(projectRoot, "validate");
+  if (!validation.ok) {
+    fs.writeFileSync(fullPath, previous, "utf8");
+    return { document: readMarkdownDocument(projectRoot, relativePath), validation, rolledBack: true };
+  }
+  return { document: readMarkdownDocument(projectRoot, relativePath), validation, rolledBack: false };
 }
 
 export function safeProjectPath(projectRoot: string, relativePath: string, options: { mustExist?: boolean } = {}) {
