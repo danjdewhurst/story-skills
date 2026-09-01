@@ -16,6 +16,12 @@
 # The Story CLI runs straight from GitHub; switch the npx --package value
 # to story-skills once the package is published to the npm registry.
 #
+# GitHub does not start other workflows for pull requests opened with the
+# built-in GITHUB_TOKEN, so story-checks.yml will not run on the drafted PR by
+# itself. This workflow therefore runs the same checks on the drafted branch
+# after the agent finishes. To have story-checks.yml run on the PR as well,
+# pass a personal access token or GitHub App token as github_token below.
+#
 # See https://github.com/anthropics/claude-code-action for action options.
 
 name: Draft the next chapter
@@ -76,3 +82,12 @@ jobs:
                advanced, and any promises planted or paid off.
           claude_args: |
             --allowedTools "Bash(npx:*),Bash(git:*),Bash(gh pr create:*),Read,Write,Edit,Glob,Grep"
+
+      - name: Validate structure, frontmatter, and registries
+        run: npx --yes --package github:danjdewhurst/story-skills story validate "$STORY_DIR"
+
+      - name: Check cross-references and backlinks
+        run: npx --yes --package github:danjdewhurst/story-skills story links "$STORY_DIR"
+
+      - name: Check continuity contracts
+        run: npx --yes --package github:danjdewhurst/story-skills story continuity "$STORY_DIR"

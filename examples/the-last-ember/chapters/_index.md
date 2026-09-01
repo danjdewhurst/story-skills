@@ -9,6 +9,6 @@ story: the-last-ember
 
 | # | Title | POV | Status | Word Count | File |
 |---|-------|-----|--------|------------|------|
-| 1 | The Ember Wakes | sera-voss | draft | 997 | [chapter-01](chapter-01.md) |
+| 1 | The Ember Wakes | sera-voss | draft | 993 | [chapter-01](chapter-01.md) |
 
-## Total Word Count: 997
+## Total Word Count: 993

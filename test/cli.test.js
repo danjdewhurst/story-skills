@@ -32,6 +32,28 @@ describe("cli", () => {
     });
   });
 
+  test("boolean flags never swallow the following positional", () => {
+    expect(parseArgs(["wordcount", "--write", "my-story"])).toEqual({
+      positionals: ["wordcount", "my-story"],
+      options: { write: true }
+    });
+    expect(parseArgs(["init", "--force", "Alpha", "Beta"])).toEqual({
+      positionals: ["init", "Alpha", "Beta"],
+      options: { force: true }
+    });
+    expect(parseArgs(["report", "--actionable", "."])).toEqual({
+      positionals: ["report", "."],
+      options: { actionable: true }
+    });
+  });
+
+  test("names the missing story.md when a path is not a project", () => {
+    const cwd = makeTempDir();
+    const result = invoke(cwd, ["links", "nowhere"]);
+    expect(result.code).toBe(1);
+    expect(result.err).toContain("is not a story project: missing story.md");
+  });
+
   test("prints help and handles unknown commands", () => {
     const cwd = makeTempDir();
     expect(invoke(cwd, []).out).toContain("Usage: story");

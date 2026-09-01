@@ -1,5 +1,5 @@
 ---
-title: "The Ember Wakes"
+title: The Ember Wakes
 number: 1
 pov: sera-voss
 locations:
@@ -10,8 +10,9 @@ characters:
 arcs-advanced:
   - seras-reclamation
 status: draft
-word-count: 997
+word-count: 993
 ---
+
 
 # Chapter 1: The Ember Wakes
 

@@ -2,7 +2,7 @@ export function kebabCase(value) {
   return String(value)
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/['']/g, "")
+    .replace(/['\u2018\u2019]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
@@ -21,9 +21,12 @@ export function wordCount(markdown) {
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/`[^`]*`/g, " ")
     .replace(/\[[^\]]+\]\([^)]+\)/g, " ")
-    .replace(/[#>*_~|:-]/g, " ");
+    .replace(/[#>*_~|:]/g, " ");
 
-  const words = normalized.match(/[A-Za-z0-9]+(?:'[A-Za-z0-9]+)?/g);
+  // Letters and digits in any script; apostrophes (straight or curly) and
+  // hyphens join a word rather than split it, so "don\u2019t" and "well-known"
+  // each count once.
+  const words = normalized.match(/[\p{L}\p{N}]+(?:['\u2019-][\p{L}\p{N}]+)*/gu);
   return words ? words.length : 0;
 }
 

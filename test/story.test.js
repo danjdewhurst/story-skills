@@ -658,6 +658,111 @@ word-count: 1
     expect(fs.readFileSync(path.join(created.root, "continuity", "promises", "old-setup.md"), "utf8")).not.toContain("keeper");
   });
 
+  test("remove clears only reference fields, never unrelated values that equal the id", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Remove Enum", force: false });
+    createEntity(created.root, { kind: "artifact", name: "Lost", status: "hidden" });
+    createEntity(created.root, { kind: "artifact", name: "Map", status: "lost" });
+    createEntity(created.root, { kind: "character", name: "Keeper", role: "supporting" });
+    createEntity(created.root, { kind: "character", name: "Rival", role: "supporting" });
+    const keeperPath = path.join(created.root, "characters", "keeper.md");
+    writeMarkdown(keeperPath, `
+name: Keeper
+role: supporting
+status: alive
+relationships:
+  - character: rival
+    type: rival
+  - character: lost
+    type: ally
+locations: []
+`, "# Keeper");
+
+    createEntity(created.root, { kind: "chapter", name: "One", number: 1, pov: "rival", character: "rival,keeper" });
+
+    removeEntity(created.root, { kind: "artifact", id: "lost" });
+
+    expect(fs.readFileSync(path.join(created.root, "worldbuilding", "artifacts", "map.md"), "utf8")).toContain("status: lost");
+    const keeper = fs.readFileSync(keeperPath, "utf8");
+    expect(keeper).toContain("  - character: rival\n    type: rival");
+    expect(keeper).not.toContain("character: lost");
+
+    removeEntity(created.root, { kind: "character", id: "rival" });
+
+    const chapter = fs.readFileSync(path.join(created.root, "chapters", "chapter-01.md"), "utf8");
+    expect(chapter).toContain('pov: ""');
+    expect(chapter).toContain("characters:\n  - keeper\n");
+    expect(fs.readFileSync(keeperPath, "utf8")).toContain("relationships: []");
+  });
+
+  test("rename updates frontmatter references and link targets but leaves prose alone", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Rename Prose", force: false });
+    createEntity(created.root, { kind: "location", name: "Port", type: "city" });
+    createEntity(created.root, { kind: "artifact", name: "Chart", location: "port" });
+    createEntity(created.root, { kind: "chapter", name: "Docks", number: 1, location: "port" });
+    const chapterPath = path.join(created.root, "chapters", "chapter-01.md");
+    fs.appendFileSync(chapterPath, "The port was quiet. [Port](../worldbuilding/locations/port.md)\n", "utf8");
+    fs.writeFileSync(path.join(created.root, "README.md"), "No frontmatter here, port.\n", "utf8");
+
+    renameEntity(created.root, { kind: "location", id: "port", name: "Harbor" });
+
+    const chapterText = fs.readFileSync(chapterPath, "utf8");
+    expect(chapterText).toContain("  - harbor");
+    expect(chapterText).toContain("The port was quiet. [Port](../worldbuilding/locations/harbor.md)");
+    expect(fs.readFileSync(path.join(created.root, "worldbuilding", "artifacts", "chart.md"), "utf8")).toContain("location: harbor");
+    expect(fs.readFileSync(path.join(created.root, "README.md"), "utf8")).toBe("No frontmatter here, port.\n");
+    expect(validateLinks(created.root)).toEqual({ ok: true, errors: [], warnings: [] });
+  });
+
+  test("rejects ids and numbers that cannot name a file", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Bad Ids", force: false });
+    expect(() => createEntity(created.root, { kind: "character", name: "???" })).toThrow("Cannot derive a kebab-case id");
+    expect(() => createEntity(created.root, { kind: "chapter", name: "Two", number: "abc" })).toThrow("chapter number must be a positive integer");
+    expect(() => createEntity(created.root, { kind: "scene", name: "Beat", chapter: "chapter-01", scene: 0 })).toThrow("scene number must be a positive integer");
+    expect(fs.readdirSync(path.join(created.root, "chapters"))).toEqual(["_index.md"]);
+    expect(() => scanProject(path.join(cwd, "nowhere"))).toThrow("is not a story project: missing story.md");
+  });
+
+  test("wordcount --write leaves chapters with current counts untouched", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Count Touch", force: false });
+    const chapterPath = path.join(created.root, "chapters", "chapter-01.md");
+    writeMarkdown(chapterPath, `
+# reviewer note
+title: One
+number: 1
+status: draft
+word-count: 2
+`, "## Chapter Text\n\nOne two.");
+    const before = fs.readFileSync(chapterPath, "utf8");
+
+    computeWordCounts(created.root, { write: true });
+
+    expect(fs.readFileSync(chapterPath, "utf8")).toBe(before);
+  });
+
+  test("renders markdown emphasis as italic and bold runs in epub and docx", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Emphasis Build", force: false });
+    writeMarkdown(path.join(created.root, "chapters", "chapter-01.md"), `
+title: One
+number: 1
+status: draft
+word-count: 0
+`, "## Chapter Text\n\nShe *whispered* the **name** and _left_.\n\n* * *\n\nsnake_case_word stays.");
+
+    const epub = fs.readFileSync(buildBook(created.root, { format: "epub" }).outFile).toString("utf8");
+    expect(epub).toContain("<p>She <em>whispered</em> the <strong>name</strong> and <em>left</em>.</p>");
+    expect(epub).toContain("<p>* * *</p>");
+    expect(epub).toContain("<p>snake_case_word stays.</p>");
+
+    const docx = fs.readFileSync(buildBook(created.root, { format: "docx" }).outFile).toString("utf8");
+    expect(docx).toContain('<w:r><w:t xml:space="preserve">She </w:t></w:r><w:r><w:rPr><w:i/></w:rPr><w:t xml:space="preserve">whispered</w:t></w:r>');
+    expect(docx).toContain('<w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">name</w:t></w:r>');
+  });
+
   test("rename leaves overlapping entity ids and prose words intact", () => {
     const cwd = makeTempDir();
     const created = createStoryProject({ cwd, title: "Rename Overlap", force: false });
@@ -665,14 +770,14 @@ word-count: 1
     createEntity(created.root, { kind: "character", name: "Mara Quill", role: "supporting" });
     createEntity(created.root, { kind: "chapter", name: "Arrival", number: 1, pov: "mara-quill", character: "mara-quill,mara" });
     const chapterPath = path.join(created.root, "chapters", "chapter-01.md");
-    fs.appendFileSync(chapterPath, "The marathon passed mara on the docks.\n", "utf8");
+    fs.appendFileSync(chapterPath, "The marathon passed mara on the docks. See [mara](../characters/mara.md) and [Mara](../characters/mara.md).\n", "utf8");
 
     renameEntity(created.root, { kind: "character", id: "mara", name: "Tess" });
 
     const chapterText = fs.readFileSync(chapterPath, "utf8");
     expect(chapterText).toContain("pov: mara-quill");
     expect(chapterText).toContain("- tess");
-    expect(chapterText).toContain("The marathon passed tess on the docks.");
+    expect(chapterText).toContain("The marathon passed mara on the docks. See [tess](../characters/tess.md) and [Mara](../characters/tess.md).");
     expect(fs.existsSync(path.join(created.root, "characters", "mara-quill.md"))).toBe(true);
     expect(validateLinks(created.root)).toEqual({ ok: true, errors: [], warnings: [] });
   });
@@ -875,7 +980,7 @@ word-count: 0
     expect(fs.readFileSync(epub.outFile).toString("utf8")).toContain("<p>* * *</p>");
     expect(fs.readFileSync(docx.outFile).toString("utf8")).toContain("word/document.xml");
     expect(fs.readFileSync(docx.outFile).toString("utf8")).toContain("word/styles.xml");
-    expect(fs.readFileSync(docx.outFile).toString("utf8")).toContain("<w:t>* * *</w:t>");
+    expect(fs.readFileSync(docx.outFile).toString("utf8")).toContain('<w:t xml:space="preserve">* * *</w:t>');
     expect(() => buildBook(created.root, { format: "pdf" })).toThrow("Unsupported build format: pdf");
   });
 });

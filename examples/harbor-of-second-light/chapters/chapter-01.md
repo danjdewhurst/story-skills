@@ -12,8 +12,9 @@ mentions:
 arcs-advanced:
   - the-drowned-witness
 status: draft
-word-count: 1492
+word-count: 1489
 ---
+
 
 
 # Chapter 1: The Bell Under the Reef

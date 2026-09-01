@@ -244,6 +244,8 @@ export function runCli(argv, io) {
   }
 }
 
+const BOOLEAN_OPTIONS = new Set(["force", "write", "actionable"]);
+
 export function parseArgs(argv) {
   const positionals = [];
   const options = {};
@@ -264,7 +266,10 @@ export function parseArgs(argv) {
     const key = arg.slice(2, equalIndex === -1 ? undefined : equalIndex);
     const inlineValue = equalIndex === -1 ? undefined : arg.slice(equalIndex + 1);
     const nextValue = argv[index + 1];
-    const hasSeparateValue = inlineValue === undefined && nextValue !== undefined && !nextValue.startsWith("-");
+    const hasSeparateValue = inlineValue === undefined
+      && !BOOLEAN_OPTIONS.has(key)
+      && nextValue !== undefined
+      && !nextValue.startsWith("-");
     const value = inlineValue ?? (hasSeparateValue ? nextValue : true);
 
     if (hasSeparateValue) {

@@ -159,14 +159,14 @@ function isPlainObject(value) {
 
 // src/markdown.js
 function kebabCase(value) {
-  return String(value).normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/['']/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return String(value).normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/['\u2018\u2019]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 function titleCaseSlug(slug) {
   return String(slug).split("-").filter(Boolean).map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`).join(" ");
 }
 function wordCount(markdown) {
-  const normalized = markdown.replace(/```[\s\S]*?```/g, " ").replace(/`[^`]*`/g, " ").replace(/\[[^\]]+\]\([^)]+\)/g, " ").replace(/[#>*_~|:-]/g, " ");
-  const words = normalized.match(/[A-Za-z0-9]+(?:'[A-Za-z0-9]+)?/g);
+  const normalized = markdown.replace(/```[\s\S]*?```/g, " ").replace(/`[^`]*`/g, " ").replace(/\[[^\]]+\]\([^)]+\)/g, " ").replace(/[#>*_~|:]/g, " ");
+  const words = normalized.match(/[\p{L}\p{N}]+(?:['\u2019-][\p{L}\p{N}]+)*/gu);
   return words ? words.length : 0;
 }
 function chapterProse(markdownBody) {
@@ -549,7 +549,7 @@ function createStoryProject(options) {
 }
 function scanProject(root) {
   const projectRoot = path2.resolve(root);
-  const story = readMarkdown(path2.join(projectRoot, "story.md"), projectRoot);
+  const story = readMarkdown(requireStoryFile(projectRoot), projectRoot);
   const storyId = kebabCase(story.data.title ?? path2.basename(projectRoot));
   return {
     root: projectRoot,
@@ -1041,7 +1041,7 @@ function computeWordCounts(root, options = {}) {
       file: path2.relative(project.root, chapter.file),
       wordCount: chapter.wordCount
     });
-    if (options.write) {
+    if (options.write && chapter.declaredWordCount !== chapter.wordCount) {
       const markdown = readMarkdown(chapter.file, project.root);
       writeFile(chapter.file, replaceFrontmatter(markdown.rawMarkdown, {
         ...markdown.data,
@@ -1097,7 +1097,7 @@ function buildBook(root, options = {}) {
 }
 function migrateProject(root) {
   const projectRoot = path2.resolve(root);
-  const storyPath = path2.join(projectRoot, "story.md");
+  const storyPath = requireStoryFile(projectRoot);
   const story = readMarkdown(storyPath, projectRoot);
   const storyId = kebabCase(story.data.title ?? path2.basename(projectRoot));
   const changed = [];
@@ -1489,18 +1489,21 @@ function appendActionLines(lines, actions) {
 }
 function buildEntity(project, kind, name, options) {
   if (kind === "chapter") {
-    const number = Number(options.number ?? project.chapters.reduce((max, chapter) => Math.max(max, chapter.number), 0) + 1);
+    const number = options.number === undefined ? project.chapters.reduce((max, chapter) => Math.max(max, chapter.number), 0) + 1 : requirePositiveInteger(options.number, "chapter number");
     const id2 = `chapter-${String(number).padStart(2, "0")}`;
     return entityResult(project, kind, id2, chapterFile(name, number, options));
   }
   if (kind === "scene") {
     const chapter = String(options.chapter ?? project.chapters.at(-1)?.id ?? "chapter-01").trim();
     requireKebabId(chapter, "chapter id");
-    const scene = Number(options.scene ?? nextSceneNumber(project, chapter));
+    const scene = options.scene === undefined ? nextSceneNumber(project, chapter) : requirePositiveInteger(options.scene, "scene number");
     const id2 = `${chapter}-scene-${String(scene).padStart(2, "0")}`;
     return entityResult(project, kind, id2, sceneFile(name, chapter, scene, options));
   }
   const id = kebabCase(name);
+  if (!id) {
+    throw new Error(`Cannot derive a kebab-case id from ${kind} name "${name}"`);
+  }
   switch (kind) {
     case "character":
       return entityResult(project, kind, id, characterFile(name, options));
@@ -1559,6 +1562,13 @@ function requireKebabId(id, label) {
   if (!isKebabId(id)) {
     throw new Error(`${label} must be a kebab-case id`);
   }
+}
+function requirePositiveInteger(value, label) {
+  const number = Number(value);
+  if (!Number.isInteger(number) || number <= 0) {
+    throw new Error(`${label} must be a positive integer`);
+  }
+  return number;
 }
 function isKebabId(value) {
   const text = String(value ?? "").trim();
@@ -1893,27 +1903,93 @@ function ensureFile(filePath, contents, changed, root) {
   }
   assertSafeProjectPath(filePath, root);
 }
+var REFERENCE_FIELDS = new Set([
+  "arc",
+  "arcs",
+  "arcs-advanced",
+  "artifact",
+  "chapter",
+  "character",
+  "characters",
+  "controlled-by",
+  "died-in",
+  "introduced",
+  "learned-in",
+  "location",
+  "locations",
+  "members",
+  "mentions",
+  "notable-characters",
+  "owner",
+  "payoff",
+  "planted",
+  "pov",
+  "resolved"
+]);
 function replaceEntityReferences(root, oldId, newId) {
-  const pattern = new RegExp(`(?<![a-z0-9-])${escapeRegExp(oldId)}(?![a-z0-9-])`, "g");
+  const targetPattern = new RegExp(`(^|/)${escapeRegExp(oldId)}\\.md$`);
+  const textPattern = new RegExp(`\\[${escapeRegExp(oldId)}\\](?=\\()`, "g");
+  rewriteReferences(root, (value) => value === oldId ? newId : value, (body) => body.replace(/\]\(([^)]*)\)/g, (match, target) => targetPattern.test(target) ? `](${target.replace(targetPattern, `$1${newId}.md`)})` : match).replace(textPattern, `[${newId}]`));
+}
+function removeEntityReferences(root, id) {
+  rewriteReferences(root, (value) => value === id ? null : value, (body) => body);
+}
+function rewriteReferences(root, transform, transformBody) {
   for (const file of markdownFiles(root)) {
-    const text = safeRead(file, root);
-    const updated = text.replace(pattern, newId);
-    if (updated !== text) {
-      writeFile(file, updated, { root });
+    assertSafeProjectPath(file, root);
+    const text = fs.readFileSync(file, "utf8");
+    const match = FRONTMATTER_PATTERN.exec(text);
+    if (!match) {
+      continue;
+    }
+    const data = parseFrontmatter(text, file).data;
+    const body = text.slice(match[0].length);
+    const nextData = transformReferences(data, transform);
+    const nextBody = transformBody(body);
+    const dataChanged = JSON.stringify(nextData) !== JSON.stringify(data);
+    if (dataChanged || nextBody !== body) {
+      writeFile(file, `${dataChanged ? stringifyFrontmatter(nextData) : match[0]}${nextBody}`, { root });
     }
   }
 }
-function removeEntityReferences(root, id) {
-  for (const file of markdownFiles(root)) {
-    if (!fs.existsSync(file)) {
+function transformReferences(data, transform, nested = false) {
+  const next = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (Array.isArray(value)) {
+      const items = [];
+      for (const item of value) {
+        if (item && typeof item === "object" && !Array.isArray(item)) {
+          const mapped = transformReferences(item, transform, true);
+          if (mapped !== null) {
+            items.push(mapped);
+          }
+        } else if (REFERENCE_FIELDS.has(key)) {
+          const mapped = transform(item);
+          if (mapped !== null) {
+            items.push(mapped);
+          }
+        } else {
+          items.push(item);
+        }
+      }
+      next[key] = items;
       continue;
     }
-    const markdown = readMarkdown(file, root);
-    const data = removeReferenceFromData(markdown.data, id);
-    if (JSON.stringify(data) !== JSON.stringify(markdown.data)) {
-      writeFile(file, replaceFrontmatter(markdown.rawMarkdown, data), { root });
+    if (REFERENCE_FIELDS.has(key)) {
+      const mapped = transform(value);
+      if (mapped === null) {
+        if (nested) {
+          return null;
+        }
+        next[key] = "";
+        continue;
+      }
+      next[key] = mapped;
+      continue;
     }
+    next[key] = value;
   }
+  return next;
 }
 function applyEntityBacklinks(root, kind, id, data) {
   if (kind === "location") {
@@ -1945,24 +2021,6 @@ function addFrontmatterListValue(root, relativePath, field, value) {
       [field]: list.concat(value)
     }), { root });
   }
-}
-function removeReferenceFromData(data, id) {
-  const next = {};
-  for (const [key, value] of Object.entries(data)) {
-    if (Array.isArray(value)) {
-      const items = [];
-      for (const item of value) {
-        const objectHasReference = item && typeof item === "object" && Object.values(item).includes(id);
-        if (item !== id && !objectHasReference) {
-          items.push(item && typeof item === "object" && !Array.isArray(item) ? removeReferenceFromData(item, id) : item);
-        }
-      }
-      next[key] = items;
-    } else {
-      next[key] = value === id ? "" : value;
-    }
-  }
-  return next;
 }
 function markdownFiles(root) {
   const files = [];
@@ -2026,7 +2084,11 @@ function navXhtml(manuscript) {
 function chapterXhtml(chapter) {
   const paragraphs = [];
   for (const paragraph of markdownParagraphs(chapter.body)) {
-    paragraphs.push(`<p>${xmlEscape(paragraph)}</p>`);
+    const runs = inlineRuns(paragraph).map((run) => {
+      const text = xmlEscape(run.text);
+      return run.style ? `<${run.style}>${text}</${run.style}>` : text;
+    });
+    paragraphs.push(`<p>${runs.join("")}</p>`);
   }
   return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>${xmlEscape(chapter.title)}</title></head><body><h1>Chapter ${chapter.number}: ${xmlEscape(chapter.title)}</h1>${paragraphs.join("")}</body></html>`;
 }
@@ -2035,7 +2097,7 @@ function writeDocx(outFile, manuscript, writeOptions = {}) {
   for (const chapter of manuscript.chapters) {
     bodyParts.push(paragraphXml(`Chapter ${chapter.number}: ${chapter.title}`, "Heading1"));
     for (const paragraph of markdownParagraphs(chapter.body)) {
-      bodyParts.push(paragraphXml(paragraph));
+      bodyParts.push(paragraphXml(paragraph, "", inlineRuns(paragraph)));
     }
   }
   const body = bodyParts.join("");
@@ -2047,9 +2109,41 @@ function writeDocx(outFile, manuscript, writeOptions = {}) {
     { name: "word/document.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr/></w:body></w:document>` }
   ], writeOptions);
 }
-function paragraphXml(text, style = "") {
+function paragraphXml(text, style = "", runs = [{ text, style: "" }]) {
   const styleXml = style ? `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>` : "";
-  return `<w:p>${styleXml}<w:r><w:t>${xmlEscape(text)}</w:t></w:r></w:p>`;
+  const runXml = runs.map((run) => {
+    const runStyle = run.style === "strong" ? "<w:rPr><w:b/></w:rPr>" : run.style === "em" ? "<w:rPr><w:i/></w:rPr>" : "";
+    return `<w:r>${runStyle}<w:t xml:space="preserve">${xmlEscape(run.text)}</w:t></w:r>`;
+  });
+  return `<w:p>${styleXml}${runXml.join("")}</w:p>`;
+}
+var INLINE_EMPHASIS_PATTERN = /(\*\*|__)(\S(?:[\s\S]*?\S)?)\1|(\*|_)(\S(?:[^*_]*?\S)?)\3/g;
+function isIntrawordUnderscore(text, match) {
+  const delimiter = match[1] ?? match[3];
+  if (!delimiter.startsWith("_")) {
+    return false;
+  }
+  const before = text[match.index - 1] ?? " ";
+  const after = text[match.index + match[0].length] ?? " ";
+  return /[\p{L}\p{N}]/u.test(before) || /[\p{L}\p{N}]/u.test(after);
+}
+function inlineRuns(text) {
+  const runs = [];
+  let last = 0;
+  for (const match of text.matchAll(INLINE_EMPHASIS_PATTERN)) {
+    if (isIntrawordUnderscore(text, match)) {
+      continue;
+    }
+    if (match.index > last) {
+      runs.push({ text: text.slice(last, match.index), style: "" });
+    }
+    runs.push(match[1] ? { text: match[2], style: "strong" } : { text: match[4], style: "em" });
+    last = match.index + match[0].length;
+  }
+  if (last < text.length) {
+    runs.push({ text: text.slice(last), style: "" });
+  }
+  return runs;
 }
 var SCENE_BREAK_PATTERN = /^([*_-])( ?\1){2,}$/;
 function markdownParagraphs(markdown) {
@@ -2148,6 +2242,13 @@ function readEntityFiles(root, relativeDir, mapEntity) {
     const markdown = readMarkdown(fullPath, root);
     return mapEntity(path2.basename(file, ".md"), fullPath, markdown.data, markdown);
   });
+}
+function requireStoryFile(projectRoot) {
+  const storyPath = path2.join(projectRoot, "story.md");
+  if (!fs.existsSync(storyPath)) {
+    throw new Error(`${projectRoot} is not a story project: missing story.md`);
+  }
+  return storyPath;
 }
 function readMarkdown(filePath, root) {
   if (root) {
@@ -3050,6 +3151,7 @@ ${HELP}`);
     return 1;
   }
 }
+var BOOLEAN_OPTIONS = new Set(["force", "write", "actionable"]);
 function parseArgs(argv) {
   const positionals = [];
   const options = {};
@@ -3067,7 +3169,7 @@ function parseArgs(argv) {
     const key = arg.slice(2, equalIndex === -1 ? undefined : equalIndex);
     const inlineValue = equalIndex === -1 ? undefined : arg.slice(equalIndex + 1);
     const nextValue = argv[index + 1];
-    const hasSeparateValue = inlineValue === undefined && nextValue !== undefined && !nextValue.startsWith("-");
+    const hasSeparateValue = inlineValue === undefined && !BOOLEAN_OPTIONS.has(key) && nextValue !== undefined && !nextValue.startsWith("-");
     const value = inlineValue ?? (hasSeparateValue ? nextValue : true);
     if (hasSeparateValue) {
       index += 1;

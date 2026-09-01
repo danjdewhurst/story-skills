@@ -289,7 +289,9 @@ The CLI is for deterministic maintenance only. Agents should write story content
 | `story export [path] --out manuscript.md` | Combine chapters into a single manuscript markdown file |
 | `story build [path] --format epub` | Build disposable markdown, EPUB, or DOCX artifacts in `dist/` |
 
-EPUB and DOCX builds target plain prose: scene-break lines (`***`, `---`) become a `* * *` separator paragraph, and other markdown structure such as lists or tables is flattened to text. The markdown export keeps chapter text as-is.
+EPUB and DOCX builds target plain prose: `*italic*` and `**bold**` become italic and bold runs, scene-break lines (`***`, `---`) become a `* * *` separator paragraph, and other markdown structure such as lists or tables is flattened to text. The markdown export keeps chapter text as-is.
+
+`story rename` and `story remove` update entity ids in frontmatter reference fields and in markdown link targets. They never edit prose, so a character called "Port" can be renamed without touching the word "port" in chapter text. Commands that rewrite a file's frontmatter regenerate it from the parsed values, so YAML comments in that file's frontmatter are dropped; files whose values do not change are left untouched.
 
 For a complete starter transcript, read [`docs/first-20-minutes.md`](docs/first-20-minutes.md). For the project contract, read [`docs/schema-v2.md`](docs/schema-v2.md) and [`schemas/story.schema.json`](schemas/story.schema.json).
 
@@ -317,7 +319,7 @@ A story project with deterministic checks is a story project an agent can advanc
 - [`story-checks.yml`](templates/github/story-checks.yml) runs `story validate`, `story links`, and `story continuity` on every push and pull request, so a chapter PR cannot merge with a continuity contradiction.
 - [`draft-next-chapter.yml`](templates/github/draft-next-chapter.yml) runs [Claude Code](https://github.com/anthropics/claude-code-action) on a schedule: it asks `story next` for the next deterministic action, drafts the next chapter with the chapter-writing skill, updates scene records and continuity state, runs the maintenance checks, and opens a pull request for review.
 
-Copy both files into `.github/workflows/` in the repository that holds your story project, add an `ANTHROPIC_API_KEY` secret, and review one chapter PR per morning.
+Copy both files into `.github/workflows/` in the repository that holds your story project, add an `ANTHROPIC_API_KEY` secret, and review one chapter PR per morning. The draft workflow runs the checks itself after drafting, because GitHub does not start `story-checks.yml` for a pull request opened with the built-in `GITHUB_TOKEN`; pass a personal access token as `github_token` if you want the checks workflow to run on those PRs too.
 
 ## 📥 Import An Existing Manuscript
 

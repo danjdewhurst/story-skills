@@ -1,4 +1,4 @@
-const FRONTMATTER_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
+export const FRONTMATTER_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 
 export function parseFrontmatter(markdown, filePath = "markdown") {
   const match = FRONTMATTER_PATTERN.exec(markdown);

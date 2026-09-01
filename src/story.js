@@ -2,7 +2,7 @@ import { Buffer } from "node:buffer";
 import fs from "node:fs";
 import path from "node:path";
 import { checkContinuity } from "./continuity.js";
-import { parseFrontmatter, replaceFrontmatter, stringifyFrontmatter } from "./frontmatter.js";
+import { FRONTMATTER_PATTERN, parseFrontmatter, replaceFrontmatter, stringifyFrontmatter } from "./frontmatter.js";
 import { chapterProse, escapeRegExp, extractSection, kebabCase, titleCaseSlug, wordCount } from "./markdown.js";
 
 export const STORY_SCHEMA_VERSION = 2;
@@ -139,7 +139,7 @@ export function createStoryProject(options) {
 
 export function scanProject(root) {
   const projectRoot = path.resolve(root);
-  const story = readMarkdown(path.join(projectRoot, "story.md"), projectRoot);
+  const story = readMarkdown(requireStoryFile(projectRoot), projectRoot);
   const storyId = kebabCase(story.data.title ?? path.basename(projectRoot));
 
   return {
@@ -698,7 +698,7 @@ export function computeWordCounts(root, options = {}) {
       wordCount: chapter.wordCount
     });
 
-    if (options.write) {
+    if (options.write && chapter.declaredWordCount !== chapter.wordCount) {
       const markdown = readMarkdown(chapter.file, project.root);
       writeFile(chapter.file, replaceFrontmatter(markdown.rawMarkdown, {
         ...markdown.data,
@@ -763,7 +763,7 @@ export function buildBook(root, options = {}) {
 
 export function migrateProject(root) {
   const projectRoot = path.resolve(root);
-  const storyPath = path.join(projectRoot, "story.md");
+  const storyPath = requireStoryFile(projectRoot);
   const story = readMarkdown(storyPath, projectRoot);
   const storyId = kebabCase(story.data.title ?? path.basename(projectRoot));
   const changed = [];
@@ -1207,7 +1207,9 @@ function appendActionLines(lines, actions) {
 
 function buildEntity(project, kind, name, options) {
   if (kind === "chapter") {
-    const number = Number(options.number ?? project.chapters.reduce((max, chapter) => Math.max(max, chapter.number), 0) + 1);
+    const number = options.number === undefined
+      ? project.chapters.reduce((max, chapter) => Math.max(max, chapter.number), 0) + 1
+      : requirePositiveInteger(options.number, "chapter number");
     const id = `chapter-${String(number).padStart(2, "0")}`;
     return entityResult(project, kind, id, chapterFile(name, number, options));
   }
@@ -1215,12 +1217,18 @@ function buildEntity(project, kind, name, options) {
   if (kind === "scene") {
     const chapter = String(options.chapter ?? project.chapters.at(-1)?.id ?? "chapter-01").trim();
     requireKebabId(chapter, "chapter id");
-    const scene = Number(options.scene ?? nextSceneNumber(project, chapter));
+    const scene = options.scene === undefined
+      ? nextSceneNumber(project, chapter)
+      : requirePositiveInteger(options.scene, "scene number");
     const id = `${chapter}-scene-${String(scene).padStart(2, "0")}`;
     return entityResult(project, kind, id, sceneFile(name, chapter, scene, options));
   }
 
   const id = kebabCase(name);
+  if (!id) {
+    throw new Error(`Cannot derive a kebab-case id from ${kind} name "${name}"`);
+  }
+
   switch (kind) {
     case "character":
       return entityResult(project, kind, id, characterFile(name, options));
@@ -1283,6 +1291,14 @@ function requireKebabId(id, label) {
   if (!isKebabId(id)) {
     throw new Error(`${label} must be a kebab-case id`);
   }
+}
+
+function requirePositiveInteger(value, label) {
+  const number = Number(value);
+  if (!Number.isInteger(number) || number <= 0) {
+    throw new Error(`${label} must be a positive integer`);
+  }
+  return number;
 }
 
 function isKebabId(value) {
@@ -1637,30 +1653,91 @@ function ensureFile(filePath, contents, changed, root) {
   assertSafeProjectPath(filePath, root);
 }
 
+// Frontmatter keys whose values are entity ids. rename and remove touch only
+// these keys plus markdown link targets, never prose or unrelated fields such
+// as status or tense that may happen to equal an id.
+const REFERENCE_FIELDS = new Set([
+  "arc", "arcs", "arcs-advanced", "artifact", "chapter", "character", "characters", "controlled-by",
+  "died-in", "introduced", "learned-in", "location", "locations", "members", "mentions",
+  "notable-characters", "owner", "payoff", "planted", "pov", "resolved"
+]);
+
 function replaceEntityReferences(root, oldId, newId) {
-  // Only replace whole ids: an id can be a substring of another id or of a
-  // prose word, so matches adjacent to id characters must be left alone.
-  const pattern = new RegExp(`(?<![a-z0-9-])${escapeRegExp(oldId)}(?![a-z0-9-])`, "g");
+  const targetPattern = new RegExp(`(^|/)${escapeRegExp(oldId)}\\.md$`);
+  const textPattern = new RegExp(`\\[${escapeRegExp(oldId)}\\](?=\\()`, "g");
+  rewriteReferences(root, (value) => (value === oldId ? newId : value), (body) => body
+    .replace(/\]\(([^)]*)\)/g, (match, target) => (targetPattern.test(target)
+      ? `](${target.replace(targetPattern, `$1${newId}.md`)})`
+      : match))
+    .replace(textPattern, `[${newId}]`));
+}
+
+function removeEntityReferences(root, id) {
+  rewriteReferences(root, (value) => (value === id ? null : value), (body) => body);
+}
+
+function rewriteReferences(root, transform, transformBody) {
   for (const file of markdownFiles(root)) {
-    const text = safeRead(file, root);
-    const updated = text.replace(pattern, newId);
-    if (updated !== text) {
-      writeFile(file, updated, { root });
+    assertSafeProjectPath(file, root);
+    const text = fs.readFileSync(file, "utf8");
+    const match = FRONTMATTER_PATTERN.exec(text);
+    if (!match) {
+      continue;
+    }
+
+    const data = parseFrontmatter(text, file).data;
+    const body = text.slice(match[0].length);
+    const nextData = transformReferences(data, transform);
+    const nextBody = transformBody(body);
+    const dataChanged = JSON.stringify(nextData) !== JSON.stringify(data);
+    if (dataChanged || nextBody !== body) {
+      writeFile(file, `${dataChanged ? stringifyFrontmatter(nextData) : match[0]}${nextBody}`, { root });
     }
   }
 }
 
-function removeEntityReferences(root, id) {
-  for (const file of markdownFiles(root)) {
-    if (!fs.existsSync(file)) {
+function transformReferences(data, transform, nested = false) {
+  const next = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (Array.isArray(value)) {
+      const items = [];
+      for (const item of value) {
+        if (item && typeof item === "object" && !Array.isArray(item)) {
+          const mapped = transformReferences(item, transform, true);
+          if (mapped !== null) {
+            items.push(mapped);
+          }
+        } else if (REFERENCE_FIELDS.has(key)) {
+          const mapped = transform(item);
+          if (mapped !== null) {
+            items.push(mapped);
+          }
+        } else {
+          items.push(item);
+        }
+      }
+      next[key] = items;
       continue;
     }
-    const markdown = readMarkdown(file, root);
-    const data = removeReferenceFromData(markdown.data, id);
-    if (JSON.stringify(data) !== JSON.stringify(markdown.data)) {
-      writeFile(file, replaceFrontmatter(markdown.rawMarkdown, data), { root });
+
+    if (REFERENCE_FIELDS.has(key)) {
+      const mapped = transform(value);
+      if (mapped === null) {
+        // A removed id inside a mapping (relationship, state entry) drops the
+        // whole entry; at the top level the field is cleared instead.
+        if (nested) {
+          return null;
+        }
+        next[key] = "";
+        continue;
+      }
+      next[key] = mapped;
+      continue;
     }
+
+    next[key] = value;
   }
+  return next;
 }
 
 function applyEntityBacklinks(root, kind, id, data) {
@@ -1696,25 +1773,6 @@ function addFrontmatterListValue(root, relativePath, field, value) {
       [field]: list.concat(value)
     }), { root });
   }
-}
-
-function removeReferenceFromData(data, id) {
-  const next = {};
-  for (const [key, value] of Object.entries(data)) {
-    if (Array.isArray(value)) {
-      const items = [];
-      for (const item of value) {
-        const objectHasReference = item && typeof item === "object" && Object.values(item).includes(id);
-        if (item !== id && !objectHasReference) {
-          items.push(item && typeof item === "object" && !Array.isArray(item) ? removeReferenceFromData(item, id) : item);
-        }
-      }
-      next[key] = items;
-    } else {
-      next[key] = value === id ? "" : value;
-    }
-  }
-  return next;
 }
 
 function markdownFiles(root) {
@@ -1786,7 +1844,11 @@ function navXhtml(manuscript) {
 function chapterXhtml(chapter) {
   const paragraphs = [];
   for (const paragraph of markdownParagraphs(chapter.body)) {
-    paragraphs.push(`<p>${xmlEscape(paragraph)}</p>`);
+    const runs = inlineRuns(paragraph).map((run) => {
+      const text = xmlEscape(run.text);
+      return run.style ? `<${run.style}>${text}</${run.style}>` : text;
+    });
+    paragraphs.push(`<p>${runs.join("")}</p>`);
   }
   return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>${xmlEscape(chapter.title)}</title></head><body><h1>Chapter ${chapter.number}: ${xmlEscape(chapter.title)}</h1>${paragraphs.join("")}</body></html>`;
 }
@@ -1796,7 +1858,7 @@ function writeDocx(outFile, manuscript, writeOptions = {}) {
   for (const chapter of manuscript.chapters) {
     bodyParts.push(paragraphXml(`Chapter ${chapter.number}: ${chapter.title}`, "Heading1"));
     for (const paragraph of markdownParagraphs(chapter.body)) {
-      bodyParts.push(paragraphXml(paragraph));
+      bodyParts.push(paragraphXml(paragraph, "", inlineRuns(paragraph)));
     }
   }
   const body = bodyParts.join("");
@@ -1810,9 +1872,47 @@ function writeDocx(outFile, manuscript, writeOptions = {}) {
   ], writeOptions);
 }
 
-function paragraphXml(text, style = "") {
+function paragraphXml(text, style = "", runs = [{ text, style: "" }]) {
   const styleXml = style ? `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>` : "";
-  return `<w:p>${styleXml}<w:r><w:t>${xmlEscape(text)}</w:t></w:r></w:p>`;
+  const runXml = runs.map((run) => {
+    const runStyle = run.style === "strong" ? "<w:rPr><w:b/></w:rPr>" : run.style === "em" ? "<w:rPr><w:i/></w:rPr>" : "";
+    return `<w:r>${runStyle}<w:t xml:space="preserve">${xmlEscape(run.text)}</w:t></w:r>`;
+  });
+  return `<w:p>${styleXml}${runXml.join("")}</w:p>`;
+}
+
+// Markdown emphasis: **bold** / __bold__ and *italic* / _italic_. The marked
+// text must start and end with a non-space character, as in CommonMark.
+const INLINE_EMPHASIS_PATTERN = /(\*\*|__)(\S(?:[\s\S]*?\S)?)\1|(\*|_)(\S(?:[^*_]*?\S)?)\3/g;
+
+// Underscores inside a word (snake_case_word) are literal, as in CommonMark.
+function isIntrawordUnderscore(text, match) {
+  const delimiter = match[1] ?? match[3];
+  if (!delimiter.startsWith("_")) {
+    return false;
+  }
+  const before = text[match.index - 1] ?? " ";
+  const after = text[match.index + match[0].length] ?? " ";
+  return /[\p{L}\p{N}]/u.test(before) || /[\p{L}\p{N}]/u.test(after);
+}
+
+function inlineRuns(text) {
+  const runs = [];
+  let last = 0;
+  for (const match of text.matchAll(INLINE_EMPHASIS_PATTERN)) {
+    if (isIntrawordUnderscore(text, match)) {
+      continue;
+    }
+    if (match.index > last) {
+      runs.push({ text: text.slice(last, match.index), style: "" });
+    }
+    runs.push(match[1] ? { text: match[2], style: "strong" } : { text: match[4], style: "em" });
+    last = match.index + match[0].length;
+  }
+  if (last < text.length) {
+    runs.push({ text: text.slice(last), style: "" });
+  }
+  return runs;
 }
 
 // A thematic break: three or more of the same marker, optionally spaced.
@@ -1933,6 +2033,14 @@ function readEntityFiles(root, relativeDir, mapEntity) {
       const markdown = readMarkdown(fullPath, root);
       return mapEntity(path.basename(file, ".md"), fullPath, markdown.data, markdown);
     });
+}
+
+function requireStoryFile(projectRoot) {
+  const storyPath = path.join(projectRoot, "story.md");
+  if (!fs.existsSync(storyPath)) {
+    throw new Error(`${projectRoot} is not a story project: missing story.md`);
+  }
+  return storyPath;
 }
 
 function readMarkdown(filePath, root) {
