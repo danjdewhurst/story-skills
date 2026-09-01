@@ -17,7 +17,7 @@ The companion CLI treats the story bible as a checkable contract: a **continuity
 
 ---
 
-> Built on the open **Agent Skills** standard. Install it as a **Codex** or **Claude Code** plugin, with the Agent Skills CLI, or copy the `skills/` folders into any agent that supports `SKILL.md`.
+> Install it as a **Codex** or **Claude Code** plugin, with the Agent Skills CLI, or copy the `skills/` folders into any agent that supports `SKILL.md`.
 
 ## 🚀 Quick Start
 
@@ -26,7 +26,7 @@ The companion CLI treats the story bible as a checkable contract: a **continuity
 codex plugin marketplace add danjdewhurst/story-skills
 codex plugin add story-skills@story-skills
 
-# Claude Code plugin
+# Claude Code plugin (type these inside a Claude Code session, not a shell)
 /plugin marketplace add danjdewhurst/story-skills
 /plugin install story-skills@story-skills
 ```
@@ -61,22 +61,6 @@ warning: continuity/state.md object-state[0] status active conflicts with worldb
 ```
 
 These findings are exact, file-addressed, and reproducible — CI asserts them on every commit. Intentional flashbacks and posthumous appearances stay legal via the chapter `mentions` field. `story doctor` and `story next` fold the same checks into prioritized repair actions.
-
-## ✍️ Highly Recommended: Better Writing
-
-For stronger chapter drafts and revision passes, install [forjd/better-writing](https://github.com/forjd/better-writing) alongside Story Skills. It adds voice calibration, anti-generic writing checks, and a final prose-quality pass.
-
-```shell
-npx skills add forjd/better-writing
-```
-
-Or with Bun:
-
-```shell
-bunx skills add forjd/better-writing
-```
-
-Story Skills works without it, but chapter drafting and revision are better when agents can use `better-writing`.
 
 ## 📦 Installation
 
@@ -186,6 +170,7 @@ gemini skills install https://github.com/danjdewhurst/story-skills.git --path sk
 gemini skills install https://github.com/danjdewhurst/story-skills.git --path skills/plot-structure
 gemini skills install https://github.com/danjdewhurst/story-skills.git --path skills/chapter-writing
 gemini skills install https://github.com/danjdewhurst/story-skills.git --path skills/revision-continuity
+gemini skills install https://github.com/danjdewhurst/story-skills.git --path skills/story-maintenance
 
 # Or link locally after cloning
 git clone https://github.com/danjdewhurst/story-skills.git
@@ -249,7 +234,11 @@ For non-agent use:
 | **revision-continuity** | Revises drafts, audits continuity, and keeps character state, timeline, and arc changes consistent | *"Continuity-check chapter 3"* |
 | **story-maintenance** | Runs deterministic CLI checks for validation, continuity, reports, indexing, links, word counts, import, and export | *"Validate my story project"* |
 
-For stronger prose, pair **chapter-writing** with [**better-writing**](https://github.com/forjd/better-writing).
+For stronger prose, pair **chapter-writing** with [**better-writing**](https://github.com/forjd/better-writing). It adds voice calibration, anti-generic writing checks, and a final prose-quality pass, and installs the same way:
+
+```shell
+npx skills add forjd/better-writing
+```
 
 ## 🧰 Companion CLI
 
@@ -265,6 +254,8 @@ The package also exposes a Node-compatible bin with no runtime dependencies. It 
 ```shell
 npx --yes --package github:danjdewhurst/story-skills story --help
 ```
+
+The CLI needs Node 18 or newer.
 
 For copied-skill installs, `story-maintenance` includes a bundled `scripts/story.js` fallback that agents can run with Node.
 
@@ -291,26 +282,11 @@ The CLI is for deterministic maintenance only. Agents should write story content
 
 EPUB and DOCX builds target plain prose: `*italic*` and `**bold**` become italic and bold runs, scene-break lines (`***`, `---`) become a `* * *` separator paragraph, and other markdown structure such as lists or tables is flattened to text. The markdown export keeps chapter text as-is.
 
-`story rename` and `story remove` update entity ids in frontmatter reference fields and in markdown link targets. They never edit prose, so a character called "Port" can be renamed without touching the word "port" in chapter text. Commands that rewrite a file's frontmatter regenerate it from the parsed values, so YAML comments in that file's frontmatter are dropped; files whose values do not change are left untouched.
+`story rename` and `story remove` update entity ids in frontmatter reference fields and in markdown link targets. They never edit prose, so a character called "Port" can be renamed without touching the word "port" in chapter text.
+
+Commands that change a frontmatter value regenerate that file's frontmatter from the parsed values, which drops any YAML comments in it. Files whose values do not change are left untouched.
 
 For a complete starter transcript, read [`docs/first-20-minutes.md`](docs/first-20-minutes.md). For the project contract, read [`docs/schema-v2.md`](docs/schema-v2.md) and [`schemas/story.schema.json`](schemas/story.schema.json).
-
-Development uses Bun for tests and coverage:
-
-```shell
-bun run test
-bun run test:coverage
-bun run test:examples
-bun run check:metadata
-```
-
-The copied-skill fallback CLI is generated from the package entrypoint. After changing CLI source, rebuild and check it before release:
-
-```shell
-bun run build:fallback
-bun run check:fallback
-node skills/story-maintenance/scripts/story.js --help
-```
 
 ## 🤖 Write A Book Via Pull Requests
 
@@ -319,7 +295,9 @@ A story project with deterministic checks is a story project an agent can advanc
 - [`story-checks.yml`](templates/github/story-checks.yml) runs `story validate`, `story links`, and `story continuity` on every push and pull request, so a chapter PR cannot merge with a continuity contradiction.
 - [`draft-next-chapter.yml`](templates/github/draft-next-chapter.yml) runs [Claude Code](https://github.com/anthropics/claude-code-action) on a schedule: it asks `story next` for the next deterministic action, drafts the next chapter with the chapter-writing skill, updates scene records and continuity state, runs the maintenance checks, and opens a pull request for review.
 
-Copy both files into `.github/workflows/` in the repository that holds your story project, add an `ANTHROPIC_API_KEY` secret, and review one chapter PR per morning. The draft workflow runs the checks itself after drafting, because GitHub does not start `story-checks.yml` for a pull request opened with the built-in `GITHUB_TOKEN`; pass a personal access token as `github_token` if you want the checks workflow to run on those PRs too.
+Copy both files into `.github/workflows/` in the repository that holds your story project, add an `ANTHROPIC_API_KEY` secret, and review one chapter PR per morning.
+
+GitHub does not start `story-checks.yml` for a pull request opened with the built-in `GITHUB_TOKEN`, so the draft workflow runs the same checks itself after drafting. Pass a personal access token as `github_token` if you want the checks workflow to run on those PRs as well.
 
 ## 📥 Import An Existing Manuscript
 
@@ -371,7 +349,7 @@ Every story element is a markdown file with YAML frontmatter. The skills cross-r
 
 - **`story.md`** is the top-level bible read by all skills
 - `story.md` includes **`schema-version: 2`** so the CLI can detect incompatible project formats
-- Characters, locations, and arcs use **kebab-case identifiers** (e.g., `sera-voss`)
+- Every entity file is named by a **kebab-case identifier** (e.g., `sera-voss`, `chapter-01`)
 - **`_index.md`** files serve as registries for each domain
 - Relationships and references are maintained **bidirectionally**
 - Scene records and continuity state make character knowledge, object ownership, and setup/payoff tracking durable
@@ -384,7 +362,24 @@ Every story element is a markdown file with YAML frontmatter. The skills cross-r
 - Explore [`examples/harbor-of-second-light/`](examples/harbor-of-second-light/) for a near-future coastal mystery example with memory technology, a posthumous witness arc, populated continuity state, and a drafted first chapter.
 - Explore [`examples/the-unraveled-thread/`](examples/the-unraveled-thread/) for a deliberately broken project that demonstrates every class of finding the continuity engine reports.
 
-## 🚢 Releasing
+## 🧪 Development And Releasing
+
+Development uses Bun for tests and coverage:
+
+```shell
+bun run test
+bun run test:coverage
+bun run test:examples
+bun run check:metadata
+```
+
+The copied-skill fallback CLI is generated from the package entrypoint. After changing CLI source, rebuild and check it before release:
+
+```shell
+bun run build:fallback
+bun run check:fallback
+node skills/story-maintenance/scripts/story.js --help
+```
 
 Codex uses `.codex-plugin/plugin.json` as its plugin version source. Claude Code uses `.claude-plugin/plugin.json`. Bump both versions for every published change so installed users receive updates; keep marketplace entries unversioned to avoid duplicate version state. Run `bun run check:metadata` before publishing to confirm package and plugin metadata are aligned.
 
