@@ -23,6 +23,7 @@
     "build:fallback": "bun build ./bin/story.js --target=node --outfile=skills/story-maintenance/scripts/story.js",
     "check:metadata": "node scripts/check-metadata.js",
     "check:fallback": "node scripts/check-fallback.js",
+    "release": "node scripts/release.js",
     "test:examples": "node scripts/check-examples.js",
     "story": "bun run ./bin/story.js",
     "test": "bun test test/*.test.js",

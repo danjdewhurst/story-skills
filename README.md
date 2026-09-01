@@ -381,7 +381,14 @@ bun run check:fallback
 node skills/story-maintenance/scripts/story.js --help
 ```
 
-Codex uses `.codex-plugin/plugin.json` as its plugin version source. Claude Code uses `.claude-plugin/plugin.json`. Bump both versions for every published change so installed users receive updates; keep marketplace entries unversioned to avoid duplicate version state. Run `bun run check:metadata` before publishing to confirm package and plugin metadata are aligned.
+Codex uses `.codex-plugin/plugin.json` as its plugin version source. Claude Code uses `.claude-plugin/plugin.json`. Every published change needs a new version in both files and in `package.json` so installed users receive updates; keep marketplace entries unversioned to avoid duplicate version state.
+
+Cut a release with the release script, which bumps all three files, runs the CI checks, commits `chore: release X.Y.Z`, tags `vX.Y.Z`, pushes, and creates a GitHub release with generated notes. It requires a clean `main` that matches `origin/main` and a logged-in `gh`:
+
+```shell
+bun run release patch          # or minor, major, or an explicit version like 1.2.0
+bun run release patch --dry-run  # run the checks and print the plan without changing anything
+```
 
 Distribution metadata lives in `.claude-plugin/` for Claude Code and `.codex-plugin/` plus `.agents/plugins/marketplace.json` for Codex. The `plugins/story-skills` symlink is intentional: Codex marketplace entries must point at a child plugin directory, so the symlink exposes the repo-root plugin without duplicating `skills/`.
 

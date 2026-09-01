@@ -61,7 +61,7 @@ For published changes, keep version metadata aligned across:
 - `.codex-plugin/plugin.json`
 - `.claude-plugin/plugin.json`
 
-Marketplace entries should remain unversioned unless the existing release process changes.
+Do not bump these by hand. `bun run release <patch|minor|major|X.Y.Z>` bumps all three, runs the CI checks, commits `chore: release X.Y.Z`, tags `vX.Y.Z`, pushes `main` and the tag, and creates the GitHub release. `--dry-run` runs the checks and stops before any change. Marketplace entries should remain unversioned unless the existing release process changes.
 
 ## Generated And Local Artifacts
 
