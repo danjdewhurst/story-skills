@@ -2357,15 +2357,15 @@ function validateChapters(project, errors) {
       requireInteger(data, "word-count", label, errors);
     }
 
-    if (filenameNumber === 0) {
+    if (filenameNumber === null) {
       errors.push(`${label} filename must match chapter-{NN}.md`);
     } else if (Number.isInteger(data.number) && data.number !== filenameNumber) {
       errors.push(`${label} number must match filename chapter number ${filenameNumber}`);
     }
 
     if (Number.isInteger(data.number)) {
-      if (data.number <= 0) {
-        errors.push(`${label} number must be greater than 0`);
+      if (data.number < 0) {
+        errors.push(`${label} number must not be negative`);
       }
 
       const existing = seenNumbers.get(data.number);
@@ -2582,7 +2582,7 @@ function requireFields(data, fields, label, errors) {
 
 function chapterNumberFromFile(file) {
   const match = /chapter-(\d+)/.exec(path.basename(file));
-  return match ? Number.parseInt(match[1], 10) : 0;
+  return match ? Number.parseInt(match[1], 10) : null;
 }
 
 function relative(project, file) {

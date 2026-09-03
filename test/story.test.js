@@ -570,8 +570,8 @@ word-count: 1
     expect(validation.errors.join("\n")).toContain("characters/Bad Name.md relationship to missing-person is missing type");
     expect(validation.errors.join("\n")).toContain("characters/bad-relationships.md frontmatter field relationships must be a list");
     expect(validation.errors.join("\n")).toContain("worldbuilding/systems/bad-system.md frontmatter field prevalence must be a scalar");
-    expect(validation.errors.join("\n")).toContain("chapters/chapter-00.md filename must match chapter-{NN}.md");
-    expect(validation.errors.join("\n")).toContain("chapters/chapter-00.md number must be greater than 0");
+    expect(validation.errors.join("\n")).not.toContain("chapters/chapter-00.md filename must match chapter-{NN}.md");
+    expect(validation.errors.join("\n")).not.toContain("chapters/chapter-00.md number must not be negative");
     expect(validation.errors.join("\n")).toContain("chapters/chapter-01.md frontmatter field status has unsupported value invalid");
     expect(validation.errors.join("\n")).toContain("chapters/chapter-01.md frontmatter field word-count must be an integer");
     expect(validation.errors.join("\n")).toContain("chapters/chapter-01.md number must match filename chapter number 1");
