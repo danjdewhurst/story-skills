@@ -7,7 +7,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const VERSION_FILES = ["package.json", ".codex-plugin/plugin.json", ".claude-plugin/plugin.json"];
 const RELEASE_BRANCH = "main";
-const PREFLIGHT = ["check:metadata", "test", "check:fallback", "test:examples"];
+// test:coverage runs the full test suite under coverage, gates src
+// line/function/branch coverage, then verifies the fallback bundle, so it
+// subsumes the old standalone test and check:fallback steps.
+export const PREFLIGHT = ["check:metadata", "test:coverage", "test:examples"];
 
 export function bumpVersion(current, bump) {
   const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(current);

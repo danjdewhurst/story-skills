@@ -1,17 +1,15 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { checkProjectContinuity, computeWordCounts, validateLinks, validateProject } from "../src/story.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const examplesRoot = path.join(repoRoot, "examples");
-const failures = [];
-const summaries = [];
 
 // the-unraveled-thread is the showcase for `story continuity`: it must stay
 // structurally valid while producing exactly these deterministic findings.
-const EXPECTED_CONTINUITY = {
+export const EXPECTED_CONTINUITY = {
   "the-unraveled-thread": {
     errors: [
       "chapters/chapter-04.md lists edran-vale, who died in chapter-02; move posthumous appearances to mentions",
@@ -27,38 +25,7 @@ const EXPECTED_CONTINUITY = {
   }
 };
 
-for (const name of fs.readdirSync(examplesRoot).sort()) {
-  const root = path.join(examplesRoot, name);
-  if (!fs.statSync(root).isDirectory() || !fs.existsSync(path.join(root, "story.md"))) {
-    continue;
-  }
-
-  const validation = validateProject(root);
-  const links = validateLinks(root);
-  const continuity = checkProjectContinuity(root);
-  const counts = computeWordCounts(root);
-  const expected = EXPECTED_CONTINUITY[name];
-  summaries.push(`${name}: ${counts.chapters.length} chapters, ${counts.total} words, ${continuity.errors.length + continuity.warnings.length} expected continuity findings`);
-
-  collectResult(name, "validate", validation);
-  collectResult(name, "links", links);
-
-  if (expected) {
-    compareFindings(name, "error", expected.errors, continuity.errors);
-    compareFindings(name, "warning", expected.warnings, continuity.warnings);
-  } else {
-    collectResult(name, "continuity", continuity);
-  }
-}
-
-if (failures.length > 0) {
-  console.error(`Example validation failed:\n${failures.join("\n")}`);
-  process.exit(1);
-}
-
-console.log(`Examples are valid:\n${summaries.join("\n")}`);
-
-function collectResult(exampleName, command, result) {
+export function collectResult(failures, exampleName, command, result) {
   for (const error of result.errors) {
     failures.push(`${exampleName} ${command} error: ${error}`);
   }
@@ -66,9 +33,10 @@ function collectResult(exampleName, command, result) {
   for (const warning of result.warnings) {
     failures.push(`${exampleName} ${command} warning: ${warning}`);
   }
+  return failures;
 }
 
-function compareFindings(exampleName, kind, expected, actual) {
+export function compareFindings(failures, exampleName, kind, expected, actual) {
   for (const finding of expected) {
     if (!actual.includes(finding)) {
       failures.push(`${exampleName} continuity is missing expected ${kind}: ${finding}`);
@@ -80,4 +48,45 @@ function compareFindings(exampleName, kind, expected, actual) {
       failures.push(`${exampleName} continuity has unexpected ${kind}: ${finding}`);
     }
   }
+  return failures;
+}
+
+function main() {
+  const failures = [];
+  const summaries = [];
+
+  for (const name of fs.readdirSync(examplesRoot).sort()) {
+    const root = path.join(examplesRoot, name);
+    if (!fs.statSync(root).isDirectory() || !fs.existsSync(path.join(root, "story.md"))) {
+      continue;
+    }
+
+    const validation = validateProject(root);
+    const links = validateLinks(root);
+    const continuity = checkProjectContinuity(root);
+    const counts = computeWordCounts(root);
+    const expected = EXPECTED_CONTINUITY[name];
+    summaries.push(`${name}: ${counts.chapters.length} chapters, ${counts.total} words, ${continuity.errors.length + continuity.warnings.length} expected continuity findings`);
+
+    collectResult(failures, name, "validate", validation);
+    collectResult(failures, name, "links", links);
+
+    if (expected) {
+      compareFindings(failures, name, "error", expected.errors, continuity.errors);
+      compareFindings(failures, name, "warning", expected.warnings, continuity.warnings);
+    } else {
+      collectResult(failures, name, "continuity", continuity);
+    }
+  }
+
+  if (failures.length > 0) {
+    console.error(`Example validation failed:\n${failures.join("\n")}`);
+    process.exit(1);
+  }
+
+  console.log(`Examples are valid:\n${summaries.join("\n")}`);
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
 }
