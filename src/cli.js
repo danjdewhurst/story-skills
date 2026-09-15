@@ -49,9 +49,9 @@ Options:
   --genre <name>            Story genre for init
   --sub-genre <name>        Story sub-genre for init
   --setting-era <name>      Setting era for init
-  --theme <name>            Add a theme for init; repeatable
-  --themes <a,b>            Add comma-separated themes for init
-  --pov <style>             POV style for init
+  --theme <name>            Theme for init or add arc; repeatable
+  --themes <a,b>            Comma-separated themes for init or add arc
+  --pov <style>             POV style for init or add chapter/scene
   --tense <tense>           Narrative tense for init
   --synopsis <text>         Starter synopsis for init
   --force                   Allow init to overwrite starter files
@@ -61,33 +61,39 @@ Options:
   --format <name>           Output format for build (markdown, epub, docx)
   --actionable              Include next actions in report
   --number <n>              Chapter number for add chapter
-  --chapter <id>            Chapter id for add scene or continuity records
+  --chapter <id>            Chapter id for add scene
   --scene <n>               Scene number for add scene
   --type <name>             Entity type for add
   --role <name>             Character role for add character
   --status <name>           Entity status for add
   --location <id>           Location reference for add
   --character <id>          Character reference for add; repeatable
+  --mention <id>            Mentioned character for add chapter/scene; repeatable
   --member <id>             Faction member reference for add faction; repeatable
   --owner <id>              Owner reference for add artifact
-  --arc <id>                Arc reference for add; repeatable
+  --arc <id>                Arc reference for add (arc theme for add character); repeatable
   --introduced <id>         Chapter id for add question
   --resolved <id>           Chapter id for add question
   --planted <id>            Chapter id for add promise
   --payoff <id>             Chapter id for add promise
   --category <name>         Category for add term
   --alias <name>            Alias for add term; repeatable
+  --region <name>           Region for add location
+  --population <name>       Population for add location
+  --controlled-by <id>      Controlling faction for add location
+  --prevalence <name>       Prevalence for add system
+  --acts <a,b>              Comma-separated acts for add arc; repeatable
   -h, --help                Show this help
 
-Option values that begin with a dash must use the --option=value form.
+Values beginning with a dash may also use the --option=value form.
 `;
 
 export function runCli(argv, io) {
-  const parsed = parseArgs(argv);
-  const cwd = io.cwd ?? process.cwd();
-  const command = parsed.positionals[0];
-
   try {
+    const parsed = parseArgs(argv);
+    const cwd = io.cwd ?? process.cwd();
+    const command = parsed.positionals[0];
+
     if (!command || command === "help" || parsed.options.help) {
       io.stdout.write(HELP);
       return 0;
@@ -246,6 +252,41 @@ export function runCli(argv, io) {
 
 const BOOLEAN_OPTIONS = new Set(["force", "write", "actionable"]);
 
+const VALUE_OPTIONS = new Set([
+  "title", "dir", "genre", "sub-genre", "setting-era",
+  "theme", "themes", "pov", "tense", "synopsis",
+  "path", "out", "format",
+  "number", "chapter", "scene",
+  "type", "role", "status",
+  "location", "locations", "character", "characters",
+  "mention", "mentions",
+  "member", "members", "owner", "arc", "arcs",
+  "introduced", "resolved", "planted", "payoff",
+  "category", "alias", "aliases",
+  "region", "population", "controlled-by",
+  "prevalence", "acts", "act"
+]);
+
+function isKnownOptionToken(token) {
+  if (token === "-h") {
+    return true;
+  }
+  if (!token.startsWith("--")) {
+    return false;
+  }
+  const equalIndex = token.indexOf("=");
+  const key = token.slice(2, equalIndex === -1 ? undefined : equalIndex);
+  return key === "help" || BOOLEAN_OPTIONS.has(key) || VALUE_OPTIONS.has(key);
+}
+
+function addOption(options, key, value) {
+  if (options[key] === undefined) {
+    options[key] = value;
+  } else {
+    options[key] = Array.isArray(options[key]) ? options[key].concat(value) : [options[key], value];
+  }
+}
+
 export function parseArgs(argv) {
   const positionals = [];
   const options = {};
@@ -265,9 +306,28 @@ export function parseArgs(argv) {
     const equalIndex = arg.indexOf("=");
     const key = arg.slice(2, equalIndex === -1 ? undefined : equalIndex);
     const inlineValue = equalIndex === -1 ? undefined : arg.slice(equalIndex + 1);
+
+    if (BOOLEAN_OPTIONS.has(key)) {
+      addOption(options, key, inlineValue ?? true);
+      continue;
+    }
+
+    if (VALUE_OPTIONS.has(key)) {
+      if (inlineValue !== undefined) {
+        addOption(options, key, inlineValue);
+        continue;
+      }
+      const nextValue = argv[index + 1];
+      if (nextValue === undefined || isKnownOptionToken(nextValue)) {
+        throw new Error(`Missing value for --${key}: expected a value`);
+      }
+      addOption(options, key, nextValue);
+      index += 1;
+      continue;
+    }
+
     const nextValue = argv[index + 1];
     const hasSeparateValue = inlineValue === undefined
-      && !BOOLEAN_OPTIONS.has(key)
       && nextValue !== undefined
       && !nextValue.startsWith("-");
     const value = inlineValue ?? (hasSeparateValue ? nextValue : true);
@@ -276,11 +336,7 @@ export function parseArgs(argv) {
       index += 1;
     }
 
-    if (options[key] === undefined) {
-      options[key] = value;
-    } else {
-      options[key] = Array.isArray(options[key]) ? options[key].concat(value) : [options[key], value];
-    }
+    addOption(options, key, value);
   }
 
   return { positionals, options };

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { parseArgs, runCli } from "../src/cli.js";
 import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
@@ -47,6 +48,58 @@ describe("cli", () => {
     });
   });
 
+  test("accepts dash-led separate values for known value-taking options", () => {
+    expect(parseArgs(["add", "chapter", "Foo", "--number", "-1"])).toEqual({
+      positionals: ["add", "chapter", "Foo"],
+      options: { number: "-1" }
+    });
+    expect(parseArgs(["add", "location", "Cave", "--region", "-north"])).toEqual({
+      positionals: ["add", "location", "Cave"],
+      options: { region: "-north" }
+    });
+    expect(parseArgs(["add", "chapter", "Foo", "--theme", "-dark", "--pov", "-first"])).toEqual({
+      positionals: ["add", "chapter", "Foo"],
+      options: { theme: "-dark", pov: "-first" }
+    });
+  });
+
+  test("keeps --option=value working for dash-led values", () => {
+    expect(parseArgs(["add", "chapter", "Foo", "--number=-1"])).toEqual({
+      positionals: ["add", "chapter", "Foo"],
+      options: { number: "-1" }
+    });
+    expect(parseArgs(["init", "A", "--synopsis=-a dark tale"])).toEqual({
+      positionals: ["init", "A"],
+      options: { synopsis: "-a dark tale" }
+    });
+  });
+
+  test("errors clearly on truly missing option values", () => {
+    expect(() => parseArgs(["add", "chapter", "Foo", "--number"])).toThrow("Missing value for --number");
+    expect(() => parseArgs(["add", "chapter", "Foo", "--number", "--format"])).toThrow("Missing value for --number");
+    expect(() => parseArgs(["add", "scene", "Bar", "--chapter", "--scene"])).toThrow("Missing value for --chapter");
+    expect(() => parseArgs(["add", "chapter", "Foo", "--number", "-h"])).toThrow("Missing value for --number");
+    const cwd = makeTempDir();
+    const missing = invoke(cwd, ["add", "chapter", "Foo", "--number"]);
+    expect(missing.code).toBe(1);
+    expect(missing.err).toContain("Missing value for --number");
+  });
+
+  test("passes unknown options through generically", () => {
+    expect(parseArgs(["add", "chapter", "Foo", "--bogus", "value"])).toEqual({
+      positionals: ["add", "chapter", "Foo"],
+      options: { bogus: "value" }
+    });
+    expect(parseArgs(["add", "chapter", "Foo", "--bogus=inline"])).toEqual({
+      positionals: ["add", "chapter", "Foo"],
+      options: { bogus: "inline" }
+    });
+    expect(parseArgs(["add", "chapter", "Foo", "--bogus"])).toEqual({
+      positionals: ["add", "chapter", "Foo"],
+      options: { bogus: true }
+    });
+  });
+
   test("names the missing story.md when a path is not a project", () => {
     const cwd = makeTempDir();
     const result = invoke(cwd, ["links", "nowhere"]);
@@ -69,6 +122,43 @@ describe("cli", () => {
     const unknown = invoke(cwd, ["nope"]);
     expect(unknown.code).toBe(1);
     expect(unknown.err).toContain("Unknown command: nope");
+  });
+
+  test("help documents builder options consumed by add", () => {
+    const cwd = makeTempDir();
+    const help = invoke(cwd, ["--help"]).out;
+    expect(help).toContain("--pov <style>");
+    expect(help).toContain("add chapter/scene");
+    expect(help).toContain("--theme <name>");
+    expect(help).toContain("add arc");
+    expect(help).toContain("--chapter <id>");
+    expect(help).toContain("Chapter id for add scene");
+    expect(help).not.toContain("or continuity records");
+    expect(help).toContain("--region <name>");
+    expect(help).toContain("--population <name>");
+    expect(help).toContain("--controlled-by <id>");
+    expect(help).toContain("--prevalence <name>");
+    expect(help).toContain("--acts <a,b>");
+    expect(help).toContain("--mention <id>");
+    expect(help).toContain("add chapter/scene");
+  });
+
+  test("parses mention options and writes them for new chapters", () => {
+    expect(parseArgs(["add", "chapter", "Foo", "--mention", "mira-sol"])).toEqual({
+      positionals: ["add", "chapter", "Foo"],
+      options: { mention: "mira-sol" }
+    });
+    expect(parseArgs(["add", "scene", "Bar", "--mentions", "-ghost"])).toEqual({
+      positionals: ["add", "scene", "Bar"],
+      options: { mentions: "-ghost" }
+    });
+    expect(() => parseArgs(["add", "chapter", "Foo", "--mention"])).toThrow("Missing value for --mention");
+    const cwd = makeTempDir();
+    expect(invoke(cwd, ["init", "Mentions"]).code).toBe(0);
+    const root = path.join(cwd, "mentions");
+    const added = invoke(cwd, ["add", "chapter", "Arrival", "--path", root, "--number", "1", "--mention", "mira-sol"]);
+    expect(added.code).toBe(0);
+    expect(fs.readFileSync(path.join(root, "chapters", "chapter-01.md"), "utf8")).toContain("mira-sol");
   });
 
   test("runs init, validate, wordcount, reindex, links, and export commands", () => {
@@ -237,15 +327,60 @@ word-count: 9
     expect(validation.out).toContain("declares 9 words");
   });
 
-  test("runs the bundled story-maintenance fallback script", () => {
-    const result = spawnSync(process.execPath, ["skills/story-maintenance/scripts/story.js", "--help"], {
-      cwd: path.resolve(import.meta.dirname, ".."),
-      encoding: "utf8"
-    });
+  test("runs the bundled story-maintenance fallback script under Node", () => {
+    const repoRoot = path.resolve(import.meta.dirname, "..");
+    const bundle = path.join(repoRoot, "skills", "story-maintenance", "scripts", "story.js");
 
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain("Usage: story");
-    expect(result.stdout).toContain("wordcount");
-    expect(result.stdout).toContain("build");
+    // process.execPath is Bun under `bun test`, so the Node-compat bundle must
+    // be spawned via an explicit `node` lookup instead.
+    let nodeAvailable = true;
+    try {
+      const probe = spawnSync("node", ["--version"], { encoding: "utf8" });
+      nodeAvailable = probe.status === 0;
+    } catch {
+      nodeAvailable = false;
+    }
+    if (!nodeAvailable) {
+      console.warn("Skipping fallback behavioral tests: node is not on PATH.");
+      return;
+    }
+
+    const runBundle = (args, cwd = repoRoot) =>
+      spawnSync("node", [bundle, ...args], { cwd, encoding: "utf8" });
+
+    const help = runBundle(["--help"]);
+    expect(help.status).toBe(0);
+    expect(help.stdout).toContain("Usage: story");
+    expect(help.stdout).toContain("wordcount");
+    expect(help.stdout).toContain("build");
+
+    // Exercise core commands against a temp copy so reindex cannot dirty the repo.
+    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "story-skills-fallback-"));
+    try {
+      const fixture = path.join(scratch, "the-last-ember");
+      fs.cpSync(path.join(repoRoot, "examples", "the-last-ember"), fixture, { recursive: true });
+
+      const validate = runBundle(["validate", fixture]);
+      expect(validate.status).toBe(0);
+      expect(validate.stdout).toContain("Project is valid");
+
+      const links = runBundle(["links", fixture]);
+      expect(links.status).toBe(0);
+      expect(links.stdout).toContain("Links are valid");
+
+      const wordcount = runBundle(["wordcount", fixture]);
+      expect(wordcount.status).toBe(0);
+      expect(wordcount.stdout).toContain("Total:");
+
+      const reindex = runBundle(["reindex", fixture]);
+      expect(reindex.status).toBe(0);
+      expect(reindex.stdout).toContain("Registries already up to date");
+
+      const missing = runBundle(["validate", path.join(scratch, "does-not-exist")]);
+      expect(missing.status).toBe(1);
+      expect(`${missing.stdout}${missing.stderr}`).toContain("Project validation failed");
+    } finally {
+      fs.rmSync(scratch, { recursive: true, force: true });
+    }
   });
 });
