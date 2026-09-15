@@ -359,4 +359,29 @@ status: alive
     fs.rmSync(path.join(created.root, "continuity", "state.md"));
     expect(checkContinuity(scanProject(created.root)).ok).toBe(true);
   });
+
+  test("warns when a scene location is missing from a chapter with no locations", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Empty Locations", force: false });
+    const root = created.root;
+
+    writeMarkdown(path.join(root, "worldbuilding", "locations", "old-mill.md"), `
+name: Old Mill
+type: building
+`, "# Mill\n");
+    writeChapter(root, 1, 'pov: ""\nlocations: []\ncharacters: []');
+    writeMarkdown(path.join(root, "scenes", "chapter-01-scene-01.md"), `
+title: Opening
+chapter: chapter-01
+scene: 1
+pov: ""
+location: old-mill
+characters: []
+status: draft
+state-changes: []
+`, "# Opening\n");
+
+    const result = checkContinuity(scanProject(root));
+    expect(result.warnings.join("\n")).toContain("scenes/chapter-01-scene-01.md is set in old-mill but chapters/chapter-01.md does not list that location");
+  });
 });

@@ -86,7 +86,7 @@ function checkSceneCasts(project, warnings) {
       }
     }
 
-    if (scene.location && chapter.locations.length > 0 && !chapter.locations.includes(scene.location)) {
+    if (scene.location && !chapter.locations.includes(scene.location)) {
       warnings.push(`${label} is set in ${scene.location} but ${relative(project, chapter.file)} does not list that location`);
     }
   }

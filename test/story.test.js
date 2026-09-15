@@ -983,4 +983,455 @@ word-count: 0
     expect(fs.readFileSync(docx.outFile).toString("utf8")).toContain('<w:t xml:space="preserve">* * *</w:t>');
     expect(() => buildBook(created.root, { format: "pdf" })).toThrow("Unsupported build format: pdf");
   });
+
+  test("falls back to filename scene numbers without throwing", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Scene Fallback", force: false });
+    writeMarkdown(path.join(created.root, "scenes", "chapter-01-scene-03.md"), `
+title: No Scene Key
+chapter: chapter-01
+status: draft
+`, "# No Scene Key");
+    const project = scanProject(created.root);
+    expect(project.scenes[0].scene).toBe(3);
+    const validation = validateProject(created.root);
+    expect(validation.errors.join("\n")).toContain("scenes/chapter-01-scene-03.md is missing frontmatter field scene");
+  });
+
+  test("converts missing or invalid frontmatter into per-file errors", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Frontmatter Gaps", force: false });
+    fs.writeFileSync(path.join(created.root, "characters", "broken.md"), "# No frontmatter\n", "utf8");
+    fs.writeFileSync(path.join(created.root, "chapters", "chapter-01.md"), "---\ntitle: Bad\n: oops\n---\nBody\n", "utf8");
+    const validation = validateProject(created.root);
+    expect(validation.ok).toBe(false);
+    expect(validation.errors.join("\n")).toContain("characters/broken.md");
+    expect(validation.errors.join("\n")).toContain("chapters/chapter-01.md");
+    const links = validateLinks(created.root);
+    expect(links.ok).toBe(false);
+    expect(links.errors.join("\n")).toContain("characters/broken.md");
+    expect(() => reindexProject(created.root)).not.toThrow();
+  });
+
+  test("anchors chapter filenames and enforces scene patterns with duplicate detection", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Filename Patterns", force: false });
+    writeMarkdown(path.join(created.root, "chapters", "my-chapter-01-notes.md"), `
+title: Notes
+number: 1
+status: draft
+word-count: 0
+`, "# Notes");
+    writeMarkdown(path.join(created.root, "scenes", "random.md"), `
+title: Random
+chapter: chapter-01
+scene: 1
+status: draft
+`, "# Random");
+    writeMarkdown(path.join(created.root, "scenes", "chapter-01-scene-01.md"), `
+title: First
+chapter: chapter-01
+scene: 1
+status: draft
+`, "# First");
+    writeMarkdown(path.join(created.root, "scenes", "chapter-01-scene-01-dup.md"), `
+title: Dup
+chapter: chapter-01
+scene: 1
+status: draft
+`, "# Dup");
+    const validation = validateProject(created.root);
+    expect(validation.errors.join("\n")).toContain("my-chapter-01-notes.md filename must match chapter-{NN}.md");
+    expect(validation.errors.join("\n")).toContain("scenes/random.md filename must match {chapter}-scene-{NN}.md");
+    expect(validation.errors.join("\n")).toContain("duplicates scene 1 of chapter-01");
+  });
+
+  test("rejects non-string enum values and scalar lists surface in links", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Enum Lists", force: false });
+    writeMarkdown(path.join(created.root, "characters", "numeric-status.md"), `
+name: Numeric
+role: supporting
+status: 123
+locations: []
+`, "# Numeric");
+    writeMarkdown(path.join(created.root, "chapters", "chapter-01.md"), `
+title: One
+number: 1
+status: draft
+characters: lone-wolf
+word-count: 0
+`, "# One");
+    const validation = validateProject(created.root);
+    expect(validation.errors.join("\n")).toContain("numeric-status.md frontmatter field status has unsupported value 123");
+    expect(validation.errors.join("\n")).toContain("chapter-01.md frontmatter field characters must be a list");
+    const links = validateLinks(created.root);
+    expect(links.errors.join("\n")).toContain("lone-wolf");
+  });
+
+  test("warns on stray top-level files and nested entity files", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Stray Files", force: false });
+    fs.writeFileSync(path.join(created.root, "notes.md"), "# stray\n", "utf8");
+    writeMarkdown(path.join(created.root, "characters", "extra", "nested.md"), `
+name: Nested
+role: supporting
+status: alive
+`, "# Nested");
+    const validation = validateProject(created.root);
+    expect(validation.warnings.join("\n")).toContain("notes.md is not part of the story project model and is ignored");
+    expect(validation.warnings.join("\n")).toContain("nested inside an entity directory and is ignored");
+  });
+
+  test("coerces numeric chapter refs to strings and guards next chapter number", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Numeric Refs", force: false });
+    writeMarkdown(path.join(created.root, "continuity", "questions", "q.md"), `
+title: Q
+status: open
+introduced: 1
+resolved: 2
+characters: []
+`, "# Q");
+    writeMarkdown(path.join(created.root, "chapters", "chapter-01.md"), `
+title: Broken Number
+number: many
+status: draft
+word-count: 0
+`, "# Broken");
+    const project = scanProject(created.root);
+    expect(typeof project.questions[0].introduced).toBe("string");
+    expect(project.questions[0].introduced).toBe("1");
+    const actions = projectActions(created.root);
+    expect(JSON.stringify(actions.actions)).not.toContain("NaN");
+  });
+
+  test("refuses duplicate chapter numbers and builds deterministically", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Deterministic Build", force: false });
+    writeMarkdown(path.join(created.root, "chapters", "chapter-01.md"), `
+title: One
+number: 1
+status: draft
+word-count: 0
+`, "## Chapter Text\n\nOne.");
+    writeMarkdown(path.join(created.root, "chapters", "chapter-02.md"), `
+title: Two
+number: 1
+status: draft
+word-count: 0
+`, "## Chapter Text\n\nTwo.");
+    expect(() => buildBook(created.root, { format: "epub" })).toThrow("Duplicate chapter number 1");
+    fs.rmSync(path.join(created.root, "chapters", "chapter-02.md"));
+    const first = buildBook(created.root, { format: "epub", out: "dist/first.epub" });
+    const second = buildBook(created.root, { format: "epub", out: "dist/second.epub" });
+    expect(fs.readFileSync(first.outFile).equals(fs.readFileSync(second.outFile))).toBe(true);
+    expect(fs.readFileSync(first.outFile).toString("utf8")).toContain("2000-01-01T00:00:00Z");
+    process.env.SOURCE_DATE_EPOCH = "1234567890";
+    try {
+      const dated = buildBook(created.root, { format: "epub", out: "dist/dated.epub" });
+      expect(fs.readFileSync(dated.outFile).toString("utf8")).toContain("2009-02-13T23:31:30Z");
+    } finally {
+      delete process.env.SOURCE_DATE_EPOCH;
+    }
+  });
+
+  test("reindex refreshes timeline and continuity story fields on title change", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Original Title", force: false });
+    fs.writeFileSync(
+      path.join(created.root, "story.md"),
+      fs.readFileSync(path.join(created.root, "story.md"), "utf8").replace("Original Title", "Renamed Title"),
+      "utf8"
+    );
+    const reindexed = reindexProject(created.root);
+    expect(reindexed.changed.join("\n")).toContain("timeline.md");
+    expect(reindexed.changed.join("\n")).toContain("state.md");
+    expect(scanProject(created.root).storyId).toBe("renamed-title");
+    expect(fs.readFileSync(path.join(created.root, "plot", "timeline.md"), "utf8")).toContain("story: renamed-title");
+    expect(fs.readFileSync(path.join(created.root, "continuity", "state.md"), "utf8")).toContain("story: renamed-title");
+  });
+
+  test("kebab-validates id refs, checks died-in, and follows timeline tokens", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Link Formats", force: false });
+    writeMarkdown(path.join(created.root, "characters", "hero.md"), `
+name: Hero
+role: protagonist
+status: alive
+died-in: missing-chapter
+locations: []
+`, "# Hero");
+    writeMarkdown(path.join(created.root, "chapters", "chapter-01.md"), `
+title: One
+number: 1
+status: draft
+characters:
+  - Bad_ID
+word-count: 0
+`, "# One");
+    fs.appendFileSync(path.join(created.root, "plot", "timeline.md"), "\n| Day 1 | Lost event | Arc | chapter-99 |\n", "utf8");
+    const links = validateLinks(created.root);
+    expect(links.errors.join("\n")).toContain("Bad_ID which must be kebab-case");
+    expect(links.errors.join("\n")).toContain("hero.md references missing chapter missing-chapter");
+    expect(links.errors.join("\n")).toContain("timeline.md");
+  });
+
+  test("writes mentions for new chapters and scenes and wires character arc", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Mentions Arc", force: false });
+    createEntity(created.root, { kind: "character", name: "Mira Sol", role: "protagonist" });
+    const chapter = createEntity(created.root, { kind: "chapter", name: "Arrival", number: 1, mentions: "mira-sol" });
+    const scene = createEntity(created.root, { kind: "scene", name: "Pier", chapter: "chapter-01", mentions: ["mira-sol"] });
+    expect(fs.readFileSync(chapter.file, "utf8")).toContain("mentions:");
+    expect(fs.readFileSync(chapter.file, "utf8")).toContain("mira-sol");
+    expect(fs.readFileSync(scene.file, "utf8")).toContain("mira-sol");
+    const arcCharacter = createEntity(created.root, { kind: "character", name: "Arc Hero", arc: "redemption" });
+    expect(fs.readFileSync(arcCharacter.file, "utf8")).toContain("arc:");
+    expect(scanProject(created.root).characters.find((item) => item.id === "arc-hero").arc).toBe("redemption");
+    expect(validateProject(created.root).ok).toBe(true);
+  });
+});
+
+describe("ingest and link hardening", () => {
+  test("surfaces story.md frontmatter errors instead of crashing", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Broken Story", force: false });
+    fs.writeFileSync(
+      path.join(created.root, "story.md"),
+      "---\ntitle: Broken\ntitle: Twice\n---\n# Broken\n",
+      "utf8"
+    );
+    const result = validateProject(created.root);
+    expect(result.errors.join("\n")).toContain("story.md: Duplicate frontmatter key: title");
+  });
+
+  test("surfaces continuity state frontmatter errors instead of crashing", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Broken State", force: false });
+    fs.writeFileSync(
+      path.join(created.root, "continuity", "state.md"),
+      "---\ntype: continuity-state\ntype: twice\n---\n# State\n",
+      "utf8"
+    );
+    const result = validateProject(created.root);
+    expect(result.errors.join("\n")).toContain("continuity/state.md: Duplicate frontmatter key: type");
+  });
+
+  test("surfaces entity frontmatter errors instead of crashing", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Broken Entity", force: false });
+    writeMarkdown(path.join(created.root, "characters", "bad.md"), `
+name: Bad
+name: Twice
+role: supporting
+status: alive
+`, "# Bad\n");
+    const result = validateProject(created.root);
+    expect(result.errors.join("\n")).toContain("characters/bad.md: Duplicate frontmatter key: name");
+  });
+
+  test("rejects non-kebab-case link targets without crashing", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Kebab Links", force: false });
+    writeMarkdown(path.join(created.root, "chapters", "chapter-01.md"), `
+title: One
+number: 1
+pov: Mira Sol
+status: draft
+word-count: 0
+`, "## Chapter Text\n\nOne two.");
+    writeMarkdown(path.join(created.root, "worldbuilding", "artifacts", "odd-relic.md"), `
+name: Odd Relic
+type: object
+status: active
+owner: Bad Owner
+`, "# Odd Relic\n");
+    writeMarkdown(path.join(created.root, "scenes", "chapter-01-scene-01.md"), `
+title: Opener
+chapter: Chapter 01
+scene: 1
+pov: Mira Sol
+status: draft
+`, "# Opener\n");
+    writeMarkdown(path.join(created.root, "worldbuilding", "factions", "quiet-ones.md"), `
+name: Quiet Ones
+type: guild
+status: active
+members:
+  - ""
+`, "# Quiet Ones\n");
+    const links = validateLinks(created.root);
+    const output = links.errors.join("\n");
+    expect(output).toContain("references POV character Mira Sol which must be kebab-case");
+    expect(output).toContain("references owner Bad Owner which must be kebab-case");
+    expect(output).toContain("references chapter Chapter 01 which must be kebab-case");
+    expect(output).not.toContain("member");
+  });
+
+  test("checks timeline and arc body references", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Body Refs", force: false });
+    createEntity(created.root, { kind: "chapter", name: "Arrival", number: 1 });
+    fs.appendFileSync(
+      path.join(created.root, "plot", "timeline.md"),
+      "\nSee [Ghost Ship](ghost-ship.md), [Bad Name](Bad Name.md), [Web](https://example.com/x), [Img](map.png), [Idx](characters/_index.md), [Query](?q=1), and [Part](chapter-01.md#text).\n",
+      "utf8"
+    );
+    const arc = createEntity(created.root, { kind: "arc", name: "Lost Arc" });
+    fs.appendFileSync(arc.file, "\nThe trail ends in chapter-99. See [Lost](lost-thing.md).\n", "utf8");
+    const links = validateLinks(created.root);
+    const output = links.errors.join("\n");
+    expect(output).toContain("links to missing file ghost-ship.md");
+    expect(output).toContain("links to Bad Name.md which must be kebab-case");
+    expect(output).toContain("references missing chapter chapter-99");
+    expect(output).toContain("links to missing file lost-thing.md");
+    expect(output).not.toContain("example.com");
+    expect(output).not.toContain("map.png");
+    expect(output).not.toContain("_index.md");
+  });
+
+  test("surfaces registry frontmatter errors instead of crashing", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Broken Index", force: false });
+    fs.writeFileSync(
+      path.join(created.root, "plot", "_index.md"),
+      "---\ntype: plot-registry\ntype: twice\n---\n# Plot\n",
+      "utf8"
+    );
+    const result = validateProject(created.root);
+    expect(result.errors.join("\n")).toContain("plot/_index.md: Duplicate frontmatter key: type");
+  });
+
+  test("surfaces timeline frontmatter errors during link checks", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Broken Timeline", force: false });
+    fs.writeFileSync(
+      path.join(created.root, "plot", "timeline.md"),
+      "---\nstory: broken\nstory: twice\n---\n# Timeline\n",
+      "utf8"
+    );
+    const links = validateLinks(created.root);
+    expect(links.errors.join("\n")).toContain("plot/timeline.md: Duplicate frontmatter key: story");
+  });
+
+  test("reindex tolerates registry and timeline file problems", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Tough Reindex", force: false });
+    const plotIndex = path.join(created.root, "plot", "_index.md");
+    const timeline = path.join(created.root, "plot", "timeline.md");
+    fs.writeFileSync(plotIndex, "---\ntitle: Tough\ntitle: Twice\n---\n# Plot\n", "utf8");
+    expect(reindexProject(created.root).changed).toBeDefined();
+    fs.rmSync(timeline);
+    expect(reindexProject(created.root).changed).toBeDefined();
+    fs.mkdirSync(timeline);
+    expect(reindexProject(created.root).changed).toBeDefined();
+    fs.rmSync(timeline, { recursive: true });
+    fs.writeFileSync(timeline, "---\nstory: tough\nstory: twice\n---\n# Timeline\n", "utf8");
+    expect(reindexProject(created.root).changed).toBeDefined();
+  });
+
+  test("flags scene frontmatter that disagrees with the filename", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Scene Names", force: false });
+    writeMarkdown(path.join(created.root, "scenes", "chapter-01-scene-01.md"), `
+title: Opener
+chapter: chapter-02
+scene: 2
+status: draft
+`, "# Opener\n");
+    const result = validateProject(created.root);
+    const output = result.errors.join("\n");
+    expect(output).toContain("chapter must match filename chapter chapter-01");
+    expect(output).toContain("scene must match filename scene number 1");
+  });
+
+  test("requires the continuity state file", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "No State", force: false });
+    createEntity(created.root, { kind: "character", name: "Mira Sol", role: "protagonist" });
+    createEntity(created.root, { kind: "chapter", name: "Arrival", number: 1, mentions: "mira-sol" });
+    fs.rmSync(path.join(created.root, "continuity", "state.md"));
+    const result = validateProject(created.root);
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain("Missing required path: continuity/state.md");
+  });
+
+  test("falls back to the filename chapter for chapterless scenes", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Chapterless", force: false });
+    writeMarkdown(path.join(created.root, "scenes", "chapter-01-scene-09.md"), `
+title: Aside
+scene: 9
+status: draft
+`, "# Aside\n");
+    const scene = scanProject(created.root).scenes.find((item) => item.id === "chapter-01-scene-09");
+    expect(scene.chapter).toBe("chapter-01");
+  });
+
+  test("falls back to the default timestamp for non-numeric SOURCE_DATE_EPOCH", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Epoch", force: false });
+    createEntity(created.root, { kind: "chapter", name: "Arrival", number: 1 });
+    const previous = process.env.SOURCE_DATE_EPOCH;
+    process.env.SOURCE_DATE_EPOCH = "not-a-number";
+    try {
+      const built = buildBook(created.root, { format: "epub" });
+      expect(fs.existsSync(built.outFile)).toBe(true);
+    } finally {
+      if (previous === undefined) {
+        delete process.env.SOURCE_DATE_EPOCH;
+      } else {
+        process.env.SOURCE_DATE_EPOCH = previous;
+      }
+    }
+  });
+
+  test("scans multiple entities of every kind", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Kitchen Sink", force: false });
+    createEntity(created.root, { kind: "character", name: "Alpha Hero", role: "protagonist" });
+    createEntity(created.root, { kind: "character", name: "Beta Rival", role: "antagonist" });
+    createEntity(created.root, { kind: "location", name: "North Gate", type: "city" });
+    createEntity(created.root, { kind: "location", name: "South Field", type: "wilderness" });
+    createEntity(created.root, { kind: "system", name: "Old Magic", type: "magic" });
+    createEntity(created.root, { kind: "system", name: "New Tech", type: "technology" });
+    createEntity(created.root, { kind: "faction", name: "Red Guild", type: "guild" });
+    createEntity(created.root, { kind: "faction", name: "Blue Court", type: "government" });
+    createEntity(created.root, { kind: "artifact", name: "Sun Blade", type: "weapon" });
+    createEntity(created.root, { kind: "artifact", name: "Moon Coin", type: "object" });
+    createEntity(created.root, { kind: "arc", name: "First Arc", type: "main" });
+    createEntity(created.root, { kind: "arc", name: "Second Arc", type: "subplot" });
+    createEntity(created.root, { kind: "chapter", name: "Arrival", number: 1 });
+    createEntity(created.root, { kind: "chapter", name: "Departure", number: 2 });
+    createEntity(created.root, { kind: "scene", name: "Pier", chapter: "chapter-01", scene: 1 });
+    createEntity(created.root, { kind: "scene", name: "Gate", chapter: "chapter-01", scene: 2 });
+    createEntity(created.root, { kind: "question", name: "Who Knocked" });
+    createEntity(created.root, { kind: "question", name: "Who Answered" });
+    createEntity(created.root, { kind: "promise", name: "First Promise" });
+    createEntity(created.root, { kind: "promise", name: "Second Promise" });
+    createEntity(created.root, { kind: "term", name: "First Term" });
+    createEntity(created.root, { kind: "term", name: "Second Term" });
+    const project = scanProject(created.root);
+    expect(project.characters.length).toBe(2);
+    expect(project.locations.length).toBe(2);
+    expect(project.systems.length).toBe(2);
+    expect(project.factions.length).toBe(2);
+    expect(project.artifacts.length).toBe(2);
+    expect(project.arcs.length).toBe(2);
+    expect(project.chapters.length).toBe(2);
+    expect(project.scenes.length).toBe(2);
+    expect(project.questions.length).toBe(2);
+    expect(project.promises.length).toBe(2);
+    expect(project.glossaryTerms.length).toBe(2);
+    // A body link forces checkBodyLinkTarget to build its known-id set over
+    // every non-empty collection.
+    fs.appendFileSync(
+      path.join(created.root, "plot", "timeline.md"),
+      "\nSee [Ghost Ship](ghost-ship.md).\n",
+      "utf8"
+    );
+    const links = validateLinks(created.root);
+    expect(links.errors.join("\n")).toContain("links to missing file ghost-ship.md");
+  });
 });
