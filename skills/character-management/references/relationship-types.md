@@ -28,9 +28,11 @@ Use these types in character frontmatter `relationships[].type` field.
 | ally | Allied but not necessarily close |
 | rival | Competitive relationship |
 | enemy | Hostile opposition |
+| adversary | Named personal opposition with direct stakes |
 | mentor | Teacher/guide figure |
 | student | Learner/protege |
 | employer | Boss or authority figure |
+| former-supervisor | Former boss or authority figure |
 | subordinate | Works under the other character |
 | colleague | Works alongside |
 
@@ -46,6 +48,8 @@ Use these types in character frontmatter `relationships[].type` field.
 
 ## Usage
 
+The type set is open and extensible: the CLI does not enum-check `relationships[].type`, so any kebab-case value passes `story validate`. Prefer a type from this reference when one fits; when none does, coin a descriptive kebab-case type (e.g. `former-supervisor`) and use it consistently on both sides.
+
 Relationships are bidirectional. When adding a relationship to one character, add the inverse to the other:
 
 - If A has `type: parent` to B, then B has `type: child` to A
@@ -60,4 +64,4 @@ Inverse pairs:
 - employer <-> subordinate
 
 Symmetric types (same both ways):
-- sibling, spouse, partner, friend, ally, rival, enemy, cousin, colleague, foil, confidant, love-interest
+- sibling, spouse, partner, friend, ally, rival, enemy, adversary, cousin, colleague, foil, confidant, love-interest, former-supervisor

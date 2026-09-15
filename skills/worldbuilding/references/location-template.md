@@ -5,7 +5,7 @@ Use this template when creating a new location file at `worldbuilding/locations/
 ```yaml
 ---
 name: "{Location Name}"
-type: {city|town|village|fortress|ruins|wilderness|landmark|region|continent|building|other}
+type: "{location-type, e.g. city, district, wilderness, submerged-ruin}"
 region: "{Parent Region}"
 population: {number or estimate}
 controlled-by: {character-kebab or faction}
@@ -14,9 +14,11 @@ notable-characters:
 tags:
   - {tag-1}
   - {tag-2}
-status: {thriving|declining|abandoned|contested|hidden}
+status: "{location-status, e.g. thriving, declining, strained, exposed, unknown}"
 ---
 ```
+
+`type` and `status` are free-form descriptive strings, not a closed set. Use the validator truth: any kebab-case or plain value passes `story validate`. Match existing example usage where it fits (e.g. `city`, `district`, `wilderness`, `submerged-ruin` for type; `thriving`, `declining`, `strained`, `exposed`, `unknown` for status).
 
 ## Description
 

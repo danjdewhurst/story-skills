@@ -5,9 +5,8 @@ Use this template when creating a new character file at `characters/{character-n
 ```yaml
 ---
 name: "{Full Name}"
-role: {protagonist|antagonist|supporting|minor}
-age: {age}
-status: {alive|deceased|unknown}
+role: {protagonist|antagonist|supporting|minor|narrator|deuteragonist}
+status: {alive|deceased|unknown|missing}
 died-in: {chapter-NN}
 aliases:
   - "{Alias 1}"

@@ -57,8 +57,12 @@ The timeline at `plot/timeline.md` is a chronological master list of all story e
 
 When adding events:
 - Insert in chronological order
-- Link to the relevant arc and chapter
 - Keep entries concise (one line per event)
+- Use the `| When | Event | Arc | Chapter |` table with these cell formats:
+  - **When:** story-relative time for story events (e.g. `Day 1, morning`), or how long ago for backstory (e.g. `12 years ago`, `~300 years ago`)
+  - **Event:** one concise line describing what happened
+  - **Arc:** the arc's display name as written in its file (e.g. `The Drowned Witness`), or `-` when the event belongs to no arc
+  - **Chapter:** `Ch {N}` once the event is written (e.g. `Ch 1`), or `-` for backstory and unwritten events
 
 When reviewing the timeline:
 - Check for chronological consistency

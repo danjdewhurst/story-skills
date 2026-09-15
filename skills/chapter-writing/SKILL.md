@@ -18,10 +18,14 @@ A story project must already exist with at least:
 
 ## Recommended Companion Skill
 
-Before drafting or revising chapter prose, check whether the `better-writing` skill is available in the active agent environment.
+Before drafting or revising chapter prose, check whether the `better-writing` skill is available in the active agent environment. Detect it by looking for its skill directory in the configured skills paths:
 
-- If `better-writing` is available, use it for prose quality, voice calibration, anti-generic writing checks, and the final pre-flight pass before saving the chapter.
-- If `better-writing` is not available, recommend installing [forjd/better-writing](https://github.com/forjd/better-writing) with `npx skills add forjd/better-writing` or `bunx skills add forjd/better-writing`, then continue with this skill's built-in writing guidelines if the user does not install it.
+```shell
+ls -d ~/.claude/skills/better-writing .claude/skills/better-writing skills/better-writing 2>/dev/null
+```
+
+- If a `better-writing` directory exists (containing `SKILL.md`), use it for prose quality, voice calibration, anti-generic writing checks, and the final pre-flight pass before saving the chapter.
+- If `better-writing` is not installed, point the user at [forjd/better-writing](https://github.com/forjd/better-writing) and ask whether they want to install it; do not run any installer without explicit approval. Then continue with this skill's built-in writing guidelines (`references/writing-guidelines.md`) if the user does not install it.
 
 ## Outline-First Workflow
 
@@ -77,7 +81,7 @@ With the approved outline, write the full prose:
 
 Save to `chapters/chapter-{NN}.md` with appropriate frontmatter.
 
-Create or update a matching scene file in `scenes/chapter-{NN}-scene-{NN}.md` for each scene. Scene frontmatter should include `chapter`, `scene`, `pov`, `location`, `characters`, `arcs-advanced`, `status`, and `state-changes` so continuity survives beyond prose.
+Create or update a matching scene file in `scenes/chapter-{NN}-scene-{NN}.md` for each scene. Scene frontmatter should include `title`, `chapter`, `scene`, `pov`, `location`, `characters`, `mentions`, `arcs-advanced`, `status`, and `state-changes` so continuity survives beyond prose.
 
 Write chapter prose directly into the chapter markdown file. Do not stage prose in project-local build scripts, generator scripts, or bulk writer scripts (for example `build-*.js`) to emit chapters. If a temporary helper is truly unavoidable for mechanical file operations, keep it outside the story project and remove it before finishing.
 

@@ -50,13 +50,15 @@ Optional lists: `aliases`, `relationships`, `locations`, `tags`.
 
 Optional scalar: `died-in`, the chapter id in which the character dies on the page. Set it together with `status: deceased`; `story continuity` then errors on appearances in later chapters. Characters who died before chapter 1 should use `status: deceased` without `died-in`.
 
+Optional freeform scalar: `arc`, a short theme label for the character's personal arc (e.g. `redemption`). It is not validated as an arc id, so it never triggers link errors; set it with `story add character --arc <theme>`.
+
 ### Worldbuilding
 
-Locations require `name` and `type`. Systems require `name` and `type`.
+Locations require `name` and `type`; they may list `region`, `population`, `controlled-by`, `notable-characters`, `tags`, and `status`. Systems require `name` and `type`; they may list `prevalence`.
 
 Factions require `name`, `type`, and `status`; they may list `members`, `locations`, and `tags`.
 
-Artifacts require `name`, `type`, and `status`; they may reference an `owner` character or faction and a `location`.
+Artifacts require `name`, `type`, and `status`; they may reference an `owner` character or faction and a `location`, and may list `tags`.
 
 ### Plot
 
@@ -64,7 +66,7 @@ Arcs require `name`, `type`, and `status`; they may list `characters`, `themes`,
 
 ### Chapters And Scenes
 
-Chapters require `title`, `number`, and `status`; optional reference lists are `locations`, `characters`, `mentions`, and `arcs-advanced`.
+Chapters require `title`, `number`, and `status`; they may list a `pov` character and a `word-count` maintained by `story wordcount --write`, plus optional reference lists `locations`, `characters`, `mentions`, and `arcs-advanced`.
 
 Scenes require `title`, `chapter`, `scene`, and `status`. Scenes carry machine-readable continuity fields: `pov`, `location`, `characters`, `mentions`, `arcs-advanced`, and `state-changes`.
 
@@ -80,9 +82,9 @@ State entries are lists of mappings checked by `story continuity`:
 - `object-state` entries reference an existing `artifact`, an optional `owner` (character or faction), an optional `location`, and a `status` that must agree with the artifact file.
 - `knowledge-state` entries reference an existing `character`, a non-empty `knows` fact, and an optional `learned-in` chapter id.
 
-Questions require `title` and `status`; optional chapter references are `introduced` and `resolved`.
+Questions require `title` and `status`; optional chapter references are `introduced` and `resolved`, plus an optional `characters` list.
 
-Promises require `title` and `status`; optional chapter references are `planted` and `payoff`.
+Promises require `title` and `status`; optional chapter references are `planted` and `payoff`, plus optional `arcs` and `characters` lists.
 
 ### Glossary
 
