@@ -17,7 +17,7 @@ A story project must already exist (created via the story-init skill). Verify by
 
 1. Read `story.md` for genre, themes, and tone context
 2. Read `characters/_index.md` for existing characters
-3. Ask for the character's name and role (protagonist, antagonist, supporting, minor)
+3. Ask for the character's name and role (protagonist, antagonist, supporting, minor, narrator, deuteragonist)
 4. Build the profile through conversation, exploring:
    - Appearance and distinguishing features
    - Personality, traits, and quirks
@@ -64,9 +64,9 @@ Family trees are maintained in the `characters/_index.md` under the "Family Tree
 ## Family Trees
 
 ### {Family Name}
-- **{Character Name}** ({status}) - [{name-kebab}.md]
-  - **{Child Name}** - [{name-kebab}.md]
-  - **{Child Name}** - [{name-kebab}.md]
+- **{Character Name}** ({status}) - [{Name}]({name-kebab}.md)
+  - **{Child Name}** - [{Name}]({name-kebab}.md)
+  - **{Child Name}** - [{Name}]({name-kebab}.md)
 ```
 
 Indent children under parents. Note marriages/partnerships inline.

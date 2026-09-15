@@ -68,7 +68,7 @@ jobs:
                first and stop after opening a maintenance PR.
             3. Otherwise draft the next chapter following the chapter-writing
                skill: outline first, then prose under "## Chapter Text", with
-               accurate frontmatter (pov, locations, characters, arcs-advanced).
+               accurate frontmatter (pov, status, word-count, locations, characters, mentions, arcs-advanced).
                Add matching scene records and update continuity/state.md,
                promises, questions, and the timeline.
             4. Run the maintenance commands and make them pass:

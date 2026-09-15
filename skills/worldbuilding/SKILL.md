@@ -52,6 +52,12 @@ Cover:
 - Important members
 - Conflicts and pressure points
 
+Then:
+1. Save to `worldbuilding/factions/{name-kebab}.md`
+2. Update the Factions table in `worldbuilding/_index.md`
+3. If members are listed, verify those character files exist
+4. When CLI access is available, run `story reindex .`, `story links .`, and `story validate .`
+
 ## Creating An Artifact
 
 Use `story add artifact "{Artifact Name}" --type "{object|weapon|document|technology|relic|symbol|resource|other}"` when the CLI is available. Otherwise create `worldbuilding/artifacts/{name-kebab}.md` with frontmatter fields `name`, `type`, `status`, `owner`, `location`, and `tags`.
@@ -61,6 +67,12 @@ Cover:
 - Function, constraints, and costs
 - History and prior owners
 - Current owner/location state
+
+Then:
+1. Save to `worldbuilding/artifacts/{name-kebab}.md`
+2. Update the Artifacts table in `worldbuilding/_index.md`
+3. If an owner or location is listed, verify those files exist and cross-reference back
+4. When CLI access is available, run `story reindex .`, `story links .`, and `story validate .`
 
 ## Updating World Elements
 

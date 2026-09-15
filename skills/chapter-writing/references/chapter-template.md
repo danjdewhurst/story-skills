@@ -15,7 +15,7 @@ mentions:
   - {referenced-character-kebab}
 arcs-advanced:
   - {arc-kebab}
-status: {outline|draft|revised|final}
+status: {outline|draft|revised|final|complete}
 word-count: {N}
 ---
 ```

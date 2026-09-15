@@ -25,7 +25,7 @@ Initialize a new story project with a structured markdown folder layout. Creates
    - Setting era/time period
    - Key themes (2-4)
    - POV style (first-person, third-person-limited, third-person-omniscient)
-   - Tense (past, present)
+   - Tense (past, present, future, mixed)
 
 If the Story CLI is available, prefer using it to create the starter project, then inspect and refine the generated files as needed:
 
