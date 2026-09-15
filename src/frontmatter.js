@@ -1,4 +1,4 @@
-export const FRONTMATTER_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
+export const FRONTMATTER_PATTERN = /^(?:\uFEFF)?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?/;
 
 export function parseFrontmatter(markdown, filePath = "markdown") {
   const match = FRONTMATTER_PATTERN.exec(markdown);
@@ -71,6 +71,9 @@ function parseYaml(source) {
     }
 
     const [, key, rest = ""] = pair;
+    if (Object.prototype.hasOwnProperty.call(data, key)) {
+      throw new Error(`Duplicate frontmatter key: ${key}`);
+    }
     if (rest !== "") {
       data[key] = parseScalar(rest);
       index += 1;
@@ -120,6 +123,9 @@ function parseArray(lines, startIndex) {
         break;
       }
 
+      if (Object.prototype.hasOwnProperty.call(item, childMatch[1])) {
+        throw new Error(`Duplicate frontmatter key: ${childMatch[1]}`);
+      }
       item[childMatch[1]] = parseScalar(childMatch[2]);
       index += 1;
     }
