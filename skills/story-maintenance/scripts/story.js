@@ -8,7 +8,7 @@ import fs2 from "node:fs";
 import path3 from "node:path";
 
 // src/frontmatter.js
-var FRONTMATTER_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
+var FRONTMATTER_PATTERN = /^(?:\uFEFF)?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?/;
 function parseFrontmatter(markdown, filePath = "markdown") {
   const match = FRONTMATTER_PATTERN.exec(markdown);
   if (!match) {
@@ -70,6 +70,9 @@ function parseYaml(source) {
       throw new Error(`Unsupported frontmatter line: ${line}`);
     }
     const [, key, rest = ""] = pair;
+    if (Object.prototype.hasOwnProperty.call(data, key)) {
+      throw new Error(`Duplicate frontmatter key: ${key}`);
+    }
     if (rest !== "") {
       data[key] = parseScalar(rest);
       index += 1;
@@ -109,6 +112,9 @@ function parseArray(lines, startIndex) {
       const childMatch = /^    ([A-Za-z0-9_-]+):\s*(.*)$/.exec(lines[index]);
       if (!childMatch) {
         break;
+      }
+      if (Object.prototype.hasOwnProperty.call(item, childMatch[1])) {
+        throw new Error(`Duplicate frontmatter key: ${childMatch[1]}`);
       }
       item[childMatch[1]] = parseScalar(childMatch[2]);
       index += 1;
@@ -281,7 +287,7 @@ function checkSceneCasts(project, warnings) {
         warnings.push(`${label} lists ${characterId} but ${relative(project, chapter.file)} does not list them in characters or mentions`);
       }
     }
-    if (scene.location && chapter.locations.length > 0 && !chapter.locations.includes(scene.location)) {
+    if (scene.location && !chapter.locations.includes(scene.location)) {
       warnings.push(`${label} is set in ${scene.location} but ${relative(project, chapter.file)} does not list that location`);
     }
   }
@@ -549,22 +555,42 @@ function createStoryProject(options) {
 }
 function scanProject(root) {
   const projectRoot = path2.resolve(root);
-  const story = readMarkdown(requireStoryFile(projectRoot), projectRoot);
+  const scanErrors = [];
+  const storyPath = requireStoryFile(projectRoot);
+  let story;
+  try {
+    story = readMarkdown(storyPath, projectRoot);
+  } catch (error) {
+    scanErrors.push(`story.md: ${error.message}`);
+    story = { data: { title: path2.basename(projectRoot) }, body: "", rawMarkdown: "" };
+  }
   const storyId = kebabCase(story.data.title ?? path2.basename(projectRoot));
+  let continuity = null;
+  const continuityPath = path2.join(projectRoot, "continuity", "state.md");
+  if (fs.existsSync(continuityPath)) {
+    try {
+      continuity = readMarkdown(continuityPath, projectRoot);
+    } catch (error) {
+      scanErrors.push(`${path2.join("continuity", "state.md")}: ${error.message}`);
+      continuity = null;
+    }
+  }
   return {
     root: projectRoot,
     story,
     storyId,
+    fileErrors: scanErrors,
     characters: readEntityFiles(projectRoot, "characters", (id, file, data) => ({
       id,
       file,
       name: data.name ?? titleCaseSlug(id),
       role: data.role ?? "",
       status: data.status ?? "",
-      diedIn: data["died-in"] ?? "",
+      arc: String(data.arc ?? ""),
+      diedIn: String(data["died-in"] ?? ""),
       relationships: asArray(data.relationships),
       locations: asArray(data.locations)
-    })),
+    }), scanErrors),
     locations: readEntityFiles(projectRoot, path2.join("worldbuilding", "locations"), (id, file, data) => ({
       id,
       file,
@@ -572,13 +598,13 @@ function scanProject(root) {
       type: data.type ?? "",
       region: data.region ?? "",
       notableCharacters: asArray(data["notable-characters"])
-    })),
+    }), scanErrors),
     systems: readEntityFiles(projectRoot, path2.join("worldbuilding", "systems"), (id, file, data) => ({
       id,
       file,
       name: data.name ?? titleCaseSlug(id),
       type: data.type ?? ""
-    })),
+    }), scanErrors),
     factions: readEntityFiles(projectRoot, path2.join("worldbuilding", "factions"), (id, file, data) => ({
       id,
       file,
@@ -587,7 +613,7 @@ function scanProject(root) {
       status: data.status ?? "",
       members: asArray(data.members),
       locations: asArray(data.locations)
-    })),
+    }), scanErrors),
     artifacts: readEntityFiles(projectRoot, path2.join("worldbuilding", "artifacts"), (id, file, data) => ({
       id,
       file,
@@ -596,7 +622,7 @@ function scanProject(root) {
       status: data.status ?? "",
       owner: data.owner ?? "",
       location: data.location ?? ""
-    })),
+    }), scanErrors),
     arcs: readEntityFiles(projectRoot, path2.join("plot", "arcs"), (id, file, data) => ({
       id,
       file,
@@ -605,7 +631,7 @@ function scanProject(root) {
       status: data.status ?? "",
       characters: asArray(data.characters),
       themes: asArray(data.themes)
-    })),
+    }), scanErrors),
     chapters: readEntityFiles(projectRoot, "chapters", (id, file, data, markdown) => ({
       id,
       file,
@@ -619,12 +645,12 @@ function scanProject(root) {
       arcsAdvanced: asArray(data["arcs-advanced"]),
       declaredWordCount: Number(data["word-count"] ?? 0),
       wordCount: wordCount(chapterProse(markdown.body))
-    })).sort((left, right) => left.number - right.number || left.file.localeCompare(right.file)),
+    }), scanErrors).sort((left, right) => left.number - right.number || left.file.localeCompare(right.file)),
     scenes: readEntityFiles(projectRoot, "scenes", (id, file, data) => ({
       id,
       file,
       title: data.title ?? titleCaseSlug(id),
-      chapter: String(data.chapter ?? ""),
+      chapter: String(data.chapter ?? sceneChapterFromFile(file) ?? ""),
       scene: Number(data.scene ?? sceneNumberFromFile(file) ?? 0),
       pov: data.pov ?? "",
       location: data.location ?? "",
@@ -633,34 +659,34 @@ function scanProject(root) {
       mentions: asArray(data.mentions),
       arcsAdvanced: asArray(data["arcs-advanced"]),
       stateChanges: asArray(data["state-changes"])
-    })).sort((left, right) => left.chapter.localeCompare(right.chapter) || left.scene - right.scene || left.file.localeCompare(right.file)),
+    }), scanErrors).sort((left, right) => left.chapter.localeCompare(right.chapter) || left.scene - right.scene || left.file.localeCompare(right.file)),
     questions: readEntityFiles(projectRoot, path2.join("continuity", "questions"), (id, file, data) => ({
       id,
       file,
       title: data.title ?? titleCaseSlug(id),
       status: data.status ?? "",
-      introduced: data.introduced ?? "",
-      resolved: data.resolved ?? "",
+      introduced: String(data.introduced ?? ""),
+      resolved: String(data.resolved ?? ""),
       characters: asArray(data.characters)
-    })),
+    }), scanErrors),
     promises: readEntityFiles(projectRoot, path2.join("continuity", "promises"), (id, file, data) => ({
       id,
       file,
       title: data.title ?? titleCaseSlug(id),
       status: data.status ?? "",
-      planted: data.planted ?? "",
-      payoff: data.payoff ?? "",
+      planted: String(data.planted ?? ""),
+      payoff: String(data.payoff ?? ""),
       arcs: asArray(data.arcs),
       characters: asArray(data.characters)
-    })),
+    }), scanErrors),
     glossaryTerms: readEntityFiles(projectRoot, path2.join("glossary", "terms"), (id, file, data) => ({
       id,
       file,
       term: data.term ?? titleCaseSlug(id),
       category: data.category ?? "",
       aliases: asArray(data.aliases)
-    })),
-    continuity: fs.existsSync(path2.join(projectRoot, "continuity", "state.md")) ? readMarkdown(path2.join(projectRoot, "continuity", "state.md"), projectRoot) : null
+    }), scanErrors),
+    continuity
   };
 }
 function validateProject(root) {
@@ -676,6 +702,9 @@ function validateProject(root) {
     return { ok: false, errors, warnings };
   }
   const project = scanProject(projectRoot);
+  for (const scanError of project.fileErrors ?? []) {
+    errors.push(scanError);
+  }
   validateStoryFrontmatter(project, errors);
   validateIndexFrontmatter(project, errors);
   validateCharacters(project, errors);
@@ -690,6 +719,7 @@ function validateProject(root) {
   validateQuestions(project, errors);
   validatePromises(project, errors);
   validateGlossaryTerms(project, errors);
+  collectStrayFileWarnings(project, warnings);
   const indexChecks = [
     [path2.join("characters", "_index.md"), project.characters.map((item) => `](${item.id}.md)`)],
     [path2.join("worldbuilding", "_index.md"), project.locations.map((item) => `](locations/${item.id}.md)`).concat(project.systems.map((item) => `](systems/${item.id}.md)`)).concat(project.factions.map((item) => `](factions/${item.id}.md)`)).concat(project.artifacts.map((item) => `](artifacts/${item.id}.md)`))],
@@ -722,141 +752,232 @@ function validateLinks(root) {
   const project = scanProject(root);
   const errors = [];
   const warnings = [];
+  for (const scanError of project.fileErrors ?? []) {
+    errors.push(scanError);
+  }
   const characters = new Map(project.characters.map((item) => [item.id, item]));
   const locations = new Map(project.locations.map((item) => [item.id, item]));
   const chapters = new Map(project.chapters.map((item) => [item.id, item]));
   const arcs = new Map(project.arcs.map((item) => [item.id, item]));
   const factions = new Map(project.factions.map((item) => [item.id, item]));
+  const hasCharacter = (id) => characters.has(id);
+  const hasLocation = (id) => locations.has(id);
+  const hasChapter = (id) => chapters.has(id);
+  const hasArc = (id) => arcs.has(id);
   for (const character of project.characters) {
+    const label = relative2(project, character.file);
     for (const relationship of character.relationships) {
+      if (!relationship || typeof relationship !== "object" || Array.isArray(relationship)) {
+        continue;
+      }
       const target = relationship.character;
+      if (typeof target !== "string" || target === "") {
+        continue;
+      }
+      if (target !== kebabCase(target)) {
+        errors.push(`${label} relationship character ${target} must be kebab-case`);
+        continue;
+      }
       if (!characters.has(target)) {
-        errors.push(`${relative2(project, character.file)} references missing character ${target}`);
-      } else if (!characters.get(target).relationships.some((entry) => entry.character === character.id)) {
-        errors.push(`${relative2(project, character.file)} relationship to ${target} is missing backlink`);
+        errors.push(`${label} references missing character ${target}`);
+      } else if (!characters.get(target).relationships.some((entry) => entry && typeof entry === "object" && entry.character === character.id)) {
+        errors.push(`${label} relationship to ${target} is missing backlink`);
       } else {
-        const backlink = characters.get(target).relationships.find((entry) => entry.character === character.id);
+        const backlink = characters.get(target).relationships.find((entry) => entry && typeof entry === "object" && entry.character === character.id);
         const expectedType = inverseRelationshipType(relationship.type);
         if (expectedType && backlink.type !== expectedType) {
-          errors.push(`${relative2(project, character.file)} relationship ${relationship.type} to ${target} expects backlink type ${expectedType}, got ${backlink.type}`);
+          errors.push(`${label} relationship ${relationship.type} to ${target} expects backlink type ${expectedType}, got ${backlink.type}`);
         }
       }
     }
     for (const locationId of character.locations) {
-      if (!locations.has(locationId)) {
-        errors.push(`${relative2(project, character.file)} references missing location ${locationId}`);
-      } else if (!locations.get(locationId).notableCharacters.includes(character.id)) {
-        errors.push(`${relative2(project, character.file)} location ${locationId} is missing notable-character backlink`);
+      checkIdReference(errors, label, locationId, "location", hasLocation);
+      if (typeof locationId === "string" && locationId !== "" && locationId === kebabCase(locationId) && locations.has(locationId) && !locations.get(locationId).notableCharacters.includes(character.id)) {
+        errors.push(`${label} location ${locationId} is missing notable-character backlink`);
       }
+    }
+    if (character.diedIn) {
+      checkIdReference(errors, label, character.diedIn, "chapter", hasChapter);
     }
   }
   for (const location of project.locations) {
+    const label = relative2(project, location.file);
     for (const characterId of location.notableCharacters) {
-      if (!characters.has(characterId)) {
-        errors.push(`${relative2(project, location.file)} references missing character ${characterId}`);
-      } else if (!characters.get(characterId).locations.includes(location.id)) {
-        errors.push(`${relative2(project, location.file)} notable character ${characterId} is missing location backlink`);
+      checkIdReference(errors, label, characterId, "character", hasCharacter);
+      if (typeof characterId === "string" && characterId !== "" && characterId === kebabCase(characterId) && characters.has(characterId) && !characters.get(characterId).locations.includes(location.id)) {
+        errors.push(`${label} notable character ${characterId} is missing location backlink`);
       }
     }
   }
   for (const arc of project.arcs) {
+    const label = relative2(project, arc.file);
     for (const characterId of arc.characters) {
-      if (!characters.has(characterId)) {
-        errors.push(`${relative2(project, arc.file)} references missing character ${characterId}`);
-      }
+      checkIdReference(errors, label, characterId, "character", hasCharacter);
     }
   }
   for (const chapter of project.chapters) {
-    if (chapter.pov && !characters.has(chapter.pov)) {
-      errors.push(`${relative2(project, chapter.file)} references missing POV character ${chapter.pov}`);
+    const label = relative2(project, chapter.file);
+    if (chapter.pov) {
+      const povText = String(chapter.pov);
+      if (povText !== kebabCase(povText)) {
+        errors.push(`${label} references POV character ${povText} which must be kebab-case`);
+      } else if (!characters.has(chapter.pov)) {
+        errors.push(`${label} references missing POV character ${chapter.pov}`);
+      }
     }
     for (const characterId of chapter.characters.concat(chapter.mentions)) {
-      if (!characters.has(characterId)) {
-        errors.push(`${relative2(project, chapter.file)} references missing character ${characterId}`);
-      }
+      checkIdReference(errors, label, characterId, "character", hasCharacter);
     }
     for (const locationId of chapter.locations) {
-      if (!locations.has(locationId)) {
-        errors.push(`${relative2(project, chapter.file)} references missing location ${locationId}`);
-      }
+      checkIdReference(errors, label, locationId, "location", hasLocation);
     }
     for (const arcId of chapter.arcsAdvanced) {
-      if (!arcs.has(arcId)) {
-        errors.push(`${relative2(project, chapter.file)} references missing arc ${arcId}`);
-      }
+      checkIdReference(errors, label, arcId, "arc", hasArc);
     }
   }
   for (const faction of project.factions) {
+    const label = relative2(project, faction.file);
     for (const characterId of faction.members) {
-      if (!characters.has(characterId)) {
-        errors.push(`${relative2(project, faction.file)} references missing member ${characterId}`);
-      }
+      checkIdReference(errors, label, characterId, "member", hasCharacter);
     }
     for (const locationId of faction.locations) {
-      if (!locations.has(locationId)) {
-        errors.push(`${relative2(project, faction.file)} references missing location ${locationId}`);
-      }
+      checkIdReference(errors, label, locationId, "location", hasLocation);
     }
   }
   for (const artifact of project.artifacts) {
-    if (artifact.owner && !characters.has(artifact.owner) && !factions.has(artifact.owner)) {
-      errors.push(`${relative2(project, artifact.file)} references missing owner ${artifact.owner}`);
+    const label = relative2(project, artifact.file);
+    if (artifact.owner) {
+      const ownerText = String(artifact.owner);
+      if (ownerText !== kebabCase(ownerText)) {
+        errors.push(`${label} references owner ${ownerText} which must be kebab-case`);
+      } else if (!characters.has(artifact.owner) && !factions.has(artifact.owner)) {
+        errors.push(`${label} references missing owner ${artifact.owner}`);
+      }
     }
-    if (artifact.location && !locations.has(artifact.location)) {
-      errors.push(`${relative2(project, artifact.file)} references missing location ${artifact.location}`);
+    if (artifact.location) {
+      checkIdReference(errors, label, artifact.location, "location", hasLocation);
     }
   }
   for (const scene of project.scenes) {
-    if (scene.chapter && !chapters.has(scene.chapter)) {
-      errors.push(`${relative2(project, scene.file)} references missing chapter ${scene.chapter}`);
+    const label = relative2(project, scene.file);
+    if (scene.chapter) {
+      const chapterText = String(scene.chapter);
+      if (chapterText !== kebabCase(chapterText)) {
+        errors.push(`${label} references chapter ${chapterText} which must be kebab-case`);
+      } else if (!chapters.has(scene.chapter)) {
+        errors.push(`${label} references missing chapter ${scene.chapter}`);
+      }
     }
-    if (scene.pov && !characters.has(scene.pov)) {
-      errors.push(`${relative2(project, scene.file)} references missing POV character ${scene.pov}`);
+    if (scene.pov) {
+      const povText = String(scene.pov);
+      if (povText !== kebabCase(povText)) {
+        errors.push(`${label} references POV character ${povText} which must be kebab-case`);
+      } else if (!characters.has(scene.pov)) {
+        errors.push(`${label} references missing POV character ${scene.pov}`);
+      }
     }
-    if (scene.location && !locations.has(scene.location)) {
-      errors.push(`${relative2(project, scene.file)} references missing location ${scene.location}`);
+    if (scene.location) {
+      checkIdReference(errors, label, scene.location, "location", hasLocation);
     }
     for (const characterId of scene.characters.concat(scene.mentions)) {
-      if (!characters.has(characterId)) {
-        errors.push(`${relative2(project, scene.file)} references missing character ${characterId}`);
-      }
+      checkIdReference(errors, label, characterId, "character", hasCharacter);
     }
     for (const arcId of scene.arcsAdvanced) {
-      if (!arcs.has(arcId)) {
-        errors.push(`${relative2(project, scene.file)} references missing arc ${arcId}`);
-      }
+      checkIdReference(errors, label, arcId, "arc", hasArc);
     }
   }
   for (const question of project.questions) {
+    const label = relative2(project, question.file);
     for (const chapterId of [question.introduced, question.resolved].filter(Boolean)) {
-      if (!chapters.has(chapterId)) {
-        errors.push(`${relative2(project, question.file)} references missing chapter ${chapterId}`);
-      }
+      checkIdReference(errors, label, chapterId, "chapter", hasChapter);
     }
     for (const characterId of question.characters) {
-      if (!characters.has(characterId)) {
-        errors.push(`${relative2(project, question.file)} references missing character ${characterId}`);
-      }
+      checkIdReference(errors, label, characterId, "character", hasCharacter);
     }
   }
   for (const promise of project.promises) {
+    const label = relative2(project, promise.file);
     for (const chapterId of [promise.planted, promise.payoff].filter(Boolean)) {
-      if (!chapters.has(chapterId)) {
-        errors.push(`${relative2(project, promise.file)} references missing chapter ${chapterId}`);
-      }
+      checkIdReference(errors, label, chapterId, "chapter", hasChapter);
     }
     for (const arcId of promise.arcs) {
-      if (!arcs.has(arcId)) {
-        errors.push(`${relative2(project, promise.file)} references missing arc ${arcId}`);
-      }
+      checkIdReference(errors, label, arcId, "arc", hasArc);
     }
     for (const characterId of promise.characters) {
-      if (!characters.has(characterId)) {
-        errors.push(`${relative2(project, promise.file)} references missing character ${characterId}`);
+      checkIdReference(errors, label, characterId, "character", hasCharacter);
+    }
+  }
+  validateTimelineAndArcBodyRefs(project, chapters, errors);
+  return { ok: errors.length === 0, errors, warnings };
+}
+function validateTimelineAndArcBodyRefs(project, chapters, errors) {
+  const chapterIds = new Set(chapters.keys());
+  const timelinePath = path2.join(project.root, "plot", "timeline.md");
+  if (fs.existsSync(timelinePath)) {
+    try {
+      const raw = fs.readFileSync(timelinePath, "utf8");
+      const body = parseFrontmatter(raw, timelinePath).body ?? raw;
+      for (const token of extractChapterIdTokens(body)) {
+        if (!chapterIds.has(token)) {
+          errors.push(`${path2.join("plot", "timeline.md")} references missing chapter ${token}`);
+        }
+      }
+      for (const target of extractMarkdownLinkTargets(body)) {
+        checkBodyLinkTarget(project, path2.join("plot", "timeline.md"), target, errors);
+      }
+    } catch (error) {
+      const message = `${path2.join("plot", "timeline.md")}: ${error.message}`;
+      if (!errors.includes(message)) {
+        errors.push(message);
       }
     }
   }
-  return { ok: errors.length === 0, errors, warnings };
+  for (const arc of project.arcs) {
+    const label = relative2(project, arc.file);
+    const body = readMarkdown(arc.file, project.root).body ?? "";
+    for (const token of extractChapterIdTokens(body)) {
+      if (!chapterIds.has(token)) {
+        errors.push(`${label} references missing chapter ${token}`);
+      }
+    }
+    for (const target of extractMarkdownLinkTargets(body)) {
+      checkBodyLinkTarget(project, label, target, errors);
+    }
+  }
+}
+function checkBodyLinkTarget(project, label, target, errors) {
+  const cleaned = String(target).trim();
+  if (!cleaned || /^(https?:|mailto:|#)/i.test(cleaned)) {
+    return;
+  }
+  const base = path2.basename(cleaned.split("#")[0].split("?")[0]);
+  if (!base.endsWith(".md")) {
+    return;
+  }
+  const id = base.slice(0, -3);
+  if (!id || id === "_index" || id.includes("*")) {
+    return;
+  }
+  if (id !== kebabCase(id)) {
+    errors.push(`${label} links to ${cleaned} which must be kebab-case`);
+    return;
+  }
+  const known = new Set([
+    ...project.characters.map((item) => item.id),
+    ...project.locations.map((item) => item.id),
+    ...project.systems.map((item) => item.id),
+    ...project.factions.map((item) => item.id),
+    ...project.artifacts.map((item) => item.id),
+    ...project.arcs.map((item) => item.id),
+    ...project.chapters.map((item) => item.id),
+    ...project.scenes.map((item) => item.id),
+    ...project.questions.map((item) => item.id),
+    ...project.promises.map((item) => item.id),
+    ...project.glossaryTerms.map((item) => item.id)
+  ]);
+  if (!known.has(id)) {
+    errors.push(`${label} links to missing file ${cleaned}`);
+  }
 }
 function checkProjectContinuity(root) {
   return checkContinuity(scanProject(root));
@@ -1020,16 +1141,47 @@ function reindexProject(root) {
   const existingCharacters = safeRead(charactersIndexPath, project.root);
   const existingWorld = safeRead(worldIndexPath, project.root);
   const existingPlot = safeRead(plotIndexPath, project.root);
-  const plotFrontmatter = parseFrontmatter(existingPlot, "plot/_index.md").data;
+  let plotStructure = "three-act";
+  try {
+    plotStructure = parseFrontmatter(existingPlot, "plot/_index.md").data.structure ?? "three-act";
+  } catch {
+    plotStructure = "three-act";
+  }
   writeChanged(charactersIndexPath, characterIndex(project.storyId, project.characters, extractSection(existingCharacters, "Relationship Map"), extractSection(existingCharacters, "Family Trees")), changed, project.root);
   writeChanged(worldIndexPath, worldIndex(project.storyId, project.locations, project.systems, project.factions, project.artifacts, extractSection(existingWorld, "World Overview")), changed, project.root);
-  writeChanged(plotIndexPath, plotIndex(project.storyId, plotFrontmatter.structure ?? "three-act", project.arcs, extractSection(existingPlot, "Story Structure"), extractSection(existingPlot, "Theme Tracking")), changed, project.root);
+  writeChanged(plotIndexPath, plotIndex(project.storyId, plotStructure, project.arcs, extractSection(existingPlot, "Story Structure"), extractSection(existingPlot, "Theme Tracking")), changed, project.root);
   writeChanged(chaptersIndexPath, chapterIndex(project.storyId, project.chapters), changed, project.root);
   writeChanged(scenesIndexPath, sceneIndex(project.storyId, project.scenes), changed, project.root);
   writeChanged(questionsIndexPath, questionIndex(project.storyId, project.questions), changed, project.root);
   writeChanged(promisesIndexPath, promiseIndex(project.storyId, project.promises), changed, project.root);
   writeChanged(glossaryIndexPath, glossaryIndex(project.storyId, project.glossaryTerms), changed, project.root);
+  refreshStoryField(path2.join(project.root, "plot", "timeline.md"), project.storyId, changed, project.root);
+  refreshStoryField(path2.join(project.root, "continuity", "state.md"), project.storyId, changed, project.root);
   return { changed };
+}
+function refreshStoryField(filePath, storyId, changed, root) {
+  if (!fs.existsSync(filePath)) {
+    return;
+  }
+  let raw;
+  try {
+    raw = fs.readFileSync(filePath, "utf8");
+  } catch {
+    return;
+  }
+  let parsed;
+  try {
+    parsed = parseFrontmatter(raw, filePath);
+  } catch {
+    return;
+  }
+  if (parsed.data.story === storyId) {
+    return;
+  }
+  writeChanged(filePath, replaceFrontmatter(raw, {
+    ...parsed.data,
+    story: storyId
+  }), changed, root);
 }
 function computeWordCounts(root, options = {}) {
   const project = scanProject(root);
@@ -1433,7 +1585,9 @@ function buildProjectActions(project, validation, links, continuity) {
     if (!hasScene) {
       chaptersWithoutScenes.push(chapter);
     }
-    nextNumber = Math.max(nextNumber, chapter.number + 1);
+    if (Number.isInteger(chapter.number) && chapter.number > 0) {
+      nextNumber = Math.max(nextNumber, chapter.number + 1);
+    }
   }
   if (staleChapters.length > 0) {
     actions.push(action("P1", "Refresh word counts", `Run story wordcount . --write for ${staleChapters.length} chapters with stale counts.`));
@@ -1782,6 +1936,7 @@ function chapterFile(title, number, options) {
     pov: options.pov ?? "",
     locations: normalizeList(options.locations ?? options.location, []),
     characters: normalizeList(options.characters ?? options.character, []),
+    mentions: normalizeList(options.mentions ?? options.mention, []),
     "arcs-advanced": normalizeList(options.arcs ?? options.arc, []),
     status: options.status ?? "outline",
     "word-count": 0
@@ -1807,6 +1962,7 @@ function sceneFile(title, chapter, scene, options) {
     pov: options.pov ?? "",
     location: options.location ?? "",
     characters: normalizeList(options.characters ?? options.character, []),
+    mentions: normalizeList(options.mentions ?? options.mention, []),
     "arcs-advanced": normalizeList(options.arcs ?? options.arc, []),
     status: options.status ?? "outline",
     "state-changes": []
@@ -2038,6 +2194,13 @@ function manuscriptParts(project) {
   if (project.chapters.length === 0) {
     throw new Error("No chapters found to export");
   }
+  const seenNumbers = new Set;
+  for (const chapter of project.chapters) {
+    if (seenNumbers.has(chapter.number)) {
+      throw new Error(`Duplicate chapter number ${chapter.number}: refusing to build with colliding EPUB ids`);
+    }
+    seenNumbers.add(chapter.number);
+  }
   const chapters = [];
   for (const chapter of project.chapters) {
     const markdown = readMarkdown(chapter.file, project.root);
@@ -2052,6 +2215,16 @@ function manuscriptParts(project) {
     chapters
   };
 }
+function epubModifiedTimestamp() {
+  const raw = process.env.SOURCE_DATE_EPOCH;
+  if (raw !== undefined && raw !== "") {
+    const seconds = Number(raw);
+    if (Number.isFinite(seconds)) {
+      return new Date(seconds * 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
+    }
+  }
+  return "2000-01-01T00:00:00Z";
+}
 function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
   const chapterEntries = [];
   const chapterItems = [];
@@ -2065,7 +2238,7 @@ function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
     chapterItems.push(`<item id="${id}" href="${id}.xhtml" media-type="application/xhtml+xml"/>`);
     spineItems.push(`<itemref idref="${id}"/>`);
   }
-  const modified = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+  const modified = epubModifiedTimestamp();
   writeZip(outFile, [
     { name: "mimetype", content: "application/epub+zip" },
     { name: "META-INF/container.xml", content: `<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>` },
@@ -2231,17 +2404,25 @@ for (let index = 0;index < 256; index += 1) {
 function xmlEscape(value) {
   return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
-function readEntityFiles(root, relativeDir, mapEntity) {
+function readEntityFiles(root, relativeDir, mapEntity, scanErrors) {
   const directory = path2.join(root, relativeDir);
   if (!fs.existsSync(directory)) {
     return [];
   }
   assertSafeProjectDirectory(directory, root);
-  return fs.readdirSync(directory, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".md") && entry.name !== "_index.md").map((entry) => entry.name).sort().map((file) => {
+  const entities = [];
+  const files = fs.readdirSync(directory, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".md") && entry.name !== "_index.md").map((entry) => entry.name).sort();
+  for (const file of files) {
     const fullPath = path2.join(directory, file);
-    const markdown = readMarkdown(fullPath, root);
-    return mapEntity(path2.basename(file, ".md"), fullPath, markdown.data, markdown);
-  });
+    const label = path2.join(relativeDir, file);
+    try {
+      const markdown = readMarkdown(fullPath, root);
+      entities.push(mapEntity(path2.basename(file, ".md"), fullPath, markdown.data, markdown));
+    } catch (error) {
+      scanErrors.push(`${label}: ${error.message}`);
+    }
+  }
+  return entities;
 }
 function requireStoryFile(projectRoot) {
   const storyPath = path2.join(projectRoot, "story.md");
@@ -2276,6 +2457,95 @@ function safeRead(filePath, root) {
     assertSafeProjectPath(filePath, root);
   }
   return fs.readFileSync(filePath, "utf8");
+}
+function readValidationData(file, root, label, errors) {
+  try {
+    return readMarkdown(file, root).data;
+  } catch (error) {
+    const message = `${label}: ${error.message}`;
+    if (!errors.includes(message)) {
+      errors.push(message);
+    }
+    return null;
+  }
+}
+var ENTITY_SCAN_DIRS = [
+  "characters",
+  "chapters",
+  "scenes",
+  path2.join("worldbuilding", "locations"),
+  path2.join("worldbuilding", "systems"),
+  path2.join("worldbuilding", "factions"),
+  path2.join("worldbuilding", "artifacts"),
+  path2.join("plot", "arcs"),
+  path2.join("continuity", "questions"),
+  path2.join("continuity", "promises"),
+  path2.join("glossary", "terms")
+];
+function collectStrayFileWarnings(project, warnings) {
+  const root = project.root;
+  const topEntries = fs.readdirSync(root, { withFileTypes: true });
+  const strayTop = [];
+  for (const entry of topEntries) {
+    if (entry.isFile() && entry.name.endsWith(".md") && entry.name !== "story.md") {
+      strayTop.push(entry.name);
+    }
+  }
+  strayTop.sort();
+  for (const name of strayTop) {
+    warnings.push(`${name} is not part of the story project model and is ignored`);
+  }
+  const nested = [];
+  for (const relativeDir of ENTITY_SCAN_DIRS) {
+    const directory = path2.join(root, relativeDir);
+    if (!fs.existsSync(directory)) {
+      continue;
+    }
+    for (const file of markdownFiles(directory)) {
+      const relativePath = path2.relative(directory, file);
+      if (relativePath.includes(path2.sep) || path2.dirname(relativePath) !== ".") {
+        nested.push(path2.join(relativeDir, relativePath));
+      }
+    }
+  }
+  nested.sort();
+  for (const nestedPath of nested) {
+    warnings.push(`${nestedPath} is nested inside an entity directory and is ignored`);
+  }
+}
+function checkIdReference(errors, label, value, kind, exists) {
+  const text = String(value ?? "");
+  if (text === "") {
+    return;
+  }
+  if (text !== kebabCase(text)) {
+    errors.push(`${label} references ${kind} ${text} which must be kebab-case`);
+    return;
+  }
+  if (!exists(text)) {
+    errors.push(`${label} references missing ${kind} ${text}`);
+  }
+}
+function extractChapterIdTokens(body) {
+  const found = [];
+  const pattern = /\bchapter-\d+\b/g;
+  let match;
+  while ((match = pattern.exec(body)) !== null) {
+    found.push(match[0]);
+  }
+  return found;
+}
+function extractMarkdownLinkTargets(body) {
+  const targets = [];
+  const pattern = /\]\(([^)]+)\)/g;
+  let match;
+  while ((match = pattern.exec(body)) !== null) {
+    const target = match[1].trim();
+    if (target && !/^(https?:|mailto:|#)/i.test(target)) {
+      targets.push(target.split("#")[0].split("?")[0]);
+    }
+  }
+  return targets;
 }
 function resolveOutputPath(project, out, defaultRelativePath, enforceRoot) {
   const rawOut = out ?? defaultRelativePath;
@@ -2350,7 +2620,13 @@ function isPathInside(root, target) {
   return relativePath === "" || !relativePath.startsWith("..") && !path2.isAbsolute(relativePath);
 }
 function asArray(value) {
-  return Array.isArray(value) ? value : [];
+  if (Array.isArray(value)) {
+    return value;
+  }
+  if (value === undefined || value === null || value === "") {
+    return [];
+  }
+  return [value];
 }
 function normalizeList(value, fallback) {
   const values = value === undefined || value === true ? [] : Array.isArray(value) ? value : [value];
@@ -2393,7 +2669,10 @@ function validateStoryFrontmatter(project, errors) {
 function validateIndexFrontmatter(project, errors) {
   for (const [relativePath, expectedType] of INDEX_SCHEMAS) {
     const label = relativePath;
-    const data = readMarkdown(path2.join(project.root, relativePath), project.root).data;
+    const data = readValidationData(path2.join(project.root, relativePath), project.root, label, errors);
+    if (!data) {
+      continue;
+    }
     requireFields(data, ["type", "story"], label, errors);
     requireScalar(data, "type", label, errors);
     requireScalar(data, "story", label, errors);
@@ -2412,7 +2691,10 @@ function validateIndexFrontmatter(project, errors) {
 function validateCharacters(project, errors) {
   for (const character of project.characters) {
     const label = relative2(project, character.file);
-    const data = readMarkdown(character.file, project.root).data;
+    const data = readValidationData(character.file, project.root, label, errors);
+    if (!data) {
+      continue;
+    }
     validateEntityId(character.id, label, errors);
     requireFields(data, ["name", "role", "status"], label, errors);
     requireScalar(data, "name", label, errors);
@@ -2423,6 +2705,9 @@ function validateCharacters(project, errors) {
     if (data["died-in"] !== undefined) {
       requireScalar(data, "died-in", label, errors);
     }
+    if (data.arc !== undefined) {
+      requireScalar(data, "arc", label, errors);
+    }
     validateStringArray(data, "aliases", label, errors);
     validateStringArray(data, "locations", label, errors);
     validateStringArray(data, "tags", label, errors);
@@ -2432,7 +2717,10 @@ function validateCharacters(project, errors) {
 function validateLocations(project, errors) {
   for (const location of project.locations) {
     const label = relative2(project, location.file);
-    const data = readMarkdown(location.file, project.root).data;
+    const data = readValidationData(location.file, project.root, label, errors);
+    if (!data) {
+      continue;
+    }
     validateEntityId(location.id, label, errors);
     requireFields(data, ["name", "type"], label, errors);
     requireScalar(data, "name", label, errors);
@@ -2444,7 +2732,10 @@ function validateLocations(project, errors) {
 function validateSystems(project, errors) {
   for (const system of project.systems) {
     const label = relative2(project, system.file);
-    const data = readMarkdown(system.file, project.root).data;
+    const data = readValidationData(system.file, project.root, label, errors);
+    if (!data) {
+      continue;
+    }
     validateEntityId(system.id, label, errors);
     requireFields(data, ["name", "type"], label, errors);
     requireScalar(data, "name", label, errors);
@@ -2457,7 +2748,10 @@ function validateSystems(project, errors) {
 function validateFactions(project, errors) {
   for (const faction of project.factions) {
     const label = relative2(project, faction.file);
-    const data = readMarkdown(faction.file, project.root).data;
+    const data = readValidationData(faction.file, project.root, label, errors);
+    if (!data) {
+      continue;
+    }
     validateEntityId(faction.id, label, errors);
     requireFields(data, ["name", "type", "status"], label, errors);
     requireScalar(data, "name", label, errors);
@@ -2473,7 +2767,10 @@ function validateFactions(project, errors) {
 function validateArtifacts(project, errors) {
   for (const artifact of project.artifacts) {
     const label = relative2(project, artifact.file);
-    const data = readMarkdown(artifact.file, project.root).data;
+    const data = readValidationData(artifact.file, project.root, label, errors);
+    if (!data) {
+      continue;
+    }
     validateEntityId(artifact.id, label, errors);
     requireFields(data, ["name", "type", "status"], label, errors);
     requireScalar(data, "name", label, errors);
@@ -2489,7 +2786,10 @@ function validateArtifacts(project, errors) {
 function validateArcs(project, errors) {
   for (const arc of project.arcs) {
     const label = relative2(project, arc.file);
-    const data = readMarkdown(arc.file, project.root).data;
+    const data = readValidationData(arc.file, project.root, label, errors);
+    if (!data) {
+      continue;
+    }
     validateEntityId(arc.id, label, errors);
     requireFields(data, ["name", "type", "status"], label, errors);
     requireScalar(data, "name", label, errors);
@@ -2506,7 +2806,10 @@ function validateChapters(project, errors) {
   const seenNumbers = new Map;
   for (const chapter of project.chapters) {
     const label = relative2(project, chapter.file);
-    const data = readMarkdown(chapter.file, project.root).data;
+    const data = readValidationData(chapter.file, project.root, label, errors);
+    if (!data) {
+      continue;
+    }
     const filenameNumber = chapterNumberFromFile(chapter.file);
     validateEntityId(chapter.id, label, errors);
     requireFields(data, ["title", "number", "status"], label, errors);
@@ -2543,9 +2846,13 @@ function validateChapters(project, errors) {
   }
 }
 function validateScenes(project, errors) {
+  const seenKeys = new Map;
   for (const scene of project.scenes) {
     const label = relative2(project, scene.file);
-    const data = readMarkdown(scene.file, project.root).data;
+    const data = readValidationData(scene.file, project.root, label, errors);
+    if (!data) {
+      continue;
+    }
     validateEntityId(scene.id, label, errors);
     requireFields(data, ["title", "chapter", "scene", "status"], label, errors);
     requireScalar(data, "title", label, errors);
@@ -2566,10 +2873,35 @@ function validateScenes(project, errors) {
     if (Number.isInteger(data.scene) && data.scene <= 0) {
       errors.push(`${label} scene must be greater than 0`);
     }
+    const filenameMatch = SCENE_FILENAME_PATTERN.exec(path2.basename(scene.file));
+    if (!filenameMatch) {
+      errors.push(`${label} filename must match {chapter}-scene-{NN}.md`);
+    } else {
+      const [, filenameChapter, filenameSceneText] = filenameMatch;
+      const filenameScene = Number.parseInt(filenameSceneText, 10);
+      if (typeof data.chapter === "string" && data.chapter !== "" && data.chapter !== filenameChapter) {
+        errors.push(`${label} chapter must match filename chapter ${filenameChapter}`);
+      }
+      if (Number.isInteger(data.scene) && data.scene !== filenameScene) {
+        errors.push(`${label} scene must match filename scene number ${filenameScene}`);
+      }
+    }
+    if (typeof data.chapter === "string" && data.chapter !== "" && Number.isInteger(data.scene)) {
+      const key = `${data.chapter}::${data.scene}`;
+      const existing = seenKeys.get(key);
+      if (existing) {
+        errors.push(`${label} duplicates scene ${data.scene} of ${data.chapter} from ${existing}`);
+      } else {
+        seenKeys.set(key, label);
+      }
+    }
   }
 }
 function validateContinuityState(project, errors) {
   const label = path2.join("continuity", "state.md");
+  if (!project.continuity) {
+    return;
+  }
   const data = project.continuity.data;
   requireFields(data, ["type", "story", "current-chapter"], label, errors);
   requireScalar(data, "type", label, errors);
@@ -2588,7 +2920,10 @@ function validateContinuityState(project, errors) {
 function validateQuestions(project, errors) {
   for (const question of project.questions) {
     const label = relative2(project, question.file);
-    const data = readMarkdown(question.file, project.root).data;
+    const data = readValidationData(question.file, project.root, label, errors);
+    if (!data) {
+      continue;
+    }
     validateEntityId(question.id, label, errors);
     requireFields(data, ["title", "status"], label, errors);
     requireScalar(data, "title", label, errors);
@@ -2602,7 +2937,10 @@ function validateQuestions(project, errors) {
 function validatePromises(project, errors) {
   for (const promise of project.promises) {
     const label = relative2(project, promise.file);
-    const data = readMarkdown(promise.file, project.root).data;
+    const data = readValidationData(promise.file, project.root, label, errors);
+    if (!data) {
+      continue;
+    }
     validateEntityId(promise.id, label, errors);
     requireFields(data, ["title", "status"], label, errors);
     requireScalar(data, "title", label, errors);
@@ -2617,7 +2955,10 @@ function validatePromises(project, errors) {
 function validateGlossaryTerms(project, errors) {
   for (const term of project.glossaryTerms) {
     const label = relative2(project, term.file);
-    const data = readMarkdown(term.file, project.root).data;
+    const data = readValidationData(term.file, project.root, label, errors);
+    if (!data) {
+      continue;
+    }
     validateEntityId(term.id, label, errors);
     requireFields(data, ["term", "category"], label, errors);
     requireScalar(data, "term", label, errors);
@@ -2698,7 +3039,7 @@ function validateRelationships(data, label, errors) {
   }
 }
 function validateEnum(data, field, allowed, label, errors) {
-  if (data[field] !== undefined && typeof data[field] === "string" && !allowed.has(data[field])) {
+  if (data[field] !== undefined && !allowed.has(data[field])) {
     errors.push(`${label} frontmatter field ${field} has unsupported value ${data[field]}`);
   }
 }
@@ -2719,16 +3060,26 @@ function requireFields(data, fields, label, errors) {
     }
   }
 }
+var CHAPTER_FILENAME_PATTERN = /^chapter-(\d+)\.md$/;
+var SCENE_FILENAME_PATTERN = /^(.+)-scene-(\d+)\.md$/;
 function chapterNumberFromFile(file) {
-  const match = /chapter-(\d+)/.exec(path2.basename(file));
+  const match = CHAPTER_FILENAME_PATTERN.exec(path2.basename(file));
   return match ? Number.parseInt(match[1], 10) : 0;
+}
+function sceneNumberFromFile(file) {
+  const match = SCENE_FILENAME_PATTERN.exec(path2.basename(file));
+  return match ? Number.parseInt(match[2], 10) : 0;
+}
+function sceneChapterFromFile(file) {
+  const match = SCENE_FILENAME_PATTERN.exec(path2.basename(file));
+  return match ? match[1] : "";
 }
 function relative2(project, file) {
   return path2.relative(project.root, file);
 }
 
 // src/import.js
-var CHAPTER_HEADING_PATTERN = /^chapter\s*(?:\d+|[ivxlc]+)?\s*[:.\-–—]*\s*(.*)$/i;
+var CHAPTER_HEADING_PATTERN = /^chapter(?![A-Za-z])\s*(?:(?:\d+|[ivxlc]+)(?=[\s:.\-–—]|$))?\s*[:.\-–—]*\s*(.*)$/i;
 var FRONTMATTER_PATTERN2 = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/;
 var CANDIDATE_THRESHOLD = 3;
 var CANDIDATE_LIMIT = 25;
@@ -2901,9 +3252,13 @@ function finishChapter(section) {
 function singleChapter(text, fileName) {
   const headingMatch = /^#\s+(.*)$/m.exec(text);
   if (headingMatch) {
+    const before = text.slice(0, headingMatch.index).trim();
+    const after = text.slice(headingMatch.index + headingMatch[0].length).trim();
     return {
       title: headingMatch[1].trim(),
-      prose: text.slice(headingMatch.index + headingMatch[0].length).trim()
+      prose: [before, after].filter((part) => part !== "").join(`
+
+`)
     };
   }
   return {
@@ -2962,9 +3317,9 @@ Options:
   --genre <name>            Story genre for init
   --sub-genre <name>        Story sub-genre for init
   --setting-era <name>      Setting era for init
-  --theme <name>            Add a theme for init; repeatable
-  --themes <a,b>            Add comma-separated themes for init
-  --pov <style>             POV style for init
+  --theme <name>            Theme for init or add arc; repeatable
+  --themes <a,b>            Comma-separated themes for init or add arc
+  --pov <style>             POV style for init or add chapter/scene
   --tense <tense>           Narrative tense for init
   --synopsis <text>         Starter synopsis for init
   --force                   Allow init to overwrite starter files
@@ -2974,31 +3329,37 @@ Options:
   --format <name>           Output format for build (markdown, epub, docx)
   --actionable              Include next actions in report
   --number <n>              Chapter number for add chapter
-  --chapter <id>            Chapter id for add scene or continuity records
+  --chapter <id>            Chapter id for add scene
   --scene <n>               Scene number for add scene
   --type <name>             Entity type for add
   --role <name>             Character role for add character
   --status <name>           Entity status for add
   --location <id>           Location reference for add
   --character <id>          Character reference for add; repeatable
+  --mention <id>            Mentioned character for add chapter/scene; repeatable
   --member <id>             Faction member reference for add faction; repeatable
   --owner <id>              Owner reference for add artifact
-  --arc <id>                Arc reference for add; repeatable
+  --arc <id>                Arc reference for add (arc theme for add character); repeatable
   --introduced <id>         Chapter id for add question
   --resolved <id>           Chapter id for add question
   --planted <id>            Chapter id for add promise
   --payoff <id>             Chapter id for add promise
   --category <name>         Category for add term
   --alias <name>            Alias for add term; repeatable
+  --region <name>           Region for add location
+  --population <name>       Population for add location
+  --controlled-by <id>      Controlling faction for add location
+  --prevalence <name>       Prevalence for add system
+  --acts <a,b>              Comma-separated acts for add arc; repeatable
   -h, --help                Show this help
 
-Option values that begin with a dash must use the --option=value form.
+Values beginning with a dash may also use the --option=value form.
 `;
 function runCli(argv, io) {
-  const parsed = parseArgs(argv);
-  const cwd = io.cwd ?? process.cwd();
-  const command = parsed.positionals[0];
   try {
+    const parsed = parseArgs(argv);
+    const cwd = io.cwd ?? process.cwd();
+    const command = parsed.positionals[0];
     if (!command || command === "help" || parsed.options.help) {
       io.stdout.write(HELP);
       return 0;
@@ -3152,6 +3513,69 @@ ${HELP}`);
   }
 }
 var BOOLEAN_OPTIONS = new Set(["force", "write", "actionable"]);
+var VALUE_OPTIONS = new Set([
+  "title",
+  "dir",
+  "genre",
+  "sub-genre",
+  "setting-era",
+  "theme",
+  "themes",
+  "pov",
+  "tense",
+  "synopsis",
+  "path",
+  "out",
+  "format",
+  "number",
+  "chapter",
+  "scene",
+  "type",
+  "role",
+  "status",
+  "location",
+  "locations",
+  "character",
+  "characters",
+  "mention",
+  "mentions",
+  "member",
+  "members",
+  "owner",
+  "arc",
+  "arcs",
+  "introduced",
+  "resolved",
+  "planted",
+  "payoff",
+  "category",
+  "alias",
+  "aliases",
+  "region",
+  "population",
+  "controlled-by",
+  "prevalence",
+  "acts",
+  "act"
+]);
+function isKnownOptionToken(token) {
+  if (token === "-h") {
+    return true;
+  }
+  if (!token.startsWith("--")) {
+    return false;
+  }
+  const equalIndex = token.indexOf("=");
+  const key = token.slice(2, equalIndex === -1 ? undefined : equalIndex);
+  return key === "help" || BOOLEAN_OPTIONS.has(key) || VALUE_OPTIONS.has(key);
+}
+function addOption(options, key, value) {
+  if (options[key] === undefined) {
+    options[key] = value;
+  } else {
+    options[key] = Array.isArray(options[key]) ? options[key].concat(value) : [options[key], value];
+  }
+}
 function parseArgs(argv) {
   const positionals = [];
   const options = {};
@@ -3168,17 +3592,30 @@ function parseArgs(argv) {
     const equalIndex = arg.indexOf("=");
     const key = arg.slice(2, equalIndex === -1 ? undefined : equalIndex);
     const inlineValue = equalIndex === -1 ? undefined : arg.slice(equalIndex + 1);
+    if (BOOLEAN_OPTIONS.has(key)) {
+      addOption(options, key, inlineValue ?? true);
+      continue;
+    }
+    if (VALUE_OPTIONS.has(key)) {
+      if (inlineValue !== undefined) {
+        addOption(options, key, inlineValue);
+        continue;
+      }
+      const nextValue2 = argv[index + 1];
+      if (nextValue2 === undefined || isKnownOptionToken(nextValue2)) {
+        throw new Error(`Missing value for --${key}: expected a value`);
+      }
+      addOption(options, key, nextValue2);
+      index += 1;
+      continue;
+    }
     const nextValue = argv[index + 1];
-    const hasSeparateValue = inlineValue === undefined && !BOOLEAN_OPTIONS.has(key) && nextValue !== undefined && !nextValue.startsWith("-");
+    const hasSeparateValue = inlineValue === undefined && nextValue !== undefined && !nextValue.startsWith("-");
     const value = inlineValue ?? (hasSeparateValue ? nextValue : true);
     if (hasSeparateValue) {
       index += 1;
     }
-    if (options[key] === undefined) {
-      options[key] = value;
-    } else {
-      options[key] = Array.isArray(options[key]) ? options[key].concat(value) : [options[key], value];
-    }
+    addOption(options, key, value);
   }
   return { positionals, options };
 }
