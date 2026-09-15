@@ -90,4 +90,36 @@ Body`);
     expect(() => parseFrontmatter("---\n  nope\n---\n")).toThrow("Unsupported frontmatter line");
     expect(() => replaceFrontmatter("Body", { title: "Nope" })).toThrow("Cannot replace missing YAML frontmatter");
   });
+
+  test("rejects duplicate top-level keys instead of overwriting", () => {
+    expect(() => parseFrontmatter("---\ntitle: A\ntitle: B\n---\nBody")).toThrow(
+      "Duplicate frontmatter key: title"
+    );
+    expect(() => parseFrontmatter("---\ntags:\n  - a\ntags:\n  - b\n---\nBody")).toThrow(
+      "Duplicate frontmatter key: tags"
+    );
+    expect(() => parseFrontmatter("---\ntitle: A\ntitle:\n  - b\n---\nBody")).toThrow(
+      "Duplicate frontmatter key: title"
+    );
+  });
+
+  test("rejects duplicate keys inside list objects", () => {
+    expect(() =>
+      parseFrontmatter("---\nrelationships:\n  - character: a\n    character: b\n---\nBody")
+    ).toThrow("Duplicate frontmatter key: character");
+  });
+
+  test("tolerates a UTF-8 BOM before the opening delimiter", () => {
+    const parsed = parseFrontmatter("\uFEFF---\ntitle: BOM\n---\nBody");
+
+    expect(parsed.data).toEqual({ title: "BOM" });
+    expect(parsed.body).toBe("Body");
+  });
+
+  test("tolerates trailing spaces and tabs after frontmatter delimiters", () => {
+    const parsed = parseFrontmatter("---   \ntitle: Spaced\n---\t \nBody");
+
+    expect(parsed.data).toEqual({ title: "Spaced" });
+    expect(parsed.body).toBe("Body");
+  });
 });

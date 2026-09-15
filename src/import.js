@@ -4,7 +4,7 @@ import { stringifyFrontmatter } from "./frontmatter.js";
 import { titleCaseSlug, wordCount } from "./markdown.js";
 import { createStoryProject, reindexProject } from "./story.js";
 
-const CHAPTER_HEADING_PATTERN = /^chapter\s*(?:\d+|[ivxlc]+)?\s*[:.\-–—]*\s*(.*)$/i;
+const CHAPTER_HEADING_PATTERN = /^chapter(?![A-Za-z])\s*(?:(?:\d+|[ivxlc]+)(?=[\s:.\-–—]|$))?\s*[:.\-–—]*\s*(.*)$/i;
 const FRONTMATTER_PATTERN = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/;
 const CANDIDATE_THRESHOLD = 3;
 const CANDIDATE_LIMIT = 25;
@@ -170,9 +170,11 @@ function finishChapter(section) {
 function singleChapter(text, fileName) {
   const headingMatch = /^#\s+(.*)$/m.exec(text);
   if (headingMatch) {
+    const before = text.slice(0, headingMatch.index).trim();
+    const after = text.slice(headingMatch.index + headingMatch[0].length).trim();
     return {
       title: headingMatch[1].trim(),
-      prose: text.slice(headingMatch.index + headingMatch[0].length).trim()
+      prose: [before, after].filter((part) => part !== "").join("\n\n")
     };
   }
 

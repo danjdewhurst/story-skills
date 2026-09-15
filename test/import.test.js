@@ -91,4 +91,66 @@ describe("manuscript import", () => {
     const repeated = "He met Vex Marrow today. She trusted Vex Marrow once. They feared Vex Marrow forever.";
     expect(extractNameCandidates(repeated)).toEqual([{ name: "Vex Marrow", count: 3 }]);
   });
+
+  test("preserves pre-H1 preamble in single-chapter imports", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "story.md"), [
+      "A quiet preface paragraph.",
+      "",
+      "# The Real Title",
+      "",
+      "The chapter body goes here."
+    ].join("\n"), "utf8");
+
+    const result = importManuscript({ source: "story.md", title: "Preamble Story", cwd });
+
+    expect(result.chapters).toBe(1);
+    const project = scanProject(result.root);
+    expect(project.chapters.map((chapter) => chapter.title)).toEqual(["The Real Title"]);
+    const body = fs.readFileSync(path.join(result.root, "chapters", "chapter-01.md"), "utf8");
+    expect(body).toContain("A quiet preface paragraph.");
+    expect(body).toContain("The chapter body goes here.");
+  });
+
+  test("does not treat Chapterhouse or Chapters headings as chapter splits", () => {
+    const houseCwd = makeTempDir();
+    fs.writeFileSync(path.join(houseCwd, "house.md"), [
+      "# Chapterhouse",
+      "",
+      "Body about the house."
+    ].join("\n"), "utf8");
+
+    const house = importManuscript({ source: "house.md", title: "House Story", cwd: houseCwd, dir: "house" });
+    expect(house.chapters).toBe(1);
+    expect(scanProject(house.root).chapters.map((chapter) => chapter.title)).toEqual(["Chapterhouse"]);
+
+    const overviewCwd = makeTempDir();
+    fs.writeFileSync(path.join(overviewCwd, "overview.md"), [
+      "# Chapters Overview",
+      "",
+      "Overview body."
+    ].join("\n"), "utf8");
+
+    const overview = importManuscript({ source: "overview.md", title: "Overview Story", cwd: overviewCwd });
+    expect(overview.chapters).toBe(1);
+    expect(scanProject(overview.root).chapters.map((chapter) => chapter.title)).toEqual(["Chapters Overview"]);
+  });
+
+  test("keeps title initials after Chapter instead of parsing them as numerals", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "book.md"), [
+      "## Chapter Cover",
+      "",
+      "Cover body.",
+      "",
+      "## Chapter Introduction",
+      "",
+      "Intro body."
+    ].join("\n"), "utf8");
+
+    const result = importManuscript({ source: "book.md", title: "Cover Story", cwd });
+
+    expect(result.chapters).toBe(2);
+    expect(scanProject(result.root).chapters.map((chapter) => chapter.title)).toEqual(["Cover", "Introduction"]);
+  });
 });
