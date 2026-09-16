@@ -53,6 +53,8 @@ story continuity .
 story doctor .
 ```
 
+If `story.md` links other books through `follows` or `precedes`, also run `story series .` so the revision does not break canon shared with sequels or prequels. See the `series-continuity` skill.
+
 `story continuity` deterministically checks death ordering (`died-in` vs later appearances), promise/question chapter ordering, unfired setups, POV/cast consistency, and `continuity/state.md` references. For intentional flashbacks, memories, or recordings of dead characters, list them under chapter or scene `mentions` instead of `characters`.
 
 If `story` is not installed, use `bun run story --` from this repository or the bundled `story-maintenance/scripts/story.js` fallback when available.

@@ -31,6 +31,7 @@ story reindex .
 story wordcount . --write
 story links .
 story continuity .
+story series .
 story import draft.md --title "Title"
 story report .
 story report . --actionable
@@ -53,6 +54,7 @@ Use:
 - `wordcount --write` after writing or revising chapters
 - `links` after changing character relationships, notable locations, arc participants, or chapter references
 - `continuity` after drafting or revising a chapter, and whenever the user asks about contradictions, dead characters appearing, unfired setups, or stale state; it deterministically checks `died-in` ordering, promise/question chapter ordering, Chekhov gaps, POV/cast consistency, and `continuity/state.md` references
+- `series` when `story.md` has `follows` or `precedes` links to other books; it orders the linked sequels and prequels by chronology and checks shared canon (characters deceased in an earlier book, cast listings, name drift, destroyed artifacts). Use `init --follows <path>` or `init --precedes <path>` to start a linked book, and see the `series-continuity` skill for carrying canon across
 - `import` when the user has an existing manuscript or chapter drafts and wants a Story Skills project built from them; follow up by creating character and location files from the printed entity candidates
 - `report` when the user asks for project status, inventory, progress, or a quick health summary
 - `next` before a drafting session to identify the next deterministic action

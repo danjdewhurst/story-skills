@@ -170,6 +170,7 @@ gemini skills install https://github.com/danjdewhurst/story-skills.git --path sk
 gemini skills install https://github.com/danjdewhurst/story-skills.git --path skills/plot-structure
 gemini skills install https://github.com/danjdewhurst/story-skills.git --path skills/chapter-writing
 gemini skills install https://github.com/danjdewhurst/story-skills.git --path skills/revision-continuity
+gemini skills install https://github.com/danjdewhurst/story-skills.git --path skills/series-continuity
 gemini skills install https://github.com/danjdewhurst/story-skills.git --path skills/story-maintenance
 
 # Or link locally after cloning
@@ -232,6 +233,7 @@ For non-agent use:
 | **plot-structure** | Plans arcs with structures like three-act, hero's journey, Save the Cat, and kishotenketsu | *"Create a plot arc"* |
 | **chapter-writing** | Drafts chapters through an outline-first workflow that pulls from story context | *"Write the next chapter"* |
 | **revision-continuity** | Revises drafts, audits continuity, and keeps character state, timeline, and arc changes consistent | *"Continuity-check chapter 3"* |
+| **series-continuity** | Starts sequels and prequels as linked projects, carries characters and world forward, and checks shared canon across books | *"Start a prequel to The Last Ember"* |
 | **story-maintenance** | Runs deterministic CLI checks for validation, continuity, reports, indexing, links, word counts, import, and export | *"Validate my story project"* |
 
 For stronger prose, pair **chapter-writing** with [**better-writing**](https://github.com/forjd/better-writing). It adds voice calibration, anti-generic writing checks, and a final prose-quality pass, and installs the same way:
@@ -273,6 +275,8 @@ The CLI is for deterministic maintenance only. Agents should write story content
 | `story wordcount [path] --write` | Count chapter prose and update chapter frontmatter plus the chapter registry |
 | `story links [path]` | Check character, location, chapter, and arc cross-references/backlinks |
 | `story continuity [path]` | Check deterministic continuity contracts: deaths, promises/payoffs, questions, casts, and durable state |
+| `story init "Book Two" --follows the-last-ember` | Scaffold a sequel (or a prequel with `--precedes`) linked to an existing book, writing the backlink |
+| `story series [path]` | Order linked sequels and prequels by chronology and check shared canon: deaths, casts, names, and destroyed artifacts |
 | `story import draft.md --title "The Lost Coast"` | Split an existing manuscript into a new story project and suggest entity candidates |
 | `story report [path] --actionable` | Summarize inventory and optionally include next actions |
 | `story next [path]` | Recommend the next deterministic writing or maintenance actions |
@@ -360,6 +364,7 @@ Every story element is a markdown file with YAML frontmatter. The skills cross-r
 - Read [**The Cormorant Tide**](https://github.com/danjdewhurst/the-cormorant-tide), a full story project generated with Story Skills.
 - Read [**Pippa and the Borrowed Star**](https://github.com/danjdewhurst/christmas-childrens-story), a complete children's Christmas story (6 chapters, 2,183 words) generated with Story Skills.
 - Explore [`examples/the-last-ember/`](examples/the-last-ember/) for a complete fantasy example: three characters, two locations, a magic system, a plot arc with foreshadowing, and a drafted first chapter.
+- Explore [`examples/the-fall-of-the-citadel/`](examples/the-fall-of-the-citadel/) for a prequel to The Last Ember, linked with `series`, `book-number`, and `precedes`, that shares characters and places with the first book. Run `story series examples/the-last-ember` to see the chronology.
 - Explore [`examples/harbor-of-second-light/`](examples/harbor-of-second-light/) for a near-future coastal mystery example with memory technology, a posthumous witness arc, populated continuity state, and a drafted first chapter.
 - Explore [`examples/the-unraveled-thread/`](examples/the-unraveled-thread/) for a deliberately broken project that demonstrates every class of finding the continuity engine reports.
 
