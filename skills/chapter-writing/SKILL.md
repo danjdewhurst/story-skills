@@ -93,7 +93,7 @@ After the chapter is written:
 2. **Update `plot/timeline.md`** - add events from this chapter in chronological order
 3. **Update arc files** - mark advanced plot points with chapter reference
 4. **Update scene records** - make sure every scene has a corresponding `scenes/` file
-5. **Update continuity** - carry forward character state, object ownership, knowledge, open questions, and promises/payoffs
+5. **Update continuity** - carry forward character state, object ownership, knowledge, open questions, and promises/payoffs. When `story.md` links other books through `follows` or `precedes`, give reveals the series depends on a stable `fact` id in `knowledge-state` (see `series-continuity`)
 6. **Update foreshadowing** - mark any items as `planted` or `paid-off` with chapter reference
 7. **Note character changes** - if a character's status changed (injury, revelation, relationship shift), flag for the user to update the character file
 8. **Run CLI maintenance when available:**

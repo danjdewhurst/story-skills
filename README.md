@@ -276,7 +276,7 @@ The CLI is for deterministic maintenance only. Agents should write story content
 | `story links [path]` | Check character, location, chapter, and arc cross-references/backlinks |
 | `story continuity [path]` | Check deterministic continuity contracts: deaths, promises/payoffs, questions, casts, and durable state |
 | `story init "Book Two" --follows the-last-ember` | Scaffold a sequel (or a prequel with `--precedes`) linked to an existing book, writing the backlink |
-| `story series [path]` | Order linked sequels and prequels by chronology and check shared canon: deaths, casts, names, and destroyed artifacts |
+| `story series [path]` | Order linked sequels and prequels by chronology and check shared canon: deaths, casts, knowledge fact ids, names, and destroyed artifacts |
 | `story import draft.md --title "The Lost Coast"` | Split an existing manuscript into a new story project and suggest entity candidates |
 | `story report [path] --actionable` | Summarize inventory and optionally include next actions |
 | `story next [path]` | Recommend the next deterministic writing or maintenance actions |
