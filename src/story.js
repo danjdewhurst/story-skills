@@ -4,6 +4,7 @@ import path from "node:path";
 import { checkContinuity } from "./continuity.js";
 import { FRONTMATTER_PATTERN, parseFrontmatter, replaceFrontmatter, stringifyFrontmatter } from "./frontmatter.js";
 import { chapterProse, escapeRegExp, extractSection, kebabCase, titleCaseSlug, wordCount } from "./markdown.js";
+import { buildSeries, readBookFrontmatter, seriesLinkPath, validateSeriesLinks, withSeriesBacklink } from "./series.js";
 
 export const STORY_SCHEMA_VERSION = 2;
 
@@ -94,11 +95,14 @@ export function createStoryProject(options) {
   }
 
   const storyId = kebabCase(title);
-  const root = path.resolve(options.cwd ?? process.cwd(), options.dir ?? storyId);
+  const cwd = options.cwd ?? process.cwd();
+  const root = path.resolve(cwd, options.dir ?? storyId);
   if (fs.existsSync(root) && !options.force) {
     throw new Error(`${root} already exists. Use --force to overwrite starter files.`);
   }
 
+  const series = resolveSeriesOptions(root, cwd, options);
+  const inherited = series.linked[0]?.data ?? {};
   const themes = normalizeList(options.themes, ["change"]);
   fs.mkdirSync(path.join(root, "characters"), { recursive: true });
   fs.mkdirSync(path.join(root, "worldbuilding", "locations"), { recursive: true });
@@ -115,12 +119,16 @@ export function createStoryProject(options) {
   writeFile(path.join(root, "story.md"), storyBible({
     title,
     storyId,
-    genre: options.genre ?? "fiction",
-    subGenre: options.subGenre ?? "general",
+    series: series.series,
+    bookNumber: series.bookNumber,
+    follows: series.follows,
+    precedes: series.precedes,
+    genre: options.genre ?? inherited.genre ?? "fiction",
+    subGenre: options.subGenre ?? inherited["sub-genre"] ?? "general",
     settingEra: options.settingEra ?? "unspecified",
     themes,
-    pov: options.pov ?? "third-person-limited",
-    tense: options.tense ?? "past",
+    pov: options.pov ?? inherited.pov ?? "third-person-limited",
+    tense: options.tense ?? inherited.tense ?? "past",
     synopsis: options.synopsis ?? "Add a 2-3 sentence synopsis here."
   }), { root });
   writeFile(path.join(root, "characters", "_index.md"), characterIndex(storyId, [], "", ""), { root });
@@ -134,7 +142,52 @@ export function createStoryProject(options) {
   writeFile(path.join(root, "continuity", "promises", "_index.md"), promiseIndex(storyId, []), { root });
   writeFile(path.join(root, "glossary", "_index.md"), glossaryIndex(storyId, []), { root });
 
-  return { root, storyId, files: REQUIRED_PATHS.filter((entry) => entry.endsWith(".md")) };
+  const linkedBooks = [];
+  for (const book of series.linked) {
+    const updated = withSeriesBacklink(book.root, book.inverse, root);
+    if (updated !== null) {
+      writeFile(path.join(book.root, "story.md"), updated, { root: book.root });
+      linkedBooks.push(book.root);
+    }
+  }
+
+  return { root, storyId, linkedBooks, files: REQUIRED_PATHS.filter((entry) => entry.endsWith(".md")) };
+}
+
+// Resolves --follows/--precedes against the working directory, confirms each
+// target is a story project, and inherits the series id and next publication
+// number from the linked books when the caller did not set them.
+function resolveSeriesOptions(root, cwd, options) {
+  const linked = [];
+  for (const [field, inverse] of [["follows", "precedes"], ["precedes", "follows"]]) {
+    for (const value of asArray(options[field]).filter((item) => typeof item === "string" && item.trim() !== "")) {
+      const bookRoot = path.resolve(cwd, value);
+      if (bookRoot === root) {
+        throw new Error(`--${field} ${value} points at the new story itself`);
+      }
+      const data = readBookFrontmatter(bookRoot);
+      if (!data) {
+        throw new Error(`--${field} ${value} is not a story project: missing story.md`);
+      }
+      linked.push({ field, inverse, root: bookRoot, data });
+    }
+  }
+
+  const series = options.series ?? linked.map((book) => book.data.series).find((value) => value !== undefined);
+  if (series !== undefined && !isKebabId(String(series))) {
+    throw new Error(`Series id must be kebab-case: ${series}`);
+  }
+
+  let bookNumber;
+  if (options.bookNumber !== undefined) {
+    bookNumber = requirePositiveInteger(options.bookNumber, "Book number");
+  } else if (linked.length > 0) {
+    const numbers = linked.map((book) => book.data["book-number"]).filter((value) => Number.isInteger(value));
+    bookNumber = numbers.length > 0 ? Math.max(...numbers) + 1 : undefined;
+  }
+
+  const linkPaths = (field) => linked.filter((book) => book.field === field).map((book) => seriesLinkPath(root, book.root));
+  return { linked, series, bookNumber, follows: linkPaths("follows"), precedes: linkPaths("precedes") };
 }
 
 export function scanProject(root) {
@@ -523,6 +576,7 @@ export function validateLinks(root) {
   }
 
   validateTimelineAndArcBodyRefs(project, chapters, errors);
+  validateSeriesLinks(project.root, project.story.data, errors);
 
   return { ok: errors.length === 0, errors, warnings };
 }
@@ -605,6 +659,12 @@ export function checkProjectContinuity(root) {
   return checkContinuity(scanProject(root));
 }
 
+export function seriesReport(root) {
+  const projectRoot = path.resolve(root);
+  requireStoryFile(projectRoot);
+  return buildSeries(projectRoot, scanProject);
+}
+
 export function projectReport(root) {
   const project = scanProject(root);
   const validation = validateProject(project.root);
@@ -617,6 +677,8 @@ export function projectReport(root) {
     title: project.story.data.title,
     storyId: project.storyId,
     schemaVersion: project.story.data["schema-version"],
+    series: project.story.data.series,
+    bookNumber: project.story.data["book-number"],
     genre: project.story.data.genre,
     subGenre: project.story.data["sub-genre"],
     status: project.story.data.status,
@@ -662,6 +724,7 @@ export function formatProjectReport(report, options = {}) {
     "",
     `Story ID: ${report.storyId}`,
     `Schema version: ${report.schemaVersion}`,
+    ...(report.series === undefined ? [] : [`Series: ${report.series}${report.bookNumber === undefined ? "" : ` (book ${report.bookNumber})`}`]),
     `Status: ${report.status}`,
     `Genre: ${[report.genre, report.subGenre].filter(Boolean).join(" / ")}`,
     `POV/Tense: ${report.pov} / ${report.tense}`,
@@ -1028,9 +1091,17 @@ export function removeEntity(root, options) {
 }
 
 function storyBible(options) {
-  return `${stringifyFrontmatter({
+  const data = {
     title: options.title,
-    "schema-version": STORY_SCHEMA_VERSION,
+    "schema-version": STORY_SCHEMA_VERSION
+  };
+  if (options.series !== undefined) {
+    data.series = options.series;
+  }
+  if (options.bookNumber !== undefined) {
+    data["book-number"] = options.bookNumber;
+  }
+  Object.assign(data, {
     genre: options.genre,
     "sub-genre": options.subGenre,
     "setting-era": options.settingEra,
@@ -1038,7 +1109,13 @@ function storyBible(options) {
     themes: options.themes,
     pov: options.pov,
     tense: options.tense
-  })}# ${options.title}
+  });
+  for (const field of ["follows", "precedes"]) {
+    if (options[field].length > 0) {
+      data[field] = options[field];
+    }
+  }
+  return `${stringifyFrontmatter(data)}# ${options.title}
 
 ## Synopsis
 
@@ -2498,6 +2575,15 @@ function validateStoryFrontmatter(project, errors) {
   requireScalar(data, "tense", "story.md", errors);
   validateEnum(data, "status", STORY_STATUSES, "story.md", errors);
   validateEnum(data, "tense", STORY_TENSES, "story.md", errors);
+  requireScalar(data, "series", "story.md", errors);
+  if (data.series !== undefined && !isKebabId(data.series)) {
+    errors.push("story.md series must be a kebab-case id");
+  }
+  if (data["book-number"] !== undefined && (!Number.isInteger(data["book-number"]) || data["book-number"] <= 0)) {
+    errors.push("story.md book-number must be a positive integer");
+  }
+  validateStringArray(data, "follows", "story.md", errors);
+  validateStringArray(data, "precedes", "story.md", errors);
 
   if (data["schema-version"] !== undefined && data["schema-version"] !== STORY_SCHEMA_VERSION) {
     errors.push(`story.md schema-version must be ${STORY_SCHEMA_VERSION}`);

@@ -1,0 +1,330 @@
+import fs from "node:fs";
+import path from "node:path";
+import { parseFrontmatter, replaceFrontmatter } from "./frontmatter.js";
+
+// Each pair is a series link field and the field the linked book must use to
+// point back. `follows` names books set earlier in the story's chronology;
+// `precedes` names books set later. Publication order lives in `book-number`.
+const SERIES_LINK_INVERSES = [["follows", "precedes"], ["precedes", "follows"]];
+
+// Entity collections compared across books, with the field that names them.
+const SHARED_CANON = [
+  ["characters", "Characters", "name"],
+  ["locations", "Locations", "name"],
+  ["systems", "Systems", "name"],
+  ["factions", "Factions", "name"],
+  ["artifacts", "Artifacts", "name"],
+  ["glossaryTerms", "Glossary terms", "term"]
+];
+
+// Stored link paths are relative to the book root and use forward slashes so
+// story.md stays portable between operating systems.
+export function seriesLinkPath(fromRoot, toRoot) {
+  return path.relative(fromRoot, toRoot).split(path.sep).join("/");
+}
+
+export function seriesLinks(root, data, field) {
+  const values = Array.isArray(data[field]) ? data[field] : [];
+  return values
+    .filter((value) => typeof value === "string" && value.trim() !== "")
+    .map((value) => path.resolve(root, value));
+}
+
+export function readBookFrontmatter(root) {
+  const storyPath = path.join(root, "story.md");
+  if (!fs.existsSync(storyPath)) {
+    return null;
+  }
+  return parseFrontmatter(fs.readFileSync(storyPath, "utf8"), storyPath).data;
+}
+
+export function validateSeriesLinks(root, data, errors) {
+  for (const [field, inverse] of SERIES_LINK_INVERSES) {
+    for (const target of seriesLinks(root, data, field)) {
+      const label = `story.md ${field} ${seriesLinkPath(root, target)}`;
+      if (target === root) {
+        errors.push(`${label} points at this book`);
+        continue;
+      }
+
+      let other;
+      try {
+        other = readBookFrontmatter(target);
+      } catch (error) {
+        errors.push(`${label}: ${error.message}`);
+        continue;
+      }
+      if (!other) {
+        errors.push(`${label} is not a story project: missing story.md`);
+        continue;
+      }
+
+      if (!seriesLinks(target, other, inverse).includes(root)) {
+        errors.push(`${label} is missing backlink: add ${seriesLinkPath(target, root)} to its ${inverse}`);
+      }
+      if (data.series !== undefined && other.series !== undefined && data.series !== other.series) {
+        errors.push(`${label} belongs to series ${other.series}, not ${data.series}`);
+      }
+    }
+  }
+}
+
+// Returns an existing book's story.md with a reciprocal link added, or null
+// when the link is already present.
+export function withSeriesBacklink(targetRoot, field, linkedRoot) {
+  const storyPath = path.join(targetRoot, "story.md");
+  const markdown = fs.readFileSync(storyPath, "utf8");
+  const { data } = parseFrontmatter(markdown, storyPath);
+  if (seriesLinks(targetRoot, data, field).includes(linkedRoot)) {
+    return null;
+  }
+  const existing = Array.isArray(data[field]) ? data[field] : [];
+  return replaceFrontmatter(markdown, { ...data, [field]: existing.concat(seriesLinkPath(targetRoot, linkedRoot)) });
+}
+
+export function buildSeries(startRoot, scan) {
+  const errors = [];
+  const warnings = [];
+  const books = discoverBooks(startRoot, scan, errors);
+
+  const seriesIds = [...new Set(books.map((book) => book.series).filter((series) => series !== undefined))].sort();
+  if (seriesIds.length > 1) {
+    errors.push(`Linked books belong to different series: ${seriesIds.join(", ")}`);
+  }
+
+  const chronology = chronologicalOrder(books, errors);
+  if (chronology) {
+    checkSharedCanon(chronology, errors, warnings);
+  }
+
+  return {
+    root: startRoot,
+    series: books[0].series ?? seriesIds[0] ?? null,
+    books: (chronology ? chronology.order : books).map((book) => ({
+      title: book.title,
+      label: book.label,
+      bookNumber: book.bookNumber,
+      status: book.status
+    })),
+    ordered: Boolean(chronology),
+    shared: sharedCanon(books),
+    ok: errors.length === 0,
+    errors,
+    warnings
+  };
+}
+
+export function formatSeriesReport(report) {
+  const lines = [
+    `# Series: ${report.series ?? "Unnamed series"}`,
+    "",
+    report.ordered ? "Chronological order:" : "Books (unordered):"
+  ];
+
+  report.books.forEach((book, index) => {
+    const details = [book.bookNumber === null ? "unnumbered" : `book ${book.bookNumber}`, book.status || "no status"];
+    lines.push(`${index + 1}. ${book.title} (${details.join(", ")}) - ${book.label}`);
+  });
+
+  lines.push("", "Shared canon:");
+  if (report.shared.length === 0) {
+    lines.push("- None");
+  }
+  for (const entry of report.shared) {
+    lines.push(`- ${entry.label}: ${entry.ids.join(", ")}`);
+  }
+
+  return `${lines.join("\n")}\n\n`;
+}
+
+function discoverBooks(startRoot, scan, errors) {
+  const visited = new Map();
+  const queue = [startRoot];
+  while (queue.length > 0) {
+    const root = queue.shift();
+    if (visited.has(root)) {
+      continue;
+    }
+
+    const label = seriesLinkPath(startRoot, root) || ".";
+    if (!fs.existsSync(path.join(root, "story.md"))) {
+      errors.push(`${label} is not a story project: missing story.md`);
+      visited.set(root, null);
+      continue;
+    }
+
+    const project = scan(root);
+    const data = project.story.data;
+    const book = {
+      root,
+      label,
+      project,
+      title: String(data.title ?? path.basename(root)),
+      series: data.series,
+      status: data.status,
+      bookNumber: Number.isInteger(data["book-number"]) ? data["book-number"] : null,
+      follows: seriesLinks(root, data, "follows"),
+      precedes: seriesLinks(root, data, "precedes")
+    };
+    visited.set(root, book);
+    queue.push(...book.follows, ...book.precedes);
+  }
+  return [...visited.values()].filter(Boolean);
+}
+
+function chronologicalOrder(books, errors) {
+  const byRoot = new Map(books.map((book) => [book.root, book]));
+  const later = new Map(books.map((book) => [book.root, new Set()]));
+  for (const book of books) {
+    for (const earlier of book.follows) {
+      if (byRoot.has(earlier) && earlier !== book.root) {
+        later.get(earlier).add(book.root);
+      }
+    }
+    for (const next of book.precedes) {
+      if (byRoot.has(next) && next !== book.root) {
+        later.get(book.root).add(next);
+      }
+    }
+  }
+
+  const indegree = new Map(books.map((book) => [book.root, 0]));
+  for (const targets of later.values()) {
+    for (const target of targets) {
+      indegree.set(target, indegree.get(target) + 1);
+    }
+  }
+
+  const order = [];
+  const ready = books.filter((book) => indegree.get(book.root) === 0);
+  while (ready.length > 0) {
+    ready.sort(compareBooks);
+    const book = ready.shift();
+    order.push(book);
+    for (const target of later.get(book.root)) {
+      indegree.set(target, indegree.get(target) - 1);
+      if (indegree.get(target) === 0) {
+        ready.push(byRoot.get(target));
+      }
+    }
+  }
+
+  if (order.length < books.length) {
+    const cycle = books.filter((book) => !order.includes(book)).map((book) => book.title);
+    errors.push(`Series chronology has a cycle between ${cycle.join(", ")}; check follows and precedes`);
+    return null;
+  }
+  return { order, later };
+}
+
+// Books with no chronological constraint between them fall back to
+// publication order, then title, so the report is deterministic.
+function compareBooks(left, right) {
+  return (left.bookNumber ?? Infinity) - (right.bookNumber ?? Infinity) || left.title.localeCompare(right.title);
+}
+
+function checkSharedCanon({ order, later }, errors, warnings) {
+  const reachable = new Map(order.map((book) => [book.root, collectLater(book.root, later, new Set())]));
+
+  for (const book of order) {
+    const earlierBooks = order.filter((candidate) => reachable.get(candidate.root).has(book.root));
+    checkCanonNames(book, earlierBooks, warnings);
+    checkCanonDeaths(book, earlierBooks, errors);
+    checkDestroyedArtifacts(book, earlierBooks, warnings);
+  }
+}
+
+function collectLater(root, later, seen) {
+  for (const next of later.get(root)) {
+    if (!seen.has(next)) {
+      seen.add(next);
+      collectLater(next, later, seen);
+    }
+  }
+  return seen;
+}
+
+// Compare against the most recent earlier book that defines the entity, so a
+// rename carried forward through a trilogy is reported once, not per book.
+function checkCanonNames(book, earlierBooks, warnings) {
+  for (const [key, , field] of SHARED_CANON) {
+    const canon = new Map();
+    for (const earlier of earlierBooks) {
+      for (const entity of earlier.project[key]) {
+        canon.set(entity.id, { book: earlier, entity });
+      }
+    }
+    for (const entity of book.project[key]) {
+      const match = canon.get(entity.id);
+      if (match && entity[field] !== match.entity[field]) {
+        warnings.push(`${bookFile(book, entity.file)} ${field} "${entity[field]}" differs from "${match.entity[field]}" in ${bookFile(match.book, match.entity.file)}`);
+      }
+    }
+  }
+}
+
+// A character who dies in an earlier book stays dead: the later book must mark
+// them deceased and keep them out of on-page casts.
+function checkCanonDeaths(book, earlierBooks, errors) {
+  const deaths = firstMatching(earlierBooks, "characters", (character) => character.status === "deceased");
+  for (const character of book.project.characters) {
+    const death = deaths.get(character.id);
+    if (!death) {
+      continue;
+    }
+    if (character.status !== "deceased") {
+      errors.push(`${bookFile(book, character.file)} has status ${character.status || "unset"}, but ${character.id} is deceased in earlier book ${death.title}; set status: deceased`);
+    }
+  }
+
+  for (const record of book.project.chapters.concat(book.project.scenes)) {
+    for (const [id, death] of deaths) {
+      if (record.pov === id || record.characters.includes(id)) {
+        errors.push(`${bookFile(book, record.file)} lists ${id}, who died in earlier book ${death.title}; move appearances to mentions`);
+      }
+    }
+  }
+}
+
+function checkDestroyedArtifacts(book, earlierBooks, warnings) {
+  const destroyed = firstMatching(earlierBooks, "artifacts", (artifact) => artifact.status === "destroyed");
+  for (const artifact of book.project.artifacts) {
+    const earlier = destroyed.get(artifact.id);
+    if (earlier && artifact.status !== "destroyed") {
+      warnings.push(`${bookFile(book, artifact.file)} has status ${artifact.status || "unset"}, but ${artifact.id} was destroyed in earlier book ${earlier.title}`);
+    }
+  }
+}
+
+function firstMatching(books, key, predicate) {
+  const matches = new Map();
+  for (const book of books) {
+    for (const entity of book.project[key]) {
+      if (!matches.has(entity.id) && predicate(entity)) {
+        matches.set(entity.id, book);
+      }
+    }
+  }
+  return matches;
+}
+
+function sharedCanon(books) {
+  const shared = [];
+  for (const [key, label] of SHARED_CANON) {
+    const counts = new Map();
+    for (const book of books) {
+      for (const entity of book.project[key]) {
+        counts.set(entity.id, (counts.get(entity.id) ?? 0) + 1);
+      }
+    }
+    const ids = [...counts].filter(([, count]) => count > 1).map(([id]) => id).sort();
+    if (ids.length > 0) {
+      shared.push({ label, ids });
+    }
+  }
+  return shared;
+}
+
+function bookFile(book, file) {
+  return path.join(book.label, path.relative(book.root, file));
+}

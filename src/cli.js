@@ -1,5 +1,6 @@
 import path from "node:path";
 import { importManuscript } from "./import.js";
+import { formatSeriesReport } from "./series.js";
 import {
   buildBook,
   checkProjectContinuity,
@@ -16,6 +17,7 @@ import {
   reindexProject,
   removeEntity,
   renameEntity,
+  seriesReport,
   validateLinks,
   validateProject
 } from "./story.js";
@@ -31,6 +33,8 @@ Commands:
   links [path]       Check cross-reference targets and backlinks
   continuity [path]  Check deterministic continuity contracts: deaths,
                     promises, questions, casts, and durable state
+  series [path]      Order linked prequels and sequels and check shared
+                    canon across books
   report [path]      Summarize project inventory, progress, and checks
   next [path]        Recommend the next writing and maintenance actions
   doctor [path]      Show health checks plus actionable repair steps
@@ -54,6 +58,12 @@ Options:
   --pov <style>             POV style for init or add chapter/scene
   --tense <tense>           Narrative tense for init
   --synopsis <text>         Starter synopsis for init
+  --series <id>             Series id for init
+  --book-number <n>         Publication order for init
+  --follows <path>          Init a sequel set after this story project;
+                            repeatable
+  --precedes <path>         Init a prequel set before this story project;
+                            repeatable
   --force                   Allow init to overwrite starter files
   --write                   Update chapter word-count frontmatter
   --path <path>             Target story root for add/rename/remove
@@ -112,9 +122,16 @@ export function runCli(argv, io) {
         pov: parsed.options.pov,
         tense: parsed.options.tense,
         synopsis: parsed.options.synopsis,
+        series: parsed.options.series,
+        bookNumber: parsed.options["book-number"],
+        follows: parsed.options.follows,
+        precedes: parsed.options.precedes,
         force: Boolean(parsed.options.force)
       });
       io.stdout.write(`Created story project: ${result.root}\n`);
+      for (const linkedBook of result.linkedBooks) {
+        io.stdout.write(`Linked series backlink in ${path.join(linkedBook, "story.md")}\n`);
+      }
       return 0;
     }
 
@@ -154,6 +171,12 @@ export function runCli(argv, io) {
 
     if (command === "continuity") {
       return reportResult(io, checkProjectContinuity(root), "Continuity is consistent", "Continuity check failed");
+    }
+
+    if (command === "series") {
+      const report = seriesReport(root);
+      io.stdout.write(formatSeriesReport(report));
+      return reportResult(io, report, "Series is consistent", "Series check failed");
     }
 
     if (command === "report") {
@@ -255,6 +278,7 @@ const BOOLEAN_OPTIONS = new Set(["force", "write", "actionable"]);
 const VALUE_OPTIONS = new Set([
   "title", "dir", "genre", "sub-genre", "setting-era",
   "theme", "themes", "pov", "tense", "synopsis",
+  "series", "book-number", "follows", "precedes",
   "path", "out", "format",
   "number", "chapter", "scene",
   "type", "role", "status",

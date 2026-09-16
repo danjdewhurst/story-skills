@@ -35,12 +35,22 @@ glossary/terms/
 - Frontmatter is machine-owned. Commands that change a value regenerate that file's frontmatter, which drops YAML comments; files whose values do not change are left as they are.
 - Cross-reference integrity is checked with `story links .`.
 - Continuity contracts (deaths, promises/payoffs, questions, casts, durable state) are checked with `story continuity .`.
+- Canon shared across linked sequels and prequels is checked with `story series .`.
 
 ## Entity Frontmatter
 
 ### Story
 
 Required: `title`, `schema-version`, `genre`, `status`, `themes`, `pov`, `tense`.
+
+Optional series fields link sequels, prequels, and companion books kept as separate projects:
+
+- `series` - kebab-case series id, identical in every linked book
+- `book-number` - positive integer publication order
+- `follows` - list of paths, relative to this book's root, to books set earlier in the chronology
+- `precedes` - list of paths to books set later in the chronology
+
+Every link needs a backlink: a book that `follows` another must appear in that book's `precedes`, and the reverse. `story links` checks that each path is a story project, has the backlink, and uses the same `series` id. `story series` orders the linked books by chronology and checks the canon they share. It errors when a character who is `deceased` in an earlier book is not deceased in a later one, or when a later book lists that character in a chapter or scene cast. It warns when a shared entity's name changes between books, or when an artifact destroyed in an earlier book has a different status in a later one.
 
 ### Characters
 
