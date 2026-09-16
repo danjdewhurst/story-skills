@@ -50,7 +50,7 @@ Optional series fields link sequels, prequels, and companion books kept as separ
 - `follows` - list of paths, relative to this book's root, to books set earlier in the chronology
 - `precedes` - list of paths to books set later in the chronology
 
-Every link needs a backlink: a book that `follows` another must appear in that book's `precedes`, and the reverse. `story links` checks that each path is a story project, has the backlink, and uses the same `series` id. `story series` orders the linked books by chronology and checks the canon they share. It errors when a character who is `deceased` in an earlier book is not deceased in a later one, or when a later book lists that character in a chapter or scene cast. It warns when a shared entity's name changes between books, or when an artifact destroyed in an earlier book has a different status in a later one.
+Every link needs a backlink: a book that `follows` another must appear in that book's `precedes`, and the reverse. `story links` checks that each path is a story project, has the backlink, and uses the same `series` id. `story series` orders the linked books by chronology and checks the canon they share. It errors when a character who is `deceased` in an earlier book is not deceased in a later one, or when a later book lists that character in a chapter or scene cast. It also errors when a later book has a character learn a `fact` (a `knowledge-state` entry with `learned-in`) that the same character already knows in an earlier book. It warns when a shared entity's name changes between books, or when an artifact destroyed in an earlier book has a different status in a later one.
 
 ### Characters
 
@@ -90,7 +90,7 @@ State entries are lists of mappings checked by `story continuity`:
 
 - `character-state` entries reference an existing `character` and optionally a `location`, plus free-form `physical`, `emotional`, and `knowledge` notes.
 - `object-state` entries reference an existing `artifact`, an optional `owner` (character or faction), an optional `location`, and a `status` that must agree with the artifact file.
-- `knowledge-state` entries reference an existing `character`, a non-empty `knows` fact, and an optional `learned-in` chapter id.
+- `knowledge-state` entries reference an existing `character`, a non-empty `knows` fact, and an optional `learned-in` chapter id. An optional `fact` gives the knowledge a stable kebab-case id. A character may list each `fact` only once, and `story series` uses fact ids to match knowledge across books. An entry without `learned-in` means the character already knew it when the book began.
 
 Questions require `title` and `status`; optional chapter references are `introduced` and `resolved`, plus an optional `characters` list.
 

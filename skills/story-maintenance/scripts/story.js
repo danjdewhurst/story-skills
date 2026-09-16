@@ -379,10 +379,24 @@ function checkContinuityState(project, context, errors, warnings) {
       errors.push(`${entryLabel} references missing location ${entry.location}`);
     }
   }
+  const knownFacts = new Map;
   for (const [index, entry] of stateEntries(data["knowledge-state"]).entries()) {
     const entryLabel = `${label} knowledge-state[${index}]`;
     if (!requireMapping(entry, entryLabel, errors)) {
       continue;
+    }
+    if (entry.fact !== undefined) {
+      const fact = String(entry.fact);
+      if (!isKebabId(fact)) {
+        errors.push(`${entryLabel} fact ${fact || "(empty)"} must be a kebab-case id`);
+      } else {
+        const key = `${entry.character}\x00${fact}`;
+        if (knownFacts.has(key)) {
+          errors.push(`${entryLabel} repeats fact ${fact} for ${entry.character} from knowledge-state[${knownFacts.get(key)}]`);
+        } else {
+          knownFacts.set(key, index);
+        }
+      }
     }
     if (!entry.character || !context.characters.has(entry.character)) {
       errors.push(`${entryLabel} references missing character ${entry.character || "(unset)"}`);
@@ -419,6 +433,9 @@ function castIncludes(record, characterId) {
 }
 function stateEntries(value) {
   return Array.isArray(value) ? value : [];
+}
+function isKebabId(value) {
+  return value !== "" && value === kebabCase(value);
 }
 function requireMapping(entry, entryLabel, errors) {
   if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
@@ -628,6 +645,7 @@ function checkSharedCanon({ order, later }, errors, warnings) {
     checkCanonNames(book, earlierBooks, warnings);
     checkCanonDeaths(book, earlierBooks, errors);
     checkDestroyedArtifacts(book, earlierBooks, warnings);
+    checkKnownFacts(book, earlierBooks, errors);
   }
 }
 function collectLater(root, later, seen) {
@@ -683,6 +701,42 @@ function checkDestroyedArtifacts(book, earlierBooks, warnings) {
     }
   }
 }
+function checkKnownFacts(book, earlierBooks, errors) {
+  const known = new Map;
+  for (const earlier of earlierBooks) {
+    for (const entry of knowledgeFacts(earlier)) {
+      if (!known.has(entry.key)) {
+        known.set(entry.key, { book: earlier, entry });
+      }
+    }
+  }
+  for (const entry of knowledgeFacts(book)) {
+    const prior = known.get(entry.key);
+    if (prior && entry.learnedIn) {
+      errors.push(`${bookFile(book, entry.file)} knowledge-state[${entry.index}] has ${entry.character} learn ${entry.fact} in ${entry.learnedIn}, but they already know it in earlier book ${prior.book.title} (${bookFile(prior.book, prior.entry.file)} knowledge-state[${prior.entry.index}])`);
+    }
+  }
+}
+function knowledgeFacts(book) {
+  const continuity = book.project.continuity;
+  const entries = continuity && Array.isArray(continuity.data["knowledge-state"]) ? continuity.data["knowledge-state"] : [];
+  const file = path2.join(book.root, "continuity", "state.md");
+  const facts = [];
+  entries.forEach((entry, index) => {
+    const fact = entry && typeof entry === "object" ? String(entry.fact ?? "") : "";
+    if (fact !== "" && typeof entry.character === "string") {
+      facts.push({
+        index,
+        file,
+        character: entry.character,
+        fact,
+        key: `${entry.character}\x00${fact}`,
+        learnedIn: entry["learned-in"] ? String(entry["learned-in"]) : ""
+      });
+    }
+  });
+  return facts;
+}
 function firstMatching(books, key, predicate) {
   const matches = new Map;
   for (const book of books) {
@@ -707,6 +761,16 @@ function sharedCanon(books) {
     if (ids.length > 0) {
       shared.push({ label, ids });
     }
+  }
+  const factBooks = new Map;
+  for (const book of books) {
+    for (const entry of knowledgeFacts(book)) {
+      factBooks.set(entry.fact, (factBooks.get(entry.fact) ?? new Set).add(book.root));
+    }
+  }
+  const facts = [...factBooks].filter(([, roots]) => roots.size > 1).map(([fact]) => fact).sort();
+  if (facts.length > 0) {
+    shared.push({ label: "Facts", ids: facts });
   }
   return shared;
 }
@@ -867,7 +931,7 @@ function resolveSeriesOptions(root, cwd, options) {
     }
   }
   const series = options.series ?? linked.map((book) => book.data.series).find((value) => value !== undefined);
-  if (series !== undefined && !isKebabId(String(series))) {
+  if (series !== undefined && !isKebabId2(String(series))) {
     throw new Error(`Series id must be kebab-case: ${series}`);
   }
   let bookNumber;
@@ -2063,7 +2127,7 @@ function normalizeKind(kind) {
   return normalized;
 }
 function requireKebabId(id, label) {
-  if (!isKebabId(id)) {
+  if (!isKebabId2(id)) {
     throw new Error(`${label} must be a kebab-case id`);
   }
 }
@@ -2074,7 +2138,7 @@ function requirePositiveInteger(value, label) {
   }
   return number;
 }
-function isKebabId(value) {
+function isKebabId2(value) {
   const text = String(value ?? "").trim();
   return text !== "" && text === kebabCase(text);
 }
@@ -2500,14 +2564,14 @@ function transformReferences(data, transform, nested = false) {
 function applyEntityBacklinks(root, kind, id, data) {
   if (kind === "location") {
     for (const characterId of asArray(data["notable-characters"])) {
-      if (isKebabId(characterId)) {
+      if (isKebabId2(characterId)) {
         addFrontmatterListValue(root, path3.join("characters", `${characterId}.md`), "locations", id);
       }
     }
   }
   if (kind === "character") {
     for (const locationId of asArray(data.locations)) {
-      if (isKebabId(locationId)) {
+      if (isKebabId2(locationId)) {
         addFrontmatterListValue(root, path3.join("worldbuilding", "locations", `${locationId}.md`), "notable-characters", id);
       }
     }
@@ -3013,7 +3077,7 @@ function validateStoryFrontmatter(project, errors) {
   validateEnum(data, "status", STORY_STATUSES, "story.md", errors);
   validateEnum(data, "tense", STORY_TENSES, "story.md", errors);
   requireScalar(data, "series", "story.md", errors);
-  if (data.series !== undefined && !isKebabId(data.series)) {
+  if (data.series !== undefined && !isKebabId2(data.series)) {
     errors.push("story.md series must be a kebab-case id");
   }
   if (data["book-number"] !== undefined && (!Number.isInteger(data["book-number"]) || data["book-number"] <= 0)) {

@@ -251,6 +251,51 @@ describe("series validation and reporting", () => {
     expect(cli.err).toContain("Series check failed: 5 errors, 2 warnings");
   });
 
+  test("flags facts a later book learns that an earlier book already knows", () => {
+    const cwd = makeTempDir();
+    const origins = book(cwd, "Origins");
+    const sequel = book(cwd, "Sequel");
+    const finale = book(cwd, "Finale");
+    setStory(origins, { precedes: ["../sequel"] });
+    setStory(sequel, { follows: ["../origins"], precedes: ["../finale"] });
+    setStory(finale, { follows: ["../sequel"] });
+    fs.rmSync(path.join(sequel, "continuity", "state.md"));
+
+    const state = (knowledge) => `type: continuity-state\nstory: x\ncurrent-chapter: 0\nknowledge-state:\n${knowledge}`;
+    writeMarkdown(path.join(origins, "continuity", "state.md"), state([
+      "  - character: ana",
+      "    knows: the heir survived",
+      "    fact: heir-survived",
+      "    learned-in: chapter-03",
+      "  - loose-note",
+      "  - character: ana",
+      "    knows: no id"
+    ].join("\n")), "# State\n");
+    writeMarkdown(path.join(finale, "continuity", "state.md"), state([
+      "  - character: ana",
+      "    knows: the heir survived",
+      "    fact: heir-survived",
+      "    learned-in: chapter-01",
+      "  - character: ana",
+      "    knows: the heir survived, carried forward",
+      "    fact: heir-survived",
+      "  - character: ben",
+      "    knows: the heir survived",
+      "    fact: heir-survived",
+      "    learned-in: chapter-02",
+      "  - character: ana",
+      "    fact: 7",
+      "    learned-in: chapter-02",
+      "  - fact: orphan-fact"
+    ].join("\n")), "# State\n");
+
+    const report = seriesReport(finale);
+    expect(report.errors).toEqual([
+      "continuity/state.md knowledge-state[0] has ana learn heir-survived in chapter-01, but they already know it in earlier book Origins (../origins/continuity/state.md knowledge-state[0])"
+    ]);
+    expect(report.shared).toEqual([{ label: "Facts", ids: ["heir-survived"] }]);
+  });
+
   test("reports cycles and conflicting series ids without ordering", () => {
     const cwd = makeTempDir();
     const one = book(cwd, "One");
