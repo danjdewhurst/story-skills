@@ -384,4 +384,46 @@ state-changes: []
     const result = checkContinuity(scanProject(root));
     expect(result.warnings.join("\n")).toContain("scenes/chapter-01-scene-01.md is set in old-mill but chapters/chapter-01.md does not list that location");
   });
+
+  test("checks knowledge fact ids are kebab-case and unique per character", () => {
+    const cwd = makeTempDir();
+    const root = createStoryProject({ cwd, title: "Facts" }).root;
+    for (const id of ["ana-roe", "ben-roe"]) {
+      writeMarkdown(path.join(root, "characters", `${id}.md`), `name: ${id}\nrole: supporting\nstatus: alive`, "# Character\n");
+    }
+    writeMarkdown(path.join(root, "continuity", "state.md"), `
+type: continuity-state
+story: facts
+current-chapter: 0
+character-state: []
+object-state: []
+knowledge-state:
+  - character: ana-roe
+    knows: the mill was burned
+    fact: mill-was-burned
+  - character: ben-roe
+    knows: the mill was burned
+    fact: mill-was-burned
+  - character: ana-roe
+    knows: the mill was burned, again
+    fact: mill-was-burned
+  - character: ana-roe
+    knows: something vague
+    fact: Not Kebab
+  - character: ana-roe
+    knows: an empty id
+    fact: ""
+  - character: ben-roe
+    knows: a numbered secret
+    fact: 42
+  - character: ben-roe
+    knows: no id at all
+`, "# State\n");
+
+    expect(checkProjectContinuity(root).errors).toEqual([
+      "continuity/state.md knowledge-state[2] repeats fact mill-was-burned for ana-roe from knowledge-state[0]",
+      "continuity/state.md knowledge-state[3] fact Not Kebab must be a kebab-case id",
+      "continuity/state.md knowledge-state[4] fact (empty) must be a kebab-case id"
+    ]);
+  });
 });

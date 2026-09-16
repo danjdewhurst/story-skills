@@ -1,4 +1,5 @@
 import path from "node:path";
+import { kebabCase } from "./markdown.js";
 
 const CHEKHOV_CHAPTER_GAP = 3;
 
@@ -201,10 +202,26 @@ function checkContinuityState(project, context, errors, warnings) {
     }
   }
 
+  const knownFacts = new Map();
   for (const [index, entry] of stateEntries(data["knowledge-state"]).entries()) {
     const entryLabel = `${label} knowledge-state[${index}]`;
     if (!requireMapping(entry, entryLabel, errors)) {
       continue;
+    }
+    // `fact` is an optional stable id so the same knowledge can be matched
+    // across entries and across books in a series.
+    if (entry.fact !== undefined) {
+      const fact = String(entry.fact);
+      if (!isKebabId(fact)) {
+        errors.push(`${entryLabel} fact ${fact || "(empty)"} must be a kebab-case id`);
+      } else {
+        const key = `${entry.character} ${fact}`;
+        if (knownFacts.has(key)) {
+          errors.push(`${entryLabel} repeats fact ${fact} for ${entry.character} from knowledge-state[${knownFacts.get(key)}]`);
+        } else {
+          knownFacts.set(key, index);
+        }
+      }
     }
     if (!entry.character || !context.characters.has(entry.character)) {
       errors.push(`${entryLabel} references missing character ${entry.character || "(unset)"}`);
@@ -244,6 +261,10 @@ function castIncludes(record, characterId) {
 
 function stateEntries(value) {
   return Array.isArray(value) ? value : [];
+}
+
+function isKebabId(value) {
+  return value !== "" && value === kebabCase(value);
 }
 
 function requireMapping(entry, entryLabel, errors) {

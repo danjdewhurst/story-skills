@@ -231,6 +231,7 @@ function checkSharedCanon({ order, later }, errors, warnings) {
     checkCanonNames(book, earlierBooks, warnings);
     checkCanonDeaths(book, earlierBooks, errors);
     checkDestroyedArtifacts(book, earlierBooks, warnings);
+    checkKnownFacts(book, earlierBooks, errors);
   }
 }
 
@@ -296,6 +297,48 @@ function checkDestroyedArtifacts(book, earlierBooks, warnings) {
   }
 }
 
+// A character who already knows a fact in an earlier book cannot learn it on
+// the page in a later one. In a prequel this usually means the prequel gave
+// away knowledge the later book treats as a discovery.
+function checkKnownFacts(book, earlierBooks, errors) {
+  const known = new Map();
+  for (const earlier of earlierBooks) {
+    for (const entry of knowledgeFacts(earlier)) {
+      if (!known.has(entry.key)) {
+        known.set(entry.key, { book: earlier, entry });
+      }
+    }
+  }
+
+  for (const entry of knowledgeFacts(book)) {
+    const prior = known.get(entry.key);
+    if (prior && entry.learnedIn) {
+      errors.push(`${bookFile(book, entry.file)} knowledge-state[${entry.index}] has ${entry.character} learn ${entry.fact} in ${entry.learnedIn}, but they already know it in earlier book ${prior.book.title} (${bookFile(prior.book, prior.entry.file)} knowledge-state[${prior.entry.index}])`);
+    }
+  }
+}
+
+function knowledgeFacts(book) {
+  const continuity = book.project.continuity;
+  const entries = continuity && Array.isArray(continuity.data["knowledge-state"]) ? continuity.data["knowledge-state"] : [];
+  const file = path.join(book.root, "continuity", "state.md");
+  const facts = [];
+  entries.forEach((entry, index) => {
+    const fact = entry && typeof entry === "object" ? String(entry.fact ?? "") : "";
+    if (fact !== "" && typeof entry.character === "string") {
+      facts.push({
+        index,
+        file,
+        character: entry.character,
+        fact,
+        key: `${entry.character} ${fact}`,
+        learnedIn: entry["learned-in"] ? String(entry["learned-in"]) : ""
+      });
+    }
+  });
+  return facts;
+}
+
 function firstMatching(books, key, predicate) {
   const matches = new Map();
   for (const book of books) {
@@ -321,6 +364,17 @@ function sharedCanon(books) {
     if (ids.length > 0) {
       shared.push({ label, ids });
     }
+  }
+
+  const factBooks = new Map();
+  for (const book of books) {
+    for (const entry of knowledgeFacts(book)) {
+      factBooks.set(entry.fact, (factBooks.get(entry.fact) ?? new Set()).add(book.root));
+    }
+  }
+  const facts = [...factBooks].filter(([, roots]) => roots.size > 1).map(([fact]) => fact).sort();
+  if (facts.length > 0) {
+    shared.push({ label: "Facts", ids: facts });
   }
   return shared;
 }
