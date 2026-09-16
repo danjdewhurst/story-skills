@@ -14,6 +14,7 @@ Initialize a new story project with a structured markdown folder layout. Creates
 - Starting a new story, book, or fiction project
 - Setting up the folder structure for an existing story idea
 - NOT for adding to an existing story project (use the domain-specific skills instead)
+- NOT for a sequel, prequel, or companion to an existing book: use `series-continuity`, which links the projects and carries canon across
 - NOT for converting an existing manuscript or chapter drafts: run `story import <source> --title "{Title}"` instead, then build out the bible from the entity candidates it prints
 
 ## Workflow
