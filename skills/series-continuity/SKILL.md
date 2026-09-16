@@ -65,7 +65,24 @@ Only carry entities the new book actually uses. For each one, copy the file from
 - **Do not copy** chapters, scenes, arcs, questions, promises, or `continuity/state.md`. Rebuild them for the new book:
   - Unresolved questions or promises the new book continues become new files in its `continuity/` folders.
   - Events from the other book become `Backstory Events` rows in `plot/timeline.md` (sequel) or `Series Canon` notes (prequel).
-  - `continuity/state.md` starts at `current-chapter: 0` with the carried character and object state.
+  - `continuity/state.md` starts at `current-chapter: 0` with the carried character and object state. Carried knowledge goes in `knowledge-state` without `learned-in`, because the character already knew it when the book began.
+
+## Fact Ids
+
+Give series-relevant knowledge a stable `fact` id in `continuity/state.md`, and use the same id in every book:
+
+```yaml
+knowledge-state:
+  - character: kael-voss
+    knows: The gallery tunnel reaches the Whisper Gate
+    fact: whisper-gate-route
+    learned-in: chapter-04   # only in the book where they learn it on the page
+```
+
+- Fact ids are kebab-case, and each character lists a given fact only once per book. `story continuity` checks both rules.
+- Add `learned-in` only in the book where the character discovers the fact. In later books, carry the entry without `learned-in`.
+- Reuse the exact id in every book. The checker matches the character id plus the fact id, never the `knows` text.
+- Give ids to the reveals, secrets, and discoveries a later or earlier book depends on. Everyday knowledge does not need one.
 
 After carrying entities, run in the new book:
 
@@ -86,18 +103,19 @@ story series .
   - A chronology cycle
   - A character who is `deceased` in an earlier book but not `deceased` in a later one
   - A later book whose chapter or scene lists that character as `pov` or under `characters`. Move flashbacks, memories, and ghosts to `mentions`.
+  - A later book where a character learns a `fact` (an entry with `learned-in`) that the same character already knows in an earlier book. In a prequel, the usual fix is to remove the knowledge from the prequel, or to change which book the discovery happens in.
 - **Warnings**
   - A shared entity whose `name` (or glossary `term`) differs from the most recent earlier book
   - An artifact that is `destroyed` in an earlier book but has a different status in a later one
 
 `story links .` also checks the book's own series links: each path exists, has a matching backlink, and uses the same `series` id.
 
-The checker cannot judge knowledge, ages, dates, travel time, or tone. Check those by reading both books' timelines and `Series Canon` notes.
+The checker cannot judge knowledge without fact ids, or ages, dates, travel time, or tone. Check those by reading both books' timelines and `Series Canon` notes.
 
 ## Writing Against Canon
 
 - **Sequels:** before drafting, reread the earlier book's final chapters, `continuity/state.md`, and every unresolved question or promise. Decide with the user which threads the new book picks up.
-- **Prequels:** the later book is canon. Every fixed endpoint must still be reachable by the end of the prequel. Do not mark a character `deceased` who is alive in a later book. Do not give a character knowledge that the later book shows them learning for the first time.
+- **Prequels:** the later book is canon. Every fixed endpoint must still be reachable by the end of the prequel. Do not mark a character `deceased` who is alive in a later book. Do not give a character knowledge that the later book shows them learning for the first time. Before drafting, list the later book's `fact` ids that have `learned-in`, and keep those facts out of the prequel's knowledge.
 - **Revising an earlier book** after later books exist: run `story series .` before and after the revision. Update the later books' `Series Notes` and carried entity files when canon changes.
 
 ## Maintenance
