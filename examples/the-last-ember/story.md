@@ -1,6 +1,8 @@
 ---
 title: The Last Ember
 schema-version: 2
+series: the-ember-cycle
+book-number: 1
 genre: fantasy
 sub-genre: epic
 setting-era: medieval
@@ -11,6 +13,8 @@ themes:
   - the-cost-of-legacy
 pov: third-person-limited
 tense: past
+follows:
+  - ../the-fall-of-the-citadel
 ---
 
 

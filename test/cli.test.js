@@ -114,6 +114,9 @@ describe("cli", () => {
     const help = invoke(cwd, ["--help"]).out;
     expect(help).toContain("validate");
     expect(help).toContain("continuity [path]");
+    expect(help).toContain("series [path]");
+    expect(help).toContain("--follows <path>");
+    expect(help).toContain("--precedes <path>");
     expect(help).toContain("import <source>");
     expect(help).toContain("--title <name>");
     expect(help).toContain("--role <name>");
@@ -359,6 +362,12 @@ word-count: 9
     try {
       const fixture = path.join(scratch, "the-last-ember");
       fs.cpSync(path.join(repoRoot, "examples", "the-last-ember"), fixture, { recursive: true });
+      // the-last-ember follows its prequel, so links need the sibling book too.
+      fs.cpSync(path.join(repoRoot, "examples", "the-fall-of-the-citadel"), path.join(scratch, "the-fall-of-the-citadel"), { recursive: true });
+
+      const series = runBundle(["series", fixture]);
+      expect(series.status).toBe(0);
+      expect(series.stdout).toContain("Series is consistent");
 
       const validate = runBundle(["validate", fixture]);
       expect(validate.status).toBe(0);

@@ -2,7 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { checkProjectContinuity, computeWordCounts, validateLinks, validateProject } from "../src/story.js";
+import { checkProjectContinuity, computeWordCounts, seriesReport, validateLinks, validateProject } from "../src/story.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const examplesRoot = path.join(repoRoot, "examples");
@@ -70,6 +70,8 @@ function main() {
 
     collectResult(failures, name, "validate", validation);
     collectResult(failures, name, "links", links);
+    // Linked examples (the-last-ember and its prequel) must agree on shared canon.
+    collectResult(failures, name, "series", seriesReport(root));
 
     if (expected) {
       compareFindings(failures, name, "error", expected.errors, continuity.errors);

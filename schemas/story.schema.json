@@ -11,6 +11,10 @@
       "properties": {
         "title": { "type": "string" },
         "schema-version": { "const": 2 },
+        "series": { "$ref": "#/$defs/id" },
+        "book-number": { "type": "integer", "minimum": 1 },
+        "follows": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "precedes": { "type": "array", "items": { "type": "string", "minLength": 1 } },
         "genre": { "type": "string" },
         "status": { "enum": ["planning", "drafting", "in-progress", "revising", "complete", "abandoned"] },
         "themes": { "type": "array", "items": { "type": "string" } },
