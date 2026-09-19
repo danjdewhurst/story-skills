@@ -1,0 +1,152 @@
+#!/usr/bin/env node
+/**
+ * Validate eval fixtures and their known-good examples.
+ *
+ * Checks that every fixture in evals/fixtures/ has an input.md and a
+ * checks.json with a brief, at least one check, valid JSON, and compiling
+ * regexes, plus a known-good draft in evals/examples/<fixture>.md (and no
+ * stray examples). Run from anywhere; exits non-zero on failure.
+ */
+
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+const FIXTURES_DIR = path.join(ROOT, "evals", "fixtures");
+const EXAMPLES_DIR = path.join(ROOT, "evals", "examples");
+
+const KNOWN_VOICE_KEYS = new Set([
+  "contraction_rate",
+  "first_person_rate",
+  "hedge_rate",
+  "mean_word_length",
+]);
+
+const errors = [];
+const check = (cond, msg) => {
+  if (!cond) errors.push(msg);
+};
+
+function isNumber(v) {
+  return typeof v === "number" && !Number.isNaN(v);
+}
+
+function main() {
+  if (!fs.existsSync(FIXTURES_DIR)) {
+    console.log("FAIL evals/fixtures: missing directory");
+    return 1;
+  }
+  if (!fs.existsSync(EXAMPLES_DIR)) {
+    console.log("FAIL evals/examples: missing directory");
+    return 1;
+  }
+  const fixtures = fs
+    .readdirSync(FIXTURES_DIR, { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name)
+    .sort();
+  check(fixtures.length > 0, "evals/fixtures: no fixtures found");
+
+  for (const name of fixtures) {
+    const dir = path.join(FIXTURES_DIR, name);
+    check(
+      fs.existsSync(path.join(dir, "input.md")),
+      `${name}: missing input.md`
+    );
+    check(
+      fs.existsSync(path.join(EXAMPLES_DIR, `${name}.md`)),
+      `evals/examples/${name}.md: missing known-good draft`
+    );
+    const checksPath = path.join(dir, "checks.json");
+    if (!fs.existsSync(checksPath)) {
+      errors.push(`${name}: missing checks.json`);
+      continue;
+    }
+    let checks;
+    try {
+      checks = JSON.parse(fs.readFileSync(checksPath, "utf8"));
+    } catch (err) {
+      errors.push(`${name}/checks.json: invalid JSON (${err.message})`);
+      continue;
+    }
+    if (typeof checks !== "object" || checks === null || Array.isArray(checks)) {
+      errors.push(`${name}/checks.json: top level must be an object`);
+      continue;
+    }
+    check(
+      typeof checks.brief === "string" && checks.brief.trim().length > 0,
+      `${name}/checks.json: brief must be a non-empty string`
+    );
+    for (const key of ["required", "banned", "banned_regex"]) {
+      if (key in checks) {
+        check(
+          Array.isArray(checks[key]) && checks[key].every((s) => typeof s === "string"),
+          `${name}/checks.json: ${key} must be a list of strings`
+        );
+      }
+    }
+    for (const key of ["max_words_ratio", "min_words_ratio"]) {
+      if (key in checks) {
+        check(
+          isNumber(checks[key]) && checks[key] > 0,
+          `${name}/checks.json: ${key} must be a positive number`
+        );
+      }
+    }
+    if ("voice_drift" in checks) {
+      const drift = checks.voice_drift;
+      if (typeof drift !== "object" || drift === null || Array.isArray(drift)) {
+        errors.push(`${name}/checks.json: voice_drift must be an object`);
+      } else {
+        for (const [key, val] of Object.entries(drift)) {
+          check(
+            KNOWN_VOICE_KEYS.has(key),
+            `${name}/checks.json: voice_drift has unknown key ${JSON.stringify(key)}`
+          );
+          if (KNOWN_VOICE_KEYS.has(key)) {
+            check(
+              isNumber(val),
+              `${name}/checks.json: voice_drift[${key}] must be numeric`
+            );
+          }
+        }
+      }
+    }
+    check(
+      (checks.required && checks.required.length > 0) ||
+        (checks.banned && checks.banned.length > 0) ||
+        (checks.banned_regex && checks.banned_regex.length > 0) ||
+        checks.max_words_ratio !== undefined ||
+        checks.min_words_ratio !== undefined ||
+        checks.voice_drift !== undefined,
+      `${name}/checks.json: defines no required, banned, banned_regex, max/min_words_ratio, or voice_drift checks`
+    );
+    for (const pattern of checks.banned_regex || []) {
+      if (typeof pattern !== "string") continue;
+      try {
+        new RegExp(pattern, "i");
+      } catch (err) {
+        errors.push(`${name}/checks.json: banned_regex /${pattern}/ does not compile (${err.message})`);
+      }
+    }
+  }
+
+  for (const file of fs.readdirSync(EXAMPLES_DIR).sort()) {
+    if (!file.endsWith(".md")) continue;
+    check(
+      fixtures.includes(path.basename(file, ".md")),
+      `evals/examples/${file}: no matching fixture`
+    );
+  }
+
+  if (errors.length > 0) {
+    for (const e of errors) console.log(`FAIL ${e}`);
+    console.log(`${errors.length} problem(s) found`);
+    return 1;
+  }
+  console.log("all eval fixture checks passed");
+  return 0;
+}
+
+process.exit(main());

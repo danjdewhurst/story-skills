@@ -23,8 +23,10 @@
     "build:fallback": "bun build ./bin/story.js --target=node --outfile=skills/story-maintenance/scripts/story.js",
     "check:metadata": "node scripts/check-metadata.js",
     "check:fallback": "node scripts/check-fallback.js",
+    "check:evals": "node scripts/check-evals.js",
     "release": "node scripts/release.js",
     "test:examples": "node scripts/check-examples.js",
+    "eval:selftest": "node evals/run-evals.js --all evals/examples",
     "story": "bun run ./bin/story.js",
     "test": "bun test test/*.test.js",
     "test:coverage": "bun test test/*.test.js --coverage --coverage-reporter=lcov --coverage-dir=coverage && node scripts/check-coverage.js coverage/lcov.info src && bun run check:fallback"
