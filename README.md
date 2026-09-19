@@ -387,6 +387,19 @@ bun run check:fallback
 node skills/story-maintenance/scripts/story.js --help
 ```
 
+The `evals/` harness regression-tests the writing skills. Fixtures seed a
+drafting brief with known canon and known traps; a dependency-free checker
+verifies drafts keep the canon and spring none of the traps; a model runner
+(`claude` CLI required) drafts through a real model and judges for invented
+canon; a pairwise comparison measures the skill against a no-skill
+baseline. See [`evals/README.md`](evals/README.md).
+
+```shell
+bun run check:evals    # validate fixture schemas
+bun run eval:selftest  # checker self-test against known-good drafts
+node evals/run-skill.js # full model run (needs Claude Code credentials)
+```
+
 Codex uses `.codex-plugin/plugin.json` as its plugin version source. Claude Code uses `.claude-plugin/plugin.json`. Every published change needs a new version in both files and in `package.json` so installed users receive updates; keep marketplace entries unversioned to avoid duplicate version state.
 
 Cut a release with the release script, which bumps all three files, runs the CI checks, commits `chore: release X.Y.Z`, tags `vX.Y.Z`, pushes, and creates a GitHub release with generated notes. It requires a clean `main` that matches `origin/main` and a logged-in `gh`:
