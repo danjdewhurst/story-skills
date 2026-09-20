@@ -83,6 +83,10 @@ describe("cli", () => {
     const missing = invoke(cwd, ["add", "chapter", "Foo", "--number"]);
     expect(missing.code).toBe(1);
     expect(missing.err).toContain("Missing value for --number");
+    expect(() => parseArgs(["validate", "--path", "--bogus"])).toThrow("Missing value for --path");
+    const badPath = invoke(cwd, ["validate", "--path", "--bogus"]);
+    expect(badPath.code).toBe(1);
+    expect(badPath.err).toContain("Missing value for --path");
   });
 
   test("rejects unknown options instead of passing them through", () => {
@@ -107,6 +111,7 @@ describe("cli", () => {
 
   test("rejects unrecognized --flag=value strings", () => {
     expect(() => parseArgs(["init", "A", "--force=maybe"])).toThrow('Unknown value "maybe" for --force');
+    expect(() => parseArgs(["init", "A", "--force="])).toThrow('Unknown value "" for --force');
     expect(parseArgs(["init", "A", "--force=yes"]).options).toEqual({ force: true });
   });
 

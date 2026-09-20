@@ -152,13 +152,13 @@ function discoverBooks(startRoot, scan, errors) {
   const visited = new Map();
   const queue = [{ root: startResolved, depth: 0 }];
   while (queue.length > 0) {
-    if (visited.size >= MAX_SERIES_BOOKS) {
-      errors.push('Series links exceed the ' + MAX_SERIES_BOOKS + ' book limit; refusing to traverse further');
-      break;
-    }
     const { root, depth } = queue.shift();
     if (visited.has(root)) {
       continue;
+    }
+    if (visited.size >= MAX_SERIES_BOOKS) {
+      errors.push('Series links exceed the ' + MAX_SERIES_BOOKS + ' book limit; refusing to traverse further');
+      break;
     }
 
     const label = seriesLinkPath(startRoot, root) || '.';

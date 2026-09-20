@@ -77,7 +77,7 @@ With the approved outline, write the full prose:
 - Consult `references/writing-guidelines.md` for quick prose craft guidance. For the deep reference — the Scene/Sequel unit, dialogue subtext and voice-differentiation, deep POV and psychic distance — use the `scene-craft` skill.
 - When available, apply the `better-writing` skill before finalizing prose
 - Use the chapter template from `references/chapter-template.md`
-- Include the approved outline in the file above the prose (for reference). Note that in-file outlines count toward the chapter `word-count` until removed: run `story wordcount . --write` after writing, and trim or move the outline before final counts.
+- Include the approved outline in the file above `## Chapter Text` (for reference). CLI word counts start at that heading, so an outline kept above it never inflates `word-count`: run `story wordcount . --write` after writing to record counts.
 
 Save to `chapters/chapter-{NN}.md` with appropriate frontmatter.
 

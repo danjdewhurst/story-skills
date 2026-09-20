@@ -372,6 +372,21 @@ describe("series traversal limits", () => {
     }
   });
 
+  test("does not false-fail at exactly 100 books with reciprocal links", () => {
+    const cwd = makeTempDir();
+    const books = [];
+    for (let index = 0; index < 100; index += 1) {
+      books.push(book(cwd, `Saga ${index}`));
+    }
+    const first = path.basename(books[0]);
+    setStory(books[0], { follows: books.slice(1).map((root) => `../${path.basename(root)}`) });
+    for (const other of books.slice(1)) {
+      setStory(other, { precedes: [`../${first}`] });
+    }
+    const report = seriesReport(books[0]);
+    expect(report.errors.join("\n")).not.toContain("book limit");
+  });
+
   test("caps traversal depth on long chains", () => {
     const cwd = makeTempDir();
     let previous = null;

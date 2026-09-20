@@ -10,7 +10,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const FIXTURES_DIR = path.join(ROOT, "evals", "fixtures");
@@ -34,6 +34,18 @@ const warn = (msg) => {
 
 function isNumber(v) {
   return typeof v === "number" && !Number.isNaN(v);
+}
+
+export function checkFixtureSkill(failures, skillsDir, skillName, fixtureName, exists) {
+  const skill = typeof skillName === "string" ? skillName.trim() : "";
+  if (skill === "") {
+    failures.push(`${fixtureName}/checks.json: skill must be a non-empty string naming the skill under test`);
+    return failures;
+  }
+  if (!exists(path.join(skillsDir, skill, "SKILL.md"))) {
+    failures.push(`${fixtureName}/checks.json: skill "${skill}" does not match a skill in skills/`);
+  }
+  return failures;
 }
 
 function main() {
@@ -82,9 +94,8 @@ function main() {
       typeof checks.brief === "string" && checks.brief.trim().length > 0,
       `${name}/checks.json: brief must be a non-empty string`
     );
-    check(
-      typeof checks.skill === "string" && checks.skill.trim().length > 0,
-      `${name}/checks.json: skill must be a non-empty string naming the skill under test`
+    checkFixtureSkill(errors, path.join(ROOT, "skills"), checks.skill, name, (skillPath) =>
+      fs.existsSync(skillPath)
     );
     for (const key of ["required", "banned", "banned_regex"]) {
       if (key in checks) {
@@ -209,4 +220,6 @@ function main() {
   return 0;
 }
 
-process.exit(main());
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  process.exit(main());
+}
