@@ -250,6 +250,7 @@ characters: not-a-list
     writeClue(root, "dangling-clue", `
 status: planted
 planted: chapter-09
+payoff: chapter-10
 arcs:
   - missing-arc
 characters:
@@ -259,7 +260,65 @@ characters:
     const result = validateLinks(root);
     expect(result.ok).toBe(false);
     expect(result.errors).toContain("continuity/clues/dangling-clue.md references missing chapter chapter-09");
+    expect(result.errors).toContain("continuity/clues/dangling-clue.md references missing chapter chapter-10");
     expect(result.errors).toContain("continuity/clues/dangling-clue.md references missing arc missing-arc");
     expect(result.errors).toContain("continuity/clues/dangling-clue.md references missing character missing-character");
+  });
+
+  test("validate accepts abandoned clue status and continuity skips abandoned ordering", () => {
+    const root = clueProject(3);
+    writeClue(root, "cut-clue", `
+status: abandoned
+planted: chapter-03
+payoff: chapter-01
+`);
+
+    const validation = validateProject(root);
+    expect(validation.errors.filter((error) => error.includes("cut-clue"))).toEqual([]);
+
+    const result = checkContinuity(scanProject(root));
+    expect(result.errors.filter((error) => error.includes("cut-clue"))).toEqual([]);
+  });
+
+  test("validate rejects non-scalar planted and payoff in clue files", () => {
+    const root = clueProject(2);
+    writeClue(root, "list-planted", `
+status: planted
+planted:
+  - chapter-01
+`);
+    writeClue(root, "map-payoff", `
+status: planned
+payoff:
+  - chapter: chapter-02
+`);
+
+    const result = validateProject(root);
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain("continuity/clues/list-planted.md frontmatter field planted must be a scalar");
+    expect(result.errors).toContain("continuity/clues/map-payoff.md frontmatter field payoff must be a scalar");
+  });
+
+  test("warns on nested files inside continuity/clues", () => {
+    const root = clueProject(1);
+    writeMarkdown(path.join(root, "continuity", "clues", "extra", "nested.md"), `
+title: Nested
+status: planned
+`, "# Nested\n");
+
+    const validation = validateProject(root);
+    expect(validation.warnings.join("\n")).toContain("continuity/clues/extra/nested.md is nested inside an entity directory and is ignored");
+  });
+
+  test("body links to clue ids resolve instead of reporting missing", () => {
+    const root = clueProject(2);
+    createEntity(root, { kind: "clue", name: "Known Clue", planted: "chapter-01" });
+    const timelinePath = path.join(root, "plot", "timeline.md");
+    const timelineRaw = fs.readFileSync(timelinePath, "utf8");
+    fs.writeFileSync(timelinePath, `${timelineRaw}\nSee [Known Clue](known-clue.md).\nSee [Ghost Clue](ghost-clue.md).\n`, "utf8");
+
+    const result = validateLinks(root);
+    expect(result.errors.join("\n")).toContain("links to missing file ghost-clue.md");
+    expect(result.errors.join("\n")).not.toContain("known-clue");
   });
 });
