@@ -34,9 +34,10 @@ bun run test
 bun run test:coverage
 bun run test:examples
 bun run check:metadata
+bun run check:evals
 ```
 
-CI runs `check:metadata`, `test`, `test:coverage`, `test:examples`, and the fallback under Node in that order. Use `bun run test` for normal verification. Use `bun run build:fallback` after changing CLI behavior in `src/`, then use `bun run check:fallback` to confirm the generated fallback is current. Use `bun run test:coverage` when changes affect CLI behavior, parsing, project scanning, validation, fallback generation, or release readiness.
+CI runs `check:metadata`, `test`, `test:coverage`, `test:examples`, `check:evals`, and the fallback under Node in that order. Use `bun run test` for normal verification. Use `bun run build:fallback` after changing CLI behavior in `src/`, then use `bun run check:fallback` to confirm the generated fallback is current. Use `bun run test:coverage` when changes affect CLI behavior, parsing, project scanning, validation, fallback generation, or release readiness.
 
 ## Implementation Rules
 
@@ -83,7 +84,7 @@ Do not commit:
 
 Before finishing code or skill changes, check:
 
-- The CI checks pass locally: `bun run check:metadata`, `bun run test`, `bun run test:coverage`, `bun run test:examples`.
+- The CI checks pass locally: `bun run check:metadata`, `bun run test`, `bun run test:coverage`, `bun run test:examples`, `bun run check:evals`.
 - CLI help and skill docs still agree on command names and options.
 - The bundled maintenance fallback is current: `bun run check:fallback`.
 - The bundled maintenance fallback still runs with Node: `node skills/story-maintenance/scripts/story.js --help`.
