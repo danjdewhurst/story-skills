@@ -58,6 +58,9 @@ Optional craft fields:
 - `counter-premise` - the antagonist's embodied counter-argument to the premise.
 - `author` - author name, used on the Shunn title page by `story build --format shunn`.
 - `contact` - contact block lines for the Shunn title page.
+- `season-goal` - one-sentence season/volume goal for serial fiction (see the `genre-craft` skill).
+- `target-words` - integer word-count target for MG/YA category contracts (see the `genre-craft` skill).
+- `draft-mode` - `discovered` marks a discovery-drafted project; per-chapter `mode:` tracks mixed projects (see the `discovery-drafting` skill).
 
 Every link needs a backlink: a book that `follows` another must appear in that book's `precedes`, and the reverse. `story links` checks that each path is a story project, has the backlink, and uses the same `series` id. `story series` orders the linked books by chronology and checks the canon they share. It errors when a character who is `deceased` in an earlier book is not deceased in a later one, or when a later book lists that character in a chapter or scene cast. It also errors when a later book has a character learn a `fact` (a `knowledge-state` entry with `learned-in`) that the same character already knows in an earlier book. It warns when a shared entity's name changes between books, or when an artifact destroyed in an earlier book has a different status in a later one.
 
@@ -103,6 +106,8 @@ Optional chapter fields:
 - `mode` - `discovered` marks a discovery-drafted chapter; the reconciliation loop (extract entities → reverse-outline → diff vs bible → reconcile) is then a required step, not optional
 - `date` - story date (`YYYY-MM-DD`); enables the clock/time checks in `story continuity`
 - `time` - story time of day
+- `episode-question` - the installment's dramatic question for serial fiction (see the `genre-craft` skill)
+- `time-skip` - freeform `from → to` note recording a skipped interval (planning note; validated as a scalar, not checked by `story continuity`)
 
 Scenes require `title`, `chapter`, `scene`, and `status`. Scenes carry machine-readable continuity fields: `pov`, `location`, `characters`, `mentions`, `arcs-advanced`, and `state-changes`.
 
@@ -113,6 +118,7 @@ Optional scene fields:
 - `date` - story date (`YYYY-MM-DD`)
 - `time` - story time: `HH:MM` (24h) or `dawn`/`morning`/`midday`/`afternoon`/`evening`/`night`
 - `travel-hours` - asserted travel time into this scene; `story continuity` errors when the timestamp allows less
+- `flashback-to` - freeform note of the flashed-back moment (e.g. a date or `chapter-02`); validated as a scalar and preserved by the CLI, but continuity checks rely on `mentions`, not this field
 
 `characters` means present in-scene. `mentions` means referenced, remembered, recorded, or seen in flashback; deceased characters may appear there without triggering continuity errors.
 
