@@ -71,6 +71,8 @@ Optional scalar: `died-in`, the chapter id in which the character dies on the pa
 
 Optional freeform scalar: `arc`, a short theme label for the character's personal arc (e.g. `redemption`). It is not validated as an arc id, so it never triggers link errors; set it with `story add character --arc <theme>`.
 
+`status: cut` keeps the file for a character removed in discovery drafting; the character stays out of canon but remains on record with a reason.
+
 Optional arc-craft fields:
 
 - `arc-type` - `change-positive` (lie → truth), `change-negative` (clings to the lie and spirals), or `flat` (holds their truth under pressure while the world changes; turning points are tests of steadfastness, not growth beats)
@@ -124,7 +126,7 @@ State entries are lists of mappings checked by `story continuity`:
 - `object-state` entries reference an existing `artifact`, an optional `owner` (character or faction), an optional `location`, and a `status` that must agree with the artifact file.
 - `knowledge-state` entries reference an existing `character`, a non-empty `knows` fact, and an optional `learned-in` chapter id. An optional `fact` gives the knowledge a stable kebab-case id. A character may list each `fact` only once, and `story series` uses fact ids to match knowledge across books. An entry without `learned-in` means the character already knew it when the book began.
 
-Questions require `title` and `status`; optional chapter references are `introduced` and `resolved`, plus an optional `characters` list.
+Questions require `title` and `status`; optional chapter references are `introduced` and `resolved`, plus an optional `characters` list. `status: abandoned` marks a thread cut in discovery drafting; abandoned questions, promises, and clues are skipped by continuity ordering checks.
 
 Promises require `title` and `status`; optional chapter references are `planted` and `payoff`, plus optional `arcs` and `characters` lists.
 
@@ -134,7 +136,7 @@ Clues require `title` and `status`; optional chapter references are `planted` an
 
 Prop custody: `object-state` entries for destroyed or lost artifacts should record `since: chapter-NN`, the chapter of destruction or loss. `story continuity` then errors when a later scene references the artifact in `state-changes` or lists it in `mentions`. Without `since`, custody cannot be checked and a warning is reported.
 
-Clock and time: `story continuity` checks timestamps only when scenes carry `date` (and ideally `time`); with no dates there are no findings. Within a chapter, a scene timestamped earlier than the previous dated scene is a warning; a `travel-hours` assertion the timestamps cannot honor is an error; a higher-numbered chapter dated earlier than a lower-numbered one is a warning. Malformed dates or times are warnings, never crashes.
+Clock and time: `story continuity` checks timestamps only when scenes or chapters carry `date` (and ideally `time`); with no dates there are no findings. Within a chapter, a scene timestamped earlier than the previous dated scene is a warning; a `travel-hours` assertion the timestamps cannot honor is an error; a higher-numbered chapter dated earlier than a lower-numbered one is a warning. Malformed dates or times are warnings, never crashes.
 
 `story knowledge <character-id> --at <chapter-id>` answers what a character knew at a story point: `knowledge-state` entries for the character whose `learned-in` chapter is at or before the given chapter, plus entries without `learned-in` (pre-existing knowledge).
 

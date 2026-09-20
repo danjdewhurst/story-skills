@@ -64,7 +64,7 @@
         "id": { "$ref": "#/$defs/id" },
         "name": { "type": "string" },
         "role": { "enum": ["protagonist", "antagonist", "supporting", "minor", "narrator", "deuteragonist"] },
-        "status": { "enum": ["alive", "deceased", "unknown", "missing"] },
+        "status": { "enum": ["alive", "deceased", "unknown", "missing", "cut"] },
         "died-in": { "type": "string" },
         "locations": { "$ref": "#/$defs/stringList" },
         "arc-type": { "enum": ["change-positive", "change-negative", "flat"] },
@@ -165,7 +165,7 @@
       "properties": {
         "id": { "$ref": "#/$defs/id" },
         "title": { "type": "string" },
-        "status": { "enum": ["open", "answered", "resolved", "dropped"] },
+        "status": { "enum": ["open", "answered", "resolved", "dropped", "abandoned"] },
         "introduced": { "type": "string" },
         "resolved": { "type": "string" },
         "characters": { "$ref": "#/$defs/stringList" }
@@ -177,7 +177,7 @@
       "properties": {
         "id": { "$ref": "#/$defs/id" },
         "title": { "type": "string" },
-        "status": { "enum": ["planned", "planted", "paid-off", "dropped"] },
+        "status": { "enum": ["planned", "planted", "paid-off", "dropped", "abandoned"] },
         "planted": { "type": "string" },
         "payoff": { "type": "string" },
         "arcs": { "$ref": "#/$defs/stringList" },

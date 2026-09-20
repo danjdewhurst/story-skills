@@ -332,6 +332,9 @@ function checkChapterSequence(project, warnings) {
 }
 function checkPromises(project, context, errors, warnings) {
   for (const promise of project.promises) {
+    if (promise.status === "abandoned") {
+      continue;
+    }
     const label = relative(project, promise.file);
     const plantedNumber = context.chapterNumbers.get(promise.planted);
     const payoffNumber = context.chapterNumbers.get(promise.payoff);
@@ -354,6 +357,9 @@ function checkPromises(project, context, errors, warnings) {
 }
 function checkQuestions(project, context, errors) {
   for (const question of project.questions) {
+    if (question.status === "abandoned") {
+      continue;
+    }
     const label = relative(project, question.file);
     const introducedNumber = context.chapterNumbers.get(question.introduced);
     const resolvedNumber = context.chapterNumbers.get(question.resolved);
@@ -570,7 +576,7 @@ var TIME_RANKS = new Map([
   ["night", 1380]
 ]);
 function checkClock(project, errors, warnings) {
-  if (!project.scenes.some((scene) => scene.date !== "")) {
+  if (!project.scenes.some((scene) => scene.date !== "") && !project.chapters.some((chapter) => chapter.date !== "")) {
     return;
   }
   const scenesByChapter = new Map;
@@ -600,16 +606,16 @@ function checkClock(project, errors, warnings) {
   }
   for (const dated of scenesByChapter.values()) {
     dated.sort((left, right) => left.scene.scene - right.scene.scene);
-    checkSceneSequence(dated, errors);
+    checkSceneSequence(dated, errors, warnings);
   }
   checkChapterDates(project, warnings);
 }
-function checkSceneSequence(dated, errors) {
+function checkSceneSequence(dated, errors, warnings) {
   for (let index = 1;index < dated.length; index += 1) {
     const previous = dated[index - 1];
     const current = dated[index];
     if (timestampBefore(current, previous)) {
-      errors.push(`${current.label} timestamp runs backward`);
+      warnings.push(`${current.label} timestamp runs backward`);
     }
     if (current.scene.travelHours > 0 && previous.minutes !== undefined && current.minutes !== undefined) {
       const elapsedHours = (timestampMinutes(current) - timestampMinutes(previous)) / 60;
@@ -1063,7 +1069,7 @@ var INDEX_SCHEMAS = [
 var STORY_STATUSES = new Set(["planning", "drafting", "in-progress", "revising", "complete", "abandoned"]);
 var STORY_TENSES = new Set(["past", "present", "future", "mixed"]);
 var CHARACTER_ROLES = new Set(["protagonist", "antagonist", "supporting", "minor", "narrator", "deuteragonist"]);
-var CHARACTER_STATUSES = new Set(["alive", "deceased", "unknown", "missing"]);
+var CHARACTER_STATUSES = new Set(["alive", "deceased", "unknown", "missing", "cut"]);
 var ARC_TYPES = new Set(["main", "subplot", "character", "thematic"]);
 var ARC_STATUSES = new Set(["planned", "in-progress", "resolved"]);
 var CHAPTER_STATUSES = new Set(["outline", "draft", "revised", "final", "complete"]);
@@ -1072,8 +1078,9 @@ var FACTION_TYPES = new Set(["family", "guild", "government", "military", "relig
 var FACTION_STATUSES = new Set(["active", "hidden", "declining", "defeated", "disbanded", "unknown"]);
 var ARTIFACT_TYPES = new Set(["object", "weapon", "document", "technology", "relic", "symbol", "resource", "other"]);
 var ARTIFACT_STATUSES = new Set(["active", "lost", "destroyed", "hidden", "transferred", "unknown"]);
-var QUESTION_STATUSES = new Set(["open", "answered", "resolved", "dropped"]);
-var PROMISE_STATUSES = new Set(["planned", "planted", "paid-off", "dropped"]);
+var QUESTION_STATUSES = new Set(["open", "answered", "resolved", "dropped", "abandoned"]);
+var PROMISE_STATUSES = new Set(["planned", "planted", "paid-off", "dropped", "abandoned"]);
+var CLUE_STATUSES = new Set(["planned", "planted", "paid-off", "dropped"]);
 var TERM_CATEGORIES = new Set(["person", "place", "faction", "artifact", "concept", "term", "other"]);
 var RELATIONSHIP_INVERSES = new Map([
   ["parent", "child"],
@@ -1305,8 +1312,8 @@ function scanProject(root) {
       stateChanges: asArray(data["state-changes"]),
       date: String(data.date ?? ""),
       time: String(data.time ?? ""),
-      travelHours: Number(data["travel-hours"] ?? 0) || 0,
-      sequel: Boolean(data.sequel ?? false),
+      travelHours: typeof data["travel-hours"] === "number" ? data["travel-hours"] : 0,
+      sequel: typeof data.sequel === "boolean" ? data.sequel : false,
       dilemma: String(data.dilemma ?? "")
     }), scanErrors).sort((left, right) => left.chapter.localeCompare(right.chapter) || left.scene - right.scene || left.file.localeCompare(right.file)),
     questions: readEntityFiles(projectRoot, path3.join("continuity", "questions"), (id, file, data) => ({
@@ -1379,6 +1386,7 @@ function validateProject(root) {
   validateContinuityState(project, errors);
   validateQuestions(project, errors);
   validatePromises(project, errors);
+  validateClues(project, errors);
   validateExemptions(project, errors);
   validateGlossaryTerms(project, errors);
   collectStrayFileWarnings(project, warnings);
@@ -1390,6 +1398,7 @@ function validateProject(root) {
     [path3.join("scenes", "_index.md"), project.scenes.map((item) => `](${item.id}.md)`)],
     [path3.join("continuity", "questions", "_index.md"), project.questions.map((item) => `](${item.id}.md)`)],
     [path3.join("continuity", "promises", "_index.md"), project.promises.map((item) => `](${item.id}.md)`)],
+    [path3.join("continuity", "clues", "_index.md"), project.clues.map((item) => `](${item.id}.md)`)],
     [path3.join("glossary", "_index.md"), project.glossaryTerms.map((item) => `](terms/${item.id}.md)`)]
   ];
   for (const [indexPath, links] of indexChecks) {
@@ -1566,6 +1575,18 @@ function validateLinks(root) {
       checkIdReference(errors, label, arcId, "arc", hasArc);
     }
     for (const characterId of promise.characters) {
+      checkIdReference(errors, label, characterId, "character", hasCharacter);
+    }
+  }
+  for (const clue of project.clues) {
+    const label = relative2(project, clue.file);
+    for (const chapterId of [clue.planted, clue.payoff].filter(Boolean)) {
+      checkIdReference(errors, label, chapterId, "chapter", hasChapter);
+    }
+    for (const arcId of clue.arcs) {
+      checkIdReference(errors, label, arcId, "arc", hasArc);
+    }
+    for (const characterId of clue.characters) {
       checkIdReference(errors, label, characterId, "character", hasCharacter);
     }
   }
@@ -1984,7 +2005,27 @@ function synopsisPremise(project) {
   return sentences.length > 0 ? sentences[0] : "No premise recorded.";
 }
 function splitSentences(text) {
-  return String(text).replace(/\s+/g, " ").trim().split(". ").map((sentence) => sentence.trim()).filter((sentence) => sentence !== "").map((sentence) => /[.?!]$/.test(sentence) ? sentence : `${sentence}.`);
+  const normalized = String(text).replace(/\s+/g, " ").trim();
+  if (normalized === "") {
+    return [];
+  }
+  const sentences = [];
+  let start = 0;
+  for (let index = 0;index < normalized.length; index += 1) {
+    const char = normalized[index];
+    if (char === "." || char === "?" || char === "!") {
+      const next = normalized[index + 1];
+      if (next === undefined || next === " ") {
+        sentences.push(normalized.slice(start, index + 1));
+        start = index + 1;
+      }
+    }
+  }
+  const tail = normalized.slice(start).trim();
+  if (tail !== "") {
+    sentences.push(/[.!?]$/.test(tail) ? tail : `${tail}.`);
+  }
+  return sentences;
 }
 function takeSentences(text, count) {
   return splitSentences(text).slice(0, count);
@@ -2754,6 +2795,8 @@ function chapterFile(title, number, options) {
     "arcs-advanced": normalizeList(options.arcs ?? options.arc, []),
     status: options.status ?? "outline",
     mode: options.mode ?? "",
+    date: options.date ?? "",
+    time: options.time ?? "",
     "word-count": 0
   })}# Chapter ${number}: ${title}
 
@@ -2770,7 +2813,15 @@ function chapterFile(title, number, options) {
 `;
 }
 function sceneFile(title, chapter, scene, options) {
-  return `${stringifyFrontmatter({
+  const travelHoursOption = options["travel-hours"];
+  let travelHours;
+  if (travelHoursOption !== undefined && travelHoursOption !== "") {
+    travelHours = Number(travelHoursOption);
+    if (!Number.isFinite(travelHours)) {
+      throw new Error(`travel-hours must be a number, got ${travelHoursOption}`);
+    }
+  }
+  const frontmatter = {
     title,
     chapter,
     scene,
@@ -2782,11 +2833,14 @@ function sceneFile(title, chapter, scene, options) {
     status: options.status ?? "outline",
     date: options.date ?? "",
     time: options.time ?? "",
-    "travel-hours": options["travel-hours"] ?? "",
     sequel: options.sequel ?? false,
     dilemma: options.dilemma ?? "",
     "state-changes": []
-  })}# ${title}
+  };
+  if (travelHours !== undefined) {
+    frontmatter["travel-hours"] = travelHours;
+  }
+  return `${stringifyFrontmatter(frontmatter)}# ${title}
 
 ## Purpose
 
@@ -3364,7 +3418,7 @@ function readExemptions(root) {
   }
   const exemptions = [];
   for (const entry of data.exemptions) {
-    const pattern = entry && typeof entry === "object" && !Array.isArray(entry) ? String(entry.pattern ?? "") : "";
+    const pattern = entry && typeof entry === "object" && !Array.isArray(entry) ? String(entry.pattern ?? "").trim() : "";
     if (pattern === "") {
       continue;
     }
@@ -3777,6 +3831,15 @@ function validateChapters(project, errors) {
     if (data["word-count"] !== undefined) {
       requireInteger(data, "word-count", label, errors);
     }
+    if (data.date !== undefined) {
+      requireScalar(data, "date", label, errors);
+    }
+    if (data.time !== undefined) {
+      requireScalar(data, "time", label, errors);
+    }
+    if (data.mode !== undefined) {
+      requireScalar(data, "mode", label, errors);
+    }
     if (filenameNumber === 0) {
       errors.push(`${label} filename must match chapter-{NN}.md`);
     } else if (Number.isInteger(data.number) && data.number !== filenameNumber) {
@@ -3819,6 +3882,21 @@ function validateScenes(project, errors) {
     }
     if (data.location !== undefined) {
       requireScalar(data, "location", label, errors);
+    }
+    if (data.date !== undefined) {
+      requireScalar(data, "date", label, errors);
+    }
+    if (data.time !== undefined) {
+      requireScalar(data, "time", label, errors);
+    }
+    if (data.dilemma !== undefined) {
+      requireScalar(data, "dilemma", label, errors);
+    }
+    if (data["travel-hours"] !== undefined && typeof data["travel-hours"] !== "number") {
+      errors.push(`${label} frontmatter field travel-hours must be a number`);
+    }
+    if (data.sequel !== undefined && typeof data.sequel !== "boolean") {
+      errors.push(`${label} frontmatter field sequel must be a boolean`);
     }
     if (Number.isInteger(data.scene) && data.scene <= 0) {
       errors.push(`${label} scene must be greater than 0`);
@@ -3900,6 +3978,27 @@ function validatePromises(project, errors) {
     validateEnum(data, "status", PROMISE_STATUSES, label, errors);
     validateStringArray(data, "arcs", label, errors);
     validateStringArray(data, "characters", label, errors);
+  }
+}
+function validateClues(project, errors) {
+  for (const clue of project.clues) {
+    const label = relative2(project, clue.file);
+    const data = readValidationData(clue.file, project.root, label, errors);
+    if (!data) {
+      continue;
+    }
+    validateEntityId(clue.id, label, errors);
+    requireFields(data, ["title", "status"], label, errors);
+    requireScalar(data, "title", label, errors);
+    requireScalar(data, "status", label, errors);
+    requireScalar(data, "planted", label, errors);
+    requireScalar(data, "payoff", label, errors);
+    validateEnum(data, "status", CLUE_STATUSES, label, errors);
+    validateStringArray(data, "arcs", label, errors);
+    validateStringArray(data, "characters", label, errors);
+    if (data["significance-delayed"] !== undefined && typeof data["significance-delayed"] !== "boolean") {
+      errors.push(`${label} frontmatter field significance-delayed must be a boolean`);
+    }
   }
 }
 function validateExemptions(project, errors) {

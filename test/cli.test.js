@@ -164,6 +164,17 @@ describe("cli", () => {
     expect(fs.readFileSync(path.join(root, "chapters", "chapter-01.md"), "utf8")).toContain("mira-sol");
   });
 
+  test("add chapter serializes --date and --time into chapter frontmatter", () => {
+    const cwd = makeTempDir();
+    expect(invoke(cwd, ["init", "Chronology"]).code).toBe(0);
+    const root = path.join(cwd, "chronology");
+    const added = invoke(cwd, ["add", "chapter", "Harvest", "--path", root, "--number", "1", "--date", "2026-03-01", "--time", "09:30"]);
+    expect(added.code).toBe(0);
+    const raw = fs.readFileSync(path.join(root, "chapters", "chapter-01.md"), "utf8");
+    expect(raw).toContain("date: 2026-03-01");
+    expect(raw).toContain(`time: "09:30"`);
+  });
+
   test("runs init, validate, wordcount, reindex, links, and export commands", () => {
     const cwd = makeTempDir();
     const init = invoke(cwd, [

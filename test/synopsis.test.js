@@ -71,6 +71,46 @@ describe("synopsis builder", () => {
     expect(synopsisBook(root).text).toBe(synopsisBook(root).text);
   });
 
+  test("honors question-mark boundaries in the premise", () => {
+    const { root } = synopsisProject();
+    const storyPath = path.join(root, "story.md");
+    const raw = fs.readFileSync(storyPath, "utf8");
+    fs.writeFileSync(
+      storyPath,
+      raw.replace("A ledger burns in the valley.", "Who lit the fire? Mara investigates."),
+      "utf8"
+    );
+
+    const { text } = synopsisBook(root);
+    expect(text).toContain("Premise: Who lit the fire?");
+    expect(text).not.toContain("Premise: Who lit the fire? Mara investigates.");
+  });
+
+  test("honors exclamation-mark boundaries in the causal chain", () => {
+    const { root } = synopsisProject();
+    writeArc(root, "test-arc", "## Climax\n\nShe confronts the miller at dawn! The mill burns behind them.\n");
+
+    const { text } = synopsisBook(root);
+    expect(text).toContain("Because She confronts the miller at dawn!");
+    expect(text).not.toContain("The mill burns behind them.");
+  });
+
+  test("appends a period to premise text without terminal punctuation", () => {
+    const { root } = synopsisProject();
+    const storyPath = path.join(root, "story.md");
+    const raw = fs.readFileSync(storyPath, "utf8");
+    fs.writeFileSync(
+      storyPath,
+      raw
+        .replace("A ledger burns in the valley. Mara must find who lit the match. The town keeps its silence.", "A ledger burns in the valley")
+        .replace("Add a 2-3 sentence synopsis here.", ""),
+      "utf8"
+    );
+
+    const { text } = synopsisBook(root);
+    expect(text).toContain("Premise: A ledger burns in the valley.");
+  });
+
   test("renders arc beats in sequence with a Because-joined causal chain", () => {
     const { root } = synopsisProject();
     writeArc(root, "test-arc", STANDARD_ARC);

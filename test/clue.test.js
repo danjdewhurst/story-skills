@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
+import { runCli } from "../src/cli.js";
 import { checkContinuity } from "../src/continuity.js";
 import {
   createEntity,
@@ -8,9 +9,11 @@ import {
   reindexProject,
   removeEntity,
   renameEntity,
-  scanProject
+  scanProject,
+  validateLinks,
+  validateProject
 } from "../src/story.js";
-import { makeTempDir, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
 function writeChapter(root, number) {
   writeMarkdown(path.join(root, "chapters", `chapter-${String(number).padStart(2, "0")}.md`), `
@@ -196,5 +199,67 @@ payoff: chapter-03
     expect(raw).toContain("planted: ");
     expect(raw).not.toContain("planted: chapter-02");
     expect(raw).toContain("payoff: chapter-03");
+  });
+
+  test("add clue through the CLI honors --significance-delayed", () => {
+    const root = clueProject(1);
+    const io = memoryIo(root);
+    const code = runCli(["add", "clue", "--significance-delayed", "The Marked Locket"], io);
+    expect(code).toBe(0);
+    expect(io.output()).toContain("Created clue the-marked-locket");
+
+    const raw = fs.readFileSync(path.join(root, "continuity", "clues", "the-marked-locket.md"), "utf8");
+    expect(raw).toContain("significance-delayed: true");
+    expect(scanProject(root).clues.find((clue) => clue.id === "the-marked-locket").significanceDelayed).toBe(true);
+  });
+
+  test("validate rejects malformed clue files", () => {
+    const root = clueProject(2);
+    writeClue(root, "missing-status", `
+status: ""
+`);
+    writeClue(root, "bad-status", `
+status: glowing
+`);
+    writeClue(root, "bad-flag", `
+status: planned
+significance-delayed: "yes"
+`);
+    writeClue(root, "bad-lists", `
+status: planned
+characters: not-a-list
+`);
+
+    const result = validateProject(root);
+    expect(result.ok).toBe(false);
+    expect(result.errors.join("\n")).toContain("frontmatter field status has unsupported value ");
+    expect(result.errors.join("\n")).toContain("frontmatter field significance-delayed must be a boolean");
+    expect(result.errors.join("\n")).toContain("frontmatter field characters must be a list");
+  });
+
+  test("validate accepts a well-formed clue", () => {
+    const root = clueProject(2);
+    createEntity(root, { kind: "clue", name: "The Marked Locket", planted: "chapter-01", payoff: "chapter-02", "significance-delayed": true });
+
+    const result = validateProject(root);
+    expect(result.errors.filter((error) => error.includes("clues/"))).toEqual([]);
+  });
+
+  test("links flags clue references to missing chapters, arcs, and characters", () => {
+    const root = clueProject(2);
+    writeClue(root, "dangling-clue", `
+status: planted
+planted: chapter-09
+arcs:
+  - missing-arc
+characters:
+  - missing-character
+`);
+
+    const result = validateLinks(root);
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain("continuity/clues/dangling-clue.md references missing chapter chapter-09");
+    expect(result.errors).toContain("continuity/clues/dangling-clue.md references missing arc missing-arc");
+    expect(result.errors).toContain("continuity/clues/dangling-clue.md references missing character missing-character");
   });
 });
