@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const VERSION_FILES = ["package.json", ".codex-plugin/plugin.json", ".claude-plugin/plugin.json"];
+const STORY_REF_FILES = ["templates/github/story-checks.yml", "templates/github/draft-next-chapter.yml"];
 const RELEASE_BRANCH = "main";
 // test:coverage runs the full test suite under coverage, gates src
 // line/function coverage (plus branch coverage when the reporter emits
@@ -109,11 +110,28 @@ function preflight(nextVersion, tag) {
   console.log(`\nPreflight passed for ${nextVersion}.`);
 }
 
-function writeVersions(nextVersion) {
+export function updateVersionFiles(root, nextVersion) {
+  const updated = [];
   for (const relativePath of VERSION_FILES) {
-    const filePath = path.join(repoRoot, relativePath);
-    const updated = replaceVersion(fs.readFileSync(filePath, "utf8"), nextVersion);
-    fs.writeFileSync(filePath, updated);
+    const filePath = path.join(root, relativePath);
+    fs.writeFileSync(filePath, replaceVersion(fs.readFileSync(filePath, "utf8"), nextVersion));
+    updated.push(relativePath);
+  }
+  for (const relativePath of STORY_REF_FILES) {
+    const filePath = path.join(root, relativePath);
+    const text = fs.readFileSync(filePath, "utf8");
+    const pattern = /^(\s*STORY_REF:\s*")[^"]*(")/m;
+    if (!pattern.test(text)) {
+      throw new Error(`No STORY_REF found in ${relativePath}.`);
+    }
+    fs.writeFileSync(filePath, text.replace(pattern, `$1v${nextVersion}$2`));
+    updated.push(relativePath);
+  }
+  return updated;
+}
+
+function writeVersions(nextVersion) {
+  for (const relativePath of updateVersionFiles(repoRoot, nextVersion)) {
     console.log(`Bumped ${relativePath} to ${nextVersion}`);
   }
   run("bun", ["run", "check:metadata"], { inherit: true });
@@ -139,7 +157,7 @@ function main(argv) {
   }
 
   writeVersions(nextVersion);
-  git("add", ...VERSION_FILES);
+  git("add", ...VERSION_FILES, ...STORY_REF_FILES);
   git("commit", "-m", `chore: release ${nextVersion}`);
   git("tag", "-a", tag, "-m", tag);
   git("push", "origin", RELEASE_BRANCH, tag);
