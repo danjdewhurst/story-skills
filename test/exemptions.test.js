@@ -119,6 +119,16 @@ planted: chapter-01
     expect(after.dismissed).toEqual([]);
   });
 
+  test("validate rejects blanket exemption patterns shorter than 4 characters", () => {
+    const { root } = exemptionProject();
+    writeExemptions(root, [{ pattern: "ch", reason: "Too generic" }]);
+    const errors = validateProject(root).errors;
+    expect(errors).toContain("continuity/exemptions.md exemptions[0] pattern must be at least 4 characters to avoid blanket exemptions");
+
+    writeExemptions(root, [{ pattern: "edran", reason: "Specific enough" }]);
+    expect(validateProject(root).errors).toEqual([]);
+  });
+
   test("cli exits 0 when only dismissed errors remain and prints dismissed lines", () => {
     const { root, cwd } = exemptionProject();
     writeExemptions(root, [{ pattern: "edran-vale", reason: "Flashback approved by editor" }]);

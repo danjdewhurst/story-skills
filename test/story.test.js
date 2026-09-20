@@ -1192,6 +1192,82 @@ status: alive
     expect(validation.warnings.join("\n")).toContain("nested inside an entity directory and is ignored");
   });
 
+  test("validates flashback-to, episode-question, time-skip, and story craft fields", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Craft Fields", force: false });
+    const root = created.root;
+
+    writeMarkdown(path.join(root, "chapters", "chapter-01.md"), `
+title: One
+number: 1
+status: draft
+mode: discovered
+episode-question: Will Mara escape?
+time-skip: Day 1 → Day 10
+word-count: 0
+`, "## Chapter Text\n\nWords here.\n");
+    writeMarkdown(path.join(root, "scenes", "chapter-01-scene-01.md"), `
+title: Opening
+chapter: chapter-01
+scene: 1
+status: draft
+flashback-to: chapter-01
+`, "# Opening\n");
+    const storyPath = path.join(root, "story.md");
+    const storyRaw = fs.readFileSync(storyPath, "utf8");
+    fs.writeFileSync(storyPath, storyRaw
+      .replace("status: planning", "status: planning\nseason-goal: Take the city\ntarget-words: 80000\ndraft-mode: discovered"), "utf8");
+
+    const project = scanProject(root);
+    expect(project.scenes[0].flashbackTo).toBe("chapter-01");
+
+    const validation = validateProject(root);
+    expect(validation.errors.filter((error) => error.includes("flashback-to"))).toEqual([]);
+    expect(validation.errors.filter((error) => error.includes("episode-question"))).toEqual([]);
+    expect(validation.errors.filter((error) => error.includes("time-skip"))).toEqual([]);
+    expect(validation.errors.filter((error) => error.includes("season-goal"))).toEqual([]);
+    expect(validation.errors.filter((error) => error.includes("target-words"))).toEqual([]);
+    expect(validation.errors.filter((error) => error.includes("draft-mode"))).toEqual([]);
+  });
+
+  test("rejects non-scalar craft fields and non-integer target-words", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Bad Craft Fields", force: false });
+    const root = created.root;
+
+    writeMarkdown(path.join(root, "chapters", "chapter-01.md"), `
+title: One
+number: 1
+status: draft
+episode-question:
+  - not-a-scalar
+time-skip:
+  - not-a-scalar
+word-count: 0
+`, "## Chapter Text\n\nWords here.\n");
+    writeMarkdown(path.join(root, "scenes", "chapter-01-scene-01.md"), `
+title: Opening
+chapter: chapter-01
+scene: 1
+status: draft
+flashback-to:
+  - not-a-scalar
+`, "# Opening\n");
+    const storyPath = path.join(root, "story.md");
+    const storyRaw = fs.readFileSync(storyPath, "utf8");
+    fs.writeFileSync(storyPath, storyRaw
+      .replace("status: planning", "status: planning\nseason-goal:\n  - not-a-scalar\ntarget-words: many\ndraft-mode:\n  - not-a-scalar"), "utf8");
+
+    const result = validateProject(root);
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain("scenes/chapter-01-scene-01.md frontmatter field flashback-to must be a scalar");
+    expect(result.errors).toContain("chapters/chapter-01.md frontmatter field episode-question must be a scalar");
+    expect(result.errors).toContain("chapters/chapter-01.md frontmatter field time-skip must be a scalar");
+    expect(result.errors).toContain("story.md frontmatter field season-goal must be a scalar");
+    expect(result.errors).toContain("story.md frontmatter field target-words must be an integer");
+    expect(result.errors).toContain("story.md frontmatter field draft-mode must be a scalar");
+  });
+
   test("coerces numeric chapter refs to strings and guards next chapter number", () => {
     const cwd = makeTempDir();
     const created = createStoryProject({ cwd, title: "Numeric Refs", force: false });

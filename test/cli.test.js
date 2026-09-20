@@ -144,6 +144,12 @@ describe("cli", () => {
     expect(help).toContain("--acts <a,b>");
     expect(help).toContain("--mention <id>");
     expect(help).toContain("add chapter/scene");
+    expect(help).toContain("--mode <name>");
+    expect(help).toContain("--date <date>");
+    expect(help).toContain("--time <time>");
+    expect(help).toContain("--travel-hours <n>");
+    expect(help).toContain("--dilemma <text>");
+    expect(help).toContain("--sequel");
   });
 
   test("parses mention options and writes them for new chapters", () => {
