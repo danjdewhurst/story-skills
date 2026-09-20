@@ -235,6 +235,11 @@ For non-agent use:
 | **revision-continuity** | Revises drafts, audits continuity, and keeps character state, timeline, and arc changes consistent | *"Continuity-check chapter 3"* |
 | **series-continuity** | Starts sequels and prequels as linked projects, carries characters and world forward, and checks shared canon across books | *"Start a prequel to The Last Ember"* |
 | **story-maintenance** | Runs deterministic CLI checks for validation, continuity, reports, indexing, links, word counts, import, and export | *"Validate my story project"* |
+| **scene-craft** | Plans and checks the scene unit: Scene/Sequel structure, try/fail cycles, scene cards, dialogue subtext and voice differentiation, deep POV, exposition, flashbacks, and openings | *"Does this chapter breathe?"* |
+| **theme-craft** | Builds the controlling idea (value + cause premise), the moral argument, lie/truth arc types, antagonist design, and motif/symbolism audits | *"What's my story really about?"* |
+| **feedback-triage** | Collects alpha/beta reader feedback per round, synthesizes convergent and divergent notes, and hands a revision plan to revision-continuity | *"Triage the beta feedback"* |
+| **discovery-drafting** | Pantsing mode: draft from a story kernel, keep post-hoc chapter notes, and reconcile the bible after each discovery-drafted chapter | *"I want to discovery-write"* |
+| **genre-craft** | Genre packs with checkable conventions: mystery fair-play, romance beats, thriller, horror, MG/YA, sci-fi, and serial/episodic structure | *"Plan a fair-play mystery"* |
 
 For stronger prose, pair **chapter-writing** with [**better-writing**](https://github.com/forjd/better-writing). It adds voice calibration, anti-generic writing checks, and a final prose-quality pass, and installs the same way:
 
@@ -266,7 +271,9 @@ The CLI is for deterministic maintenance only. Agents should write story content
 | Command | Purpose |
 |---------|---------|
 | `story init "The Last Ember"` | Scaffold a story project with the standard markdown layout |
-| `story add character "Sera Voss"` | Create entity files for characters, locations, systems, factions, artifacts, arcs, chapters, scenes, questions, promises, and glossary terms |
+| `story add character "Sera Voss"` | Create entity files for characters, locations, systems, factions, artifacts, arcs, chapters, scenes, questions, promises, clues, and glossary terms |
+| `story knowledge sera-voss --at chapter-03` | Show what a character knew at a chapter, from timeline-scoped knowledge-state |
+| `story synopsis [--pages 1\|3] [--out file]` | Compress arcs into a mechanical 1- or 3-page synopsis |
 | `story rename character sera-voss "Sera Vale"` | Rename an entity and update kebab-case references |
 | `story remove promise old-setup` | Remove an entity and scrub metadata references |
 | `story migrate [path]` | Upgrade a project to the current schema |
@@ -282,7 +289,7 @@ The CLI is for deterministic maintenance only. Agents should write story content
 | `story next [path]` | Recommend the next deterministic writing or maintenance actions |
 | `story doctor [path]` | Show health checks with actionable repair steps |
 | `story export [path] --out manuscript.md` | Combine chapters into a single manuscript markdown file |
-| `story build [path] --format epub` | Build disposable markdown, EPUB, or DOCX artifacts in `dist/` |
+| `story build [path] --format epub` | Build disposable markdown, EPUB, DOCX, or Shunn manuscript artifacts in `dist/` |
 
 EPUB and DOCX builds target plain prose: `*italic*` and `**bold**` become italic and bold runs, scene-break lines (`***`, `---`) become a `* * *` separator paragraph, and other markdown structure such as lists or tables is flattened to text. The markdown export keeps chapter text as-is.
 

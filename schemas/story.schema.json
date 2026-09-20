@@ -19,7 +19,11 @@
         "status": { "enum": ["planning", "drafting", "in-progress", "revising", "complete", "abandoned"] },
         "themes": { "type": "array", "items": { "type": "string" } },
         "pov": { "type": "string" },
-        "tense": { "enum": ["past", "present", "future", "mixed"] }
+        "tense": { "enum": ["past", "present", "future", "mixed"] },
+        "premise": { "type": "string" },
+        "counter-premise": { "type": "string" },
+        "author": { "type": "string" },
+        "contact": { "type": "array", "items": { "type": "string" } }
       }
     },
     "characters": { "type": "array", "items": { "$ref": "#/$defs/character" } },
@@ -44,7 +48,8 @@
       "type": "object",
       "properties": {
         "questions": { "type": "array", "items": { "$ref": "#/$defs/question" } },
-        "promises": { "type": "array", "items": { "$ref": "#/$defs/promise" } }
+        "promises": { "type": "array", "items": { "$ref": "#/$defs/promise" } },
+        "clues": { "type": "array", "items": { "$ref": "#/$defs/clue" } }
       }
     },
     "glossary": { "type": "array", "items": { "$ref": "#/$defs/term" } }
@@ -61,7 +66,11 @@
         "role": { "enum": ["protagonist", "antagonist", "supporting", "minor", "narrator", "deuteragonist"] },
         "status": { "enum": ["alive", "deceased", "unknown", "missing"] },
         "died-in": { "type": "string" },
-        "locations": { "$ref": "#/$defs/stringList" }
+        "locations": { "$ref": "#/$defs/stringList" },
+        "arc-type": { "enum": ["change-positive", "change-negative", "flat"] },
+        "lie": { "type": "string" },
+        "truth": { "type": "string" },
+        "ghost-wound": { "type": "string" }
       }
     },
     "location": {
@@ -112,7 +121,8 @@
         "id": { "$ref": "#/$defs/id" },
         "name": { "type": "string" },
         "type": { "enum": ["main", "subplot", "character", "thematic"] },
-        "status": { "enum": ["planned", "in-progress", "resolved"] }
+        "status": { "enum": ["planned", "in-progress", "resolved"] },
+        "mice-threads": { "$ref": "#/$defs/stringList" }
       }
     },
     "chapter": {
@@ -125,7 +135,10 @@
         "status": { "enum": ["outline", "draft", "revised", "final", "complete"] },
         "characters": { "$ref": "#/$defs/stringList" },
         "mentions": { "$ref": "#/$defs/stringList" },
-        "locations": { "$ref": "#/$defs/stringList" }
+        "locations": { "$ref": "#/$defs/stringList" },
+        "mode": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" }
       }
     },
     "scene": {
@@ -138,7 +151,12 @@
         "scene": { "type": "integer", "minimum": 1 },
         "status": { "enum": ["outline", "draft", "revised", "final", "complete"] },
         "characters": { "$ref": "#/$defs/stringList" },
-        "mentions": { "$ref": "#/$defs/stringList" }
+        "mentions": { "$ref": "#/$defs/stringList" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "travel-hours": { "type": "number" },
+        "sequel": { "type": "boolean" },
+        "dilemma": { "type": "string" }
       }
     },
     "question": {
@@ -147,7 +165,10 @@
       "properties": {
         "id": { "$ref": "#/$defs/id" },
         "title": { "type": "string" },
-        "status": { "enum": ["open", "answered", "resolved", "dropped"] }
+        "status": { "enum": ["open", "answered", "resolved", "dropped"] },
+        "introduced": { "type": "string" },
+        "resolved": { "type": "string" },
+        "characters": { "$ref": "#/$defs/stringList" }
       }
     },
     "promise": {
@@ -156,7 +177,25 @@
       "properties": {
         "id": { "$ref": "#/$defs/id" },
         "title": { "type": "string" },
-        "status": { "enum": ["planned", "planted", "paid-off", "dropped"] }
+        "status": { "enum": ["planned", "planted", "paid-off", "dropped"] },
+        "planted": { "type": "string" },
+        "payoff": { "type": "string" },
+        "arcs": { "$ref": "#/$defs/stringList" },
+        "characters": { "$ref": "#/$defs/stringList" }
+      }
+    },
+    "clue": {
+      "type": "object",
+      "required": ["id", "title", "status"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "title": { "type": "string" },
+        "status": { "enum": ["planned", "planted", "paid-off", "dropped"] },
+        "planted": { "type": "string" },
+        "payoff": { "type": "string" },
+        "significance-delayed": { "type": "boolean" },
+        "arcs": { "$ref": "#/$defs/stringList" },
+        "characters": { "$ref": "#/$defs/stringList" }
       }
     },
     "term": {
