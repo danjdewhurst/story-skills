@@ -9,7 +9,9 @@
  *
  * Each fixture's input.md is sent to `claude -p` with the skill's SKILL.md
  * and references as the system prompt and the fixture's brief as the
- * instruction. Drafts land in DIR (default evals/outputs/) as
+ * instruction. Each fixture runs under the skill named by its checks.json
+ * (`skill`); pass --skill to override every fixture at once (useful for
+ * cross-skill experiments). Drafts land in DIR (default evals/outputs/) as
  * <fixture-name>.md, then run-evals.js checks them. Run provenance lands
  * next to each draft: <fixture-name>.prompt.md (the exact prompt sent),
  * <fixture-name>.system.sha256 (hash of the system prompt), and
@@ -46,11 +48,6 @@ const DEFAULT_JUDGE_MODEL = "claude-opus-5";
 const CLAUDE_TIMEOUT_MS = 300_000;
 const MAX_RETRIES = 2;
 
-const SYSTEM_HEADER = `You are running a story-skills chapter-writing workflow. The skill instructions and reference material follow. Apply them to the user's request.
-
-Output rules for this run: return only the final draft prose. No preamble, no outline, no change note, no diagnostic audit, no closing remark.
-`;
-
 const BASELINE_HEADER = `You are a careful fiction writer. Apply the user's request to the text.
 
 Output rules for this run: return only the final draft prose. No preamble, no outline, no change note, no diagnostic audit, no closing remark.
@@ -77,7 +74,14 @@ Reply with a JSON array of short strings, one per invented canon claim, and noth
 function buildSystemPrompt(skillName, withSkill) {
   if (!withSkill) return BASELINE_HEADER;
   const skillDir = path.join(ROOT, "skills", skillName);
-  const parts = [SYSTEM_HEADER, fs.readFileSync(path.join(skillDir, "SKILL.md"), "utf8")];
+  if (!fs.existsSync(path.join(skillDir, "SKILL.md"))) {
+    throw new Error(`unknown skill "${skillName}": no ${path.join("skills", skillName, "SKILL.md")}`);
+  }
+  const header = `You are running a story-skills ${skillName} workflow. The skill instructions and reference material follow. Apply them to the user's request.
+
+Output rules for this run: return only the final draft prose. No preamble, no outline, no change note, no diagnostic audit, no closing remark.
+`;
+  const parts = [header, fs.readFileSync(path.join(skillDir, "SKILL.md"), "utf8")];
   const refsDir = path.join(skillDir, "references");
   if (fs.existsSync(refsDir)) {
     for (const name of fs.readdirSync(refsDir).sort()) {
@@ -159,6 +163,7 @@ function parseArgs(argv) {
     model: DEFAULT_MODEL,
     judgeModel: DEFAULT_JUDGE_MODEL,
     skill: "chapter-writing",
+    skillOverridden: false,
     out: path.join(here, "outputs"),
     withSkill: true,
     judge: true,
@@ -168,7 +173,10 @@ function parseArgs(argv) {
     const a = argv[i];
     if (a === "--model") opts.model = argv[++i];
     else if (a === "--judge-model") opts.judgeModel = argv[++i];
-    else if (a === "--skill") opts.skill = argv[++i];
+    else if (a === "--skill") {
+      opts.skill = argv[++i];
+      opts.skillOverridden = true;
+    }
     else if (a === "--out") opts.out = argv[++i];
     else if (a === "--no-skill") opts.withSkill = false;
     else if (a === "--no-judge") opts.judge = false;
@@ -181,7 +189,6 @@ function parseArgs(argv) {
 function main(argv) {
   const opts = parseArgs(argv);
   fs.mkdirSync(opts.out, { recursive: true });
-  const systemPrompt = buildSystemPrompt(opts.skill, opts.withSkill);
 
   let names = fs
     .readdirSync(FIXTURES_DIR, { withFileTypes: true })
@@ -194,21 +201,34 @@ function main(argv) {
     return 2;
   }
 
-  console.log(`model: ${opts.model}${opts.withSkill ? ` (skill: ${opts.skill})` : " (no skill baseline)"}`);
+  console.log(`model: ${opts.model}${opts.withSkill ? "" : " (no skill baseline)"}`);
   // `claude -p` exposes no temperature or seed flags, so every run uses the
   // CLI defaults; they are logged here (and saved per fixture below) so a
   // future reader knows sampling was not pinned.
   console.log(`temperature: default (not settable via claude -p)`);
   console.log(`seed: default (not settable via claude -p)`);
-  console.log(`system sha256: ${sha256(systemPrompt)}`);
   let allOk = true;
   const report = [];
   for (const name of names) {
     const fixtureDir = path.join(FIXTURES_DIR, name);
     const { checks, inputText } = loadFixture(fixtureDir);
+    // Each fixture runs under the skill it declares; an explicit --skill
+    // overrides every fixture (useful for cross-skill experiments).
+    const skillName = opts.withSkill ? (opts.skillOverridden ? opts.skill : checks.skill || opts.skill) : opts.skill;
+    const systemPrompt = buildSystemPrompt(skillName, opts.withSkill);
+    // Clear stale outputs first so a failed run never presents a previous
+    // run's draft, claims, or judge reply as current results.
+    for (const ext of [".md", ".claims.json", ".judge-raw.txt"]) {
+      try {
+        fs.rmSync(path.join(opts.out, `${name}${ext}`), { force: true });
+      } catch {
+        // Missing files are the common case; ignore removal failures.
+      }
+    }
     const prompt = `${checks.brief}\n\nText:\n\n${inputText}`;
     console.log(`\n${name}: drafting...`);
-    console.log(`  model: ${opts.model}, temperature: default, seed: default`);
+    console.log(`  model: ${opts.model}, skill: ${opts.withSkill ? skillName : "(none)"}, temperature: default, seed: default`);
+    console.log(`  system sha256: ${sha256(systemPrompt)}`);
     // Provenance saved next to the draft so a run can be audited later.
     fs.writeFileSync(path.join(opts.out, `${name}.prompt.md`), prompt, "utf8");
     fs.writeFileSync(path.join(opts.out, `${name}.system.sha256`), `${sha256(systemPrompt)}\n`, "utf8");

@@ -854,13 +854,13 @@ function discoverBooks(startRoot, scan, errors) {
   const visited = new Map;
   const queue = [{ root: startResolved, depth: 0 }];
   while (queue.length > 0) {
-    if (visited.size >= MAX_SERIES_BOOKS) {
-      errors.push("Series links exceed the " + MAX_SERIES_BOOKS + " book limit; refusing to traverse further");
-      break;
-    }
     const { root, depth } = queue.shift();
     if (visited.has(root)) {
       continue;
+    }
+    if (visited.size >= MAX_SERIES_BOOKS) {
+      errors.push("Series links exceed the " + MAX_SERIES_BOOKS + " book limit; refusing to traverse further");
+      break;
     }
     const label = seriesLinkPath(startRoot, root) || ".";
     const resolved = path2.resolve(root);
@@ -1445,6 +1445,11 @@ function validateProjectOf(project) {
   const errors = [];
   const warnings = [];
   const projectRoot = project.root;
+  for (const requiredPath of REQUIRED_PATHS) {
+    if (!fs2.existsSync(path3.join(projectRoot, requiredPath))) {
+      errors.push(`Missing required path: ${requiredPath}`);
+    }
+  }
   for (const scanError of project.fileErrors ?? []) {
     errors.push(scanError);
   }
@@ -1477,7 +1482,13 @@ function validateProjectOf(project) {
     [path3.join("glossary", "_index.md"), project.glossaryTerms.map((item) => `](terms/${item.id}.md)`)]
   ];
   for (const [indexPath, links] of indexChecks) {
-    const markdown = safeRead(path3.join(projectRoot, indexPath), projectRoot);
+    let markdown;
+    try {
+      markdown = safeRead(path3.join(projectRoot, indexPath), projectRoot);
+    } catch (error) {
+      errors.push(`${indexPath}: ${error.message}`);
+      continue;
+    }
     for (const link of links) {
       if (!markdown.includes(link)) {
         warnings.push(`${indexPath} is missing registry link ${link}`);
@@ -2190,9 +2201,29 @@ function migrateProject(root) {
   const reindexed = reindexProject(projectRoot);
   return { root: projectRoot, changed: changed.concat(reindexed.changed) };
 }
+var ENTITY_ENUM_OPTIONS = {
+  character: [["role", CHARACTER_ROLES], ["status", CHARACTER_STATUSES]],
+  faction: [["type", FACTION_TYPES]],
+  artifact: [["type", ARTIFACT_TYPES]],
+  arc: [["type", ARC_TYPES]],
+  chapter: [["status", CHAPTER_STATUSES]],
+  question: [["status", QUESTION_STATUSES]],
+  promise: [["status", PROMISE_STATUSES]],
+  clue: [["status", CLUE_STATUSES]],
+  term: [["category", TERM_CATEGORIES]]
+};
+function requireEntityEnumOptions(kind, options) {
+  for (const [field, allowed] of ENTITY_ENUM_OPTIONS[kind] ?? []) {
+    const value = options[field];
+    if (value !== undefined && !allowed.has(String(value))) {
+      throw new Error(`Unsupported ${kind} ${field} "${value}": expected one of ${[...allowed].join(", ")}`);
+    }
+  }
+}
 function createEntity(root, options) {
   const project = scanProject(root);
   const kind = normalizeKind(options.kind);
+  requireEntityEnumOptions(kind, options);
   const name = String(options.name ?? "").trim();
   if (!name) {
     throw new Error(`A ${kind} name is required`);
@@ -5019,7 +5050,7 @@ function parseArgs(argv) {
         continue;
       }
       const nextValue = argv[index + 1];
-      if (nextValue === undefined || isKnownOptionToken(nextValue)) {
+      if (nextValue === undefined || isKnownOptionToken(nextValue) || nextValue.startsWith("--")) {
         throw new Error(`Missing value for --${key}: expected a value`);
       }
       addOption(options, key, nextValue);

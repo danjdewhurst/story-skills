@@ -15,9 +15,9 @@ Run every fixture through a real model with the skill loaded, then check the
 drafts:
 
 ```bash
-node evals/run-skill.js                        # all fixtures, claude-opus-5, chapter-writing skill
+node evals/run-skill.js                        # all fixtures, claude-opus-5, each fixture's declared skill
 node evals/run-skill.js --model claude-sonnet-5 canon-keeping voice-preservation
-node evals/run-skill.js --skill revision-continuity  # evaluate a different skill
+node evals/run-skill.js --skill revision-continuity  # override every fixture with one skill
 ```
 
 The runner builds a system prompt from the skill's `SKILL.md` plus its

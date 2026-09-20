@@ -1738,4 +1738,47 @@ status: alive
       fs.statSync = originalStatSync;
     }
   });
+
+  test("createEntity rejects unsupported enum values", () => {
+    const cwd = makeTempDir();
+    const root = createStoryProject({ title: "Enums", cwd }).root;
+    expect(() => createEntity(root, { kind: "character", name: "Bad Role", role: "emperor" })).toThrow(
+      'Unsupported character role "emperor"'
+    );
+    expect(() => createEntity(root, { kind: "term", name: "Bad Cat", category: "bogus" })).toThrow(
+      'Unsupported term category "bogus"'
+    );
+    expect(() => createEntity(root, { kind: "clue", name: "Bad Status", status: "bogus" })).toThrow(
+      'Unsupported clue status "bogus"'
+    );
+    const ok = createEntity(root, { kind: "character", name: "Good Role", role: "protagonist" });
+    expect(ok.id).toBe("good-role");
+  });
+
+  test("projectReport and projectActions flag missing required paths", () => {
+    const cwd = makeTempDir();
+    const root = createStoryProject({ title: "Partial", cwd }).root;
+    fs.rmSync(path.join(root, "scenes"), { recursive: true, force: true });
+    const report = projectReport(root);
+    expect(report.validation.ok).toBe(false);
+    expect(report.validation.errors.join("\n")).toContain("Missing required path:");
+    const actions = projectActions(root);
+    expect(actions.validation.ok).toBe(false);
+    expect(actions.validation.errors.join("\n")).toContain("Missing required path:");
+  });
+
+  test("validateProjectOf matches validateProject on a valid project", () => {
+    const cwd = makeTempDir();
+    const root = createStoryProject({ title: "Even", cwd }).root;
+    expect(validateProjectOf(scanProject(root))).toEqual(validateProject(root));
+  });
+
+  test("oversized registry indexes surface as validation errors", () => {
+    const cwd = makeTempDir();
+    const root = createStoryProject({ title: "Big Index", cwd }).root;
+    fs.writeFileSync(path.join(root, "characters", "_index.md"), "x".repeat(6 * 1024 * 1024), "utf8");
+    const errors = validateProject(root).errors.join("\n");
+    expect(errors).toContain(path.join("characters", "_index.md"));
+    expect(errors).toContain("exceeds the");
+  });
 });

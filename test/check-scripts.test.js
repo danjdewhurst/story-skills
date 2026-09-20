@@ -5,6 +5,7 @@ import path from "node:path";
 import { checkCoverage, parseLcov } from "../scripts/check-coverage.js";
 import { collectResult, compareFindings } from "../scripts/check-examples.js";
 import { checkMarketplaces, checkSkillFrontmatter, checkTemplateStoryRef, expectEqual } from "../scripts/check-metadata.js";
+import { checkFixtureSkill } from "../scripts/check-evals.js";
 import { PREFLIGHT } from "../scripts/release.js";
 
 const repoRoot = path.resolve(import.meta.dir, "..");
@@ -290,6 +291,18 @@ describe("github workflows", () => {
     expect(checkTemplateStoryRef([], "0.5.0", "/templates", readFile)).toEqual([
       "templates/github/story-checks.yml STORY_REF mismatch: expected v0.5.0, got v9.9.9",
       "templates/github/draft-next-chapter.yml is missing STORY_REF"
+    ]);
+  });
+
+  test("checkFixtureSkill accepts real skills and flags typos", () => {
+    const skillsDir = path.join(repoRoot, "skills");
+    const exists = (skillPath) => fs.existsSync(skillPath);
+    expect(checkFixtureSkill([], skillsDir, "chapter-writing", "canon-keeping", exists)).toEqual([]);
+    expect(checkFixtureSkill([], skillsDir, "  ", "canon-keeping", exists)).toEqual([
+      "canon-keeping/checks.json: skill must be a non-empty string naming the skill under test"
+    ]);
+    expect(checkFixtureSkill([], skillsDir, "chapter-writting", "canon-keeping", exists)).toEqual([
+      'canon-keeping/checks.json: skill "chapter-writting" does not match a skill in skills/'
     ]);
   });
 

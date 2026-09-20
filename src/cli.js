@@ -444,7 +444,7 @@ export function parseArgs(argv) {
         continue;
       }
       const nextValue = argv[index + 1];
-      if (nextValue === undefined || isKnownOptionToken(nextValue)) {
+      if (nextValue === undefined || isKnownOptionToken(nextValue) || nextValue.startsWith("--")) {
         throw new Error(`Missing value for --${key}: expected a value`);
       }
       addOption(options, key, nextValue);
