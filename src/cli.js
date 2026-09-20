@@ -11,6 +11,7 @@ import {
   formatActionReport,
   formatDoctorReport,
   formatProjectReport,
+  knowledgeAtChapter,
   migrateProject,
   projectReport,
   projectActions,
@@ -18,6 +19,7 @@ import {
   removeEntity,
   renameEntity,
   seriesReport,
+  synopsisBook,
   validateLinks,
   validateProject
 } from "./story.js";
@@ -32,7 +34,10 @@ Commands:
   wordcount [path]   Count chapter prose words
   links [path]       Check cross-reference targets and backlinks
   continuity [path]  Check deterministic continuity contracts: deaths,
-                    promises, questions, casts, and durable state
+                    promises, questions, casts, and durable state.
+                    Findings matching continuity/exemptions.md are
+                    reported as dismissed
+  knowledge <id>    List what a character knew at a chapter; requires --at
   series [path]      Order linked prequels and sequels and check shared
                     canon across books
   report [path]      Summarize project inventory, progress, and checks
@@ -46,6 +51,7 @@ Commands:
                     Remove an entity and scrub id references
   export [path]      Combine chapters into a manuscript markdown file
   build [path]       Build a disposable book artifact in dist/
+  synopsis [path]    Build a deterministic 1- or 3-page synopsis from arcs
 
 Options:
   --title <name>            Story title for import
@@ -67,8 +73,11 @@ Options:
   --force                   Allow init to overwrite starter files
   --write                   Update chapter word-count frontmatter
   --path <path>             Target story root for add/rename/remove
-  --out <file>              Output path for export/build
-  --format <name>           Output format for build (markdown, epub, docx)
+  --out <file>              Output path for export/build/synopsis
+  --format <name>           Output format for build (markdown, epub, docx, shunn)
+  --shunn                   Apply Shunn manuscript formatting (with --format docx)
+  --at <chapter-id>         Chapter id for knowledge
+  --pages <n>               Synopsis length for synopsis (1 or 3)
   --actionable              Include next actions in report
   --number <n>              Chapter number for add chapter
   --chapter <id>            Chapter id for add scene
@@ -84,8 +93,9 @@ Options:
   --arc <id>                Arc reference for add (arc theme for add character); repeatable
   --introduced <id>         Chapter id for add question
   --resolved <id>           Chapter id for add question
-  --planted <id>            Chapter id for add promise
-  --payoff <id>             Chapter id for add promise
+  --planted <id>            Chapter id for add promise/clue
+  --payoff <id>             Chapter id for add promise/clue
+  --significance-delayed    Significance is delayed for add clue
   --category <name>         Category for add term
   --alias <name>            Alias for add term; repeatable
   --region <name>           Region for add location
@@ -171,6 +181,25 @@ export function runCli(argv, io) {
 
     if (command === "continuity") {
       return reportResult(io, checkProjectContinuity(root), "Continuity is consistent", "Continuity check failed");
+    }
+
+    if (command === "knowledge") {
+      const characterId = parsed.positionals[1];
+      const atChapterId = parsed.options.at;
+      if (!characterId || typeof atChapterId !== "string") {
+        io.stderr.write("Usage: story knowledge <character-id> --at <chapter-id> [--path <project>]\n");
+        return 1;
+      }
+      const entries = knowledgeAtChapter(targetRoot(cwd, parsed), characterId, atChapterId);
+      if (entries.length === 0) {
+        io.stdout.write(`No recorded knowledge for ${characterId} at ${atChapterId}\n`);
+        return 0;
+      }
+      for (const entry of entries) {
+        const source = entry.learnedIn === "" ? "pre-existing knowledge" : `learned in ${entry.learnedIn}`;
+        io.stdout.write(`- ${entry.knows} (${source})\n`);
+      }
+      return 0;
     }
 
     if (command === "series") {
@@ -259,9 +288,20 @@ export function runCli(argv, io) {
     if (command === "build") {
       const result = buildBook(root, {
         out: parsed.options.out,
-        format: parsed.options.format
+        format: parsed.options.format,
+        shunn: Boolean(parsed.options.shunn)
       });
       io.stdout.write(`Built ${result.chapters} chapters as ${result.format} to ${result.outFile}\n`);
+      return 0;
+    }
+
+    if (command === "synopsis") {
+      const result = synopsisBook(root, { pages: parsed.options.pages, out: parsed.options.out });
+      if (result.outFile === undefined) {
+        io.stdout.write(result.text);
+      } else {
+        io.stdout.write(`Wrote synopsis to ${result.outFile}\n`);
+      }
       return 0;
     }
 
@@ -273,15 +313,16 @@ export function runCli(argv, io) {
   }
 }
 
-const BOOLEAN_OPTIONS = new Set(["force", "write", "actionable"]);
+const BOOLEAN_OPTIONS = new Set(["force", "write", "actionable", "significance-delayed", "shunn", "sequel"]);
 
 const VALUE_OPTIONS = new Set([
   "title", "dir", "genre", "sub-genre", "setting-era",
   "theme", "themes", "pov", "tense", "synopsis",
   "series", "book-number", "follows", "precedes",
-  "path", "out", "format",
+  "path", "out", "format", "at", "pages",
   "number", "chapter", "scene",
-  "type", "role", "status",
+  "type", "role", "status", "mode",
+  "date", "time", "travel-hours", "dilemma",
   "location", "locations", "character", "characters",
   "mention", "mentions",
   "member", "members", "owner", "arc", "arcs",
@@ -379,7 +420,8 @@ function targetRoot(cwd, parsed) {
 
 function reportResult(io, result, successMessage, failureMessage) {
   const output = result.ok ? io.stdout : io.stderr;
-  output.write(`${result.ok ? successMessage : failureMessage}: ${result.errors.length} errors, ${result.warnings.length} warnings\n`);
+  const dismissed = result.dismissed ?? [];
+  output.write(`${result.ok ? successMessage : failureMessage}: ${result.errors.length} errors, ${result.warnings.length} warnings, ${dismissed.length} dismissed\n`);
 
   for (const error of result.errors) {
     io.stderr.write(`error: ${error}\n`);
@@ -387,6 +429,10 @@ function reportResult(io, result, successMessage, failureMessage) {
 
   for (const warning of result.warnings) {
     output.write(`warning: ${warning}\n`);
+  }
+
+  for (const entry of dismissed) {
+    io.stdout.write(`dismissed: ${entry.finding} (exemption: ${entry.reason})\n`);
   }
 
   return result.ok ? 0 : 1;

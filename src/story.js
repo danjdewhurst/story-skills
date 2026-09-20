@@ -26,6 +26,8 @@ const REQUIRED_PATHS = [
   "continuity/questions",
   "continuity/promises/_index.md",
   "continuity/promises",
+  "continuity/clues/_index.md",
+  "continuity/clues",
   "glossary/_index.md",
   "glossary/terms"
 ];
@@ -39,6 +41,7 @@ const INDEX_SCHEMAS = [
   [path.join("scenes", "_index.md"), "scene-registry"],
   [path.join("continuity", "questions", "_index.md"), "question-registry"],
   [path.join("continuity", "promises", "_index.md"), "promise-registry"],
+  [path.join("continuity", "clues", "_index.md"), "clue-registry"],
   [path.join("glossary", "_index.md"), "glossary-registry"]
 ];
 
@@ -114,6 +117,7 @@ export function createStoryProject(options) {
   fs.mkdirSync(path.join(root, "scenes"), { recursive: true });
   fs.mkdirSync(path.join(root, "continuity", "questions"), { recursive: true });
   fs.mkdirSync(path.join(root, "continuity", "promises"), { recursive: true });
+  fs.mkdirSync(path.join(root, "continuity", "clues"), { recursive: true });
   fs.mkdirSync(path.join(root, "glossary", "terms"), { recursive: true });
 
   writeFile(path.join(root, "story.md"), storyBible({
@@ -140,6 +144,7 @@ export function createStoryProject(options) {
   writeFile(path.join(root, "continuity", "state.md"), continuityState(storyId), { root });
   writeFile(path.join(root, "continuity", "questions", "_index.md"), questionIndex(storyId, []), { root });
   writeFile(path.join(root, "continuity", "promises", "_index.md"), promiseIndex(storyId, []), { root });
+  writeFile(path.join(root, "continuity", "clues", "_index.md"), clueIndex(storyId, []), { root });
   writeFile(path.join(root, "glossary", "_index.md"), glossaryIndex(storyId, []), { root });
 
   const linkedBooks = [];
@@ -283,7 +288,10 @@ export function scanProject(root) {
       locations: asArray(data.locations),
       arcsAdvanced: asArray(data["arcs-advanced"]),
       declaredWordCount: Number(data["word-count"] ?? 0),
-      wordCount: wordCount(chapterProse(markdown.body))
+      wordCount: wordCount(chapterProse(markdown.body)),
+      date: String(data.date ?? ""),
+      time: String(data.time ?? ""),
+      mode: String(data.mode ?? "")
     }), scanErrors).sort((left, right) => left.number - right.number || left.file.localeCompare(right.file)),
     scenes: readEntityFiles(projectRoot, "scenes", (id, file, data) => ({
       id,
@@ -300,7 +308,12 @@ export function scanProject(root) {
       characters: asArray(data.characters),
       mentions: asArray(data.mentions),
       arcsAdvanced: asArray(data["arcs-advanced"]),
-      stateChanges: asArray(data["state-changes"])
+      stateChanges: asArray(data["state-changes"]),
+      date: String(data.date ?? ""),
+      time: String(data.time ?? ""),
+      travelHours: Number(data["travel-hours"] ?? 0) || 0,
+      sequel: Boolean(data.sequel ?? false),
+      dilemma: String(data.dilemma ?? "")
     }), scanErrors).sort((left, right) => left.chapter.localeCompare(right.chapter) || left.scene - right.scene || left.file.localeCompare(right.file)),
     questions: readEntityFiles(projectRoot, path.join("continuity", "questions"), (id, file, data) => ({
       id,
@@ -321,6 +334,17 @@ export function scanProject(root) {
       arcs: asArray(data.arcs),
       characters: asArray(data.characters)
     }), scanErrors),
+    clues: readEntityFiles(projectRoot, path.join("continuity", "clues"), (id, file, data) => ({
+      id,
+      file,
+      title: data.title ?? titleCaseSlug(id),
+      status: data.status ?? "",
+      planted: String(data.planted ?? ""),
+      payoff: String(data.payoff ?? ""),
+      significanceDelayed: Boolean(data["significance-delayed"] ?? false),
+      characters: asArray(data.characters),
+      arcs: asArray(data.arcs)
+    }), scanErrors),
     glossaryTerms: readEntityFiles(projectRoot, path.join("glossary", "terms"), (id, file, data) => ({
       id,
       file,
@@ -328,6 +352,7 @@ export function scanProject(root) {
       category: data.category ?? "",
       aliases: asArray(data.aliases)
     }), scanErrors),
+    exemptions: readExemptions(projectRoot),
     continuity
   };
 }
@@ -364,6 +389,7 @@ export function validateProject(root) {
   validateContinuityState(project, errors);
   validateQuestions(project, errors);
   validatePromises(project, errors);
+  validateExemptions(project, errors);
   validateGlossaryTerms(project, errors);
   collectStrayFileWarnings(project, warnings);
 
@@ -659,6 +685,44 @@ export function checkProjectContinuity(root) {
   return checkContinuity(scanProject(root));
 }
 
+// Returns knowledge-state entries for a character that the character knew at
+// (or before) a chapter: entries without learned-in are pre-existing
+// knowledge, the rest must be learned in a chapter numbered at or before the
+// target. File order is preserved.
+export function knowledgeAtChapter(root, characterId, atChapterId) {
+  const project = scanProject(root);
+  const characters = new Map(project.characters.map((character) => [character.id, character]));
+  if (!characters.has(characterId)) {
+    throw new Error(`Unknown character ${characterId}`);
+  }
+
+  const chapterNumbers = new Map(project.chapters.map((chapter) => [chapter.id, chapter.number]));
+  const atNumber = chapterNumbers.get(atChapterId);
+  if (atNumber === undefined) {
+    throw new Error(`Unknown chapter ${atChapterId}`);
+  }
+
+  const entries = [];
+  const knowledge = project.continuity ? asArray(project.continuity.data["knowledge-state"]) : [];
+  for (const entry of knowledge) {
+    if (entry === null || typeof entry !== "object" || Array.isArray(entry) || entry.character !== characterId) {
+      continue;
+    }
+    const learnedIn = entry["learned-in"] === undefined || entry["learned-in"] === null || entry["learned-in"] === ""
+      ? ""
+      : String(entry["learned-in"]);
+    if (learnedIn === "") {
+      entries.push({ knows: String(entry.knows ?? ""), learnedIn: "" });
+      continue;
+    }
+    const learnedNumber = chapterNumbers.get(learnedIn);
+    if (learnedNumber !== undefined && learnedNumber <= atNumber) {
+      entries.push({ knows: String(entry.knows ?? ""), learnedIn });
+    }
+  }
+  return entries;
+}
+
 export function seriesReport(root) {
   const projectRoot = path.resolve(root);
   requireStoryFile(projectRoot);
@@ -834,6 +898,7 @@ export function reindexProject(root) {
   const scenesIndexPath = path.join(project.root, "scenes", "_index.md");
   const questionsIndexPath = path.join(project.root, "continuity", "questions", "_index.md");
   const promisesIndexPath = path.join(project.root, "continuity", "promises", "_index.md");
+  const cluesIndexPath = path.join(project.root, "continuity", "clues", "_index.md");
   const glossaryIndexPath = path.join(project.root, "glossary", "_index.md");
   const existingCharacters = safeRead(charactersIndexPath, project.root);
   const existingWorld = safeRead(worldIndexPath, project.root);
@@ -870,6 +935,7 @@ export function reindexProject(root) {
   writeChanged(scenesIndexPath, sceneIndex(project.storyId, project.scenes), changed, project.root);
   writeChanged(questionsIndexPath, questionIndex(project.storyId, project.questions), changed, project.root);
   writeChanged(promisesIndexPath, promiseIndex(project.storyId, project.promises), changed, project.root);
+  writeChanged(cluesIndexPath, clueIndex(project.storyId, project.clues), changed, project.root);
   writeChanged(glossaryIndexPath, glossaryIndex(project.storyId, project.glossaryTerms), changed, project.root);
   refreshStoryField(path.join(project.root, "plot", "timeline.md"), project.storyId, changed, project.root);
   refreshStoryField(path.join(project.root, "continuity", "state.md"), project.storyId, changed, project.root);
@@ -955,7 +1021,7 @@ export function exportManuscript(root, options = {}) {
 export function buildBook(root, options = {}) {
   const format = normalizeBuildFormat(options.format ?? "markdown");
   const project = scanProject(root);
-  const extension = format === "markdown" ? "md" : format;
+  const extension = format === "markdown" ? "md" : format === "shunn" ? "shunn.md" : format;
   const output = resolveOutputPath(project, options.out, path.join("dist", `${project.storyId}.${extension}`));
 
   if (format === "markdown") {
@@ -968,13 +1034,116 @@ export function buildBook(root, options = {}) {
   }
 
   const manuscript = manuscriptParts(project);
-  if (format === "epub") {
+  if (format === "shunn") {
+    writeShunnMarkdown(output.outFile, manuscript, shunnMeta(project), output.writeOptions);
+  } else if (format === "epub") {
     writeEpub(output.outFile, project.storyId, manuscript, output.writeOptions);
+  } else if (options.shunn) {
+    writeShunnDocx(output.outFile, manuscript, shunnMeta(project), output.writeOptions);
   } else {
     writeDocx(output.outFile, manuscript, output.writeOptions);
   }
 
   return { outFile: output.outFile, chapters: manuscript.chapters.length, format };
+}
+
+// Builds a deterministic mechanical synopsis from the story premise and the
+// arc sections: Setup (first two sentences), then a Because-joined causal
+// chain of Rising Action, Climax, and Resolution first sentences. When the
+// word budget is exceeded the text is rebuilt with trimming applied in this
+// order: drop Rising Action, trim each arc to Setup + Climax, hard truncate.
+export function synopsisBook(root, options = {}) {
+  const pages = options.pages === undefined ? 1 : Number(options.pages);
+  if (pages !== 1 && pages !== 3) {
+    throw new Error(`Unsupported synopsis length: ${options.pages}. Supported pages: 1, 3`);
+  }
+
+  const project = scanProject(root);
+  const budget = pages === 1 ? 500 : 1500;
+  const title = project.story.data.title ?? project.storyId;
+  const premise = synopsisPremise(project);
+
+  let text = renderSynopsis(title, premise, project, 0);
+  if (wordCount(text) > budget) {
+    text = renderSynopsis(title, premise, project, 1);
+  }
+  if (wordCount(text) > budget) {
+    text = renderSynopsis(title, premise, project, 2);
+  }
+  if (wordCount(text) > budget) {
+    text = truncateWords(text, budget);
+  }
+
+  if (options.out === undefined) {
+    return { text };
+  }
+  const output = resolveOutputPath(project, options.out, path.join("dist", `${project.storyId}.synopsis.md`));
+  writeFile(output.outFile, text, output.writeOptions);
+  return { text, outFile: output.outFile };
+}
+
+function synopsisPremise(project) {
+  const sentences = splitSentences(extractSection(project.story.body, "Synopsis"));
+  return sentences.length > 0 ? sentences[0] : "No premise recorded.";
+}
+
+// Splits prose at sentence boundaries; every returned sentence ends with
+// terminal punctuation.
+function splitSentences(text) {
+  return String(text)
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(". ")
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence !== "")
+    .map((sentence) => (/[.?!]$/.test(sentence) ? sentence : `${sentence}.`));
+}
+
+function takeSentences(text, count) {
+  return splitSentences(text).slice(0, count);
+}
+
+function renderSynopsis(title, premise, project, level) {
+  const lines = [`# Synopsis: ${title}`, "", `Premise: ${premise}`, ""];
+  for (const arc of project.arcs) {
+    const markdown = readMarkdown(arc.file, project.root);
+    lines.push(`## ${arc.name}`, "");
+    const setup = takeSentences(extractSection(markdown.body, "Setup"), 2);
+    if (setup.length > 0) {
+      lines.push(setup.join(" "), "");
+    }
+    if (level === 0) {
+      const rising = takeSentences(extractSection(markdown.body, "Rising Action"), 2);
+      if (rising.length > 0) {
+        lines.push(rising.join(" "), "");
+      }
+    }
+    const climax = takeSentences(extractSection(markdown.body, "Climax"), 1);
+    const resolution = level < 2 ? takeSentences(extractSection(markdown.body, "Resolution"), 1) : [];
+    const chain = climax.concat(resolution);
+    if (chain.length > 0) {
+      lines.push(`Because ${chain.join(" ")}`, "");
+    }
+  }
+  return `${lines.join("\n").trimEnd()}\n`;
+}
+
+function truncateWords(text, budget) {
+  // Only called when the word count already exceeds the budget.
+  const words = text.split(/\s+/).filter((word) => word !== "");
+  const kept = words.slice(0, budget - 1);
+  kept.push(`${words[budget - 1]}…`);
+  return kept.join(" ");
+}
+
+function shunnMeta(project) {
+  const data = project.story.data;
+  return {
+    title: data.title ?? project.storyId,
+    author: data.author === undefined ? "" : String(data.author),
+    contact: asArray(data.contact),
+    words: project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0)
+  };
 }
 
 export function migrateProject(root) {
@@ -990,6 +1159,7 @@ export function migrateProject(root) {
     "scenes",
     path.join("continuity", "questions"),
     path.join("continuity", "promises"),
+    path.join("continuity", "clues"),
     path.join("glossary", "terms")
   ]) {
     ensureDirectory(path.join(projectRoot, directory), changed, projectRoot);
@@ -999,6 +1169,7 @@ export function migrateProject(root) {
   ensureFile(path.join(projectRoot, "continuity", "state.md"), continuityState(storyId), changed, projectRoot);
   ensureFile(path.join(projectRoot, "continuity", "questions", "_index.md"), questionIndex(storyId, []), changed, projectRoot);
   ensureFile(path.join(projectRoot, "continuity", "promises", "_index.md"), promiseIndex(storyId, []), changed, projectRoot);
+  ensureFile(path.join(projectRoot, "continuity", "clues", "_index.md"), clueIndex(storyId, []), changed, projectRoot);
   ensureFile(path.join(projectRoot, "glossary", "_index.md"), glossaryIndex(storyId, []), changed, projectRoot);
 
   if (story.data["schema-version"] !== STORY_SCHEMA_VERSION) {
@@ -1330,6 +1501,21 @@ ${rows.join("\n")}
 `;
 }
 
+function clueIndex(storyId, clues) {
+  const rows = clues.length === 0
+    ? ["| *No clues yet* | | | |"]
+    : clues.map((clue) => `| ${clue.title} | ${clue.status} | ${clue.planted} | [${clue.id}](${clue.id}.md) |`);
+
+  return `${stringifyFrontmatter({ type: "clue-registry", story: storyId })}# Clue Ledger
+
+## Registry
+
+| Clue | Status | Planted | File |
+|------|--------|---------|------|
+${rows.join("\n")}
+`;
+}
+
 function glossaryIndex(storyId, terms) {
   const rows = terms.length === 0
     ? ["| *No terms yet* | | |"]
@@ -1478,6 +1664,8 @@ function buildEntity(project, kind, name, options) {
       return entityResult(project, kind, id, questionFile(name, options));
     case "promise":
       return entityResult(project, kind, id, promiseFile(name, options));
+    case "clue":
+      return entityResult(project, kind, id, clueFile(name, options));
     case "term":
       return entityResult(project, kind, id, termFile(name, options));
     default:
@@ -1502,6 +1690,7 @@ function entityConfig(kind) {
     scene: { dir: "scenes", titleField: "title" },
     question: { dir: path.join("continuity", "questions"), titleField: "title" },
     promise: { dir: path.join("continuity", "promises"), titleField: "title" },
+    clue: { dir: path.join("continuity", "clues"), titleField: "title" },
     term: { dir: path.join("glossary", "terms"), titleField: "term" }
   };
   const config = configs[kind];
@@ -1755,6 +1944,7 @@ function chapterFile(title, number, options) {
     mentions: normalizeList(options.mentions ?? options.mention, []),
     "arcs-advanced": normalizeList(options.arcs ?? options.arc, []),
     status: options.status ?? "outline",
+    mode: options.mode ?? "",
     "word-count": 0
   })}# Chapter ${number}: ${title}
 
@@ -1782,6 +1972,11 @@ function sceneFile(title, chapter, scene, options) {
     mentions: normalizeList(options.mentions ?? options.mention, []),
     "arcs-advanced": normalizeList(options.arcs ?? options.arc, []),
     status: options.status ?? "outline",
+    date: options.date ?? "",
+    time: options.time ?? "",
+    "travel-hours": options["travel-hours"] ?? "",
+    sequel: options.sequel ?? false,
+    dilemma: options.dilemma ?? "",
     "state-changes": []
   })}# ${title}
 
@@ -1835,6 +2030,35 @@ What is promised to the reader.
 ## Payoff
 
 How the story should answer the setup.
+
+## Tracking Notes
+
+Keep planted and payoff chapters current.
+`;
+}
+
+function clueFile(title, options) {
+  return `${stringifyFrontmatter({
+    title,
+    status: options.status ?? "planned",
+    planted: options.planted ?? "",
+    payoff: options.payoff ?? "",
+    "significance-delayed": options["significance-delayed"] ?? false,
+    characters: normalizeList(options.characters ?? options.character, []),
+    arcs: normalizeList(options.arcs ?? options.arc, [])
+  })}# ${title}
+
+## Clue
+
+What the reader sees and why it matters.
+
+## Planting Plan
+
+How and when to plant it.
+
+## Payoff Plan
+
+How the payoff lands.
 
 ## Tracking Notes
 
@@ -2120,15 +2344,92 @@ function writeDocx(outFile, manuscript, writeOptions = {}) {
       bodyParts.push(paragraphXml(paragraph, "", inlineRuns(paragraph)));
     }
   }
-  const body = bodyParts.join("");
 
-  writeZip(outFile, [
+  writeZip(outFile, docxPackageEntries(bodyParts.join("")), writeOptions);
+}
+
+function docxPackageEntries(body) {
+  return [
     { name: "[Content_Types].xml", content: `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>` },
     { name: "_rels/.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>` },
     { name: "word/_rels/document.xml.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
     { name: "word/styles.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:pPr><w:spacing w:after="240"/><w:jc w:val="center"/></w:pPr><w:rPr><w:b/><w:sz w:val="56"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:pPr><w:spacing w:before="480" w:after="240"/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style></w:styles>` },
     { name: "word/document.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr/></w:body></w:document>` }
-  ], writeOptions);
+  ];
+}
+
+// Shunn manuscript format: Courier New 12pt, double spacing, page break
+// before each chapter heading, and a title page with contact and word count.
+const SHUNN_RUN_FONTS = `<w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/><w:sz w:val="24"/>`;
+const SHUNN_PARAGRAPH_SPACING = `<w:spacing w:line="480" w:lineRule="auto"/>`;
+
+function shunnRunXml(text, decoration) {
+  return `<w:r><w:rPr>${SHUNN_RUN_FONTS}${decoration}</w:rPr><w:t xml:space="preserve">${xmlEscape(text)}</w:t></w:r>`;
+}
+
+function shunnTextRunXml(run) {
+  if (run.style === "strong") {
+    return shunnRunXml(run.text, "<w:b/>");
+  }
+  if (run.style === "em") {
+    return shunnRunXml(run.text, "<w:i/>");
+  }
+  return shunnRunXml(run.text, "");
+}
+
+function shunnParagraphXml(runXml, centered) {
+  const alignment = centered ? `<w:jc w:val="center"/>` : "";
+  return `<w:p><w:pPr>${SHUNN_PARAGRAPH_SPACING}${alignment}</w:pPr>${runXml}</w:p>`;
+}
+
+function shunnChapterHeadingXml(text) {
+  return `<w:p><w:pPr>${SHUNN_PARAGRAPH_SPACING}</w:pPr><w:r><w:br w:type="page"/></w:r>${shunnRunXml(text, "<w:b/>")}</w:p>`;
+}
+
+function shunnTitlePageXml(meta) {
+  const lines = [
+    shunnParagraphXml(shunnRunXml(meta.title, "<w:b/>"), true),
+    shunnParagraphXml(shunnRunXml("by", ""), true)
+  ];
+  if (meta.author) {
+    lines.push(shunnParagraphXml(shunnRunXml(meta.author, ""), true));
+  }
+  lines.push(shunnParagraphXml(shunnRunXml(`Approximately ${meta.words} words`, ""), true));
+  for (const contactLine of meta.contact) {
+    lines.push(shunnParagraphXml(shunnRunXml(String(contactLine), ""), true));
+  }
+  return lines;
+}
+
+function writeShunnDocx(outFile, manuscript, meta, writeOptions = {}) {
+  const paragraphs = [...shunnTitlePageXml(meta)];
+  for (const chapter of manuscript.chapters) {
+    paragraphs.push(shunnChapterHeadingXml(`Chapter ${chapter.number}: ${chapter.title}`));
+    for (const paragraph of markdownParagraphs(chapter.body)) {
+      paragraphs.push(shunnParagraphXml(inlineRuns(paragraph).map(shunnTextRunXml).join(""), false));
+    }
+  }
+
+  writeZip(outFile, docxPackageEntries(paragraphs.join("")), writeOptions);
+}
+
+function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {}) {
+  const lines = [meta.title, "by"];
+  if (meta.author) {
+    lines.push(meta.author);
+  }
+  lines.push("", `Approximately ${meta.words} words`, "");
+  for (const contactLine of meta.contact) {
+    lines.push(String(contactLine));
+  }
+  for (const chapter of manuscript.chapters) {
+    lines.push("\f", `# Chapter ${chapter.number}: ${chapter.title}`, "");
+    for (const paragraph of markdownParagraphs(chapter.body)) {
+      lines.push(paragraph, "");
+    }
+  }
+
+  writeFile(outFile, `${lines.join("\n").trimEnd()}\n`, writeOptions);
 }
 
 function paragraphXml(text, style = "", runs = [{ text, style: "" }]) {
@@ -2309,6 +2610,41 @@ function requireStoryFile(projectRoot) {
     throw new Error(`${projectRoot} is not a story project: missing story.md`);
   }
   return storyPath;
+}
+
+// Reads continuity/exemptions.md when present. A missing or unparsable file
+// means no exemptions; strict shape validation lives in validateExemptions.
+function readExemptions(root) {
+  const exemptionsPath = path.join(root, "continuity", "exemptions.md");
+  let raw;
+  try {
+    raw = fs.readFileSync(exemptionsPath, "utf8");
+  } catch {
+    return [];
+  }
+
+  let data;
+  try {
+    data = parseFrontmatter(raw, exemptionsPath).data;
+  } catch {
+    return [];
+  }
+
+  if (!Array.isArray(data.exemptions)) {
+    return [];
+  }
+
+  const exemptions = [];
+  for (const entry of data.exemptions) {
+    const pattern = entry && typeof entry === "object" && !Array.isArray(entry)
+      ? String(entry.pattern ?? "")
+      : "";
+    if (pattern === "") {
+      continue;
+    }
+    exemptions.push({ pattern, reason: String(entry.reason ?? "") });
+  }
+  return exemptions;
 }
 
 function readMarkdown(filePath, root) {
@@ -2557,11 +2893,11 @@ function normalizeBuildFormat(value) {
     return "markdown";
   }
 
-  if (format === "epub" || format === "docx") {
+  if (format === "epub" || format === "docx" || format === "shunn") {
     return format;
   }
 
-  throw new Error(`Unsupported build format: ${value}. Supported formats: markdown, epub, docx`);
+  throw new Error(`Unsupported build format: ${value}. Supported formats: markdown, epub, docx, shunn`);
 }
 
 function validateStoryFrontmatter(project, errors) {
@@ -2895,6 +3231,47 @@ function validatePromises(project, errors) {
     validateEnum(data, "status", PROMISE_STATUSES, label, errors);
     validateStringArray(data, "arcs", label, errors);
     validateStringArray(data, "characters", label, errors);
+  }
+}
+
+function validateExemptions(project, errors) {
+  const exemptionsPath = path.join(project.root, "continuity", "exemptions.md");
+  if (!fs.existsSync(exemptionsPath)) {
+    return;
+  }
+
+  const label = path.join("continuity", "exemptions.md");
+  const data = readValidationData(exemptionsPath, project.root, label, errors);
+  if (!data) {
+    return;
+  }
+
+  if (data.type !== "exemption-log") {
+    errors.push(`${label} type must be exemption-log`);
+  }
+
+  const entries = data.exemptions;
+  if (entries === undefined) {
+    errors.push(`${label} is missing frontmatter field exemptions`);
+    return;
+  }
+  if (!Array.isArray(entries)) {
+    errors.push(`${label} frontmatter field exemptions must be a list`);
+    return;
+  }
+
+  for (const [index, entry] of entries.entries()) {
+    const entryLabel = `${label} exemptions[${index}]`;
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      errors.push(`${entryLabel} must be a mapping`);
+      continue;
+    }
+    if (typeof entry.pattern !== "string" || entry.pattern.trim() === "") {
+      errors.push(`${entryLabel} is missing a non-empty pattern`);
+    }
+    if (typeof entry.reason !== "string" || entry.reason.trim() === "") {
+      errors.push(`${entryLabel} is missing a non-empty reason`);
+    }
   }
 }
 

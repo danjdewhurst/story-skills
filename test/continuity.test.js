@@ -347,7 +347,7 @@ object-state:
     const created = createStoryProject({ cwd, title: "Clean", force: false });
 
     const clean = checkContinuity(scanProject(created.root));
-    expect(clean).toEqual({ ok: true, errors: [], warnings: [] });
+    expect(clean).toEqual({ ok: true, errors: [], warnings: [], dismissed: [] });
 
     writeMarkdown(path.join(created.root, "characters", "lone-scribe.md"), `
 name: Lone Scribe
