@@ -45,6 +45,12 @@ story export . --out manuscript.md
 story build . --format markdown
 story build . --format epub
 story build . --format docx
+story build . --format shunn
+story build . --format docx --shunn
+story knowledge sera-voss --at chapter-04
+story add clue "The silver locket" --planted chapter-02 --payoff chapter-05
+story synopsis --pages 1
+story synopsis --pages 3 --out synopsis.md
 ```
 
 Use:
@@ -53,7 +59,7 @@ Use:
 - `reindex` after adding/removing/renaming characters, locations, systems, arcs, or chapters
 - `wordcount --write` after writing or revising chapters
 - `links` after changing character relationships, notable locations, arc participants, or chapter references
-- `continuity` after drafting or revising a chapter, and whenever the user asks about contradictions, dead characters appearing, unfired setups, or stale state; it deterministically checks `died-in` ordering, promise/question chapter ordering, Chekhov gaps, POV/cast consistency, and `continuity/state.md` references
+- `continuity` after drafting or revising a chapter, and whenever the user asks about contradictions, dead characters appearing, unfired setups, or stale state; it deterministically checks `died-in` ordering, promise/question chapter ordering, Chekhov gaps, POV/cast consistency, and `continuity/state.md` references. It reuses the promise-ordering machinery for the clue ledger (`continuity/clues/`): payoff before plant is an error, a clue planted ≥3 chapters ago with no payoff is a warning, and a completed story with planned or planted clues is an error. It also checks prop custody — artifacts with `destroyed` or `lost` status must not be referenced after their destruction chapter (recorded in object-state `since: chapter-NN`; later scenes referencing them in `state-changes` or `mentions` are errors) — and clock/time plausibility when scenes or chapters carry `date: YYYY-MM-DD` / `time: HH:MM` frontmatter (time may be `dawn`, `morning`, `midday`, `afternoon`, `evening`, or `night`; scene `travel-hours: N` asserts minimum travel time). No dates means no time findings. Intentional exceptions go in `continuity/exemptions.md` (frontmatter `type: exemption-log`, entries with `pattern` + `reason`); exempted findings are reported as dismissed, not errors
 - `series` when `story.md` has `follows` or `precedes` links to other books; it orders the linked sequels and prequels by chronology and checks shared canon (characters deceased in an earlier book, cast listings, facts relearned across books, name drift, destroyed artifacts). Use `init --follows <path>` or `init --precedes <path>` to start a linked book, and see the `series-continuity` skill for carrying canon across
 - `import` when the user has an existing manuscript or chapter drafts and wants a Story Skills project built from them; follow up by creating character and location files from the printed entity candidates
 - `report` when the user asks for project status, inventory, progress, or a quick health summary
@@ -63,6 +69,10 @@ Use:
 - `add`, `rename`, and `remove` for deterministic entity file operations when they fit the requested change
 - `export` only when the user asks for a combined manuscript at a specific path
 - `build` when the user asks to build the book artifact; supports markdown, EPUB, and DOCX outputs in `dist/`
+- `build --format shunn` when the user wants Shunn manuscript-format markdown: title page, contact block, word count, chapter breaks, and double-spaced prose; `story build . --format docx --shunn` applies the same Shunn formatting to the DOCX output
+- `knowledge` when the user asks what a character knew at a given chapter: `story knowledge <character-id> --at <chapter-id>` lists knowledge-state entries whose `learned-in` chapter is at or before that chapter, plus entries without `learned-in` as pre-existing knowledge
+- `add clue` when the user plants a new clue: `story add clue "Name" --planted chapter-02 --payoff chapter-05` creates the clue ledger entity in `continuity/clues/`; omit `--payoff` when the payoff is not yet known
+- `synopsis` when the user wants a mechanical synopsis compressed from the arcs and the causality ledger: `story synopsis [--pages 1|3] [--out file]`
 
 ## Failure Handling
 

@@ -87,6 +87,8 @@ status: planning
 themes:
   - {theme-1}
   - {theme-2}
+premise: "{One-sentence controlling idea: value + cause, e.g. justice triumphs because the hero outsmarts the system}"
+counter-premise: "{The antagonist's embodied argument}"
 pov: {pov-style}
 tense: {tense}
 ---
@@ -97,7 +99,11 @@ Below the frontmatter, include sections:
 - **Tone & Style** - brief notes on the story's voice (derive from genre/themes)
 - **Notes** - empty section for the user to fill in
 
-4. Populate each `_index.md` with an empty registry:
+4. Draft a working premise:
+
+Fill in the `premise:` and `counter-premise:` fields as hypotheses, not commitments. The premise is a one-sentence controlling idea — value + cause, e.g. "justice triumphs because the hero outsmarts the system". The counter-premise is the antagonist's embodied argument: the story's opposing value, stated as the antagonist would believe it. Draft both early, alongside the synopsis, but do not force theme — a working premise is a guess to be audited, not a conclusion to be imposed. Revisit it during revision: the `revision-continuity` theme audit pass (see the `theme-craft` skill for the deep pass) checks whether the ending actually dramatizes the premise through consequence. If the draft argues a different premise, update the premise, not the draft.
+
+5. Populate each `_index.md` with an empty registry:
 
 **`characters/_index.md`:**
 ```markdown
@@ -230,19 +236,23 @@ Also create the v2 support files:
 
 If manual initialization gets tedious, stop and ask the user to install or run the Story CLI rather than inventing a different project shape.
 
-5. Present a summary of what was created and suggest next steps:
+6. Present a summary of what was created and suggest next steps:
    - "Add your first character" (triggers character-management skill)
    - "Start worldbuilding" (triggers worldbuilding skill)
    - "Define your plot structure" (triggers plot-structure skill)
    - "Run `story next .`" to show deterministic next actions
 
-6. When CLI access is available, run a final maintenance check:
+7. When CLI access is available, run a final maintenance check:
 
 ```shell
 story validate {story-title-kebab}
 ```
 
 If using the bundled fallback, replace `story` with `node ../story-maintenance/scripts/story.js`, resolving the path relative to this skill folder.
+
+## Reference Files
+
+- **`references/title-logline.md`** - Title craft (comps, hook phrasing, title as promise) and the logline recipe
 
 ## Conventions
 
