@@ -107,6 +107,18 @@ planted: chapter-01
     expect(result.dismissed).toEqual([]);
   });
 
+  test("whitespace-only exemption patterns cannot dismiss findings", () => {
+    const { root } = exemptionProject();
+    const before = checkContinuity(scanProject(root));
+    expect(before.ok).toBe(false);
+
+    writeExemptions(root, [{ pattern: "   ", reason: "Blanket exemption" }]);
+    const after = checkContinuity(scanProject(root));
+    expect(after.ok).toBe(false);
+    expect(after.errors).toEqual(before.errors);
+    expect(after.dismissed).toEqual([]);
+  });
+
   test("cli exits 0 when only dismissed errors remain and prints dismissed lines", () => {
     const { root, cwd } = exemptionProject();
     writeExemptions(root, [{ pattern: "edran-vale", reason: "Flashback approved by editor" }]);

@@ -34,22 +34,28 @@ outline-first drafting workflow.
    - Starting the book or a chapter, or introducing a character → `references/openings.md`
 2. **Read the relevant reference(s).** Each file carries its own checklists
    and planning fields; apply them, don't paraphrase them.
-3. **Plan before prose.** For the scene in question, write the planning
+3. **Clarify missing inputs before planning or editing.** Ask the user for
+   any required inputs you cannot establish from the project files — scene
+   purpose, viewpoint, location, canon-changing intent, and the applicable
+   craft layer. Never guess at these or proceed on assumptions; a wrong
+   guess edits canon. Only continue to step 4 once every required input
+   is known.
+4. **Plan before prose.** For the scene in question, write the planning
    inputs the reference requires (sequel beats, try/fail positions, subtext
    wants, zoom level, exposition audit, flashback trigger, hook check) into
    the chapter outline or the scene's planning notes before drafting or
    revising.
-4. **Record machine-readable state.** Update the scene file in `scenes/`:
+5. **Record machine-readable state.** Update the scene file in `scenes/`:
    - Set `sequel: true/false` and fill the `dilemma:` field plus the
      `## Sequel` section (reaction/dilemma/decision) for scenes with
      sequel content (see `references/scene-sequel.md`)
    - Add `flashback-to:` and move flashback-only characters to `mentions`
      (see `references/flashbacks-time.md`)
    - Keep `state-changes` current for every change the scene makes
-5. **Run the reference's checklist** against the draft or the revision plan
+6. **Run the reference's checklist** against the draft or the revision plan
    (try/fail checklist, deep-POV filter-word scan, tag-swap test, first-page
    hook check).
-6. **Hand off cleanly.** Scene/sequel planning feeds the chapter-writing
+7. **Hand off cleanly.** Scene/sequel planning feeds the chapter-writing
    drafting workflow; theme-audit findings feed revision-continuity. When a
    scene decision changes canon (new knowledge, moved objects, changed
    relationships), update `continuity/state.md` and the affected entity

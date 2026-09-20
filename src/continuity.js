@@ -139,6 +139,9 @@ function checkChapterSequence(project, warnings) {
 
 function checkPromises(project, context, errors, warnings) {
   for (const promise of project.promises) {
+    if (promise.status === "abandoned") {
+      continue;
+    }
     const label = relative(project, promise.file);
     const plantedNumber = context.chapterNumbers.get(promise.planted);
     const payoffNumber = context.chapterNumbers.get(promise.payoff);
@@ -167,6 +170,9 @@ function checkPromises(project, context, errors, warnings) {
 
 function checkQuestions(project, context, errors) {
   for (const question of project.questions) {
+    if (question.status === "abandoned") {
+      continue;
+    }
     const label = relative(project, question.file);
     const introducedNumber = context.chapterNumbers.get(question.introduced);
     const resolvedNumber = context.chapterNumbers.get(question.resolved);
@@ -422,7 +428,7 @@ const TIME_RANKS = new Map([
 ]);
 
 function checkClock(project, errors, warnings) {
-  if (!project.scenes.some((scene) => scene.date !== "")) {
+  if (!project.scenes.some((scene) => scene.date !== "") && !project.chapters.some((chapter) => chapter.date !== "")) {
     return;
   }
 
@@ -454,18 +460,18 @@ function checkClock(project, errors, warnings) {
 
   for (const dated of scenesByChapter.values()) {
     dated.sort((left, right) => left.scene.scene - right.scene.scene);
-    checkSceneSequence(dated, errors);
+    checkSceneSequence(dated, errors, warnings);
   }
 
   checkChapterDates(project, warnings);
 }
 
-function checkSceneSequence(dated, errors) {
+function checkSceneSequence(dated, errors, warnings) {
   for (let index = 1; index < dated.length; index += 1) {
     const previous = dated[index - 1];
     const current = dated[index];
     if (timestampBefore(current, previous)) {
-      errors.push(`${current.label} timestamp runs backward`);
+      warnings.push(`${current.label} timestamp runs backward`);
     }
     if (current.scene.travelHours > 0 && previous.minutes !== undefined && current.minutes !== undefined) {
       const elapsedHours = (timestampMinutes(current) - timestampMinutes(previous)) / 60;

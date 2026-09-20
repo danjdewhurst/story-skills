@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
+import { checkContinuity } from "../src/continuity.js";
 import {
   formatProjectReport,
   buildBook,
@@ -592,6 +593,7 @@ word-count: 1
     const artifact = createEntity(created.root, { kind: "artifact", name: "Tide Key", owner: "harbor-guild", location: "glass-harbor" });
     const arc = createEntity(created.root, { kind: "arc", name: "Find The Tide Key", type: "main", character: "mira-sol" });
     const chapter = createEntity(created.root, { kind: "chapter", name: "Arrival", number: 1, pov: "mira-sol", location: "glass-harbor", character: "mira-sol", arc: "find-the-tide-key" });
+    expect(chapter.id).toBe("chapter-01");
     const scene = createEntity(created.root, { kind: "scene", name: "At The Pier", chapter: "chapter-01", scene: 1, pov: "mira-sol", location: "glass-harbor", character: "mira-sol", arc: "find-the-tide-key" });
     const nextScene = createEntity(created.root, { kind: "scene", name: "Second Beat", chapter: "chapter-01" });
     const question = createEntity(created.root, { kind: "question", name: "Who hid the key?", introduced: "chapter-01", character: "mira-sol" });
@@ -641,6 +643,113 @@ word-count: 1
     const migrated = migrateProject(created.root);
     expect(migrated.changed.length).toBeGreaterThan(0);
     expect(scanProject(created.root).story.data["schema-version"]).toBe(STORY_SCHEMA_VERSION);
+  });
+
+  test("add chapter serializes date and time options into frontmatter", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Chronology API", force: false });
+    const chapter = createEntity(created.root, { kind: "chapter", name: "Harvest", number: 1, date: "2026-03-01", time: "09:30" });
+
+    const raw = fs.readFileSync(chapter.file, "utf8");
+    expect(raw).toContain("date: 2026-03-01");
+    expect(raw).toContain(`time: "09:30"`);
+    const scanned = scanProject(created.root).chapters.find((entry) => entry.id === "chapter-01");
+    expect(scanned.date).toBe("2026-03-01");
+    expect(scanned.time).toBe("09:30");
+  });
+
+  test("add scene writes travel-hours and rejects non-numeric values", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Travel", force: false });
+    createEntity(created.root, { kind: "chapter", name: "One", number: 1 });
+    const scene = createEntity(created.root, { kind: "scene", name: "Road", chapter: "chapter-01", "travel-hours": 3 });
+
+    const raw = fs.readFileSync(scene.file, "utf8");
+    expect(raw).toContain("travel-hours: 3");
+    expect(scanProject(created.root).scenes.find((entry) => entry.id === "chapter-01-scene-01").travelHours).toBe(3);
+    expect(() => createEntity(created.root, { kind: "scene", name: "Bad Road", chapter: "chapter-01", "travel-hours": "nonsense" }))
+      .toThrow("travel-hours must be a number");
+  });
+
+  test("accepts abandoned and cut statuses from the discovery-drafting cut-thread convention", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Cut Statuses", force: false });
+    const root = created.root;
+    writeMarkdown(path.join(root, "continuity", "promises", "dead-promise.md"), `
+title: Dead Promise
+status: abandoned
+`, "# Dead Promise\n");
+    writeMarkdown(path.join(root, "continuity", "questions", "dead-question.md"), `
+title: Dead Question
+status: abandoned
+`, "# Dead Question\n");
+    writeMarkdown(path.join(root, "characters", "cut-character.md"), `
+name: Cut Character
+role: supporting
+status: cut
+`, "# Cut Character\n");
+
+    const validation = validateProject(root);
+    expect(validation.errors.filter((error) => /dead-promise|dead-question|cut-character/.test(error))).toEqual([]);
+  });
+
+  test("abandoned threads are skipped by continuity ordering checks", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Abandoned Ordering", force: false });
+    const root = created.root;
+    for (let number = 1; number <= 3; number += 1) {
+      writeMarkdown(path.join(root, "chapters", `chapter-0${number}.md`), `
+title: Chapter ${number}
+number: ${number}
+status: draft
+word-count: 0
+`, "## Chapter Text\n\nWords here.\n");
+    }
+    writeMarkdown(path.join(root, "continuity", "promises", "dead-promise.md"), `
+title: Dead Promise
+status: abandoned
+planted: chapter-03
+payoff: chapter-01
+`, "# Dead Promise\n");
+
+    const continuity = checkContinuity(scanProject(root));
+    expect(continuity.errors.filter((error) => error.includes("dead-promise"))).toEqual([]);
+  });
+
+  test("rejects malformed scene metadata types", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Scene Types", force: false });
+    const root = created.root;
+    writeMarkdown(path.join(root, "scenes", "chapter-01-scene-01.md"), `
+title: Bad Scene
+chapter: chapter-01
+scene: 1
+status: draft
+travel-hours: nonsense
+sequel: "false"
+date:
+  - 2026-01-01
+`, "# Bad Scene\n");
+
+    const validation = validateProject(root);
+    const errors = validation.errors.join("\n");
+    expect(validation.ok).toBe(false);
+    expect(errors).toContain("frontmatter field travel-hours must be a number");
+    expect(errors).toContain("frontmatter field sequel must be a boolean");
+    expect(errors).toContain("frontmatter field date must be a scalar");
+  });
+
+  test("warns when a clue file is missing from the clue registry", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Clue Registry", force: false });
+    const root = created.root;
+    writeMarkdown(path.join(root, "continuity", "clues", "orphan-clue.md"), `
+title: Orphan Clue
+status: planned
+`, "# Orphan Clue\n");
+
+    const validation = validateProject(root);
+    expect(validation.warnings).toContain("continuity/clues/_index.md is missing registry link ](orphan-clue.md)");
   });
 
   test("remove scrubs references without rewriting untouched files", () => {

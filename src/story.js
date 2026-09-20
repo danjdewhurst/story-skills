@@ -48,7 +48,7 @@ const INDEX_SCHEMAS = [
 const STORY_STATUSES = new Set(["planning", "drafting", "in-progress", "revising", "complete", "abandoned"]);
 const STORY_TENSES = new Set(["past", "present", "future", "mixed"]);
 const CHARACTER_ROLES = new Set(["protagonist", "antagonist", "supporting", "minor", "narrator", "deuteragonist"]);
-const CHARACTER_STATUSES = new Set(["alive", "deceased", "unknown", "missing"]);
+const CHARACTER_STATUSES = new Set(["alive", "deceased", "unknown", "missing", "cut"]);
 const ARC_TYPES = new Set(["main", "subplot", "character", "thematic"]);
 const ARC_STATUSES = new Set(["planned", "in-progress", "resolved"]);
 const CHAPTER_STATUSES = new Set(["outline", "draft", "revised", "final", "complete"]);
@@ -57,8 +57,9 @@ const FACTION_TYPES = new Set(["family", "guild", "government", "military", "rel
 const FACTION_STATUSES = new Set(["active", "hidden", "declining", "defeated", "disbanded", "unknown"]);
 const ARTIFACT_TYPES = new Set(["object", "weapon", "document", "technology", "relic", "symbol", "resource", "other"]);
 const ARTIFACT_STATUSES = new Set(["active", "lost", "destroyed", "hidden", "transferred", "unknown"]);
-const QUESTION_STATUSES = new Set(["open", "answered", "resolved", "dropped"]);
-const PROMISE_STATUSES = new Set(["planned", "planted", "paid-off", "dropped"]);
+const QUESTION_STATUSES = new Set(["open", "answered", "resolved", "dropped", "abandoned"]);
+const PROMISE_STATUSES = new Set(["planned", "planted", "paid-off", "dropped", "abandoned"]);
+const CLUE_STATUSES = new Set(["planned", "planted", "paid-off", "dropped"]);
 const TERM_CATEGORIES = new Set(["person", "place", "faction", "artifact", "concept", "term", "other"]);
 
 const RELATIONSHIP_INVERSES = new Map([
@@ -311,8 +312,8 @@ export function scanProject(root) {
       stateChanges: asArray(data["state-changes"]),
       date: String(data.date ?? ""),
       time: String(data.time ?? ""),
-      travelHours: Number(data["travel-hours"] ?? 0) || 0,
-      sequel: Boolean(data.sequel ?? false),
+      travelHours: typeof data["travel-hours"] === "number" ? data["travel-hours"] : 0,
+      sequel: typeof data.sequel === "boolean" ? data.sequel : false,
       dilemma: String(data.dilemma ?? "")
     }), scanErrors).sort((left, right) => left.chapter.localeCompare(right.chapter) || left.scene - right.scene || left.file.localeCompare(right.file)),
     questions: readEntityFiles(projectRoot, path.join("continuity", "questions"), (id, file, data) => ({
@@ -389,6 +390,7 @@ export function validateProject(root) {
   validateContinuityState(project, errors);
   validateQuestions(project, errors);
   validatePromises(project, errors);
+  validateClues(project, errors);
   validateExemptions(project, errors);
   validateGlossaryTerms(project, errors);
   collectStrayFileWarnings(project, warnings);
@@ -404,6 +406,7 @@ export function validateProject(root) {
     [path.join("scenes", "_index.md"), project.scenes.map((item) => `](${item.id}.md)`)],
     [path.join("continuity", "questions", "_index.md"), project.questions.map((item) => `](${item.id}.md)`)],
     [path.join("continuity", "promises", "_index.md"), project.promises.map((item) => `](${item.id}.md)`)],
+    [path.join("continuity", "clues", "_index.md"), project.clues.map((item) => `](${item.id}.md)`)],
     [path.join("glossary", "_index.md"), project.glossaryTerms.map((item) => `](terms/${item.id}.md)`)]
   ];
 
@@ -597,6 +600,19 @@ export function validateLinks(root) {
       checkIdReference(errors, label, arcId, "arc", hasArc);
     }
     for (const characterId of promise.characters) {
+      checkIdReference(errors, label, characterId, "character", hasCharacter);
+    }
+  }
+
+  for (const clue of project.clues) {
+    const label = relative(project, clue.file);
+    for (const chapterId of [clue.planted, clue.payoff].filter(Boolean)) {
+      checkIdReference(errors, label, chapterId, "chapter", hasChapter);
+    }
+    for (const arcId of clue.arcs) {
+      checkIdReference(errors, label, arcId, "arc", hasArc);
+    }
+    for (const characterId of clue.characters) {
       checkIdReference(errors, label, characterId, "character", hasCharacter);
     }
   }
@@ -1088,15 +1104,30 @@ function synopsisPremise(project) {
 }
 
 // Splits prose at sentence boundaries; every returned sentence ends with
-// terminal punctuation.
+// terminal punctuation. A boundary is any of . ? ! followed by whitespace
+// or the end of input.
 function splitSentences(text) {
-  return String(text)
-    .replace(/\s+/g, " ")
-    .trim()
-    .split(". ")
-    .map((sentence) => sentence.trim())
-    .filter((sentence) => sentence !== "")
-    .map((sentence) => (/[.?!]$/.test(sentence) ? sentence : `${sentence}.`));
+  const normalized = String(text).replace(/\s+/g, " ").trim();
+  if (normalized === "") {
+    return [];
+  }
+  const sentences = [];
+  let start = 0;
+  for (let index = 0; index < normalized.length; index += 1) {
+    const char = normalized[index];
+    if (char === "." || char === "?" || char === "!") {
+      const next = normalized[index + 1];
+      if (next === undefined || next === " ") {
+        sentences.push(normalized.slice(start, index + 1));
+        start = index + 1;
+      }
+    }
+  }
+  const tail = normalized.slice(start).trim();
+  if (tail !== "") {
+    sentences.push(/[.!?]$/.test(tail) ? tail : `${tail}.`);
+  }
+  return sentences;
 }
 
 function takeSentences(text, count) {
@@ -1945,6 +1976,8 @@ function chapterFile(title, number, options) {
     "arcs-advanced": normalizeList(options.arcs ?? options.arc, []),
     status: options.status ?? "outline",
     mode: options.mode ?? "",
+    date: options.date ?? "",
+    time: options.time ?? "",
     "word-count": 0
   })}# Chapter ${number}: ${title}
 
@@ -1962,7 +1995,15 @@ function chapterFile(title, number, options) {
 }
 
 function sceneFile(title, chapter, scene, options) {
-  return `${stringifyFrontmatter({
+  const travelHoursOption = options["travel-hours"];
+  let travelHours;
+  if (travelHoursOption !== undefined && travelHoursOption !== "") {
+    travelHours = Number(travelHoursOption);
+    if (!Number.isFinite(travelHours)) {
+      throw new Error(`travel-hours must be a number, got ${travelHoursOption}`);
+    }
+  }
+  const frontmatter = {
     title,
     chapter,
     scene,
@@ -1974,11 +2015,14 @@ function sceneFile(title, chapter, scene, options) {
     status: options.status ?? "outline",
     date: options.date ?? "",
     time: options.time ?? "",
-    "travel-hours": options["travel-hours"] ?? "",
     sequel: options.sequel ?? false,
     dilemma: options.dilemma ?? "",
     "state-changes": []
-  })}# ${title}
+  };
+  if (travelHours !== undefined) {
+    frontmatter["travel-hours"] = travelHours;
+  }
+  return `${stringifyFrontmatter(frontmatter)}# ${title}
 
 ## Purpose
 
@@ -2637,7 +2681,7 @@ function readExemptions(root) {
   const exemptions = [];
   for (const entry of data.exemptions) {
     const pattern = entry && typeof entry === "object" && !Array.isArray(entry)
-      ? String(entry.pattern ?? "")
+      ? String(entry.pattern ?? "").trim()
       : "";
     if (pattern === "") {
       continue;
@@ -3099,6 +3143,15 @@ function validateChapters(project, errors) {
     if (data["word-count"] !== undefined) {
       requireInteger(data, "word-count", label, errors);
     }
+    if (data.date !== undefined) {
+      requireScalar(data, "date", label, errors);
+    }
+    if (data.time !== undefined) {
+      requireScalar(data, "time", label, errors);
+    }
+    if (data.mode !== undefined) {
+      requireScalar(data, "mode", label, errors);
+    }
 
     if (filenameNumber === 0) {
       errors.push(`${label} filename must match chapter-{NN}.md`);
@@ -3145,6 +3198,21 @@ function validateScenes(project, errors) {
     }
     if (data.location !== undefined) {
       requireScalar(data, "location", label, errors);
+    }
+    if (data.date !== undefined) {
+      requireScalar(data, "date", label, errors);
+    }
+    if (data.time !== undefined) {
+      requireScalar(data, "time", label, errors);
+    }
+    if (data.dilemma !== undefined) {
+      requireScalar(data, "dilemma", label, errors);
+    }
+    if (data["travel-hours"] !== undefined && typeof data["travel-hours"] !== "number") {
+      errors.push(`${label} frontmatter field travel-hours must be a number`);
+    }
+    if (data.sequel !== undefined && typeof data.sequel !== "boolean") {
+      errors.push(`${label} frontmatter field sequel must be a boolean`);
     }
     if (Number.isInteger(data.scene) && data.scene <= 0) {
       errors.push(`${label} scene must be greater than 0`);
@@ -3231,6 +3299,28 @@ function validatePromises(project, errors) {
     validateEnum(data, "status", PROMISE_STATUSES, label, errors);
     validateStringArray(data, "arcs", label, errors);
     validateStringArray(data, "characters", label, errors);
+  }
+}
+
+function validateClues(project, errors) {
+  for (const clue of project.clues) {
+    const label = relative(project, clue.file);
+    const data = readValidationData(clue.file, project.root, label, errors);
+    if (!data) {
+      continue;
+    }
+    validateEntityId(clue.id, label, errors);
+    requireFields(data, ["title", "status"], label, errors);
+    requireScalar(data, "title", label, errors);
+    requireScalar(data, "status", label, errors);
+    requireScalar(data, "planted", label, errors);
+    requireScalar(data, "payoff", label, errors);
+    validateEnum(data, "status", CLUE_STATUSES, label, errors);
+    validateStringArray(data, "arcs", label, errors);
+    validateStringArray(data, "characters", label, errors);
+    if (data["significance-delayed"] !== undefined && typeof data["significance-delayed"] !== "boolean") {
+      errors.push(`${label} frontmatter field significance-delayed must be a boolean`);
+    }
   }
 }
 

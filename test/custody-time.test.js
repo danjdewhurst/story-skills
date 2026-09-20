@@ -168,7 +168,7 @@ state-changes:
 });
 
 describe("clock and time", () => {
-  test("flags scene timestamps that run backward", () => {
+  test("warns on scene timestamps that run backward", () => {
     const root = baseProject(1);
     writeScene(root, 1, 1, `
 date: 2026-01-05
@@ -180,11 +180,12 @@ time: "09:00"
 `);
 
     const result = checkContinuity(scanProject(root));
-    expect(result.errors).toContain("scenes/chapter-01-scene-02.md timestamp runs backward");
-    expect(result.ok).toBe(false);
+    expect(result.warnings).toContain("scenes/chapter-01-scene-02.md timestamp runs backward");
+    expect(result.errors).toEqual([]);
+    expect(result.ok).toBe(true);
   });
 
-  test("flags backward time within the same date", () => {
+  test("warns on backward time within the same date", () => {
     const root = baseProject(1);
     writeScene(root, 1, 1, `
 date: 2026-01-05
@@ -196,7 +197,9 @@ time: dawn
 `);
 
     const result = checkContinuity(scanProject(root));
-    expect(result.errors).toContain("scenes/chapter-01-scene-02.md timestamp runs backward");
+    expect(result.warnings).toContain("scenes/chapter-01-scene-02.md timestamp runs backward");
+    expect(result.errors).toEqual([]);
+    expect(result.ok).toBe(true);
   });
 
   test("accepts forward-moving timestamps", () => {
@@ -370,6 +373,30 @@ time: "10:00"
 
     const result = checkContinuity(scanProject(root));
     expect(result.warnings).toContain("Chapter 3 date 2026-01-01 is earlier than Chapter 1 date 2026-01-10");
+  });
+
+  test("checks chapter dates when no scene has a date", () => {
+    const root = baseProject(3);
+    for (const [number, date] of [[1, "2026-01-10"], [2, "2026-01-10"], [3, "2026-01-01"]]) {
+      const chapterPath = path.join(root, "chapters", `chapter-0${number}.md`);
+      const raw = fs.readFileSync(chapterPath, "utf8");
+      fs.writeFileSync(chapterPath, raw.replace("word-count: 0", `word-count: 0\ndate: ${date}`), "utf8");
+    }
+
+    const result = checkContinuity(scanProject(root));
+    expect(result.warnings).toContain("Chapter 3 date 2026-01-01 is earlier than Chapter 1 date 2026-01-10");
+    expect(result.errors).toEqual([]);
+    expect(result.ok).toBe(true);
+  });
+
+  test("warns on malformed chapter dates when no scene has a date", () => {
+    const root = baseProject(2);
+    const chapterPath = path.join(root, "chapters", "chapter-02.md");
+    const raw = fs.readFileSync(chapterPath, "utf8");
+    fs.writeFileSync(chapterPath, raw.replace("word-count: 0", "word-count: 0\ndate: 2026-02-30"), "utf8");
+
+    const result = checkContinuity(scanProject(root));
+    expect(result.warnings).toContain(`Chapter 2 has malformed date "2026-02-30"`);
   });
 
   test("warns on malformed chapter dates and times", () => {
