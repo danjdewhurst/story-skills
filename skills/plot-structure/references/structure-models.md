@@ -82,6 +82,32 @@ Classical dramatic structure.
 | Falling Action | 4 | Consequences unfold, momentum shifts |
 | Denouement | 5 | Resolution and new equilibrium |
 
+## Fichtean Curve
+
+Crisis-driven structure that opens at or near the first crisis and escalates through rising crises to the climax. Minimal setup — exposition arrives in small doses between crises, and the ending is brief.
+
+| Beat | Phase | Description |
+|------|-------|-------------|
+| First Crisis | Rising | Open mid-crisis; the protagonist is already in trouble |
+| Escalating Crises | Rising | Each crisis worse than the last, with shrinking recovery time between them |
+| Climax | Peak | The final, decisive crisis — the point of no return |
+| Resolution | Falling | Brief falling action; consequences land quickly |
+
+## Dan Harmon's Story Circle
+
+Eight steps in a circle that foreground internal change. Fits episodic and short-form stories well: each episode runs one full circle while the season traces a larger one.
+
+| Beat | Step | Description |
+|------|------|-------------|
+| You | 1 | Character in a zone of comfort |
+| Need | 2 | But they want something |
+| Go | 3 | They enter an unfamiliar situation |
+| Search | 4 | They adapt to the new situation |
+| Find | 5 | They get what they wanted |
+| Take | 6 | They pay a heavy price for it |
+| Return | 7 | They return to their familiar situation |
+| Change | 8 | Having changed — the circle completes where it began, but the character is different |
+
 ## Choosing a Structure
 
 - **Three-Act:** Default choice for most stories. Simple, flexible, well-understood.
@@ -89,5 +115,7 @@ Classical dramatic structure.
 - **Save the Cat:** Tightly paced commercial fiction. Stories that need precise pacing.
 - **Kishotenketsu:** Literary fiction, slice-of-life, stories exploring ideas over conflict.
 - **Five-Act:** Epic scope, multiple climaxes, complex political drama.
+- **Fichtean Curve:** Crisis-driven pacing. Stories that start in motion and never let up.
+- **Story Circle:** Episodic and short-form. Stories built around one character's internal change per unit.
 
 Structures are guides, not rules. Mix and adapt as the story demands.

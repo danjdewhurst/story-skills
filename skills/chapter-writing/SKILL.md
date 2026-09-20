@@ -74,7 +74,7 @@ With the approved outline, write the full prose:
 - Follow the POV and tense from `story.md`
 - Use the POV character's voice and speech patterns from their profile
 - Ground scenes in location details from worldbuilding files
-- Consult `references/writing-guidelines.md` for prose craft guidance
+- Consult `references/writing-guidelines.md` for quick prose craft guidance. For the deep reference — the Scene/Sequel unit, dialogue subtext and voice-differentiation, deep POV and psychic distance — use the `scene-craft` skill.
 - When available, apply the `better-writing` skill before finalizing prose
 - Use the chapter template from `references/chapter-template.md`
 - Include the approved outline in the file above the prose (for reference)
@@ -124,4 +124,4 @@ Use the Story CLI when it is available. If `story` is not installed but the `sto
 
 - **`references/chapter-template.md`** - Frontmatter and structure template for chapter files
 - **`references/scene-template.md`** - Machine-readable continuity template for scenes
-- **`references/writing-guidelines.md`** - Prose craft guidance: show-don't-tell, POV, dialogue, pacing, scene structure, continuity
+- **`references/writing-guidelines.md`** - Quick-reference prose craft: show-don't-tell, POV, dialogue, pacing, scene structure, continuity. For the deep reference — the Scene/Sequel unit, dialogue subtext and voice-differentiation, deep POV and psychic distance — use the `scene-craft` skill.

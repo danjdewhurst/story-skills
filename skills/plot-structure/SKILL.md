@@ -32,6 +32,7 @@ A story project must already exist (created via the story-init skill). Verify by
    - Type (main, subplot, character, thematic)
    - Which characters are involved
    - Which themes it serves
+   - Which MICE threads the arc carries (optional `mice-threads:` frontmatter, e.g. `[event, character]`; see `references/mice-quotient.md`)
 5. Build the arc through conversation: setup, escalations, climax, resolution
 6. Write the file using `references/arc-template.md`
 7. Save to `plot/arcs/{arc-name-kebab}.md`
@@ -99,4 +100,7 @@ Use the Story CLI when it is available. If `story` is not installed but the `sto
 - **`references/arc-template.md`** - Template for arc files with frontmatter and sections
 - **`references/question-template.md`** - Template for continuity questions and mysteries
 - **`references/promise-template.md`** - Template for setup/payoff tracking
-- **`references/structure-models.md`** - Story structure models (three-act, hero's journey, save the cat, kishotenketsu, five-act) with beat sheets
+- **`references/structure-models.md`** - Story structure models (three-act, hero's journey, save the cat, kishotenketsu, five-act, Fichtean curve, Harmon's story circle) with beat sheets
+- **`references/mice-quotient.md`** - MICE threading: milieu/inquiry/character/event threads, start/end rules, and the optional `mice-threads:` arc frontmatter
+- **`references/short-story-form.md`** - Short fiction form: one dominant change, single effect, narrow scope
+- **`references/outlining-ladder.md`** - Premise → beat sheet → step outline → full outline, with exit criteria per rung (cross-links discovery-drafting)

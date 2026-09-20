@@ -14,15 +14,27 @@ characters:
 arcs-advanced:
   - {arc-kebab}
 status: {outline|draft|revised|final|complete}
+sequel: {true|false}
+dilemma: "{The choice the POV character must make in the sequel}"
 state-changes:
   - target: {character-or-artifact-kebab}
     change: "{What changed and must carry forward}"
 ---
 ```
 
+`sequel` and `dilemma` are optional. Set `sequel: true` when the scene is the reaction half of the scene/sequel unit; leave them out for ordinary action scenes.
+
 ## Purpose
 
 What this scene changes for plot, character, theme, or reader knowledge.
+
+## Sequel
+
+For `sequel: true` scenes — the reaction → dilemma → decision half that follows a scene ending in a setback:
+
+- **Reaction:** How the POV character processes the setback emotionally
+- **Dilemma:** The impossible choice they face between the options available
+- **Decision:** What they decide to do next — the goal that launches the following scene
 
 ## Continuity Notes
 
