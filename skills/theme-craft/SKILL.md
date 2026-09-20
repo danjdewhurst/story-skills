@@ -97,6 +97,11 @@ story links .
 story validate .
 ```
 
+The motif ledger (`continuity/motifs.md` or the motif table in an arc file)
+and `continuity/theme-audit.md` are prose revision notes: the CLI does not
+scan, validate, link-check, or reindex them. Audit motif payoff and the
+theme verdict manually per `references/theme-audit.md`.
+
 ## Reference Files
 
 - **`references/controlling-idea.md`** - The controlling idea as value + cause (McKee), counter-premise, working-premise workflow

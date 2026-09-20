@@ -49,8 +49,10 @@ outline-first drafting workflow.
    - Set `sequel: true/false` and fill the `dilemma:` field plus the
      `## Sequel` section (reaction/dilemma/decision) for scenes with
      sequel content (see `references/scene-sequel.md`)
-   - Add `flashback-to:` and move flashback-only characters to `mentions`
-     (see `references/flashbacks-time.md`)
+    - Add `flashback-to:` (freeform note of the flashed-back moment,
+      validated as a scalar by `story validate` but not used by continuity
+      checks) and move flashback-only characters to `mentions`
+      (see `references/flashbacks-time.md`)
    - Keep `state-changes` current for every change the scene makes
 6. **Run the reference's checklist** against the draft or the revision plan
    (try/fail checklist, deep-POV filter-word scan, tag-swap test, first-page
