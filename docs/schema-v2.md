@@ -22,6 +22,9 @@ continuity/questions/_index.md
 continuity/questions/
 continuity/promises/_index.md
 continuity/promises/
+continuity/clues/_index.md
+continuity/clues/
+continuity/exemptions.md        # optional: decision log for dismissed findings
 glossary/_index.md
 glossary/terms/
 ```
@@ -44,11 +47,17 @@ glossary/terms/
 Required: `title`, `schema-version`, `genre`, `status`, `themes`, `pov`, `tense`.
 
 Optional series fields link sequels, prequels, and companion books kept as separate projects:
-
 - `series` - kebab-case series id, identical in every linked book
 - `book-number` - positive integer publication order
 - `follows` - list of paths, relative to this book's root, to books set earlier in the chronology
 - `precedes` - list of paths to books set later in the chronology
+
+Optional craft fields:
+
+- `premise` - working controlling idea, one sentence of value + cause (e.g. "justice triumphs because the hero outsmarts the system"). Draft it early, audit it during revision.
+- `counter-premise` - the antagonist's embodied counter-argument to the premise.
+- `author` - author name, used on the Shunn title page by `story build --format shunn`.
+- `contact` - contact block lines for the Shunn title page.
 
 Every link needs a backlink: a book that `follows` another must appear in that book's `precedes`, and the reverse. `story links` checks that each path is a story project, has the backlink, and uses the same `series` id. `story series` orders the linked books by chronology and checks the canon they share. It errors when a character who is `deceased` in an earlier book is not deceased in a later one, or when a later book lists that character in a chapter or scene cast. It also errors when a later book has a character learn a `fact` (a `knowledge-state` entry with `learned-in`) that the same character already knows in an earlier book. It warns when a shared entity's name changes between books, or when an artifact destroyed in an earlier book has a different status in a later one.
 
@@ -62,6 +71,13 @@ Optional scalar: `died-in`, the chapter id in which the character dies on the pa
 
 Optional freeform scalar: `arc`, a short theme label for the character's personal arc (e.g. `redemption`). It is not validated as an arc id, so it never triggers link errors; set it with `story add character --arc <theme>`.
 
+Optional arc-craft fields:
+
+- `arc-type` - `change-positive` (lie → truth), `change-negative` (clings to the lie and spirals), or `flat` (holds their truth under pressure while the world changes; turning points are tests of steadfastness, not growth beats)
+- `lie` - the character's false belief, generating flaw, fear, and wants
+- `truth` - the belief that resolves the lie by the arc's end
+- `ghost-wound` - the formative wound behind the lie
+
 ### Worldbuilding
 
 Locations require `name` and `type`; they may list `region`, `population`, `controlled-by`, `notable-characters`, `tags`, and `status`. Systems require `name` and `type`; they may list `prevalence`.
@@ -74,11 +90,27 @@ Artifacts require `name`, `type`, and `status`; they may reference an `owner` ch
 
 Arcs require `name`, `type`, and `status`; they may list `characters`, `themes`, and `acts`.
 
+Optional: `mice-threads`, the MICE threads the arc carries (`milieu`, `inquiry`, `character`, `event`). Each thread has its own start/end rule: a milieu thread ends when the character exits the place, an inquiry thread ends when the question is answered.
+
 ### Chapters And Scenes
 
 Chapters require `title`, `number`, and `status`; they may list a `pov` character and a `word-count` maintained by `story wordcount --write`, plus optional reference lists `locations`, `characters`, `mentions`, and `arcs-advanced`.
 
+Optional chapter fields:
+
+- `mode` - `discovered` marks a discovery-drafted chapter; the reconciliation loop (extract entities → reverse-outline → diff vs bible → reconcile) is then a required step, not optional
+- `date` - story date (`YYYY-MM-DD`); enables the clock/time checks in `story continuity`
+- `time` - story time of day
+
 Scenes require `title`, `chapter`, `scene`, and `status`. Scenes carry machine-readable continuity fields: `pov`, `location`, `characters`, `mentions`, `arcs-advanced`, and `state-changes`.
+
+Optional scene fields:
+
+- `sequel` - `true` when the scene is a sequel unit (reaction → dilemma → decision) rather than a scene unit (goal → conflict → outcome)
+- `dilemma` - the sequel unit's dilemma: the choice the POV character faces
+- `date` - story date (`YYYY-MM-DD`)
+- `time` - story time: `HH:MM` (24h) or `dawn`/`morning`/`midday`/`afternoon`/`evening`/`night`
+- `travel-hours` - asserted travel time into this scene; `story continuity` errors when the timestamp allows less
 
 `characters` means present in-scene. `mentions` means referenced, remembered, recorded, or seen in flashback; deceased characters may appear there without triggering continuity errors.
 
@@ -95,6 +127,16 @@ State entries are lists of mappings checked by `story continuity`:
 Questions require `title` and `status`; optional chapter references are `introduced` and `resolved`, plus an optional `characters` list.
 
 Promises require `title` and `status`; optional chapter references are `planted` and `payoff`, plus optional `arcs` and `characters` lists.
+
+Clues require `title` and `status`; optional chapter references are `planted` and `payoff`, plus optional `arcs` and `characters` lists. `significance-delayed: true` marks a clue whose meaning only lands later. `story continuity` reuses the promise-ordering machinery on clues: payoff before plant is an error, a clue planted three or more chapters ago with no payoff is a warning, and a story marked `complete` with `planned`/`planted` clues is an error. Create them with `story add clue "Name" --planted chapter-02 --payoff chapter-05`.
+
+`continuity/exemptions.md` is an optional decision log (frontmatter `type: exemption-log`). Each entry has a `pattern` (matched as a substring against finding text) and a `reason` recording why the finding is intentional. `story continuity` reports exempted findings as dismissed, not errors.
+
+Prop custody: `object-state` entries for destroyed or lost artifacts should record `since: chapter-NN`, the chapter of destruction or loss. `story continuity` then errors when a later scene references the artifact in `state-changes` or lists it in `mentions`. Without `since`, custody cannot be checked and a warning is reported.
+
+Clock and time: `story continuity` checks timestamps only when scenes carry `date` (and ideally `time`); with no dates there are no findings. Within a chapter, a scene timestamped earlier than the previous dated scene is a warning; a `travel-hours` assertion the timestamps cannot honor is an error; a higher-numbered chapter dated earlier than a lower-numbered one is a warning. Malformed dates or times are warnings, never crashes.
+
+`story knowledge <character-id> --at <chapter-id>` answers what a character knew at a story point: `knowledge-state` entries for the character whose `learned-in` chapter is at or before the given chapter, plus entries without `learned-in` (pre-existing knowledge).
 
 ### Glossary
 
