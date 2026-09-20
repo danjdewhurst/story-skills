@@ -19,7 +19,9 @@ import {
   scanProject,
   STORY_SCHEMA_VERSION,
   validateLinks,
-  validateProject
+  validateLinksOf,
+  validateProject,
+  validateProjectOf
 } from "../src/story.js";
 import { makeTempDir, writeMarkdown } from "./helpers.js";
 
@@ -1506,6 +1508,8 @@ members:
     const plotIndex = path.join(created.root, "plot", "_index.md");
     const timeline = path.join(created.root, "plot", "timeline.md");
     fs.writeFileSync(plotIndex, "---\ntitle: Tough\ntitle: Twice\n---\n# Plot\n", "utf8");
+    expect(() => reindexProject(created.root)).toThrow("Duplicate frontmatter key: title");
+    fs.writeFileSync(plotIndex, "---\nstory: tough-reindex\nstructure: three-act\n---\n# Plot\n", "utf8");
     expect(reindexProject(created.root).changed).toBeDefined();
     fs.rmSync(timeline);
     expect(reindexProject(created.root).changed).toBeDefined();
@@ -1618,5 +1622,120 @@ status: draft
     );
     const links = validateLinks(created.root);
     expect(links.errors.join("\n")).toContain("links to missing file ghost-ship.md");
+  });
+});
+
+describe("review-findings hardening", () => {
+  test("arc body re-read failures become structured errors instead of throwing", () => {
+    const cwd = makeTempDir();
+    const root = createStoryProject({ title: "Arc Errors", cwd }).root;
+    const created = createEntity(root, { kind: "arc", name: "Broken Arc" });
+    expect(created.id).toBe("broken-arc");
+    const project = scanProject(root);
+    expect(project.arcs.length).toBe(1);
+    fs.writeFileSync(created.file, "no frontmatter here\n", "utf8");
+    const links = validateLinksOf(project);
+    expect(links.ok).toBe(false);
+    expect(links.errors.join("\n")).toContain("plot/arcs/broken-arc.md");
+  });
+
+  test("validateProjectOf and validateLinksOf match the scanning wrappers", () => {
+    const cwd = makeTempDir();
+    const root = createStoryProject({ title: "Single Scan", cwd }).root;
+    const scanned = scanProject(root);
+    expect(validateProjectOf(scanned)).toEqual(validateProject(root));
+    expect(validateLinksOf(scanned)).toEqual(validateLinks(root));
+    const reported = projectReport(root);
+    expect(reported.validation).toEqual(validateProject(root));
+    expect(reported.links).toEqual(validateLinks(root));
+    const actions = projectActions(root);
+    expect(actions.validation).toEqual(validateProject(root));
+    expect(actions.links).toEqual(validateLinks(root));
+  });
+
+  test("reindex propagates a corrupt plot index instead of resetting to three-act", () => {
+    const cwd = makeTempDir();
+    const root = createStoryProject({ title: "Reindex Errors", cwd }).root;
+    fs.writeFileSync(path.join(root, "plot", "_index.md"), "no frontmatter\n", "utf8");
+    expect(() => reindexProject(root)).toThrow("missing YAML frontmatter");
+    fs.rmSync(path.join(root, "plot", "_index.md"));
+    const rebuilt = reindexProject(root);
+    expect(rebuilt.changed.join("\n")).toContain("_index.md");
+    expect(fs.readFileSync(path.join(root, "plot", "_index.md"), "utf8")).toContain("three-act");
+  });
+
+  test("createStoryProject rejects titles with no usable directory name", () => {
+    const cwd = makeTempDir();
+    expect(() => createStoryProject({ title: "!!!", cwd })).toThrow("--dir");
+    const before = fs.readdirSync(cwd);
+    expect(() => createStoryProject({ title: "!!!", cwd })).toThrow("Cannot derive a directory name");
+    expect(fs.readdirSync(cwd)).toEqual(before);
+    const explicit = createStoryProject({ title: "!!!", cwd, dir: "punctuated" });
+    expect(explicit.root).toBe(path.join(cwd, "punctuated"));
+  });
+
+  test("oversized entity files surface as scan errors instead of being read", () => {
+    const cwd = makeTempDir();
+    const root = createStoryProject({ title: "Big Files", cwd }).root;
+    const big = "x".repeat(6 * 1024 * 1024);
+    fs.writeFileSync(path.join(root, "chapters", "chapter-99.md"), big, "utf8");
+    const project = scanProject(root);
+    expect(project.fileErrors.join("\n")).toContain("oversized");
+    expect(validateProject(root).errors.join("\n")).toContain("oversized");
+  });
+
+  test("scan refuses entity directories packed past the file cap", () => {
+    const cwd = makeTempDir();
+    const root = createStoryProject({ title: "Packed", cwd }).root;
+    for (let i = 0; i < 5001; i++) {
+      fs.writeFileSync(path.join(root, "characters", `extra-${i}.md`), "# Extra\n", "utf8");
+    }
+    expect(() => scanProject(root)).toThrow("exceeds the 5000 file limit");
+  });
+
+  test("rename refuses to scan past the directory depth cap", () => {
+    const cwd = makeTempDir();
+    const root = createStoryProject({ title: "Deep", cwd }).root;
+    writeMarkdown(path.join(root, "characters", "deep-char.md"), `
+name: "Deep Char"
+role: supporting
+status: alive
+`, "# Deep\n");
+    let dir = path.join(root, "notes");
+    for (let i = 0; i < 12; i++) {
+      dir = path.join(dir, `level-${i}`);
+    }
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "note.md"), "# Deep note\n", "utf8");
+    expect(() => renameEntity(root, { kind: "character", id: "deep-char", name: "Deeper Char" })).toThrow("beyond depth 10");
+  });
+
+  test("rename refuses to scan past the file count cap", () => {
+    const cwd = makeTempDir();
+    const root = createStoryProject({ title: "Many", cwd }).root;
+    writeMarkdown(path.join(root, "characters", "many-char.md"), `
+name: "Many Char"
+role: supporting
+status: alive
+`, "# Many\n");
+    const dir = path.join(root, "notes");
+    fs.mkdirSync(dir, { recursive: true });
+    for (let i = 0; i < 5001; i++) {
+      fs.writeFileSync(path.join(dir, `note-${i}.md`), "# Note\n", "utf8");
+    }
+    expect(() => renameEntity(root, { kind: "character", id: "many-char", name: "Many Char Two" })).toThrow("exceeds the 5000 file limit");
+  });
+
+  test("scan tolerates files that vanish between listing and reading", () => {
+    const cwd = makeTempDir();
+    const root = createStoryProject({ title: "Gone", cwd }).root;
+    const originalStatSync = fs.statSync;
+    fs.statSync = () => { throw new Error("ENOENT: gone"); };
+    try {
+      const project = scanProject(root);
+      expect(project.root).toBe(path.resolve(root));
+    } finally {
+      fs.statSync = originalStatSync;
+    }
   });
 });

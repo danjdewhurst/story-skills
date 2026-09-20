@@ -34,7 +34,7 @@ A story project must already exist (created via the story-init skill). Verify by
    - Which themes it serves
    - Which MICE threads the arc carries (optional `mice-threads:` frontmatter, e.g. `[event, character]`; see `references/mice-quotient.md`)
 5. Build the arc through conversation: setup, escalations, climax, resolution
-6. Write the file using `references/arc-template.md`
+6. Write the file using `references/arc-template.md` (or scaffold it with `story add arc "{Name}" --type main --character {id} --theme {theme}`, then fill in the sections)
 7. Save to `plot/arcs/{arc-name-kebab}.md`
 8. Update `plot/_index.md` arcs table
 9. Update theme tracking in `plot/_index.md`
@@ -82,6 +82,8 @@ During chapter writing, flag any `planted` items that haven't been paid off as r
 
 For durable cross-arc setup/payoff tracking, also maintain `continuity/promises/{promise-kebab}.md` with `status`, `planted`, `payoff`, `arcs`, and `characters`. For mystery or open-continuity tracking, maintain `continuity/questions/{question-kebab}.md`.
 
+Scaffold chapters and scenes with `story add chapter "{Title}" --number {N} --pov {id} --arc {arc-id}` and `story add scene "{Title}" --chapter chapter-{NN} --scene {M} --pov {id} --location {id}`, then write the prose and outline content into the created files.
+
 ## Cross-Referencing
 
 - Arcs reference characters via frontmatter `characters` field
@@ -93,7 +95,7 @@ For durable cross-arc setup/payoff tracking, also maintain `continuity/promises/
 
 ## CLI Maintenance
 
-Use the Story CLI when it is available. If `story` is not installed but the `story-maintenance` skill is present, use `node ../story-maintenance/scripts/story.js` with the same arguments, resolving the path relative to this skill folder. If no CLI is available, perform the registry and backlink checks manually.
+Use the Story CLI when it is available. If `story` is not installed, use `bun run story --` from the Story Skills repository checkout or the bundled fallback `node ../story-maintenance/scripts/story.js` with the same arguments, resolving the path relative to this skill folder. If no CLI is available, perform the registry, backlink, and word-count checks manually.
 
 ## Reference Files
 

@@ -11,6 +11,10 @@
  * both orders; a split is a tie. Typical use: dir-a from
  * `run-skill.js --no-skill` and dir-b from `run-skill.js`, to show the
  * skill changes the output for the better and not just differently.
+ * Exits non-zero when a fixture has no draft in one directory (a missing
+ * draft is a failed comparison, not a tie). Each judge verdict is logged
+ * raw, with the model and temperature noted; `claude -p` exposes no
+ * temperature flag, so judging always uses the CLI defaults.
  *
  * Judges prefer low-perplexity text and the first item shown, and they
  * agree with human writing preferences only about three quarters of the
@@ -66,7 +70,11 @@ function ask(model, prompt) {
       if (attempt >= MAX_RETRIES) return null;
       continue;
     }
-    const m = res.stdout.trim().match(/[12]/);
+    const raw = res.stdout.trim();
+    const m = raw.match(/[12]/);
+    // Log the raw verdict (not just the extracted digit) so order-effect
+    // audits can see hedging like "leaning 1, but 2 has...".
+    console.log(`  judge raw verdict: ${JSON.stringify(raw.slice(0, 200))}`);
     if (m) return m[0];
     console.log(`  WARN judge gave no verdict (attempt ${attempt + 1}/${MAX_RETRIES + 1})`);
   }
@@ -93,12 +101,14 @@ function main(argv) {
   if (only.length > 0) names = names.filter((n) => only.includes(n));
 
   const tally = { a: 0, b: 0, tie: 0 };
+  let missing = 0;
+  console.log(`model: ${model}, temperature: default (not settable via claude -p)`);
   for (const name of names) {
     const aPath = path.join(dirA, `${name}.md`);
     const bPath = path.join(dirB, `${name}.md`);
     if (!fs.existsSync(aPath) || !fs.existsSync(bPath)) {
-      console.log(`${name}: SKIP (missing draft in one directory)`);
-      tally.tie++;
+      console.log(`${name}: FAIL (missing draft in one directory)`);
+      missing++;
       continue;
     }
     const { checks, inputText } = loadFixture(path.join(FIXTURES_DIR, name));
@@ -127,7 +137,7 @@ function main(argv) {
   }
   console.log(`\nA: ${tally.a}  B: ${tally.b}  ties: ${tally.tie}`);
   console.log("(Never label which directory came from the skill: labelled authorship shifts judge preference.)");
-  return 0;
+  return missing > 0 ? 1 : 0;
 }
 
 const invoked =

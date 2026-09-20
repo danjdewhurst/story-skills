@@ -14,6 +14,22 @@ const CANDIDATE_STOPWORDS = new Set([
   "This", "To", "We", "When", "While", "With", "Yes", "You"
 ]);
 
+const MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024;
+const MAX_IMPORT_FILES = 500;
+
+function rejectSymlinkedSource(filePath) {
+  if (fs.lstatSync(filePath).isSymbolicLink()) {
+    throw new Error('Refusing to import symlinked source: ' + filePath);
+  }
+}
+
+function assertImportFileSize(filePath) {
+  const size = fs.statSync(filePath).size;
+  if (size > MAX_IMPORT_FILE_BYTES) {
+    throw new Error('Refusing to import oversized file ' + filePath + ': ' + size + ' bytes exceeds the ' + MAX_IMPORT_FILE_BYTES + ' byte limit');
+  }
+}
+
 export function importManuscript(options) {
   const rawSource = String(options.source ?? "").trim();
   if (!rawSource) {
@@ -96,15 +112,29 @@ function addCandidate(counts, name) {
 }
 
 function readSourceDocuments(source) {
+  rejectSymlinkedSource(source);
   if (fs.statSync(source).isFile()) {
+    assertImportFileSize(source);
     return [{ name: path.basename(source), text: fs.readFileSync(source, "utf8") }];
   }
 
-  const documents = fs.readdirSync(source, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && /\.(md|markdown|txt)$/i.test(entry.name))
-    .map((entry) => entry.name)
-    .sort()
-    .map((name) => ({ name, text: fs.readFileSync(path.join(source, name), "utf8") }));
+  const names = [];
+  for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
+    const fullPath = path.join(source, entry.name);
+    rejectSymlinkedSource(fullPath);
+    if (entry.isFile() && /\.(md|markdown|txt)$/i.test(entry.name)) {
+      names.push(entry.name);
+    }
+  }
+  names.sort();
+  if (names.length > MAX_IMPORT_FILES) {
+    throw new Error('Too many import files in ' + source + ': ' + names.length + ' exceeds the ' + MAX_IMPORT_FILES + ' file limit');
+  }
+  const documents = names.map((name) => {
+    const fullPath = path.join(source, name);
+    assertImportFileSize(fullPath);
+    return { name, text: fs.readFileSync(fullPath, "utf8") };
+  });
 
   if (documents.length === 0) {
     throw new Error(`No markdown or text files found in ${source}`);

@@ -134,4 +134,36 @@ Body`);
 
     expect(parsed.data).toEqual({ "significance-delayed": false, sequel: true });
   });
+
+  test("quotes strings that would parse as booleans, null, or numbers", () => {
+    const yaml = stringifyFrontmatter({ a: "true", b: "false", c: "null", d: "1984", e: "-3.5", f: "plain" });
+    expect(yaml).toContain('a: "true"');
+    expect(yaml).toContain('b: "false"');
+    expect(yaml).toContain('c: "null"');
+    expect(yaml).toContain('d: "1984"');
+    expect(yaml).toContain('e: "-3.5"');
+
+    const parsed = parseFrontmatter(yaml + "Body");
+    expect(parsed.data.a).toBe("true");
+    expect(parsed.data.b).toBe("false");
+    expect(parsed.data.c).toBe("null");
+    expect(parsed.data.d).toBe("1984");
+    expect(parsed.data.e).toBe("-3.5");
+    expect(parsed.data.f).toBe("plain");
+  });
+
+  test("rejects empty mappings instead of crashing on entries[0]", () => {
+    expect(() => stringifyFrontmatter({ tags: [{}] })).toThrow("Cannot stringify empty mapping in tags");
+  });
+
+  test("parses __proto__ keys as own data without polluting prototypes", () => {
+    const parsed = parseFrontmatter("---\n__proto__: polluted\ntitle: x\n---\nBody");
+    expect(Object.prototype.hasOwnProperty.call(parsed.data, "__proto__")).toBe(true);
+    expect(parsed.data["__proto__"]).toBe("polluted");
+    expect({}.polluted).toBeUndefined();
+
+    const nested = parseFrontmatter("---\nrel:\n  - character: a\n    __proto__: x\n---\nBody");
+    expect(nested.data.rel[0]["__proto__"]).toBe("x");
+    expect({}.x).toBeUndefined();
+  });
 });

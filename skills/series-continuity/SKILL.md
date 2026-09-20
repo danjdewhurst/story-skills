@@ -131,7 +131,7 @@ story continuity .
 story series .
 ```
 
-If `story` is not installed, use `bun run story --` from the Story Skills repository or the bundled `story-maintenance/scripts/story.js` fallback, resolving the path relative to this skill folder.
+If `story` is not installed, use `bun run story --` from the Story Skills repository checkout or the bundled fallback `node ../story-maintenance/scripts/story.js` with the same arguments, resolving the path relative to this skill folder.
 
 ## Conventions
 

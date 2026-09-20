@@ -63,7 +63,7 @@ If `story.md` links other books through `follows` or `precedes`, also run `story
 
 `story continuity` deterministically checks death ordering (`died-in` vs later appearances), promise/question chapter ordering, unfired setups, POV/cast consistency, and `continuity/state.md` references. For intentional flashbacks, memories, or recordings of dead characters, list them under chapter or scene `mentions` instead of `characters`.
 
-If `story` is not installed, use `bun run story --` from this repository or the bundled `story-maintenance/scripts/story.js` fallback when available.
+If `story` is not installed, use `bun run story --` from the Story Skills repository checkout or the bundled fallback `node ../story-maintenance/scripts/story.js` with the same arguments, resolving the path relative to this skill folder.
 
 ## Continuity Audit Checklist
 
@@ -77,7 +77,7 @@ Run `story continuity .` first to collect the deterministic findings, then check
 - Promises/questions: durable continuity records match what the chapter now reveals or withholds
 - Scene state: every chapter scene has machine-readable POV, location, participants, arcs, and state-change notes
 - World rules: magic, technology, politics, and geography stay consistent with worldbuilding files
-- References: chapter frontmatter lists every major character, location, and arc advanced in the prose
+- References: chapter frontmatter lists every major character, location, and arc advanced in the prose. A chapter with no references is fine by design (a quiet two-hander advances nothing on paper) — only flag missing references, never empty ones.
 - Registries: indexes, word counts, and links are current after edits
 
 ## Reporting

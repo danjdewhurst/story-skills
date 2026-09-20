@@ -2,6 +2,15 @@
 
 This walkthrough shows the complete loop: initialize, add story bible entities, draft a chapter shell, record scene continuity, check the project, and build exports.
 
+## 0. Install Prerequisites
+
+```shell
+bun install
+bun run story -- --help
+```
+
+All `story ...` commands below also run as `bun run story -- ...` from the repository checkout. For copied-skill installs without the package, use the bundled fallback: `node skills/story-maintenance/scripts/story.js --help`.
+
 ## 1. Start The Project
 
 ```shell
@@ -80,3 +89,14 @@ story build . --format docx
 ```
 
 The `dist/` outputs are disposable build artifacts. The source of truth remains the markdown project.
+
+`story add` rebuilds the registries automatically, so there is no need to run `story reindex` after each add — reindex explicitly only after hand-editing files or renaming outside the CLI.
+
+## 7. Go Further
+
+- `story add clue "The torn page" --planted chapter-01 --payoff chapter-03` — track a plant/payoff pair alongside questions and promises.
+- `story knowledge mara-quill --at chapter-01` — check what a character knew at a story point (from `knowledge-state` in `continuity/state.md`).
+- `story synopsis --pages 1` — compress arcs into a mechanical 1-page synopsis (`--pages 3` for the longer form).
+- `story series .` — once a sequel or prequel is linked with `story init "Book Two" --follows <path>`, order the books and check shared canon.
+- `story migrate .` — upgrade an older project to the current schema.
+- `continuity/exemptions.md` — log intentional findings (a `pattern` of at least 4 characters plus a `reason`); `story continuity` reports them as dismissed instead of errors.

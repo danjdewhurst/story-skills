@@ -10,7 +10,12 @@
  * Each fixture's input.md is sent to `claude -p` with the skill's SKILL.md
  * and references as the system prompt and the fixture's brief as the
  * instruction. Drafts land in DIR (default evals/outputs/) as
- * <fixture-name>.md, then run-evals.js checks them. A second model call
+ * <fixture-name>.md, then run-evals.js checks them. Run provenance lands
+ * next to each draft: <fixture-name>.prompt.md (the exact prompt sent),
+ * <fixture-name>.system.sha256 (hash of the system prompt), and
+ * <fixture-name>.judge-raw.txt (the judge's raw reply). Model, temperature,
+ * and seed are logged per run; `claude -p` exposes no temperature/seed
+ * flags, so sampling always uses the CLI defaults. A second model call
  * then lists any canon claim the draft makes that the context does not
  * state or imply; one invented claim fails the fixture. Pass --no-judge to
  * skip that call. Exits non-zero if any fixture fails.
@@ -26,6 +31,7 @@
  */
 
 import { spawnSync } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -80,6 +86,10 @@ function buildSystemPrompt(skillName, withSkill) {
     }
   }
   return parts.join("\n");
+}
+
+function sha256(text) {
+  return crypto.createHash("sha256").update(text, "utf8").digest("hex");
 }
 
 function claudeText(model, prompt, systemText) {
@@ -185,6 +195,12 @@ function main(argv) {
   }
 
   console.log(`model: ${opts.model}${opts.withSkill ? ` (skill: ${opts.skill})` : " (no skill baseline)"}`);
+  // `claude -p` exposes no temperature or seed flags, so every run uses the
+  // CLI defaults; they are logged here (and saved per fixture below) so a
+  // future reader knows sampling was not pinned.
+  console.log(`temperature: default (not settable via claude -p)`);
+  console.log(`seed: default (not settable via claude -p)`);
+  console.log(`system sha256: ${sha256(systemPrompt)}`);
   let allOk = true;
   const report = [];
   for (const name of names) {
@@ -192,6 +208,10 @@ function main(argv) {
     const { checks, inputText } = loadFixture(fixtureDir);
     const prompt = `${checks.brief}\n\nText:\n\n${inputText}`;
     console.log(`\n${name}: drafting...`);
+    console.log(`  model: ${opts.model}, temperature: default, seed: default`);
+    // Provenance saved next to the draft so a run can be audited later.
+    fs.writeFileSync(path.join(opts.out, `${name}.prompt.md`), prompt, "utf8");
+    fs.writeFileSync(path.join(opts.out, `${name}.system.sha256`), `${sha256(systemPrompt)}\n`, "utf8");
     let draft;
     try {
       draft = stripPreamble(claudeText(opts.model, prompt, systemPrompt));
@@ -213,6 +233,7 @@ function main(argv) {
       const judgePrompt = JUDGE_PROMPT.replace("{context}", inputText).replace("{draft}", draft);
       try {
         const raw = claudeText(opts.judgeModel, judgePrompt, BASELINE_HEADER);
+        fs.writeFileSync(path.join(opts.out, `${name}.judge-raw.txt`), raw, "utf8");
         claims = parseJudgeJson(raw);
         fs.writeFileSync(path.join(opts.out, `${name}.claims.json`), JSON.stringify(claims, null, 2) + "\n", "utf8");
       } catch (err) {

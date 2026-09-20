@@ -2,9 +2,9 @@
 
 ## Supported Versions
 
-The latest release on the `main` branch is supported. Older tags are
-supported on a best-effort basis — please upgrade and confirm the issue
-reproduces on `main` before reporting.
+The latest release tag on the `main` branch (currently the `v0.5.x` series)
+is supported. Older tags are supported on a best-effort basis — please
+upgrade and confirm the issue reproduces on `main` before reporting.
 
 ## Reporting a Vulnerability
 
@@ -20,7 +20,16 @@ Include, where possible:
 
 You can expect an initial response within 7 days. If the issue is
 confirmed, a fix will be released as soon as practical and credited in
-the release notes unless you prefer to remain anonymous.
+the release notes unless you prefer to remain anonymous. Please allow up
+to 90 days of coordinated disclosure before publishing details, and let
+us know if you are working to a shorter deadline.
+
+## Safe Harbor
+
+Good-faith security research against this repository is welcome: we will
+not pursue legal action against researchers who follow this policy, avoid
+harming users or disrupting services, and give us a chance to fix
+confirmed issues before disclosing them.
 
 ## Scope
 

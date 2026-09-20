@@ -7,6 +7,9 @@ import { parseFrontmatter, replaceFrontmatter } from "./frontmatter.js";
 // `precedes` names books set later. Publication order lives in `book-number`.
 const SERIES_LINK_INVERSES = [["follows", "precedes"], ["precedes", "follows"]];
 
+const MAX_SERIES_BOOKS = 100;
+const MAX_SERIES_DEPTH = 10;
+
 // Entity collections compared across books, with the field that names them.
 const SHARED_CANON = [
   ["characters", "Characters", "name"],
@@ -138,15 +141,31 @@ export function formatSeriesReport(report) {
 }
 
 function discoverBooks(startRoot, scan, errors) {
+  const startResolved = path.resolve(startRoot);
+  const scopeRoot = path.dirname(startResolved);
   const visited = new Map();
-  const queue = [startRoot];
+  const queue = [{ root: startResolved, depth: 0 }];
   while (queue.length > 0) {
-    const root = queue.shift();
+    if (visited.size >= MAX_SERIES_BOOKS) {
+      errors.push('Series links exceed the ' + MAX_SERIES_BOOKS + ' book limit; refusing to traverse further');
+      break;
+    }
+    const { root, depth } = queue.shift();
     if (visited.has(root)) {
       continue;
     }
 
-    const label = seriesLinkPath(startRoot, root) || ".";
+    const label = seriesLinkPath(startRoot, root) || '.';
+    if (!isPathInside(scopeRoot, path.resolve(root))) {
+      errors.push(label + ' points outside the series directory ' + scopeRoot + '; refusing to follow');
+      visited.set(root, null);
+      continue;
+    }
+    if (depth > MAX_SERIES_DEPTH) {
+      errors.push(label + ' exceeds the series traversal depth of ' + MAX_SERIES_DEPTH + '; refusing to follow further links');
+      visited.set(root, null);
+      continue;
+    }
     if (!fs.existsSync(path.join(root, "story.md"))) {
       errors.push(`${label} is not a story project: missing story.md`);
       visited.set(root, null);
@@ -167,9 +186,16 @@ function discoverBooks(startRoot, scan, errors) {
       precedes: seriesLinks(root, data, "precedes")
     };
     visited.set(root, book);
-    queue.push(...book.follows, ...book.precedes);
+    for (const next of book.follows.concat(book.precedes)) {
+      queue.push({ root: next, depth: depth + 1 });
+    }
   }
   return [...visited.values()].filter(Boolean);
+}
+
+function isPathInside(root, target) {
+  const relativePath = path.relative(root, target);
+  return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath));
 }
 
 function chronologicalOrder(books, errors) {

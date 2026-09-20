@@ -102,10 +102,7 @@ Only when every expected reader file is collected:
 
 ## CLI Maintenance
 
-Use the Story CLI when it is available. If `story` is not installed but the
-`story-maintenance` skill is present, use `node ../story-maintenance/scripts/story.js`
-with the same arguments, resolving the path relative to this skill folder.
-If no CLI is available, perform the registry and backlink checks manually.
+Use the Story CLI when it is available. If `story` is not installed, use `bun run story --` from the Story Skills repository checkout or the bundled fallback `node ../story-maintenance/scripts/story.js` with the same arguments, resolving the path relative to this skill folder. If no CLI is available, perform the registry, backlink, and word-count checks manually.
 
 After creating or updating feedback files and synthesis:
 
@@ -113,6 +110,7 @@ After creating or updating feedback files and synthesis:
 story reindex .
 story links .
 story validate .
+story continuity .
 ```
 
 ## Reference Files

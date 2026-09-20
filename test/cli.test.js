@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { parseArgs, runCli } from "../src/cli.js";
+import { isTruthy, parseArgs, runCli } from "../src/cli.js";
 import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
 function invoke(cwd, argv) {
@@ -85,21 +85,105 @@ describe("cli", () => {
     expect(missing.err).toContain("Missing value for --number");
   });
 
-  test("passes unknown options through generically", () => {
-    expect(parseArgs(["add", "chapter", "Foo", "--bogus", "value"])).toEqual({
-      positionals: ["add", "chapter", "Foo"],
-      options: { bogus: "value" }
-    });
-    expect(parseArgs(["add", "chapter", "Foo", "--bogus=inline"])).toEqual({
-      positionals: ["add", "chapter", "Foo"],
-      options: { bogus: "inline" }
-    });
-    expect(parseArgs(["add", "chapter", "Foo", "--bogus"])).toEqual({
-      positionals: ["add", "chapter", "Foo"],
-      options: { bogus: true }
-    });
+  test("rejects unknown options instead of passing them through", () => {
+    expect(() => parseArgs(["add", "chapter", "Foo", "--bogus", "value"])).toThrow("Unknown option --bogus");
+    expect(() => parseArgs(["add", "chapter", "Foo", "--bogus=inline"])).toThrow("Unknown option --bogus");
+    expect(() => parseArgs(["add", "chapter", "Foo", "--bogus"])).toThrow("Unknown option --bogus");
+    const cwd = makeTempDir();
+    const rejected = invoke(cwd, ["add", "chapter", "Foo", "--bogus", "value"]);
+    expect(rejected.code).toBe(1);
+    expect(rejected.err).toContain("Unknown option --bogus");
   });
 
+  test("normalizes --flag=false/0/no to false", () => {
+    expect(parseArgs(["init", "A", "--force=false"]).options).toEqual({ force: false });
+    expect(parseArgs(["init", "A", "--force=0"]).options).toEqual({ force: false });
+    expect(parseArgs(["init", "A", "--force=no"]).options).toEqual({ force: false });
+    expect(parseArgs(["init", "A", "--force=NO"]).options).toEqual({ force: false });
+    expect(parseArgs(["wordcount", "--write=false", "."]).options).toEqual({ write: false, });
+    expect(parseArgs(["report", "--actionable", "."]).options).toEqual({ actionable: true });
+    expect(parseArgs(["build", ".", "--shunn=true"]).options).toEqual({ shunn: true });
+  });
+
+  test("treats unrecognized --flag=value strings as true", () => {
+    expect(parseArgs(["init", "A", "--force=maybe"]).options).toEqual({ force: true });
+    expect(parseArgs(["init", "A", "--force=yes"]).options).toEqual({ force: true });
+  });
+
+  test("isTruthy coerces strings, arrays, and misc values", () => {
+    expect(isTruthy("false")).toBe(false);
+    expect(isTruthy("FALSE")).toBe(false);
+    expect(isTruthy("0")).toBe(false);
+    expect(isTruthy("no")).toBe(false);
+    expect(isTruthy("off")).toBe(false);
+    expect(isTruthy("")).toBe(false);
+    expect(isTruthy("yes")).toBe(true);
+    expect(isTruthy("anything-else")).toBe(true);
+    expect(isTruthy(true)).toBe(true);
+    expect(isTruthy(false)).toBe(false);
+    expect(isTruthy(undefined)).toBe(false);
+    expect(isTruthy(["true", "false"])).toBe(false);
+    expect(isTruthy(["false", "yes"])).toBe(true);
+  });
+
+  test("--force=false does not overwrite an existing project", () => {
+    const cwd = makeTempDir();
+    expect(invoke(cwd, ["init", "Forced"]).code).toBe(0);
+    const root = path.join(cwd, "forced");
+    const retry = invoke(cwd, ["init", "Forced", "--force=false"]);
+    expect(retry.code).toBe(1);
+    expect(retry.err).toContain("already exists");
+    expect(invoke(cwd, ["init", "Forced", "--force"]).code).toBe(0);
+    expect(invoke(cwd, ["wordcount", root, "--write=false"]).out).toContain("Total:");
+  });
+
+  test("resolveRoot accepts a positional path or --path but rejects conflicts", () => {
+    const cwd = makeTempDir();
+    expect(invoke(cwd, ["init", "Rooted"]).code).toBe(0);
+    const root = path.join(cwd, "rooted");
+    const positional = invoke(cwd, ["validate", root]);
+    expect(positional.code).toBe(0);
+    const flagged = invoke(cwd, ["validate", "--path", root]);
+    expect(flagged.code).toBe(0);
+    const same = invoke(cwd, ["validate", root, "--path", root]);
+    expect(same.code).toBe(0);
+    const conflict = invoke(cwd, ["validate", root, "--path", cwd]);
+    expect(conflict.code).toBe(1);
+    expect(conflict.err).toContain("Conflicting project paths");
+    const added = invoke(cwd, ["add", "character", "Root Hero", "--path", root]);
+    expect(added.code).toBe(0);
+    expect(added.out).toContain("Created character root-hero");
+  });
+
+  test("check output goes to stderr while report bodies stay on stdout", () => {
+    const cwd = makeTempDir();
+    expect(invoke(cwd, ["init", "Streams"]).code).toBe(0);
+    const root = path.join(cwd, "streams");
+    const validate = invoke(cwd, ["validate", root]);
+    expect(validate.code).toBe(0);
+    expect(validate.err).toContain("Project is valid");
+    expect(validate.out).toBe("");
+    const series = invoke(cwd, ["series", root]);
+    expect(series.code).toBe(0);
+    expect(series.out).toContain("# Series:");
+    expect(series.out).not.toContain("Series is consistent");
+    expect(series.err).toContain("Series is consistent");
+  });
+
+  test("add accepts plural kinds but rejects non-kinds like glass", () => {
+    const cwd = makeTempDir();
+    expect(invoke(cwd, ["init", "Kinds"]).code).toBe(0);
+    const root = path.join(cwd, "kinds");
+    for (const kind of ["characters", "terms", "glossary-terms"]) {
+      const name = "Plural " + kind;
+      const result = invoke(cwd, ["add", kind, name, "--path", root]);
+      expect(result.code).toBe(0);
+      expect(result.out).toContain("Created ");
+    }
+    const bad = invoke(cwd, ["add", "glass", "Pane", "--path", root]);
+    expect(bad.code).toBe(1);
+    expect(bad.err).toContain("Unsupported entity kind: glass");
+  });
   test("names the missing story.md when a path is not a project", () => {
     const cwd = makeTempDir();
     const result = invoke(cwd, ["links", "nowhere"]);
@@ -211,8 +295,8 @@ describe("cli", () => {
     expect(invoke(cwd, ["wordcount", root, "--write"]).out).toContain("chapters/chapter-01.md: 2");
     expect(fs.readFileSync(path.join(root, "chapters", "_index.md"), "utf8")).toContain("Total Word Count: 2");
     expect(invoke(cwd, ["reindex", root]).out).toContain("Registries already up to date");
-    expect(invoke(cwd, ["validate", root]).out).toContain("Project is valid");
-    expect(invoke(cwd, ["links", root]).out).toContain("Links are valid");
+    expect(invoke(cwd, ["validate", root]).err).toContain("Project is valid");
+    expect(invoke(cwd, ["links", root]).err).toContain("Links are valid");
     const report = invoke(cwd, ["report", root]);
     expect(report.out).toContain("# CLI Story");
     expect(report.out).toContain("Schema version: 2");
@@ -298,7 +382,7 @@ word-count: 0
 
     const clean = invoke(cwd, ["continuity", root]);
     expect(clean.code).toBe(0);
-    expect(clean.out).toContain("Continuity is consistent");
+    expect(clean.err).toContain("Continuity is consistent");
 
     writeMarkdown(path.join(root, "continuity", "promises", "ghost-payoff.md"), `
 title: Ghost Payoff
@@ -343,8 +427,9 @@ word-count: 9
 
     const validation = invoke(cwd, ["validate", root]);
     expect(validation.code).toBe(0);
-    expect(validation.out).toContain("warning:");
-    expect(validation.out).toContain("declares 9 words");
+    expect(validation.err).toContain("warning:");
+    expect(validation.err).toContain("declares 9 words");
+    expect(validation.out).not.toContain("warning:");
   });
 
   test("runs the bundled story-maintenance fallback script under Node", () => {
@@ -384,15 +469,15 @@ word-count: 9
 
       const series = runBundle(["series", fixture]);
       expect(series.status).toBe(0);
-      expect(series.stdout).toContain("Series is consistent");
+      expect(series.stderr).toContain("Series is consistent");
 
       const validate = runBundle(["validate", fixture]);
       expect(validate.status).toBe(0);
-      expect(validate.stdout).toContain("Project is valid");
+      expect(validate.stderr).toContain("Project is valid");
 
       const links = runBundle(["links", fixture]);
       expect(links.status).toBe(0);
-      expect(links.stdout).toContain("Links are valid");
+      expect(links.stderr).toContain("Links are valid");
 
       const wordcount = runBundle(["wordcount", fixture]);
       expect(wordcount.status).toBe(0);

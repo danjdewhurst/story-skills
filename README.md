@@ -50,7 +50,7 @@ Long-range consistency is the thing language models are worst at and prompts can
 
 ```text
 $ story continuity examples/the-unraveled-thread
-Continuity check failed: 4 errors, 3 warnings
+Continuity check failed: 4 errors, 3 warnings, 0 dismissed
 error: chapters/chapter-04.md lists edran-vale, who died in chapter-02; move posthumous appearances to mentions
 error: continuity/promises/the-broken-compass.md pays off in chapter-02 before it is planted in chapter-03
 error: continuity/questions/who-burned-the-mill.md resolves in chapter-02 before it is introduced in chapter-03
@@ -271,7 +271,7 @@ The CLI is for deterministic maintenance only. Agents should write story content
 | Command | Purpose |
 |---------|---------|
 | `story init "The Last Ember"` | Scaffold a story project with the standard markdown layout |
-| `story add character "Sera Voss"` | Create entity files for characters, locations, systems, factions, artifacts, arcs, chapters, scenes, questions, promises, clues, and glossary terms |
+| `story add character "Sera Voss"` | Create entity files for characters, locations, systems, factions, artifacts, arcs, chapters, scenes, questions, promises, clues, and terms |
 | `story knowledge sera-voss --at chapter-03` | Show what a character knew at a chapter, from timeline-scoped knowledge-state |
 | `story synopsis [--pages 1\|3] [--out file]` | Compress arcs into a mechanical 1- or 3-page synopsis |
 | `story rename character sera-voss "Sera Vale"` | Rename an entity and update kebab-case references |

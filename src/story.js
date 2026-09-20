@@ -101,6 +101,11 @@ export function createStoryProject(options) {
   const storyId = kebabCase(title);
   const cwd = options.cwd ?? process.cwd();
   const root = path.resolve(cwd, options.dir ?? storyId);
+  if (!options.dir) {
+    if (!storyId) {
+      throw new Error('Cannot derive a directory name from story title "' + title + '": pass --dir to set the target directory explicitly');
+    }
+  }
   if (fs.existsSync(root) && !options.force) {
     throw new Error(`${root} already exists. Use --force to overwrite starter files.`);
   }
@@ -374,7 +379,13 @@ export function validateProject(root) {
     return { ok: false, errors, warnings };
   }
 
-  const project = scanProject(projectRoot);
+  return validateProjectOf(scanProject(projectRoot));
+}
+
+export function validateProjectOf(project) {
+  const errors = [];
+  const warnings = [];
+  const projectRoot = project.root;
   for (const scanError of project.fileErrors ?? []) {
     errors.push(scanError);
   }
@@ -434,7 +445,10 @@ export function validateProject(root) {
 }
 
 export function validateLinks(root) {
-  const project = scanProject(root);
+  return validateLinksOf(scanProject(root));
+}
+
+export function validateLinksOf(project) {
   const errors = [];
   const warnings = [];
   for (const scanError of project.fileErrors ?? []) {
@@ -629,6 +643,7 @@ function validateTimelineAndArcBodyRefs(project, chapters, errors) {
   const timelinePath = path.join(project.root, "plot", "timeline.md");
   if (fs.existsSync(timelinePath)) {
     try {
+      assertFileSizeWithinLimit(timelinePath);
       const raw = fs.readFileSync(timelinePath, "utf8");
       const body = parseFrontmatter(raw, timelinePath).body ?? raw;
       for (const token of extractChapterIdTokens(body)) {
@@ -649,9 +664,16 @@ function validateTimelineAndArcBodyRefs(project, chapters, errors) {
 
   for (const arc of project.arcs) {
     const label = relative(project, arc.file);
-    // The scan already read this file successfully, so a re-read here cannot
-    // fail; read directly instead of swallowing errors.
-    const body = readMarkdown(arc.file, project.root).body ?? "";
+    let body = '';
+    try {
+      body = readMarkdown(arc.file, project.root).body ?? '';
+    } catch (error) {
+      const message = label + ': ' + error.message;
+      if (!errors.includes(message)) {
+        errors.push(message);
+      }
+      continue;
+    }
     for (const token of extractChapterIdTokens(body)) {
       if (!chapterIds.has(token)) {
         errors.push(`${label} references missing chapter ${token}`);
@@ -749,8 +771,8 @@ export function seriesReport(root) {
 
 export function projectReport(root) {
   const project = scanProject(root);
-  const validation = validateProject(project.root);
-  const links = validateLinks(project.root);
+  const validation = validateProjectOf(project);
+  const links = validateLinksOf(project);
   const continuity = checkContinuity(project);
   const totalWords = project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
 
@@ -863,8 +885,8 @@ export function formatProjectReport(report, options = {}) {
 
 export function projectActions(root) {
   const project = scanProject(root);
-  const validation = validateProject(project.root);
-  const links = validateLinks(project.root);
+  const validation = validateProjectOf(project);
+  const links = validateLinksOf(project);
   const continuity = checkContinuity(project);
   return {
     root: project.root,
@@ -921,11 +943,9 @@ export function reindexProject(root) {
   const existingCharacters = safeRead(charactersIndexPath, project.root);
   const existingWorld = safeRead(worldIndexPath, project.root);
   const existingPlot = safeRead(plotIndexPath, project.root);
-  let plotStructure = "three-act";
-  try {
-    plotStructure = parseFrontmatter(existingPlot, "plot/_index.md").data.structure ?? "three-act";
-  } catch {
-    plotStructure = "three-act";
+  let plotStructure = 'three-act';
+  if (fs.existsSync(plotIndexPath)) {
+    plotStructure = parseFrontmatter(existingPlot, 'plot/_index.md').data.structure ?? 'three-act';
   }
 
   writeChanged(charactersIndexPath, characterIndex(
@@ -1733,12 +1753,39 @@ function entityConfig(kind) {
   return config;
 }
 
+const KIND_ALIASES = {
+  character: 'character',
+  characters: 'character',
+  location: 'location',
+  locations: 'location',
+  system: 'system',
+  systems: 'system',
+  faction: 'faction',
+  factions: 'faction',
+  artifact: 'artifact',
+  artifacts: 'artifact',
+  arc: 'arc',
+  arcs: 'arc',
+  chapter: 'chapter',
+  chapters: 'chapter',
+  scene: 'scene',
+  scenes: 'scene',
+  question: 'question',
+  questions: 'question',
+  promise: 'promise',
+  promises: 'promise',
+  clue: 'clue',
+  clues: 'clue',
+  term: 'term',
+  terms: 'term',
+  'glossary-term': 'term',
+  'glossary-terms': 'term',
+  glossary: 'term'
+};
+
 function normalizeKind(kind) {
-  const normalized = String(kind ?? "").trim().toLowerCase().replace(/s$/, "");
-  if (normalized === "glossary" || normalized === "glossary-term") {
-    return "term";
-  }
-  return normalized;
+  const normalized = String(kind ?? '').trim().toLowerCase();
+  return KIND_ALIASES[normalized] ?? normalized;
 }
 
 function requireKebabId(id, label) {
@@ -2183,6 +2230,7 @@ function removeEntityReferences(root, id) {
 function rewriteReferences(root, transform, transformBody) {
   for (const file of markdownFiles(root)) {
     assertSafeProjectPath(file, root);
+    assertFileSizeWithinLimit(file);
     const text = fs.readFileSync(file, "utf8");
     const match = FRONTMATTER_PATTERN.exec(text);
     if (!match) {
@@ -2279,17 +2327,26 @@ function addFrontmatterListValue(root, relativePath, field, value) {
   }
 }
 
-function markdownFiles(root) {
-  const files = [];
+function markdownFiles(root, depth = 0, collected = null) {
+  const files = collected ?? [];
+  if (depth > MAX_SCAN_DEPTH) {
+    throw new Error('Refusing to scan beyond depth ' + MAX_SCAN_DEPTH + ' under ' + root);
+  }
   for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
     const fullPath = path.join(root, entry.name);
-    if (entry.isDirectory() && entry.name !== "dist" && !entry.name.startsWith(".")) {
-      files.push(...markdownFiles(fullPath));
-    } else if (entry.isFile() && entry.name.endsWith(".md")) {
+    if (entry.isDirectory() && entry.name !== 'dist' && !entry.name.startsWith('.')) {
+      markdownFiles(fullPath, depth + 1, files);
+    } else if (entry.isFile() && entry.name.endsWith('.md')) {
       files.push(fullPath);
+      if (files.length > MAX_SCAN_FILES) {
+        throw new Error('Too many markdown files under ' + root + ': exceeds the ' + MAX_SCAN_FILES + ' file limit');
+      }
     }
   }
-  return files.sort();
+  if (depth === 0) {
+    files.sort();
+  }
+  return files;
 }
 
 function manuscriptParts(project) {
@@ -2623,6 +2680,22 @@ function xmlEscape(value) {
     .replace(/"/g, "&quot;");
 }
 
+const MAX_SCAN_FILE_BYTES = 5 * 1024 * 1024;
+const MAX_SCAN_FILES = 5000;
+const MAX_SCAN_DEPTH = 10;
+
+function assertFileSizeWithinLimit(filePath) {
+  let size = 0;
+  try {
+    size = fs.statSync(filePath).size;
+  } catch {
+    return;
+  }
+  if (size > MAX_SCAN_FILE_BYTES) {
+    throw new Error('Refusing to read oversized file ' + filePath + ': ' + size + ' bytes exceeds the ' + MAX_SCAN_FILE_BYTES + ' byte limit');
+  }
+}
+
 function readEntityFiles(root, relativeDir, mapEntity, scanErrors) {
   const directory = path.join(root, relativeDir);
   if (!fs.existsSync(directory)) {
@@ -2632,9 +2705,12 @@ function readEntityFiles(root, relativeDir, mapEntity, scanErrors) {
   assertSafeProjectDirectory(directory, root);
   const entities = [];
   const files = fs.readdirSync(directory, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".md") && entry.name !== "_index.md")
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.md') && entry.name !== '_index.md')
     .map((entry) => entry.name)
     .sort();
+  if (files.length > MAX_SCAN_FILES) {
+    throw new Error('Too many files in ' + relativeDir + ': ' + files.length + ' exceeds the ' + MAX_SCAN_FILES + ' file limit');
+  }
   for (const file of files) {
     const fullPath = path.join(directory, file);
     const label = path.join(relativeDir, file);
@@ -2697,6 +2773,7 @@ function readMarkdown(filePath, root) {
   if (root) {
     assertSafeProjectPath(filePath, root);
   }
+  assertFileSizeWithinLimit(filePath);
   const rawMarkdown = fs.readFileSync(filePath, "utf8");
   const parsed = parseFrontmatter(rawMarkdown, filePath);
   return { ...parsed, rawMarkdown };
@@ -2722,6 +2799,7 @@ function safeRead(filePath, root) {
   if (root) {
     assertSafeProjectPath(filePath, root);
   }
+  assertFileSizeWithinLimit(filePath);
   return fs.readFileSync(filePath, "utf8");
 }
 

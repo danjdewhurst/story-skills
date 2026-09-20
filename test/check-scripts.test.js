@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { checkCoverage, parseLcov } from "../scripts/check-coverage.js";
 import { collectResult, compareFindings } from "../scripts/check-examples.js";
-import { checkMarketplaces, expectEqual } from "../scripts/check-metadata.js";
+import { checkMarketplaces, checkSkillFrontmatter, expectEqual } from "../scripts/check-metadata.js";
 import { PREFLIGHT } from "../scripts/release.js";
 
 const repoRoot = path.resolve(import.meta.dir, "..");
@@ -56,6 +57,7 @@ describe("release preflight", () => {
   test("gates on test:coverage", () => {
     expect(PREFLIGHT).toContain("test:coverage");
     expect(PREFLIGHT).toContain("check:metadata");
+    expect(PREFLIGHT).toContain("check:evals");
     expect(PREFLIGHT).toContain("test:examples");
   });
 });
@@ -84,7 +86,7 @@ describe("check-coverage", () => {
     expect(record.hasBranchData).toBe(false);
   });
 
-  test("passes full line, function, and branch coverage", () => {
+  test("passes full line and function coverage, gating branches only when records exist", () => {
     const file = path.join(repoRoot, "src", "a.js");
     const lcov = lcovRecord(file, { branches: ["1", "2"] });
     expect(checkCoverage(lcov, [file])).toEqual({ failures: [], filesWithBranches: 1, filesChecked: 1 });
@@ -97,7 +99,9 @@ describe("check-coverage", () => {
     expect(failures).toEqual([`${file} branch coverage 1/2`]);
   });
 
-  test("skips the branch gate when the report has no branch records", () => {
+  test("skips the branch gate only when the report has no branch records", () => {
+    // Bun's lcov reporter emits no BRDA/BRF/BRH records, which is the only
+    // case this skip is for; check-coverage.js prints a skip note in main().
     const file = path.join(repoRoot, "src", "a.js");
     const result = checkCoverage(lcovRecord(file), [file]);
     expect(result).toEqual({ failures: [], filesWithBranches: 0, filesChecked: 1 });
@@ -113,6 +117,34 @@ describe("check-coverage", () => {
       `${covered} function coverage 1/2`,
       `${missing} has no coverage record`
     ]);
+  });
+});
+
+describe("checkSkillFrontmatter", () => {
+  function skillDir() {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "story-skills-frontmatter-"));
+    const write = (name, frontmatter) => {
+      fs.mkdirSync(path.join(dir, name), { recursive: true });
+      fs.writeFileSync(path.join(dir, name, "SKILL.md"), `---\n${frontmatter}\n---\n\n# Skill\n`, "utf8");
+    };
+    write("good-skill", "name: good-skill\ndescription: Does good things.");
+    return { dir, write };
+  }
+
+  test("accepts a well-formed skill", () => {
+    const { dir } = skillDir();
+    expect(checkSkillFrontmatter([], dir, (filePath) => fs.readFileSync(filePath, "utf8"))).toEqual([]);
+  });
+
+  test("flags a missing SKILL.md, a wrong name field, and a missing description", () => {
+    const { dir, write } = skillDir();
+    fs.mkdirSync(path.join(dir, "no-file"));
+    write("bad-name", "name: other-name\ndescription: Mismatched name.");
+    write("no-desc", "name: no-desc");
+    const failures = checkSkillFrontmatter([], dir, (filePath) => fs.readFileSync(filePath, "utf8"));
+    expect(failures.join("\n")).toContain("skills/no-file is missing SKILL.md");
+    expect(failures.join("\n")).toContain("skills/bad-name/SKILL.md name");
+    expect(failures.join("\n")).toContain("skills/no-desc/SKILL.md is missing description");
   });
 });
 
@@ -161,6 +193,17 @@ describe("check-metadata marketplaces", () => {
     expect(failures.join("\n")).toContain("./plugins/story-skills but that path does not exist");
   });
 
+  test("detects a bad plugin version that trails the package", () => {
+    const stale = {
+      ...base,
+      agentsMarketplace: {
+        ...agentsMarketplace,
+        plugins: [{ ...agentsMarketplace.plugins[0], version: "0.0.0" }]
+      }
+    };
+    expect(checkMarketplaces(stale).join("\n")).toContain("version");
+  });
+
   test("detects version drift where versions are declared", () => {
     const stale = {
       ...base,
@@ -203,21 +246,23 @@ describe("github workflows", () => {
     }
   });
 
-  test("every ci actions reference is SHA-pinned with a version comment", () => {
-    // Template workflows under templates/github/ are owned by a separate
-    // fix-docs change, so only the repo's own ci.yml is gated here.
-    const refs = usesRefs(readRepo(".github/workflows/ci.yml"));
-    expect(refs.length).toBeGreaterThan(0);
-    for (const { ref, comment, line } of refs) {
-      expect(line).toContain("#");
-      expect(ref).toMatch(/^[\w-]+\/[\w.-]+@[0-9a-f]{40}$/);
-      expect(comment).toMatch(/^v\d/);
+  test("every actions reference is SHA-pinned with a version comment", () => {
+    // Repo workflow and user-facing templates are all gated: a moving tag
+    // must never silently change what any of them run.
+    for (const relativePath of workflowFiles) {
+      const refs = usesRefs(readRepo(relativePath));
+      expect(refs.length, relativePath).toBeGreaterThan(0);
+      for (const { ref, comment, line } of refs) {
+        expect(`${relativePath}: ${line}`).toContain("#");
+        expect(ref).toMatch(/^[\w-]+\/[\w.-]+@[0-9a-f]{40}$/);
+        expect(comment).toMatch(/^v\d/);
+      }
     }
   });
 
   test("ci runs the release-gate checks and the Node fallback", () => {
     const ci = readRepo(".github/workflows/ci.yml");
-    for (const step of ["bun run check:metadata", "bun run test:coverage", "bun run test:examples"]) {
+    for (const step of ["bun run check:metadata", "bun run check:evals", "bun run test:coverage", "bun run test:examples"]) {
       expect(ci).toContain(step);
     }
     expect(ci).toContain("node skills/story-maintenance/scripts/story.js");

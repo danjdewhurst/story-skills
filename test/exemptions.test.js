@@ -134,9 +134,9 @@ planted: chapter-01
     writeExemptions(root, [{ pattern: "edran-vale", reason: "Flashback approved by editor" }]);
     const result = invoke(cwd, ["continuity", root]);
     expect(result.code).toBe(0);
-    expect(result.out).toContain("Continuity is consistent: 0 errors, 0 warnings, 1 dismissed");
-    expect(result.out).toContain("dismissed: ");
-    expect(result.out).toContain("(exemption: Flashback approved by editor)");
+    expect(result.err).toContain("Continuity is consistent: 0 errors, 0 warnings, 1 dismissed");
+    expect(result.err).toContain("dismissed: ");
+    expect(result.err).toContain("(exemption: Flashback approved by editor)");
   });
 
   test("cli still fails when an error is not dismissed", () => {
@@ -147,7 +147,7 @@ planted: chapter-01
     expect(result.err).toContain("Continuity check failed: 1 errors, 0 warnings, 0 dismissed");
   });
 
-  test("cli prints dismissed lines to stdout even when errors remain", () => {
+  test("cli prints dismissed lines to stderr even when errors remain", () => {
     const { root, cwd } = exemptionProject();
     for (const number of [3, 4]) {
       writeMarkdown(path.join(root, "chapters", `chapter-0${number}.md`), `
@@ -173,9 +173,8 @@ planted: chapter-01
     const result = invoke(cwd, ["continuity", root]);
     expect(result.code).toBe(1);
     expect(result.err).toContain("Continuity check failed: 1 errors, 0 warnings, 1 dismissed");
-    expect(result.out).toContain("dismissed: ");
-    expect(result.out).toContain("(exemption: Payoff lands in the sequel)");
-    expect(result.err).not.toContain("dismissed: ");
+    expect(result.err).toContain("dismissed: ");
+    expect(result.err).toContain("(exemption: Payoff lands in the sequel)");
   });
 
   test("missing exemptions file changes nothing", () => {
@@ -226,6 +225,19 @@ exemptions:
     expect(errors).toContain("continuity/exemptions.md exemptions[0] is missing a non-empty pattern");
     expect(errors).toContain("continuity/exemptions.md exemptions[0] is missing a non-empty reason");
     expect(errors).toContain("continuity/exemptions.md exemptions[1] must be a mapping");
+  });
+
+  test("validate rejects entries with a missing pattern or a missing reason", () => {
+    const { root } = exemptionProject();
+    writeMarkdown(path.join(root, "continuity", "exemptions.md"), `
+type: exemption-log
+exemptions:
+  - reason: "Has a reason but no pattern"
+  - pattern: "has-a-pattern-but-no-reason"
+`, "# Bad\n");
+    const errors = validateProject(root).errors;
+    expect(errors).toContain("continuity/exemptions.md exemptions[0] is missing a non-empty pattern");
+    expect(errors).toContain("continuity/exemptions.md exemptions[1] is missing a non-empty reason");
   });
 
   test("validate accepts a well-formed exemption log", () => {

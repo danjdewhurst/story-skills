@@ -24,8 +24,12 @@ const KNOWN_VOICE_KEYS = new Set([
 ]);
 
 const errors = [];
+const warnings = [];
 const check = (cond, msg) => {
   if (!cond) errors.push(msg);
+};
+const warn = (msg) => {
+  warnings.push(msg);
 };
 
 function isNumber(v) {
@@ -78,6 +82,10 @@ function main() {
       typeof checks.brief === "string" && checks.brief.trim().length > 0,
       `${name}/checks.json: brief must be a non-empty string`
     );
+    check(
+      typeof checks.skill === "string" && checks.skill.trim().length > 0,
+      `${name}/checks.json: skill must be a non-empty string naming the skill under test`
+    );
     for (const key of ["required", "banned", "banned_regex"]) {
       if (key in checks) {
         check(
@@ -86,11 +94,25 @@ function main() {
         );
       }
     }
-    for (const key of ["max_words_ratio", "min_words_ratio"]) {
+    for (const key of ["max_words_ratio", "min_words_ratio", "max_words"]) {
       if (key in checks) {
         check(
           isNumber(checks[key]) && checks[key] > 0,
           `${name}/checks.json: ${key} must be a positive number`
+        );
+      }
+    }
+    if ("paragraphs" in checks) {
+      check(
+        Number.isInteger(checks.paragraphs) && checks.paragraphs > 0,
+        `${name}/checks.json: paragraphs must be a positive integer`
+      );
+    }
+    for (const key of ["ends_with_question", "requires_first_person", "requires_past_tense"]) {
+      if (key in checks) {
+        check(
+          typeof checks[key] === "boolean",
+          `${name}/checks.json: ${key} must be a boolean`
         );
       }
     }
@@ -119,8 +141,13 @@ function main() {
         (checks.banned_regex && checks.banned_regex.length > 0) ||
         checks.max_words_ratio !== undefined ||
         checks.min_words_ratio !== undefined ||
+        checks.max_words !== undefined ||
+        checks.paragraphs !== undefined ||
+        checks.ends_with_question !== undefined ||
+        checks.requires_first_person !== undefined ||
+        checks.requires_past_tense !== undefined ||
         checks.voice_drift !== undefined,
-      `${name}/checks.json: defines no required, banned, banned_regex, max/min_words_ratio, or voice_drift checks`
+      `${name}/checks.json: defines no required, banned, banned_regex, length, structural, or voice_drift checks`
     );
     for (const pattern of checks.banned_regex || []) {
       if (typeof pattern !== "string") continue;
@@ -128,6 +155,37 @@ function main() {
         new RegExp(pattern, "i");
       } catch (err) {
         errors.push(`${name}/checks.json: banned_regex /${pattern}/ does not compile (${err.message})`);
+      }
+    }
+
+    // Cross-check phrases against the fixture input. Both are warnings, not
+    // errors: anti-slop-style briefs ("rewrite without X") deliberately seed
+    // the input with the banned tells, and near-overlaps can be intentional.
+    let inputText = "";
+    try {
+      inputText = fs.readFileSync(path.join(dir, "input.md"), "utf8");
+    } catch {
+      inputText = "";
+    }
+    const lowered = (s) => String(s).toLowerCase();
+    for (const phrase of checks.banned || []) {
+      if (typeof phrase !== "string" || phrase.trim() === "") continue;
+      if (lowered(inputText).includes(lowered(phrase.trim()))) {
+        warn(
+          `${name}: banned phrase ${JSON.stringify(phrase)} appears in input.md — ` +
+            `drafts quoting that context will fail unless the brief tells the model to remove it`
+        );
+      }
+      for (const fact of checks.required || []) {
+        if (typeof fact !== "string" || fact.trim() === "") continue;
+        const b = lowered(phrase.trim());
+        const r = lowered(fact.trim());
+        if (b.includes(r) || r.includes(b)) {
+          warn(
+            `${name}: banned ${JSON.stringify(phrase)} overlaps required ${JSON.stringify(fact)} — ` +
+              `keeping the canon may trip the trap`
+          );
+        }
       }
     }
   }
@@ -142,9 +200,11 @@ function main() {
 
   if (errors.length > 0) {
     for (const e of errors) console.log(`FAIL ${e}`);
+    for (const w of warnings) console.log(`WARN ${w}`);
     console.log(`${errors.length} problem(s) found`);
     return 1;
   }
+  for (const w of warnings) console.log(`WARN ${w}`);
   console.log("all eval fixture checks passed");
   return 0;
 }

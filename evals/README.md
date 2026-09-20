@@ -23,7 +23,12 @@ node evals/run-skill.js --skill revision-continuity  # evaluate a different skil
 The runner builds a system prompt from the skill's `SKILL.md` plus its
 `references/`, sends each fixture's `input.md` with its `brief` through
 `claude -p` with no tools, saves the draft to `evals/outputs/<fixture>.md`
-(gitignored), and runs the checker on it. It needs the Claude Code CLI on
+(gitignored), and runs the checker on it. Run provenance is saved next to
+each draft: `<fixture>.prompt.md` (exact prompt sent),
+`<fixture>.system.sha256` (hash of the system prompt), and
+`<fixture>.judge-raw.txt` (the judge's raw reply); model, temperature, and
+seed are logged per run (`claude -p` exposes no temperature/seed flags, so
+sampling uses the CLI defaults). It needs the Claude Code CLI on
 PATH with working credentials. Run it before and after any change to a
 skill's instructions or references and compare the reports, and read the
 drafts, since a pass count says nothing about whether the prose reads well.
@@ -93,6 +98,22 @@ node evals/run-evals.js --all evals/examples
 CI runs this self-test, together with `scripts/check-evals.js`, on every
 push and pull request.
 
+## What CI does NOT run (and why)
+
+`run-skill.js` and `compare-outputs.js` are model-backed: they shell out to
+the `claude` CLI with working credentials, spend real money, and return
+nondeterministic prose (temperature and seed are not settable via
+`claude -p`, so sampling cannot be pinned). None of that belongs in a
+per-commit gate. CI runs only the deterministic half: the checker
+self-test above and the fixture schema validation. Model runs happen by
+hand before/after skill changes, with results recorded below.
+
+## Last full model run
+
+| Date | Model | Skill(s) | Fixtures | Result | Notes |
+| --- | --- | --- | --- | --- | --- |
+| _none yet_ | | | | | Fill this in after each hand-run `node evals/run-skill.js` pass. |
+
 ## What each fixture tests
 
 | Fixture | Tests |
@@ -103,17 +124,25 @@ push and pull request.
 | `promise-payoff` | Setup paid off, mystery intact: the key opens the sea-chest; the logbook and fuse wire are found; who left the key stays unanswered. |
 | `question-stays-open` | Deepening without resolving: the mystery gets sharper and ends on a question. Naming the key-leaver fails. |
 | `anti-slop` | Generic AI tells removed ("beacon of hope", "it is important to note", "delve") while every fact survives. |
+| `revision-continuity` | Revision restraint: the sea-chest stays shut and the key-leaver unnamed while every fact survives. Evaluates the `revision-continuity` skill. |
+| `series-continuity` | Canon carried forward: deaths, the paraffin-fired lens, the shut chest, and the open question survive into book two with no new characters. Evaluates the `series-continuity` skill. |
+| `genre-craft-mystery` | Fair-play contract stated and the passage ends on the open question. Evaluates the `genre-craft` skill (mystery). |
 
 ## Check format
 
 `checks.json` fields:
 
 - `brief`: the drafting instruction to give the skill.
-- `required`: case-insensitive canon phrases that must appear in the draft (facts, names, objects).
-- `banned`: case-insensitive phrases that must not appear (resolutions, inventions, slop).
+- `skill`: the skill under test (e.g. `chapter-writing`). Required by `scripts/check-evals.js`; `run-skill.js --skill` selects which skill's instructions to load.
+- `required`: case-insensitive canon phrases that must appear in the draft (facts, names, objects). Matching is stem/inflected, so `logbook` also matches `logbooks`.
+- `banned`: case-insensitive phrases that must not appear (resolutions, inventions, slop). Matching is stem/inflected like `required`, so `delve` also catches `delving`; add 2–3 paraphrase variants per trap phrase (e.g. `told Petra about the key` beside `told her about the key`) for what inflection cannot catch.
 - `banned_regex`: regular expressions that must not match (for example invented measurements or anachronisms). Matching is case-insensitive.
 - `max_words_ratio` / `min_words_ratio`: draft length bounds relative to the input, to catch padding and over-cutting.
-- `voice_drift`: for keep-my-voice briefs, the largest change allowed per marker between input and draft. Markers are `contraction_rate`, `first_person_rate`, and `hedge_rate` (all per 100 words) and `mean_word_length`.
+- `max_words`: absolute draft word cap, for briefs that promise one (canon-keeping: under 220 words).
+- `paragraphs`: exact paragraph count, for briefs that promise one (no-invention: two paragraphs). Fenced code blocks are exempt.
+- `ends_with_question`: when `true`, the draft must end on `?` (question-stays-open, genre-craft-mystery).
+- `requires_first_person` / `requires_past_tense`: when `true`, the draft must show first-person pronouns / at least 2 past-tense markers. Both are coarse proxies (the past-tense list counts `red` as past tense, hence the ≥2 minimum), tripwires for ignored briefs rather than classifiers.
+- `voice_drift`: for keep-my-voice briefs, the largest change allowed per marker between input and draft. Markers are `contraction_rate`, `first_person_rate`, and `hedge_rate` (all per 100 words) and `mean_word_length`. Limits are regression tripwires calibrated so the known-good draft passes with headroom (voice-preservation drifts +1.21/+1.62/0.00/−0.31 against limits 3.0/3.0/2.0/0.6), not perceptual thresholds. Drift is directional: rates fail when they fall past the limit (voice stripped) and warn on overshoot; `mean_word_length` fails when it rises past the limit and warns on a fall.
 
 Every fixture also gets three well-formedness checks the checker applies itself: no doubled spaces inside a line, no space before punctuation, and no empty clause between punctuation marks. Four structure checks run on every draft as well: the binary-contrast scaffolds ("not just X but Y", "isn't just", "it's not about X, it's Y", "not because X but because Y"), which no fixture's ideal draft needs.
 

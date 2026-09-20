@@ -142,7 +142,7 @@ export function runCli(argv, io) {
         bookNumber: parsed.options["book-number"],
         follows: parsed.options.follows,
         precedes: parsed.options.precedes,
-        force: Boolean(parsed.options.force)
+        force: isTruthy(parsed.options.force)
       });
       io.stdout.write(`Created story project: ${result.root}\n`);
       for (const linkedBook of result.linkedBooks) {
@@ -164,7 +164,7 @@ export function runCli(argv, io) {
         pov: parsed.options.pov,
         tense: parsed.options.tense,
         synopsis: parsed.options.synopsis,
-        force: Boolean(parsed.options.force)
+        force: isTruthy(parsed.options.force)
       });
       io.stdout.write(`Imported ${result.chapters} chapters (${result.words} words) into ${result.root}\n`);
       if (result.candidates.length > 0) {
@@ -176,16 +176,18 @@ export function runCli(argv, io) {
       return 0;
     }
 
-    const root = path.resolve(cwd, parsed.positionals[1] ?? ".");
     if (command === "validate") {
+      const root = resolveRoot(cwd, parsed, command);
       return reportResult(io, validateProject(root), "Project is valid", "Project validation failed");
     }
 
     if (command === "links") {
+      const root = resolveRoot(cwd, parsed, command);
       return reportResult(io, validateLinks(root), "Links are valid", "Link check failed");
     }
 
     if (command === "continuity") {
+      const root = resolveRoot(cwd, parsed, command);
       return reportResult(io, checkProjectContinuity(root), "Continuity is consistent", "Continuity check failed");
     }
 
@@ -196,7 +198,7 @@ export function runCli(argv, io) {
         io.stderr.write("Usage: story knowledge <character-id> --at <chapter-id> [--path <project>]\n");
         return 1;
       }
-      const entries = knowledgeAtChapter(targetRoot(cwd, parsed), characterId, atChapterId);
+      const entries = knowledgeAtChapter(resolveRoot(cwd, parsed, command), characterId, atChapterId);
       if (entries.length === 0) {
         io.stdout.write(`No recorded knowledge for ${characterId} at ${atChapterId}\n`);
         return 0;
@@ -209,27 +211,32 @@ export function runCli(argv, io) {
     }
 
     if (command === "series") {
+      const root = resolveRoot(cwd, parsed, command);
       const report = seriesReport(root);
       io.stdout.write(formatSeriesReport(report));
       return reportResult(io, report, "Series is consistent", "Series check failed");
     }
 
     if (command === "report") {
-      io.stdout.write(formatProjectReport(projectReport(root), { actionable: Boolean(parsed.options.actionable) }));
+      const root = resolveRoot(cwd, parsed, command);
+      io.stdout.write(formatProjectReport(projectReport(root), { actionable: isTruthy(parsed.options.actionable) }));
       return 0;
     }
 
     if (command === "next") {
+      const root = resolveRoot(cwd, parsed, command);
       io.stdout.write(formatActionReport(projectActions(root)));
       return 0;
     }
 
     if (command === "doctor") {
+      const root = resolveRoot(cwd, parsed, command);
       io.stdout.write(formatDoctorReport(projectActions(root)));
       return 0;
     }
 
     if (command === "migrate") {
+      const root = resolveRoot(cwd, parsed, command);
       const result = migrateProject(root);
       io.stdout.write(result.changed.length === 0
         ? "Project already uses the current schema\n"
@@ -238,7 +245,7 @@ export function runCli(argv, io) {
     }
 
     if (command === "add") {
-      const result = createEntity(targetRoot(cwd, parsed), {
+      const result = createEntity(resolveRoot(cwd, parsed, command), {
         ...parsed.options,
         kind: parsed.positionals[1],
         name: parsed.positionals.slice(2).join(" ")
@@ -248,7 +255,7 @@ export function runCli(argv, io) {
     }
 
     if (command === "rename") {
-      const result = renameEntity(targetRoot(cwd, parsed), {
+      const result = renameEntity(resolveRoot(cwd, parsed, command), {
         ...parsed.options,
         kind: parsed.positionals[1],
         id: parsed.positionals[2],
@@ -259,7 +266,7 @@ export function runCli(argv, io) {
     }
 
     if (command === "remove") {
-      const result = removeEntity(targetRoot(cwd, parsed), {
+      const result = removeEntity(resolveRoot(cwd, parsed, command), {
         ...parsed.options,
         kind: parsed.positionals[1],
         id: parsed.positionals[2]
@@ -269,6 +276,7 @@ export function runCli(argv, io) {
     }
 
     if (command === "reindex") {
+      const root = resolveRoot(cwd, parsed, command);
       const result = reindexProject(root);
       io.stdout.write(result.changed.length === 0
         ? "Registries already up to date\n"
@@ -277,7 +285,8 @@ export function runCli(argv, io) {
     }
 
     if (command === "wordcount") {
-      const result = computeWordCounts(root, { write: Boolean(parsed.options.write) });
+      const root = resolveRoot(cwd, parsed, command);
+      const result = computeWordCounts(root, { write: isTruthy(parsed.options.write) });
       for (const chapter of result.chapters) {
         io.stdout.write(`${chapter.file}: ${chapter.wordCount}\n`);
       }
@@ -286,22 +295,25 @@ export function runCli(argv, io) {
     }
 
     if (command === "export") {
+      const root = resolveRoot(cwd, parsed, command);
       const result = exportManuscript(root, { out: parsed.options.out });
       io.stdout.write(`Exported ${result.chapters} chapters to ${result.outFile}\n`);
       return 0;
     }
 
     if (command === "build") {
+      const root = resolveRoot(cwd, parsed, command);
       const result = buildBook(root, {
         out: parsed.options.out,
         format: parsed.options.format,
-        shunn: Boolean(parsed.options.shunn)
+        shunn: isTruthy(parsed.options.shunn)
       });
       io.stdout.write(`Built ${result.chapters} chapters as ${result.format} to ${result.outFile}\n`);
       return 0;
     }
 
     if (command === "synopsis") {
+      const root = resolveRoot(cwd, parsed, command);
       const result = synopsisBook(root, { pages: parsed.options.pages, out: parsed.options.out });
       if (result.outFile === undefined) {
         io.stdout.write(result.text);
@@ -351,11 +363,38 @@ function isKnownOptionToken(token) {
 }
 
 function addOption(options, key, value) {
+  const stored = BOOLEAN_OPTIONS.has(key) ? normalizeBooleanValue(value) : value;
   if (options[key] === undefined) {
-    options[key] = value;
+    options[key] = stored;
   } else {
-    options[key] = Array.isArray(options[key]) ? options[key].concat(value) : [options[key], value];
+    options[key] = Array.isArray(options[key]) ? options[key].concat(stored) : [options[key], stored];
   }
+}
+
+function normalizeBooleanValue(value) {
+  if (typeof value !== "string") {
+    return Boolean(value);
+  }
+  const lower = value.trim().toLowerCase();
+  if (lower === "false" || lower === "0" || lower === "no" || lower === "off") {
+    return false;
+  }
+  if (lower === "true" || lower === "1" || lower === "yes" || lower === "on") {
+    return true;
+  }
+  return true;
+}
+
+export function isTruthy(value) {
+  const current = Array.isArray(value) ? value[value.length - 1] : value;
+  if (typeof current === "string") {
+    const lower = current.trim().toLowerCase();
+    if (lower === "false" || lower === "0" || lower === "no" || lower === "off" || lower === "") {
+      return false;
+    }
+    return true;
+  }
+  return Boolean(current);
 }
 
 export function parseArgs(argv) {
@@ -397,17 +436,7 @@ export function parseArgs(argv) {
       continue;
     }
 
-    const nextValue = argv[index + 1];
-    const hasSeparateValue = inlineValue === undefined
-      && nextValue !== undefined
-      && !nextValue.startsWith("-");
-    const value = inlineValue ?? (hasSeparateValue ? nextValue : true);
-
-    if (hasSeparateValue) {
-      index += 1;
-    }
-
-    addOption(options, key, value);
+    throw new Error(`Unknown option --${key}`);
   }
 
   return { positionals, options };
@@ -420,25 +449,46 @@ function collectThemes(options) {
     .filter((value) => value !== undefined && value !== true);
 }
 
-function targetRoot(cwd, parsed) {
-  return path.resolve(cwd, parsed.options.path ?? ".");
+const PATH_POSITIONAL_COMMANDS = new Set([
+  "validate", "links", "continuity", "series", "report", "next",
+  "doctor", "migrate", "reindex", "wordcount", "export", "build", "synopsis"
+]);
+
+function lastOptionValue(value) {
+  return Array.isArray(value) ? value[value.length - 1] : value;
+}
+
+export function resolveRoot(cwd, parsed, command) {
+  const flagPath = lastOptionValue(parsed.options.path);
+  if (!PATH_POSITIONAL_COMMANDS.has(command)) {
+    return path.resolve(cwd, flagPath ?? ".");
+  }
+  const positionalPath = parsed.positionals[1];
+  if (positionalPath !== undefined && flagPath !== undefined) {
+    const resolvedPositional = path.resolve(cwd, positionalPath);
+    const resolvedFlag = path.resolve(cwd, flagPath);
+    if (resolvedPositional !== resolvedFlag) {
+      throw new Error(`Conflicting project paths: ${positionalPath} and --path ${flagPath}. Use either a positional path or --path, not both.`);
+    }
+    return resolvedFlag;
+  }
+  return path.resolve(cwd, flagPath ?? positionalPath ?? ".");
 }
 
 function reportResult(io, result, successMessage, failureMessage) {
-  const output = result.ok ? io.stdout : io.stderr;
   const dismissed = result.dismissed ?? [];
-  output.write(`${result.ok ? successMessage : failureMessage}: ${result.errors.length} errors, ${result.warnings.length} warnings, ${dismissed.length} dismissed\n`);
+  io.stderr.write(`${result.ok ? successMessage : failureMessage}: ${result.errors.length} errors, ${result.warnings.length} warnings, ${dismissed.length} dismissed\n`);
 
   for (const error of result.errors) {
     io.stderr.write(`error: ${error}\n`);
   }
 
   for (const warning of result.warnings) {
-    output.write(`warning: ${warning}\n`);
+    io.stderr.write(`warning: ${warning}\n`);
   }
 
   for (const entry of dismissed) {
-    io.stdout.write(`dismissed: ${entry.finding} (exemption: ${entry.reason})\n`);
+    io.stderr.write(`dismissed: ${entry.finding} (exemption: ${entry.reason})\n`);
   }
 
   return result.ok ? 0 : 1;

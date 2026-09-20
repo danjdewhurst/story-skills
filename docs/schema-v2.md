@@ -52,7 +52,7 @@ Optional series fields link sequels, prequels, and companion books kept as separ
 - `follows` - list of paths, relative to this book's root, to books set earlier in the chronology
 - `precedes` - list of paths to books set later in the chronology
 
-Optional craft fields:
+Optional craft fields (hand-edit only — no CLI flags; edit `story.md` directly):
 
 - `premise` - working controlling idea, one sentence of value + cause (e.g. "justice triumphs because the hero outsmarts the system"). Draft it early, audit it during revision.
 - `counter-premise` - the antagonist's embodied counter-argument to the premise.
@@ -76,7 +76,7 @@ Optional freeform scalar: `arc`, a short theme label for the character's persona
 
 `status: cut` keeps the file for a character removed in discovery drafting; the character stays out of canon but remains on record with a reason.
 
-Optional arc-craft fields:
+Optional arc-craft fields (hand-edit only — no CLI flags; edit the character file directly):
 
 - `arc-type` - `change-positive` (lie → truth), `change-negative` (clings to the lie and spirals), or `flat` (holds their truth under pressure while the world changes; turning points are tests of steadfastness, not growth beats)
 - `lie` - the character's false belief, generating flaw, fear, and wants
@@ -138,7 +138,7 @@ Promises require `title` and `status`; optional chapter references are `planted`
 
 Clues require `title` and `status`; optional chapter references are `planted` and `payoff`, plus optional `arcs` and `characters` lists. `significance-delayed: true` marks a clue whose meaning only lands later. `story continuity` reuses the promise-ordering machinery on clues: payoff before plant is an error, a clue planted three or more chapters ago with no payoff is a warning, and a story marked `complete` with `planned`/`planted` clues is an error. Create them with `story add clue "Name" --planted chapter-02 --payoff chapter-05`.
 
-`continuity/exemptions.md` is an optional decision log (frontmatter `type: exemption-log`). Each entry has a `pattern` (matched as a substring against finding text) and a `reason` recording why the finding is intentional. `story continuity` reports exempted findings as dismissed, not errors.
+`continuity/exemptions.md` is an optional decision log (frontmatter `type: exemption-log`). Each entry has a `pattern` (matched as a substring against finding text; minimum 4 non-blank characters so a 1–3 character pattern cannot blanket-exempt whole finding classes) and a `reason` recording why the finding is intentional. `story continuity` reports exempted findings as dismissed, not errors.
 
 Prop custody: `object-state` entries for destroyed or lost artifacts should record `since: chapter-NN`, the chapter of destruction or loss. `story continuity` then errors when a later scene references the artifact in `state-changes` or lists it in `mentions`. Without `since`, custody cannot be checked and a warning is reported.
 
@@ -149,6 +149,27 @@ Clock and time: `story continuity` checks timestamps only when scenes or chapter
 ### Glossary
 
 Glossary terms require `term` and `category`, plus optional `aliases`.
+
+## CLI Flag Values
+
+`story add` validates `--role`, `--type`, `--status`, and `--category` against the same sets as `story validate` (see `src/story.js`). Accepted values:
+
+- `--role` (character): `protagonist`, `antagonist`, `supporting`, `minor`, `narrator`, `deuteragonist`
+- `--type` (faction): `family`, `guild`, `government`, `military`, `religion`, `company`, `community`, `criminal`, `other`
+- `--type` (artifact): `object`, `weapon`, `document`, `technology`, `relic`, `symbol`, `resource`, `other`
+- `--type` (arc): `main`, `subplot`, `character`, `thematic`
+- `--type` (location, system): free-form text (defaults to `other` / `uncommon` prevalence for systems)
+- `--status` (story): `planning`, `drafting`, `in-progress`, `revising`, `complete`, `abandoned`
+- `--status` (character): `alive`, `deceased`, `unknown`, `missing`, `cut`
+- `--status` (faction): `active`, `hidden`, `declining`, `defeated`, `disbanded`, `unknown`
+- `--status` (artifact): `active`, `lost`, `destroyed`, `hidden`, `transferred`, `unknown`
+- `--status` (arc): `planned`, `in-progress`, `resolved`
+- `--status` (chapter, scene): `outline`, `draft`, `revised`, `final`, `complete`
+- `--status` (question): `open`, `answered`, `resolved`, `dropped`, `abandoned`
+- `--status` (promise, clue): `planned`, `planted`, `paid-off`, `dropped`, `abandoned`
+- `--category` (term): `person`, `place`, `faction`, `artifact`, `concept`, `term`, `other`
+
+`story init` accepts `--sub-genre <name>` and `--setting-era <name>` (free-form text, e.g. `--sub-genre coastal --setting-era near-future`). They are stored as `sub-genre` (default `general`) and `setting-era` (default `unspecified`) in `story.md` and shown in `story report` as `Genre: <genre> / <sub-genre>`.
 
 ## Migration
 
