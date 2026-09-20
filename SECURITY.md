@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-The latest release tag on the `main` branch (currently the `v0.5.x` series)
+The latest release tag on the `main` branch
 is supported. Older tags are supported on a best-effort basis — please
 upgrade and confirm the issue reproduces on `main` before reporting.
 

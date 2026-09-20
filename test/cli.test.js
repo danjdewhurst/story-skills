@@ -105,9 +105,24 @@ describe("cli", () => {
     expect(parseArgs(["build", ".", "--shunn=true"]).options).toEqual({ shunn: true });
   });
 
-  test("treats unrecognized --flag=value strings as true", () => {
-    expect(parseArgs(["init", "A", "--force=maybe"]).options).toEqual({ force: true });
+  test("rejects unrecognized --flag=value strings", () => {
+    expect(() => parseArgs(["init", "A", "--force=maybe"])).toThrow('Unknown value "maybe" for --force');
     expect(parseArgs(["init", "A", "--force=yes"]).options).toEqual({ force: true });
+  });
+
+  test("consumes space-separated boolean literals without swallowing positionals", () => {
+    expect(parseArgs(["init", "A", "--force", "false"])).toEqual({
+      positionals: ["init", "A"],
+      options: { force: false }
+    });
+    expect(parseArgs(["init", "A", "--force", "off"])).toEqual({
+      positionals: ["init", "A"],
+      options: { force: false }
+    });
+    expect(parseArgs(["wordcount", "--write", "my-story"])).toEqual({
+      positionals: ["wordcount", "my-story"],
+      options: { write: true }
+    });
   });
 
   test("isTruthy coerces strings, arrays, and misc values", () => {

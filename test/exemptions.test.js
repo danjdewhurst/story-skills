@@ -147,6 +147,16 @@ planted: chapter-01
     expect(result.err).toContain("Continuity check failed: 1 errors, 0 warnings, 0 dismissed");
   });
 
+  test("cli ignores sub-minimum exemption patterns at runtime", () => {
+    const { root, cwd } = exemptionProject();
+    writeExemptions(root, [{ pattern: "ed", reason: "Too short to take effect" }]);
+    const result = invoke(cwd, ["continuity", root]);
+    expect(result.code).toBe(1);
+    expect(result.err).toContain("Continuity check failed: 1 errors, 0 warnings, 0 dismissed");
+    expect(result.err).not.toContain("dismissed: ");
+    expect(validateProject(root).errors.join("\n")).toContain("at least 4 characters");
+  });
+
   test("cli prints dismissed lines to stderr even when errors remain", () => {
     const { root, cwd } = exemptionProject();
     for (const number of [3, 4]) {

@@ -36,6 +36,19 @@ export function checkSkillFrontmatter(failures, skillsDir, readFile) {
   return failures;
 }
 
+export function checkTemplateStoryRef(failures, packageVersion, templatesDir, readFile) {
+  for (const name of ["story-checks.yml", "draft-next-chapter.yml"]) {
+    const text = readFile(path.join(templatesDir, name));
+    const match = /STORY_REF:\s*"([^"]+)"/.exec(text);
+    if (!match) {
+      failures.push(`templates/github/${name} is missing STORY_REF`);
+      continue;
+    }
+    expectEqual(failures, `templates/github/${name} STORY_REF`, `v${packageVersion}`, match[1]);
+  }
+  return failures;
+}
+
 export function checkMarketplaces({ packageName, packageVersion, claudeMarketplace, agentsMarketplace, exists }) {
   const failures = [];
 
@@ -118,6 +131,10 @@ function main() {
   }
 
   checkSkillFrontmatter(failures, path.join(repoRoot, "skills"), (filePath) => fs.readFileSync(filePath, "utf8"));
+
+  checkTemplateStoryRef(failures, packageJson.version, path.join(repoRoot, "templates", "github"), (filePath) =>
+    fs.readFileSync(filePath, "utf8")
+  );
 
   const marketplaceFailures = checkMarketplaces({
     packageName: packageJson.name,

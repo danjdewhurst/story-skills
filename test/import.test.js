@@ -175,6 +175,26 @@ describe("import source hardening", () => {
     expect(() => importManuscript({ source: "drafts", title: "Linked Dir", cwd })).toThrow("symlinked source");
   });
 
+  test("skips directory symlinks instead of aborting the import", () => {
+    const cwd = makeTempDir();
+    const dir = path.join(cwd, "drafts");
+    fs.mkdirSync(dir);
+    fs.writeFileSync(path.join(dir, "a.md"), "## Chapter 1: Real\n\nReal body.\n", "utf8");
+    const realSub = path.join(cwd, "real-sub");
+    fs.mkdirSync(realSub);
+    fs.writeFileSync(path.join(realSub, "z.md"), "Hidden body.\n", "utf8");
+    try {
+      fs.symlinkSync(realSub, path.join(dir, "sub"));
+    } catch {
+      console.warn("Skipping directory-symlink import test: symlinks unavailable.");
+      return;
+    }
+    fs.symlinkSync(path.join(dir, "missing.md"), path.join(dir, "dead.md"));
+    const result = importManuscript({ source: "drafts", title: "Skipped Link", cwd });
+    expect(result.chapters).toBe(1);
+    expect(scanProject(result.root).chapters.map((chapter) => chapter.title)).toEqual(["Real"]);
+  });
+
   test("rejects oversized import files", () => {
     const cwd = makeTempDir();
     fs.writeFileSync(path.join(cwd, "huge.md"), "x".repeat(6 * 1024 * 1024), "utf8");

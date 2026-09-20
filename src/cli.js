@@ -363,7 +363,7 @@ function isKnownOptionToken(token) {
 }
 
 function addOption(options, key, value) {
-  const stored = BOOLEAN_OPTIONS.has(key) ? normalizeBooleanValue(value) : value;
+  const stored = BOOLEAN_OPTIONS.has(key) ? normalizeBooleanValue(key, value) : value;
   if (options[key] === undefined) {
     options[key] = stored;
   } else {
@@ -371,7 +371,7 @@ function addOption(options, key, value) {
   }
 }
 
-function normalizeBooleanValue(value) {
+function normalizeBooleanValue(key, value) {
   if (typeof value !== "string") {
     return Boolean(value);
   }
@@ -382,7 +382,7 @@ function normalizeBooleanValue(value) {
   if (lower === "true" || lower === "1" || lower === "yes" || lower === "on") {
     return true;
   }
-  return true;
+  throw new Error(`Unknown value "${value}" for --${key}: expected true or false`);
 }
 
 export function isTruthy(value) {
@@ -395,6 +395,10 @@ export function isTruthy(value) {
     return true;
   }
   return Boolean(current);
+}
+
+function isBooleanLiteralToken(token) {
+  return typeof token === "string" && /^(true|false|0|1|yes|no|on|off)$/i.test(token);
 }
 
 export function parseArgs(argv) {
@@ -418,7 +422,19 @@ export function parseArgs(argv) {
     const inlineValue = equalIndex === -1 ? undefined : arg.slice(equalIndex + 1);
 
     if (BOOLEAN_OPTIONS.has(key)) {
-      addOption(options, key, inlineValue ?? true);
+      if (inlineValue !== undefined) {
+        addOption(options, key, inlineValue);
+        continue;
+      }
+      // Accept a space-separated boolean literal (`--force false`) so it is
+      // not mistaken for a positional; anything else stays positional.
+      const nextToken = argv[index + 1];
+      if (isBooleanLiteralToken(nextToken)) {
+        addOption(options, key, nextToken);
+        index += 1;
+        continue;
+      }
+      addOption(options, key, true);
       continue;
     }
 

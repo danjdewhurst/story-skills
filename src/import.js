@@ -121,7 +121,22 @@ function readSourceDocuments(source) {
   const names = [];
   for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
     const fullPath = path.join(source, entry.name);
-    rejectSymlinkedSource(fullPath);
+    if (fs.lstatSync(fullPath).isSymbolicLink()) {
+      // Never follow symlinks during import. A symlink that resolves to an
+      // importable document is rejected loudly; anything else (subdirectory
+      // links, dangling links) is skipped so stray links cannot block a
+      // safe import.
+      let targetIsDocument = false;
+      try {
+        targetIsDocument = fs.statSync(fullPath).isFile();
+      } catch {
+        targetIsDocument = false;
+      }
+      if (targetIsDocument && /\.(md|markdown|txt)$/i.test(entry.name)) {
+        rejectSymlinkedSource(fullPath);
+      }
+      continue;
+    }
     if (entry.isFile() && /\.(md|markdown|txt)$/i.test(entry.name)) {
       names.push(entry.name);
     }

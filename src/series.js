@@ -143,6 +143,12 @@ export function formatSeriesReport(report) {
 function discoverBooks(startRoot, scan, errors) {
   const startResolved = path.resolve(startRoot);
   const scopeRoot = path.dirname(startResolved);
+  let scopeReal = scopeRoot;
+  try {
+    scopeReal = fs.realpathSync(scopeRoot);
+  } catch {
+    scopeReal = scopeRoot;
+  }
   const visited = new Map();
   const queue = [{ root: startResolved, depth: 0 }];
   while (queue.length > 0) {
@@ -156,7 +162,16 @@ function discoverBooks(startRoot, scan, errors) {
     }
 
     const label = seriesLinkPath(startRoot, root) || '.';
-    if (!isPathInside(scopeRoot, path.resolve(root))) {
+    const resolved = path.resolve(root);
+    // Resolve symlinks so a link that is lexically inside the scope but
+    // points outside cannot escape traversal confinement.
+    let effective = resolved;
+    try {
+      effective = fs.realpathSync(resolved);
+    } catch {
+      effective = resolved;
+    }
+    if (!isPathInside(scopeRoot, resolved) || !isPathInside(scopeReal, effective)) {
       errors.push(label + ' points outside the series directory ' + scopeRoot + '; refusing to follow');
       visited.set(root, null);
       continue;
