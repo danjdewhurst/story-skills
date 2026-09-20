@@ -23,7 +23,10 @@
         "premise": { "type": "string" },
         "counter-premise": { "type": "string" },
         "author": { "type": "string" },
-        "contact": { "type": "array", "items": { "type": "string" } }
+        "contact": { "type": "array", "items": { "type": "string" } },
+        "season-goal": { "type": "string" },
+        "target-words": { "type": "integer", "minimum": 1 },
+        "draft-mode": { "type": "string" }
       }
     },
     "characters": { "type": "array", "items": { "$ref": "#/$defs/character" } },
@@ -138,7 +141,9 @@
         "locations": { "$ref": "#/$defs/stringList" },
         "mode": { "type": "string" },
         "date": { "type": "string" },
-        "time": { "type": "string" }
+        "time": { "type": "string" },
+        "episode-question": { "type": "string" },
+        "time-skip": { "type": "string" }
       }
     },
     "scene": {
@@ -156,7 +161,8 @@
         "time": { "type": "string" },
         "travel-hours": { "type": "number" },
         "sequel": { "type": "boolean" },
-        "dilemma": { "type": "string" }
+        "dilemma": { "type": "string" },
+        "flashback-to": { "type": "string" }
       }
     },
     "question": {
@@ -190,7 +196,7 @@
       "properties": {
         "id": { "$ref": "#/$defs/id" },
         "title": { "type": "string" },
-        "status": { "enum": ["planned", "planted", "paid-off", "dropped"] },
+        "status": { "enum": ["planned", "planted", "paid-off", "dropped", "abandoned"] },
         "planted": { "type": "string" },
         "payoff": { "type": "string" },
         "significance-delayed": { "type": "boolean" },

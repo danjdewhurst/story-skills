@@ -85,6 +85,12 @@ Options:
   --type <name>             Entity type for add
   --role <name>             Character role for add character
   --status <name>           Entity status for add
+  --mode <name>             Mode for add chapter (e.g. discovered)
+  --date <date>             Story date (YYYY-MM-DD) for add chapter/scene
+  --time <time>             Story time for add chapter/scene
+  --travel-hours <n>        Travel hours for add scene
+  --dilemma <text>          Dilemma for add scene sequel unit
+  --sequel                  Mark scene as sequel unit for add scene
   --location <id>           Location reference for add
   --character <id>          Character reference for add; repeatable
   --mention <id>            Mentioned character for add chapter/scene; repeatable

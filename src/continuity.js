@@ -217,6 +217,9 @@ function checkStoryCompletion(project, errors) {
 
 function checkClues(project, context, errors, warnings) {
   for (const clue of project.clues) {
+    if (clue.status === "abandoned") {
+      continue;
+    }
     const label = relative(project, clue.file);
     const plantedNumber = context.chapterNumbers.get(clue.planted);
     const payoffNumber = context.chapterNumbers.get(clue.payoff);

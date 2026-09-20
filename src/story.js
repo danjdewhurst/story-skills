@@ -59,7 +59,7 @@ const ARTIFACT_TYPES = new Set(["object", "weapon", "document", "technology", "r
 const ARTIFACT_STATUSES = new Set(["active", "lost", "destroyed", "hidden", "transferred", "unknown"]);
 const QUESTION_STATUSES = new Set(["open", "answered", "resolved", "dropped", "abandoned"]);
 const PROMISE_STATUSES = new Set(["planned", "planted", "paid-off", "dropped", "abandoned"]);
-const CLUE_STATUSES = new Set(["planned", "planted", "paid-off", "dropped"]);
+const CLUE_STATUSES = new Set(["planned", "planted", "paid-off", "dropped", "abandoned"]);
 const TERM_CATEGORIES = new Set(["person", "place", "faction", "artifact", "concept", "term", "other"]);
 
 const RELATIONSHIP_INVERSES = new Map([
@@ -314,7 +314,8 @@ export function scanProject(root) {
       time: String(data.time ?? ""),
       travelHours: typeof data["travel-hours"] === "number" ? data["travel-hours"] : 0,
       sequel: typeof data.sequel === "boolean" ? data.sequel : false,
-      dilemma: String(data.dilemma ?? "")
+      dilemma: String(data.dilemma ?? ""),
+      flashbackTo: String(data["flashback-to"] ?? "")
     }), scanErrors).sort((left, right) => left.chapter.localeCompare(right.chapter) || left.scene - right.scene || left.file.localeCompare(right.file)),
     questions: readEntityFiles(projectRoot, path.join("continuity", "questions"), (id, file, data) => ({
       id,
@@ -690,6 +691,7 @@ function checkBodyLinkTarget(project, label, target, errors) {
     ...project.scenes.map((item) => item.id),
     ...project.questions.map((item) => item.id),
     ...project.promises.map((item) => item.id),
+    ...project.clues.map((item) => item.id),
     ...project.glossaryTerms.map((item) => item.id)
   ]);
   if (!known.has(id)) {
@@ -2746,6 +2748,7 @@ const ENTITY_SCAN_DIRS = [
   path.join("plot", "arcs"),
   path.join("continuity", "questions"),
   path.join("continuity", "promises"),
+  path.join("continuity", "clues"),
   path.join("glossary", "terms")
 ];
 
@@ -2964,6 +2967,15 @@ function validateStoryFrontmatter(project, errors) {
   }
   validateStringArray(data, "follows", "story.md", errors);
   validateStringArray(data, "precedes", "story.md", errors);
+  if (data["season-goal"] !== undefined) {
+    requireScalar(data, "season-goal", "story.md", errors);
+  }
+  if (data["target-words"] !== undefined) {
+    requireInteger(data, "target-words", "story.md", errors);
+  }
+  if (data["draft-mode"] !== undefined) {
+    requireScalar(data, "draft-mode", "story.md", errors);
+  }
 
   if (data["schema-version"] !== undefined && data["schema-version"] !== STORY_SCHEMA_VERSION) {
     errors.push(`story.md schema-version must be ${STORY_SCHEMA_VERSION}`);
@@ -3152,6 +3164,12 @@ function validateChapters(project, errors) {
     if (data.mode !== undefined) {
       requireScalar(data, "mode", label, errors);
     }
+    if (data["episode-question"] !== undefined) {
+      requireScalar(data, "episode-question", label, errors);
+    }
+    if (data["time-skip"] !== undefined) {
+      requireScalar(data, "time-skip", label, errors);
+    }
 
     if (filenameNumber === 0) {
       errors.push(`${label} filename must match chapter-{NN}.md`);
@@ -3213,6 +3231,9 @@ function validateScenes(project, errors) {
     }
     if (data.sequel !== undefined && typeof data.sequel !== "boolean") {
       errors.push(`${label} frontmatter field sequel must be a boolean`);
+    }
+    if (data["flashback-to"] !== undefined) {
+      requireScalar(data, "flashback-to", label, errors);
     }
     if (Number.isInteger(data.scene) && data.scene <= 0) {
       errors.push(`${label} scene must be greater than 0`);
@@ -3358,6 +3379,8 @@ function validateExemptions(project, errors) {
     }
     if (typeof entry.pattern !== "string" || entry.pattern.trim() === "") {
       errors.push(`${entryLabel} is missing a non-empty pattern`);
+    } else if (entry.pattern.trim().length < 4) {
+      errors.push(`${entryLabel} pattern must be at least 4 characters to avoid blanket exemptions`);
     }
     if (typeof entry.reason !== "string" || entry.reason.trim() === "") {
       errors.push(`${entryLabel} is missing a non-empty reason`);
