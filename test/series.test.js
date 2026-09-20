@@ -338,6 +338,40 @@ describe("series traversal limits", () => {
     expect(report.errors.join("\n")).toContain("points outside the series directory");
   });
 
+  test("refuses links that escape the scope through a symlink", () => {
+    const cwd = makeTempDir();
+    const root = book(cwd, "Linked");
+    const outside = makeTempDir();
+    const outsideBook = createStoryProject({ title: "Far Away", cwd: outside }).root;
+    try {
+      fs.symlinkSync(outsideBook, path.join(cwd, "sneaky"), "dir");
+    } catch {
+      console.warn("Skipping series symlink test: symlinks unavailable.");
+      return;
+    }
+    setStory(root, { follows: ["../sneaky"] });
+    const report = seriesReport(root);
+    expect(report.ok).toBe(false);
+    expect(report.errors.join("\n")).toContain("points outside the series directory");
+  });
+
+  test("series scope check falls back to lexical paths when realpath fails", () => {
+    const cwd = makeTempDir();
+    const root = book(cwd, "Scoped");
+    const originalRealpath = fs.realpathSync;
+    fs.realpathSync = (target) => {
+      if (target === cwd) {
+        throw new Error("EIO: simulated realpath failure");
+      }
+      return originalRealpath(target);
+    };
+    try {
+      expect(seriesReport(root).ok).toBe(true);
+    } finally {
+      fs.realpathSync = originalRealpath;
+    }
+  });
+
   test("caps traversal depth on long chains", () => {
     const cwd = makeTempDir();
     let previous = null;

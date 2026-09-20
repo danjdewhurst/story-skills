@@ -80,3 +80,4 @@ Use:
 - Fix broken references, missing required files, stale registries, or incorrect word counts when the requested task implies doing so.
 - Do not overwrite creative prose or story content merely to satisfy a mechanical check.
 - If a validation warning reflects intentional user data, report it rather than silently changing it.
+- If `story reindex` fails on a corrupt `plot/_index.md`, do not hand-edit story content to work around it: restore the index frontmatter from git, or delete `plot/_index.md` so reindex rebuilds it, then rerun.

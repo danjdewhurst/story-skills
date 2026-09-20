@@ -2761,7 +2761,10 @@ function readExemptions(root) {
     const pattern = entry && typeof entry === "object" && !Array.isArray(entry)
       ? String(entry.pattern ?? "").trim()
       : "";
-    if (pattern === "") {
+    // Mirror the validate floor: sub-minimum patterns never take effect at
+    // runtime, so a short pattern cannot blanket-exempt findings. validate
+    // still reports the entry as an error so the user removes or extends it.
+    if (pattern === "" || pattern.length < 4) {
       continue;
     }
     exemptions.push({ pattern, reason: String(entry.reason ?? "") });

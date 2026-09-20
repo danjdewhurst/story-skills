@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { checkCoverage, parseLcov } from "../scripts/check-coverage.js";
 import { collectResult, compareFindings } from "../scripts/check-examples.js";
-import { checkMarketplaces, checkSkillFrontmatter, expectEqual } from "../scripts/check-metadata.js";
+import { checkMarketplaces, checkSkillFrontmatter, checkTemplateStoryRef, expectEqual } from "../scripts/check-metadata.js";
 import { PREFLIGHT } from "../scripts/release.js";
 
 const repoRoot = path.resolve(import.meta.dir, "..");
@@ -275,6 +275,22 @@ describe("github workflows", () => {
         expect(template).toContain(command);
       }
     }
+  });
+
+  test("story templates pin STORY_REF to the package version", () => {
+    const packageJson = JSON.parse(readRepo("package.json"));
+    const failures = checkTemplateStoryRef([], packageJson.version, path.join(repoRoot, "templates", "github"), (filePath) =>
+      fs.readFileSync(filePath, "utf8")
+    );
+    expect(failures).toEqual([]);
+  });
+
+  test("checkTemplateStoryRef flags missing and stale refs", () => {
+    const readFile = (filePath) => (filePath.endsWith("story-checks.yml") ? 'STORY_REF: "v9.9.9"\n' : "no ref here\n");
+    expect(checkTemplateStoryRef([], "0.5.0", "/templates", readFile)).toEqual([
+      "templates/github/story-checks.yml STORY_REF mismatch: expected v0.5.0, got v9.9.9",
+      "templates/github/draft-next-chapter.yml is missing STORY_REF"
+    ]);
   });
 
   test("dependabot keeps pinned actions updated", () => {

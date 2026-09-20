@@ -845,6 +845,12 @@ function formatSeriesReport(report) {
 function discoverBooks(startRoot, scan, errors) {
   const startResolved = path2.resolve(startRoot);
   const scopeRoot = path2.dirname(startResolved);
+  let scopeReal = scopeRoot;
+  try {
+    scopeReal = fs.realpathSync(scopeRoot);
+  } catch {
+    scopeReal = scopeRoot;
+  }
   const visited = new Map;
   const queue = [{ root: startResolved, depth: 0 }];
   while (queue.length > 0) {
@@ -857,7 +863,14 @@ function discoverBooks(startRoot, scan, errors) {
       continue;
     }
     const label = seriesLinkPath(startRoot, root) || ".";
-    if (!isPathInside(scopeRoot, path2.resolve(root))) {
+    const resolved = path2.resolve(root);
+    let effective = resolved;
+    try {
+      effective = fs.realpathSync(resolved);
+    } catch {
+      effective = resolved;
+    }
+    if (!isPathInside(scopeRoot, resolved) || !isPathInside(scopeReal, effective)) {
       errors.push(label + " points outside the series directory " + scopeRoot + "; refusing to follow");
       visited.set(root, null);
       continue;
@@ -3545,7 +3558,7 @@ function readExemptions(root) {
   const exemptions = [];
   for (const entry of data.exemptions) {
     const pattern = entry && typeof entry === "object" && !Array.isArray(entry) ? String(entry.pattern ?? "").trim() : "";
-    if (pattern === "") {
+    if (pattern === "" || pattern.length < 4) {
       continue;
     }
     exemptions.push({ pattern, reason: String(entry.reason ?? "") });
@@ -4446,7 +4459,18 @@ function readSourceDocuments(source) {
   const names = [];
   for (const entry of fs3.readdirSync(source, { withFileTypes: true })) {
     const fullPath = path4.join(source, entry.name);
-    rejectSymlinkedSource(fullPath);
+    if (fs3.lstatSync(fullPath).isSymbolicLink()) {
+      let targetIsDocument = false;
+      try {
+        targetIsDocument = fs3.statSync(fullPath).isFile();
+      } catch {
+        targetIsDocument = false;
+      }
+      if (targetIsDocument && /\.(md|markdown|txt)$/i.test(entry.name)) {
+        rejectSymlinkedSource(fullPath);
+      }
+      continue;
+    }
     if (entry.isFile() && /\.(md|markdown|txt)$/i.test(entry.name)) {
       names.push(entry.name);
     }
@@ -4925,14 +4949,14 @@ function isKnownOptionToken(token) {
   return key === "help" || BOOLEAN_OPTIONS.has(key) || VALUE_OPTIONS.has(key);
 }
 function addOption(options, key, value) {
-  const stored = BOOLEAN_OPTIONS.has(key) ? normalizeBooleanValue(value) : value;
+  const stored = BOOLEAN_OPTIONS.has(key) ? normalizeBooleanValue(key, value) : value;
   if (options[key] === undefined) {
     options[key] = stored;
   } else {
     options[key] = Array.isArray(options[key]) ? options[key].concat(stored) : [options[key], stored];
   }
 }
-function normalizeBooleanValue(value) {
+function normalizeBooleanValue(key, value) {
   if (typeof value !== "string") {
     return Boolean(value);
   }
@@ -4943,7 +4967,7 @@ function normalizeBooleanValue(value) {
   if (lower === "true" || lower === "1" || lower === "yes" || lower === "on") {
     return true;
   }
-  return true;
+  throw new Error(`Unknown value "${value}" for --${key}: expected true or false`);
 }
 function isTruthy(value) {
   const current = Array.isArray(value) ? value[value.length - 1] : value;
@@ -4955,6 +4979,9 @@ function isTruthy(value) {
     return true;
   }
   return Boolean(current);
+}
+function isBooleanLiteralToken(token) {
+  return typeof token === "string" && /^(true|false|0|1|yes|no|on|off)$/i.test(token);
 }
 function parseArgs(argv) {
   const positionals = [];
@@ -4973,7 +5000,17 @@ function parseArgs(argv) {
     const key = arg.slice(2, equalIndex === -1 ? undefined : equalIndex);
     const inlineValue = equalIndex === -1 ? undefined : arg.slice(equalIndex + 1);
     if (BOOLEAN_OPTIONS.has(key)) {
-      addOption(options, key, inlineValue ?? true);
+      if (inlineValue !== undefined) {
+        addOption(options, key, inlineValue);
+        continue;
+      }
+      const nextToken = argv[index + 1];
+      if (isBooleanLiteralToken(nextToken)) {
+        addOption(options, key, nextToken);
+        index += 1;
+        continue;
+      }
+      addOption(options, key, true);
       continue;
     }
     if (VALUE_OPTIONS.has(key)) {

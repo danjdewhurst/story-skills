@@ -1726,7 +1726,7 @@ status: alive
     expect(() => renameEntity(root, { kind: "character", id: "many-char", name: "Many Char Two" })).toThrow("exceeds the 5000 file limit");
   });
 
-  test("scan tolerates files that vanish between listing and reading", () => {
+  test("scan tolerates size-stat failures during project scan", () => {
     const cwd = makeTempDir();
     const root = createStoryProject({ title: "Gone", cwd }).root;
     const originalStatSync = fs.statSync;
