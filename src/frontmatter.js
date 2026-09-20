@@ -27,6 +27,9 @@ export function stringifyFrontmatter(data) {
       for (const item of value) {
         if (isPlainObject(item)) {
           const entries = Object.entries(item);
+          if (entries.length === 0) {
+            throw new Error('Cannot stringify empty mapping in ' + key);
+          }
           const [firstKey, firstValue] = entries[0];
           lines.push(`  - ${firstKey}: ${formatScalar(firstValue)}`);
           for (const [childKey, childValue] of entries.slice(1)) {
@@ -56,7 +59,7 @@ export function replaceFrontmatter(markdown, data) {
 
 function parseYaml(source) {
   const lines = source.split(/\r?\n/);
-  const data = {};
+  const data = Object.create(null);
 
   for (let index = 0; index < lines.length;) {
     const line = lines[index];
@@ -91,7 +94,30 @@ function parseYaml(source) {
     index = parsed.nextIndex;
   }
 
-  return data;
+  return toPlainObject(data);
+}
+
+function toPlainObject(value) {
+  if (Array.isArray(value)) {
+    return value.map(toPlainObject);
+  }
+  if (value !== null && typeof value === "object") {
+    const out = {};
+    for (const [key, entry] of Object.entries(value)) {
+      if (key === "__proto__") {
+        Object.defineProperty(out, key, {
+          value: toPlainObject(entry),
+          enumerable: true,
+          configurable: true,
+          writable: true
+        });
+      } else {
+        out[key] = toPlainObject(entry);
+      }
+    }
+    return out;
+  }
+  return value;
 }
 
 function parseArray(lines, startIndex) {
@@ -112,9 +138,8 @@ function parseArray(lines, startIndex) {
       continue;
     }
 
-    const item = {
-      [objectMatch[1]]: parseScalar(objectMatch[2])
-    };
+    const item = Object.create(null);
+    item[objectMatch[1]] = parseScalar(objectMatch[2]);
     index += 1;
 
     while (index < lines.length) {
@@ -177,7 +202,7 @@ function parseScalar(value) {
 }
 
 function formatScalar(value) {
-  if (typeof value === "number") {
+  if (typeof value === "number" || typeof value === "boolean") {
     return String(value);
   }
 
@@ -186,7 +211,7 @@ function formatScalar(value) {
   }
 
   const text = String(value);
-  if (text === "" || text === "[]" || /^-?\d+(\.\d+)?$/.test(text) || /^\s|\s$/.test(text) || /[:#\n"']/.test(text)) {
+  if (text === '' || text === '[]' || /^(true|false|null|-?\d+(\.\d+)?)$/.test(text) || /^\s|\s$/.test(text) || /[:#\n"']/.test(text)) {
     return JSON.stringify(text);
   }
 

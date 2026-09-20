@@ -7,8 +7,14 @@
 #
 # If your story project lives in a subdirectory, change STORY_DIR.
 #
-# The Story CLI runs straight from GitHub; switch the npx --package value
-# to story-skills once the package is published to the npm registry.
+# The Story CLI runs straight from GitHub, pinned to the STORY_REF tag below;
+# bump STORY_REF when you adopt a newer story-skills release. (There is no
+# npm-published package yet; switch the npx --package value to story-skills
+# once the package is published to the npm registry.)
+#
+# Actions are pinned to commit SHAs with their moving tags in comments, so a
+# compromised tag cannot silently change what this workflow runs. Dependabot
+# (github-actions ecosystem) proposes SHA updates.
 
 name: Story checks
 
@@ -17,29 +23,33 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 env:
   STORY_DIR: "."
+  STORY_REF: "v0.5.0"
 
 jobs:
   story-checks:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Set up Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24
 
       - name: Validate structure, frontmatter, and registries
-        run: npx --yes --package github:danjdewhurst/story-skills story validate "$STORY_DIR"
+        run: npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story validate "$STORY_DIR"
 
       - name: Check cross-references and backlinks
-        run: npx --yes --package github:danjdewhurst/story-skills story links "$STORY_DIR"
+        run: npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story links "$STORY_DIR"
 
       - name: Check continuity contracts
-        run: npx --yes --package github:danjdewhurst/story-skills story continuity "$STORY_DIR"
+        run: npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story continuity "$STORY_DIR"
 
       - name: Report project health
-        run: npx --yes --package github:danjdewhurst/story-skills story report "$STORY_DIR" --actionable
+        run: npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story report "$STORY_DIR" --actionable

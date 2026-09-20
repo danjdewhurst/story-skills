@@ -4,6 +4,7 @@ import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { parseFrontmatter, replaceFrontmatter } from "../src/frontmatter.js";
 import {
+  buildSeries,
   formatSeriesReport,
   seriesLinkPath,
   seriesLinks,
@@ -318,6 +319,67 @@ describe("series validation and reporting", () => {
 
     const consistent = invoke(cwd, ["series", book(cwd, "Three")]);
     expect(consistent.code).toBe(0);
-    expect(consistent.out).toContain("Series is consistent: 0 errors, 0 warnings");
+    expect(consistent.err).toContain("Series is consistent: 0 errors, 0 warnings");
+    expect(consistent.out).toContain("# Series:");
+  });
+});
+
+describe("series traversal limits", () => {
+  test("refuses to follow links outside the common parent directory", () => {
+    const cwd = makeTempDir();
+    const root = book(cwd, "Scoped");
+    const outside = makeTempDir();
+    const outsideBook = createStoryProject({ title: "Outside", cwd: outside }).root;
+    const outsideData = parseFrontmatter(fs.readFileSync(path.join(outsideBook, "story.md"), "utf8")).data;
+    expect(outsideData.title).toContain("Outside");
+    setStory(root, { follows: [path.relative(root, outsideBook)] });
+    const report = seriesReport(root);
+    expect(report.ok).toBe(false);
+    expect(report.errors.join("\n")).toContain("points outside the series directory");
+  });
+
+  test("caps traversal depth on long chains", () => {
+    const cwd = makeTempDir();
+    let previous = null;
+    const chain = [];
+    for (let index = 0; index < 13; index += 1) {
+      const root = book(cwd, "Chain " + index);
+      chain.push(root);
+      if (previous !== null) {
+        setStory(root, { follows: ["../" + path.basename(previous)] });
+      }
+      previous = root;
+    }
+    const report = seriesReport(chain[chain.length - 1]);
+    expect(report.errors.join("\n")).toContain("traversal depth");
+  });
+
+  test("caps the total number of traversed books", () => {
+    const cwd = makeTempDir();
+    const start = path.join(cwd, "start");
+    fs.mkdirSync(start, { recursive: true });
+    fs.writeFileSync(path.join(start, "story.md"), "---\ntitle: Start\n---\nBody\n", "utf8");
+    const follows = [];
+    for (let index = 0; index < 110; index += 1) {
+      const dir = path.join(cwd, "leaf-" + index);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, "story.md"), "---\ntitle: Leaf " + index + "\n---\nBody\n", "utf8");
+      follows.push("../leaf-" + index);
+    }
+    const fakeScan = (root) => ({
+      root,
+      story: { data: root === start ? { title: "Start", follows } : { title: path.basename(root) } },
+      characters: [],
+      locations: [],
+      systems: [],
+      factions: [],
+      artifacts: [],
+      chapters: [],
+      scenes: [],
+      glossaryTerms: [],
+      continuity: null
+    });
+    const report = buildSeries(start, fakeScan);
+    expect(report.errors.join("\n")).toContain("book limit");
   });
 });

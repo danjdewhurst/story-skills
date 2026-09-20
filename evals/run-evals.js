@@ -95,6 +95,22 @@ function wordCount(text) {
   return text.split(/\s+/).filter(Boolean).length;
 }
 
+// Fenced code blocks are exempt from well-formedness and structural checks:
+// a draft that quotes a logbook page or a noticeboard inside fences should
+// not fail for the quoted text's spacing, paragraph breaks, or ending.
+// Required/banned phrase checks still run on the full text so traps cannot
+// hide inside a fence.
+function stripCodeFences(text) {
+  return text.replace(/```[\s\S]*?```/g, "").replace(/```[\s\S]*$/g, "");
+}
+
+function paragraphs(text) {
+  return stripCodeFences(text)
+    .split(/\n\s*\n/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 // Damage a search-and-replace draft leaves behind: doubled spaces mid-line,
 // a space before closing punctuation, or two punctuation marks with nothing
 // between them ("I !", "our  new", "to .").
@@ -137,6 +153,16 @@ const FIRST_PERSON_RE = /\b(?:I|me|my|mine|myself|we|us|our|ours|ourselves)\b/gi
 const HEDGE_RE =
   /\b(?:I think|I suspect|I guess|probably|perhaps|maybe|sort of|kind of|seems|seemed|apparently|arguably|roughly|might|may|tends? to|not sure)\b/gi;
 
+// Past-tense proxy for the requires_past_tense structural check: strong
+// irregular markers plus regular -ed forms. Deliberately coarse — it counts
+// "red" as past tense — so the check needs PAST_TENSE_MIN_MARKERS hits, not
+// one, and fixtures only opt in where the known-good draft clears it with
+// headroom. It is a tripwire for drafts that ignore the brief's tense, not
+// a tense classifier.
+const PAST_TENSE_RE =
+  /\b(?:was|were|had|did|said|told|went|came|took|brought|carried|looked|stood|knew|felt|thought|saw|heard|found|left|kept|put|sat|locked|checked|lifted|asked|\w+ed)\b/gi;
+const PAST_TENSE_MIN_MARKERS = 2;
+
 function voiceMetrics(text) {
   const words = text.match(WORD_RE) || [];
   const n = Math.max(words.length, 1);
@@ -161,6 +187,7 @@ export function checkDraft(checks, inputText, draftText) {
   const results = [];
   const normDraft = normalizeApos(draftText);
   const normInput = normalizeApos(inputText);
+  const proseOnly = stripCodeFences(normDraft);
 
   for (const fact of checks.required || []) {
     if (typeof fact !== "string") {
@@ -178,8 +205,11 @@ export function checkDraft(checks, inputText, draftText) {
       results.push([false, `banned phrase must be a string, got ${phrase}`]);
       continue;
     }
+    // Banned phrases inflect like required ones: a draft that "delves",
+    // "treasures", or "shows Petra the keys" springs the same trap as the
+    // base form. See phraseFound's inflect flag.
     results.push([
-      !phraseFound(phrase, normDraft, false),
+      !phraseFound(phrase, normDraft, true),
       `trap avoided: "${phrase}"`,
     ]);
   }
@@ -200,14 +230,53 @@ export function checkDraft(checks, inputText, draftText) {
   }
 
   for (const [pattern, desc] of WELL_FORMED) {
-    results.push([!pattern.test(normDraft), `well formed: ${desc}`]);
+    results.push([!pattern.test(proseOnly), `well formed: ${desc}`]);
   }
 
   // Collapse whitespace for structure checks so scaffolds split across
   // lines or sentences still match.
-  const contrastText = normDraft.replace(/\s+/g, " ");
+  const contrastText = proseOnly.replace(/\s+/g, " ");
   for (const [pattern, desc] of CONTRAST) {
     results.push([!pattern.test(contrastText), `structure: ${desc}`]);
+  }
+
+  // Structural promises made by fixture briefs, checked only when the
+  // fixture opts in via checks.json. All are smoke-test proxies, not
+  // literary judgments; see evals/README.md.
+  if (checks.paragraphs !== undefined) {
+    const count = paragraphs(draftText).length;
+    results.push([
+      count === checks.paragraphs,
+      `structure: ${count} paragraph(s), brief asks for ${checks.paragraphs}`,
+    ]);
+  }
+  if (checks.ends_with_question === true) {
+    results.push([
+      proseOnly.trim().endsWith("?"),
+      `structure: ends on a question`,
+    ]);
+  }
+  if (checks.requires_first_person === true) {
+    FIRST_PERSON_RE.lastIndex = 0;
+    results.push([
+      FIRST_PERSON_RE.test(proseOnly),
+      `structure: first-person voice present`,
+    ]);
+  }
+  if (checks.requires_past_tense === true) {
+    PAST_TENSE_RE.lastIndex = 0;
+    const markers = proseOnly.match(PAST_TENSE_RE) || [];
+    results.push([
+      markers.length >= PAST_TENSE_MIN_MARKERS,
+      `structure: past-tense voice present (${markers.length} marker(s), need ${PAST_TENSE_MIN_MARKERS})`,
+    ]);
+  }
+  if (checks.max_words !== undefined) {
+    const count = wordCount(draftText);
+    results.push([
+      count <= checks.max_words,
+      `length ${count} words <= ${checks.max_words} (absolute cap)`,
+    ]);
   }
 
   const maxRatio = checks.max_words_ratio;
@@ -230,6 +299,25 @@ export function checkDraft(checks, inputText, draftText) {
 
   const drift = checks.voice_drift;
   if (drift) {
+    // Directional voice drift: a draft that strips the voice fails, a draft
+    // that overshoots it only warns. For the rate markers (contractions,
+    // first person, hedges) voice-stripping is a FALL past the limit; for
+    // mean word length it is a RISE (flattened prose uses longer words).
+    // Overshoots in the other direction pass with a "warn" label so the
+    // report still surfaces them.
+    //
+    // Threshold provenance: the limits live in each fixture's checks.json
+    // and are regression tripwires, not perceptual just-noticeable
+    // differences. They were set so the known-good draft in evals/examples/
+    // passes with headroom (voice-preservation drifts +1.21/+1.62/0.00/-0.31
+    // against limits 3.0/3.0/2.0/0.6). Tighten a limit only if a bad draft
+    // slips through; widen it only if a good draft fails.
+    const STRIP_DIRECTION = {
+      contraction_rate: "fall",
+      first_person_rate: "fall",
+      hedge_rate: "fall",
+      mean_word_length: "rise",
+    };
     const before = voiceMetrics(normInput);
     const after = voiceMetrics(normDraft);
     for (const [name, limit] of Object.entries(drift)) {
@@ -248,10 +336,17 @@ export function checkDraft(checks, inputText, draftText) {
         continue;
       }
       const delta = after[name] - before[name];
-      results.push([
-        Math.abs(delta) <= limit,
-        `voice kept: ${name} ${before[name].toFixed(1)} -> ${after[name].toFixed(1)} (change ${delta >= 0 ? "+" : ""}${delta.toFixed(1)}, limit ${limit})`,
-      ]);
+      const change = `${before[name].toFixed(1)} -> ${after[name].toFixed(1)} (change ${delta >= 0 ? "+" : ""}${delta.toFixed(1)}, limit ${limit})`;
+      const strips =
+        (STRIP_DIRECTION[name] === "fall" && delta < -limit) ||
+        (STRIP_DIRECTION[name] === "rise" && delta > limit);
+      if (strips) {
+        results.push([false, `voice kept: ${name} ${change} (voice stripped)`]);
+      } else if (Math.abs(delta) > limit) {
+        results.push([true, `voice note (warn): ${name} ${change} (overshoot, not stripping)`]);
+      } else {
+        results.push([true, `voice kept: ${name} ${change}`]);
+      }
     }
   }
 

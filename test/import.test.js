@@ -154,3 +154,40 @@ describe("manuscript import", () => {
     expect(scanProject(result.root).chapters.map((chapter) => chapter.title)).toEqual(["Cover", "Introduction"]);
   });
 });
+
+describe("import source hardening", () => {
+  test("rejects symlinked import sources", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "real.md"), "## Chapter 1: Real\n\nReal body.\n", "utf8");
+    const link = path.join(cwd, "linked.md");
+    try {
+      fs.symlinkSync(path.join(cwd, "real.md"), link);
+    } catch {
+      console.warn("Skipping symlink import test: symlinks unavailable.");
+      return;
+    }
+    expect(() => importManuscript({ source: "linked.md", title: "Linked", cwd })).toThrow("symlinked source");
+
+    const dir = path.join(cwd, "drafts");
+    fs.mkdirSync(dir);
+    fs.writeFileSync(path.join(dir, "a.md"), "Body text here.\n", "utf8");
+    fs.symlinkSync(path.join(dir, "a.md"), path.join(dir, "b.md"));
+    expect(() => importManuscript({ source: "drafts", title: "Linked Dir", cwd })).toThrow("symlinked source");
+  });
+
+  test("rejects oversized import files", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "huge.md"), "x".repeat(6 * 1024 * 1024), "utf8");
+    expect(() => importManuscript({ source: "huge.md", title: "Huge", cwd })).toThrow("oversized");
+  });
+
+  test("caps the number of import files", () => {
+    const cwd = makeTempDir();
+    const dir = path.join(cwd, "many");
+    fs.mkdirSync(dir);
+    for (let index = 0; index < 501; index += 1) {
+      fs.writeFileSync(path.join(dir, "file-" + index + ".md"), "Body " + index + ".\n", "utf8");
+    }
+    expect(() => importManuscript({ source: "many", title: "Many", cwd })).toThrow("Too many import files");
+  });
+});

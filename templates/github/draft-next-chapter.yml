@@ -13,8 +13,20 @@
 #      npx skills add danjdewhurst/story-skills  (or commit skills/ to .claude/skills/)
 #   3. Adjust STORY_DIR and the cron schedule to taste.
 #
-# The Story CLI runs straight from GitHub; switch the npx --package value
-# to story-skills once the package is published to the npm registry.
+# The Story CLI runs straight from GitHub, pinned to the STORY_REF tag below;
+# bump STORY_REF when you adopt a newer story-skills release. (There is no
+# npm-published package yet; switch the npx --package value to story-skills
+# once the package is published to the npm registry.)
+#
+# Actions are pinned to commit SHAs with their moving tags in comments, so a
+# compromised tag cannot silently change what this workflow runs. Dependabot
+# (github-actions ecosystem) proposes SHA updates.
+#
+# Secrets: ANTHROPIC_API_KEY and GITHUB_TOKEN are only passed to steps on
+# trusted pushes here. This workflow runs on `schedule` and manual
+# `workflow_dispatch` only — never on `pull_request` or `pull_request_target`
+# — so fork PRs cannot exfiltrate the secrets, and the agent's shell access is
+# limited to the allowlisted story/git/gh commands below.
 #
 # GitHub does not start other workflows for pull requests opened with the
 # built-in GITHUB_TOKEN, so story-checks.yml will not run on the drafted PR by
@@ -31,29 +43,29 @@ on:
     - cron: "0 6 * * 1-5" # weekday mornings
   workflow_dispatch:
 
-permissions:
-  contents: write
-  pull-requests: write
-
 env:
   STORY_DIR: "."
+  STORY_REF: "v0.5.0"
 
 jobs:
   draft:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
 
       - name: Set up Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24
 
       - name: Draft the next chapter
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -61,7 +73,7 @@ jobs:
             You are drafting the next chapter of the story project in $STORY_DIR.
             Work on a new branch named draft/chapter-<next-number>.
 
-            1. Run `npx --yes --package github:danjdewhurst/story-skills story next "$STORY_DIR"` and
+            1. Run `npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story next "$STORY_DIR"` and
                read story.md, chapters/_index.md, continuity/state.md, open
                questions, promises, and the active arc files.
             2. If the next actions report any P0 maintenance issues, fix those
@@ -72,22 +84,22 @@ jobs:
                Add matching scene records and update continuity/state.md,
                promises, questions, and the timeline.
             4. Run the maintenance commands and make them pass:
-               npx --yes --package github:danjdewhurst/story-skills story wordcount "$STORY_DIR" --write
-               npx --yes --package github:danjdewhurst/story-skills story reindex "$STORY_DIR"
-               npx --yes --package github:danjdewhurst/story-skills story validate "$STORY_DIR"
-               npx --yes --package github:danjdewhurst/story-skills story links "$STORY_DIR"
-               npx --yes --package github:danjdewhurst/story-skills story continuity "$STORY_DIR"
+               npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story wordcount "$STORY_DIR" --write
+               npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story reindex "$STORY_DIR"
+               npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story validate "$STORY_DIR"
+               npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story links "$STORY_DIR"
+               npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story continuity "$STORY_DIR"
             5. Commit, push the branch, and open a pull request titled
                "Draft chapter <number>: <title>" summarizing the beats, the arcs
                advanced, and any promises planted or paid off.
           claude_args: |
-            --allowedTools "Bash(npx:*),Bash(git:*),Bash(gh pr create:*),Read,Write,Edit,Glob,Grep"
+            --allowedTools "Bash(npx --yes --package github:danjdewhurst/story-skills* story *),Bash(git checkout -b:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(gh pr create:*),Read,Write,Edit,Glob,Grep"
 
       - name: Validate structure, frontmatter, and registries
-        run: npx --yes --package github:danjdewhurst/story-skills story validate "$STORY_DIR"
+        run: npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story validate "$STORY_DIR"
 
       - name: Check cross-references and backlinks
-        run: npx --yes --package github:danjdewhurst/story-skills story links "$STORY_DIR"
+        run: npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story links "$STORY_DIR"
 
       - name: Check continuity contracts
-        run: npx --yes --package github:danjdewhurst/story-skills story continuity "$STORY_DIR"
+        run: npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story continuity "$STORY_DIR"

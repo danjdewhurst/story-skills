@@ -34,7 +34,7 @@ If the Story CLI is available, prefer using it to create the starter project, th
 story init "{Title}" --genre "{genre}" --sub-genre "{sub-genre}" --setting-era "{era}" --pov "{pov-style}" --tense "{tense}" --synopsis "{synopsis}" --theme "{theme-1}" --theme "{theme-2}"
 ```
 
-If `story` is not installed, use the bundled maintenance fallback when available, resolving the script path relative to the `story-maintenance` skill:
+If `story` is not installed, use `bun run story --` from the Story Skills repository checkout or the bundled fallback `node ../story-maintenance/scripts/story.js` with the same arguments, resolving the path relative to this skill folder:
 
 ```shell
 node ../story-maintenance/scripts/story.js init "{Title}"
@@ -248,7 +248,7 @@ If manual initialization gets tedious, stop and ask the user to install or run t
 story validate {story-title-kebab}
 ```
 
-If using the bundled fallback, replace `story` with `node ../story-maintenance/scripts/story.js`, resolving the path relative to this skill folder.
+If `story` is not installed, use `bun run story --` from the Story Skills repository checkout or the bundled fallback `node ../story-maintenance/scripts/story.js` with the same arguments, resolving the path relative to this skill folder.
 
 ## Reference Files
 

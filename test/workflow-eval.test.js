@@ -45,8 +45,8 @@ describe("skill workflow eval", () => {
 
     fs.appendFileSync(path.join(root, "chapters", "chapter-01.md"), "Nia found the missing page beneath the clock.\n", "utf8");
     expect(invoke(cwd, ["wordcount", root, "--write"]).out).toContain("Total: 8");
-    expect(invoke(cwd, ["validate", root]).out).toContain("Project is valid: 0 errors, 0 warnings");
-    expect(invoke(cwd, ["links", root]).out).toContain("Links are valid");
+    expect(invoke(cwd, ["validate", root]).err).toContain("Project is valid: 0 errors, 0 warnings");
+    expect(invoke(cwd, ["links", root]).err).toContain("Links are valid");
     expect(invoke(cwd, ["next", root]).out).toContain("Draft chapter 2");
     expect(invoke(cwd, ["build", root, "--format", "docx"]).out).toContain("as docx");
   });

@@ -8,9 +8,11 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const VERSION_FILES = ["package.json", ".codex-plugin/plugin.json", ".claude-plugin/plugin.json"];
 const RELEASE_BRANCH = "main";
 // test:coverage runs the full test suite under coverage, gates src
-// line/function/branch coverage, then verifies the fallback bundle, so it
-// subsumes the old standalone test and check:fallback steps.
-export const PREFLIGHT = ["check:metadata", "test:coverage", "test:examples"];
+// line/function coverage (plus branch coverage when the reporter emits
+// BRDA/BRF/BRH records — Bun's lcov reporter currently does not, so the
+// branch gate is skipped with a note), then verifies the fallback bundle,
+// so it subsumes the old standalone test and check:fallback steps.
+export const PREFLIGHT = ["check:metadata", "check:evals", "test:coverage", "test:examples"];
 
 export function bumpVersion(current, bump) {
   const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(current);

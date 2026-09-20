@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/danjdewhurst/story-skills/schemas/story.schema.json",
   "title": "Story Skills Schema v2",
+  "$comment": "Entity ids are filename-derived: the kebab-case basename of the entity file without .md (e.g. characters/sera-voss.md -> sera-voss). Frontmatter never carries a separate id field; the required id in each definition below is that filename-derived identifier as it appears in reference lists and registries.",
   "type": "object",
   "required": ["story", "characters", "worldbuilding", "plot", "chapters", "scenes", "continuity", "glossary"],
   "properties": {
@@ -16,6 +17,8 @@
         "follows": { "type": "array", "items": { "type": "string", "minLength": 1 } },
         "precedes": { "type": "array", "items": { "type": "string", "minLength": 1 } },
         "genre": { "type": "string" },
+        "sub-genre": { "type": "string" },
+        "setting-era": { "type": "string" },
         "status": { "enum": ["planning", "drafting", "in-progress", "revising", "complete", "abandoned"] },
         "themes": { "type": "array", "items": { "type": "string" } },
         "pov": { "type": "string" },
@@ -52,13 +55,22 @@
       "properties": {
         "questions": { "type": "array", "items": { "$ref": "#/$defs/question" } },
         "promises": { "type": "array", "items": { "$ref": "#/$defs/promise" } },
-        "clues": { "type": "array", "items": { "$ref": "#/$defs/clue" } }
+        "clues": { "type": "array", "items": { "$ref": "#/$defs/clue" } },
+        "current-chapter": { "type": "integer", "minimum": 0 },
+        "character-state": { "type": "array", "items": { "$ref": "#/$defs/characterState" } },
+        "object-state": { "type": "array", "items": { "$ref": "#/$defs/objectState" } },
+        "knowledge-state": { "type": "array", "items": { "$ref": "#/$defs/knowledgeState" } },
+        "exemptions": { "type": "array", "items": { "$ref": "#/$defs/exemption" } }
       }
     },
     "glossary": { "type": "array", "items": { "$ref": "#/$defs/term" } }
   },
   "$defs": {
-    "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "description": "Filename-derived identifier: the kebab-case basename of the entity file without .md. There is no separate id frontmatter field."
+    },
     "stringList": { "type": "array", "items": { "type": "string" } },
     "character": {
       "type": "object",
@@ -69,7 +81,21 @@
         "role": { "enum": ["protagonist", "antagonist", "supporting", "minor", "narrator", "deuteragonist"] },
         "status": { "enum": ["alive", "deceased", "unknown", "missing", "cut"] },
         "died-in": { "type": "string" },
+        "aliases": { "$ref": "#/$defs/stringList" },
+        "relationships": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["character", "type"],
+            "properties": {
+              "character": { "$ref": "#/$defs/id" },
+              "type": { "type": "string" }
+            }
+          }
+        },
         "locations": { "$ref": "#/$defs/stringList" },
+        "tags": { "$ref": "#/$defs/stringList" },
+        "arc": { "type": "string" },
         "arc-type": { "enum": ["change-positive", "change-negative", "flat"] },
         "lie": { "type": "string" },
         "truth": { "type": "string" },
@@ -83,7 +109,12 @@
         "id": { "$ref": "#/$defs/id" },
         "name": { "type": "string" },
         "type": { "type": "string" },
-        "notable-characters": { "$ref": "#/$defs/stringList" }
+        "region": { "type": "string" },
+        "population": { "type": "string" },
+        "controlled-by": { "type": "string" },
+        "notable-characters": { "$ref": "#/$defs/stringList" },
+        "tags": { "$ref": "#/$defs/stringList" },
+        "status": { "type": "string" }
       }
     },
     "system": {
@@ -92,7 +123,8 @@
       "properties": {
         "id": { "$ref": "#/$defs/id" },
         "name": { "type": "string" },
-        "type": { "type": "string" }
+        "type": { "type": "string" },
+        "prevalence": { "type": "string" }
       }
     },
     "faction": {
@@ -104,7 +136,8 @@
         "type": { "enum": ["family", "guild", "government", "military", "religion", "company", "community", "criminal", "other"] },
         "status": { "enum": ["active", "hidden", "declining", "defeated", "disbanded", "unknown"] },
         "members": { "$ref": "#/$defs/stringList" },
-        "locations": { "$ref": "#/$defs/stringList" }
+        "locations": { "$ref": "#/$defs/stringList" },
+        "tags": { "$ref": "#/$defs/stringList" }
       }
     },
     "artifact": {
@@ -114,7 +147,10 @@
         "id": { "$ref": "#/$defs/id" },
         "name": { "type": "string" },
         "type": { "enum": ["object", "weapon", "document", "technology", "relic", "symbol", "resource", "other"] },
-        "status": { "enum": ["active", "lost", "destroyed", "hidden", "transferred", "unknown"] }
+        "status": { "enum": ["active", "lost", "destroyed", "hidden", "transferred", "unknown"] },
+        "owner": { "type": "string" },
+        "location": { "type": "string" },
+        "tags": { "$ref": "#/$defs/stringList" }
       }
     },
     "arc": {
@@ -125,6 +161,9 @@
         "name": { "type": "string" },
         "type": { "enum": ["main", "subplot", "character", "thematic"] },
         "status": { "enum": ["planned", "in-progress", "resolved"] },
+        "characters": { "$ref": "#/$defs/stringList" },
+        "themes": { "$ref": "#/$defs/stringList" },
+        "acts": { "$ref": "#/$defs/stringList" },
         "mice-threads": { "$ref": "#/$defs/stringList" }
       }
     },
@@ -136,6 +175,9 @@
         "title": { "type": "string" },
         "number": { "type": "integer", "minimum": 1 },
         "status": { "enum": ["outline", "draft", "revised", "final", "complete"] },
+        "pov": { "type": "string" },
+        "word-count": { "type": "integer", "minimum": 0 },
+        "arcs-advanced": { "$ref": "#/$defs/stringList" },
         "characters": { "$ref": "#/$defs/stringList" },
         "mentions": { "$ref": "#/$defs/stringList" },
         "locations": { "$ref": "#/$defs/stringList" },
@@ -155,8 +197,15 @@
         "chapter": { "$ref": "#/$defs/id" },
         "scene": { "type": "integer", "minimum": 1 },
         "status": { "enum": ["outline", "draft", "revised", "final", "complete"] },
+        "pov": { "type": "string" },
+        "location": { "type": "string" },
         "characters": { "$ref": "#/$defs/stringList" },
         "mentions": { "$ref": "#/$defs/stringList" },
+        "arcs-advanced": { "$ref": "#/$defs/stringList" },
+        "state-changes": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
         "date": { "type": "string" },
         "time": { "type": "string" },
         "travel-hours": { "type": "number" },
@@ -210,7 +259,45 @@
       "properties": {
         "id": { "$ref": "#/$defs/id" },
         "term": { "type": "string" },
-        "category": { "enum": ["person", "place", "faction", "artifact", "concept", "term", "other"] }
+        "category": { "enum": ["person", "place", "faction", "artifact", "concept", "term", "other"] },
+        "aliases": { "$ref": "#/$defs/stringList" }
+      }
+    },
+    "characterState": {
+      "type": "object",
+      "properties": {
+        "character": { "$ref": "#/$defs/id" },
+        "location": { "type": "string" },
+        "physical": { "type": "string" },
+        "emotional": { "type": "string" },
+        "knowledge": { "type": "string" }
+      }
+    },
+    "objectState": {
+      "type": "object",
+      "properties": {
+        "artifact": { "$ref": "#/$defs/id" },
+        "owner": { "type": "string" },
+        "location": { "type": "string" },
+        "status": { "type": "string" },
+        "since": { "type": "string" }
+      }
+    },
+    "knowledgeState": {
+      "type": "object",
+      "properties": {
+        "character": { "$ref": "#/$defs/id" },
+        "knows": { "type": "string" },
+        "fact": { "$ref": "#/$defs/id" },
+        "learned-in": { "type": "string" }
+      }
+    },
+    "exemption": {
+      "type": "object",
+      "required": ["pattern", "reason"],
+      "properties": {
+        "pattern": { "type": "string", "minLength": 4 },
+        "reason": { "type": "string", "minLength": 1 }
       }
     }
   }

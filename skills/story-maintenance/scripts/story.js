@@ -32,6 +32,9 @@ function stringifyFrontmatter(data) {
       for (const item of value) {
         if (isPlainObject(item)) {
           const entries = Object.entries(item);
+          if (entries.length === 0) {
+            throw new Error("Cannot stringify empty mapping in " + key);
+          }
           const [firstKey, firstValue] = entries[0];
           lines.push(`  - ${firstKey}: ${formatScalar(firstValue)}`);
           for (const [childKey, childValue] of entries.slice(1)) {
@@ -58,7 +61,7 @@ function replaceFrontmatter(markdown, data) {
 }
 function parseYaml(source) {
   const lines = source.split(/\r?\n/);
-  const data = {};
+  const data = Object.create(null);
   for (let index = 0;index < lines.length; ) {
     const line = lines[index];
     if (!line.trim() || line.trimStart().startsWith("#")) {
@@ -87,7 +90,29 @@ function parseYaml(source) {
     data[key] = parsed.items;
     index = parsed.nextIndex;
   }
-  return data;
+  return toPlainObject(data);
+}
+function toPlainObject(value) {
+  if (Array.isArray(value)) {
+    return value.map(toPlainObject);
+  }
+  if (value !== null && typeof value === "object") {
+    const out = {};
+    for (const [key, entry] of Object.entries(value)) {
+      if (key === "__proto__") {
+        Object.defineProperty(out, key, {
+          value: toPlainObject(entry),
+          enumerable: true,
+          configurable: true,
+          writable: true
+        });
+      } else {
+        out[key] = toPlainObject(entry);
+      }
+    }
+    return out;
+  }
+  return value;
 }
 function parseArray(lines, startIndex) {
   const items = [];
@@ -104,9 +129,8 @@ function parseArray(lines, startIndex) {
       index += 1;
       continue;
     }
-    const item = {
-      [objectMatch[1]]: parseScalar(objectMatch[2])
-    };
+    const item = Object.create(null);
+    item[objectMatch[1]] = parseScalar(objectMatch[2]);
     index += 1;
     while (index < lines.length) {
       const childMatch = /^    ([A-Za-z0-9_-]+):\s*(.*)$/.exec(lines[index]);
@@ -153,14 +177,14 @@ function parseScalar(value) {
   return trimmed;
 }
 function formatScalar(value) {
-  if (typeof value === "number") {
+  if (typeof value === "number" || typeof value === "boolean") {
     return String(value);
   }
   if (value === null || value === undefined) {
     return "";
   }
   const text = String(value);
-  if (text === "" || text === "[]" || /^-?\d+(\.\d+)?$/.test(text) || /^\s|\s$/.test(text) || /[:#\n"']/.test(text)) {
+  if (text === "" || text === "[]" || /^(true|false|null|-?\d+(\.\d+)?)$/.test(text) || /^\s|\s$/.test(text) || /[:#\n"']/.test(text)) {
     return JSON.stringify(text);
   }
   return text;
@@ -706,6 +730,8 @@ function checkChapterDates(project, warnings) {
 import fs from "node:fs";
 import path2 from "node:path";
 var SERIES_LINK_INVERSES = [["follows", "precedes"], ["precedes", "follows"]];
+var MAX_SERIES_BOOKS = 100;
+var MAX_SERIES_DEPTH = 10;
 var SHARED_CANON = [
   ["characters", "Characters", "name"],
   ["locations", "Locations", "name"],
@@ -817,14 +843,30 @@ function formatSeriesReport(report) {
 `;
 }
 function discoverBooks(startRoot, scan, errors) {
+  const startResolved = path2.resolve(startRoot);
+  const scopeRoot = path2.dirname(startResolved);
   const visited = new Map;
-  const queue = [startRoot];
+  const queue = [{ root: startResolved, depth: 0 }];
   while (queue.length > 0) {
-    const root = queue.shift();
+    if (visited.size >= MAX_SERIES_BOOKS) {
+      errors.push("Series links exceed the " + MAX_SERIES_BOOKS + " book limit; refusing to traverse further");
+      break;
+    }
+    const { root, depth } = queue.shift();
     if (visited.has(root)) {
       continue;
     }
     const label = seriesLinkPath(startRoot, root) || ".";
+    if (!isPathInside(scopeRoot, path2.resolve(root))) {
+      errors.push(label + " points outside the series directory " + scopeRoot + "; refusing to follow");
+      visited.set(root, null);
+      continue;
+    }
+    if (depth > MAX_SERIES_DEPTH) {
+      errors.push(label + " exceeds the series traversal depth of " + MAX_SERIES_DEPTH + "; refusing to follow further links");
+      visited.set(root, null);
+      continue;
+    }
     if (!fs.existsSync(path2.join(root, "story.md"))) {
       errors.push(`${label} is not a story project: missing story.md`);
       visited.set(root, null);
@@ -844,9 +886,15 @@ function discoverBooks(startRoot, scan, errors) {
       precedes: seriesLinks(root, data, "precedes")
     };
     visited.set(root, book);
-    queue.push(...book.follows, ...book.precedes);
+    for (const next of book.follows.concat(book.precedes)) {
+      queue.push({ root: next, depth: depth + 1 });
+    }
   }
   return [...visited.values()].filter(Boolean);
+}
+function isPathInside(root, target) {
+  const relativePath = path2.relative(root, target);
+  return relativePath === "" || !relativePath.startsWith("..") && !path2.isAbsolute(relativePath);
 }
 function chronologicalOrder(books, errors) {
   const byRoot = new Map(books.map((book) => [book.root, book]));
@@ -1121,6 +1169,11 @@ function createStoryProject(options) {
   const storyId = kebabCase(title);
   const cwd = options.cwd ?? process.cwd();
   const root = path3.resolve(cwd, options.dir ?? storyId);
+  if (!options.dir) {
+    if (!storyId) {
+      throw new Error('Cannot derive a directory name from story title "' + title + '": pass --dir to set the target directory explicitly');
+    }
+  }
   if (fs2.existsSync(root) && !options.force) {
     throw new Error(`${root} already exists. Use --force to overwrite starter files.`);
   }
@@ -1373,7 +1426,12 @@ function validateProject(root) {
   if (errors.length > 0) {
     return { ok: false, errors, warnings };
   }
-  const project = scanProject(projectRoot);
+  return validateProjectOf(scanProject(projectRoot));
+}
+function validateProjectOf(project) {
+  const errors = [];
+  const warnings = [];
+  const projectRoot = project.root;
   for (const scanError of project.fileErrors ?? []) {
     errors.push(scanError);
   }
@@ -1424,7 +1482,9 @@ function validateProject(root) {
   return { ok: errors.length === 0, errors, warnings };
 }
 function validateLinks(root) {
-  const project = scanProject(root);
+  return validateLinksOf(scanProject(root));
+}
+function validateLinksOf(project) {
   const errors = [];
   const warnings = [];
   for (const scanError of project.fileErrors ?? []) {
@@ -1603,6 +1663,7 @@ function validateTimelineAndArcBodyRefs(project, chapters, errors) {
   const timelinePath = path3.join(project.root, "plot", "timeline.md");
   if (fs2.existsSync(timelinePath)) {
     try {
+      assertFileSizeWithinLimit(timelinePath);
       const raw = fs2.readFileSync(timelinePath, "utf8");
       const body = parseFrontmatter(raw, timelinePath).body ?? raw;
       for (const token of extractChapterIdTokens(body)) {
@@ -1622,7 +1683,16 @@ function validateTimelineAndArcBodyRefs(project, chapters, errors) {
   }
   for (const arc of project.arcs) {
     const label = relative2(project, arc.file);
-    const body = readMarkdown(arc.file, project.root).body ?? "";
+    let body = "";
+    try {
+      body = readMarkdown(arc.file, project.root).body ?? "";
+    } catch (error) {
+      const message = label + ": " + error.message;
+      if (!errors.includes(message)) {
+        errors.push(message);
+      }
+      continue;
+    }
     for (const token of extractChapterIdTokens(body)) {
       if (!chapterIds.has(token)) {
         errors.push(`${label} references missing chapter ${token}`);
@@ -1707,8 +1777,8 @@ function seriesReport(root) {
 }
 function projectReport(root) {
   const project = scanProject(root);
-  const validation = validateProject(project.root);
-  const links = validateLinks(project.root);
+  const validation = validateProjectOf(project);
+  const links = validateLinksOf(project);
   const continuity = checkContinuity(project);
   const totalWords = project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
   return {
@@ -1809,8 +1879,8 @@ function formatProjectReport(report, options = {}) {
 }
 function projectActions(root) {
   const project = scanProject(root);
-  const validation = validateProject(project.root);
-  const links = validateLinks(project.root);
+  const validation = validateProjectOf(project);
+  const links = validateLinksOf(project);
   const continuity = checkContinuity(project);
   return {
     root: project.root,
@@ -1869,10 +1939,8 @@ function reindexProject(root) {
   const existingWorld = safeRead(worldIndexPath, project.root);
   const existingPlot = safeRead(plotIndexPath, project.root);
   let plotStructure = "three-act";
-  try {
+  if (fs2.existsSync(plotIndexPath)) {
     plotStructure = parseFrontmatter(existingPlot, "plot/_index.md").data.structure ?? "three-act";
-  } catch {
-    plotStructure = "three-act";
   }
   writeChanged(charactersIndexPath, characterIndex(project.storyId, project.characters, extractSection(existingCharacters, "Relationship Map"), extractSection(existingCharacters, "Family Trees")), changed, project.root);
   writeChanged(worldIndexPath, worldIndex(project.storyId, project.locations, project.systems, project.factions, project.artifacts, extractSection(existingWorld, "World Overview")), changed, project.root);
@@ -2565,12 +2633,38 @@ function entityConfig(kind) {
   }
   return config;
 }
+var KIND_ALIASES = {
+  character: "character",
+  characters: "character",
+  location: "location",
+  locations: "location",
+  system: "system",
+  systems: "system",
+  faction: "faction",
+  factions: "faction",
+  artifact: "artifact",
+  artifacts: "artifact",
+  arc: "arc",
+  arcs: "arc",
+  chapter: "chapter",
+  chapters: "chapter",
+  scene: "scene",
+  scenes: "scene",
+  question: "question",
+  questions: "question",
+  promise: "promise",
+  promises: "promise",
+  clue: "clue",
+  clues: "clue",
+  term: "term",
+  terms: "term",
+  "glossary-term": "term",
+  "glossary-terms": "term",
+  glossary: "term"
+};
 function normalizeKind(kind) {
-  const normalized = String(kind ?? "").trim().toLowerCase().replace(/s$/, "");
-  if (normalized === "glossary" || normalized === "glossary-term") {
-    return "term";
-  }
-  return normalized;
+  const normalized = String(kind ?? "").trim().toLowerCase();
+  return KIND_ALIASES[normalized] ?? normalized;
 }
 function requireKebabId(id, label) {
   if (!isKebabId2(id)) {
@@ -3000,6 +3094,7 @@ function removeEntityReferences(root, id) {
 function rewriteReferences(root, transform, transformBody) {
   for (const file of markdownFiles(root)) {
     assertSafeProjectPath(file, root);
+    assertFileSizeWithinLimit(file);
     const text = fs2.readFileSync(file, "utf8");
     const match = FRONTMATTER_PATTERN.exec(text);
     if (!match) {
@@ -3085,17 +3180,26 @@ function addFrontmatterListValue(root, relativePath, field, value) {
     }), { root });
   }
 }
-function markdownFiles(root) {
-  const files = [];
+function markdownFiles(root, depth = 0, collected = null) {
+  const files = collected ?? [];
+  if (depth > MAX_SCAN_DEPTH) {
+    throw new Error("Refusing to scan beyond depth " + MAX_SCAN_DEPTH + " under " + root);
+  }
   for (const entry of fs2.readdirSync(root, { withFileTypes: true })) {
     const fullPath = path3.join(root, entry.name);
     if (entry.isDirectory() && entry.name !== "dist" && !entry.name.startsWith(".")) {
-      files.push(...markdownFiles(fullPath));
+      markdownFiles(fullPath, depth + 1, files);
     } else if (entry.isFile() && entry.name.endsWith(".md")) {
       files.push(fullPath);
+      if (files.length > MAX_SCAN_FILES) {
+        throw new Error("Too many markdown files under " + root + ": exceeds the " + MAX_SCAN_FILES + " file limit");
+      }
     }
   }
-  return files.sort();
+  if (depth === 0) {
+    files.sort();
+  }
+  return files;
 }
 function manuscriptParts(project) {
   if (project.chapters.length === 0) {
@@ -3377,6 +3481,20 @@ for (let index = 0;index < 256; index += 1) {
 function xmlEscape(value) {
   return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
+var MAX_SCAN_FILE_BYTES = 5 * 1024 * 1024;
+var MAX_SCAN_FILES = 5000;
+var MAX_SCAN_DEPTH = 10;
+function assertFileSizeWithinLimit(filePath) {
+  let size = 0;
+  try {
+    size = fs2.statSync(filePath).size;
+  } catch {
+    return;
+  }
+  if (size > MAX_SCAN_FILE_BYTES) {
+    throw new Error("Refusing to read oversized file " + filePath + ": " + size + " bytes exceeds the " + MAX_SCAN_FILE_BYTES + " byte limit");
+  }
+}
 function readEntityFiles(root, relativeDir, mapEntity, scanErrors) {
   const directory = path3.join(root, relativeDir);
   if (!fs2.existsSync(directory)) {
@@ -3385,6 +3503,9 @@ function readEntityFiles(root, relativeDir, mapEntity, scanErrors) {
   assertSafeProjectDirectory(directory, root);
   const entities = [];
   const files = fs2.readdirSync(directory, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".md") && entry.name !== "_index.md").map((entry) => entry.name).sort();
+  if (files.length > MAX_SCAN_FILES) {
+    throw new Error("Too many files in " + relativeDir + ": " + files.length + " exceeds the " + MAX_SCAN_FILES + " file limit");
+  }
   for (const file of files) {
     const fullPath = path3.join(directory, file);
     const label = path3.join(relativeDir, file);
@@ -3435,6 +3556,7 @@ function readMarkdown(filePath, root) {
   if (root) {
     assertSafeProjectPath(filePath, root);
   }
+  assertFileSizeWithinLimit(filePath);
   const rawMarkdown = fs2.readFileSync(filePath, "utf8");
   const parsed = parseFrontmatter(rawMarkdown, filePath);
   return { ...parsed, rawMarkdown };
@@ -3456,6 +3578,7 @@ function safeRead(filePath, root) {
   if (root) {
     assertSafeProjectPath(filePath, root);
   }
+  assertFileSizeWithinLimit(filePath);
   return fs2.readFileSync(filePath, "utf8");
 }
 function readValidationData(file, root, label, errors) {
@@ -3590,21 +3713,21 @@ function assertSafeProjectDirectory(directory, root) {
   }
   const rootReal = fs2.realpathSync(path3.resolve(root));
   const directoryReal = fs2.realpathSync(target);
-  if (!isPathInside(rootReal, directoryReal)) {
+  if (!isPathInside2(rootReal, directoryReal)) {
     throw new Error(`Refusing to use project directory outside root: ${target}`);
   }
 }
 function assertSafeProjectParent(filePath, root) {
   const rootReal = fs2.realpathSync(path3.resolve(root));
   const parentReal = fs2.realpathSync(path3.dirname(path3.resolve(filePath)));
-  if (!isPathInside(rootReal, parentReal)) {
+  if (!isPathInside2(rootReal, parentReal)) {
     throw new Error(`Refusing to access project path outside root: ${filePath}`);
   }
 }
 function assertLexicallyInsideRoot(filePath, root) {
   const rootPath = path3.resolve(root);
   const target = path3.resolve(filePath);
-  if (!isPathInside(rootPath, target)) {
+  if (!isPathInside2(rootPath, target)) {
     throw new Error(`Refusing to access path outside project root: ${target}`);
   }
 }
@@ -3616,7 +3739,7 @@ function rejectSymlinkTarget(filePath) {
 function lstatIfExists(filePath) {
   return fs2.lstatSync(filePath, { throwIfNoEntry: false }) ?? null;
 }
-function isPathInside(root, target) {
+function isPathInside2(root, target) {
   const relativePath = path3.relative(root, target);
   return relativePath === "" || !relativePath.startsWith("..") && !path3.isAbsolute(relativePath);
 }
@@ -4234,6 +4357,19 @@ var CANDIDATE_STOPWORDS = new Set([
   "Yes",
   "You"
 ]);
+var MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024;
+var MAX_IMPORT_FILES = 500;
+function rejectSymlinkedSource(filePath) {
+  if (fs3.lstatSync(filePath).isSymbolicLink()) {
+    throw new Error("Refusing to import symlinked source: " + filePath);
+  }
+}
+function assertImportFileSize(filePath) {
+  const size = fs3.statSync(filePath).size;
+  if (size > MAX_IMPORT_FILE_BYTES) {
+    throw new Error("Refusing to import oversized file " + filePath + ": " + size + " bytes exceeds the " + MAX_IMPORT_FILE_BYTES + " byte limit");
+  }
+}
 function importManuscript(options) {
   const rawSource = String(options.source ?? "").trim();
   if (!rawSource) {
@@ -4302,10 +4438,28 @@ function addCandidate(counts, name) {
   counts.set(name, (counts.get(name) ?? 0) + 1);
 }
 function readSourceDocuments(source) {
+  rejectSymlinkedSource(source);
   if (fs3.statSync(source).isFile()) {
+    assertImportFileSize(source);
     return [{ name: path4.basename(source), text: fs3.readFileSync(source, "utf8") }];
   }
-  const documents = fs3.readdirSync(source, { withFileTypes: true }).filter((entry) => entry.isFile() && /\.(md|markdown|txt)$/i.test(entry.name)).map((entry) => entry.name).sort().map((name) => ({ name, text: fs3.readFileSync(path4.join(source, name), "utf8") }));
+  const names = [];
+  for (const entry of fs3.readdirSync(source, { withFileTypes: true })) {
+    const fullPath = path4.join(source, entry.name);
+    rejectSymlinkedSource(fullPath);
+    if (entry.isFile() && /\.(md|markdown|txt)$/i.test(entry.name)) {
+      names.push(entry.name);
+    }
+  }
+  names.sort();
+  if (names.length > MAX_IMPORT_FILES) {
+    throw new Error("Too many import files in " + source + ": " + names.length + " exceeds the " + MAX_IMPORT_FILES + " file limit");
+  }
+  const documents = names.map((name) => {
+    const fullPath = path4.join(source, name);
+    assertImportFileSize(fullPath);
+    return { name, text: fs3.readFileSync(fullPath, "utf8") };
+  });
   if (documents.length === 0) {
     throw new Error(`No markdown or text files found in ${source}`);
   }
@@ -4514,7 +4668,7 @@ function runCli(argv, io) {
         bookNumber: parsed.options["book-number"],
         follows: parsed.options.follows,
         precedes: parsed.options.precedes,
-        force: Boolean(parsed.options.force)
+        force: isTruthy(parsed.options.force)
       });
       io.stdout.write(`Created story project: ${result.root}
 `);
@@ -4537,7 +4691,7 @@ function runCli(argv, io) {
         pov: parsed.options.pov,
         tense: parsed.options.tense,
         synopsis: parsed.options.synopsis,
-        force: Boolean(parsed.options.force)
+        force: isTruthy(parsed.options.force)
       });
       io.stdout.write(`Imported ${result.chapters} chapters (${result.words} words) into ${result.root}
 `);
@@ -4551,14 +4705,16 @@ function runCli(argv, io) {
       }
       return 0;
     }
-    const root = path5.resolve(cwd, parsed.positionals[1] ?? ".");
     if (command === "validate") {
+      const root = resolveRoot(cwd, parsed, command);
       return reportResult(io, validateProject(root), "Project is valid", "Project validation failed");
     }
     if (command === "links") {
+      const root = resolveRoot(cwd, parsed, command);
       return reportResult(io, validateLinks(root), "Links are valid", "Link check failed");
     }
     if (command === "continuity") {
+      const root = resolveRoot(cwd, parsed, command);
       return reportResult(io, checkProjectContinuity(root), "Continuity is consistent", "Continuity check failed");
     }
     if (command === "knowledge") {
@@ -4569,7 +4725,7 @@ function runCli(argv, io) {
 `);
         return 1;
       }
-      const entries = knowledgeAtChapter(targetRoot(cwd, parsed), characterId, atChapterId);
+      const entries = knowledgeAtChapter(resolveRoot(cwd, parsed, command), characterId, atChapterId);
       if (entries.length === 0) {
         io.stdout.write(`No recorded knowledge for ${characterId} at ${atChapterId}
 `);
@@ -4583,23 +4739,28 @@ function runCli(argv, io) {
       return 0;
     }
     if (command === "series") {
+      const root = resolveRoot(cwd, parsed, command);
       const report = seriesReport(root);
       io.stdout.write(formatSeriesReport(report));
       return reportResult(io, report, "Series is consistent", "Series check failed");
     }
     if (command === "report") {
-      io.stdout.write(formatProjectReport(projectReport(root), { actionable: Boolean(parsed.options.actionable) }));
+      const root = resolveRoot(cwd, parsed, command);
+      io.stdout.write(formatProjectReport(projectReport(root), { actionable: isTruthy(parsed.options.actionable) }));
       return 0;
     }
     if (command === "next") {
+      const root = resolveRoot(cwd, parsed, command);
       io.stdout.write(formatActionReport(projectActions(root)));
       return 0;
     }
     if (command === "doctor") {
+      const root = resolveRoot(cwd, parsed, command);
       io.stdout.write(formatDoctorReport(projectActions(root)));
       return 0;
     }
     if (command === "migrate") {
+      const root = resolveRoot(cwd, parsed, command);
       const result = migrateProject(root);
       io.stdout.write(result.changed.length === 0 ? `Project already uses the current schema
 ` : `Migrated project to current schema: ${result.changed.length} changes
@@ -4607,7 +4768,7 @@ function runCli(argv, io) {
       return 0;
     }
     if (command === "add") {
-      const result = createEntity(targetRoot(cwd, parsed), {
+      const result = createEntity(resolveRoot(cwd, parsed, command), {
         ...parsed.options,
         kind: parsed.positionals[1],
         name: parsed.positionals.slice(2).join(" ")
@@ -4617,7 +4778,7 @@ function runCli(argv, io) {
       return 0;
     }
     if (command === "rename") {
-      const result = renameEntity(targetRoot(cwd, parsed), {
+      const result = renameEntity(resolveRoot(cwd, parsed, command), {
         ...parsed.options,
         kind: parsed.positionals[1],
         id: parsed.positionals[2],
@@ -4628,7 +4789,7 @@ function runCli(argv, io) {
       return 0;
     }
     if (command === "remove") {
-      const result = removeEntity(targetRoot(cwd, parsed), {
+      const result = removeEntity(resolveRoot(cwd, parsed, command), {
         ...parsed.options,
         kind: parsed.positionals[1],
         id: parsed.positionals[2]
@@ -4638,6 +4799,7 @@ function runCli(argv, io) {
       return 0;
     }
     if (command === "reindex") {
+      const root = resolveRoot(cwd, parsed, command);
       const result = reindexProject(root);
       io.stdout.write(result.changed.length === 0 ? `Registries already up to date
 ` : `Updated ${result.changed.length} registries
@@ -4645,7 +4807,8 @@ function runCli(argv, io) {
       return 0;
     }
     if (command === "wordcount") {
-      const result = computeWordCounts(root, { write: Boolean(parsed.options.write) });
+      const root = resolveRoot(cwd, parsed, command);
+      const result = computeWordCounts(root, { write: isTruthy(parsed.options.write) });
       for (const chapter of result.chapters) {
         io.stdout.write(`${chapter.file}: ${chapter.wordCount}
 `);
@@ -4655,22 +4818,25 @@ function runCli(argv, io) {
       return 0;
     }
     if (command === "export") {
+      const root = resolveRoot(cwd, parsed, command);
       const result = exportManuscript(root, { out: parsed.options.out });
       io.stdout.write(`Exported ${result.chapters} chapters to ${result.outFile}
 `);
       return 0;
     }
     if (command === "build") {
+      const root = resolveRoot(cwd, parsed, command);
       const result = buildBook(root, {
         out: parsed.options.out,
         format: parsed.options.format,
-        shunn: Boolean(parsed.options.shunn)
+        shunn: isTruthy(parsed.options.shunn)
       });
       io.stdout.write(`Built ${result.chapters} chapters as ${result.format} to ${result.outFile}
 `);
       return 0;
     }
     if (command === "synopsis") {
+      const root = resolveRoot(cwd, parsed, command);
       const result = synopsisBook(root, { pages: parsed.options.pages, out: parsed.options.out });
       if (result.outFile === undefined) {
         io.stdout.write(result.text);
@@ -4759,11 +4925,36 @@ function isKnownOptionToken(token) {
   return key === "help" || BOOLEAN_OPTIONS.has(key) || VALUE_OPTIONS.has(key);
 }
 function addOption(options, key, value) {
+  const stored = BOOLEAN_OPTIONS.has(key) ? normalizeBooleanValue(value) : value;
   if (options[key] === undefined) {
-    options[key] = value;
+    options[key] = stored;
   } else {
-    options[key] = Array.isArray(options[key]) ? options[key].concat(value) : [options[key], value];
+    options[key] = Array.isArray(options[key]) ? options[key].concat(stored) : [options[key], stored];
   }
+}
+function normalizeBooleanValue(value) {
+  if (typeof value !== "string") {
+    return Boolean(value);
+  }
+  const lower = value.trim().toLowerCase();
+  if (lower === "false" || lower === "0" || lower === "no" || lower === "off") {
+    return false;
+  }
+  if (lower === "true" || lower === "1" || lower === "yes" || lower === "on") {
+    return true;
+  }
+  return true;
+}
+function isTruthy(value) {
+  const current = Array.isArray(value) ? value[value.length - 1] : value;
+  if (typeof current === "string") {
+    const lower = current.trim().toLowerCase();
+    if (lower === "false" || lower === "0" || lower === "no" || lower === "off" || lower === "") {
+      return false;
+    }
+    return true;
+  }
+  return Boolean(current);
 }
 function parseArgs(argv) {
   const positionals = [];
@@ -4790,45 +4981,69 @@ function parseArgs(argv) {
         addOption(options, key, inlineValue);
         continue;
       }
-      const nextValue2 = argv[index + 1];
-      if (nextValue2 === undefined || isKnownOptionToken(nextValue2)) {
+      const nextValue = argv[index + 1];
+      if (nextValue === undefined || isKnownOptionToken(nextValue)) {
         throw new Error(`Missing value for --${key}: expected a value`);
       }
-      addOption(options, key, nextValue2);
+      addOption(options, key, nextValue);
       index += 1;
       continue;
     }
-    const nextValue = argv[index + 1];
-    const hasSeparateValue = inlineValue === undefined && nextValue !== undefined && !nextValue.startsWith("-");
-    const value = inlineValue ?? (hasSeparateValue ? nextValue : true);
-    if (hasSeparateValue) {
-      index += 1;
-    }
-    addOption(options, key, value);
+    throw new Error(`Unknown option --${key}`);
   }
   return { positionals, options };
 }
 function collectThemes(options) {
   return [].concat(options.theme ?? []).concat(options.themes ?? []).filter((value) => value !== undefined && value !== true);
 }
-function targetRoot(cwd, parsed) {
-  return path5.resolve(cwd, parsed.options.path ?? ".");
+var PATH_POSITIONAL_COMMANDS = new Set([
+  "validate",
+  "links",
+  "continuity",
+  "series",
+  "report",
+  "next",
+  "doctor",
+  "migrate",
+  "reindex",
+  "wordcount",
+  "export",
+  "build",
+  "synopsis"
+]);
+function lastOptionValue(value) {
+  return Array.isArray(value) ? value[value.length - 1] : value;
+}
+function resolveRoot(cwd, parsed, command) {
+  const flagPath = lastOptionValue(parsed.options.path);
+  if (!PATH_POSITIONAL_COMMANDS.has(command)) {
+    return path5.resolve(cwd, flagPath ?? ".");
+  }
+  const positionalPath = parsed.positionals[1];
+  if (positionalPath !== undefined && flagPath !== undefined) {
+    const resolvedPositional = path5.resolve(cwd, positionalPath);
+    const resolvedFlag = path5.resolve(cwd, flagPath);
+    if (resolvedPositional !== resolvedFlag) {
+      throw new Error(`Conflicting project paths: ${positionalPath} and --path ${flagPath}. Use either a positional path or --path, not both.`);
+    }
+    return resolvedFlag;
+  }
+  return path5.resolve(cwd, flagPath ?? positionalPath ?? ".");
 }
 function reportResult(io, result, successMessage, failureMessage) {
-  const output = result.ok ? io.stdout : io.stderr;
   const dismissed = result.dismissed ?? [];
-  output.write(`${result.ok ? successMessage : failureMessage}: ${result.errors.length} errors, ${result.warnings.length} warnings, ${dismissed.length} dismissed
+  io.stderr.write(`${result.ok ? successMessage : failureMessage}: ${result.errors.length} errors, ${result.warnings.length} warnings, ${dismissed.length} dismissed
 `);
   for (const error of result.errors) {
     io.stderr.write(`error: ${error}
 `);
   }
   for (const warning of result.warnings) {
-    output.write(`warning: ${warning}
+    io.stderr.write(`warning: ${warning}
 `);
   }
   for (const entry of dismissed) {
-    io.stdout.write(`dismissed: ${entry.finding} (exemption: ${entry.reason})
+    io.stderr.write(`dismissed: ${entry.finding} (exemption: ${entry.reason})
 `);
   }
   return result.ok ? 0 : 1;

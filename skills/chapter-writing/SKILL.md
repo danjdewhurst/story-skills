@@ -77,7 +77,7 @@ With the approved outline, write the full prose:
 - Consult `references/writing-guidelines.md` for quick prose craft guidance. For the deep reference — the Scene/Sequel unit, dialogue subtext and voice-differentiation, deep POV and psychic distance — use the `scene-craft` skill.
 - When available, apply the `better-writing` skill before finalizing prose
 - Use the chapter template from `references/chapter-template.md`
-- Include the approved outline in the file above the prose (for reference)
+- Include the approved outline in the file above the prose (for reference). Note that in-file outlines count toward the chapter `word-count` until removed: run `story wordcount . --write` after writing, and trim or move the outline before final counts.
 
 Save to `chapters/chapter-{NN}.md` with appropriate frontmatter.
 
@@ -118,7 +118,7 @@ When asked to revise, line edit, polish, or continuity-check an existing chapter
 
 ## CLI Maintenance
 
-Use the Story CLI when it is available. If `story` is not installed but the `story-maintenance` skill is present, use `node ../story-maintenance/scripts/story.js` with the same arguments, resolving the path relative to this skill folder. If no CLI is available, perform the registry, backlink, and word-count checks manually.
+Use the Story CLI when it is available. If `story` is not installed, use `bun run story --` from the Story Skills repository checkout or the bundled fallback `node ../story-maintenance/scripts/story.js` with the same arguments, resolving the path relative to this skill folder. If no CLI is available, perform the registry, backlink, and word-count checks manually.
 
 ## Reference Files
 
