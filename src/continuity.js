@@ -21,10 +21,41 @@ export function checkContinuity(project) {
   checkChapterSequence(project, warnings);
   checkPromises(project, context, errors, warnings);
   checkQuestions(project, context, errors);
+  checkClues(project, context, errors, warnings);
   checkStoryCompletion(project, errors);
   checkContinuityState(project, context, errors, warnings);
+  checkPropCustody(project, context, errors, warnings);
+  checkClock(project, errors, warnings);
 
-  return { ok: errors.length === 0, errors, warnings };
+  return withExemptions(project, { ok: errors.length === 0, errors, warnings });
+}
+
+// Applies continuity/exemptions.md: findings whose text contains an exemption
+// pattern are moved out of errors/warnings and reported as dismissed. `ok`
+// reflects only the errors that remain.
+function withExemptions(project, result) {
+  const exemptions = project.exemptions ?? [];
+  const keptErrors = [];
+  const keptWarnings = [];
+  const dismissed = [];
+
+  for (const error of result.errors) {
+    dismissFinding(error, exemptions, keptErrors, dismissed);
+  }
+  for (const warning of result.warnings) {
+    dismissFinding(warning, exemptions, keptWarnings, dismissed);
+  }
+
+  return { ok: keptErrors.length === 0, errors: keptErrors, warnings: keptWarnings, dismissed };
+}
+
+function dismissFinding(finding, exemptions, kept, dismissed) {
+  const match = exemptions.find((exemption) => finding.includes(exemption.pattern));
+  if (match) {
+    dismissed.push({ finding, reason: match.reason });
+  } else {
+    kept.push(finding);
+  }
 }
 
 function checkCharacterDeaths(project, context, errors) {
@@ -170,6 +201,36 @@ function checkStoryCompletion(project, errors) {
       errors.push(`story.md is complete but ${relative(project, question.file)} is still open`);
     }
   }
+
+  for (const clue of project.clues) {
+    if (clue.status === "planned" || clue.status === "planted") {
+      errors.push(`story.md is complete but ${relative(project, clue.file)} is still ${clue.status}`);
+    }
+  }
+}
+
+function checkClues(project, context, errors, warnings) {
+  for (const clue of project.clues) {
+    const label = relative(project, clue.file);
+    const plantedNumber = context.chapterNumbers.get(clue.planted);
+    const payoffNumber = context.chapterNumbers.get(clue.payoff);
+
+    if (plantedNumber !== undefined && payoffNumber !== undefined && payoffNumber < plantedNumber) {
+      errors.push(`${label} pays off in ${clue.payoff} before it is planted in ${clue.planted}`);
+    }
+
+    if (clue.status === "paid-off" && !clue.payoff) {
+      errors.push(`${label} has status paid-off but no payoff chapter recorded`);
+    }
+
+    if (clue.status === "planted" && !clue.planted) {
+      errors.push(`${label} is planted but no plant chapter recorded`);
+    }
+
+    if (clue.status === "planted" && plantedNumber !== undefined && context.latestChapter - plantedNumber >= CHEKHOV_CHAPTER_GAP) {
+      warnings.push(`${label} was planted in ${clue.planted}, ${context.latestChapter - plantedNumber} chapters ago, and has no payoff yet`);
+    }
+  }
 }
 
 function checkContinuityState(project, context, errors, warnings) {
@@ -277,4 +338,218 @@ function requireMapping(entry, entryLabel, errors) {
 
 function relative(project, file) {
   return path.relative(project.root, file);
+}
+
+// Prop custody: artifacts with destroyed/lost object-state must not appear in
+// later chapters or scenes. The destruction chapter is recorded in
+// object-state `since`; later scenes whose state-changes target the artifact
+// are errors, and later chapters/scenes listing it in mentions or characters
+// are errors. Entries with no `since` cannot be checked and warn instead.
+function checkPropCustody(project, context, errors, warnings) {
+  const destroyed = [];
+  if (project.continuity) {
+    const label = path.join("continuity", "state.md");
+    for (const [index, entry] of stateEntries(project.continuity.data["object-state"]).entries()) {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+        continue;
+      }
+      const status = String(entry.status ?? "");
+      if (status !== "destroyed" && status !== "lost") {
+        continue;
+      }
+      const entryLabel = `${label} object-state[${index}]`;
+      const artifact = String(entry.artifact ?? "");
+      const since = entry.since === undefined || entry.since === null ? "" : String(entry.since);
+      if (since === "") {
+        warnings.push(`${entryLabel} is destroyed/lost with no since chapter; custody cannot be checked`);
+        continue;
+      }
+      const sinceNumber = context.chapterNumbers.get(since);
+      if (sinceNumber === undefined) {
+        errors.push(`${entryLabel} references missing since chapter ${since}`);
+        continue;
+      }
+      destroyed.push({ artifact, since, sinceNumber });
+    }
+  }
+
+  for (const { artifact, since, sinceNumber } of destroyed) {
+    if (artifact === "") {
+      continue;
+    }
+    for (const scene of project.scenes) {
+      const sceneNumber = context.chapterNumbers.get(scene.chapter);
+      if (sceneNumber === undefined || sceneNumber <= sinceNumber) {
+        continue;
+      }
+      const sceneLabel = relative(project, scene.file);
+      if (scene.stateChanges.some((change) => stateChangeTargets(change, artifact))) {
+        errors.push(`${sceneLabel} uses ${artifact}, destroyed/lost since ${since}`);
+      }
+      if (scene.mentions.includes(artifact) || scene.characters.includes(artifact)) {
+        errors.push(`${sceneLabel} mentions ${artifact}, destroyed/lost since ${since}`);
+      }
+    }
+    for (const chapter of project.chapters) {
+      if (chapter.number <= sinceNumber) {
+        continue;
+      }
+      if (chapter.mentions.includes(artifact) || chapter.characters.includes(artifact)) {
+        errors.push(`Chapter ${chapter.number} mentions ${artifact}, destroyed/lost since ${since}`);
+      }
+    }
+  }
+}
+
+function stateChangeTargets(change, artifact) {
+  if (!change || typeof change !== "object" || Array.isArray(change)) {
+    return false;
+  }
+  return change.target === artifact;
+}
+
+// Clock/time plausibility. Only active when at least one scene carries a
+// date; with no scene dates there are no time findings. Scene timestamps run
+// backward when a dated scene is earlier than the preceding dated scene in
+// the same chapter, and scene travel-hours asserts a minimum travel time.
+const TIME_RANKS = new Map([
+  ["dawn", 300],
+  ["morning", 420],
+  ["midday", 720],
+  ["afternoon", 900],
+  ["evening", 1140],
+  ["night", 1380]
+]);
+
+function checkClock(project, errors, warnings) {
+  if (!project.scenes.some((scene) => scene.date !== "")) {
+    return;
+  }
+
+  const scenesByChapter = new Map();
+  for (const scene of project.scenes) {
+    if (scene.date === "") {
+      continue;
+    }
+    const label = relative(project, scene.file);
+    const parsed = parseClockDate(scene.date);
+    if (!parsed) {
+      warnings.push(`${label} has malformed date "${scene.date}"`);
+      continue;
+    }
+    const minutes = parseClockTime(scene.time);
+    if (scene.time !== "" && minutes === undefined) {
+      warnings.push(`${label} has malformed time "${scene.time}"`);
+    }
+    if (scene.travelHours < 0) {
+      warnings.push(`${label} has negative travel-hours ${scene.travelHours}`);
+    }
+    const dated = scenesByChapter.get(scene.chapter);
+    if (dated) {
+      dated.push({ scene, label, days: parsed.days, minutes });
+    } else {
+      scenesByChapter.set(scene.chapter, [{ scene, label, days: parsed.days, minutes }]);
+    }
+  }
+
+  for (const dated of scenesByChapter.values()) {
+    dated.sort((left, right) => left.scene.scene - right.scene.scene);
+    checkSceneSequence(dated, errors);
+  }
+
+  checkChapterDates(project, warnings);
+}
+
+function checkSceneSequence(dated, errors) {
+  for (let index = 1; index < dated.length; index += 1) {
+    const previous = dated[index - 1];
+    const current = dated[index];
+    if (timestampBefore(current, previous)) {
+      errors.push(`${current.label} timestamp runs backward`);
+    }
+    if (current.scene.travelHours > 0 && previous.minutes !== undefined && current.minutes !== undefined) {
+      const elapsedHours = (timestampMinutes(current) - timestampMinutes(previous)) / 60;
+      if (elapsedHours < current.scene.travelHours) {
+        errors.push(`${current.label} allows only ${elapsedHours}h for travel of ${current.scene.travelHours}h`);
+      }
+    }
+  }
+}
+
+function timestampBefore(current, previous) {
+  if (current.days !== previous.days) {
+    return current.days < previous.days;
+  }
+  if (current.minutes === undefined || previous.minutes === undefined) {
+    return false;
+  }
+  return current.minutes < previous.minutes;
+}
+
+function timestampMinutes(stamp) {
+  return stamp.days * 1440 + stamp.minutes;
+}
+
+function parseClockDate(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) {
+    return undefined;
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const days = Date.UTC(year, month - 1, day) / 86400000;
+  const roundtrip = new Date(days * 86400000);
+  if (roundtrip.getUTCFullYear() !== year || roundtrip.getUTCMonth() !== month - 1 || roundtrip.getUTCDate() !== day) {
+    return undefined;
+  }
+  return { text: value.trim(), days };
+}
+
+function parseClockTime(value) {
+  const text = value.trim().toLowerCase();
+  if (text === "") {
+    return undefined;
+  }
+  const named = TIME_RANKS.get(text);
+  if (named !== undefined) {
+    return named;
+  }
+  const match = /^(\d{1,2}):(\d{2})$/.exec(text);
+  if (!match) {
+    return undefined;
+  }
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) {
+    return undefined;
+  }
+  return hours * 60 + minutes;
+}
+
+function checkChapterDates(project, warnings) {
+  let latestDate = "";
+  let latestNumber = 0;
+  for (const chapter of project.chapters) {
+    if (chapter.date === "") {
+      continue;
+    }
+    const parsed = parseClockDate(chapter.date);
+    if (!parsed) {
+      warnings.push(`Chapter ${chapter.number} has malformed date "${chapter.date}"`);
+      continue;
+    }
+    if (chapter.time !== "") {
+      if (parseClockTime(chapter.time) === undefined) {
+        warnings.push(`Chapter ${chapter.number} has malformed time "${chapter.time}"`);
+      }
+    }
+    if (latestDate !== "" && parsed.text < latestDate) {
+      warnings.push(`Chapter ${chapter.number} date ${parsed.text} is earlier than Chapter ${latestNumber} date ${latestDate}`);
+    }
+    if (parsed.text > latestDate) {
+      latestDate = parsed.text;
+      latestNumber = chapter.number;
+    }
+  }
 }

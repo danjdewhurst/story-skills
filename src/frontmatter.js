@@ -143,6 +143,14 @@ function parseScalar(value) {
     return [];
   }
 
+  if (trimmed === "true") {
+    return true;
+  }
+
+  if (trimmed === "false") {
+    return false;
+  }
+
   if (/^-?\d+$/.test(trimmed)) {
     return Number.parseInt(trimmed, 10);
   }

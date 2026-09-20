@@ -122,4 +122,16 @@ Body`);
     expect(parsed.data).toEqual({ title: "Spaced" });
     expect(parsed.body).toBe("Body");
   });
+
+  test("parses literal true and false as booleans", () => {
+    const parsed = parseFrontmatter("---\nsignificance-delayed: false\nsequel: true\n---\nBody");
+
+    expect(parsed.data).toEqual({ "significance-delayed": false, sequel: true });
+  });
+
+  test("round-trips booleans through stringify", () => {
+    const parsed = parseFrontmatter(stringifyFrontmatter({ "significance-delayed": false, sequel: true }));
+
+    expect(parsed.data).toEqual({ "significance-delayed": false, sequel: true });
+  });
 });
