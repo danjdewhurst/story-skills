@@ -782,7 +782,7 @@ function parseClockTime(value) {
   if (named !== undefined) {
     return named;
   }
-  const match = /^(\d{1,2}):(\d{2})$/.exec(text);
+  const match = /^(\d{2}):(\d{2})$/.exec(text);
   if (!match) {
     return;
   }
@@ -1009,6 +1009,7 @@ function discoverBooks(startRoot, scan, errors) {
     const data = project.story.data;
     const book = {
       root,
+      key: effective,
       label,
       project,
       title: String(data.title ?? path2.basename(root)),
@@ -1030,36 +1031,36 @@ function isPathInside(root, target) {
   return !path2.isAbsolute(relativePath) && (relativePath === "" || !relativePath.split(path2.sep).includes(".."));
 }
 function chronologicalOrder(books, errors) {
-  const byRoot = new Map(books.map((book) => [book.root, book]));
-  const later = new Map(books.map((book) => [book.root, new Set]));
+  const byKey = new Map(books.map((book) => [book.key, book]));
+  const later = new Map(books.map((book) => [book.key, new Set]));
   for (const book of books) {
-    for (const earlier of book.follows) {
-      if (byRoot.has(earlier) && earlier !== book.root) {
-        later.get(earlier).add(book.root);
+    for (const earlier of book.follows.map(canonicalPath)) {
+      if (byKey.has(earlier) && earlier !== book.key) {
+        later.get(earlier).add(book.key);
       }
     }
-    for (const next of book.precedes) {
-      if (byRoot.has(next) && next !== book.root) {
-        later.get(book.root).add(next);
+    for (const next of book.precedes.map(canonicalPath)) {
+      if (byKey.has(next) && next !== book.key) {
+        later.get(book.key).add(next);
       }
     }
   }
-  const indegree = new Map(books.map((book) => [book.root, 0]));
+  const indegree = new Map(books.map((book) => [book.key, 0]));
   for (const targets of later.values()) {
     for (const target of targets) {
       indegree.set(target, indegree.get(target) + 1);
     }
   }
   const order = [];
-  const ready = books.filter((book) => indegree.get(book.root) === 0);
+  const ready = books.filter((book) => indegree.get(book.key) === 0);
   while (ready.length > 0) {
     ready.sort(compareBooks);
     const book = ready.shift();
     order.push(book);
-    for (const target of later.get(book.root)) {
+    for (const target of later.get(book.key)) {
       indegree.set(target, indegree.get(target) - 1);
       if (indegree.get(target) === 0) {
-        ready.push(byRoot.get(target));
+        ready.push(byKey.get(target));
       }
     }
   }
@@ -1074,9 +1075,9 @@ function compareBooks(left, right) {
   return (left.bookNumber ?? Infinity) - (right.bookNumber ?? Infinity) || left.title.localeCompare(right.title);
 }
 function checkSharedCanon({ order, later }, errors, warnings) {
-  const reachable = new Map(order.map((book) => [book.root, collectLater(book.root, later, new Set)]));
+  const reachable = new Map(order.map((book) => [book.key, collectLater(book.key, later, new Set)]));
   for (const book of order) {
-    const earlierBooks = order.filter((candidate) => reachable.get(candidate.root).has(book.root));
+    const earlierBooks = order.filter((candidate) => reachable.get(candidate.key).has(book.key));
     checkCanonNames(book, earlierBooks, warnings);
     checkCanonDeaths(book, earlierBooks, errors);
     checkDestroyedArtifacts(book, earlierBooks, warnings);
@@ -1267,18 +1268,18 @@ var PROMISE_STATUSES = new Set(["planned", "planted", "paid-off", "dropped", "ab
 var CLUE_STATUSES = new Set(["planned", "planted", "paid-off", "dropped", "abandoned"]);
 var TERM_CATEGORIES = new Set(["person", "place", "faction", "artifact", "concept", "term", "other"]);
 var RELATIONSHIP_INVERSES = new Map([
-  ["parent", "child"],
-  ["child", "parent"],
-  ["grandparent", "grandchild"],
-  ["grandchild", "grandparent"],
-  ["uncle", "nephew"],
-  ["aunt", "niece"],
-  ["nephew", "uncle"],
-  ["niece", "aunt"],
-  ["mentor", "student"],
-  ["student", "mentor"],
-  ["employer", "subordinate"],
-  ["subordinate", "employer"]
+  ["parent", ["child"]],
+  ["child", ["parent"]],
+  ["grandparent", ["grandchild"]],
+  ["grandchild", ["grandparent"]],
+  ["uncle", ["nephew", "niece"]],
+  ["aunt", ["nephew", "niece"]],
+  ["nephew", ["uncle", "aunt"]],
+  ["niece", ["uncle", "aunt"]],
+  ["mentor", ["student"]],
+  ["student", ["mentor"]],
+  ["employer", ["subordinate"]],
+  ["subordinate", ["employer"]]
 ]);
 var SYMMETRIC_RELATIONSHIPS = new Set([
   "sibling",
@@ -1306,6 +1307,9 @@ function createStoryProject(options) {
     if (!storyId) {
       throw new Error('Cannot derive a directory name from story title "' + title + '": pass --dir to set the target directory explicitly');
     }
+  }
+  if (lstatIfExists(root)?.isSymbolicLink()) {
+    throw new Error(`Refusing to use symlinked project directory: ${root}`);
   }
   if (fs2.existsSync(root) && !options.force) {
     throw new Error(`${root} already exists. Use --force to overwrite starter files.`);
@@ -1672,19 +1676,19 @@ function validateLinksOf(project) {
         if (backlinks.length === 0) {
           errors.push(`${label} relationship to ${target} is missing backlink`);
         } else {
-          const expectedType = inverseRelationshipType(relationship.type);
-          let matched = expectedType === "";
+          const expectedTypes = inverseRelationshipTypes(relationship.type);
+          let matched = expectedTypes.length === 0;
           const types = [];
           for (const entry of backlinks) {
             if (entry.type) {
               types.push(entry.type);
             }
-            if (entry.type === expectedType) {
+            if (expectedTypes.includes(entry.type)) {
               matched = true;
             }
           }
           if (!matched) {
-            errors.push(`${label} relationship ${relationship.type} to ${target} expects backlink type ${expectedType}, got ${types.join(", ") || "none"}`);
+            errors.push(`${label} relationship ${relationship.type} to ${target} expects backlink type ${expectedTypes.join(" or ")}, got ${types.join(", ") || "none"}`);
           }
         }
       }
@@ -1888,6 +1892,10 @@ function checkBodyLinkTarget(project, label, target, errors) {
   const resolved = path3.resolve(path3.dirname(path3.join(project.root, label)), pathOnly);
   if (!isPathInside2(path3.resolve(project.root), resolved) || !fs2.existsSync(resolved) || !fs2.statSync(resolved).isFile()) {
     errors.push(`${label} links to missing file ${cleaned}`);
+    return;
+  }
+  if (!isPathInside2(fs2.realpathSync(project.root), fs2.realpathSync(resolved))) {
+    errors.push(`${label} links to ${cleaned} which resolves outside the project`);
     return;
   }
   const known = new Set;
@@ -3331,6 +3339,9 @@ var NESTED_IDENTITY_FIELDS = new Set(["artifact", "character"]);
 function replaceEntityReferences(root, oldId, newId) {
   const pathPattern = new RegExp(`(^|/)${escapeRegExp(oldId)}\\.md$`);
   rewriteReferences(root, (value) => value === oldId ? newId : value, (body) => body.replace(/\[([^\]]*)\]\(([^)]*)\)/g, (match, label, target) => {
+    if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(target.trim())) {
+      return match;
+    }
     const hash = target.indexOf("#");
     const query = target.indexOf("?");
     let cut = target.length;
@@ -4540,11 +4551,11 @@ function validateEnum(data, field, allowed, label, errors) {
     errors.push(`${label} frontmatter field ${field} has unsupported value ${data[field]}`);
   }
 }
-function inverseRelationshipType(type) {
+function inverseRelationshipTypes(type) {
   if (RELATIONSHIP_INVERSES.has(type)) {
     return RELATIONSHIP_INVERSES.get(type);
   }
-  return SYMMETRIC_RELATIONSHIPS.has(type) ? type : "";
+  return SYMMETRIC_RELATIONSHIPS.has(type) ? [type] : [];
 }
 function formatCheck(result) {
   const status = result.ok ? "ok" : "failed";

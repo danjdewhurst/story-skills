@@ -943,6 +943,21 @@ word-count: 0
     expect(chapterText).toContain("[tess](../characters/tess.md?ref=1)");
   });
 
+  test("rename leaves external URLs that end in the old filename alone", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "External Rename", force: false });
+    createEntity(created.root, { kind: "character", name: "Mara", role: "protagonist" });
+    const chapter = createEntity(created.root, { kind: "chapter", name: "Arrival", number: 1 });
+    fs.appendFileSync(chapter.file, "See [mara](https://example.test/mara.md#s), [mara](//cdn.example.test/mara.md), and [mara](../characters/mara.md).\n", "utf8");
+
+    renameEntity(created.root, { kind: "character", id: "mara", name: "Tess" });
+
+    const chapterText = fs.readFileSync(chapter.file, "utf8");
+    expect(chapterText).toContain("[mara](https://example.test/mara.md#s)");
+    expect(chapterText).toContain("[mara](//cdn.example.test/mara.md)");
+    expect(chapterText).toContain("[tess](../characters/tess.md)");
+  });
+
   test("remove clears since and learned-in without dropping the rest of the row", () => {
     const cwd = makeTempDir();
     const created = createStoryProject({ cwd, title: "Scrub Since", force: false });
@@ -983,6 +998,7 @@ object-state:
     createEntity(created.root, { kind: "chapter", name: "Dated", number: 1, date: "2026-03-01", time: "morning" });
     expect(() => createEntity(created.root, { kind: "chapter", name: "Bad Date", number: 2, date: "yesterday" })).toThrow("YYYY-MM-DD");
     expect(() => createEntity(created.root, { kind: "chapter", name: "Bad Time", number: 2, time: "99:99" })).toThrow("HH:MM");
+    expect(() => createEntity(created.root, { kind: "chapter", name: "Short Hour", number: 2, time: "1:00" })).toThrow("HH:MM");
     expect(() => createEntity(created.root, { kind: "scene", name: "Back", chapter: "chapter-01", scene: 1, "travel-hours": -1 })).toThrow("zero or positive");
     expect(() => createEntity(created.root, { kind: "scene", name: "Bad Date", chapter: "chapter-01", scene: 2, date: "yesterday" })).toThrow("YYYY-MM-DD");
     expect(() => createEntity(created.root, { kind: "scene", name: "Bad Time", chapter: "chapter-01", scene: 2, time: "99:99" })).toThrow("HH:MM");
@@ -1013,6 +1029,48 @@ relationships:
 `, "# Bea");
 
     expect(validateLinks(created.root).ok).toBe(true);
+  });
+
+  test("accepts either gendered inverse for aunt, uncle, niece, and nephew", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Mixed Kin", force: false });
+    writeMarkdown(path.join(created.root, "characters", "ada.md"), `
+name: Ada
+role: protagonist
+status: alive
+relationships:
+  - character: bea
+    type: uncle
+  - character: cal
+    type: aunt
+`, "# Ada");
+    writeMarkdown(path.join(created.root, "characters", "bea.md"), `
+name: Bea
+role: supporting
+status: alive
+relationships:
+  - character: ada
+    type: niece
+`, "# Bea");
+    writeMarkdown(path.join(created.root, "characters", "cal.md"), `
+name: Cal
+role: supporting
+status: alive
+relationships:
+  - character: ada
+    type: nephew
+`, "# Cal");
+    expect(validateLinks(created.root).errors).toEqual([]);
+
+    writeMarkdown(path.join(created.root, "characters", "cal.md"), `
+name: Cal
+role: supporting
+status: alive
+relationships:
+  - character: ada
+    type: friend
+`, "# Cal");
+    expect(validateLinks(created.root).errors.join("\n")).toContain("relationship aunt to cal expects backlink type nephew or niece, got friend");
   });
 
   test("covers helper errors, fallback branches, and malformed continuity state", () => {
@@ -1752,6 +1810,38 @@ status: draft
 });
 
 describe("review-findings hardening", () => {
+  test("body links that resolve through a symlink to outside the project fail", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Escaping Link", force: false });
+    createEntity(created.root, { kind: "character", name: "Mara", role: "protagonist" });
+    const outside = path.join(cwd, "mara.md");
+    fs.writeFileSync(outside, "# Outside\n", "utf8");
+    fs.mkdirSync(path.join(created.root, "plot", "notes"));
+    try {
+      fs.symlinkSync(outside, path.join(created.root, "plot", "notes", "mara.md"));
+    } catch {
+      console.warn("Skipping body-link symlink test: symlinks unavailable.");
+      return;
+    }
+    fs.appendFileSync(path.join(created.root, "plot", "timeline.md"), "\nSee [Mara](notes/mara.md).\n", "utf8");
+
+    const links = validateLinks(created.root);
+    expect(links.errors.join("\n")).toContain("plot/timeline.md links to notes/mara.md which resolves outside the project");
+  });
+
+  test("init refuses a symlinked project directory even with force", () => {
+    const cwd = makeTempDir();
+    fs.mkdirSync(path.join(cwd, "real"));
+    try {
+      fs.symlinkSync(path.join(cwd, "real"), path.join(cwd, "linked"), "dir");
+    } catch {
+      console.warn("Skipping symlinked init test: symlinks unavailable.");
+      return;
+    }
+    expect(() => createStoryProject({ cwd, title: "Linked", dir: "linked", force: true })).toThrow("symlinked project directory");
+    expect(fs.readdirSync(path.join(cwd, "real"))).toEqual([]);
+  });
+
   test("arc body re-read failures become structured errors instead of throwing", () => {
     const cwd = makeTempDir();
     const root = createStoryProject({ title: "Arc Errors", cwd }).root;

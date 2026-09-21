@@ -195,6 +195,23 @@ describe("manuscript import", () => {
     expect(fs.existsSync(path.join(second.root, "chapters", "chapter-02.md"))).toBe(false);
   });
 
+  test("force import refuses a symlinked destination instead of deleting its chapters", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "novel.md"), "# Chapter 1\n\nHello there.", "utf8");
+    fs.mkdirSync(path.join(cwd, "real", "chapters"), { recursive: true });
+    const kept = path.join(cwd, "real", "chapters", "chapter-09.md");
+    fs.writeFileSync(kept, "keep", "utf8");
+    try {
+      fs.symlinkSync(path.join(cwd, "real"), path.join(cwd, "linked"), "dir");
+    } catch {
+      console.warn("Skipping symlinked destination test: symlinks unavailable.");
+      return;
+    }
+
+    expect(() => importManuscript({ source: "novel.md", title: "Linked", cwd, dir: "linked", force: true })).toThrow("symlinked project directory");
+    expect(fs.readFileSync(kept, "utf8")).toBe("keep");
+  });
+
   test("sorts unnumbered front matter first and other unnumbered files last", () => {
     const names = ["epilogue.md", "chapter-2.md", "prologue.md", "chapter-1.md", "afterword.md"];
     expect(names.sort(compareImportNames)).toEqual(["prologue.md", "chapter-1.md", "chapter-2.md", "afterword.md", "epilogue.md"]);

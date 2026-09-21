@@ -224,6 +224,9 @@ function discoverBooks(startRoot, scan, errors) {
     const data = project.story.data;
     const book = {
       root,
+      // Canonical paths, so an edge written through a symlink and one written
+      // with the real path reach the same book.
+      key: effective,
       label,
       project,
       title: String(data.title ?? path.basename(root)),
@@ -247,22 +250,22 @@ function isPathInside(root, target) {
 }
 
 function chronologicalOrder(books, errors) {
-  const byRoot = new Map(books.map((book) => [book.root, book]));
-  const later = new Map(books.map((book) => [book.root, new Set()]));
+  const byKey = new Map(books.map((book) => [book.key, book]));
+  const later = new Map(books.map((book) => [book.key, new Set()]));
   for (const book of books) {
-    for (const earlier of book.follows) {
-      if (byRoot.has(earlier) && earlier !== book.root) {
-        later.get(earlier).add(book.root);
+    for (const earlier of book.follows.map(canonicalPath)) {
+      if (byKey.has(earlier) && earlier !== book.key) {
+        later.get(earlier).add(book.key);
       }
     }
-    for (const next of book.precedes) {
-      if (byRoot.has(next) && next !== book.root) {
-        later.get(book.root).add(next);
+    for (const next of book.precedes.map(canonicalPath)) {
+      if (byKey.has(next) && next !== book.key) {
+        later.get(book.key).add(next);
       }
     }
   }
 
-  const indegree = new Map(books.map((book) => [book.root, 0]));
+  const indegree = new Map(books.map((book) => [book.key, 0]));
   for (const targets of later.values()) {
     for (const target of targets) {
       indegree.set(target, indegree.get(target) + 1);
@@ -270,15 +273,15 @@ function chronologicalOrder(books, errors) {
   }
 
   const order = [];
-  const ready = books.filter((book) => indegree.get(book.root) === 0);
+  const ready = books.filter((book) => indegree.get(book.key) === 0);
   while (ready.length > 0) {
     ready.sort(compareBooks);
     const book = ready.shift();
     order.push(book);
-    for (const target of later.get(book.root)) {
+    for (const target of later.get(book.key)) {
       indegree.set(target, indegree.get(target) - 1);
       if (indegree.get(target) === 0) {
-        ready.push(byRoot.get(target));
+        ready.push(byKey.get(target));
       }
     }
   }
@@ -298,10 +301,10 @@ function compareBooks(left, right) {
 }
 
 function checkSharedCanon({ order, later }, errors, warnings) {
-  const reachable = new Map(order.map((book) => [book.root, collectLater(book.root, later, new Set())]));
+  const reachable = new Map(order.map((book) => [book.key, collectLater(book.key, later, new Set())]));
 
   for (const book of order) {
-    const earlierBooks = order.filter((candidate) => reachable.get(candidate.root).has(book.root));
+    const earlierBooks = order.filter((candidate) => reachable.get(candidate.key).has(book.key));
     checkCanonNames(book, earlierBooks, warnings);
     checkCanonDeaths(book, earlierBooks, errors);
     checkDestroyedArtifacts(book, earlierBooks, warnings);
