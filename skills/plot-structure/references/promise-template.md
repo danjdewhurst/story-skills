@@ -5,7 +5,7 @@ Use this template for setup/payoff files at `continuity/promises/{promise-kebab}
 ```yaml
 ---
 title: "{Promise Or Setup}"
-status: {planned|planted|paid-off|dropped}
+status: {planned|planted|paid-off|abandoned|dropped}
 planted: chapter-{NN}
 payoff: chapter-{NN}
 arcs:

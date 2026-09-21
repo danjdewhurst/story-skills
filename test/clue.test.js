@@ -6,6 +6,8 @@ import { checkContinuity } from "../src/continuity.js";
 import {
   createEntity,
   createStoryProject,
+  formatActionReport,
+  projectActions,
   reindexProject,
   removeEntity,
   renameEntity,
@@ -91,6 +93,7 @@ describe("clue ledger", () => {
     const raw = fs.readFileSync(path.join(root, "continuity", "clues", "_index.md"), "utf8");
     expect(raw).toContain("type: clue-registry");
     expect(raw).toContain("the-silver-locket");
+    expect(formatActionReport(projectActions(root))).toContain("Review open clues");
   });
 
   test("flags payoff before plant, planted without chapter, and paid-off without payoff", () => {
@@ -133,6 +136,28 @@ planted: chapter-01
       "continuity/clues/stale-clue.md was planted in chapter-01, 4 chapters ago, and has no payoff yet"
     );
     expect(result.ok).toBe(true);
+  });
+
+  test("skips the gap warning when payoff is still ahead and names a passed payoff", () => {
+    const ahead = clueProject(4);
+    writeClue(ahead, "later-clue", `
+status: planted
+planted: chapter-01
+payoff: chapter-10
+`);
+    const aheadResult = checkContinuity(scanProject(ahead));
+    expect(aheadResult.warnings.join("\n")).not.toContain("later-clue");
+
+    const passed = clueProject(4);
+    writeClue(passed, "missed-clue", `
+status: planted
+planted: chapter-01
+payoff: chapter-02
+`);
+    const passedResult = checkContinuity(scanProject(passed));
+    expect(passedResult.warnings).toContain(
+      "continuity/clues/missed-clue.md payoff chapter chapter-02 has passed and status is still planted"
+    );
   });
 
   test("does not warn for recently planted clues", () => {
@@ -315,7 +340,7 @@ status: planned
     createEntity(root, { kind: "clue", name: "Known Clue", planted: "chapter-01" });
     const timelinePath = path.join(root, "plot", "timeline.md");
     const timelineRaw = fs.readFileSync(timelinePath, "utf8");
-    fs.writeFileSync(timelinePath, `${timelineRaw}\nSee [Known Clue](known-clue.md).\nSee [Ghost Clue](ghost-clue.md).\n`, "utf8");
+    fs.writeFileSync(timelinePath, `${timelineRaw}\nSee [Known Clue](../continuity/clues/known-clue.md).\nSee [Ghost Clue](ghost-clue.md).\n`, "utf8");
 
     const result = validateLinks(root);
     expect(result.errors.join("\n")).toContain("links to missing file ghost-clue.md");

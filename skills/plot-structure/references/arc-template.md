@@ -42,7 +42,7 @@ Ordered list of specific story events, linked to chapters:
 
 | # | Plot Point | Act | Chapter | Status | Notes |
 |---|------------|-----|---------|--------|-------|
-| 1 | | | {planned|written|revised} | |
+| 1 | | | | planned | |
 
 ## Foreshadowing
 

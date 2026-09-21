@@ -6,7 +6,7 @@ Use this template when creating a new character file at `characters/{character-n
 ---
 name: "{Full Name}"
 role: {protagonist|antagonist|supporting|minor|narrator|deuteragonist}
-status: {alive|deceased|unknown|missing}
+status: {alive|deceased|unknown|missing|cut}
 died-in: {chapter-NN}
 aliases:
   - "{Alias 1}"
@@ -26,7 +26,7 @@ ghost-wound: "{The past wound that made the lie feel true}"
 ---
 ```
 
-`died-in` is optional. Set it (with `status: deceased`) when a character dies on the page so `story continuity` can flag appearances in later chapters; leave it out for characters who died before the story begins. Posthumous appearances in flashbacks, memories, or recordings belong in chapter/scene `mentions`, not `characters`.
+`died-in` is optional. Set it (with `status: deceased`) when a character dies on the page so `story continuity` can flag appearances in later chapters; leave it out for characters who died before the story begins. Posthumous appearances in flashbacks, memories, or recordings belong in chapter/scene `mentions`, not `characters`. `status: cut` keeps a removed character's file. `story reindex` still lists that file.
 
 ## Appearance
 

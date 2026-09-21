@@ -5,6 +5,7 @@ import { runCli } from "../src/cli.js";
 import { parseFrontmatter, replaceFrontmatter } from "../src/frontmatter.js";
 import {
   buildSeries,
+  canonicalPath,
   formatSeriesReport,
   seriesLinkPath,
   seriesLinks,
@@ -53,7 +54,8 @@ describe("series links", () => {
     const root = path.resolve("/stories/book-two");
     expect(seriesLinkPath(root, path.resolve("/stories/book-one"))).toBe("../book-one");
     expect(seriesLinks(root, { follows: ["../book-one", "", "  ", 3] }, "follows")).toEqual([path.resolve("/stories/book-one")]);
-    expect(seriesLinks(root, { follows: "../book-one" }, "follows")).toEqual([]);
+    expect(seriesLinks(root, { follows: "../book-one" }, "follows")).toEqual([path.resolve("/stories/book-one")]);
+    expect(seriesLinks(root, { follows: "  " }, "follows")).toEqual([]);
   });
 
   test("reports self links, missing projects, unreadable bibles, missing backlinks, and series mismatches", () => {
@@ -370,6 +372,53 @@ describe("series traversal limits", () => {
     } finally {
       fs.realpathSync = originalRealpath;
     }
+  });
+
+  test("canonicalPath falls back when realpath fails, including at the filesystem root", () => {
+    const cwd = makeTempDir();
+    const root = book(cwd, "Scoped");
+    const originalRealpath = fs.realpathSync;
+    fs.realpathSync = (target) => {
+      if (target === path.parse(target).root) {
+        return originalRealpath(target);
+      }
+      throw new Error("EIO");
+    };
+    try {
+      expect(canonicalPath(root)).toBe(path.resolve(root));
+    } finally {
+      fs.realpathSync = originalRealpath;
+    }
+    fs.realpathSync = () => {
+      throw new Error("EIO");
+    };
+    try {
+      expect(canonicalPath(root)).toBe(path.resolve(root));
+    } finally {
+      fs.realpathSync = originalRealpath;
+    }
+  });
+
+  test("reports an empty series when the start path is not a project", () => {
+    const cwd = makeTempDir();
+    const report = buildSeries(cwd, () => {
+      throw new Error("scan should not run");
+    });
+    expect(report.books).toEqual([]);
+    expect(report.ok).toBe(false);
+    expect(report.errors.join("\n")).toContain("missing story.md");
+  });
+
+  test("reports scan errors from a linked book", () => {
+    const cwd = makeTempDir();
+    const one = book(cwd, "Book One");
+    const two = book(cwd, "Book Two");
+    setStory(one, { series: "saga", "book-number": 1, precedes: ["../book-two"] });
+    setStory(two, { series: "saga", "book-number": 2, follows: ["../book-one"] });
+    fs.writeFileSync(path.join(two, "characters", "ada.md"), "not frontmatter\n", "utf8");
+    const report = seriesReport(one);
+    expect(report.ok).toBe(false);
+    expect(report.errors.join("\n")).toContain("characters/ada.md");
   });
 
   test("does not false-fail at exactly 100 books with reciprocal links", () => {

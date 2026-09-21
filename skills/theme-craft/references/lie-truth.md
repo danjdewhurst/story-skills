@@ -53,8 +53,12 @@ last.
 The character template (`character-management/references/character-template.md`)
 carries these fields — fill them in for significant characters:
 
+`arc-type` is `change-positive`, `change-negative`, or `flat`. Keep the
+choice as the value only. An inline `#` comment is stored as part of the
+scalar.
+
 ```yaml
-arc-type: change-positive   # change-positive | change-negative | flat
+arc-type: change-positive
 lie: "{The false belief}"
 truth: "{The belief that resolves it}"
 ghost-wound: "{The specific backstory event that planted the lie}"

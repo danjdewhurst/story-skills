@@ -65,7 +65,9 @@ If neither command is available, create the files manually using the steps below
 │   ├── state.md
 │   ├── questions/
 │   │   └── _index.md
-│   └── promises/
+│   ├── promises/
+│   │   └── _index.md
+│   └── clues/
 │       └── _index.md
 ├── glossary/
 │   ├── _index.md
@@ -226,13 +228,14 @@ story: {story-title-kebab}
 ## Total Word Count: 0
 ```
 
-Also create the v2 support files:
+Also create the v2 support files. Every registry and `continuity/state.md` needs `story: {story-title-kebab}` in addition to its `type`, or `story validate` reports a missing `story` field:
 
-- `scenes/_index.md` with frontmatter `type: scene-registry`
-- `continuity/state.md` with frontmatter `type: continuity-state`, `current-chapter: 0`, and empty `character-state`, `object-state`, and `knowledge-state` lists
-- `continuity/questions/_index.md` with frontmatter `type: question-registry`
-- `continuity/promises/_index.md` with frontmatter `type: promise-registry`
-- `glossary/_index.md` with frontmatter `type: glossary-registry`
+- `scenes/_index.md` with frontmatter `type: scene-registry` and `story: {story-title-kebab}`
+- `continuity/state.md` with frontmatter `type: continuity-state`, `story: {story-title-kebab}`, `current-chapter: 0`, and empty `character-state`, `object-state`, and `knowledge-state` lists
+- `continuity/questions/_index.md` with frontmatter `type: question-registry` and `story: {story-title-kebab}`
+- `continuity/promises/_index.md` with frontmatter `type: promise-registry` and `story: {story-title-kebab}`
+- `continuity/clues/_index.md` with frontmatter `type: clue-registry` and `story: {story-title-kebab}`
+- `glossary/_index.md` with frontmatter `type: glossary-registry` and `story: {story-title-kebab}`
 
 If manual initialization gets tedious, stop and ask the user to install or run the Story CLI rather than inventing a different project shape.
 
@@ -268,6 +271,6 @@ These conventions apply across ALL story skills:
 - **Death tracking** - when a character dies on the page, set `status: deceased` and `died-in: chapter-{NN}` so `story continuity` can flag posthumous appearances
 - **`mentions` vs `characters`** - chapter and scene frontmatter lists characters present in-scene under `characters`; characters who are only referenced, remembered, recorded, or seen in flashback go under `mentions`
 - **Scene identifiers** use `chapter-{NN}-scene-{NN}` and live in `scenes/`
-- **Continuity state** lives in `continuity/state.md`, with open questions and promises tracked under `continuity/questions/` and `continuity/promises/`
+- **Continuity state** lives in `continuity/state.md`, with open questions, promises, and clues tracked under `continuity/questions/`, `continuity/promises/`, and `continuity/clues/`
 - **Markdown-first artifacts** - create and edit story content directly in the target `.md` files. Do not create project-local build scripts, generator scripts, or bulk writer scripts (for example `build-*.js`) to emit story files.
 - **CLI helpers stay external** - the only JavaScript helper agents should run is the installed or bundled Story CLI (`story`, `bun run story --`, or `story-maintenance/scripts/story.js`) for deterministic maintenance. Do not copy it into the user's story project, and remove any unavoidable scratch helper before finishing.

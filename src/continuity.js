@@ -6,6 +6,9 @@ const CHEKHOV_CHAPTER_GAP = 3;
 export function checkContinuity(project) {
   const errors = [];
   const warnings = [];
+  for (const scanError of project.fileErrors ?? []) {
+    errors.push(scanError);
+  }
   const context = {
     chapterNumbers: new Map(project.chapters.map((chapter) => [chapter.id, chapter.number])),
     characters: new Map(project.characters.map((character) => [character.id, character])),
@@ -162,8 +165,9 @@ function checkPromises(project, context, errors, warnings) {
       warnings.push(`${label} records planted chapter ${promise.planted} but status is still planned`);
     }
 
-    if (promise.status === "planted" && plantedNumber !== undefined && context.latestChapter - plantedNumber >= CHEKHOV_CHAPTER_GAP) {
-      warnings.push(`${label} was planted in ${promise.planted}, ${context.latestChapter - plantedNumber} chapters ago, and has no payoff yet`);
+    const chekhov = chekhovWarning(label, promise.planted, plantedNumber, promise.payoff, referencedChapterNumber(context.chapterNumbers, promise.payoff), context.latestChapter);
+    if (promise.status === "planted" && chekhov) {
+      warnings.push(chekhov);
     }
   }
 }
@@ -236,10 +240,35 @@ function checkClues(project, context, errors, warnings) {
       errors.push(`${label} is planted but no plant chapter recorded`);
     }
 
-    if (clue.status === "planted" && plantedNumber !== undefined && context.latestChapter - plantedNumber >= CHEKHOV_CHAPTER_GAP) {
-      warnings.push(`${label} was planted in ${clue.planted}, ${context.latestChapter - plantedNumber} chapters ago, and has no payoff yet`);
+    const chekhov = chekhovWarning(label, clue.planted, plantedNumber, clue.payoff, referencedChapterNumber(context.chapterNumbers, clue.payoff), context.latestChapter);
+    if (clue.status === "planted" && chekhov) {
+      warnings.push(chekhov);
     }
   }
+}
+
+function referencedChapterNumber(chapterNumbers, id) {
+  if (typeof id !== "string" || id === "") {
+    return undefined;
+  }
+  if (chapterNumbers.has(id)) {
+    return chapterNumbers.get(id);
+  }
+  const match = /^chapter-(\d+)$/.exec(id);
+  return match ? Number.parseInt(match[1], 10) : undefined;
+}
+
+function chekhovWarning(label, planted, plantedNumber, payoff, payoffNumber, latestChapter) {
+  if (plantedNumber === undefined || latestChapter - plantedNumber < CHEKHOV_CHAPTER_GAP) {
+    return "";
+  }
+  if (payoff && payoffNumber !== undefined && payoffNumber > latestChapter) {
+    return "";
+  }
+  if (payoff && payoffNumber !== undefined && payoffNumber <= latestChapter) {
+    return `${label} payoff chapter ${payoff} has passed and status is still planted`;
+  }
+  return `${label} was planted in ${planted}, ${latestChapter - plantedNumber} chapters ago, and has no payoff yet`;
 }
 
 function checkContinuityState(project, context, errors, warnings) {
@@ -466,7 +495,24 @@ function checkClock(project, errors, warnings) {
     checkSceneSequence(dated, errors, warnings);
   }
 
+  checkCrossChapterSceneClock(project, scenesByChapter, errors, warnings);
   checkChapterDates(project, warnings);
+}
+
+function checkCrossChapterSceneClock(project, scenesByChapter, errors, warnings) {
+  const ordered = [...project.chapters].sort((left, right) => left.number - right.number);
+  let previous = null;
+  for (const chapter of ordered) {
+    const dated = scenesByChapter.get(chapter.id);
+    if (!dated || dated.length === 0) {
+      continue;
+    }
+    const sorted = [...dated].sort((left, right) => left.scene.scene - right.scene.scene);
+    if (previous) {
+      checkSceneSequence([previous, sorted[0]], errors, warnings);
+    }
+    previous = sorted[sorted.length - 1];
+  }
 }
 
 function checkSceneSequence(dated, errors, warnings) {
@@ -475,6 +521,7 @@ function checkSceneSequence(dated, errors, warnings) {
     const current = dated[index];
     if (timestampBefore(current, previous)) {
       warnings.push(`${current.label} timestamp runs backward`);
+      continue;
     }
     if (current.scene.travelHours > 0 && previous.minutes !== undefined && current.minutes !== undefined) {
       const elapsedHours = (timestampMinutes(current) - timestampMinutes(previous)) / 60;
@@ -497,6 +544,26 @@ function timestampBefore(current, previous) {
 
 function timestampMinutes(stamp) {
   return stamp.days * 1440 + stamp.minutes;
+}
+
+export function storyDateError(value) {
+  if (value === undefined || value === null || String(value).trim() === "") {
+    return "";
+  }
+  if (!parseClockDate(String(value))) {
+    return `date must be a real YYYY-MM-DD calendar day, got ${value}`;
+  }
+  return "";
+}
+
+export function storyTimeError(value) {
+  if (value === undefined || value === null || String(value).trim() === "") {
+    return "";
+  }
+  if (parseClockTime(String(value)) === undefined) {
+    return `time must be HH:MM or a named part of day (dawn, morning, midday, afternoon, evening, night), got ${value}`;
+  }
+  return "";
 }
 
 function parseClockDate(value) {

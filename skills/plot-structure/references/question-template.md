@@ -5,7 +5,7 @@ Use this template for open mystery or continuity-question files at `continuity/q
 ```yaml
 ---
 title: "{Question}"
-status: {open|answered|resolved|dropped}
+status: {open|answered|resolved|abandoned|dropped}
 introduced: chapter-{NN}
 resolved: chapter-{NN}
 characters:

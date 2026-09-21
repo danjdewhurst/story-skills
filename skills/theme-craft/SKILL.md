@@ -38,8 +38,12 @@ Character files (character-management) and a plot structure
    (and any significant supporting character whose arc touches the theme),
    consult `references/lie-truth.md` and add to their character files:
 
+   `arc-type` is one of `change-positive`, `change-negative`, or `flat`.
+   Do not put that list in an inline comment. The frontmatter parser keeps
+   the comment as part of the value.
+
    ```yaml
-   arc-type: change-positive   # change-positive | change-negative | flat
+   arc-type: change-positive
    lie: "{The false belief}"
    truth: "{The belief that resolves it}"
    ghost-wound: "{The specific backstory event that planted the lie}"

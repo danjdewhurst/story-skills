@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
+import { wordCount } from "../src/markdown.js";
 import { createStoryProject, synopsisBook } from "../src/story.js";
 import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
@@ -29,7 +30,7 @@ function wordy(word, repeats) {
 }
 
 function countWords(text) {
-  return text.split(/\s+/).filter((word) => word !== "").length;
+  return wordCount(text);
 }
 
 function invoke(cwd, argv) {
@@ -62,6 +63,15 @@ describe("synopsis builder", () => {
     const { text } = synopsisBook(root);
     expect(text).toContain("Premise: A ledger burns in the valley.");
     expect(text).not.toContain("Mara must find who lit the match.");
+  });
+
+  test("keeps an honorific with the premise sentence", () => {
+    const { root } = synopsisProject();
+    const storyPath = path.join(root, "story.md");
+    const raw = fs.readFileSync(storyPath, "utf8");
+    fs.writeFileSync(storyPath, raw.replace("A ledger burns in the valley.", "Dr. Mara left the mill."), "utf8");
+
+    expect(synopsisBook(root).text).toContain("Premise: Dr. Mara left the mill.");
   });
 
   test("is deterministic across runs", () => {
@@ -164,6 +174,16 @@ The valley keeps its secret.`);
     const { text } = synopsisBook(root);
     expect(countWords(text)).toBeLessThanOrEqual(500);
     expect(text.trimEnd().endsWith("…")).toBe(true);
+    expect(text).not.toContain("undefined");
+  });
+
+  test("truncates dotted tokens with the same word count as the budget", () => {
+    const { root } = synopsisProject();
+    writeArc(root, "dotted-arc", `## Climax\n\n${"U.S.A ".repeat(400).trim()}\n`);
+
+    const { text } = synopsisBook(root, { pages: 1 });
+    expect(wordCount(text)).toBeLessThanOrEqual(500);
+    expect(text).not.toContain("undefined");
   });
 
   test("drops rising action first when trimming to fit one page", () => {

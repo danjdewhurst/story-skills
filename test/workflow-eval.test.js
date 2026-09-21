@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { programArgs as compareArgs } from "../evals/compare-outputs.js";
+import { parseArgs as parseSkillArgs, programArgs as skillArgs } from "../evals/run-skill.js";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
@@ -49,5 +51,22 @@ describe("skill workflow eval", () => {
     expect(invoke(cwd, ["links", root]).err).toContain("Links are valid");
     expect(invoke(cwd, ["next", root]).out).toContain("Draft chapter 2");
     expect(invoke(cwd, ["build", root, "--format", "docx"]).out).toContain("as docx");
+  });
+});
+
+describe("eval cli argv", () => {
+  test("drops the node binary and the script path", () => {
+    expect(skillArgs(["node", "evals/run-skill.js", "--no-skill"])).toEqual(["--no-skill"]);
+    expect(compareArgs(["node", "evals/compare-outputs.js", "evals/baseline", "evals/outputs"])).toEqual([
+      "evals/baseline",
+      "evals/outputs"
+    ]);
+  });
+
+  test("does not treat the script path as a fixture name", () => {
+    const opts = parseSkillArgs(["--no-skill", "--no-judge"]);
+    expect(opts.fixtures).toEqual([]);
+    expect(opts.withSkill).toBe(false);
+    expect(opts.judge).toBe(false);
   });
 });

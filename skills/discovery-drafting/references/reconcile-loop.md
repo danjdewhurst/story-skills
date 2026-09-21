@@ -57,8 +57,10 @@ is not an outcome — unresolved diffs become continuity bugs.
 
 ## Post-hoc chapter notes
 
-After the loop, append a `## Chapter Notes (post-hoc)` section to the
-chapter file recording:
+After the loop, add a `## Chapter Notes (post-hoc)` section above
+`## Chapter Text`. `story wordcount` and `story export` count everything
+after `## Chapter Text` as prose, so notes and TODOs below that heading
+ship in the manuscript. Record:
 
 - What was discovered (new entities, rules, relationships).
 - What was cut or left dangling.

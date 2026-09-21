@@ -8,12 +8,14 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const VERSION_FILES = ["package.json", ".codex-plugin/plugin.json", ".claude-plugin/plugin.json"];
 const STORY_REF_FILES = ["templates/github/story-checks.yml", "templates/github/draft-next-chapter.yml"];
 const RELEASE_BRANCH = "main";
-// test:coverage runs the full test suite under coverage, gates src
-// line/function coverage (plus branch coverage when the reporter emits
-// BRDA/BRF/BRH records — Bun's lcov reporter currently does not, so the
-// branch gate is skipped with a note), then verifies the fallback bundle,
-// so it subsumes the old standalone test and check:fallback steps.
-export const PREFLIGHT = ["check:metadata", "check:evals", "test:coverage", "test:examples"];
+// test:coverage gates src line and function coverage, then the fallback bundle.
+// Branch records are gated only when the lcov report contains them.
+export const PREFLIGHT = ["check:metadata", "check:evals", "eval:selftest", "test:coverage", "test:examples", "check:node-help"];
+
+export function isAbsentGitHubRelease(error) {
+  const stderr = `${error.stderr ?? ""}\n${error.message ?? ""}`;
+  return /release not found/i.test(stderr);
+}
 
 export function bumpVersion(current, bump) {
   const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(current);
@@ -98,8 +100,8 @@ function preflight(nextVersion, tag) {
     run("gh", ["release", "view", tag]);
     fail(`GitHub release ${tag} already exists.`);
   } catch (error) {
-    if (error.status === undefined) {
-      throw error;
+    if (!isAbsentGitHubRelease(error)) {
+      fail(`could not check GitHub release ${tag}: ${error.stderr || error.message}`);
     }
   }
 

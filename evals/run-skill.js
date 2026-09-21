@@ -158,7 +158,11 @@ function parseJudgeJson(raw) {
   return parsed;
 }
 
-function parseArgs(argv) {
+export function programArgs(argv = process.argv) {
+  return argv.slice(2);
+}
+
+export function parseArgs(argv) {
   const opts = {
     model: DEFAULT_MODEL,
     judgeModel: DEFAULT_JUDGE_MODEL,
@@ -284,7 +288,7 @@ const invoked =
   process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (invoked) {
   try {
-    process.exit(main(process.argv.slice(1)));
+    process.exit(main(programArgs()));
   } catch (err) {
     console.log(`FAIL ${err.message}`);
     process.exit(2);

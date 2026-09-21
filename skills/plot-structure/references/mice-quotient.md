@@ -18,4 +18,12 @@ A threading tool from Orson Scott Card's widely taught craft framework: every st
 
 ## Arc Frontmatter
 
-Arc files may carry an optional `mice-threads:` frontmatter list naming which threads the arc carries, e.g. `mice-threads: [event, character]`. Use it when an arc braids threads of different types — it tells the agent (and the checker) which closing rules apply.
+Arc files may carry an optional `mice-threads:` frontmatter list naming which threads the arc carries, for example:
+
+```yaml
+mice-threads:
+  - event
+  - character
+```
+
+The field is agent-facing. `story validate` and `story continuity` do not read it, so closing rules are a manual audit. Use a block list. A flow sequence such as `[event, character]` is stored as one string.

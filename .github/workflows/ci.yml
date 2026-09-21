@@ -33,6 +33,9 @@ jobs:
       - name: Validate eval fixtures (schema-only, no model calls)
         run: bun run check:evals
 
+      - name: Check known-good eval drafts
+        run: bun run eval:selftest
+
       - name: Run tests
         run: bun run test
 

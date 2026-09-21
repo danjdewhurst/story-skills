@@ -26,8 +26,9 @@ payoff exists in the ledger, the thread is alive — leave it.
    the recommendation (cut, fold, or keep).
 2. **Choose the cut type:**
    - **Cut clean:** the thread never mattered. Remove its scenes' claims
-     (or leave the scenes if they do other work) and delete its ledger
-     entries.
+     (or leave the scenes if they do other work) and mark its promise,
+     question, or clue `status: abandoned` with a reason. Deleting the
+     ledger file drops the record `story continuity` uses to skip ordering.
    - **Fold:** the thread's best element survives inside another thread
      (the interesting character joins an existing subplot; the clue becomes
      part of the main mystery). Record the fold in both threads' notes.
@@ -40,8 +41,11 @@ payoff exists in the ledger, the thread is alive — leave it.
      setup has no payoff; a deleted record looks like a forgotten setup.
    - Update affected scene records' `state-changes` if the cut removes a
      change other chapters assumed.
-   - If a character is cut, set their file's `status: cut` (do not delete
-     the file — it documents the decision) and remove them from registries.
+   - If a character is cut, set their file's `status: cut` and leave the
+     file in place. `story reindex` rebuilds `characters/_index.md` from
+     every character file, including `status: cut`, so the cut stays in
+     that registry. Drop the character from casts, relationships, and arc
+     `characters` lists.
    - Update `plot/timeline.md` for any removed events.
 4. **Run maintenance:** `story reindex .`, `story links .`,
    `story validate .`, `story continuity .` — the checker should confirm

@@ -27,7 +27,8 @@ export function seriesLinkPath(fromRoot, toRoot) {
 }
 
 export function seriesLinks(root, data, field) {
-  const values = Array.isArray(data[field]) ? data[field] : [];
+  const raw = data[field];
+  const values = Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : [];
   return values
     .filter((value) => typeof value === "string" && value.trim() !== "")
     .map((value) => path.resolve(root, value));
@@ -81,7 +82,12 @@ export function withSeriesBacklink(targetRoot, field, linkedRoot) {
   if (seriesLinks(targetRoot, data, field).includes(linkedRoot)) {
     return null;
   }
-  const existing = Array.isArray(data[field]) ? data[field] : [];
+  const raw = data[field];
+  const existing = Array.isArray(raw)
+    ? raw
+    : typeof raw === "string" && raw.trim() !== ""
+      ? [raw]
+      : [];
   return replaceFrontmatter(markdown, { ...data, [field]: existing.concat(seriesLinkPath(targetRoot, linkedRoot)) });
 }
 
@@ -89,6 +95,18 @@ export function buildSeries(startRoot, scan) {
   const errors = [];
   const warnings = [];
   const books = discoverBooks(startRoot, scan, errors);
+  if (books.length === 0) {
+    return {
+      root: startRoot,
+      series: null,
+      books: [],
+      ordered: false,
+      shared: [],
+      ok: false,
+      errors,
+      warnings
+    };
+  }
 
   const seriesIds = [...new Set(books.map((book) => book.series).filter((series) => series !== undefined))].sort();
   if (seriesIds.length > 1) {
@@ -140,20 +158,41 @@ export function formatSeriesReport(report) {
   return `${lines.join("\n")}\n\n`;
 }
 
+export function canonicalPath(target) {
+  const resolved = path.resolve(target);
+  const tail = [];
+  let current = resolved;
+  while (current !== path.dirname(current)) {
+    try {
+      const real = fs.realpathSync(current);
+      return tail.length === 0 ? real : path.join(real, ...tail.reverse());
+    } catch {
+      tail.push(path.basename(current));
+      current = path.dirname(current);
+    }
+  }
+  try {
+    return path.join(fs.realpathSync(current), ...tail.reverse());
+  } catch {
+    return path.join(current, ...tail.reverse());
+  }
+}
+
 function discoverBooks(startRoot, scan, errors) {
   const startResolved = path.resolve(startRoot);
   const scopeRoot = path.dirname(startResolved);
-  let scopeReal = scopeRoot;
-  try {
-    scopeReal = fs.realpathSync(scopeRoot);
-  } catch {
-    scopeReal = scopeRoot;
-  }
+  const scopeReal = canonicalPath(scopeRoot);
   const visited = new Map();
   const queue = [{ root: startResolved, depth: 0 }];
   while (queue.length > 0) {
     const { root, depth } = queue.shift();
-    if (visited.has(root)) {
+    const resolved = path.resolve(root);
+    // Canonical path is the visit key so an in-scope symlink to a book
+    // already in the graph is the same book. A missing path keeps the
+    // unresolved tail after the nearest existing ancestor, so /var and
+    // /private/var stay comparable.
+    const effective = canonicalPath(resolved);
+    if (visited.has(effective)) {
       continue;
     }
     if (visited.size >= MAX_SERIES_BOOKS) {
@@ -162,32 +201,26 @@ function discoverBooks(startRoot, scan, errors) {
     }
 
     const label = seriesLinkPath(startRoot, root) || '.';
-    const resolved = path.resolve(root);
-    // Resolve symlinks so a link that is lexically inside the scope but
-    // points outside cannot escape traversal confinement.
-    let effective = resolved;
-    try {
-      effective = fs.realpathSync(resolved);
-    } catch {
-      effective = resolved;
-    }
     if (!isPathInside(scopeRoot, resolved) || !isPathInside(scopeReal, effective)) {
       errors.push(label + ' points outside the series directory ' + scopeRoot + '; refusing to follow');
-      visited.set(root, null);
+      visited.set(effective, null);
       continue;
     }
     if (depth > MAX_SERIES_DEPTH) {
       errors.push(label + ' exceeds the series traversal depth of ' + MAX_SERIES_DEPTH + '; refusing to follow further links');
-      visited.set(root, null);
+      visited.set(effective, null);
       continue;
     }
     if (!fs.existsSync(path.join(root, "story.md"))) {
       errors.push(`${label} is not a story project: missing story.md`);
-      visited.set(root, null);
+      visited.set(effective, null);
       continue;
     }
 
     const project = scan(root);
+    for (const scanError of project.fileErrors ?? []) {
+      errors.push(`${label}: ${scanError}`);
+    }
     const data = project.story.data;
     const book = {
       root,
@@ -200,7 +233,7 @@ function discoverBooks(startRoot, scan, errors) {
       follows: seriesLinks(root, data, "follows"),
       precedes: seriesLinks(root, data, "precedes")
     };
-    visited.set(root, book);
+    visited.set(effective, book);
     for (const next of book.follows.concat(book.precedes)) {
       queue.push({ root: next, depth: depth + 1 });
     }
@@ -210,7 +243,7 @@ function discoverBooks(startRoot, scan, errors) {
 
 function isPathInside(root, target) {
   const relativePath = path.relative(root, target);
-  return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath));
+  return !path.isAbsolute(relativePath) && (relativePath === "" || !relativePath.split(path.sep).includes(".."));
 }
 
 function chronologicalOrder(books, errors) {
