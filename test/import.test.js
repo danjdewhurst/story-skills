@@ -195,6 +195,62 @@ describe("manuscript import", () => {
     expect(fs.existsSync(path.join(second.root, "chapters", "chapter-02.md"))).toBe(false);
   });
 
+  test("sorts unnumbered front matter first and other unnumbered files last", () => {
+    const names = ["epilogue.md", "chapter-2.md", "prologue.md", "chapter-1.md", "afterword.md"];
+    expect(names.sort(compareImportNames)).toEqual(["prologue.md", "chapter-1.md", "chapter-2.md", "afterword.md", "epilogue.md"]);
+  });
+
+  test("uses standalone roman numerals as chapter numbers, not titles", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "book.md"), [
+      "## Chapter IV",
+      "",
+      "The first.",
+      "",
+      "## Chapter V The Storm",
+      "",
+      "The second.",
+      "",
+      "## Chapter Civil War",
+      "",
+      "The third."
+    ].join("\n"), "utf8");
+
+    const result = importManuscript({ source: "book.md", title: "Romans", cwd });
+
+    expect(scanProject(result.root).chapters.map((chapter) => chapter.title)).toEqual(["Chapter IV", "The Storm", "Civil War"]);
+  });
+
+  test("strips frontmatter the strict parser rejects but keeps a leading scene break", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "pandoc.md"), [
+      "---",
+      "title: Pandoc Export",
+      "author:",
+      "  name: Someone",
+      "  - odd: shape",
+      "---",
+      "# Pandoc",
+      "",
+      "Prose after metadata."
+    ].join("\n"), "utf8");
+    fs.writeFileSync(path.join(cwd, "break.md"), [
+      "---",
+      "The ship left at dawn.",
+      "---",
+      "",
+      "Nobody waved."
+    ].join("\n"), "utf8");
+
+    const pandoc = importManuscript({ source: "pandoc.md", title: "Pandoc", cwd, dir: "pandoc" });
+    const pandocChapter = fs.readFileSync(path.join(pandoc.root, "chapters", "chapter-01.md"), "utf8");
+    expect(pandocChapter).not.toContain("Someone");
+    expect(pandocChapter).toContain("Prose after metadata.");
+
+    const brk = importManuscript({ source: "break.md", title: "Break", cwd, dir: "break" });
+    expect(fs.readFileSync(path.join(brk.root, "chapters", "chapter-01.md"), "utf8")).toContain("The ship left at dawn.");
+  });
+
   test("sorts chapter filenames by each number group and then by name", () => {
     expect(compareImportNames("a-1.md", "a-1-2.md")).toBe(-1);
     expect(compareImportNames("a-1-2.md", "a-1.md")).toBe(1);

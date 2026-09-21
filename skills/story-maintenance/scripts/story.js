@@ -3327,7 +3327,7 @@ var REFERENCE_FIELDS = new Set([
   "resolved",
   "since"
 ]);
-var NESTED_IDENTITY_FIELDS = new Set(["character"]);
+var NESTED_IDENTITY_FIELDS = new Set(["artifact", "character"]);
 function replaceEntityReferences(root, oldId, newId) {
   const pathPattern = new RegExp(`(^|/)${escapeRegExp(oldId)}\\.md$`);
   rewriteReferences(root, (value) => value === oldId ? newId : value, (body) => body.replace(/\[([^\]]*)\]\(([^)]*)\)/g, (match, label, target) => {
@@ -4576,7 +4576,11 @@ function relative2(project, file) {
 }
 
 // src/import.js
-var CHAPTER_HEADING_PATTERN = /^chapter(?![A-Za-z])\s*(?:(?:\d+(?=[\s:.\-–—]|$)|[ivxlc]+(?=[:.\-–—])))?\s*[:.\-–—]*\s*(.*)$/i;
+var ROMAN_NUMERAL = "(?!i\\s+\\S)(?=[ivxlc])c{0,3}(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})";
+var CHAPTER_HEADING_PATTERN = new RegExp(`^chapter(?![A-Za-z])\\s*(?:(?:\\d+|${ROMAN_NUMERAL})(?=[\\s:.\\-–—]|$))?\\s*[:.\\-–—]*\\s*(.*)$`, "i");
+var FRONTMATTER_BLOCK_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
+var YAML_LINE_PATTERN = /^(?:\s*$|\s*#|\s*-\s|\s*-$|\s+\S|[A-Za-z0-9_"'][^:]*:(?:\s|$))/;
+var FRONT_MATTER_NAMES = /^(?:prologue|preface|foreword|introduction|prelude)\b/i;
 var CANDIDATE_THRESHOLD = 3;
 var CANDIDATE_LIMIT = 25;
 var CANDIDATE_STOPWORDS = new Set([
@@ -4745,9 +4749,19 @@ function readSourceDocuments(source) {
   }
   return documents;
 }
+function importNameRank(name, nums) {
+  if (nums.length > 0) {
+    return 1;
+  }
+  return FRONT_MATTER_NAMES.test(name) ? 0 : 2;
+}
 function compareImportNames(left, right) {
   const leftNums = [...left.matchAll(/\d+/g)].map((match) => Number(match[0]));
   const rightNums = [...right.matchAll(/\d+/g)].map((match) => Number(match[0]));
+  const rankDiff = importNameRank(left, leftNums) - importNameRank(right, rightNums);
+  if (rankDiff !== 0) {
+    return rankDiff;
+  }
   const length = Math.max(leftNums.length, rightNums.length);
   for (let index = 0;index < length; index += 1) {
     const leftNum = leftNums[index];
@@ -4771,6 +4785,10 @@ function withoutLeadingFrontmatter(text) {
   try {
     return parseFrontmatter(text).body;
   } catch {
+    const match = FRONTMATTER_BLOCK_PATTERN.exec(text);
+    if (match && match[1].split(/\r?\n/).every((line) => YAML_LINE_PATTERN.test(line))) {
+      return text.slice(match[0].length);
+    }
     return text;
   }
 }
