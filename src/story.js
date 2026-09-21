@@ -2321,9 +2321,9 @@ const REFERENCE_FIELDS = new Set([
   "notable-characters", "owner", "payoff", "planted", "pov", "resolved", "since"
 ]);
 
-// A nested row whose subject is this character is about that character.
+// A nested row whose subject is a removed character or artifact is dropped.
 // Other reference fields are cleared or retargeted and the rest of the row stays.
-const NESTED_IDENTITY_FIELDS = new Set(["character"]);
+const NESTED_IDENTITY_FIELDS = new Set(["artifact", "character"]);
 
 function replaceEntityReferences(root, oldId, newId) {
   const pathPattern = new RegExp(`(^|/)${escapeRegExp(oldId)}\\.md$`);

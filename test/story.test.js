@@ -807,6 +807,26 @@ locations: []
     expect(fs.readFileSync(keeperPath, "utf8")).toContain("relationships: []");
   });
 
+  test("remove drops object-state rows for a removed artifact", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Remove Artifact Row", force: false });
+    createEntity(created.root, { kind: "location", name: "Vault", type: "building" });
+    createEntity(created.root, { kind: "artifact", name: "Key", status: "hidden" });
+    createEntity(created.root, { kind: "artifact", name: "Map", status: "hidden" });
+    const statePath = path.join(created.root, "continuity", "state.md");
+    fs.writeFileSync(statePath, fs.readFileSync(statePath, "utf8").replace(
+      "object-state: []",
+      "object-state:\n  - artifact: key\n    location: vault\n  - artifact: map\n    location: vault"
+    ), "utf8");
+
+    removeEntity(created.root, { kind: "artifact", id: "key" });
+
+    const state = fs.readFileSync(statePath, "utf8");
+    expect(state).not.toContain("artifact: key");
+    expect(state).not.toContain('artifact: ""');
+    expect(state).toContain("  - artifact: map\n    location: vault");
+  });
+
   test("rename updates frontmatter references and link targets but leaves prose alone", () => {
     const cwd = makeTempDir();
     const created = createStoryProject({ cwd, title: "Rename Prose", force: false });
