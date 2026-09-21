@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { bumpVersion, replaceVersion, updateVersionFiles } from "../scripts/release.js";
+import { bumpVersion, isAbsentGitHubRelease, replaceVersion, updateVersionFiles } from "../scripts/release.js";
 
 describe("release script", () => {
   test("bumps patch, minor, and major", () => {
@@ -58,5 +58,11 @@ describe("release script", () => {
     }
     fs.writeFileSync(path.join(dir, "templates", "github", "story-checks.yml"), "env: {}\n", "utf8");
     expect(() => updateVersionFiles(dir, "0.6.1")).toThrow("No STORY_REF");
+  });
+
+  test("treats only a missing GitHub release as absent", () => {
+    expect(isAbsentGitHubRelease({ stderr: "release not found\n", status: 1 })).toBe(true);
+    expect(isAbsentGitHubRelease({ stderr: "HTTP 401: Bad credentials\n", status: 1 })).toBe(false);
+    expect(isAbsentGitHubRelease({ message: "connect ETIMEDOUT", status: 1 })).toBe(false);
   });
 });

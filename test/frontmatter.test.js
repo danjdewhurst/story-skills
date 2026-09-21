@@ -85,6 +85,15 @@ Body`);
     expect(replaced).toBe("---\ntitle: New\n---\n\nBody");
   });
 
+  test("keeps comments and stays byte-stable across repeated rewrites", () => {
+    const original = "---\n# keep me\ntitle: Old\n\nstatus: draft\n# tail\n---\n\nBody\n";
+    const once = replaceFrontmatter(original, { title: "New", status: "draft" });
+    const twice = replaceFrontmatter(once, { title: "New", status: "draft" });
+
+    expect(once).toBe("---\n# keep me\ntitle: New\n\nstatus: draft\n# tail\n---\n\nBody\n");
+    expect(twice).toBe(once);
+  });
+
   test("rejects missing or unsupported frontmatter", () => {
     expect(() => parseFrontmatter("Body", "body.md")).toThrow("body.md is missing YAML frontmatter");
     expect(() => parseFrontmatter("---\n  nope\n---\n")).toThrow("Unsupported frontmatter line");

@@ -1,7 +1,7 @@
 import { Buffer } from "node:buffer";
 import fs from "node:fs";
 import path from "node:path";
-import { checkContinuity } from "./continuity.js";
+import { checkContinuity, storyDateError, storyTimeError } from "./continuity.js";
 import { FRONTMATTER_PATTERN, parseFrontmatter, replaceFrontmatter, stringifyFrontmatter } from "./frontmatter.js";
 import { chapterProse, escapeRegExp, extractSection, kebabCase, titleCaseSlug, wordCount } from "./markdown.js";
 import { buildSeries, readBookFrontmatter, seriesLinkPath, validateSeriesLinks, withSeriesBacklink } from "./series.js";
@@ -108,6 +108,10 @@ export function createStoryProject(options) {
   }
   if (fs.existsSync(root) && !options.force) {
     throw new Error(`${root} already exists. Use --force to overwrite starter files.`);
+  }
+
+  if (options.tense !== undefined && options.tense !== "" && !STORY_TENSES.has(options.tense)) {
+    throw new Error(`Unsupported tense "${options.tense}": expected one of ${[...STORY_TENSES].join(", ")}`);
   }
 
   const series = resolveSeriesOptions(root, cwd, options);
@@ -298,7 +302,7 @@ export function scanProject(root) {
       date: String(data.date ?? ""),
       time: String(data.time ?? ""),
       mode: String(data.mode ?? "")
-    }), scanErrors).sort((left, right) => left.number - right.number || left.file.localeCompare(right.file)),
+    }), scanErrors).sort((left, right) => left.number - right.number || left.file.localeCompare(right.file, "en")),
     scenes: readEntityFiles(projectRoot, "scenes", (id, file, data) => ({
       id,
       file,
@@ -321,7 +325,7 @@ export function scanProject(root) {
       sequel: typeof data.sequel === "boolean" ? data.sequel : false,
       dilemma: String(data.dilemma ?? ""),
       flashbackTo: String(data["flashback-to"] ?? "")
-    }), scanErrors).sort((left, right) => left.chapter.localeCompare(right.chapter) || left.scene - right.scene || left.file.localeCompare(right.file)),
+    }), scanErrors).sort((left, right) => left.chapter.localeCompare(right.chapter, "en") || left.scene - right.scene || left.file.localeCompare(right.file, "en")),
     questions: readEntityFiles(projectRoot, path.join("continuity", "questions"), (id, file, data) => ({
       id,
       file,
@@ -491,13 +495,30 @@ export function validateLinksOf(project) {
       }
       if (!characters.has(target)) {
         errors.push(`${label} references missing character ${target}`);
-      } else if (!characters.get(target).relationships.some((entry) => entry && typeof entry === "object" && entry.character === character.id)) {
-        errors.push(`${label} relationship to ${target} is missing backlink`);
       } else {
-        const backlink = characters.get(target).relationships.find((entry) => entry && typeof entry === "object" && entry.character === character.id);
-        const expectedType = inverseRelationshipType(relationship.type);
-        if (expectedType && backlink.type !== expectedType) {
-          errors.push(`${label} relationship ${relationship.type} to ${target} expects backlink type ${expectedType}, got ${backlink.type}`);
+        const backlinks = [];
+        for (const entry of characters.get(target).relationships) {
+          if (entry && typeof entry === "object" && !Array.isArray(entry) && entry.character === character.id) {
+            backlinks.push(entry);
+          }
+        }
+        if (backlinks.length === 0) {
+          errors.push(`${label} relationship to ${target} is missing backlink`);
+        } else {
+          const expectedType = inverseRelationshipType(relationship.type);
+          let matched = expectedType === "";
+          const types = [];
+          for (const entry of backlinks) {
+            if (entry.type) {
+              types.push(entry.type);
+            }
+            if (entry.type === expectedType) {
+              matched = true;
+            }
+          }
+          if (!matched) {
+            errors.push(`${label} relationship ${relationship.type} to ${target} expects backlink type ${expectedType}, got ${types.join(", ") || "none"}`);
+          }
         }
       }
     }
@@ -701,7 +722,8 @@ function checkBodyLinkTarget(project, label, target, errors) {
   if (!cleaned || /^(https?:|mailto:|#)/i.test(cleaned)) {
     return;
   }
-  const base = path.basename(cleaned.split("#")[0].split("?")[0]);
+  const pathOnly = cleaned.split("#")[0].split("?")[0];
+  const base = path.basename(pathOnly);
   if (!base.endsWith(".md")) {
     return;
   }
@@ -713,20 +735,30 @@ function checkBodyLinkTarget(project, label, target, errors) {
     errors.push(`${label} links to ${cleaned} which must be kebab-case`);
     return;
   }
-  const known = new Set([
-    ...project.characters.map((item) => item.id),
-    ...project.locations.map((item) => item.id),
-    ...project.systems.map((item) => item.id),
-    ...project.factions.map((item) => item.id),
-    ...project.artifacts.map((item) => item.id),
-    ...project.arcs.map((item) => item.id),
-    ...project.chapters.map((item) => item.id),
-    ...project.scenes.map((item) => item.id),
-    ...project.questions.map((item) => item.id),
-    ...project.promises.map((item) => item.id),
-    ...project.clues.map((item) => item.id),
-    ...project.glossaryTerms.map((item) => item.id)
-  ]);
+  const resolved = path.resolve(path.dirname(path.join(project.root, label)), pathOnly);
+  if (!isPathInside(path.resolve(project.root), resolved) || !fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
+    errors.push(`${label} links to missing file ${cleaned}`);
+    return;
+  }
+  const known = new Set();
+  for (const collection of [
+    project.characters,
+    project.locations,
+    project.systems,
+    project.factions,
+    project.artifacts,
+    project.arcs,
+    project.chapters,
+    project.scenes,
+    project.questions,
+    project.promises,
+    project.clues,
+    project.glossaryTerms
+  ]) {
+    for (const item of collection) {
+      known.add(item.id);
+    }
+  }
   if (!known.has(id)) {
     errors.push(`${label} links to missing file ${cleaned}`);
   }
@@ -751,6 +783,16 @@ export function knowledgeAtChapter(root, characterId, atChapterId) {
   const atNumber = chapterNumbers.get(atChapterId);
   if (atNumber === undefined) {
     throw new Error(`Unknown chapter ${atChapterId}`);
+  }
+
+  let stateError = "";
+  for (const error of project.fileErrors ?? []) {
+    if (!stateError && String(error).startsWith(`${path.join("continuity", "state.md")}:`)) {
+      stateError = error;
+    }
+  }
+  if (stateError) {
+    throw new Error(stateError);
   }
 
   const entries = [];
@@ -810,6 +852,7 @@ export function projectReport(root) {
       scenes: project.scenes.length,
       questions: project.questions.length,
       promises: project.promises.length,
+      clues: project.clues.length,
       glossaryTerms: project.glossaryTerms.length,
       words: totalWords
     },
@@ -855,6 +898,7 @@ export function formatProjectReport(report, options = {}) {
     `- Scenes: ${report.counts.scenes}`,
     `- Questions: ${report.counts.questions}`,
     `- Promises: ${report.counts.promises}`,
+    `- Clues: ${report.counts.clues}`,
     `- Glossary terms: ${report.counts.glossaryTerms}`,
     `- Total words: ${report.counts.words}`,
     "",
@@ -1096,11 +1140,10 @@ export function buildBook(root, options = {}) {
   return { outFile: output.outFile, chapters: manuscript.chapters.length, format };
 }
 
-// Builds a deterministic mechanical synopsis from the story premise and the
-// arc sections: Setup (first two sentences), then a Because-joined causal
-// chain of Rising Action, Climax, and Resolution first sentences. When the
-// word budget is exceeded the text is rebuilt with trimming applied in this
-// order: drop Rising Action, trim each arc to Setup + Climax, hard truncate.
+// Deterministic synopsis. Budgets are 500 words (1 page) and 1500 (3 pages).
+// Level 0 keeps setup (2 sentences), rising action (2), and a Because line
+// of climax plus resolution. Level 1 drops rising action. Level 2 also drops
+// resolution. The last resort truncates with the same word rules as wordCount.
 export function synopsisBook(root, options = {}) {
   const pages = options.pages === undefined ? 1 : Number(options.pages);
   if (pages !== 1 && pages !== 3) {
@@ -1136,9 +1179,6 @@ function synopsisPremise(project) {
   return sentences.length > 0 ? sentences[0] : "No premise recorded.";
 }
 
-// Splits prose at sentence boundaries; every returned sentence ends with
-// terminal punctuation. A boundary is any of . ? ! followed by whitespace
-// or the end of input.
 function splitSentences(text) {
   const normalized = String(text).replace(/\s+/g, " ").trim();
   if (normalized === "") {
@@ -1148,13 +1188,15 @@ function splitSentences(text) {
   let start = 0;
   for (let index = 0; index < normalized.length; index += 1) {
     const char = normalized[index];
-    if (char === "." || char === "?" || char === "!") {
-      const next = normalized[index + 1];
-      if (next === undefined || next === " ") {
-        sentences.push(normalized.slice(start, index + 1));
-        start = index + 1;
-      }
+    const next = normalized[index + 1];
+    const boundary = (char === "." || char === "?" || char === "!") && (next === undefined || next === " ");
+    const token = char === "." ? /([A-Za-z]+)$/.exec(normalized.slice(0, index)) : null;
+    const abbreviation = token !== null && (/^(Dr|Mr|Mrs|Ms|St)$/.test(token[1]) || /^[A-Z]$/.test(token[1]));
+    if (!boundary || abbreviation) {
+      continue;
     }
+    sentences.push(normalized.slice(start, index + 1));
+    start = index + 1;
   }
   const tail = normalized.slice(start).trim();
   if (tail !== "") {
@@ -1193,11 +1235,15 @@ function renderSynopsis(title, premise, project, level) {
 }
 
 function truncateWords(text, budget) {
-  // Only called when the word count already exceeds the budget.
-  const words = text.split(/\s+/).filter((word) => word !== "");
-  const kept = words.slice(0, budget - 1);
-  kept.push(`${words[budget - 1]}…`);
-  return kept.join(" ");
+  const tokens = text.split(/\s+/).filter((word) => word !== "");
+  const kept = [];
+  for (const token of tokens) {
+    if (wordCount(kept.concat(token).join(" ")) > budget) {
+      break;
+    }
+    kept.push(token);
+  }
+  return `${kept.join(" ")}…\n`;
 }
 
 function shunnMeta(project) {
@@ -1250,10 +1296,11 @@ export function migrateProject(root) {
 
 const ENTITY_ENUM_OPTIONS = {
   character: [["role", CHARACTER_ROLES], ["status", CHARACTER_STATUSES]],
-  faction: [["type", FACTION_TYPES]],
-  artifact: [["type", ARTIFACT_TYPES]],
-  arc: [["type", ARC_TYPES]],
+  faction: [["type", FACTION_TYPES], ["status", FACTION_STATUSES]],
+  artifact: [["type", ARTIFACT_TYPES], ["status", ARTIFACT_STATUSES]],
+  arc: [["type", ARC_TYPES], ["status", ARC_STATUSES]],
   chapter: [["status", CHAPTER_STATUSES]],
+  scene: [["status", SCENE_STATUSES]],
   question: [["status", QUESTION_STATUSES]],
   promise: [["status", PROMISE_STATUSES]],
   clue: [["status", CLUE_STATUSES]],
@@ -1307,7 +1354,7 @@ export function renameEntity(root, options) {
   }
 
   const markdown = readMarkdown(oldFile, project.root);
-  const newId = kind === "chapter" ? oldId : kebabCase(name);
+  const newId = kind === "chapter" || kind === "scene" ? oldId : kebabCase(name);
   const newFile = path.join(project.root, config.dir, `${newId}.md`);
   assertSafeProjectPath(newFile, project.root);
   if (newFile !== oldFile && fs.existsSync(newFile)) {
@@ -1674,6 +1721,15 @@ function buildProjectActions(project, validation, links, continuity) {
   }
   if (pendingPromises.length > 0) {
     actions.push(action("P2", "Review promises and payoffs", `${pendingPromises.length} setup/payoff promises need planting or payoff decisions.`));
+  }
+  const openClues = [];
+  for (const clue of project.clues) {
+    if (clue.status === "planned" || clue.status === "planted") {
+      openClues.push(clue);
+    }
+  }
+  if (openClues.length > 0) {
+    actions.push(action("P2", "Review open clues", `${openClues.length} clues are still planned or planted.`));
   }
   const activeArcNames = [];
   for (const arc of project.arcs) {
@@ -2048,6 +2104,14 @@ What changes because of this arc.
 }
 
 function chapterFile(title, number, options) {
+  const dateError = storyDateError(options.date);
+  if (dateError) {
+    throw new Error(dateError);
+  }
+  const timeError = storyTimeError(options.time);
+  if (timeError) {
+    throw new Error(timeError);
+  }
   return `${stringifyFrontmatter({
     title,
     number,
@@ -2077,12 +2141,23 @@ function chapterFile(title, number, options) {
 }
 
 function sceneFile(title, chapter, scene, options) {
+  const dateError = storyDateError(options.date);
+  if (dateError) {
+    throw new Error(dateError);
+  }
+  const timeError = storyTimeError(options.time);
+  if (timeError) {
+    throw new Error(timeError);
+  }
   const travelHoursOption = options["travel-hours"];
   let travelHours;
   if (travelHoursOption !== undefined && travelHoursOption !== "") {
     travelHours = Number(travelHoursOption);
     if (!Number.isFinite(travelHours)) {
       throw new Error(`travel-hours must be a number, got ${travelHoursOption}`);
+    }
+    if (travelHours < 0) {
+      throw new Error(`travel-hours must be zero or positive, got ${travelHoursOption}`);
     }
   }
   const frontmatter = {
@@ -2243,17 +2318,34 @@ function ensureFile(filePath, contents, changed, root) {
 const REFERENCE_FIELDS = new Set([
   "arc", "arcs", "arcs-advanced", "artifact", "chapter", "character", "characters", "controlled-by",
   "died-in", "introduced", "learned-in", "location", "locations", "members", "mentions",
-  "notable-characters", "owner", "payoff", "planted", "pov", "resolved"
+  "notable-characters", "owner", "payoff", "planted", "pov", "resolved", "since"
 ]);
 
+// A nested row whose subject is this character is about that character.
+// Other reference fields are cleared or retargeted and the rest of the row stays.
+const NESTED_IDENTITY_FIELDS = new Set(["character"]);
+
 function replaceEntityReferences(root, oldId, newId) {
-  const targetPattern = new RegExp(`(^|/)${escapeRegExp(oldId)}\\.md$`);
-  const textPattern = new RegExp(`\\[${escapeRegExp(oldId)}\\](?=\\()`, "g");
-  rewriteReferences(root, (value) => (value === oldId ? newId : value), (body) => body
-    .replace(/\]\(([^)]*)\)/g, (match, target) => (targetPattern.test(target)
-      ? `](${target.replace(targetPattern, `$1${newId}.md`)})`
-      : match))
-    .replace(textPattern, `[${newId}]`));
+  const pathPattern = new RegExp(`(^|/)${escapeRegExp(oldId)}\\.md$`);
+  rewriteReferences(root, (value) => (value === oldId ? newId : value), (body) => body.replace(/\[([^\]]*)\]\(([^)]*)\)/g, (match, label, target) => {
+    const hash = target.indexOf("#");
+    const query = target.indexOf("?");
+    let cut = target.length;
+    if (hash !== -1) {
+      cut = Math.min(cut, hash);
+    }
+    if (query !== -1) {
+      cut = Math.min(cut, query);
+    }
+    const pathOnly = target.slice(0, cut);
+    if (!pathPattern.test(pathOnly)) {
+      return match;
+    }
+    const suffix = target.slice(cut);
+    const newPath = pathOnly.replace(pathPattern, `$1${newId}.md`);
+    const newLabel = label === oldId ? newId : label;
+    return `[${newLabel}](${newPath}${suffix})`;
+  }));
 }
 
 function removeEntityReferences(root, id) {
@@ -2276,7 +2368,8 @@ function rewriteReferences(root, transform, transformBody) {
     const nextBody = transformBody(body);
     const dataChanged = JSON.stringify(nextData) !== JSON.stringify(data);
     if (dataChanged || nextBody !== body) {
-      writeFile(file, `${dataChanged ? stringifyFrontmatter(nextData) : match[0]}${nextBody}`, { root });
+      const next = dataChanged ? replaceFrontmatter(text, nextData, nextBody) : `${match[0]}${nextBody}`;
+      writeFile(file, next, { root });
     }
   }
 }
@@ -2308,9 +2401,7 @@ function transformReferences(data, transform, nested = false) {
     if (REFERENCE_FIELDS.has(key)) {
       const mapped = transform(value);
       if (mapped === null) {
-        // A removed id inside a mapping (relationship, state entry) drops the
-        // whole entry; at the top level the field is cleared instead.
-        if (nested) {
+        if (nested && NESTED_IDENTITY_FIELDS.has(key)) {
           return null;
         }
         next[key] = "";
@@ -2815,7 +2906,7 @@ function readMarkdown(filePath, root) {
   return { ...parsed, rawMarkdown };
 }
 
-function writeFile(filePath, contents, options = {}) {
+export function writeFile(filePath, contents, options = {}) {
   const target = prepareWriteTarget(filePath, options.root);
   fs.writeFileSync(target, contents, "utf8");
 }
@@ -3021,7 +3112,7 @@ function lstatIfExists(filePath) {
 
 function isPathInside(root, target) {
   const relativePath = path.relative(root, target);
-  return relativePath === "" || (!relativePath.startsWith("..") && !path.isAbsolute(relativePath));
+  return !path.isAbsolute(relativePath) && (relativePath === "" || !relativePath.split(path.sep).includes(".."));
 }
 
 function asArray(value) {

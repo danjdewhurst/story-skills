@@ -81,7 +81,11 @@ function ask(model, prompt) {
   return null;
 }
 
-function main(argv) {
+export function programArgs(argv = process.argv) {
+  return argv.slice(2);
+}
+
+export function main(argv) {
   let model = "claude-opus-5";
   const rest = [];
   for (let i = 0; i < argv.length; i++) {
@@ -99,6 +103,10 @@ function main(argv) {
     .map((e) => e.name)
     .sort();
   if (only.length > 0) names = names.filter((n) => only.includes(n));
+  if (names.length === 0) {
+    console.log("no fixtures selected");
+    return 2;
+  }
 
   const tally = { a: 0, b: 0, tie: 0 };
   let missing = 0;
@@ -142,4 +150,4 @@ function main(argv) {
 
 const invoked =
   process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
-if (invoked) process.exit(main(process.argv.slice(1)));
+if (invoked) process.exit(main(programArgs()));

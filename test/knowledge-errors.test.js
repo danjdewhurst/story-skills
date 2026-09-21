@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { createStoryProject } from "../src/story.js";
@@ -29,5 +30,14 @@ describe("knowledge CLI errors", () => {
     const unknown = invoke(cwd, ["knowledge", "mara-finn", "--at", "chapter-09", "--path", root]);
     expect(unknown.code).toBe(1);
     expect(unknown.err).toContain("Unknown chapter chapter-09");
+  });
+
+  test("cli errors when continuity state does not parse", () => {
+    const { root, cwd } = knowledgeProject();
+    writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft", "# One\n");
+    fs.writeFileSync(path.join(root, "continuity", "state.md"), "not frontmatter\n", "utf8");
+    const result = invoke(cwd, ["knowledge", "mara-finn", "--at", "chapter-01", "--path", root]);
+    expect(result.code).toBe(1);
+    expect(result.err).toContain("continuity/state.md");
   });
 });

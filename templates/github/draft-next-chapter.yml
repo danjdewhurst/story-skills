@@ -73,7 +73,7 @@ jobs:
             You are drafting the next chapter of the story project in $STORY_DIR.
             Work on a new branch named draft/chapter-<next-number>.
 
-            1. Run `npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story next "$STORY_DIR"` and
+            1. Run `npx --yes --package github:danjdewhurst/story-skills#$STORY_REF story next "$STORY_DIR"` and
                read story.md, chapters/_index.md, continuity/state.md, open
                questions, promises, and the active arc files.
             2. If the next actions report any P0 maintenance issues, fix those
@@ -84,11 +84,11 @@ jobs:
                Add matching scene records and update continuity/state.md,
                promises, questions, and the timeline.
             4. Run the maintenance commands and make them pass:
-               npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story wordcount "$STORY_DIR" --write
-               npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story reindex "$STORY_DIR"
-               npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story validate "$STORY_DIR"
-               npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story links "$STORY_DIR"
-               npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story continuity "$STORY_DIR"
+               npx --yes --package github:danjdewhurst/story-skills#$STORY_REF story wordcount "$STORY_DIR" --write
+               npx --yes --package github:danjdewhurst/story-skills#$STORY_REF story reindex "$STORY_DIR"
+               npx --yes --package github:danjdewhurst/story-skills#$STORY_REF story validate "$STORY_DIR"
+               npx --yes --package github:danjdewhurst/story-skills#$STORY_REF story links "$STORY_DIR"
+               npx --yes --package github:danjdewhurst/story-skills#$STORY_REF story continuity "$STORY_DIR"
             5. Commit, push the branch, and open a pull request titled
                "Draft chapter <number>: <title>" summarizing the beats, the arcs
                advanced, and any promises planted or paid off.

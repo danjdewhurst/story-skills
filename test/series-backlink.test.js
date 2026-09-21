@@ -7,7 +7,7 @@ import { createStoryProject } from "../src/story.js";
 import { makeTempDir } from "./helpers.js";
 
 describe("withSeriesBacklink string fields", () => {
-  test("replaces a scalar field with a list holding the new link", () => {
+  test("keeps an existing path when a string field becomes a list", () => {
     const cwd = makeTempDir();
     const one = createStoryProject({ title: "Book One", cwd }).root;
     const three = createStoryProject({ title: "Book Three", cwd }).root;
@@ -20,6 +20,6 @@ describe("withSeriesBacklink string fields", () => {
       "utf8"
     );
     const updated = withSeriesBacklink(one, "precedes", three);
-    expect(parseFrontmatter(updated).data.precedes).toEqual(["../book-three"]);
+    expect(parseFrontmatter(updated).data.precedes).toEqual(["../book-two", "../book-three"]);
   });
 });

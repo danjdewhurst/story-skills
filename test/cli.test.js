@@ -226,6 +226,12 @@ describe("cli", () => {
     expect(help).toContain("--role <name>");
     expect(help).toContain("--introduced <id>");
     expect(help).toContain("--category <name>");
+    const initPath = invoke(cwd, ["init", "Nope", "--path", "somewhere"]);
+    expect(initPath.code).toBe(1);
+    expect(initPath.err).toContain("init uses --dir");
+    const importPath = invoke(cwd, ["import", "draft.md", "--path", "somewhere"]);
+    expect(importPath.code).toBe(1);
+    expect(importPath.err).toContain("import uses --dir");
     const unknown = invoke(cwd, ["nope"]);
     expect(unknown.code).toBe(1);
     expect(unknown.err).toContain("Unknown command: nope");

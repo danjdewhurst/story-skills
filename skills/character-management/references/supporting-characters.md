@@ -1,6 +1,6 @@
 # Supporting Characters
 
-Brief guidance for roles smaller than deuteragonist. Major supporting characters still get full files from `references/character-template.md`; minor ones can be a paragraph in the `characters/_index.md` notes.
+Brief guidance for roles smaller than deuteragonist. Major supporting characters still get full files from `references/character-template.md`. Minor ones can be a paragraph in `story.md` `## Notes`, or inside the Relationship Map or Family Trees sections of `characters/_index.md`. `story reindex` drops any other heading on that index.
 
 ## Role Vocabulary
 

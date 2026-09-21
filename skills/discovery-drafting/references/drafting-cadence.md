@@ -7,10 +7,13 @@ in batches. This reference sets the cadence; the reconcile loop
 ## Daily targets
 
 Agree on a target with the user at the start of a discovery project and
-record it in `story.md` frontmatter:
+record it in the `## Notes` or `## Draft Log` body of `story.md`. Schema v2
+has `draft-mode` and does not read a `draft-target` frontmatter field.
 
-```yaml
-draft-target: "{e.g. 1500 words/day, or 1 chapter/week}"
+```markdown
+## Draft Log
+
+Target: 1500 words/day, or 1 chapter/week.
 ```
 
 Rules for targets:
@@ -51,10 +54,11 @@ A discovery session has three phases; keep them separate:
    words and try a different choice. Do not open the bible mid-session —
    note questions in the chapter file as `[TODO: check bible]` and resolve
    them in the reconcile loop.
-3. **Close (5 min):** jot a `[TODO]` line at the end of the chapter file
-   with where the next session should start ("Mara is about to open the
-   door — decide what's behind it"). Future-you is a different person;
-   leave them a map.
+3. **Close (5 min):** jot a `[TODO]` line above `## Chapter Text` (with
+   the outline or post-hoc notes) saying where the next session should
+   start ("Mara is about to open the door — decide what's behind it").
+   A TODO under `## Chapter Text` is counted and exported as prose.
+   Future-you is a different person; leave them a map.
 
 ## When cadence breaks
 

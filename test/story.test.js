@@ -169,6 +169,7 @@ describe("story project operations", () => {
       scenes: 1,
       questions: 0,
       promises: 0,
+      clues: 0,
       glossaryTerms: 0,
       words: 3
     });
@@ -893,6 +894,107 @@ word-count: 0
     expect(validateLinks(created.root)).toEqual({ ok: true, errors: [], warnings: [] });
   });
 
+  test("scene rename keeps the filename and only updates the title", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Scene Rename", force: false });
+    createEntity(created.root, { kind: "chapter", name: "One", number: 1 });
+    const scene = createEntity(created.root, { kind: "scene", name: "Opening", chapter: "chapter-01", scene: 1 });
+    const renamed = renameEntity(created.root, { kind: "scene", id: scene.id, name: "The Pier" });
+
+    expect(renamed.id).toBe("chapter-01-scene-01");
+    expect(fs.existsSync(path.join(created.root, "scenes", "chapter-01-scene-01.md"))).toBe(true);
+    expect(fs.readFileSync(renamed.file, "utf8")).toContain("title: The Pier");
+    expect(validateProject(created.root).ok).toBe(true);
+  });
+
+  test("rename rewrites anchors on the old file and leaves overlapping ids alone", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Anchor Rename", force: false });
+    createEntity(created.root, { kind: "character", name: "Mara", role: "protagonist" });
+    createEntity(created.root, { kind: "character", name: "Mara Quill", role: "supporting" });
+    const chapter = createEntity(created.root, { kind: "chapter", name: "Arrival", number: 1 });
+    fs.appendFileSync(chapter.file, "See [mara](../characters/mara-quill.md) and [mara](../characters/mara.md#intro) and [mara](../characters/mara.md?ref=1).\n", "utf8");
+
+    renameEntity(created.root, { kind: "character", id: "mara", name: "Tess" });
+
+    const chapterText = fs.readFileSync(chapter.file, "utf8");
+    expect(chapterText).toContain("[mara](../characters/mara-quill.md)");
+    expect(chapterText).toContain("[tess](../characters/tess.md#intro)");
+    expect(chapterText).toContain("[tess](../characters/tess.md?ref=1)");
+  });
+
+  test("remove clears since and learned-in without dropping the rest of the row", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Scrub Since", force: false });
+    createEntity(created.root, { kind: "chapter", name: "One", number: 1 });
+    createEntity(created.root, { kind: "character", name: "Ada", role: "protagonist" });
+    createEntity(created.root, { kind: "artifact", name: "Key", type: "object" });
+    const statePath = path.join(created.root, "continuity", "state.md");
+    const state = fs.readFileSync(statePath, "utf8");
+    fs.writeFileSync(statePath, state.replace(`character-state: []
+object-state: []
+knowledge-state: []`, `character-state: []
+knowledge-state:
+  - character: ada
+    knows: the vault is open
+    learned-in: chapter-01
+object-state:
+  - artifact: key
+    since: chapter-01
+    location: vault`), "utf8");
+
+    removeEntity(created.root, { kind: "chapter", id: "chapter-01" });
+
+    const next = fs.readFileSync(statePath, "utf8");
+    expect(next).toContain("knows: the vault is open");
+    expect(next).toContain('learned-in: ""');
+    expect(next).toContain("artifact: key");
+    expect(next).toContain('since: ""');
+  });
+
+  test("rejects enum values and tenses that validate would reject", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Enums", force: false });
+    expect(() => createEntity(created.root, { kind: "scene", name: "Beat", chapter: "chapter-01", scene: 1, status: "bogus" })).toThrow("Unsupported scene status");
+    expect(() => createEntity(created.root, { kind: "faction", name: "Guild", status: "bogus" })).toThrow("Unsupported faction status");
+    expect(() => createEntity(created.root, { kind: "arc", name: "Arc", status: "bogus" })).toThrow("Unsupported arc status");
+    expect(() => createEntity(created.root, { kind: "artifact", name: "Relic", status: "bogus" })).toThrow("Unsupported artifact status");
+    expect(() => createStoryProject({ cwd, title: "Bad Tense", tense: "bogus" })).toThrow("Unsupported tense");
+    createEntity(created.root, { kind: "chapter", name: "Dated", number: 1, date: "2026-03-01", time: "morning" });
+    expect(() => createEntity(created.root, { kind: "chapter", name: "Bad Date", number: 2, date: "yesterday" })).toThrow("YYYY-MM-DD");
+    expect(() => createEntity(created.root, { kind: "chapter", name: "Bad Time", number: 2, time: "99:99" })).toThrow("HH:MM");
+    expect(() => createEntity(created.root, { kind: "scene", name: "Back", chapter: "chapter-01", scene: 1, "travel-hours": -1 })).toThrow("zero or positive");
+    expect(() => createEntity(created.root, { kind: "scene", name: "Bad Date", chapter: "chapter-01", scene: 2, date: "yesterday" })).toThrow("YYYY-MM-DD");
+    expect(() => createEntity(created.root, { kind: "scene", name: "Bad Time", chapter: "chapter-01", scene: 2, time: "99:99" })).toThrow("HH:MM");
+  });
+
+  test("accepts two relationship types between the same pair", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Two Links", force: false });
+    writeMarkdown(path.join(created.root, "characters", "ada.md"), `
+name: Ada
+role: protagonist
+status: alive
+relationships:
+  - character: bea
+    type: parent
+  - character: bea
+    type: friend
+`, "# Ada");
+    writeMarkdown(path.join(created.root, "characters", "bea.md"), `
+name: Bea
+role: supporting
+status: alive
+relationships:
+  - character: ada
+    type: friend
+  - character: ada
+    type: child
+`, "# Bea");
+
+    expect(validateLinks(created.root).ok).toBe(true);
+  });
+
   test("covers helper errors, fallback branches, and malformed continuity state", () => {
     const cwd = makeTempDir();
     const created = createStoryProject({ cwd, title: "Coverage Branches", force: false });
@@ -1460,9 +1562,10 @@ members:
     const cwd = makeTempDir();
     const created = createStoryProject({ cwd, title: "Body Refs", force: false });
     createEntity(created.root, { kind: "chapter", name: "Arrival", number: 1 });
+    fs.writeFileSync(path.join(created.root, "plot", "notes.md"), "# Notes\n", "utf8");
     fs.appendFileSync(
       path.join(created.root, "plot", "timeline.md"),
-      "\nSee [Ghost Ship](ghost-ship.md), [Bad Name](Bad Name.md), [Web](https://example.com/x), [Img](map.png), [Idx](characters/_index.md), [Query](?q=1), and [Part](chapter-01.md#text).\n",
+      "\nSee [Ghost Ship](ghost-ship.md), [Bad Name](Bad Name.md), [Web](https://example.com/x), [Img](map.png), [Idx](characters/_index.md), [Query](?q=1), [Missing Dir](does-not-exist/harbor.md), [Notes](notes.md), and [Part](../chapters/chapter-01.md#text).\n",
       "utf8"
     );
     const arc = createEntity(created.root, { kind: "arc", name: "Lost Arc" });
@@ -1473,6 +1576,9 @@ members:
     expect(output).toContain("links to Bad Name.md which must be kebab-case");
     expect(output).toContain("references missing chapter chapter-99");
     expect(output).toContain("links to missing file lost-thing.md");
+    expect(output).toContain("links to missing file does-not-exist/harbor.md");
+    expect(output).toContain("links to missing file notes.md");
+    expect(output).not.toContain("chapter-01.md#text");
     expect(output).not.toContain("example.com");
     expect(output).not.toContain("map.png");
     expect(output).not.toContain("_index.md");

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { extractNameCandidates, importManuscript } from "../src/import.js";
+import { compareImportNames, extractNameCandidates, importManuscript } from "../src/import.js";
 import { scanProject, validateProject } from "../src/story.js";
 import { makeTempDir } from "./helpers.js";
 
@@ -152,6 +152,56 @@ describe("manuscript import", () => {
 
     expect(result.chapters).toBe(2);
     expect(scanProject(result.root).chapters.map((chapter) => chapter.title)).toEqual(["Cover", "Introduction"]);
+  });
+
+  test("keeps a leading scene break and roman-numeral title words", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "book.md"), [
+      "---",
+      "Alpha still stands.",
+      "---",
+      "",
+      "## Chapter I Am Legend",
+      "",
+      "Alpha body.",
+      "",
+      "## Chapter II: The Door",
+      "",
+      "Door body."
+    ].join("\n"), "utf8");
+
+    const result = importManuscript({ source: "book.md", title: "Breaks", cwd });
+    expect(scanProject(result.root).chapters.map((chapter) => chapter.title)).toEqual(["Opening", "I Am Legend", "The Door"]);
+    const opening = fs.readFileSync(path.join(result.root, "chapters", "chapter-01.md"), "utf8");
+    expect(opening).toContain("Alpha still stands.");
+  });
+
+  test("orders numbered chapter files numerically and drops leftovers on force", () => {
+    const cwd = makeTempDir();
+    const source = path.join(cwd, "drafts");
+    fs.mkdirSync(source);
+    fs.writeFileSync(path.join(source, "chapter-1.md"), "# One\n\nOne.", "utf8");
+    fs.writeFileSync(path.join(source, "chapter-2.md"), "# Two\n\nTwo.", "utf8");
+    fs.writeFileSync(path.join(source, "chapter-10.md"), "# Ten\n\nTen.", "utf8");
+
+    const first = importManuscript({ source: "drafts", title: "Numbers", cwd, dir: "numbers" });
+    expect(scanProject(first.root).chapters.map((chapter) => chapter.title)).toEqual(["One", "Two", "Ten"]);
+
+    fs.writeFileSync(path.join(source, "chapter-1.md"), "# Only\n\nOnly.", "utf8");
+    fs.rmSync(path.join(source, "chapter-2.md"));
+    fs.rmSync(path.join(source, "chapter-10.md"));
+    const second = importManuscript({ source: "drafts", title: "Numbers", cwd, dir: "numbers", force: true });
+    expect(scanProject(second.root).chapters.map((chapter) => chapter.title)).toEqual(["Only"]);
+    expect(fs.existsSync(path.join(second.root, "chapters", "chapter-02.md"))).toBe(false);
+  });
+
+  test("sorts chapter filenames by each number group and then by name", () => {
+    expect(compareImportNames("a-1.md", "a-1-2.md")).toBe(-1);
+    expect(compareImportNames("a-1-2.md", "a-1.md")).toBe(1);
+    expect(compareImportNames("a-1.md", "b-1.md")).toBe(-1);
+    expect(compareImportNames("b-1.md", "a-1.md")).toBe(1);
+    expect(compareImportNames("a-1.md", "a-1.md")).toBe(0);
+    expect(compareImportNames("chapter-2.md", "chapter-10.md")).toBeLessThan(0);
   });
 });
 

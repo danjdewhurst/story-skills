@@ -4,5 +4,6 @@
 *~
 node_modules/
 coverage/
+dist/
 evals/outputs/
 evals/baseline/

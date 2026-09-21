@@ -416,4 +416,30 @@ time: "10:00"
     expect(result.warnings).toContain(`Chapter 2 has malformed date "2026-02-30"`);
     expect(result.warnings).toContain(`Chapter 1 has malformed time "someday"`);
   });
+
+  test("does not turn a backward timestamp into a travel error", () => {
+    const root = baseProject(1);
+    writeScene(root, 1, 1, "date: 2026-01-05\ntime: 12:00");
+    writeScene(root, 1, 2, "date: 2026-01-05\ntime: 10:00\ntravel-hours: 1");
+    const result = checkContinuity(scanProject(root));
+    expect(result.ok).toBe(true);
+    expect(result.warnings.join("\n")).toContain("timestamp runs backward");
+    expect(result.errors.join("\n")).not.toContain("travel");
+  });
+
+  test("warns when scene dates run backward across chapters", () => {
+    const root = baseProject(2);
+    writeScene(root, 1, 1, "date: 2026-05-01\ntime: 12:00");
+    writeScene(root, 2, 1, "date: 2026-01-01\ntime: 12:00");
+    const result = checkContinuity(scanProject(root));
+    expect(result.warnings.join("\n")).toContain("scenes/chapter-02-scene-01.md timestamp runs backward");
+  });
+
+  test("continuity reports a character file that failed to parse", () => {
+    const root = baseProject(1);
+    fs.writeFileSync(path.join(root, "characters", "ada.md"), "not frontmatter\n", "utf8");
+    const result = checkContinuity(scanProject(root));
+    expect(result.ok).toBe(false);
+    expect(result.errors.join("\n")).toContain("characters/ada.md");
+  });
 });

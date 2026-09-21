@@ -299,19 +299,8 @@ export function checkDraft(checks, inputText, draftText) {
 
   const drift = checks.voice_drift;
   if (drift) {
-    // Directional voice drift: a draft that strips the voice fails, a draft
-    // that overshoots it only warns. For the rate markers (contractions,
-    // first person, hedges) voice-stripping is a FALL past the limit; for
-    // mean word length it is a RISE (flattened prose uses longer words).
-    // Overshoots in the other direction pass with a "warn" label so the
-    // report still surfaces them.
-    //
-    // Threshold provenance: the limits live in each fixture's checks.json
-    // and are regression tripwires, not perceptual just-noticeable
-    // differences. They were set so the known-good draft in evals/examples/
-    // passes with headroom (voice-preservation drifts +1.21/+1.62/0.00/-0.31
-    // against limits 3.0/3.0/2.0/0.6). Tighten a limit only if a bad draft
-    // slips through; widen it only if a good draft fails.
+    // Rate markers fail when the draft falls below the limit. Mean word
+    // length fails when it rises. The other direction is a warning.
     const STRIP_DIRECTION = {
       contraction_rate: "fall",
       first_person_rate: "fall",

@@ -345,7 +345,9 @@ my-story/
 │   ├── state.md              # Character, object, and knowledge state
 │   ├── questions/
 │   │   └── _index.md
-│   └── promises/
+│   ├── promises/
+│   │   └── _index.md
+│   └── clues/
 │       └── _index.md
 ├── glossary/
 │   ├── _index.md

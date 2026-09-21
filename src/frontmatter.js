@@ -13,10 +13,15 @@ export function parseFrontmatter(markdown, filePath = "markdown") {
   };
 }
 
-export function stringifyFrontmatter(data) {
+export function stringifyFrontmatter(data, decorations = null) {
   const lines = ["---"];
+  const notesFor = decorations?.byKey ?? new Map();
 
   for (const [key, value] of Object.entries(data)) {
+    const notes = notesFor.get(key);
+    if (notes) {
+      lines.push(...notes);
+    }
     if (Array.isArray(value)) {
       if (value.length === 0) {
         lines.push(`${key}: []`);
@@ -44,17 +49,48 @@ export function stringifyFrontmatter(data) {
     }
   }
 
+  if (decorations?.trailing?.length) {
+    lines.push(...decorations.trailing);
+  }
+
+  // One blank line between the closing delimiter and the body. Two empty
+  // strings are required: join places separators between elements, so the
+  // last empty string does not add a trailing newline of its own.
   lines.push("---", "", "");
   return lines.join("\n");
 }
 
-export function replaceFrontmatter(markdown, data) {
+export function replaceFrontmatter(markdown, data, bodyOverride) {
   const match = FRONTMATTER_PATTERN.exec(markdown);
   if (!match) {
     throw new Error("Cannot replace missing YAML frontmatter");
   }
 
-  return `${stringifyFrontmatter(data)}${markdown.slice(match[0].length)}`;
+  const rawBody = bodyOverride === undefined ? markdown.slice(match[0].length) : bodyOverride;
+  const body = String(rawBody).replace(/^(?:\r?\n)+/, "");
+  return `${stringifyFrontmatter(data, frontmatterDecorations(match[1]))}${body}`;
+}
+
+// Full-line comments and blank lines are not data. Attach the ones that
+// precede a top-level key to that key so a rewrite can put them back.
+function frontmatterDecorations(raw) {
+  const byKey = new Map();
+  let pending = [];
+  for (const line of raw.split(/\r?\n/)) {
+    const comment = line.trimStart().startsWith("#");
+    const blank = line.trim() === "" && !line.startsWith(" ") && !line.startsWith("\t");
+    if (comment || blank) {
+      pending.push(line);
+      continue;
+    }
+    const pair = /^([A-Za-z0-9_-]+):/.exec(line);
+    if (!pair) {
+      continue;
+    }
+    byKey.set(pair[1], pending);
+    pending = [];
+  }
+  return { byKey, trailing: pending };
 }
 
 function parseYaml(source) {

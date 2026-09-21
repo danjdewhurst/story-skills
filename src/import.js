@@ -1,11 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
-import { stringifyFrontmatter } from "./frontmatter.js";
+import { parseFrontmatter, stringifyFrontmatter } from "./frontmatter.js";
 import { titleCaseSlug, wordCount } from "./markdown.js";
-import { createStoryProject, reindexProject } from "./story.js";
+import { createStoryProject, reindexProject, writeFile } from "./story.js";
 
-const CHAPTER_HEADING_PATTERN = /^chapter(?![A-Za-z])\s*(?:(?:\d+|[ivxlc]+)(?=[\s:.\-–—]|$))?\s*[:.\-–—]*\s*(.*)$/i;
-const FRONTMATTER_PATTERN = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/;
+const CHAPTER_HEADING_PATTERN = /^chapter(?![A-Za-z])\s*(?:(?:\d+(?=[\s:.\-–—]|$)|[ivxlc]+(?=[:.\-–—])))?\s*[:.\-–—]*\s*(.*)$/i;
 const CANDIDATE_THRESHOLD = 3;
 const CANDIDATE_LIMIT = 25;
 const CANDIDATE_STOPWORDS = new Set([
@@ -61,13 +60,21 @@ export function importManuscript(options) {
     force: options.force
   });
 
+  const chaptersDir = path.join(created.root, "chapters");
+  for (const name of fs.readdirSync(chaptersDir)) {
+    if (!/^chapter-\d+\.md$/i.test(name)) {
+      continue;
+    }
+    fs.unlinkSync(path.join(chaptersDir, name));
+  }
+
   let totalWords = 0;
   chapters.forEach((chapter, index) => {
     const number = index + 1;
     const words = wordCount(chapter.prose);
     totalWords += words;
-    const file = path.join(created.root, "chapters", `chapter-${String(number).padStart(2, "0")}.md`);
-    fs.writeFileSync(file, chapterMarkdown(chapter.title, number, words, chapter.prose), "utf8");
+    const file = path.join(chaptersDir, `chapter-${String(number).padStart(2, "0")}.md`);
+    writeFile(file, chapterMarkdown(chapter.title, number, words, chapter.prose), { root: created.root });
   });
 
   reindexProject(created.root);
@@ -141,7 +148,7 @@ function readSourceDocuments(source) {
       names.push(entry.name);
     }
   }
-  names.sort();
+  names.sort(compareImportNames);
   if (names.length > MAX_IMPORT_FILES) {
     throw new Error('Too many import files in ' + source + ': ' + names.length + ' exceeds the ' + MAX_IMPORT_FILES + ' file limit');
   }
@@ -158,11 +165,42 @@ function readSourceDocuments(source) {
   return documents;
 }
 
+export function compareImportNames(left, right) {
+  const leftNums = [...left.matchAll(/\d+/g)].map((match) => Number(match[0]));
+  const rightNums = [...right.matchAll(/\d+/g)].map((match) => Number(match[0]));
+  const length = Math.max(leftNums.length, rightNums.length);
+  for (let index = 0; index < length; index += 1) {
+    const leftNum = leftNums[index];
+    const rightNum = rightNums[index];
+    if (leftNum === undefined) {
+      return -1;
+    }
+    if (rightNum === undefined) {
+      return 1;
+    }
+    if (leftNum !== rightNum) {
+      return leftNum - rightNum;
+    }
+  }
+  if (left === right) {
+    return 0;
+  }
+  return left < right ? -1 : 1;
+}
+
+function withoutLeadingFrontmatter(text) {
+  try {
+    return parseFrontmatter(text).body;
+  } catch {
+    return text;
+  }
+}
+
 function splitChapters(documents) {
   const chapters = [];
 
   for (const document of documents) {
-    const text = document.text.replace(FRONTMATTER_PATTERN, "").replace(/\r\n/g, "\n");
+    const text = withoutLeadingFrontmatter(document.text).replace(/\r\n/g, "\n");
     const sections = splitByChapterHeadings(text);
     if (sections.length > 0) {
       chapters.push(...sections);

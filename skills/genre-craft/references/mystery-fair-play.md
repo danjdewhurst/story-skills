@@ -39,8 +39,11 @@ cheating.
   never inserted solely to mislead), and **resolved, not abandoned**.
 - A resolved red herring gets its own mini-payoff: the suspect is cleared
   *for a reason that teaches the reader something true* about the case.
-- Track herrings in the clue ledger with `type: red-herring` and a
-  `cleared-in` chapter. An uncleared herring is a broken promise.
+- Track herrings in the clue file's prose (the schema has no `type` or
+  `cleared-in` field). Note that the entry is a herring and which chapter
+  clears it. An uncleared herring is a broken promise. Set `status: planted`
+  when the herring is on the page, and `status: paid-off` or `abandoned`
+  when it is resolved.
 
 ## The gather-suspects reveal
 
@@ -62,26 +65,35 @@ CLI creates them with `story add clue`:
 story add clue "The silver locket" --planted chapter-02 --payoff chapter-05
 ```
 
-Omit `--payoff` when the payoff is not yet known. The generated frontmatter:
+Omit `--payoff` when the payoff is not yet known. `--planted` records the
+chapter and leaves `status: planned`. Set `status: planted` when the clue
+is on the page. The generated frontmatter, before that status change:
 
 ```yaml
 ---
 title: The silver locket
-status: planned        # planned | planted | paid-off
+status: planned
 planted: chapter-02
 payoff: chapter-05
-significance-delayed: true   # reader sees it before understanding it
-characters: [edwin-marsh, priya-okafor]
-arcs: [the-drowned-witness]
+significance-delayed: false
+characters: []
+arcs: []
 ---
 ```
 
-Add a `type: clue | red-herring` field by hand when the entry is a herring,
-plus `cleared-in: chapter-NN` recording where it gets resolved with a reason.
+Set `significance-delayed: true` only when the reader sees the clue before
+understanding it. Pass `--significance-delayed`, `--character`, and `--arc`
+on `story add clue` when those values are known. List characters and arcs
+as block entries, the way the CLI writes them. Herring type and the chapter
+that clears a herring belong in the clue's prose. The schema does not store
+`type` or `cleared-in`.
 
-- `planted` must precede `payoff` — `story continuity` reuses the
-  promise-ordering machinery for the clue ledger: payoff before plant is an
-  error, a clue planted ≥3 chapters ago with no payoff is a warning.
+- `planted` must precede `payoff`. `story continuity` errors when payoff
+  comes before plant. The Chekhov warning (planted three or more chapters
+  ago with no payoff yet) fires only when `status` is `planted`. `--planted`
+  alone does not change status, so set `status: planted` when the clue is
+  on the page. A completed story that still has a `planned` or `planted`
+  clue is an error.
 - A clue with `significance-delayed: true` is fair play *only if* the clue
   itself was visible; delayed significance is the game, hidden clues are
   the cheat.

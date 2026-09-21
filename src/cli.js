@@ -72,7 +72,7 @@ Options:
                             repeatable
   --force                   Allow init to overwrite starter files
   --write                   Update chapter word-count frontmatter
-  --path <path>             Target story root for add/rename/remove
+  --path <path>             Project root for every command except init and import
   --out <file>              Output path for export/build/synopsis
   --format <name>           Output format for build (markdown, epub, docx, shunn)
   --shunn                   Apply Shunn manuscript formatting (with --format docx)
@@ -87,7 +87,7 @@ Options:
   --status <name>           Entity status for add
   --mode <name>             Mode for add chapter (e.g. discovered)
   --date <date>             Story date (YYYY-MM-DD) for add chapter/scene
-  --time <time>             Story time for add chapter/scene
+  --time <time>             Story time (HH:MM or dawn, morning, midday, afternoon, evening, night) for add chapter/scene
   --travel-hours <n>        Travel hours for add scene
   --dilemma <text>          Dilemma for add scene sequel unit
   --sequel                  Mark scene as sequel unit for add scene
@@ -126,6 +126,10 @@ export function runCli(argv, io) {
     }
 
     if (command === "init") {
+      if (parsed.options.path !== undefined) {
+        io.stderr.write("init uses --dir for the target directory. --path is the project root for other commands.\n");
+        return 1;
+      }
       const title = parsed.positionals.slice(1).join(" ");
       const result = createStoryProject({
         title,
@@ -152,6 +156,10 @@ export function runCli(argv, io) {
     }
 
     if (command === "import") {
+      if (parsed.options.path !== undefined) {
+        io.stderr.write("import uses --dir for the target directory. --path is the project root for other commands.\n");
+        return 1;
+      }
       const result = importManuscript({
         source: parsed.positionals[1],
         title: parsed.options.title,

@@ -55,13 +55,12 @@ thrillers bias hard toward the cliffhanger end of that spectrum.
 
 ## Structure pairing
 
-Thrillers pair naturally with the **Fichtean curve** pacing shape: the story
-opens at or near the first crisis with minimal setup, then escalates
-through a rising series of crises. (Fichtean curve is not one of the five
-structure models in `plot-structure/references/structure-models.md` — when
-using it, note the choice in `plot/_index.md`'s structure section and track
-crises as the primary beat unit.) Cross-link the Fichtean crisis beats to
-the ticking-clock deadlines in the timeline.
+Thrillers pair naturally with the **Fichtean curve** pacing shape in
+`plot-structure/references/structure-models.md`: the story opens at or near
+the first crisis with minimal setup, then escalates through a rising series
+of crises. Set `plot/_index.md` `structure` from that model and track crises
+as the primary beat unit. Cross-link the Fichtean crisis beats to the
+ticking-clock deadlines in the timeline.
 
 ## Thriller audit (revision)
 

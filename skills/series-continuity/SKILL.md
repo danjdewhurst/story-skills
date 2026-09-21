@@ -45,9 +45,9 @@ story init "{Title}" --follows {existing-book-dir} --synopsis "{synopsis}"
 story init "{Title}" --precedes {existing-book-dir} --synopsis "{synopsis}"
 ```
 
-`init` checks that the linked path is a story project, writes the relative link, adds the backlink to the existing book's `story.md`, and inherits `series`, `genre`, `sub-genre`, `pov`, and `tense`. It sets `book-number` to one more than the highest linked number. Pass `--series`, `--book-number`, `--genre`, `--pov`, or `--tense` to override these.
+`init` checks that the linked path is a story project, writes the relative link, adds the backlink to the existing book's `story.md`, and inherits `series`, `genre`, `sub-genre`, `pov`, and `tense`. It sets `book-number` to one more than the highest linked `book-number` only when a linked book already has an integer `book-number`. A normal `story init` book has none, so the new book is left unnumbered. Pass `--book-number` (or write the field on both `story.md` files) in that case. Pass `--series`, `--genre`, `--pov`, or `--tense` to override the inherited values.
 
-If the existing book has no `series` yet, pass `--series {series-id}` and add the same `series` (plus `book-number: 1`) to the existing `story.md`.
+If the existing book has no `series` yet, pass `--series {series-id}` and add the same `series` plus `book-number` values to both `story.md` files.
 
 If the CLI is not available, add the fields to both `story.md` files by hand.
 
@@ -78,11 +78,11 @@ knowledge-state:
   - character: kael-voss
     knows: The gallery tunnel reaches the Whisper Gate
     fact: whisper-gate-route
-    learned-in: chapter-04   # only in the book where they learn it on the page
+    learned-in: chapter-04
 ```
 
 - Fact ids are kebab-case, and each character lists a given fact only once per book. `story continuity` checks both rules.
-- Add `learned-in` only in the book where the character discovers the fact. In later books, carry the entry without `learned-in`.
+- Add `learned-in` only in the book where the character discovers the fact on the page. In later books, carry the entry without `learned-in`. Do not put that rule in an inline comment: the parser keeps `# ...` as part of the chapter id, and `story continuity` then reports a missing chapter.
 - Reuse the exact id in every book. The checker matches the character id plus the fact id, never the `knows` text.
 - Give ids to the reveals, secrets, and discoveries a later or earlier book depends on. Everyday knowledge does not need one.
 

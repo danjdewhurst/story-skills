@@ -16,8 +16,10 @@ export function titleCaseSlug(slug) {
     .join(" ");
 }
 
-export function wordCount(markdown) {
-  const normalized = markdown
+const WORD_PATTERN = /[\p{L}\p{N}]+(?:['\u2019-][\p{L}\p{N}]+)*/gu;
+
+export function splitWords(markdown) {
+  const normalized = String(markdown)
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/`[^`]*`/g, " ")
     .replace(/\[[^\]]+\]\([^)]+\)/g, " ")
@@ -25,9 +27,12 @@ export function wordCount(markdown) {
 
   // Letters and digits in any script; apostrophes (straight or curly) and
   // hyphens join a word rather than split it, so "don\u2019t" and "well-known"
-  // each count once.
-  const words = normalized.match(/[\p{L}\p{N}]+(?:['\u2019-][\p{L}\p{N}]+)*/gu);
-  return words ? words.length : 0;
+  // each count once. "U.S.A" is three words because the periods split it.
+  return normalized.match(WORD_PATTERN) ?? [];
+}
+
+export function wordCount(markdown) {
+  return splitWords(markdown).length;
 }
 
 export function chapterProse(markdownBody) {

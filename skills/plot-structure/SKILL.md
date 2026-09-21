@@ -50,7 +50,7 @@ Plot points live within arc files in the "Plot Points" table. When adding a plot
 3. Add the event to `plot/timeline.md` in chronological order
 4. If the plot point involves foreshadowing, add it to the arc's foreshadowing table
 5. If the plot point creates a reader promise or mystery, create or update a record in `continuity/promises/` or `continuity/questions/`
-6. When CLI access is available, run `story validate .`
+6. When CLI access is available, run `story reindex .`, `story links .`, and `story validate .`
 
 ## Timeline Management
 

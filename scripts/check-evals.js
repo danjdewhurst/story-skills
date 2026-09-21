@@ -36,6 +36,15 @@ function isNumber(v) {
   return typeof v === "number" && !Number.isNaN(v);
 }
 
+function nonemptyStrings(list) {
+  return Array.isArray(list) && list.some((item) => typeof item === "string" && item.trim() !== "");
+}
+
+function voiceDriftActive(drift) {
+  return Boolean(drift) && typeof drift === "object" && !Array.isArray(drift)
+    && Object.entries(drift).some(([key, value]) => KNOWN_VOICE_KEYS.has(key) && isNumber(value));
+}
+
 export function checkFixtureSkill(failures, skillsDir, skillName, fixtureName, exists) {
   const skill = typeof skillName === "string" ? skillName.trim() : "";
   if (skill === "") {
@@ -100,8 +109,8 @@ function main() {
     for (const key of ["required", "banned", "banned_regex"]) {
       if (key in checks) {
         check(
-          Array.isArray(checks[key]) && checks[key].every((s) => typeof s === "string"),
-          `${name}/checks.json: ${key} must be a list of strings`
+          Array.isArray(checks[key]) && checks[key].every((s) => typeof s === "string" && s.trim() !== ""),
+          `${name}/checks.json: ${key} must be a list of non-empty strings`
         );
       }
     }
@@ -144,20 +153,25 @@ function main() {
             );
           }
         }
+        check(
+          voiceDriftActive(drift),
+          `${name}/checks.json: voice_drift must include a known numeric marker`
+        );
       }
     }
+    const voiceActive = voiceDriftActive(checks.voice_drift);
     check(
-      (checks.required && checks.required.length > 0) ||
-        (checks.banned && checks.banned.length > 0) ||
-        (checks.banned_regex && checks.banned_regex.length > 0) ||
+      nonemptyStrings(checks.required) ||
+        nonemptyStrings(checks.banned) ||
+        nonemptyStrings(checks.banned_regex) ||
         checks.max_words_ratio !== undefined ||
         checks.min_words_ratio !== undefined ||
         checks.max_words !== undefined ||
         checks.paragraphs !== undefined ||
-        checks.ends_with_question !== undefined ||
-        checks.requires_first_person !== undefined ||
-        checks.requires_past_tense !== undefined ||
-        checks.voice_drift !== undefined,
+        checks.ends_with_question === true ||
+        checks.requires_first_person === true ||
+        checks.requires_past_tense === true ||
+        voiceActive,
       `${name}/checks.json: defines no required, banned, banned_regex, length, structural, or voice_drift checks`
     );
     for (const pattern of checks.banned_regex || []) {
