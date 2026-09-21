@@ -190,7 +190,7 @@ export function parseArgs(argv) {
   return opts;
 }
 
-function main(argv) {
+export function main(argv) {
   const opts = parseArgs(argv);
   fs.mkdirSync(opts.out, { recursive: true });
 

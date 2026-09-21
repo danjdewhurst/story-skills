@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { programArgs as compareArgs } from "../evals/compare-outputs.js";
-import { parseArgs as parseSkillArgs, programArgs as skillArgs } from "../evals/run-skill.js";
+import { main as compareMain, programArgs as compareArgs } from "../evals/compare-outputs.js";
+import { main as skillMain, parseArgs as parseSkillArgs, programArgs as skillArgs } from "../evals/run-skill.js";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
@@ -61,6 +61,17 @@ describe("eval cli argv", () => {
       "evals/baseline",
       "evals/outputs"
     ]);
+  });
+
+  test("fails when the fixture filter selects nothing", () => {
+    const log = console.log;
+    console.log = () => {};
+    try {
+      expect(compareMain([makeTempDir(), makeTempDir(), "no-such-fixture"])).toBe(2);
+      expect(skillMain(["--out", makeTempDir(), "no-such-fixture"])).toBe(2);
+    } finally {
+      console.log = log;
+    }
   });
 
   test("does not treat the script path as a fixture name", () => {

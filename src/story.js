@@ -62,19 +62,21 @@ const PROMISE_STATUSES = new Set(["planned", "planted", "paid-off", "dropped", "
 const CLUE_STATUSES = new Set(["planned", "planted", "paid-off", "dropped", "abandoned"]);
 const TERM_CATEGORIES = new Set(["person", "place", "faction", "artifact", "concept", "term", "other"]);
 
+// Aunt, uncle, niece, and nephew are gendered on both sides, so either
+// gendered inverse is a valid backlink.
 const RELATIONSHIP_INVERSES = new Map([
-  ["parent", "child"],
-  ["child", "parent"],
-  ["grandparent", "grandchild"],
-  ["grandchild", "grandparent"],
-  ["uncle", "nephew"],
-  ["aunt", "niece"],
-  ["nephew", "uncle"],
-  ["niece", "aunt"],
-  ["mentor", "student"],
-  ["student", "mentor"],
-  ["employer", "subordinate"],
-  ["subordinate", "employer"]
+  ["parent", ["child"]],
+  ["child", ["parent"]],
+  ["grandparent", ["grandchild"]],
+  ["grandchild", ["grandparent"]],
+  ["uncle", ["nephew", "niece"]],
+  ["aunt", ["nephew", "niece"]],
+  ["nephew", ["uncle", "aunt"]],
+  ["niece", ["uncle", "aunt"]],
+  ["mentor", ["student"]],
+  ["student", ["mentor"]],
+  ["employer", ["subordinate"]],
+  ["subordinate", ["employer"]]
 ]);
 
 const SYMMETRIC_RELATIONSHIPS = new Set([
@@ -105,6 +107,11 @@ export function createStoryProject(options) {
     if (!storyId) {
       throw new Error('Cannot derive a directory name from story title "' + title + '": pass --dir to set the target directory explicitly');
     }
+  }
+  // --force overwrites starter files and import --force deletes chapter
+  // files, so never follow a symlinked project root to another directory.
+  if (lstatIfExists(root)?.isSymbolicLink()) {
+    throw new Error(`Refusing to use symlinked project directory: ${root}`);
   }
   if (fs.existsSync(root) && !options.force) {
     throw new Error(`${root} already exists. Use --force to overwrite starter files.`);
@@ -505,19 +512,19 @@ export function validateLinksOf(project) {
         if (backlinks.length === 0) {
           errors.push(`${label} relationship to ${target} is missing backlink`);
         } else {
-          const expectedType = inverseRelationshipType(relationship.type);
-          let matched = expectedType === "";
+          const expectedTypes = inverseRelationshipTypes(relationship.type);
+          let matched = expectedTypes.length === 0;
           const types = [];
           for (const entry of backlinks) {
             if (entry.type) {
               types.push(entry.type);
             }
-            if (entry.type === expectedType) {
+            if (expectedTypes.includes(entry.type)) {
               matched = true;
             }
           }
           if (!matched) {
-            errors.push(`${label} relationship ${relationship.type} to ${target} expects backlink type ${expectedType}, got ${types.join(", ") || "none"}`);
+            errors.push(`${label} relationship ${relationship.type} to ${target} expects backlink type ${expectedTypes.join(" or ")}, got ${types.join(", ") || "none"}`);
           }
         }
       }
@@ -738,6 +745,12 @@ function checkBodyLinkTarget(project, label, target, errors) {
   const resolved = path.resolve(path.dirname(path.join(project.root, label)), pathOnly);
   if (!isPathInside(path.resolve(project.root), resolved) || !fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
     errors.push(`${label} links to missing file ${cleaned}`);
+    return;
+  }
+  // existsSync and statSync follow symlinks, so a link can pass the lexical
+  // check above and still land outside the project.
+  if (!isPathInside(fs.realpathSync(project.root), fs.realpathSync(resolved))) {
+    errors.push(`${label} links to ${cleaned} which resolves outside the project`);
     return;
   }
   const known = new Set();
@@ -2328,6 +2341,10 @@ const NESTED_IDENTITY_FIELDS = new Set(["artifact", "character"]);
 function replaceEntityReferences(root, oldId, newId) {
   const pathPattern = new RegExp(`(^|/)${escapeRegExp(oldId)}\\.md$`);
   rewriteReferences(root, (value) => (value === oldId ? newId : value), (body) => body.replace(/\[([^\]]*)\]\(([^)]*)\)/g, (match, label, target) => {
+    // A URL with a scheme, or a protocol-relative one, is not a project file.
+    if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(target.trim())) {
+      return match;
+    }
     const hash = target.indexOf("#");
     const query = target.indexOf("?");
     let cut = target.length;
@@ -3701,12 +3718,12 @@ function validateEnum(data, field, allowed, label, errors) {
   }
 }
 
-function inverseRelationshipType(type) {
+function inverseRelationshipTypes(type) {
   if (RELATIONSHIP_INVERSES.has(type)) {
     return RELATIONSHIP_INVERSES.get(type);
   }
 
-  return SYMMETRIC_RELATIONSHIPS.has(type) ? type : "";
+  return SYMMETRIC_RELATIONSHIPS.has(type) ? [type] : [];
 }
 
 function formatCheck(result) {

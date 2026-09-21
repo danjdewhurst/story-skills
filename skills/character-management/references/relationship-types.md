@@ -59,10 +59,7 @@ Relationships are bidirectional. When adding a relationship to one character, ad
 Inverse pairs:
 - parent <-> child
 - grandparent <-> grandchild
-- uncle <-> nephew
-- aunt <-> niece
-- nephew <-> uncle
-- niece <-> aunt
+- uncle or aunt <-> nephew or niece (either gendered inverse is valid, e.g. uncle <-> niece)
 - mentor <-> student
 - employer <-> subordinate
 

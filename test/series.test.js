@@ -16,6 +16,7 @@ import {
   createStoryProject,
   formatProjectReport,
   projectReport,
+  scanProject,
   seriesReport,
   validateLinks,
   validateProject
@@ -355,6 +356,24 @@ describe("series traversal limits", () => {
     const report = seriesReport(root);
     expect(report.ok).toBe(false);
     expect(report.errors.join("\n")).toContain("points outside the series directory");
+  });
+
+  test("orders a book reached through a symlink and through its real path as one book", () => {
+    const cwd = makeTempDir();
+    const opening = book(cwd, "Opening");
+    const middle = book(cwd, "Zeta");
+    const last = book(cwd, "Alpha");
+    try {
+      fs.symlinkSync(middle, path.join(cwd, "zeta-alias"), "dir");
+    } catch {
+      console.warn("Skipping series alias test: symlinks unavailable.");
+      return;
+    }
+    setStory(opening, { precedes: ["../zeta-alias", "../alpha"] });
+    setStory(last, { follows: ["../zeta"] });
+
+    const report = buildSeries(opening, scanProject);
+    expect(report.books.map((entry) => entry.title)).toEqual(["Opening", "Zeta", "Alpha"]);
   });
 
   test("series scope check falls back to lexical paths when realpath fails", () => {

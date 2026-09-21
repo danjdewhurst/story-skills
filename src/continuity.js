@@ -591,7 +591,7 @@ function parseClockTime(value) {
   if (named !== undefined) {
     return named;
   }
-  const match = /^(\d{1,2}):(\d{2})$/.exec(text);
+  const match = /^(\d{2}):(\d{2})$/.exec(text);
   if (!match) {
     return undefined;
   }
