@@ -105,8 +105,42 @@ exemptions:
     expect(validateAgainstSchema([], local)).toEqual(["$: expected object, got array"]);
   });
 
-  test("refuses schema keywords it cannot enforce", () => {
+  test("refuses schema keywords it cannot enforce, even where no data reaches", () => {
     expect(() => validateAgainstSchema({}, { additionalProperties: false })).toThrow("Unsupported schema keyword additionalProperties");
     expect(() => validateAgainstSchema({}, { $ref: "other.json#/x" })).toThrow("Unsupported $ref");
+    expect(() => validateAgainstSchema({}, { $ref: "#/$defs/missing" })).toThrow("Unsupported $ref");
+    const absentProperty = { type: "object", properties: { author: { type: "string", maxLength: 5 } } };
+    expect(() => validateAgainstSchema({}, absentProperty)).toThrow("Unsupported schema keyword maxLength at #/properties/author");
+    const emptyArray = { type: "array", items: { $ref: "#/$defs/entry" }, $defs: { entry: { type: "object", uniqueItems: true } } };
+    expect(() => validateAgainstSchema([], emptyArray)).toThrow("Unsupported schema keyword uniqueItems at #/$defs/entry");
+  });
+
+  test("applies keywords beside $ref", () => {
+    const local = {
+      type: "object",
+      properties: { id: { $ref: "#/$defs/id", minLength: 4 } },
+      $defs: { id: { type: "string", pattern: "^[a-z]+$" } }
+    };
+    expect(validateAgainstSchema({ id: "abcd" }, local)).toEqual([]);
+    expect(validateAgainstSchema({ id: "AB" }, local)).toEqual([
+      "$.id: \"AB\" does not match ^[a-z]+$",
+      "$.id: shorter than 4 characters"
+    ]);
+  });
+
+  test("ids come from filenames, not frontmatter", () => {
+    const cwd = makeTempDir();
+    invoke(cwd, ["init", "Ids", "--dir", "book"]);
+    const root = path.join(cwd, "book");
+    writeMarkdown(path.join(root, "characters", "Bad_Name.md"), `
+id: good-name
+name: Bad Name
+role: minor
+status: alive
+`);
+    expect(buildSchemaDocument(root).characters.map((character) => character.id)).toEqual(["Bad_Name"]);
+    expect(checkProjectSchema(root)).toEqual([
+      "$.characters[Bad_Name].id: \"Bad_Name\" does not match ^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    ]);
   });
 });
