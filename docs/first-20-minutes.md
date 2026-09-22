@@ -106,6 +106,11 @@ The `dist/` outputs are disposable build artifacts. The source of truth remains 
 
 ## 7. Go Further
 
+- `git tag draft-1` (after committing) before a revision pass, then `story compare . --ref draft-1` to see which chapters the pass changed and by how much.
+- `story progress . --log` after each session, with `target-words` and `deadline` in `story.md`, to track pace against the deadline.
+- `story timeline .` to see dated scenes in story order, POV balance, and characters who drop out.
+- `story add research "Topic" --used-in chapter-02` to record real-world facts with their sources.
+
 - `story add clue "The torn page" --planted chapter-01 --payoff chapter-03` — track a plant/payoff pair alongside questions and promises.
 - `story knowledge mara-quill --at chapter-01` — check what a character knew at a story point (from `knowledge-state` in `continuity/state.md`).
 - `story synopsis --pages 1` — compress arcs into a mechanical 1-page synopsis (`--pages 3` for the longer form).

@@ -335,6 +335,7 @@ function stripLeadingH1(markdownBody) {
 
 // src/story.js
 import { Buffer } from "node:buffer";
+import { execFileSync } from "node:child_process";
 import fs2 from "node:fs";
 import path4 from "node:path";
 
@@ -1052,6 +1053,95 @@ function formatNumber(value) {
   return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
+// src/compare.js
+function compareChapters(previous, current) {
+  const before = new Map(previous.map((chapter) => [chapter.id, chapter]));
+  const after = new Map(current.map((chapter) => [chapter.id, chapter]));
+  const ids = [...new Set([...before.keys(), ...after.keys()])].sort((left, right) => left.localeCompare(right, "en", { numeric: true }));
+  const chapters = ids.map((id) => {
+    const old = before.get(id);
+    const now = after.get(id);
+    if (!old) {
+      return { id, title: now.title, status: "added", before: 0, after: now.words, unchanged: 0 };
+    }
+    if (!now) {
+      return { id, title: old.title, status: "removed", before: old.words, after: 0, unchanged: 0 };
+    }
+    const unchanged = unchangedShare(old.paragraphs, now.paragraphs);
+    return {
+      id,
+      title: now.title,
+      status: unchanged === 1 && old.paragraphs.length === now.paragraphs.length ? "unchanged" : "changed",
+      before: old.words,
+      after: now.words,
+      unchanged
+    };
+  });
+  const total = (list) => list.reduce((sum, chapter) => sum + chapter.words, 0);
+  return {
+    chapters,
+    beforeChapters: previous.length,
+    afterChapters: current.length,
+    beforeWords: total(previous),
+    afterWords: total(current)
+  };
+}
+function proseParagraphs(prose) {
+  return String(prose).split(/\r?\n\s*\r?\n/).map((paragraph) => paragraph.replace(/\s+/g, " ").trim()).filter(Boolean);
+}
+function unchangedShare(oldParagraphs, newParagraphs) {
+  if (newParagraphs.length === 0) {
+    return oldParagraphs.length === 0 ? 1 : 0;
+  }
+  const remaining = new Map;
+  for (const paragraph of oldParagraphs) {
+    remaining.set(paragraph, (remaining.get(paragraph) ?? 0) + 1);
+  }
+  let kept = 0;
+  for (const paragraph of newParagraphs) {
+    const count = remaining.get(paragraph) ?? 0;
+    if (count > 0) {
+      kept += 1;
+      remaining.set(paragraph, count - 1);
+    }
+  }
+  return kept / newParagraphs.length;
+}
+function formatComparison(comparison, label) {
+  const added = comparison.chapters.filter((chapter) => chapter.status === "added").length;
+  const removed = comparison.chapters.filter((chapter) => chapter.status === "removed").length;
+  const lines = [
+    `Compared with ${label}`,
+    `Chapters: ${comparison.beforeChapters} then, ${comparison.afterChapters} now (${added} added, ${removed} removed)`,
+    `Words: ${formatNumber2(comparison.beforeWords)} then, ${formatNumber2(comparison.afterWords)} now (${signed(comparison.afterWords - comparison.beforeWords)})`,
+    ""
+  ];
+  if (comparison.chapters.length === 0) {
+    lines.push("- No chapters in either version");
+  }
+  for (const chapter of comparison.chapters) {
+    const name = `${chapter.id} ${chapter.title}`;
+    if (chapter.status === "added") {
+      lines.push(`- ${name}: added (${formatNumber2(chapter.after)} words)`);
+    } else if (chapter.status === "removed") {
+      lines.push(`- ${name}: removed (was ${formatNumber2(chapter.before)} words)`);
+    } else if (chapter.status === "unchanged") {
+      lines.push(`- ${name}: unchanged (${formatNumber2(chapter.after)} words)`);
+    } else {
+      lines.push(`- ${name}: ${formatNumber2(chapter.before)} -> ${formatNumber2(chapter.after)} words (${signed(chapter.after - chapter.before)}), ${Math.round(chapter.unchanged * 100)}% of paragraphs unchanged`);
+    }
+  }
+  return `${lines.join(`
+`)}
+`;
+}
+function signed(value) {
+  return `${value > 0 ? "+" : value < 0 ? "-" : "±"}${formatNumber2(Math.abs(value))}`;
+}
+function formatNumber2(value) {
+  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
 // src/progress.js
 var PROGRESS_FILE = "progress.md";
 var PACE_SESSIONS = 7;
@@ -1109,10 +1199,10 @@ function computeProgress({ words, target, deadline, today, chapters, sessions })
 function formatProgress(progress) {
   const lines = [];
   if (progress.target === null) {
-    lines.push(`Progress: ${formatNumber2(progress.words)} words (no target-words in story.md)`);
+    lines.push(`Progress: ${formatNumber3(progress.words)} words (no target-words in story.md)`);
   } else {
-    lines.push(`Progress: ${formatNumber2(progress.words)} of ${formatNumber2(progress.target)} words (${progress.percent.toFixed(1)}%)`);
-    lines.push(`Remaining: ${formatNumber2(progress.remaining)} words`);
+    lines.push(`Progress: ${formatNumber3(progress.words)} of ${formatNumber3(progress.target)} words (${progress.percent.toFixed(1)}%)`);
+    lines.push(`Remaining: ${formatNumber3(progress.remaining)} words`);
   }
   if (progress.deadline) {
     const { date, daysLeft, perDay } = progress.deadline;
@@ -1121,17 +1211,17 @@ function formatProgress(progress) {
     } else if (perDay === null) {
       lines.push(`Deadline: ${date} (${plural2(daysLeft, "day")} left)`);
     } else {
-      lines.push(`Deadline: ${date} (${plural2(daysLeft, "day")} left): ${formatNumber2(perDay)} words a day needed`);
+      lines.push(`Deadline: ${date} (${plural2(daysLeft, "day")} left): ${formatNumber3(perDay)} words a day needed`);
     }
   }
   if (progress.lastSession) {
     const { date, since } = progress.lastSession;
-    lines.push(`Sessions: ${progress.sessions} logged; last ${date} (${since >= 0 ? "+" : ""}${formatNumber2(since)} words since)`);
+    lines.push(`Sessions: ${progress.sessions} logged; last ${date} (${since >= 0 ? "+" : ""}${formatNumber3(since)} words since)`);
   } else {
     lines.push("Sessions: none logged (run story progress --log after a writing session)");
   }
   if (progress.pace !== null) {
-    lines.push(`Pace: ${formatNumber2(Math.round(progress.pace))} words a day over the last ${Math.min(progress.sessions, PACE_SESSIONS)} sessions`);
+    lines.push(`Pace: ${formatNumber3(Math.round(progress.pace))} words a day over the last ${Math.min(progress.sessions, PACE_SESSIONS)} sessions`);
   }
   if (progress.projected) {
     lines.push(`Projected finish at this pace: ${progress.projected}`);
@@ -1139,7 +1229,7 @@ function formatProgress(progress) {
   if (progress.chapters.length > 0) {
     lines.push("", "Chapter targets:");
     for (const chapter of progress.chapters) {
-      lines.push(`- ${chapter.id}: ${formatNumber2(chapter.words)} of ${formatNumber2(chapter.target)} words (${Math.round(chapter.percent)}%)`);
+      lines.push(`- ${chapter.id}: ${formatNumber3(chapter.words)} of ${formatNumber3(chapter.target)} words (${Math.round(chapter.percent)}%)`);
     }
   }
   return `${lines.join(`
@@ -1156,7 +1246,7 @@ function formatDate(days) {
 function plural2(count, noun) {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
-function formatNumber2(value) {
+function formatNumber3(value) {
   return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
@@ -1473,7 +1563,7 @@ function proseRules(styleData, characterNames) {
   };
 }
 function analyzeChapter(prose, rules) {
-  const paragraphs = proseParagraphs(prose);
+  const paragraphs = proseParagraphs2(prose);
   const text = paragraphs.join(`
 
 `);
@@ -1584,7 +1674,7 @@ function formatProseReport(report) {
 `)}
 `;
 }
-function proseParagraphs(prose) {
+function proseParagraphs2(prose) {
   return String(prose).replace(/<!--[\s\S]*?-->/g, " ").split(/\r?\n\s*\r?\n/).map((paragraph) => paragraph.replace(/\s+/g, " ").trim()).filter((paragraph) => paragraph !== "" && !paragraph.startsWith("#") && !/^([*_-])( ?\1){2,}$/.test(paragraph));
 }
 function splitSentences(paragraph) {
@@ -3191,6 +3281,74 @@ function computeWordCounts(root, options = {}) {
     chapters,
     total: chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0)
   };
+}
+function compareProject(root, options = {}) {
+  const hasRef = typeof options.ref === "string" && options.ref !== "";
+  const hasAgainst = typeof options.against === "string" && options.against !== "";
+  if (hasRef === hasAgainst) {
+    throw new Error("compare needs exactly one of --ref <git-ref> or --against <project-path>");
+  }
+  const project = scanProject(root);
+  const current = project.chapters.map((chapter) => comparableChapter(chapter.id, readMarkdown(chapter.file, project.root)));
+  let previous;
+  let label;
+  if (hasRef) {
+    previous = chaptersAtGitRef(project.root, options.ref);
+    label = `git ref ${options.ref}`;
+  } else {
+    const otherRoot = path4.resolve(options.cwd ?? process.cwd(), options.against);
+    const other = scanProject(otherRoot);
+    if (other.fileErrors.length > 0) {
+      throw new Error(`Cannot read ${otherRoot}: ${other.fileErrors[0]}`);
+    }
+    previous = other.chapters.map((chapter) => comparableChapter(chapter.id, readMarkdown(chapter.file, other.root)));
+    label = otherRoot;
+  }
+  return {
+    ok: project.fileErrors.length === 0,
+    errors: [...project.fileErrors],
+    warnings: [],
+    label,
+    ...compareChapters(previous, current)
+  };
+}
+function comparableChapter(id, markdown) {
+  const prose = chapterProse(markdown.body);
+  return {
+    id,
+    title: String(markdown.data.title ?? titleCaseSlug(id)),
+    words: wordCount(prose),
+    paragraphs: proseParagraphs(prose)
+  };
+}
+var GIT_REF_PATTERN = /^[A-Za-z0-9._/@{}~^][A-Za-z0-9._/@{}~^-]*$/;
+function chaptersAtGitRef(root, ref) {
+  if (!GIT_REF_PATTERN.test(ref)) {
+    throw new Error(`Unsupported git ref: ${ref}`);
+  }
+  const git = (args) => execFileSync("git", ["-C", root, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 });
+  let prefix;
+  try {
+    prefix = git(["rev-parse", "--show-prefix"]).trim();
+  } catch {
+    throw new Error("compare --ref needs the project inside a git repository");
+  }
+  try {
+    git(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
+  } catch {
+    throw new Error(`Unknown git ref: ${ref}`);
+  }
+  const names = git(["ls-tree", "--name-only", ref, "--", "chapters/"]).split(`
+`).map((name) => path4.posix.basename(name.trim())).filter((name) => CHAPTER_FILENAME_PATTERN.test(name)).sort();
+  return names.map((name) => {
+    const id = path4.basename(name, ".md");
+    const raw = git(["show", `${ref}:${prefix}chapters/${name}`]);
+    try {
+      return comparableChapter(id, parseFrontmatter(raw, name));
+    } catch {
+      return comparableChapter(id, { data: {}, body: raw });
+    }
+  });
 }
 function projectProgress(root, options = {}) {
   const today = options.date === undefined ? localDate() : String(options.date);
@@ -6409,6 +6567,9 @@ Commands:
                     Findings matching continuity/exemptions.md are
                     reported as dismissed
   knowledge <id>    List what a character knew at a chapter; requires --at
+  compare [path]     Compare chapters with an earlier draft: word changes,
+                    added and removed chapters, and unchanged paragraphs;
+                    requires --ref or --against
   progress [path]    Show words against target-words, deadline, chapter
                     targets, and logged sessions; --log records today
   timeline [path]    Show scenes in story-time order (marking scenes told
@@ -6455,6 +6616,8 @@ Options:
                             import also replaces every chapter-NN.md file
   --write                   Update chapter word-count frontmatter
   --log                     Record today's word count in progress.md
+  --ref <git-ref>           Earlier draft as a git branch, tag, or commit for compare
+  --against <path>          Earlier draft as another project folder for compare
   --path <path>             Project root for every command except init and import
   --out <file>              Output path for export/build/synopsis
   --format <name>           Output format for build (markdown, epub, docx, shunn)
@@ -6618,6 +6781,12 @@ function runCli(argv, io) {
       const report = seriesReport(root);
       io.stdout.write(formatSeriesReport(report));
       return reportResult(io, report, "Series is consistent", "Series check failed");
+    }
+    if (command === "compare") {
+      const root = resolveRoot(cwd, parsed, command);
+      const comparison = compareProject(root, { ref: parsed.options.ref, against: parsed.options.against, cwd });
+      io.stdout.write(formatComparison(comparison, comparison.label));
+      return reportResult(io, comparison, "Comparison complete", "Comparison failed");
     }
     if (command === "progress") {
       const root = resolveRoot(cwd, parsed, command);
@@ -6813,7 +6982,9 @@ var VALUE_OPTIONS = new Set([
   "order",
   "source",
   "sources",
-  "used-in"
+  "used-in",
+  "ref",
+  "against"
 ]);
 var REPEATABLE_OPTIONS = new Set([
   "theme",
