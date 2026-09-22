@@ -47,3 +47,33 @@ jobs:
 
       - name: Check bundled fallback under Node
         run: node skills/story-maintenance/scripts/story.js --help
+
+  node:
+    name: Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # package.json declares engines.node >=18; keep the floor covered.
+        node: ["18", "20", "22"]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Validate examples and schema from source
+        run: node scripts/check-examples.js
+
+      - name: Run the source CLI
+        run: |
+          node bin/story.js --version
+          node bin/story.js validate examples/the-last-ember
+
+      - name: Run the bundled fallback
+        run: |
+          node skills/story-maintenance/scripts/story.js --version
+          node skills/story-maintenance/scripts/story.js validate examples/the-last-ember

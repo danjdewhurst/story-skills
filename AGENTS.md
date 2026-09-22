@@ -37,7 +37,7 @@ bun run check:metadata
 bun run check:evals
 ```
 
-CI runs `check:metadata`, `test`, `test:coverage`, `test:examples`, `check:evals`, and the fallback under Node in that order. Use `bun run test` for normal verification. Use `bun run build:fallback` after changing CLI behavior in `src/`, then use `bun run check:fallback` to confirm the generated fallback is current. Use `bun run test:coverage` when changes affect CLI behavior, parsing, project scanning, validation, fallback generation, or release readiness.
+CI runs `check:metadata`, `test`, `test:coverage`, `test:examples`, `check:evals`, and the fallback under Node in that order, plus a Node 18/20/22 matrix that runs the examples check and both CLIs directly under Node. Use `bun run test` for normal verification. Use `bun run build:fallback` after changing CLI behavior in `src/`, then use `bun run check:fallback` to confirm the generated fallback is current. Use `bun run test:coverage` when changes affect CLI behavior, parsing, project scanning, validation, fallback generation, or release readiness.
 
 ## Implementation Rules
 
