@@ -384,7 +384,7 @@ Development uses Bun for tests and coverage:
 ```shell
 bun run test
 bun run test:coverage
-bun run test:examples
+bun run test:examples   # also validates every example against schemas/story.schema.json
 bun run check:metadata
 ```
 
