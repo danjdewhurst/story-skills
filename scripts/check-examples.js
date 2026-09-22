@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { checkProjectSchema } from "./check-schema.js";
 import { checkProjectContinuity, computeWordCounts, seriesReport, validateLinks, validateProject } from "../src/story.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -70,6 +71,9 @@ function main() {
 
     collectResult(failures, name, "validate", validation);
     collectResult(failures, name, "links", links);
+    for (const error of checkProjectSchema(root)) {
+      failures.push(`${name} schema error: ${error}`);
+    }
     // Linked examples (the-last-ember and its prequel) must agree on shared canon.
     collectResult(failures, name, "series", seriesReport(root));
 

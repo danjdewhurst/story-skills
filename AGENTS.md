@@ -16,7 +16,7 @@ Primary paths:
 - `examples/` - sample Story Skills projects
 - `scripts/` - CI check scripts and the release script
 - `docs/` - user-facing guides, including the schema v2 reference
-- `schemas/story.schema.json` - JSON schema for story project frontmatter
+- `schemas/story.schema.json` - JSON schema for story project frontmatter; `test:examples` validates every example against it, so update both together
 - `templates/github/` - GitHub Actions workflows users copy into a story repository for checks and scheduled chapter drafting
 - `.codex-plugin/`, `.claude-plugin/`, `.agents/` - plugin and marketplace metadata
 - `plugins/story-skills` - symlink to the repo root. Codex marketplace entries must point at a child plugin directory, so keep it a symlink rather than a copy.
