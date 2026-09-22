@@ -9,7 +9,7 @@ Story Skills is a Bun/Node package that ships Agent Skills for fiction-writing w
 Primary paths:
 
 - `skills/` - published `SKILL.md` workflows and their reference files
-- `src/` - source modules for the `story` CLI
+- `src/` - source modules for the `story` CLI. `src/commands.js` and `src/options.js` are the command and option registries: add a command or flag there, and `story --help`, argument parsing, and project-path handling follow from the entry
 - `bin/story.js` - package binary entrypoint
 - `skills/story-maintenance/scripts/story.js` - Node-compatible bundled fallback CLI for copied skill installs
 - `test/` - Bun tests
@@ -45,6 +45,7 @@ CI runs `check:metadata`, `test`, `test:coverage`, `test:examples`, `check:evals
 - Prefer standard `node:` imports and synchronous filesystem APIs where existing CLI code already uses them.
 - Preserve the markdown-first project model. Do not add project-local generator scripts or build scripts that emit story content.
 - When modifying CLI behavior in `src/`, run `bun run build:fallback` to regenerate `skills/story-maintenance/scripts/story.js` because copied skill installs rely on that fallback.
+- Register new CLI commands in `src/commands.js` (with `project: "positional"` when they take `[path]`) and new flags in `src/options.js`; never hand-edit help text or add a separate dispatch branch.
 - Add or update focused Bun tests for behavior changes.
 - Keep examples realistic and valid; if you change the story project format, update examples and tests together.
 
