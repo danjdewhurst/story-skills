@@ -14,7 +14,7 @@ category's readers and gatekeepers:
 - **YA:** roughly 55,000–90,000 words (fantasy/SF to ~100,000).
 
 Record the target in `story.md` (`target-words:`) and check progress with
-`story wordcount .`. A 130,000-word "MG" is a miscategorized adult novel —
+`story progress .`. A 130,000-word "MG" is a miscategorized adult novel —
 recategorize or cut.
 
 ## Age-appropriate voice and stakes

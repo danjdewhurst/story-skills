@@ -5,6 +5,7 @@ import { checkContinuity, storyDateError, storyTimeError } from "./continuity.js
 import { FRONTMATTER_PATTERN, parseFrontmatter, replaceFrontmatter, stringifyFrontmatter } from "./frontmatter.js";
 import { chapterProse, escapeRegExp, extractSection, kebabCase, titleCaseSlug, wordCount } from "./markdown.js";
 import { buildTimeline } from "./timeline.js";
+import { PROGRESS_FILE, cleanSessions, computeProgress, localDate, withSession } from "./progress.js";
 import { analyzeChapter, chapterFindings, proseRules, repeatedPhrases, similarNames } from "./prose.js";
 import { buildSeries, readBookFrontmatter, seriesLinkPath, validateSeriesLinks, withSeriesBacklink } from "./series.js";
 
@@ -358,6 +359,7 @@ export function scanProject(root) {
       locations: asArray(data.locations),
       arcsAdvanced: asArray(data["arcs-advanced"]),
       declaredWordCount: Number(data["word-count"] ?? 0),
+      targetWords: Number.isInteger(data["target-words"]) && data["target-words"] > 0 ? data["target-words"] : 0,
       wordCount: wordCount(chapterProse(markdown.body)),
       date: String(data.date ?? ""),
       time: String(data.time ?? ""),
@@ -442,6 +444,7 @@ export function scanProject(root) {
     }), scanErrors).sort((left, right) => left.order - right.order || left.id.localeCompare(right.id, "en")),
     exemptions: readExemptions(projectRoot),
     styleSheet: readStyleSheet(projectRoot, scanErrors),
+    progressLog: readOptionalRootFile(projectRoot, PROGRESS_FILE, scanErrors),
     continuity
   };
 }
@@ -495,6 +498,7 @@ export function validateProjectOf(project) {
   validateStyleSheet(project, errors);
   validateMatter(project, errors, warnings);
   validateResearch(project, errors, warnings);
+  validateProgressLog(project, errors);
   collectStrayFileWarnings(project, warnings);
 
   const indexChecks = [
@@ -949,6 +953,7 @@ export function projectReport(root) {
     status: project.story.data.status,
     pov: project.story.data.pov,
     tense: project.story.data.tense,
+    targetWords: Number.isInteger(project.story.data["target-words"]) ? project.story.data["target-words"] : null,
     counts: {
       characters: project.characters.length,
       locations: project.locations.length,
@@ -1011,6 +1016,7 @@ export function formatProjectReport(report, options = {}) {
     `- Glossary terms: ${report.counts.glossaryTerms}`,
     ...(report.counts.research === 0 ? [] : [`- Research notes: ${report.counts.research}`]),
     `- Total words: ${report.counts.words}`,
+    ...(report.targetWords > 0 ? [`- Target words: ${report.targetWords} (${Math.round((report.counts.words * 100) / report.targetWords)}%)`] : []),
     "",
     "Chapters:"
   ];
@@ -1203,6 +1209,56 @@ export function computeWordCounts(root, options = {}) {
     chapters,
     total: chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0)
   };
+}
+
+// Word-count progress against story.md target-words and deadline, chapter
+// target-words, and the progress.md session log. With `log`, records the
+// day's total in progress.md first (replacing an entry for the same date).
+export function projectProgress(root, options = {}) {
+  const today = options.date === undefined ? localDate() : String(options.date);
+  const dateError = storyDateError(today);
+  if (dateError !== "" || today.trim() === "") {
+    throw new Error(`progress --date ${dateError || "must be a YYYY-MM-DD date"}`);
+  }
+  let project = scanProject(root);
+  const words = project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
+  let logged = null;
+  if (options.log) {
+    if (project.fileErrors.some((error) => error.startsWith(`${PROGRESS_FILE}:`))) {
+      throw new Error(`Cannot log progress: ${PROGRESS_FILE} does not parse`);
+    }
+    const filePath = path.join(project.root, PROGRESS_FILE);
+    const existing = project.progressLog;
+    const sessions = withSession(cleanSessions(existing?.data.sessions), today, words);
+    const contents = existing === null
+      ? progressLogFile(sessions)
+      : replaceFrontmatter(existing.rawMarkdown, { ...existing.data, sessions });
+    writeFile(filePath, contents, { root: project.root });
+    logged = { file: filePath, date: today, words };
+    project = scanProject(root);
+  }
+  const data = project.story.data;
+  return {
+    ok: project.fileErrors.length === 0,
+    errors: [...project.fileErrors],
+    warnings: [],
+    logged,
+    ...computeProgress({
+      words,
+      target: Number.isInteger(data["target-words"]) && data["target-words"] > 0 ? data["target-words"] : null,
+      deadline: typeof data.deadline === "string" ? data.deadline : null,
+      today,
+      chapters: project.chapters.map((chapter) => ({ id: chapter.id, words: chapter.wordCount, target: chapter.targetWords })),
+      sessions: cleanSessions(project.progressLog?.data.sessions)
+    })
+  };
+}
+
+function progressLogFile(sessions) {
+  return `${stringifyFrontmatter({ type: "progress-log", sessions })}# Progress Log
+
+\`story progress --log\` records the manuscript word count for the day in the frontmatter above. Set \`target-words\` and \`deadline\` in \`story.md\`, and \`target-words\` on chapters, to measure against them.
+`;
 }
 
 // Read-only chronology, POV balance, and character presence. Parse errors are
@@ -3350,6 +3406,22 @@ function readExemptions(root) {
   return exemptions;
 }
 
+// Reads an optional project-root markdown file such as progress.md. A
+// missing file means null; a parse error is collected for validate.
+function readOptionalRootFile(root, name, scanErrors) {
+  const filePath = path.join(root, name);
+  if (!lstatIfExists(filePath)) {
+    return null;
+  }
+  try {
+    const markdown = readMarkdown(filePath, root);
+    return { file: filePath, data: markdown.data, rawMarkdown: markdown.rawMarkdown };
+  } catch (error) {
+    scanErrors.push(`${name}: ${error.message}`);
+    return null;
+  }
+}
+
 // Reads the optional style-sheet.md. A missing file means no style sheet; a
 // parse error is collected so validate reports it and callers see null.
 function readStyleSheet(root, scanErrors) {
@@ -3435,7 +3507,7 @@ function collectStrayFileWarnings(project, warnings) {
   const topEntries = fs.readdirSync(root, { withFileTypes: true });
   const strayTop = [];
   for (const entry of topEntries) {
-    if (entry.isFile() && entry.name.endsWith(".md") && entry.name !== "story.md" && entry.name !== STYLE_SHEET_FILE) {
+    if (entry.isFile() && entry.name.endsWith(".md") && entry.name !== "story.md" && entry.name !== STYLE_SHEET_FILE && entry.name !== PROGRESS_FILE) {
       strayTop.push(entry.name);
     }
   }
@@ -3680,6 +3752,12 @@ function validateStoryFrontmatter(project, errors) {
     requireScalar(data, "draft-mode", "story.md", errors);
   }
   validateCover(project, errors);
+  if (data.deadline !== undefined) {
+    const deadlineError = storyDateError(String(data.deadline));
+    if (deadlineError !== "") {
+      errors.push(`story.md deadline ${deadlineError}`);
+    }
+  }
 
   if (data["schema-version"] !== undefined && data["schema-version"] !== STORY_SCHEMA_VERSION) {
     errors.push(`story.md schema-version must be ${STORY_SCHEMA_VERSION}`);
@@ -3858,6 +3936,9 @@ function validateChapters(project, errors) {
     }
     if (data["word-count"] !== undefined) {
       requireInteger(data, "word-count", label, errors, 0);
+    }
+    if (data["target-words"] !== undefined) {
+      requireInteger(data, "target-words", label, errors, 1);
     }
     if (data.date !== undefined) {
       requireScalar(data, "date", label, errors);
@@ -4137,6 +4218,35 @@ function validateStyleSheet(project, errors) {
   });
   validateStringArray(data, "watch-words", label, errors);
   validateStringArray(data, "allow-words", label, errors);
+}
+
+function validateProgressLog(project, errors) {
+  if (project.progressLog === null) {
+    return;
+  }
+  const data = project.progressLog.data;
+  if (data.type !== "progress-log") {
+    errors.push(`${PROGRESS_FILE} type must be progress-log`);
+  }
+  validateObjectArray(data, "sessions", PROGRESS_FILE, errors);
+  const seen = new Set();
+  asArray(data.sessions).forEach((entry, index) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      return;
+    }
+    const label = `${PROGRESS_FILE} sessions[${index}]`;
+    const dateError = storyDateError(entry.date);
+    if (entry.date === undefined || dateError !== "") {
+      errors.push(`${label} ${dateError || "requires a date"}`);
+    } else if (seen.has(String(entry.date))) {
+      errors.push(`${label} repeats date ${entry.date}`);
+    } else {
+      seen.add(String(entry.date));
+    }
+    if (!Number.isInteger(entry.words) || entry.words < 0) {
+      errors.push(`${label} words must be a non-negative integer`);
+    }
+  });
 }
 
 function validateResearch(project, errors, warnings) {

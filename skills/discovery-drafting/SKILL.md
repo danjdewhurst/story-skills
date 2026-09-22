@@ -58,8 +58,9 @@ start — arcs get built during reconciliation.
    promise/question ledgers for dangling setups, and cut dead ends per
    `references/dead-ends.md` (abandoned ledger entries keep a recorded
    reason; cut characters get `status: cut`, not deletion).
-5. **Hold the cadence.** Keep the agreed `draft-target` (see
-   `references/drafting-cadence.md`); at midpoint and draft completion,
+5. **Hold the cadence.** Keep the agreed target (see
+   `references/drafting-cadence.md`) and log each session with
+   `story progress . --log`; at midpoint and draft completion,
    hand the batch to `revision-continuity` for developmental checks before
    continuing.
 6. **Close the loop on mode.** When the draft is complete, every

@@ -1,5 +1,6 @@
 import path from "node:path";
 import { importManuscript } from "./import.js";
+import { formatProgress } from "./progress.js";
 import { formatProseReport } from "./prose.js";
 import { formatSeriesReport } from "./series.js";
 import { formatTimeline } from "./timeline.js";
@@ -18,6 +19,7 @@ import {
   migrateProject,
   projectReport,
   projectActions,
+  projectProgress,
   proseReport,
   reindexProject,
   removeEntity,
@@ -43,6 +45,8 @@ Commands:
                     Findings matching continuity/exemptions.md are
                     reported as dismissed
   knowledge <id>    List what a character knew at a chapter; requires --at
+  progress [path]    Show words against target-words, deadline, chapter
+                    targets, and logged sessions; --log records today
   timeline [path]    Show scenes in story-time order (marking scenes told
                     out of order), POV balance, and character presence
   prose [path]       Lint chapter prose: filter words, adverbs, dialogue
@@ -86,6 +90,7 @@ Options:
                             missing starter files, never overwrite existing ones;
                             import also replaces every chapter-NN.md file
   --write                   Update chapter word-count frontmatter
+  --log                     Record today's word count in progress.md
   --path <path>             Project root for every command except init and import
   --out <file>              Output path for export/build/synopsis
   --format <name>           Output format for build (markdown, epub, docx, shunn)
@@ -100,7 +105,8 @@ Options:
   --role <name>             Character role for add character
   --status <name>           Entity status for add
   --mode <name>             Mode for add chapter (e.g. discovered)
-  --date <date>             Story date (YYYY-MM-DD) for add chapter/scene
+  --date <date>             Story date (YYYY-MM-DD) for add chapter/scene;
+                            the session date for progress (default today)
   --time <time>             Story time (HH:MM or dawn, morning, midday, afternoon, evening, night) for add chapter/scene
   --travel-hours <n>        Travel hours for add scene
   --dilemma <text>          Dilemma for add scene sequel unit
@@ -249,6 +255,16 @@ export function runCli(argv, io) {
       return reportResult(io, report, "Series is consistent", "Series check failed");
     }
 
+    if (command === "progress") {
+      const root = resolveRoot(cwd, parsed, command);
+      const progress = projectProgress(root, { log: isTruthy(parsed.options.log), date: parsed.options.date });
+      if (progress.logged) {
+        io.stdout.write(`Logged ${progress.logged.words} words for ${progress.logged.date} in ${progress.logged.file}\n`);
+      }
+      io.stdout.write(formatProgress(progress));
+      return reportResult(io, progress, "Progress checked", "Progress check failed");
+    }
+
     if (command === "timeline") {
       const root = resolveRoot(cwd, parsed, command);
       const timeline = storyTimeline(root);
@@ -377,7 +393,7 @@ export function runCli(argv, io) {
   }
 }
 
-const BOOLEAN_OPTIONS = new Set(["force", "write", "actionable", "significance-delayed", "shunn", "sequel"]);
+const BOOLEAN_OPTIONS = new Set(["force", "write", "actionable", "significance-delayed", "shunn", "sequel", "log"]);
 
 const VALUE_OPTIONS = new Set([
   "title", "dir", "genre", "sub-genre", "setting-era",

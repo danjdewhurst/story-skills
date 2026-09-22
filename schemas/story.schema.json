@@ -30,7 +30,8 @@
         "season-goal": { "type": "string" },
         "target-words": { "type": "integer", "minimum": 1 },
         "draft-mode": { "type": "string" },
-        "cover": { "type": "string", "minLength": 1 }
+        "cover": { "type": "string", "minLength": 1 },
+        "deadline": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" }
       }
     },
     "characters": { "type": "array", "items": { "$ref": "#/$defs/character" } },
@@ -67,7 +68,8 @@
     "glossary": { "type": "array", "items": { "$ref": "#/$defs/term" } },
     "styleSheet": { "$ref": "#/$defs/styleSheet" },
     "matter": { "type": "array", "items": { "$ref": "#/$defs/matter" } },
-    "research": { "type": "array", "items": { "$ref": "#/$defs/research" } }
+    "research": { "type": "array", "items": { "$ref": "#/$defs/research" } },
+    "progressLog": { "$ref": "#/$defs/progressLog" }
   },
   "$defs": {
     "id": {
@@ -181,6 +183,7 @@
         "status": { "enum": ["outline", "draft", "revised", "final", "complete"] },
         "pov": { "type": "string" },
         "word-count": { "type": "integer", "minimum": 0 },
+        "target-words": { "type": "integer", "minimum": 1 },
         "arcs-advanced": { "$ref": "#/$defs/stringList" },
         "characters": { "$ref": "#/$defs/stringList" },
         "mentions": { "$ref": "#/$defs/stringList" },
@@ -294,6 +297,25 @@
         "knows": { "type": "string" },
         "fact": { "$ref": "#/$defs/id" },
         "learned-in": { "type": "string" }
+      }
+    },
+    "progressLog": {
+      "type": "object",
+      "description": "Optional progress.md frontmatter: one manuscript word count per logged day, written by story progress --log.",
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "progress-log" },
+        "sessions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["date", "words"],
+            "properties": {
+              "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+              "words": { "type": "integer", "minimum": 0 }
+            }
+          }
+        }
       }
     },
     "research": {
