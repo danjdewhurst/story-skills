@@ -17,6 +17,13 @@ export function isAbsentGitHubRelease(error) {
   return /release not found/i.test(stderr);
 }
 
+// --atomic makes the remote accept both refs or neither, so a rejected main
+// push (someone pushed during the checks) can never leave a published tag
+// pointing at a commit that is not on main.
+export function releasePushArgs(tag) {
+  return ["push", "--atomic", "origin", RELEASE_BRANCH, tag];
+}
+
 export function bumpVersion(current, bump) {
   const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(current);
   if (!match) {
@@ -162,7 +169,7 @@ function main(argv) {
   git("add", ...VERSION_FILES, ...STORY_REF_FILES);
   git("commit", "-m", `chore: release ${nextVersion}`);
   git("tag", "-a", tag, "-m", tag);
-  git("push", "origin", RELEASE_BRANCH, tag);
+  git(...releasePushArgs(tag));
   console.log(`Pushed ${RELEASE_BRANCH} and ${tag}`);
 
   const releaseUrl = run("gh", ["release", "create", tag, "--title", tag, "--generate-notes", "--verify-tag"]).trim();

@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { bumpVersion, isAbsentGitHubRelease, replaceVersion, updateVersionFiles } from "../scripts/release.js";
+import { execFileSync, spawnSync } from "node:child_process";
+import { bumpVersion, isAbsentGitHubRelease, releasePushArgs, replaceVersion, updateVersionFiles } from "../scripts/release.js";
 
 describe("release script", () => {
   test("bumps patch, minor, and major", () => {
@@ -64,5 +65,36 @@ describe("release script", () => {
     expect(isAbsentGitHubRelease({ stderr: "release not found\n", status: 1 })).toBe(true);
     expect(isAbsentGitHubRelease({ stderr: "HTTP 401: Bad credentials\n", status: 1 })).toBe(false);
     expect(isAbsentGitHubRelease({ message: "connect ETIMEDOUT", status: 1 })).toBe(false);
+  });
+
+  test("pushes main and the tag atomically", () => {
+    expect(releasePushArgs("v1.2.3")).toEqual(["push", "--atomic", "origin", "main", "v1.2.3"]);
+  });
+
+  test("a rejected main push leaves no tag on the remote", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "story-release-push-"));
+    const git = (cwd, ...args) =>
+      execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "init.defaultBranch=main", ...args], {
+        cwd,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"]
+      });
+    const remote = path.join(dir, "remote.git");
+    git(dir, "init", "--bare", "--initial-branch=main", remote);
+    const seed = path.join(dir, "seed");
+    git(dir, "clone", remote, seed);
+    git(seed, "checkout", "-B", "main");
+    git(seed, "commit", "--allow-empty", "-m", "initial");
+    git(seed, "push", "origin", "main");
+    const releaser = path.join(dir, "releaser");
+    git(dir, "clone", remote, releaser);
+    // Someone else advances origin/main while the release checks run.
+    git(seed, "commit", "--allow-empty", "-m", "concurrent");
+    git(seed, "push", "origin", "main");
+    git(releaser, "commit", "--allow-empty", "-m", "chore: release 1.2.3");
+    git(releaser, "tag", "-a", "v1.2.3", "-m", "v1.2.3");
+    const push = spawnSync("git", releasePushArgs("v1.2.3"), { cwd: releaser, encoding: "utf8" });
+    expect(push.status).not.toBe(0);
+    expect(git(remote, "tag", "--list")).toBe("");
   });
 });

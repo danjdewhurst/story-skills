@@ -83,6 +83,17 @@ function phraseFound(phrase, text, inflect = false) {
   }
 }
 
+/**
+ * Fill `{name}` placeholders in one pass. A function replacer keeps `$&`,
+ * `$'` and friends in the values literal, and a single scan means text
+ * inserted for one placeholder is never re-scanned for another.
+ */
+export function fillTemplate(template, values) {
+  return template.replace(/\{(\w+)\}/g, (match, key) =>
+    Object.prototype.hasOwnProperty.call(values, key) ? String(values[key]) : match
+  );
+}
+
 export function loadFixture(fixtureDir) {
   const checks = JSON.parse(
     fs.readFileSync(path.join(fixtureDir, "checks.json"), "utf8")
