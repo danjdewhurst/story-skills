@@ -60,6 +60,8 @@ CI runs `check:metadata`, `test`, `test:coverage`, `test:examples`, `check:evals
 
 - Use Conventional Commits for commit messages, such as `feat: add chapter export option`, `fix: repair registry validation`, or `docs: update skill instructions`.
 - Keep commits focused on one logical change.
+- Update branches by rebasing onto `main`, not by merging `main` in; keep PR history linear.
+- Force-push rebased branches only with `--force-with-lease`.
 
 ## Release Metadata
 
