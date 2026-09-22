@@ -284,6 +284,7 @@ The CLI is for deterministic maintenance only. Agents should write story content
 | `story reindex [path]` | Rebuild registry tables from the current markdown files |
 | `story wordcount [path] --write` | Count chapter prose and update chapter frontmatter plus the chapter registry |
 | `story links [path]` | Check character, location, chapter, and arc cross-references/backlinks |
+| `story compare [path] --ref draft-1` | Compare chapters with an earlier draft (a git ref, or `--against` a copied project folder): word changes, added and removed chapters, and unchanged paragraphs |
 | `story progress [path] --log` | Report words against `target-words`, the `deadline`, and chapter targets; `--log` records the day's count in `progress.md` for pace and a projected finish |
 | `story timeline [path]` | Show scenes in story-time order from their `date`/`time` (marking scenes told out of order), POV balance by words, and each character's presence and longest absence |
 | `story prose [path]` | Lint chapter prose: filter words, -ly adverbs, said-bookisms, echoes, sentence rhythm, repeated phrases, similar names, and `style-sheet.md` spellings and watch words |

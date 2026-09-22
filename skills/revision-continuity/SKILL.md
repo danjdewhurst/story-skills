@@ -27,7 +27,8 @@ A story project must already exist. Verify by checking for `story.md` in the pro
    - **Copyedit** - distinct from proof/polish: enforce a style baseline (hyphenation, capitalization, naming, numbers) and continuity of surface detail (hair color, room layouts, name spellings). This pass is mechanical consistency, not prose quality — prose quality belongs to the line edit. Read: `style-sheet.md` (create it with the `voice-style` skill if missing), `glossary/`, character and location files. Run `story prose .` and fix every avoided spelling it reports. Update: chapters, `style-sheet.md` when a new convention is settled, `glossary/`, character files where details drifted.
    - **Fact check** - verify real-world details the chapter relies on. Read: `research/` notes whose `used-in` lists the chapter. Update: research notes and their status, and the chapter where it contradicts verified findings. See the `research` skill
    - **Proof/polish** - fix small wording, grammar, repetition, and formatting issues
-2. Read the relevant context:
+2. Snapshot the draft before any multi-chapter pass (see Draft Snapshots below), so the pass can be compared and undone.
+3. Read the relevant context:
    - `story.md`
    - `chapters/_index.md`
    - The target chapter(s)
@@ -36,12 +37,12 @@ A story project must already exist. Verify by checking for `story.md` in the pro
    - Matching scene files in `scenes/`
    - `continuity/state.md`, open questions, and promises/payoffs
    - `plot/timeline.md` and active arc files for continuity-sensitive edits
-3. Create a concise revision plan:
+4. Create a concise revision plan:
    - What will change
    - What must stay fixed for continuity
    - Which files may need updates beyond the chapter
-4. Make targeted edits directly in markdown files. Do not create project-local scripts to rewrite prose.
-5. Update dependent metadata:
+5. Make targeted edits directly in markdown files. Do not create project-local scripts to rewrite prose.
+6. Update dependent metadata:
    - Chapter frontmatter `status` (`draft` -> `revised`, `revised` -> `final` only when appropriate)
    - Chapter `word-count` via CLI when available
    - `plot/timeline.md` if events changed
@@ -49,7 +50,7 @@ A story project must already exist. Verify by checking for `story.md` in the pro
    - `continuity/state.md`, `continuity/questions/`, or `continuity/promises/` when knowledge, object ownership, mystery state, or payoffs changed
    - Arc plot points or foreshadowing status if the revision changes setup/payoff
    - Character or location files when state, relationship, or location references changed
-6. Run maintenance:
+7. Run maintenance:
 
 ```shell
 story wordcount . --write
@@ -65,6 +66,22 @@ If `story.md` links other books through `follows` or `precedes`, also run `story
 `story continuity` deterministically checks death ordering (`died-in` vs later appearances), promise/question chapter ordering, unfired setups, POV/cast consistency, and `continuity/state.md` references. For intentional flashbacks, memories, or recordings of dead characters, list them under chapter or scene `mentions` instead of `characters`.
 
 If `story` is not installed, use `bun run story --` from the Story Skills repository checkout or the bundled fallback `node ../story-maintenance/scripts/story.js` with the same arguments, resolving the path relative to this skill folder.
+
+## Draft Snapshots
+
+Take a snapshot before a revision pass that touches more than one chapter, and name it after the draft it preserves (`draft-1`, `pre-beta-edit`).
+
+- **Git projects:** check `git status`. Ask the user before committing anything; with approval, commit the current state and tag it: `git add -A && git commit -m "Draft 1 before developmental pass" && git tag draft-1`. Never push, rewrite history, or delete tags without explicit approval.
+- **Projects without git:** offer to run `git init` first. If the user declines, copy the whole project folder beside it (`../the-tide-room-draft-1`), never into the project, where `story` commands would scan the copy.
+
+After the pass, compare with the snapshot and report the result:
+
+```shell
+story compare . --ref draft-1
+story compare . --against ../the-tide-room-draft-1
+```
+
+`story compare` lists each chapter's word change, added and removed chapters, and the share of paragraphs left unchanged, so the user can see how deep the pass went. Chapters are matched by id, so a renumbered chapter shows as removed and added. It only reads git; it never commits or tags.
 
 ## Continuity Audit Checklist
 

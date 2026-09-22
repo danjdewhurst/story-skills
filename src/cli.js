@@ -1,5 +1,6 @@
 import path from "node:path";
 import { importManuscript } from "./import.js";
+import { formatComparison } from "./compare.js";
 import { formatProgress } from "./progress.js";
 import { formatProseReport } from "./prose.js";
 import { formatSeriesReport } from "./series.js";
@@ -8,6 +9,7 @@ import { VERSION } from "./version.js";
 import {
   buildBook,
   checkProjectContinuity,
+  compareProject,
   computeWordCounts,
   createEntity,
   createStoryProject,
@@ -45,6 +47,9 @@ Commands:
                     Findings matching continuity/exemptions.md are
                     reported as dismissed
   knowledge <id>    List what a character knew at a chapter; requires --at
+  compare [path]     Compare chapters with an earlier draft: word changes,
+                    added and removed chapters, and unchanged paragraphs;
+                    requires --ref or --against
   progress [path]    Show words against target-words, deadline, chapter
                     targets, and logged sessions; --log records today
   timeline [path]    Show scenes in story-time order (marking scenes told
@@ -91,6 +96,8 @@ Options:
                             import also replaces every chapter-NN.md file
   --write                   Update chapter word-count frontmatter
   --log                     Record today's word count in progress.md
+  --ref <git-ref>           Earlier draft as a git branch, tag, or commit for compare
+  --against <path>          Earlier draft as another project folder for compare
   --path <path>             Project root for every command except init and import
   --out <file>              Output path for export/build/synopsis
   --format <name>           Output format for build (markdown, epub, docx, shunn)
@@ -255,6 +262,13 @@ export function runCli(argv, io) {
       return reportResult(io, report, "Series is consistent", "Series check failed");
     }
 
+    if (command === "compare") {
+      const root = resolveRoot(cwd, parsed, command);
+      const comparison = compareProject(root, { ref: parsed.options.ref, against: parsed.options.against, cwd });
+      io.stdout.write(formatComparison(comparison, comparison.label));
+      return reportResult(io, comparison, "Comparison complete", "Comparison failed");
+    }
+
     if (command === "progress") {
       const root = resolveRoot(cwd, parsed, command);
       const progress = projectProgress(root, { log: isTruthy(parsed.options.log), date: parsed.options.date });
@@ -410,7 +424,7 @@ const VALUE_OPTIONS = new Set([
   "category", "alias", "aliases",
   "region", "population", "controlled-by",
   "prevalence", "acts", "act", "placement", "order",
-  "source", "sources", "used-in"
+  "source", "sources", "used-in", "ref", "against"
 ]);
 
 // Options that collect every value when repeated. Any other option keeps the
