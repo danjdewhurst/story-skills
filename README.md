@@ -239,6 +239,7 @@ For non-agent use:
 | **theme-craft** | Builds the controlling idea (value + cause premise), the moral argument, lie/truth arc types, antagonist design, and motif/symbolism audits | *"What's my story really about?"* |
 | **feedback-triage** | Collects alpha/beta reader feedback per round, synthesizes convergent and divergent notes, and hands a revision plan to revision-continuity | *"Triage the beta feedback"* |
 | **discovery-drafting** | Pantsing mode: draft from a story kernel, keep post-hoc chapter notes, and reconcile the bible after each discovery-drafted chapter | *"I want to discovery-write"* |
+| **voice-style** | Keeps a copyeditor's style sheet (dialect, house spellings, dialogue punctuation, character voices, watch words) and acts on `story prose` lint findings | *"Set up a style sheet for this book"* |
 | **genre-craft** | Genre packs with checkable conventions: mystery fair-play, romance beats, thriller, horror, MG/YA, sci-fi, and serial/episodic structure | *"Plan a fair-play mystery"* |
 
 For stronger prose, pair **chapter-writing** with [**better-writing**](https://github.com/forjd/better-writing). It adds voice calibration, anti-generic writing checks, and a final prose-quality pass, and installs the same way:
@@ -281,6 +282,7 @@ The CLI is for deterministic maintenance only. Agents should write story content
 | `story reindex [path]` | Rebuild registry tables from the current markdown files |
 | `story wordcount [path] --write` | Count chapter prose and update chapter frontmatter plus the chapter registry |
 | `story links [path]` | Check character, location, chapter, and arc cross-references/backlinks |
+| `story prose [path]` | Lint chapter prose: filter words, -ly adverbs, said-bookisms, echoes, sentence rhythm, repeated phrases, similar names, and `style-sheet.md` spellings and watch words |
 | `story continuity [path]` | Check deterministic continuity contracts: deaths, promises/payoffs, questions, casts, and durable state |
 | `story init "Book Two" --follows the-last-ember` | Scaffold a sequel (or a prequel with `--precedes`) linked to an existing book, writing the backlink |
 | `story series [path]` | Order linked sequels and prequels by chronology and check shared canon: deaths, casts, knowledge fact ids, names, and destroyed artifacts |
@@ -327,6 +329,7 @@ Running **story-init** creates this layout:
 ```
 my-story/
 ├── story.md                  # Story bible — title, genre, themes, POV, tense
+├── style-sheet.md            # Voice, house spellings, and watch words for story prose
 ├── characters/
 │   └── _index.md             # Character registry
 ├── worldbuilding/

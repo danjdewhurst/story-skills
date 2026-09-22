@@ -27,6 +27,7 @@ continuity/clues/
 continuity/exemptions.md        # optional: decision log for dismissed findings
 glossary/_index.md
 glossary/terms/
+style-sheet.md                  # optional: house style read by story prose
 ```
 
 ## Core Rules
@@ -149,6 +150,20 @@ Clock and time: `story continuity` checks timestamps only when scenes or chapter
 ### Glossary
 
 Glossary terms require `term` and `category`, plus optional `aliases`.
+
+### Style Sheet
+
+`style-sheet.md` is optional. `story init` creates it, and `story validate` checks it when present:
+
+- `type` must be `style-sheet`.
+- `dialect` is `british`, `american`, or `unspecified`. British or American makes `story prose` flag the other dialect's common spellings (colour/color, grey/gray, defence/defense, travelled/traveled, and their inflections). -ise/-ize is not built in.
+- `preferred` is a list of mappings, each with a non-empty `use` (the house form) and `avoid` (the form to flag); they must differ. A `preferred` entry naming either word of a built-in dialect pair replaces that pair.
+- `watch-words` is a list of words or phrases `story prose` counts in every chapter.
+- `allow-words` is a list of words `story prose` never flags as filter words, -ly adverbs, echoes, said-bookisms, or dialect spellings.
+
+The body records the decisions a copyeditor tracks: voice, spelling and usage, capitalisation, hyphenation, numbers, dialogue punctuation, and one line per character voice linked to the character file. See the `voice-style` skill.
+
+`story prose` is advisory: it reports counts per chapter and raises warnings for avoided spellings, filter words or -ly adverbs over 10 or 12 per 1,000 narration words (once a chapter has 300 narration words), three or more said-bookism tags in a chapter, uniform sentence lengths (spread under 5 words over 20 or more sentences), and similar character first names. It exits 0 unless a project file cannot be read.
 
 ## CLI Flag Values
 

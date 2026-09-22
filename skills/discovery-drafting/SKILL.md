@@ -43,8 +43,9 @@ start — arcs get built during reconciliation.
    a next-session note). Write forward only; park bible questions as
    `[TODO: check bible]` inline rather than stopping. Follow the prose
    craft in `chapter-writing/references/writing-guidelines.md` and the
-   scene-grain tools in the `scene-craft` skill as usual — discovery
-   changes *planning order*, not prose standards.
+   scene-grain tools in the `scene-craft` skill as usual, and write in the
+   voice and house style recorded in `style-sheet.md` — discovery changes
+   *planning order*, not prose standards.
 3. **Run the reconcile loop.** After each chapter, follow
    `references/reconcile-loop.md` exactly:
    - Extract new entity/promise candidates (import-style, user-approved)

@@ -1,5 +1,6 @@
 import path from "node:path";
 import { importManuscript } from "./import.js";
+import { formatProseReport } from "./prose.js";
 import { formatSeriesReport } from "./series.js";
 import { VERSION } from "./version.js";
 import {
@@ -16,6 +17,7 @@ import {
   migrateProject,
   projectReport,
   projectActions,
+  proseReport,
   reindexProject,
   removeEntity,
   renameEntity,
@@ -39,6 +41,9 @@ Commands:
                     Findings matching continuity/exemptions.md are
                     reported as dismissed
   knowledge <id>    List what a character knew at a chapter; requires --at
+  prose [path]       Lint chapter prose: filter words, adverbs, dialogue
+                    tags, echoes, rhythm, repeated phrases, similar
+                    names, and style-sheet.md spellings and watch words
   series [path]      Order linked prequels and sequels and check shared
                     canon across books
   report [path]      Summarize project inventory, progress, and checks
@@ -232,6 +237,13 @@ export function runCli(argv, io) {
       const report = seriesReport(root);
       io.stdout.write(formatSeriesReport(report));
       return reportResult(io, report, "Series is consistent", "Series check failed");
+    }
+
+    if (command === "prose") {
+      const root = resolveRoot(cwd, parsed, command);
+      const report = proseReport(root);
+      io.stdout.write(formatProseReport(report));
+      return reportResult(io, report, "Prose check complete", "Prose check failed");
     }
 
     if (command === "report") {

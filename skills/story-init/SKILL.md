@@ -49,6 +49,7 @@ If neither command is available, create the files manually using the steps below
 ```
 {story-title-kebab}/
 ├── story.md
+├── style-sheet.md
 ├── characters/
 │   └── _index.md
 ├── worldbuilding/
@@ -238,6 +239,7 @@ Also create the v2 support files. Every registry and `continuity/state.md` needs
 - `continuity/promises/_index.md` with frontmatter `type: promise-registry` and `story: {story-title-kebab}`
 - `continuity/clues/_index.md` with frontmatter `type: clue-registry` and `story: {story-title-kebab}`
 - `glossary/_index.md` with frontmatter `type: glossary-registry` and `story: {story-title-kebab}`
+- `style-sheet.md` (optional) with frontmatter `type: style-sheet`, `dialect: unspecified`, and empty `preferred`, `watch-words`, and `allow-words` lists, plus the body sections described in the `voice-style` skill
 
 If manual initialization gets tedious, stop and ask the user to install or run the Story CLI rather than inventing a different project shape.
 
@@ -245,6 +247,7 @@ If manual initialization gets tedious, stop and ask the user to install or run t
    - "Add your first character" (triggers character-management skill)
    - "Start worldbuilding" (triggers worldbuilding skill)
    - "Define your plot structure" (triggers plot-structure skill)
+   - "Set up the style sheet" (triggers voice-style skill) once there is a writing sample
    - "Run `story next .`" to show deterministic next actions
 
 7. When CLI access is available, run a final maintenance check:
@@ -268,6 +271,7 @@ These conventions apply across ALL story skills:
 - **Schema version** - `story.md` frontmatter includes `schema-version: 2`
 - **`_index.md`** files are authoritative registries for each domain
 - **`story.md`** is the top-level bible read by all skills for context
+- **`style-sheet.md`** records voice and house style; skills that write or revise prose read it
 - **Bidirectional cross-links** - when referencing another entity, update both files
 - **Character identifiers** use the kebab-case filename without extension (e.g., `sera-voss`)
 - **Death tracking** - when a character dies on the page, set `status: deceased` and `died-in: chapter-{NN}` so `story continuity` can flag posthumous appearances

@@ -4,6 +4,7 @@ import path from "node:path";
 import { checkContinuity, storyDateError, storyTimeError } from "./continuity.js";
 import { FRONTMATTER_PATTERN, parseFrontmatter, replaceFrontmatter, stringifyFrontmatter } from "./frontmatter.js";
 import { chapterProse, escapeRegExp, extractSection, kebabCase, titleCaseSlug, wordCount } from "./markdown.js";
+import { analyzeChapter, chapterFindings, proseRules, repeatedPhrases, similarNames } from "./prose.js";
 import { buildSeries, readBookFrontmatter, seriesLinkPath, validateSeriesLinks, withSeriesBacklink } from "./series.js";
 
 export const STORY_SCHEMA_VERSION = 2;
@@ -61,6 +62,8 @@ const QUESTION_STATUSES = new Set(["open", "answered", "resolved", "dropped", "a
 const PROMISE_STATUSES = new Set(["planned", "planted", "paid-off", "dropped", "abandoned"]);
 const CLUE_STATUSES = new Set(["planned", "planted", "paid-off", "dropped", "abandoned"]);
 const TERM_CATEGORIES = new Set(["person", "place", "faction", "artifact", "concept", "term", "other"]);
+export const STYLE_DIALECTS = new Set(["british", "american", "unspecified"]);
+export const STYLE_SHEET_FILE = "style-sheet.md";
 
 // Aunt, uncle, niece, and nephew are gendered on both sides, so either
 // gendered inverse is a valid backlink.
@@ -163,6 +166,7 @@ export function createStoryProject(options) {
   writeStarterFile(path.join(root, "continuity", "promises", "_index.md"), promiseIndex(storyId, []), { root });
   writeStarterFile(path.join(root, "continuity", "clues", "_index.md"), clueIndex(storyId, []), { root });
   writeStarterFile(path.join(root, "glossary", "_index.md"), glossaryIndex(storyId, []), { root });
+  writeStarterFile(path.join(root, STYLE_SHEET_FILE), styleSheet(), { root });
 
   const linkedBooks = [];
   // An existing story.md is preserved under --force, so only add backlinks
@@ -405,6 +409,7 @@ export function scanProject(root) {
       aliases: asArray(data.aliases)
     }), scanErrors),
     exemptions: readExemptions(projectRoot),
+    styleSheet: readStyleSheet(projectRoot, scanErrors),
     continuity
   };
 }
@@ -455,6 +460,7 @@ export function validateProjectOf(project) {
   validateClues(project, errors);
   validateExemptions(project, errors);
   validateGlossaryTerms(project, errors);
+  validateStyleSheet(project, errors);
   collectStrayFileWarnings(project, warnings);
 
   const indexChecks = [
@@ -1149,6 +1155,39 @@ export function computeWordCounts(root, options = {}) {
   };
 }
 
+// Advisory prose lint: counts per chapter plus manuscript-wide repeats.
+// Findings are warnings, never errors, so the command always exits 0 on a
+// readable project.
+export function proseReport(root) {
+  const project = scanProject(root);
+  const errors = [...project.fileErrors];
+  const warnings = [];
+  const rules = proseRules(project.styleSheet?.data, project.characters.map((character) => character.name));
+  const chapters = [];
+  for (const chapter of project.chapters) {
+    // Chapters that failed to parse are already in fileErrors, not here.
+    const label = relative(project, chapter.file);
+    const analysis = analyzeChapter(chapterProse(readMarkdown(chapter.file, project.root).body), rules);
+    chapters.push({ file: label, title: chapter.title, analysis });
+    warnings.push(...chapterFindings(label, analysis));
+  }
+  const phrases = repeatedPhrases(chapters.map((chapter) => chapter.analysis));
+  const names = similarNames(project.characters);
+  for (const [left, right] of names) {
+    warnings.push(`characters ${left.id} and ${right.id} have similar first names (${left.name} / ${right.name})`);
+  }
+  return {
+    ok: errors.length === 0,
+    errors,
+    warnings,
+    styleSheet: project.styleSheet !== null,
+    words: chapters.reduce((sum, chapter) => sum + chapter.analysis.words, 0),
+    chapters,
+    phrases,
+    similarNames: names
+  };
+}
+
 export function exportManuscript(root, options = {}) {
   const project = scanProject(root);
   if (project.chapters.length === 0) {
@@ -1732,6 +1771,49 @@ function glossaryIndex(storyId, terms) {
 | Term | Category | File |
 |------|----------|------|
 ${rows.join("\n")}
+`;
+}
+
+function styleSheet() {
+  return `${stringifyFrontmatter({
+    type: "style-sheet",
+    dialect: "unspecified",
+    preferred: [],
+    "watch-words": [],
+    "allow-words": []
+  })}# Style Sheet
+
+The book's house decisions, kept the way a copyeditor keeps them. Read this before drafting or revising prose. \`story prose\` enforces the lists in the frontmatter: \`dialect\` (british, american, or unspecified) flags the other dialect's common spellings, each \`preferred\` entry flags its \`avoid\` form, \`watch-words\` are counted in every chapter, and \`allow-words\` silences a built-in filter word or adverb.
+
+## Voice
+
+Narrative distance, sentence rhythm, register, and what this prose never does. Quote two or three sentences that sound exactly right.
+
+## Spelling And Usage
+
+Record one \`preferred\` entry per variant (\`use: grey\`, \`avoid: gray\`) and note usage rules here.
+
+## Capitalisation
+
+Titles, ranks, institutions, invented terms, and deities. Invented terms also belong in the glossary.
+
+## Hyphenation And Compounds
+
+## Numbers, Dates, And Time
+
+Spelled-out or numerals, and how in-world dates and times are written.
+
+## Dialogue And Punctuation
+
+Quote marks, dash style, ellipses, italics for thought or foreign words, and the default dialogue tags.
+
+## Character Voices
+
+One entry per POV character or major speaker: vocabulary, sentence length, verbal tics, and words they never use.
+
+## Watch List
+
+Why each \`watch-words\` entry is there.
 `;
 }
 
@@ -3076,6 +3158,22 @@ function readExemptions(root) {
   return exemptions;
 }
 
+// Reads the optional style-sheet.md. A missing file means no style sheet; a
+// parse error is collected so validate reports it and callers see null.
+function readStyleSheet(root, scanErrors) {
+  const filePath = path.join(root, STYLE_SHEET_FILE);
+  if (!lstatIfExists(filePath)) {
+    return null;
+  }
+  try {
+    const markdown = readMarkdown(filePath, root);
+    return { file: filePath, data: markdown.data, body: markdown.body };
+  } catch (error) {
+    scanErrors.push(`${STYLE_SHEET_FILE}: ${error.message}`);
+    return null;
+  }
+}
+
 function readMarkdown(filePath, root) {
   if (root) {
     assertSafeProjectPath(filePath, root);
@@ -3143,7 +3241,7 @@ function collectStrayFileWarnings(project, warnings) {
   const topEntries = fs.readdirSync(root, { withFileTypes: true });
   const strayTop = [];
   for (const entry of topEntries) {
-    if (entry.isFile() && entry.name.endsWith(".md") && entry.name !== "story.md") {
+    if (entry.isFile() && entry.name.endsWith(".md") && entry.name !== "story.md" && entry.name !== STYLE_SHEET_FILE) {
       strayTop.push(entry.name);
     }
   }
@@ -3813,6 +3911,37 @@ function validateGlossaryTerms(project, errors) {
     validateEnum(data, "category", TERM_CATEGORIES, label, errors);
     validateStringArray(data, "aliases", label, errors);
   }
+}
+
+function validateStyleSheet(project, errors) {
+  if (project.styleSheet === null) {
+    return;
+  }
+  const data = project.styleSheet.data;
+  const label = STYLE_SHEET_FILE;
+  if (data.type !== "style-sheet") {
+    errors.push(`${label} type must be style-sheet`);
+  }
+  requireScalar(data, "dialect", label, errors);
+  validateEnum(data, "dialect", STYLE_DIALECTS, label, errors);
+  validateObjectArray(data, "preferred", label, errors);
+  asArray(data.preferred).forEach((entry, index) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      return;
+    }
+    const entryLabel = `${label} preferred[${index}]`;
+    for (const field of ["use", "avoid"]) {
+      if (typeof entry[field] !== "string" || entry[field].trim() === "") {
+        errors.push(`${entryLabel} requires a non-empty ${field}`);
+      }
+    }
+    if (typeof entry.use === "string" && typeof entry.avoid === "string"
+      && entry.use.trim().toLowerCase() === entry.avoid.trim().toLowerCase()) {
+      errors.push(`${entryLabel} use and avoid must differ`);
+    }
+  });
+  validateStringArray(data, "watch-words", label, errors);
+  validateStringArray(data, "allow-words", label, errors);
 }
 
 function validateEntityId(id, label, errors) {

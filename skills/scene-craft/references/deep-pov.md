@@ -47,7 +47,9 @@ and the POV character's perception:
   door open" → "the door swung open")
 
 This is a checkable list, not a style guide. Scan the draft for each word;
-where it mediates perception, rewrite as direct perception.
+where it mediates perception, rewrite as direct perception. `story prose .`
+counts the common filter words in narration per chapter (see the
+`voice-style` skill).
 
 **No thought-tags.** Italicized thoughts with tags ("she thought," "she told
 herself") are training wheels. Deep POV expresses thought as unmediated

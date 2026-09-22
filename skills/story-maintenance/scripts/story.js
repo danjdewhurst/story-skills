@@ -886,6 +886,558 @@ function checkChapterDates(project, warnings) {
   }
 }
 
+// src/prose.js
+var FILTER_WORDS = [
+  "felt",
+  "saw",
+  "heard",
+  "noticed",
+  "realized",
+  "realised",
+  "wondered",
+  "seemed",
+  "watched",
+  "knew",
+  "decided",
+  "thought",
+  "sensed"
+];
+var SAID_BOOKISMS = [
+  "barked",
+  "bellowed",
+  "breathed",
+  "chuckled",
+  "cooed",
+  "declared",
+  "exclaimed",
+  "gasped",
+  "grinned",
+  "groaned",
+  "growled",
+  "grunted",
+  "hissed",
+  "inquired",
+  "interjected",
+  "intoned",
+  "laughed",
+  "opined",
+  "purred",
+  "queried",
+  "quipped",
+  "retorted",
+  "shrieked",
+  "sighed",
+  "smiled",
+  "smirked",
+  "snapped",
+  "snarled",
+  "sneered",
+  "spat",
+  "stated"
+];
+var PLAIN_TAGS = ["said", "asked", "says", "asks"];
+var NOT_ADVERBS = new Set([
+  "ally",
+  "anomaly",
+  "apply",
+  "assembly",
+  "belly",
+  "bully",
+  "burly",
+  "butterfly",
+  "chilly",
+  "comply",
+  "costly",
+  "curly",
+  "daily",
+  "deadly",
+  "dolly",
+  "dragonfly",
+  "early",
+  "elderly",
+  "family",
+  "fly",
+  "folly",
+  "friendly",
+  "ghastly",
+  "ghostly",
+  "gully",
+  "holly",
+  "holy",
+  "homely",
+  "hourly",
+  "imply",
+  "italy",
+  "jelly",
+  "jolly",
+  "july",
+  "lily",
+  "likely",
+  "lively",
+  "lonely",
+  "lovely",
+  "melancholy",
+  "monopoly",
+  "monthly",
+  "multiply",
+  "oily",
+  "only",
+  "orderly",
+  "prickly",
+  "rally",
+  "rely",
+  "reply",
+  "sickly",
+  "silly",
+  "sly",
+  "smelly",
+  "stately",
+  "supply",
+  "surly",
+  "tally",
+  "ugly",
+  "unlikely",
+  "weekly",
+  "wobbly",
+  "woolly",
+  "yearly"
+]);
+var ECHO_STOPWORDS = new Set([
+  "about",
+  "above",
+  "after",
+  "again",
+  "against",
+  "along",
+  "always",
+  "among",
+  "another",
+  "around",
+  "because",
+  "before",
+  "behind",
+  "being",
+  "below",
+  "between",
+  "could",
+  "couldn't",
+  "didn't",
+  "doesn't",
+  "don't",
+  "every",
+  "first",
+  "hadn't",
+  "haven't",
+  "isn't",
+  "might",
+  "never",
+  "other",
+  "right",
+  "should",
+  "since",
+  "something",
+  "still",
+  "their",
+  "there",
+  "these",
+  "thing",
+  "things",
+  "those",
+  "though",
+  "three",
+  "through",
+  "until",
+  "wasn't",
+  "where",
+  "which",
+  "while",
+  "without",
+  "would",
+  "wouldn't",
+  "you're",
+  "they're",
+  "we're"
+]);
+var PHRASE_STOPWORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "as",
+  "at",
+  "be",
+  "but",
+  "by",
+  "for",
+  "from",
+  "had",
+  "has",
+  "have",
+  "he",
+  "her",
+  "his",
+  "i",
+  "in",
+  "into",
+  "is",
+  "it",
+  "its",
+  "me",
+  "my",
+  "not",
+  "of",
+  "on",
+  "or",
+  "she",
+  "so",
+  "that",
+  "the",
+  "their",
+  "them",
+  "then",
+  "they",
+  "this",
+  "to",
+  "was",
+  "we",
+  "were",
+  "with",
+  "you"
+]);
+var DIALECT_PAIRS = [
+  ["armour", "armor"],
+  ["armoured", "armored"],
+  ["centre", "center"],
+  ["centres", "centers"],
+  ["centred", "centered"],
+  ["colour", "color"],
+  ["colours", "colors"],
+  ["coloured", "colored"],
+  ["colourful", "colorful"],
+  ["defence", "defense"],
+  ["defences", "defenses"],
+  ["favour", "favor"],
+  ["favours", "favors"],
+  ["favoured", "favored"],
+  ["favourite", "favorite"],
+  ["grey", "gray"],
+  ["greying", "graying"],
+  ["harbour", "harbor"],
+  ["harbours", "harbors"],
+  ["honour", "honor"],
+  ["honours", "honors"],
+  ["honoured", "honored"],
+  ["honourable", "honorable"],
+  ["jewellery", "jewelry"],
+  ["labour", "labor"],
+  ["mould", "mold"],
+  ["mouldy", "moldy"],
+  ["neighbour", "neighbor"],
+  ["neighbours", "neighbors"],
+  ["odour", "odor"],
+  ["offence", "offense"],
+  ["plough", "plow"],
+  ["rumour", "rumor"],
+  ["rumours", "rumors"],
+  ["sceptic", "skeptic"],
+  ["sceptical", "skeptical"],
+  ["smoulder", "smolder"],
+  ["smouldering", "smoldering"],
+  ["theatre", "theater"],
+  ["towards", "toward"],
+  ["travelled", "traveled"],
+  ["travelling", "traveling"],
+  ["traveller", "traveler"],
+  ["cancelled", "canceled"],
+  ["vapour", "vapor"],
+  ["whisky", "whiskey"]
+];
+var PROSE_THRESHOLDS = {
+  filterPerThousand: 10,
+  adverbsPerThousand: 12,
+  minRateWords: 300,
+  bookismsPerChapter: 3,
+  echoWindow: 30,
+  echoMinLength: 5,
+  uniformMinSentences: 20,
+  uniformSpread: 5,
+  phraseLength: 4,
+  phraseMinCount: 3,
+  phraseLimit: 10
+};
+function proseRules(styleData, characterNames) {
+  const data = styleData ?? {};
+  const allow = new Set(stringList(data["allow-words"]).map((word) => word.toLowerCase()));
+  const variants = [];
+  for (const entry of Array.isArray(data.preferred) ? data.preferred : []) {
+    if (entry && typeof entry.use === "string" && typeof entry.avoid === "string" && entry.use.trim() !== "" && entry.avoid.trim() !== "") {
+      variants.push({ use: entry.use.trim(), avoid: entry.avoid.trim(), source: "style sheet" });
+    }
+  }
+  const dialect = typeof data.dialect === "string" ? data.dialect : "unspecified";
+  if (dialect === "british" || dialect === "american") {
+    const claimed = new Set(variants.flatMap((variant) => [variant.use.toLowerCase(), variant.avoid.toLowerCase()]).concat([...allow]));
+    for (const [british, american] of DIALECT_PAIRS) {
+      const [use, avoid] = dialect === "british" ? [british, american] : [american, british];
+      if (!claimed.has(use) && !claimed.has(avoid)) {
+        variants.push({ use, avoid, source: `${dialect} dialect` });
+      }
+    }
+  }
+  const nameTokens = new Set;
+  for (const name of characterNames) {
+    for (const token of splitWords(name)) {
+      nameTokens.add(token.toLowerCase());
+    }
+  }
+  return {
+    allow,
+    variants: variants.map((variant) => ({ ...variant, pattern: phrasePattern(variant.avoid) })),
+    watch: stringList(data["watch-words"]).map((word) => ({ word, pattern: phrasePattern(word) })),
+    filterWords: new Set(FILTER_WORDS.filter((word) => !allow.has(word))),
+    bookisms: new Set(SAID_BOOKISMS.filter((word) => !allow.has(word))),
+    nameTokens
+  };
+}
+function analyzeChapter(prose, rules) {
+  const paragraphs = proseParagraphs(prose);
+  const text = paragraphs.join(`
+
+`);
+  const words = splitWords(text);
+  const narration = splitWords(paragraphs.map(stripDialogue).join(`
+
+`));
+  const sentences = paragraphs.flatMap(splitSentences).map((sentence) => splitWords(sentence).length).filter((count) => count > 0);
+  const filterWords = countMatching(narration, (word) => rules.filterWords.has(word));
+  const adverbs = countMatching(narration, (word) => isAdverb(word, rules));
+  const tags = dialogueTags(paragraphs, rules);
+  return {
+    words: words.length,
+    narrationWords: narration.length,
+    sentences: sentenceStats(sentences),
+    filterWords,
+    adverbs,
+    plainTags: tags.plain,
+    bookisms: tags.bookisms,
+    echoes: echoes(words, rules),
+    watch: rules.watch.map(({ word, pattern }) => ({ word, count: countPattern(text, pattern) })).filter((entry) => entry.count > 0),
+    variants: rules.variants.map(({ use, avoid, source, pattern }) => ({ use, avoid, source, count: countPattern(text, pattern) })).filter((entry) => entry.count > 0),
+    phraseSentences: paragraphs.flatMap(splitSentences).map((sentence) => splitWords(sentence).map((word) => word.toLowerCase()))
+  };
+}
+function chapterFindings(label, analysis, thresholds = PROSE_THRESHOLDS) {
+  const findings = [];
+  for (const variant of analysis.variants) {
+    findings.push(`${label} uses "${variant.avoid}" ${times(variant.count)}; ${variant.source} prefers "${variant.use}"`);
+  }
+  const rated = analysis.narrationWords >= thresholds.minRateWords;
+  const filterRate = perThousand(total(analysis.filterWords), analysis.narrationWords);
+  if (rated && filterRate > thresholds.filterPerThousand) {
+    findings.push(`${label} has ${formatRate(filterRate)} filter words per 1,000 narration words (over ${thresholds.filterPerThousand}): ${formatCounts(analysis.filterWords, 5)}`);
+  }
+  const adverbRate = perThousand(total(analysis.adverbs), analysis.narrationWords);
+  if (rated && adverbRate > thresholds.adverbsPerThousand) {
+    findings.push(`${label} has ${formatRate(adverbRate)} -ly adverbs per 1,000 narration words (over ${thresholds.adverbsPerThousand}): ${formatCounts(analysis.adverbs, 5)}`);
+  }
+  const bookisms = total(analysis.bookisms);
+  if (bookisms >= thresholds.bookismsPerChapter) {
+    findings.push(`${label} has ${bookisms} said-bookism dialogue tags: ${formatCounts(analysis.bookisms, 5)}`);
+  }
+  const stats = analysis.sentences;
+  if (stats.count >= thresholds.uniformMinSentences && stats.spread < thresholds.uniformSpread) {
+    findings.push(`${label} sentence lengths are uniform (spread ${formatRate(stats.spread)} words over ${stats.count} sentences); vary the rhythm`);
+  }
+  return findings;
+}
+function repeatedPhrases(analyses, thresholds = PROSE_THRESHOLDS) {
+  const counts = new Map;
+  const size = thresholds.phraseLength;
+  for (const analysis of analyses) {
+    for (const sentence of analysis.phraseSentences) {
+      for (let index = 0;index + size <= sentence.length; index += 1) {
+        const gram = sentence.slice(index, index + size);
+        if (gram.every((word) => PHRASE_STOPWORDS.has(word))) {
+          continue;
+        }
+        const key = gram.join(" ");
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+    }
+  }
+  return sortCounts(counts).filter((entry) => entry.count >= thresholds.phraseMinCount).slice(0, thresholds.phraseLimit).map((entry) => ({ phrase: entry.word, count: entry.count }));
+}
+function similarNames(characters) {
+  const firsts = characters.map((character) => ({ id: character.id, name: String(character.name), first: (splitWords(character.name)[0] ?? "").toLowerCase() })).filter((entry) => entry.first.length >= 3).sort((left, right) => left.id.localeCompare(right.id, "en"));
+  const pairs = [];
+  for (let left = 0;left < firsts.length; left += 1) {
+    for (let right = left + 1;right < firsts.length; right += 1) {
+      const a = firsts[left].first;
+      const b = firsts[right].first;
+      const limit = Math.min(a.length, b.length) >= 5 ? 2 : 1;
+      if (a === b || a.slice(0, 3) === b.slice(0, 3) || editDistance(a, b) <= limit) {
+        pairs.push([firsts[left], firsts[right]]);
+      }
+    }
+  }
+  return pairs;
+}
+function formatProseReport(report) {
+  const chapterCount = `${report.chapters.length} ${report.chapters.length === 1 ? "chapter" : "chapters"}`;
+  const lines = [`Prose report: ${chapterCount}, ${report.words} words`];
+  if (!report.styleSheet) {
+    lines.push("No style-sheet.md: spelling and watch-word checks are off");
+  }
+  for (const chapter of report.chapters) {
+    const analysis = chapter.analysis;
+    const stats = analysis.sentences;
+    lines.push("", `${chapter.file}: ${chapter.title} (${analysis.words} words)`);
+    lines.push(`  Sentences: ${stats.count}, average ${formatRate(stats.mean)} words, longest ${stats.longest}, spread ${formatRate(stats.spread)}`);
+    lines.push(`  Filter words: ${formatRate(perThousand(total(analysis.filterWords), analysis.narrationWords))} per 1k narration words${countSuffix(analysis.filterWords)}`);
+    lines.push(`  -ly adverbs: ${formatRate(perThousand(total(analysis.adverbs), analysis.narrationWords))} per 1k narration words${countSuffix(analysis.adverbs)}`);
+    lines.push(`  Dialogue tags: ${formatCounts(analysis.plainTags, 4) || "none plain"}; said-bookisms: ${formatCounts(analysis.bookisms, 5) || "none"}`);
+    lines.push(`  Echoes within ${PROSE_THRESHOLDS.echoWindow} words: ${formatCounts(analysis.echoes, 5) || "none"}`);
+    if (analysis.watch.length > 0) {
+      lines.push(`  Watch words: ${analysis.watch.map((entry) => `${entry.word} ${entry.count}`).join(", ")}`);
+    }
+    if (analysis.variants.length > 0) {
+      lines.push(`  Spelling: ${analysis.variants.map((entry) => `${entry.avoid} ${entry.count} (use ${entry.use})`).join(", ")}`);
+    }
+  }
+  lines.push("", "Manuscript:");
+  lines.push(`  Repeated ${PROSE_THRESHOLDS.phraseLength}-word phrases: ${report.phrases.map((entry) => `"${entry.phrase}" ${entry.count}`).join(", ") || "none"}`);
+  lines.push(`  Similar character names: ${report.similarNames.map(([a, b]) => `${a.name} / ${b.name}`).join(", ") || "none"}`);
+  return `${lines.join(`
+`)}
+`;
+}
+function proseParagraphs(prose) {
+  return String(prose).replace(/<!--[\s\S]*?-->/g, " ").split(/\r?\n\s*\r?\n/).map((paragraph) => paragraph.replace(/\s+/g, " ").trim()).filter((paragraph) => paragraph !== "" && !paragraph.startsWith("#") && !/^([*_-])( ?\1){2,}$/.test(paragraph));
+}
+function splitSentences(paragraph) {
+  return paragraph.split(/(?<=[.!?…]["'”’)\]*_]*)\s+(?=["'“‘(*_]*[\p{Lu}\p{N}])/u);
+}
+function stripDialogue(paragraph) {
+  return paragraph.replace(/“[^”]*(”|$)/g, " ").replace(/"[^"]*("|$)/g, " ");
+}
+function dialogueTags(paragraphs, rules) {
+  const plain = new Map;
+  const bookisms = new Map;
+  for (const paragraph of paragraphs) {
+    for (const closing of closingQuoteIndexes(paragraph)) {
+      const after = splitWords(paragraph.slice(closing + 1).split(/[.!?;:“"]/)[0]).slice(0, 3);
+      for (const raw of after) {
+        const word = raw.toLowerCase();
+        if (PLAIN_TAGS.includes(word)) {
+          increment(plain, word);
+          break;
+        }
+        if (rules.bookisms.has(word)) {
+          increment(bookisms, word);
+          break;
+        }
+      }
+    }
+  }
+  return { plain: sortCounts(plain), bookisms: sortCounts(bookisms) };
+}
+function closingQuoteIndexes(paragraph) {
+  const indexes = [];
+  let straight = 0;
+  for (let index = 0;index < paragraph.length; index += 1) {
+    const char = paragraph[index];
+    if (char === "”") {
+      indexes.push(index);
+    } else if (char === '"') {
+      straight += 1;
+      if (straight % 2 === 0) {
+        indexes.push(index);
+      }
+    }
+  }
+  return indexes;
+}
+function isAdverb(word, rules) {
+  return word.length > 4 && word.endsWith("ly") && !NOT_ADVERBS.has(word) && !rules.allow.has(word) && !rules.nameTokens.has(word);
+}
+function echoes(words, rules) {
+  const lastSeen = new Map;
+  const counts = new Map;
+  words.forEach((raw, index) => {
+    const word = raw.toLowerCase();
+    if (word.length < PROSE_THRESHOLDS.echoMinLength || ECHO_STOPWORDS.has(word) || rules.nameTokens.has(word) || rules.allow.has(word) || /^\p{N}+$/u.test(word)) {
+      return;
+    }
+    if (lastSeen.has(word) && index - lastSeen.get(word) <= PROSE_THRESHOLDS.echoWindow) {
+      increment(counts, word);
+    }
+    lastSeen.set(word, index);
+  });
+  return sortCounts(counts);
+}
+function sentenceStats(lengths) {
+  if (lengths.length === 0) {
+    return { count: 0, mean: 0, longest: 0, spread: 0 };
+  }
+  const mean = lengths.reduce((sum, value) => sum + value, 0) / lengths.length;
+  const variance = lengths.reduce((sum, value) => sum + (value - mean) ** 2, 0) / lengths.length;
+  return { count: lengths.length, mean, longest: Math.max(...lengths), spread: Math.sqrt(variance) };
+}
+function countMatching(words, predicate) {
+  const counts = new Map;
+  for (const raw of words) {
+    const word = raw.toLowerCase();
+    if (predicate(word)) {
+      increment(counts, word);
+    }
+  }
+  return sortCounts(counts);
+}
+function phrasePattern(phrase) {
+  const body = phrase.trim().split(/\s+/).map(escapeRegExp).join("\\s+");
+  return new RegExp(`(?<![\\p{L}\\p{N}])${body}(?![\\p{L}\\p{N}])`, "giu");
+}
+function countPattern(text, pattern) {
+  return (text.match(pattern) ?? []).length;
+}
+function editDistance(a, b) {
+  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1;i <= a.length; i += 1) {
+    const current = [i];
+    for (let j = 1;j <= b.length; j += 1) {
+      current[j] = Math.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    previous = current;
+  }
+  return previous[b.length];
+}
+function increment(counts, key) {
+  counts.set(key, (counts.get(key) ?? 0) + 1);
+}
+function sortCounts(counts) {
+  return [...counts.entries()].map(([word, count]) => ({ word, count })).sort((left, right) => right.count - left.count || left.word.localeCompare(right.word, "en"));
+}
+function stringList(value) {
+  return Array.isArray(value) ? value.filter((item) => typeof item === "string" && item.trim() !== "").map((item) => item.trim()) : [];
+}
+function total(counts) {
+  return counts.reduce((sum, entry) => sum + entry.count, 0);
+}
+function perThousand(count, words) {
+  return words === 0 ? 0 : count * 1000 / words;
+}
+function formatRate(value) {
+  return value.toFixed(1);
+}
+function formatCounts(counts, limit) {
+  return counts.slice(0, limit).map((entry) => `${entry.word} ${entry.count}`).join(", ");
+}
+function countSuffix(counts) {
+  return counts.length === 0 ? "" : ` (${formatCounts(counts, 5)})`;
+}
+function times(count) {
+  return count === 1 ? "once" : `${count} times`;
+}
+
 // src/series.js
 import fs from "node:fs";
 import path2 from "node:path";
@@ -1354,6 +1906,8 @@ var QUESTION_STATUSES = new Set(["open", "answered", "resolved", "dropped", "aba
 var PROMISE_STATUSES = new Set(["planned", "planted", "paid-off", "dropped", "abandoned"]);
 var CLUE_STATUSES = new Set(["planned", "planted", "paid-off", "dropped", "abandoned"]);
 var TERM_CATEGORIES = new Set(["person", "place", "faction", "artifact", "concept", "term", "other"]);
+var STYLE_DIALECTS = new Set(["british", "american", "unspecified"]);
+var STYLE_SHEET_FILE = "style-sheet.md";
 var RELATIONSHIP_INVERSES = new Map([
   ["parent", ["child"]],
   ["child", ["parent"]],
@@ -1443,6 +1997,7 @@ function createStoryProject(options) {
   writeStarterFile(path3.join(root, "continuity", "promises", "_index.md"), promiseIndex(storyId, []), { root });
   writeStarterFile(path3.join(root, "continuity", "clues", "_index.md"), clueIndex(storyId, []), { root });
   writeStarterFile(path3.join(root, "glossary", "_index.md"), glossaryIndex(storyId, []), { root });
+  writeStarterFile(path3.join(root, STYLE_SHEET_FILE), styleSheet(), { root });
   const linkedBooks = [];
   for (const book of storyWritten ? series.linked : []) {
     const updated = withSeriesBacklink(book.root, book.inverse, root);
@@ -1658,6 +2213,7 @@ function scanProject(root) {
       aliases: asArray(data.aliases)
     }), scanErrors),
     exemptions: readExemptions(projectRoot),
+    styleSheet: readStyleSheet(projectRoot, scanErrors),
     continuity
   };
 }
@@ -1703,6 +2259,7 @@ function validateProjectOf(project) {
   validateClues(project, errors);
   validateExemptions(project, errors);
   validateGlossaryTerms(project, errors);
+  validateStyleSheet(project, errors);
   collectStrayFileWarnings(project, warnings);
   const indexChecks = [
     [path3.join("characters", "_index.md"), project.characters.map((item) => `](${item.id}.md)`)],
@@ -2314,6 +2871,34 @@ function computeWordCounts(root, options = {}) {
     total: chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0)
   };
 }
+function proseReport(root) {
+  const project = scanProject(root);
+  const errors = [...project.fileErrors];
+  const warnings = [];
+  const rules = proseRules(project.styleSheet?.data, project.characters.map((character) => character.name));
+  const chapters = [];
+  for (const chapter of project.chapters) {
+    const label = relative2(project, chapter.file);
+    const analysis = analyzeChapter(chapterProse(readMarkdown(chapter.file, project.root).body), rules);
+    chapters.push({ file: label, title: chapter.title, analysis });
+    warnings.push(...chapterFindings(label, analysis));
+  }
+  const phrases = repeatedPhrases(chapters.map((chapter) => chapter.analysis));
+  const names = similarNames(project.characters);
+  for (const [left, right] of names) {
+    warnings.push(`characters ${left.id} and ${right.id} have similar first names (${left.name} / ${right.name})`);
+  }
+  return {
+    ok: errors.length === 0,
+    errors,
+    warnings,
+    styleSheet: project.styleSheet !== null,
+    words: chapters.reduce((sum, chapter) => sum + chapter.analysis.words, 0),
+    chapters,
+    phrases,
+    similarNames: names
+  };
+}
 function exportManuscript(root, options = {}) {
   const project = scanProject(root);
   if (project.chapters.length === 0) {
@@ -2383,10 +2968,10 @@ function synopsisBook(root, options = {}) {
   return { text, outFile: output.outFile };
 }
 function synopsisPremise(project) {
-  const sentences = splitSentences(extractSection(project.story.body, "Synopsis"));
+  const sentences = splitSentences2(extractSection(project.story.body, "Synopsis"));
   return sentences.length > 0 ? sentences[0] : "No premise recorded.";
 }
-function splitSentences(text) {
+function splitSentences2(text) {
   const normalized = String(text).replace(/\s+/g, " ").trim();
   if (normalized === "") {
     return [];
@@ -2412,7 +2997,7 @@ function splitSentences(text) {
   return sentences;
 }
 function takeSentences(text, count) {
-  return splitSentences(text).slice(0, count);
+  return splitSentences2(text).slice(0, count);
 }
 function renderSynopsis(title, premise, project, level) {
   const lines = [`# Synopsis: ${title}`, "", `Premise: ${premise}`, ""];
@@ -2714,7 +3299,7 @@ ${themeTracking || `| Theme | Arcs | Chapters |
 }
 function chapterIndex(storyId, chapters) {
   const rows = chapters.length === 0 ? ["| *No chapters yet* | | | | | |"] : chapters.map((chapter) => `| ${chapter.number} | ${chapter.title} | ${chapter.pov} | ${chapter.status} | ${chapter.wordCount} | [${chapter.id}](${path3.basename(chapter.file)}) |`);
-  const total = chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
+  const total2 = chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
   return `${stringifyFrontmatter({ type: "chapter-registry", story: storyId })}# Chapters
 
 ## Registry
@@ -2724,7 +3309,7 @@ function chapterIndex(storyId, chapters) {
 ${rows.join(`
 `)}
 
-## Total Word Count: ${total}
+## Total Word Count: ${total2}
 `;
 }
 function timeline(storyId) {
@@ -2826,6 +3411,48 @@ function glossaryIndex(storyId, terms) {
 |------|----------|------|
 ${rows.join(`
 `)}
+`;
+}
+function styleSheet() {
+  return `${stringifyFrontmatter({
+    type: "style-sheet",
+    dialect: "unspecified",
+    preferred: [],
+    "watch-words": [],
+    "allow-words": []
+  })}# Style Sheet
+
+The book's house decisions, kept the way a copyeditor keeps them. Read this before drafting or revising prose. \`story prose\` enforces the lists in the frontmatter: \`dialect\` (british, american, or unspecified) flags the other dialect's common spellings, each \`preferred\` entry flags its \`avoid\` form, \`watch-words\` are counted in every chapter, and \`allow-words\` silences a built-in filter word or adverb.
+
+## Voice
+
+Narrative distance, sentence rhythm, register, and what this prose never does. Quote two or three sentences that sound exactly right.
+
+## Spelling And Usage
+
+Record one \`preferred\` entry per variant (\`use: grey\`, \`avoid: gray\`) and note usage rules here.
+
+## Capitalisation
+
+Titles, ranks, institutions, invented terms, and deities. Invented terms also belong in the glossary.
+
+## Hyphenation And Compounds
+
+## Numbers, Dates, And Time
+
+Spelled-out or numerals, and how in-world dates and times are written.
+
+## Dialogue And Punctuation
+
+Quote marks, dash style, ellipses, italics for thought or foreign words, and the default dialogue tags.
+
+## Character Voices
+
+One entry per POV character or major speaker: vocabulary, sentence length, verbal tics, and words they never use.
+
+## Watch List
+
+Why each \`watch-words\` entry is there.
 `;
 }
 function buildProjectActions(project, validation, links, continuity) {
@@ -4007,6 +4634,19 @@ function readExemptions(root) {
   }
   return exemptions;
 }
+function readStyleSheet(root, scanErrors) {
+  const filePath = path3.join(root, STYLE_SHEET_FILE);
+  if (!lstatIfExists(filePath)) {
+    return null;
+  }
+  try {
+    const markdown = readMarkdown(filePath, root);
+    return { file: filePath, data: markdown.data, body: markdown.body };
+  } catch (error) {
+    scanErrors.push(`${STYLE_SHEET_FILE}: ${error.message}`);
+    return null;
+  }
+}
 function readMarkdown(filePath, root) {
   if (root) {
     assertSafeProjectPath(filePath, root);
@@ -4066,7 +4706,7 @@ function collectStrayFileWarnings(project, warnings) {
   const topEntries = fs2.readdirSync(root, { withFileTypes: true });
   const strayTop = [];
   for (const entry of topEntries) {
-    if (entry.isFile() && entry.name.endsWith(".md") && entry.name !== "story.md") {
+    if (entry.isFile() && entry.name.endsWith(".md") && entry.name !== "story.md" && entry.name !== STYLE_SHEET_FILE) {
       strayTop.push(entry.name);
     }
   }
@@ -4678,6 +5318,35 @@ function validateGlossaryTerms(project, errors) {
     validateStringArray(data, "aliases", label, errors);
   }
 }
+function validateStyleSheet(project, errors) {
+  if (project.styleSheet === null) {
+    return;
+  }
+  const data = project.styleSheet.data;
+  const label = STYLE_SHEET_FILE;
+  if (data.type !== "style-sheet") {
+    errors.push(`${label} type must be style-sheet`);
+  }
+  requireScalar(data, "dialect", label, errors);
+  validateEnum(data, "dialect", STYLE_DIALECTS, label, errors);
+  validateObjectArray(data, "preferred", label, errors);
+  asArray(data.preferred).forEach((entry, index) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      return;
+    }
+    const entryLabel = `${label} preferred[${index}]`;
+    for (const field of ["use", "avoid"]) {
+      if (typeof entry[field] !== "string" || entry[field].trim() === "") {
+        errors.push(`${entryLabel} requires a non-empty ${field}`);
+      }
+    }
+    if (typeof entry.use === "string" && typeof entry.avoid === "string" && entry.use.trim().toLowerCase() === entry.avoid.trim().toLowerCase()) {
+      errors.push(`${entryLabel} use and avoid must differ`);
+    }
+  });
+  validateStringArray(data, "watch-words", label, errors);
+  validateStringArray(data, "allow-words", label, errors);
+}
 function validateEntityId(id, label, errors) {
   if (id !== kebabCase(id)) {
     errors.push(`${label} filename id must be kebab-case`);
@@ -5116,6 +5785,9 @@ Commands:
                     Findings matching continuity/exemptions.md are
                     reported as dismissed
   knowledge <id>    List what a character knew at a chapter; requires --at
+  prose [path]       Lint chapter prose: filter words, adverbs, dialogue
+                    tags, echoes, rhythm, repeated phrases, similar
+                    names, and style-sheet.md spellings and watch words
   series [path]      Order linked prequels and sequels and check shared
                     canon across books
   report [path]      Summarize project inventory, progress, and checks
@@ -5310,6 +5982,12 @@ function runCli(argv, io) {
       const report = seriesReport(root);
       io.stdout.write(formatSeriesReport(report));
       return reportResult(io, report, "Series is consistent", "Series check failed");
+    }
+    if (command === "prose") {
+      const root = resolveRoot(cwd, parsed, command);
+      const report = proseReport(root);
+      io.stdout.write(formatProseReport(report));
+      return reportResult(io, report, "Prose check complete", "Prose check failed");
     }
     if (command === "report") {
       const root = resolveRoot(cwd, parsed, command);

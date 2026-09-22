@@ -34,6 +34,7 @@ ls -d ~/.claude/skills/better-writing .claude/skills/better-writing skills/bette
 Read these files to understand the current story state:
 
 - `story.md` - genre, themes, POV, tense
+- `style-sheet.md` - voice, house spellings, dialogue punctuation, character voices, and watch words (see the `voice-style` skill)
 - `chapters/_index.md` - what's been written, current word count
 - `plot/_index.md` - arc status, what needs to happen next
 - `plot/timeline.md` - chronological position

@@ -73,9 +73,12 @@ story reindex .
 story links .
 story validate .
 story continuity .
+story prose .
 story next .
 story doctor .
 ```
+
+Once the first chapter exists, fill in `style-sheet.md`: set `dialect: british` or `dialect: american`, add a `preferred` entry for each house spelling, and list the book's overused words under `watch-words`. `story prose .` then flags avoided spellings and reports filter words, adverbs, said-bookisms, echoes, sentence rhythm, and repeated phrases for every chapter.
 
 Use `story next .` before a drafting session. Use `story doctor .` when something feels inconsistent or stale. Use `story continuity .` after every chapter to catch contradictions - dead characters reappearing, payoffs landing before their setup, stale story state - before a reader does.
 
