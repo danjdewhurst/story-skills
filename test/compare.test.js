@@ -81,7 +81,7 @@ describe("story compare", () => {
 
   test("the CLI prints the git comparison", () => {
     const { root, repo } = gitProject();
-    const result = invoke(repo, ["compare", "--path", root, "--ref", "draft-1"]);
+    const result = invoke(repo, ["compare", root, "--ref", "draft-1"]);
 
     expect(result.code).toBe(0);
     expect(result.out).toContain("Chapters: 3 then, 3 now (1 added, 1 removed)");

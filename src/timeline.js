@@ -41,8 +41,11 @@ export function buildTimeline(project) {
 }
 
 function timelineEntry(project, unit, chapter, reading) {
-  const parsedDate = parseClockDate(unit.date || chapter.date || "");
-  const time = unit.date ? unit.time : unit.time || chapter.time;
+  // Scenes carry their own timestamps; a chapter's date and time only apply
+  // to the chapter-level entry that stands in for a chapter with no scenes,
+  // matching how story continuity reads them.
+  const parsedDate = parseClockDate(unit.date || "");
+  const time = unit.time;
   const minutes = parseClockTime(time || "");
   return {
     id: unit.id,

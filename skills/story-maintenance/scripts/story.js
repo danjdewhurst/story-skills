@@ -915,8 +915,8 @@ function buildTimeline(project) {
   };
 }
 function timelineEntry(project, unit, chapter, reading) {
-  const parsedDate = parseClockDate(unit.date || chapter.date || "");
-  const time = unit.date ? unit.time : unit.time || chapter.time;
+  const parsedDate = parseClockDate(unit.date || "");
+  const time = unit.time;
   const minutes = parseClockTime(time || "");
   return {
     id: unit.id,
@@ -2273,6 +2273,7 @@ var TERM_CATEGORIES = new Set(["person", "place", "faction", "artifact", "concep
 var STYLE_DIALECTS = new Set(["british", "american", "unspecified"]);
 var STYLE_SHEET_FILE = "style-sheet.md";
 var MATTER_PLACEMENTS = new Set(["front", "back"]);
+var MATTER_DIR = "matter";
 var RESEARCH_STATUSES = new Set(["open", "verified", "disputed"]);
 var RESEARCH_DIR = "research";
 var SETTLED_CHAPTER_STATUSES = new Set(["final", "complete"]);
@@ -2596,7 +2597,7 @@ function scanProject(root) {
       sources: asArray(data.sources),
       usedIn: asArray(data["used-in"])
     }), scanErrors),
-    matter: readEntityFiles(projectRoot, "matter", (id, file, data, markdown) => ({
+    matter: readEntityFiles(projectRoot, MATTER_DIR, (id, file, data, markdown) => ({
       id,
       file,
       title: String(data.title ?? titleCaseSlug(id)),
@@ -2668,6 +2669,7 @@ function validateProjectOf(project) {
     [path4.join("continuity", "promises", "_index.md"), project.promises.map((item) => `](${item.id}.md)`)],
     [path4.join("continuity", "clues", "_index.md"), project.clues.map((item) => `](${item.id}.md)`)],
     [path4.join("glossary", "_index.md"), project.glossaryTerms.map((item) => `](terms/${item.id}.md)`)],
+    ...fs2.existsSync(path4.join(projectRoot, MATTER_DIR, "_index.md")) ? [[path4.join(MATTER_DIR, "_index.md"), project.matter.map((item) => `](${item.id}.md)`)]] : [],
     ...fs2.existsSync(path4.join(projectRoot, RESEARCH_DIR, "_index.md")) ? [[path4.join(RESEARCH_DIR, "_index.md"), project.research.map((item) => `](${item.id}.md)`)]] : []
   ];
   for (const [indexPath, links] of indexChecks) {
@@ -2987,7 +2989,9 @@ function checkBodyLinkTarget(project, label, target, errors) {
     project.questions,
     project.promises,
     project.clues,
-    project.glossaryTerms
+    project.glossaryTerms,
+    project.research,
+    project.matter
   ]) {
     for (const item of collection) {
       known.add(item.id);
@@ -3225,6 +3229,9 @@ function reindexProject(root) {
   writeChanged(promisesIndexPath, promiseIndex(project.storyId, project.promises), changed, project.root);
   writeChanged(cluesIndexPath, clueIndex(project.storyId, project.clues), changed, project.root);
   writeChanged(glossaryIndexPath, glossaryIndex(project.storyId, project.glossaryTerms), changed, project.root);
+  if (fs2.existsSync(path4.join(project.root, MATTER_DIR))) {
+    writeChanged(path4.join(project.root, MATTER_DIR, "_index.md"), matterIndex(project.storyId, project.matter), changed, project.root);
+  }
   if (fs2.existsSync(path4.join(project.root, RESEARCH_DIR))) {
     writeChanged(path4.join(project.root, RESEARCH_DIR, "_index.md"), researchIndex(project.storyId, project.research), changed, project.root);
   }
@@ -3362,6 +3369,11 @@ function projectProgress(root, options = {}) {
   if (options.log) {
     if (project.fileErrors.some((error) => error.startsWith(`${PROGRESS_FILE}:`))) {
       throw new Error(`Cannot log progress: ${PROGRESS_FILE} does not parse`);
+    }
+    const logErrors = [];
+    validateProgressLog(project, logErrors);
+    if (logErrors.length > 0) {
+      throw new Error(`Cannot log progress until ${PROGRESS_FILE} is fixed: ${logErrors.join("; ")}`);
     }
     const filePath = path4.join(project.root, PROGRESS_FILE);
     const existing = project.progressLog;
@@ -3956,6 +3968,18 @@ ${rows.join(`
 `)}
 `;
 }
+function matterIndex(storyId, pages) {
+  const rows = pages.length === 0 ? ["| *No matter pages yet* | | | |"] : pages.map((page) => `| ${page.title} | ${page.placement} | ${page.order} | [${page.id}](${page.id}.md) |`);
+  return `${stringifyFrontmatter({ type: "matter-registry", story: storyId })}# Front And Back Matter
+
+## Registry
+
+| Title | Placement | Order | File |
+|-------|-----------|-------|------|
+${rows.join(`
+`)}
+`;
+}
 function researchIndex(storyId, notes) {
   const rows = notes.length === 0 ? ["| *No research notes yet* | | | |"] : notes.map((note) => `| ${note.title} | ${note.status} | ${note.usedIn.join(", ")} | [${note.id}](${note.id}.md) |`);
   return `${stringifyFrontmatter({ type: "research-registry", story: storyId })}# Research
@@ -4169,7 +4193,7 @@ function entityConfig(kind) {
     promise: { dir: path4.join("continuity", "promises"), titleField: "title" },
     clue: { dir: path4.join("continuity", "clues"), titleField: "title" },
     term: { dir: path4.join("glossary", "terms"), titleField: "term" },
-    matter: { dir: "matter", titleField: "title" },
+    matter: { dir: MATTER_DIR, titleField: "title" },
     research: { dir: RESEARCH_DIR, titleField: "title" }
   };
   const config = configs[kind];
@@ -4904,6 +4928,11 @@ function manuscriptParts(project) {
       body: chapterProse(markdown.body).trim()
     });
   }
+  for (const entry of project.matter) {
+    if (!isKebabId2(entry.id)) {
+      throw new Error(`${relative2(project, entry.file)}: matter file names must be kebab-case to build`);
+    }
+  }
   const matter = (placement) => project.matter.filter((entry) => entry.placement === placement && !entry.empty).map((entry) => ({
     id: entry.id,
     title: entry.title,
@@ -5354,7 +5383,7 @@ var ENTITY_SCAN_DIRS = [
   path4.join("continuity", "promises"),
   path4.join("continuity", "clues"),
   path4.join("glossary", "terms"),
-  "matter",
+  MATTER_DIR,
   RESEARCH_DIR
 ];
 function collectStrayFileWarnings(project, warnings) {
@@ -5579,7 +5608,7 @@ function validateStoryFrontmatter(project, errors) {
   }
   validateCover(project, errors);
   if (data.deadline !== undefined) {
-    const deadlineError = storyDateError(String(data.deadline));
+    const deadlineError = typeof data.deadline === "string" && data.deadline.trim() !== "" ? storyDateError(data.deadline) : "must be a YYYY-MM-DD date";
     if (deadlineError !== "") {
       errors.push(`story.md deadline ${deadlineError}`);
     }
@@ -6041,15 +6070,18 @@ function validateProgressLog(project, errors) {
     }
   });
 }
-function validateResearch(project, errors, warnings) {
-  const indexPath = path4.join(project.root, RESEARCH_DIR, "_index.md");
+function validateOptionalRegistry(project, directory, expectedType, errors) {
+  const indexPath = path4.join(project.root, directory, "_index.md");
   if (fs2.existsSync(indexPath)) {
-    const label = path4.join(RESEARCH_DIR, "_index.md");
+    const label = path4.join(directory, "_index.md");
     const data = readValidationData(indexPath, project.root, label, errors);
-    if (data && data.type !== "research-registry") {
-      errors.push(`${label} type must be research-registry`);
+    if (data && data.type !== expectedType) {
+      errors.push(`${label} type must be ${expectedType}`);
     }
   }
+}
+function validateResearch(project, errors, warnings) {
+  validateOptionalRegistry(project, RESEARCH_DIR, "research-registry", errors);
   const chapterStatus = new Map(project.chapters.map((chapter) => [chapter.id, chapter.status]));
   for (const note of project.research) {
     const label = relative2(project, note.file);
@@ -6076,6 +6108,7 @@ function validateResearch(project, errors, warnings) {
   }
 }
 function validateMatter(project, errors, warnings) {
+  validateOptionalRegistry(project, MATTER_DIR, "matter-registry", errors);
   for (const matter of project.matter) {
     const label = relative2(project, matter.file);
     if (matter.empty) {
@@ -7122,7 +7155,11 @@ var PATH_POSITIONAL_COMMANDS = new Set([
   "wordcount",
   "export",
   "build",
-  "synopsis"
+  "synopsis",
+  "compare",
+  "progress",
+  "timeline",
+  "prose"
 ]);
 function lastOptionValue(value) {
   return Array.isArray(value) ? value[value.length - 1] : value;

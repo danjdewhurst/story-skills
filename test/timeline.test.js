@@ -133,6 +133,18 @@ describe("story timeline", () => {
     expect(text).toContain("- solo-hart: 1 of 1 chapters, chapter 1");
   });
 
+  test("scenes do not inherit their chapter's date, and a positional path works", () => {
+    const cwd = makeTempDir();
+    const { root } = createStoryProject({ cwd, title: "Inherit", force: false });
+    writeChapter(root, 1, "date: 2024-03-01\ntime: dawn");
+    writeScene(root, "chapter-01", 1, "pov: someone");
+    const timeline = storyTimeline(root);
+
+    expect(timeline.chronology).toEqual([]);
+    expect(timeline.undated.map((entry) => entry.id)).toEqual(["chapter-01-scene-01"]);
+    expect(invoke(cwd, ["timeline", root]).out).toContain("Timeline: 0 dated, 1 undated");
+  });
+
   test("parse errors fail the command", () => {
     const { root, cwd } = timelineProject();
     fs.writeFileSync(path.join(root, "chapters", "chapter-09.md"), "no frontmatter", "utf8");

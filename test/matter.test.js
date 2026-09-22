@@ -67,6 +67,33 @@ describe("story add matter", () => {
     expect(() => createEntity(root, { kind: "matter", name: "X", order: "1.5" })).toThrow("non-negative integer");
   });
 
+  test("reindex keeps matter/_index.md current and validate checks it", () => {
+    const { root } = matterProject();
+    createEntity(root, { kind: "matter", name: "Dedication" });
+    createEntity(root, { kind: "matter", name: "Acknowledgments", placement: "back" });
+    const indexPath = path.join(root, "matter", "_index.md");
+    const index = fs.readFileSync(indexPath, "utf8");
+
+    expect(index).toContain("type: matter-registry\nstory: matter-story");
+    expect(index).toContain("| Dedication | front | 1 | [dedication](dedication.md) |");
+    expect(index).toContain("| Acknowledgments | back | 1 | [acknowledgments](acknowledgments.md) |");
+
+    removeEntity(root, { kind: "matter", id: "dedication" });
+    removeEntity(root, { kind: "matter", id: "acknowledgments" });
+    expect(fs.readFileSync(indexPath, "utf8")).toContain("*No matter pages yet*");
+
+    writeMatter(root, "stray", "title: Stray\nplacement: back", "Text.\n");
+    expect(validateProject(root).warnings).toContain("matter/_index.md is missing registry link ](stray.md)");
+    writeMarkdown(indexPath, "type: notes\nstory: matter-story", "# Matter\n");
+    expect(validateProject(root).errors).toContain("matter/_index.md type must be matter-registry");
+  });
+
+  test("builds refuse matter files whose names are not kebab-case", () => {
+    const { root } = matterProject();
+    writeMatter(root, "a&b", "title: Odd\nplacement: front", "Text.\n");
+    expect(() => buildBook(root, { format: "epub" })).toThrow("matter/a&b.md: matter file names must be kebab-case to build");
+  });
+
   test("rename and remove work on matter files", () => {
     const { root } = matterProject();
     createEntity(root, { kind: "matter", name: "Afterword", placement: "back" });

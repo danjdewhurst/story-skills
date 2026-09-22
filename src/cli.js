@@ -558,7 +558,8 @@ function collectThemes(options) {
 
 const PATH_POSITIONAL_COMMANDS = new Set([
   "validate", "links", "continuity", "series", "report", "next",
-  "doctor", "migrate", "reindex", "wordcount", "export", "build", "synopsis"
+  "doctor", "migrate", "reindex", "wordcount", "export", "build", "synopsis",
+  "compare", "progress", "timeline", "prose"
 ]);
 
 function lastOptionValue(value) {
