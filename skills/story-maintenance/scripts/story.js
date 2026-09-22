@@ -1909,6 +1909,9 @@ var TERM_CATEGORIES = new Set(["person", "place", "faction", "artifact", "concep
 var STYLE_DIALECTS = new Set(["british", "american", "unspecified"]);
 var STYLE_SHEET_FILE = "style-sheet.md";
 var MATTER_PLACEMENTS = new Set(["front", "back"]);
+var RESEARCH_STATUSES = new Set(["open", "verified", "disputed"]);
+var RESEARCH_DIR = "research";
+var SETTLED_CHAPTER_STATUSES = new Set(["final", "complete"]);
 var COVER_MEDIA_TYPES = {
   ".gif": "image/gif",
   ".jpeg": "image/jpeg",
@@ -2220,6 +2223,14 @@ function scanProject(root) {
       category: data.category ?? "",
       aliases: asArray(data.aliases)
     }), scanErrors),
+    research: readEntityFiles(projectRoot, RESEARCH_DIR, (id, file, data) => ({
+      id,
+      file,
+      title: data.title ?? titleCaseSlug(id),
+      status: data.status ?? "",
+      sources: asArray(data.sources),
+      usedIn: asArray(data["used-in"])
+    }), scanErrors),
     matter: readEntityFiles(projectRoot, "matter", (id, file, data, markdown) => ({
       id,
       file,
@@ -2278,6 +2289,7 @@ function validateProjectOf(project) {
   validateGlossaryTerms(project, errors);
   validateStyleSheet(project, errors);
   validateMatter(project, errors, warnings);
+  validateResearch(project, errors, warnings);
   collectStrayFileWarnings(project, warnings);
   const indexChecks = [
     [path3.join("characters", "_index.md"), project.characters.map((item) => `](${item.id}.md)`)],
@@ -2288,7 +2300,8 @@ function validateProjectOf(project) {
     [path3.join("continuity", "questions", "_index.md"), project.questions.map((item) => `](${item.id}.md)`)],
     [path3.join("continuity", "promises", "_index.md"), project.promises.map((item) => `](${item.id}.md)`)],
     [path3.join("continuity", "clues", "_index.md"), project.clues.map((item) => `](${item.id}.md)`)],
-    [path3.join("glossary", "_index.md"), project.glossaryTerms.map((item) => `](terms/${item.id}.md)`)]
+    [path3.join("glossary", "_index.md"), project.glossaryTerms.map((item) => `](terms/${item.id}.md)`)],
+    ...fs2.existsSync(path3.join(projectRoot, RESEARCH_DIR, "_index.md")) ? [[path3.join(RESEARCH_DIR, "_index.md"), project.research.map((item) => `](${item.id}.md)`)]] : []
   ];
   for (const [indexPath, links] of indexChecks) {
     let markdown;
@@ -2477,6 +2490,12 @@ function validateLinksOf(project) {
     }
     for (const arcId of scene.arcsAdvanced) {
       checkIdReference(errors, label, arcId, "arc", hasArc);
+    }
+  }
+  for (const note of project.research) {
+    const label = relative2(project, note.file);
+    for (const chapterId of note.usedIn) {
+      checkIdReference(errors, label, chapterId, "chapter", hasChapter);
     }
   }
   for (const question of project.questions) {
@@ -2688,6 +2707,7 @@ function projectReport(root) {
       promises: project.promises.length,
       clues: project.clues.length,
       glossaryTerms: project.glossaryTerms.length,
+      research: project.research.length,
       words: totalWords
     },
     chapters: project.chapters.map((chapter) => ({
@@ -2733,6 +2753,7 @@ function formatProjectReport(report, options = {}) {
     `- Promises: ${report.counts.promises}`,
     `- Clues: ${report.counts.clues}`,
     `- Glossary terms: ${report.counts.glossaryTerms}`,
+    ...report.counts.research === 0 ? [] : [`- Research notes: ${report.counts.research}`],
     `- Total words: ${report.counts.words}`,
     "",
     "Chapters:"
@@ -2835,6 +2856,9 @@ function reindexProject(root) {
   writeChanged(promisesIndexPath, promiseIndex(project.storyId, project.promises), changed, project.root);
   writeChanged(cluesIndexPath, clueIndex(project.storyId, project.clues), changed, project.root);
   writeChanged(glossaryIndexPath, glossaryIndex(project.storyId, project.glossaryTerms), changed, project.root);
+  if (fs2.existsSync(path3.join(project.root, RESEARCH_DIR))) {
+    writeChanged(path3.join(project.root, RESEARCH_DIR, "_index.md"), researchIndex(project.storyId, project.research), changed, project.root);
+  }
   refreshStoryField(path3.join(project.root, "plot", "timeline.md"), project.storyId, changed, project.root);
   refreshStoryField(path3.join(project.root, "continuity", "state.md"), project.storyId, changed, project.root);
   return { changed };
@@ -3117,7 +3141,8 @@ var ENTITY_ENUM_OPTIONS = {
   promise: [["status", PROMISE_STATUSES]],
   clue: [["status", CLUE_STATUSES]],
   term: [["category", TERM_CATEGORIES]],
-  matter: [["placement", MATTER_PLACEMENTS]]
+  matter: [["placement", MATTER_PLACEMENTS]],
+  research: [["status", RESEARCH_STATUSES]]
 };
 function requireEntityEnumOptions(kind, options) {
   for (const [field, allowed] of ENTITY_ENUM_OPTIONS[kind] ?? []) {
@@ -3441,6 +3466,18 @@ ${rows.join(`
 `)}
 `;
 }
+function researchIndex(storyId, notes) {
+  const rows = notes.length === 0 ? ["| *No research notes yet* | | | |"] : notes.map((note) => `| ${note.title} | ${note.status} | ${note.usedIn.join(", ")} | [${note.id}](${note.id}.md) |`);
+  return `${stringifyFrontmatter({ type: "research-registry", story: storyId })}# Research
+
+## Registry
+
+| Title | Status | Used In | File |
+|-------|--------|---------|------|
+${rows.join(`
+`)}
+`;
+}
 function styleSheet() {
   return `${stringifyFrontmatter({
     type: "style-sheet",
@@ -3618,6 +3655,8 @@ function buildEntity(project, kind, name, options) {
       return entityResult(project, kind, id, termFile(name, options));
     case "matter":
       return entityResult(project, kind, id, matterFile(project, name, options));
+    case "research":
+      return entityResult(project, kind, id, researchFile(name, options));
     default:
       entityConfig(kind);
   }
@@ -3640,7 +3679,8 @@ function entityConfig(kind) {
     promise: { dir: path3.join("continuity", "promises"), titleField: "title" },
     clue: { dir: path3.join("continuity", "clues"), titleField: "title" },
     term: { dir: path3.join("glossary", "terms"), titleField: "term" },
-    matter: { dir: "matter", titleField: "title" }
+    matter: { dir: "matter", titleField: "title" },
+    research: { dir: RESEARCH_DIR, titleField: "title" }
   };
   const config = configs[kind];
   if (!config) {
@@ -3676,7 +3716,10 @@ var KIND_ALIASES = {
   "glossary-term": "term",
   "glossary-terms": "term",
   glossary: "term",
-  matter: "matter"
+  matter: "matter",
+  research: "research",
+  "research-note": "research",
+  "research-notes": "research"
 };
 function normalizeKind(kind) {
   const normalized = String(kind ?? "").trim().toLowerCase();
@@ -4077,6 +4120,27 @@ Define the term in story context.
 How agents should use this term consistently.
 `;
 }
+function researchFile(title, options) {
+  return `${stringifyFrontmatter({
+    title,
+    status: options.status ?? "open",
+    sources: asArray(options.sources ?? options.source).map((source) => String(source).trim()).filter(Boolean),
+    "used-in": normalizeList(options["used-in"], [])
+  })}# ${title}
+
+## Question
+
+What the story needs to get right.
+
+## Findings
+
+The facts, with the source for each.
+
+## Story Use
+
+How the chapters use these facts, and what was changed on purpose.
+`;
+}
 function matterFile(project, title, options) {
   const placement = String(options.placement ?? "front");
   let order;
@@ -4126,6 +4190,7 @@ var REFERENCE_FIELD_KINDS = {
   "died-in": ["chapter"],
   introduced: ["chapter"],
   "learned-in": ["chapter"],
+  "used-in": ["chapter"],
   location: ["location"],
   locations: ["location"],
   members: ["character"],
@@ -4786,7 +4851,8 @@ var ENTITY_SCAN_DIRS = [
   path3.join("continuity", "promises"),
   path3.join("continuity", "clues"),
   path3.join("glossary", "terms"),
-  "matter"
+  "matter",
+  RESEARCH_DIR
 ];
 function collectStrayFileWarnings(project, warnings) {
   const root = project.root;
@@ -5435,6 +5501,40 @@ function validateStyleSheet(project, errors) {
   validateStringArray(data, "watch-words", label, errors);
   validateStringArray(data, "allow-words", label, errors);
 }
+function validateResearch(project, errors, warnings) {
+  const indexPath = path3.join(project.root, RESEARCH_DIR, "_index.md");
+  if (fs2.existsSync(indexPath)) {
+    const label = path3.join(RESEARCH_DIR, "_index.md");
+    const data = readValidationData(indexPath, project.root, label, errors);
+    if (data && data.type !== "research-registry") {
+      errors.push(`${label} type must be research-registry`);
+    }
+  }
+  const chapterStatus = new Map(project.chapters.map((chapter) => [chapter.id, chapter.status]));
+  for (const note of project.research) {
+    const label = relative2(project, note.file);
+    const data = readValidationData(note.file, project.root, label, errors);
+    if (!data) {
+      continue;
+    }
+    validateEntityId(note.id, label, errors);
+    requireFields(data, ["title", "status"], label, errors);
+    requireScalar(data, "title", label, errors);
+    validateEnum(data, "status", RESEARCH_STATUSES, label, errors);
+    validateStringArray(data, "sources", label, errors);
+    validateStringArray(data, "used-in", label, errors);
+    if (note.status === "verified" && note.sources.length === 0) {
+      warnings.push(`${label} is verified but lists no sources`);
+    }
+    if (note.status === "open" || note.status === "disputed") {
+      for (const chapterId of note.usedIn) {
+        if (SETTLED_CHAPTER_STATUSES.has(chapterStatus.get(chapterId))) {
+          warnings.push(`${label} is ${note.status} but ${chapterId} relies on it and is ${chapterStatus.get(chapterId)}`);
+        }
+      }
+    }
+  }
+}
 function validateMatter(project, errors, warnings) {
   for (const matter of project.matter) {
     const label = relative2(project, matter.file);
@@ -6007,6 +6107,8 @@ Options:
   --acts <a,b>              Comma-separated acts for add arc; repeatable
   --placement <front|back>  Placement for add matter (default front)
   --order <n>               Order within its placement for add matter
+  --source <text>           Source for add research; repeatable
+  --used-in <chapter-id>    Chapter that relies on add research; repeatable
   -h, --help                Show this help
   -v, --version             Show the story CLI version
 
@@ -6304,7 +6406,10 @@ var VALUE_OPTIONS = new Set([
   "acts",
   "act",
   "placement",
-  "order"
+  "order",
+  "source",
+  "sources",
+  "used-in"
 ]);
 var REPEATABLE_OPTIONS = new Set([
   "theme",
@@ -6324,7 +6429,10 @@ var REPEATABLE_OPTIONS = new Set([
   "alias",
   "aliases",
   "acts",
-  "act"
+  "act",
+  "source",
+  "sources",
+  "used-in"
 ]);
 function isKnownOptionToken(token) {
   if (token === "-h" || token === "-v") {

@@ -171,6 +171,7 @@ describe("story project operations", () => {
       promises: 0,
       clues: 0,
       glossaryTerms: 0,
+      research: 0,
       words: 3
     });
     expect(report.validation.ok).toBe(true);

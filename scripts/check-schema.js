@@ -20,7 +20,8 @@ const ENTITY_DIRS = [
   ["continuity.promises", "continuity/promises"],
   ["continuity.clues", "continuity/clues"],
   ["glossary", "glossary/terms"],
-  ["matter", "matter"]
+  ["matter", "matter"],
+  ["research", "research"]
 ];
 
 const STATE_KEYS = ["current-chapter", "character-state", "object-state", "knowledge-state"];

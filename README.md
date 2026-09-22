@@ -240,6 +240,7 @@ For non-agent use:
 | **feedback-triage** | Collects alpha/beta reader feedback per round, synthesizes convergent and divergent notes, and hands a revision plan to revision-continuity | *"Triage the beta feedback"* |
 | **discovery-drafting** | Pantsing mode: draft from a story kernel, keep post-hoc chapter notes, and reconcile the bible after each discovery-drafted chapter | *"I want to discovery-write"* |
 | **voice-style** | Keeps a copyeditor's style sheet (dialect, house spellings, dialogue punctuation, character voices, watch words) and acts on `story prose` lint findings | *"Set up a style sheet for this book"* |
+| **research** | Records the real-world facts a story relies on, with sources and the chapters that use them, and flags final chapters resting on unverified research | *"Fact-check the sailing in chapter 4"* |
 | **genre-craft** | Genre packs with checkable conventions: mystery fair-play, romance beats, thriller, horror, MG/YA, sci-fi, and serial/episodic structure | *"Plan a fair-play mystery"* |
 
 For stronger prose, pair **chapter-writing** with [**better-writing**](https://github.com/forjd/better-writing). It adds voice calibration, anti-generic writing checks, and a final prose-quality pass, and installs the same way:
@@ -272,7 +273,7 @@ The CLI is for deterministic maintenance only. Agents should write story content
 | Command | Purpose |
 |---------|---------|
 | `story init "The Last Ember"` | Scaffold a story project with the standard markdown layout |
-| `story add character "Sera Voss"` | Create entity files for characters, locations, systems, factions, artifacts, arcs, chapters, scenes, questions, promises, clues, terms, and front or back matter |
+| `story add character "Sera Voss"` | Create entity files for characters, locations, systems, factions, artifacts, arcs, chapters, scenes, questions, promises, clues, terms, research notes, and front or back matter |
 | `story knowledge sera-voss --at chapter-03` | Show what a character knew at a chapter, from timeline-scoped knowledge-state |
 | `story synopsis [--pages 1\|3] [--out file]` | Compress arcs into a mechanical 1- or 3-page synopsis |
 | `story rename character sera-voss "Sera Vale"` | Rename an entity and update kebab-case references |
@@ -332,6 +333,7 @@ my-story/
 ├── story.md                  # Story bible — title, genre, themes, POV, tense
 ├── style-sheet.md            # Voice, house spellings, and watch words for story prose
 ├── matter/                   # Optional front and back matter (dedication, acknowledgments)
+├── research/                 # Optional research notes with sources and used-in chapters
 ├── characters/
 │   └── _index.md             # Character registry
 ├── worldbuilding/
