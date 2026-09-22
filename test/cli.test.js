@@ -33,6 +33,15 @@ describe("cli", () => {
     });
   });
 
+  test("keeps the last value of a repeated single-value option", () => {
+    expect(parseArgs(["export", "proj", "--out", "a.md", "--out", "b.md", "--format=x", "--format", "y"])).toEqual({
+      positionals: ["export", "proj"],
+      options: { out: "b.md", format: "y" }
+    });
+    expect(parseArgs(["init", "A", "--force", "--force=false"]).options.force).toBe(false);
+    expect(parseArgs(["add", "scene", "S", "--character", "a", "--character", "b"]).options.character).toEqual(["a", "b"]);
+  });
+
   test("boolean flags never swallow the following positional", () => {
     expect(parseArgs(["wordcount", "--write", "my-story"])).toEqual({
       positionals: ["wordcount", "my-story"],

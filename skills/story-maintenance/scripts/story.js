@@ -231,7 +231,7 @@ function titleCaseSlug(slug) {
 }
 var WORD_PATTERN = /[\p{L}\p{N}]+(?:['\u2019-][\p{L}\p{N}]+)*/gu;
 function splitWords(markdown) {
-  const normalized = String(markdown).replace(/```[\s\S]*?```/g, " ").replace(/`[^`]*`/g, " ").replace(/\[[^\]]+\]\([^)]+\)/g, " ").replace(/[#>*_~|:]/g, " ");
+  const normalized = String(markdown).replace(/```[\s\S]*?```/g, " ").replace(/`[^`]*`/g, " ").replace(/!\[[^\]]*\]\([^)]*\)/g, " ").replace(/\[([^\]]*)\]\([^)]*\)/g, " $1 ").replace(/[#>*_~|:]/g, " ");
   return normalized.match(WORD_PATTERN) ?? [];
 }
 function wordCount(markdown) {
@@ -5261,6 +5261,26 @@ var VALUE_OPTIONS = new Set([
   "acts",
   "act"
 ]);
+var REPEATABLE_OPTIONS = new Set([
+  "theme",
+  "themes",
+  "follows",
+  "precedes",
+  "location",
+  "locations",
+  "character",
+  "characters",
+  "mention",
+  "mentions",
+  "member",
+  "members",
+  "arc",
+  "arcs",
+  "alias",
+  "aliases",
+  "acts",
+  "act"
+]);
 function isKnownOptionToken(token) {
   if (token === "-h") {
     return true;
@@ -5274,7 +5294,7 @@ function isKnownOptionToken(token) {
 }
 function addOption(options, key, value) {
   const stored = BOOLEAN_OPTIONS.has(key) ? normalizeBooleanValue(key, value) : value;
-  if (options[key] === undefined) {
+  if (options[key] === undefined || !REPEATABLE_OPTIONS.has(key)) {
     options[key] = stored;
   } else {
     options[key] = Array.isArray(options[key]) ? options[key].concat(stored) : [options[key], stored];

@@ -22,7 +22,9 @@ export function splitWords(markdown) {
   const normalized = String(markdown)
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/`[^`]*`/g, " ")
-    .replace(/\[[^\]]+\]\([^)]+\)/g, " ")
+    // Drop images; keep a link's visible text and drop only its target.
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, " $1 ")
     .replace(/[#>*_~|:]/g, " ");
 
   // Letters and digits in any script; apostrophes (straight or curly) and
