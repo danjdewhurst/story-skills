@@ -1052,6 +1052,114 @@ function formatNumber(value) {
   return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
+// src/progress.js
+var PROGRESS_FILE = "progress.md";
+var PACE_SESSIONS = 7;
+function withSession(sessions, date, words) {
+  const kept = sessions.filter((session) => session.date !== date);
+  kept.push({ date, words });
+  return kept.sort((left, right) => left.date.localeCompare(right.date, "en"));
+}
+function cleanSessions(value) {
+  const sessions = [];
+  for (const entry of Array.isArray(value) ? value : []) {
+    if (entry && typeof entry === "object" && parseClockDate(String(entry.date ?? "")) && Number.isInteger(entry.words) && entry.words >= 0) {
+      sessions.push({ date: String(entry.date), words: entry.words });
+    }
+  }
+  return sessions.sort((left, right) => left.date.localeCompare(right.date, "en"));
+}
+function computeProgress({ words, target, deadline, today, chapters, sessions }) {
+  const todayDays = parseClockDate(today).days;
+  const result = {
+    words,
+    target: target ?? null,
+    percent: target ? words * 100 / target : null,
+    remaining: target ? Math.max(0, target - words) : null,
+    deadline: null,
+    chapters: chapters.filter((chapter) => chapter.target > 0).map((chapter) => ({ ...chapter, percent: chapter.words * 100 / chapter.target })),
+    sessions: sessions.length,
+    lastSession: null,
+    pace: null,
+    projected: null
+  };
+  const deadlineDate = deadline ? parseClockDate(deadline) : undefined;
+  if (deadlineDate) {
+    const daysLeft = deadlineDate.days - todayDays;
+    result.deadline = {
+      date: deadlineDate.text,
+      daysLeft,
+      perDay: result.remaining !== null && daysLeft > 0 ? Math.ceil(result.remaining / daysLeft) : null
+    };
+  }
+  if (sessions.length > 0) {
+    const last = sessions[sessions.length - 1];
+    result.lastSession = { date: last.date, words: last.words, since: words - last.words };
+    const recent = sessions.slice(-PACE_SESSIONS);
+    const span = parseClockDate(recent[recent.length - 1].date).days - parseClockDate(recent[0].date).days;
+    if (recent.length > 1 && span > 0) {
+      result.pace = (recent[recent.length - 1].words - recent[0].words) / span;
+      if (result.remaining > 0 && result.pace > 0) {
+        result.projected = formatDate(todayDays + Math.ceil(result.remaining / result.pace));
+      }
+    }
+  }
+  return result;
+}
+function formatProgress(progress) {
+  const lines = [];
+  if (progress.target === null) {
+    lines.push(`Progress: ${formatNumber2(progress.words)} words (no target-words in story.md)`);
+  } else {
+    lines.push(`Progress: ${formatNumber2(progress.words)} of ${formatNumber2(progress.target)} words (${progress.percent.toFixed(1)}%)`);
+    lines.push(`Remaining: ${formatNumber2(progress.remaining)} words`);
+  }
+  if (progress.deadline) {
+    const { date, daysLeft, perDay } = progress.deadline;
+    if (daysLeft < 0) {
+      lines.push(`Deadline: ${date} passed ${plural2(-daysLeft, "day")} ago`);
+    } else if (perDay === null) {
+      lines.push(`Deadline: ${date} (${plural2(daysLeft, "day")} left)`);
+    } else {
+      lines.push(`Deadline: ${date} (${plural2(daysLeft, "day")} left): ${formatNumber2(perDay)} words a day needed`);
+    }
+  }
+  if (progress.lastSession) {
+    const { date, since } = progress.lastSession;
+    lines.push(`Sessions: ${progress.sessions} logged; last ${date} (${since >= 0 ? "+" : ""}${formatNumber2(since)} words since)`);
+  } else {
+    lines.push("Sessions: none logged (run story progress --log after a writing session)");
+  }
+  if (progress.pace !== null) {
+    lines.push(`Pace: ${formatNumber2(Math.round(progress.pace))} words a day over the last ${Math.min(progress.sessions, PACE_SESSIONS)} sessions`);
+  }
+  if (progress.projected) {
+    lines.push(`Projected finish at this pace: ${progress.projected}`);
+  }
+  if (progress.chapters.length > 0) {
+    lines.push("", "Chapter targets:");
+    for (const chapter of progress.chapters) {
+      lines.push(`- ${chapter.id}: ${formatNumber2(chapter.words)} of ${formatNumber2(chapter.target)} words (${Math.round(chapter.percent)}%)`);
+    }
+  }
+  return `${lines.join(`
+`)}
+`;
+}
+function localDate(now = new Date) {
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+function formatDate(days) {
+  return new Date(days * 86400000).toISOString().slice(0, 10);
+}
+function plural2(count, noun) {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+function formatNumber2(value) {
+  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
 // src/prose.js
 var FILTER_WORDS = [
   "felt",
@@ -2327,6 +2435,7 @@ function scanProject(root) {
       locations: asArray(data.locations),
       arcsAdvanced: asArray(data["arcs-advanced"]),
       declaredWordCount: Number(data["word-count"] ?? 0),
+      targetWords: Number.isInteger(data["target-words"]) && data["target-words"] > 0 ? data["target-words"] : 0,
       wordCount: wordCount(chapterProse(markdown.body)),
       date: String(data.date ?? ""),
       time: String(data.time ?? ""),
@@ -2408,6 +2517,7 @@ function scanProject(root) {
     }), scanErrors).sort((left, right) => left.order - right.order || left.id.localeCompare(right.id, "en")),
     exemptions: readExemptions(projectRoot),
     styleSheet: readStyleSheet(projectRoot, scanErrors),
+    progressLog: readOptionalRootFile(projectRoot, PROGRESS_FILE, scanErrors),
     continuity
   };
 }
@@ -2456,6 +2566,7 @@ function validateProjectOf(project) {
   validateStyleSheet(project, errors);
   validateMatter(project, errors, warnings);
   validateResearch(project, errors, warnings);
+  validateProgressLog(project, errors);
   collectStrayFileWarnings(project, warnings);
   const indexChecks = [
     [path4.join("characters", "_index.md"), project.characters.map((item) => `](${item.id}.md)`)],
@@ -2860,6 +2971,7 @@ function projectReport(root) {
     status: project.story.data.status,
     pov: project.story.data.pov,
     tense: project.story.data.tense,
+    targetWords: Number.isInteger(project.story.data["target-words"]) ? project.story.data["target-words"] : null,
     counts: {
       characters: project.characters.length,
       locations: project.locations.length,
@@ -2921,6 +3033,7 @@ function formatProjectReport(report, options = {}) {
     `- Glossary terms: ${report.counts.glossaryTerms}`,
     ...report.counts.research === 0 ? [] : [`- Research notes: ${report.counts.research}`],
     `- Total words: ${report.counts.words}`,
+    ...report.targetWords > 0 ? [`- Target words: ${report.targetWords} (${Math.round(report.counts.words * 100 / report.targetWords)}%)`] : [],
     "",
     "Chapters:"
   ];
@@ -3078,6 +3191,49 @@ function computeWordCounts(root, options = {}) {
     chapters,
     total: chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0)
   };
+}
+function projectProgress(root, options = {}) {
+  const today = options.date === undefined ? localDate() : String(options.date);
+  const dateError = storyDateError(today);
+  if (dateError !== "" || today.trim() === "") {
+    throw new Error(`progress --date ${dateError || "must be a YYYY-MM-DD date"}`);
+  }
+  let project = scanProject(root);
+  const words = project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
+  let logged = null;
+  if (options.log) {
+    if (project.fileErrors.some((error) => error.startsWith(`${PROGRESS_FILE}:`))) {
+      throw new Error(`Cannot log progress: ${PROGRESS_FILE} does not parse`);
+    }
+    const filePath = path4.join(project.root, PROGRESS_FILE);
+    const existing = project.progressLog;
+    const sessions = withSession(cleanSessions(existing?.data.sessions), today, words);
+    const contents = existing === null ? progressLogFile(sessions) : replaceFrontmatter(existing.rawMarkdown, { ...existing.data, sessions });
+    writeFile(filePath, contents, { root: project.root });
+    logged = { file: filePath, date: today, words };
+    project = scanProject(root);
+  }
+  const data = project.story.data;
+  return {
+    ok: project.fileErrors.length === 0,
+    errors: [...project.fileErrors],
+    warnings: [],
+    logged,
+    ...computeProgress({
+      words,
+      target: Number.isInteger(data["target-words"]) && data["target-words"] > 0 ? data["target-words"] : null,
+      deadline: typeof data.deadline === "string" ? data.deadline : null,
+      today,
+      chapters: project.chapters.map((chapter) => ({ id: chapter.id, words: chapter.wordCount, target: chapter.targetWords })),
+      sessions: cleanSessions(project.progressLog?.data.sessions)
+    })
+  };
+}
+function progressLogFile(sessions) {
+  return `${stringifyFrontmatter({ type: "progress-log", sessions })}# Progress Log
+
+\`story progress --log\` records the manuscript word count for the day in the frontmatter above. Set \`target-words\` and \`deadline\` in \`story.md\`, and \`target-words\` on chapters, to measure against them.
+`;
 }
 function storyTimeline(root) {
   const project = scanProject(root);
@@ -4961,6 +5117,19 @@ function readExemptions(root) {
   }
   return exemptions;
 }
+function readOptionalRootFile(root, name, scanErrors) {
+  const filePath = path4.join(root, name);
+  if (!lstatIfExists(filePath)) {
+    return null;
+  }
+  try {
+    const markdown = readMarkdown(filePath, root);
+    return { file: filePath, data: markdown.data, rawMarkdown: markdown.rawMarkdown };
+  } catch (error) {
+    scanErrors.push(`${name}: ${error.message}`);
+    return null;
+  }
+}
 function readStyleSheet(root, scanErrors) {
   const filePath = path4.join(root, STYLE_SHEET_FILE);
   if (!lstatIfExists(filePath)) {
@@ -5035,7 +5204,7 @@ function collectStrayFileWarnings(project, warnings) {
   const topEntries = fs2.readdirSync(root, { withFileTypes: true });
   const strayTop = [];
   for (const entry of topEntries) {
-    if (entry.isFile() && entry.name.endsWith(".md") && entry.name !== "story.md" && entry.name !== STYLE_SHEET_FILE) {
+    if (entry.isFile() && entry.name.endsWith(".md") && entry.name !== "story.md" && entry.name !== STYLE_SHEET_FILE && entry.name !== PROGRESS_FILE) {
       strayTop.push(entry.name);
     }
   }
@@ -5251,6 +5420,12 @@ function validateStoryFrontmatter(project, errors) {
     requireScalar(data, "draft-mode", "story.md", errors);
   }
   validateCover(project, errors);
+  if (data.deadline !== undefined) {
+    const deadlineError = storyDateError(String(data.deadline));
+    if (deadlineError !== "") {
+      errors.push(`story.md deadline ${deadlineError}`);
+    }
+  }
   if (data["schema-version"] !== undefined && data["schema-version"] !== STORY_SCHEMA_VERSION) {
     errors.push(`story.md schema-version must be ${STORY_SCHEMA_VERSION}`);
   }
@@ -5415,6 +5590,9 @@ function validateChapters(project, errors) {
     }
     if (data["word-count"] !== undefined) {
       requireInteger(data, "word-count", label, errors, 0);
+    }
+    if (data["target-words"] !== undefined) {
+      requireInteger(data, "target-words", label, errors, 1);
     }
     if (data.date !== undefined) {
       requireScalar(data, "date", label, errors);
@@ -5676,6 +5854,34 @@ function validateStyleSheet(project, errors) {
   });
   validateStringArray(data, "watch-words", label, errors);
   validateStringArray(data, "allow-words", label, errors);
+}
+function validateProgressLog(project, errors) {
+  if (project.progressLog === null) {
+    return;
+  }
+  const data = project.progressLog.data;
+  if (data.type !== "progress-log") {
+    errors.push(`${PROGRESS_FILE} type must be progress-log`);
+  }
+  validateObjectArray(data, "sessions", PROGRESS_FILE, errors);
+  const seen = new Set;
+  asArray(data.sessions).forEach((entry, index) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      return;
+    }
+    const label = `${PROGRESS_FILE} sessions[${index}]`;
+    const dateError = storyDateError(entry.date);
+    if (entry.date === undefined || dateError !== "") {
+      errors.push(`${label} ${dateError || "requires a date"}`);
+    } else if (seen.has(String(entry.date))) {
+      errors.push(`${label} repeats date ${entry.date}`);
+    } else {
+      seen.add(String(entry.date));
+    }
+    if (!Number.isInteger(entry.words) || entry.words < 0) {
+      errors.push(`${label} words must be a non-negative integer`);
+    }
+  });
 }
 function validateResearch(project, errors, warnings) {
   const indexPath = path4.join(project.root, RESEARCH_DIR, "_index.md");
@@ -6203,6 +6409,8 @@ Commands:
                     Findings matching continuity/exemptions.md are
                     reported as dismissed
   knowledge <id>    List what a character knew at a chapter; requires --at
+  progress [path]    Show words against target-words, deadline, chapter
+                    targets, and logged sessions; --log records today
   timeline [path]    Show scenes in story-time order (marking scenes told
                     out of order), POV balance, and character presence
   prose [path]       Lint chapter prose: filter words, adverbs, dialogue
@@ -6246,6 +6454,7 @@ Options:
                             missing starter files, never overwrite existing ones;
                             import also replaces every chapter-NN.md file
   --write                   Update chapter word-count frontmatter
+  --log                     Record today's word count in progress.md
   --path <path>             Project root for every command except init and import
   --out <file>              Output path for export/build/synopsis
   --format <name>           Output format for build (markdown, epub, docx, shunn)
@@ -6260,7 +6469,8 @@ Options:
   --role <name>             Character role for add character
   --status <name>           Entity status for add
   --mode <name>             Mode for add chapter (e.g. discovered)
-  --date <date>             Story date (YYYY-MM-DD) for add chapter/scene
+  --date <date>             Story date (YYYY-MM-DD) for add chapter/scene;
+                            the session date for progress (default today)
   --time <time>             Story time (HH:MM or dawn, morning, midday, afternoon, evening, night) for add chapter/scene
   --travel-hours <n>        Travel hours for add scene
   --dilemma <text>          Dilemma for add scene sequel unit
@@ -6409,6 +6619,16 @@ function runCli(argv, io) {
       io.stdout.write(formatSeriesReport(report));
       return reportResult(io, report, "Series is consistent", "Series check failed");
     }
+    if (command === "progress") {
+      const root = resolveRoot(cwd, parsed, command);
+      const progress = projectProgress(root, { log: isTruthy(parsed.options.log), date: parsed.options.date });
+      if (progress.logged) {
+        io.stdout.write(`Logged ${progress.logged.words} words for ${progress.logged.date} in ${progress.logged.file}
+`);
+      }
+      io.stdout.write(formatProgress(progress));
+      return reportResult(io, progress, "Progress checked", "Progress check failed");
+    }
     if (command === "timeline") {
       const root = resolveRoot(cwd, parsed, command);
       const timeline2 = storyTimeline(root);
@@ -6533,7 +6753,7 @@ ${HELP}`);
     return 1;
   }
 }
-var BOOLEAN_OPTIONS = new Set(["force", "write", "actionable", "significance-delayed", "shunn", "sequel"]);
+var BOOLEAN_OPTIONS = new Set(["force", "write", "actionable", "significance-delayed", "shunn", "sequel", "log"]);
 var VALUE_OPTIONS = new Set([
   "title",
   "dir",

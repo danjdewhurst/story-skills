@@ -62,7 +62,8 @@ Optional craft fields (hand-edit only — no CLI flags; edit `story.md` directly
 - `author` - author name, used on the Shunn title page by `story build --format shunn`.
 - `contact` - contact block lines for the Shunn title page.
 - `season-goal` - one-sentence season/volume goal for serial fiction (see the `genre-craft` skill).
-- `target-words` - positive integer word-count target for MG/YA category contracts (see the `genre-craft` skill).
+- `target-words` - positive integer word-count target for the book (MG/YA category contracts rely on it; see the `genre-craft` skill). `story progress` and `story report` measure against it.
+- `deadline` - due date as `YYYY-MM-DD`; `story progress` reports days left and the words a day needed.
 - `draft-mode` - `discovered` marks a discovery-drafted project; per-chapter `mode:` tracks mixed projects (see the `discovery-drafting` skill).
 - `cover` - path, relative to the project root, to a `.jpg`, `.jpeg`, `.png`, `.gif`, or `.webp` cover image inside the project. `story validate` errors when the file is missing or outside the project; `story build --format epub` embeds it as the EPUB cover. `author` also becomes the EPUB `dc:creator`.
 
@@ -111,6 +112,7 @@ Optional chapter fields:
 - `date` - story date (`YYYY-MM-DD`); enables the clock/time checks in `story continuity`
 - `time` - story time of day
 - `episode-question` - the installment's dramatic question for serial fiction (see the `genre-craft` skill)
+- `target-words` - positive integer word target for the chapter; `story progress` reports each chapter against its target
 - `time-skip` - freeform `from → to` note recording a skipped interval (planning note; validated as a scalar, not checked by `story continuity`)
 
 Scenes require `title`, `chapter`, `scene`, and `status`. Scenes carry machine-readable continuity fields: `pov`, `location`, `characters`, `mentions`, `arcs-advanced`, and `state-changes`.
@@ -177,6 +179,12 @@ Files in `research/` record the real-world facts the story relies on. Create the
 - `used-in` lists the chapter ids that rely on the note. `story links` errors on missing chapters, and `story rename` and `story remove` keep the list current.
 
 `story validate` warns when a `final` or `complete` chapter is in the `used-in` list of an `open` or `disputed` note, and when a `verified` note lists no sources. See the `research` skill.
+
+### Progress Log
+
+`progress.md` is optional and written by `story progress --log`: frontmatter `type: progress-log` and `sessions`, a list of `{date, words}` entries (one per day, `YYYY-MM-DD`, non-negative integer word count of the whole manuscript). Logging again on the same date replaces that day's entry; other frontmatter and the body are preserved. `--date` sets the session date, which defaults to today.
+
+`story progress` reports words against `target-words`, the words remaining, days left to `deadline` and the words a day needed, chapters against their `target-words`, words since the last logged session, pace per day across the last seven sessions, and a projected finish date at that pace. `story validate` checks the `deadline` date, chapter `target-words`, and each session entry.
 
 ### Style Sheet
 

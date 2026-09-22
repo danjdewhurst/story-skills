@@ -105,7 +105,10 @@ story reindex .
 story links .
 story validate .
 story next .
+story progress . --log
 ```
+
+`story progress . --log` records the session in `progress.md` and reports words against `target-words`, the `deadline`, and chapter `target-words`; skip the `--log` flag when the user does not keep a log.
 
 Present a summary of all updates made.
 

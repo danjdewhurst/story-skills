@@ -7,8 +7,10 @@ in batches. This reference sets the cadence; the reconcile loop
 ## Daily targets
 
 Agree on a target with the user at the start of a discovery project and
-record it in the `## Notes` or `## Draft Log` body of `story.md`. Schema v2
-has `draft-mode` and does not read a `draft-target` frontmatter field.
+record the daily rhythm in the `## Notes` or `## Draft Log` body of
+`story.md`. Record the book's total in `story.md` as `target-words` and any
+due date as `deadline: YYYY-MM-DD`; `story progress .` measures against
+both. There is no `draft-target` frontmatter field.
 
 ```markdown
 ## Draft Log
@@ -24,9 +26,10 @@ Rules for targets:
 - **Small enough to keep daily.** A missed target should be recoverable the
   next day. Chronic misses mean the target is wrong, not the writer —
   renegotiate it.
-- **Track streaks, not totals.** Record per-session word counts in the
-  chapter notes or a simple `## Draft Log` in `story.md` notes. The log is
-  motivation data, not a performance review.
+- **Track streaks, not totals.** Run `story progress . --log` at the end of
+  each session: it records the day's manuscript word count in `progress.md`
+  and reports pace, words since the last session, and a projected finish.
+  The log is motivation data, not a performance review.
 
 ## Batch reviews
 

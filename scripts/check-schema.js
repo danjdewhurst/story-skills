@@ -87,6 +87,11 @@ export function buildSchemaDocument(root) {
     }
   }
 
+  const progressPath = path.join(root, "progress.md");
+  if (fs.existsSync(progressPath)) {
+    document.progressLog = readFrontmatter(progressPath);
+  }
+
   // The style sheet is optional, so the schema only sees it when present.
   const styleSheetPath = path.join(root, "style-sheet.md");
   if (fs.existsSync(styleSheetPath)) {
