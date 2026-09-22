@@ -79,15 +79,13 @@ export function withSeriesBacklink(targetRoot, field, linkedRoot) {
   const storyPath = path.join(targetRoot, "story.md");
   const markdown = fs.readFileSync(storyPath, "utf8");
   const { data } = parseFrontmatter(markdown, storyPath);
-  if (seriesLinks(targetRoot, data, field).includes(linkedRoot)) {
+  // A hand-written scalar link is kept and converted to a list rather than
+  // dropped when the new link is added.
+  const current = data[field];
+  const existing = Array.isArray(current) ? current : typeof current === "string" && current.trim() !== "" ? [current] : [];
+  if (seriesLinks(targetRoot, { [field]: existing }, field).includes(linkedRoot)) {
     return null;
   }
-  const raw = data[field];
-  const existing = Array.isArray(raw)
-    ? raw
-    : typeof raw === "string" && raw.trim() !== ""
-      ? [raw]
-      : [];
   return replaceFrontmatter(markdown, { ...data, [field]: existing.concat(seriesLinkPath(targetRoot, linkedRoot)) });
 }
 
@@ -112,6 +110,7 @@ export function buildSeries(startRoot, scan) {
   if (seriesIds.length > 1) {
     errors.push(`Linked books belong to different series: ${seriesIds.join(", ")}`);
   }
+  checkDuplicateBookNumbers(books, errors);
 
   const chronology = chronologicalOrder(books, errors);
   if (chronology) {
@@ -120,7 +119,7 @@ export function buildSeries(startRoot, scan) {
 
   return {
     root: startRoot,
-    series: books[0].series ?? seriesIds[0] ?? null,
+    series: books[0]?.series ?? seriesIds[0] ?? null,
     books: (chronology ? chronology.order : books).map((book) => ({
       title: book.title,
       label: book.label,
@@ -217,7 +216,14 @@ function discoverBooks(startRoot, scan, errors) {
       continue;
     }
 
-    const project = scan(root);
+    let project;
+    try {
+      project = scan(root);
+    } catch (error) {
+      errors.push(`${label}: ${error.message}`);
+      visited.set(effective, null);
+      continue;
+    }
     for (const scanError of project.fileErrors ?? []) {
       errors.push(`${label}: ${scanError}`);
     }
@@ -292,6 +298,20 @@ function chronologicalOrder(books, errors) {
     return null;
   }
   return { order, later };
+}
+
+function checkDuplicateBookNumbers(books, errors) {
+  const byNumber = new Map();
+  for (const book of books) {
+    if (book.bookNumber !== null) {
+      byNumber.set(book.bookNumber, (byNumber.get(book.bookNumber) ?? []).concat(book.label));
+    }
+  }
+  for (const [number, labels] of [...byNumber].sort((left, right) => left[0] - right[0])) {
+    if (labels.length > 1) {
+      errors.push(`Books ${labels.join(", ")} share book-number ${number}; book-number is publication order and must be unique`);
+    }
+  }
 }
 
 // Books with no chronological constraint between them fall back to

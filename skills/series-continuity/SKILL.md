@@ -45,7 +45,7 @@ story init "{Title}" --follows {existing-book-dir} --synopsis "{synopsis}"
 story init "{Title}" --precedes {existing-book-dir} --synopsis "{synopsis}"
 ```
 
-`init` checks that the linked path is a story project, writes the relative link, adds the backlink to the existing book's `story.md`, and inherits `series`, `genre`, `sub-genre`, `pov`, and `tense`. It sets `book-number` to one more than the highest linked `book-number` only when a linked book already has an integer `book-number`. A normal `story init` book has none, so the new book is left unnumbered. Pass `--book-number` (or write the field on both `story.md` files) in that case. Pass `--series`, `--genre`, `--pov`, or `--tense` to override the inherited values.
+`init` checks that the linked path is a story project, writes the relative link, adds the backlink to the existing book's `story.md`, and inherits `series`, `genre`, `sub-genre`, `pov`, and `tense`. When any book in the linked series has an integer `book-number`, it sets `book-number` to one more than the highest number used anywhere in the series, so publication numbers never collide. A normal `story init` book has none, so a series with no numbered books leaves the new book unnumbered. Pass `--book-number` (or write the field on both `story.md` files) in that case. Pass `--series`, `--genre`, `--pov`, or `--tense` to override the inherited values.
 
 If the existing book has no `series` yet, pass `--series {series-id}` and add the same `series` plus `book-number` values to both `story.md` files.
 
@@ -102,6 +102,7 @@ story series .
 - **Errors**
   - A linked path that is not a story project
   - Books that declare different `series` ids
+  - Two books that share a `book-number`
   - A chronology cycle
   - A character who is `deceased` in an earlier book but not `deceased` in a later one
   - A later book whose chapter or scene lists that character as `pov` or under `characters`. Move flashbacks, memories, and ghosts to `mentions`.

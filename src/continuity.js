@@ -15,7 +15,13 @@ export function checkContinuity(project) {
     locations: new Set(project.locations.map((location) => location.id)),
     artifacts: new Map(project.artifacts.map((artifact) => [artifact.id, artifact])),
     factions: new Set(project.factions.map((faction) => faction.id)),
-    latestChapter: project.chapters.reduce((max, chapter) => Math.max(max, chapter.number), 0)
+    // Chekhov gaps and the stale-state warning measure against chapters that
+    // have prose; outline-only chapters scaffolded ahead of drafting do not
+    // count. `highestChapter` still bounds current-chapter from above.
+    latestChapter: project.chapters
+      .filter((chapter) => chapter.status !== "outline")
+      .reduce((max, chapter) => Math.max(max, chapter.number), 0),
+    highestChapter: project.chapters.reduce((max, chapter) => Math.max(max, chapter.number), 0)
   };
 
   checkCharacterDeaths(project, context, errors);
@@ -281,8 +287,8 @@ function checkContinuityState(project, context, errors, warnings) {
   const currentChapter = data["current-chapter"];
 
   if (Number.isInteger(currentChapter)) {
-    if (currentChapter > context.latestChapter) {
-      errors.push(`${label} current-chapter ${currentChapter} is ahead of the latest chapter ${context.latestChapter}`);
+    if (currentChapter > context.highestChapter) {
+      errors.push(`${label} current-chapter ${currentChapter} is ahead of the latest chapter ${context.highestChapter}`);
     } else if (currentChapter < context.latestChapter) {
       warnings.push(`${label} current-chapter ${currentChapter} is behind the latest chapter ${context.latestChapter}; update continuity state after drafting`);
     }
@@ -424,7 +430,7 @@ function checkPropCustody(project, context, errors, warnings) {
       if (scene.stateChanges.some((change) => stateChangeTargets(change, artifact))) {
         errors.push(`${sceneLabel} uses ${artifact}, destroyed/lost since ${since}`);
       }
-      if (scene.mentions.includes(artifact) || scene.characters.includes(artifact)) {
+      if (scene.mentions.includes(artifact)) {
         errors.push(`${sceneLabel} mentions ${artifact}, destroyed/lost since ${since}`);
       }
     }
@@ -432,8 +438,8 @@ function checkPropCustody(project, context, errors, warnings) {
       if (chapter.number <= sinceNumber) {
         continue;
       }
-      if (chapter.mentions.includes(artifact) || chapter.characters.includes(artifact)) {
-        errors.push(`Chapter ${chapter.number} mentions ${artifact}, destroyed/lost since ${since}`);
+      if (chapter.mentions.includes(artifact)) {
+        errors.push(`${relative(project, chapter.file)} mentions ${artifact}, destroyed/lost since ${since}`);
       }
     }
   }
@@ -574,7 +580,10 @@ function parseClockDate(value) {
   const year = Number(match[1]);
   const month = Number(match[2]);
   const day = Number(match[3]);
-  const days = Date.UTC(year, month - 1, day) / 86400000;
+  // Date.UTC maps years 0-99 to 1900-1999, so set the full year explicitly.
+  const date = new Date(Date.UTC(2000, month - 1, day));
+  date.setUTCFullYear(year, month - 1, day);
+  const days = date.getTime() / 86400000;
   const roundtrip = new Date(days * 86400000);
   if (roundtrip.getUTCFullYear() !== year || roundtrip.getUTCMonth() !== month - 1 || roundtrip.getUTCDate() !== day) {
     return undefined;

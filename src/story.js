@@ -205,11 +205,30 @@ function resolveSeriesOptions(root, cwd, options) {
     bookNumber = requirePositiveInteger(options.bookNumber, "Book number");
   } else if (linked.length > 0) {
     const numbers = linked.map((book) => book.data["book-number"]).filter((value) => Number.isInteger(value));
-    bookNumber = numbers.length > 0 ? Math.max(...numbers) + 1 : undefined;
+    // Publication order: the new book comes after every numbered book already
+    // in the series, not just the directly linked ones, so it never collides.
+    const all = numbers.concat(seriesBookNumbers(linked));
+    bookNumber = all.length > 0 ? Math.max(...all) + 1 : undefined;
   }
 
   const linkPaths = (field) => linked.filter((book) => book.field === field).map((book) => seriesLinkPath(root, book.root));
   return { linked, series, bookNumber, follows: linkPaths("follows"), precedes: linkPaths("precedes") };
+}
+
+function seriesBookNumbers(linked) {
+  const numbers = [];
+  for (const book of linked) {
+    try {
+      for (const entry of buildSeries(book.root, scanProject).books) {
+        if (Number.isInteger(entry.bookNumber)) {
+          numbers.push(entry.bookNumber);
+        }
+      }
+    } catch {
+      // Fall back to the directly linked numbers when the series cannot be read.
+    }
+  }
+  return numbers;
 }
 
 export function scanProject(root) {
@@ -485,6 +504,10 @@ export function validateLinksOf(project) {
   const hasLocation = (id) => locations.has(id);
   const hasChapter = (id) => chapters.has(id);
   const hasArc = (id) => arcs.has(id);
+  // `mentions` may name characters or artifacts; prop custody checks read
+  // artifact ids there.
+  const artifactIds = new Set(project.artifacts.map((item) => item.id));
+  const hasMention = (id) => characters.has(id) || artifactIds.has(id);
 
   for (const character of project.characters) {
     const label = relative(project, character.file);
@@ -570,8 +593,11 @@ export function validateLinksOf(project) {
       }
     }
 
-    for (const characterId of chapter.characters.concat(chapter.mentions)) {
+    for (const characterId of chapter.characters) {
       checkIdReference(errors, label, characterId, "character", hasCharacter);
+    }
+    for (const mentionId of chapter.mentions) {
+      checkIdReference(errors, label, mentionId, "character or artifact", hasMention);
     }
     for (const locationId of chapter.locations) {
       checkIdReference(errors, label, locationId, "location", hasLocation);
@@ -627,8 +653,11 @@ export function validateLinksOf(project) {
     if (scene.location) {
       checkIdReference(errors, label, scene.location, "location", hasLocation);
     }
-    for (const characterId of scene.characters.concat(scene.mentions)) {
+    for (const characterId of scene.characters) {
       checkIdReference(errors, label, characterId, "character", hasCharacter);
+    }
+    for (const mentionId of scene.mentions) {
+      checkIdReference(errors, label, mentionId, "character or artifact", hasMention);
     }
     for (const arcId of scene.arcsAdvanced) {
       checkIdReference(errors, label, arcId, "arc", hasArc);

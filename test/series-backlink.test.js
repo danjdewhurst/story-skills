@@ -7,7 +7,7 @@ import { createEntity, createStoryProject, renameEntity } from "../src/story.js"
 import { makeTempDir } from "./helpers.js";
 
 describe("withSeriesBacklink string fields", () => {
-  test("keeps an existing path when a string field becomes a list", () => {
+  test("keeps an existing scalar link and adds the new link as a list", () => {
     const cwd = makeTempDir();
     const one = createStoryProject({ title: "Book One", cwd }).root;
     const three = createStoryProject({ title: "Book Three", cwd }).root;
@@ -21,6 +21,8 @@ describe("withSeriesBacklink string fields", () => {
     );
     const updated = withSeriesBacklink(one, "precedes", three);
     expect(parseFrontmatter(updated).data.precedes).toEqual(["../book-two", "../book-three"]);
+    fs.writeFileSync(storyPath, updated, "utf8");
+    expect(withSeriesBacklink(one, "precedes", path.join(cwd, "book-two"))).toBeNull();
   });
 });
 

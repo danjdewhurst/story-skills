@@ -353,7 +353,8 @@ function checkContinuity(project) {
     locations: new Set(project.locations.map((location) => location.id)),
     artifacts: new Map(project.artifacts.map((artifact) => [artifact.id, artifact])),
     factions: new Set(project.factions.map((faction) => faction.id)),
-    latestChapter: project.chapters.reduce((max, chapter) => Math.max(max, chapter.number), 0)
+    latestChapter: project.chapters.filter((chapter) => chapter.status !== "outline").reduce((max, chapter) => Math.max(max, chapter.number), 0),
+    highestChapter: project.chapters.reduce((max, chapter) => Math.max(max, chapter.number), 0)
   };
   checkCharacterDeaths(project, context, errors);
   checkChapterCasts(project, warnings);
@@ -570,8 +571,8 @@ function checkContinuityState(project, context, errors, warnings) {
   const data = project.continuity.data;
   const currentChapter = data["current-chapter"];
   if (Number.isInteger(currentChapter)) {
-    if (currentChapter > context.latestChapter) {
-      errors.push(`${label} current-chapter ${currentChapter} is ahead of the latest chapter ${context.latestChapter}`);
+    if (currentChapter > context.highestChapter) {
+      errors.push(`${label} current-chapter ${currentChapter} is ahead of the latest chapter ${context.highestChapter}`);
     } else if (currentChapter < context.latestChapter) {
       warnings.push(`${label} current-chapter ${currentChapter} is behind the latest chapter ${context.latestChapter}; update continuity state after drafting`);
     }
@@ -696,7 +697,7 @@ function checkPropCustody(project, context, errors, warnings) {
       if (scene.stateChanges.some((change) => stateChangeTargets(change, artifact))) {
         errors.push(`${sceneLabel} uses ${artifact}, destroyed/lost since ${since}`);
       }
-      if (scene.mentions.includes(artifact) || scene.characters.includes(artifact)) {
+      if (scene.mentions.includes(artifact)) {
         errors.push(`${sceneLabel} mentions ${artifact}, destroyed/lost since ${since}`);
       }
     }
@@ -704,8 +705,8 @@ function checkPropCustody(project, context, errors, warnings) {
       if (chapter.number <= sinceNumber) {
         continue;
       }
-      if (chapter.mentions.includes(artifact) || chapter.characters.includes(artifact)) {
-        errors.push(`Chapter ${chapter.number} mentions ${artifact}, destroyed/lost since ${since}`);
+      if (chapter.mentions.includes(artifact)) {
+        errors.push(`${relative(project, chapter.file)} mentions ${artifact}, destroyed/lost since ${since}`);
       }
     }
   }
@@ -829,7 +830,9 @@ function parseClockDate(value) {
   const year = Number(match[1]);
   const month = Number(match[2]);
   const day = Number(match[3]);
-  const days = Date.UTC(year, month - 1, day) / 86400000;
+  const date = new Date(Date.UTC(2000, month - 1, day));
+  date.setUTCFullYear(year, month - 1, day);
+  const days = date.getTime() / 86400000;
   const roundtrip = new Date(days * 86400000);
   if (roundtrip.getUTCFullYear() !== year || roundtrip.getUTCMonth() !== month - 1 || roundtrip.getUTCDate() !== day) {
     return;
@@ -944,11 +947,11 @@ function withSeriesBacklink(targetRoot, field, linkedRoot) {
   const storyPath = path2.join(targetRoot, "story.md");
   const markdown = fs.readFileSync(storyPath, "utf8");
   const { data } = parseFrontmatter(markdown, storyPath);
-  if (seriesLinks(targetRoot, data, field).includes(linkedRoot)) {
+  const current = data[field];
+  const existing = Array.isArray(current) ? current : typeof current === "string" && current.trim() !== "" ? [current] : [];
+  if (seriesLinks(targetRoot, { [field]: existing }, field).includes(linkedRoot)) {
     return null;
   }
-  const raw = data[field];
-  const existing = Array.isArray(raw) ? raw : typeof raw === "string" && raw.trim() !== "" ? [raw] : [];
   return replaceFrontmatter(markdown, { ...data, [field]: existing.concat(seriesLinkPath(targetRoot, linkedRoot)) });
 }
 function buildSeries(startRoot, scan) {
@@ -971,13 +974,14 @@ function buildSeries(startRoot, scan) {
   if (seriesIds.length > 1) {
     errors.push(`Linked books belong to different series: ${seriesIds.join(", ")}`);
   }
+  checkDuplicateBookNumbers(books, errors);
   const chronology = chronologicalOrder(books, errors);
   if (chronology) {
     checkSharedCanon(chronology, errors, warnings);
   }
   return {
     root: startRoot,
-    series: books[0].series ?? seriesIds[0] ?? null,
+    series: books[0]?.series ?? seriesIds[0] ?? null,
     books: (chronology ? chronology.order : books).map((book) => ({
       title: book.title,
       label: book.label,
@@ -1065,7 +1069,14 @@ function discoverBooks(startRoot, scan, errors) {
       visited.set(effective, null);
       continue;
     }
-    const project = scan(root);
+    let project;
+    try {
+      project = scan(root);
+    } catch (error) {
+      errors.push(`${label}: ${error.message}`);
+      visited.set(effective, null);
+      continue;
+    }
     for (const scanError of project.fileErrors ?? []) {
       errors.push(`${label}: ${scanError}`);
     }
@@ -1133,6 +1144,19 @@ function chronologicalOrder(books, errors) {
     return null;
   }
   return { order, later };
+}
+function checkDuplicateBookNumbers(books, errors) {
+  const byNumber = new Map;
+  for (const book of books) {
+    if (book.bookNumber !== null) {
+      byNumber.set(book.bookNumber, (byNumber.get(book.bookNumber) ?? []).concat(book.label));
+    }
+  }
+  for (const [number, labels] of [...byNumber].sort((left, right) => left[0] - right[0])) {
+    if (labels.length > 1) {
+      errors.push(`Books ${labels.join(", ")} share book-number ${number}; book-number is publication order and must be unique`);
+    }
+  }
 }
 function compareBooks(left, right) {
   return (left.bookNumber ?? Infinity) - (right.bookNumber ?? Infinity) || left.title.localeCompare(right.title);
@@ -1455,10 +1479,24 @@ function resolveSeriesOptions(root, cwd, options) {
     bookNumber = requirePositiveInteger(options.bookNumber, "Book number");
   } else if (linked.length > 0) {
     const numbers = linked.map((book) => book.data["book-number"]).filter((value) => Number.isInteger(value));
-    bookNumber = numbers.length > 0 ? Math.max(...numbers) + 1 : undefined;
+    const all = numbers.concat(seriesBookNumbers(linked));
+    bookNumber = all.length > 0 ? Math.max(...all) + 1 : undefined;
   }
   const linkPaths = (field) => linked.filter((book) => book.field === field).map((book) => seriesLinkPath(root, book.root));
   return { linked, series, bookNumber, follows: linkPaths("follows"), precedes: linkPaths("precedes") };
+}
+function seriesBookNumbers(linked) {
+  const numbers = [];
+  for (const book of linked) {
+    try {
+      for (const entry of buildSeries(book.root, scanProject).books) {
+        if (Number.isInteger(entry.bookNumber)) {
+          numbers.push(entry.bookNumber);
+        }
+      }
+    } catch {}
+  }
+  return numbers;
 }
 function scanProject(root) {
   const projectRoot = path3.resolve(root);
@@ -1713,6 +1751,8 @@ function validateLinksOf(project) {
   const hasLocation = (id) => locations.has(id);
   const hasChapter = (id) => chapters.has(id);
   const hasArc = (id) => arcs.has(id);
+  const artifactIds = new Set(project.artifacts.map((item) => item.id));
+  const hasMention = (id) => characters.has(id) || artifactIds.has(id);
   for (const character of project.characters) {
     const label = relative2(project, character.file);
     for (const relationship of character.relationships) {
@@ -1791,8 +1831,11 @@ function validateLinksOf(project) {
         errors.push(`${label} references missing POV character ${chapter.pov}`);
       }
     }
-    for (const characterId of chapter.characters.concat(chapter.mentions)) {
+    for (const characterId of chapter.characters) {
       checkIdReference(errors, label, characterId, "character", hasCharacter);
+    }
+    for (const mentionId of chapter.mentions) {
+      checkIdReference(errors, label, mentionId, "character or artifact", hasMention);
     }
     for (const locationId of chapter.locations) {
       checkIdReference(errors, label, locationId, "location", hasLocation);
@@ -1845,8 +1888,11 @@ function validateLinksOf(project) {
     if (scene.location) {
       checkIdReference(errors, label, scene.location, "location", hasLocation);
     }
-    for (const characterId of scene.characters.concat(scene.mentions)) {
+    for (const characterId of scene.characters) {
       checkIdReference(errors, label, characterId, "character", hasCharacter);
+    }
+    for (const mentionId of scene.mentions) {
+      checkIdReference(errors, label, mentionId, "character or artifact", hasMention);
     }
     for (const arcId of scene.arcsAdvanced) {
       checkIdReference(errors, label, arcId, "arc", hasArc);
