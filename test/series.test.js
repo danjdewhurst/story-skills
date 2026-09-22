@@ -142,10 +142,16 @@ describe("series init", () => {
     expect(data).toMatchObject({ series: "saga", "book-number": 4, genre: "horror", "sub-genre": "general", precedes: ["../book-one"] });
     expect(data.follows).toBeUndefined();
 
-    const unnumbered = book(cwd, "Side Story", { follows: "book-one" });
-    const sideData = parseFrontmatter(fs.readFileSync(path.join(unnumbered, "story.md"), "utf8")).data;
-    expect(sideData["book-number"]).toBeUndefined();
+    // Book One is unnumbered, but Origins (book 4) is in the same series, so
+    // the new book numbers after it rather than colliding.
+    const sideStory = book(cwd, "Side Story", { follows: "book-one" });
+    const sideData = parseFrontmatter(fs.readFileSync(path.join(sideStory, "story.md"), "utf8")).data;
+    expect(sideData["book-number"]).toBe(5);
     expect(sideData.series).toBeUndefined();
+
+    book(cwd, "Loose One");
+    const unnumbered = book(cwd, "Loose Two", { follows: "loose-one" });
+    expect(parseFrontmatter(fs.readFileSync(path.join(unnumbered, "story.md"), "utf8")).data["book-number"]).toBeUndefined();
   });
 
   test("rejects invalid series options before creating files", () => {
@@ -356,6 +362,49 @@ describe("series traversal limits", () => {
     const report = seriesReport(root);
     expect(report.ok).toBe(false);
     expect(report.errors.join("\n")).toContain("points outside the series directory");
+  });
+
+  test("visits a book reached through a symlink alias only once", () => {
+    const cwd = makeTempDir();
+    const root = book(cwd, "Linked");
+    const other = book(cwd, "Other");
+    try {
+      fs.symlinkSync(other, path.join(cwd, "alias"), "dir");
+    } catch {
+      console.warn("Skipping series symlink test: symlinks unavailable.");
+      return;
+    }
+    setStory(root, { follows: ["../other", "../alias"] });
+    setStory(other, { precedes: ["../linked"] });
+    const report = seriesReport(root);
+    expect(report.books.map((entry) => entry.title)).toEqual(["Other", "Linked"]);
+  });
+
+  test("reports parse errors in linked books instead of silently dropping them", () => {
+    const cwd = makeTempDir();
+    const one = book(cwd, "Book One", { series: "saga" });
+    const two = book(cwd, "Book Two", { follows: ["book-one"] });
+    const storyPath = path.join(one, "story.md");
+    const markdown = fs.readFileSync(storyPath, "utf8");
+    fs.writeFileSync(storyPath, markdown.replace("---\n", "---\nlogline: >\n  folded text\n"), "utf8");
+    const report = seriesReport(two);
+    expect(report.ok).toBe(false);
+    expect(report.errors.join("\n")).toContain("../book-one: story.md: Unsupported frontmatter line");
+    const cli = invoke(cwd, ["series", "--path", "book-two"]);
+    expect(cli.code).toBe(1);
+  });
+
+  test("reports linked books whose scan throws", () => {
+    const cwd = makeTempDir();
+    const one = book(cwd, "Book One", { series: "saga" });
+    const two = book(cwd, "Book Two", { follows: ["book-one"] });
+    const outside = path.join(cwd, "outside-world");
+    fs.mkdirSync(path.join(outside, "locations"), { recursive: true });
+    fs.rmSync(path.join(one, "worldbuilding"), { recursive: true, force: true });
+    fs.symlinkSync(outside, path.join(one, "worldbuilding"), "dir");
+    const report = seriesReport(two);
+    expect(report.ok).toBe(false);
+    expect(report.errors.join("\n")).toContain("../book-one: Refusing to use project directory outside root");
   });
 
   test("orders a book reached through a symlink and through its real path as one book", () => {

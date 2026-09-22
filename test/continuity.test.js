@@ -188,8 +188,8 @@ current-chapter: 0
     expect(validateProject(root).errors.join("\n")).not.toContain("died-in");
 
     const links = validateLinks(root).errors.join("\n");
-    expect(links).toContain("chapters/chapter-03.md references missing character nobody-here");
-    expect(links).toContain("scenes/chapter-77-scene-01.md references missing character nobody-scene");
+    expect(links).toContain("chapters/chapter-03.md references missing character or artifact nobody-here");
+    expect(links).toContain("scenes/chapter-77-scene-01.md references missing character or artifact nobody-scene");
   });
 
   test("flags promise, question, completion, and durable state contradictions", () => {

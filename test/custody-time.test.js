@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { checkContinuity } from "../src/continuity.js";
-import { createStoryProject, scanProject } from "../src/story.js";
+import { createStoryProject, scanProject, validateLinks } from "../src/story.js";
 import { makeTempDir, writeMarkdown } from "./helpers.js";
 
 function baseProject(chapters) {
@@ -61,19 +61,30 @@ state-changes:
     expect(result.ok).toBe(false);
   });
 
-  test("flags mentions and character listings after the since chapter", () => {
+  test("flags artifact mentions after the since chapter, which link validation accepts", () => {
     const root = baseProject(3);
     setObjectState(root, `  - artifact: moon-blade\n    status: lost\n    since: chapter-01\n`);
     writeScene(root, 2, 1, `
 mentions:
-  - moon-blade
-characters:
   - moon-blade
 `);
 
     const result = checkContinuity(scanProject(root));
     expect(result.errors).toContain(
       "scenes/chapter-02-scene-01.md mentions moon-blade, destroyed/lost since chapter-01"
+    );
+    const links = validateLinks(root).errors.join("\n");
+    expect(links).not.toContain("moon-blade");
+  });
+
+  test("rejects mentions that name neither a character nor an artifact", () => {
+    const root = baseProject(3);
+    writeScene(root, 2, 1, `
+mentions:
+  - ghost-blade
+`);
+    expect(validateLinks(root).errors).toContain(
+      "scenes/chapter-02-scene-01.md references missing character or artifact ghost-blade"
     );
   });
 
@@ -85,7 +96,8 @@ characters:
     fs.writeFileSync(chapterPath, raw.replace("word-count: 0", "word-count: 0\nmentions:\n  - moon-blade"), "utf8");
 
     const result = checkContinuity(scanProject(root));
-    expect(result.errors).toContain("Chapter 3 mentions moon-blade, destroyed/lost since chapter-02");
+    expect(result.errors).toContain("chapters/chapter-03.md mentions moon-blade, destroyed/lost since chapter-02");
+    expect(validateLinks(root).errors.join("\n")).not.toContain("moon-blade");
   });
 
   test("ignores references at or before the since chapter", () => {
@@ -441,5 +453,59 @@ time: "10:00"
     const result = checkContinuity(scanProject(root));
     expect(result.ok).toBe(false);
     expect(result.errors.join("\n")).toContain("characters/ada.md");
+  });
+});
+
+describe("low-year dates and outline chapters", () => {
+  test("accepts dates with years 0000-0099 and orders them", () => {
+    const root = baseProject(1);
+    writeScene(root, 1, 1, `
+date: 0050-01-02
+time: "10:00"
+`);
+    writeScene(root, 1, 2, `
+date: 0050-01-01
+time: "09:00"
+`);
+
+    const result = checkContinuity(scanProject(root));
+    expect(result.warnings.join("\n")).not.toContain("malformed date");
+    expect(result.warnings).toContain("scenes/chapter-01-scene-02.md timestamp runs backward");
+  });
+
+  test("still rejects impossible low-year dates", () => {
+    const root = baseProject(1);
+    writeScene(root, 1, 1, `
+date: 0042-02-30
+`);
+    const result = checkContinuity(scanProject(root));
+    expect(result.warnings.join("\n")).toContain('malformed date "0042-02-30"');
+  });
+
+  test("outline-only chapters do not advance the latest chapter", () => {
+    const root = baseProject(1);
+    writeMarkdown(path.join(root, "chapters", "chapter-04.md"), `
+title: Later
+number: 4
+status: outline
+word-count: 0
+`, "## Chapter Text\n");
+    writeMarkdown(path.join(root, "continuity", "promises", "early-gun.md"), `
+title: Early Gun
+status: planted
+planted: chapter-01
+`, "# Early Gun\n");
+
+    const result = checkContinuity(scanProject(root));
+    const warnings = result.warnings.join("\n");
+    expect(warnings).not.toContain("chapters ago");
+    expect(warnings).not.toContain("is behind the latest chapter");
+    expect(result.errors.join("\n")).not.toContain("is ahead of the latest chapter");
+
+    const draftedPath = path.join(root, "chapters", "chapter-04.md");
+    fs.writeFileSync(draftedPath, fs.readFileSync(draftedPath, "utf8").replace("status: outline", "status: draft"), "utf8");
+    const drafted = checkContinuity(scanProject(root)).warnings.join("\n");
+    expect(drafted).toContain("early-gun.md was planted in chapter-01, 3 chapters ago");
+    expect(drafted).toContain("current-chapter 1 is behind the latest chapter 4");
   });
 });
