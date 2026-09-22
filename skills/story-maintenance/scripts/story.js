@@ -20,14 +20,9 @@ function parseFrontmatter(markdown, filePath = "markdown") {
     raw: match[1]
   };
 }
-function stringifyFrontmatter(data, decorations = null) {
+function stringifyFrontmatter(data) {
   const lines = ["---"];
-  const notesFor = decorations?.byKey ?? new Map;
   for (const [key, value] of Object.entries(data)) {
-    const notes = notesFor.get(key);
-    if (notes) {
-      lines.push(...notes);
-    }
     if (Array.isArray(value)) {
       if (value.length === 0) {
         lines.push(`${key}: []`);
@@ -35,65 +30,115 @@ function stringifyFrontmatter(data, decorations = null) {
       }
       lines.push(`${key}:`);
       for (const item of value) {
-        if (isPlainObject(item)) {
-          const entries = Object.entries(item);
-          if (entries.length === 0) {
-            throw new Error("Cannot stringify empty mapping in " + key);
-          }
-          const [firstKey, firstValue] = entries[0];
-          lines.push(`  - ${firstKey}: ${formatScalar(firstValue)}`);
-          for (const [childKey, childValue] of entries.slice(1)) {
-            lines.push(`    ${childKey}: ${formatScalar(childValue)}`);
-          }
-        } else {
-          lines.push(`  - ${formatScalar(item)}`);
-        }
+        lines.push(...stringifyItem(key, item));
       }
     } else {
       lines.push(`${key}: ${formatScalar(value)}`);
     }
-  }
-  if (decorations?.trailing?.length) {
-    lines.push(...decorations.trailing);
   }
   lines.push("---", "", "");
   return lines.join(`
 `);
 }
 function replaceFrontmatter(markdown, data, bodyOverride) {
-  const match = FRONTMATTER_PATTERN.exec(markdown);
+  const match = FRONTMATTER_PARTS_PATTERN.exec(markdown);
   if (!match) {
     throw new Error("Cannot replace missing YAML frontmatter");
   }
-  const rawBody = bodyOverride === undefined ? markdown.slice(match[0].length) : bodyOverride;
-  const body = String(rawBody).replace(/^(?:\r?\n)+/, "");
-  return `${stringifyFrontmatter(data, frontmatterDecorations(match[1]))}${body}`;
-}
-function frontmatterDecorations(raw) {
-  const byKey = new Map;
-  let pending = [];
-  for (const line of raw.split(/\r?\n/)) {
-    const comment = line.trimStart().startsWith("#");
-    const blank = line.trim() === "" && !line.startsWith(" ") && !line.startsWith("\t");
-    if (comment || blank) {
-      pending.push(line);
+  const [whole, opening, raw, closing] = match;
+  const eol = opening.endsWith(`\r
+`) ? `\r
+` : `
+`;
+  const { data: original, blocks } = parseYamlBlocks(raw);
+  const lines = [];
+  const written = new Set;
+  for (const block of blocks) {
+    if (block.key === undefined) {
+      lines.push(block.line);
       continue;
     }
-    const pair = /^([A-Za-z0-9_-]+):/.exec(line);
-    if (!pair) {
+    if (!Object.prototype.hasOwnProperty.call(data, block.key)) {
       continue;
     }
-    byKey.set(pair[1], pending);
-    pending = [];
+    written.add(block.key);
+    const value = data[block.key];
+    if (isDeepEqual(original[block.key], value)) {
+      lines.push(...block.lines);
+    } else {
+      lines.push(...stringifyEntry(block.key, value, block.items));
+    }
   }
-  return { byKey, trailing: pending };
+  for (const [key, value] of Object.entries(data)) {
+    if (!written.has(key)) {
+      lines.push(...stringifyEntry(key, value));
+    }
+  }
+  const body = lines.length > 0 ? `${lines.join(eol)}` : "";
+  const rest = bodyOverride === undefined ? markdown.slice(whole.length) : String(bodyOverride);
+  return `${opening}${body}${closing}${rest}`;
+}
+var FRONTMATTER_PARTS_PATTERN = /^((?:\uFEFF)?---[ \t]*\r?\n)([\s\S]*?)(\r?\n---[ \t]*(?:\r?\n)?)/;
+function stringifyEntry(key, value, originalItems = []) {
+  if (!Array.isArray(value)) {
+    return [`${key}: ${formatScalar(value)}`];
+  }
+  if (value.length === 0) {
+    return [`${key}: []`];
+  }
+  const lines = [`${key}:`];
+  const unused = originalItems.slice();
+  for (const item of value) {
+    const reuse = unused.findIndex((candidate) => isDeepEqual(candidate.value, item));
+    if (reuse !== -1) {
+      lines.push(...unused[reuse].lines);
+      unused.splice(reuse, 1);
+    } else {
+      lines.push(...stringifyItem(key, item));
+    }
+  }
+  return lines;
+}
+function stringifyItem(key, item) {
+  if (!isPlainObject(item)) {
+    return [`  - ${formatScalar(item)}`];
+  }
+  const entries = Object.entries(item);
+  if (entries.length === 0) {
+    throw new Error("Cannot stringify empty mapping in " + key);
+  }
+  const [firstKey, firstValue] = entries[0];
+  const lines = [`  - ${firstKey}: ${formatScalar(firstValue)}`];
+  for (const [childKey, childValue] of entries.slice(1)) {
+    lines.push(`    ${childKey}: ${formatScalar(childValue)}`);
+  }
+  return lines;
+}
+function isDeepEqual(left, right) {
+  if (left === right) {
+    return true;
+  }
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left) && Array.isArray(right) && left.length === right.length && left.every((entry, index) => isDeepEqual(entry, right[index]));
+  }
+  if (isPlainObject(left) && isPlainObject(right)) {
+    const leftKeys = Object.keys(left);
+    const rightKeys = Object.keys(right);
+    return leftKeys.length === rightKeys.length && leftKeys.every((key, index) => key === rightKeys[index] && isDeepEqual(left[key], right[key]));
+  }
+  return false;
 }
 function parseYaml(source) {
-  const lines = source.split(/\r?\n/);
+  return parseYamlBlocks(source).data;
+}
+function parseYamlBlocks(source) {
+  const lines = source === "" ? [] : source.split(/\r?\n/);
   const data = Object.create(null);
+  const blocks = [];
   for (let index = 0;index < lines.length; ) {
     const line = lines[index];
     if (!line.trim() || line.trimStart().startsWith("#")) {
+      blocks.push({ line });
       index += 1;
       continue;
     }
@@ -107,19 +152,29 @@ function parseYaml(source) {
     }
     if (rest !== "") {
       data[key] = parseScalar(rest);
+      blocks.push({ key, lines: [line], items: [] });
       index += 1;
       continue;
     }
     const parsed = parseArray(lines, index + 1);
     if (parsed.nextIndex === index + 1) {
       data[key] = "";
+      blocks.push({ key, lines: [line], items: [] });
       index += 1;
       continue;
     }
     data[key] = parsed.items;
+    blocks.push({
+      key,
+      lines: lines.slice(index, parsed.nextIndex),
+      items: parsed.items.map((item, itemIndex) => ({
+        value: toPlainObject(item),
+        lines: lines.slice(parsed.starts[itemIndex], parsed.starts[itemIndex + 1] ?? parsed.nextIndex)
+      }))
+    });
     index = parsed.nextIndex;
   }
-  return toPlainObject(data);
+  return { data: toPlainObject(data), blocks };
 }
 function toPlainObject(value) {
   if (Array.isArray(value)) {
@@ -145,12 +200,14 @@ function toPlainObject(value) {
 }
 function parseArray(lines, startIndex) {
   const items = [];
+  const starts = [];
   let index = startIndex;
   while (index < lines.length) {
     const itemMatch = /^  -(?:\s+(.*))?$/.exec(lines[index]);
     if (!itemMatch) {
       break;
     }
+    starts.push(index);
     const itemText = itemMatch[1] ?? "";
     const objectMatch = /^([A-Za-z0-9_-]+):\s*(.*)$/.exec(itemText);
     if (!objectMatch) {
@@ -174,7 +231,7 @@ function parseArray(lines, startIndex) {
     }
     items.push(item);
   }
-  return { items, nextIndex: index };
+  return { items, starts, nextIndex: index };
 }
 function parseScalar(value) {
   const trimmed = value.trim();
@@ -206,6 +263,12 @@ function parseScalar(value) {
   return trimmed;
 }
 function formatScalar(value) {
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return "[]";
+    }
+    throw new Error("Cannot stringify a nested non-empty list");
+  }
   if (typeof value === "number" || typeof value === "boolean") {
     return String(value);
   }

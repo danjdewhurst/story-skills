@@ -35,7 +35,7 @@ glossary/terms/
 - Entity filenames are kebab-case identifiers.
 - Registries are deterministic and rebuilt with `story reindex .`.
 - Chapter prose word counts are recalculated with `story wordcount . --write`. A word is a run of letters or digits in any script; straight or curly apostrophes and hyphens join a word, so `don’t` and `well-known` each count once.
-- Frontmatter is machine-owned. Commands that change a value regenerate that file's frontmatter, which drops YAML comments; files whose values do not change are left as they are.
+- Frontmatter is machine-owned. Commands that change a value rewrite only the changed entries: comment lines, blank lines, unchanged entries (with their quoting and number formatting), and the body keep their original text. Files whose values do not change are left as they are.
 - Cross-reference integrity is checked with `story links .`.
 - Continuity contracts (deaths, promises/payoffs, questions, casts, durable state) are checked with `story continuity .`.
 - Canon shared across linked sequels and prequels is checked with `story series .`.

@@ -82,7 +82,7 @@ Body`);
     expect(yaml).toContain("blank: ");
 
     const replaced = replaceFrontmatter("---\ntitle: Old\n---\nBody", { title: "New" });
-    expect(replaced).toBe("---\ntitle: New\n---\n\nBody");
+    expect(replaced).toBe("---\ntitle: New\n---\nBody");
   });
 
   test("keeps comments and stays byte-stable across repeated rewrites", () => {
@@ -174,5 +174,77 @@ Body`);
     const nested = parseFrontmatter("---\nrel:\n  - character: a\n    __proto__: x\n---\nBody");
     expect(nested.data.rel[0]["__proto__"]).toBe("x");
     expect({}.x).toBeUndefined();
+  });
+
+  test("replaceFrontmatter is idempotent and keeps body spacing exactly", () => {
+    let markdown = "---\ntitle: X\ncount: 1\n---\n\n\n# X\n\nBody\n";
+    for (let index = 0; index < 3; index += 1) {
+      const { data } = parseFrontmatter(markdown);
+      markdown = replaceFrontmatter(markdown, { ...data, count: data.count + 1 });
+    }
+    expect(markdown).toBe("---\ntitle: X\ncount: 4\n---\n\n\n# X\n\nBody\n");
+    expect(replaceFrontmatter("---\ntitle: X\n---", { title: "Y" })).toBe("---\ntitle: Y\n---");
+    expect(replaceFrontmatter("---\r\ntitle: X\r\n---\r\nBody", { title: "X", n: 2 })).toBe("---\r\ntitle: X\r\nn: 2\r\n---\r\nBody");
+  });
+
+  test("replaceFrontmatter keeps comments, unchanged formatting, and nested empty lists", () => {
+    const markdown = [
+      "---",
+      "# TODO: pick POV",
+      "version: 1.10",
+      "title: 'Quoted Title'",
+      "big: 12345678901234567890",
+      "",
+      "items:",
+      "  - id: a",
+      "    tags: []",
+      "  - []",
+      "  - id: b",
+      "    weight: 2.50",
+      "word-count: 10",
+      "# trailing note",
+      "---",
+      "Body"
+    ].join("\n");
+    const { data } = parseFrontmatter(markdown);
+    const next = replaceFrontmatter(markdown, {
+      ...data,
+      items: data.items.concat({ id: "c", tags: [] }),
+      "word-count": 20
+    });
+    expect(next).toBe([
+      "---",
+      "# TODO: pick POV",
+      "version: 1.10",
+      "title: 'Quoted Title'",
+      "big: 12345678901234567890",
+      "",
+      "items:",
+      "  - id: a",
+      "    tags: []",
+      "  - []",
+      "  - id: b",
+      "    weight: 2.50",
+      "  - id: c",
+      "    tags: []",
+      "word-count: 20",
+      "# trailing note",
+      "---",
+      "Body"
+    ].join("\n"));
+    expect(parseFrontmatter(next).data.items[3]).toEqual({ id: "c", tags: [] });
+
+    const removed = replaceFrontmatter(markdown, { ...data, items: [data.items[2]], version: undefined });
+    expect(removed).toContain("items:\n  - id: b\n    weight: 2.50\n");
+    expect(removed).toContain("version: \n");
+    const { version, ...withoutVersion } = data;
+    expect(replaceFrontmatter(markdown, withoutVersion)).not.toContain("version");
+  });
+
+  test("stringifies nested empty lists as [] and rejects nested non-empty lists", () => {
+    const yaml = stringifyFrontmatter({ items: [{ id: "a", tags: [] }, []] });
+    expect(yaml).toContain("    tags: []\n  - []\n");
+    expect(parseFrontmatter(`${yaml}Body`).data.items).toEqual([{ id: "a", tags: [] }, []]);
+    expect(() => stringifyFrontmatter({ items: [{ id: "a", tags: ["x"] }] })).toThrow("nested non-empty list");
   });
 });
