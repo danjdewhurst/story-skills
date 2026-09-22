@@ -61,7 +61,8 @@ export function buildSchemaDocument(root) {
       : fs.readdirSync(directory)
           .filter((name) => name.endsWith(".md") && name !== "_index.md")
           .sort()
-          .map((name) => ({ id: path.basename(name, ".md"), ...readFrontmatter(path.join(directory, name)) }));
+          // Ids are filename-derived, so a stray frontmatter id never wins.
+          .map((name) => ({ ...readFrontmatter(path.join(directory, name)), id: path.basename(name, ".md") }));
     setPath(document, key, entities);
   }
 
@@ -105,10 +106,11 @@ function matchesType(value, type) {
 }
 
 function resolveRef(schema, ref) {
-  if (!ref.startsWith("#/")) {
+  const target = ref.startsWith("#/") ? ref.slice(2).split("/").reduce((node, key) => node?.[key], schema) : undefined;
+  if (!target || typeof target !== "object") {
     throw new Error(`Unsupported $ref ${ref}`);
   }
-  return ref.slice(2).split("/").reduce((node, key) => node[key], schema);
+  return target;
 }
 
 // Dependency-free validator for the JSON Schema keywords story.schema.json
@@ -118,19 +120,38 @@ const SUPPORTED = new Set([
   "$ref", "type", "required", "properties", "items", "enum", "const", "pattern", "minimum", "minLength"
 ]);
 
-export function validateAgainstSchema(value, schema, root = schema, at = "$") {
-  const errors = [];
+// Walks the whole schema up front, so an unsupported keyword fails even
+// under a property or definition that no project data reaches.
+export function assertSupportedSchema(schema, root = schema, at = "#") {
   for (const keyword of Object.keys(schema)) {
     if (!SUPPORTED.has(keyword)) {
       throw new Error(`Unsupported schema keyword ${keyword} at ${at}`);
     }
   }
-
   if (schema.$ref) {
-    return validateAgainstSchema(value, resolveRef(root, schema.$ref), root, at);
+    resolveRef(root, schema.$ref);
+  }
+  for (const group of ["$defs", "properties"]) {
+    for (const [key, child] of Object.entries(schema[group] ?? {})) {
+      assertSupportedSchema(child, root, `${at}/${group}/${key}`);
+    }
+  }
+  if (schema.items) {
+    assertSupportedSchema(schema.items, root, `${at}/items`);
+  }
+}
+
+export function validateAgainstSchema(value, schema, root = schema, at = "$") {
+  if (schema === root) {
+    assertSupportedSchema(root);
+  }
+  const errors = [];
+  if (schema.$ref) {
+    // Keywords beside $ref still apply (draft 2020-12), so keep going.
+    errors.push(...validateAgainstSchema(value, resolveRef(root, schema.$ref), root, at));
   }
   if (schema.type && !matchesType(value, schema.type)) {
-    return [`${at}: expected ${schema.type}, got ${typeOf(value)}`];
+    return [...errors, `${at}: expected ${schema.type}, got ${typeOf(value)}`];
   }
   if (schema.const !== undefined && value !== schema.const) {
     errors.push(`${at}: expected ${JSON.stringify(schema.const)}, got ${JSON.stringify(value)}`);
