@@ -55,8 +55,10 @@ Commands:
                     Rename an entity and update id references
   remove <kind> <id>
                     Remove an entity and scrub id references
-  export [path]      Combine chapters into a manuscript markdown file
-  build [path]       Build a disposable book artifact in dist/
+  export [path]      Combine front matter, chapters, and back matter into a
+                    manuscript markdown file
+  build [path]       Build a disposable book artifact in dist/; EPUB
+                    builds use the story.md cover image
   synopsis [path]    Build a deterministic 1- or 3-page synopsis from arcs
 
 Options:
@@ -117,6 +119,8 @@ Options:
   --controlled-by <id>      Controlling faction for add location
   --prevalence <name>       Prevalence for add system
   --acts <a,b>              Comma-separated acts for add arc; repeatable
+  --placement <front|back>  Placement for add matter (default front)
+  --order <n>               Order within its placement for add matter
   -h, --help                Show this help
   -v, --version             Show the story CLI version
 
@@ -376,7 +380,7 @@ const VALUE_OPTIONS = new Set([
   "introduced", "resolved", "planted", "payoff",
   "category", "alias", "aliases",
   "region", "population", "controlled-by",
-  "prevalence", "acts", "act"
+  "prevalence", "acts", "act", "placement", "order"
 ]);
 
 // Options that collect every value when repeated. Any other option keeps the

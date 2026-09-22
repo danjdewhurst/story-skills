@@ -272,7 +272,7 @@ The CLI is for deterministic maintenance only. Agents should write story content
 | Command | Purpose |
 |---------|---------|
 | `story init "The Last Ember"` | Scaffold a story project with the standard markdown layout |
-| `story add character "Sera Voss"` | Create entity files for characters, locations, systems, factions, artifacts, arcs, chapters, scenes, questions, promises, clues, and terms |
+| `story add character "Sera Voss"` | Create entity files for characters, locations, systems, factions, artifacts, arcs, chapters, scenes, questions, promises, clues, terms, and front or back matter |
 | `story knowledge sera-voss --at chapter-03` | Show what a character knew at a chapter, from timeline-scoped knowledge-state |
 | `story synopsis [--pages 1\|3] [--out file]` | Compress arcs into a mechanical 1- or 3-page synopsis |
 | `story rename character sera-voss "Sera Vale"` | Rename an entity and update kebab-case references |
@@ -290,10 +290,11 @@ The CLI is for deterministic maintenance only. Agents should write story content
 | `story report [path] --actionable` | Summarize inventory and optionally include next actions |
 | `story next [path]` | Recommend the next deterministic writing or maintenance actions |
 | `story doctor [path]` | Show health checks with actionable repair steps |
-| `story export [path] --out manuscript.md` | Combine chapters into a single manuscript markdown file |
-| `story build [path] --format epub` | Build disposable markdown, EPUB, DOCX, or Shunn manuscript artifacts in `dist/` |
+| `story add matter "Dedication"` | Add a front (default) or `--placement back` matter page such as a dedication, epigraph, or acknowledgments |
+| `story export [path] --out manuscript.md` | Combine front matter, chapters, and back matter into a single manuscript markdown file |
+| `story build [path] --format epub` | Build disposable markdown, EPUB, DOCX, or Shunn manuscript artifacts in `dist/`; EPUB builds embed the `story.md` `cover` image and `author` |
 
-EPUB and DOCX builds target plain prose: `*italic*` and `**bold**` become italic and bold runs, scene-break lines (`***`, `---`) become a `* * *` separator paragraph, and other markdown structure such as lists or tables is flattened to text. The markdown export keeps chapter text as-is.
+Front and back matter from `matter/` appear in export and every build format except Shunn, which is a submission format. EPUB and DOCX builds target plain prose: `*italic*` and `**bold**` become italic and bold runs, scene-break lines (`***`, `---`) become a `* * *` separator paragraph, and other markdown structure such as blockquotes, lists, or tables is flattened to text. The markdown export keeps chapter text as-is.
 
 `story rename` and `story remove` update entity ids in frontmatter reference fields and in markdown link targets. They never edit prose, so a character called "Port" can be renamed without touching the word "port" in chapter text.
 
@@ -330,6 +331,7 @@ Running **story-init** creates this layout:
 my-story/
 ├── story.md                  # Story bible — title, genre, themes, POV, tense
 ├── style-sheet.md            # Voice, house spellings, and watch words for story prose
+├── matter/                   # Optional front and back matter (dedication, acknowledgments)
 ├── characters/
 │   └── _index.md             # Character registry
 ├── worldbuilding/

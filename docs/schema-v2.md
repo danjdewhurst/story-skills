@@ -28,6 +28,7 @@ continuity/exemptions.md        # optional: decision log for dismissed findings
 glossary/_index.md
 glossary/terms/
 style-sheet.md                  # optional: house style read by story prose
+matter/                         # optional: front and back matter for export and build
 ```
 
 ## Core Rules
@@ -62,6 +63,7 @@ Optional craft fields (hand-edit only — no CLI flags; edit `story.md` directly
 - `season-goal` - one-sentence season/volume goal for serial fiction (see the `genre-craft` skill).
 - `target-words` - positive integer word-count target for MG/YA category contracts (see the `genre-craft` skill).
 - `draft-mode` - `discovered` marks a discovery-drafted project; per-chapter `mode:` tracks mixed projects (see the `discovery-drafting` skill).
+- `cover` - path, relative to the project root, to a `.jpg`, `.jpeg`, `.png`, `.gif`, or `.webp` cover image inside the project. `story validate` errors when the file is missing or outside the project; `story build --format epub` embeds it as the EPUB cover. `author` also becomes the EPUB `dc:creator`.
 
 Every link needs a backlink: a book that `follows` another must appear in that book's `precedes`, and the reverse. `story links` checks that each path is a story project, has the backlink, and uses the same `series` id. `story series` orders the linked books by chronology and checks the canon they share. It errors when two linked books share a `book-number`, or when a character who is `deceased` in an earlier book is not deceased in a later one, or when a later book lists that character in a chapter or scene cast. It also errors when a later book has a character learn a `fact` (a `knowledge-state` entry with `learned-in`) that the same character already knows in an earlier book. It warns when a shared entity's name changes between books, or when an artifact destroyed in an earlier book has a different status in a later one. It also reports parse errors in linked books as errors.
 
@@ -150,6 +152,17 @@ Clock and time: `story continuity` checks timestamps only when scenes or chapter
 ### Glossary
 
 Glossary terms require `term` and `category`, plus optional `aliases`.
+
+### Front And Back Matter
+
+Files in `matter/` hold the pages around the chapters: dedication, epigraph, copyright page, acknowledgments, author's note, about the author, also-by. Create them with `story add matter "Dedication"` (front by default) or `story add matter "Acknowledgments" --placement back`.
+
+- `title` (required) labels the page in the EPUB table of contents and, unless `heading: false`, is printed as its heading.
+- `placement` (required) is `front` or `back`.
+- `order` is a non-negative integer; pages sort by `order`, then by id. `story add matter` numbers new pages after the last one in their placement.
+- `heading` defaults to `true`. Set `heading: false` for pages that print no title, such as a dedication or epigraph.
+
+The body is the page text; a leading `# Heading` line is dropped, like a chapter's. `story export` and every `story build` format except Shunn place front matter after the book title and back matter after the last chapter. Shunn manuscripts are for submission and leave matter out. A matter file with no text is left out of export and build, and `story validate` warns about it.
 
 ### Style Sheet
 
