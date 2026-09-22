@@ -63,7 +63,8 @@
         "exemptions": { "type": "array", "items": { "$ref": "#/$defs/exemption" } }
       }
     },
-    "glossary": { "type": "array", "items": { "$ref": "#/$defs/term" } }
+    "glossary": { "type": "array", "items": { "$ref": "#/$defs/term" } },
+    "styleSheet": { "$ref": "#/$defs/styleSheet" }
   },
   "$defs": {
     "id": {
@@ -290,6 +291,28 @@
         "knows": { "type": "string" },
         "fact": { "$ref": "#/$defs/id" },
         "learned-in": { "type": "string" }
+      }
+    },
+    "styleSheet": {
+      "type": "object",
+      "description": "Optional style-sheet.md frontmatter: house spelling and usage decisions enforced by story prose.",
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "style-sheet" },
+        "dialect": { "enum": ["british", "american", "unspecified"] },
+        "preferred": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["use", "avoid"],
+            "properties": {
+              "use": { "type": "string", "minLength": 1 },
+              "avoid": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "watch-words": { "$ref": "#/$defs/stringList" },
+        "allow-words": { "$ref": "#/$defs/stringList" }
       }
     },
     "exemption": {

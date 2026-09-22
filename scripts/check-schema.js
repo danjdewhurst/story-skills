@@ -41,7 +41,8 @@ function setPath(target, dotted, value) {
 // The schema describes one aggregate document rather than individual files:
 // story.md frontmatter under `story`, each entity directory as an array of
 // frontmatter objects carrying their filename-derived `id`, and the durable
-// state from continuity/state.md and continuity/exemptions.md under `continuity`.
+// state from continuity/state.md and continuity/exemptions.md under `continuity`,
+// plus the optional style-sheet.md frontmatter under `styleSheet`.
 export function buildSchemaDocument(root) {
   const document = {
     story: readFrontmatter(path.join(root, "story.md")),
@@ -82,6 +83,12 @@ export function buildSchemaDocument(root) {
     if (exemptions !== undefined) {
       document.continuity.exemptions = exemptions;
     }
+  }
+
+  // The style sheet is optional, so the schema only sees it when present.
+  const styleSheetPath = path.join(root, "style-sheet.md");
+  if (fs.existsSync(styleSheetPath)) {
+    document.styleSheet = readFrontmatter(styleSheetPath);
   }
 
   return document;
