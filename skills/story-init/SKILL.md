@@ -34,6 +34,8 @@ If the Story CLI is available, prefer using it to create the starter project, th
 story init "{Title}" --genre "{genre}" --sub-genre "{sub-genre}" --setting-era "{era}" --pov "{pov-style}" --tense "{tense}" --synopsis "{synopsis}" --theme "{theme-1}" --theme "{theme-2}"
 ```
 
+The title must contain ASCII letters or digits, because the story id recorded in every registry is derived from it (`--dir` sets only the directory). `init` refuses an existing directory unless you pass `--force`; with `--force` it only creates missing starter files and never overwrites an existing `story.md`, registry, timeline, or `continuity/state.md`.
+
 If `story` is not installed, use `bun run story --` from the Story Skills repository checkout or the bundled fallback `node ../story-maintenance/scripts/story.js` with the same arguments, resolving the path relative to this skill folder:
 
 ```shell

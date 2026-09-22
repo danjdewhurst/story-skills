@@ -70,7 +70,9 @@ Options:
                             repeatable
   --precedes <path>         Init a prequel set before this story project;
                             repeatable
-  --force                   Allow init to overwrite starter files
+  --force                   Let init/import use an existing directory: add
+                            missing starter files, never overwrite existing ones;
+                            import also replaces every chapter-NN.md file
   --write                   Update chapter word-count frontmatter
   --path <path>             Project root for every command except init and import
   --out <file>              Output path for export/build/synopsis

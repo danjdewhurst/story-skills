@@ -58,7 +58,7 @@ describe("clue ledger", () => {
     expect(result.kind).toBe("clue");
     expect(result.id).toBe("the-silver-locket");
     const raw = fs.readFileSync(result.file, "utf8");
-    expect(raw).toContain("status: planned");
+    expect(raw).toContain("status: planted");
     expect(raw).toContain("planted: chapter-01");
     expect(raw).toContain("payoff: chapter-03");
     expect(raw).toContain("significance-delayed: false");
