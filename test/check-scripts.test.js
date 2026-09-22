@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { checkCoverage, parseLcov } from "../scripts/check-coverage.js";
 import { collectResult, compareFindings } from "../scripts/check-examples.js";
-import { checkMarketplaces, checkSkillFrontmatter, checkTemplateStoryRef, expectEqual } from "../scripts/check-metadata.js";
+import { checkMarketplaces, checkSkillFrontmatter, checkTemplateStoryRef, checkVersionModule, expectEqual } from "../scripts/check-metadata.js";
 import { checkFixtureSkill } from "../scripts/check-evals.js";
 import { PREFLIGHT } from "../scripts/release.js";
 import { spawnSync } from "node:child_process";
@@ -295,6 +295,15 @@ describe("github workflows", () => {
       "templates/github/story-checks.yml STORY_REF mismatch: expected v0.5.0, got v9.9.9",
       "templates/github/draft-next-chapter.yml is missing STORY_REF"
     ]);
+  });
+
+  test("checkVersionModule matches src/version.js to the package version", () => {
+    const packageJson = JSON.parse(readRepo("package.json"));
+    expect(checkVersionModule([], packageJson.version, readRepo("src/version.js"))).toEqual([]);
+    expect(checkVersionModule([], "0.5.0", 'export const VERSION = "0.4.0";\n')).toEqual([
+      "src/version.js VERSION mismatch: expected 0.5.0, got 0.4.0"
+    ]);
+    expect(checkVersionModule([], "0.5.0", "")).toEqual(["src/version.js is missing export const VERSION"]);
   });
 
   test("checkFixtureSkill accepts real skills and flags typos", () => {

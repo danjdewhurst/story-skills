@@ -6,6 +6,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const VERSION_FILES = ["package.json", ".codex-plugin/plugin.json", ".claude-plugin/plugin.json"];
+const VERSION_MODULE = "src/version.js";
+const FALLBACK_FILE = "skills/story-maintenance/scripts/story.js";
 const STORY_REF_FILES = ["templates/github/story-checks.yml", "templates/github/draft-next-chapter.yml"];
 const RELEASE_BRANCH = "main";
 // test:coverage gates src line and function coverage, then the fallback bundle.
@@ -126,6 +128,14 @@ export function updateVersionFiles(root, nextVersion) {
     fs.writeFileSync(filePath, replaceVersion(fs.readFileSync(filePath, "utf8"), nextVersion));
     updated.push(relativePath);
   }
+  const modulePath = path.join(root, VERSION_MODULE);
+  const moduleSource = fs.readFileSync(modulePath, "utf8");
+  const versionPattern = /^(export const VERSION = ")[^"]*(";)/m;
+  if (!versionPattern.test(moduleSource)) {
+    throw new Error(`No VERSION export found in ${VERSION_MODULE}.`);
+  }
+  fs.writeFileSync(modulePath, moduleSource.replace(versionPattern, `$1${nextVersion}$2`));
+  updated.push(VERSION_MODULE);
   for (const relativePath of STORY_REF_FILES) {
     const filePath = path.join(root, relativePath);
     const text = fs.readFileSync(filePath, "utf8");
@@ -143,6 +153,8 @@ function writeVersions(nextVersion) {
   for (const relativePath of updateVersionFiles(repoRoot, nextVersion)) {
     console.log(`Bumped ${relativePath} to ${nextVersion}`);
   }
+  // The bundled fallback inlines src/version.js, so rebuild it with the bump.
+  run("bun", ["run", "build:fallback"], { inherit: true });
   run("bun", ["run", "check:metadata"], { inherit: true });
 }
 
@@ -161,12 +173,12 @@ function main(argv) {
 
   preflight(nextVersion, tag);
   if (dryRun) {
-    console.log(`Dry run: would bump ${VERSION_FILES.join(", ")}, commit, tag ${tag}, push, and create the GitHub release.`);
+    console.log(`Dry run: would bump ${[...VERSION_FILES, VERSION_MODULE].join(", ")}, rebuild the fallback, commit, tag ${tag}, push, and create the GitHub release.`);
     return;
   }
 
   writeVersions(nextVersion);
-  git("add", ...VERSION_FILES, ...STORY_REF_FILES);
+  git("add", ...VERSION_FILES, VERSION_MODULE, FALLBACK_FILE, ...STORY_REF_FILES);
   git("commit", "-m", `chore: release ${nextVersion}`);
   git("tag", "-a", tag, "-m", tag);
   git(...releasePushArgs(tag));

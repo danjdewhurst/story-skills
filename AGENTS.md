@@ -70,8 +70,9 @@ For published changes, keep version metadata aligned across:
 - `package.json`
 - `.codex-plugin/plugin.json`
 - `.claude-plugin/plugin.json`
+- `src/version.js` (printed by `story --version`, inlined into the bundled fallback)
 
-Do not bump these by hand. `bun run release <patch|minor|major|X.Y.Z>` bumps all three, runs the CI checks, commits `chore: release X.Y.Z`, tags `vX.Y.Z`, pushes `main` and the tag, and creates the GitHub release. `--dry-run` runs the checks and stops before any change. Marketplace entries should remain unversioned unless the existing release process changes.
+Do not bump these by hand. `bun run release <patch|minor|major|X.Y.Z>` bumps all four, rebuilds the fallback, runs the CI checks, commits `chore: release X.Y.Z`, tags `vX.Y.Z`, pushes `main` and the tag, and creates the GitHub release. `--dry-run` runs the checks and stops before any change. Marketplace entries should remain unversioned unless the existing release process changes.
 
 ## Generated And Local Artifacts
 

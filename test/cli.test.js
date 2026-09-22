@@ -220,6 +220,16 @@ describe("cli", () => {
     expect(result.err).toContain("is not a story project: missing story.md");
   });
 
+  test("prints the package version", () => {
+    const cwd = makeTempDir();
+    const { version } = JSON.parse(fs.readFileSync(path.resolve(import.meta.dir, "..", "package.json"), "utf8"));
+    for (const argv of [["--version"], ["-v"], ["validate", "-v"]]) {
+      expect(invoke(cwd, argv)).toEqual({ code: 0, out: `${version}\n`, err: "" });
+    }
+    expect(parseArgs(["--version", "--help"]).options).toEqual({ version: true, help: true });
+    expect(invoke(cwd, ["--help"]).out).toContain("-v, --version");
+  });
+
   test("prints help and handles unknown commands", () => {
     const cwd = makeTempDir();
     expect(invoke(cwd, []).out).toContain("Usage: story");

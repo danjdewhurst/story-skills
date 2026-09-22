@@ -13,6 +13,15 @@ export function expectEqual(failures, label, expected, actual) {
   return failures;
 }
 
+export function checkVersionModule(failures, packageVersion, source) {
+  const match = /export const VERSION = "([^"]+)";/.exec(source);
+  if (!match) {
+    failures.push("src/version.js is missing export const VERSION");
+    return failures;
+  }
+  return expectEqual(failures, "src/version.js VERSION", packageVersion, match[1]);
+}
+
 export function checkSkillFrontmatter(failures, skillsDir, readFile) {
   for (const skillName of fs.readdirSync(skillsDir).sort()) {
     const skillDir = path.join(skillsDir, skillName);
@@ -125,6 +134,8 @@ function main() {
   expectEqual(failures, "package.json name", packageJson.name, claudePlugin.name);
   expectEqual(failures, "package/plugin version", packageJson.version, codexPlugin.version);
   expectEqual(failures, "package/plugin version", packageJson.version, claudePlugin.version);
+
+  checkVersionModule(failures, packageJson.version, fs.readFileSync(path.join(repoRoot, "src", "version.js"), "utf8"));
 
   if (codexPlugin.skills !== "./skills/") {
     failures.push(".codex-plugin/plugin.json skills must point to ./skills/");
