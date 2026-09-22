@@ -334,3 +334,44 @@ describe("import source hardening", () => {
     expect(() => importManuscript({ source: "many", title: "Many", cwd })).toThrow("Too many import files");
   });
 });
+
+describe("import ordering, encoding, and headings", () => {
+  test("orders directory files numerically, not by plain string sort", () => {
+    const cwd = makeTempDir();
+    const source = path.join(cwd, "drafts");
+    fs.mkdirSync(source);
+    for (const number of [1, 2, 10, 11]) {
+      fs.writeFileSync(path.join(source, `chapter-${number}.md`), `Part ${number} prose.`, "utf8");
+    }
+
+    const result = importManuscript({ source: "drafts", title: "Parts", cwd, dir: "out" });
+
+    expect(scanProject(result.root).chapters.map((chapter) => chapter.title)).toEqual([
+      "Chapter 1", "Chapter 2", "Chapter 10", "Chapter 11"
+    ]);
+  });
+
+  test("strips a UTF-8 BOM before removing source frontmatter", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "m.md"), "\uFEFF---\nauthor: x\n---\n# Chapter 1: Dawn\n\nMorning came.\n", "utf8");
+
+    const result = importManuscript({ source: "m.md", title: "Bom", cwd });
+
+    expect(result.chapters).toBe(1);
+    const chapters = scanProject(result.root).chapters;
+    expect(chapters.map((chapter) => chapter.title)).toEqual(["Dawn"]);
+    expect(fs.readFileSync(path.join(result.root, "chapters", "chapter-01.md"), "utf8")).not.toContain("author: x");
+  });
+
+  test("keeps title words made of Roman-numeral letters", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "book.md"), [
+      "## Chapter Civil War", "", "One.", "",
+      "## Chapter Ill Omens", "", "Two.", "",
+      "## Chapter Vivid Dreams", "", "Three.", "",
+      "## Chapter IV: Dawn", "", "Four."
+    ].join("\n"), "utf8");
+    const result = importManuscript({ source: "book.md", title: "Numerals", cwd });
+    expect(scanProject(result.root).chapters.map((chapter) => chapter.title)).toEqual(["Civil War", "Ill Omens", "Vivid Dreams", "Dawn"]);
+  });
+});
