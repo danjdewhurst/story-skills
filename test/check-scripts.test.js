@@ -272,6 +272,14 @@ describe("github workflows", () => {
     expect(ci).toContain("node skills/story-maintenance/scripts/story.js");
   });
 
+  test("ci runs the source and fallback CLIs on the lowest supported Node", () => {
+    const ci = readRepo(".github/workflows/ci.yml");
+    const floor = /^>=(\d+)$/.exec(JSON.parse(readRepo("package.json")).engines.node)[1];
+    expect(ci).toMatch(new RegExp(`node: \\[[^\\]]*"${floor}"`));
+    expect(ci).toContain("node scripts/check-examples.js");
+    expect(ci).toContain("node bin/story.js validate");
+  });
+
   test("story templates invoke the deterministic story checks", () => {
     for (const relativePath of ["templates/github/story-checks.yml", "templates/github/draft-next-chapter.yml"]) {
       const template = readRepo(relativePath);
