@@ -4,6 +4,7 @@ import path from "node:path";
 import { checkContinuity, storyDateError, storyTimeError } from "./continuity.js";
 import { FRONTMATTER_PATTERN, parseFrontmatter, replaceFrontmatter, stringifyFrontmatter } from "./frontmatter.js";
 import { chapterProse, escapeRegExp, extractSection, kebabCase, titleCaseSlug, wordCount } from "./markdown.js";
+import { buildTimeline } from "./timeline.js";
 import { analyzeChapter, chapterFindings, proseRules, repeatedPhrases, similarNames } from "./prose.js";
 import { buildSeries, readBookFrontmatter, seriesLinkPath, validateSeriesLinks, withSeriesBacklink } from "./series.js";
 
@@ -1201,6 +1202,19 @@ export function computeWordCounts(root, options = {}) {
   return {
     chapters,
     total: chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0)
+  };
+}
+
+// Read-only chronology, POV balance, and character presence. Parse errors are
+// reported like the other checks; the views never add findings of their own.
+export function storyTimeline(root) {
+  const project = scanProject(root);
+  return {
+    ok: project.fileErrors.length === 0,
+    errors: [...project.fileErrors],
+    warnings: [],
+    totalChapters: project.chapters.length,
+    ...buildTimeline(project)
   };
 }
 

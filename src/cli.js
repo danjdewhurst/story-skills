@@ -2,6 +2,7 @@ import path from "node:path";
 import { importManuscript } from "./import.js";
 import { formatProseReport } from "./prose.js";
 import { formatSeriesReport } from "./series.js";
+import { formatTimeline } from "./timeline.js";
 import { VERSION } from "./version.js";
 import {
   buildBook,
@@ -22,6 +23,7 @@ import {
   removeEntity,
   renameEntity,
   seriesReport,
+  storyTimeline,
   synopsisBook,
   validateLinks,
   validateProject
@@ -41,6 +43,8 @@ Commands:
                     Findings matching continuity/exemptions.md are
                     reported as dismissed
   knowledge <id>    List what a character knew at a chapter; requires --at
+  timeline [path]    Show scenes in story-time order (marking scenes told
+                    out of order), POV balance, and character presence
   prose [path]       Lint chapter prose: filter words, adverbs, dialogue
                     tags, echoes, rhythm, repeated phrases, similar
                     names, and style-sheet.md spellings and watch words
@@ -243,6 +247,13 @@ export function runCli(argv, io) {
       const report = seriesReport(root);
       io.stdout.write(formatSeriesReport(report));
       return reportResult(io, report, "Series is consistent", "Series check failed");
+    }
+
+    if (command === "timeline") {
+      const root = resolveRoot(cwd, parsed, command);
+      const timeline = storyTimeline(root);
+      io.stdout.write(formatTimeline(timeline, timeline.totalChapters));
+      return reportResult(io, timeline, "Timeline built", "Timeline failed");
     }
 
     if (command === "prose") {
