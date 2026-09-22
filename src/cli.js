@@ -121,6 +121,8 @@ Options:
   --acts <a,b>              Comma-separated acts for add arc; repeatable
   --placement <front|back>  Placement for add matter (default front)
   --order <n>               Order within its placement for add matter
+  --source <text>           Source for add research; repeatable
+  --used-in <chapter-id>    Chapter that relies on add research; repeatable
   -h, --help                Show this help
   -v, --version             Show the story CLI version
 
@@ -380,7 +382,8 @@ const VALUE_OPTIONS = new Set([
   "introduced", "resolved", "planted", "payoff",
   "category", "alias", "aliases",
   "region", "population", "controlled-by",
-  "prevalence", "acts", "act", "placement", "order"
+  "prevalence", "acts", "act", "placement", "order",
+  "source", "sources", "used-in"
 ]);
 
 // Options that collect every value when repeated. Any other option keeps the
@@ -389,7 +392,8 @@ const REPEATABLE_OPTIONS = new Set([
   "theme", "themes", "follows", "precedes",
   "location", "locations", "character", "characters",
   "mention", "mentions", "member", "members",
-  "arc", "arcs", "alias", "aliases", "acts", "act"
+  "arc", "arcs", "alias", "aliases", "acts", "act",
+  "source", "sources", "used-in"
 ]);
 
 function isKnownOptionToken(token) {

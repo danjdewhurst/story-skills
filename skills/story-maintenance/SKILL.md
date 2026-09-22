@@ -41,6 +41,7 @@ story doctor .
 story migrate .
 story add character "Name"
 story add matter "Dedication"
+story add research "Tidal bore timing" --source "Tide tables 2024" --used-in chapter-03
 story add matter "Acknowledgments" --placement back
 story rename character old-id "New Name"
 story remove promise old-promise
@@ -72,6 +73,7 @@ Use:
 - `migrate` when a project has an older schema version or missing v2 paths
 - `add`, `rename`, and `remove` for deterministic entity file operations when they fit the requested change
 - `add matter` when the user wants a dedication, epigraph, copyright page, acknowledgments, author's note, about-the-author, or also-by page. Pages live in `matter/` with `title`, `placement` (`front` or `back`), `order`, and `heading` (set `heading: false` for a dedication or epigraph). Write the page text directly in the file; unwritten pages are left out of builds and `validate` warns about them. Never invent acknowledgments, biographical facts, or copyright details: ask the user for them
+- `add research` when the story relies on a real-world fact: notes live in `research/` with `status` (`open`, `verified`, `disputed`), whole-citation `sources`, and `used-in` chapter ids; `validate` warns when a final chapter relies on open or disputed research. See the `research` skill
 - `export` only when the user asks for a combined manuscript at a specific path; it includes front and back matter
 - `build` when the user asks to build the book artifact; supports markdown, EPUB, and DOCX outputs in `dist/`, with front and back matter. For EPUB, set `cover: path/to/cover.jpg` (inside the project) and `author` in `story.md` to embed a cover image and creator
 - `build --format shunn` when the user wants Shunn manuscript-format markdown: title page, contact block, word count, chapter breaks, and double-spaced prose; `story build . --format docx --shunn` applies the same Shunn formatting to the DOCX output

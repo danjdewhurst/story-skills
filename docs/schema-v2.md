@@ -29,6 +29,7 @@ glossary/_index.md
 glossary/terms/
 style-sheet.md                  # optional: house style read by story prose
 matter/                         # optional: front and back matter for export and build
+research/                       # optional: research notes and their registry
 ```
 
 ## Core Rules
@@ -163,6 +164,17 @@ Files in `matter/` hold the pages around the chapters: dedication, epigraph, cop
 - `heading` defaults to `true`. Set `heading: false` for pages that print no title, such as a dedication or epigraph.
 
 The body is the page text; a leading `# Heading` line is dropped, like a chapter's. `story export` and every `story build` format except Shunn place front matter after the book title and back matter after the last chapter. Shunn manuscripts are for submission and leave matter out. A matter file with no text is left out of export and build, and `story validate` warns about it.
+
+### Research Notes
+
+Files in `research/` record the real-world facts the story relies on. Create them with `story add research "Tidal bore timing" --source "..." --used-in chapter-03`; the first note creates `research/_index.md` (frontmatter `type: research-registry`), which `story reindex` keeps current once the folder exists.
+
+- `title` (required).
+- `status` (required) is `open`, `verified`, or `disputed`; `story add research` defaults to `open`.
+- `sources` is a list of citations or URLs, kept whole (commas allowed). `--source` is repeatable.
+- `used-in` lists the chapter ids that rely on the note. `story links` errors on missing chapters, and `story rename` and `story remove` keep the list current.
+
+`story validate` warns when a `final` or `complete` chapter is in the `used-in` list of an `open` or `disputed` note, and when a `verified` note lists no sources. See the `research` skill.
 
 ### Style Sheet
 
