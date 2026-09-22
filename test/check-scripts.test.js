@@ -7,6 +7,9 @@ import { collectResult, compareFindings } from "../scripts/check-examples.js";
 import { checkMarketplaces, checkSkillFrontmatter, checkTemplateStoryRef, expectEqual } from "../scripts/check-metadata.js";
 import { checkFixtureSkill } from "../scripts/check-evals.js";
 import { PREFLIGHT } from "../scripts/release.js";
+import { spawnSync } from "node:child_process";
+import { fillTemplate } from "../evals/run-evals.js";
+import { buildJudgePrompt, parseArgs as parseRunSkillArgs, selectFixtures } from "../evals/run-skill.js";
 
 const repoRoot = path.resolve(import.meta.dir, "..");
 
@@ -306,9 +309,108 @@ describe("github workflows", () => {
     ]);
   });
 
+  test("draft template skips while a draft PR is open and never runs concurrently", () => {
+    const template = readRepo("templates/github/draft-next-chapter.yml");
+    expect(topLevelKeys(template)).toContain("concurrency");
+    expect(template).toContain("cancel-in-progress: false");
+    expect(template).toContain("gh pr list");
+    expect(template).toContain('startswith("draft/")');
+    // Fork PRs cannot suppress drafting.
+    expect(template).toContain("(.isCrossRepository | not)");
+    // Every step after the guard is gated on it, so a skip is a successful no-op.
+    const stepsAfterGuard = template.split("id: guard")[1].split(/\n\s+- name: /).slice(1);
+    expect(stepsAfterGuard.length).toBeGreaterThan(0);
+    for (const step of stepsAfterGuard) {
+      expect(step).toContain("if: steps.guard.outputs.skip != 'true'");
+    }
+  });
+
+  test("draft template prompt commands match the allowed-tools rules", () => {
+    // Resolve ${{ env.X }} expressions the way Actions does before the agent sees them.
+    const raw = readRepo("templates/github/draft-next-chapter.yml");
+    const envValue = (name) => new RegExp(`^  ${name}: "([^"]*)"`, "m").exec(raw)[1];
+    const template = raw.replace(/\$\{\{ env\.(\w+) \}\}/g, (_, name) => envValue(name));
+    const prompt = template.split("prompt: |")[1].split("claude_args:")[0];
+    const allowed = /--allowedTools "([^"]+)"/.exec(template)[1];
+    const bashPrefixes = [...allowed.matchAll(/Bash\(([^)]+)\)/g)].map(([, rule]) => rule.replace(/(:\*| \*)$/, ""));
+    const commands = [...prompt.matchAll(/npx [^`\n]+/g)].map(([command]) => command.trim());
+    expect(commands.length).toBeGreaterThanOrEqual(6);
+    for (const command of commands) {
+      // Claude Code matches rules against the literal command text, so quotes
+      // or shell variables in the prompt would never match an unquoted rule.
+      expect(command).not.toMatch(/["'$]/);
+      expect(bashPrefixes.some((prefix) => command === prefix || command.startsWith(`${prefix} `)), command).toBe(true);
+    }
+  });
+
   test("dependabot keeps pinned actions updated", () => {
     const dependabot = readRepo(".github/dependabot.yml");
     expect(dependabot).toContain("github-actions");
     expect(topLevelKeys(dependabot)).toContain("updates");
+  });
+});
+
+describe("eval scripts", () => {
+  const nodeScript = (script, args) =>
+    spawnSync("node", [path.join(repoRoot, "evals", script), ...args], { cwd: repoRoot, encoding: "utf8" });
+
+  test("fillTemplate keeps $ patterns literal and never re-scans inserted text", () => {
+    expect(fillTemplate("A {c} B {d}", { c: "x $' $& $$ {d}", d: "DRAFT" })).toBe("A x $' $& $$ {d} B DRAFT");
+    expect(fillTemplate("{a}{missing}", { a: "1" })).toBe("1{missing}");
+  });
+
+  test("judge prompt puts the draft in its own slot", () => {
+    const prompt = buildJudgePrompt("context with {draft} and $'", "THE DRAFT");
+    expect(prompt).toContain("<context>\ncontext with {draft} and $'\n</context>");
+    expect(prompt).toContain("<draft>\nTHE DRAFT\n</draft>");
+  });
+
+  test("run-skill selects every fixture when none are named", () => {
+    // Mirrors `node evals/run-skill.js --no-judge --out DIR`: argv.slice(2)
+    // must not carry the script path into the fixture filter.
+    const opts = parseRunSkillArgs(["--no-judge", "--out", "/tmp/out"]);
+    expect(opts.fixtures).toEqual([]);
+    const { names, unknown } = selectFixtures(opts.fixtures);
+    expect(names.length).toBeGreaterThan(0);
+    expect(unknown).toEqual([]);
+    expect(selectFixtures(["canon-keeping", "no-such-fixture"])).toEqual({ names: ["canon-keeping"], unknown: ["no-such-fixture"] });
+  });
+
+  test("run-skill rejects an unknown fixture name before calling a model", () => {
+    const res = nodeScript("run-skill.js", ["--no-judge", "--out", fs.mkdtempSync(path.join(os.tmpdir(), "story-eval-")), "no-such-fixture"]);
+    expect(res.status).toBe(2);
+    expect(res.stdout).toContain("unknown fixture(s): no-such-fixture");
+  });
+
+  test("compare-outputs reads dir-a and dir-b from the right arguments", () => {
+    const dirA = fs.mkdtempSync(path.join(os.tmpdir(), "story-cmp-a-"));
+    const dirB = fs.mkdtempSync(path.join(os.tmpdir(), "story-cmp-b-"));
+    const res = nodeScript("compare-outputs.js", [dirA, dirB]);
+    // Every fixture lacks drafts, so each is reported missing and the run fails.
+    expect(res.status).toBe(1);
+    expect(res.stdout).toContain("canon-keeping: FAIL (missing draft in one directory)");
+  });
+
+  test("compare-outputs fails when the judge gives no verdict", () => {
+    const dirA = fs.mkdtempSync(path.join(os.tmpdir(), "story-cmp-a-"));
+    const dirB = fs.mkdtempSync(path.join(os.tmpdir(), "story-cmp-b-"));
+    fs.writeFileSync(path.join(dirA, "canon-keeping.md"), "Draft A.", "utf8");
+    fs.writeFileSync(path.join(dirB, "canon-keeping.md"), "Draft B.", "utf8");
+    // No `claude` on PATH, so every judge call returns no verdict.
+    const res = spawnSync(process.execPath, [path.join(repoRoot, "evals", "compare-outputs.js"), dirA, dirB, "canon-keeping"], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      env: { ...process.env, PATH: fs.mkdtempSync(path.join(os.tmpdir(), "story-empty-path-")) }
+    });
+    expect(res.stdout).toContain("canon-keeping: FAIL (judge gave no verdict)");
+    expect(res.status).toBe(1);
+  });
+
+  test("compare-outputs fails when there is nothing to compare", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "story-cmp-"));
+    const unknown = nodeScript("compare-outputs.js", [dir, dir, "no-such-fixture"]);
+    expect(unknown.status).toBe(2);
+    expect(unknown.stdout).toContain("unknown fixture(s): no-such-fixture");
+    expect(nodeScript("compare-outputs.js", [dir]).status).toBe(2);
   });
 });

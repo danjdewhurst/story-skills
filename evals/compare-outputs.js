@@ -12,7 +12,8 @@
  * `run-skill.js --no-skill` and dir-b from `run-skill.js`, to show the
  * skill changes the output for the better and not just differently.
  * Exits non-zero when a fixture has no draft in one directory (a missing
- * draft is a failed comparison, not a tie). Each judge verdict is logged
+ * draft is a failed comparison, not a tie), when nothing was compared, or
+ * when a named fixture does not exist. Each judge verdict is logged
  * raw, with the model and temperature noted; `claude -p` exposes no
  * temperature flag, so judging always uses the CLI defaults.
  *
@@ -27,7 +28,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { FIXTURES_DIR, loadFixture } from "./run-evals.js";
+import { FIXTURES_DIR, fillTemplate, loadFixture } from "./run-evals.js";
 
 const CLAUDE_TIMEOUT_MS = 300_000;
 const MAX_RETRIES = 2;
@@ -102,7 +103,14 @@ export function main(argv) {
     .filter((e) => e.isDirectory())
     .map((e) => e.name)
     .sort();
-  if (only.length > 0) names = names.filter((n) => only.includes(n));
+  if (only.length > 0) {
+    const unknown = only.filter((n) => !names.includes(n));
+    if (unknown.length > 0) {
+      console.log(`unknown fixture(s): ${unknown.join(", ")}`);
+      return 2;
+    }
+    names = names.filter((n) => only.includes(n));
+  }
   if (names.length === 0) {
     console.log("no fixtures selected");
     return 2;
@@ -123,10 +131,7 @@ export function main(argv) {
     const a = fs.readFileSync(aPath, "utf8");
     const b = fs.readFileSync(bPath, "utf8");
     const fill = (first, second) =>
-      PROMPT.replace("{brief}", checks.brief)
-        .replace("{context}", inputText)
-        .replace("{first}", first)
-        .replace("{second}", second);
+      fillTemplate(PROMPT, { brief: checks.brief, context: inputText, first, second });
     const v1 = ask(model, fill(a, b)); // A first
     const v2 = ask(model, fill(b, a)); // B first
     // v1 === "1" means A won when shown first; v2 === "2" means A won when shown second.
@@ -138,14 +143,20 @@ export function main(argv) {
     } else if (bWins) {
       tally.b++;
       console.log(`${name}: B wins both orders`);
+    } else if (v1 === null || v2 === null) {
+      // A missing verdict is a failed comparison, never a tie.
+      missing++;
+      console.log(`${name}: FAIL (judge gave no verdict)`);
     } else {
       tally.tie++;
-      console.log(`${name}: tie (order split or no verdict)`);
+      console.log(`${name}: tie (order split)`);
     }
   }
   console.log(`\nA: ${tally.a}  B: ${tally.b}  ties: ${tally.tie}`);
   console.log("(Never label which directory came from the skill: labelled authorship shifts judge preference.)");
-  return missing > 0 ? 1 : 0;
+  // A missing draft or judge verdict fails the run, and so does a run that
+  // compared nothing, so it is never a vacuous pass.
+  return missing > 0 || tally.a + tally.b + tally.tie === 0 ? 1 : 0;
 }
 
 const invoked =

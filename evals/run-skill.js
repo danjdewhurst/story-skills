@@ -38,7 +38,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { FIXTURES_DIR, loadFixture, checkDraft } from "./run-evals.js";
+import { FIXTURES_DIR, fillTemplate, loadFixture, checkDraft } from "./run-evals.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(here, "..");
@@ -190,20 +190,35 @@ export function parseArgs(argv) {
   return opts;
 }
 
-export function main(argv) {
-  const opts = parseArgs(argv);
-  fs.mkdirSync(opts.out, { recursive: true });
-
-  let names = fs
+export function selectFixtures(requested) {
+  const all = fs
     .readdirSync(FIXTURES_DIR, { withFileTypes: true })
     .filter((e) => e.isDirectory())
     .map((e) => e.name)
     .sort();
-  if (opts.fixtures.length > 0) names = names.filter((n) => opts.fixtures.includes(n));
+  if (requested.length === 0) return { names: all, unknown: [] };
+  return {
+    names: all.filter((n) => requested.includes(n)),
+    unknown: requested.filter((n) => !all.includes(n)),
+  };
+}
+
+export function buildJudgePrompt(inputText, draft) {
+  return fillTemplate(JUDGE_PROMPT, { context: inputText, draft });
+}
+
+export function main(argv) {
+  const opts = parseArgs(argv);
+  const { names, unknown } = selectFixtures(opts.fixtures);
+  if (unknown.length > 0) {
+    console.log(`unknown fixture(s): ${unknown.join(", ")}`);
+    return 2;
+  }
   if (names.length === 0) {
     console.log("no fixtures selected");
     return 2;
   }
+  fs.mkdirSync(opts.out, { recursive: true });
 
   console.log(`model: ${opts.model}${opts.withSkill ? "" : " (no skill baseline)"}`);
   // `claude -p` exposes no temperature or seed flags, so every run uses the
@@ -254,7 +269,7 @@ export function main(argv) {
 
     let claims = [];
     if (opts.judge) {
-      const judgePrompt = JUDGE_PROMPT.replace("{context}", inputText).replace("{draft}", draft);
+      const judgePrompt = buildJudgePrompt(inputText, draft);
       try {
         const raw = claudeText(opts.judgeModel, judgePrompt, BASELINE_HEADER);
         fs.writeFileSync(path.join(opts.out, `${name}.judge-raw.txt`), raw, "utf8");
