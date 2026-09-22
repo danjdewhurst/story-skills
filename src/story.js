@@ -102,19 +102,19 @@ export function createStoryProject(options) {
 
   const storyId = kebabCase(title);
   const cwd = options.cwd ?? process.cwd();
-  const root = path.resolve(cwd, options.dir ?? storyId);
-  if (!options.dir) {
-    if (!storyId) {
-      throw new Error('Cannot derive a directory name from story title "' + title + '": pass --dir to set the target directory explicitly');
-    }
+  if (!storyId) {
+    // Registries record the story id derived from the title, so a title with
+    // no kebab-case form can never validate, even with an explicit --dir.
+    throw new Error('Cannot derive a story id from title "' + title + '": use a title containing ASCII letters or digits');
   }
+  const root = path.resolve(cwd, options.dir ?? storyId);
   // --force overwrites starter files and import --force deletes chapter
   // files, so never follow a symlinked project root to another directory.
   if (lstatIfExists(root)?.isSymbolicLink()) {
     throw new Error(`Refusing to use symlinked project directory: ${root}`);
   }
   if (fs.existsSync(root) && !options.force) {
-    throw new Error(`${root} already exists. Use --force to overwrite starter files.`);
+    throw new Error(`${root} already exists. Use --force to add missing starter files; existing files are never overwritten.`);
   }
 
   if (options.tense !== undefined && options.tense !== "" && !STORY_TENSES.has(options.tense)) {
@@ -137,7 +137,7 @@ export function createStoryProject(options) {
   fs.mkdirSync(path.join(root, "continuity", "clues"), { recursive: true });
   fs.mkdirSync(path.join(root, "glossary", "terms"), { recursive: true });
 
-  writeFile(path.join(root, "story.md"), storyBible({
+  const storyWritten = writeStarterFile(path.join(root, "story.md"), storyBible({
     title,
     storyId,
     series: series.series,
@@ -152,20 +152,22 @@ export function createStoryProject(options) {
     tense: options.tense ?? inherited.tense ?? "past",
     synopsis: options.synopsis ?? "Add a 2-3 sentence synopsis here."
   }), { root });
-  writeFile(path.join(root, "characters", "_index.md"), characterIndex(storyId, [], "", ""), { root });
-  writeFile(path.join(root, "worldbuilding", "_index.md"), worldIndex(storyId, [], [], [], [], ""), { root });
-  writeFile(path.join(root, "plot", "_index.md"), plotIndex(storyId, "three-act", [], "", ""), { root });
-  writeFile(path.join(root, "plot", "timeline.md"), timeline(storyId), { root });
-  writeFile(path.join(root, "chapters", "_index.md"), chapterIndex(storyId, []), { root });
-  writeFile(path.join(root, "scenes", "_index.md"), sceneIndex(storyId, []), { root });
-  writeFile(path.join(root, "continuity", "state.md"), continuityState(storyId), { root });
-  writeFile(path.join(root, "continuity", "questions", "_index.md"), questionIndex(storyId, []), { root });
-  writeFile(path.join(root, "continuity", "promises", "_index.md"), promiseIndex(storyId, []), { root });
-  writeFile(path.join(root, "continuity", "clues", "_index.md"), clueIndex(storyId, []), { root });
-  writeFile(path.join(root, "glossary", "_index.md"), glossaryIndex(storyId, []), { root });
+  writeStarterFile(path.join(root, "characters", "_index.md"), characterIndex(storyId, [], "", ""), { root });
+  writeStarterFile(path.join(root, "worldbuilding", "_index.md"), worldIndex(storyId, [], [], [], [], ""), { root });
+  writeStarterFile(path.join(root, "plot", "_index.md"), plotIndex(storyId, "three-act", [], "", ""), { root });
+  writeStarterFile(path.join(root, "plot", "timeline.md"), timeline(storyId), { root });
+  writeStarterFile(path.join(root, "chapters", "_index.md"), chapterIndex(storyId, []), { root });
+  writeStarterFile(path.join(root, "scenes", "_index.md"), sceneIndex(storyId, []), { root });
+  writeStarterFile(path.join(root, "continuity", "state.md"), continuityState(storyId), { root });
+  writeStarterFile(path.join(root, "continuity", "questions", "_index.md"), questionIndex(storyId, []), { root });
+  writeStarterFile(path.join(root, "continuity", "promises", "_index.md"), promiseIndex(storyId, []), { root });
+  writeStarterFile(path.join(root, "continuity", "clues", "_index.md"), clueIndex(storyId, []), { root });
+  writeStarterFile(path.join(root, "glossary", "_index.md"), glossaryIndex(storyId, []), { root });
 
   const linkedBooks = [];
-  for (const book of series.linked) {
+  // An existing story.md is preserved under --force, so only add backlinks
+  // when this run wrote the forward links they must mirror.
+  for (const book of storyWritten ? series.linked : []) {
     const updated = withSeriesBacklink(book.root, book.inverse, root);
     if (updated !== null) {
       writeFile(path.join(book.root, "story.md"), updated, { root: book.root });
@@ -174,6 +176,19 @@ export function createStoryProject(options) {
   }
 
   return { root, storyId, linkedBooks, files: REQUIRED_PATHS.filter((entry) => entry.endsWith(".md")) };
+}
+
+// Writes a scaffold file only when nothing exists at the path, so `init
+// --force` fills gaps in an existing project without clobbering user work.
+function writeStarterFile(filePath, contents, options) {
+  if (lstatIfExists(filePath)) {
+    // A preserved file must still sit inside the project, so a symlinked
+    // directory (chapters/, say) cannot redirect later writes elsewhere.
+    assertSafeProjectPath(filePath, options.root);
+    return false;
+  }
+  writeFile(filePath, contents, options);
+  return true;
 }
 
 // Resolves --follows/--precedes against the working directory, confirms each
@@ -2273,7 +2288,7 @@ How and when this should resolve.
 function promiseFile(title, options) {
   return `${stringifyFrontmatter({
     title,
-    status: options.status ?? "planned",
+    status: options.status ?? plantedDefaultStatus(options),
     planted: options.planted ?? "",
     payoff: options.payoff ?? "",
     arcs: normalizeList(options.arcs ?? options.arc, []),
@@ -2294,10 +2309,16 @@ Keep planted and payoff chapters current.
 `;
 }
 
+// A promise or clue created with --planted is already on the page, so its
+// default status follows the chapter rather than contradicting it.
+function plantedDefaultStatus(options) {
+  return String(options.planted ?? "").trim() !== "" ? "planted" : "planned";
+}
+
 function clueFile(title, options) {
   return `${stringifyFrontmatter({
     title,
-    status: options.status ?? "planned",
+    status: options.status ?? plantedDefaultStatus(options),
     planted: options.planted ?? "",
     payoff: options.payoff ?? "",
     "significance-delayed": options["significance-delayed"] ?? false,
@@ -2349,6 +2370,7 @@ function nextSceneNumber(project, chapter) {
 function ensureDirectory(directory, changed, root) {
   if (!fs.existsSync(directory)) {
     assertLexicallyInsideRoot(directory, root);
+    assertExistingAncestorInsideRoot(directory, root);
     fs.mkdirSync(directory, { recursive: true });
     assertSafeProjectDirectory(directory, root);
     changed.push(directory);
@@ -2862,9 +2884,12 @@ const SCENE_BREAK_PATTERN = /^([*_-])( ?\1){2,}$/;
 
 function markdownParagraphs(markdown) {
   const paragraphs = [];
+  // Normalize CRLF and treat whitespace-only lines as blank, matching
+  // CommonMark paragraph breaks.
   for (const paragraph of markdown
-    .replace(/^#+\s+/gm, "")
-    .split(/\n{2,}/)) {
+    .replace(/\r\n?/g, "\n")
+    .replace(/^#+[ \t]+/gm, "")
+    .split(/\n[ \t]*\n\s*/)) {
     const trimmed = paragraph.replace(/\s+/g, " ").trim();
     if (trimmed) {
       paragraphs.push(SCENE_BREAK_PATTERN.test(trimmed) ? "* * *" : trimmed);
@@ -3198,6 +3223,7 @@ function prepareWriteTarget(filePath, root) {
   const target = path.resolve(filePath);
   if (root) {
     assertLexicallyInsideRoot(target, root);
+    assertExistingAncestorInsideRoot(path.dirname(target), root);
   }
 
   fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -3244,6 +3270,31 @@ function assertSafeProjectParent(filePath, root) {
   const parentReal = fs.realpathSync(path.dirname(path.resolve(filePath)));
   if (!isPathInside(rootReal, parentReal)) {
     throw new Error(`Refusing to access project path outside root: ${filePath}`);
+  }
+}
+
+// Resolves the nearest existing ancestor of a path that may not exist yet and
+// confirms it stays inside the root, so a symlinked intermediate directory
+// cannot make a recursive mkdir create directories outside the project.
+function assertExistingAncestorInsideRoot(target, root) {
+  let current = path.resolve(target);
+  while (!lstatIfExists(current)) {
+    const parent = path.dirname(current);
+    if (parent === current) {
+      break;
+    }
+    current = parent;
+  }
+  let rootReal;
+  let currentReal;
+  try {
+    rootReal = fs.realpathSync(path.resolve(root));
+    currentReal = fs.realpathSync(current);
+  } catch {
+    throw new Error(`Refusing to access project path outside root: ${target}`);
+  }
+  if (!isPathInside(rootReal, currentReal)) {
+    throw new Error(`Refusing to access project path outside root: ${target}`);
   }
 }
 
@@ -3331,7 +3382,7 @@ function validateStoryFrontmatter(project, errors) {
     requireScalar(data, "season-goal", "story.md", errors);
   }
   if (data["target-words"] !== undefined) {
-    requireInteger(data, "target-words", "story.md", errors);
+    requireInteger(data, "target-words", "story.md", errors, 1);
   }
   if (data["draft-mode"] !== undefined) {
     requireScalar(data, "draft-mode", "story.md", errors);
@@ -3513,7 +3564,7 @@ function validateChapters(project, errors) {
       requireScalar(data, "pov", label, errors);
     }
     if (data["word-count"] !== undefined) {
-      requireInteger(data, "word-count", label, errors);
+      requireInteger(data, "word-count", label, errors, 0);
     }
     if (data.date !== undefined) {
       requireScalar(data, "date", label, errors);
@@ -3634,7 +3685,7 @@ function validateContinuityState(project, errors) {
   requireFields(data, ["type", "story", "current-chapter"], label, errors);
   requireScalar(data, "type", label, errors);
   requireScalar(data, "story", label, errors);
-  requireInteger(data, "current-chapter", label, errors);
+  requireInteger(data, "current-chapter", label, errors, 0);
   validateObjectArray(data, "character-state", label, errors);
   validateObjectArray(data, "object-state", label, errors);
   validateObjectArray(data, "knowledge-state", label, errors);
@@ -3782,9 +3833,14 @@ function requireArray(data, field, label, errors) {
   }
 }
 
-function requireInteger(data, field, label, errors) {
-  if (data[field] !== undefined && !Number.isInteger(data[field])) {
+function requireInteger(data, field, label, errors, minimum) {
+  if (data[field] === undefined) {
+    return;
+  }
+  if (!Number.isInteger(data[field])) {
     errors.push(`${label} frontmatter field ${field} must be an integer`);
+  } else if (minimum !== undefined && data[field] < minimum) {
+    errors.push(`${label} frontmatter field ${field} must be at least ${minimum}`);
   }
 }
 

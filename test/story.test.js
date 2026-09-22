@@ -1881,14 +1881,12 @@ describe("review-findings hardening", () => {
     expect(fs.readFileSync(path.join(root, "plot", "_index.md"), "utf8")).toContain("three-act");
   });
 
-  test("createStoryProject rejects titles with no usable directory name", () => {
+  test("createStoryProject rejects titles with no usable story id", () => {
     const cwd = makeTempDir();
-    expect(() => createStoryProject({ title: "!!!", cwd })).toThrow("--dir");
     const before = fs.readdirSync(cwd);
-    expect(() => createStoryProject({ title: "!!!", cwd })).toThrow("Cannot derive a directory name");
+    expect(() => createStoryProject({ title: "!!!", cwd })).toThrow("Cannot derive a story id");
+    expect(() => createStoryProject({ title: "!!!", cwd, dir: "punctuated" })).toThrow("Cannot derive a story id");
     expect(fs.readdirSync(cwd)).toEqual(before);
-    const explicit = createStoryProject({ title: "!!!", cwd, dir: "punctuated" });
-    expect(explicit.root).toBe(path.join(cwd, "punctuated"));
   });
 
   test("oversized entity files surface as scan errors instead of being read", () => {

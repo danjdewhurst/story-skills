@@ -318,7 +318,7 @@ Most writers don't start from a blank page. `story import` reverse-engineers a S
 story import draft.md --title "The Lost Coast" --genre mystery
 ```
 
-It splits the manuscript on chapter headings (or imports a directory of chapter files), creates the full project layout with accurate word counts and registries, and prints recurring proper-name candidates so an agent can follow up with `story add character` and `story add location` to build out the bible.
+It splits the manuscript on chapter headings (or imports a directory of chapter files), creates the full project layout with accurate word counts and registries, and prints recurring proper-name candidates so an agent can follow up with `story add character` and `story add location` to build out the bible. Files in a directory import in natural name order (`chapter-2` before `chapter-10`). `--force` lets an import reuse an existing directory: it replaces every `chapter-NN.md` file in `chapters/`, so stale chapters from an earlier import are removed.
 
 ## 📁 Project Structure
 

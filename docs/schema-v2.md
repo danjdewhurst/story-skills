@@ -59,7 +59,7 @@ Optional craft fields (hand-edit only — no CLI flags; edit `story.md` directly
 - `author` - author name, used on the Shunn title page by `story build --format shunn`.
 - `contact` - contact block lines for the Shunn title page.
 - `season-goal` - one-sentence season/volume goal for serial fiction (see the `genre-craft` skill).
-- `target-words` - integer word-count target for MG/YA category contracts (see the `genre-craft` skill).
+- `target-words` - positive integer word-count target for MG/YA category contracts (see the `genre-craft` skill).
 - `draft-mode` - `discovered` marks a discovery-drafted project; per-chapter `mode:` tracks mixed projects (see the `discovery-drafting` skill).
 
 Every link needs a backlink: a book that `follows` another must appear in that book's `precedes`, and the reverse. `story links` checks that each path is a story project, has the backlink, and uses the same `series` id. `story series` orders the linked books by chronology and checks the canon they share. It errors when two linked books share a `book-number`, or when a character who is `deceased` in an earlier book is not deceased in a later one, or when a later book lists that character in a chapter or scene cast. It also errors when a later book has a character learn a `fact` (a `knowledge-state` entry with `learned-in`) that the same character already knows in an earlier book. It warns when a shared entity's name changes between books, or when an artifact destroyed in an earlier book has a different status in a later one. It also reports parse errors in linked books as errors.
@@ -99,7 +99,7 @@ Optional: `mice-threads`, the MICE threads the arc carries (`milieu`, `inquiry`,
 
 ### Chapters And Scenes
 
-Chapters require `title`, `number`, and `status`; they may list a `pov` character and a `word-count` maintained by `story wordcount --write`, plus optional reference lists `locations`, `characters`, `mentions`, and `arcs-advanced`.
+Chapters require `title`, `number`, and `status`; they may list a `pov` character and a non-negative integer `word-count` maintained by `story wordcount --write`, plus optional reference lists `locations`, `characters`, `mentions`, and `arcs-advanced`.
 
 Optional chapter fields:
 
@@ -124,7 +124,7 @@ Optional scene fields:
 
 ### Continuity
 
-`continuity/state.md` stores `current-chapter`, `character-state`, `object-state`, and `knowledge-state`.
+`continuity/state.md` stores `current-chapter` (an integer, 0 or more), `character-state`, `object-state`, and `knowledge-state`.
 
 State entries are lists of mappings checked by `story continuity`:
 
@@ -134,7 +134,7 @@ State entries are lists of mappings checked by `story continuity`:
 
 Questions require `title` and `status`; optional chapter references are `introduced` and `resolved`, plus an optional `characters` list. `status: abandoned` marks a thread cut in discovery drafting; abandoned questions, promises, and clues are skipped by continuity ordering checks.
 
-Promises require `title` and `status`; optional chapter references are `planted` and `payoff`, plus optional `arcs` and `characters` lists.
+Promises require `title` and `status`; optional chapter references are `planted` and `payoff`, plus optional `arcs` and `characters` lists. `story add promise` and `story add clue` default `status` to `planted` when `--planted` is given and to `planned` otherwise; pass `--status` to override.
 
 Clues require `title` and `status`; optional chapter references are `planted` and `payoff`, plus optional `arcs` and `characters` lists. `significance-delayed: true` marks a clue whose meaning only lands later. `story continuity` reuses the promise-ordering machinery on clues: payoff before plant is an error, and a story marked `complete` with `planned` or `planted` clues is an error. The warning for a clue planted three or more chapters ago requires `status: planted`. `story add clue --planted` records the chapter and leaves `status: planned`, so set `status: planted` when the clue is on the page. Create them with `story add clue "Name" --planted chapter-02 --payoff chapter-05`.
 

@@ -1389,17 +1389,15 @@ function createStoryProject(options) {
   }
   const storyId = kebabCase(title);
   const cwd = options.cwd ?? process.cwd();
-  const root = path3.resolve(cwd, options.dir ?? storyId);
-  if (!options.dir) {
-    if (!storyId) {
-      throw new Error('Cannot derive a directory name from story title "' + title + '": pass --dir to set the target directory explicitly');
-    }
+  if (!storyId) {
+    throw new Error('Cannot derive a story id from title "' + title + '": use a title containing ASCII letters or digits');
   }
+  const root = path3.resolve(cwd, options.dir ?? storyId);
   if (lstatIfExists(root)?.isSymbolicLink()) {
     throw new Error(`Refusing to use symlinked project directory: ${root}`);
   }
   if (fs2.existsSync(root) && !options.force) {
-    throw new Error(`${root} already exists. Use --force to overwrite starter files.`);
+    throw new Error(`${root} already exists. Use --force to add missing starter files; existing files are never overwritten.`);
   }
   if (options.tense !== undefined && options.tense !== "" && !STORY_TENSES.has(options.tense)) {
     throw new Error(`Unsupported tense "${options.tense}": expected one of ${[...STORY_TENSES].join(", ")}`);
@@ -1419,7 +1417,7 @@ function createStoryProject(options) {
   fs2.mkdirSync(path3.join(root, "continuity", "promises"), { recursive: true });
   fs2.mkdirSync(path3.join(root, "continuity", "clues"), { recursive: true });
   fs2.mkdirSync(path3.join(root, "glossary", "terms"), { recursive: true });
-  writeFile(path3.join(root, "story.md"), storyBible({
+  const storyWritten = writeStarterFile(path3.join(root, "story.md"), storyBible({
     title,
     storyId,
     series: series.series,
@@ -1434,19 +1432,19 @@ function createStoryProject(options) {
     tense: options.tense ?? inherited.tense ?? "past",
     synopsis: options.synopsis ?? "Add a 2-3 sentence synopsis here."
   }), { root });
-  writeFile(path3.join(root, "characters", "_index.md"), characterIndex(storyId, [], "", ""), { root });
-  writeFile(path3.join(root, "worldbuilding", "_index.md"), worldIndex(storyId, [], [], [], [], ""), { root });
-  writeFile(path3.join(root, "plot", "_index.md"), plotIndex(storyId, "three-act", [], "", ""), { root });
-  writeFile(path3.join(root, "plot", "timeline.md"), timeline(storyId), { root });
-  writeFile(path3.join(root, "chapters", "_index.md"), chapterIndex(storyId, []), { root });
-  writeFile(path3.join(root, "scenes", "_index.md"), sceneIndex(storyId, []), { root });
-  writeFile(path3.join(root, "continuity", "state.md"), continuityState(storyId), { root });
-  writeFile(path3.join(root, "continuity", "questions", "_index.md"), questionIndex(storyId, []), { root });
-  writeFile(path3.join(root, "continuity", "promises", "_index.md"), promiseIndex(storyId, []), { root });
-  writeFile(path3.join(root, "continuity", "clues", "_index.md"), clueIndex(storyId, []), { root });
-  writeFile(path3.join(root, "glossary", "_index.md"), glossaryIndex(storyId, []), { root });
+  writeStarterFile(path3.join(root, "characters", "_index.md"), characterIndex(storyId, [], "", ""), { root });
+  writeStarterFile(path3.join(root, "worldbuilding", "_index.md"), worldIndex(storyId, [], [], [], [], ""), { root });
+  writeStarterFile(path3.join(root, "plot", "_index.md"), plotIndex(storyId, "three-act", [], "", ""), { root });
+  writeStarterFile(path3.join(root, "plot", "timeline.md"), timeline(storyId), { root });
+  writeStarterFile(path3.join(root, "chapters", "_index.md"), chapterIndex(storyId, []), { root });
+  writeStarterFile(path3.join(root, "scenes", "_index.md"), sceneIndex(storyId, []), { root });
+  writeStarterFile(path3.join(root, "continuity", "state.md"), continuityState(storyId), { root });
+  writeStarterFile(path3.join(root, "continuity", "questions", "_index.md"), questionIndex(storyId, []), { root });
+  writeStarterFile(path3.join(root, "continuity", "promises", "_index.md"), promiseIndex(storyId, []), { root });
+  writeStarterFile(path3.join(root, "continuity", "clues", "_index.md"), clueIndex(storyId, []), { root });
+  writeStarterFile(path3.join(root, "glossary", "_index.md"), glossaryIndex(storyId, []), { root });
   const linkedBooks = [];
-  for (const book of series.linked) {
+  for (const book of storyWritten ? series.linked : []) {
     const updated = withSeriesBacklink(book.root, book.inverse, root);
     if (updated !== null) {
       writeFile(path3.join(book.root, "story.md"), updated, { root: book.root });
@@ -1454,6 +1452,14 @@ function createStoryProject(options) {
     }
   }
   return { root, storyId, linkedBooks, files: REQUIRED_PATHS.filter((entry) => entry.endsWith(".md")) };
+}
+function writeStarterFile(filePath, contents, options) {
+  if (lstatIfExists(filePath)) {
+    assertSafeProjectPath(filePath, options.root);
+    return false;
+  }
+  writeFile(filePath, contents, options);
+  return true;
 }
 function resolveSeriesOptions(root, cwd, options) {
   const linked = [];
@@ -3345,7 +3351,7 @@ How and when this should resolve.
 function promiseFile(title, options) {
   return `${stringifyFrontmatter({
     title,
-    status: options.status ?? "planned",
+    status: options.status ?? plantedDefaultStatus(options),
     planted: options.planted ?? "",
     payoff: options.payoff ?? "",
     arcs: normalizeList(options.arcs ?? options.arc, []),
@@ -3365,10 +3371,13 @@ How the story should answer the setup.
 Keep planted and payoff chapters current.
 `;
 }
+function plantedDefaultStatus(options) {
+  return String(options.planted ?? "").trim() !== "" ? "planted" : "planned";
+}
 function clueFile(title, options) {
   return `${stringifyFrontmatter({
     title,
-    status: options.status ?? "planned",
+    status: options.status ?? plantedDefaultStatus(options),
     planted: options.planted ?? "",
     payoff: options.payoff ?? "",
     "significance-delayed": options["significance-delayed"] ?? false,
@@ -3415,6 +3424,7 @@ function nextSceneNumber(project, chapter) {
 function ensureDirectory(directory, changed, root) {
   if (!fs2.existsSync(directory)) {
     assertLexicallyInsideRoot(directory, root);
+    assertExistingAncestorInsideRoot(directory, root);
     fs2.mkdirSync(directory, { recursive: true });
     assertSafeProjectDirectory(directory, root);
     changed.push(directory);
@@ -3842,7 +3852,8 @@ function inlineRuns(text) {
 var SCENE_BREAK_PATTERN = /^([*_-])( ?\1){2,}$/;
 function markdownParagraphs(markdown) {
   const paragraphs = [];
-  for (const paragraph of markdown.replace(/^#+\s+/gm, "").split(/\n{2,}/)) {
+  for (const paragraph of markdown.replace(/\r\n?/g, `
+`).replace(/^#+[ \t]+/gm, "").split(/\n[ \t]*\n\s*/)) {
     const trimmed = paragraph.replace(/\s+/g, " ").trim();
     if (trimmed) {
       paragraphs.push(SCENE_BREAK_PATTERN.test(trimmed) ? "* * *" : trimmed);
@@ -4129,6 +4140,7 @@ function prepareWriteTarget(filePath, root) {
   const target = path3.resolve(filePath);
   if (root) {
     assertLexicallyInsideRoot(target, root);
+    assertExistingAncestorInsideRoot(path3.dirname(target), root);
   }
   fs2.mkdirSync(path3.dirname(target), { recursive: true });
   if (root) {
@@ -4166,6 +4178,27 @@ function assertSafeProjectParent(filePath, root) {
   const parentReal = fs2.realpathSync(path3.dirname(path3.resolve(filePath)));
   if (!isPathInside2(rootReal, parentReal)) {
     throw new Error(`Refusing to access project path outside root: ${filePath}`);
+  }
+}
+function assertExistingAncestorInsideRoot(target, root) {
+  let current = path3.resolve(target);
+  while (!lstatIfExists(current)) {
+    const parent = path3.dirname(current);
+    if (parent === current) {
+      break;
+    }
+    current = parent;
+  }
+  let rootReal;
+  let currentReal;
+  try {
+    rootReal = fs2.realpathSync(path3.resolve(root));
+    currentReal = fs2.realpathSync(current);
+  } catch {
+    throw new Error(`Refusing to access project path outside root: ${target}`);
+  }
+  if (!isPathInside2(rootReal, currentReal)) {
+    throw new Error(`Refusing to access project path outside root: ${target}`);
   }
 }
 function assertLexicallyInsideRoot(filePath, root) {
@@ -4243,7 +4276,7 @@ function validateStoryFrontmatter(project, errors) {
     requireScalar(data, "season-goal", "story.md", errors);
   }
   if (data["target-words"] !== undefined) {
-    requireInteger(data, "target-words", "story.md", errors);
+    requireInteger(data, "target-words", "story.md", errors, 1);
   }
   if (data["draft-mode"] !== undefined) {
     requireScalar(data, "draft-mode", "story.md", errors);
@@ -4411,7 +4444,7 @@ function validateChapters(project, errors) {
       requireScalar(data, "pov", label, errors);
     }
     if (data["word-count"] !== undefined) {
-      requireInteger(data, "word-count", label, errors);
+      requireInteger(data, "word-count", label, errors, 0);
     }
     if (data.date !== undefined) {
       requireScalar(data, "date", label, errors);
@@ -4525,7 +4558,7 @@ function validateContinuityState(project, errors) {
   requireFields(data, ["type", "story", "current-chapter"], label, errors);
   requireScalar(data, "type", label, errors);
   requireScalar(data, "story", label, errors);
-  requireInteger(data, "current-chapter", label, errors);
+  requireInteger(data, "current-chapter", label, errors, 0);
   validateObjectArray(data, "character-state", label, errors);
   validateObjectArray(data, "object-state", label, errors);
   validateObjectArray(data, "knowledge-state", label, errors);
@@ -4660,9 +4693,14 @@ function requireArray(data, field, label, errors) {
     errors.push(`${label} frontmatter field ${field} must be a list`);
   }
 }
-function requireInteger(data, field, label, errors) {
-  if (data[field] !== undefined && !Number.isInteger(data[field])) {
+function requireInteger(data, field, label, errors, minimum) {
+  if (data[field] === undefined) {
+    return;
+  }
+  if (!Number.isInteger(data[field])) {
     errors.push(`${label} frontmatter field ${field} must be an integer`);
+  } else if (minimum !== undefined && data[field] < minimum) {
+    errors.push(`${label} frontmatter field ${field} must be at least ${minimum}`);
   }
 }
 function validateStringArray(data, field, label, errors) {
@@ -5107,7 +5145,9 @@ Options:
                             repeatable
   --precedes <path>         Init a prequel set before this story project;
                             repeatable
-  --force                   Allow init to overwrite starter files
+  --force                   Let init/import use an existing directory: add
+                            missing starter files, never overwrite existing ones;
+                            import also replaces every chapter-NN.md file
   --write                   Update chapter word-count frontmatter
   --path <path>             Project root for every command except init and import
   --out <file>              Output path for export/build/synopsis
