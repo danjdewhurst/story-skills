@@ -91,6 +91,15 @@ story build . --format epub
 story build . --format docx
 ```
 
+Before a real build, add the pages around the chapters and a cover:
+
+```shell
+story add matter "Dedication"
+story add matter "Acknowledgments" --placement back
+```
+
+Write each page's text in its `matter/` file, and set `heading: false` on the dedication so it prints without a title. Add `cover: cover.jpg` and `author: Your Name` to `story.md` so the EPUB carries a cover image and creator. Shunn manuscripts leave matter out.
+
 The `dist/` outputs are disposable build artifacts. The source of truth remains the markdown project.
 
 `story add` rebuilds the registries automatically, so there is no need to run `story reindex` after each add — reindex explicitly only after hand-editing files or renaming outside the CLI.

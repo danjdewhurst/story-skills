@@ -40,6 +40,8 @@ story next .
 story doctor .
 story migrate .
 story add character "Name"
+story add matter "Dedication"
+story add matter "Acknowledgments" --placement back
 story rename character old-id "New Name"
 story remove promise old-promise
 story export . --out manuscript.md
@@ -69,8 +71,9 @@ Use:
 - `doctor` when the user asks what is stale, broken, or inconsistent
 - `migrate` when a project has an older schema version or missing v2 paths
 - `add`, `rename`, and `remove` for deterministic entity file operations when they fit the requested change
-- `export` only when the user asks for a combined manuscript at a specific path
-- `build` when the user asks to build the book artifact; supports markdown, EPUB, and DOCX outputs in `dist/`
+- `add matter` when the user wants a dedication, epigraph, copyright page, acknowledgments, author's note, about-the-author, or also-by page. Pages live in `matter/` with `title`, `placement` (`front` or `back`), `order`, and `heading` (set `heading: false` for a dedication or epigraph). Write the page text directly in the file; unwritten pages are left out of builds and `validate` warns about them. Never invent acknowledgments, biographical facts, or copyright details: ask the user for them
+- `export` only when the user asks for a combined manuscript at a specific path; it includes front and back matter
+- `build` when the user asks to build the book artifact; supports markdown, EPUB, and DOCX outputs in `dist/`, with front and back matter. For EPUB, set `cover: path/to/cover.jpg` (inside the project) and `author` in `story.md` to embed a cover image and creator
 - `build --format shunn` when the user wants Shunn manuscript-format markdown: title page, contact block, word count, chapter breaks, and double-spaced prose; `story build . --format docx --shunn` applies the same Shunn formatting to the DOCX output
 - `knowledge` when the user asks what a character knew at a given chapter: `story knowledge <character-id> --at <chapter-id>` lists knowledge-state entries whose `learned-in` chapter is at or before that chapter, plus entries without `learned-in` as pre-existing knowledge
 - `add clue` when the user plants a new clue: `story add clue "Name" --planted chapter-02 --payoff chapter-05` creates the clue ledger entity in `continuity/clues/` with `status: planned`; omit `--payoff` when the payoff is not yet known, and set `status: planted` when the clue is on the page

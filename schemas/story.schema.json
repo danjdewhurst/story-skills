@@ -29,7 +29,8 @@
         "contact": { "type": "array", "items": { "type": "string" } },
         "season-goal": { "type": "string" },
         "target-words": { "type": "integer", "minimum": 1 },
-        "draft-mode": { "type": "string" }
+        "draft-mode": { "type": "string" },
+        "cover": { "type": "string", "minLength": 1 }
       }
     },
     "characters": { "type": "array", "items": { "$ref": "#/$defs/character" } },
@@ -64,7 +65,8 @@
       }
     },
     "glossary": { "type": "array", "items": { "$ref": "#/$defs/term" } },
-    "styleSheet": { "$ref": "#/$defs/styleSheet" }
+    "styleSheet": { "$ref": "#/$defs/styleSheet" },
+    "matter": { "type": "array", "items": { "$ref": "#/$defs/matter" } }
   },
   "$defs": {
     "id": {
@@ -291,6 +293,18 @@
         "knows": { "type": "string" },
         "fact": { "$ref": "#/$defs/id" },
         "learned-in": { "type": "string" }
+      }
+    },
+    "matter": {
+      "type": "object",
+      "description": "Front or back matter in matter/: dedication, epigraph, acknowledgments, author's note, about the author.",
+      "required": ["id", "title", "placement"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "title": { "type": "string" },
+        "placement": { "enum": ["front", "back"] },
+        "order": { "type": "integer", "minimum": 0 },
+        "heading": { "type": "boolean" }
       }
     },
     "styleSheet": {
