@@ -797,14 +797,15 @@ locations: []
     expect(fs.readFileSync(path.join(created.root, "worldbuilding", "artifacts", "map.md"), "utf8")).toContain("status: lost");
     const keeper = fs.readFileSync(keeperPath, "utf8");
     expect(keeper).toContain("  - character: rival\n    type: rival");
-    expect(keeper).not.toContain("character: lost");
+    // relationships point at characters, so removing the artifact `lost` leaves them alone
+    expect(keeper).toContain("character: lost");
 
     removeEntity(created.root, { kind: "character", id: "rival" });
 
     const chapter = fs.readFileSync(path.join(created.root, "chapters", "chapter-01.md"), "utf8");
     expect(chapter).toContain('pov: ""');
     expect(chapter).toContain("characters:\n  - keeper\n");
-    expect(fs.readFileSync(keeperPath, "utf8")).toContain("relationships: []");
+    expect(fs.readFileSync(keeperPath, "utf8")).toContain("relationships:\n  - character: lost\n    type: ally\nlocations");
   });
 
   test("remove drops object-state rows for a removed artifact", () => {
