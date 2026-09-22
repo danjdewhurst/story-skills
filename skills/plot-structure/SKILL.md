@@ -66,6 +66,7 @@ When adding events:
   - **Chapter:** `Ch {N}` once the event is written (e.g. `Ch 1`), or `-` for backstory and unwritten events
 
 When reviewing the timeline:
+- Run `story timeline .` to see written scenes in story-time order from their `date`/`time` fields, with scenes told out of order marked, and compare it with `plot/timeline.md`
 - Check for chronological consistency
 - Identify pacing issues (too many events clustered, long gaps)
 - Flag arcs that haven't progressed

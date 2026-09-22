@@ -572,7 +572,7 @@ export function storyTimeError(value) {
   return "";
 }
 
-function parseClockDate(value) {
+export function parseClockDate(value) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
   if (!match) {
     return undefined;
@@ -591,7 +591,7 @@ function parseClockDate(value) {
   return { text: value.trim(), days };
 }
 
-function parseClockTime(value) {
+export function parseClockTime(value) {
   const text = value.trim().toLowerCase();
   if (text === "") {
     return undefined;
