@@ -2496,16 +2496,25 @@ function renameEntity(root, options) {
   }
   const markdown = readMarkdown(oldFile, project.root);
   const newId = kind === "chapter" || kind === "scene" ? oldId : kebabCase(name);
+  if (!isKebabId2(newId)) {
+    throw new Error(`Cannot derive a kebab-case id from ${kind} name "${name}"`);
+  }
   const newFile = path3.join(project.root, config.dir, `${newId}.md`);
   assertSafeProjectPath(newFile, project.root);
   if (newFile !== oldFile && fs2.existsSync(newFile)) {
     throw new Error(`${kind} ${newId} already exists`);
   }
   const data = { ...markdown.data, [config.titleField]: name };
-  writeFile(oldFile, replaceFrontmatter(markdown.rawMarkdown, data), { root: project.root });
-  if (newFile !== oldFile) {
-    fs2.renameSync(oldFile, newFile);
-    replaceEntityReferences(project.root, oldId, newId);
+  const retitled = replaceFrontmatter(markdown.rawMarkdown, data);
+  if (newFile === oldFile) {
+    writeFile(oldFile, retitled, { root: project.root });
+  } else {
+    const plan = replaceEntityReferences(project.root, kind, oldId, newId, new Map([[oldFile, retitled]]));
+    const renamedContents = plan.get(oldFile);
+    plan.delete(oldFile);
+    writeFile(newFile, renamedContents, { root: project.root });
+    fs2.rmSync(oldFile);
+    writeReferencePlan(project.root, plan);
   }
   const reindexed = reindexProject(project.root);
   return { kind, oldId, id: newId, file: newFile, changed: [newFile].concat(reindexed.changed) };
@@ -2524,8 +2533,9 @@ function removeEntity(root, options) {
   if (!fs2.existsSync(file)) {
     throw new Error(`${kind} ${id} does not exist`);
   }
+  const plan = removeEntityReferences(project.root, kind, id, new Map([[file, null]]));
   fs2.rmSync(file);
-  removeEntityReferences(project.root, id);
+  writeReferencePlan(project.root, plan);
   const reindexed = reindexProject(project.root);
   return { kind, id, file, changed: [file].concat(reindexed.changed) };
 }
@@ -3374,91 +3384,142 @@ function ensureFile(filePath, contents, changed, root) {
   }
   assertSafeProjectPath(filePath, root);
 }
-var REFERENCE_FIELDS = new Set([
-  "arc",
-  "arcs",
-  "arcs-advanced",
-  "artifact",
-  "chapter",
-  "character",
-  "characters",
-  "controlled-by",
-  "died-in",
-  "introduced",
-  "learned-in",
-  "location",
-  "locations",
-  "members",
-  "mentions",
-  "notable-characters",
-  "owner",
-  "payoff",
-  "planted",
-  "pov",
-  "resolved",
-  "since"
-]);
-var NESTED_IDENTITY_FIELDS = new Set(["artifact", "character"]);
-function replaceEntityReferences(root, oldId, newId) {
-  const pathPattern = new RegExp(`(^|/)${escapeRegExp(oldId)}\\.md$`);
-  rewriteReferences(root, (value) => value === oldId ? newId : value, (body) => body.replace(/\[([^\]]*)\]\(([^)]*)\)/g, (match, label, target) => {
-    if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(target.trim())) {
+var REFERENCE_FIELD_KINDS = {
+  arc: ["arc"],
+  arcs: ["arc"],
+  "arcs-advanced": ["arc"],
+  artifact: ["artifact"],
+  chapter: ["chapter"],
+  character: ["character"],
+  characters: ["character"],
+  "controlled-by": ["faction", "character"],
+  "died-in": ["chapter"],
+  introduced: ["chapter"],
+  "learned-in": ["chapter"],
+  location: ["location"],
+  locations: ["location"],
+  members: ["character"],
+  mentions: ["character", "artifact"],
+  "notable-characters": ["character"],
+  owner: ["character", "faction"],
+  payoff: ["chapter"],
+  planted: ["chapter"],
+  pov: ["character"],
+  resolved: ["chapter"],
+  since: ["chapter"]
+};
+var ENTRY_IDENTITY_FIELDS = {
+  relationships: "character",
+  "character-state": "character",
+  "knowledge-state": "character",
+  "object-state": "artifact"
+};
+function entityReferenceContext(root, kind, id) {
+  const otherExists = new Map;
+  const existsAs = (other) => {
+    if (!otherExists.has(other)) {
+      otherExists.set(other, fs2.existsSync(path3.join(root, entityConfig(other).dir, `${id}.md`)));
+    }
+    return otherExists.get(other);
+  };
+  return {
+    id,
+    entityFile: path3.resolve(root, entityConfig(kind).dir, `${id}.md`),
+    isReferenceKey: (key) => {
+      const kinds = Object.hasOwn(REFERENCE_FIELD_KINDS, key) ? REFERENCE_FIELD_KINDS[key] : [];
+      return kinds.includes(kind) && !kinds.some((other) => other !== kind && existsAs(other));
+    }
+  };
+}
+function resolveLinkTarget(root, file, target) {
+  const cleaned = String(target).trim().split(/\s+/)[0].replace(/^<|>$/g, "").split("#")[0].split("?")[0];
+  if (cleaned === "" || /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(cleaned)) {
+    return null;
+  }
+  let decoded = cleaned;
+  try {
+    decoded = decodeURIComponent(cleaned);
+  } catch {
+    decoded = cleaned;
+  }
+  return decoded.startsWith("/") ? path3.resolve(root, `.${decoded}`) : path3.resolve(path3.dirname(file), decoded);
+}
+function renameLinkTargets(root, file, body, context, newId) {
+  return body.replace(/\[([^\]\n]*)\]\(([^)\n]*)\)/g, (match, text, target) => {
+    if (resolveLinkTarget(root, file, target) !== context.entityFile) {
       return match;
     }
-    const hash = target.indexOf("#");
-    const query = target.indexOf("?");
-    let cut = target.length;
-    if (hash !== -1) {
-      cut = Math.min(cut, hash);
-    }
-    if (query !== -1) {
-      cut = Math.min(cut, query);
-    }
-    const pathOnly = target.slice(0, cut);
-    if (!pathPattern.test(pathOnly)) {
-      return match;
-    }
-    const suffix = target.slice(cut);
-    const newPath = pathOnly.replace(pathPattern, `$1${newId}.md`);
-    const newLabel = label === oldId ? newId : label;
-    return `[${newLabel}](${newPath}${suffix})`;
-  }));
+    const nextTarget = target.replace(new RegExp(`(^|/|<)${escapeRegExp(context.id)}\\.md(?=$|[#?>\\s])`), `$1${newId}.md`);
+    const nextText = text === context.id ? newId : text;
+    return `[${nextText}](${nextTarget})`;
+  });
 }
-function removeEntityReferences(root, id) {
-  rewriteReferences(root, (value) => value === id ? null : value, (body) => body);
+function replaceEntityReferences(root, kind, oldId, newId, overrides) {
+  const context = entityReferenceContext(root, kind, oldId);
+  return planReferenceRewrites(root, context, overrides, (value) => value === oldId ? newId : value, (body, file) => renameLinkTargets(root, file, body, context, newId));
 }
-function rewriteReferences(root, transform, transformBody) {
+function removeEntityReferences(root, kind, id, overrides) {
+  const context = entityReferenceContext(root, kind, id);
+  return planReferenceRewrites(root, context, overrides, (value) => value === id ? null : value, (body) => body);
+}
+function planReferenceRewrites(root, context, overrides, transform, transformBody) {
+  const plan = new Map;
+  const storyFile = path3.join(root, "story.md");
   for (const file of markdownFiles(root)) {
-    assertSafeProjectPath(file, root);
-    assertFileSizeWithinLimit(file);
-    const text = fs2.readFileSync(file, "utf8");
-    const match = FRONTMATTER_PATTERN.exec(text);
-    if (!match) {
+    const override = overrides?.has(file) ? overrides.get(file) : undefined;
+    if (override === null) {
       continue;
     }
-    const data = parseFrontmatter(text, file).data;
-    const body = text.slice(match[0].length);
-    const nextData = transformReferences(data, transform);
-    const nextBody = transformBody(body);
-    const dataChanged = JSON.stringify(nextData) !== JSON.stringify(data);
-    if (dataChanged || nextBody !== body) {
-      const next = dataChanged ? replaceFrontmatter(text, nextData, nextBody) : `${match[0]}${nextBody}`;
-      writeFile(file, next, { root });
+    let text = override;
+    if (text === undefined) {
+      assertSafeProjectPath(file, root);
+      assertFileSizeWithinLimit(file);
+      text = fs2.readFileSync(file, "utf8");
+    }
+    const match = FRONTMATTER_PATTERN.exec(text);
+    let header = "";
+    let body = text;
+    if (match) {
+      header = match[0];
+      body = text.slice(match[0].length);
+      if (file !== storyFile) {
+        let data;
+        try {
+          data = parseFrontmatter(text, file).data;
+        } catch (error) {
+          throw new Error(`${path3.relative(root, file)}: ${error.message}; nothing was changed`);
+        }
+        const nextData = transformReferences(data, transform, context);
+        if (JSON.stringify(nextData) !== JSON.stringify(data)) {
+          header = replaceFrontmatter(header, nextData);
+        }
+      }
+    }
+    const next = `${header}${transformBody(body, file)}`;
+    if (next !== text || override !== undefined) {
+      plan.set(file, next);
     }
   }
+  return plan;
 }
-function transformReferences(data, transform, nested = false) {
+function writeReferencePlan(root, plan) {
+  for (const [file, contents] of plan) {
+    writeFile(file, contents, { root });
+  }
+}
+function transformReferences(data, transform, context, identityKey = null) {
   const next = {};
   for (const [key, value] of Object.entries(data)) {
     if (Array.isArray(value)) {
       const items = [];
+      const childIdentity = ENTRY_IDENTITY_FIELDS[key] ?? null;
       for (const item of value) {
         if (item && typeof item === "object" && !Array.isArray(item)) {
-          const mapped = transformReferences(item, transform, true);
+          const mapped = transformReferences(item, transform, context, childIdentity);
           if (mapped !== null) {
             items.push(mapped);
           }
-        } else if (REFERENCE_FIELDS.has(key)) {
+        } else if (context.isReferenceKey(key)) {
           const mapped = transform(item);
           if (mapped !== null) {
             items.push(mapped);
@@ -3470,10 +3531,10 @@ function transformReferences(data, transform, nested = false) {
       next[key] = items;
       continue;
     }
-    if (REFERENCE_FIELDS.has(key)) {
+    if (context.isReferenceKey(key)) {
       const mapped = transform(value);
       if (mapped === null) {
-        if (nested && NESTED_IDENTITY_FIELDS.has(key)) {
+        if (identityKey !== null && key === identityKey) {
           return null;
         }
         next[key] = "";
