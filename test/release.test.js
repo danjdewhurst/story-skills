@@ -46,14 +46,18 @@ describe("release script", () => {
     for (const name of ["story-checks.yml", "draft-next-chapter.yml"]) {
       fs.writeFileSync(path.join(dir, "templates", "github", name), 'env:\n  STORY_REF: "v0.5.0"\n', "utf8");
     }
+    fs.mkdirSync(path.join(dir, "src"));
+    fs.writeFileSync(path.join(dir, "src", "version.js"), '// note\nexport const VERSION = "0.5.0";\n', "utf8");
     expect(updateVersionFiles(dir, "0.6.0")).toEqual([
       "package.json",
       ".codex-plugin/plugin.json",
       ".claude-plugin/plugin.json",
+      "src/version.js",
       "templates/github/story-checks.yml",
       "templates/github/draft-next-chapter.yml"
     ]);
     expect(JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf8")).version).toBe("0.6.0");
+    expect(fs.readFileSync(path.join(dir, "src", "version.js"), "utf8")).toBe('// note\nexport const VERSION = "0.6.0";\n');
     for (const name of ["story-checks.yml", "draft-next-chapter.yml"]) {
       expect(fs.readFileSync(path.join(dir, "templates", "github", name), "utf8")).toContain('STORY_REF: "v0.6.0"');
     }

@@ -5098,6 +5098,9 @@ ${prose}
 `;
 }
 
+// src/version.js
+var VERSION = "0.6.0";
+
 // src/cli.js
 var HELP = `Usage: story <command> [options]
 
@@ -5187,6 +5190,7 @@ Options:
   --prevalence <name>       Prevalence for add system
   --acts <a,b>              Comma-separated acts for add arc; repeatable
   -h, --help                Show this help
+  -v, --version             Show the story CLI version
 
 Values beginning with a dash may also use the --option=value form.
 `;
@@ -5195,6 +5199,11 @@ function runCli(argv, io) {
     const parsed = parseArgs(argv);
     const cwd = io.cwd ?? process.cwd();
     const command = parsed.positionals[0];
+    if (parsed.options.version) {
+      io.stdout.write(`${VERSION}
+`);
+      return 0;
+    }
     if (!command || command === "help" || parsed.options.help) {
       io.stdout.write(HELP);
       return 0;
@@ -5492,7 +5501,7 @@ var REPEATABLE_OPTIONS = new Set([
   "act"
 ]);
 function isKnownOptionToken(token) {
-  if (token === "-h") {
+  if (token === "-h" || token === "-v") {
     return true;
   }
   if (!token.startsWith("--")) {
@@ -5500,7 +5509,7 @@ function isKnownOptionToken(token) {
   }
   const equalIndex = token.indexOf("=");
   const key = token.slice(2, equalIndex === -1 ? undefined : equalIndex);
-  return key === "help" || BOOLEAN_OPTIONS.has(key) || VALUE_OPTIONS.has(key);
+  return key === "help" || key === "version" || BOOLEAN_OPTIONS.has(key) || VALUE_OPTIONS.has(key);
 }
 function addOption(options, key, value) {
   const stored = BOOLEAN_OPTIONS.has(key) ? normalizeBooleanValue(key, value) : value;
@@ -5544,6 +5553,10 @@ function parseArgs(argv) {
     const arg = argv[index];
     if (arg === "-h" || arg === "--help") {
       options.help = true;
+      continue;
+    }
+    if (arg === "-v" || arg === "--version") {
+      options.version = true;
       continue;
     }
     if (!arg.startsWith("--")) {

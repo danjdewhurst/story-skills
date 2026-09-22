@@ -409,9 +409,9 @@ bun run eval:selftest  # checker self-test against known-good drafts
 node evals/run-skill.js # full model run (needs Claude Code credentials)
 ```
 
-Codex uses `.codex-plugin/plugin.json` as its plugin version source. Claude Code uses `.claude-plugin/plugin.json`. Every published change needs a new version in both files and in `package.json` so installed users receive updates; keep marketplace entries unversioned to avoid duplicate version state.
+Codex uses `.codex-plugin/plugin.json` as its plugin version source. Claude Code uses `.claude-plugin/plugin.json`. Every published change needs a new version in both files, in `package.json`, and in `src/version.js` (what `story --version` prints) so installed users receive updates; keep marketplace entries unversioned to avoid duplicate version state.
 
-Cut a release with the release script, which bumps all three files, runs the CI checks, commits `chore: release X.Y.Z`, tags `vX.Y.Z`, pushes, and creates a GitHub release with generated notes. It requires a clean `main` that matches `origin/main` and a logged-in `gh`:
+Cut a release with the release script, which bumps all four files, rebuilds the fallback, runs the CI checks, commits `chore: release X.Y.Z`, tags `vX.Y.Z`, pushes, and creates a GitHub release with generated notes. It requires a clean `main` that matches `origin/main` and a logged-in `gh`:
 
 ```shell
 bun run release patch          # or minor, major, or an explicit version like 1.2.0

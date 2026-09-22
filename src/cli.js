@@ -1,6 +1,7 @@
 import path from "node:path";
 import { importManuscript } from "./import.js";
 import { formatSeriesReport } from "./series.js";
+import { VERSION } from "./version.js";
 import {
   buildBook,
   checkProjectContinuity,
@@ -112,6 +113,7 @@ Options:
   --prevalence <name>       Prevalence for add system
   --acts <a,b>              Comma-separated acts for add arc; repeatable
   -h, --help                Show this help
+  -v, --version             Show the story CLI version
 
 Values beginning with a dash may also use the --option=value form.
 `;
@@ -121,6 +123,11 @@ export function runCli(argv, io) {
     const parsed = parseArgs(argv);
     const cwd = io.cwd ?? process.cwd();
     const command = parsed.positionals[0];
+
+    if (parsed.options.version) {
+      io.stdout.write(`${VERSION}\n`);
+      return 0;
+    }
 
     if (!command || command === "help" || parsed.options.help) {
       io.stdout.write(HELP);
@@ -370,7 +377,7 @@ const REPEATABLE_OPTIONS = new Set([
 ]);
 
 function isKnownOptionToken(token) {
-  if (token === "-h") {
+  if (token === "-h" || token === "-v") {
     return true;
   }
   if (!token.startsWith("--")) {
@@ -378,7 +385,7 @@ function isKnownOptionToken(token) {
   }
   const equalIndex = token.indexOf("=");
   const key = token.slice(2, equalIndex === -1 ? undefined : equalIndex);
-  return key === "help" || BOOLEAN_OPTIONS.has(key) || VALUE_OPTIONS.has(key);
+  return key === "help" || key === "version" || BOOLEAN_OPTIONS.has(key) || VALUE_OPTIONS.has(key);
 }
 
 function addOption(options, key, value) {
@@ -428,6 +435,10 @@ export function parseArgs(argv) {
     const arg = argv[index];
     if (arg === "-h" || arg === "--help") {
       options.help = true;
+      continue;
+    }
+    if (arg === "-v" || arg === "--version") {
+      options.version = true;
       continue;
     }
 
