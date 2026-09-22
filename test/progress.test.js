@@ -103,9 +103,28 @@ describe("story progress", () => {
     expect(errors).toContain("progress.md frontmatter field sessions must contain objects");
   });
 
-  test("validate rejects a non-string deadline", () => {
-    const { root } = progressProject("deadline: 20261001");
-    expect(validateProject(root).errors).toContain("story.md deadline date must be a real YYYY-MM-DD calendar day, got 20261001");
+  test("validate rejects a non-string, empty, or list deadline", () => {
+    for (const value of ["20261001", '""', "\n  - 2026-10-01"]) {
+      const { root } = progressProject(`deadline: ${value}`);
+      expect(validateProject(root).errors).toContain("story.md deadline must be a YYYY-MM-DD date");
+    }
+  });
+
+  test("--log refuses to rewrite a log with invalid sessions and leaves it untouched", () => {
+    const { root } = progressProject();
+    const original = "---\ntype: progress-log\nsessions:\n  - date: 2026-09-01\n    words: 5\n  - date: 2026-02-30\n    words: 7\n---\n\n# Log\n";
+    fs.writeFileSync(path.join(root, "progress.md"), original, "utf8");
+
+    expect(() => projectProgress(root, { log: true, date: "2026-09-02" })).toThrow("Cannot log progress until progress.md is fixed: progress.md sessions[1] date must be a real YYYY-MM-DD calendar day, got 2026-02-30");
+    expect(fs.readFileSync(path.join(root, "progress.md"), "utf8")).toBe(original);
+    expect(projectProgress(root, { date: "2026-09-02" }).sessions).toBe(1);
+  });
+
+  test("progress accepts a positional project path", () => {
+    const { root, cwd } = progressProject();
+    const result = invoke(cwd, ["progress", root, "--log", "--date", "2026-09-01"]);
+    expect(result.code).toBe(0);
+    expect(fs.existsSync(path.join(root, "progress.md"))).toBe(true);
   });
 
   test("report shows the target when set", () => {

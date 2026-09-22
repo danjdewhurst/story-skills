@@ -89,6 +89,15 @@ describe("research notes", () => {
     expect(validateProject(root).errors).toContain("research/_index.md type must be research-registry");
   });
 
+  test("links accepts plot links to research notes and matter pages", () => {
+    const { root } = researchProject();
+    createEntity(root, { kind: "research", name: "Lamp Oil" });
+    createEntity(root, { kind: "matter", name: "Author Note", placement: "back" });
+    const timelinePath = path.join(root, "plot", "timeline.md");
+    fs.appendFileSync(timelinePath, "\nSee [lamp oil](../research/lamp-oil.md) and [the note](../matter/author-note.md).\n", "utf8");
+    expect(validateLinks(root).errors).toEqual([]);
+  });
+
   test("links reports missing chapters in used-in", () => {
     const { root } = researchProject();
     createEntity(root, { kind: "research", name: "Lamp Oil", "used-in": ["chapter-01", "chapter-09"] });

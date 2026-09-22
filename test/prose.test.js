@@ -258,6 +258,13 @@ describe("proseReport", () => {
     expect(result.err).toContain("Prose check complete: 0 errors, 0 warnings");
   });
 
+  test("story prose accepts a positional project path", () => {
+    const { root, cwd } = proseProject();
+    writeChapter(root, 1, "Positional prose.");
+    const result = invoke(cwd, ["prose", root]);
+    expect(result.out).toContain("Prose report: 1 chapter, 2 words");
+  });
+
   test("story prose lists watch words, spellings, phrases, and similar names", () => {
     const { root, cwd } = proseProject();
     writeStyleSheet(root, "dialect: american\nwatch-words:\n  - suddenly");

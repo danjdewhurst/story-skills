@@ -148,7 +148,7 @@ Clues require `title` and `status`; optional chapter references are `planted` an
 
 Prop custody: `object-state` entries for destroyed or lost artifacts should record `since: chapter-NN`, the chapter of destruction or loss. `story continuity` then errors when a later scene references the artifact in `state-changes` or lists it in `mentions`. Without `since`, custody cannot be checked and a warning is reported.
 
-`story timeline` is the read-only view of the same fields: it orders dated scenes, and chapters without scene records, by `date` and `time`; marks entries read after events that happen later in story time; lists undated scenes in reading order; and reports POV balance by chapter words and each character's presence (chapter or scene `characters`, not `mentions`) with their longest absence.
+`story timeline` is the read-only view of the same fields: it orders dated scenes, and chapters without scene records, by `date` and `time` (a scene never inherits its chapter's date); marks entries read after events that happen later in story time; lists undated scenes in reading order; and reports POV balance by chapter words and each character's presence (chapter or scene `characters`, not `mentions`) with their longest absence.
 
 Clock and time: `story continuity` checks timestamps only when scenes or chapters carry `date` (and ideally `time`); with no dates there are no findings. Within a chapter, a scene timestamped earlier than the previous dated scene is a warning; a `travel-hours` assertion the timestamps cannot honor is an error; a higher-numbered chapter dated earlier than a lower-numbered one is a warning. Malformed dates or times are warnings, never crashes.
 
@@ -160,7 +160,7 @@ Glossary terms require `term` and `category`, plus optional `aliases`.
 
 ### Front And Back Matter
 
-Files in `matter/` hold the pages around the chapters: dedication, epigraph, copyright page, acknowledgments, author's note, about the author, also-by. Create them with `story add matter "Dedication"` (front by default) or `story add matter "Acknowledgments" --placement back`.
+Files in `matter/` hold the pages around the chapters: dedication, epigraph, copyright page, acknowledgments, author's note, about the author, also-by. Create them with `story add matter "Dedication"` (front by default) or `story add matter "Acknowledgments" --placement back`. `story reindex` keeps `matter/_index.md` (frontmatter `type: matter-registry`) current once the folder exists. File names must be kebab-case; builds refuse others because the id becomes an EPUB file name.
 
 - `title` (required) labels the page in the EPUB table of contents and, unless `heading: false`, is printed as its heading.
 - `placement` (required) is `front` or `back`.
