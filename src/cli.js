@@ -358,6 +358,15 @@ const VALUE_OPTIONS = new Set([
   "prevalence", "acts", "act"
 ]);
 
+// Options that collect every value when repeated. Any other option keeps the
+// last value given, so `--out a.md --out b.md` writes b.md.
+const REPEATABLE_OPTIONS = new Set([
+  "theme", "themes", "follows", "precedes",
+  "location", "locations", "character", "characters",
+  "mention", "mentions", "member", "members",
+  "arc", "arcs", "alias", "aliases", "acts", "act"
+]);
+
 function isKnownOptionToken(token) {
   if (token === "-h") {
     return true;
@@ -372,7 +381,7 @@ function isKnownOptionToken(token) {
 
 function addOption(options, key, value) {
   const stored = BOOLEAN_OPTIONS.has(key) ? normalizeBooleanValue(key, value) : value;
-  if (options[key] === undefined) {
+  if (options[key] === undefined || !REPEATABLE_OPTIONS.has(key)) {
     options[key] = stored;
   } else {
     options[key] = Array.isArray(options[key]) ? options[key].concat(stored) : [options[key], stored];

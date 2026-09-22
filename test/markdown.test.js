@@ -5,7 +5,12 @@ describe("markdown utilities", () => {
   test("normalizes labels and counts prose words", () => {
     expect(kebabCase(" Sera's Last Ember! ")).toBe("seras-last-ember");
     expect(titleCaseSlug("seras-last-ember")).toBe("Seras Last Ember");
-    expect(wordCount("# Title\n\nSera's [lost heir](x.md) `code` **returns**.")).toBe(3);
+    expect(wordCount("# Title\n\nSera's [lost heir](x.md) `code` **returns**.")).toBe(5);
+  });
+
+  test("counts the visible text of links but not their targets or images", () => {
+    expect(wordCount("She walked to [the old stone mill](../locations/mill.md) at dawn.")).toBe(9);
+    expect(wordCount("A map ![harbor chart](map.png) hung there.")).toBe(4);
   });
 
   test("counts curly apostrophes, accents, and hyphenated words as single words", () => {
