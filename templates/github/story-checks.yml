@@ -28,7 +28,7 @@ permissions:
 
 env:
   STORY_DIR: "."
-  STORY_REF: "v0.6.0"
+  STORY_REF: "v0.7.0"
 
 jobs:
   story-checks:
