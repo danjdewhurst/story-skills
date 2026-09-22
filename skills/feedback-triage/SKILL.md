@@ -81,7 +81,7 @@ Only when every expected reader file is collected:
    plan to the `revision-continuity` skill for execution. The synthesis is
    the input; revision-continuity owns the edits.
 3. If the verdict is `ready`, the round is closed — proceed to the next
-   round, the next drafting stage, or export.
+   round, the next drafting stage, export, or the `submission` skill.
 
 ## Conventions
 
