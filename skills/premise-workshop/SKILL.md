@@ -127,15 +127,22 @@ known, themes, and the comps. On approval, follow the `story-init` skill
 with the brief:
 
 ```shell
-story init "{Title}" --form novella --genre "{genre}" --sub-genre "{sub-genre}" --synopsis "{logline}" --theme "{theme}"
+story init 'The Keeper of Skerry Light' --form novella --genre fantasy --sub-genre coastal --synopsis 'A lighthouse keeper who has never left the rock must choose between the light and her drowned brother.' --theme isolation
 ```
+
+Workshop text is the user's own words, so quote every value for the shell
+before running the command: wrap each in single quotes and write any
+single quote inside it as `'\''`. Never paste a value into double quotes,
+where `$(...)`, backticks, and `"` still take effect.
 
 `--form` sets `form` in `story.md` and a default `target-words` for the
 form when none is given (`serial` sets none; set per-episode chapter
 `target-words` instead). Then hand-edit `premise` and `counter-premise`
-into `story.md`, move the stakes, rejected what-ifs worth keeping, title
-shortlist, and comps into its `## Notes` section, and delete
-`premise-notes.md` if one was made.
+into `story.md`, and move the stakes, rejected what-ifs worth keeping,
+title shortlist, and comps into its `## Notes` section. Keep
+`premise-notes.md` if one was made: offer to move it into the new
+project as `notes/premise-notes.md`, and delete it only when the user
+asks after seeing what was carried over.
 
 ## Conventions
 
