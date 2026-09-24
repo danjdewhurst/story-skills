@@ -210,9 +210,9 @@ describe("matter in export and build", () => {
     expect(text).toContain('<spine><itemref idref="cover"/><itemref idref="front-dedication"/><itemref idref="front-epigraph"/><itemref idref="chapter-01"/><itemref idref="back-acknowledgments"/><itemref idref="back-author-note"/></spine>');
     expect(text).toContain('<li><a href="front-dedication.xhtml">Dedication</a></li>');
     expect(text).toContain(`<li><a href="back-author-note.xhtml">Author's Note</a></li>`);
-    expect(text).toContain("<body><p>For the lamplighters.</p></body>");
-    expect(text).toContain("<body><p>The sea keeps what it takes.</p></body>");
-    expect(text).toContain("<body><h1>Acknowledgments</h1><p>Thanks to <em>everyone</em>.</p></body>");
+    expect(text).toContain('<body epub:type="frontmatter"><p>For the lamplighters.</p></body>');
+    expect(text).toContain('<body epub:type="frontmatter"><p>The sea keeps what it takes.</p></body>');
+    expect(text).toContain('<body epub:type="backmatter"><h1>Acknowledgments</h1><p>Thanks to <em>everyone</em>.</p></body>');
     expect(text).toContain('<img src="images/cover.png" alt="Cover of Matter Story"/>');
     expect(text).toContain("OEBPS/images/cover.png");
     expect(epub.includes(PNG_BYTES)).toBe(true);

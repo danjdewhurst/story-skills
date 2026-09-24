@@ -11,6 +11,7 @@ import { buildDiagram } from "./diagram.js";
 import { buildVoices } from "./voices.js";
 import { checkNames, existingNames } from "./names.js";
 import { STORY_FORMS, formRangeWarning } from "./forms.js";
+import { copyrightPage, publishingMeta, validatePublishing } from "./publishing.js";
 import { DEFAULT_PASSES, nextPass, readPasses, updatePasses, validatePasses } from "./passes.js";
 import { CHAPTER_HOOKS, SCENE_OUTCOMES, buildPacing } from "./pacing.js";
 import { compareChapters, proseParagraphs } from "./compare.js";
@@ -528,6 +529,7 @@ export function validateProjectOf(project) {
   validateResearch(project, errors, warnings);
   validateProgressLog(project, errors);
   validateFormRange(project, warnings);
+  validatePublishing(project.story.data, errors, warnings);
   collectStrayFileWarnings(project, warnings);
 
   const indexChecks = [
@@ -3233,10 +3235,20 @@ function manuscriptParts(project) {
       body: chapterProse(readMarkdown(entry.file, project.root).body).trim()
     }));
 
+  const meta = publishingMeta(project.story.data);
+  const front = matter("front");
+  // A copyright line in story.md becomes the copyright page unless a matter
+  // page already provides one.
+  const hasCopyrightPage = project.matter.some((entry) => entry.id === "copyright" || /copyright/i.test(entry.title));
+  if (meta.copyright !== "" && !hasCopyrightPage) {
+    front.unshift({ id: "copyright", title: "Copyright", heading: false, body: copyrightPage(meta) });
+  }
+
   return {
     title: project.story.data.title,
-    author: typeof project.story.data.author === "string" ? project.story.data.author : "",
-    front: matter("front"),
+    author: meta.authors.join(" and "),
+    meta,
+    front,
     chapters,
     back: matter("back")
   };
@@ -3258,11 +3270,13 @@ function epubModifiedTimestamp() {
 }
 
 function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
+  const meta = manuscript.meta ?? publishingMeta({});
+  const lang = xmlEscape(meta.language);
   const documents = [];
   const pushMatter = (placement) => (entry) => documents.push({
     id: `${placement}-${entry.id}`,
     label: entry.title,
-    content: matterXhtml(entry)
+    content: matterXhtml(entry, placement, lang)
   });
   manuscript.front.forEach(pushMatter("front"));
   // Duplicate chapter numbers are refused up front in manuscriptParts, so ids
@@ -3272,7 +3286,8 @@ function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
     documents.push({
       id: `chapter-${String(chapter.number).padStart(2, "0")}`,
       label: `Chapter ${chapter.number}: ${chapter.title}`,
-      content: chapterXhtml(chapter)
+      content: chapterXhtml(chapter, lang),
+      bodymatter: true
     });
   }
   manuscript.back.forEach(pushMatter("back"));
@@ -3283,32 +3298,62 @@ function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
   const coverSpine = [];
   if (manuscript.cover) {
     const href = `images/cover.${manuscript.cover.extension}`;
+    const alt = meta.coverAlt === "" ? `Cover of ${manuscript.title}` : meta.coverAlt;
     coverEntries.push(
       { name: `OEBPS/${href}`, content: fs.readFileSync(manuscript.cover.filePath) },
-      { name: "OEBPS/cover.xhtml", content: `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>${xmlEscape(manuscript.title)}</title></head><body><img src="${href}" alt="Cover of ${xmlEscape(manuscript.title)}"/></body></html>` }
+      { name: "OEBPS/cover.xhtml", content: `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="${lang}" lang="${lang}"><head><title>${xmlEscape(manuscript.title)}</title></head><body epub:type="cover"><img src="${href}" alt="${xmlEscape(alt)}"/></body></html>` }
     );
     coverItems.push(`<item id="cover-image" href="${href}" media-type="${manuscript.cover.mediaType}" properties="cover-image"/>`, `<item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>`);
     coverMeta.push(`<meta name="cover" content="cover-image"/>`);
     coverSpine.push(`<itemref idref="cover"/>`);
   }
 
-  const creator = manuscript.author === "" ? "" : `<dc:creator>${xmlEscape(manuscript.author)}</dc:creator>`;
+  const creator = meta.authors.map((name) => `<dc:creator>${xmlEscape(name)}</dc:creator>`).join("");
+  const identifier = meta.isbn === "" ? xmlEscape(storyId) : `urn:isbn:${meta.isbn}`;
+  const optional = [
+    meta.publisher === "" ? "" : `<dc:publisher>${xmlEscape(meta.publisher)}</dc:publisher>`,
+    meta.publicationDate === "" ? "" : `<dc:date>${xmlEscape(meta.publicationDate)}</dc:date>`,
+    meta.description === "" ? "" : `<dc:description>${xmlEscape(meta.description)}</dc:description>`,
+    ...meta.subjects.map((subject) => `<dc:subject>${xmlEscape(subject)}</dc:subject>`),
+    meta.copyright === "" ? "" : `<dc:rights>${xmlEscape(meta.copyright)}</dc:rights>`
+  ].join("");
+  const accessibility = epubAccessibilityMeta(Boolean(manuscript.cover));
   const items = documents.map((doc) => `<item id="${doc.id}" href="${doc.id}.xhtml" media-type="application/xhtml+xml"/>`);
   const spine = documents.map((doc) => `<itemref idref="${doc.id}"/>`);
   const modified = epubModifiedTimestamp();
   writeZip(outFile, [
     { name: "mimetype", content: "application/epub+zip" },
     { name: "META-INF/container.xml", content: `<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>` },
-    { name: "OEBPS/content.opf", content: `<?xml version="1.0" encoding="UTF-8"?><package version="3.0" unique-identifier="book-id" xmlns="http://www.idpf.org/2007/opf"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book-id">${xmlEscape(storyId)}</dc:identifier><dc:title>${xmlEscape(manuscript.title)}</dc:title>${creator}<dc:language>en</dc:language><meta property="dcterms:modified">${modified}</meta>${coverMeta.join("")}</metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>${coverItems.join("")}${items.join("")}</manifest><spine>${coverSpine.join("")}${spine.join("")}</spine></package>` },
-    { name: "OEBPS/nav.xhtml", content: navXhtml(manuscript.title, documents) },
+    { name: "OEBPS/content.opf", content: `<?xml version="1.0" encoding="UTF-8"?><package version="3.0" unique-identifier="book-id" xmlns="http://www.idpf.org/2007/opf"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book-id">${identifier}</dc:identifier><dc:title>${xmlEscape(manuscript.title)}</dc:title>${creator}<dc:language>${lang}</dc:language>${optional}<meta property="dcterms:modified">${modified}</meta>${accessibility}${coverMeta.join("")}</metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>${coverItems.join("")}${items.join("")}</manifest><spine>${coverSpine.join("")}${spine.join("")}</spine></package>` },
+    { name: "OEBPS/nav.xhtml", content: navXhtml(manuscript.title, documents, lang) },
     ...coverEntries,
     ...documents.map((doc) => ({ name: `OEBPS/${doc.id}.xhtml`, content: doc.content }))
   ], writeOptions);
 }
 
-function navXhtml(title, documents) {
+function navXhtml(title, documents, lang = "en") {
   const links = documents.map((doc) => `<li><a href="${doc.id}.xhtml">${xmlEscape(doc.label)}</a></li>`);
-  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>${xmlEscape(title)}</title></head><body><nav epub:type="toc" xmlns:epub="http://www.idpf.org/2007/ops"><ol>${links.join("")}</ol></nav></body></html>`;
+  const start = documents.find((doc) => doc.bodymatter);
+  const landmarks = [`<li><a epub:type="toc" href="nav.xhtml">Table of Contents</a></li>`];
+  if (start) {
+    landmarks.push(`<li><a epub:type="bodymatter" href="${start.id}.xhtml">Start of Content</a></li>`);
+  }
+  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="${lang}" lang="${lang}"><head><title>${xmlEscape(title)}</title></head><body><nav epub:type="toc" id="toc"><h1>Contents</h1><ol>${links.join("")}</ol></nav><nav epub:type="landmarks" hidden="hidden"><ol>${landmarks.join("")}</ol></nav></body></html>`;
+}
+
+// EPUB Accessibility 1.1 discovery metadata for a text-only book with a
+// table of contents and a single reading order.
+function epubAccessibilityMeta(hasCover) {
+  const features = ["tableOfContents", "readingOrder", "structuralNavigation", ...(hasCover ? ["alternativeText"] : [])];
+  const summary = "Text-only book with a navigable table of contents, headings for each chapter, and a single logical reading order.";
+  return [
+    `<meta property="schema:accessMode">textual</meta>`,
+    ...(hasCover ? [`<meta property="schema:accessMode">visual</meta>`] : []),
+    `<meta property="schema:accessModeSufficient">textual</meta>`,
+    ...features.map((feature) => `<meta property="schema:accessibilityFeature">${feature}</meta>`),
+    `<meta property="schema:accessibilityHazard">none</meta>`,
+    `<meta property="schema:accessibilitySummary">${summary}</meta>`
+  ].join("");
 }
 
 function xhtmlParagraphs(body) {
@@ -3323,13 +3368,18 @@ function xhtmlParagraphs(body) {
   return paragraphs.join("");
 }
 
-function chapterXhtml(chapter) {
-  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>${xmlEscape(chapter.title)}</title></head><body><h1>Chapter ${chapter.number}: ${xmlEscape(chapter.title)}</h1>${xhtmlParagraphs(chapter.body)}</body></html>`;
+function xhtmlDocument(title, lang, bodyType, content) {
+  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="${lang}" lang="${lang}"><head><title>${xmlEscape(title)}</title></head><body epub:type="${bodyType}">${content}</body></html>`;
 }
 
-function matterXhtml(entry) {
+function chapterXhtml(chapter, lang = "en") {
+  return xhtmlDocument(chapter.title, lang, "bodymatter chapter", `<h1>Chapter ${chapter.number}: ${xmlEscape(chapter.title)}</h1>${xhtmlParagraphs(chapter.body)}`);
+}
+
+function matterXhtml(entry, placement = "front", lang = "en") {
   const heading = entry.heading ? `<h1>${xmlEscape(entry.title)}</h1>` : "";
-  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>${xmlEscape(entry.title)}</title></head><body>${heading}${xhtmlParagraphs(entry.body)}</body></html>`;
+  const bodyType = entry.id === "copyright" ? `${placement}matter copyright-page` : `${placement}matter`;
+  return xhtmlDocument(entry.title, lang, bodyType, `${heading}${xhtmlParagraphs(entry.body)}`);
 }
 
 function writeDocx(outFile, manuscript, writeOptions = {}) {
