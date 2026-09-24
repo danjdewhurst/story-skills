@@ -169,7 +169,9 @@ The CLI is for maintenance only. Agents write story content directly to markdown
 |---------|---------|
 | `story synopsis [--pages 1\|3] [--out file]` | Compress arcs into a mechanical 1- or 3-page synopsis |
 | `story export [path] --out manuscript.md` | Combine front matter, chapters, and back matter into a single manuscript markdown file |
-| `story build [path] --format epub` | Build disposable markdown, EPUB, DOCX, or Shunn manuscript artifacts in `dist/`; EPUB builds embed the `story.md` `cover` image and `author` |
+| `story build [path] --format epub` | Build disposable markdown, EPUB, DOCX, or Shunn manuscript artifacts in `dist/`; EPUB builds embed the `story.md` `cover` image, publishing metadata, and accessibility metadata |
+| `story build [path] --format html` | Build a single-file review copy whose paragraphs carry citable anchors such as `ch03-p12` |
+| `story build [path] --format print --trim 6x9` | Build a print-ready paged-media HTML interior to render to PDF with Paged.js, WeasyPrint, or Prince |
 
 Behavior notes:
 
