@@ -112,11 +112,14 @@ npx skills add forjd/better-writing
 
 ## Companion CLI
 
-The optional `story` CLI handles deterministic project maintenance while the skills handle the creative work. It needs Node 18 or newer and has no runtime dependencies. It isn't on the npm registry yet, so run it straight from GitHub:
+The optional `story` CLI handles deterministic project maintenance while the skills handle the creative work. It needs Node 18 or newer and has no runtime dependencies. Run it with `npx`, or install it globally:
 
 ```shell
-npx --yes --package github:danjdewhurst/story-skills story --help
+npx story-skills --help
+npm install -g story-skills   # then: story --help
 ```
+
+To try unreleased changes, run it straight from GitHub with `npx --yes --package github:danjdewhurst/story-skills story --help`.
 
 From a clone, use `bun install` and then `bun run story --help`. Copied-skill installs don't need either: `story-maintenance` bundles a `scripts/story.js` fallback that agents run with Node.
 
