@@ -12,6 +12,7 @@ export const OPTIONS = [
   { name: "themes", value: "<a,b>", repeatable: true, help: ["Comma-separated themes for init or add arc"] },
   { name: "pov", value: "<style>", help: ["POV style for init or add chapter/scene"] },
   { name: "tense", value: "<tense>", help: ["Narrative tense for init"] },
+  { name: "form", value: "<form>", help: ["Story form for init (novel, novella, novelette,", "short-story, flash, serial, picture-book,", "chapter-book); sets a default target-words"] },
   { name: "synopsis", value: "<text>", help: ["Starter synopsis for init"] },
   { name: "series", value: "<id>", help: ["Series id for init"] },
   { name: "book-number", value: "<n>", help: ["Publication order for init"] },

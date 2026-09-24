@@ -10,6 +10,7 @@ import { buildClueMatrix } from "./clues.js";
 import { buildDiagram } from "./diagram.js";
 import { buildVoices } from "./voices.js";
 import { checkNames, existingNames } from "./names.js";
+import { STORY_FORMS, formRangeWarning } from "./forms.js";
 import { DEFAULT_PASSES, nextPass, readPasses, updatePasses, validatePasses } from "./passes.js";
 import { CHAPTER_HOOKS, SCENE_OUTCOMES, buildPacing } from "./pacing.js";
 import { compareChapters, proseParagraphs } from "./compare.js";
@@ -148,6 +149,9 @@ export function createStoryProject(options) {
   if (options.tense !== undefined && options.tense !== "" && !STORY_TENSES.has(options.tense)) {
     throw new Error(`Unsupported tense "${options.tense}": expected one of ${[...STORY_TENSES].join(", ")}`);
   }
+  if (options.form !== undefined && !STORY_FORMS.has(options.form)) {
+    throw new Error(`Unsupported form "${options.form}": expected one of ${[...STORY_FORMS.keys()].join(", ")}`);
+  }
 
   const series = resolveSeriesOptions(root, cwd, options);
   const inherited = series.linked[0]?.data ?? {};
@@ -178,6 +182,7 @@ export function createStoryProject(options) {
     themes,
     pov: options.pov ?? inherited.pov ?? "third-person-limited",
     tense: options.tense ?? inherited.tense ?? "past",
+    form: options.form,
     synopsis: options.synopsis ?? "Add a 2-3 sentence synopsis here."
   }), { root });
   writeStarterFile(path.join(root, "characters", "_index.md"), characterIndex(storyId, [], "", ""), { root });
@@ -515,6 +520,7 @@ export function validateProjectOf(project) {
   validateMatter(project, errors, warnings);
   validateResearch(project, errors, warnings);
   validateProgressLog(project, errors);
+  validateFormRange(project, warnings);
   collectStrayFileWarnings(project, warnings);
 
   const indexChecks = [
@@ -982,6 +988,7 @@ export function projectReport(root) {
     bookNumber: project.story.data["book-number"],
     genre: project.story.data.genre,
     subGenre: project.story.data["sub-genre"],
+    form: typeof project.story.data.form === "string" ? project.story.data.form : "",
     status: project.story.data.status,
     pov: project.story.data.pov,
     tense: project.story.data.tense,
@@ -1031,6 +1038,7 @@ export function formatProjectReport(report, options = {}) {
     ...(report.series === undefined ? [] : [`Series: ${report.series}${report.bookNumber === undefined ? "" : ` (book ${report.bookNumber})`}`]),
     `Status: ${report.status}`,
     `Genre: ${[report.genre, report.subGenre].filter(Boolean).join(" / ")}`,
+    ...(report.form ? [`Form: ${report.form}`] : []),
     `POV/Tense: ${report.pov} / ${report.tense}`,
     "",
     "Inventory:",
@@ -1848,6 +1856,13 @@ function storyBible(options) {
     pov: options.pov,
     tense: options.tense
   });
+  if (options.form !== undefined) {
+    data.form = options.form;
+    const target = STORY_FORMS.get(options.form).target;
+    if (target !== null) {
+      data["target-words"] = target;
+    }
+  }
   for (const field of ["follows", "precedes"]) {
     if (options[field].length > 0) {
       data[field] = options[field];
@@ -3979,6 +3994,7 @@ function validateStoryFrontmatter(project, errors) {
   if (data["target-words"] !== undefined) {
     requireInteger(data, "target-words", "story.md", errors, 1);
   }
+  validateEnum(data, "form", STORY_FORMS, "story.md", errors);
   if (data["draft-mode"] !== undefined) {
     requireScalar(data, "draft-mode", "story.md", errors);
   }
@@ -3995,6 +4011,21 @@ function validateStoryFrontmatter(project, errors) {
 
   if (data["schema-version"] !== undefined && data["schema-version"] !== STORY_SCHEMA_VERSION) {
     errors.push(`story.md schema-version must be ${STORY_SCHEMA_VERSION}`);
+  }
+}
+
+function validateFormRange(project, warnings) {
+  const data = project.story.data;
+  const targetWarning = formRangeWarning(data.form, data["target-words"], "story.md target-words");
+  if (targetWarning !== "") {
+    warnings.push(targetWarning);
+  }
+  if (data.status === "complete") {
+    const words = project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
+    const wordsWarning = formRangeWarning(data.form, words, "Manuscript length");
+    if (wordsWarning !== "") {
+      warnings.push(wordsWarning);
+    }
   }
 }
 
