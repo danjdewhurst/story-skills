@@ -19,6 +19,8 @@ function project() {
   writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: Arrival\nnumber: 1\nstatus: draft", `## Chapter Text\n\nShe *ran*.\n\n* * *\n\n${"word ".repeat(310)}\n`);
   createEntity(root, { kind: "matter", name: "Dedication" });
   fs.appendFileSync(path.join(root, "matter", "dedication.md"), "\nFor Morag.\n");
+  createEntity(root, { kind: "matter", name: "Historical Note", placement: "back" });
+  fs.appendFileSync(path.join(root, "matter", "historical-note.md"), "\nThe clans are invented.\n");
   return root;
 }
 
@@ -29,7 +31,7 @@ describe("narration build", () => {
     expect(result.outFile).toBe(path.join(root, "dist", "siorsa.narration.md"));
     const text = fs.readFileSync(result.outFile, "utf8");
 
-    expect(text).toContain("# Siorsa: Narration Script\n\nEstimated finished runtime: 0h 02m at 155 words per minute (314 words).");
+    expect(text).toContain("# Siorsa: Narration Script\n\nEstimated finished runtime: 0h 02m at 155 words per minute (318 words).");
     expect(text).toContain([
       "| Name | Say it | Kind |",
       "| --- | --- | --- |",
@@ -44,6 +46,7 @@ describe("narration build", () => {
     expect(text).toContain("## Dedication\n\n[under 1 min]\n\nFor Morag.");
     expect(text).toContain("## Chapter 1: Arrival\n\n[about 2 min]\n\nShe *ran*.\n\n[pause]\n\nword word");
     expect(text).not.toContain("All rights reserved");
+    expect(text).toContain("## Historical Note\n\n[under 1 min]\n\nThe clans are invented.\n\n## Closing Credits");
     expect(text.trimEnd().endsWith("You have been listening to Siorsa, written by Ada Writer, narrated by [narrator].")).toBe(true);
     expect(validateProject(root).errors).toEqual([]);
   });

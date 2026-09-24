@@ -591,29 +591,28 @@ function routeGraph(locations) {
 function shortestRouteHours(graph, from, to) {
   const distances = new Map([[from, 0]]);
   const settled = new Set();
-  while (true) {
-    let current;
-    let best = Infinity;
-    for (const [node, distance] of distances) {
-      if (!settled.has(node) && distance < best) {
-        best = distance;
-        current = node;
-      }
-    }
-    if (current === undefined) {
-      return undefined;
-    }
+  let current = from;
+  while (current !== undefined) {
+    const best = distances.get(current);
     if (current === to) {
       return best;
     }
     settled.add(current);
     for (const [next, hours] of graph.get(current) ?? []) {
-      const candidate = best + hours;
-      if (!distances.has(next) || candidate < distances.get(next)) {
-        distances.set(next, candidate);
+      if (!distances.has(next) || best + hours < distances.get(next)) {
+        distances.set(next, best + hours);
+      }
+    }
+    current = undefined;
+    let nearest = Infinity;
+    for (const [node, distance] of distances) {
+      if (!settled.has(node) && distance < nearest) {
+        nearest = distance;
+        current = node;
       }
     }
   }
+  return undefined;
 }
 
 function formatHours(hours) {

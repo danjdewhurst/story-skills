@@ -103,6 +103,21 @@ describe("story pacing", () => {
     expect(pacingReport(root).medianWords).toBe(15);
   });
 
+  test("a sequel closes a long run without one, and a trailing run of resolutions is reported", () => {
+    const { root } = project();
+    for (const number of [1, 2, 3]) {
+      writeChapter(root, number, "status: draft\nhook: resolution", 100);
+    }
+    for (const scene of [1, 2, 3, 4]) {
+      writeScene(root, "chapter-01", scene, "outcome: no");
+    }
+    writeScene(root, "chapter-01", 5, "sequel: true");
+    expect(pacingReport(root).warnings).toEqual([
+      "4 scene units in a row with no sequel (chapter-01-scene-01 to chapter-01-scene-04): give the POV character room to react and decide",
+      "3 chapters in a row end on resolution (chapter-01 to chapter-03): readers can put the book down"
+    ]);
+  });
+
   test("validate checks outcome and hook values; add writes them", () => {
     const { root } = project();
     createEntity(root, { kind: "chapter", name: "Opening", number: "1", hook: "cliffhanger" });

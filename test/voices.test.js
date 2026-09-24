@@ -78,6 +78,18 @@ describe("story voices", () => {
     ]);
   });
 
+  test("two tagged speakers leave a line unattributed, nameless characters are skipped, and signature words rank", () => {
+    const { root } = voiceProject();
+    writeCharacter(root, "nameless", "\"\"");
+    writeChapter(root, 1, [
+      "\"Enough,\" Mara said, and Tom said nothing.",
+      "\"Brine and brine and kelp and kelp and kelp,\" Tom said."
+    ]);
+    const report = voicesReport(root);
+    expect(report.unattributed).toBe(1);
+    expect(report.profiles.map((entry) => [entry.id, entry.signature])).toEqual([["tom-reed", ["kelp", "brine"]]]);
+  });
+
   test("quotedSpans pairs curly and straight quotes and skips empty ones", () => {
     expect(quotedSpans("“One,” she said, \"two\" and \"\" “ ”")).toEqual(["One,", "two"]);
   });
