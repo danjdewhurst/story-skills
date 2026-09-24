@@ -389,7 +389,10 @@
         "title": { "type": "string" },
         "placement": { "enum": ["front", "back"] },
         "order": { "type": "integer", "minimum": 0 },
-        "heading": { "type": "boolean" }
+        "heading": { "type": "boolean" },
+        "permission": { "enum": ["not-needed", "pending", "granted", "public-domain"] },
+        "rights-holder": { "type": "string" },
+        "credit": { "type": "string" }
       }
     },
     "styleSheet": {
