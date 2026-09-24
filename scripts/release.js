@@ -93,6 +93,12 @@ function fail(message) {
   process.exit(1);
 }
 
+// Publishing runs after the tag and GitHub release exist, so a rerun of the
+// release stops at the existing-tag check. Finish from the tagged commit instead.
+export function npmRecoveryCommand(tag) {
+  return `git checkout ${tag} && npm publish && git checkout ${RELEASE_BRANCH}`;
+}
+
 function checkNpm(name, nextVersion) {
   try {
     run("npm", ["whoami"]);
@@ -219,8 +225,12 @@ function main(argv) {
   console.log(`Created GitHub release: ${releaseUrl}`);
 
   if (npm) {
-    // Inherit stdin so npm can prompt for a 2FA one-time password.
-    execFileSync("npm", ["publish"], { cwd: repoRoot, stdio: "inherit" });
+    try {
+      // Inherit stdin so npm can prompt for a 2FA one-time password.
+      execFileSync("npm", ["publish"], { cwd: repoRoot, stdio: "inherit" });
+    } catch {
+      fail(`${tag} is on GitHub but npm publish failed. Retry the npm step with:\n  ${npmRecoveryCommand(tag)}`);
+    }
     console.log(`Published ${packageJson.name}@${nextVersion} to npm`);
   }
 }
