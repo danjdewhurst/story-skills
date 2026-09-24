@@ -218,7 +218,7 @@ The `Shared canon` section lists every id that appears in more than one book, gr
 
 ### What it checks
 
-Each book is compared with every book set earlier in the chronology: every book from which this one can be reached by following `precedes` links forward (equivalently, every book reachable by following `follows` links back from this one).
+Each book is compared with every book set earlier in the chronology: every book that comes before this one through any chain of `follows` or `precedes` links, as read from either book. A link counts even when the other book is missing its backlink.
 
 | Level | Finding | Fix |
 |-------|---------|-----|
@@ -291,7 +291,7 @@ The same messages appear with `precedes` for links in that field. With the backl
 error: story.md follows ../the-last-ember is missing backlink: add ../embers-of-the-vale to its precedes
 ```
 
-`story report` and `story doctor` include the link check only as a count (`Links: failed (4 errors, 0 warnings)` in the report, a `Fix broken references` action in the doctor output), so run `story links` to see the messages.
+`story report` and `story doctor` include the link check only as a count (`Links: failed (N errors, 0 warnings)` in the report, a `Fix broken references` action in the doctor output), so run `story links` to see the messages.
 
 `story report` also shows the series id and publication number when they are set:
 

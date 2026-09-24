@@ -261,7 +261,7 @@ Creates a new project from an existing manuscript. `<source>` is a single `.md`,
 
 Each chapter is written to `chapters/chapter-NN.md` with `status: draft` and its word count, and the registries are rebuilt. `import` then prints up to 25 capitalised names that appear three or more times, as candidates for `story add character` or `story add location`.
 
-`import` accepts `--dir`, `--genre`, `--sub-genre`, `--setting-era`, `--theme`, `--themes`, `--pov`, `--tense`, `--synopsis`, and `--force`, with the same meaning as for `init`. It does not accept the series options. Without `--synopsis`, the synopsis placeholder names the source file.
+`import` accepts `--dir`, `--genre`, `--sub-genre`, `--setting-era`, `--theme`, `--themes`, `--pov`, `--tense`, `--synopsis`, and `--force`, with the same meaning as for `init`. It ignores the series options (`--series`, `--book-number`, `--follows`, `--precedes`) without an error. Without `--synopsis`, the synopsis placeholder names the source file.
 
 > [!WARNING]
 > With `--force` on an existing directory, `import` deletes every `chapter-NN.md` in `chapters/` before writing the imported chapters, and the frontmatter you filled in on those chapters is lost. Commit or back up the project first.
@@ -287,7 +287,7 @@ See [Import, export, and builds](manuscripts.md) for the full import workflow.
 story migrate [path]
 ```
 
-Upgrades a project to the current schema (version 2). It creates any missing v2 directories and starter files (`scenes/`, `continuity/state.md` and the question, promise, and clue ledgers, `glossary/`, and the `worldbuilding/factions/` and `worldbuilding/artifacts/` folders), sets `schema-version: 2` in `story.md`, and runs `reindex`. Existing files are never overwritten. Running it on a current project changes nothing.
+Upgrades a project to the current schema (version 2). It creates any missing v2 directories and starter files (`scenes/`, `continuity/state.md` and the question, promise, and clue ledgers, `glossary/`, and the `worldbuilding/factions/` and `worldbuilding/artifacts/` folders), sets `schema-version: 2` in `story.md`, and runs `reindex`. Existing files are never overwritten. On a project that is already current it still runs `reindex`, so a stale registry is rebuilt and counted as a change.
 
 On a copy of a project with `schema-version: 1` and no clue ledger or glossary:
 
@@ -306,7 +306,7 @@ $ story validate
 Project is valid: 0 errors, 0 warnings, 0 dismissed
 ```
 
-On a project that is already current:
+When nothing needed changing, including the registries:
 
 ```text
 Project already uses the current schema
@@ -440,7 +440,13 @@ Checks that references between entities point at entities that exist and that tw
 - chapter ids and markdown links in the bodies of `plot/timeline.md` and arc files
 - the `follows` and `precedes` links in `story.md`, which must point at story projects that link back
 
-With `characters/old-bram.md` listing `locations: [dock-nine, gull-harbour]`, where `dock-nine` does not exist and `gull-harbour` does not list Bram back:
+With `characters/old-bram.md` listing two locations, where `dock-nine` does not exist and `gull-harbour` does not list Bram back:
+
+```yaml
+locations:
+  - dock-nine
+  - gull-harbour
+```
 
 ```shell
 story links
@@ -552,7 +558,7 @@ Compares the current chapters with an earlier draft and reports word changes per
 | `--ref <git-ref>` | Read the earlier chapters from a git branch, tag, or commit (with `~` and `^` suffixes). The project must be inside a git repository. It reads with `git show` and never writes to the repository |
 | `--against <path>` | Read the earlier chapters from another copy of the project on disk, resolved against the current directory. It must be a story project with a `story.md` |
 
-Chapters are matched by id (`chapter-01`, `chapter-02`, and so on). Old drafts without frontmatter are still compared.
+Chapters are matched by id (`chapter-01`, `chapter-02`, and so on). With `--ref`, old drafts without frontmatter are still compared. With `--against`, every file in the other project must parse, or `compare` stops with an error.
 
 With `../thread-draft-1` a copy of the project taken before the chapter 3 edit shown under [wordcount](#wordcount):
 
@@ -686,7 +692,7 @@ story prose [path]
 
 An advisory prose lint. For each chapter it reports sentence count, average and longest sentence length and their spread, filter words and `-ly` adverbs per 1,000 narration words, dialogue tags and said-bookisms, words echoed within 30 words, and watch words and avoided spellings from `style-sheet.md`. Across the manuscript it lists repeated four-word phrases and characters with similar first names.
 
-Findings are warnings, so `prose` exits 0 on any readable project.
+Style findings are warnings and never fail the run. `prose` exits 1 only when a file's frontmatter fails to parse.
 
 ```shell
 story prose
@@ -927,14 +933,14 @@ Options by kind:
 | `faction` | `--type`, `--status`, `--member` (`members`; `--character` also works), `--location` (`locations`) | `other`, `active` |
 | `artifact` | `--type`, `--status`, `--owner` (`owner`), `--location` (`location`, a single id; give it once) | `object`, `active` |
 | `arc` | `--type`, `--status`, `--character` (`characters`), `--theme`/`--themes` (`themes`), `--acts` (`acts`) | `subplot`, `planned` |
-| `chapter` | `--number`, `--pov`, `--location` (`locations`), `--character` (`characters`), `--mention` (`mentions`), `--arc` (`arcs-advanced`), `--status`, `--mode`, `--date`, `--time` | Next free number, `outline` |
-| `scene` | `--chapter`, `--scene`, `--pov`, `--location` (`location`, a single id; give it once), `--character` (`characters`), `--mention` (`mentions`), `--arc` (`arcs-advanced`), `--status`, `--date`, `--time`, `--travel-hours`, `--sequel`, `--dilemma` | Latest chapter, next free scene number, `outline` |
+| `chapter` | `--number`, `--pov`, `--location` (`locations`), `--character` (`characters`), `--mention` (`mentions`), `--arc` (`arcs-advanced`), `--status`, `--mode`, `--date`, `--time` | One more than the highest chapter number, `outline` |
+| `scene` | `--chapter`, `--scene`, `--pov`, `--location` (`location`, a single id; give it once), `--character` (`characters`), `--mention` (`mentions`), `--arc` (`arcs-advanced`), `--status`, `--date`, `--time`, `--travel-hours`, `--sequel`, `--dilemma` | Latest chapter, one more than that chapter's highest scene number, `outline` |
 | `question` | `--status`, `--introduced`, `--resolved`, `--character` (`characters`) | `open` |
 | `promise` | `--status`, `--planted`, `--payoff`, `--arc` (`arcs`), `--character` (`characters`) | `planted` with `--planted`, otherwise `planned` |
 | `clue` | `--status`, `--planted`, `--payoff`, `--significance-delayed`, `--character` (`characters`), `--arc` (`arcs`) | `planted` with `--planted`, otherwise `planned` |
 | `term` | `--category`, `--alias` (`aliases`) | `term` |
 | `research` | `--status`, `--source` (`sources`), `--used-in` (`used-in`) | `open` |
-| `matter` | `--placement`, `--order` | `front`, next order in that placement |
+| `matter` | `--placement`, `--order` | `front`, one more than the highest order in that placement |
 
 `add` checks enum values before writing anything:
 
@@ -955,7 +961,7 @@ Options by kind:
 | research `--status` | `open`, `verified`, `disputed` |
 | matter `--placement` | `front`, `back` |
 
-Location and system `--type`, location `--status`, and system `--prevalence` are free text. `--date` must be a real `YYYY-MM-DD` day; `--time` is `HH:MM` or one of `dawn`, `morning`, `midday`, `afternoon`, `evening`, `night`; `--travel-hours` is a number zero or above; `--number` and `--scene` are positive integers; `--order` is a non-negative integer. Repeating a single-value flag writes a list that `story validate` rejects.
+Location and system `--type`, location `--status`, and system `--prevalence` are free text. `--date` must be a real `YYYY-MM-DD` day; `--time` is `HH:MM` or one of `dawn`, `morning`, `midday`, `afternoon`, `evening`, `night`; `--travel-hours` is a number zero or above; `--number` and `--scene` are positive integers; `--order` is a non-negative integer. Repeating `--location` on `add artifact` or `add scene`, or `--arc` on `add character`, writes a list that `story validate` rejects, because those flags are repeatable elsewhere. Other single-value flags keep the last value given.
 
 `--source` keeps each value whole, because citations contain commas. Repeat the flag for more sources. Other list options split on commas.
 
@@ -1044,7 +1050,7 @@ Renamed chapter chapter-01 to chapter-01: ~/stories/the-salt-road/chapters/chapt
 story remove <kind> <id> [--path <project>]
 ```
 
-Deletes the entity file and scrubs its id from every reference field. List entries are removed, single-value fields are cleared, and whole entries in `relationships`, `character-state`, `knowledge-state`, and `object-state` are dropped when they are about the removed entity. Prose and markdown links in file bodies are never changed, so `story links` reports any body link that now points at a missing file. As with `rename`, every file is parsed before anything is deleted, so a file that fails to parse leaves the project unchanged.
+Deletes the entity file and scrubs its id from every reference field. List entries are removed, single-value fields are cleared, and whole entries in `relationships`, `character-state`, `knowledge-state`, and `object-state` are dropped when they are about the removed entity. Prose and markdown links in file bodies are never changed. `story links` reports leftover body links and chapter ids only in `plot/timeline.md` and arc files; find any others by hand, for example with `grep -rn brass-sounding-line .`. As with `rename`, every file is parsed before anything is deleted, so a file that fails to parse leaves the project unchanged.
 
 ```text
 $ story remove artifact brass-sounding-line
@@ -1223,7 +1229,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--travel-hours` | `<n>` | `add scene` | |
 | `--dilemma` | `<text>` | `add scene` | |
 | `--sequel` | | `add scene` | Boolean |
-| `--location` | `<id>` | `add character`, `faction`, `artifact`, `chapter`, `scene` | Repeatable; alias `--locations`. For `add artifact` and `add scene` it sets one location id: give it once |
+| `--location` | `<id>` | `add character`, `faction`, `artifact`, `chapter`, `scene` | Repeatable; alias `--locations`. For `add artifact` and `add scene` it sets one location id: give it once; `--locations` is ignored there |
 | `--character` | `<id>` | `add location`, `faction`, `arc`, `chapter`, `scene`, `question`, `promise`, `clue` | Repeatable; alias `--characters` |
 | `--mention` | `<id>` | `add chapter`, `add scene` | Repeatable; alias `--mentions` |
 | `--member` | `<id>` | `add faction` | Repeatable; alias `--members` |

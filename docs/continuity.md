@@ -81,7 +81,7 @@ Chapter order is always the chapter's `number`. Chapter references such as `died
 
 ### How findings are reported
 
-`continuity`, `timeline`, `prose`, `progress`, and `compare` all report the same way. They end with one summary line on stderr, like the first line above, followed by each finding on its own line:
+`continuity`, `timeline`, `prose`, `progress`, and `compare` all report the same way. On stderr they print one summary line first, like the first line above, and then each finding on its own line:
 
 - **error** lines are contradictions. They make the command exit 1.
 - **warning** lines are things that are probably wrong or stale. They never change the exit code.
@@ -284,11 +284,11 @@ Time checks switch on as soon as any scene or chapter has a `date`. Without date
 |-------|----|--------|
 | `date` | scene or chapter | A real calendar day, `YYYY-MM-DD` (years 0000 to 9999) |
 | `time` | scene or chapter | `HH:MM` (24-hour) or a named part of day |
-| `travel-hours` | scene | A YAML number (not a quoted string): the minimum hours of travel needed to reach this scene from the previous one. Any other value is treated as 0, which switches the travel check off. |
+| `travel-hours` | scene | A YAML number (not a quoted string): the minimum hours of travel needed to reach this scene from the previous one. `story validate` rejects any other value; inside `story continuity` it is treated as 0, which switches the travel check off. |
 
 Named parts of day sort as fixed clock times: `dawn` 05:00, `morning` 07:00, `midday` 12:00, `afternoon` 15:00, `evening` 19:00, `night` 23:00. `HH:MM` needs two-digit hours (`09:00`, not `9:00`). Quoting `HH:MM` times (`time: "22:00"`) keeps other YAML tools from reading them as numbers.
 
-`story add chapter` and `story add scene` reject a bad `--date`, `--time`, or `--travel-hours` when they create the file. `story validate` does not check these fields, so values you type by hand are only checked by `story continuity`, as the warnings below.
+`story add chapter` and `story add scene` reject a bad `--date`, `--time`, or `--travel-hours` when they create the file. `story validate` rejects a non-numeric `travel-hours` and a `date` or `time` that is not a single value, but it does not check date or time formats, so a malformed date or time you type by hand is only reported by `story continuity`, as the warnings below.
 
 The checker walks dated scenes in reading order: by scene number within a chapter, then from the last dated scene of one chapter to the first dated scene of the next. For each step:
 

@@ -180,7 +180,7 @@ Keep to these rules, because anything else is either an error or parses differen
 - List items are indented exactly two spaces (`  - item`). Mapping keys inside a list item are indented exactly four spaces. Deeper nesting, four-space list items, and block scalars (`>` or `|`) fail with `Unsupported frontmatter line`.
 - Flow lists are not parsed: `themes: [a, b]` is stored as the single string `[a, b]`, and a field that must be a list then fails validation. Always use block lists.
 - A list item that starts with a key-like word followed by a colon is read as a mapping. `  - https://example.com/tides` becomes `{https: //example.com/tides}` and fails as a list of strings. Quote such items: `  - "https://example.com/tides"`. (`story add research --source` quotes them for you.)
-- `#` starts a comment only at the beginning of a line. `title: Ash # draft` keeps `# draft` as part of the title. A comment line inside a list ends the list, so keep comments between top-level entries.
+- `#` starts a comment only at the beginning of a line. `title: Ash # draft` keeps `# draft` as part of the title. A comment line or a blank line inside a list is an error: the next item fails with `Unsupported frontmatter line`. Keep comments and blank lines between top-level entries.
 - Single-quoted strings are taken literally: `'it''s'` stays `it''s`. Use double quotes when you need escapes.
 - `null` and `~` are plain strings, not null.
 - Dates such as `2026-09-24` stay strings.
@@ -189,7 +189,7 @@ Fields the tools do not know are kept and ignored. The example character files c
 
 ### How the CLI rewrites frontmatter
 
-Several commands edit frontmatter in place: `story wordcount --write`, `story add` (for backlinks), `story rename`, `story remove`, `story reindex` (for the `story` field), and `story migrate`. They rewrite only the entries whose values changed:
+Several commands edit frontmatter in place: `story wordcount --write`, `story add` (for backlinks), `story rename`, `story remove`, `story reindex` (for the `story` field), `story migrate`, `story progress --log` (which rewrites `progress.md`), and `story init --follows` or `--precedes` (which adds the backlink to the linked book's `story.md`). They rewrite only the entries whose values changed:
 
 - Comment lines, blank lines, unchanged entries (with their original quoting and number formatting), and unchanged list items keep their exact text.
 - The body is untouched, except that `story rename` updates links to a renamed file.
@@ -429,7 +429,7 @@ Files: `plot/arcs/<arc-id>.md`. Created with `story add arc "Name"`.
 | `acts` | list of strings | no | Acts the arc spans, for example `act-1`. |
 | `mice-threads` | list of strings | no | MICE threads the arc carries: `milieu`, `inquiry`, `character`, `event`. Not read by the CLI. |
 
-The arc body's `## Setup`, `## Rising Action`, `## Climax`, and `## Resolution` sections feed `story synopsis`. Any `chapter-NN` token or relative `.md` link in the body must point at something that exists, apart from `_index.md` and wildcard links (see [References and backlinks](#references-and-backlinks)). The [plot-structure skill](../skills/plot-structure/SKILL.md) covers arc design and MICE threading.
+The arc body's `## Setup`, `## Rising Action`, `## Climax`, and `## Resolution` sections feed `story synopsis`. Any `chapter-NN` token in the body must name an existing chapter, and any relative `.md` link must point at an existing entity file (one named by a kebab-case entity id) inside the project. Links to other files, such as `story.md` or `style-sheet.md`, are reported as missing; `_index.md` and `*` wildcard targets are skipped (see [References and backlinks](#references-and-backlinks)). The [plot-structure skill](../skills/plot-structure/SKILL.md) covers arc design and MICE threading.
 
 ### Plot registry and timeline
 
@@ -442,7 +442,7 @@ The arc body's `## Setup`, `## Rising Action`, `## Climax`, and `## Resolution` 
 |------|-------|-----|---------|
 ```
 
-`story reindex` never rewrites the timeline body; it only corrects the `story` field. `story links` checks every `chapter-NN` token and `.md` link in it, except links to an `_index.md` registry or containing a `*` wildcard. For a timeline computed from scene dates, use `story timeline` (see [Continuity and analysis](continuity.md#story-timeline)).
+`story reindex` never rewrites the timeline body; it only corrects the `story` field. `story links` checks every `chapter-NN` token and `.md` link in it, except links to an `_index.md` registry or containing a `*` wildcard. Each link must point at an existing entity file inside the project; a link to `story.md` or `style-sheet.md` is reported as missing. For a timeline computed from scene dates, use `story timeline` (see [Continuity and analysis](continuity.md#story-timeline)).
 
 ## Chapters
 
@@ -867,7 +867,7 @@ Fields that name another entity hold its id. `story links` checks that each id i
 | Promise, clue | `arcs` | Arc |
 | Research note | `used-in` | Chapter |
 | `plot/timeline.md`, arc bodies | any `chapter-NN` token | Chapter |
-| `plot/timeline.md`, arc bodies | relative links to `.md` files, except `_index.md` and `*` wildcard targets | Existing entity file inside the project |
+| `plot/timeline.md`, arc bodies | relative links to `.md` files, except `_index.md` and `*` wildcard targets (links to non-entity files such as `story.md` are reported missing) | Existing entity file, named by its kebab-case id, inside the project |
 
 `story continuity`, not `story links`, checks the ids in `continuity/state.md`: `character`, `location`, `artifact`, `owner`, `learned-in`, and `since` must name existing entities, and `fact` must be kebab-case.
 
@@ -876,7 +876,7 @@ When you add a character with `--location`, or a location with `--character`, `s
 `story rename` and `story remove` keep ids consistent across every file's frontmatter (except `story.md`). They rewrite the entity-reference fields in the table above, plus `controlled-by`, the state-file fields (`character`, `location`, `artifact`, `owner`, `learned-in`, `since`), and any `character` key inside a scene's `state-changes`. A field that can name more than one kind (`owner`, `controlled-by`, `mentions`) is left alone when another kind has an entity with the same id. Beyond that:
 
 - `story rename` also rewrites markdown links, in any project file, that point at the renamed file.
-- `story remove` clears a scalar reference, drops the id from a list, and drops a whole `relationships`, `character-state`, `knowledge-state`, or `object-state` entry whose identifying `character` or `artifact` was removed. It does not edit bodies, so bare `chapter-NN` tokens and links to a removed file remain for `story links` to report.
+- `story remove` clears a scalar reference, drops the id from a list, and drops a whole `relationships`, `character-state`, `knowledge-state`, or `object-state` entry whose identifying `character` or `artifact` was removed. It does not edit bodies, so bare `chapter-NN` tokens and links to a removed file remain. `story links` reports them only in `plot/timeline.md` and arc bodies; find leftovers elsewhere (hand-written registry sections, `style-sheet.md`, other entity bodies) by hand.
 - Neither command edits `follows` or `precedes`, which name other projects rather than entities.
 
 The CLI reference covers [`rename`](cli-reference.md#rename) and [`remove`](cli-reference.md#remove).
@@ -970,8 +970,8 @@ Scene status is not read by any check beyond validation; chapter status drives t
 
 | Value | Meaning | CLI behaviour |
 |-------|---------|---------------|
-| `planned` | Intended, not yet on the page. | `story add` default without `--planted`. Warning if a `planted` chapter is recorded (promises only). Error when `story.md` is `complete`. |
-| `planted` | On the page, awaiting payoff. | `story add` default with `--planted`. Error if no `planted` chapter; gap warning when the payoff is overdue; error when `story.md` is `complete`. |
+| `planned` | Intended, not yet on the page. | `story add` default without `--planted`. Warning if a `planted` chapter is recorded (promises only). Error when `story.md` is `complete`. Counted by `story next`. |
+| `planted` | On the page, awaiting payoff. | `story add` default with `--planted`. Error if no `planted` chapter; gap warning when the payoff is overdue; error when `story.md` is `complete`. Counted by `story next`. |
 | `paid-off` | The payoff has landed. | Error if no `payoff` chapter is recorded. |
 | `dropped` | The setup stays in the book but will not be paid off. | No gap warning and no completion error, but still checked: `payoff` must not come before `planted`. |
 | `abandoned` | The thread was cut, usually during discovery drafting, and kept on record. | Skipped entirely by `story continuity`. |

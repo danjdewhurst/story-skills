@@ -23,7 +23,7 @@ This page explains the model behind Story Skills: how a story project is laid ou
 - Entities refer to each other by id. Some references must be mirrored in the other file. These mirrored references are called backlinks.
 - Each entity folder has an `_index.md` registry that the CLI generates from the entity files. You rebuild registries; you don't edit them.
 - Chapter word counts are measured from the prose and stored in frontmatter, so they can be checked and totalled.
-- Skills make the creative decisions and write the story files. The `story` CLI does the mechanical work: it checks, reindexes, counts, and exports, and it never writes prose.
+- Skills make the creative decisions and write the story files. The `story` CLI does the mechanical work: it checks, reindexes, counts, and exports, and it never composes or revises prose.
 
 ## A project is a folder of markdown
 
@@ -180,11 +180,11 @@ Ids are kebab-case: lowercase ASCII letters and digits separated by single hyphe
 
 Chapters and scenes are the exceptions: their ids come from their numbers. Chapter 1 is `chapter-01`. Scene 1 of chapter 1 is `chapter-01-scene-01`. Their titles live in frontmatter, so `story rename` on a chapter or scene changes only the title and keeps the id.
 
-The id comes from the filename, not the name field. A file you write by hand can use any valid id: the example's artifact is named "Blackened Crown" and lives at `worldbuilding/artifacts/blackened-crown.md`.
+The id comes from the filename, not the name field. A file you write by hand can use any valid id: the example's location is named "The Ashen Citadel" but lives at `worldbuilding/locations/ashen-citadel.md`, so its id is `ashen-citadel`.
 
-The story itself has an id too. It is the kebab-case form of the `story.md` title, and it appears as the `story` field in every registry. `story validate` reports an error when a registry's `story` value doesn't match.
+The story itself has an id too. It is the kebab-case form of the `story.md` title, and it appears as the `story` field in every registry. `story validate` reports an error when a required registry's `story` value doesn't match. The optional `matter/` and `research/` registries have only their `type` checked.
 
-Because ids are ordinary text in many files, don't rename a file by hand. `story rename <kind> <id> "<New Name>"` moves the file, updates the name field, and rewrites the id in every frontmatter reference field and markdown link target across the project. `story remove <kind> <id>` deletes the file and clears the id from every frontmatter reference field; it leaves markdown links in bodies alone, so `story links` reports any that now point at a missing file. Neither command edits prose, so renaming a character called "Port" won't change the word "port" in your chapters. See [`rename`](cli-reference.md#rename) and [`remove`](cli-reference.md#remove) in the CLI reference for details.
+Because ids are ordinary text in many files, don't rename a file by hand. `story rename <kind> <id> "<New Name>"` moves the file, updates the name field, and rewrites the id in every frontmatter reference field and markdown link target across the project. `story remove <kind> <id>` deletes the file and clears the id from every frontmatter reference field; it leaves markdown links and chapter ids in bodies alone. `story links` reports leftovers only in `plot/timeline.md` and arc bodies, so search hand-written registry sections, `style-sheet.md`, and other entity bodies for the id yourself. Neither command edits prose, so renaming a character called "Port" won't change the word "port" in your chapters. See [`rename`](cli-reference.md#rename) and [`remove`](cli-reference.md#remove) in the CLI reference for details.
 
 ## Registries
 
@@ -260,7 +260,7 @@ You rarely need to run `story reindex` yourself. `story add`, `story rename`, `s
 
 ## Links and backlinks
 
-A reference is a frontmatter field that holds another entity's id, such as a chapter's `pov`, a scene's `location`, or a promise's `planted` chapter. `story links` checks that every reference points to an existing file of the right kind and that every id in a reference is kebab-case. It also checks the bodies of `plot/timeline.md` and each arc file: every chapter id mentioned there must exist, and every relative link to a `.md` file must resolve to a file inside the project. Links to an `_index.md` registry and links containing a `*` wildcard are not checked.
+A reference is a frontmatter field that holds another entity's id, such as a chapter's `pov`, a scene's `location`, or a promise's `planted` chapter. `story links` checks that every reference points to an existing file of the right kind and that every id in a reference is kebab-case. It also checks the bodies of `plot/timeline.md` and each arc file: every chapter id mentioned there must exist, and every relative link to a `.md` file must resolve to an existing entity file, named by its kebab-case id, inside the project. A link to a non-entity file such as `story.md` or `style-sheet.md` is reported as missing. Links to an `_index.md` registry and links containing a `*` wildcard are not checked.
 
 Some relationships go both ways, and the model stores them in both files. These pairs must agree, and `story links` reports an error when they don't:
 
@@ -327,8 +327,8 @@ Story Skills splits the work in two:
 | What it is | `SKILL.md` instructions in [`skills/`](../skills/) that an agent loads | A Node program with no runtime dependencies |
 | Kind of work | Creative judgement: what happens next, who a character is, whether a scene works, how to fix a contradiction | Mechanical checks and upkeep: is the file valid, does the id exist, did the dead character come back, how many words |
 | Writes | Story content: prose, bible entries, frontmatter values, continuity state | Registries, `word-count` values, reference rewrites on rename and remove, new entity files from templates, exports and builds |
-| Never does | Invents its own generator or build scripts to emit story content | Writes or edits prose, or makes a story decision |
-| Output | Changes to markdown files, and questions for you | Findings with file paths, and an exit code of 1 when a check finds errors (warnings alone exit 0) |
+| Never does | Invents its own generator or build scripts to emit story content | Composes or revises prose, or makes a story decision |
+| Output | Changes to markdown files, and questions for you | Findings with file paths. `validate`, `links`, `continuity`, `compare`, `progress`, `timeline`, `prose`, and `series` exit 1 when they find errors (warnings alone exit 0); `next`, `doctor`, and `report` always exit 0 |
 
 Each skill ends its workflow by running the maintenance commands that fit what it changed. After adding, removing, renaming, or revising entities, that means some of `story reindex`, `story wordcount --write`, `story links`, and `story validate`, plus `story continuity` after drafting or revision. When a command reports findings, the agent decides how to fix them. It fixes structural problems such as a missing backlink or a stale registry directly. It raises story problems with you, such as a character appearing after their death, and never rewrites prose only to make a check pass.
 
@@ -360,9 +360,10 @@ node skills/story-maintenance/scripts/story.js --version
 
 Skills look for a CLI in this order:
 
-1. `story <command>`, when the package is installed (`npm install -g story-skills`, or `npx story-skills`)
-2. `bun run story -- <command>`, when working in a checkout of this repository
-3. `node ../story-maintenance/scripts/story.js <command>`, resolved relative to the skill's own folder (the `story-maintenance` skill itself uses `node scripts/story.js`)
+1. `story <command>`, when the package is installed (`npm install -g story-skills`)
+2. `npx story-skills <command>`, which runs the published package without installing it
+3. `bun run story -- <command>`, when working in a checkout of this repository
+4. `node ../story-maintenance/scripts/story.js <command>`, resolved relative to the skill's own folder (the `story-maintenance` skill itself uses `node scripts/story.js`)
 
 The agent runs the fallback where it is installed. It never copies it into the story project, which stays markdown only. The fallback is generated with `bun run build:fallback`, and CI checks that it matches the source; see the [Development guide](development.md).
 

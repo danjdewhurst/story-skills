@@ -8,9 +8,10 @@
 # If your story project lives in a subdirectory, change STORY_DIR.
 #
 # The Story CLI runs straight from GitHub, pinned to the STORY_REF tag below;
-# bump STORY_REF when you adopt a newer story-skills release. (There is no
-# npm-published package yet; switch the npx --package value to story-skills
-# once the package is published to the npm registry.)
+# bump STORY_REF when you adopt a newer story-skills release. To use the
+# story-skills package from npm instead, replace each
+# github:danjdewhurst/story-skills#... --package value with
+# story-skills@<version>.
 #
 # Actions are pinned to commit SHAs with their moving tags in comments, so a
 # compromised tag cannot silently change what this workflow runs. Dependabot

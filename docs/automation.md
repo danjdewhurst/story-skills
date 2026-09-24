@@ -270,7 +270,7 @@ For several books in one repository, copy the check steps once per book, or turn
 
 `STORY_REF` is the Story Skills release tag the CLI is fetched from. The release process sets it to the release's own version, so a template copied from a given release already points at that release. Bump it in both files when you want a newer release, and run the checks locally first, because new releases can add checks. Releases are listed on the [GitHub releases page](https://github.com/danjdewhurst/story-skills/releases).
 
-To use the npm package instead of the GitHub tag, replace `github:danjdewhurst/story-skills#$STORY_REF` with `story-skills@<version>` in each `npx --package` value. In `draft-next-chapter.yml`, change the prompt commands and the `Bash(...)` rule in `--allowedTools` together, so they still match.
+To use the npm package instead of the GitHub tag, replace `github:danjdewhurst/story-skills#$STORY_REF` with `story-skills@<version>` in each `npx --package` value. In `draft-next-chapter.yml`, the prompt commands and the `Bash(...)` rule in `--allowedTools` spell it `github:danjdewhurst/story-skills#${{ env.STORY_REF }}` instead; change those together, so they still match.
 
 ### Schedule
 

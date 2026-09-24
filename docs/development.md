@@ -76,7 +76,7 @@ Notes on specific paths:
 
 - `plugins/story-skills` is a symlink to the repository root. Codex marketplace entries must point at a child plugin directory, so `.agents/plugins/marketplace.json` points at `./plugins/story-skills`. Keep it a symlink; a copy would duplicate `skills/` and drift. `check:metadata` fails if the path is missing or the marketplace entry points anywhere else.
 - `evals/` is tooling for this repository. Agents using the skills never load it. `evals/outputs/` and `evals/baseline/` are gitignored.
-- `docs/`, `bin/`, `src/`, `skills/`, `schemas/`, `README.md`, and `LICENSE` are the only paths published to npm (the `files` list in `package.json`).
+- `docs/`, `bin/`, `src/`, `skills/`, `schemas/`, `README.md`, and `LICENSE` (the `files` list in `package.json`), plus `package.json` itself, which npm always includes, are the only paths published to npm.
 - `assets/demo.gif` is generated from `assets/demo.tape` with `vhs assets/demo.tape`.
 - `CLAUDE.md` is a symlink to `AGENTS.md`. Edit `AGENTS.md` and leave the symlink alone.
 
@@ -120,7 +120,7 @@ flowchart LR
 Most commands follow the same pattern. A function in `src/story.js` takes the project root, calls `scanProject(root)` to read every entity file into one in-memory project object, and passes that object to a pure function in a feature module. For example, `checkProjectContinuity(root)` is `checkContinuity(scanProject(root))`. What happens next depends on the kind of command:
 
 - Check commands such as `validate`, `links`, and `continuity` get back `{ ok, errors, warnings }` (plus `dismissed` for continuity) and hand it to `reportResult`.
-- Report commands such as `timeline`, `prose`, and `progress` pass their result to a `format*` function from the feature module and write the text to stdout.
+- Report commands (`compare`, `progress`, `timeline`, `prose`, and `series`) pass their result to a `format*` function from the feature module and write the text to stdout, then hand the same result to `reportResult` for the stderr summary and exit code.
 
 Keep new analysis code in that shape: pure functions over the scanned project, with file I/O left to `story.js`.
 
