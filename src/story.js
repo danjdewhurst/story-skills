@@ -1436,12 +1436,15 @@ export function clueReport(root) {
 export function diagramProject(root, options = {}) {
   const project = scanProject(root);
   const text = buildDiagram(project, options.kind);
-  if (options.out === undefined) {
-    return { text };
+  const result = { ok: project.fileErrors.length === 0, errors: [...project.fileErrors], warnings: [], text };
+  // A diagram drawn from a partly unreadable project would silently drop
+  // entities, so nothing is written until the scan is clean.
+  if (options.out === undefined || !result.ok) {
+    return result;
   }
   const output = resolveOutputPath(project, options.out, "");
   writeFile(output.outFile, text, output.writeOptions);
-  return { text, outFile: output.outFile };
+  return { ...result, outFile: output.outFile };
 }
 
 // Reads, and with init/start/done updates, story.md revision-passes. Only
@@ -1457,13 +1460,19 @@ export function projectPasses(root, change = {}) {
   if (project.fileErrors.some((error) => error.startsWith("story.md"))) {
     throw new Error("story.md cannot be parsed; fix it before recording revision passes");
   }
-  const next = updatePasses(passes, change);
+  const passErrors = [];
+  validatePasses(project.story.data, "story.md", passErrors);
+  if (passErrors.length > 0) {
+    throw new Error(`Fix revision-passes in story.md before changing it: ${passErrors.join("; ")}`);
+  }
+  const current = asArray(project.story.data["revision-passes"]);
+  const next = updatePasses(current, change);
   const raw = safeRead(storyPath, project.root);
-  const changed = JSON.stringify(next) !== JSON.stringify(passes);
+  const changed = JSON.stringify(next) !== JSON.stringify(current);
   if (changed) {
     writeFile(storyPath, replaceFrontmatter(raw, { ...parseFrontmatter(raw, storyPath).data, "revision-passes": next }), { root: project.root });
   }
-  return { passes: next, changed };
+  return { passes: readPasses({ "revision-passes": next }), changed };
 }
 
 // Collision check for candidate names against every name in the bible.
@@ -3264,7 +3273,8 @@ function manuscriptParts(project) {
   const front = matter("front");
   // A copyright line in story.md becomes the copyright page unless a matter
   // page already provides one.
-  const hasCopyrightPage = project.matter.some((entry) => entry.id === "copyright" || /copyright/i.test(entry.title));
+  const back = matter("back");
+  const hasCopyrightPage = [...front, ...back].some((entry) => entry.id === "copyright" || /copyright/i.test(entry.title));
   if (meta.copyright !== "" && !hasCopyrightPage) {
     front.unshift({ id: "copyright", title: "Copyright", heading: false, body: copyrightPage(meta) });
   }
@@ -3275,7 +3285,7 @@ function manuscriptParts(project) {
     meta,
     front,
     chapters,
-    back: matter("back")
+    back
   };
 }
 

@@ -128,9 +128,9 @@ describe("story diagram", () => {
   test("arcs joins each arc to the chapters and scenes that advance it", () => {
     const { root } = diagramFixture();
     const text = diagramProject(root, { kind: "arcs" }).text;
-    expect(text).toContain("  arc_main_line([\"Main Line\"])\n");
-    expect(text).toContain("  arc_main_line --> chapter_01\n");
-    expect(text).toContain("  arc_main_line --> chapter_02\n");
+    expect(text).toContain("  arc__main_line([\"Main Line\"])\n");
+    expect(text).toContain("  arc__main_line --> chapter_01\n");
+    expect(text).toContain("  arc__main_line --> chapter_02\n");
     expect(text).not.toContain("missing");
   });
 

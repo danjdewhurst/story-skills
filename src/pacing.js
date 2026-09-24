@@ -22,7 +22,7 @@ export function buildPacing(project) {
       .sort((left, right) => left.scene - right.scene || left.id.localeCompare(right.id, "en"));
     const outcomes = { yes: 0, no: 0, "yes-but": 0, "no-and": 0 };
     for (const scene of scenes) {
-      if (SCENE_OUTCOMES.has(scene.outcome)) {
+      if (!scene.sequel && SCENE_OUTCOMES.has(scene.outcome)) {
         outcomes[scene.outcome] += 1;
       }
       units.push(scene);

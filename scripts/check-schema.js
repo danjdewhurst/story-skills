@@ -115,6 +115,9 @@ function typeOf(value) {
 }
 
 function matchesType(value, type) {
+  if (Array.isArray(type)) {
+    return type.some((entry) => matchesType(value, entry));
+  }
   const actual = typeOf(value);
   return actual === type || (type === "number" && actual === "integer");
 }
@@ -131,7 +134,7 @@ function resolveRef(schema, ref) {
 // uses. Unknown keywords throw so the schema cannot quietly outgrow it.
 const SUPPORTED = new Set([
   "$schema", "$id", "$comment", "$defs", "title", "description",
-  "$ref", "type", "required", "properties", "items", "enum", "const", "pattern", "minimum", "minLength"
+  "$ref", "type", "required", "properties", "items", "enum", "const", "pattern", "minimum", "exclusiveMinimum", "minLength"
 ]);
 
 // Walks the whole schema up front, so an unsupported keyword fails even
@@ -165,7 +168,7 @@ export function validateAgainstSchema(value, schema, root = schema, at = "$") {
     errors.push(...validateAgainstSchema(value, resolveRef(root, schema.$ref), root, at));
   }
   if (schema.type && !matchesType(value, schema.type)) {
-    return [...errors, `${at}: expected ${schema.type}, got ${typeOf(value)}`];
+    return [...errors, `${at}: expected ${[].concat(schema.type).join(" or ")}, got ${typeOf(value)}`];
   }
   if (schema.const !== undefined && value !== schema.const) {
     errors.push(`${at}: expected ${JSON.stringify(schema.const)}, got ${JSON.stringify(value)}`);
@@ -183,6 +186,9 @@ export function validateAgainstSchema(value, schema, root = schema, at = "$") {
   }
   if (typeof value === "number" && schema.minimum !== undefined && value < schema.minimum) {
     errors.push(`${at}: ${value} is below the minimum ${schema.minimum}`);
+  }
+  if (typeof value === "number" && schema.exclusiveMinimum !== undefined && value <= schema.exclusiveMinimum) {
+    errors.push(`${at}: ${value} must be greater than ${schema.exclusiveMinimum}`);
   }
   if (Array.isArray(value) && schema.items) {
     value.forEach((item, index) => {

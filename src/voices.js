@@ -120,7 +120,7 @@ function speakerPatterns(characters) {
       }
       return {
         id: character.id,
-        name: new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternatives})(?![\\p{L}\\p{N}])`, "u"),
+        name: new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternatives})(?![\\p{L}\\p{N}])`, "iu"),
         tag: new RegExp(`(?<![\\p{L}\\p{N}])(?:(?:${alternatives})\\s+(?:${verbs})|(?:${verbs})\\s+(?:${alternatives}))(?![\\p{L}\\p{N}])`, "iu")
       };
     })

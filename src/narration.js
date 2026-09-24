@@ -75,5 +75,5 @@ function formatMinutes(words) {
 }
 
 function cell(value) {
-  return String(value).replace(/\|/g, "\\|");
+  return String(value).replace(/\s+/g, " ").trim().replace(/\|/g, "\\|");
 }
