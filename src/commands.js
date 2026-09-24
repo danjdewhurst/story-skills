@@ -1,4 +1,5 @@
 import path from "node:path";
+import { formatClueMatrix } from "./clues.js";
 import { formatComparison } from "./compare.js";
 import { importManuscript } from "./import.js";
 import { isTruthy } from "./options.js";
@@ -9,6 +10,7 @@ import { formatTimeline } from "./timeline.js";
 import {
   buildBook,
   checkProjectContinuity,
+  clueReport,
   compareProject,
   computeWordCounts,
   createEntity,
@@ -235,6 +237,21 @@ export const COMMANDS = [
       const report = proseReport(root());
       io.stdout.write(formatProseReport(report));
       return reportResult(io, report, "Prose check complete", "Prose check failed");
+    }
+  },
+  {
+    name: "clues",
+    usage: "clues [path]",
+    summary: [
+      "Show the clue plant/reveal grid by chapter and flag",
+      "fair-play problems: late plants, unplanted reveals,",
+      "and red herrings never debunked"
+    ],
+    project: "positional",
+    run({ io, root }) {
+      const report = clueReport(root());
+      io.stdout.write(formatClueMatrix(report));
+      return reportResult(io, report, "Clue check complete", "Clue check failed");
     }
   },
   {
