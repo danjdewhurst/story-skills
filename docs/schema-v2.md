@@ -73,7 +73,7 @@ Optional publishing metadata (hand-edit; see the `publishing` skill), read by `s
 
 - `authors` - list of author names for a co-written book; builds use it in place of `author`, and `story validate` warns when both are set.
 - `language` - BCP 47 language tag (`en`, `en-GB`, `fr`); default `en`. The EPUB package and every EPUB document declare it.
-- `isbn` - ISBN-13 or ISBN-10, hyphens allowed; `story validate` checks the checksum. The EPUB identifier becomes `urn:isbn:<digits>`. Use the ISBN of the edition being built.
+- `isbn` - ISBN-13 or ISBN-10, hyphens allowed; `story validate` checks the checksum. Quote an ISBN-10 that starts with 0, or YAML reads it as a number and drops the zero. The EPUB identifier becomes `urn:isbn:<digits>`. Use the ISBN of the edition being built.
 - `publisher`, `publication-date` (`YYYY-MM-DD`), `description` (the retailer description) - written to the EPUB package.
 - `keywords` - retailer search keywords; `story validate` warns over 7.
 - `subjects` - BISAC subject codes such as `FIC022000`; written as EPUB subjects.
@@ -222,6 +222,8 @@ The body is the page text; a leading `# Heading` line is dropped, like a chapter
 - `print` - a print interior as HTML with CSS paged media, written to `dist/<story-id>.print.html`: a title page, the front matter with the copyright page before the contents, chapters opening on a recto with a raised initial, running heads (author on the verso, chapter title on the recto, none on chapter openings), page numbers, justified text with widow and orphan control, and back matter. `--trim` sets the trim size: `5x8`, `5.25x8`, `5.5x8.5` (default), `6x9`, or `a5`. The inside margin grows with the estimated page count. Render it to PDF with a paged-media engine (`npx pagedjs-cli`, `weasyprint`, or `prince`); the CLI does not bundle one. Check the printer's current specifications for margins, bleed, and embedded fonts before upload.
 
 - `narration` - an audiobook narration script, `dist/<story-id>.narration.md`: the estimated finished runtime at 155 words per minute, a pronunciation guide built from every `pronunciation` field, opening credits, each front matter page (except the copyright page), chapter, and back matter page with its own runtime estimate, scene breaks as `[pause]`, and closing credits. Emphasis stays marked so the narrator sees the stress. See the `adaptation` skill.
+
+- `metadata` - a retailer metadata sheet, `dist/<story-id>.metadata.md`: a table of title, series, authors, ISBN, publisher, publication date, language, genre, form, word count, estimated print pages at 5.5x8.5 and 6x9, description length against a 4,000-character limit, keywords, BISAC subjects, copyright, cover, cover alt text, and AI disclosure (missing fields say so), the full description, and a readiness checklist. Retailer limits change, so check each retailer's current requirements before upload.
 
 Characters, locations, factions, artifacts, and glossary terms may set `pronunciation`, a respelling such as `SHUR-sha`, for the narration guide; `story validate` checks it is text. Cut characters are left out of the guide.
 

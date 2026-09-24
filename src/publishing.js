@@ -17,7 +17,8 @@ export function publishingMeta(data) {
   return {
     authors: authors.length > 0 ? authors : author === "" ? [] : [author],
     language: text("language") || "en",
-    isbn: normalizeIsbn(text("isbn")),
+    // An unquoted ISBN-13 parses as a number, so accept that too.
+    isbn: normalizeIsbn(typeof data.isbn === "number" ? String(data.isbn) : text("isbn")),
     publisher: text("publisher"),
     publicationDate: text("publication-date"),
     description: text("description"),
@@ -31,7 +32,7 @@ export function publishingMeta(data) {
 
 export function validatePublishing(data, errors, warnings) {
   for (const field of SCALAR_FIELDS) {
-    if (data[field] !== undefined && typeof data[field] !== "string") {
+    if (data[field] !== undefined && typeof data[field] !== "string" && !(field === "isbn" && typeof data[field] === "number")) {
       errors.push(`story.md frontmatter field ${field} must be text`);
     }
   }
@@ -43,8 +44,10 @@ export function validatePublishing(data, errors, warnings) {
   if (typeof data.language === "string" && !LANGUAGE_PATTERN.test(data.language.trim())) {
     errors.push(`story.md language ${data.language} must be a BCP 47 tag such as en, en-GB, or fr`);
   }
-  if (typeof data.isbn === "string" && data.isbn.trim() !== "" && normalizeIsbn(data.isbn) === "") {
-    errors.push(`story.md isbn ${data.isbn} is not a valid ISBN-13 or ISBN-10 (check the digits and checksum)`);
+  const isbn = typeof data.isbn === "number" ? String(data.isbn) : data.isbn;
+  if (typeof isbn === "string" && isbn.trim() !== "" && normalizeIsbn(isbn) === "") {
+    const hint = typeof data.isbn === "number" ? "; quote it so leading zeros survive" : "";
+    errors.push(`story.md isbn ${isbn} is not a valid ISBN-13 or ISBN-10 (check the digits and checksum${hint})`);
   }
   if (typeof data["publication-date"] === "string") {
     const dateError = storyDateError(data["publication-date"]);
@@ -96,4 +99,69 @@ export function copyrightPage(meta) {
     lines.push("", meta.aiDisclosure);
   }
   return lines.join("\n");
+}
+
+export const DESCRIPTION_LIMIT = 4000;
+
+// Retailer metadata sheet: every field a distributor form asks for, with a
+// readiness checklist of what is still missing.
+export function metadataSheet(input) {
+  const { title, data, meta, words, pages } = input;
+  const series = typeof data.series === "string" ? `${data.series}${Number.isInteger(data["book-number"]) ? `, book ${data["book-number"]}` : ""}` : "";
+  const rows = [
+    ["Title", title],
+    ["Series", series],
+    ["Author(s)", meta.authors.join("; ")],
+    ["ISBN", meta.isbn],
+    ["Publisher", meta.publisher],
+    ["Publication date", meta.publicationDate],
+    ["Language", meta.language],
+    ["Genre", [data.genre, data["sub-genre"]].filter((value) => typeof value === "string" && value !== "").join(" / ")],
+    ["Form", typeof data.form === "string" ? data.form : ""],
+    ["Word count", String(words)],
+    ["Estimated print pages", Object.entries(pages).map(([trim, count]) => `${count} at ${trim}`).join(", ")],
+    ["Description", meta.description === "" ? "" : `${meta.description.length} characters (limit ${DESCRIPTION_LIMIT})`],
+    ["Keywords", meta.keywords.length === 0 ? "" : `${meta.keywords.length} of ${MAX_KEYWORDS}: ${meta.keywords.join("; ")}`],
+    ["BISAC subjects", meta.subjects.join("; ")],
+    ["Copyright", meta.copyright],
+    ["Cover", typeof data.cover === "string" ? data.cover : ""],
+    ["Cover alt text", meta.coverAlt],
+    ["AI disclosure", meta.aiDisclosure]
+  ];
+  const checks = [
+    ["Author named (`author` or `authors`)", meta.authors.length > 0],
+    ["ISBN for this edition (`isbn`), or a retailer-assigned identifier", meta.isbn !== ""],
+    ["Publisher or imprint (`publisher`)", meta.publisher !== ""],
+    ["Publication date (`publication-date`)", meta.publicationDate !== ""],
+    [`Description under ${DESCRIPTION_LIMIT} characters (\`description\`)`, meta.description !== "" && meta.description.length <= DESCRIPTION_LIMIT],
+    [`Keywords, up to ${MAX_KEYWORDS} (\`keywords\`)`, meta.keywords.length > 0 && meta.keywords.length <= MAX_KEYWORDS],
+    ["BISAC subjects (`subjects`)", meta.subjects.length > 0],
+    ["Copyright line (`copyright`) or copyright matter page", meta.copyright !== "" || input.hasCopyrightPage],
+    ["Cover image (`cover`)", typeof data.cover === "string" && data.cover !== ""],
+    ["Cover alt text (`cover-alt`)", meta.coverAlt !== ""],
+    ["AI-use statement decided (`ai-disclosure`)", meta.aiDisclosure !== ""],
+    ["Story status is complete", data.status === "complete"]
+  ];
+  return [
+    `# ${title}: Retailer Metadata`,
+    "",
+    "Generated from story.md. Retailer limits change; check each retailer's current requirements before upload.",
+    "",
+    "| Field | Value |",
+    "| --- | --- |",
+    ...rows.map(([field, value]) => `| ${field} | ${value === "" ? "(missing)" : tableCell(value)} |`),
+    "",
+    "## Description",
+    "",
+    meta.description === "" ? "(missing)" : meta.description,
+    "",
+    "## Readiness",
+    "",
+    ...checks.map(([label, ok]) => `- [${ok ? "x" : " "}] ${label}`),
+    ""
+  ].join("\n");
+}
+
+function tableCell(value) {
+  return String(value).replace(/\|/g, "\\|").replace(/\n/g, " ");
 }

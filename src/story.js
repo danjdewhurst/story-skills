@@ -11,8 +11,8 @@ import { buildDiagram } from "./diagram.js";
 import { buildVoices } from "./voices.js";
 import { checkNames, existingNames } from "./names.js";
 import { STORY_FORMS, formRangeWarning } from "./forms.js";
-import { copyrightPage, publishingMeta, validatePublishing } from "./publishing.js";
-import { DEFAULT_TRIM, escapeHtml, printHtml, reviewHtml } from "./html.js";
+import { copyrightPage, metadataSheet, publishingMeta, validatePublishing } from "./publishing.js";
+import { DEFAULT_TRIM, escapeHtml, estimatePages, printHtml, reviewHtml } from "./html.js";
 import { narrationScript, pronunciationGuide } from "./narration.js";
 import { DEFAULT_PASSES, nextPass, readPasses, updatePasses, validatePasses } from "./passes.js";
 import { CHAPTER_HOOKS, SCENE_OUTCOMES, buildPacing } from "./pacing.js";
@@ -1569,7 +1569,17 @@ export function buildBook(root, options = {}) {
   }
 
   const manuscript = manuscriptParts(project);
-  if (format === "narration") {
+  if (format === "metadata") {
+    const words = manuscript.chapters.reduce((sum, chapter) => sum + wordCount(chapter.body), 0);
+    writeFile(output.outFile, metadataSheet({
+      title: manuscript.title,
+      data: project.story.data,
+      meta: manuscript.meta,
+      words,
+      pages: { "5.5x8.5": estimatePages(words, "5.5x8.5"), "6x9": estimatePages(words, "6x9") },
+      hasCopyrightPage: manuscript.front.some((entry) => entry.id === "copyright" || /copyright/i.test(entry.title))
+    }), output.writeOptions);
+  } else if (format === "narration") {
     writeFile(output.outFile, narrationScript(manuscript, pronunciationGuide(project)), output.writeOptions);
   } else if (format === "html" || format === "print") {
     const book = htmlBook(manuscript);
@@ -4089,7 +4099,8 @@ const BUILD_EXTENSIONS = {
   shunn: "shunn.md",
   html: "html",
   print: "print.html",
-  narration: "narration.md"
+  narration: "narration.md",
+  metadata: "metadata.md"
 };
 
 function normalizeBuildFormat(value) {
