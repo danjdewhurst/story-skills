@@ -6,6 +6,7 @@ import { checkContinuity, storyDateError, storyTimeError } from "./continuity.js
 import { FRONTMATTER_PATTERN, parseFrontmatter, replaceFrontmatter, stringifyFrontmatter } from "./frontmatter.js";
 import { chapterProse, escapeRegExp, extractSection, kebabCase, titleCaseSlug, wordCount } from "./markdown.js";
 import { buildTimeline } from "./timeline.js";
+import { buildClueMatrix } from "./clues.js";
 import { compareChapters, proseParagraphs } from "./compare.js";
 import { PROGRESS_FILE, cleanSessions, computeProgress, localDate, withSession } from "./progress.js";
 import { analyzeChapter, chapterFindings, proseRules, repeatedPhrases, similarNames } from "./prose.js";
@@ -418,6 +419,7 @@ export function scanProject(root) {
       planted: String(data.planted ?? ""),
       payoff: String(data.payoff ?? ""),
       significanceDelayed: Boolean(data["significance-delayed"] ?? false),
+      redHerring: data["red-herring"] === true,
       characters: asArray(data.characters),
       arcs: asArray(data.arcs)
     }), scanErrors),
@@ -1374,6 +1376,13 @@ export function storyTimeline(root) {
     totalChapters: project.chapters.length,
     ...buildTimeline(project)
   };
+}
+
+// Read-only fair-play grid over the clue registry. Findings are advisory.
+export function clueReport(root) {
+  const project = scanProject(root);
+  const matrix = buildClueMatrix(project);
+  return { ok: project.fileErrors.length === 0, errors: [...project.fileErrors], ...matrix };
 }
 
 // Advisory prose lint: counts per chapter plus manuscript-wide repeats.
@@ -2676,6 +2685,7 @@ function clueFile(title, options) {
     planted: options.planted ?? "",
     payoff: options.payoff ?? "",
     "significance-delayed": options["significance-delayed"] ?? false,
+    ...(options["red-herring"] ? { "red-herring": true } : {}),
     characters: normalizeList(options.characters ?? options.character, []),
     arcs: normalizeList(options.arcs ?? options.arc, [])
   })}# ${title}
@@ -4249,8 +4259,10 @@ function validateClues(project, errors) {
     validateEnum(data, "status", CLUE_STATUSES, label, errors);
     validateStringArray(data, "arcs", label, errors);
     validateStringArray(data, "characters", label, errors);
-    if (data["significance-delayed"] !== undefined && typeof data["significance-delayed"] !== "boolean") {
-      errors.push(`${label} frontmatter field significance-delayed must be a boolean`);
+    for (const field of ["significance-delayed", "red-herring"]) {
+      if (data[field] !== undefined && typeof data[field] !== "boolean") {
+        errors.push(`${label} frontmatter field ${field} must be a boolean`);
+      }
     }
   }
 }

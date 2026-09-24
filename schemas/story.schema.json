@@ -256,6 +256,7 @@
         "planted": { "type": "string" },
         "payoff": { "type": "string" },
         "significance-delayed": { "type": "boolean" },
+        "red-herring": { "type": "boolean" },
         "arcs": { "$ref": "#/$defs/stringList" },
         "characters": { "$ref": "#/$defs/stringList" }
       }

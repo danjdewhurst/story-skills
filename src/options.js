@@ -64,6 +64,7 @@ export const OPTIONS = [
   { name: "planted", value: "<id>", help: ["Chapter id for add promise/clue"] },
   { name: "payoff", value: "<id>", help: ["Chapter id for add promise/clue"] },
   { name: "significance-delayed", help: ["Significance is delayed for add clue"] },
+  { name: "red-herring", help: ["Mark add clue as a red herring"] },
   { name: "category", value: "<name>", help: ["Category for add term"] },
   { name: "alias", value: "<name>", repeatable: true, help: ["Alias for add term; repeatable"] },
   { name: "aliases", value: "<names>", repeatable: true },
