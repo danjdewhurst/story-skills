@@ -8,7 +8,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const VERSION_FILES = ["package.json", ".codex-plugin/plugin.json", ".claude-plugin/plugin.json"];
 const VERSION_MODULE = "src/version.js";
 const FALLBACK_FILE = "skills/story-maintenance/scripts/story.js";
-const STORY_REF_FILES = ["templates/github/story-checks.yml", "templates/github/draft-next-chapter.yml"];
+const STORY_REF_FILES = ["templates/github/story-checks.yml", "templates/github/draft-next-chapter.yml", "templates/github/review-copy.yml"];
 const RELEASE_BRANCH = "main";
 // test:coverage gates src line and function coverage, then the fallback bundle.
 // Branch records are gated only when the lcov report contains them.

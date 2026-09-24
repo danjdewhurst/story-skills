@@ -46,7 +46,7 @@ export function checkSkillFrontmatter(failures, skillsDir, readFile) {
 }
 
 export function checkTemplateStoryRef(failures, packageVersion, templatesDir, readFile) {
-  for (const name of ["story-checks.yml", "draft-next-chapter.yml"]) {
+  for (const name of ["story-checks.yml", "draft-next-chapter.yml", "review-copy.yml"]) {
     const text = readFile(path.join(templatesDir, name));
     const match = /STORY_REF:\s*"([^"]+)"/.exec(text);
     if (!match) {

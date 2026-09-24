@@ -1,0 +1,91 @@
+# Review copy - publish a readable, citable manuscript for non-technical readers.
+#
+# Copy this file to .github/workflows/review-copy.yml in the repository that
+# holds your story project. Every push to main builds `story build --format
+# html` and publishes it to GitHub Pages, so beta readers, critique partners,
+# and editors get a link instead of a terminal. Every paragraph carries a
+# label such as ch03-p12; readers quote it in their notes, and the matching
+# issue form (ISSUE_TEMPLATE/manuscript-note.yml) asks for it.
+#
+# One-time setup: in the repository's Settings > Pages, set Source to
+# "GitHub Actions". Pages sites are public unless your plan supports private
+# Pages; if the manuscript must stay private, delete the deploy job and share
+# the review-copy workflow artifact instead.
+#
+# If your story project lives in a subdirectory, change STORY_DIR.
+#
+# The Story CLI runs straight from GitHub, pinned to the STORY_REF tag below;
+# bump STORY_REF when you adopt a newer story-skills release.
+#
+# Actions are pinned to commit SHAs with their moving tags in comments, so a
+# compromised tag cannot silently change what this workflow runs. Dependabot
+# (github-actions ecosystem) proposes SHA updates.
+
+name: Review copy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: review-copy
+  cancel-in-progress: true
+
+env:
+  STORY_DIR: "."
+  STORY_REF: "v0.8.2"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+
+      - name: Check the project before publishing it
+        run: |
+          npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story validate "$STORY_DIR"
+          npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story links "$STORY_DIR"
+          npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story continuity "$STORY_DIR"
+
+      - name: Build the review copy
+        run: |
+          mkdir -p review-site
+          npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story build "$STORY_DIR" --format html --out "$GITHUB_WORKSPACE/review-site/index.html"
+
+      - name: Keep the review copy as a workflow artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: review-copy
+          path: review-site/index.html
+
+      - name: Configure Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
+
+      - name: Upload the Pages site
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
+        with:
+          path: review-site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5
