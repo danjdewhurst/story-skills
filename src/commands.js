@@ -460,13 +460,18 @@ export const COMMANDS = [
   {
     name: "build",
     usage: "build [path]",
-    summary: ["Build a disposable book artifact in dist/; EPUB", "builds use the story.md cover image"],
+    summary: [
+      "Build a disposable book artifact in dist/: markdown,",
+      "epub, docx, shunn, html (review copy with paragraph",
+      "anchors), or print (paged-media interior)"
+    ],
     project: "positional",
     run({ parsed, io, root }) {
       const result = buildBook(root(), {
         out: parsed.options.out,
         format: parsed.options.format,
-        shunn: isTruthy(parsed.options.shunn)
+        shunn: isTruthy(parsed.options.shunn),
+        trim: parsed.options.trim
       });
       io.stdout.write(`Built ${result.chapters} chapters as ${result.format} to ${result.outFile}\n`);
       return 0;

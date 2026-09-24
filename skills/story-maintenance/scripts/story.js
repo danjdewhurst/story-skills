@@ -2602,6 +2602,203 @@ function copyrightPage(meta) {
 `);
 }
 
+// src/html.js
+var TRIM_SIZES = new Map([
+  ["5x8", { width: "5in", height: "8in", wordsPerPage: 230 }],
+  ["5.25x8", { width: "5.25in", height: "8in", wordsPerPage: 250 }],
+  ["5.5x8.5", { width: "5.5in", height: "8.5in", wordsPerPage: 275 }],
+  ["6x9", { width: "6in", height: "9in", wordsPerPage: 300 }],
+  ["a5", { width: "148mm", height: "210mm", wordsPerPage: 270 }]
+]);
+var DEFAULT_TRIM = "5.5x8.5";
+function reviewHtml(book) {
+  const toc = [];
+  const sections = [];
+  for (const part of book.parts) {
+    toc.push(`<li><a href="#${part.key}">${escapeHtml(part.title)}</a></li>`);
+    const body = [];
+    let count = 0;
+    for (const paragraph of part.paragraphs) {
+      if (paragraph === null) {
+        body.push(`<hr class="scene-break" aria-label="Scene break">`);
+        continue;
+      }
+      count += 1;
+      const anchor = `${part.key}-p${count}`;
+      body.push(`<p id="${anchor}"><a class="anchor" href="#${anchor}" title="Link to ${anchor}">${anchor}</a>${paragraph}</p>`);
+    }
+    const heading = part.heading ? `<h2>${escapeHtml(part.title)}</h2>` : `<h2 class="visually-hidden">${escapeHtml(part.title)}</h2>`;
+    sections.push(`<section id="${part.key}" class="${part.kind}">${heading}
+${body.join(`
+`)}
+</section>`);
+  }
+  const byline = book.authors.length === 0 ? "" : `<p class="byline">${escapeHtml(book.authors.join(" and "))}</p>`;
+  return `<!DOCTYPE html>
+<html lang="${escapeHtml(book.language)}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(book.title)}: review copy</title>
+<style>
+:root { --bg: #fdfcf8; --fg: #1d1b16; --muted: #6b665c; --rule: #ddd6c8; --accent: #7c3aed; }
+@media (prefers-color-scheme: dark) { :root { --bg: #16150f; --fg: #ece8dd; --muted: #a39e92; --rule: #3a372f; --accent: #b794f4; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 1.1rem/1.65 Georgia, "Iowan Old Style", "Palatino Linotype", serif; }
+main { max-width: 38rem; margin: 0 auto; padding: 2rem 1rem 6rem; }
+header h1 { font-size: 2rem; line-height: 1.2; margin: 2rem 0 0.25rem; }
+.byline, .note { color: var(--muted); margin: 0 0 1rem; }
+.note { font: 0.9rem/1.5 system-ui, sans-serif; border-left: 3px solid var(--accent); padding-left: 0.75rem; }
+nav ol { padding-left: 1.25rem; }
+nav a, .anchor { color: var(--accent); }
+section { border-top: 1px solid var(--rule); margin-top: 3rem; padding-top: 1rem; }
+h2 { font-size: 1.4rem; margin: 1rem 0 1.5rem; }
+p { position: relative; margin: 0 0 1rem; }
+.anchor { position: absolute; left: -5.5rem; width: 5rem; text-align: right; font: 0.7rem/2.2 system-ui, sans-serif; text-decoration: none; opacity: 0.35; }
+p:hover .anchor, p:target .anchor, .anchor:focus { opacity: 1; }
+p:target { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.scene-break { border: 0; text-align: center; margin: 2rem 0; }
+.scene-break::after { content: "* * *"; color: var(--muted); }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+@media (max-width: 52rem) { .anchor { position: static; display: block; width: auto; text-align: left; line-height: 1.4; opacity: 0.6; } }
+</style>
+</head>
+<body>
+<main>
+<header>
+<h1>${escapeHtml(book.title)}</h1>
+${byline}
+<p class="note">Review copy. Every paragraph has a label such as <code>ch03-p12</code> (chapter 3, paragraph 12). Quote the label with each note so the author can find the exact spot.</p>
+</header>
+<nav aria-label="Contents"><h2>Contents</h2><ol>
+${toc.join(`
+`)}
+</ol></nav>
+${sections.join(`
+`)}
+</main>
+</body>
+</html>
+`;
+}
+function printHtml(book, trimName = DEFAULT_TRIM) {
+  const trim = TRIM_SIZES.get(trimName);
+  if (!trim) {
+    throw new Error(`Unsupported trim size: ${trimName}. Supported sizes: ${[...TRIM_SIZES.keys()].join(", ")}`);
+  }
+  const pages = estimatePages(book.words, trimName);
+  const inside = insideMargin(pages);
+  const author = book.authors.join(" and ");
+  const toc = [];
+  const sections = [];
+  for (const part of book.parts) {
+    const paragraphs = [];
+    let first = true;
+    for (const paragraph of part.paragraphs) {
+      if (paragraph === null) {
+        paragraphs.push(`<p class="scene-break" aria-label="Scene break">*&#8195;*&#8195;*</p>`);
+        first = true;
+        continue;
+      }
+      paragraphs.push(first ? `<p class="first">${paragraph}</p>` : `<p>${paragraph}</p>`);
+      first = false;
+    }
+    if (part.kind === "chapter") {
+      toc.push(`<li><a href="#${part.key}">${escapeHtml(part.title)}</a></li>`);
+    }
+    const heading = part.heading ? `<h1>${escapeHtml(part.title)}</h1>` : "";
+    sections.push(`<section id="${part.key}" class="${part.kind}${part.kind === "chapter" ? "" : ` ${part.placement}`}">${heading}
+${paragraphs.join(`
+`)}
+</section>`);
+  }
+  const copyrightIndex = book.parts.findIndex((part) => part.key === "front-copyright");
+  const beforeToc = copyrightIndex === -1 ? [] : sections.slice(0, copyrightIndex + 1);
+  const afterToc = copyrightIndex === -1 ? sections : sections.slice(copyrightIndex + 1);
+  return `<!DOCTYPE html>
+<html lang="${escapeHtml(book.language)}">
+<head>
+<meta charset="utf-8">
+<title>${escapeHtml(book.title)}</title>
+<!-- Print interior for ${trimName} trim (${trim.width} x ${trim.height}), about ${pages} pages.
+     Render to PDF with a CSS paged-media engine, for example:
+       npx pagedjs-cli book.print.html -o book.pdf
+       weasyprint book.print.html book.pdf
+       prince book.print.html -o book.pdf
+     Check the printer's current specs for margins, bleed, and fonts before upload. -->
+<style>
+@page { size: ${trim.width} ${trim.height}; margin: 0.75in 0.5in 0.75in ${inside}; }
+@page :left { margin-left: 0.5in; margin-right: ${inside};
+  @top-left { content: counter(page); font: 9pt Georgia, serif; }
+  @top-center { content: "${cssString(author || book.title)}"; font: italic 9pt Georgia, serif; } }
+@page :right {
+  @top-right { content: counter(page); font: 9pt Georgia, serif; }
+  @top-center { content: string(chapter-title, first-except); font: italic 9pt Georgia, serif; } }
+@page :blank { @top-left { content: none; } @top-center { content: none; } @top-right { content: none; } }
+@page chapter:first { @top-left { content: none; } @top-center { content: none; } @top-right { content: none; }
+  @bottom-center { content: counter(page); font: 9pt Georgia, serif; } }
+@page front { @top-left { content: none; } @top-center { content: none; } @top-right { content: none; } }
+html { font: 11pt/1.4 Georgia, "Iowan Old Style", "Palatino Linotype", serif; }
+body { margin: 0; hyphens: auto; }
+.title-page, .toc, section.front { page: front; break-before: right; }
+section.front.copyright-page, #front-copyright { break-before: page; font-size: 9pt; }
+.title-page { text-align: center; padding-top: 30%; }
+.title-page h1 { font-size: 26pt; font-weight: normal; margin: 0 0 1em; }
+.title-page .author { font-size: 14pt; font-variant: small-caps; letter-spacing: 0.05em; }
+.toc h1 { font-size: 14pt; font-weight: normal; text-align: center; font-variant: small-caps; }
+.toc ol { list-style: none; padding: 0; }
+.toc a { color: inherit; text-decoration: none; }
+.toc a::after { content: " " target-counter(attr(href), page); float: right; }
+section.chapter, section.back { page: chapter; break-before: right; }
+section.chapter > h1, section.back > h1 { string-set: chapter-title content(text); }
+h1 { font-size: 16pt; font-weight: normal; text-align: center; margin: 1.5in 0 0.5in; break-after: avoid; }
+p { margin: 0; text-indent: 1.5em; text-align: justify; widows: 2; orphans: 2; }
+p.first, p.scene-break + p { text-indent: 0; }
+/* A raised initial: floated drop caps render inconsistently across engines. */
+section.chapter > h1 + p.first::first-letter { font-size: 2.4em; line-height: 1; }
+p.scene-break { text-align: center; text-indent: 0; margin: 0.8em 0; break-after: avoid; }
+section.front p, section.back p { text-indent: 0; margin-bottom: 0.6em; text-align: left; }
+section.front:not(.copyright-page) p { text-align: center; }
+@media screen { body { max-width: ${trim.width}; margin: 2rem auto; padding: 0 1rem; } section { margin-top: 3rem; } }
+</style>
+</head>
+<body>
+<section class="title-page"><h1>${escapeHtml(book.title)}</h1>${author === "" ? "" : `<p class="author">${escapeHtml(author)}</p>`}</section>
+${beforeToc.join(`
+`)}
+<nav class="toc"><h1>Contents</h1><ol>
+${toc.join(`
+`)}
+</ol></nav>
+${afterToc.join(`
+`)}
+</body>
+</html>
+`;
+}
+function estimatePages(words, trimName = DEFAULT_TRIM) {
+  const trim = TRIM_SIZES.get(trimName) ?? TRIM_SIZES.get(DEFAULT_TRIM);
+  return Math.max(1, Math.ceil(words / trim.wordsPerPage));
+}
+function insideMargin(pages) {
+  if (pages <= 150) {
+    return "0.625in";
+  }
+  if (pages <= 300) {
+    return "0.75in";
+  }
+  if (pages <= 500) {
+    return "0.875in";
+  }
+  return "1in";
+}
+function escapeHtml(value) {
+  return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function cssString(value) {
+  return String(value).replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, " ");
+}
+
 // src/passes.js
 var PASS_STATUSES = new Set(["pending", "in-progress", "done"]);
 var DEFAULT_PASSES = [
@@ -4700,7 +4897,7 @@ function exportManuscript(root, options = {}) {
 function buildBook(root, options = {}) {
   const format = normalizeBuildFormat(options.format ?? "markdown");
   const project = scanProject(root);
-  const extension = format === "markdown" ? "md" : format === "shunn" ? "shunn.md" : format;
+  const extension = BUILD_EXTENSIONS[format];
   const output = resolveOutputPath(project, options.out, path4.join("dist", `${project.storyId}.${extension}`));
   if (format === "markdown") {
     const result = exportManuscript(project.root, {
@@ -4711,7 +4908,11 @@ function buildBook(root, options = {}) {
     return { ...result, format };
   }
   const manuscript = manuscriptParts(project);
-  if (format === "shunn") {
+  if (format === "html" || format === "print") {
+    const book = htmlBook(manuscript);
+    const text = format === "html" ? reviewHtml(book) : printHtml(book, options.trim === undefined ? DEFAULT_TRIM : String(options.trim));
+    writeFile(output.outFile, text, output.writeOptions);
+  } else if (format === "shunn") {
     writeShunnMarkdown(output.outFile, manuscript, shunnMeta(project), output.writeOptions);
   } else if (format === "epub") {
     const cover = project.story.data.cover === undefined ? null : coverImage(project);
@@ -6331,6 +6532,36 @@ function matterXhtml(entry, placement = "front", lang = "en") {
   const bodyType = entry.id === "copyright" ? `${placement}matter copyright-page` : `${placement}matter`;
   return xhtmlDocument(entry.title, lang, bodyType, `${heading}${xhtmlParagraphs(entry.body)}`);
 }
+function htmlBook(manuscript) {
+  const paragraphs = (body) => markdownParagraphs(body).map((paragraph) => paragraph === "* * *" ? null : inlineRuns(paragraph).map((run) => run.style ? `<${run.style}>${escapeHtml(run.text)}</${run.style}>` : escapeHtml(run.text)).join(""));
+  const matter = (placement) => (entry) => ({
+    key: `${placement}-${entry.id}`,
+    kind: entry.id === "copyright" ? "front copyright-page" : placement,
+    placement,
+    title: entry.title,
+    heading: entry.heading,
+    paragraphs: paragraphs(entry.body)
+  });
+  const parts = [
+    ...manuscript.front.map(matter("front")),
+    ...manuscript.chapters.map((chapter) => ({
+      key: `ch${String(chapter.number).padStart(2, "0")}`,
+      kind: "chapter",
+      placement: "body",
+      title: `Chapter ${chapter.number}: ${chapter.title}`,
+      heading: true,
+      paragraphs: paragraphs(chapter.body)
+    })),
+    ...manuscript.back.map(matter("back"))
+  ];
+  return {
+    title: manuscript.title,
+    authors: manuscript.meta.authors,
+    language: manuscript.meta.language,
+    words: manuscript.chapters.reduce((sum, chapter) => sum + wordCount(chapter.body), 0),
+    parts
+  };
+}
 function writeDocx(outFile, manuscript, writeOptions = {}) {
   const bodyParts = [paragraphXml(manuscript.title, "Title")];
   const pushSection = (heading, body) => {
@@ -6879,15 +7110,23 @@ function normalizeList(value, fallback) {
   }
   return list.length > 0 ? list : fallback;
 }
+var BUILD_EXTENSIONS = {
+  markdown: "md",
+  epub: "epub",
+  docx: "docx",
+  shunn: "shunn.md",
+  html: "html",
+  print: "print.html"
+};
 function normalizeBuildFormat(value) {
   const format = String(value).trim().toLowerCase();
   if (format === "markdown" || format === "md") {
     return "markdown";
   }
-  if (format === "epub" || format === "docx" || format === "shunn") {
+  if (Object.prototype.hasOwnProperty.call(BUILD_EXTENSIONS, format)) {
     return format;
   }
-  throw new Error(`Unsupported build format: ${value}. Supported formats: markdown, epub, docx, shunn`);
+  throw new Error(`Unsupported build format: ${value}. Supported formats: ${Object.keys(BUILD_EXTENSIONS).join(", ")}`);
 }
 function validateStoryFrontmatter(project, errors) {
   const data = project.story.data;
@@ -7973,7 +8212,8 @@ var OPTIONS = [
   { name: "against", value: "<path>", help: ["Earlier draft as another project folder for compare"] },
   { name: "path", value: "<path>", help: ["Project root for every command except init and", "import"] },
   { name: "out", value: "<file>", help: ["Output path for export/build/synopsis/diagram"] },
-  { name: "format", value: "<name>", help: ["Output format for build (markdown, epub, docx,", "shunn)"] },
+  { name: "format", value: "<name>", help: ["Output format for build (markdown, epub, docx,", "shunn, html, print)"] },
+  { name: "trim", value: "<size>", help: ["Trim size for build --format print (5x8,", "5.25x8, 5.5x8.5, 6x9, a5; default 5.5x8.5)"] },
   { name: "shunn", help: ["Apply Shunn manuscript formatting (with --format", "docx)"] },
   { name: "at", value: "<chapter-id>", help: ["Chapter id for knowledge"] },
   { name: "init", help: ["Add the default revision passes for passes"] },
@@ -8578,13 +8818,18 @@ var COMMANDS = [
   {
     name: "build",
     usage: "build [path]",
-    summary: ["Build a disposable book artifact in dist/; EPUB", "builds use the story.md cover image"],
+    summary: [
+      "Build a disposable book artifact in dist/: markdown,",
+      "epub, docx, shunn, html (review copy with paragraph",
+      "anchors), or print (paged-media interior)"
+    ],
     project: "positional",
     run({ parsed, io, root }) {
       const result = buildBook(root(), {
         out: parsed.options.out,
         format: parsed.options.format,
-        shunn: isTruthy(parsed.options.shunn)
+        shunn: isTruthy(parsed.options.shunn),
+        trim: parsed.options.trim
       });
       io.stdout.write(`Built ${result.chapters} chapters as ${result.format} to ${result.outFile}
 `);

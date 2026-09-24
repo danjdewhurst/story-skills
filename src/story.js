@@ -12,6 +12,7 @@ import { buildVoices } from "./voices.js";
 import { checkNames, existingNames } from "./names.js";
 import { STORY_FORMS, formRangeWarning } from "./forms.js";
 import { copyrightPage, publishingMeta, validatePublishing } from "./publishing.js";
+import { DEFAULT_TRIM, escapeHtml, printHtml, reviewHtml } from "./html.js";
 import { DEFAULT_PASSES, nextPass, readPasses, updatePasses, validatePasses } from "./passes.js";
 import { CHAPTER_HOOKS, SCENE_OUTCOMES, buildPacing } from "./pacing.js";
 import { compareChapters, proseParagraphs } from "./compare.js";
@@ -1548,7 +1549,7 @@ export function exportManuscript(root, options = {}) {
 export function buildBook(root, options = {}) {
   const format = normalizeBuildFormat(options.format ?? "markdown");
   const project = scanProject(root);
-  const extension = format === "markdown" ? "md" : format === "shunn" ? "shunn.md" : format;
+  const extension = BUILD_EXTENSIONS[format];
   const output = resolveOutputPath(project, options.out, path.join("dist", `${project.storyId}.${extension}`));
 
   if (format === "markdown") {
@@ -1561,7 +1562,11 @@ export function buildBook(root, options = {}) {
   }
 
   const manuscript = manuscriptParts(project);
-  if (format === "shunn") {
+  if (format === "html" || format === "print") {
+    const book = htmlBook(manuscript);
+    const text = format === "html" ? reviewHtml(book) : printHtml(book, options.trim === undefined ? DEFAULT_TRIM : String(options.trim));
+    writeFile(output.outFile, text, output.writeOptions);
+  } else if (format === "shunn") {
     writeShunnMarkdown(output.outFile, manuscript, shunnMeta(project), output.writeOptions);
   } else if (format === "epub") {
     const cover = project.story.data.cover === undefined ? null : coverImage(project);
@@ -3382,6 +3387,42 @@ function matterXhtml(entry, placement = "front", lang = "en") {
   return xhtmlDocument(entry.title, lang, bodyType, `${heading}${xhtmlParagraphs(entry.body)}`);
 }
 
+// The manuscript as HTML parts for the review and print builds. Paragraph
+// anchors are keyed by chapter number (ch03) or matter id (front-dedication),
+// so they stay stable while other chapters change.
+function htmlBook(manuscript) {
+  const paragraphs = (body) => markdownParagraphs(body).map((paragraph) => (paragraph === "* * *"
+    ? null
+    : inlineRuns(paragraph).map((run) => (run.style ? `<${run.style}>${escapeHtml(run.text)}</${run.style}>` : escapeHtml(run.text))).join("")));
+  const matter = (placement) => (entry) => ({
+    key: `${placement}-${entry.id}`,
+    kind: entry.id === "copyright" ? "front copyright-page" : placement,
+    placement,
+    title: entry.title,
+    heading: entry.heading,
+    paragraphs: paragraphs(entry.body)
+  });
+  const parts = [
+    ...manuscript.front.map(matter("front")),
+    ...manuscript.chapters.map((chapter) => ({
+      key: `ch${String(chapter.number).padStart(2, "0")}`,
+      kind: "chapter",
+      placement: "body",
+      title: `Chapter ${chapter.number}: ${chapter.title}`,
+      heading: true,
+      paragraphs: paragraphs(chapter.body)
+    })),
+    ...manuscript.back.map(matter("back"))
+  ];
+  return {
+    title: manuscript.title,
+    authors: manuscript.meta.authors,
+    language: manuscript.meta.language,
+    words: manuscript.chapters.reduce((sum, chapter) => sum + wordCount(chapter.body), 0),
+    parts
+  };
+}
+
 function writeDocx(outFile, manuscript, writeOptions = {}) {
   const bodyParts = [paragraphXml(manuscript.title, "Title")];
   const pushSection = (heading, body) => {
@@ -4032,17 +4073,26 @@ function normalizeList(value, fallback) {
   return list.length > 0 ? list : fallback;
 }
 
+const BUILD_EXTENSIONS = {
+  markdown: "md",
+  epub: "epub",
+  docx: "docx",
+  shunn: "shunn.md",
+  html: "html",
+  print: "print.html"
+};
+
 function normalizeBuildFormat(value) {
   const format = String(value).trim().toLowerCase();
   if (format === "markdown" || format === "md") {
     return "markdown";
   }
 
-  if (format === "epub" || format === "docx" || format === "shunn") {
+  if (Object.prototype.hasOwnProperty.call(BUILD_EXTENSIONS, format)) {
     return format;
   }
 
-  throw new Error(`Unsupported build format: ${value}. Supported formats: markdown, epub, docx, shunn`);
+  throw new Error(`Unsupported build format: ${value}. Supported formats: ${Object.keys(BUILD_EXTENSIONS).join(", ")}`);
 }
 
 function validateStoryFrontmatter(project, errors) {
