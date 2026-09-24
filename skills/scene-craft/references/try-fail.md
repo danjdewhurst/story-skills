@@ -31,7 +31,10 @@ Rules for planning try/fail chains:
 ## Scene outcomes
 
 Record each scene's result in the scene file's `outcome` field, using
-Swain's four answers to "Does the POV character get what they want?":
+four answers to "Does the POV character get what they want?". Swain's
+scene ends in disaster; the yes-but and no-and outcomes are a later
+extension of his scene outcomes, common in current craft teaching, not
+Swain's own terms:
 
 | `outcome` | Meaning | Effect on pressure |
 |-----------|---------|--------------------|

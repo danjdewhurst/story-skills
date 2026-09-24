@@ -3,13 +3,14 @@
 Write the round synthesis to `feedback/round-{N}/synthesis.md` only after
 every expected reader file for the round is collected. The synthesis is the
 decision record: which notes become revision work, which are adjudicated,
-and which are declined with a recorded reason.
+and which are declined with a recorded reason. `readiness` is one of
+`ready`, `needs-revision`, or `not-ready`.
 
 ```yaml
 ---
 round: {N}
 readers: [{reader-1-kebab}, {reader-2-kebab}, ...]
-readiness: needs-revision   # ready | needs-revision | not-ready
+readiness: needs-revision
 ---
 
 # Synthesis — Round {N}

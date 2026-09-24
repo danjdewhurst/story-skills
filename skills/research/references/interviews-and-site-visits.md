@@ -84,9 +84,10 @@ Record walking or travel times on the location's `routes` as well, so
 ## Expert review
 
 An expert review is a reading of drafted passages, not an interview. Use
-`method: expert-review` for the note, list the passages or chapters read in
-`used-in`, record the reviewer in `reviewed-by`, and log their corrections
-under `## Findings`. Triage the notes with the `feedback-triage` skill.
+`method: expert-review` for the note, list the chapter ids read in
+`used-in` (it takes chapter ids only, such as `chapter-07`; name the
+specific passages under `## Findings`), record the reviewer in the
+`reviewed-by` list, and log their corrections under `## Findings`. Triage the notes with the `feedback-triage` skill.
 Notes with a `risk` need this review before the chapters are final.
 
 After adding or updating interview, visit, or review notes, run

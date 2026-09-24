@@ -82,7 +82,7 @@ print --trim <size>`. Cite problems by paragraph anchor (`ch03-p12`).
 - Chapter headings, numbering, and order
 - Front and back matter present, in order, with correct text
 - Print copy: widows and orphans, a chapter title stranded at a page
-  foot, running heads, page numbers, drop caps rendering, hyphenation at
+  foot, running heads, page numbers, the raised chapter initial, hyphenation at
   line ends
 - Final check that the copyright page and any credits match what the
   author supplied; never invent them

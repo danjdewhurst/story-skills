@@ -1,6 +1,6 @@
 ---
 name: feedback-triage
-description: This skill should be used when the user asks to "process beta reader feedback", "alpha reader feedback", "feedback round", "synthesize reader feedback", "reader notes", "beta feedback", "readiness check", "review copy", "send the draft to readers", or wants to collect, reconcile, and act on external reader feedback for a story project.
+description: This skill should be used when the user asks to "process beta reader feedback", "alpha reader feedback", "feedback round", "synthesize reader feedback", "reader notes", "beta feedback", "readiness check", "review copy", "send the draft to readers", "share with readers who don't use GitHub", or wants to collect, reconcile, and act on external reader feedback for a story project. NOT for rounds with a professional editor (use editorial-review).
 ---
 
 # Feedback Triage

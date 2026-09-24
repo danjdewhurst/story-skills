@@ -1,6 +1,6 @@
 ---
 name: publishing
-description: This skill should be used when the user asks to "self-publish", "publish my book", "ISBN", "copyright page", "book metadata", "BISAC", "keywords", "KDP", "IngramSpark", "Draft2Digital", "go wide", "Kindle Unlimited", "print interior", "trim size", "paperback", "ebook", "EPUB", "cover wrap", "spine width", "pricing", "launch plan", "ARC team", "advance readers", "newsletter", "reader magnet", "Amazon ads", "BookBub", "rights", "foreign rights", "audio rights", "film rights", "publishing contract", or wants to take a finished manuscript through production, distribution, launch, and rights management.
+description: This skill should be used when the user asks to "self-publish", "publish my book", "ISBN", "copyright page", "book metadata", "BISAC", "keywords", "KDP", "IngramSpark", "Draft2Digital", "go wide", "Kindle Unlimited", "print interior", "trim size", "paperback", "ebook", "EPUB", "cover wrap", "spine width", "pricing", "launch plan", "ARC team", "advance readers", "newsletter", "reader magnet", "Amazon ads", "BookBub", "rights", "foreign rights", "audio rights", "film rights", "publishing contract", or wants to take a finished manuscript through production, distribution, launch, and rights management. It owns contracts and rights sales; NOT for permission to quote lyrics, epigraphs, or other material in the book (use editorial-review).
 ---
 
 # Publishing
@@ -67,9 +67,19 @@ story build . --format metadata
 ```
 
 The metadata sheet lists every missing field in its readiness checklist.
-Report it with the validate findings, including any matter page with
-`permission: pending` and any research note flagged with a `risk` but no
-`reviewed-by`. If `story passes .` shows unfinished revision passes, say so
+Report it with the validate findings. `validate` warns about
+`permission: pending` only once the story `status` is `complete`, and
+about a research note with a `risk` but no `reviewed-by` only when a final
+or complete chapter uses it, so also search the files directly before
+publication:
+
+```shell
+grep -l "permission: pending" matter/*.md
+grep -l "^risk:" research/*.md
+```
+
+Report every pending permission, and every risky note without
+`reviewed-by`, whatever the chapter status. If `story passes .` shows unfinished revision passes, say so
 before production starts.
 
 ### 2. Metadata
@@ -96,11 +106,13 @@ story build . --format metadata
    `references/copyright-page.md`:
 
    ```shell
-   story add matter "Copyright" --order 1
+   story add matter "Copyright" --order 0
    ```
 
-   Set `heading: false`. Without this page, EPUB builds generate one from
-   `copyright`; write it by hand when the book needs credits, permissions,
+   Use an `order` lower than every other front page so it sits first
+   (behind the title page); `story add matter` otherwise takes the next
+   free number. Set `heading: false`. Without this page, every build
+   except Shunn generates a minimal one from `copyright`; write it by hand when the book needs credits, permissions,
    or a Library of Congress line.
 3. For each epigraph, lyric, or quoted page in `matter/`, set `permission`
    (`not-needed`, `pending`, `granted`, `public-domain`), `rights-holder`,

@@ -2,8 +2,10 @@
 
 `story build . --format print --trim <size>` writes print-ready HTML using
 CSS paged media: mirrored margins with a gutter, running heads (author on
-the verso, title on the recto), page numbers, chapters starting on a recto,
-drop caps, widow and orphan control, and a copyright page. A paged-media
+the verso, chapter title on the recto, blank on chapter openings), page
+numbers at the foot of chapter and back-matter pages, chapters starting on
+a recto, a raised initial opening each chapter, widow and orphan control,
+and a copyright page. A paged-media
 engine turns it into the PDF the printer needs.
 
 ## Trim Size
@@ -48,7 +50,7 @@ The CLI bundles no PDF engine. Use one the author has installed:
   free for non-commercial use with a watermark; check its current license).
 
 Engines differ in their support for paged-media features. If running heads,
-drop caps, or recto starts render wrong in one engine, try another before
+the raised initial, or recto starts render wrong in one engine, try another before
 touching the manuscript. Do not hand-edit the built HTML: it is disposable
 and the next build overwrites it.
 

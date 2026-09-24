@@ -196,7 +196,7 @@ Route travel: when locations declare `routes`, `story continuity` follows each c
 
 ### Name Checks
 
-`story names <name...>` checks candidate names before they are used, one name per argument (quote multi-word names). It compares each against character names, first names, and aliases (cut characters excepted), location, faction, artifact, and system names, and glossary terms and aliases, ignoring case, accents, and punctuation. A candidate, or its first word, equal to an existing name is a clash: an error, and the command exits 1. Warnings flag look-alikes (first words sharing their first four letters, or sharing an initial within an edit distance of 1, or 2 for words of five letters or more) and a shared initial with a protagonist, antagonist, deuteragonist, or narrator. Each name prints as `clear`, `check`, or `taken`.
+`story names <name...>` checks candidate names before they are used, one name per argument (quote multi-word names). Existing names are character names, given names, and aliases (cut characters excepted), location, faction, artifact, and system names, and glossary terms and aliases, compared ignoring case, accents, and punctuation. A character's given name is the first word of the name that is not a title or article (`the`, `a`, `lord`, `lady`, `sir`, `captain`, `king`, `queen`, `dr`, and similar), so `Lord Maren Vell` is known as Maren; the candidate's given name is found the same way and compared against each character's given name. Everything else (full names, aliases, places, factions, artifacts, systems, and terms) is compared as a whole name. A candidate equal to a whole name, or whose given name equals a character's given name, is a clash: an error, and the command exits 1. Warnings flag look-alikes, words sharing their first four letters, or sharing an initial within an edit distance of 1 (2 when both words have five letters or more), and a given name sharing an initial with a protagonist, antagonist, deuteragonist, or narrator. Multi-word whole names are only checked for exact clashes, so pass the distinctive word of a multi-word name (`story names "Ashen Reach" Ashen`) to check it for look-alikes. Each name prints as `clear`, `check`, or `taken`.
 
 ### Glossary
 
@@ -269,9 +269,9 @@ The body records the decisions a copyeditor tracks: voice, spelling and usage, c
 
 ### Dialogue Voices
 
-`story voices` fingerprints each character's dialogue. A quoted line is attributed when the paragraph's narration names the speaker next to a speech verb (`"...," Mara said`, `said Mara`, `Mara asked`) by full name, first name, or alias; otherwise, when the narration names exactly one character (an action beat), the line is theirs. Any other quoted line is counted as unattributed and never guessed. Cut characters are skipped.
+`story voices` fingerprints each character's dialogue. A quoted line (straight `"..."`, curly `“...”`, or British `‘...’`) is attributed when the paragraph's narration names the speaker next to a speech verb (`"...," Mara said`, `said Mara`, `Mara asked`) by full name, given name, or alias. A name-before-verb tag wins over verb-before-name, so `Sera told Kael` gives the line to Sera. Otherwise, when the narration names exactly one character (an action beat), the line is theirs. Names match case-sensitively as proper nouns, and titles are skipped for the given name (`Lord Maren` also matches `Maren`). Pronoun tags (`she said`) are never attributed, so in close third person the POV character is often under-counted; name the tags in a sample chapter when that matters. Any other quoted line is counted as unattributed and never guessed. Cut characters are skipped.
 
-For each speaking character it reports lines, words, mean sentence length, contractions per 100 words, the share of sentences that are questions and exclamations, and up to five signature words: words of four or more letters, used at least twice, and used more than twice as often per word spoken as in everyone else's dialogue. It warns when a character says a `voice-avoid` word; when a character with five or more lines never says one of their `voice-words`; and when two characters with five or more lines each have sentence lengths within 1.5 words, contraction rates within 1.5 per 100 words, and question and exclamation shares within 10 points ("may sound alike"). Findings are advisory; the command exits 0 on a readable project.
+For each speaking character it reports lines, words, mean sentence length, contractions per 100 words, the share of sentences that are questions and exclamations, and up to five signature words: words of four or more letters, used at least twice, and used more than twice as often per word spoken as in everyone else's dialogue. It warns when a character says a `voice-avoid` word; when a character with five or more lines never says one of their `voice-words`; and when two characters with five or more lines each have sentence lengths within 1.5 words, contraction rates within 1.5 per 100 words, and question and exclamation shares within 10 points ("X and Y may sound alike: similar sentence length, contractions, questions, and exclamations"). Findings are advisory; the command exits 0 on a readable project.
 
 ## CLI Flag Values
 
@@ -291,6 +291,16 @@ For each speaking character it reports lines, words, mean sentence length, contr
 - `--status` (question): `open`, `answered`, `resolved`, `dropped`, `abandoned`
 - `--status` (promise, clue): `planned`, `planted`, `paid-off`, `dropped`, `abandoned`
 - `--category` (term): `person`, `place`, `faction`, `artifact`, `concept`, `term`, `other`
+- `--form` (init): `novel`, `novella`, `novelette`, `short-story`, `flash`, `serial`, `picture-book`, `chapter-book`
+- `--hook` (chapter): `cliffhanger`, `question`, `revelation`, `reversal`, `decision`, `emotional`, `resolution`
+- `--outcome` (scene): `yes`, `no`, `yes-but`, `no-and`
+- `--accuracy` (research): `must-be-accurate`, `blended`, `invented`
+- `--confidence` (research): `high`, `medium`, `low`
+- `--method` (research): `fact`, `interview`, `site-visit`, `expert-review`, `reading`
+- `--risk` (research, repeatable): `legal`, `medical`, `weapons`, `safety`, `cultural`, `defamation`, `technical`
+- `--trim` (`build --format print`): `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, `a5` (default `5.5x8.5`)
+
+Any other value is refused with the accepted list. `story.md` `language` has no flag, but `story validate` reports a value that is not a BCP 47 tag (`en`, `en-GB`, `fr-CA`) as an error.
 
 `story init` accepts `--sub-genre <name>` and `--setting-era <name>` (free-form text, e.g. `--sub-genre coastal --setting-era near-future`). They are stored as `sub-genre` (default `general`) and `setting-era` (default `unspecified`) in `story.md` and shown in `story report` as `Genre: <genre> / <sub-genre>`.
 

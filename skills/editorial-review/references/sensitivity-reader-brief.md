@@ -35,8 +35,9 @@ accuracy; record them with `method: expert-review` on the research note.
 
 ## Brief template
 
-Save as `feedback/round-{N}/brief-{reader-kebab}.md` or send as the
-body of the user's email.
+Save as `feedback/briefs/{reader-kebab}.md` or send as the body of the
+user's email. Keep briefs out of the `feedback/round-{N}/` folders, which
+hold only reader feedback files and the synthesis.
 
 ```markdown
 # Reading brief: {Title}

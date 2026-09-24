@@ -1,6 +1,6 @@
 ---
 name: adaptation
-description: This skill should be used when the user asks to "make an audiobook", "narration script", "narrator", "ACX", "Findaway", "pronunciation guide", "how long is the audiobook", "adapt to a screenplay", "Fountain", "screenplay", "script", "picture book", "spreads", "illustration notes", "art notes", "comic script", "graphic novel", "panels", "interactive fiction", "Ink", "Twine", "choose your own adventure", "translate the book", "translation", "foreign edition", "glossary for translators", or wants to turn a story project into another form or language.
+description: This skill should be used when the user asks to "make an audiobook", "narration script", "narrator", "ACX", "Findaway", "pronunciation guide", "how long is the audiobook", "adapt to a screenplay", "Fountain", "screenplay", "picture book", "spreads", "illustration notes", "art notes", "comic script", "comics script", "graphic novel", "panels", "interactive fiction", "Ink", "Twine", "choose your own adventure", "translate the book", "translation", "foreign edition", "glossary for translators", or wants to turn a story project into another form or language.
 ---
 
 # Adaptation
@@ -127,7 +127,9 @@ Follow `references/translation.md`.
    term, and `pronunciation` where it helps. Check new translated names
    with `story names`.
 2. Copy the source project to a new folder (without `dist/`), set
-   `language`, and keep every id as the English kebab-case id.
+   `language`, remove `series`, `book-number`, `follows`, and `precedes`
+   from the copied `story.md`, and keep every id as the English
+   kebab-case id.
 3. Write a style sheet for the target language in the new project.
 4. After translation, run the checks in both projects and compare the
    chapter sets:
@@ -154,8 +156,10 @@ Follow `references/translation.md`.
   syllable (`SEER-sha`, `kah-LEE-na`), not IPA, unless the narrator asks
   for IPA.
 - A translated edition is a separate story project with the same ids and
-  its own `language`, `isbn`, and metadata. It is not linked with
-  `series`, `follows`, or `precedes`; those are for different books.
+  its own `language`, `isbn`, and metadata. Its `story.md` has no
+  `series`, `book-number`, `follows`, or `precedes`; those are for
+  different books, and copied values break `story links` and
+  `story series`.
 - When the source manuscript changes, list the adaptation files the change
   affects and update them.
 

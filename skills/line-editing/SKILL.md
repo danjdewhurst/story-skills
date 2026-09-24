@@ -1,6 +1,6 @@
 ---
 name: line-editing
-description: This skill should be used when the user asks to "line edit", "edit my prose", "polish this chapter", "tighten the prose", "improve the sentences", "copyedit", "proofread", "proof pass", "check grammar and punctuation", "dialogue punctuation", "make the voices distinct", "everyone sounds the same", "read it aloud", "read-aloud pass", "text to speech", or wants a sentence-level quality pass on drafted chapters that preserves the author's voice.
+description: This skill should be used when the user asks to "line edit", "edit my prose", "polish this chapter", "tighten the prose", "improve the sentences", "copyedit", "proofread", "proof pass", "check grammar and punctuation", "dialogue punctuation", "make the voices distinct", "everyone sounds the same", "read it aloud", "read-aloud pass", "text to speech", or wants a sentence-level quality pass on drafted chapters that preserves the author's voice. NOT for creating the style sheet or checking voice consistency (use voice-style).
 ---
 
 # Line Editing
@@ -86,8 +86,13 @@ when two voices are near-identical, when a character says a
 2. If a character file has no voice notes, propose `voice-words` and
    `voice-avoid` lists drawn from their best existing lines, and ask
    before adding them to the character file.
-3. Only dialogue with a tag naming the speaker is attributed; untagged
-   lines are invisible to the report, so read those by hand.
+3. A line is attributed only when the narration names the speaker next
+   to a speech verb or, failing that, names exactly one character in the
+   paragraph. Pronoun tags (`she said`) and untagged lines are invisible
+   to the report, so the POV character in close third is often
+   under-counted; read those lines by hand, or name the tags in a sample
+   chapter and rerun. The near-identical warning reads "X and Y may sound
+   alike" and needs five or more lines from each character.
 
 ### 4. Copyedit
 

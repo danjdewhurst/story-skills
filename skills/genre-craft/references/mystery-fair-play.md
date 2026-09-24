@@ -84,10 +84,11 @@ arcs: []
 ```
 
 Set `significance-delayed: true` only when the reader sees the clue before
-understanding it. Set `red-herring: true` by editing the file when the clue
-misleads; its `payoff` is the chapter that clears it. Pass
-`--significance-delayed`, `--character`, and `--arc` on `story add clue`
-when those values are known. List characters and arcs as block entries, the
+understanding it. Set `red-herring: true` when the clue misleads (pass
+`--red-herring` on `story add clue`, or edit the file later); its `payoff`
+is the chapter that clears it. Pass `--significance-delayed`,
+`--character`, and `--arc` on `story add clue` when those values are
+known. List characters and arcs as block entries, the
 way the CLI writes them. `characters` names who can notice the clue (the
 detective, the witness); a clue nobody can notice cannot be played fair.
 
@@ -107,7 +108,7 @@ detective, the witness); a clue nobody can notice cannot be played fair.
 
 `story clues .` prints the ledger as a grid: clues as rows, chapters as
 columns. `P` marks the chapter a clue is planted, `R` its payoff or reveal,
-`x` both, `.` neither; red herrings are marked. Read down a column to see
+`x` both, `.` neither; a red herring has `~` after its clue name. Read down a column to see
 what the reader holds at each chapter, and along a row to see how long a
 clue waits. It warns about:
 
@@ -115,8 +116,9 @@ clue waits. It warns about:
 - A late plant: planted in the same chapter as its payoff, or the chapter
   immediately before, so the reader cannot play fair
 - A clue with no `characters` (nobody in the story can notice it)
-- A story with clues but no `significance-delayed` clue (every clue is
-  understood on sight, so there is no puzzle)
+- A story with three or more genuine live clues (not red herrings; status
+  `planned`, `planted`, or `paid-off`) and none `significance-delayed`
+  (every clue is understood on sight, so there is no puzzle)
 - A red herring with no `payoff` (never debunked)
 
 `story diagram clues` prints a Mermaid flow of each clue from plant to

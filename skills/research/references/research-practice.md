@@ -25,7 +25,8 @@ each under `## Question` so findings can answer them one by one.
 ## Search plan
 
 Write the plan into the note before searching so the work can be resumed
-or handed to the user:
+or handed to the user. The examples in this file are illustrative: the
+sources, figures, and URLs show the format and are not verified facts.
 
 ```markdown
 ## Search Plan
@@ -58,6 +59,9 @@ forums, and AI summaries as leads to a real source, never as the source.
 
 Write findings as short factual statements, each with its citation: author
 or institution, title, date, and page, section, or URL.
+
+The figures below are illustrative placeholders; verify real values
+against the sources before using them.
 
 ```markdown
 ## Findings
@@ -108,8 +112,15 @@ Set `risk` whenever a mistake could cause real harm or liability:
 - `technical` - engineering, security, aviation, or other specialist systems
 
 A risky note needs a qualified human reviewer before the chapters using it
-are final. Record them in `reviewed-by` as a name or role (`Dr A. Patel,
-A&E consultant`). Research gathers facts and flags concerns; it never
+are final. Record them in `reviewed-by`, a list of names or roles that
+`story add research` has no flag for, so edit the frontmatter by hand:
+
+```yaml
+reviewed-by:
+  - "Dr A. Patel, A&E consultant"
+```
+
+Research gathers facts and flags concerns; it never
 substitutes for professional advice, and the agent never gives legal,
 medical, weapons, or safety advice. Omit operational detail that would let
 a reader cause harm; the scene rarely needs it. Route defamation and

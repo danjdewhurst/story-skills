@@ -1,6 +1,6 @@
 ---
 name: voice-style
-description: This skill should be used when the user asks to "create a style sheet", "style guide", "house style", "keep the voice consistent", "voice drift", "British or American spelling", "character voices", "lint the prose", "prose check", "filter words", "said-bookisms", "overused words", "repeated phrases", "similar character names", "voice fingerprints", "dialogue voices sound the same", or wants to record and enforce the voice and surface conventions of a story project.
+description: This skill should be used when the user asks to "create a style sheet", "style guide", "house style", "keep the voice consistent", "voice drift", "British or American spelling", "character voices", "lint the prose", "prose check", "filter words", "said-bookisms", "overused words", "repeated phrases", "similar character names", "voice fingerprints", or wants to record and enforce the voice and surface conventions of a story project. NOT for rewriting lines when everyone sounds the same (use line-editing).
 ---
 
 # Voice & Style
@@ -26,7 +26,7 @@ A story project with `story.md` in the root. `story init` scaffolds
 
 - Starting a project, once the first chapter or a writing sample exists
 - Before drafting when voice has drifted between chapters or sessions
-- During a copyedit pass (`revision-continuity` reads this file)
+- When a copyedit pass needs a style decision recorded (the copyedit itself belongs to the `line-editing` skill, which reads this file)
 - When the user wants a mechanical prose check before sharing a draft
 - NOT for character personality or arc (use `character-management`)
 - NOT for scene-level craft such as deep POV or subtext (use `scene-craft`)
@@ -88,15 +88,25 @@ count means and how to respond.
 story voices .
 ```
 
-`story voices` attributes quoted dialogue to a character when the
-paragraph's tag names them (`"...," Mara said`, `said Mara`, `Mara asked`;
-aliases count). Per character it reports lines, words, mean sentence
-length, contraction, question, and exclamation rates, and signature words
-used more by them than by others. It warns when a character says one of
-their `voice-avoid` words, when two characters with five or more lines each
-have near-identical fingerprints ("voices may be indistinguishable"), and
-when a `voice-words` entry is never said. Untagged dialogue is not counted,
-so a low line count may mean few tags rather than few lines.
+`story voices` attributes a quoted line (straight `"..."`, curly `“...”`,
+or British `‘...’`) when the narration names the speaker next to a speech
+verb. A name before the verb wins over a name after it: in `"...," Sera
+told Kael` the line is Sera's, and `said Kael` gives it to Kael. With no
+speech-verb tag, a paragraph whose narration names exactly one character
+(an action beat) gives the line to that character. Names and aliases match
+case-sensitively as proper nouns, and titles are skipped for the given
+name (`Lord Maren` also matches `Maren`). Pronoun tags (`she said`) are
+never attributed, so in close third person the POV character is often
+under-counted; when that matters, name the tags in a sample chapter and
+rerun. Per character it reports lines, words, mean sentence length,
+contraction, question, and exclamation rates, and signature words used
+more by them than by others. It warns when a character says one of their
+`voice-avoid` words, when two characters with five or more lines each have
+close fingerprints ("X and Y may sound alike: similar sentence length,
+contractions, questions, and exclamations"), and when a character with
+five or more lines never says a `voice-words` entry. Unattributed dialogue
+is not counted, so a low line count may mean few named tags rather than
+few lines.
 
 When two voices blur, differentiate them on more than one axis (sentence
 length, contractions, vocabulary, what they ask about) and see

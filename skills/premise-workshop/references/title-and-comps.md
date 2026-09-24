@@ -44,12 +44,19 @@ character, place, or term name, through the collision check:
 story names "Maren" "Bellrock" --path .
 ```
 
+Pass each word separately when a title or name has more than one
+(`"Bell Tower" Bell Tower`): multi-word names are only checked for exact
+clashes.
+
 - **Exact clash** (error, exit 1): the name already belongs to a
   character, alias, location, faction, artifact, system, or glossary
-  term. Pick another, or confirm the reuse is deliberate and rename the
-  existing entity with `story rename`.
-- **Look-alike warning:** same initial and one or two letters apart, or
-  the same first four letters (*Maren* / *Marek*). Readers confuse these.
+  term, or its given name (the first word that is not a title or article
+  such as `The`, `Lord`, or `Captain`) equals a character's given name,
+  so *Lady Sera* clashes with *Sera Voss*. Pick another, or confirm the
+  reuse is deliberate and rename the existing entity with `story rename`.
+- **Look-alike warning:** the same first four letters (*Maren* /
+  *Marenna*), or the same initial and one letter apart (two for words of
+  five letters or more: *Maren* / *Marek*). Readers confuse these.
 - **Shared initial with a major character:** fine in moderation; a cast
   where three leads start with M is hard to follow.
 

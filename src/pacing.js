@@ -1,6 +1,7 @@
-// Pacing dashboard: per-chapter scene and sequel counts, Swain scene
-// outcomes, chapter-ending hooks, and length, plus advisory findings about
-// runs that go slack. Reads frontmatter only; everything here is a warning.
+// Pacing dashboard: per-chapter scene and sequel counts, scene outcomes
+// (yes, no, and the yes-but/no-and extension of Swain), chapter-ending
+// hooks, and length, plus advisory findings about runs that go slack. Reads
+// frontmatter only; everything here is a warning.
 
 export const SCENE_OUTCOMES = new Set(["yes", "no", "yes-but", "no-and"]);
 export const CHAPTER_HOOKS = new Set(["cliffhanger", "question", "revelation", "reversal", "decision", "emotional", "resolution"]);

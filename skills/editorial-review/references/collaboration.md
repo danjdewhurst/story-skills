@@ -71,7 +71,9 @@ GitHub) so changes to shared entities require review by their owner:
 CODEOWNERS only enforces review when branch protection on `main`
 requires code-owner review; tell the user to enable it in the repository
 settings. Use `story names "<candidate>" --path .` before adding a name,
-so authors do not create clashing characters or places, and run
+so authors do not create clashing characters or places (it exits 1 on an
+exact clash and warns about look-alikes; pass each word of a multi-word
+name separately to check it for look-alikes too), and run
 `story series .` across linked books.
 
 ## Backups
