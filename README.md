@@ -88,24 +88,29 @@ Every finding is exact, file-addressed, and reproducible, and CI asserts this ou
 
 | Skill | What it does | Try saying |
 |-------|-------------|------------|
+| **premise-workshop** | Turns a spark into a tested premise: what-ifs, logline tests, premise and counter-premise, stakes, choice of form, titles, and comparable books, then hands off to `story init --form` | *"Is there a novel in this idea?"* |
 | **story-init** | Scaffolds the story bible, folders, and registries | *"Start a new story"* |
 | **character-management** | Creates character profiles with relationships, traits, arcs, and family trees | *"Create a character"* |
 | **worldbuilding** | Builds locations and systems: magic, politics, technology, religion, and more | *"Design a magic system"* |
 | **plot-structure** | Plans arcs with structures like three-act, hero's journey, Save the Cat, and kishotenketsu | *"Create a plot arc"* |
 | **theme-craft** | Builds the controlling idea (value + cause premise), the moral argument, lie/truth arc types, antagonist design, and motif/symbolism audits | *"What's my story really about?"* |
 | **genre-craft** | Genre packs with checkable conventions: mystery fair-play, romance beats, thriller, horror, MG/YA, sci-fi, and serial/episodic structure | *"Plan a fair-play mystery"* |
-| **research** | Records the real-world facts a story relies on, with sources and the chapters that use them, and flags final chapters resting on unverified research | *"Fact-check the sailing in chapter 4"* |
+| **research** | Investigates the real-world facts a story relies on, with quoted sources, confidence, interviews and site visits, invented-versus-accurate decisions, and qualified reviewers for legal, medical, and other risky details | *"Fact-check the sailing in chapter 4"* |
 | **chapter-writing** | Drafts chapters through an outline-first workflow that pulls from story context | *"Write the next chapter"* |
 | **discovery-drafting** | Pantsing mode: draft from a story kernel, keep post-hoc chapter notes, and reconcile the bible after each discovery-drafted chapter | *"I want to discovery-write"* |
 | **scene-craft** | Plans and checks the scene unit: Scene/Sequel structure, try/fail cycles, scene cards, dialogue subtext and voice differentiation, deep POV, exposition, flashbacks, and openings | *"Does this chapter breathe?"* |
 | **voice-style** | Keeps a copyeditor's style sheet (dialect, house spellings, dialogue punctuation, character voices, watch words) and acts on `story prose` lint findings | *"Set up a style sheet for this book"* |
+| **line-editing** | Owns the prose pass without flattening the author's voice: line edits with a reason for each change, distinct character voices checked by `story voices`, a copyedit against the style sheet, and read-aloud and proof passes | *"Line edit chapter 3. Everyone sounds the same."* |
 | **revision-continuity** | Revises drafts, audits continuity, and keeps character state, timeline, and arc changes consistent | *"Continuity-check chapter 3"* |
 | **feedback-triage** | Collects alpha/beta reader feedback per round, synthesizes convergent and divergent notes, and hands a revision plan to revision-continuity | *"Triage the beta feedback"* |
+| **editorial-review** | Handles work with other people: sensitivity and authenticity reader briefs, a real-people and defamation check, permissions for lyrics and epigraphs, the AI-use statement, rounds with human editors, review copies, and co-authoring | *"I'm quoting a song lyric as my epigraph. What do I need?"* |
 | **series-continuity** | Starts sequels and prequels as linked projects, carries characters and world forward, and checks shared canon across books | *"Start a prequel to The Last Ember"* |
 | **submission** | Checks submission readiness, drafts the query letter, pitch, comp titles, synopsis, and blurb, builds the Shunn manuscript, and tracks queries and responses | *"Help me query agents"* |
+| **publishing** | Self-publishing production: retailer metadata, ISBNs, the copyright page, accessible EPUB and print interiors, distribution, pricing, a launch plan with ARCs and ad testing, and a rights inventory with contract red flags | *"Get my book ready for KDP and IngramSpark in 6x9"* |
+| **adaptation** | Carries the story into other forms: an audiobook narration script with a pronunciation guide, a Fountain screenplay, a picture-book spread plan with illustration briefs, a comics script, an interactive-fiction branch map, and translated editions | *"Make a narration script so I can audition narrators"* |
 | **story-maintenance** | Runs deterministic CLI checks for validation, continuity, reports, indexing, links, word counts, import, and export | *"Validate my story project"* |
 
-For stronger prose, pair **chapter-writing** with [**better-writing**](https://github.com/forjd/better-writing). It adds voice calibration, anti-generic writing checks, and a final prose-quality pass, and installs the same way:
+**line-editing** owns the prose pass. For general-purpose writing checks as well, add [**better-writing**](https://github.com/forjd/better-writing). It adds voice calibration, anti-generic writing checks, and a final prose-quality pass, and installs the same way:
 
 ```shell
 npx skills add forjd/better-writing
@@ -135,6 +140,7 @@ The CLI is for maintenance only. Agents write story content directly to markdown
 | `story import draft.md --title "The Lost Coast"` | Split an existing manuscript into a new story project and suggest entity candidates |
 | `story add character "Sera Voss"` | Create entity files for characters, locations, systems, factions, artifacts, arcs, chapters, scenes, questions, promises, clues, terms, research notes, and matter pages |
 | `story add matter "Dedication"` | Add a front (default) or `--placement back` matter page such as a dedication, epigraph, or acknowledgments |
+| `story names "Seren" "Kestrel Row"` | Check candidate names against every name, alias, and glossary term before using them: clashes fail, look-alikes warn |
 | `story rename character sera-voss "Sera Vale"` | Rename an entity and update kebab-case references |
 | `story remove promise old-setup` | Remove an entity and scrub metadata references |
 | `story migrate [path]` | Upgrade a project to the current schema |
@@ -150,7 +156,8 @@ The CLI is for maintenance only. Agents write story content directly to markdown
 | `story reindex [path]` | Rebuild registry tables from the current markdown files |
 | `story wordcount [path] --write` | Count chapter prose and update chapter frontmatter plus the chapter registry |
 | `story doctor [path]` | Show health checks with actionable repair steps |
-| `story next [path]` | Recommend the next deterministic writing or maintenance actions |
+| `story next [path]` | Recommend the next deterministic writing or maintenance actions, including the next revision pass while revising |
+| `story passes [path] --init` | Record named revision passes (structure, character, theme, continuity, pacing, line, copyedit, proof) in `story.md`; `--start` and `--done` mark progress |
 | `story report [path] --actionable` | Summarize inventory and optionally include next actions |
 
 **Analyze**
@@ -160,6 +167,10 @@ The CLI is for maintenance only. Agents write story content directly to markdown
 | `story knowledge sera-voss --at chapter-03` | Show what a character knew at a chapter, from timeline-scoped knowledge state |
 | `story timeline [path]` | Show scenes in story-time order from their `date`/`time` (marking scenes told out of order), POV balance by words, and each character's presence and longest absence |
 | `story prose [path]` | Lint chapter prose: filter words, -ly adverbs, said-bookisms, echoes, sentence rhythm, repeated phrases, similar names, and `style-sheet.md` spellings and watch words |
+| `story voices [path]` | Fingerprint each character's tagged dialogue (sentence length, contractions, questions, signature words) and flag `voice-avoid` words and characters who sound alike |
+| `story pacing [path]` | Tabulate scenes, sequels, scene outcomes (`yes`, `no`, `yes-but`, `no-and`), and chapter hooks; flag runs of easy wins, missing sequels, flat chapter endings, and length outliers |
+| `story clues [path]` | Draw the fair-play grid of clue plants and reveals by chapter; flag late plants, unplanted reveals, and red herrings never debunked |
+| `story diagram relationships --path .` | Print Mermaid source for the family tree and relationships, the location route map, the story-time timeline, the clue flow, or arcs by chapter |
 | `story progress [path] --log` | Report words against `target-words`, the `deadline`, and chapter targets; `--log` records the day's count in `progress.md` for pace and a projected finish |
 | `story compare [path] --ref draft-1` | Compare chapters with an earlier draft (a git ref, or `--against` a copied project folder): word changes, added and removed chapters, and unchanged paragraphs |
 
@@ -172,6 +183,8 @@ The CLI is for maintenance only. Agents write story content directly to markdown
 | `story build [path] --format epub` | Build disposable markdown, EPUB, DOCX, or Shunn manuscript artifacts in `dist/`; EPUB builds embed the `story.md` `cover` image, publishing metadata, and accessibility metadata |
 | `story build [path] --format html` | Build a single-file review copy whose paragraphs carry citable anchors such as `ch03-p12` |
 | `story build [path] --format print --trim 6x9` | Build a print-ready paged-media HTML interior to render to PDF with Paged.js, WeasyPrint, or Prince |
+| `story build [path] --format narration` | Build an audiobook narration script with a pronunciation guide and runtime estimates |
+| `story build [path] --format metadata` | Build a retailer metadata sheet from `story.md` with a readiness checklist |
 
 Behavior notes:
 
