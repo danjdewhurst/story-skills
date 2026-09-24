@@ -78,7 +78,8 @@ function cell(planted, revealed) {
 }
 function formatClueMatrix(matrix) {
   const { totals } = matrix;
-  const lines = [`Clues: ${totals.clues} live (${totals.redHerrings} red herrings), ${totals.planted} planted, ${totals.revealed} revealed`];
+  const herrings = `${totals.redHerrings} red herring${totals.redHerrings === 1 ? "" : "s"}`;
+  const lines = [`Clues: ${totals.clues} live (${herrings}), ${totals.planted} planted, ${totals.revealed} revealed`];
   if (matrix.rows.length === 0) {
     lines.push("", '- None: add clues with story add clue "Name" --planted chapter-02 --payoff chapter-09');
     return `${lines.join(`
