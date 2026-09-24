@@ -74,6 +74,7 @@ describe("story clues", () => {
       "no clue is significance-delayed: every clue announces its meaning when planted"
     ]);
     expect(formatClueMatrix(report)).toContain("d-herring ~");
+    expect(formatClueMatrix(report)).toContain("Clues: 4 live (1 red herring), 3 planted, 2 revealed");
   });
 
   test("add clue --red-herring writes the flag and validate checks its type", () => {
