@@ -179,6 +179,10 @@ Route travel: when locations declare `routes`, `story continuity` follows each c
 - `clues` - chapters in reading order with an arrow from each clue's planting chapter to its reveal; red herrings are dotted, and unrevealed clues point at a "not yet revealed" node. Dropped and abandoned clues are left out.
 - `arcs` - each arc joined to the chapters whose chapter or scene `arcs-advanced` names it.
 
+### Name Checks
+
+`story names <name...>` checks candidate names before they are used, one name per argument (quote multi-word names). It compares each against character names, first names, and aliases (cut characters excepted), location, faction, artifact, and system names, and glossary terms and aliases, ignoring case, accents, and punctuation. A candidate, or its first word, equal to an existing name is a clash: an error, and the command exits 1. Warnings flag look-alikes (first words sharing their first four letters, or sharing an initial within an edit distance of 1, or 2 for words of five letters or more) and a shared initial with a protagonist, antagonist, deuteragonist, or narrator. Each name prints as `clear`, `check`, or `taken`.
+
 ### Glossary
 
 Glossary terms require `term` and `category`, plus optional `aliases`.

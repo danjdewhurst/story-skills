@@ -9,6 +9,7 @@ import { buildTimeline } from "./timeline.js";
 import { buildClueMatrix } from "./clues.js";
 import { buildDiagram } from "./diagram.js";
 import { buildVoices } from "./voices.js";
+import { checkNames, existingNames } from "./names.js";
 import { DEFAULT_PASSES, nextPass, readPasses, updatePasses, validatePasses } from "./passes.js";
 import { CHAPTER_HOOKS, SCENE_OUTCOMES, buildPacing } from "./pacing.js";
 import { compareChapters, proseParagraphs } from "./compare.js";
@@ -1437,6 +1438,18 @@ export function projectPasses(root, change = {}) {
     writeFile(storyPath, replaceFrontmatter(raw, { ...parseFrontmatter(raw, storyPath).data, "revision-passes": next }), { root: project.root });
   }
   return { passes: next, changed };
+}
+
+// Collision check for candidate names against every name in the bible.
+export function namesReport(root, candidates) {
+  const list = asArray(candidates).map((name) => String(name).trim()).filter(Boolean);
+  if (list.length === 0) {
+    throw new Error("Usage: story names <name...> [--path <project>]");
+  }
+  const project = scanProject(root);
+  const result = checkNames(list, existingNames(project));
+  const errors = [...project.fileErrors, ...result.errors];
+  return { ok: errors.length === 0, errors, warnings: result.warnings, results: result.results };
 }
 
 // Dialogue fingerprints per character from attributed speech. Advisory.

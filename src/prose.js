@@ -367,7 +367,7 @@ function countPattern(text, pattern) {
   return (text.match(pattern) ?? []).length;
 }
 
-function editDistance(a, b) {
+export function editDistance(a, b) {
   let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
   for (let i = 1; i <= a.length; i += 1) {
     const current = [i];
