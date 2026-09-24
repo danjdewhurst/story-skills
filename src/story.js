@@ -7,6 +7,7 @@ import { FRONTMATTER_PATTERN, parseFrontmatter, replaceFrontmatter, stringifyFro
 import { chapterProse, escapeRegExp, extractSection, kebabCase, titleCaseSlug, wordCount } from "./markdown.js";
 import { buildTimeline } from "./timeline.js";
 import { buildClueMatrix } from "./clues.js";
+import { CHAPTER_HOOKS, SCENE_OUTCOMES, buildPacing } from "./pacing.js";
 import { compareChapters, proseParagraphs } from "./compare.js";
 import { PROGRESS_FILE, cleanSessions, computeProgress, localDate, withSession } from "./progress.js";
 import { analyzeChapter, chapterFindings, proseRules, repeatedPhrases, similarNames } from "./prose.js";
@@ -367,7 +368,8 @@ export function scanProject(root) {
       wordCount: wordCount(chapterProse(markdown.body)),
       date: String(data.date ?? ""),
       time: String(data.time ?? ""),
-      mode: String(data.mode ?? "")
+      mode: String(data.mode ?? ""),
+      hook: typeof data.hook === "string" ? data.hook : ""
     }), scanErrors).sort((left, right) => left.number - right.number || left.file.localeCompare(right.file, "en")),
     scenes: readEntityFiles(projectRoot, "scenes", (id, file, data) => ({
       id,
@@ -389,6 +391,7 @@ export function scanProject(root) {
       time: String(data.time ?? ""),
       travelHours: typeof data["travel-hours"] === "number" ? data["travel-hours"] : 0,
       sequel: typeof data.sequel === "boolean" ? data.sequel : false,
+      outcome: typeof data.outcome === "string" ? data.outcome : "",
       dilemma: String(data.dilemma ?? ""),
       flashbackTo: String(data["flashback-to"] ?? "")
     }), scanErrors).sort((left, right) => left.chapter.localeCompare(right.chapter, "en") || left.scene - right.scene || left.file.localeCompare(right.file, "en")),
@@ -1385,6 +1388,12 @@ export function clueReport(root) {
   return { ok: project.fileErrors.length === 0, errors: [...project.fileErrors], ...matrix };
 }
 
+// Pacing dashboard over chapters and scene records. Findings are advisory.
+export function pacingReport(root) {
+  const project = scanProject(root);
+  return { ok: project.fileErrors.length === 0, errors: [...project.fileErrors], ...buildPacing(project) };
+}
+
 // Advisory prose lint: counts per chapter plus manuscript-wide repeats.
 // Findings are warnings, never errors, so the command always exits 0 on a
 // readable project.
@@ -1634,8 +1643,8 @@ const ENTITY_ENUM_OPTIONS = {
   faction: [["type", FACTION_TYPES], ["status", FACTION_STATUSES]],
   artifact: [["type", ARTIFACT_TYPES], ["status", ARTIFACT_STATUSES]],
   arc: [["type", ARC_TYPES], ["status", ARC_STATUSES]],
-  chapter: [["status", CHAPTER_STATUSES]],
-  scene: [["status", SCENE_STATUSES]],
+  chapter: [["status", CHAPTER_STATUSES], ["hook", CHAPTER_HOOKS]],
+  scene: [["status", SCENE_STATUSES], ["outcome", SCENE_OUTCOMES]],
   question: [["status", QUESTION_STATUSES]],
   promise: [["status", PROMISE_STATUSES]],
   clue: [["status", CLUE_STATUSES]],
@@ -2558,6 +2567,7 @@ function chapterFile(title, number, options) {
     mode: options.mode ?? "",
     date: options.date ?? "",
     time: options.time ?? "",
+    ...(options.hook === undefined ? {} : { hook: options.hook }),
     "word-count": 0
   })}# Chapter ${number}: ${title}
 
@@ -2607,6 +2617,7 @@ function sceneFile(title, chapter, scene, options) {
     date: options.date ?? "",
     time: options.time ?? "",
     sequel: options.sequel ?? false,
+    ...(options.outcome === undefined ? {} : { outcome: options.outcome }),
     dilemma: options.dilemma ?? "",
     "state-changes": []
   };
@@ -4090,6 +4101,7 @@ function validateChapters(project, errors) {
     if (data["time-skip"] !== undefined) {
       requireScalar(data, "time-skip", label, errors);
     }
+    validateEnum(data, "hook", CHAPTER_HOOKS, label, errors);
 
     if (filenameNumber === 0) {
       errors.push(`${label} filename must match chapter-{NN}.md`);
@@ -4152,6 +4164,7 @@ function validateScenes(project, errors) {
     if (data.sequel !== undefined && typeof data.sequel !== "boolean") {
       errors.push(`${label} frontmatter field sequel must be a boolean`);
     }
+    validateEnum(data, "outcome", SCENE_OUTCOMES, label, errors);
     if (data["flashback-to"] !== undefined) {
       requireScalar(data, "flashback-to", label, errors);
     }

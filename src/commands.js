@@ -3,6 +3,7 @@ import { formatClueMatrix } from "./clues.js";
 import { formatComparison } from "./compare.js";
 import { importManuscript } from "./import.js";
 import { isTruthy } from "./options.js";
+import { formatPacing } from "./pacing.js";
 import { formatProgress } from "./progress.js";
 import { formatProseReport } from "./prose.js";
 import { formatSeriesReport } from "./series.js";
@@ -21,6 +22,7 @@ import {
   formatProjectReport,
   knowledgeAtChapter,
   migrateProject,
+  pacingReport,
   projectActions,
   projectProgress,
   projectReport,
@@ -237,6 +239,21 @@ export const COMMANDS = [
       const report = proseReport(root());
       io.stdout.write(formatProseReport(report));
       return reportResult(io, report, "Prose check complete", "Prose check failed");
+    }
+  },
+  {
+    name: "pacing",
+    usage: "pacing [path]",
+    summary: [
+      "Show words, scenes, sequels, scene outcomes, and",
+      "chapter hooks per chapter; flag easy-win runs,",
+      "missing sequels, and length outliers"
+    ],
+    project: "positional",
+    run({ io, root }) {
+      const report = pacingReport(root());
+      io.stdout.write(formatPacing(report));
+      return reportResult(io, report, "Pacing check complete", "Pacing check failed");
     }
   },
   {

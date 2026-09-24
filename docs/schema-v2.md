@@ -114,6 +114,7 @@ Optional chapter fields:
 - `episode-question` - the installment's dramatic question for serial fiction (see the `genre-craft` skill)
 - `target-words` - positive integer word target for the chapter; `story progress` reports each chapter against its target
 - `time-skip` - freeform `from → to` note recording a skipped interval (planning note; validated as a scalar, not checked by `story continuity`)
+- `hook` - how the chapter ending pulls the reader on: `cliffhanger`, `question`, `revelation`, `reversal`, `decision`, `emotional`, or `resolution`. Set it with `story add chapter --hook <name>`.
 
 Scenes require `title`, `chapter`, `scene`, and `status`. Scenes carry machine-readable continuity fields: `pov`, `location`, `characters`, `mentions`, `arcs-advanced`, and `state-changes`.
 
@@ -121,6 +122,7 @@ Optional scene fields:
 
 - `sequel` - `true` when the scene is a sequel unit (reaction → dilemma → decision) rather than a scene unit (goal → conflict → outcome)
 - `dilemma` - the sequel unit's dilemma: the choice the POV character faces
+- `outcome` - how a scene unit ends for the POV character's goal: `yes`, `no`, `yes-but` (they get it, at a cost), or `no-and` (they fail, and things get worse). Set it with `story add scene --outcome <name>`.
 - `date` - story date (`YYYY-MM-DD`)
 - `time` - story time: `HH:MM` (24h) or `dawn`/`morning`/`midday`/`afternoon`/`evening`/`night`
 - `travel-hours` - asserted travel time into this scene; `story continuity` errors when the timestamp allows less
@@ -153,6 +155,8 @@ Clues require `title` and `status`; optional chapter references are `planted` an
 Prop custody: `object-state` entries for destroyed or lost artifacts should record `since: chapter-NN`, the chapter of destruction or loss. `story continuity` then errors when a later scene references the artifact in `state-changes` or lists it in `mentions`. Without `since`, custody cannot be checked and a warning is reported.
 
 `story timeline` is the read-only view of the same fields: it orders dated scenes, and chapters without scene records, by `date` and `time` (a scene never inherits its chapter's date); marks entries read after events that happen later in story time; lists undated scenes in reading order; and reports POV balance by chapter words and each character's presence (chapter or scene `characters`, not `mentions`) with their longest absence.
+
+`story pacing` is the read-only pacing dashboard: per chapter, prose words, scene units, sequel units, the count of each scene `outcome`, and the chapter `hook`, plus the median chapter length and the share of recorded outcomes that are setbacks (`no`, `yes-but`, `no-and`). It warns when a drafted chapter (`draft` or later) has no `hook`; when three or more scene units in a row, in reading order and skipping sequels, end in `yes`; when four or more scene units in a row have no sequel between them; when three or more chapters in a row end on `resolution`; and, once three chapters have prose, when a chapter is over twice or under half the median length. Findings are advisory; the command exits 0 on a readable project.
 
 Clock and time: `story continuity` checks timestamps only when scenes or chapters carry `date` (and ideally `time`); with no dates there are no findings. Within a chapter, a scene timestamped earlier than the previous dated scene is a warning; a `travel-hours` assertion the timestamps cannot honor is an error; a higher-numbered chapter dated earlier than a lower-numbered one is a warning. Malformed dates or times are warnings, never crashes.
 

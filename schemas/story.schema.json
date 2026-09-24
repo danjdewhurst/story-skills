@@ -192,6 +192,7 @@
         "date": { "type": "string" },
         "time": { "type": "string" },
         "episode-question": { "type": "string" },
+        "hook": { "enum": ["cliffhanger", "question", "revelation", "reversal", "decision", "emotional", "resolution"] },
         "time-skip": { "type": "string" }
       }
     },
@@ -217,6 +218,7 @@
         "time": { "type": "string" },
         "travel-hours": { "type": "number" },
         "sequel": { "type": "boolean" },
+        "outcome": { "enum": ["yes", "no", "yes-but", "no-and"] },
         "dilemma": { "type": "string" },
         "flashback-to": { "type": "string" }
       }
