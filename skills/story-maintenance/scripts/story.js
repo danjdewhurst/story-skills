@@ -952,6 +952,21 @@ function checkClock(project, errors, warnings) {
   checkChapterDates(project, warnings);
   checkRouteTravel(project, errors);
 }
+var TIME_RANGES = new Map([
+  ["dawn", [240, 419]],
+  ["morning", [300, 719]],
+  ["midday", [660, 839]],
+  ["afternoon", [720, 1079]],
+  ["evening", [1020, 1319]],
+  ["night", [1200, 1439]]
+]);
+function sceneWindow(days, time) {
+  const text = String(time ?? "").trim().toLowerCase();
+  const named = TIME_RANGES.get(text);
+  const exact = named === undefined ? parseClockTime(text) : undefined;
+  const [from, to] = named ?? (exact === undefined ? [0, 1439] : [exact, exact]);
+  return { earliest: days * 1440 + from, latest: days * 1440 + to, exact: exact !== undefined };
+}
 function checkRouteTravel(project, errors) {
   const graph = routeGraph(project.locations);
   if (graph.size === 0) {
@@ -963,32 +978,41 @@ function checkRouteTravel(project, errors) {
     if (!parsed || scene.location === "" || !graph.has(scene.location)) {
       continue;
     }
-    const minutes = parseClockTime(scene.time);
+    const window = sceneWindow(parsed.days, scene.time);
     const present = new Set(scene.characters.filter((id) => typeof id === "string"));
     if (typeof scene.pov === "string" && scene.pov !== "") {
       present.add(scene.pov);
     }
     for (const characterId of present) {
       const list = sightings.get(characterId) ?? [];
-      list.push({ scene, label: relative(project, scene.file), days: parsed.days, minutes });
+      list.push({ scene, label: relative(project, scene.file), ...window });
       sightings.set(characterId, list);
     }
   }
+  const distances = new Map;
+  const distance = (from, to) => {
+    const key = `${from}>${to}`;
+    if (!distances.has(key)) {
+      distances.set(key, shortestRouteHours(graph, from, to));
+    }
+    return distances.get(key);
+  };
   for (const [characterId, list] of [...sightings.entries()].sort(([left], [right]) => left.localeCompare(right, "en"))) {
-    list.sort((left, right) => left.days - right.days || (left.minutes ?? 0) - (right.minutes ?? 0) || left.label.localeCompare(right.label, "en"));
+    list.sort((left, right) => left.earliest - right.earliest || left.latest - right.latest || left.label.localeCompare(right.label, "en"));
     for (let index = 1;index < list.length; index += 1) {
-      const previous = list[index - 1];
       const current = list[index];
-      if (previous.scene.location === current.scene.location) {
-        continue;
-      }
-      const needed = shortestRouteHours(graph, previous.scene.location, current.scene.location);
-      if (needed === undefined) {
-        continue;
-      }
-      const elapsed = previous.minutes === undefined || current.minutes === undefined ? (current.days - previous.days + 1) * 24 : (timestampMinutes(current) - timestampMinutes(previous)) / 60;
-      if (elapsed < needed) {
-        errors.push(`${current.label} puts ${characterId} at ${current.scene.location} ${formatHours(elapsed)} after ${previous.label} at ${previous.scene.location}, but the fastest route takes ${formatHours(needed)}`);
+      for (let back = index - 1;back >= 0; back -= 1) {
+        const previous = list[back];
+        if (previous.scene.location === current.scene.location) {
+          continue;
+        }
+        const needed = distance(previous.scene.location, current.scene.location);
+        const elapsed = Math.max(current.latest - previous.earliest, previous.latest - current.earliest) / 60;
+        if (needed !== undefined && elapsed < needed) {
+          const gap = previous.exact && current.exact ? formatHours(elapsed) : `at most ${formatHours(elapsed)}`;
+          errors.push(`${current.label} puts ${characterId} at ${current.scene.location} ${gap} after ${previous.label} at ${previous.scene.location}, but the fastest route takes ${formatHours(needed)}`);
+          break;
+        }
       }
     }
   }
@@ -1538,302 +1562,6 @@ function timelineText(text) {
   return String(text).replace(/:/g, "∶").replace(/\s+/g, " ").trim();
 }
 
-// src/voices.js
-var SPEECH_VERBS = [
-  "said",
-  "says",
-  "asked",
-  "asks",
-  "replied",
-  "replies",
-  "answered",
-  "answers",
-  "whispered",
-  "whispers",
-  "shouted",
-  "shouts",
-  "called",
-  "calls",
-  "muttered",
-  "mutters",
-  "murmured",
-  "murmurs",
-  "cried",
-  "cries",
-  "yelled",
-  "yells",
-  "added",
-  "adds",
-  "told",
-  "tells",
-  "snapped",
-  "snaps",
-  "admitted",
-  "admits",
-  "insisted",
-  "insists",
-  "demanded",
-  "demands",
-  "continued",
-  "continues",
-  "began",
-  "begins",
-  "went on",
-  "goes on"
-];
-var CONTRACTION_PATTERN = /[\p{L}](?:n['’]t|['’](?:re|ll|ve|m|d))\b/giu;
-var STOPWORDS = new Set([
-  "that",
-  "this",
-  "with",
-  "have",
-  "what",
-  "from",
-  "they",
-  "there",
-  "their",
-  "them",
-  "then",
-  "than",
-  "were",
-  "would",
-  "could",
-  "should",
-  "your",
-  "yours",
-  "just",
-  "know",
-  "been",
-  "will",
-  "when",
-  "where",
-  "which",
-  "about",
-  "into",
-  "some",
-  "because",
-  "want",
-  "like",
-  "only",
-  "here",
-  "does",
-  "didn't",
-  "don't",
-  "it's",
-  "can't",
-  "won't",
-  "i'm",
-  "you're",
-  "we're",
-  "that's",
-  "there's",
-  "what's",
-  "going",
-  "come",
-  "back",
-  "over",
-  "tell",
-  "said",
-  "more",
-  "very",
-  "also"
-]);
-var VOICE_THRESHOLDS = {
-  minLines: 5,
-  sentenceLength: 1.5,
-  contractions: 1.5,
-  questions: 0.1,
-  exclamations: 0.1
-};
-function buildVoices(project, chapters) {
-  const speakers = speakerPatterns(project.characters);
-  const lines = new Map(project.characters.map((character) => [character.id, []]));
-  let unattributed = 0;
-  for (const chapter of chapters) {
-    for (const paragraph of chapter.paragraphs) {
-      const quotes = quotedSpans(paragraph);
-      if (quotes.length === 0) {
-        continue;
-      }
-      const speaker = attribute(paragraph, speakers);
-      if (speaker === null) {
-        unattributed += quotes.length;
-        continue;
-      }
-      for (const text of quotes) {
-        lines.get(speaker).push({ chapter: chapter.id, text });
-      }
-    }
-  }
-  const profiles = project.characters.map((character) => profile(character, lines.get(character.id))).filter((entry) => entry.lines > 0);
-  signatureWords(profiles);
-  const warnings = [];
-  for (const character of project.characters) {
-    const said = lines.get(character.id);
-    for (const phrase of stringList(character.voiceAvoid)) {
-      const pattern = phrasePattern(phrase);
-      const chaptersUsing = [...new Set(said.filter((line) => pattern.test(line.text)).map((line) => line.chapter))];
-      if (chaptersUsing.length > 0) {
-        warnings.push(`${character.id} says "${phrase}", which is in their voice-avoid list (${chaptersUsing.join(", ")})`);
-      }
-    }
-    if (said.length >= VOICE_THRESHOLDS.minLines) {
-      for (const phrase of stringList(character.voiceWords)) {
-        const pattern = phrasePattern(phrase);
-        if (!said.some((line) => pattern.test(line.text))) {
-          warnings.push(`${character.id} never says "${phrase}" from their voice-words list in ${said.length} lines of dialogue`);
-        }
-      }
-    }
-  }
-  const eligible = profiles.filter((entry) => entry.lines >= VOICE_THRESHOLDS.minLines);
-  for (let left = 0;left < eligible.length; left += 1) {
-    for (let right = left + 1;right < eligible.length; right += 1) {
-      if (similarVoices(eligible[left], eligible[right])) {
-        warnings.push(`${eligible[left].id} and ${eligible[right].id} may sound alike: similar sentence length, contractions, questions, and exclamations`);
-      }
-    }
-  }
-  return {
-    profiles: profiles.sort((left, right) => right.words - left.words || left.id.localeCompare(right.id, "en")),
-    unattributed,
-    warnings
-  };
-}
-function speakerPatterns(characters) {
-  const verbs = SPEECH_VERBS.map((verb) => verb.replace(/ /g, "\\s+")).join("|");
-  return characters.filter((character) => character.status !== "cut").map((character) => {
-    const names = new Set;
-    const full = String(character.name ?? "").trim();
-    if (full !== "") {
-      names.add(full);
-      const first = splitWords(full)[0];
-      if (first && first.length >= 2) {
-        names.add(first);
-      }
-    }
-    for (const alias of stringList(character.aliases)) {
-      names.add(alias);
-    }
-    const alternatives = [...names].sort((left, right) => right.length - left.length).map(escape).join("|");
-    if (alternatives === "") {
-      return null;
-    }
-    return {
-      id: character.id,
-      name: new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternatives})(?![\\p{L}\\p{N}])`, "iu"),
-      tag: new RegExp(`(?<![\\p{L}\\p{N}])(?:(?:${alternatives})\\s+(?:${verbs})|(?:${verbs})\\s+(?:${alternatives}))(?![\\p{L}\\p{N}])`, "iu")
-    };
-  }).filter(Boolean);
-}
-function attribute(paragraph, speakers) {
-  const narration = stripQuotes(paragraph);
-  const tagged = speakers.filter((speaker) => speaker.tag.test(narration));
-  if (tagged.length === 1) {
-    return tagged[0].id;
-  }
-  if (tagged.length > 1) {
-    return null;
-  }
-  const named = speakers.filter((speaker) => speaker.name.test(narration));
-  return named.length === 1 ? named[0].id : null;
-}
-function quotedSpans(paragraph) {
-  const spans = [];
-  for (const match of paragraph.matchAll(/“([^”]*)”|"([^"]*)"/g)) {
-    const text = (match[1] ?? match[2] ?? "").trim();
-    if (text !== "") {
-      spans.push(text);
-    }
-  }
-  return spans;
-}
-function stripQuotes(paragraph) {
-  return paragraph.replace(/“[^”]*(”|$)/g, " ").replace(/"[^"]*("|$)/g, " ");
-}
-function profile(character, said) {
-  const text = said.map((line) => line.text).join(" ");
-  const words = splitWords(text);
-  const sentences = said.flatMap((line) => line.text.split(/(?<=[.!?…])\s+/).filter((sentence) => splitWords(sentence).length > 0));
-  const questions = sentences.filter((sentence) => /\?["'”’)]*$/.test(sentence.trim())).length;
-  const exclamations = sentences.filter((sentence) => /!["'”’)]*$/.test(sentence.trim())).length;
-  return {
-    id: character.id,
-    lines: said.length,
-    words: words.length,
-    sentenceLength: sentences.length === 0 ? 0 : words.length / sentences.length,
-    contractions: words.length === 0 ? 0 : (text.match(CONTRACTION_PATTERN) ?? []).length * 100 / words.length,
-    questions: sentences.length === 0 ? 0 : questions / sentences.length,
-    exclamations: sentences.length === 0 ? 0 : exclamations / sentences.length,
-    counts: wordCounts(words),
-    signature: []
-  };
-}
-function wordCounts(words) {
-  const counts = new Map;
-  for (const raw of words) {
-    const word = raw.toLowerCase().replace(/’/g, "'");
-    if (word.length >= 4 && !STOPWORDS.has(word) && !/^\d+$/.test(word)) {
-      counts.set(word, (counts.get(word) ?? 0) + 1);
-    }
-  }
-  return counts;
-}
-function signatureWords(profiles) {
-  const totals = new Map;
-  let allWords = 0;
-  for (const entry of profiles) {
-    allWords += entry.words;
-    for (const [word, count] of entry.counts) {
-      totals.set(word, (totals.get(word) ?? 0) + count);
-    }
-  }
-  for (const entry of profiles) {
-    const otherWords = allWords - entry.words;
-    const scored = [];
-    for (const [word, count] of entry.counts) {
-      if (count < 2) {
-        continue;
-      }
-      const own = count / entry.words;
-      const others = otherWords === 0 ? 0 : (totals.get(word) - count) / otherWords;
-      if (own > others * 2) {
-        scored.push({ word, count, score: own - others });
-      }
-    }
-    entry.signature = scored.sort((left, right) => right.score - left.score || right.count - left.count || left.word.localeCompare(right.word, "en")).slice(0, 5).map((item) => item.word);
-    delete entry.counts;
-  }
-}
-function similarVoices(left, right) {
-  const limits = VOICE_THRESHOLDS;
-  return Math.abs(left.sentenceLength - right.sentenceLength) < limits.sentenceLength && Math.abs(left.contractions - right.contractions) < limits.contractions && Math.abs(left.questions - right.questions) < limits.questions && Math.abs(left.exclamations - right.exclamations) < limits.exclamations;
-}
-function phrasePattern(phrase) {
-  return new RegExp(`(?<![\\p{L}\\p{N}])${escape(String(phrase).trim()).replace(/'/g, "['’]")}(?![\\p{L}\\p{N}])`, "iu");
-}
-function escape(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-function stringList(value) {
-  return (Array.isArray(value) ? value : []).filter((item) => typeof item === "string" && item.trim() !== "");
-}
-function formatVoices(report) {
-  const lines = [`Voices: ${report.profiles.length} speaking characters, ${report.unattributed} unattributed lines`];
-  if (report.profiles.length === 0) {
-    lines.push("", `- None: tag dialogue with a character's name and a speech verb ("...," Mara said)`);
-    return `${lines.join(`
-`)}
-`;
-  }
-  for (const entry of report.profiles) {
-    lines.push("", `${entry.id}: ${entry.lines} lines, ${entry.words} words`, `  Sentence length ${entry.sentenceLength.toFixed(1)}, contractions ${entry.contractions.toFixed(1)} per 100 words, questions ${Math.round(entry.questions * 100)}%, exclamations ${Math.round(entry.exclamations * 100)}%`, `  Signature words: ${entry.signature.join(", ") || "none yet"}`);
-  }
-  return `${lines.join(`
-`)}
-`;
-}
-
 // src/prose.js
 var FILTER_WORDS = [
   "felt",
@@ -2114,7 +1842,7 @@ var PROSE_THRESHOLDS = {
 };
 function proseRules(styleData, characterNames) {
   const data = styleData ?? {};
-  const allow = new Set(stringList2(data["allow-words"]).map((word) => word.toLowerCase()));
+  const allow = new Set(stringList(data["allow-words"]).map((word) => word.toLowerCase()));
   const variants = [];
   for (const entry of Array.isArray(data.preferred) ? data.preferred : []) {
     if (entry && typeof entry.use === "string" && typeof entry.avoid === "string" && entry.use.trim() !== "" && entry.avoid.trim() !== "") {
@@ -2139,8 +1867,8 @@ function proseRules(styleData, characterNames) {
   }
   return {
     allow,
-    variants: variants.map((variant) => ({ ...variant, pattern: phrasePattern2(variant.avoid) })),
-    watch: stringList2(data["watch-words"]).map((word) => ({ word, pattern: phrasePattern2(word) })),
+    variants: variants.map((variant) => ({ ...variant, pattern: phrasePattern(variant.avoid) })),
+    watch: stringList(data["watch-words"]).map((word) => ({ word, pattern: phrasePattern(word) })),
     filterWords: new Set(FILTER_WORDS.filter((word) => !allow.has(word))),
     bookisms: new Set(SAID_BOOKISMS.filter((word) => !allow.has(word))),
     nameTokens
@@ -2340,7 +2068,7 @@ function countMatching(words, predicate) {
   }
   return sortCounts(counts);
 }
-function phrasePattern2(phrase) {
+function phrasePattern(phrase) {
   const body = phrase.trim().split(/\s+/).map(escapeRegExp).join("\\s+");
   return new RegExp(`(?<![\\p{L}\\p{N}])${body}(?![\\p{L}\\p{N}])`, "giu");
 }
@@ -2364,7 +2092,7 @@ function increment(counts, key) {
 function sortCounts(counts) {
   return [...counts.entries()].map(([word, count]) => ({ word, count })).sort((left, right) => right.count - left.count || left.word.localeCompare(right.word, "en"));
 }
-function stringList2(value) {
+function stringList(value) {
   return Array.isArray(value) ? value.filter((item) => typeof item === "string" && item.trim() !== "").map((item) => item.trim()) : [];
 }
 function total(counts) {
@@ -2388,21 +2116,77 @@ function times(count) {
 
 // src/names.js
 var MAJOR_ROLES = new Set(["protagonist", "antagonist", "deuteragonist", "narrator"]);
+var TITLE_WORDS = new Set([
+  "the",
+  "a",
+  "an",
+  "lord",
+  "lady",
+  "sir",
+  "dame",
+  "dr",
+  "doctor",
+  "mr",
+  "mrs",
+  "ms",
+  "miss",
+  "master",
+  "mistress",
+  "captain",
+  "capt",
+  "king",
+  "queen",
+  "prince",
+  "princess",
+  "duke",
+  "duchess",
+  "count",
+  "countess",
+  "baron",
+  "baroness",
+  "father",
+  "mother",
+  "sister",
+  "brother",
+  "uncle",
+  "aunt",
+  "councillor",
+  "councilor",
+  "general",
+  "colonel",
+  "major",
+  "sergeant",
+  "lieutenant",
+  "commander",
+  "professor",
+  "prof",
+  "saint",
+  "st",
+  "old",
+  "young",
+  "little"
+]);
+function givenName(name) {
+  const words = splitWords(String(name));
+  const index = words.findIndex((word) => !TITLE_WORDS.has(word.toLowerCase().replace(/[.’']/g, "")));
+  return index === -1 ? "" : words[index];
+}
 function existingNames(project) {
   const names = [];
-  const add = (kind, id, name, role = "") => {
+  const add = (kind, id, name, role = "", given = false, full = name) => {
     if (typeof name === "string" && name.trim() !== "") {
-      names.push({ kind, id, name: name.trim(), role });
+      names.push({ kind, id, name: name.trim(), full: String(full).trim(), role, given });
     }
   };
   for (const character of project.characters) {
     if (character.status === "cut") {
       continue;
     }
-    add("character", character.id, String(character.name), character.role);
-    const first = splitWords(String(character.name))[0];
-    if (first && first !== String(character.name).trim()) {
-      add("character", character.id, first, character.role);
+    const first = givenName(character.name);
+    const single = first !== "" && first === String(character.name).trim();
+    add("character", character.id, String(character.name), character.role, single);
+    if (first !== "" && !single) {
+      add("character", character.id, first, character.role, true, character.name);
     }
     for (const alias of character.aliases ?? []) {
       add("character", character.id, alias, character.role);
@@ -2431,7 +2215,7 @@ function checkNames(candidates, names) {
       continue;
     }
     const key = normalize(candidate);
-    const first = normalize(splitWords(candidate)[0] ?? candidate);
+    const first = normalize(givenName(candidate));
     const clashes = [];
     const lookalikes = [];
     const initials = [];
@@ -2439,18 +2223,18 @@ function checkNames(candidates, names) {
     for (const entry of names) {
       const tag = `${entry.kind} ${entry.id}`;
       const existing = normalize(entry.name);
-      if (existing === key || existing === first) {
+      if (existing === key || entry.given && existing === first) {
         if (!seen.has(`clash ${tag}`)) {
           clashes.push(entry);
           seen.add(`clash ${tag}`);
         }
         continue;
       }
-      const existingFirst = normalize(splitWords(entry.name)[0] ?? entry.name);
-      if (looksAlike(first, existingFirst) && !seen.has(`like ${tag}`)) {
+      const alike = entry.given ? looksAlike(first, existing) : !existing.includes(" ") && !key.includes(" ") && looksAlike(key, existing);
+      if (alike && !seen.has(`like ${tag}`)) {
         lookalikes.push(entry);
         seen.add(`like ${tag}`);
-      } else if (entry.kind === "character" && MAJOR_ROLES.has(entry.role) && first[0] === existingFirst[0] && !seen.has(`initial ${entry.id}`)) {
+      } else if (entry.given && MAJOR_ROLES.has(entry.role) && first !== "" && first[0] === existing[0] && !seen.has(`initial ${entry.id}`)) {
         initials.push(entry);
         seen.add(`initial ${entry.id}`);
       }
@@ -2460,12 +2244,12 @@ function checkNames(candidates, names) {
     }
     for (const entry of lookalikes) {
       if (!clashes.some((clash) => clash.kind === entry.kind && clash.id === entry.id)) {
-        warnings.push(`"${candidate}" looks like ${entry.kind} ${entry.id} (${entry.name})`);
+        warnings.push(`"${candidate}" looks like ${entry.kind} ${entry.id} (${entry.full})`);
       }
     }
     for (const entry of initials) {
       if (!clashes.concat(lookalikes).some((other) => other.kind === "character" && other.id === entry.id)) {
-        warnings.push(`"${candidate}" shares an initial with ${entry.role} ${entry.id} (${entry.name})`);
+        warnings.push(`"${candidate}" shares an initial with ${entry.role} ${entry.id} (${entry.full})`);
       }
     }
     results.push({ name: candidate, clashes: clashes.length, lookalikes: lookalikes.length, initials: initials.length });
@@ -2490,6 +2274,307 @@ function formatNames(report) {
   for (const result of report.results) {
     const status = result.clashes > 0 ? "taken" : result.lookalikes + result.initials > 0 ? "check" : "clear";
     lines.push(`${result.name}: ${status}`);
+  }
+  return `${lines.join(`
+`)}
+`;
+}
+
+// src/voices.js
+var SPEECH_VERBS = [
+  "said",
+  "says",
+  "asked",
+  "asks",
+  "replied",
+  "replies",
+  "answered",
+  "answers",
+  "whispered",
+  "whispers",
+  "shouted",
+  "shouts",
+  "called",
+  "calls",
+  "muttered",
+  "mutters",
+  "murmured",
+  "murmurs",
+  "cried",
+  "cries",
+  "yelled",
+  "yells",
+  "added",
+  "adds",
+  "told",
+  "tells",
+  "snapped",
+  "snaps",
+  "admitted",
+  "admits",
+  "insisted",
+  "insists",
+  "demanded",
+  "demands",
+  "continued",
+  "continues",
+  "began",
+  "begins",
+  "went on",
+  "goes on"
+];
+var CONTRACTION_PATTERN = /[\p{L}](?:n['’]t|['’](?:re|ll|ve|m|d))\b/giu;
+var STOPWORDS = new Set([
+  "that",
+  "this",
+  "with",
+  "have",
+  "what",
+  "from",
+  "they",
+  "there",
+  "their",
+  "them",
+  "then",
+  "than",
+  "were",
+  "would",
+  "could",
+  "should",
+  "your",
+  "yours",
+  "just",
+  "know",
+  "been",
+  "will",
+  "when",
+  "where",
+  "which",
+  "about",
+  "into",
+  "some",
+  "because",
+  "want",
+  "like",
+  "only",
+  "here",
+  "does",
+  "didn't",
+  "don't",
+  "it's",
+  "can't",
+  "won't",
+  "i'm",
+  "you're",
+  "we're",
+  "that's",
+  "there's",
+  "what's",
+  "going",
+  "come",
+  "back",
+  "over",
+  "tell",
+  "said",
+  "more",
+  "very",
+  "also"
+]);
+var VOICE_THRESHOLDS = {
+  minLines: 5,
+  sentenceLength: 1.5,
+  contractions: 1.5,
+  questions: 0.1,
+  exclamations: 0.1
+};
+function buildVoices(project, chapters) {
+  const speakers = speakerPatterns(project.characters);
+  const lines = new Map(project.characters.map((character) => [character.id, []]));
+  let unattributed = 0;
+  for (const chapter of chapters) {
+    for (const paragraph of chapter.paragraphs) {
+      const quotes = quotedSpans(paragraph);
+      if (quotes.length === 0) {
+        continue;
+      }
+      const speaker = attribute(paragraph, speakers);
+      if (speaker === null) {
+        unattributed += quotes.length;
+        continue;
+      }
+      for (const text of quotes) {
+        lines.get(speaker).push({ chapter: chapter.id, text });
+      }
+    }
+  }
+  const profiles = project.characters.map((character) => profile(character, lines.get(character.id))).filter((entry) => entry.lines > 0);
+  signatureWords(profiles);
+  const warnings = [];
+  for (const character of project.characters) {
+    const said = lines.get(character.id);
+    for (const phrase of stringList2(character.voiceAvoid)) {
+      const pattern = phrasePattern2(phrase);
+      const chaptersUsing = [...new Set(said.filter((line) => pattern.test(line.text)).map((line) => line.chapter))];
+      if (chaptersUsing.length > 0) {
+        warnings.push(`${character.id} says "${phrase}", which is in their voice-avoid list (${chaptersUsing.join(", ")})`);
+      }
+    }
+    if (said.length >= VOICE_THRESHOLDS.minLines) {
+      for (const phrase of stringList2(character.voiceWords)) {
+        const pattern = phrasePattern2(phrase);
+        if (!said.some((line) => pattern.test(line.text))) {
+          warnings.push(`${character.id} never says "${phrase}" from their voice-words list in ${said.length} lines of dialogue`);
+        }
+      }
+    }
+  }
+  const eligible = profiles.filter((entry) => entry.lines >= VOICE_THRESHOLDS.minLines);
+  for (let left = 0;left < eligible.length; left += 1) {
+    for (let right = left + 1;right < eligible.length; right += 1) {
+      if (similarVoices(eligible[left], eligible[right])) {
+        warnings.push(`${eligible[left].id} and ${eligible[right].id} may sound alike: similar sentence length, contractions, questions, and exclamations`);
+      }
+    }
+  }
+  return {
+    profiles: profiles.sort((left, right) => right.words - left.words || left.id.localeCompare(right.id, "en")),
+    unattributed,
+    warnings
+  };
+}
+function speakerPatterns(characters) {
+  const verbs = SPEECH_VERBS.flatMap((verb) => [verb, `${verb[0].toUpperCase()}${verb.slice(1)}`]).map((verb) => verb.replace(/ /g, "\\s+")).join("|");
+  return characters.filter((character) => character.status !== "cut").map((character) => {
+    const names = new Set;
+    const full = String(character.name ?? "").trim();
+    if (full !== "") {
+      names.add(full);
+      const first = givenName(full);
+      if (first.length >= 2) {
+        names.add(first);
+      }
+    }
+    for (const alias of stringList2(character.aliases)) {
+      names.add(alias);
+    }
+    const alternatives = [...names].sort((left, right) => right.length - left.length).map(escape).join("|");
+    if (alternatives === "") {
+      return null;
+    }
+    return {
+      id: character.id,
+      name: new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternatives})(?![\\p{L}\\p{N}])`, "u"),
+      subject: new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternatives})\\s+(?:${verbs})(?![\\p{L}\\p{N}])`, "u"),
+      inverted: new RegExp(`(?<![\\p{L}\\p{N}])(?:${verbs})\\s+(?:${alternatives})(?![\\p{L}\\p{N}])`, "u")
+    };
+  }).filter(Boolean);
+}
+function attribute(paragraph, speakers) {
+  const narration = stripQuotes(paragraph);
+  for (const form of ["subject", "inverted"]) {
+    const tagged = speakers.filter((speaker) => speaker[form].test(narration));
+    if (tagged.length === 1) {
+      return tagged[0].id;
+    }
+    if (tagged.length > 1) {
+      return null;
+    }
+  }
+  const named = speakers.filter((speaker) => speaker.name.test(narration));
+  return named.length === 1 ? named[0].id : null;
+}
+var SINGLE_QUOTE = "(?<![\\p{L}\\p{N}])‘((?:[^‘’]|’(?=[\\p{L}\\p{N}]))*)’(?![\\p{L}\\p{N}])";
+var QUOTE_PATTERN = new RegExp(`“([^”]*)”|"([^"]*)"|${SINGLE_QUOTE}`, "gu");
+function quotedSpans(paragraph) {
+  const spans = [];
+  for (const match of paragraph.matchAll(QUOTE_PATTERN)) {
+    const text = (match[1] ?? match[2] ?? match[3] ?? "").trim();
+    if (text !== "") {
+      spans.push(text);
+    }
+  }
+  return spans;
+}
+function stripQuotes(paragraph) {
+  return paragraph.replace(QUOTE_PATTERN, " ").replace(/“[^”]*$/g, " ").replace(/"[^"]*$/g, " ");
+}
+function profile(character, said) {
+  const text = said.map((line) => line.text).join(" ");
+  const words = splitWords(text);
+  const sentences = said.flatMap((line) => line.text.split(/(?<=[.!?…])\s+/).filter((sentence) => splitWords(sentence).length > 0));
+  const questions = sentences.filter((sentence) => /\?["'”’)]*$/.test(sentence.trim())).length;
+  const exclamations = sentences.filter((sentence) => /!["'”’)]*$/.test(sentence.trim())).length;
+  return {
+    id: character.id,
+    lines: said.length,
+    words: words.length,
+    sentenceLength: sentences.length === 0 ? 0 : words.length / sentences.length,
+    contractions: words.length === 0 ? 0 : (text.match(CONTRACTION_PATTERN) ?? []).length * 100 / words.length,
+    questions: sentences.length === 0 ? 0 : questions / sentences.length,
+    exclamations: sentences.length === 0 ? 0 : exclamations / sentences.length,
+    counts: wordCounts(words),
+    signature: []
+  };
+}
+function wordCounts(words) {
+  const counts = new Map;
+  for (const raw of words) {
+    const word = raw.toLowerCase().replace(/’/g, "'");
+    if (word.length >= 4 && !STOPWORDS.has(word) && !/^\d+$/.test(word)) {
+      counts.set(word, (counts.get(word) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+function signatureWords(profiles) {
+  const totals = new Map;
+  let allWords = 0;
+  for (const entry of profiles) {
+    allWords += entry.words;
+    for (const [word, count] of entry.counts) {
+      totals.set(word, (totals.get(word) ?? 0) + count);
+    }
+  }
+  for (const entry of profiles) {
+    const otherWords = allWords - entry.words;
+    const scored = [];
+    for (const [word, count] of entry.counts) {
+      if (count < 2) {
+        continue;
+      }
+      const own = count / entry.words;
+      const others = otherWords === 0 ? 0 : (totals.get(word) - count) / otherWords;
+      if (own > others * 2) {
+        scored.push({ word, count, score: own - others });
+      }
+    }
+    entry.signature = scored.sort((left, right) => right.score - left.score || right.count - left.count || left.word.localeCompare(right.word, "en")).slice(0, 5).map((item) => item.word);
+    delete entry.counts;
+  }
+}
+function similarVoices(left, right) {
+  const limits = VOICE_THRESHOLDS;
+  return Math.abs(left.sentenceLength - right.sentenceLength) < limits.sentenceLength && Math.abs(left.contractions - right.contractions) < limits.contractions && Math.abs(left.questions - right.questions) < limits.questions && Math.abs(left.exclamations - right.exclamations) < limits.exclamations;
+}
+function phrasePattern2(phrase) {
+  return new RegExp(`(?<![\\p{L}\\p{N}])${escape(String(phrase).trim()).replace(/['’]/g, "['’]")}(?![\\p{L}\\p{N}])`, "iu");
+}
+function escape(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function stringList2(value) {
+  return (Array.isArray(value) ? value : []).filter((item) => typeof item === "string" && item.trim() !== "");
+}
+function formatVoices(report) {
+  const lines = [`Voices: ${report.profiles.length} speaking characters, ${report.unattributed} unattributed lines`];
+  if (report.profiles.length === 0) {
+    lines.push("", `- None: tag dialogue with a character's name and a speech verb ("...," Mara said)`);
+    return `${lines.join(`
+`)}
+`;
+  }
+  for (const entry of report.profiles) {
+    lines.push("", `${entry.id}: ${entry.lines} lines, ${entry.words} words`, `  Sentence length ${entry.sentenceLength.toFixed(1)}, contractions ${entry.contractions.toFixed(1)} per 100 words, questions ${Math.round(entry.questions * 100)}%, exclamations ${Math.round(entry.exclamations * 100)}%`, `  Signature words: ${entry.signature.join(", ") || "none yet"}`);
   }
   return `${lines.join(`
 `)}
@@ -2583,7 +2668,7 @@ function validatePublishing(data, errors, warnings) {
 }
 function normalizeIsbn(value) {
   const compact = String(value ?? "").replace(/[\s-]/g, "").toUpperCase();
-  if (/^\d{13}$/.test(compact)) {
+  if (/^97[89]\d{10}$/.test(compact)) {
     const sum = [...compact.slice(0, 12)].reduce((total2, digit, index) => total2 + Number(digit) * (index % 2 === 0 ? 1 : 3), 0);
     return (10 - sum % 10) % 10 === Number(compact[12]) ? compact : "";
   }
@@ -2682,7 +2767,8 @@ function reviewHtml(book) {
   const toc = [];
   const sections = [];
   for (const part of book.parts) {
-    toc.push(`<li><a href="#${part.key}">${escapeHtml(part.title)}</a></li>`);
+    const sectionId = part.kind === "chapter" ? part.key : `matter-${part.key}`;
+    toc.push(`<li><a href="#${sectionId}">${escapeHtml(part.title)}</a></li>`);
     const body = [];
     let count = 0;
     for (const paragraph of part.paragraphs) {
@@ -2695,7 +2781,7 @@ function reviewHtml(book) {
       body.push(`<p id="${anchor}"><a class="anchor" href="#${anchor}" title="Link to ${anchor}">${anchor}</a>${paragraph}</p>`);
     }
     const heading = part.heading ? `<h2>${escapeHtml(part.title)}</h2>` : `<h2 class="visually-hidden">${escapeHtml(part.title)}</h2>`;
-    sections.push(`<section id="${part.key}" class="${part.kind}">${heading}
+    sections.push(`<section id="${sectionId}" class="${part.kind}">${heading}
 ${body.join(`
 `)}
 </section>`);
@@ -2779,7 +2865,7 @@ ${paragraphs.join(`
 `)}
 </section>`);
   }
-  const copyrightIndex = book.parts.findIndex((part) => part.key === "front-copyright");
+  const copyrightIndex = book.parts.findIndex((part) => part.copyright && part.placement === "front");
   const beforeToc = copyrightIndex === -1 ? [] : sections.slice(0, copyrightIndex + 1);
   const afterToc = copyrightIndex === -1 ? sections : sections.slice(copyrightIndex + 1);
   return `<!DOCTYPE html>
@@ -2796,19 +2882,16 @@ ${paragraphs.join(`
 <style>
 @page { size: ${trim.width} ${trim.height}; margin: 0.75in 0.5in 0.75in ${inside}; }
 @page :left { margin-left: 0.5in; margin-right: ${inside};
-  @top-left { content: counter(page); font: 9pt Georgia, serif; }
   @top-center { content: "${cssString(author || book.title)}"; font: italic 9pt Georgia, serif; } }
 @page :right {
-  @top-right { content: counter(page); font: 9pt Georgia, serif; }
   @top-center { content: string(chapter-title, first-except); font: italic 9pt Georgia, serif; } }
-@page :blank { @top-left { content: none; } @top-center { content: none; } @top-right { content: none; } }
-@page chapter:first { @top-left { content: none; } @top-center { content: none; } @top-right { content: none; }
-  @bottom-center { content: counter(page); font: 9pt Georgia, serif; } }
-@page front { @top-left { content: none; } @top-center { content: none; } @top-right { content: none; } }
+@page chapter { @bottom-center { content: counter(page); font: 9pt Georgia, serif; } }
+@page :blank { @top-center { content: none; } @bottom-center { content: none; } }
+@page front { @top-center { content: none; } @bottom-center { content: none; } }
 html { font: 11pt/1.4 Georgia, "Iowan Old Style", "Palatino Linotype", serif; }
 body { margin: 0; hyphens: auto; }
 .title-page, .toc, section.front { page: front; break-before: right; }
-section.front.copyright-page, #front-copyright { break-before: page; font-size: 9pt; }
+section.front.copyright-page { break-before: page; font-size: 9pt; }
 .title-page { text-align: center; padding-top: 30%; }
 .title-page h1 { font-size: 26pt; font-weight: normal; margin: 0 0 1em; }
 .title-page .author { font-size: 14pt; font-variant: small-caps; letter-spacing: 0.05em; }
@@ -2871,7 +2954,7 @@ var NARRATION_WORDS_PER_MINUTE = 155;
 function narrationScript(manuscript, guide) {
   const authors = manuscript.meta.authors.join(" and ");
   const sections = [
-    ...manuscript.front.filter((entry) => entry.id !== "copyright").map((entry) => ({ title: entry.title, body: entry.body })),
+    ...manuscript.front.filter((entry) => !entry.copyright).map((entry) => ({ title: entry.title, body: entry.body })),
     ...manuscript.chapters.map((chapter) => ({ title: `Chapter ${chapter.number}: ${chapter.title}`, body: chapter.body })),
     ...manuscript.back.map((entry) => ({ title: entry.title, body: entry.body }))
   ].map((section) => ({ ...section, words: wordCount(section.body) }));
@@ -4068,7 +4151,7 @@ function scanProject(root) {
       status: data.status ?? "",
       planted: String(data.planted ?? ""),
       payoff: String(data.payoff ?? ""),
-      significanceDelayed: Boolean(data["significance-delayed"] ?? false),
+      significanceDelayed: data["significance-delayed"] === true,
       redHerring: data["red-herring"] === true,
       characters: asArray(data.characters),
       arcs: asArray(data.arcs)
@@ -5063,7 +5146,7 @@ function buildBook(root, options = {}) {
       meta: manuscript.meta,
       words,
       pages: { "5.5x8.5": estimatePages(words, "5.5x8.5"), "6x9": estimatePages(words, "6x9") },
-      hasCopyrightPage: manuscript.front.some((entry) => entry.id === "copyright" || /copyright/i.test(entry.title))
+      hasCopyrightPage: manuscript.front.concat(manuscript.back).some((entry) => entry.copyright)
     }), output.writeOptions);
   } else if (format === "narration") {
     writeFile(output.outFile, narrationScript(manuscript, pronunciationGuide(project)), output.writeOptions);
@@ -6344,8 +6427,7 @@ var REFERENCE_FIELD_KINDS = {
   planted: ["chapter"],
   pov: ["character"],
   resolved: ["chapter"],
-  since: ["chapter"],
-  to: ["location"]
+  since: ["chapter"]
 };
 var ENTRY_IDENTITY_FIELDS = {
   relationships: "character",
@@ -6364,6 +6446,7 @@ function entityReferenceContext(root, kind, id) {
   };
   return {
     id,
+    kind,
     entityFile: path4.resolve(root, entityConfig(kind).dir, `${id}.md`),
     isReferenceKey: (key) => {
       const kinds = Object.hasOwn(REFERENCE_FIELD_KINDS, key) ? REFERENCE_FIELD_KINDS[key] : [];
@@ -6449,6 +6532,7 @@ function writeReferencePlan(root, plan) {
 }
 function transformReferences(data, transform, context, identityKey = null) {
   const next = {};
+  const isReference = (key) => context.isReferenceKey(key) || key === "to" && identityKey === "to" && context.kind === "location";
   for (const [key, value] of Object.entries(data)) {
     if (Array.isArray(value)) {
       const items = [];
@@ -6459,7 +6543,7 @@ function transformReferences(data, transform, context, identityKey = null) {
           if (mapped !== null) {
             items.push(mapped);
           }
-        } else if (context.isReferenceKey(key)) {
+        } else if (isReference(key)) {
           const mapped = transform(item);
           if (mapped !== null) {
             items.push(mapped);
@@ -6471,7 +6555,7 @@ function transformReferences(data, transform, context, identityKey = null) {
       next[key] = items;
       continue;
     }
-    if (context.isReferenceKey(key)) {
+    if (isReference(key)) {
       const mapped = transform(value);
       if (mapped === null) {
         if (identityKey !== null && key === identityKey) {
@@ -6568,14 +6652,15 @@ function manuscriptParts(project) {
     id: entry.id,
     title: entry.title,
     heading: entry.heading,
+    copyright: isCopyrightMatter(entry),
     body: chapterProse(readMarkdown(entry.file, project.root).body).trim()
   }));
   const meta = publishingMeta(project.story.data);
   const front = matter("front");
   const back = matter("back");
-  const hasCopyrightPage = [...front, ...back].some((entry) => entry.id === "copyright" || /copyright/i.test(entry.title));
+  const hasCopyrightPage = [...front, ...back].some((entry) => entry.copyright);
   if (meta.copyright !== "" && !hasCopyrightPage) {
-    front.unshift({ id: "copyright", title: "Copyright", heading: false, body: copyrightPage(meta) });
+    front.unshift({ id: "copyright", title: "Copyright", heading: false, copyright: true, body: copyrightPage(meta) });
   }
   return {
     title: project.story.data.title,
@@ -6585,6 +6670,9 @@ function manuscriptParts(project) {
     chapters,
     back
   };
+}
+function isCopyrightMatter(entry) {
+  return entry.id === "copyright" || /copyright/i.test(entry.title);
 }
 function epubModifiedTimestamp() {
   const raw = process.env.SOURCE_DATE_EPOCH;
@@ -6652,15 +6740,12 @@ function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
 function navXhtml(title, documents, lang = "en") {
   const links = documents.map((doc) => `<li><a href="${doc.id}.xhtml">${xmlEscape(doc.label)}</a></li>`);
   const start = documents.find((doc) => doc.bodymatter);
-  const landmarks = [`<li><a epub:type="toc" href="nav.xhtml">Table of Contents</a></li>`];
-  if (start) {
-    landmarks.push(`<li><a epub:type="bodymatter" href="${start.id}.xhtml">Start of Content</a></li>`);
-  }
-  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="${lang}" lang="${lang}"><head><title>${xmlEscape(title)}</title></head><body><nav epub:type="toc" id="toc"><h1>Contents</h1><ol>${links.join("")}</ol></nav><nav epub:type="landmarks" hidden="hidden"><ol>${landmarks.join("")}</ol></nav></body></html>`;
+  const landmarks = start ? `<nav epub:type="landmarks" hidden="hidden"><ol><li><a epub:type="bodymatter" href="${start.id}.xhtml">Start of Content</a></li></ol></nav>` : "";
+  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="${lang}" lang="${lang}"><head><title>${xmlEscape(title)}</title></head><body><nav epub:type="toc" id="toc"><h1>Contents</h1><ol>${links.join("")}</ol></nav>${landmarks}</body></html>`;
 }
 function epubAccessibilityMeta(hasCover) {
   const features = ["tableOfContents", "readingOrder", "structuralNavigation", ...hasCover ? ["alternativeText"] : []];
-  const summary = "Text-only book with a navigable table of contents, headings for each chapter, and a single logical reading order.";
+  const summary = hasCover ? "Text book with a described cover image, a navigable table of contents, headings for each chapter, and a single logical reading order." : "Text-only book with a navigable table of contents, headings for each chapter, and a single logical reading order.";
   return [
     `<meta property="schema:accessMode">textual</meta>`,
     ...hasCover ? [`<meta property="schema:accessMode">visual</meta>`] : [],
@@ -6689,14 +6774,15 @@ function chapterXhtml(chapter, lang = "en") {
 }
 function matterXhtml(entry, placement = "front", lang = "en") {
   const heading = entry.heading ? `<h1>${xmlEscape(entry.title)}</h1>` : "";
-  const bodyType = entry.id === "copyright" ? `${placement}matter copyright-page` : `${placement}matter`;
+  const bodyType = entry.copyright ? `${placement}matter copyright-page` : `${placement}matter`;
   return xhtmlDocument(entry.title, lang, bodyType, `${heading}${xhtmlParagraphs(entry.body)}`);
 }
 function htmlBook(manuscript) {
   const paragraphs = (body) => markdownParagraphs(body).map((paragraph) => paragraph === "* * *" ? null : inlineRuns(paragraph).map((run) => run.style ? `<${run.style}>${escapeHtml(run.text)}</${run.style}>` : escapeHtml(run.text)).join(""));
   const matter = (placement) => (entry) => ({
     key: `${placement}-${entry.id}`,
-    kind: entry.id === "copyright" ? "front copyright-page" : placement,
+    kind: entry.copyright ? `${placement} copyright-page` : placement,
+    copyright: Boolean(entry.copyright),
     placement,
     title: entry.title,
     heading: entry.heading,

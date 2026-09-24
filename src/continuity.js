@@ -506,11 +506,33 @@ function checkClock(project, errors, warnings) {
   checkRouteTravel(project, errors);
 }
 
+// Named parts of the day cover a span of clock time, so a journey is judged
+// against the widest reading of each.
+const TIME_RANGES = new Map([
+  ["dawn", [240, 419]],
+  ["morning", [300, 719]],
+  ["midday", [660, 839]],
+  ["afternoon", [720, 1079]],
+  ["evening", [1020, 1319]],
+  ["night", [1200, 1439]]
+]);
+
+// The earliest and latest minute a dated scene can happen: an exact time is
+// a point, a named time its span, and no time the whole day.
+function sceneWindow(days, time) {
+  const text = String(time ?? "").trim().toLowerCase();
+  const named = TIME_RANGES.get(text);
+  const exact = named === undefined ? parseClockTime(text) : undefined;
+  const [from, to] = named ?? (exact === undefined ? [0, 1439] : [exact, exact]);
+  return { earliest: days * 1440 + from, latest: days * 1440 + to, exact: exact !== undefined };
+}
+
 // Location routes give the fastest journey between places. A character seen
-// in two dated scenes at different locations needs at least the shortest
-// route time between them. When either scene has no time of day, the gap is
-// taken at its most generous (the whole of both days) so only impossible
-// journeys are reported.
+// at two different places needs at least the shortest route time between the
+// sightings, which may pass through other places. Every earlier sighting is
+// checked, not just the last one, and each gap is taken at its most generous
+// reading of the scene times, so only journeys impossible on any reading are
+// reported, once per scene.
 function checkRouteTravel(project, errors) {
   const graph = routeGraph(project.locations);
   if (graph.size === 0) {
@@ -522,35 +544,44 @@ function checkRouteTravel(project, errors) {
     if (!parsed || scene.location === "" || !graph.has(scene.location)) {
       continue;
     }
-    const minutes = parseClockTime(scene.time);
+    const window = sceneWindow(parsed.days, scene.time);
     const present = new Set(scene.characters.filter((id) => typeof id === "string"));
     if (typeof scene.pov === "string" && scene.pov !== "") {
       present.add(scene.pov);
     }
     for (const characterId of present) {
       const list = sightings.get(characterId) ?? [];
-      list.push({ scene, label: relative(project, scene.file), days: parsed.days, minutes });
+      list.push({ scene, label: relative(project, scene.file), ...window });
       sightings.set(characterId, list);
     }
   }
 
+  const distances = new Map();
+  const distance = (from, to) => {
+    const key = `${from}>${to}`;
+    if (!distances.has(key)) {
+      distances.set(key, shortestRouteHours(graph, from, to));
+    }
+    return distances.get(key);
+  };
   for (const [characterId, list] of [...sightings.entries()].sort(([left], [right]) => left.localeCompare(right, "en"))) {
-    list.sort((left, right) => left.days - right.days || (left.minutes ?? 0) - (right.minutes ?? 0) || left.label.localeCompare(right.label, "en"));
+    list.sort((left, right) => left.earliest - right.earliest || left.latest - right.latest || left.label.localeCompare(right.label, "en"));
     for (let index = 1; index < list.length; index += 1) {
-      const previous = list[index - 1];
       const current = list[index];
-      if (previous.scene.location === current.scene.location) {
-        continue;
-      }
-      const needed = shortestRouteHours(graph, previous.scene.location, current.scene.location);
-      if (needed === undefined) {
-        continue;
-      }
-      const elapsed = previous.minutes === undefined || current.minutes === undefined
-        ? (current.days - previous.days + 1) * 24
-        : (timestampMinutes(current) - timestampMinutes(previous)) / 60;
-      if (elapsed < needed) {
-        errors.push(`${current.label} puts ${characterId} at ${current.scene.location} ${formatHours(elapsed)} after ${previous.label} at ${previous.scene.location}, but the fastest route takes ${formatHours(needed)}`);
+      for (let back = index - 1; back >= 0; back -= 1) {
+        const previous = list[back];
+        if (previous.scene.location === current.scene.location) {
+          continue;
+        }
+        const needed = distance(previous.scene.location, current.scene.location);
+        // Overlapping windows (an untimed day and a time on it) could fall in
+        // either order, so the gap is the larger of the two readings.
+        const elapsed = Math.max(current.latest - previous.earliest, previous.latest - current.earliest) / 60;
+        if (needed !== undefined && elapsed < needed) {
+          const gap = previous.exact && current.exact ? formatHours(elapsed) : `at most ${formatHours(elapsed)}`;
+          errors.push(`${current.label} puts ${characterId} at ${current.scene.location} ${gap} after ${previous.label} at ${previous.scene.location}, but the fastest route takes ${formatHours(needed)}`);
+          break;
+        }
       }
     }
   }

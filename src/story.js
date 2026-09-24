@@ -446,7 +446,7 @@ export function scanProject(root) {
       status: data.status ?? "",
       planted: String(data.planted ?? ""),
       payoff: String(data.payoff ?? ""),
-      significanceDelayed: Boolean(data["significance-delayed"] ?? false),
+      significanceDelayed: data["significance-delayed"] === true,
       redHerring: data["red-herring"] === true,
       characters: asArray(data.characters),
       arcs: asArray(data.arcs)
@@ -1587,7 +1587,7 @@ export function buildBook(root, options = {}) {
       meta: manuscript.meta,
       words,
       pages: { "5.5x8.5": estimatePages(words, "5.5x8.5"), "6x9": estimatePages(words, "6x9") },
-      hasCopyrightPage: manuscript.front.some((entry) => entry.id === "copyright" || /copyright/i.test(entry.title))
+      hasCopyrightPage: manuscript.front.concat(manuscript.back).some((entry) => entry.copyright)
     }), output.writeOptions);
   } else if (format === "narration") {
     writeFile(output.outFile, narrationScript(manuscript, pronunciationGuide(project)), output.writeOptions);
@@ -2995,8 +2995,7 @@ const REFERENCE_FIELD_KINDS = {
   planted: ["chapter"],
   pov: ["character"],
   resolved: ["chapter"],
-  since: ["chapter"],
-  to: ["location"]
+  since: ["chapter"]
 };
 
 // Nested mapping lists whose entries are identified by one reference key.
@@ -3025,6 +3024,7 @@ function entityReferenceContext(root, kind, id) {
   };
   return {
     id,
+    kind,
     entityFile: path.resolve(root, entityConfig(kind).dir, `${id}.md`),
     isReferenceKey: (key) => {
       const kinds = Object.hasOwn(REFERENCE_FIELD_KINDS, key) ? REFERENCE_FIELD_KINDS[key] : [];
@@ -3129,6 +3129,8 @@ function writeReferencePlan(root, plan) {
 
 function transformReferences(data, transform, context, identityKey = null) {
   const next = {};
+  // A route's `to` names a location; `to` anywhere else is left alone.
+  const isReference = (key) => context.isReferenceKey(key) || (key === "to" && identityKey === "to" && context.kind === "location");
   for (const [key, value] of Object.entries(data)) {
     if (Array.isArray(value)) {
       const items = [];
@@ -3139,7 +3141,7 @@ function transformReferences(data, transform, context, identityKey = null) {
           if (mapped !== null) {
             items.push(mapped);
           }
-        } else if (context.isReferenceKey(key)) {
+        } else if (isReference(key)) {
           const mapped = transform(item);
           if (mapped !== null) {
             items.push(mapped);
@@ -3152,7 +3154,7 @@ function transformReferences(data, transform, context, identityKey = null) {
       continue;
     }
 
-    if (context.isReferenceKey(key)) {
+    if (isReference(key)) {
       const mapped = transform(value);
       if (mapped === null) {
         // A removed id that identifies a nested entry (a relationship's
@@ -3266,6 +3268,7 @@ function manuscriptParts(project) {
       id: entry.id,
       title: entry.title,
       heading: entry.heading,
+      copyright: isCopyrightMatter(entry),
       body: chapterProse(readMarkdown(entry.file, project.root).body).trim()
     }));
 
@@ -3274,9 +3277,9 @@ function manuscriptParts(project) {
   // A copyright line in story.md becomes the copyright page unless a matter
   // page already provides one.
   const back = matter("back");
-  const hasCopyrightPage = [...front, ...back].some((entry) => entry.id === "copyright" || /copyright/i.test(entry.title));
+  const hasCopyrightPage = [...front, ...back].some((entry) => entry.copyright);
   if (meta.copyright !== "" && !hasCopyrightPage) {
-    front.unshift({ id: "copyright", title: "Copyright", heading: false, body: copyrightPage(meta) });
+    front.unshift({ id: "copyright", title: "Copyright", heading: false, copyright: true, body: copyrightPage(meta) });
   }
 
   return {
@@ -3287,6 +3290,12 @@ function manuscriptParts(project) {
     chapters,
     back
   };
+}
+
+// A copyright page is found by its id or its title, once, and every build
+// format reads the flag.
+function isCopyrightMatter(entry) {
+  return entry.id === "copyright" || /copyright/i.test(entry.title);
 }
 
 function epubModifiedTimestamp() {
@@ -3369,18 +3378,19 @@ function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
 function navXhtml(title, documents, lang = "en") {
   const links = documents.map((doc) => `<li><a href="${doc.id}.xhtml">${xmlEscape(doc.label)}</a></li>`);
   const start = documents.find((doc) => doc.bodymatter);
-  const landmarks = [`<li><a epub:type="toc" href="nav.xhtml">Table of Contents</a></li>`];
-  if (start) {
-    landmarks.push(`<li><a epub:type="bodymatter" href="${start.id}.xhtml">Start of Content</a></li>`);
-  }
-  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="${lang}" lang="${lang}"><head><title>${xmlEscape(title)}</title></head><body><nav epub:type="toc" id="toc"><h1>Contents</h1><ol>${links.join("")}</ol></nav><nav epub:type="landmarks" hidden="hidden"><ol>${landmarks.join("")}</ol></nav></body></html>`;
+  // The nav document is not in the spine, so landmarks point only at spine
+  // documents (EPUBCheck RSC-011); reading systems find the toc themselves.
+  const landmarks = start ? `<nav epub:type="landmarks" hidden="hidden"><ol><li><a epub:type="bodymatter" href="${start.id}.xhtml">Start of Content</a></li></ol></nav>` : "";
+  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="${lang}" lang="${lang}"><head><title>${xmlEscape(title)}</title></head><body><nav epub:type="toc" id="toc"><h1>Contents</h1><ol>${links.join("")}</ol></nav>${landmarks}</body></html>`;
 }
 
 // EPUB Accessibility 1.1 discovery metadata for a text-only book with a
 // table of contents and a single reading order.
 function epubAccessibilityMeta(hasCover) {
   const features = ["tableOfContents", "readingOrder", "structuralNavigation", ...(hasCover ? ["alternativeText"] : [])];
-  const summary = "Text-only book with a navigable table of contents, headings for each chapter, and a single logical reading order.";
+  const summary = hasCover
+    ? "Text book with a described cover image, a navigable table of contents, headings for each chapter, and a single logical reading order."
+    : "Text-only book with a navigable table of contents, headings for each chapter, and a single logical reading order.";
   return [
     `<meta property="schema:accessMode">textual</meta>`,
     ...(hasCover ? [`<meta property="schema:accessMode">visual</meta>`] : []),
@@ -3413,7 +3423,7 @@ function chapterXhtml(chapter, lang = "en") {
 
 function matterXhtml(entry, placement = "front", lang = "en") {
   const heading = entry.heading ? `<h1>${xmlEscape(entry.title)}</h1>` : "";
-  const bodyType = entry.id === "copyright" ? `${placement}matter copyright-page` : `${placement}matter`;
+  const bodyType = entry.copyright ? `${placement}matter copyright-page` : `${placement}matter`;
   return xhtmlDocument(entry.title, lang, bodyType, `${heading}${xhtmlParagraphs(entry.body)}`);
 }
 
@@ -3426,7 +3436,8 @@ function htmlBook(manuscript) {
     : inlineRuns(paragraph).map((run) => (run.style ? `<${run.style}>${escapeHtml(run.text)}</${run.style}>` : escapeHtml(run.text))).join("")));
   const matter = (placement) => (entry) => ({
     key: `${placement}-${entry.id}`,
-    kind: entry.id === "copyright" ? "front copyright-page" : placement,
+    kind: entry.copyright ? `${placement} copyright-page` : placement,
+    copyright: Boolean(entry.copyright),
     placement,
     title: entry.title,
     heading: entry.heading,

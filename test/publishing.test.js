@@ -101,7 +101,7 @@ author: Solo`);
     expect(text).toContain('<meta property="schema:accessibilityHazard">none</meta>');
     expect(text).toContain('xml:lang="en-GB" lang="en-GB"');
     expect(text).toContain('<img src="images/cover.png" alt="A lighthouse at dusk"/>');
-    expect(text).toContain('<nav epub:type="landmarks" hidden="hidden"><ol><li><a epub:type="toc" href="nav.xhtml">Table of Contents</a></li><li><a epub:type="bodymatter" href="chapter-01.xhtml">Start of Content</a></li></ol></nav>');
+    expect(text).toContain('<nav epub:type="landmarks" hidden="hidden"><ol><li><a epub:type="bodymatter" href="chapter-01.xhtml">Start of Content</a></li></ol></nav>');
     expect(text).toContain('<body epub:type="bodymatter chapter"><h1>Chapter 1: Arrival</h1>');
     expect(text).toContain('<body epub:type="frontmatter copyright-page"><p>© 2026 Ada Writer</p><p>All rights reserved.</p><p>Published by Lamplight Press</p><p>ISBN 9780306406157</p><p>No generative AI was used to write the text.</p></body>');
     expect(text).toContain('<spine><itemref idref="cover"/><itemref idref="front-copyright"/><itemref idref="chapter-01"/></spine>');

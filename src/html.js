@@ -18,7 +18,11 @@ export function reviewHtml(book) {
   const toc = [];
   const sections = [];
   for (const part of book.parts) {
-    toc.push(`<li><a href="#${part.key}">${escapeHtml(part.title)}</a></li>`);
+    // Paragraph anchors are `<key>-p<n>`, so a matter section id carries a
+    // prefix no anchor has; otherwise matter "note" paragraph 1 and matter
+    // "note-p1" would share an id.
+    const sectionId = part.kind === "chapter" ? part.key : `matter-${part.key}`;
+    toc.push(`<li><a href="#${sectionId}">${escapeHtml(part.title)}</a></li>`);
     const body = [];
     let count = 0;
     for (const paragraph of part.paragraphs) {
@@ -31,7 +35,7 @@ export function reviewHtml(book) {
       body.push(`<p id="${anchor}"><a class="anchor" href="#${anchor}" title="Link to ${anchor}">${anchor}</a>${paragraph}</p>`);
     }
     const heading = part.heading ? `<h2>${escapeHtml(part.title)}</h2>` : `<h2 class="visually-hidden">${escapeHtml(part.title)}</h2>`;
-    sections.push(`<section id="${part.key}" class="${part.kind}">${heading}\n${body.join("\n")}\n</section>`);
+    sections.push(`<section id="${sectionId}" class="${part.kind}">${heading}\n${body.join("\n")}\n</section>`);
   }
   const byline = book.authors.length === 0 ? "" : `<p class="byline">${escapeHtml(book.authors.join(" and "))}</p>`;
   return `<!DOCTYPE html>
@@ -108,7 +112,7 @@ export function printHtml(book, trimName = DEFAULT_TRIM) {
     const heading = part.heading ? `<h1>${escapeHtml(part.title)}</h1>` : "";
     sections.push(`<section id="${part.key}" class="${part.kind}${part.kind === "chapter" ? "" : ` ${part.placement}`}">${heading}\n${paragraphs.join("\n")}\n</section>`);
   }
-  const copyrightIndex = book.parts.findIndex((part) => part.key === "front-copyright");
+  const copyrightIndex = book.parts.findIndex((part) => part.copyright && part.placement === "front");
   const beforeToc = copyrightIndex === -1 ? [] : sections.slice(0, copyrightIndex + 1);
   const afterToc = copyrightIndex === -1 ? sections : sections.slice(copyrightIndex + 1);
 
@@ -126,19 +130,16 @@ export function printHtml(book, trimName = DEFAULT_TRIM) {
 <style>
 @page { size: ${trim.width} ${trim.height}; margin: 0.75in 0.5in 0.75in ${inside}; }
 @page :left { margin-left: 0.5in; margin-right: ${inside};
-  @top-left { content: counter(page); font: 9pt Georgia, serif; }
   @top-center { content: "${cssString(author || book.title)}"; font: italic 9pt Georgia, serif; } }
 @page :right {
-  @top-right { content: counter(page); font: 9pt Georgia, serif; }
   @top-center { content: string(chapter-title, first-except); font: italic 9pt Georgia, serif; } }
-@page :blank { @top-left { content: none; } @top-center { content: none; } @top-right { content: none; } }
-@page chapter:first { @top-left { content: none; } @top-center { content: none; } @top-right { content: none; }
-  @bottom-center { content: counter(page); font: 9pt Georgia, serif; } }
-@page front { @top-left { content: none; } @top-center { content: none; } @top-right { content: none; } }
+@page chapter { @bottom-center { content: counter(page); font: 9pt Georgia, serif; } }
+@page :blank { @top-center { content: none; } @bottom-center { content: none; } }
+@page front { @top-center { content: none; } @bottom-center { content: none; } }
 html { font: 11pt/1.4 Georgia, "Iowan Old Style", "Palatino Linotype", serif; }
 body { margin: 0; hyphens: auto; }
 .title-page, .toc, section.front { page: front; break-before: right; }
-section.front.copyright-page, #front-copyright { break-before: page; font-size: 9pt; }
+section.front.copyright-page { break-before: page; font-size: 9pt; }
 .title-page { text-align: center; padding-top: 30%; }
 .title-page h1 { font-size: 26pt; font-weight: normal; margin: 0 0 1em; }
 .title-page .author { font-size: 14pt; font-variant: small-caps; letter-spacing: 0.05em; }
