@@ -3,6 +3,8 @@ name: "Mara Quill"
 role: protagonist
 age: 34
 status: alive
+voice-avoid:
+  - sweetheart
 aliases:
   - "Dock Six Mara"
 relationships:

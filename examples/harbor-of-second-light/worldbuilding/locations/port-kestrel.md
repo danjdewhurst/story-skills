@@ -13,6 +13,10 @@ tags:
   - salvage-economy
   - storm-grid
 status: strained
+routes:
+  - to: bellwether-reef
+    hours: 0.5
+    mode: dive skiff
 ---
 
 # Port Kestrel

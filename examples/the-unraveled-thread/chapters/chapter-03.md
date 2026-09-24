@@ -9,6 +9,7 @@ characters:
 arcs-advanced:
   - the-ledger-trail
 status: draft
+hook: revelation
 word-count: 24
 ---
 

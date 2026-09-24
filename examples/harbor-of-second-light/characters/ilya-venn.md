@@ -3,6 +3,7 @@ name: "Councillor Ilya Venn"
 role: antagonist
 age: 56
 status: alive
+pronunciation: EEL-ya VEN
 aliases:
   - "Harbor Chair"
 relationships:

@@ -11,6 +11,18 @@ themes:
   - truth-after-loss
 pov: third-person-limited
 tense: past
+form: novel
+author: Morgan Hale
+language: en
+description: "When a storm exposes an illegal memory archive beneath a floating harbor, salvage diver Mara Quill finds proof that her dead brother was not the saboteur everyone blames."
+keywords:
+  - floating city
+  - memory archive
+  - salvage diver
+  - near-future mystery
+subjects:
+  - FIC028000
+  - FIC022000
 ---
 
 
