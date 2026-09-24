@@ -120,7 +120,19 @@
         "controlled-by": { "type": "string" },
         "notable-characters": { "$ref": "#/$defs/stringList" },
         "tags": { "$ref": "#/$defs/stringList" },
-        "status": { "type": "string" }
+        "status": { "type": "string" },
+        "routes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["to", "hours"],
+            "properties": {
+              "to": { "$ref": "#/$defs/id" },
+              "hours": { "type": "number", "minimum": 0 },
+              "mode": { "type": "string" }
+            }
+          }
+        }
       }
     },
     "system": {

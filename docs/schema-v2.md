@@ -90,7 +90,9 @@ Optional arc-craft fields (hand-edit only — no CLI flags; edit the character f
 
 ### Worldbuilding
 
-Locations require `name` and `type`; they may list `region`, `population`, `controlled-by`, `notable-characters`, `tags`, and `status`. Systems require `name` and `type`; they may list `prevalence`.
+Locations require `name` and `type`; they may list `region`, `population`, `controlled-by`, `notable-characters`, `tags`, and `status`.
+
+Locations may also list `routes`, the journeys to other locations: each entry has a `to` location id, `hours` (a positive number, the fastest the journey can be made), and an optional free-form `mode` (`cart`, `ferry`, `on foot`). A route is two-way unless the destination declares its own route back, which then sets the return time. `story links` checks each `to`, and `story rename` and `story remove` keep it current (removing a location drops the routes to it). `story diagram locations` draws the network. Systems require `name` and `type`; they may list `prevalence`.
 
 Factions require `name`, `type`, and `status`; they may list `members`, `locations`, and `tags`.
 
@@ -159,6 +161,8 @@ Prop custody: `object-state` entries for destroyed or lost artifacts should reco
 `story pacing` is the read-only pacing dashboard: per chapter, prose words, scene units, sequel units, the count of each scene `outcome`, and the chapter `hook`, plus the median chapter length and the share of recorded outcomes that are setbacks (`no`, `yes-but`, `no-and`). It warns when a drafted chapter (`draft` or later) has no `hook`; when three or more scene units in a row, in reading order and skipping sequels, end in `yes`; when four or more scene units in a row have no sequel between them; when three or more chapters in a row end on `resolution`; and, once three chapters have prose, when a chapter is over twice or under half the median length. Findings are advisory; the command exits 0 on a readable project.
 
 Clock and time: `story continuity` checks timestamps only when scenes or chapters carry `date` (and ideally `time`); with no dates there are no findings. Within a chapter, a scene timestamped earlier than the previous dated scene is a warning; a `travel-hours` assertion the timestamps cannot honor is an error; a higher-numbered chapter dated earlier than a lower-numbered one is a warning. Malformed dates or times are warnings, never crashes.
+
+Route travel: when locations declare `routes`, `story continuity` follows each character (scene `characters` plus the scene `pov`) through their dated scenes in story-time order. When two consecutive sightings are at different locations joined by routes, the story time between them must be at least the fastest route, which may pass through other locations; otherwise it is an error. When either scene has no time of day, the gap is taken as the whole of both days, so only journeys that are impossible on any reading are reported.
 
 `story knowledge <character-id> --at <chapter-id>` answers what a character knew at a story point: `knowledge-state` entries for the character whose `learned-in` chapter is at or before the given chapter, plus entries without `learned-in` (pre-existing knowledge).
 
