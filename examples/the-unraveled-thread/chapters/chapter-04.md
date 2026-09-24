@@ -10,6 +10,7 @@ characters:
 arcs-advanced:
   - the-ledger-trail
 status: draft
+hook: cliffhanger
 word-count: 22
 ---
 

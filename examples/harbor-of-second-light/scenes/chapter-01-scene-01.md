@@ -11,6 +11,7 @@ mentions:
 arcs-advanced:
   - the-drowned-witness
 status: draft
+outcome: yes-but
 state-changes: []
 ---
 

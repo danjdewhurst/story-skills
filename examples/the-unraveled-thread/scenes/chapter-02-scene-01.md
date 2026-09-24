@@ -10,6 +10,7 @@ characters:
 arcs-advanced:
   - the-ledger-trail
 status: outline
+outcome: no-and
 state-changes: []
 ---
 

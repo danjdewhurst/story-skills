@@ -12,6 +12,7 @@ mentions:
 arcs-advanced:
   - the-drowned-witness
 status: draft
+hook: revelation
 word-count: 1489
 ---
 

@@ -10,6 +10,7 @@ themes:
   - small-town secrets
 pov: third-person-limited
 tense: past
+form: novel
 ---
 
 # The Unraveled Thread
