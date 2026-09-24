@@ -429,7 +429,7 @@ Files: `plot/arcs/<arc-id>.md`. Created with `story add arc "Name"`.
 | `acts` | list of strings | no | Acts the arc spans, for example `act-1`. |
 | `mice-threads` | list of strings | no | MICE threads the arc carries: `milieu`, `inquiry`, `character`, `event`. Not read by the CLI. |
 
-The arc body's `## Setup`, `## Rising Action`, `## Climax`, and `## Resolution` sections feed `story synopsis`. Any `chapter-NN` token or relative `.md` link in the body must point at something that exists (see [References and backlinks](#references-and-backlinks)). The [plot-structure skill](../skills/plot-structure/SKILL.md) covers arc design and MICE threading.
+The arc body's `## Setup`, `## Rising Action`, `## Climax`, and `## Resolution` sections feed `story synopsis`. Any `chapter-NN` token or relative `.md` link in the body must point at something that exists, apart from `_index.md` and wildcard links (see [References and backlinks](#references-and-backlinks)). The [plot-structure skill](../skills/plot-structure/SKILL.md) covers arc design and MICE threading.
 
 ### Plot registry and timeline
 
@@ -442,7 +442,7 @@ The arc body's `## Setup`, `## Rising Action`, `## Climax`, and `## Resolution` 
 |------|-------|-----|---------|
 ```
 
-`story reindex` never rewrites the timeline body; it only corrects the `story` field. `story links` checks every `chapter-NN` token and `.md` link in it. For a timeline computed from scene dates, use `story timeline` (see [Continuity and analysis](continuity.md#story-timeline)).
+`story reindex` never rewrites the timeline body; it only corrects the `story` field. `story links` checks every `chapter-NN` token and `.md` link in it, except links to an `_index.md` registry or containing a `*` wildcard. For a timeline computed from scene dates, use `story timeline` (see [Continuity and analysis](continuity.md#story-timeline)).
 
 ## Chapters
 
@@ -867,7 +867,7 @@ Fields that name another entity hold its id. `story links` checks that each id i
 | Promise, clue | `arcs` | Arc |
 | Research note | `used-in` | Chapter |
 | `plot/timeline.md`, arc bodies | any `chapter-NN` token | Chapter |
-| `plot/timeline.md`, arc bodies | relative links to `.md` files | Existing entity file inside the project |
+| `plot/timeline.md`, arc bodies | relative links to `.md` files, except `_index.md` and `*` wildcard targets | Existing entity file inside the project |
 
 `story continuity`, not `story links`, checks the ids in `continuity/state.md`: `character`, `location`, `artifact`, `owner`, `learned-in`, and `since` must name existing entities, and `fact` must be kebab-case.
 

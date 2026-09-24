@@ -260,7 +260,7 @@ You rarely need to run `story reindex` yourself. `story add`, `story rename`, `s
 
 ## Links and backlinks
 
-A reference is a frontmatter field that holds another entity's id, such as a chapter's `pov`, a scene's `location`, or a promise's `planted` chapter. `story links` checks that every reference points to an existing file of the right kind and that every id in a reference is kebab-case. It also checks the bodies of `plot/timeline.md` and each arc file: every chapter id mentioned there must exist, and every relative link to a `.md` file must resolve to a file inside the project.
+A reference is a frontmatter field that holds another entity's id, such as a chapter's `pov`, a scene's `location`, or a promise's `planted` chapter. `story links` checks that every reference points to an existing file of the right kind and that every id in a reference is kebab-case. It also checks the bodies of `plot/timeline.md` and each arc file: every chapter id mentioned there must exist, and every relative link to a `.md` file must resolve to a file inside the project. Links to an `_index.md` registry and links containing a `*` wildcard are not checked.
 
 Some relationships go both ways, and the model stores them in both files. These pairs must agree, and `story links` reports an error when they don't:
 
