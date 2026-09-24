@@ -356,7 +356,12 @@
         "title": { "type": "string" },
         "status": { "enum": ["open", "verified", "disputed"] },
         "sources": { "$ref": "#/$defs/stringList" },
-        "used-in": { "type": "array", "items": { "$ref": "#/$defs/id" } }
+        "used-in": { "type": "array", "items": { "$ref": "#/$defs/id" } },
+        "accuracy": { "enum": ["must-be-accurate", "blended", "invented"] },
+        "confidence": { "enum": ["high", "medium", "low"] },
+        "method": { "enum": ["fact", "interview", "site-visit", "expert-review", "reading"] },
+        "risk": { "type": "array", "items": { "enum": ["legal", "medical", "weapons", "safety", "cultural", "defamation", "technical"] } },
+        "reviewed-by": { "$ref": "#/$defs/stringList" }
       }
     },
     "matter": {

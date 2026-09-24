@@ -3328,6 +3328,10 @@ var STYLE_SHEET_FILE = "style-sheet.md";
 var MATTER_PLACEMENTS = new Set(["front", "back"]);
 var MATTER_DIR = "matter";
 var RESEARCH_STATUSES = new Set(["open", "verified", "disputed"]);
+var RESEARCH_ACCURACY = new Set(["must-be-accurate", "blended", "invented"]);
+var RESEARCH_CONFIDENCE = new Set(["high", "medium", "low"]);
+var RESEARCH_METHODS = new Set(["fact", "interview", "site-visit", "expert-review", "reading"]);
+var RESEARCH_RISKS = new Set(["legal", "medical", "weapons", "safety", "cultural", "defamation", "technical"]);
 var RESEARCH_DIR = "research";
 var SETTLED_CHAPTER_STATUSES = new Set(["final", "complete"]);
 var COVER_MEDIA_TYPES = {
@@ -3659,7 +3663,10 @@ function scanProject(root) {
       title: data.title ?? titleCaseSlug(id),
       status: data.status ?? "",
       sources: asArray(data.sources),
-      usedIn: asArray(data["used-in"])
+      usedIn: asArray(data["used-in"]),
+      accuracy: typeof data.accuracy === "string" ? data.accuracy : "",
+      risk: asArray(data.risk),
+      reviewedBy: asArray(data["reviewed-by"])
     }), scanErrors),
     matter: readEntityFiles(projectRoot, MATTER_DIR, (id, file, data, markdown) => ({
       id,
@@ -4777,7 +4784,7 @@ var ENTITY_ENUM_OPTIONS = {
   clue: [["status", CLUE_STATUSES]],
   term: [["category", TERM_CATEGORIES]],
   matter: [["placement", MATTER_PLACEMENTS]],
-  research: [["status", RESEARCH_STATUSES]]
+  research: [["status", RESEARCH_STATUSES], ["accuracy", RESEARCH_ACCURACY], ["confidence", RESEARCH_CONFIDENCE], ["method", RESEARCH_METHODS]]
 };
 function requireEntityEnumOptions(kind, options) {
   for (const [field, allowed] of ENTITY_ENUM_OPTIONS[kind] ?? []) {
@@ -5793,7 +5800,8 @@ function researchFile(title, options) {
     title,
     status: options.status ?? "open",
     sources: asArray(options.sources ?? options.source).map((source) => String(source).trim()).filter(Boolean),
-    "used-in": normalizeList(options["used-in"], [])
+    "used-in": normalizeList(options["used-in"], []),
+    ...researchOptionalFields(options)
   })}# ${title}
 
 ## Question
@@ -5808,6 +5816,24 @@ The facts, with the source for each.
 
 How the chapters use these facts, and what was changed on purpose.
 `;
+}
+function researchOptionalFields(options) {
+  const fields = {};
+  for (const key of ["accuracy", "confidence", "method"]) {
+    if (options[key] !== undefined) {
+      fields[key] = String(options[key]);
+    }
+  }
+  const risks = normalizeList(options.risk, []);
+  for (const risk of risks) {
+    if (!RESEARCH_RISKS.has(risk)) {
+      throw new Error(`Unsupported risk "${risk}": expected one of ${[...RESEARCH_RISKS].join(", ")}`);
+    }
+  }
+  if (risks.length > 0) {
+    fields.risk = risks;
+  }
+  return fields;
 }
 function matterFile(project, title, options) {
   const placement = String(options.placement ?? "front");
@@ -7286,15 +7312,28 @@ function validateResearch(project, errors, warnings) {
     validateEnum(data, "status", RESEARCH_STATUSES, label2, errors);
     validateStringArray(data, "sources", label2, errors);
     validateStringArray(data, "used-in", label2, errors);
-    if (note.status === "verified" && note.sources.length === 0) {
+    validateEnum(data, "accuracy", RESEARCH_ACCURACY, label2, errors);
+    validateEnum(data, "confidence", RESEARCH_CONFIDENCE, label2, errors);
+    validateEnum(data, "method", RESEARCH_METHODS, label2, errors);
+    validateStringArray(data, "risk", label2, errors);
+    validateStringArray(data, "reviewed-by", label2, errors);
+    for (const risk of Array.isArray(data.risk) ? data.risk : []) {
+      if (typeof risk === "string" && !RESEARCH_RISKS.has(risk)) {
+        errors.push(`${label2} risk has unsupported value ${risk}`);
+      }
+    }
+    const invented = note.accuracy === "invented";
+    if (!invented && note.status === "verified" && note.sources.length === 0) {
       warnings.push(`${label2} is verified but lists no sources`);
     }
-    if (note.status === "open" || note.status === "disputed") {
-      for (const chapterId of note.usedIn) {
-        if (SETTLED_CHAPTER_STATUSES.has(chapterStatus.get(chapterId))) {
-          warnings.push(`${label2} is ${note.status} but ${chapterId} relies on it and is ${chapterStatus.get(chapterId)}`);
-        }
+    const settled = note.usedIn.filter((chapterId) => SETTLED_CHAPTER_STATUSES.has(chapterStatus.get(chapterId)));
+    if (!invented && (note.status === "open" || note.status === "disputed")) {
+      for (const chapterId of settled) {
+        warnings.push(`${label2} is ${note.status} but ${chapterId} relies on it and is ${chapterStatus.get(chapterId)}`);
       }
+    }
+    if (note.risk.length > 0 && note.reviewedBy.length === 0 && settled.length > 0) {
+      warnings.push(`${label2} carries ${note.risk.join(", ")} risk but has no reviewed-by, and ${settled.join(", ")} relies on it`);
     }
   }
 }
@@ -7856,7 +7895,11 @@ var OPTIONS = [
   { name: "order", value: "<n>", help: ["Order within its placement for add matter"] },
   { name: "source", value: "<text>", repeatable: true, help: ["Source for add research; repeatable"] },
   { name: "sources", value: "<texts>", repeatable: true },
-  { name: "used-in", value: "<chapter-id>", repeatable: true, help: ["Chapter that relies on add research; repeatable"] }
+  { name: "used-in", value: "<chapter-id>", repeatable: true, help: ["Chapter that relies on add research; repeatable"] },
+  { name: "accuracy", value: "<level>", help: ["Accuracy for add research (must-be-accurate,", "blended, invented)"] },
+  { name: "confidence", value: "<level>", help: ["Confidence for add research (high, medium, low)"] },
+  { name: "method", value: "<name>", help: ["Research method for add research (fact, interview,", "site-visit, expert-review, reading)"] },
+  { name: "risk", value: "<name>", repeatable: true, help: ["Risk area for add research (legal, medical,", "weapons, safety, cultural, defamation,", "technical); repeatable"] }
 ];
 var BOOLEAN_OPTIONS = new Set(OPTIONS.filter((option) => option.value === undefined).map((option) => option.name));
 var VALUE_OPTIONS = new Set(OPTIONS.filter((option) => option.value !== undefined).map((option) => option.name));

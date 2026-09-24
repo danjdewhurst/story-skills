@@ -2,11 +2,11 @@
 
 People and places answer questions no book can: what a job smells like,
 what a nurse says under her breath, how long the walk from the car park
-really takes. Record them as research notes with `kind: interview`,
-`kind: site-visit`, or `kind: expert-review`.
+really takes. Record them as research notes with `method: interview`,
+`method: site-visit`, or `method: expert-review`.
 
 ```shell
-story add research "Night shift on a cardiac ward" --kind interview \
+story add research "Night shift on a cardiac ward" --method interview \
   --accuracy must-be-accurate --risk medical --used-in chapter-07
 ```
 
@@ -84,7 +84,7 @@ Record walking or travel times on the location's `routes` as well, so
 ## Expert review
 
 An expert review is a reading of drafted passages, not an interview. Use
-`kind: expert-review` for the note, list the passages or chapters read in
+`method: expert-review` for the note, list the passages or chapters read in
 `used-in`, record the reviewer in `reviewed-by`, and log their corrections
 under `## Findings`. Triage the notes with the `feedback-triage` skill.
 Notes with a `risk` need this review before the chapters are final.

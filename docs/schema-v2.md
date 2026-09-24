@@ -208,7 +208,15 @@ Files in `research/` record the real-world facts the story relies on. Create the
 - `sources` is a list of citations or URLs, kept whole (commas allowed). `--source` is repeatable.
 - `used-in` lists the chapter ids that rely on the note. `story links` errors on missing chapters, and `story rename` and `story remove` keep the list current.
 
-`story validate` warns when a `final` or `complete` chapter is in the `used-in` list of an `open` or `disputed` note, and when a `verified` note lists no sources. See the `research` skill.
+- `accuracy` is `must-be-accurate` (a knowledgeable reader will check it), `blended` (real facts bent on purpose, with the departure recorded under `## Story Use`), or `invented` (made up for the story).
+- `confidence` is `high`, `medium`, or `low`.
+- `method` is how the knowledge was gathered: `fact` (desk research), `interview`, `site-visit`, `expert-review`, or `reading`.
+- `risk` lists the areas where getting it wrong could hurt a reader or the author: `legal`, `medical`, `weapons`, `safety`, `cultural`, `defamation`, `technical`.
+- `reviewed-by` lists the qualified people, by name or role, who checked the note.
+
+`story add research` accepts `--accuracy`, `--confidence`, `--method`, and a repeatable `--risk`.
+
+`story validate` warns when a `final` or `complete` chapter is in the `used-in` list of an `open` or `disputed` note, when a `verified` note lists no sources, and when a note with any `risk` has no `reviewed-by` while a `final` or `complete` chapter relies on it. Notes with `accuracy: invented` need no sources and never raise the open-research warning. See the `research` skill.
 
 ### Progress Log
 

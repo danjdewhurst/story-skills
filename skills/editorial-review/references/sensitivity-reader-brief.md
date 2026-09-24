@@ -18,7 +18,7 @@ Sources and research notes (the `research` skill) cannot replace them.
 One reader speaks for their own experience, not a whole community. For a
 central portrayal, two readers with different perspectives are better
 than one. An expert reader (a paramedic, a lawyer) checks technical
-accuracy; record them with `kind: expert-review` on the research note.
+accuracy; record them with `method: expert-review` on the research note.
 
 ## Finding and paying readers
 
