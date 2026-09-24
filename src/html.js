@@ -196,6 +196,14 @@ export function escapeHtml(value) {
   return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+// CSS escapes keep a title or author from ending the string or, with "<",
+// closing the style element.
 function cssString(value) {
-  return String(value).replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, " ");
+  return String(value)
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, "\\\"")
+    .replace(/</g, "\\3C ")
+    .replace(/>/g, "\\3E ")
+    .replace(/&/g, "\\26 ")
+    .replace(/[\r\n]+/g, " ");
 }

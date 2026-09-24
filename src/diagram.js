@@ -153,7 +153,7 @@ function arcDiagram(project) {
   const knownArcs = new Set(arcs.map((arc) => arc.id));
   const lines = ["flowchart LR"];
   for (const arc of arcs) {
-    lines.push(`  ${nodeId(`arc-${arc.id}`)}(["${label(arc.name)}"])`);
+    lines.push(`  ${arcNodeId(arc.id)}(["${label(arc.name)}"])`);
   }
   for (const chapter of chapters) {
     lines.push(`  ${nodeId(chapter.id)}["${chapter.number}. ${label(chapter.title)}"]`);
@@ -166,7 +166,7 @@ function arcDiagram(project) {
       }
     }
     for (const arcId of [...advanced].filter((id) => knownArcs.has(id)).sort()) {
-      lines.push(`  ${nodeId(`arc-${arcId}`)} --> ${nodeId(chapter.id)}`);
+      lines.push(`  ${arcNodeId(arcId)} --> ${nodeId(chapter.id)}`);
     }
   }
   return `${lines.join("\n")}\n`;
@@ -180,6 +180,12 @@ function byId(left, right) {
 // underscores; labels carry the readable names.
 function nodeId(id) {
   return String(id).replace(/[^A-Za-z0-9]/g, "_");
+}
+
+// Kebab-case ids never contain "--", so the double underscore keeps arc
+// nodes apart from chapter nodes whatever their ids.
+function arcNodeId(id) {
+  return `arc__${nodeId(id)}`;
 }
 
 function label(text) {

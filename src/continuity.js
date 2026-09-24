@@ -570,9 +570,10 @@ function routeGraph(locations) {
     }
   };
   const valid = [];
+  const known = new Set(locations.map((location) => location.id));
   for (const location of locations) {
     for (const route of location.routes ?? []) {
-      if (route && typeof route === "object" && typeof route.to === "string" && route.to !== "" && route.to !== location.id
+      if (route && typeof route === "object" && typeof route.to === "string" && known.has(route.to) && route.to !== location.id
         && typeof route.hours === "number" && Number.isFinite(route.hours) && route.hours > 0) {
         valid.push([location.id, route.to, route.hours]);
         declared.add(`${location.id}>${route.to}`);

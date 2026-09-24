@@ -1006,9 +1006,10 @@ function routeGraph(locations) {
     }
   };
   const valid = [];
+  const known = new Set(locations.map((location) => location.id));
   for (const location of locations) {
     for (const route of location.routes ?? []) {
-      if (route && typeof route === "object" && typeof route.to === "string" && route.to !== "" && route.to !== location.id && typeof route.hours === "number" && Number.isFinite(route.hours) && route.hours > 0) {
+      if (route && typeof route === "object" && typeof route.to === "string" && known.has(route.to) && route.to !== location.id && typeof route.hours === "number" && Number.isFinite(route.hours) && route.hours > 0) {
         valid.push([location.id, route.to, route.hours]);
         declared.add(`${location.id}>${route.to}`);
       }
@@ -1501,7 +1502,7 @@ function arcDiagram(project) {
   const knownArcs = new Set(arcs.map((arc) => arc.id));
   const lines = ["flowchart LR"];
   for (const arc of arcs) {
-    lines.push(`  ${nodeId(`arc-${arc.id}`)}(["${label(arc.name)}"])`);
+    lines.push(`  ${arcNodeId(arc.id)}(["${label(arc.name)}"])`);
   }
   for (const chapter of chapters) {
     lines.push(`  ${nodeId(chapter.id)}["${chapter.number}. ${label(chapter.title)}"]`);
@@ -1514,7 +1515,7 @@ function arcDiagram(project) {
       }
     }
     for (const arcId of [...advanced].filter((id) => knownArcs.has(id)).sort()) {
-      lines.push(`  ${nodeId(`arc-${arcId}`)} --> ${nodeId(chapter.id)}`);
+      lines.push(`  ${arcNodeId(arcId)} --> ${nodeId(chapter.id)}`);
     }
   }
   return `${lines.join(`
@@ -1526,6 +1527,9 @@ function byId(left, right) {
 }
 function nodeId(id) {
   return String(id).replace(/[^A-Za-z0-9]/g, "_");
+}
+function arcNodeId(id) {
+  return `arc__${nodeId(id)}`;
 }
 function label(text) {
   return String(text).replace(/&/g, "&amp;").replace(/"/g, "#quot;").replace(/\|/g, "#124;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\s+/g, " ").trim();
@@ -1717,7 +1721,7 @@ function speakerPatterns(characters) {
     }
     return {
       id: character.id,
-      name: new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternatives})(?![\\p{L}\\p{N}])`, "u"),
+      name: new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternatives})(?![\\p{L}\\p{N}])`, "iu"),
       tag: new RegExp(`(?<![\\p{L}\\p{N}])(?:(?:${alternatives})\\s+(?:${verbs})|(?:${verbs})\\s+(?:${alternatives}))(?![\\p{L}\\p{N}])`, "iu")
     };
   }).filter(Boolean);
@@ -2518,7 +2522,7 @@ function formRangeWarning(form, words, label2) {
 var MAX_KEYWORDS = 7;
 var BISAC_PATTERN = /^[A-Z]{3}\d{6}$/;
 var LANGUAGE_PATTERN = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
-var SCALAR_FIELDS = ["language", "isbn", "publisher", "publication-date", "description", "copyright", "cover-alt", "ai-disclosure"];
+var SCALAR_FIELDS = ["author", "language", "isbn", "publisher", "publication-date", "description", "copyright", "cover-alt", "ai-disclosure"];
 function publishingMeta(data) {
   const text = (field) => typeof data[field] === "string" ? data[field].trim() : "";
   const list = (field) => Array.isArray(data[field]) ? data[field].filter((item) => typeof item === "string" && item.trim() !== "").map((item) => item.trim()) : [];
@@ -2859,7 +2863,7 @@ function escapeHtml(value) {
   return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 function cssString(value) {
-  return String(value).replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, " ");
+  return String(value).replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/</g, "\\3C ").replace(/>/g, "\\3E ").replace(/&/g, "\\26 ").replace(/[\r\n]+/g, " ");
 }
 
 // src/narration.js
@@ -2925,7 +2929,7 @@ function formatMinutes(words) {
   return minutes < 1 ? "under 1 min" : `about ${Math.round(minutes)} min`;
 }
 function cell2(value) {
-  return String(value).replace(/\|/g, "\\|");
+  return String(value).replace(/\s+/g, " ").trim().replace(/\|/g, "\\|");
 }
 
 // src/passes.js
@@ -3046,7 +3050,7 @@ function buildPacing(project) {
     const scenes = project.scenes.filter((scene) => scene.chapter === chapter.id).sort((left, right) => left.scene - right.scene || left.id.localeCompare(right.id, "en"));
     const outcomes = { yes: 0, no: 0, "yes-but": 0, "no-and": 0 };
     for (const scene of scenes) {
-      if (SCENE_OUTCOMES.has(scene.outcome)) {
+      if (!scene.sequel && SCENE_OUTCOMES.has(scene.outcome)) {
         outcomes[scene.outcome] += 1;
       }
       units.push(scene);
@@ -4929,12 +4933,13 @@ function clueReport(root) {
 function diagramProject(root, options = {}) {
   const project = scanProject(root);
   const text = buildDiagram(project, options.kind);
-  if (options.out === undefined) {
-    return { text };
+  const result = { ok: project.fileErrors.length === 0, errors: [...project.fileErrors], warnings: [], text };
+  if (options.out === undefined || !result.ok) {
+    return result;
   }
   const output = resolveOutputPath(project, options.out, "");
   writeFile(output.outFile, text, output.writeOptions);
-  return { text, outFile: output.outFile };
+  return { ...result, outFile: output.outFile };
 }
 function projectPasses(root, change = {}) {
   const project = scanProject(root);
@@ -4947,13 +4952,19 @@ function projectPasses(root, change = {}) {
   if (project.fileErrors.some((error) => error.startsWith("story.md"))) {
     throw new Error("story.md cannot be parsed; fix it before recording revision passes");
   }
-  const next = updatePasses(passes, change);
+  const passErrors = [];
+  validatePasses(project.story.data, "story.md", passErrors);
+  if (passErrors.length > 0) {
+    throw new Error(`Fix revision-passes in story.md before changing it: ${passErrors.join("; ")}`);
+  }
+  const current = asArray(project.story.data["revision-passes"]);
+  const next = updatePasses(current, change);
   const raw = safeRead(storyPath, project.root);
-  const changed = JSON.stringify(next) !== JSON.stringify(passes);
+  const changed = JSON.stringify(next) !== JSON.stringify(current);
   if (changed) {
     writeFile(storyPath, replaceFrontmatter(raw, { ...parseFrontmatter(raw, storyPath).data, "revision-passes": next }), { root: project.root });
   }
-  return { passes: next, changed };
+  return { passes: readPasses({ "revision-passes": next }), changed };
 }
 function namesReport(root, candidates) {
   const list = asArray(candidates).map((name) => String(name).trim()).filter(Boolean);
@@ -6561,7 +6572,8 @@ function manuscriptParts(project) {
   }));
   const meta = publishingMeta(project.story.data);
   const front = matter("front");
-  const hasCopyrightPage = project.matter.some((entry) => entry.id === "copyright" || /copyright/i.test(entry.title));
+  const back = matter("back");
+  const hasCopyrightPage = [...front, ...back].some((entry) => entry.id === "copyright" || /copyright/i.test(entry.title));
   if (meta.copyright !== "" && !hasCopyrightPage) {
     front.unshift({ id: "copyright", title: "Copyright", heading: false, body: copyrightPage(meta) });
   }
@@ -6571,7 +6583,7 @@ function manuscriptParts(project) {
     meta,
     front,
     chapters,
-    back: matter("back")
+    back
   };
 }
 function epubModifiedTimestamp() {
@@ -8779,9 +8791,12 @@ var COMMANDS = [
     project: "flag",
     run({ parsed, io, root }) {
       const result = diagramProject(root(), { kind: parsed.positionals[1], out: parsed.options.out });
-      io.stdout.write(result.outFile === undefined ? result.text : `Wrote ${parsed.positionals[1]} diagram to ${result.outFile}
+      if (result.ok) {
+        io.stdout.write(result.outFile === undefined ? result.text : `Wrote ${parsed.positionals[1]} diagram to ${result.outFile}
 `);
-      return 0;
+        return 0;
+      }
+      return reportResult(io, result, "Diagram built", "Diagram failed");
     }
   },
   {

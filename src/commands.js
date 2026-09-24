@@ -260,8 +260,11 @@ export const COMMANDS = [
     project: "flag",
     run({ parsed, io, root }) {
       const result = diagramProject(root(), { kind: parsed.positionals[1], out: parsed.options.out });
-      io.stdout.write(result.outFile === undefined ? result.text : `Wrote ${parsed.positionals[1]} diagram to ${result.outFile}\n`);
-      return 0;
+      if (result.ok) {
+        io.stdout.write(result.outFile === undefined ? result.text : `Wrote ${parsed.positionals[1]} diagram to ${result.outFile}\n`);
+        return 0;
+      }
+      return reportResult(io, result, "Diagram built", "Diagram failed");
     }
   },
   {

@@ -7,7 +7,7 @@ import { storyDateError } from "./continuity.js";
 export const MAX_KEYWORDS = 7;
 const BISAC_PATTERN = /^[A-Z]{3}\d{6}$/;
 const LANGUAGE_PATTERN = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
-const SCALAR_FIELDS = ["language", "isbn", "publisher", "publication-date", "description", "copyright", "cover-alt", "ai-disclosure"];
+const SCALAR_FIELDS = ["author", "language", "isbn", "publisher", "publication-date", "description", "copyright", "cover-alt", "ai-disclosure"];
 
 export function publishingMeta(data) {
   const text = (field) => (typeof data[field] === "string" ? data[field].trim() : "");
