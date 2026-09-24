@@ -4,6 +4,7 @@ import { formatComparison } from "./compare.js";
 import { importManuscript } from "./import.js";
 import { isTruthy } from "./options.js";
 import { formatPacing } from "./pacing.js";
+import { formatPasses } from "./passes.js";
 import { formatProgress } from "./progress.js";
 import { formatProseReport } from "./prose.js";
 import { formatSeriesReport } from "./series.js";
@@ -25,6 +26,7 @@ import {
   knowledgeAtChapter,
   migrateProject,
   pacingReport,
+  projectPasses,
   projectActions,
   projectProgress,
   projectReport,
@@ -313,6 +315,28 @@ export const COMMANDS = [
       const report = seriesReport(root());
       io.stdout.write(formatSeriesReport(report));
       return reportResult(io, report, "Series is consistent", "Series check failed");
+    }
+  },
+  {
+    name: "passes",
+    usage: "passes [path]",
+    summary: [
+      "Show the named revision passes in story.md;",
+      "--init adds the default ladder, --start and --done",
+      "mark a pass"
+    ],
+    project: "positional",
+    run({ parsed, io, root }) {
+      const result = projectPasses(root(), {
+        init: isTruthy(parsed.options.init),
+        start: parsed.options.start,
+        done: parsed.options.done
+      });
+      if (result.changed) {
+        io.stdout.write("Updated revision-passes in story.md\n");
+      }
+      io.stdout.write(formatPasses(result.passes));
+      return 0;
     }
   },
   {

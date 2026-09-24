@@ -9,6 +9,7 @@ import { buildTimeline } from "./timeline.js";
 import { buildClueMatrix } from "./clues.js";
 import { buildDiagram } from "./diagram.js";
 import { buildVoices } from "./voices.js";
+import { DEFAULT_PASSES, nextPass, readPasses, updatePasses, validatePasses } from "./passes.js";
 import { CHAPTER_HOOKS, SCENE_OUTCOMES, buildPacing } from "./pacing.js";
 import { compareChapters, proseParagraphs } from "./compare.js";
 import { PROGRESS_FILE, cleanSessions, computeProgress, localDate, withSession } from "./progress.js";
@@ -1416,6 +1417,28 @@ export function diagramProject(root, options = {}) {
   return { text, outFile: output.outFile };
 }
 
+// Reads, and with init/start/done updates, story.md revision-passes. Only
+// the revision-passes entry is rewritten; the rest of story.md is kept.
+export function projectPasses(root, change = {}) {
+  const project = scanProject(root);
+  const storyPath = path.join(project.root, "story.md");
+  const passes = readPasses(project.story.data);
+  const wantsChange = Boolean(change.init) || change.start !== undefined || change.done !== undefined;
+  if (!wantsChange) {
+    return { passes, changed: false };
+  }
+  if (project.fileErrors.some((error) => error.startsWith("story.md"))) {
+    throw new Error("story.md cannot be parsed; fix it before recording revision passes");
+  }
+  const next = updatePasses(passes, change);
+  const raw = safeRead(storyPath, project.root);
+  const changed = JSON.stringify(next) !== JSON.stringify(passes);
+  if (changed) {
+    writeFile(storyPath, replaceFrontmatter(raw, { ...parseFrontmatter(raw, storyPath).data, "revision-passes": next }), { root: project.root });
+  }
+  return { passes: next, changed };
+}
+
 // Dialogue fingerprints per character from attributed speech. Advisory.
 export function voicesReport(root) {
   const project = scanProject(root);
@@ -2201,6 +2224,17 @@ function buildProjectActions(project, validation, links, continuity) {
   }
   if (openClues.length > 0) {
     actions.push(action("P2", "Review open clues", `${openClues.length} clues are still planned or planted.`));
+  }
+  if (project.story.data.status === "revising") {
+    const passes = readPasses(project.story.data);
+    const upcoming = nextPass(passes);
+    if (passes.length === 0) {
+      actions.push(action("P1", "Plan revision passes", "Run story passes --init to record the structure-to-proof pass ladder, then work one pass at a time."));
+    } else if (upcoming !== null) {
+      const known = DEFAULT_PASSES.find((entry) => entry.pass === upcoming.pass);
+      const checks = known ? ` Run ${known.checks.join(", ")}.` : "";
+      actions.push(action("P1", `Revision pass: ${upcoming.pass}`, `${known ? `${known.focus}.` : "Work through this pass."}${checks} Mark it with story passes --done ${upcoming.pass}.`));
+    }
   }
   const activeArcNames = [];
   for (const arc of project.arcs) {
@@ -3936,6 +3970,7 @@ function validateStoryFrontmatter(project, errors) {
     requireScalar(data, "draft-mode", "story.md", errors);
   }
   validateCover(project, errors);
+  validatePasses(data, "story.md", errors);
   if (data.deadline !== undefined) {
     // progress reads only string deadlines, so anything else must fail here
     // rather than silently switching the deadline off.
