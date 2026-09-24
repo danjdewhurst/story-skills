@@ -62,6 +62,7 @@ Optional craft fields (hand-edit only — no CLI flags; edit `story.md` directly
 - `author` - author name, used on the Shunn title page by `story build --format shunn`.
 - `contact` - contact block lines for the Shunn title page.
 - `season-goal` - one-sentence season/volume goal for serial fiction (see the `genre-craft` skill).
+- `form` - the story's form: `flash` (up to 1,500 words), `short-story` (1,000-7,500), `novelette` (7,500-17,500), `novella` (17,500-40,000), `novel` (40,000-200,000), `serial` (no range), `picture-book` (up to 1,000), or `chapter-book` (4,000-15,000). `story init --form <form>` records it with a default `target-words` (1,000, 5,000, 12,000, 30,000, 80,000, none, 500, and 10,000 respectively). `story validate` warns when `target-words` falls outside the form's range, and when a `complete` story's prose does; `story report` shows it.
 - `target-words` - positive integer word-count target for the book (MG/YA category contracts rely on it; see the `genre-craft` skill). `story progress` and `story report` measure against it.
 - `deadline` - due date as `YYYY-MM-DD`; `story progress` reports days left and the words a day needed.
 - `draft-mode` - `discovered` marks a discovery-drafted project; per-chapter `mode:` tracks mixed projects (see the `discovery-drafting` skill).

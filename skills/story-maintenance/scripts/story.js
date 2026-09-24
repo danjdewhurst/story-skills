@@ -2492,6 +2492,28 @@ function formatNames(report) {
 `;
 }
 
+// src/forms.js
+var STORY_FORMS = new Map([
+  ["flash", { min: 1, max: 1500, target: 1000 }],
+  ["short-story", { min: 1000, max: 7500, target: 5000 }],
+  ["novelette", { min: 7500, max: 17500, target: 12000 }],
+  ["novella", { min: 17500, max: 40000, target: 30000 }],
+  ["novel", { min: 40000, max: 200000, target: 80000 }],
+  ["serial", { min: null, max: null, target: null }],
+  ["picture-book", { min: 1, max: 1000, target: 500 }],
+  ["chapter-book", { min: 4000, max: 15000, target: 1e4 }]
+]);
+function formRangeWarning(form, words, label2) {
+  const range = STORY_FORMS.get(form);
+  if (!range || range.min === null || !Number.isInteger(words) || words <= 0) {
+    return "";
+  }
+  if (words < range.min || words > range.max) {
+    return `${label2} ${words} is outside the usual ${form} range of ${range.min}-${range.max} words`;
+  }
+  return "";
+}
+
 // src/passes.js
 var PASS_STATUSES = new Set(["pending", "in-progress", "done"]);
 var DEFAULT_PASSES = [
@@ -3363,6 +3385,9 @@ function createStoryProject(options) {
   if (options.tense !== undefined && options.tense !== "" && !STORY_TENSES.has(options.tense)) {
     throw new Error(`Unsupported tense "${options.tense}": expected one of ${[...STORY_TENSES].join(", ")}`);
   }
+  if (options.form !== undefined && !STORY_FORMS.has(options.form)) {
+    throw new Error(`Unsupported form "${options.form}": expected one of ${[...STORY_FORMS.keys()].join(", ")}`);
+  }
   const series = resolveSeriesOptions(root, cwd, options);
   const inherited = series.linked[0]?.data ?? {};
   const themes = normalizeList(options.themes, ["change"]);
@@ -3391,6 +3416,7 @@ function createStoryProject(options) {
     themes,
     pov: options.pov ?? inherited.pov ?? "third-person-limited",
     tense: options.tense ?? inherited.tense ?? "past",
+    form: options.form,
     synopsis: options.synopsis ?? "Add a 2-3 sentence synopsis here."
   }), { root });
   writeStarterFile(path4.join(root, "characters", "_index.md"), characterIndex(storyId, [], "", ""), { root });
@@ -3696,6 +3722,7 @@ function validateProjectOf(project) {
   validateMatter(project, errors, warnings);
   validateResearch(project, errors, warnings);
   validateProgressLog(project, errors);
+  validateFormRange(project, warnings);
   collectStrayFileWarnings(project, warnings);
   const indexChecks = [
     [path4.join("characters", "_index.md"), project.characters.map((item) => `](${item.id}.md)`)],
@@ -4110,6 +4137,7 @@ function projectReport(root) {
     bookNumber: project.story.data["book-number"],
     genre: project.story.data.genre,
     subGenre: project.story.data["sub-genre"],
+    form: typeof project.story.data.form === "string" ? project.story.data.form : "",
     status: project.story.data.status,
     pov: project.story.data.pov,
     tense: project.story.data.tense,
@@ -4158,6 +4186,7 @@ function formatProjectReport(report, options = {}) {
     ...report.series === undefined ? [] : [`Series: ${report.series}${report.bookNumber === undefined ? "" : ` (book ${report.bookNumber})`}`],
     `Status: ${report.status}`,
     `Genre: ${[report.genre, report.subGenre].filter(Boolean).join(" / ")}`,
+    ...report.form ? [`Form: ${report.form}`] : [],
     `POV/Tense: ${report.pov} / ${report.tense}`,
     "",
     "Inventory:",
@@ -4855,6 +4884,13 @@ function storyBible(options) {
     pov: options.pov,
     tense: options.tense
   });
+  if (options.form !== undefined) {
+    data.form = options.form;
+    const target = STORY_FORMS.get(options.form).target;
+    if (target !== null) {
+      data["target-words"] = target;
+    }
+  }
   for (const field of ["follows", "precedes"]) {
     if (options[field].length > 0) {
       data[field] = options[field];
@@ -6723,6 +6759,7 @@ function validateStoryFrontmatter(project, errors) {
   if (data["target-words"] !== undefined) {
     requireInteger(data, "target-words", "story.md", errors, 1);
   }
+  validateEnum(data, "form", STORY_FORMS, "story.md", errors);
   if (data["draft-mode"] !== undefined) {
     requireScalar(data, "draft-mode", "story.md", errors);
   }
@@ -6736,6 +6773,20 @@ function validateStoryFrontmatter(project, errors) {
   }
   if (data["schema-version"] !== undefined && data["schema-version"] !== STORY_SCHEMA_VERSION) {
     errors.push(`story.md schema-version must be ${STORY_SCHEMA_VERSION}`);
+  }
+}
+function validateFormRange(project, warnings) {
+  const data = project.story.data;
+  const targetWarning = formRangeWarning(data.form, data["target-words"], "story.md target-words");
+  if (targetWarning !== "") {
+    warnings.push(targetWarning);
+  }
+  if (data.status === "complete") {
+    const words = project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
+    const wordsWarning = formRangeWarning(data.form, words, "Manuscript length");
+    if (wordsWarning !== "") {
+      warnings.push(wordsWarning);
+    }
   }
 }
 function validateIndexFrontmatter(project, errors) {
@@ -7733,6 +7784,7 @@ var OPTIONS = [
   { name: "themes", value: "<a,b>", repeatable: true, help: ["Comma-separated themes for init or add arc"] },
   { name: "pov", value: "<style>", help: ["POV style for init or add chapter/scene"] },
   { name: "tense", value: "<tense>", help: ["Narrative tense for init"] },
+  { name: "form", value: "<form>", help: ["Story form for init (novel, novella, novelette,", "short-story, flash, serial, picture-book,", "chapter-book); sets a default target-words"] },
   { name: "synopsis", value: "<text>", help: ["Starter synopsis for init"] },
   { name: "series", value: "<id>", help: ["Series id for init"] },
   { name: "book-number", value: "<n>", help: ["Publication order for init"] },
@@ -7942,6 +7994,7 @@ var COMMANDS = [
         themes: collectThemes(parsed.options),
         pov: parsed.options.pov,
         tense: parsed.options.tense,
+        form: parsed.options.form,
         synopsis: parsed.options.synopsis,
         series: parsed.options.series,
         bookNumber: parsed.options["book-number"],

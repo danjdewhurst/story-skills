@@ -66,6 +66,7 @@ export const COMMANDS = [
         themes: collectThemes(parsed.options),
         pov: parsed.options.pov,
         tense: parsed.options.tense,
+        form: parsed.options.form,
         synopsis: parsed.options.synopsis,
         series: parsed.options.series,
         bookNumber: parsed.options["book-number"],
