@@ -25,13 +25,13 @@ The `form` field in `story.md` takes one of these values; `story init
 
 | `form` | Rough length | What it does well | Watch out for |
 |--------|--------------|-------------------|---------------|
-| `flash` | Up to about 1,000 words | One moment, one image, one turn | Needing backstory to land |
+| `flash` | Up to about 1,500 words | One moment, one image, one turn | Needing backstory to land |
 | `short-story` | About 1,000-7,500 | One change, a single effect (see `../../plot-structure/references/short-story-form.md`) | Subplots, large casts |
 | `novelette` | About 7,500-17,500 | One change with room for a second character's pressure | Being a long short story with padding |
 | `novella` | About 17,500-40,000 | A contained situation, one strong arc, intensity | A novel's worth of threads |
-| `novel` | About 40,000 and up; genre norms vary | Multiple arcs, subplots, world, time | A single-situation premise that cannot generate 60+ scenes |
+| `novel` | About 40,000-200,000; genre norms vary | Multiple arcs, subplots, world, time | A single-situation premise that cannot generate 60+ scenes |
 | `serial` | Episodes, each with its own question | Ongoing situations, cliffhangers, reader habit | A story that only pays off at the end; see the `genre-craft` serial reference |
-| `picture-book` | Usually under 1,000 words, text shared with art | One emotional truth, read-aloud rhythm, page turns | Describing what the art will show |
+| `picture-book` | Up to about 1,000 words, text shared with art | One emotional truth, read-aloud rhythm, page turns | Describing what the art will show |
 | `chapter-book` | Roughly 4,000-15,000 for early readers | Short chapters, simple plots, a series-able lead | Vocabulary and sentence length above the reader |
 
 The bands are rough conventions; SFWA award categories set the

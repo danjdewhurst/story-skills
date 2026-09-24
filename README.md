@@ -169,7 +169,7 @@ The CLI is for maintenance only. Agents write story content directly to markdown
 | `story knowledge sera-voss --at chapter-03` | Show what a character knew at a chapter, from timeline-scoped knowledge state |
 | `story timeline [path]` | Show scenes in story-time order from their `date`/`time` (marking scenes told out of order), POV balance by words, and each character's presence and longest absence |
 | `story prose [path]` | Lint chapter prose: filter words, -ly adverbs, said-bookisms, echoes, sentence rhythm, repeated phrases, similar names, and `style-sheet.md` spellings and watch words |
-| `story voices [path]` | Fingerprint each character's tagged dialogue (sentence length, contractions, questions, signature words) and flag `voice-avoid` words and characters who sound alike |
+| `story voices [path]` | Fingerprint each character's attributed dialogue (named speech tags and single-name action beats; pronoun tags are not counted) (sentence length, contractions, questions, signature words) and flag `voice-avoid` words and characters who sound alike |
 | `story pacing [path]` | Tabulate scenes, sequels, scene outcomes (`yes`, `no`, `yes-but`, `no-and`), and chapter hooks; flag runs of easy wins, missing sequels, flat chapter endings, and length outliers |
 | `story clues [path]` | Draw the fair-play grid of clue plants and reveals by chapter; flag late plants, unplanted reveals, and red herrings never debunked |
 | `story diagram relationships --path .` | Print Mermaid source for the family tree and relationships, the location route map, the story-time timeline, the clue flow, or arcs by chapter |
@@ -184,7 +184,7 @@ The CLI is for maintenance only. Agents write story content directly to markdown
 | `story export [path] --out manuscript.md` | Combine front matter, chapters, and back matter into a single manuscript markdown file |
 | `story build [path] --format epub` | Build disposable markdown, EPUB, DOCX, or Shunn manuscript artifacts in `dist/`; EPUB builds embed the `story.md` `cover` image, publishing metadata, and accessibility metadata |
 | `story build [path] --format html` | Build a single-file review copy whose paragraphs carry citable anchors such as `ch03-p12` |
-| `story build [path] --format print --trim 6x9` | Build a print-ready paged-media HTML interior to render to PDF with Paged.js, WeasyPrint, or Prince |
+| `story build [path] --format print --trim 6x9` | Build a print-ready paged-media HTML interior (author and chapter-title running heads, foot page numbers, raised chapter initials) to render to PDF with Paged.js, WeasyPrint, or Prince |
 | `story build [path] --format narration` | Build an audiobook narration script with a pronunciation guide and runtime estimates |
 | `story build [path] --format metadata` | Build a retailer metadata sheet from `story.md` with a readiness checklist |
 

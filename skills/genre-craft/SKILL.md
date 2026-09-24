@@ -52,7 +52,8 @@ exist or be in progress.
      herring via `story add clue "..." --planted chapter-NN --payoff
      chapter-NN`, with `significance-delayed` frontmatter where the reader
      sees the clue before understanding it and `red-herring: true` on
-     misleading clues (their `payoff` is the chapter that debunks them).
+     misleading clues (`story add clue "..." --red-herring`; their
+     `payoff` is the chapter that debunks them).
      Run `story clues .` for the fair-play matrix and `story diagram clues`
      for the plant-to-reveal flow.
    - Thriller: log every promised deadline in `continuity/promises/` and

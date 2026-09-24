@@ -81,7 +81,13 @@ which makes a good rare event.
   read after events that happen later.
 - `story diagram timeline` prints a Mermaid timeline of dated scenes and
   chapters.
-- `story continuity .` checks clock order, `travel-hours`, and routes.
+- `story continuity .` checks clock order, `travel-hours`, and routes. It
+  reads scene `date`, `time`, `location`, `characters`, and `pov`; chapter
+  dates do not feed the route check. A named time is a span (`morning` is
+  05:00-11:59), an untimed scene spans its whole day, and only journeys
+  impossible on every reading are errors. `travel-hours` on a scene is the
+  minimum time since the previous dated scene in chapter order, not a
+  journey within the scene.
 
 After adding or changing the calendar system, run `story reindex .`,
 `story links .`, and `story validate .`.

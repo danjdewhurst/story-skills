@@ -59,10 +59,16 @@ story names "Mira" "Kelvos" "Oda"
 ```
 
 `story names` compares candidates with character names and aliases,
-locations, factions, artifacts, systems, and glossary terms and aliases. An
-exact clash is an error (exit 1). It warns about look-alikes (same initial
-and an edit distance of 2 or less, or the same first four letters) and
-about names sharing an initial with a major character. Readers skim names
+locations, factions, artifacts, systems, and glossary terms and aliases. A
+candidate's given name (the first word that is not a title or article
+such as `The`, `Lord`, or `Captain`) is compared with each character's
+given name; everything else is compared as a whole name. An exact match
+with either is a clash: an error (exit 1). It warns about look-alikes
+(the same first four letters, or the same initial within an edit distance
+of 1, or 2 when both words have five letters or more) and about given
+names sharing an initial with a major character. Multi-word names such as
+`Ashen Citadel` are only checked for exact clashes, so pass a distinctive
+word on its own (`story names "Ashen Reach" Ashen`) to catch look-alikes. Readers skim names
 by shape: `Mara` and `Mira`, or `Kelvar` and `Kelvoss`, blur together.
 Change the initial or the length unless the resemblance is deliberate
 (siblings, a namesake), and say so in the file.

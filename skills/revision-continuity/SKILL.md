@@ -1,6 +1,6 @@
 ---
 name: revision-continuity
-description: This skill should be used when the user asks to revise a chapter, continuity check, find inconsistencies, audit character state, check timeline consistency, developmental edit, structural revision, "revision passes", "what pass next", "pacing check", "clue check", "voice check", or prepare existing story material for the next revision pass.
+description: This skill should be used when the user asks to revise a chapter, continuity check, find inconsistencies, audit character state, check timeline consistency, developmental edit, structural revision, "revision passes", "what pass next", "pacing check" as a revision pass, "clue check", or prepare existing story material for the next revision pass. NOT for planning book structure (use plot-structure), scene-level craft (use scene-craft), or voice consistency (use voice-style).
 ---
 
 # Revision Continuity
@@ -29,20 +29,21 @@ story next .                     # with story status revising, recommends the ne
 
 The default ladder is `structure`, `character`, `theme`, `continuity`,
 `pacing`, `line`, `copyedit`, `proof`. Each entry is `{pass, status}` with
-status `pending`, `in-progress`, or `done`; add custom kebab-case passes
-(`fact-check`, `sensitivity`) by editing `revision-passes` directly. The
-checks per pass:
+status `pending`, `in-progress`, or `done`; add a custom kebab-case pass
+(`fact-check`, `sensitivity`) with `story passes . --start <name>`, which
+appends it as `in-progress`. The checks per pass, as `story passes .`
+prints them:
 
 | Pass | Checks | Workflow below |
 |------|--------|----------------|
-| `structure` | `story timeline .`, `story pacing .` | Reverse outline, pacing waveform, removability audit |
-| `character` | `story voices .`, `story knowledge` | Developmental revision (motivation, arcs) |
-| `theme` | | Theme audit |
+| `structure` | `story timeline .`, `story pacing .`, `story diagram arcs` | Reverse outline, pacing waveform, removability audit |
+| `character` | `story voices .`, `story knowledge <id> --at <chapter>`, `story diagram relationships` | Developmental revision (motivation, arcs) |
+| `theme` | `story report .` | Theme audit |
 | `continuity` | `story continuity .`, `story clues .`, `story links .` | Continuity audit, reveal economy, fact check |
 | `pacing` | `story pacing .` | Pacing waveform |
 | `line` | `story prose .`, `story voices .` | Line edit (the `line-editing` skill) |
 | `copyedit` | `story prose .` + `style-sheet.md` | Copyedit (the `line-editing` skill) |
-| `proof` | `story build --format print` or `html` | Proof (the `line-editing` skill) |
+| `proof` | `story build --format print`, `story build --format html` | Proof (the `line-editing` skill) |
 
 Mark a pass `--start` when beginning it and `--done` only when its checks
 are clean or every remaining finding is a recorded decision. Set story

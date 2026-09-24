@@ -64,9 +64,16 @@ editing it by hand.
 ## The continuity travel check
 
 `story continuity .` uses routes together with scene `date`, `time`, and
-`location`. When a character appears in two dated scenes at locations joined
-by a route, and the story time between the scenes is less than the route's
-`hours`, it reports an error: the character could not have made the trip.
+`location`, and the scene's `characters` and `pov`. Chapter dates and
+locations are not read. When a character appears in two dated scenes at
+locations linked by routes, and the story time between the scenes is less
+than the fastest route (possibly through other places), it reports an
+error: the character could not have made the trip. A named `time` covers a
+span (`dawn` 04:00-06:59, `morning` 05:00-11:59, `midday` 11:00-13:59,
+`afternoon` 12:00-17:59, `evening` 17:00-21:59, `night` 20:00-23:59), and
+a scene with a `date` but no `time` spans its whole day. The gap is taken
+at its most generous reading, so only a journey impossible on every
+reading is an error.
 
 To fix a finding:
 
@@ -76,8 +83,9 @@ To fix a finding:
 3. Remove the character from one scene's `characters` (list them in
    `mentions` if they are only referred to)
 
-Scene `travel-hours` still records a journey asserted inside a single
-scene. `story timeline .` and `story diagram timeline` show dated scenes in
+Scene `travel-hours` is separate from routes: it asserts the minimum time
+since the previous dated scene in chapter order (both scenes need a
+`time`), not a journey inside the scene. `story timeline .` and `story diagram timeline` show dated scenes in
 story-time order, which helps when adjusting dates.
 
 After editing routes, run `story reindex .`, `story links .`,

@@ -102,7 +102,15 @@ Notes with any `risk` value need a qualified human reviewer (a lawyer,
 clinician, weapons or safety specialist, cultural reader, or subject
 engineer, as fits) before the chapters that use them are final. Record the
 reviewer in `reviewed-by` as a name or role once they have read the
-passage. Collect facts and flag concerns, but **never give legal, medical,
+passage. `reviewed-by` is a list with no `story add` flag; edit the note's
+frontmatter by hand:
+
+```yaml
+reviewed-by:
+  - "Dr A. Patel, A&E consultant"
+```
+
+Collect facts and flag concerns, but **never give legal, medical,
 or safety advice yourself**, and never treat your own research as the
 review. Portrayals of real, living people carry defamation risk; route
 those, and sensitivity or authenticity reads, through the

@@ -94,9 +94,12 @@ every edition.
    `pt-BR`), and clear `isbn`, `publisher`, `publication-date`,
    `description`, `keywords`, and `subjects` for the new edition's own
    values. Every edition needs its own ISBN.
-3. Do not set `series`, `follows`, or `precedes` to link the editions;
-   those fields are for different books in a series. A translated series
-   links its own translated books the same way the source series does.
+3. Remove `series`, `book-number`, `follows`, and `precedes` from the
+   copied `story.md`. Those fields are for different books in a series,
+   and copied values point at the source series, which breaks
+   `story links` and `story series` for the new edition. Do not use them
+   to link the editions. A translated series links its own translated
+   books the same way the source series does.
 4. Translate titles and prose in place, chapter by chapter, keeping every
    file name and id.
 5. If AI or machine translation is used at any stage, record it in

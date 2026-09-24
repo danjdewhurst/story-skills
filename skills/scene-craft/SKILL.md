@@ -1,6 +1,6 @@
 ---
 name: scene-craft
-description: This skill should be used when the user asks to "plan a scene", "scene structure", "sequel scene", "dialogue subtext", "deep POV", "psychic distance", "try fail", "scene cards", "exposition", "info dump", "flashback", "time skip", "story opening", "first page hook", "introduce a character", "scene outcome", "yes-but no-and", "chapter hook", or wants scene-level craft for drafting or revision.
+description: This skill should be used when the user asks to "plan a scene", "scene structure", "sequel scene", "dialogue subtext", "deep POV", "psychic distance", "try fail", "scene cards", "exposition", "info dump", "flashback", "time skip", "story opening", "first page hook", "introduce a character", "scene outcome", "yes-but no-and", "chapter hook", or wants scene-level craft for drafting or revision. NOT for book-level pacing or act structure (use plot-structure).
 ---
 
 # Scene Craft

@@ -1,6 +1,6 @@
 ---
 name: character-management
-description: This skill should be used when the user asks to "create a character", "update a character", "add a character", "build a family tree", "character relationships", "character timeline", "character arc", "character profile", "relationship graph", "name a character", "character voice words", or needs to manage characters in a story project.
+description: This skill should be used when the user asks to "create a character", "update a character", "add a character", "build a family tree", "character relationships", "character timeline", "character arc", "character profile", "relationship graph", "name a character", or needs to manage characters in a story project. NOT for character voices or dialogue style (use voice-style).
 ---
 
 # Character Management
@@ -66,7 +66,7 @@ story diagram relationships
 story diagram relationships --out dist/relationships.mmd
 ```
 
-It prints Mermaid source built from every character's `relationships`, with family edges styled distinctly so the family tree stands out from alliances and rivalries. GitHub, many editors, and mermaid.live render it. Use it to spot one-way relationships, isolated characters, and families missing a generation; regenerate it after relationship changes rather than editing the output.
+It prints Mermaid source built from every character's `relationships`, with family edges styled distinctly so the family tree stands out from alliances and rivalries. Each pair gets one edge: parent, grandparent, aunt, and uncle draw an arrow from the elder side, other types draw an undirected line, and child-side types (child, grandchild, niece, nephew) are skipped, so the diagram cannot show a one-way relationship. GitHub, many editors, and mermaid.live render it. Use it to spot isolated characters and families missing a generation, and run `story links` to find one-way relationships and missing backlinks; regenerate it after relationship changes rather than editing the output.
 
 Family trees are also maintained in the `characters/_index.md` under the "Family Trees" section. Format:
 
@@ -88,13 +88,15 @@ Indent children under parents. Note marriages/partnerships inline.
 ```yaml
 voice-words:
   - "reckon"
-  - "love"          # as an address: "all right, love"
+  - "love"
 voice-avoid:
   - "awesome"
   - "literally"
 ```
 
-`story voices .` fingerprints each character's tagged dialogue and warns when they say a `voice-avoid` word, when a `voice-words` entry never appears, and when two characters' voices are near-identical. Keep these lists short (three to eight entries) and consistent with the Voice & Speech Patterns section and the style sheet's Character Voices line (see the `voice-style` skill).
+Here "love" is a term of address ("all right, love"). Keep notes like that in prose, not as `#` comments in frontmatter; the parser keeps them as part of the value.
+
+`story voices .` fingerprints each character's attributed dialogue (see the `voice-style` skill for how lines are attributed) and warns when they say a `voice-avoid` word, when a `voice-words` entry never appears, and when two characters' voices are near-identical. Keep these lists short (three to eight entries) and consistent with the Voice & Speech Patterns section and the style sheet's Character Voices line (see the `voice-style` skill).
 
 ## Cross-Referencing
 

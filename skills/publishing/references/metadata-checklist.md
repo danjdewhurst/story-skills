@@ -7,12 +7,18 @@ checklist.
 
 ## Fields
 
+Use `authors:` instead of `author:` for a co-written book. `language` is a
+BCP 47 tag (`en`, `en-GB`, `es`, `fr-CA`, `pt-BR`). Prefer an ISBN-13; the
+checksum is validated. `publisher` is the imprint name, or the author's name
+when self-publishing. Keep comments out of the block itself: text after `#`
+on a value line becomes part of the value.
+
 ```yaml
 title: The Last Ember
-author: Jane Doe                # or authors: for a co-written book
-language: en                    # BCP 47: en, en-GB, es, fr-CA, pt-BR
-isbn: 9781234567897             # ISBN-13 preferred; checksum validated
-publisher: Ember Lane Press     # imprint name, or the author's name
+author: Jane Doe
+language: en
+isbn: 9781234567897
+publisher: Ember Lane Press
 publication-date: 2027-03-02
 description: "The retailer description, on one line; see the Description section."
 keywords:

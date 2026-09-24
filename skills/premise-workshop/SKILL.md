@@ -1,6 +1,6 @@
 ---
 name: premise-workshop
-description: This skill should be used when the user asks to "brainstorm a story idea", "I have an idea for a story", "what if", "develop a premise", "is this idea strong enough", "workshop my logline", "premise", "story concept", "what should I write", "short story or novel", "novella or novel", "name my book", "title ideas", or has a spark (an image, a character, a setting, a question) and wants to turn it into a tested premise before starting a story project.
+description: This skill should be used when the user asks to "brainstorm a story idea", "I have an idea for a story", "what if", "develop a premise", "is this idea strong enough", "workshop my logline", "premise", "story concept", "what should I write", "short story or novel", "novella or novel", "name my book", "title ideas", or has a spark (an image, a character, a setting, a question) and wants to turn it into a tested premise before starting a story project. NOT for the controlling idea or theme of an existing story (use theme-craft).
 ---
 
 # Premise Workshop
@@ -98,12 +98,17 @@ Once a project exists, check title words and new names against the story's
 entities before adopting them:
 
 ```shell
-story names "Bell Tower" "Maren" --path .
+story names "Bell Tower" Bell "Maren" --path .
 ```
 
-An exact clash exits 1 and must be resolved; look-alike warnings (same
-initial and close spelling, or a shared initial with a major character)
-are the user's call.
+An exact clash exits 1 and must be resolved: the candidate equals an
+existing name, alias, or term, or its given name (first word that is not
+a title such as `Lord` or `The`) equals a character's given name.
+Look-alike warnings (same first four letters, or same initial and one
+letter apart, two for longer words) and a shared initial with a major
+character are the user's call. Multi-word names are only checked for
+exact clashes, so pass a multi-word title's distinctive word separately,
+as `Bell` is above.
 
 ### 8. Sanity-check against comparable books
 

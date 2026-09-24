@@ -4,11 +4,14 @@ The copyright page sits on the verso (left-hand page) behind the title
 page in print, and near the front of an ebook. Create it with:
 
 ```shell
-story add matter "Copyright" --order 1
+story add matter "Copyright" --order 0
 ```
 
-Set `heading: false`, then write the page from the template. Without this
-page, `story build --format epub` generates a minimal one from `copyright`.
+Give it an `order` lower than every other front page (`0` works unless
+another page already uses it). Set `heading: false`, then write the page
+from the template. Without this page, every build except Shunn (markdown,
+EPUB, DOCX, HTML, print, and `story export`) generates a minimal one from
+`copyright`.
 Ask the author for every name, credit, and number; never invent them.
 
 This template reflects common practice. It is not legal advice. For
@@ -21,7 +24,7 @@ ask a lawyer or their author organization.
 ---
 title: Copyright
 placement: front
-order: 1
+order: 0
 heading: false
 ---
 
@@ -88,7 +91,10 @@ Edited by {name}
 - Short lyric quotations often need permission even when very short.
   Public domain status depends on the country and the date. When in doubt,
   the author should ask the rights holder or a lawyer, or cut the quote.
-- Titles of songs and books are not copyrightable and need no permission.
+- Titles of songs and books are generally not copyrightable, so quoting a
+  title alone needs no copyright permission. A title can still be a
+  trademark, or part of a protected series name or brand, so check before
+  using another book's or franchise's title prominently.
 
 ## Registration And Legal Deposit
 

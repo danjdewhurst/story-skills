@@ -1,6 +1,6 @@
 ---
 name: plot-structure
-description: This skill should be used when the user asks to "create a plot arc", "story structure", "add a plot point", "story timeline", "track foreshadowing", "pacing", "chapter hooks", "scene outcomes", "act structure", "story arc", "plot outline", or wants to plan and manage the narrative structure of a story.
+description: This skill should be used when the user asks to "create a plot arc", "story structure", "add a plot point", "story timeline", "track foreshadowing", "pacing", "sagging middle", "act structure", "story arc", "plot outline", or wants to plan and manage the narrative structure of a story. It owns book-level pacing; NOT for scene outcomes or writing a chapter hook (use scene-craft).
 ---
 
 # Plot Structure
