@@ -128,7 +128,7 @@ Follow `references/editor-rounds.md`:
 For beta readers, editors, or agents who never open a terminal:
 
 1. `story build . --format html` produces one file with a table of
-   contents and a clickable ¶ anchor on every paragraph (`ch03-p12`), so
+   contents and a clickable paragraph label on every paragraph (`ch03-p12`), so
    comments can cite exact places in email, a doc, or an issue.
 2. For a GitHub-hosted project, offer the templates from the Story Skills
    repository (https://github.com/danjdewhurst/story-skills,

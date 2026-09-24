@@ -32,7 +32,7 @@ the chapter files.
    ```shell
    story build . --format docx          # Word, for tracked changes
    story build . --format docx --shunn  # Word in manuscript format
-   story build . --format html          # single-file reading copy with ¶ anchors
+   story build . --format html          # single-file reading copy with paragraph anchors
    ```
 
 4. Tell the user where the file was written (`dist/`) and what to send
@@ -64,7 +64,7 @@ the chapter files.
 ## Review copies with paragraph anchors
 
 `story build . --format html` writes one self-contained file with a
-table of contents and a ¶ anchor on every paragraph: `ch03-p12` is
+table of contents and a paragraph anchor on every paragraph: `ch03-p12` is
 chapter 3, paragraph 12. Reviewers cite the anchor in an email, comment,
 or issue, and the note points at an exact paragraph whatever format the
 reader happens to be reading.
