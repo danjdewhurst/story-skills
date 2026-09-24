@@ -1830,6 +1830,108 @@ function formatVoices(report) {
 `;
 }
 
+// src/passes.js
+var PASS_STATUSES = new Set(["pending", "in-progress", "done"]);
+var DEFAULT_PASSES = [
+  { pass: "structure", focus: "Order of events, act turns, scenes that do not change anything", checks: ["story timeline", "story pacing", "story diagram arcs"] },
+  { pass: "character", focus: "Wants, arcs, motivation, and who knows what when", checks: ["story voices", "story knowledge <id> --at <chapter>", "story diagram relationships"] },
+  { pass: "theme", focus: "Premise, counter-premise, motifs, and the lie/truth arc", checks: ["story report"] },
+  { pass: "continuity", focus: "Deaths, props, travel, promises, clues, and backlinks", checks: ["story continuity", "story clues", "story links"] },
+  { pass: "pacing", focus: "Scene outcomes, sequels, chapter hooks, and chapter lengths", checks: ["story pacing"] },
+  { pass: "line", focus: "Sentence-level clarity, rhythm, and distinct voices", checks: ["story prose", "story voices"] },
+  { pass: "copyedit", focus: "Spelling, usage, and consistency against the style sheet", checks: ["story prose"] },
+  { pass: "proof", focus: "Typos and layout in the built book", checks: ["story build --format print", "story build --format html"] }
+];
+var DEFAULTS = new Map(DEFAULT_PASSES.map((entry) => [entry.pass, entry]));
+function readPasses(storyData) {
+  const raw = storyData["revision-passes"];
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw.filter((entry) => entry && typeof entry === "object" && !Array.isArray(entry) && typeof entry.pass === "string").map((entry) => ({ pass: entry.pass, status: typeof entry.status === "string" ? entry.status : "pending" }));
+}
+function validatePasses(data, label2, errors) {
+  const raw = data["revision-passes"];
+  if (raw === undefined) {
+    return;
+  }
+  if (!Array.isArray(raw)) {
+    errors.push(`${label2} frontmatter field revision-passes must be a list`);
+    return;
+  }
+  const seen = new Set;
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      errors.push(`${label2} frontmatter field revision-passes must contain objects`);
+      continue;
+    }
+    if (typeof entry.pass !== "string" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(entry.pass)) {
+      errors.push(`${label2} revision pass ${entry.pass ?? "(missing)"} must be a kebab-case name`);
+      continue;
+    }
+    if (seen.has(entry.pass)) {
+      errors.push(`${label2} lists revision pass ${entry.pass} more than once`);
+    }
+    seen.add(entry.pass);
+    if (entry.status !== undefined && !PASS_STATUSES.has(entry.status)) {
+      errors.push(`${label2} revision pass ${entry.pass} has unsupported status ${entry.status}`);
+    }
+  }
+}
+function updatePasses(passes, change) {
+  const next = passes.map((entry) => ({ ...entry }));
+  if (change.init) {
+    for (const entry of DEFAULT_PASSES) {
+      if (!next.some((existing) => existing.pass === entry.pass)) {
+        next.push({ pass: entry.pass, status: "pending" });
+      }
+    }
+  }
+  for (const [name, status] of [[change.start, "in-progress"], [change.done, "done"]]) {
+    if (name === undefined) {
+      continue;
+    }
+    if (typeof name !== "string" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name)) {
+      throw new Error(`Revision pass names must be kebab-case, got ${name}`);
+    }
+    const existing = next.find((entry) => entry.pass === name);
+    if (existing) {
+      existing.status = status;
+    } else {
+      next.push({ pass: name, status });
+    }
+  }
+  return next;
+}
+function nextPass(passes) {
+  return passes.find((entry) => entry.status === "in-progress") ?? passes.find((entry) => entry.status !== "done") ?? null;
+}
+function formatPasses(passes) {
+  const lines = [];
+  if (passes.length === 0) {
+    lines.push("Revision passes: none recorded. Run story passes --init to add the default ladder:", "");
+    for (const entry of DEFAULT_PASSES) {
+      lines.push(`- ${entry.pass}: ${entry.focus} (${entry.checks.join(", ")})`);
+    }
+    return `${lines.join(`
+`)}
+`;
+  }
+  const done = passes.filter((entry) => entry.status === "done").length;
+  lines.push(`Revision passes: ${done} of ${passes.length} done`, "");
+  for (const entry of passes) {
+    const mark = entry.status === "done" ? "[x]" : entry.status === "in-progress" ? "[~]" : "[ ]";
+    const known = DEFAULTS.get(entry.pass);
+    const detail = known ? ` - ${known.focus} (${known.checks.join(", ")})` : "";
+    lines.push(`${mark} ${entry.pass}${detail}`);
+  }
+  const upcoming = nextPass(passes);
+  lines.push("", upcoming === null ? "All passes done." : `Next: ${upcoming.pass}${upcoming.status === "in-progress" ? " (in progress)" : ""}; mark it with story passes --done ${upcoming.pass}`);
+  return `${lines.join(`
+`)}
+`;
+}
+
 // src/pacing.js
 var SCENE_OUTCOMES = new Set(["yes", "no", "yes-but", "no-and"]);
 var CHAPTER_HOOKS = new Set(["cliffhanger", "question", "revelation", "reversal", "decision", "emotional", "resolution"]);
@@ -4266,6 +4368,25 @@ function diagramProject(root, options = {}) {
   writeFile(output.outFile, text, output.writeOptions);
   return { text, outFile: output.outFile };
 }
+function projectPasses(root, change = {}) {
+  const project = scanProject(root);
+  const storyPath = path4.join(project.root, "story.md");
+  const passes = readPasses(project.story.data);
+  const wantsChange = Boolean(change.init) || change.start !== undefined || change.done !== undefined;
+  if (!wantsChange) {
+    return { passes, changed: false };
+  }
+  if (project.fileErrors.some((error) => error.startsWith("story.md"))) {
+    throw new Error("story.md cannot be parsed; fix it before recording revision passes");
+  }
+  const next = updatePasses(passes, change);
+  const raw = safeRead(storyPath, project.root);
+  const changed = JSON.stringify(next) !== JSON.stringify(passes);
+  if (changed) {
+    writeFile(storyPath, replaceFrontmatter(raw, { ...parseFrontmatter(raw, storyPath).data, "revision-passes": next }), { root: project.root });
+  }
+  return { passes: next, changed };
+}
 function voicesReport(root) {
   const project = scanProject(root);
   const chapters = project.chapters.map((chapter) => ({
@@ -4963,6 +5084,17 @@ function buildProjectActions(project, validation, links, continuity) {
   }
   if (openClues.length > 0) {
     actions.push(action("P2", "Review open clues", `${openClues.length} clues are still planned or planted.`));
+  }
+  if (project.story.data.status === "revising") {
+    const passes = readPasses(project.story.data);
+    const upcoming = nextPass(passes);
+    if (passes.length === 0) {
+      actions.push(action("P1", "Plan revision passes", "Run story passes --init to record the structure-to-proof pass ladder, then work one pass at a time."));
+    } else if (upcoming !== null) {
+      const known = DEFAULT_PASSES.find((entry) => entry.pass === upcoming.pass);
+      const checks = known ? ` Run ${known.checks.join(", ")}.` : "";
+      actions.push(action("P1", `Revision pass: ${upcoming.pass}`, `${known ? `${known.focus}.` : "Work through this pass."}${checks} Mark it with story passes --done ${upcoming.pass}.`));
+    }
   }
   const activeArcNames = [];
   for (const arc of project.arcs) {
@@ -6475,6 +6607,7 @@ function validateStoryFrontmatter(project, errors) {
     requireScalar(data, "draft-mode", "story.md", errors);
   }
   validateCover(project, errors);
+  validatePasses(data, "story.md", errors);
   if (data.deadline !== undefined) {
     const deadlineError = typeof data.deadline === "string" && data.deadline.trim() !== "" ? storyDateError(data.deadline) : "must be a YYYY-MM-DD date";
     if (deadlineError !== "") {
@@ -7502,6 +7635,9 @@ var OPTIONS = [
   { name: "format", value: "<name>", help: ["Output format for build (markdown, epub, docx,", "shunn)"] },
   { name: "shunn", help: ["Apply Shunn manuscript formatting (with --format", "docx)"] },
   { name: "at", value: "<chapter-id>", help: ["Chapter id for knowledge"] },
+  { name: "init", help: ["Add the default revision passes for passes"] },
+  { name: "start", value: "<pass>", help: ["Mark a revision pass in progress for passes"] },
+  { name: "done", value: "<pass>", help: ["Mark a revision pass done for passes"] },
   { name: "pages", value: "<n>", help: ["Synopsis length for synopsis (1 or 3)"] },
   { name: "actionable", help: ["Include next actions in report"] },
   { name: "number", value: "<n>", help: ["Chapter number for add chapter"] },
@@ -7949,6 +8085,29 @@ var COMMANDS = [
       const report = seriesReport(root());
       io.stdout.write(formatSeriesReport(report));
       return reportResult(io, report, "Series is consistent", "Series check failed");
+    }
+  },
+  {
+    name: "passes",
+    usage: "passes [path]",
+    summary: [
+      "Show the named revision passes in story.md;",
+      "--init adds the default ladder, --start and --done",
+      "mark a pass"
+    ],
+    project: "positional",
+    run({ parsed, io, root }) {
+      const result = projectPasses(root(), {
+        init: isTruthy(parsed.options.init),
+        start: parsed.options.start,
+        done: parsed.options.done
+      });
+      if (result.changed) {
+        io.stdout.write(`Updated revision-passes in story.md
+`);
+      }
+      io.stdout.write(formatPasses(result.passes));
+      return 0;
     }
   },
   {
