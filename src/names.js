@@ -8,21 +8,43 @@ import { editDistance } from "./prose.js";
 
 const MAJOR_ROLES = new Set(["protagonist", "antagonist", "deuteragonist", "narrator"]);
 
+// Leading words that are titles or articles, not names: "Lord Maren" is
+// known as Maren, and "The Iron Lord" should not make every "The..." name a
+// look-alike.
+const TITLE_WORDS = new Set([
+  "the", "a", "an", "lord", "lady", "sir", "dame", "dr", "doctor", "mr", "mrs", "ms", "miss",
+  "master", "mistress", "captain", "capt", "king", "queen", "prince", "princess", "duke", "duchess",
+  "count", "countess", "baron", "baroness", "father", "mother", "sister", "brother", "uncle", "aunt",
+  "councillor", "councilor", "general", "colonel", "major", "sergeant", "lieutenant", "commander",
+  "professor", "prof", "saint", "st", "old", "young", "little"
+]);
+
+// The first word of a name that is not a title or article, or "" when the
+// name is all titles.
+export function givenName(name) {
+  const words = splitWords(String(name));
+  const index = words.findIndex((word) => !TITLE_WORDS.has(word.toLowerCase().replace(/[.’']/g, "")));
+  return index === -1 ? "" : words[index];
+}
+
 export function existingNames(project) {
   const names = [];
-  const add = (kind, id, name, role = "") => {
+  // `given` marks the one word a reader knows the name by; only character
+  // names have one. Every other entry is compared as a whole name.
+  const add = (kind, id, name, role = "", given = false, full = name) => {
     if (typeof name === "string" && name.trim() !== "") {
-      names.push({ kind, id, name: name.trim(), role });
+      names.push({ kind, id, name: name.trim(), full: String(full).trim(), role, given });
     }
   };
   for (const character of project.characters) {
     if (character.status === "cut") {
       continue;
     }
-    add("character", character.id, String(character.name), character.role);
-    const first = splitWords(String(character.name))[0];
-    if (first && first !== String(character.name).trim()) {
-      add("character", character.id, first, character.role);
+    const first = givenName(character.name);
+    const single = first !== "" && first === String(character.name).trim();
+    add("character", character.id, String(character.name), character.role, single);
+    if (first !== "" && !single) {
+      add("character", character.id, first, character.role, true, character.name);
     }
     for (const alias of character.aliases ?? []) {
       add("character", character.id, alias, character.role);
@@ -52,7 +74,7 @@ export function checkNames(candidates, names) {
       continue;
     }
     const key = normalize(candidate);
-    const first = normalize(splitWords(candidate)[0] ?? candidate);
+    const first = normalize(givenName(candidate));
     const clashes = [];
     const lookalikes = [];
     const initials = [];
@@ -60,18 +82,22 @@ export function checkNames(candidates, names) {
     for (const entry of names) {
       const tag = `${entry.kind} ${entry.id}`;
       const existing = normalize(entry.name);
-      if (existing === key || existing === first) {
+      if (existing === key || (entry.given && existing === first)) {
         if (!seen.has(`clash ${tag}`)) {
           clashes.push(entry);
           seen.add(`clash ${tag}`);
         }
         continue;
       }
-      const existingFirst = normalize(splitWords(entry.name)[0] ?? entry.name);
-      if (looksAlike(first, existingFirst) && !seen.has(`like ${tag}`)) {
+      // A given name is compared word to word; whole names are compared
+      // whole, so "The Hollow" is not measured against "The Shadow".
+      const alike = entry.given
+        ? looksAlike(first, existing)
+        : !existing.includes(" ") && !key.includes(" ") && looksAlike(key, existing);
+      if (alike && !seen.has(`like ${tag}`)) {
         lookalikes.push(entry);
         seen.add(`like ${tag}`);
-      } else if (entry.kind === "character" && MAJOR_ROLES.has(entry.role) && first[0] === existingFirst[0] && !seen.has(`initial ${entry.id}`)) {
+      } else if (entry.given && MAJOR_ROLES.has(entry.role) && first !== "" && first[0] === existing[0] && !seen.has(`initial ${entry.id}`)) {
         initials.push(entry);
         seen.add(`initial ${entry.id}`);
       }
@@ -81,12 +107,12 @@ export function checkNames(candidates, names) {
     }
     for (const entry of lookalikes) {
       if (!clashes.some((clash) => clash.kind === entry.kind && clash.id === entry.id)) {
-        warnings.push(`"${candidate}" looks like ${entry.kind} ${entry.id} (${entry.name})`);
+        warnings.push(`"${candidate}" looks like ${entry.kind} ${entry.id} (${entry.full})`);
       }
     }
     for (const entry of initials) {
       if (!clashes.concat(lookalikes).some((other) => other.kind === "character" && other.id === entry.id)) {
-        warnings.push(`"${candidate}" shares an initial with ${entry.role} ${entry.id} (${entry.name})`);
+        warnings.push(`"${candidate}" shares an initial with ${entry.role} ${entry.id} (${entry.full})`);
       }
     }
     results.push({ name: candidate, clashes: clashes.length, lookalikes: lookalikes.length, initials: initials.length });

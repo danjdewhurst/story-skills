@@ -1,4 +1,5 @@
 import { splitWords } from "./markdown.js";
+import { givenName } from "./names.js";
 
 // Dialogue voice fingerprints for `story voices`. Speech is attributed only
 // when the paragraph says who spoke: a tag naming the speaker next to a
@@ -97,8 +98,13 @@ export function buildVoices(project, chapters) {
   };
 }
 
+// Names are proper nouns, so they match case-sensitively ("the lord's hall"
+// is not Lord Maren); speech verbs match in either case.
 function speakerPatterns(characters) {
-  const verbs = SPEECH_VERBS.map((verb) => verb.replace(/ /g, "\\s+")).join("|");
+  const verbs = SPEECH_VERBS
+    .flatMap((verb) => [verb, `${verb[0].toUpperCase()}${verb.slice(1)}`])
+    .map((verb) => verb.replace(/ /g, "\\s+"))
+    .join("|");
   return characters
     .filter((character) => character.status !== "cut")
     .map((character) => {
@@ -106,8 +112,8 @@ function speakerPatterns(characters) {
       const full = String(character.name ?? "").trim();
       if (full !== "") {
         names.add(full);
-        const first = splitWords(full)[0];
-        if (first && first.length >= 2) {
+        const first = givenName(full);
+        if (first.length >= 2) {
           names.add(first);
         }
       }
@@ -120,8 +126,9 @@ function speakerPatterns(characters) {
       }
       return {
         id: character.id,
-        name: new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternatives})(?![\\p{L}\\p{N}])`, "iu"),
-        tag: new RegExp(`(?<![\\p{L}\\p{N}])(?:(?:${alternatives})\\s+(?:${verbs})|(?:${verbs})\\s+(?:${alternatives}))(?![\\p{L}\\p{N}])`, "iu")
+        name: new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternatives})(?![\\p{L}\\p{N}])`, "u"),
+        subject: new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternatives})\\s+(?:${verbs})(?![\\p{L}\\p{N}])`, "u"),
+        inverted: new RegExp(`(?<![\\p{L}\\p{N}])(?:${verbs})\\s+(?:${alternatives})(?![\\p{L}\\p{N}])`, "u")
       };
     })
     .filter(Boolean);
@@ -129,22 +136,31 @@ function speakerPatterns(characters) {
 
 function attribute(paragraph, speakers) {
   const narration = stripQuotes(paragraph);
-  const tagged = speakers.filter((speaker) => speaker.tag.test(narration));
-  if (tagged.length === 1) {
-    return tagged[0].id;
-  }
-  if (tagged.length > 1) {
-    return null;
+  // "Sera told Kael": the name before the verb is the speaker, so subject
+  // tags win over inverted ones ("said Sera").
+  for (const form of ["subject", "inverted"]) {
+    const tagged = speakers.filter((speaker) => speaker[form].test(narration));
+    if (tagged.length === 1) {
+      return tagged[0].id;
+    }
+    if (tagged.length > 1) {
+      return null;
+    }
   }
   const named = speakers.filter((speaker) => speaker.name.test(narration));
   return named.length === 1 ? named[0].id : null;
 }
 
-// Curly quotes pair explicitly; straight quotes pair in order.
+// Curly double quotes pair explicitly and straight quotes pair in order.
+// British single quotes open after a non-letter and close before one, so an
+// apostrophe inside a word (don’t) never ends the quote.
+const SINGLE_QUOTE = "(?<![\\p{L}\\p{N}])‘((?:[^‘’]|’(?=[\\p{L}\\p{N}]))*)’(?![\\p{L}\\p{N}])";
+const QUOTE_PATTERN = new RegExp(`“([^”]*)”|"([^"]*)"|${SINGLE_QUOTE}`, "gu");
+
 export function quotedSpans(paragraph) {
   const spans = [];
-  for (const match of paragraph.matchAll(/“([^”]*)”|"([^"]*)"/g)) {
-    const text = (match[1] ?? match[2] ?? "").trim();
+  for (const match of paragraph.matchAll(QUOTE_PATTERN)) {
+    const text = (match[1] ?? match[2] ?? match[3] ?? "").trim();
     if (text !== "") {
       spans.push(text);
     }
@@ -153,7 +169,7 @@ export function quotedSpans(paragraph) {
 }
 
 function stripQuotes(paragraph) {
-  return paragraph.replace(/“[^”]*(”|$)/g, " ").replace(/"[^"]*("|$)/g, " ");
+  return paragraph.replace(QUOTE_PATTERN, " ").replace(/“[^”]*$/g, " ").replace(/"[^"]*$/g, " ");
 }
 
 function profile(character, said) {
@@ -227,7 +243,7 @@ function similarVoices(left, right) {
 }
 
 function phrasePattern(phrase) {
-  return new RegExp(`(?<![\\p{L}\\p{N}])${escape(String(phrase).trim()).replace(/'/g, "['’]")}(?![\\p{L}\\p{N}])`, "iu");
+  return new RegExp(`(?<![\\p{L}\\p{N}])${escape(String(phrase).trim()).replace(/['’]/g, "['’]")}(?![\\p{L}\\p{N}])`, "iu");
 }
 
 function escape(value) {

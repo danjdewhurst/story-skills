@@ -40,9 +40,9 @@ describe("html and print builds", () => {
     expect(html).toContain('<p id="ch01-p1"><a class="anchor" href="#ch01-p1" title="Link to ch01-p1">ch01-p1</a>The &lt;lamps&gt; came <em>on</em>.</p>');
     expect(html).toContain('<hr class="scene-break" aria-label="Scene break">\n<p id="ch01-p3"><a class="anchor" href="#ch01-p3" title="Link to ch01-p3">ch01-p3</a>Morning.</p>');
     expect(html).toContain('<p id="ch02-p1">');
-    expect(html).toContain('<section id="front-copyright" class="front copyright-page"><h2 class="visually-hidden">Copyright</h2>');
+    expect(html).toContain('<section id="matter-front-copyright" class="front copyright-page"><h2 class="visually-hidden">Copyright</h2>');
     expect(html).toContain('<p id="front-dedication-p1">');
-    expect(html).toContain('<section id="back-afterword" class="back"><h2>Afterword</h2>');
+    expect(html).toContain('<section id="matter-back-afterword" class="back"><h2>Afterword</h2>');
   });
 
   test("the print interior sets the trim, running heads, title page, contents, and matter order", () => {

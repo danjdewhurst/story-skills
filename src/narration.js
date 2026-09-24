@@ -9,7 +9,7 @@ export const NARRATION_WORDS_PER_MINUTE = 155;
 export function narrationScript(manuscript, guide) {
   const authors = manuscript.meta.authors.join(" and ");
   const sections = [
-    ...manuscript.front.filter((entry) => entry.id !== "copyright").map((entry) => ({ title: entry.title, body: entry.body })),
+    ...manuscript.front.filter((entry) => !entry.copyright).map((entry) => ({ title: entry.title, body: entry.body })),
     ...manuscript.chapters.map((chapter) => ({ title: `Chapter ${chapter.number}: ${chapter.title}`, body: chapter.body })),
     ...manuscript.back.map((entry) => ({ title: entry.title, body: entry.body }))
   ].map((section) => ({ ...section, words: wordCount(section.body) }));

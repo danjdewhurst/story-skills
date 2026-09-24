@@ -74,7 +74,7 @@ export function validatePublishing(data, errors, warnings) {
 // value is not a valid ISBN.
 export function normalizeIsbn(value) {
   const compact = String(value ?? "").replace(/[\s-]/g, "").toUpperCase();
-  if (/^\d{13}$/.test(compact)) {
+  if (/^97[89]\d{10}$/.test(compact)) {
     const sum = [...compact.slice(0, 12)].reduce((total, digit, index) => total + Number(digit) * (index % 2 === 0 ? 1 : 3), 0);
     return (10 - (sum % 10)) % 10 === Number(compact[12]) ? compact : "";
   }
