@@ -48,6 +48,8 @@ export const OPTIONS = [
   { name: "travel-hours", value: "<n>", help: ["Travel hours for add scene"] },
   { name: "dilemma", value: "<text>", help: ["Dilemma for add scene sequel unit"] },
   { name: "sequel", help: ["Mark scene as sequel unit for add scene"] },
+  { name: "outcome", value: "<name>", help: ["Scene outcome for add scene (yes, no, yes-but,", "no-and)"] },
+  { name: "hook", value: "<name>", help: ["Chapter-ending hook for add chapter (cliffhanger,", "question, revelation, reversal, decision,", "emotional, resolution)"] },
   { name: "location", value: "<id>", repeatable: true, help: ["Location reference for add"] },
   { name: "locations", value: "<ids>", repeatable: true },
   { name: "character", value: "<id>", repeatable: true, help: ["Character reference for add; repeatable"] },

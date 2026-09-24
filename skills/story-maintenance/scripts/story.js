@@ -1241,6 +1241,137 @@ function formatNumber2(value) {
   return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
+// src/pacing.js
+var SCENE_OUTCOMES = new Set(["yes", "no", "yes-but", "no-and"]);
+var CHAPTER_HOOKS = new Set(["cliffhanger", "question", "revelation", "reversal", "decision", "emotional", "resolution"]);
+var DRAFTED_STATUSES = new Set(["draft", "revised", "final", "complete"]);
+var EASY_WIN_RUN = 3;
+var NO_SEQUEL_RUN = 4;
+var RESOLUTION_RUN = 3;
+function buildPacing(project) {
+  const chapters = [...project.chapters].sort((left, right) => left.number - right.number || left.id.localeCompare(right.id, "en"));
+  const warnings = [];
+  const rows = [];
+  const units = [];
+  for (const chapter of chapters) {
+    const scenes = project.scenes.filter((scene) => scene.chapter === chapter.id).sort((left, right) => left.scene - right.scene || left.id.localeCompare(right.id, "en"));
+    const outcomes = { yes: 0, no: 0, "yes-but": 0, "no-and": 0 };
+    for (const scene of scenes) {
+      if (SCENE_OUTCOMES.has(scene.outcome)) {
+        outcomes[scene.outcome] += 1;
+      }
+      units.push(scene);
+    }
+    rows.push({
+      id: chapter.id,
+      number: chapter.number,
+      words: chapter.wordCount,
+      scenes: scenes.filter((scene) => !scene.sequel).length,
+      sequels: scenes.filter((scene) => scene.sequel).length,
+      outcomes,
+      hook: chapter.hook,
+      status: chapter.status
+    });
+    if (chapter.hook === "" && DRAFTED_STATUSES.has(chapter.status)) {
+      warnings.push(`${chapter.id} has no hook: record how the chapter ending pulls the reader on`);
+    }
+  }
+  let easyWins = [];
+  let withoutSequel = [];
+  for (const unit of units) {
+    if (unit.sequel) {
+      flushRun(withoutSequel, NO_SEQUEL_RUN, warnings, (run) => `${run.length} scene units in a row with no sequel (${span(run)}): give the POV character room to react and decide`);
+      withoutSequel = [];
+      continue;
+    }
+    withoutSequel.push(unit);
+    if (unit.outcome === "yes") {
+      easyWins.push(unit);
+    } else {
+      flushRun(easyWins, EASY_WIN_RUN, warnings, (run) => `${run.length} scenes in a row end in an outright yes (${span(run)}): raise the cost with yes-but or no-and`);
+      easyWins = [];
+    }
+  }
+  flushRun(easyWins, EASY_WIN_RUN, warnings, (run) => `${run.length} scenes in a row end in an outright yes (${span(run)}): raise the cost with yes-but or no-and`);
+  flushRun(withoutSequel, NO_SEQUEL_RUN, warnings, (run) => `${run.length} scene units in a row with no sequel (${span(run)}): give the POV character room to react and decide`);
+  let resolutions = [];
+  for (const row of rows) {
+    if (row.hook === "resolution") {
+      resolutions.push(row);
+    } else {
+      flushRun(resolutions, RESOLUTION_RUN, warnings, (run) => `${run.length} chapters in a row end on resolution (${span(run)}): readers can put the book down`);
+      resolutions = [];
+    }
+  }
+  flushRun(resolutions, RESOLUTION_RUN, warnings, (run) => `${run.length} chapters in a row end on resolution (${span(run)}): readers can put the book down`);
+  const written = rows.filter((row) => row.words > 0);
+  const median = medianOf(written.map((row) => row.words));
+  if (written.length >= 3) {
+    for (const row of written) {
+      if (row.words > median * 2) {
+        warnings.push(`${row.id} runs ${row.words} words, over twice the median chapter (${median}): consider splitting it`);
+      } else if (row.words < median / 2) {
+        warnings.push(`${row.id} runs ${row.words} words, under half the median chapter (${median}): check it earns its place`);
+      }
+    }
+  }
+  const recorded = units.filter((unit) => !unit.sequel && SCENE_OUTCOMES.has(unit.outcome));
+  return {
+    rows,
+    medianWords: median,
+    totals: {
+      scenes: units.filter((unit) => !unit.sequel).length,
+      sequels: units.filter((unit) => unit.sequel).length,
+      outcomesRecorded: recorded.length,
+      setbacks: recorded.filter((unit) => unit.outcome !== "yes").length,
+      hooks: rows.filter((row) => row.hook !== "").length
+    },
+    warnings
+  };
+}
+function flushRun(run, minimum, warnings, message) {
+  if (run.length >= minimum) {
+    warnings.push(message(run));
+  }
+}
+function span(run) {
+  const first = run[0].id;
+  const last = run[run.length - 1].id;
+  return first === last ? first : `${first} to ${last}`;
+}
+function medianOf(values) {
+  if (values.length === 0) {
+    return 0;
+  }
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1 ? sorted[middle] : Math.round((sorted[middle - 1] + sorted[middle]) / 2);
+}
+function formatPacing(pacing) {
+  const { totals } = pacing;
+  const setbackShare = totals.outcomesRecorded === 0 ? "no outcomes recorded" : `${Math.round(totals.setbacks * 100 / totals.outcomesRecorded)}% of recorded outcomes are setbacks or complications`;
+  const lines = [
+    `Pacing: ${totals.scenes} scenes, ${totals.sequels} sequels, ${totals.hooks} of ${pacing.rows.length} chapters with hooks`,
+    `Outcomes: ${setbackShare}`,
+    `Median chapter: ${pacing.medianWords} words`,
+    ""
+  ];
+  if (pacing.rows.length === 0) {
+    lines.push("- None: add chapters with story add chapter");
+    return `${lines.join(`
+`)}
+`;
+  }
+  lines.push("Ch  Words  Scenes  Sequels  Outcomes (yes/no/yes-but/no-and)  Hook");
+  for (const row of pacing.rows) {
+    const outcomes = `${row.outcomes.yes}/${row.outcomes.no}/${row.outcomes["yes-but"]}/${row.outcomes["no-and"]}`;
+    lines.push(`${String(row.number).padStart(2)}  ${String(row.words).padStart(5)}  ${String(row.scenes).padStart(6)}  ${String(row.sequels).padStart(7)}  ${outcomes.padEnd(32)}  ${row.hook || "-"}`);
+  }
+  return `${lines.join(`
+`)}
+`;
+}
+
 // src/progress.js
 var PROGRESS_FILE = "progress.md";
 var PACE_SESSIONS = 7;
@@ -1285,9 +1416,9 @@ function computeProgress({ words, target, deadline, today, chapters, sessions })
     const last = sessions[sessions.length - 1];
     result.lastSession = { date: last.date, words: last.words, since: words - last.words };
     const recent = sessions.slice(-PACE_SESSIONS);
-    const span = parseClockDate(recent[recent.length - 1].date).days - parseClockDate(recent[0].date).days;
-    if (recent.length > 1 && span > 0) {
-      result.pace = (recent[recent.length - 1].words - recent[0].words) / span;
+    const span2 = parseClockDate(recent[recent.length - 1].date).days - parseClockDate(recent[0].date).days;
+    if (recent.length > 1 && span2 > 0) {
+      result.pace = (recent[recent.length - 1].words - recent[0].words) / span2;
       if (result.remaining > 0 && result.pace > 0) {
         result.projected = formatDate(todayDays + Math.ceil(result.remaining / result.pace));
       }
@@ -2629,7 +2760,8 @@ function scanProject(root) {
       wordCount: wordCount(chapterProse(markdown.body)),
       date: String(data.date ?? ""),
       time: String(data.time ?? ""),
-      mode: String(data.mode ?? "")
+      mode: String(data.mode ?? ""),
+      hook: typeof data.hook === "string" ? data.hook : ""
     }), scanErrors).sort((left, right) => left.number - right.number || left.file.localeCompare(right.file, "en")),
     scenes: readEntityFiles(projectRoot, "scenes", (id, file, data) => ({
       id,
@@ -2648,6 +2780,7 @@ function scanProject(root) {
       time: String(data.time ?? ""),
       travelHours: typeof data["travel-hours"] === "number" ? data["travel-hours"] : 0,
       sequel: typeof data.sequel === "boolean" ? data.sequel : false,
+      outcome: typeof data.outcome === "string" ? data.outcome : "",
       dilemma: String(data.dilemma ?? ""),
       flashbackTo: String(data["flashback-to"] ?? "")
     }), scanErrors).sort((left, right) => left.chapter.localeCompare(right.chapter, "en") || left.scene - right.scene || left.file.localeCompare(right.file, "en")),
@@ -3520,6 +3653,10 @@ function clueReport(root) {
   const matrix = buildClueMatrix(project);
   return { ok: project.fileErrors.length === 0, errors: [...project.fileErrors], ...matrix };
 }
+function pacingReport(root) {
+  const project = scanProject(root);
+  return { ok: project.fileErrors.length === 0, errors: [...project.fileErrors], ...buildPacing(project) };
+}
 function proseReport(root) {
   const project = scanProject(root);
   const errors = [...project.fileErrors];
@@ -3742,8 +3879,8 @@ var ENTITY_ENUM_OPTIONS = {
   faction: [["type", FACTION_TYPES], ["status", FACTION_STATUSES]],
   artifact: [["type", ARTIFACT_TYPES], ["status", ARTIFACT_STATUSES]],
   arc: [["type", ARC_TYPES], ["status", ARC_STATUSES]],
-  chapter: [["status", CHAPTER_STATUSES]],
-  scene: [["status", SCENE_STATUSES]],
+  chapter: [["status", CHAPTER_STATUSES], ["hook", CHAPTER_HOOKS]],
+  scene: [["status", SCENE_STATUSES], ["outcome", SCENE_OUTCOMES]],
   question: [["status", QUESTION_STATUSES]],
   promise: [["status", PROMISE_STATUSES]],
   clue: [["status", CLUE_STATUSES]],
@@ -4582,6 +4719,7 @@ function chapterFile(title, number, options) {
     mode: options.mode ?? "",
     date: options.date ?? "",
     time: options.time ?? "",
+    ...options.hook === undefined ? {} : { hook: options.hook },
     "word-count": 0
   })}# Chapter ${number}: ${title}
 
@@ -4630,6 +4768,7 @@ function sceneFile(title, chapter, scene, options) {
     date: options.date ?? "",
     time: options.time ?? "",
     sequel: options.sequel ?? false,
+    ...options.outcome === undefined ? {} : { outcome: options.outcome },
     dilemma: options.dilemma ?? "",
     "state-changes": []
   };
@@ -5902,6 +6041,7 @@ function validateChapters(project, errors) {
     if (data["time-skip"] !== undefined) {
       requireScalar(data, "time-skip", label, errors);
     }
+    validateEnum(data, "hook", CHAPTER_HOOKS, label, errors);
     if (filenameNumber === 0) {
       errors.push(`${label} filename must match chapter-{NN}.md`);
     } else if (Number.isInteger(data.number) && data.number !== filenameNumber) {
@@ -5960,6 +6100,7 @@ function validateScenes(project, errors) {
     if (data.sequel !== undefined && typeof data.sequel !== "boolean") {
       errors.push(`${label} frontmatter field sequel must be a boolean`);
     }
+    validateEnum(data, "outcome", SCENE_OUTCOMES, label, errors);
     if (data["flashback-to"] !== undefined) {
       requireScalar(data, "flashback-to", label, errors);
     }
@@ -6737,6 +6878,8 @@ var OPTIONS = [
   { name: "travel-hours", value: "<n>", help: ["Travel hours for add scene"] },
   { name: "dilemma", value: "<text>", help: ["Dilemma for add scene sequel unit"] },
   { name: "sequel", help: ["Mark scene as sequel unit for add scene"] },
+  { name: "outcome", value: "<name>", help: ["Scene outcome for add scene (yes, no, yes-but,", "no-and)"] },
+  { name: "hook", value: "<name>", help: ["Chapter-ending hook for add chapter (cliffhanger,", "question, revelation, reversal, decision,", "emotional, resolution)"] },
   { name: "location", value: "<id>", repeatable: true, help: ["Location reference for add"] },
   { name: "locations", value: "<ids>", repeatable: true },
   { name: "character", value: "<id>", repeatable: true, help: ["Character reference for add; repeatable"] },
@@ -7096,6 +7239,21 @@ var COMMANDS = [
       const report = proseReport(root());
       io.stdout.write(formatProseReport(report));
       return reportResult(io, report, "Prose check complete", "Prose check failed");
+    }
+  },
+  {
+    name: "pacing",
+    usage: "pacing [path]",
+    summary: [
+      "Show words, scenes, sequels, scene outcomes, and",
+      "chapter hooks per chapter; flag easy-win runs,",
+      "missing sequels, and length outliers"
+    ],
+    project: "positional",
+    run({ io, root }) {
+      const report = pacingReport(root());
+      io.stdout.write(formatPacing(report));
+      return reportResult(io, report, "Pacing check complete", "Pacing check failed");
     }
   },
   {
