@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
-import { bumpVersion, isAbsentGitHubRelease, isAbsentNpmVersion, releasePushArgs, replaceVersion, updateVersionFiles } from "../scripts/release.js";
+import { bumpVersion, isAbsentGitHubRelease, isAbsentNpmVersion, npmRecoveryCommand, releasePushArgs, replaceVersion, updateVersionFiles } from "../scripts/release.js";
 
 describe("release script", () => {
   test("bumps patch, minor, and major", () => {
@@ -75,6 +75,10 @@ describe("release script", () => {
     expect(isAbsentNpmVersion({ stderr: "npm error code E404\nnpm error 404 Not Found - GET https://registry.npmjs.org/story-skills\n" })).toBe(true);
     expect(isAbsentNpmVersion({ stderr: "npm error code E401\nnpm error 401 Unauthorized\n" })).toBe(false);
     expect(isAbsentNpmVersion({ message: "getaddrinfo ENOTFOUND registry.npmjs.org" })).toBe(false);
+  });
+
+  test("recovers a failed npm publish from the release tag", () => {
+    expect(npmRecoveryCommand("v1.2.3")).toBe("git checkout v1.2.3 && npm publish && git checkout main");
   });
 
   test("pushes main and the tag atomically", () => {
