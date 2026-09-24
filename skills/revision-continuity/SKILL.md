@@ -1,6 +1,6 @@
 ---
 name: revision-continuity
-description: This skill should be used when the user asks to revise a chapter, edit prose, continuity check, find inconsistencies, audit character state, check timeline consistency, line edit, developmental edit, polish a draft, "revision passes", "what pass next", "pacing check", "clue check", "voice check", or prepare existing story material for the next revision pass.
+description: This skill should be used when the user asks to revise a chapter, continuity check, find inconsistencies, audit character state, check timeline consistency, developmental edit, structural revision, "revision passes", "what pass next", "pacing check", "clue check", "voice check", or prepare existing story material for the next revision pass.
 ---
 
 # Revision Continuity
