@@ -78,6 +78,10 @@ export const STYLE_SHEET_FILE = "style-sheet.md";
 const MATTER_PLACEMENTS = new Set(["front", "back"]);
 const MATTER_DIR = "matter";
 const RESEARCH_STATUSES = new Set(["open", "verified", "disputed"]);
+const RESEARCH_ACCURACY = new Set(["must-be-accurate", "blended", "invented"]);
+const RESEARCH_CONFIDENCE = new Set(["high", "medium", "low"]);
+const RESEARCH_METHODS = new Set(["fact", "interview", "site-visit", "expert-review", "reading"]);
+const RESEARCH_RISKS = new Set(["legal", "medical", "weapons", "safety", "cultural", "defamation", "technical"]);
 const RESEARCH_DIR = "research";
 // Chapter statuses that mean the prose is settled, so it should not rest on
 // research that is still open or disputed.
@@ -452,7 +456,10 @@ export function scanProject(root) {
       title: data.title ?? titleCaseSlug(id),
       status: data.status ?? "",
       sources: asArray(data.sources),
-      usedIn: asArray(data["used-in"])
+      usedIn: asArray(data["used-in"]),
+      accuracy: typeof data.accuracy === "string" ? data.accuracy : "",
+      risk: asArray(data.risk),
+      reviewedBy: asArray(data["reviewed-by"])
     }), scanErrors),
     matter: readEntityFiles(projectRoot, MATTER_DIR, (id, file, data, markdown) => ({
       id,
@@ -1732,7 +1739,7 @@ const ENTITY_ENUM_OPTIONS = {
   clue: [["status", CLUE_STATUSES]],
   term: [["category", TERM_CATEGORIES]],
   matter: [["placement", MATTER_PLACEMENTS]],
-  research: [["status", RESEARCH_STATUSES]]
+  research: [["status", RESEARCH_STATUSES], ["accuracy", RESEARCH_ACCURACY], ["confidence", RESEARCH_CONFIDENCE], ["method", RESEARCH_METHODS]]
 };
 
 function requireEntityEnumOptions(kind, options) {
@@ -2842,7 +2849,8 @@ function researchFile(title, options) {
     status: options.status ?? "open",
     // Citations contain commas, so sources are kept whole, one per flag.
     sources: asArray(options.sources ?? options.source).map((source) => String(source).trim()).filter(Boolean),
-    "used-in": normalizeList(options["used-in"], [])
+    "used-in": normalizeList(options["used-in"], []),
+    ...researchOptionalFields(options)
   })}# ${title}
 
 ## Question
@@ -2857,6 +2865,25 @@ The facts, with the source for each.
 
 How the chapters use these facts, and what was changed on purpose.
 `;
+}
+
+function researchOptionalFields(options) {
+  const fields = {};
+  for (const key of ["accuracy", "confidence", "method"]) {
+    if (options[key] !== undefined) {
+      fields[key] = String(options[key]);
+    }
+  }
+  const risks = normalizeList(options.risk, []);
+  for (const risk of risks) {
+    if (!RESEARCH_RISKS.has(risk)) {
+      throw new Error(`Unsupported risk "${risk}": expected one of ${[...RESEARCH_RISKS].join(", ")}`);
+    }
+  }
+  if (risks.length > 0) {
+    fields.risk = risks;
+  }
+  return fields;
 }
 
 function matterFile(project, title, options) {
@@ -4559,15 +4586,30 @@ function validateResearch(project, errors, warnings) {
     validateEnum(data, "status", RESEARCH_STATUSES, label, errors);
     validateStringArray(data, "sources", label, errors);
     validateStringArray(data, "used-in", label, errors);
-    if (note.status === "verified" && note.sources.length === 0) {
+    validateEnum(data, "accuracy", RESEARCH_ACCURACY, label, errors);
+    validateEnum(data, "confidence", RESEARCH_CONFIDENCE, label, errors);
+    validateEnum(data, "method", RESEARCH_METHODS, label, errors);
+    validateStringArray(data, "risk", label, errors);
+    validateStringArray(data, "reviewed-by", label, errors);
+    for (const risk of Array.isArray(data.risk) ? data.risk : []) {
+      if (typeof risk === "string" && !RESEARCH_RISKS.has(risk)) {
+        errors.push(`${label} risk has unsupported value ${risk}`);
+      }
+    }
+    // Invented facts are the author's to decide, so they need no sources and
+    // never hold up a final chapter.
+    const invented = note.accuracy === "invented";
+    if (!invented && note.status === "verified" && note.sources.length === 0) {
       warnings.push(`${label} is verified but lists no sources`);
     }
-    if (note.status === "open" || note.status === "disputed") {
-      for (const chapterId of note.usedIn) {
-        if (SETTLED_CHAPTER_STATUSES.has(chapterStatus.get(chapterId))) {
-          warnings.push(`${label} is ${note.status} but ${chapterId} relies on it and is ${chapterStatus.get(chapterId)}`);
-        }
+    const settled = note.usedIn.filter((chapterId) => SETTLED_CHAPTER_STATUSES.has(chapterStatus.get(chapterId)));
+    if (!invented && (note.status === "open" || note.status === "disputed")) {
+      for (const chapterId of settled) {
+        warnings.push(`${label} is ${note.status} but ${chapterId} relies on it and is ${chapterStatus.get(chapterId)}`);
       }
+    }
+    if (note.risk.length > 0 && note.reviewedBy.length === 0 && settled.length > 0) {
+      warnings.push(`${label} carries ${note.risk.join(", ")} risk but has no reviewed-by, and ${settled.join(", ")} relies on it`);
     }
   }
 }

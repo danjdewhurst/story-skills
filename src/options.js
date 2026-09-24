@@ -84,7 +84,11 @@ export const OPTIONS = [
   { name: "order", value: "<n>", help: ["Order within its placement for add matter"] },
   { name: "source", value: "<text>", repeatable: true, help: ["Source for add research; repeatable"] },
   { name: "sources", value: "<texts>", repeatable: true },
-  { name: "used-in", value: "<chapter-id>", repeatable: true, help: ["Chapter that relies on add research; repeatable"] }
+  { name: "used-in", value: "<chapter-id>", repeatable: true, help: ["Chapter that relies on add research; repeatable"] },
+  { name: "accuracy", value: "<level>", help: ["Accuracy for add research (must-be-accurate,", "blended, invented)"] },
+  { name: "confidence", value: "<level>", help: ["Confidence for add research (high, medium, low)"] },
+  { name: "method", value: "<name>", help: ["Research method for add research (fact, interview,", "site-visit, expert-review, reading)"] },
+  { name: "risk", value: "<name>", repeatable: true, help: ["Risk area for add research (legal, medical,", "weapons, safety, cultural, defamation,", "technical); repeatable"] }
 ];
 
 const BOOLEAN_OPTIONS = new Set(OPTIONS.filter((option) => option.value === undefined).map((option) => option.name));

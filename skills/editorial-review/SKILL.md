@@ -46,7 +46,7 @@ workflow; offer `git init` if the project has none.
    as they apply), or open one:
 
    ```shell
-   story add research "Deaf community in 1980s Glasgow" --accuracy must-be-accurate --kind expert-review --risk cultural --used-in chapter-04
+   story add research "Deaf community in 1980s Glasgow" --accuracy must-be-accurate --method expert-review --risk cultural --used-in chapter-04
    ```
 
 2. Prepare the brief with `references/sensitivity-reader-brief.md`: which

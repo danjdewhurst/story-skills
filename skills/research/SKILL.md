@@ -16,7 +16,7 @@ visit places, and record what was found in a form a later fact-check can
 retrace.
 
 The CLI tracks each note's status (`open`, `verified`, `disputed`), its
-`used-in` chapters, and the optional `accuracy`, `confidence`, `kind`,
+`used-in` chapters, and the optional `accuracy`, `confidence`, `method`,
 `risk`, and `reviewed-by` fields. It checks the chapter links, warns when a
 final chapter still rests on research that is open or disputed, and warns
 when a risky note reaches a final chapter without a qualified reviewer.
@@ -42,7 +42,7 @@ registry are created by the first `story add research`.
 
 ```shell
 story add research "Tidal bore timing" --used-in chapter-03 \
-  --accuracy must-be-accurate --kind fact --confidence low
+  --accuracy must-be-accurate --method fact --confidence low
 ```
 
 Fill the note's `## Question` with what the story needs to get right, in
@@ -53,7 +53,7 @@ one or two sentences. Set the fields that describe the note:
   on), `blended` (real facts deliberately mixed with invention), or
   `invented` (a made-up fact recorded here for consistency). Invented notes
   need no sources and never trigger the open-research warning.
-- `kind` - where the knowledge comes from: `fact` (desk research),
+- `method` - where the knowledge comes from: `fact` (desk research),
   `reading` (a book or paper read for background), `interview`,
   `site-visit`, or `expert-review`.
 - `confidence` - `high`, `medium`, or `low`; how sure the current findings
