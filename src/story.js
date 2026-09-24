@@ -317,7 +317,8 @@ export function scanProject(root) {
       name: data.name ?? titleCaseSlug(id),
       type: data.type ?? "",
       region: data.region ?? "",
-      notableCharacters: asArray(data["notable-characters"])
+      notableCharacters: asArray(data["notable-characters"]),
+      routes: asArray(data.routes)
     }), scanErrors),
     systems: readEntityFiles(projectRoot, path.join("worldbuilding", "systems"), (id, file, data) => ({
       id,
@@ -642,6 +643,16 @@ export function validateLinksOf(project) {
 
   for (const location of project.locations) {
     const label = relative(project, location.file);
+    for (const route of location.routes) {
+      if (!route || typeof route !== "object" || Array.isArray(route) || typeof route.to !== "string" || route.to === "") {
+        continue;
+      }
+      if (route.to === location.id) {
+        errors.push(`${label} route points at itself`);
+        continue;
+      }
+      checkIdReference(errors, `${label} route`, route.to, "location", hasLocation);
+    }
     for (const characterId of location.notableCharacters) {
       checkIdReference(errors, label, characterId, "character", hasCharacter);
       if (typeof characterId === "string" && characterId !== "" && characterId === kebabCase(characterId) && characters.has(characterId) && !characters.get(characterId).locations.includes(location.id)) {
@@ -2832,7 +2843,8 @@ const REFERENCE_FIELD_KINDS = {
   planted: ["chapter"],
   pov: ["character"],
   resolved: ["chapter"],
-  since: ["chapter"]
+  since: ["chapter"],
+  to: ["location"]
 };
 
 // Nested mapping lists whose entries are identified by one reference key.
@@ -2842,7 +2854,8 @@ const ENTRY_IDENTITY_FIELDS = {
   relationships: "character",
   "character-state": "character",
   "knowledge-state": "character",
-  "object-state": "artifact"
+  "object-state": "artifact",
+  routes: "to"
 };
 
 // Describes the entity being renamed or removed. A frontmatter key counts as
@@ -3976,6 +3989,19 @@ function validateLocations(project, errors) {
     requireScalar(data, "type", label, errors);
     validateStringArray(data, "notable-characters", label, errors);
     validateStringArray(data, "tags", label, errors);
+    validateObjectArray(data, "routes", label, errors);
+    for (const route of Array.isArray(data.routes) ? data.routes : []) {
+      if (!route || typeof route !== "object" || Array.isArray(route)) {
+        continue;
+      }
+      if (typeof route.to !== "string" || route.to === "") {
+        errors.push(`${label} route is missing to`);
+      }
+      if (typeof route.hours !== "number" || !Number.isFinite(route.hours) || route.hours <= 0) {
+        errors.push(`${label} route to ${route.to ?? "?"} hours must be a positive number`);
+      }
+      requireScalar(route, "mode", `${label} route to ${route.to ?? "?"}`, errors);
+    }
   }
 }
 

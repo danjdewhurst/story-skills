@@ -949,6 +949,107 @@ function checkClock(project, errors, warnings) {
   }
   checkCrossChapterSceneClock(project, scenesByChapter, errors, warnings);
   checkChapterDates(project, warnings);
+  checkRouteTravel(project, errors);
+}
+function checkRouteTravel(project, errors) {
+  const graph = routeGraph(project.locations);
+  if (graph.size === 0) {
+    return;
+  }
+  const sightings = new Map;
+  for (const scene of project.scenes) {
+    const parsed = parseClockDate(scene.date);
+    if (!parsed || scene.location === "" || !graph.has(scene.location)) {
+      continue;
+    }
+    const minutes = parseClockTime(scene.time);
+    const present = new Set(scene.characters.filter((id) => typeof id === "string"));
+    if (typeof scene.pov === "string" && scene.pov !== "") {
+      present.add(scene.pov);
+    }
+    for (const characterId of present) {
+      const list = sightings.get(characterId) ?? [];
+      list.push({ scene, label: relative(project, scene.file), days: parsed.days, minutes });
+      sightings.set(characterId, list);
+    }
+  }
+  for (const [characterId, list] of [...sightings.entries()].sort(([left], [right]) => left.localeCompare(right, "en"))) {
+    list.sort((left, right) => left.days - right.days || (left.minutes ?? 0) - (right.minutes ?? 0) || left.label.localeCompare(right.label, "en"));
+    for (let index = 1;index < list.length; index += 1) {
+      const previous = list[index - 1];
+      const current = list[index];
+      if (previous.scene.location === current.scene.location) {
+        continue;
+      }
+      const needed = shortestRouteHours(graph, previous.scene.location, current.scene.location);
+      if (needed === undefined) {
+        continue;
+      }
+      const elapsed = previous.minutes === undefined || current.minutes === undefined ? (current.days - previous.days + 1) * 24 : (timestampMinutes(current) - timestampMinutes(previous)) / 60;
+      if (elapsed < needed) {
+        errors.push(`${current.label} puts ${characterId} at ${current.scene.location} ${formatHours(elapsed)} after ${previous.label} at ${previous.scene.location}, but the fastest route takes ${formatHours(needed)}`);
+      }
+    }
+  }
+}
+function routeGraph(locations) {
+  const graph = new Map;
+  const declared = new Set;
+  const addEdge = (from, to, hours) => {
+    if (!graph.has(from)) {
+      graph.set(from, new Map);
+    }
+    const edges = graph.get(from);
+    if (!edges.has(to) || edges.get(to) > hours) {
+      edges.set(to, hours);
+    }
+  };
+  const valid = [];
+  for (const location of locations) {
+    for (const route of location.routes ?? []) {
+      if (route && typeof route === "object" && typeof route.to === "string" && route.to !== "" && route.to !== location.id && typeof route.hours === "number" && Number.isFinite(route.hours) && route.hours > 0) {
+        valid.push([location.id, route.to, route.hours]);
+        declared.add(`${location.id}>${route.to}`);
+      }
+    }
+  }
+  for (const [from, to, hours] of valid) {
+    addEdge(from, to, hours);
+    if (!declared.has(`${to}>${from}`)) {
+      addEdge(to, from, hours);
+    }
+  }
+  return graph;
+}
+function shortestRouteHours(graph, from, to) {
+  const distances = new Map([[from, 0]]);
+  const settled = new Set;
+  while (true) {
+    let current;
+    let best = Infinity;
+    for (const [node, distance] of distances) {
+      if (!settled.has(node) && distance < best) {
+        best = distance;
+        current = node;
+      }
+    }
+    if (current === undefined) {
+      return;
+    }
+    if (current === to) {
+      return best;
+    }
+    settled.add(current);
+    for (const [next, hours] of graph.get(current) ?? []) {
+      const candidate = best + hours;
+      if (!distances.has(next) || candidate < distances.get(next)) {
+        distances.set(next, candidate);
+      }
+    }
+  }
+}
+function formatHours(hours) {
+  return `${Math.round(hours * 10) / 10}h`;
 }
 function checkCrossChapterSceneClock(project, scenesByChapter, errors, warnings) {
   const ordered = [...project.chapters].sort((left, right) => left.number - right.number);
@@ -2709,7 +2810,8 @@ function scanProject(root) {
       name: data.name ?? titleCaseSlug(id),
       type: data.type ?? "",
       region: data.region ?? "",
-      notableCharacters: asArray(data["notable-characters"])
+      notableCharacters: asArray(data["notable-characters"]),
+      routes: asArray(data.routes)
     }), scanErrors),
     systems: readEntityFiles(projectRoot, path4.join("worldbuilding", "systems"), (id, file, data) => ({
       id,
@@ -3004,6 +3106,16 @@ function validateLinksOf(project) {
   }
   for (const location of project.locations) {
     const label = relative2(project, location.file);
+    for (const route of location.routes) {
+      if (!route || typeof route !== "object" || Array.isArray(route) || typeof route.to !== "string" || route.to === "") {
+        continue;
+      }
+      if (route.to === location.id) {
+        errors.push(`${label} route points at itself`);
+        continue;
+      }
+      checkIdReference(errors, `${label} route`, route.to, "location", hasLocation);
+    }
     for (const characterId of location.notableCharacters) {
       checkIdReference(errors, label, characterId, "character", hasCharacter);
       if (typeof characterId === "string" && characterId !== "" && characterId === kebabCase(characterId) && characters.has(characterId) && !characters.get(characterId).locations.includes(location.id)) {
@@ -4960,13 +5072,15 @@ var REFERENCE_FIELD_KINDS = {
   planted: ["chapter"],
   pov: ["character"],
   resolved: ["chapter"],
-  since: ["chapter"]
+  since: ["chapter"],
+  to: ["location"]
 };
 var ENTRY_IDENTITY_FIELDS = {
   relationships: "character",
   "character-state": "character",
   "knowledge-state": "character",
-  "object-state": "artifact"
+  "object-state": "artifact",
+  routes: "to"
 };
 function entityReferenceContext(root, kind, id) {
   const otherExists = new Map;
@@ -5923,6 +6037,19 @@ function validateLocations(project, errors) {
     requireScalar(data, "type", label, errors);
     validateStringArray(data, "notable-characters", label, errors);
     validateStringArray(data, "tags", label, errors);
+    validateObjectArray(data, "routes", label, errors);
+    for (const route of Array.isArray(data.routes) ? data.routes : []) {
+      if (!route || typeof route !== "object" || Array.isArray(route)) {
+        continue;
+      }
+      if (typeof route.to !== "string" || route.to === "") {
+        errors.push(`${label} route is missing to`);
+      }
+      if (typeof route.hours !== "number" || !Number.isFinite(route.hours) || route.hours <= 0) {
+        errors.push(`${label} route to ${route.to ?? "?"} hours must be a positive number`);
+      }
+      requireScalar(route, "mode", `${label} route to ${route.to ?? "?"}`, errors);
+    }
   }
 }
 function validateSystems(project, errors) {

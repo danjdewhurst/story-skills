@@ -503,6 +503,121 @@ function checkClock(project, errors, warnings) {
 
   checkCrossChapterSceneClock(project, scenesByChapter, errors, warnings);
   checkChapterDates(project, warnings);
+  checkRouteTravel(project, errors);
+}
+
+// Location routes give the fastest journey between places. A character seen
+// in two dated scenes at different locations needs at least the shortest
+// route time between them. When either scene has no time of day, the gap is
+// taken at its most generous (the whole of both days) so only impossible
+// journeys are reported.
+function checkRouteTravel(project, errors) {
+  const graph = routeGraph(project.locations);
+  if (graph.size === 0) {
+    return;
+  }
+  const sightings = new Map();
+  for (const scene of project.scenes) {
+    const parsed = parseClockDate(scene.date);
+    if (!parsed || scene.location === "" || !graph.has(scene.location)) {
+      continue;
+    }
+    const minutes = parseClockTime(scene.time);
+    const present = new Set(scene.characters.filter((id) => typeof id === "string"));
+    if (typeof scene.pov === "string" && scene.pov !== "") {
+      present.add(scene.pov);
+    }
+    for (const characterId of present) {
+      const list = sightings.get(characterId) ?? [];
+      list.push({ scene, label: relative(project, scene.file), days: parsed.days, minutes });
+      sightings.set(characterId, list);
+    }
+  }
+
+  for (const [characterId, list] of [...sightings.entries()].sort(([left], [right]) => left.localeCompare(right, "en"))) {
+    list.sort((left, right) => left.days - right.days || (left.minutes ?? 0) - (right.minutes ?? 0) || left.label.localeCompare(right.label, "en"));
+    for (let index = 1; index < list.length; index += 1) {
+      const previous = list[index - 1];
+      const current = list[index];
+      if (previous.scene.location === current.scene.location) {
+        continue;
+      }
+      const needed = shortestRouteHours(graph, previous.scene.location, current.scene.location);
+      if (needed === undefined) {
+        continue;
+      }
+      const elapsed = previous.minutes === undefined || current.minutes === undefined
+        ? (current.days - previous.days + 1) * 24
+        : (timestampMinutes(current) - timestampMinutes(previous)) / 60;
+      if (elapsed < needed) {
+        errors.push(`${current.label} puts ${characterId} at ${current.scene.location} ${formatHours(elapsed)} after ${previous.label} at ${previous.scene.location}, but the fastest route takes ${formatHours(needed)}`);
+      }
+    }
+  }
+}
+
+// Routes are two-way unless the destination declares its own route back.
+function routeGraph(locations) {
+  const graph = new Map();
+  const declared = new Set();
+  const addEdge = (from, to, hours) => {
+    if (!graph.has(from)) {
+      graph.set(from, new Map());
+    }
+    const edges = graph.get(from);
+    if (!edges.has(to) || edges.get(to) > hours) {
+      edges.set(to, hours);
+    }
+  };
+  const valid = [];
+  for (const location of locations) {
+    for (const route of location.routes ?? []) {
+      if (route && typeof route === "object" && typeof route.to === "string" && route.to !== "" && route.to !== location.id
+        && typeof route.hours === "number" && Number.isFinite(route.hours) && route.hours > 0) {
+        valid.push([location.id, route.to, route.hours]);
+        declared.add(`${location.id}>${route.to}`);
+      }
+    }
+  }
+  for (const [from, to, hours] of valid) {
+    addEdge(from, to, hours);
+    if (!declared.has(`${to}>${from}`)) {
+      addEdge(to, from, hours);
+    }
+  }
+  return graph;
+}
+
+function shortestRouteHours(graph, from, to) {
+  const distances = new Map([[from, 0]]);
+  const settled = new Set();
+  while (true) {
+    let current;
+    let best = Infinity;
+    for (const [node, distance] of distances) {
+      if (!settled.has(node) && distance < best) {
+        best = distance;
+        current = node;
+      }
+    }
+    if (current === undefined) {
+      return undefined;
+    }
+    if (current === to) {
+      return best;
+    }
+    settled.add(current);
+    for (const [next, hours] of graph.get(current) ?? []) {
+      const candidate = best + hours;
+      if (!distances.has(next) || candidate < distances.get(next)) {
+        distances.set(next, candidate);
+      }
+    }
+  }
+}
+
+function formatHours(hours) {
+  return `${Math.round(hours * 10) / 10}h`;
 }
 
 function checkCrossChapterSceneClock(project, scenesByChapter, errors, warnings) {
