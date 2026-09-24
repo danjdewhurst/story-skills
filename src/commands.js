@@ -16,6 +16,7 @@ import {
   computeWordCounts,
   createEntity,
   createStoryProject,
+  diagramProject,
   exportManuscript,
   formatActionReport,
   formatDoctorReport,
@@ -239,6 +240,21 @@ export const COMMANDS = [
       const report = proseReport(root());
       io.stdout.write(formatProseReport(report));
       return reportResult(io, report, "Prose check complete", "Prose check failed");
+    }
+  },
+  {
+    name: "diagram",
+    usage: "diagram <kind>",
+    summary: [
+      "Print Mermaid source for relationships (family",
+      "tree), locations (route map), timeline, clues, or",
+      "arcs; --out writes it to a file"
+    ],
+    project: "flag",
+    run({ parsed, io, root }) {
+      const result = diagramProject(root(), { kind: parsed.positionals[1], out: parsed.options.out });
+      io.stdout.write(result.outFile === undefined ? result.text : `Wrote ${parsed.positionals[1]} diagram to ${result.outFile}\n`);
+      return 0;
     }
   },
   {

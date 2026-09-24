@@ -30,7 +30,7 @@ export const OPTIONS = [
   { name: "ref", value: "<git-ref>", help: ["Earlier draft as a git branch, tag, or commit", "for compare"] },
   { name: "against", value: "<path>", help: ["Earlier draft as another project folder for compare"] },
   { name: "path", value: "<path>", help: ["Project root for every command except init and", "import"] },
-  { name: "out", value: "<file>", help: ["Output path for export/build/synopsis"] },
+  { name: "out", value: "<file>", help: ["Output path for export/build/synopsis/diagram"] },
   { name: "format", value: "<name>", help: ["Output format for build (markdown, epub, docx,", "shunn)"] },
   { name: "shunn", help: ["Apply Shunn manuscript formatting (with --format", "docx)"] },
   { name: "at", value: "<chapter-id>", help: ["Chapter id for knowledge"] },
