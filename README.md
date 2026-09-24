@@ -44,6 +44,8 @@ npx skills add danjdewhurst/story-skills   # or: bunx skills add danjdewhurst/st
 
 Then ask your agent to **"Start a new story"**. Per-agent instructions for GitHub Copilot, Cursor, Windsurf, Gemini CLI, OpenCode, and others are under [More install options](#more-install-options).
 
+New to Story Skills? [Getting started](docs/getting-started.md) walks through a first session, and the [documentation index](docs/README.md) links every guide and reference page.
+
 ### Or let your agent install it
 
 Paste this prompt into your coding agent. It works out which agent it is and uses the matching install method:
@@ -193,9 +195,9 @@ Behavior notes:
 - **Matter pages** from `matter/` appear in the export and in every build format except Shunn, which is a submission format.
 - **EPUB and DOCX** builds target plain prose: `*italic*` and `**bold**` become italic and bold runs, scene-break lines (`***`, `---`) become a `* * *` separator, and other markdown structure such as blockquotes, lists, and tables is flattened to text. The markdown export keeps chapter text as-is.
 - **`story rename` and `story remove`** update entity ids in frontmatter reference fields and markdown link targets. They never edit prose, so a character called "Port" can be renamed without touching the word "port" in chapter text.
-- A command that changes a frontmatter value regenerates that file's **frontmatter** from the parsed values, which drops any YAML comments in it. Files whose values don't change are left untouched.
+- A command that changes a frontmatter value rewrites only the entries that changed. Comment lines, unchanged entries, and the body keep their exact text, and files whose values don't change are left untouched.
 
-For a complete starter transcript, read [`docs/first-20-minutes.md`](docs/first-20-minutes.md). For the project contract, read [`docs/schema-v2.md`](docs/schema-v2.md) and [`schemas/story.schema.json`](schemas/story.schema.json).
+Every command and option is in the [CLI reference](docs/cli-reference.md). For a complete first session, read [Getting started](docs/getting-started.md). For the project contract, read the [Project format reference](docs/project-format.md) and [`schemas/story.schema.json`](schemas/story.schema.json).
 
 ## Write a book with pull requests
 
@@ -288,7 +290,7 @@ Examples in this repository:
 - [`examples/the-last-ember/`](examples/the-last-ember/): a fantasy with three characters, two locations, a magic system, a plot arc with foreshadowing, and a drafted first chapter.
 - [`examples/the-fall-of-the-citadel/`](examples/the-fall-of-the-citadel/): a prequel to The Last Ember, linked with `series`, `book-number`, and `precedes`, that shares characters and places with the first book. Run `story series examples/the-last-ember` to see the chronology.
 - [`examples/harbor-of-second-light/`](examples/harbor-of-second-light/): a near-future coastal mystery with memory technology, a posthumous witness arc, populated continuity state, and a drafted first chapter.
-- [`examples/the-unraveled-thread/`](examples/the-unraveled-thread/): a deliberately broken project that demonstrates every class of finding the continuity engine reports.
+- [`examples/the-unraveled-thread/`](examples/the-unraveled-thread/): a deliberately broken project that demonstrates the main kinds of finding the continuity engine reports.
 
 ## More install options
 
@@ -421,7 +423,7 @@ Outside coding agents:
 
 ## Development and releasing
 
-Development uses Bun:
+The [Development guide](docs/development.md) covers the repository layout, CLI architecture, tests, and release process in full. Development uses Bun:
 
 ```shell
 bun install

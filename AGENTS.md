@@ -15,7 +15,7 @@ Primary paths:
 - `test/` - Bun tests
 - `examples/` - sample Story Skills projects
 - `scripts/` - CI check scripts and the release script
-- `docs/` - user-facing guides, including the schema v2 reference
+- `docs/` - user and contributor documentation, indexed by `docs/README.md`: getting started, core concepts, the project format (schema v2) reference, the CLI reference, the skills catalogue, writing workflows, continuity and analysis, series, import/export/builds, automation and CI, and the development guide
 - `assets/` - plugin logo, screenshot, social preview, and the README demo GIF (regenerate the GIF with `vhs assets/demo.tape`)
 - `schemas/story.schema.json` - JSON schema for story project frontmatter; `test:examples` validates every example against it, so update both together
 - `templates/github/` - GitHub Actions workflows users copy into a story repository for checks and scheduled chapter drafting
@@ -36,9 +36,10 @@ bun run test:coverage
 bun run test:examples
 bun run check:metadata
 bun run check:evals
+bun run eval:selftest
 ```
 
-CI runs `check:metadata`, `test`, `test:coverage`, `test:examples`, `check:evals`, and the fallback under Node in that order, plus a Node 18/20/22 matrix that runs the examples check and both CLIs directly under Node. Use `bun run test` for normal verification. Use `bun run build:fallback` after changing CLI behavior in `src/`, then use `bun run check:fallback` to confirm the generated fallback is current. Use `bun run test:coverage` when changes affect CLI behavior, parsing, project scanning, validation, fallback generation, or release readiness.
+CI runs `check:metadata`, `check:evals`, `eval:selftest`, `test`, `test:coverage` (which also runs `check:fallback`), `test:examples`, and then the fallback's `--help` under Node, in that order, plus a Node 18/20/22 matrix that runs the examples check and both CLIs directly under Node. Use `bun run test` for normal verification. Use `bun run build:fallback` after changing CLI behavior in `src/`, then use `bun run check:fallback` to confirm the generated fallback is current. Use `bun run test:coverage` when changes affect CLI behavior, parsing, project scanning, validation, fallback generation, or release readiness.
 
 ## Implementation Rules
 
@@ -89,7 +90,7 @@ Do not commit:
 
 Before finishing code or skill changes, check:
 
-- The CI checks pass locally: `bun run check:metadata`, `bun run test`, `bun run test:coverage`, `bun run test:examples`, `bun run check:evals`.
+- The CI checks pass locally: `bun run check:metadata`, `bun run check:evals`, `bun run eval:selftest`, `bun run test`, `bun run test:coverage`, `bun run test:examples`.
 - CLI help and skill docs still agree on command names and options.
 - The bundled maintenance fallback is current: `bun run check:fallback`.
 - The bundled maintenance fallback still runs with Node: `node skills/story-maintenance/scripts/story.js --help`.
