@@ -8,7 +8,7 @@
     "node": ">=18"
   },
   "bin": {
-    "story": "./bin/story.js"
+    "story": "bin/story.js"
   },
   "files": [
     "bin",
