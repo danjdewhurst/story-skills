@@ -19,6 +19,13 @@ export function isAbsentGitHubRelease(error) {
   return /release not found/i.test(stderr);
 }
 
+// `npm view name@version` exits non-zero with E404 when the package or that
+// version has never been published; anything else (auth, network) is a real error.
+export function isAbsentNpmVersion(error) {
+  const stderr = `${error.stderr ?? ""}\n${error.message ?? ""}`;
+  return /\bE404\b/.test(stderr);
+}
+
 // --atomic makes the remote accept both refs or neither, so a rejected main
 // push (someone pushed during the checks) can never leave a published tag
 // pointing at a commit that is not on main.
@@ -86,7 +93,26 @@ function fail(message) {
   process.exit(1);
 }
 
-function preflight(nextVersion, tag) {
+function checkNpm(name, nextVersion) {
+  try {
+    run("npm", ["whoami"]);
+  } catch {
+    fail("npm is not logged in. Run `npm login`, or pass --no-npm to skip publishing to npm.");
+  }
+  let published = "";
+  try {
+    published = run("npm", ["view", `${name}@${nextVersion}`, "version"]).trim();
+  } catch (error) {
+    if (!isAbsentNpmVersion(error)) {
+      fail(`could not check npm for ${name}@${nextVersion}: ${error.stderr || error.message}`);
+    }
+  }
+  if (published !== "") {
+    fail(`${name}@${nextVersion} is already published on npm.`);
+  }
+}
+
+function preflight(nextVersion, tag, { npm, name }) {
   if (git("rev-parse", "--abbrev-ref", "HEAD") !== RELEASE_BRANCH) {
     fail(`releases are cut from ${RELEASE_BRANCH}.`);
   }
@@ -112,6 +138,9 @@ function preflight(nextVersion, tag) {
     if (!isAbsentGitHubRelease(error)) {
       fail(`could not check GitHub release ${tag}: ${error.stderr || error.message}`);
     }
+  }
+  if (npm) {
+    checkNpm(name, nextVersion);
   }
 
   for (const script of PREFLIGHT) {
@@ -160,9 +189,10 @@ function writeVersions(nextVersion) {
 
 function main(argv) {
   const dryRun = argv.includes("--dry-run");
+  const npm = !argv.includes("--no-npm");
   const [bump] = argv.filter((arg) => !arg.startsWith("--"));
   if (!bump) {
-    console.error("Usage: bun run release <patch|minor|major|MAJOR.MINOR.PATCH> [--dry-run]");
+    console.error("Usage: bun run release <patch|minor|major|MAJOR.MINOR.PATCH> [--dry-run] [--no-npm]");
     process.exit(1);
   }
 
@@ -171,9 +201,10 @@ function main(argv) {
   const tag = `v${nextVersion}`;
   console.log(`Releasing ${packageJson.version} -> ${nextVersion} (${tag})`);
 
-  preflight(nextVersion, tag);
+  preflight(nextVersion, tag, { npm, name: packageJson.name });
   if (dryRun) {
-    console.log(`Dry run: would bump ${[...VERSION_FILES, VERSION_MODULE].join(", ")}, rebuild the fallback, commit, tag ${tag}, push, and create the GitHub release.`);
+    const npmStep = npm ? `, create the GitHub release, and publish ${packageJson.name}@${nextVersion} to npm.` : ", and create the GitHub release.";
+    console.log(`Dry run: would bump ${[...VERSION_FILES, VERSION_MODULE].join(", ")}, rebuild the fallback, commit, tag ${tag}, push${npmStep}`);
     return;
   }
 
@@ -186,6 +217,12 @@ function main(argv) {
 
   const releaseUrl = run("gh", ["release", "create", tag, "--title", tag, "--generate-notes", "--verify-tag"]).trim();
   console.log(`Created GitHub release: ${releaseUrl}`);
+
+  if (npm) {
+    // Inherit stdin so npm can prompt for a 2FA one-time password.
+    execFileSync("npm", ["publish"], { cwd: repoRoot, stdio: "inherit" });
+    console.log(`Published ${packageJson.name}@${nextVersion} to npm`);
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
