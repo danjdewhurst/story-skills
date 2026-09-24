@@ -463,8 +463,9 @@ export const COMMANDS = [
     summary: [
       "Build a disposable book artifact in dist/: markdown,",
       "epub, docx, shunn, html (review copy with paragraph",
-      "anchors), print (paged-media interior), or",
-      "narration (audiobook script)"
+      "anchors), print (paged-media interior),",
+      "narration (audiobook script), or metadata",
+      "(retailer sheet)"
     ],
     project: "positional",
     run({ parsed, io, root }) {
