@@ -93,18 +93,9 @@ function fail(message) {
   process.exit(1);
 }
 
-// Publishing runs after the tag and GitHub release exist, so a rerun of the
-// release stops at the existing-tag check. Finish from the tagged commit instead.
-export function npmRecoveryCommand(tag) {
-  return `git checkout ${tag} && npm publish && git checkout ${RELEASE_BRANCH}`;
-}
-
+// The tag push triggers .github/workflows/publish.yml, which publishes to npm
+// through trusted publishing. Check here that the version is still free.
 function checkNpm(name, nextVersion) {
-  try {
-    run("npm", ["whoami"]);
-  } catch {
-    fail("npm is not logged in. Run `npm login`, or pass --no-npm to skip publishing to npm.");
-  }
   let published = "";
   try {
     published = run("npm", ["view", `${name}@${nextVersion}`, "version"]).trim();
@@ -118,7 +109,7 @@ function checkNpm(name, nextVersion) {
   }
 }
 
-function preflight(nextVersion, tag, { npm, name }) {
+function preflight(nextVersion, tag, name) {
   if (git("rev-parse", "--abbrev-ref", "HEAD") !== RELEASE_BRANCH) {
     fail(`releases are cut from ${RELEASE_BRANCH}.`);
   }
@@ -145,9 +136,7 @@ function preflight(nextVersion, tag, { npm, name }) {
       fail(`could not check GitHub release ${tag}: ${error.stderr || error.message}`);
     }
   }
-  if (npm) {
-    checkNpm(name, nextVersion);
-  }
+  checkNpm(name, nextVersion);
 
   for (const script of PREFLIGHT) {
     console.log(`\n> bun run ${script}`);
@@ -195,10 +184,9 @@ function writeVersions(nextVersion) {
 
 function main(argv) {
   const dryRun = argv.includes("--dry-run");
-  const npm = !argv.includes("--no-npm");
   const [bump] = argv.filter((arg) => !arg.startsWith("--"));
   if (!bump) {
-    console.error("Usage: bun run release <patch|minor|major|MAJOR.MINOR.PATCH> [--dry-run] [--no-npm]");
+    console.error("Usage: bun run release <patch|minor|major|MAJOR.MINOR.PATCH> [--dry-run]");
     process.exit(1);
   }
 
@@ -207,10 +195,9 @@ function main(argv) {
   const tag = `v${nextVersion}`;
   console.log(`Releasing ${packageJson.version} -> ${nextVersion} (${tag})`);
 
-  preflight(nextVersion, tag, { npm, name: packageJson.name });
+  preflight(nextVersion, tag, packageJson.name);
   if (dryRun) {
-    const npmStep = npm ? `, create the GitHub release, and publish ${packageJson.name}@${nextVersion} to npm.` : ", and create the GitHub release.";
-    console.log(`Dry run: would bump ${[...VERSION_FILES, VERSION_MODULE].join(", ")}, rebuild the fallback, commit, tag ${tag}, push${npmStep}`);
+    console.log(`Dry run: would bump ${[...VERSION_FILES, VERSION_MODULE].join(", ")}, rebuild the fallback, commit, tag ${tag}, push, and create the GitHub release. The tag push publishes ${packageJson.name}@${nextVersion} to npm from GitHub Actions.`);
     return;
   }
 
@@ -224,15 +211,7 @@ function main(argv) {
   const releaseUrl = run("gh", ["release", "create", tag, "--title", tag, "--generate-notes", "--verify-tag"]).trim();
   console.log(`Created GitHub release: ${releaseUrl}`);
 
-  if (npm) {
-    try {
-      // Inherit stdin so npm can prompt for a 2FA one-time password.
-      execFileSync("npm", ["publish"], { cwd: repoRoot, stdio: "inherit" });
-    } catch {
-      fail(`${tag} is on GitHub but npm publish failed. Retry the npm step with:\n  ${npmRecoveryCommand(tag)}`);
-    }
-    console.log(`Published ${packageJson.name}@${nextVersion} to npm`);
-  }
+  console.log(`The Publish workflow is publishing ${packageJson.name}@${nextVersion} to npm: https://github.com/danjdewhurst/story-skills/actions/workflows/publish.yml`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
