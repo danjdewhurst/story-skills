@@ -69,6 +69,20 @@ Optional craft fields (hand-edit only — no CLI flags; edit `story.md` directly
 - `revision-passes` - the named revision passes and their progress, a list of `{pass, status}` entries: `pass` is a kebab-case name, unique in the list, and `status` is `pending`, `in-progress`, or `done`. `story passes --init` writes the default ladder (`structure`, `character`, `theme`, `continuity`, `pacing`, `line`, `copyedit`, `proof`) after any passes already listed; `--start <pass>` and `--done <pass>` set one pass's status, adding it when it is new. Plain `story passes` prints the checklist with each default pass's focus and the commands it runs. While the story `status` is `revising`, `story next` recommends the pass in progress, or else the first pass not done, or `story passes --init` when none are recorded.
 - `cover` - path, relative to the project root, to a `.jpg`, `.jpeg`, `.png`, `.gif`, or `.webp` cover image inside the project. `story validate` errors when the file is missing or outside the project; `story build --format epub` embeds it as the EPUB cover. `author` also becomes the EPUB `dc:creator`.
 
+Optional publishing metadata (hand-edit; see the `publishing` skill), read by `story build`:
+
+- `authors` - list of author names for a co-written book; builds use it in place of `author`, and `story validate` warns when both are set.
+- `language` - BCP 47 language tag (`en`, `en-GB`, `fr`); default `en`. The EPUB package and every EPUB document declare it.
+- `isbn` - ISBN-13 or ISBN-10, hyphens allowed; `story validate` checks the checksum. The EPUB identifier becomes `urn:isbn:<digits>`. Use the ISBN of the edition being built.
+- `publisher`, `publication-date` (`YYYY-MM-DD`), `description` (the retailer description) - written to the EPUB package.
+- `keywords` - retailer search keywords; `story validate` warns over 7.
+- `subjects` - BISAC subject codes such as `FIC022000`; written as EPUB subjects.
+- `copyright` - the copyright line (`© 2026 Jane Doe`). Unless a matter page with id `copyright` or a title containing "Copyright" exists, every build except Shunn adds a copyright page as the first front matter: the line, "All rights reserved.", and the publisher, ISBN, and `ai-disclosure` when set.
+- `cover-alt` - alt text for the EPUB cover image (default "Cover of <title>").
+- `ai-disclosure` - a short statement of how AI tools were used, for retailer and agent disclosure forms.
+
+EPUB builds also write EPUB Accessibility discovery metadata (access modes, features such as `tableOfContents` and `readingOrder`, no hazards, and a summary), mark each document with `epub:type` (`bodymatter chapter`, `frontmatter`, `backmatter`, `copyright-page`), and add a landmarks navigation list.
+
 Every link needs a backlink: a book that `follows` another must appear in that book's `precedes`, and the reverse. `story links` checks that each path is a story project, has the backlink, and uses the same `series` id. `story series` orders the linked books by chronology and checks the canon they share. It errors when two linked books share a `book-number`, or when a character who is `deceased` in an earlier book is not deceased in a later one, or when a later book lists that character in a chapter or scene cast. It also errors when a later book has a character learn a `fact` (a `knowledge-state` entry with `learned-in`) that the same character already knows in an earlier book. It warns when a shared entity's name changes between books, or when an artifact destroyed in an earlier book has a different status in a later one. It also reports parse errors in linked books as errors.
 
 ### Characters

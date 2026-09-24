@@ -2514,6 +2514,94 @@ function formRangeWarning(form, words, label2) {
   return "";
 }
 
+// src/publishing.js
+var MAX_KEYWORDS = 7;
+var BISAC_PATTERN = /^[A-Z]{3}\d{6}$/;
+var LANGUAGE_PATTERN = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
+var SCALAR_FIELDS = ["language", "isbn", "publisher", "publication-date", "description", "copyright", "cover-alt", "ai-disclosure"];
+function publishingMeta(data) {
+  const text = (field) => typeof data[field] === "string" ? data[field].trim() : "";
+  const list = (field) => Array.isArray(data[field]) ? data[field].filter((item) => typeof item === "string" && item.trim() !== "").map((item) => item.trim()) : [];
+  const authors = list("authors");
+  const author = text("author");
+  return {
+    authors: authors.length > 0 ? authors : author === "" ? [] : [author],
+    language: text("language") || "en",
+    isbn: normalizeIsbn(text("isbn")),
+    publisher: text("publisher"),
+    publicationDate: text("publication-date"),
+    description: text("description"),
+    keywords: list("keywords"),
+    subjects: list("subjects"),
+    copyright: text("copyright"),
+    coverAlt: text("cover-alt"),
+    aiDisclosure: text("ai-disclosure")
+  };
+}
+function validatePublishing(data, errors, warnings) {
+  for (const field of SCALAR_FIELDS) {
+    if (data[field] !== undefined && typeof data[field] !== "string") {
+      errors.push(`story.md frontmatter field ${field} must be text`);
+    }
+  }
+  for (const field of ["keywords", "subjects", "authors"]) {
+    if (data[field] !== undefined && (!Array.isArray(data[field]) || data[field].some((item) => typeof item !== "string"))) {
+      errors.push(`story.md frontmatter field ${field} must be a list of text`);
+    }
+  }
+  if (typeof data.language === "string" && !LANGUAGE_PATTERN.test(data.language.trim())) {
+    errors.push(`story.md language ${data.language} must be a BCP 47 tag such as en, en-GB, or fr`);
+  }
+  if (typeof data.isbn === "string" && data.isbn.trim() !== "" && normalizeIsbn(data.isbn) === "") {
+    errors.push(`story.md isbn ${data.isbn} is not a valid ISBN-13 or ISBN-10 (check the digits and checksum)`);
+  }
+  if (typeof data["publication-date"] === "string") {
+    const dateError = storyDateError(data["publication-date"]);
+    if (dateError !== "") {
+      errors.push(`story.md publication-date ${dateError}`);
+    }
+  }
+  if (Array.isArray(data.subjects)) {
+    for (const subject of data.subjects) {
+      if (typeof subject === "string" && !BISAC_PATTERN.test(subject.trim())) {
+        errors.push(`story.md subject ${subject} must be a BISAC code such as FIC022000`);
+      }
+    }
+  }
+  if (Array.isArray(data.keywords) && data.keywords.length > MAX_KEYWORDS) {
+    warnings.push(`story.md lists ${data.keywords.length} keywords; most retailers accept ${MAX_KEYWORDS}`);
+  }
+  if (data.author !== undefined && data.authors !== undefined) {
+    warnings.push("story.md sets both author and authors; builds use authors");
+  }
+}
+function normalizeIsbn(value) {
+  const compact = String(value ?? "").replace(/[\s-]/g, "").toUpperCase();
+  if (/^\d{13}$/.test(compact)) {
+    const sum = [...compact.slice(0, 12)].reduce((total2, digit, index) => total2 + Number(digit) * (index % 2 === 0 ? 1 : 3), 0);
+    return (10 - sum % 10) % 10 === Number(compact[12]) ? compact : "";
+  }
+  if (/^\d{9}[\dX]$/.test(compact)) {
+    const sum = [...compact].reduce((total2, char, index) => total2 + (char === "X" ? 10 : Number(char)) * (10 - index), 0);
+    return sum % 11 === 0 ? compact : "";
+  }
+  return "";
+}
+function copyrightPage(meta) {
+  const lines = [meta.copyright, "", "All rights reserved."];
+  if (meta.publisher !== "") {
+    lines.push("", `Published by ${meta.publisher}`);
+  }
+  if (meta.isbn !== "") {
+    lines.push("", `ISBN ${meta.isbn}`);
+  }
+  if (meta.aiDisclosure !== "") {
+    lines.push("", meta.aiDisclosure);
+  }
+  return lines.join(`
+`);
+}
+
 // src/passes.js
 var PASS_STATUSES = new Set(["pending", "in-progress", "done"]);
 var DEFAULT_PASSES = [
@@ -3730,6 +3818,7 @@ function validateProjectOf(project) {
   validateResearch(project, errors, warnings);
   validateProgressLog(project, errors);
   validateFormRange(project, warnings);
+  validatePublishing(project.story.data, errors, warnings);
   collectStrayFileWarnings(project, warnings);
   const indexChecks = [
     [path4.join("characters", "_index.md"), project.characters.map((item) => `](${item.id}.md)`)],
@@ -6121,10 +6210,17 @@ function manuscriptParts(project) {
     heading: entry.heading,
     body: chapterProse(readMarkdown(entry.file, project.root).body).trim()
   }));
+  const meta = publishingMeta(project.story.data);
+  const front = matter("front");
+  const hasCopyrightPage = project.matter.some((entry) => entry.id === "copyright" || /copyright/i.test(entry.title));
+  if (meta.copyright !== "" && !hasCopyrightPage) {
+    front.unshift({ id: "copyright", title: "Copyright", heading: false, body: copyrightPage(meta) });
+  }
   return {
     title: project.story.data.title,
-    author: typeof project.story.data.author === "string" ? project.story.data.author : "",
-    front: matter("front"),
+    author: meta.authors.join(" and "),
+    meta,
+    front,
     chapters,
     back: matter("back")
   };
@@ -6140,18 +6236,21 @@ function epubModifiedTimestamp() {
   return "2000-01-01T00:00:00Z";
 }
 function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
+  const meta = manuscript.meta ?? publishingMeta({});
+  const lang = xmlEscape(meta.language);
   const documents = [];
   const pushMatter = (placement) => (entry) => documents.push({
     id: `${placement}-${entry.id}`,
     label: entry.title,
-    content: matterXhtml(entry)
+    content: matterXhtml(entry, placement, lang)
   });
   manuscript.front.forEach(pushMatter("front"));
   for (const chapter of manuscript.chapters) {
     documents.push({
       id: `chapter-${String(chapter.number).padStart(2, "0")}`,
       label: `Chapter ${chapter.number}: ${chapter.title}`,
-      content: chapterXhtml(chapter)
+      content: chapterXhtml(chapter, lang),
+      bodymatter: true
     });
   }
   manuscript.back.forEach(pushMatter("back"));
@@ -6161,27 +6260,54 @@ function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
   const coverSpine = [];
   if (manuscript.cover) {
     const href = `images/cover.${manuscript.cover.extension}`;
-    coverEntries.push({ name: `OEBPS/${href}`, content: fs2.readFileSync(manuscript.cover.filePath) }, { name: "OEBPS/cover.xhtml", content: `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>${xmlEscape(manuscript.title)}</title></head><body><img src="${href}" alt="Cover of ${xmlEscape(manuscript.title)}"/></body></html>` });
+    const alt = meta.coverAlt === "" ? `Cover of ${manuscript.title}` : meta.coverAlt;
+    coverEntries.push({ name: `OEBPS/${href}`, content: fs2.readFileSync(manuscript.cover.filePath) }, { name: "OEBPS/cover.xhtml", content: `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="${lang}" lang="${lang}"><head><title>${xmlEscape(manuscript.title)}</title></head><body epub:type="cover"><img src="${href}" alt="${xmlEscape(alt)}"/></body></html>` });
     coverItems.push(`<item id="cover-image" href="${href}" media-type="${manuscript.cover.mediaType}" properties="cover-image"/>`, `<item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>`);
     coverMeta.push(`<meta name="cover" content="cover-image"/>`);
     coverSpine.push(`<itemref idref="cover"/>`);
   }
-  const creator = manuscript.author === "" ? "" : `<dc:creator>${xmlEscape(manuscript.author)}</dc:creator>`;
+  const creator = meta.authors.map((name) => `<dc:creator>${xmlEscape(name)}</dc:creator>`).join("");
+  const identifier = meta.isbn === "" ? xmlEscape(storyId) : `urn:isbn:${meta.isbn}`;
+  const optional = [
+    meta.publisher === "" ? "" : `<dc:publisher>${xmlEscape(meta.publisher)}</dc:publisher>`,
+    meta.publicationDate === "" ? "" : `<dc:date>${xmlEscape(meta.publicationDate)}</dc:date>`,
+    meta.description === "" ? "" : `<dc:description>${xmlEscape(meta.description)}</dc:description>`,
+    ...meta.subjects.map((subject) => `<dc:subject>${xmlEscape(subject)}</dc:subject>`),
+    meta.copyright === "" ? "" : `<dc:rights>${xmlEscape(meta.copyright)}</dc:rights>`
+  ].join("");
+  const accessibility = epubAccessibilityMeta(Boolean(manuscript.cover));
   const items = documents.map((doc) => `<item id="${doc.id}" href="${doc.id}.xhtml" media-type="application/xhtml+xml"/>`);
   const spine = documents.map((doc) => `<itemref idref="${doc.id}"/>`);
   const modified = epubModifiedTimestamp();
   writeZip(outFile, [
     { name: "mimetype", content: "application/epub+zip" },
     { name: "META-INF/container.xml", content: `<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>` },
-    { name: "OEBPS/content.opf", content: `<?xml version="1.0" encoding="UTF-8"?><package version="3.0" unique-identifier="book-id" xmlns="http://www.idpf.org/2007/opf"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book-id">${xmlEscape(storyId)}</dc:identifier><dc:title>${xmlEscape(manuscript.title)}</dc:title>${creator}<dc:language>en</dc:language><meta property="dcterms:modified">${modified}</meta>${coverMeta.join("")}</metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>${coverItems.join("")}${items.join("")}</manifest><spine>${coverSpine.join("")}${spine.join("")}</spine></package>` },
-    { name: "OEBPS/nav.xhtml", content: navXhtml(manuscript.title, documents) },
+    { name: "OEBPS/content.opf", content: `<?xml version="1.0" encoding="UTF-8"?><package version="3.0" unique-identifier="book-id" xmlns="http://www.idpf.org/2007/opf"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book-id">${identifier}</dc:identifier><dc:title>${xmlEscape(manuscript.title)}</dc:title>${creator}<dc:language>${lang}</dc:language>${optional}<meta property="dcterms:modified">${modified}</meta>${accessibility}${coverMeta.join("")}</metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>${coverItems.join("")}${items.join("")}</manifest><spine>${coverSpine.join("")}${spine.join("")}</spine></package>` },
+    { name: "OEBPS/nav.xhtml", content: navXhtml(manuscript.title, documents, lang) },
     ...coverEntries,
     ...documents.map((doc) => ({ name: `OEBPS/${doc.id}.xhtml`, content: doc.content }))
   ], writeOptions);
 }
-function navXhtml(title, documents) {
+function navXhtml(title, documents, lang = "en") {
   const links = documents.map((doc) => `<li><a href="${doc.id}.xhtml">${xmlEscape(doc.label)}</a></li>`);
-  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>${xmlEscape(title)}</title></head><body><nav epub:type="toc" xmlns:epub="http://www.idpf.org/2007/ops"><ol>${links.join("")}</ol></nav></body></html>`;
+  const start = documents.find((doc) => doc.bodymatter);
+  const landmarks = [`<li><a epub:type="toc" href="nav.xhtml">Table of Contents</a></li>`];
+  if (start) {
+    landmarks.push(`<li><a epub:type="bodymatter" href="${start.id}.xhtml">Start of Content</a></li>`);
+  }
+  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="${lang}" lang="${lang}"><head><title>${xmlEscape(title)}</title></head><body><nav epub:type="toc" id="toc"><h1>Contents</h1><ol>${links.join("")}</ol></nav><nav epub:type="landmarks" hidden="hidden"><ol>${landmarks.join("")}</ol></nav></body></html>`;
+}
+function epubAccessibilityMeta(hasCover) {
+  const features = ["tableOfContents", "readingOrder", "structuralNavigation", ...hasCover ? ["alternativeText"] : []];
+  const summary = "Text-only book with a navigable table of contents, headings for each chapter, and a single logical reading order.";
+  return [
+    `<meta property="schema:accessMode">textual</meta>`,
+    ...hasCover ? [`<meta property="schema:accessMode">visual</meta>`] : [],
+    `<meta property="schema:accessModeSufficient">textual</meta>`,
+    ...features.map((feature) => `<meta property="schema:accessibilityFeature">${feature}</meta>`),
+    `<meta property="schema:accessibilityHazard">none</meta>`,
+    `<meta property="schema:accessibilitySummary">${summary}</meta>`
+  ].join("");
 }
 function xhtmlParagraphs(body) {
   const paragraphs = [];
@@ -6194,12 +6320,16 @@ function xhtmlParagraphs(body) {
   }
   return paragraphs.join("");
 }
-function chapterXhtml(chapter) {
-  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>${xmlEscape(chapter.title)}</title></head><body><h1>Chapter ${chapter.number}: ${xmlEscape(chapter.title)}</h1>${xhtmlParagraphs(chapter.body)}</body></html>`;
+function xhtmlDocument(title, lang, bodyType, content) {
+  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="${lang}" lang="${lang}"><head><title>${xmlEscape(title)}</title></head><body epub:type="${bodyType}">${content}</body></html>`;
 }
-function matterXhtml(entry) {
+function chapterXhtml(chapter, lang = "en") {
+  return xhtmlDocument(chapter.title, lang, "bodymatter chapter", `<h1>Chapter ${chapter.number}: ${xmlEscape(chapter.title)}</h1>${xhtmlParagraphs(chapter.body)}`);
+}
+function matterXhtml(entry, placement = "front", lang = "en") {
   const heading = entry.heading ? `<h1>${xmlEscape(entry.title)}</h1>` : "";
-  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>${xmlEscape(entry.title)}</title></head><body>${heading}${xhtmlParagraphs(entry.body)}</body></html>`;
+  const bodyType = entry.id === "copyright" ? `${placement}matter copyright-page` : `${placement}matter`;
+  return xhtmlDocument(entry.title, lang, bodyType, `${heading}${xhtmlParagraphs(entry.body)}`);
 }
 function writeDocx(outFile, manuscript, writeOptions = {}) {
   const bodyParts = [paragraphXml(manuscript.title, "Title")];
