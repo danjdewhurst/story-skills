@@ -27,7 +27,7 @@ overall-verdict: "{loved it | liked it with reservations | mixed | didn't connec
 ### {Problem title} (Ch {N})
 
 - **What the reader said:** {quote or close paraphrase}
-- **Where:** {¶ anchor from the HTML review copy, e.g. ch03-p12; or chapter/scene reference}
+- **Where:** {paragraph anchor from the HTML review copy, e.g. ch03-p12; or chapter/scene reference}
 - **Canon check:** {verified against the bible | contradicts canon — see note |
   outside canon scope}
 - **Severity (reader's):** {blocking | major | minor | nit}
@@ -51,8 +51,8 @@ adjusting the chapters and deadline:
 Thanks for reading! The attached file opens in any web browser.
 
 - Please read chapters {range} by {date}.
-- Every paragraph has a ¶ mark. Click it to get its label (like
-  `ch03-p12`: chapter 3, paragraph 12) and put that label at the start of
+- Every paragraph has a small label beside it (like
+  `ch03-p12`: chapter 3, paragraph 12). Put that label at the start of
   each note so I can find the exact spot.
 - Note anything: where you were confused, bored, or pulled out of the
   story; where you couldn't put it down; typos; anything that felt off.

@@ -14,6 +14,9 @@
 #
 # If your story project lives in a subdirectory, change STORY_DIR.
 #
+# The html build format ships in the first story-skills release after 0.8.2;
+# STORY_REF must point at that release or later.
+#
 # The Story CLI runs straight from GitHub, pinned to the STORY_REF tag below;
 # bump STORY_REF when you adopt a newer story-skills release.
 #
@@ -31,9 +34,10 @@ on:
 permissions:
   contents: read
 
+# Let a running Pages deployment finish rather than cancel it mid-upload.
 concurrency:
   group: review-copy
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   STORY_DIR: "."
@@ -67,9 +71,6 @@ jobs:
         with:
           name: review-copy
           path: review-site/index.html
-
-      - name: Configure Pages
-        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
 
       - name: Upload the Pages site
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5

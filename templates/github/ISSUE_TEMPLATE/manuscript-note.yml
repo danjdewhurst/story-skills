@@ -5,6 +5,9 @@
 # (review-copy.yml) open an issue per note, quoting the paragraph label shown
 # beside each paragraph, so every note points at an exact place in the book.
 # The feedback-triage skill reads these issues into a feedback round.
+#
+# GitHub only applies labels that already exist, so create a
+# `manuscript-note` label in the repository first.
 
 name: Manuscript note
 description: Leave a note on a paragraph of the review copy.
