@@ -1,6 +1,6 @@
 ---
 name: character-management
-description: This skill should be used when the user asks to "create a character", "update a character", "add a character", "build a family tree", "character relationships", "character timeline", "character arc", "character profile", or needs to manage characters in a story project.
+description: This skill should be used when the user asks to "create a character", "update a character", "add a character", "build a family tree", "character relationships", "character timeline", "character arc", "character profile", "relationship graph", "name a character", "character voice words", or needs to manage characters in a story project.
 ---
 
 # Character Management
@@ -17,13 +17,14 @@ A story project must already exist (created via the story-init skill). Verify by
 
 1. Read `story.md` for genre, themes, and tone context
 2. Read `characters/_index.md` for existing characters
-3. Ask for the character's name and role (protagonist, antagonist, supporting, minor, narrator, deuteragonist)
+3. Ask for the character's name and role (protagonist, antagonist, supporting, minor, narrator, deuteragonist). Before settling the name, run `story names "{Name}"` (several candidates can be checked at once): it errors on an exact clash with any existing character, alias, location, faction, artifact, system, or glossary term, and warns about look-alikes and names sharing an initial with a major character. Invented names from a culture should follow its naming rules (see `references/naming-languages.md` in the `worldbuilding` skill)
 4. Build the profile through conversation, exploring:
    - Appearance and distinguishing features
    - Personality, traits, and quirks
    - Backstory and formative events
    - Motivations (external wants vs internal needs)
-   - Voice and speech patterns (ask for example dialogue)
+   - Voice and speech patterns (ask for example dialogue), plus `voice-words` (words and phrases they reach for) and `voice-avoid` (words they would never say)
+   - Pronunciation, when the name is invented or easily misread (`pronunciation: "SEER-sha"`)
    - Character arc (starting state, turning points, ending state)
    - Key life events for the timeline
 5. Write the character file using the template in `references/character-template.md`
@@ -56,9 +57,18 @@ When adding a relationship:
 - Add the inverse relationship to the other character's frontmatter
 - Update the Relationship Map section in `characters/_index.md`
 
-## Family Trees
+## Family Trees and Relationship Graphs
 
-Family trees are maintained in the `characters/_index.md` under the "Family Trees" section. Format:
+Generate the relationship graph from character frontmatter instead of drawing it by hand:
+
+```shell
+story diagram relationships
+story diagram relationships --out dist/relationships.mmd
+```
+
+It prints Mermaid source built from every character's `relationships`, with family edges styled distinctly so the family tree stands out from alliances and rivalries. GitHub, many editors, and mermaid.live render it. Use it to spot one-way relationships, isolated characters, and families missing a generation; regenerate it after relationship changes rather than editing the output.
+
+Family trees are also maintained in the `characters/_index.md` under the "Family Trees" section. Format:
 
 ```markdown
 ## Family Trees
@@ -70,6 +80,21 @@ Family trees are maintained in the `characters/_index.md` under the "Family Tree
 ```
 
 Indent children under parents. Note marriages/partnerships inline.
+
+## Voice Fields
+
+`voice-words` and `voice-avoid` are optional lists in character frontmatter that make a speaker's voice checkable:
+
+```yaml
+voice-words:
+  - "reckon"
+  - "love"          # as an address: "all right, love"
+voice-avoid:
+  - "awesome"
+  - "literally"
+```
+
+`story voices .` fingerprints each character's tagged dialogue and warns when they say a `voice-avoid` word, when a `voice-words` entry never appears, and when two characters' voices are near-identical. Keep these lists short (three to eight entries) and consistent with the Voice & Speech Patterns section and the style sheet's Character Voices line (see the `voice-style` skill).
 
 ## Cross-Referencing
 

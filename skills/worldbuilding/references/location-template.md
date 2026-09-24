@@ -15,8 +15,15 @@ tags:
   - {tag-1}
   - {tag-2}
 status: "{location-status, e.g. thriving, declining, strained, exposed, unknown}"
+pronunciation: "{optional, e.g. KEL-ah-mar}"
+routes:
+  - to: {location-kebab}
+    hours: {travel time as a number}
+    mode: "{on foot|horse|coach|boat|train|...}"
 ---
 ```
+
+`pronunciation` and `routes` are optional. A route is two-way unless the other location declares its own; `story continuity` checks dated scenes against its `hours`. See `maps-and-routes.md`.
 
 `type` and `status` are free-form descriptive strings, not a closed set. Use the validator truth: any kebab-case or plain value passes `story validate`. Match existing example usage where it fits (e.g. `city`, `district`, `wilderness`, `submerged-ruin` for type; `thriving`, `declining`, `strained`, `exposed`, `unknown` for status).
 
