@@ -25,6 +25,10 @@
       "Continuity-check my latest chapter.",
       "Validate my story project."
     ],
-    "brandColor": "#7C3AED"
+    "brandColor": "#7C3AED",
+    "websiteURL": "https://github.com/danjdewhurst/story-skills",
+    "composerIcon": "./assets/logo.png",
+    "logo": "./assets/logo.png",
+    "screenshots": ["./assets/screenshot-continuity.png"]
   }
 }
