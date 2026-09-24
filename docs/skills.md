@@ -57,7 +57,7 @@ If none of the three is available, skills fall back to doing the registry, backl
 | Check real-world facts and record sources | [research](#research) | "Fact-check the sailing in chapter 4" |
 | Draft the next chapter from an outline | [chapter-writing](#chapter-writing) | "Write the next chapter" |
 | Draft without an outline and tidy the bible afterwards | [discovery-drafting](#discovery-drafting) | "I want to discovery-write" |
-| Fix a flat scene, weak dialogue, an info dump, or an opening | [scene-craft](#scene-craft) | "Does this chapter breathe?" |
+| Fix a flat scene, weak dialogue, an info dump, or an opening | [scene-craft](#scene-craft) | "Fix the info dump in chapter 2" |
 | Keep spelling, voice, and house style consistent, or lint prose | [voice-style](#voice-style) | "Set up a style sheet for this book" |
 | Revise, line edit, or continuity-check existing chapters | [revision-continuity](#revision-continuity) | "Continuity-check chapter 3" |
 | Process notes from alpha or beta readers | [feedback-triage](#feedback-triage) | "Triage the beta feedback" |
@@ -105,7 +105,7 @@ The main handoffs:
 
 | Skill | Main files it writes | CLI commands it runs |
 |-------|----------------------|----------------------|
-| [story-init](#story-init) | Whole project scaffold, `story.md`, all registries | `init`, `validate`, `next` |
+| [story-init](#story-init) | Whole project scaffold, `story.md`, all registries | `init`, `validate` (then suggests `next`) |
 | [character-management](#character-management) | `characters/*.md`, `characters/_index.md` | `add character`, `reindex`, `links`, `validate` |
 | [worldbuilding](#worldbuilding) | `worldbuilding/{locations,systems,factions,artifacts}/*.md` | `add faction`, `add artifact`, `reindex`, `links`, `validate` |
 | [plot-structure](#plot-structure) | `plot/_index.md`, `plot/arcs/*.md`, `plot/timeline.md`, `continuity/{promises,questions}/` | `add arc`, `add chapter`, `add scene`, `timeline`, `reindex`, `links`, `validate` |
@@ -187,7 +187,7 @@ The main handoffs:
 
 ### worldbuilding
 
-**Purpose.** Creates locations, systems (magic, politics, technology, religion, economy, military, social), factions, and artifacts under `worldbuilding/`.
+**Purpose.** Creates locations, systems (magic, politics, technology, religion, economy, military, social, education), factions, and artifacts under `worldbuilding/`.
 
 **Triggers.** "Create a location", "add a location", "magic system", "political system", "build the world", "add culture", "world history", "technology system", "religion", "economy".
 
@@ -376,7 +376,7 @@ When `story.md` links other books, reveals the series depends on get a stable `f
 **Workflow.**
 
 1. **Kernel.** Writes the kernel (a character in a situation, a want, an obstacle, a tone signal) under `## Story Kernel` in `story.md` and sets `draft-mode: discovered`.
-2. **Draft forward.** Writes in sessions of re-read, write, and a note for next time. Questions about the bible are left inline as `[TODO: check bible]` rather than stopping the draft. Prose standards and `style-sheet.md` still apply.
+2. **Draft forward.** Writes in sessions of re-read, write, and a note for next time. Questions about the bible are left inline as `[TODO: check bible]` rather than stopping the draft; these markers stay in the prose, counting towards its words, until the reconcile loop clears them. Only the note for next time goes above `## Chapter Text`. Prose standards and `style-sheet.md` still apply.
 3. **Reconcile loop** after every chapter:
    - extract new entity and promise candidates for your approval
    - reverse-outline the chapter into the chapter file and `scenes/`
@@ -386,6 +386,8 @@ When `story.md` links other books, reveals the series depends on get a stable `f
 4. **Batch review** every three to five chapters: re-reads the post-hoc notes, sweeps promises and questions for dangling setups, and cuts dead ends. Abandoned ledger entries keep a reason, and cut characters keep their file with `status: cut`.
 5. **Cadence.** Logs sessions with `story progress . --log`, and hands batches to [revision-continuity](#revision-continuity) at the midpoint and at the end of the draft.
 6. **Close out.** Flags any `mode: discovered` chapter that lacks post-hoc notes or a completed diff.
+
+**Reads.** `story.md` and its kernel, `style-sheet.md`, the previous chapter's post-hoc notes and last few pages at the start of each session, and, in the reconcile loop and batch reviews, the bible files and the promise and question ledgers.
 
 **Writes.** `story.md` (kernel and `draft-mode`), chapters and their post-hoc notes, `scenes/`, and whichever bible files the reconcile step updates.
 
@@ -424,6 +426,8 @@ When `story.md` links other books, reveals the series depends on get a stable `f
 4. Records machine-readable state on the scene file: `sequel: true`, `dilemma`, a `## Sequel` section, `flashback-to` for flashbacks (a freeform note that `story validate` checks is a single value but continuity checks ignore; flashback-only characters move to `mentions`), and current `state-changes`.
 5. Runs the reference's checklist, and marks intentional departures (a deliberate info dump, say) in the scene's planning notes so a later audit leaves them alone.
 
+**Reads.** The reference file for the craft problem at hand, the scene file in `scenes/`, the chapter outline or prose, and whatever project files settle the scene's purpose, viewpoint, and location.
+
 **Writes.** `scenes/*.md` frontmatter and `## Planning`, `## Scene Card`, or `## Sequel` sections; chapter outlines; and `continuity/state.md` plus entity files when a scene decision changes canon.
 
 **CLI.** `story reindex .`, `story links .`, `story validate .`, `story continuity .`. `story add scene` accepts `--sequel` and `--dilemma` and writes them into the scene frontmatter; the `## Sequel` section is added by hand.
@@ -457,6 +461,8 @@ When `story.md` links other books, reveals the series depends on get a stable `f
 
 `chapter-writing` and `discovery-drafting` read `style-sheet.md` before drafting, and the copyedit pass in `revision-continuity` enforces it. Projects created before the style sheet existed can add one with `story init "<title>" --dir . --force`, which only adds missing files.
 
+**Reads.** `story.md` (genre, POV, tense, and tone), `style-sheet.md`, and two or three drafted chapters or a sample you supply.
+
 **Writes.** `style-sheet.md` and chapter prose.
 
 **CLI.** `story validate .`, `story prose .`, `story wordcount . --write`, `story links .`, and `story rename character` for a name change.
@@ -484,6 +490,8 @@ When `story.md` links other books, reveals the series depends on get a stable `f
 4. Edits the markdown directly, then updates the chapter `status` (`draft` to `revised`, and to `final` only when appropriate), timeline, scenes, continuity records, arc plot points, and entity files.
 5. Runs the continuity checklist for what the CLI can't judge: character knowledge, carried-forward state, travel time, world rules, and chapter references.
 6. For an audit, reports findings by severity with file references and concrete fixes. For a revision, summarises what changed.
+
+**Reads.** `story.md`, `chapters/_index.md`, the target chapters and their neighbours, the character, location, system, and arc files they reference, their scene files, `continuity/state.md`, open questions and promises, and `plot/timeline.md`. Each audit adds its own reads, such as `style-sheet.md` and `glossary/` for a copyedit or `research/` notes for a fact check.
 
 **Writes.** Chapter prose and `status`, `plot/timeline.md`, `scenes/*.md`, `continuity/state.md`, question and promise files, arc plot points and foreshadowing rows, and character or location files whose state changed. Copyedits can also update `style-sheet.md` and `glossary/`.
 
@@ -514,6 +522,8 @@ story compare . --against ../the-tide-room-draft-1
 4. **Hand off.** A `needs-revision` or `not-ready` verdict goes to [revision-continuity](#revision-continuity). A `ready` verdict closes the round.
 
 When reader confusion reveals a gap in clarity, it creates or resolves files in `continuity/questions/` as well.
+
+**Reads.** `story.md`, every reader file in the round, and the bible files a note needs checking against.
 
 **Writes.** `feedback/round-N/*.md` and `continuity/questions/*.md`.
 
@@ -583,6 +593,8 @@ When reader confusion reveals a gap in clarity, it creates or resolves files in 
 5. Copies only the entities the new book uses, keeping the filename id and `name` identical (new epithets go in `aliases`), setting state for this book's starting point, removing references to chapters in the other book such as `died-in`, and pruning or carrying every link. It never copies chapters, scenes, arcs, questions, promises, or `continuity/state.md`.
 6. Gives series-relevant knowledge a stable `fact` id in `knowledge-state`, with `learned-in` only in the book where the character learns it on the page.
 
+**Reads.** The existing book first: `story.md`, `characters/_index.md`, `worldbuilding/_index.md`, `plot/timeline.md`, `continuity/state.md`, open questions and promises, and the final chapters.
+
 **Writes.** A new project, both books' `story.md`, carried entity files, and `continuity/state.md` fact ids.
 
 **CLI.** After carrying entities into the new book it runs `story reindex .`, `story links .`, `story validate .`, and `story series .`. After any later change to series links or carried entities, it runs `story validate .`, `story links .`, `story continuity .`, and `story series .` in each affected book.
@@ -600,6 +612,8 @@ When reader confusion reveals a gap in clarity, it creates or resolves files in 
 **Triggers.** "Validate my story project", "reindex", "repair registries", "check links", "check continuity", "count words", "summarize the project", "import an existing manuscript", "export a manuscript", "run the story CLI".
 
 **When each command fits.** The skill picks commands the same way the rest of the docs describe: [the maintenance loop](writing-workflows.md#the-maintenance-loop) for the five commands that follow most edits, [When to run what](continuity.md#when-to-run-what) for the analysis commands, and the [command summary](cli-reference.md#command-summary) for everything else, including `import`, `migrate`, `add`/`rename`/`remove`, `knowledge`, `export`, `build`, and `synopsis`.
+
+**Reads.** The CLI's output, and the project files a finding names when it fixes them.
 
 **Failure handling.** It treats CLI errors as findings to fix, and fixes broken references, stale registries, and wrong word counts when the task implies it. It never rewrites prose just to satisfy a check, and it reports warnings that reflect deliberate choices instead of changing them. `story import --force` deletes every `chapter-NN.md` in `chapters/` before writing, so it confirms with you first. If `story reindex` fails on a corrupt `plot/_index.md`, it restores the frontmatter from git or deletes the file so reindex rebuilds it, rather than editing story content.
 

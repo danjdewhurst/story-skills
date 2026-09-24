@@ -61,7 +61,7 @@ cp -r story-skills/skills/* .agents/skills/     # or this repository only
 
 ### Other agents: the Agent Skills CLI
 
-For any agent the [Agent Skills CLI](https://agentskills.io) supports:
+For any agent that the [`skills` CLI](https://github.com/vercel-labs/skills) (run with `npx skills`) supports:
 
 ```shell
 npx skills add danjdewhurst/story-skills

@@ -6,7 +6,7 @@ If you have not used Story Skills before, start with [Getting started](getting-s
 
 ## How the pieces fit
 
-A story project is a folder of markdown files with YAML frontmatter. The skills do the creative work, such as outlining, drafting, and revising, and write those files. The `story` CLI does the mechanical work: it validates the files, rebuilds registries, counts words, checks links and continuity, and builds the finished book. It never writes prose. [Core concepts](concepts.md) explains the model in full.
+A story project is a folder of markdown files with YAML frontmatter. The skills do the creative work, such as outlining, drafting, and revising, and write those files. The `story` CLI does the mechanical work: it validates the files, rebuilds registries, counts words, checks links and continuity, and builds the finished book. It never composes or revises prose. [Core concepts](concepts.md) explains the model in full.
 
 ```mermaid
 flowchart LR

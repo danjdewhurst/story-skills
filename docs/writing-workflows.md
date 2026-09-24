@@ -185,7 +185,7 @@ Design the harbor's smuggling economy as a system.
 Add the Coastguard Board as a government faction.
 ```
 
-[`worldbuilding`](../skills/worldbuilding/SKILL.md) handles locations, systems (magic, political, technology, religion, economic, military, social), factions, and artifacts. Each goes in its own folder under `worldbuilding/` and is cross-linked to the characters who use it: a location's `notable-characters` must match each character's `locations` list, a faction's `members` must be real character ids, and an artifact's `owner` must be a real character or faction. `story links` reports any reference that points nowhere and any location or character that is missing its backlink.
+[`worldbuilding`](../skills/worldbuilding/SKILL.md) handles locations, systems (magic, political, technology, religion, economic, military, social, education), factions, and artifacts. Each goes in its own folder under `worldbuilding/` and is cross-linked to the characters who use it: a location's `notable-characters` must match each character's `locations` list, a faction's `members` must be real character ids, and an artifact's `owner` must be a real character or faction. `story links` reports any reference that points nowhere and any location or character that is missing its backlink.
 
 ### 5. Add the thematic and genre layers (optional)
 
@@ -332,7 +332,7 @@ Each session has three parts, described in the [drafting cadence reference](../s
 2. **Write forward.** When the agent needs a fact it has not settled, it leaves `[TODO: check bible]` inline and keeps going. When stuck, it goes back a few hundred words and tries a different choice.
 3. **Close** with a `[TODO]` note above `## Chapter Text` saying where the next session starts.
 
-Keep TODOs and notes above `## Chapter Text`. Anything below that heading is counted by `story wordcount` and shipped by `story export`.
+The inline `[TODO: check bible]` markers sit in the prose until the reconcile loop clears them, and they count towards the chapter's words in the meantime. Only the end-of-session note goes above `## Chapter Text`: anything below that heading is counted by `story wordcount` and shipped by `story export`, so a stray TODO left in the prose ends up in the book.
 
 Discovery changes the planning order, not the prose standard: the skill still reads `style-sheet.md` and uses the `scene-craft` tools.
 
