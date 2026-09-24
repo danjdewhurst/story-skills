@@ -1,6 +1,6 @@
 # Continuity and analysis
 
-This page is for writers and agents who want to know what the `story` CLI can check about a manuscript, and what to do when it finds something. It covers the continuity engine (deaths, casts, promises, questions, clues, state, prop custody, and clock), exemptions, and the read-only analysis commands: `knowledge`, `timeline`, `prose`, `progress`, `compare`, `report`, `next`, and `doctor`.
+This page is for writers and agents who want to know what the `story` CLI can check about a manuscript, and what to do when it finds something. It covers the continuity engine (deaths, casts, promises, questions, clues, state, prop custody, and clock), exemptions, and the analysis commands: `knowledge`, `timeline`, `prose`, `progress`, `compare`, `report`, `next`, and `doctor`. All of them are read-only except `story progress --log`, which adds or replaces today's entry in `progress.md`.
 
 All of these commands are deterministic. They read your markdown frontmatter and chapter prose, never call a model, never rewrite prose, and give the same answer every time for the same files. They only flag contradictions that the frontmatter makes visible. Judgement calls, such as whether a character acts on knowledge they have not learned yet, are left to you or to the [`revision-continuity`](../skills/revision-continuity/SKILL.md) skill.
 

@@ -218,7 +218,7 @@ The `Shared canon` section lists every id that appears in more than one book, gr
 
 ### What it checks
 
-Each book is compared with every book set earlier in the chronology, meaning every book reachable by following `precedes` forward from it.
+Each book is compared with every book set earlier in the chronology: every book from which this one can be reached by following `precedes` links forward (equivalently, every book reachable by following `follows` links back from this one).
 
 | Level | Finding | Fix |
 |-------|---------|-----|
