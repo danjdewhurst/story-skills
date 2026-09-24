@@ -3,6 +3,7 @@ import { formatClueMatrix } from "./clues.js";
 import { formatComparison } from "./compare.js";
 import { importManuscript } from "./import.js";
 import { isTruthy } from "./options.js";
+import { formatNames } from "./names.js";
 import { formatPacing } from "./pacing.js";
 import { formatPasses } from "./passes.js";
 import { formatProgress } from "./progress.js";
@@ -25,6 +26,7 @@ import {
   formatProjectReport,
   knowledgeAtChapter,
   migrateProject,
+  namesReport,
   pacingReport,
   projectPasses,
   projectActions,
@@ -259,6 +261,21 @@ export const COMMANDS = [
       const result = diagramProject(root(), { kind: parsed.positionals[1], out: parsed.options.out });
       io.stdout.write(result.outFile === undefined ? result.text : `Wrote ${parsed.positionals[1]} diagram to ${result.outFile}\n`);
       return 0;
+    }
+  },
+  {
+    name: "names",
+    usage: "names <name...>",
+    summary: [
+      "Check candidate names against characters, places,",
+      "factions, artifacts, systems, and glossary terms:",
+      "clashes are errors, look-alikes are warnings"
+    ],
+    project: "flag",
+    run({ parsed, io, root }) {
+      const report = namesReport(root(), parsed.positionals.slice(1));
+      io.stdout.write(formatNames(report));
+      return reportResult(io, report, "Names checked", "Name check failed");
     }
   },
   {
