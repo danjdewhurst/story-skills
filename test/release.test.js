@@ -77,6 +77,15 @@ describe("release script", () => {
     expect(isAbsentNpmVersion({ message: "getaddrinfo ENOTFOUND registry.npmjs.org" })).toBe(false);
   });
 
+  test("declares bin paths the way npm publish keeps them", () => {
+    // npm publish normalizes a "./" prefix away and warns that it removed the bin.
+    const packageJson = JSON.parse(fs.readFileSync(path.resolve(import.meta.dir, "..", "package.json"), "utf8"));
+    for (const target of Object.values(packageJson.bin)) {
+      expect(target.startsWith("./")).toBe(false);
+      expect(fs.existsSync(path.resolve(import.meta.dir, "..", target))).toBe(true);
+    }
+  });
+
   test("recovers a failed npm publish from the release tag", () => {
     expect(npmRecoveryCommand("v1.2.3")).toBe("git checkout v1.2.3 && npm publish && git checkout main");
   });
