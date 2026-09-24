@@ -1,18 +1,25 @@
 ---
 name: research
-description: This skill should be used when the user asks to "research", "fact-check", "check the history", "is this accurate", "research notes", "sources", "historical accuracy", "technical accuracy", "how would this really work", "verify a detail", or needs to record the real-world facts a story relies on and the chapters that use them.
+description: This skill should be used when the user asks to "research", "fact-check", "check the history", "is this accurate", "research notes", "sources", "historical accuracy", "technical accuracy", "how would this really work", "verify a detail", "interview an expert", "plan a site visit", "expert review", or needs to investigate and record the real-world facts a story relies on and the chapters that use them.
 ---
 
 # Research
 
 ## Overview
 
-Keep the real-world facts a story depends on in `research/` notes: the
-question, the findings with a source for each, and the chapters that rely
-on them. The CLI tracks each note's status (`open`, `verified`,
-`disputed`) and its `used-in` chapters, checks those chapter links, and
-warns when a final chapter still rests on research that is open or
-disputed.
+Investigate the real-world facts a story depends on and keep them in
+`research/` notes: the question, a search plan, the findings with a
+citation for each, how confident the finding is, and the chapters that
+rely on them. Research is active work, not only a ledger: form precise
+questions, go to primary sources where they exist, interview people and
+visit places, and record what was found in a form a later fact-check can
+retrace.
+
+The CLI tracks each note's status (`open`, `verified`, `disputed`), its
+`used-in` chapters, and the optional `accuracy`, `confidence`, `kind`,
+`risk`, and `reviewed-by` fields. It checks the chapter links, warns when a
+final chapter still rests on research that is open or disputed, and warns
+when a risky note reaches a final chapter without a qualified reviewer.
 
 ## Prerequisites
 
@@ -34,26 +41,74 @@ registry are created by the first `story add research`.
 ### 1. Open a note
 
 ```shell
-story add research "Tidal bore timing" --used-in chapter-03
+story add research "Tidal bore timing" --used-in chapter-03 \
+  --accuracy must-be-accurate --kind fact --confidence low
 ```
 
 Fill the note's `## Question` with what the story needs to get right, in
-one or two sentences.
+one or two sentences. Set the fields that describe the note:
 
-### 2. Research
+- `accuracy` - how closely the prose must match reality:
+  `must-be-accurate` (a checkable real fact the plot or setting relies
+  on), `blended` (real facts deliberately mixed with invention), or
+  `invented` (a made-up fact recorded here for consistency). Invented notes
+  need no sources and never trigger the open-research warning.
+- `kind` - where the knowledge comes from: `fact` (desk research),
+  `reading` (a book or paper read for background), `interview`,
+  `site-visit`, or `expert-review`.
+- `confidence` - `high`, `medium`, or `low`; how sure the current findings
+  are. Start at `low` and raise it as sources agree.
+- `risk` - a list, when getting it wrong could harm a reader, a real person,
+  or the author: `legal`, `medical`, `weapons`, `safety`, `cultural`,
+  `defamation`, `technical`. Pass `--risk` once per value.
+
+### 2. Plan the investigation
+
+1. Break the question into the specific things the prose asserts or
+   implies ("Could she walk from the station to the docks in 20 minutes in
+   1953?" rather than "1950s Liverpool").
+2. Write a short `## Search Plan` in the note: the terms to search, the
+   archives, records, or reference works to try, and the people who would
+   know. Mark which would be primary sources (records, first-hand accounts,
+   official data, the place itself) and which secondary.
+3. Decide what "enough" looks like: one authoritative primary source, or
+   two independent secondary sources that agree.
+
+### 3. Research
 
 1. Use the research tools available in the session (web search or fetch,
-   documents the user provides). If none are available, list what needs
-   checking and ask the user to supply sources.
-2. Record each finding under `## Findings` with its source beside it. Add
-   every source to the `sources` frontmatter list, one full citation or URL
-   per entry, with `--source` on `story add` or by editing the file.
-3. **Never present unverified knowledge as verified.** A fact recalled
+   documents the user provides). If none are available, give the user the
+   search plan and ask them to supply sources.
+2. Record each finding under `## Findings` with its citation beside it:
+   author or institution, title, date, and the page, section, or URL.
+   When a finding rests on exact wording, quote it and give the page or
+   URL, so the claim can be retraced without repeating the search. Add
+   every source to the `sources` frontmatter list, one full citation or
+   URL per entry, with `--source` on `story add` or by editing the file.
+3. Set `confidence` from the evidence: `high` for a primary source or
+   independent agreement, `medium` for one good secondary source, `low`
+   for anything recalled, inferred, or from a single weak source.
+4. **Never present unverified knowledge as verified.** A fact recalled
    without a source stays `status: open`. Only set `status: verified` when
    every finding the chapters rely on has a source. Set `status: disputed`
    when sources disagree, and record both sides.
+5. For interviews and site visits, prepare questions and consent first and
+   record notes in the note body; see
+   `references/interviews-and-site-visits.md`.
 
-### 3. Connect it to the story
+### 4. Flag risk; never advise
+
+Notes with any `risk` value need a qualified human reviewer (a lawyer,
+clinician, weapons or safety specialist, cultural reader, or subject
+engineer, as fits) before the chapters that use them are final. Record the
+reviewer in `reviewed-by` as a name or role once they have read the
+passage. Collect facts and flag concerns, but **never give legal, medical,
+or safety advice yourself**, and never treat your own research as the
+review. Portrayals of real, living people carry defamation risk; route
+those, and sensitivity or authenticity reads, through the
+`editorial-review` skill.
+
+### 5. Connect it to the story
 
 1. List every chapter that relies on the note in `used-in`.
 2. Under `## Story Use`, record how the prose uses the facts and any
@@ -62,12 +117,13 @@ one or two sentences.
 3. Revise the chapters if the findings contradict them, following the
    `revision-continuity` skill.
 
-### 4. Before finalising
+### 6. Before finalising
 
 Run `story validate .`: it warns about a `final` or `complete` chapter that
-uses open or disputed research, and about verified notes with no sources.
-Resolve those before the chapter is marked final, or tell the user which
-facts remain unverified.
+uses open or disputed research, about verified notes with no sources, and
+about notes with a `risk` used in a final or complete chapter with no
+`reviewed-by`. Resolve those before the chapter is marked final, or tell
+the user which facts remain unverified and which reviews are outstanding.
 
 ## Conventions
 
@@ -75,9 +131,12 @@ facts remain unverified.
 - `sources` entries are kept whole, so citations may contain commas.
 - `used-in` lists chapter ids; `story rename` and `story remove` keep it
   current when chapters change.
+- `accuracy: invented` notes are a consistency record, not research; keep
+  invented world facts that belong to the setting in `worldbuilding`.
 - Sensitive or lived-experience topics need a human reader as well as
-  sources. Suggest an authenticity read and record it through the
-  `feedback-triage` skill.
+  sources. Suggest an authenticity or sensitivity read through the
+  `editorial-review` skill, record the reader in `reviewed-by`, and triage
+  their notes through the `feedback-triage` skill.
 
 ## CLI Maintenance
 
@@ -98,4 +157,5 @@ story validate .
 
 ## Reference Files
 
-- **`references/research-practice.md`** - What to check, how to judge sources, and how to record findings and deliberate departures
+- **`references/research-practice.md`** - What to check, search plans, how to judge sources, citing quotes, confidence, accuracy levels, risk flags, and deliberate departures
+- **`references/interviews-and-site-visits.md`** - Preparing questions, consent, recording notes, and turning interviews and visits into research notes
