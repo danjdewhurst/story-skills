@@ -425,12 +425,11 @@ node evals/run-skill.js  # full model run (needs Claude Code credentials)
 
 Every published change needs a new version in `package.json`, `.codex-plugin/plugin.json` (Codex's version source), `.claude-plugin/plugin.json` (Claude Code's), and `src/version.js` (printed by `story --version`), so installed users receive updates. Marketplace entries stay unversioned to avoid duplicate version state.
 
-Don't bump these by hand. The release script bumps all four, rebuilds the fallback, runs the CI checks, commits `chore: release X.Y.Z`, tags `vX.Y.Z`, pushes, creates a GitHub release with generated notes, and publishes the package to npm. It requires a clean `main` that matches `origin/main`, a logged-in `gh`, and a logged-in `npm` (checked before anything changes):
+Don't bump these by hand. The release script bumps all four, rebuilds the fallback, runs the CI checks, commits `chore: release X.Y.Z`, tags `vX.Y.Z`, pushes, and creates a GitHub release with generated notes. The tag push runs the Publish workflow, which publishes the package to npm with provenance through trusted publishing. The script requires a clean `main` that matches `origin/main`, a logged-in `gh`, and a version that isn't already on npm:
 
 ```shell
 bun run release patch            # or minor, major, or an explicit version like 1.2.0
 bun run release patch --dry-run  # run the checks and print the plan without changing anything
-bun run release patch --no-npm   # release to GitHub only and skip the npm publish
 ```
 
 Distribution metadata lives in `.claude-plugin/` for Claude Code and in `.codex-plugin/` plus `.agents/plugins/marketplace.json` for Codex. The `plugins/story-skills` symlink is intentional: Codex marketplace entries must point at a child plugin directory, so the symlink exposes the repo-root plugin without duplicating `skills/`.
