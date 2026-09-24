@@ -10,6 +10,11 @@ status: {alive|deceased|unknown|missing|cut}
 died-in: {chapter-NN}
 aliases:
   - "{Alias 1}"
+pronunciation: "{optional, e.g. SEER-sha}"
+voice-words:
+  - "{word or phrase they reach for}"
+voice-avoid:
+  - "{word they would never say}"
 relationships:
   - character: {other-character-kebab}
     type: {relationship-type}
@@ -26,7 +31,7 @@ ghost-wound: "{The past wound that made the lie feel true}"
 ---
 ```
 
-`died-in` is optional. Set it (with `status: deceased`) when a character dies on the page so `story continuity` can flag appearances in later chapters; leave it out for characters who died before the story begins. Posthumous appearances in flashbacks, memories, or recordings belong in chapter/scene `mentions`, not `characters`. `status: cut` keeps a removed character's file. `story reindex` still lists that file.
+`pronunciation`, `voice-words`, and `voice-avoid` are optional. `pronunciation` feeds the narrator's guide in `story build --format narration`; the voice lists are checked by `story voices`. `died-in` is optional. Set it (with `status: deceased`) when a character dies on the page so `story continuity` can flag appearances in later chapters; leave it out for characters who died before the story begins. Posthumous appearances in flashbacks, memories, or recordings belong in chapter/scene `mentions`, not `characters`. `status: cut` keeps a removed character's file. `story reindex` still lists that file.
 
 ## Appearance
 

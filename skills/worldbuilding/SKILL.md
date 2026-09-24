@@ -1,6 +1,6 @@
 ---
 name: worldbuilding
-description: This skill should be used when the user asks to "create a location", "add a location", "magic system", "political system", "build the world", "add culture", "world history", "technology system", "religion", "economy", or wants to develop any aspect of a story's world and setting.
+description: This skill should be used when the user asks to "create a location", "add a location", "magic system", "political system", "build the world", "add culture", "world history", "technology system", "religion", "economy", "map", "travel times", "routes", "calendar", "moons", "seasons", "naming language", "conlang names", "trade routes", "supply lines", "magic cost", or wants to develop any aspect of a story's world and setting.
 ---
 
 # Worldbuilding
@@ -24,17 +24,41 @@ A story project must already exist (created via the story-init skill). Verify by
    - Culture and customs of inhabitants
    - Notable features characters will interact with
    - Current state at story's timeline
-5. Write the file using `references/location-template.md`
-6. Save to `worldbuilding/locations/{name-kebab}.md`
-7. Update `worldbuilding/_index.md` locations table
-8. If notable characters are listed, verify those character files exist and add this location's kebab-case identifier to each character file's `locations` frontmatter list
-9. When CLI access is available, run `story reindex .`, `story links .`, and `story validate .`
+   - Routes to other locations: travel time in hours and mode (see `references/maps-and-routes.md`)
+   - Pronunciation, if the name is invented or easily misread (`pronunciation: "KEL-ah-mar"`)
+5. Before settling an invented name, run `story names "{Candidate}"` to catch clashes and look-alikes (see `references/naming-languages.md`)
+6. Write the file using `references/location-template.md`
+7. Save to `worldbuilding/locations/{name-kebab}.md`
+8. Update `worldbuilding/_index.md` locations table
+9. If notable characters are listed, verify those character files exist and add this location's kebab-case identifier to each character file's `locations` frontmatter list
+10. When CLI access is available, run `story reindex .`, `story links .`, and `story validate .`
+
+## Maps, Routes, and Travel
+
+Record travel between locations as `routes` on the location file, not in prose notes, so the CLI can check it:
+
+```yaml
+routes:
+  - to: harbor-district
+    hours: 1.5
+    mode: on foot
+  - to: saltmarsh-fort
+    hours: 9
+    mode: coach
+```
+
+- `to` is a location id; `story links .` checks it exists.
+- A route is two-way unless the other location declares its own route back (for example, uphill slower than down).
+- `story continuity .` errors when a character appears in two dated scenes at locations joined by a route and the story time between them is shorter than the route's `hours`.
+- `story diagram locations` prints the route network as a Mermaid map-graph with edges labelled in hours; add `--out dist/locations.mmd` to save it. Use it to spot unreachable places and implausible shortcuts.
+
+Use the travel speeds table in `references/economy-logistics.md` to set plausible hours, and `references/maps-and-routes.md` for the full workflow.
 
 ## Creating a System
 
 1. Read `story.md` for genre and themes context
 2. Read `worldbuilding/_index.md` for existing systems
-3. Identify the system type and consult `references/world-element-types.md` for the relevant prompts
+3. Identify the system type and consult `references/world-element-types.md` for the relevant prompts. For calendars, naming languages, economies, and magic costs, also use `references/calendars.md`, `references/naming-languages.md`, and `references/economy-logistics.md`
 4. Build the system through conversation, addressing the key questions for that type
 5. Write the file using `references/system-template.md`
 6. Save to `worldbuilding/systems/{name-kebab}.md`
@@ -89,6 +113,8 @@ Then:
 - Factions reference character members and locations
 - Artifacts reference an owner character or faction and a current location
 - Systems reference practitioners via character tags
+- Location `routes` reference other locations by id
+- Invented names across characters, locations, factions, artifacts, and glossary terms may carry a `pronunciation`; `story build --format narration` gathers them into a pronunciation guide for audiobook narrators
 - When a location is used in a chapter, the chapter's frontmatter `locations` field links back
 - Keep the `worldbuilding/_index.md` world overview section current as elements are added
 
@@ -103,3 +129,7 @@ Use the Story CLI when it is available. If `story` is not installed, use `bun ru
 - **`references/faction-template.md`** - Template for faction files
 - **`references/artifact-template.md`** - Template for artifact/object files
 - **`references/world-element-types.md`** - Detailed prompts for each system type (magic, political, technology, religion, economic, military, social)
+- **`references/maps-and-routes.md`** - Recording `routes`, the `story diagram locations` map-graph, and the continuity travel check
+- **`references/calendars.md`** - Recording a custom calendar, seasons, and moons as a system file and dating scenes consistently
+- **`references/naming-languages.md`** - Phonology sketches, naming rules per culture, pronunciation, and the `story names` collision check
+- **`references/economy-logistics.md`** - Prices and wages, supply lines, magic and technology costs, and a travel speeds table by mode
