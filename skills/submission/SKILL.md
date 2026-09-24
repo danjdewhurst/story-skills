@@ -29,6 +29,9 @@ check will fail until the draft is finished.
 - Building a Shunn-format manuscript for agents or magazines
 - Writing a retailer or back-cover description for self-publishing
 - Recording queries sent and responses received
+- NOT for self-publishing production (ISBNs, retailer metadata, print
+  interiors, launch, rights): use the `publishing` skill. This skill still
+  drafts the blurb and retailer description it uses
 - NOT for revising the manuscript itself (use `revision-continuity`)
 - NOT for reader feedback rounds (use `feedback-triage`)
 
@@ -145,7 +148,23 @@ story build . --format shunn
 
 Confirm `story.md` has `author` and `contact` first; the title page uses
 them. Shunn builds leave out `matter/` pages, as submissions expect. For
-self-publishing, use `story build . --format epub` or `--format docx`.
+self-publishing, hand off to the `publishing` skill, which covers EPUB and
+print builds (`story build . --format epub`, `--format print --trim 6x9`),
+retailer metadata, and launch.
+
+For a one-page metadata sheet to check the pitch facts against (title,
+series, author, word count, description length against retailer limits,
+keywords, BISAC subjects, and missing fields), run:
+
+```shell
+story build . --format metadata
+```
+
+Keep the retailer description in `submission/blurb.md` and the
+`description` field in `story.md` in step when the user self-publishes.
+If `story.md` has an `ai-disclosure`, check each agent's or market's
+policy on AI-assisted work and disclose as they require; see the
+`editorial-review` skill.
 Tell the user which file in `dist/` to send, and remind them to check each
 agent's or market's guidelines for format and attachment rules.
 

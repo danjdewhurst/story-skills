@@ -15,12 +15,14 @@ Initialize a new story project with a structured markdown folder layout. Creates
 - Setting up the folder structure for an existing story idea
 - NOT for adding to an existing story project (use the domain-specific skills instead)
 - NOT for a sequel, prequel, or companion to an existing book: use `series-continuity`, which links the projects and carries canon across
+- NOT for finding the idea itself: when the user has only a vague notion ("something about lighthouses"), several competing ideas, or no premise yet, run the `premise-workshop` skill first, then return here with the chosen premise, form, and genre
 - NOT for converting an existing manuscript or chapter drafts: run `story import <source> --title "{Title}"` instead, then build out the bible from the entity candidates it prints
 
 ## Workflow
 
-1. Ask for basic story information:
+1. Ask for basic story information (if a `premise-workshop` session produced a premise, logline, genre, and form, reuse them rather than asking again):
    - Title
+   - Form: `novel`, `novella`, `novelette`, `short-story`, `flash`, `serial`, `picture-book`, or `chapter-book` (default `novel`)
    - Genre and sub-genre
    - Brief synopsis (2-3 sentences)
    - Setting era/time period
@@ -31,8 +33,12 @@ Initialize a new story project with a structured markdown folder layout. Creates
 If the Story CLI is available, prefer using it to create the starter project, then inspect and refine the generated files as needed:
 
 ```shell
-story init "{Title}" --genre "{genre}" --sub-genre "{sub-genre}" --setting-era "{era}" --pov "{pov-style}" --tense "{tense}" --synopsis "{synopsis}" --theme "{theme-1}" --theme "{theme-2}"
+story init "{Title}" --form "{form}" --genre "{genre}" --sub-genre "{sub-genre}" --setting-era "{era}" --pov "{pov-style}" --tense "{tense}" --synopsis "{synopsis}" --theme "{theme-1}" --theme "{theme-2}"
 ```
+
+`--form` records `form` in `story.md` and, when no target is given, sets a default `target-words` for the form (novel 80,000, novella 30,000, novelette 12,000, short story 5,000, flash 1,000, chapter book 10,000, picture book 500; serials get no book-level default). `story validate` then warns when `target-words` is outside the form's usual range. For short forms, point the user to `references/short-story-form.md` in the `plot-structure` skill.
+
+Publishing metadata (`isbn`, `publisher`, `publication-date`, `description`, `keywords`, `subjects`, `copyright`, `cover-alt`, `ai-disclosure`, `language`) is optional and can wait until the book is ready to publish; the `publishing` skill fills it in. Do not ask for it at init.
 
 The title must contain ASCII letters or digits, because the story id recorded in every registry is derived from it (`--dir` sets only the directory). `init` refuses an existing directory unless you pass `--force`; with `--force` it only creates missing starter files and never overwrites an existing `story.md`, registry, timeline, or `continuity/state.md`.
 
@@ -89,6 +95,7 @@ genre: {genre}
 sub-genre: {sub-genre}
 setting-era: {era}
 status: planning
+form: {form}
 themes:
   - {theme-1}
   - {theme-2}
@@ -244,6 +251,7 @@ Also create the v2 support files. Every registry and `continuity/state.md` needs
 If manual initialization gets tedious, stop and ask the user to install or run the Story CLI rather than inventing a different project shape.
 
 6. Present a summary of what was created and suggest next steps:
+   - "Workshop the premise" (triggers premise-workshop skill) if the premise is still a guess
    - "Add your first character" (triggers character-management skill)
    - "Start worldbuilding" (triggers worldbuilding skill)
    - "Define your plot structure" (triggers plot-structure skill)

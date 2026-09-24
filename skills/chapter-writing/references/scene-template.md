@@ -14,6 +14,7 @@ characters:
 arcs-advanced:
   - {arc-kebab}
 status: {outline|draft|revised|final|complete}
+outcome: {yes|no|yes-but|no-and}
 sequel: {true|false}
 dilemma: "{The choice the POV character must make in the sequel}"
 state-changes:
@@ -22,7 +23,7 @@ state-changes:
 ---
 ```
 
-`sequel` and `dilemma` are optional. Set `sequel: true` when the scene is the reaction half of the scene/sequel unit; leave them out for ordinary action scenes.
+`outcome` is optional: whether the POV character gets what they want in the scene. `yes-but` and `no-and` are the complicating outcomes; `story pacing` warns after three or more consecutive `yes` outcomes. Leave it out for sequel scenes, which react rather than pursue a goal. `sequel` and `dilemma` are optional. Set `sequel: true` when the scene is the reaction half of the scene/sequel unit; leave them out for ordinary action scenes.
 
 ## Purpose
 

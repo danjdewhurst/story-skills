@@ -28,6 +28,22 @@ Rules for planning try/fail chains:
 - Track each attempt in the chapter outline as `try-1`, `try-2`, `try-3` with
   its failure and its new complication.
 
+## Scene outcomes
+
+Record each scene's result in the scene file's `outcome` field, using
+Swain's four answers to "Does the POV character get what they want?":
+
+| `outcome` | Meaning | Effect on pressure |
+|-----------|---------|--------------------|
+| `yes` | Goal achieved cleanly | Releases pressure; use sparingly |
+| `no` | Goal blocked | Holds pressure |
+| `yes-but` | Goal achieved at a cost or with a new problem | Complicates; raises pressure |
+| `no-and` | Goal blocked and things get worse | Complicates; raises pressure most |
+
+A try/fail chain usually reads `no`, `no-and`, then `yes-but` or `no-and`.
+`story pacing .` lists outcomes per chapter and warns after three or more
+consecutive `yes` outcomes, where the story has stopped pushing back.
+
 ## The Five Commandments (Story Grid)
 
 Shawn Coyne's *Story Grid* describes every complete story unit — including a

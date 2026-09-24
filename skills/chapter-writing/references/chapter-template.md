@@ -16,9 +16,12 @@ mentions:
 arcs-advanced:
   - {arc-kebab}
 status: {outline|draft|revised|final|complete}
+hook: {cliffhanger|question|revelation|reversal|decision|emotional|resolution}
 word-count: {N}
 ---
 ```
+
+`hook` is optional but expected once a chapter is drafted: it records how the chapter ends. `story pacing` warns about drafted chapters with no `hook` and about three or more consecutive chapters ending on `resolution`.
 
 `characters` lists characters present in the chapter's scenes. `mentions` is optional and lists characters who are only referenced, remembered, recorded, or seen in flashback - including deceased characters, so `story continuity` does not flag them as posthumous appearances.
 

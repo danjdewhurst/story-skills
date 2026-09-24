@@ -1,6 +1,6 @@
 ---
 name: voice-style
-description: This skill should be used when the user asks to "create a style sheet", "style guide", "house style", "keep the voice consistent", "voice drift", "British or American spelling", "character voices", "lint the prose", "prose check", "filter words", "said-bookisms", "overused words", "repeated phrases", "similar character names", or wants to record and enforce the voice and surface conventions of a story project.
+description: This skill should be used when the user asks to "create a style sheet", "style guide", "house style", "keep the voice consistent", "voice drift", "British or American spelling", "character voices", "lint the prose", "prose check", "filter words", "said-bookisms", "overused words", "repeated phrases", "similar character names", "voice fingerprints", "dialogue voices sound the same", or wants to record and enforce the voice and surface conventions of a story project.
 ---
 
 # Voice & Style
@@ -30,6 +30,7 @@ A story project with `story.md` in the root. `story init` scaffolds
 - When the user wants a mechanical prose check before sharing a draft
 - NOT for character personality or arc (use `character-management`)
 - NOT for scene-level craft such as deep POV or subtext (use `scene-craft`)
+- NOT for the line-by-line prose pass itself (line edit, copyedit, read-aloud, proof): use the `line-editing` skill, which reads this style sheet and runs these checks
 
 ## Workflow
 
@@ -52,7 +53,9 @@ A story project with `story.md` in the root. `story init` scaffolds
      this book uses on purpose (a proper noun like *Harbor Street* in a
      British book)
 4. Character Voices entries summarise each character file's Voice & Speech
-   Patterns section in one line and link to it. The character file is
+   Patterns section in one line and link to it. Record words a speaker
+   reaches for in the character file's `voice-words` list and words they
+   would never say in `voice-avoid`, so `story voices` can check them. The character file is
    canon; if the two disagree, fix the style sheet, or ask the user before
    changing the character.
 
@@ -79,7 +82,27 @@ readers could confuse. Warnings are advisory and the command exits 0 unless
 a file cannot be read. See `references/prose-checks.md` for what each
 count means and how to respond.
 
-### 4. Act on the findings
+### 4. Run the dialogue voice check
+
+```shell
+story voices .
+```
+
+`story voices` attributes quoted dialogue to a character when the
+paragraph's tag names them (`"...," Mara said`, `said Mara`, `Mara asked`;
+aliases count). Per character it reports lines, words, mean sentence
+length, contraction, question, and exclamation rates, and signature words
+used more by them than by others. It warns when a character says one of
+their `voice-avoid` words, when two characters with five or more lines each
+have near-identical fingerprints ("voices may be indistinguishable"), and
+when a `voice-words` entry is never said. Untagged dialogue is not counted,
+so a low line count may mean few tags rather than few lines.
+
+When two voices blur, differentiate them on more than one axis (sentence
+length, contractions, vocabulary, what they ask about) and see
+`dialogue-subtext.md` in the `scene-craft` skill for the tag-swap test.
+
+### 5. Act on the findings
 
 1. Fix avoided spellings everywhere; they are always errors of consistency.
 2. Treat rates, echoes, and repeated phrases as prompts to reread the
@@ -87,10 +110,15 @@ count means and how to respond.
    add it to `allow-words` when the book uses it deliberately.
 3. For uniform-rhythm warnings, revise sentence length by intent (short for
    impact, long for flow), not by formula.
-4. For similar names, ask the user before renaming; then use
+4. For similar names, ask the user before renaming; check replacements with
+   `story names "<Candidate>"`, then use
    `story rename character <id> "<New Name>"` so references follow.
-5. Present a summary: what changed, what was kept on purpose, and any
-   style-sheet updates.
+5. For `story voices` warnings, revise the dialogue or update the
+   character's `voice-words`/`voice-avoid` when the draft has found a
+   better voice; ask the user before changing canon.
+6. Present a summary: what changed, what was kept on purpose, and any
+   style-sheet updates. For a full line edit, copyedit, or proof, hand off
+   to the `line-editing` skill.
 
 ## CLI Maintenance
 
@@ -105,6 +133,7 @@ After editing the style sheet or revising prose:
 ```shell
 story validate .
 story prose .
+story voices .
 story wordcount . --write
 story links .
 ```

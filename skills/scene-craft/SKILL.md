@@ -1,6 +1,6 @@
 ---
 name: scene-craft
-description: This skill should be used when the user asks to "plan a scene", "scene structure", "sequel scene", "dialogue subtext", "deep POV", "psychic distance", "try fail", "scene cards", "exposition", "info dump", "flashback", "time skip", "story opening", "first page hook", "introduce a character", or wants scene-level craft for drafting or revision.
+description: This skill should be used when the user asks to "plan a scene", "scene structure", "sequel scene", "dialogue subtext", "deep POV", "psychic distance", "try fail", "scene cards", "exposition", "info dump", "flashback", "time skip", "story opening", "first page hook", "introduce a character", "scene outcome", "yes-but no-and", "chapter hook", or wants scene-level craft for drafting or revision.
 ---
 
 # Scene Craft
@@ -46,6 +46,10 @@ outline-first drafting workflow.
    the chapter outline or the scene's planning notes before drafting or
    revising.
 5. **Record machine-readable state.** Update the scene file in `scenes/`:
+   - Set `outcome:` to how the scene's goal resolves for the POV
+     character: `yes`, `no`, `yes-but`, or `no-and` (see
+     `references/try-fail.md`). Prefer the complicating `yes-but` and
+     `no-and`; a run of clean `yes` outcomes drains tension
    - Set `sequel: true/false` and fill the `dilemma:` field plus the
      `## Sequel` section (reaction/dilemma/decision) for scenes with
      sequel content (see `references/scene-sequel.md`)
@@ -54,9 +58,16 @@ outline-first drafting workflow.
       checks) and move flashback-only characters to `mentions`
       (see `references/flashbacks-time.md`)
    - Keep `state-changes` current for every change the scene makes
+   - When the scene ends its chapter, set the chapter's `hook:` to how the
+     chapter ends: `cliffhanger`, `question`, `revelation`, `reversal`,
+     `decision`, `emotional`, or `resolution` (see `references/openings.md`
+     for the first-page counterpart)
 6. **Run the reference's checklist** against the draft or the revision plan
    (try/fail checklist, deep-POV filter-word scan, tag-swap test, first-page
-   hook check).
+   hook check). Run `story pacing .` to see scene outcomes, sequel counts,
+   and chapter hooks across the book: it warns after three or more
+   consecutive `yes` outcomes, four or more scene units without a sequel,
+   and three or more chapters in a row ending on `resolution`.
 7. **Hand off cleanly.** Scene/sequel planning feeds the chapter-writing
    drafting workflow; theme-audit findings feed revision-continuity. When a
    scene decision changes canon (new knowledge, moved objects, changed
@@ -88,12 +99,13 @@ story reindex .
 story links .
 story validate .
 story continuity .
+story pacing .
 ```
 
 ## Reference Files
 
 - **`references/scene-sequel.md`** - Sequel mechanics: reaction → dilemma → decision (Dwight Swain's scene framework)
-- **`references/try-fail.md`** - Try/fail escalation cycles and the Five Commandments scene shape
+- **`references/try-fail.md`** - Try/fail escalation cycles, scene `outcome` values (yes/no/yes-but/no-and), and the Five Commandments scene shape
 - **`references/scene-cards.md`** - Scene card unit (start state → change → end state), reordering, POV braiding
 - **`references/dialogue-subtext.md`** - Subtext as planning input, dialogue-as-negotiation, voice differentiation, tag-swap test
 - **`references/deep-pov.md`** - Psychic distance zoom levels and checkable deep-POV rules

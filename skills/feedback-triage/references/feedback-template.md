@@ -27,7 +27,7 @@ overall-verdict: "{loved it | liked it with reservations | mixed | didn't connec
 ### {Problem title} (Ch {N})
 
 - **What the reader said:** {quote or close paraphrase}
-- **Where:** {chapter/scene reference}
+- **Where:** {¶ anchor from the HTML review copy, e.g. ch03-p12; or chapter/scene reference}
 - **Canon check:** {verified against the bible | contradicts canon — see note |
   outside canon scope}
 - **Severity (reader's):** {blocking | major | minor | nit}
@@ -41,6 +41,29 @@ overall-verdict: "{loved it | liked it with reservations | mixed | didn't connec
 
 - {Concrete changes the reader proposed — record as proposals, not decisions}
 ```
+
+## Review-copy note for readers
+
+Send this with the HTML review copy (`story build . --format html`),
+adjusting the chapters and deadline:
+
+```markdown
+Thanks for reading! The attached file opens in any web browser.
+
+- Please read chapters {range} by {date}.
+- Every paragraph has a ¶ mark. Click it to get its label (like
+  `ch03-p12`: chapter 3, paragraph 12) and put that label at the start of
+  each note so I can find the exact spot.
+- Note anything: where you were confused, bored, or pulled out of the
+  story; where you couldn't put it down; typos; anything that felt off.
+- Tell me how it made you feel, not how to fix it. Your reactions are the
+  useful part.
+- At the end: what worked best, what worked least, and would you keep
+  reading?
+```
+
+If the project uses the GitHub manuscript-note issue form, replace the
+second bullet with the link to the repository's new-issue page.
 
 ## Canon check discipline
 
