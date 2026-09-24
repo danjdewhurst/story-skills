@@ -1,13 +1,13 @@
 ---
 name: story-maintenance
-description: This skill should be used when the user asks to validate, reindex, repair registries, check links, check continuity, count words, summarize a story project, import an existing manuscript, export a manuscript, run the story CLI, or perform deterministic maintenance on a Story Skills markdown project.
+description: This skill should be used when the user asks to validate, reindex, repair registries, check links, check continuity, count words, summarize a story project, import an existing manuscript, export a manuscript, build a review copy or print interior, generate a diagram, check pacing, clues, voices, or names, track revision passes, run the story CLI, or perform deterministic maintenance on a Story Skills markdown project.
 ---
 
 # Story Maintenance
 
 ## Overview
 
-Run deterministic maintenance for Story Skills projects. Use the CLI for structure validation, registry rebuilds, word counts, link checks, continuity checks, project reports, next-action reports, schema migration, entity helpers, manuscript import, and manuscript export. The creative skills still own story decisions; this skill handles mechanical consistency.
+Run deterministic maintenance for Story Skills projects. Use the CLI for structure validation, registry rebuilds, word counts, link checks, continuity checks, project reports, next-action reports, pacing, clue, voice, and name checks, revision-pass tracking, Mermaid diagrams, schema migration, entity helpers, manuscript import, and manuscript export and builds. The creative skills still own story decisions; this skill handles mechanical consistency.
 
 ## CLI Access
 
@@ -32,7 +32,20 @@ story wordcount . --write
 story links .
 story continuity .
 story prose .
+story voices .
+story pacing .
+story clues .
 story timeline .
+story passes .
+story passes . --init
+story passes . --start structure
+story passes . --done structure
+story names "Mira" "Kelvos"
+story diagram relationships
+story diagram locations --out dist/locations.mmd
+story diagram timeline
+story diagram clues
+story diagram arcs
 story progress . --log
 story compare . --ref draft-1
 story compare . --against ../book-draft-1
@@ -46,6 +59,7 @@ story migrate .
 story add character "Name"
 story add matter "Dedication"
 story add research "Tidal bore timing" --source "Tide tables 2024" --used-in chapter-03
+story add research "Night shift on a cardiac ward" --kind interview --accuracy must-be-accurate --confidence medium --risk medical
 story add matter "Acknowledgments" --placement back
 story rename character old-id "New Name"
 story remove promise old-promise
@@ -55,6 +69,10 @@ story build . --format epub
 story build . --format docx
 story build . --format shunn
 story build . --format docx --shunn
+story build . --format html
+story build . --format print --trim 6x9
+story build . --format narration
+story build . --format metadata
 story knowledge sera-voss --at chapter-04
 story add clue "The silver locket" --planted chapter-02 --payoff chapter-05
 story synopsis --pages 1
@@ -67,9 +85,15 @@ Use:
 - `reindex` after adding, removing, or renaming any entity file. It rebuilds the character, location, system, faction, artifact, arc, chapter, scene, question, promise, clue, and glossary registries. `story add` reindexes itself; a hand-written file does not
 - `wordcount --write` after writing or revising chapters
 - `links` after changing character relationships, notable locations, arc participants, or chapter references
-- `continuity` after drafting or revising a chapter, and whenever the user asks about contradictions, dead characters appearing, unfired setups, or stale state; it deterministically checks `died-in` ordering, promise/question chapter ordering, Chekhov gaps, POV/cast consistency, and `continuity/state.md` references. It reuses the promise-ordering machinery for the clue ledger (`continuity/clues/`): payoff before plant is an error, and a completed story with planned or planted clues is an error. The Chekhov warning (a clue or promise planted three or more chapters ago) requires `status: planted`. `story add clue --planted` records the chapter and leaves `status: planned`, so set `status: planted` when the clue is on the page. A recorded payoff chapter that is still ahead of the latest chapter suppresses the "no payoff yet" warning. It also checks prop custody — artifacts with `destroyed` or `lost` status must not be referenced after their destruction chapter (recorded in object-state `since: chapter-NN`; later scenes referencing them in `state-changes` or `mentions` are errors) — and clock/time plausibility when scenes or chapters carry `date: YYYY-MM-DD` / `time: HH:MM` frontmatter (time may be `dawn`, `morning`, `midday`, `afternoon`, `evening`, or `night`; scene `travel-hours: N` asserts minimum travel time). No dates means no time findings. Intentional exceptions go in `continuity/exemptions.md` (frontmatter `type: exemption-log`, entries with `pattern` + `reason`); exempted findings are reported as dismissed, not errors
+- `continuity` after drafting or revising a chapter, and whenever the user asks about contradictions, dead characters appearing, unfired setups, or stale state; it deterministically checks `died-in` ordering, promise/question chapter ordering, Chekhov gaps, POV/cast consistency, and `continuity/state.md` references. It reuses the promise-ordering machinery for the clue ledger (`continuity/clues/`): payoff before plant is an error, and a completed story with planned or planted clues is an error. The Chekhov warning (a clue or promise planted three or more chapters ago) requires `status: planted`. `story add clue --planted` records the chapter and leaves `status: planned`, so set `status: planted` when the clue is on the page. A recorded payoff chapter that is still ahead of the latest chapter suppresses the "no payoff yet" warning. It also checks prop custody — artifacts with `destroyed` or `lost` status must not be referenced after their destruction chapter (recorded in object-state `since: chapter-NN`; later scenes referencing them in `state-changes` or `mentions` are errors) — and clock/time plausibility when scenes or chapters carry `date: YYYY-MM-DD` / `time: HH:MM` frontmatter (time may be `dawn`, `morning`, `midday`, `afternoon`, `evening`, or `night`; scene `travel-hours: N` asserts minimum travel time; a character in two dated scenes at locations joined by a location `routes` entry, with less story time between them than the route's `hours`, is an error). No dates means no time findings. Intentional exceptions go in `continuity/exemptions.md` (frontmatter `type: exemption-log`, entries with `pattern` + `reason`); exempted findings are reported as dismissed, not errors
 - `compare` after a revision pass, or when the user asks what changed since a draft: `--ref` reads chapters at a git branch, tag, or commit with `git show` (it never writes to the repository), and `--against` reads another copy of the project. It reports per-chapter word changes, added and removed chapters, and the share of paragraphs unchanged. See Draft Snapshots in the `revision-continuity` skill for taking the snapshot
 - `progress` when the user asks how far along the book is, whether they will make a deadline, or after a writing session: it reports words against `story.md` `target-words`, days left to `deadline` and words a day needed, chapter `target-words`, and pace from `progress.md`. `--log` records today's total there (`--date YYYY-MM-DD` to backfill); only log when the user keeps a log or asks for it
+- `pacing` when the user asks about pacing, sagging middles, or chapter endings, and after drafting or restructuring chapters: per chapter it shows words, scene and sequel counts, scene `outcome`s (`yes`, `no`, `yes-but`, `no-and`), and the chapter `hook` (`cliffhanger`, `question`, `revelation`, `reversal`, `decision`, `emotional`, `resolution`). It warns about three or more consecutive `yes` outcomes, four or more scene units with no sequel, chapter length outliers (over 2x or under 0.5x the median once three chapters have prose), three or more consecutive chapters ending on `resolution`, and drafted chapters with no `hook`. See the `plot-structure` and `scene-craft` skills
+- `clues` for mysteries and any story with a clue ledger: prints a clue-by-chapter matrix (`P` planted, `R` payoff, `x` both, `.` none; red herrings marked) and warns about a payoff with no plant, a late plant (same chapter as the payoff, or the one before), a clue with no `characters`, a story with clues but no `significance-delayed` clue, and a `red-herring: true` clue with no `payoff`. See the `genre-craft` skill
+- `voices` when dialogue voices may blur or during a line pass: attributes tagged dialogue (`"...," Mara said`, `said Mara`, `Mara asked`, aliases included) to characters and reports lines, words, mean sentence length, contraction, question, and exclamation rates, and signature words. It warns when a character says a `voice-avoid` word, when two characters with five or more lines have near-identical fingerprints, and when a `voice-words` entry is never said. See the `voice-style` and `line-editing` skills
+- `passes` to track named revision passes in `story.md` `revision-passes` (`{pass, status}`, status `pending`, `in-progress`, or `done`). `--init` writes the default ladder (`structure`, `character`, `theme`, `continuity`, `pacing`, `line`, `copyedit`, `proof`) and keeps existing entries; `--start <pass>` and `--done <pass>` update one; with no flag it prints the checklist and the checks each default pass runs. When the story `status` is `revising`, `next` recommends the next unfinished pass. See the `revision-continuity` skill
+- `names` before naming a character, place, faction, artifact, system, or glossary term: `story names <name...>` checks candidates against every existing name and alias; an exact clash is an error (exit 1), and look-alikes (same initial and edit distance 2 or less, or the same first four letters) and a shared initial with a major character are warnings. Pass `--path <project>` when not in the project root
+- `diagram` when the user wants a picture of the story's structure: `story diagram <kind>` prints Mermaid source generated from frontmatter, or writes it with `--out <file>` (`--path <project>` sets the project). Kinds: `relationships` (character graph, family edges styled distinctly: the family tree), `locations` (map-graph from location `routes`, edges labelled with hours), `timeline` (dated scenes and chapters in story-time order), `clues` (clue plant to reveal flow per chapter), and `arcs` (arcs to the chapters that advance them). GitHub, many editors, and mermaid.live render it; regenerate rather than hand-edit
 - `timeline` when the user asks what happens when, how flashbacks sit against the main line, whose POV dominates, or where a character drops out: it orders dated scenes (and chapters without scene records) by `date` and `time`, marks entries told after later events, lists undated scenes in reading order, totals chapters and words per POV, and reports each character's chapter presence, longest absence, and absence from the final chapters. It is read-only; `continuity` owns clock errors
 - `prose` when the user asks for a prose check or before sharing a draft: per chapter it counts sentence length and spread, filter words and -ly adverbs per 1,000 narration words, plain and said-bookism dialogue tags, echoed words, watch words, and avoided spellings from `style-sheet.md` (`dialect`, `preferred`, `watch-words`, `allow-words`); across the manuscript it lists repeated 4-word phrases and similar character first names. Findings are advisory warnings and the command exits 0. See the `voice-style` skill for acting on them
 - `series` when `story.md` has `follows` or `precedes` links to other books; it orders the linked sequels and prequels by chronology and checks shared canon (characters deceased in an earlier book, cast listings, facts relearned across books, name drift, destroyed artifacts). Use `init --follows <path>` or `init --precedes <path>` to start a linked book, and see the `series-continuity` skill for carrying canon across
@@ -79,11 +103,21 @@ Use:
 - `doctor` when the user asks what is stale, broken, or inconsistent
 - `migrate` when a project has an older schema version or missing v2 paths
 - `add`, `rename`, and `remove` for deterministic entity file operations when they fit the requested change
-- `add matter` when the user wants a dedication, epigraph, copyright page, acknowledgments, author's note, about-the-author, or also-by page. Pages live in `matter/` (indexed in `matter/_index.md` by reindex) with `title`, `placement` (`front` or `back`), `order`, and `heading` (set `heading: false` for a dedication or epigraph). Write the page text directly in the file; unwritten pages are left out of builds and `validate` warns about them. Never invent acknowledgments, biographical facts, or copyright details: ask the user for them
-- `add research` when the story relies on a real-world fact: notes live in `research/` with `status` (`open`, `verified`, `disputed`), whole-citation `sources`, and `used-in` chapter ids; `validate` warns when a final chapter relies on open or disputed research. See the `research` skill
+- `init --form <form>` records `form` in `story.md` (`novel`, `novella`, `novelette`, `short-story`, `flash`, `serial`, `picture-book`, `chapter-book`) and sets a default `target-words` when none is given; `validate` warns when `target-words` is outside the form's usual range and `report` shows the form
+- `add matter` when the user wants a dedication, epigraph, copyright page, acknowledgments, author's note, about-the-author, or also-by page. Pages live in `matter/` (indexed in `matter/_index.md` by reindex) with `title`, `placement` (`front` or `back`), `order`, and `heading` (set `heading: false` for a dedication or epigraph). Write the page text directly in the file; unwritten pages are left out of builds and `validate` warns about them. Never invent acknowledgments, biographical facts, or copyright details: ask the user for them. Matter pages that quote others' work (an epigraph, song lyrics) may record `permission` (`not-needed`, `pending`, `granted`, `public-domain`), `rights-holder`, and `credit`; `validate` warns when `permission: pending` remains on a complete story and when `granted` has no `rights-holder`. See the `editorial-review` skill
+- `add research` when the story relies on a real-world fact: notes live in `research/` with `status` (`open`, `verified`, `disputed`), whole-citation `sources`, and `used-in` chapter ids, plus optional `--accuracy` (`must-be-accurate`, `blended`, `invented`), `--confidence` (`high`, `medium`, `low`), `--kind` (`fact`, `interview`, `site-visit`, `expert-review`, `reading`), and repeatable `--risk` (`legal`, `medical`, `weapons`, `safety`, `cultural`, `defamation`, `technical`). `validate` warns when a final chapter relies on open or disputed research (invented notes never trigger this), and when a note with a `risk` is used in a final or complete chapter with no `reviewed-by`. See the `research` skill
 - `export` only when the user asks for a combined manuscript at a specific path; it includes front and back matter
-- `build` when the user asks to build the book artifact; supports markdown, EPUB, and DOCX outputs in `dist/`, with front and back matter. For EPUB, set `cover: path/to/cover.jpg` (inside the project) and `author` in `story.md` to embed a cover image and creator
-- `build --format shunn` when the user wants Shunn manuscript-format markdown: title page, contact block, word count, chapter breaks, and double-spaced prose; `story build . --format docx --shunn` applies the same Shunn formatting to the DOCX output
+- `build` when the user asks to build the book artifact; supports markdown, EPUB, DOCX, Shunn, HTML, print, narration, and metadata outputs in `dist/`, with front and back matter. For EPUB, set `cover: path/to/cover.jpg` (inside the project) and `author` in `story.md` to embed a cover image and creator
+- `build --format html` when the user wants a review or reading copy for people who never open a terminal: a single HTML file with a table of contents and a stable ¶ anchor on every paragraph (`ch03-p12` is chapter 3, paragraph 12) that reviewers cite in notes. `templates/github/review-copy.yml` publishes it to GitHub Pages; see the `feedback-triage` skill
+- `build --format print` for a print-ready interior: HTML with CSS paged media, trim size from `--trim` (`5x8`, `5.25x8`, `5.5x8.5`, `6x9`, `a5`; default `5.5x8.5`), mirrored margins with gutter, running heads, page numbers, chapters on recto, drop caps, widow and orphan control, and a copyright page. Render it to PDF with a paged-media engine the user installs (Paged.js CLI `pagedjs-cli`, WeasyPrint, or Prince); the CLI does not bundle one. See the `publishing` skill
+- `build --format narration` for an audiobook narration script: a pronunciation guide table from every `pronunciation` field, each chapter with an estimated finished runtime at 155 words per minute, scene breaks as `[pause]`, and a total runtime. See the `adaptation` skill
+- `build --format metadata` for a retailer metadata sheet from `story.md`: title, series, authors, ISBN, publisher, date, language, description with its character count against common limits (KDP 4,000), keywords, BISAC subjects, word count, estimated page count, AI disclosure, and a readiness checklist of missing fields. See the `publishing` skill
+- `build --format epub` also writes EPUB 3 accessibility metadata, language, semantic chapter and matter markup, and a landmarks nav, and uses the optional `story.md` publishing fields (`cover-alt`, `isbn`, `publisher`, `publication-date`, `description`, `subjects`, `language`, and `copyright`, which generates a copyright page when no copyright matter page exists)
+- `build --format shunn` when the user wants Shunn manuscript-format markdown: title page, contact block, word count, chapter breaks, and double-spaced prose; `story build . --format docx --shunn
+story build . --format html
+story build . --format print --trim 6x9
+story build . --format narration
+story build . --format metadata` applies the same Shunn formatting to the DOCX output
 - `knowledge` when the user asks what a character knew at a given chapter: `story knowledge <character-id> --at <chapter-id>` lists knowledge-state entries whose `learned-in` chapter is at or before that chapter, plus entries without `learned-in` as pre-existing knowledge
 - `add clue` when the user plants a new clue: `story add clue "Name" --planted chapter-02 --payoff chapter-05` creates the clue ledger entity in `continuity/clues/` with `status: planned`; omit `--payoff` when the payoff is not yet known, and set `status: planted` when the clue is on the page
 - `synopsis` when the user wants a mechanical synopsis: the first sentence of `story.md`'s `## Synopsis` section, then each arc's Setup, Rising Action, Climax, and Resolution. One page is 500 words and three pages is 1500. `story synopsis [--pages 1|3] [--out file]`. The output is a scaffold; the `submission` skill rewrites it into an agent-ready synopsis

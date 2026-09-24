@@ -16,9 +16,11 @@ A story project must already exist with at least:
 - At least one character in `characters/`
 - A plot structure in `plot/_index.md` (recommended but not required for first chapters)
 
-## Recommended Companion Skill
+## Prose Pass and Companion Skill
 
-Before drafting or revising chapter prose, check whether the `better-writing` skill is available in the active agent environment. Detect it by looking for its skill directory in the configured skills paths:
+The in-repo `line-editing` skill owns the prose-quality pass (line edit, voice differentiation, copyedit, read-aloud, proof). It ships with Story Skills, so it is always available: run it on a drafted chapter before marking it `revised`.
+
+The external `better-writing` skill is an optional complement for general prose quality and anti-generic writing checks. Before drafting or revising chapter prose, check whether it is available in the active agent environment. Detect it by looking for its skill directory in the configured skills paths:
 
 ```shell
 ls -d ~/.claude/skills/better-writing .claude/skills/better-writing skills/better-writing 2>/dev/null
@@ -63,6 +65,7 @@ Create a beat-by-beat outline listing:
 - Which arc plot points are advanced
 - Any foreshadowing to plant or pay off
 - Any machine-readable state changes the scene should record
+- Each scene's intended `outcome` (`yes`, `no`, `yes-but`, `no-and`) and how the chapter ends (`hook`)
 
 Load the POV character's file for voice reference. Load relevant location files for setting details.
 
@@ -76,13 +79,14 @@ With the approved outline, write the full prose:
 - Use the POV character's voice and speech patterns from their profile
 - Ground scenes in location details from worldbuilding files
 - Consult `references/writing-guidelines.md` for quick prose craft guidance. For the deep reference — the Scene/Sequel unit, dialogue subtext and voice-differentiation, deep POV and psychic distance — use the `scene-craft` skill.
-- When available, apply the `better-writing` skill before finalizing prose
+- Give each speaker their recorded voice, using `voice-words` and avoiding `voice-avoid` from their character file
+- When available, apply the `better-writing` skill before finalizing prose; the `line-editing` skill handles the fuller prose pass afterwards
 - Use the chapter template from `references/chapter-template.md`
 - Include the approved outline in the file above `## Chapter Text` (for reference). CLI word counts start at that heading, so an outline kept above it never inflates `word-count`: run `story wordcount . --write` after writing to record counts.
 
 Save to `chapters/chapter-{NN}.md` with appropriate frontmatter.
 
-Create or update a matching scene file in `scenes/chapter-{NN}-scene-{NN}.md` for each scene. Scene frontmatter should include `title`, `chapter`, `scene`, `pov`, `location`, `characters`, `mentions`, `arcs-advanced`, `status`, and `state-changes` so continuity survives beyond prose.
+Create or update a matching scene file in `scenes/chapter-{NN}-scene-{NN}.md` for each scene. Scene frontmatter should include `title`, `chapter`, `scene`, `pov`, `location`, `characters`, `mentions`, `arcs-advanced`, `status`, and `state-changes` so continuity survives beyond prose. Set `outcome` on each goal-driven scene record to what actually happened on the page (`yes`, `no`, `yes-but`, `no-and`), and set the chapter's `hook` to how it actually ends (`cliffhanger`, `question`, `revelation`, `reversal`, `decision`, `emotional`, `resolution`).
 
 Write chapter prose directly into the chapter markdown file. Do not stage prose in project-local build scripts, generator scripts, or bulk writer scripts (for example `build-*.js`) to emit chapters. If a temporary helper is truly unavoidable for mechanical file operations, keep it outside the story project and remove it before finishing.
 
@@ -105,8 +109,11 @@ story reindex .
 story links .
 story validate .
 story next .
+story pacing .
 story progress . --log
 ```
+
+`story pacing .` shows the new chapter's words, scene outcomes, and hook alongside the rest of the book, and warns about runs of `yes` outcomes, missing sequels, length outliers, or a missing `hook`.
 
 `story progress . --log` records the session in `progress.md` and reports words against `target-words`, the `deadline`, and chapter `target-words`; skip the `--log` flag when the user does not keep a log.
 
@@ -118,7 +125,7 @@ Within a chapter, separate scenes with `---`. Each scene should have a clear POV
 
 ## Revision Handoff
 
-When asked to revise, line edit, polish, or continuity-check an existing chapter, use the `revision-continuity` skill. This skill owns new drafting and chapter creation; `revision-continuity` owns targeted edits, continuity audits, and post-draft cleanup.
+When asked to revise or continuity-check an existing chapter, use the `revision-continuity` skill; for line edits, copyedits, and proofing, use the `line-editing` skill. This skill owns new drafting and chapter creation; `revision-continuity` owns targeted edits, continuity audits, and post-draft cleanup.
 
 ## CLI Maintenance
 

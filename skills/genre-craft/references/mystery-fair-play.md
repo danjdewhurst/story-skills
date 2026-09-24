@@ -39,11 +39,12 @@ cheating.
   never inserted solely to mislead), and **resolved, not abandoned**.
 - A resolved red herring gets its own mini-payoff: the suspect is cleared
   *for a reason that teaches the reader something true* about the case.
-- Track herrings in the clue file's prose (the schema has no `type` or
-  `cleared-in` field). Note that the entry is a herring and which chapter
-  clears it. An uncleared herring is a broken promise. Set `status: planted`
-  when the herring is on the page, and `status: paid-off` or `abandoned`
-  when it is resolved.
+- Mark herrings with `red-herring: true` in the clue's frontmatter, and use
+  `payoff` for the chapter that debunks it. `story clues` warns about a red
+  herring with no `payoff`: an undebunked herring is a broken promise. Note
+  how it is cleared in the clue's prose. Set `status: planted` when the
+  herring is on the page, and `status: paid-off` or `abandoned` when it is
+  resolved.
 
 ## The gather-suspects reveal
 
@@ -76,17 +77,19 @@ status: planned
 planted: chapter-02
 payoff: chapter-05
 significance-delayed: false
+red-herring: false
 characters: []
 arcs: []
 ---
 ```
 
 Set `significance-delayed: true` only when the reader sees the clue before
-understanding it. Pass `--significance-delayed`, `--character`, and `--arc`
-on `story add clue` when those values are known. List characters and arcs
-as block entries, the way the CLI writes them. Herring type and the chapter
-that clears a herring belong in the clue's prose. The schema does not store
-`type` or `cleared-in`.
+understanding it. Set `red-herring: true` by editing the file when the clue
+misleads; its `payoff` is the chapter that clears it. Pass
+`--significance-delayed`, `--character`, and `--arc` on `story add clue`
+when those values are known. List characters and arcs as block entries, the
+way the CLI writes them. `characters` names who can notice the clue (the
+detective, the witness); a clue nobody can notice cannot be played fair.
 
 - `planted` must precede `payoff`. `story continuity` errors when payoff
   comes before plant. The Chekhov warning (planted three or more chapters
@@ -100,7 +103,34 @@ that clears a herring belong in the clue's prose. The schema does not store
 - After adding or editing clues, run `story reindex .`, `story links .`,
   `story validate .`, `story continuity .`
 
+## The fair-play matrix
+
+`story clues .` prints the ledger as a grid: clues as rows, chapters as
+columns. `P` marks the chapter a clue is planted, `R` its payoff or reveal,
+`x` both, `.` neither; red herrings are marked. Read down a column to see
+what the reader holds at each chapter, and along a row to see how long a
+clue waits. It warns about:
+
+- A clue with a payoff but no plant (the reveal uses an unplanted fact)
+- A late plant: planted in the same chapter as its payoff, or the chapter
+  immediately before, so the reader cannot play fair
+- A clue with no `characters` (nobody in the story can notice it)
+- A story with clues but no `significance-delayed` clue (every clue is
+  understood on sight, so there is no puzzle)
+- A red herring with no `payoff` (never debunked)
+
+`story diagram clues` prints a Mermaid flow of each clue from plant to
+reveal by chapter, useful for spotting reveal clusters where the solution
+arrives in a dump. Save it with `--out dist/clues.mmd` when the user wants a file;
+keep generated diagrams out of the entity folders.
+
+Run `story clues .` when planning the ledger, after each drafted chapter
+that plants or pays off a clue, and in the revision audit.
+
 ## Mystery audit (revision)
+
+- [ ] `story clues .` reports no late plants, unplanted payoffs, or
+      undebunked red herrings (or each remaining one is a recorded decision).
 
 - [ ] Every clue the solution uses is planted before the reveal.
 - [ ] The culprit appears in the first third.

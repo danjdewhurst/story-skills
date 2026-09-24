@@ -1,6 +1,6 @@
 ---
 name: feedback-triage
-description: This skill should be used when the user asks to "process beta reader feedback", "alpha reader feedback", "feedback round", "synthesize reader feedback", "reader notes", "beta feedback", "readiness check", or wants to collect, reconcile, and act on external reader feedback for a story project.
+description: This skill should be used when the user asks to "process beta reader feedback", "alpha reader feedback", "feedback round", "synthesize reader feedback", "reader notes", "beta feedback", "readiness check", "review copy", "send the draft to readers", or wants to collect, reconcile, and act on external reader feedback for a story project.
 ---
 
 # Feedback Triage
@@ -36,7 +36,24 @@ readers have read. Verify `story.md` exists in the project root.
    and how many readers (2–4 per round is typical; one reader is a data
    point, not a round).
 2. Create the round folder: `feedback/round-{N}/`.
-3. For each expected reader, create a stub file from
+3. Give readers a review copy they can open without a terminal:
+
+   ```shell
+   story build . --format html
+   ```
+
+   The single-file HTML copy in `dist/` has a table of contents and a
+   stable anchor on every paragraph, shown as a clickable ¶ (`ch03-p12` is
+   chapter 3, paragraph 12). Ask readers to cite anchors in their notes so
+   every note points at an exact place. For projects on GitHub, the
+   `templates/github/review-copy.yml` workflow publishes the HTML copy to
+   GitHub Pages on each push to main, and
+   `templates/github/ISSUE_TEMPLATE/manuscript-note.yml` gives readers an
+   issue form with anchor, note type (typo, confusion, continuity,
+   sensitivity, praise, other), and the note. Copy them into the story
+   repository's `.github/workflows/` and `.github/ISSUE_TEMPLATE/` only with
+   the user's approval.
+4. For each expected reader, create a stub file from
    `references/feedback-template.md` at
    `feedback/round-{N}/{reader-kebab}.md` with frontmatter filled in and the
    body sections empty. The stub list is the round's checklist.
@@ -44,7 +61,11 @@ readers have read. Verify `story.md` exists in the project root.
 ### 2. Collect feedback (the discipline)
 
 1. As each reader's notes arrive, record them in their file using the
-   template. Quote or closely paraphrase; do not editorialize yet.
+   template. Quote or closely paraphrase; do not editorialize yet. Keep
+   each note's ¶ anchor (`ch03-p12`) in its **Where** line; convert chapter
+   or page references from other formats to anchors when the location is
+   unambiguous. Sensitivity and authenticity reads use the same file shape;
+   see the `editorial-review` skill for commissioning them.
 2. Run the **canon check** on each problem note: verified against the bible,
    contradicts canon (usually a setup problem — note the canon file), or
    outside canon scope. Record the result in the file.
@@ -88,6 +109,10 @@ Only when every expected reader file is collected:
 - Feedback lives under `feedback/round-{N}/`; `{N}` is a plain integer
   (`round-1`, `round-2`).
 - Reader files use kebab-case reader ids: `feedback/round-1/maria-chen.md`.
+- Locations cite paragraph anchors from `story build --format html`
+  (`ch03-p12`) where available. Anchors are paragraph positions, so rebuild
+  and resend the review copy between rounds; do not reuse old anchors after
+  a revision.
 - Every feedback file and the synthesis carry YAML frontmatter
   (`reader`, `round`, `chapters-read`, `overall-verdict` / `readers`,
   `readiness`).
@@ -115,5 +140,5 @@ story continuity .
 
 ## Reference Files
 
-- **`references/feedback-template.md`** - Per-reader feedback file template with frontmatter (`reader`, `round`, `chapters-read`, `overall-verdict`) and canon-check discipline
+- **`references/feedback-template.md`** - Per-reader feedback file template with frontmatter (`reader`, `round`, `chapters-read`, `overall-verdict`), ¶ anchor citations, the review-copy note for readers, and canon-check discipline
 - **`references/synthesis-template.md`** - Round synthesis template: convergent/divergent/single-reader/declined-with-reason categories, readiness verdict, revision plan

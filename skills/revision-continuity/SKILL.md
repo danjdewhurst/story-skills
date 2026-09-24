@@ -1,6 +1,6 @@
 ---
 name: revision-continuity
-description: This skill should be used when the user asks to revise a chapter, edit prose, continuity check, find inconsistencies, audit character state, check timeline consistency, line edit, developmental edit, polish a draft, or prepare existing story material for the next revision pass.
+description: This skill should be used when the user asks to revise a chapter, edit prose, continuity check, find inconsistencies, audit character state, check timeline consistency, line edit, developmental edit, polish a draft, "revision passes", "what pass next", "pacing check", "clue check", "voice check", or prepare existing story material for the next revision pass.
 ---
 
 # Revision Continuity
@@ -13,6 +13,41 @@ Revise existing Story Skills projects without losing continuity. Use this skill 
 
 A story project must already exist. Verify by checking for `story.md` in the project root, then run or inspect `story report .` when CLI access is available.
 
+## Named Revision Passes
+
+Track a full revision as a ladder of named passes in `story.md`
+`revision-passes`, so the work happens in order (big structural changes
+before polishing sentences that may be cut) and survives between sessions:
+
+```shell
+story passes . --init            # writes the default ladder, keeping existing entries
+story passes .                   # checklist with the checks each pass runs
+story passes . --start pacing    # mark a pass in-progress
+story passes . --done pacing     # mark it done
+story next .                     # with story status revising, recommends the next unfinished pass
+```
+
+The default ladder is `structure`, `character`, `theme`, `continuity`,
+`pacing`, `line`, `copyedit`, `proof`. Each entry is `{pass, status}` with
+status `pending`, `in-progress`, or `done`; add custom kebab-case passes
+(`fact-check`, `sensitivity`) by editing `revision-passes` directly. The
+checks per pass:
+
+| Pass | Checks | Workflow below |
+|------|--------|----------------|
+| `structure` | `story timeline .`, `story pacing .` | Reverse outline, pacing waveform, removability audit |
+| `character` | `story voices .`, `story knowledge` | Developmental revision (motivation, arcs) |
+| `theme` | | Theme audit |
+| `continuity` | `story continuity .`, `story clues .`, `story links .` | Continuity audit, reveal economy, fact check |
+| `pacing` | `story pacing .` | Pacing waveform |
+| `line` | `story prose .`, `story voices .` | Line edit (the `line-editing` skill) |
+| `copyedit` | `story prose .` + `style-sheet.md` | Copyedit (the `line-editing` skill) |
+| `proof` | `story build --format print` or `html` | Proof (the `line-editing` skill) |
+
+Mark a pass `--start` when beginning it and `--done` only when its checks
+are clean or every remaining finding is a recorded decision. Set story
+`status: revising` so `story next .` points at the next pass.
+
 ## Revision Workflow
 
 1. Clarify the pass type unless the user already specified it:
@@ -20,13 +55,14 @@ A story project must already exist. Verify by checking for `story.md` in the pro
    - **Developmental revision** - improve structure, scene purpose, character motivation, pacing, stakes, and arc progression
    - **Reverse outline** - extract what each chapter actually does in one line per chapter, without looking at the outline or arc files, then diff that against what the plot files say it should do. Reorder, merge, split, or cut where they disagree. Read: every chapter in `chapters/`, `plot/timeline.md`, active arc files. Update: `plot/timeline.md`, arc plot-point tables, `chapters/_index.md` when chapters move, merge, or split.
    - **Theme audit** - check whether the ending engages the opening's value-question and whether the theme is dramatized through consequence rather than commentary. Verify every motif introduced early is paid off by the end. Read: `story.md` premise and themes, the opening and closing chapters, theme-tracked arcs in `plot/_index.md`. Update: `story.md` premise if the draft argues a different idea, arc `themes` tags. See the `theme-craft` skill for the deep pass.
-   - **Pacing waveform** - map tension per chapter to find dead zones: chapters that neither raise nor vary the tension level. Two peaks back-to-back dilute each other; a flat middle means escalation is missing. Run `story timeline .` for POV balance and characters who vanish for long stretches. Read: the chapters, `scenes/` state-changes, arc climax points. Update: chapter or scene order, or add escalation where the map goes flat.
-   - **Reveal economy** - check that every reveal is earned by planted setup and that reveals are spaced rather than dumped in clusters. Unplanted twists and reveal dumps both read as cheap. Read: `continuity/promises/`, arc foreshadowing tables, `knowledge-state` in `continuity/state.md`. Update: promise/question `status` and chapter fields, foreshadowing rows.
+   - **Pacing waveform** - map tension per chapter to find dead zones: chapters that neither raise nor vary the tension level. Two peaks back-to-back dilute each other; a flat middle means escalation is missing. Run `story pacing .` for the per-chapter dashboard (words, scene and sequel counts, scene `outcome`s, chapter `hook`) and its warnings: three or more consecutive `yes` outcomes (no pressure), four or more scene units without a sequel (no breath), chapter length outliers, three or more chapters in a row ending on `resolution`, and drafted chapters with no `hook`. Run `story timeline .` for POV balance and characters who vanish for long stretches. Read: the chapters, `scenes/` state-changes, arc climax points. Update: chapter or scene order, or add escalation where the map goes flat.
+   - **Reveal economy** - check that every reveal is earned by planted setup and that reveals are spaced rather than dumped in clusters. Unplanted twists and reveal dumps both read as cheap. Run `story clues .` for the clue-by-chapter matrix and its fair-play warnings (late plants, unplanted payoffs, clues nobody can notice, undebunked red herrings); `story diagram clues` draws the plant-to-reveal flow. Read: `continuity/promises/`, arc foreshadowing tables, `knowledge-state` in `continuity/state.md`. Update: promise/question `status` and chapter fields, foreshadowing rows.
    - **Removability audit (darling-killing)** - find scenes whose removal would change nothing downstream: no state changes, no causality, no payoff. Wire such scenes in (give them consequence), fold them into an adjacent scene, or cut them — then record the decision so nobody re-litigates it. Read: `scenes/` state-changes, `continuity/state.md`, `continuity/promises/`. Update: scene `state-changes`, promise/question status, `plot/timeline.md`.
-   - **Line edit** - improve clarity, voice, rhythm, dialogue, and sensory specificity without changing plot facts. Read `style-sheet.md` for the recorded voice, and use `story prose .` to find filter words, adverb clusters, said-bookisms, echoes, uniform rhythm, and repeated phrases worth rereading
-   - **Copyedit** - distinct from proof/polish: enforce a style baseline (hyphenation, capitalization, naming, numbers) and continuity of surface detail (hair color, room layouts, name spellings). This pass is mechanical consistency, not prose quality — prose quality belongs to the line edit. Read: `style-sheet.md` (create it with the `voice-style` skill if missing), `glossary/`, character and location files. Run `story prose .` and fix every avoided spelling it reports. Update: chapters, `style-sheet.md` when a new convention is settled, `glossary/`, character files where details drifted.
+   - **Voice differentiation** - check that each speaker sounds like themselves. Run `story voices .` for per-character dialogue fingerprints: it warns when two characters' fingerprints are near-identical, when a character says a word from their `voice-avoid` list, and when a `voice-words` entry never appears. Update: dialogue in chapters, or the character's `voice-words`/`voice-avoid` when the draft has found a better voice.
+   - **Line edit** - improve clarity, voice, rhythm, dialogue, and sensory specificity without changing plot facts. Read `style-sheet.md` for the recorded voice, and use `story prose .` to find filter words, adverb clusters, said-bookisms, echoes, uniform rhythm, and repeated phrases worth rereading. For a full prose-quality pass, follow the `line-editing` skill
+   - **Copyedit** - distinct from proof/polish: enforce a style baseline (hyphenation, capitalization, naming, numbers) and continuity of surface detail (hair color, room layouts, name spellings). This pass is mechanical consistency, not prose quality — prose quality belongs to the line edit. Read: `style-sheet.md` (create it with the `voice-style` skill if missing), `glossary/`, character and location files. Run `story prose .` and fix every avoided spelling it reports. Update: chapters, `style-sheet.md` when a new convention is settled, `glossary/`, character files where details drifted. The `line-editing` skill has the full copyedit procedure.
    - **Fact check** - verify real-world details the chapter relies on. Read: `research/` notes whose `used-in` lists the chapter. Update: research notes and their status, and the chapter where it contradicts verified findings. See the `research` skill
-   - **Proof/polish** - fix small wording, grammar, repetition, and formatting issues
+   - **Proof/polish** - fix small wording, grammar, repetition, and formatting issues. Proof a built copy, not the source: `story build . --format print` or `--format html`. See the `line-editing` skill
 2. Snapshot the draft before any multi-chapter pass (see Draft Snapshots below), so the pass can be compared and undone.
 3. Read the relevant context:
    - `story.md`
@@ -61,6 +97,8 @@ story continuity .
 story doctor .
 ```
 
+For structural or reveal passes, also run `story pacing .` and `story clues .`; after dialogue changes, `story voices .`. When working through named passes, finish with `story passes . --done <pass>`.
+
 If `story.md` links other books through `follows` or `precedes`, also run `story series .` so the revision does not break canon shared with sequels or prequels. See the `series-continuity` skill.
 
 `story continuity` deterministically checks death ordering (`died-in` vs later appearances), promise/question chapter ordering, unfired setups, POV/cast consistency, and `continuity/state.md` references. For intentional flashbacks, memories, or recordings of dead characters, list them under chapter or scene `mentions` instead of `characters`.
@@ -89,9 +127,9 @@ Run `story continuity .` first to collect the deterministic findings, then check
 
 - Character knowledge: no one acts on information they have not learned
 - Character state: injuries, emotions, alliances, location, and status carry forward
-- Timeline: time of day, travel time, sequence, and cause/effect stay coherent. `story timeline .` shows dated scenes in story order and marks flashbacks; check each marked scene is meant to be one
+- Timeline: time of day, travel time, sequence, and cause/effect stay coherent. `story timeline .` shows dated scenes in story order and marks flashbacks; check each marked scene is meant to be one. `story diagram timeline` prints the same order as a Mermaid timeline. `story continuity .` errors when a character moves between locations joined by `routes` faster than the route's `hours` allow
 - Plot arcs: each changed scene still advances or intentionally pauses an arc
-- Foreshadowing: planted and paid-off items match arc files
+- Foreshadowing: planted and paid-off items match arc files; `story clues .` shows every clue's plant and payoff chapter
 - Promises/questions: durable continuity records match what the chapter now reveals or withholds
 - Scene state: every chapter scene has machine-readable POV, location, participants, arcs, and state-change notes
 - World rules: magic, technology, politics, and geography stay consistent with worldbuilding files

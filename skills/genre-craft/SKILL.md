@@ -51,7 +51,10 @@ exist or be in progress.
    - Mystery: create `continuity/clues/` and ledger every clue and red
      herring via `story add clue "..." --planted chapter-NN --payoff
      chapter-NN`, with `significance-delayed` frontmatter where the reader
-     sees the clue before understanding it.
+     sees the clue before understanding it and `red-herring: true` on
+     misleading clues (their `payoff` is the chapter that debunks them).
+     Run `story clues .` for the fair-play matrix and `story diagram clues`
+     for the plant-to-reveal flow.
    - Thriller: log every promised deadline in `continuity/promises/` and
      track story-time in `plot/timeline.md`.
    - Serial: record `season-goal:` in `story.md` and `episode-question:`
@@ -63,7 +66,9 @@ exist or be in progress.
 3. **Draft against the pack.** Use the pack's beat concepts and rules
    alongside the `chapter-writing` workflow and the `scene-craft`
    scene-grain tools. Cross-link thriller pacing to the Fichtean curve
-   note in `references/thriller.md`; cross-link serial book-level canon
+   note in `references/thriller.md`, and check thriller and serial chapter
+   endings with `story pacing .` (chapter `hook` values, and runs of
+   `resolution` endings); cross-link serial book-level canon
    to the `series-continuity` skill.
 4. **Run the pack audit in revision.** Each reference ends with an audit
    checklist. Run it as part of a developmental revision pass (see the
@@ -98,11 +103,12 @@ story reindex .
 story links .
 story validate .
 story continuity .
+story clues .     # mystery: fair-play matrix and warnings
 ```
 
 ## Reference Files
 
-- **`references/mystery-fair-play.md`** - Fair-play doctrine, clue-planting techniques, red-herring discipline, gather-suspects reveal, clue ledger convention
+- **`references/mystery-fair-play.md`** - Fair-play doctrine, clue-planting techniques, red-herring discipline (`red-herring: true`), gather-suspects reveal, clue ledger convention, the `story clues` fair-play matrix and `story diagram clues`
 - **`references/romance-beats.md`** - Widely-published romance beat concepts (paraphrased), HEA/HFN reader contract, the black moment
 - **`references/thriller.md`** - Ticking clock honored once promised, power imbalance, set pieces, mini-cliffhanger endings, Fichtean curve pairing
 - **`references/horror.md`** - Dread vs. terror vs. gross-out ordering, the uncanny, monster rules stated early, recovery periods

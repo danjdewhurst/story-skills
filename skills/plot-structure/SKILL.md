@@ -1,6 +1,6 @@
 ---
 name: plot-structure
-description: This skill should be used when the user asks to "create a plot arc", "story structure", "add a plot point", "story timeline", "track foreshadowing", "pacing", "act structure", "story arc", "plot outline", or wants to plan and manage the narrative structure of a story.
+description: This skill should be used when the user asks to "create a plot arc", "story structure", "add a plot point", "story timeline", "track foreshadowing", "pacing", "chapter hooks", "scene outcomes", "act structure", "story arc", "plot outline", or wants to plan and manage the narrative structure of a story.
 ---
 
 # Plot Structure
@@ -15,7 +15,7 @@ A story project must already exist (created via the story-init skill). Verify by
 
 ## Choosing a Story Structure
 
-1. Read `story.md` for genre and themes
+1. Read `story.md` for genre, themes, and `form` (`novel`, `novella`, `novelette`, `short-story`, `flash`, `serial`, `picture-book`, `chapter-book`). For `short-story` and `flash`, use `references/short-story-form.md` instead of a multi-act beat sheet
 2. Consult `references/structure-models.md` for available structures
 3. Recommend a structure based on genre (default to three-act if unclear)
 4. Update `plot/_index.md` frontmatter `structure` field
@@ -67,9 +67,19 @@ When adding events:
 
 When reviewing the timeline:
 - Run `story timeline .` to see written scenes in story-time order from their `date`/`time` fields, with scenes told out of order marked, and compare it with `plot/timeline.md`
+- Run `story diagram timeline` for a Mermaid timeline of dated scenes and chapters, and `story diagram arcs` for which chapters advance each arc (add `--out dist/<name>.mmd` to save either; keep generated diagrams out of entity folders)
 - Check for chronological consistency
 - Identify pacing issues (too many events clustered, long gaps)
 - Flag arcs that haven't progressed
+
+## Pacing, Outcomes, and Hooks
+
+Two optional fields make pacing checkable:
+
+- Scene `outcome`: `yes`, `no`, `yes-but`, or `no-and` — whether the POV character got what they wanted in the scene. `yes-but` and `no-and` are the complicating outcomes that drive a plot forward (see the `scene-craft` skill).
+- Chapter `hook`: how the chapter ends — `cliffhanger`, `question`, `revelation`, `reversal`, `decision`, `emotional`, or `resolution`.
+
+Plan both in the outline, then run `story pacing .` for a per-chapter dashboard of words, scene and sequel counts, scene outcomes, and hooks. It warns about three or more consecutive `yes` outcomes (no pressure), four or more scene units with no sequel (no breath), chapter length outliers (over twice or under half the median once three chapters have prose), three or more consecutive chapters ending on `resolution`, and drafted chapters with no `hook`. Treat the warnings as prompts to reread, not rules: a quiet `resolution` chapter after the climax is right.
 
 ## Foreshadowing Tracking
 
@@ -81,9 +91,11 @@ Each arc tracks its own foreshadowing in the "Foreshadowing" table:
 
 During chapter writing, flag any `planted` items that haven't been paid off as reminders.
 
+For mystery clues, `story clues .` prints a clue-by-chapter fair-play matrix and `story diagram clues` the plant-to-reveal flow (see the `genre-craft` skill).
+
 For durable cross-arc setup/payoff tracking, also maintain `continuity/promises/{promise-kebab}.md` with `status`, `planted`, `payoff`, `arcs`, and `characters`. For mystery or open-continuity tracking, maintain `continuity/questions/{question-kebab}.md`.
 
-Scaffold chapters and scenes with `story add chapter "{Title}" --number {N} --pov {id} --arc {arc-id}` and `story add scene "{Title}" --chapter chapter-{NN} --scene {M} --pov {id} --location {id}`, then write the prose and outline content into the created files.
+Scaffold chapters and scenes with `story add chapter "{Title}" --number {N} --pov {id} --arc {arc-id}` and `story add scene "{Title}" --chapter chapter-{NN} --scene {M} --pov {id} --location {id}`, then write the prose and outline content into the created files. Set `outcome` on scene records and `hook` on chapters as the outline settles them, then run `story reindex .`, `story links .`, `story validate .`, and `story pacing .`.
 
 ## Cross-Referencing
 
@@ -105,5 +117,5 @@ Use the Story CLI when it is available. If `story` is not installed, use `bun ru
 - **`references/promise-template.md`** - Template for setup/payoff tracking
 - **`references/structure-models.md`** - Story structure models (three-act, hero's journey, save the cat, kishotenketsu, five-act, Fichtean curve, Harmon's story circle) with beat sheets
 - **`references/mice-quotient.md`** - MICE threading: milieu/inquiry/character/event threads, start/end rules, and the optional `mice-threads:` arc frontmatter
-- **`references/short-story-form.md`** - Short fiction form: one dominant change, single effect, narrow scope
+- **`references/short-story-form.md`** - Short fiction form: one dominant change, single effect, narrow scope, and the `form` field (`story init --form short-story` or `flash`)
 - **`references/outlining-ladder.md`** - Premise → beat sheet → step outline → full outline, with exit criteria per rung (cross-links discovery-drafting)
