@@ -105,6 +105,7 @@
       "type": "object",
       "required": ["id", "name", "role", "status"],
       "properties": {
+        "pronunciation": { "type": "string" },
         "id": { "$ref": "#/$defs/id" },
         "name": { "type": "string" },
         "role": { "enum": ["protagonist", "antagonist", "supporting", "minor", "narrator", "deuteragonist"] },
@@ -137,6 +138,7 @@
       "type": "object",
       "required": ["id", "name", "type"],
       "properties": {
+        "pronunciation": { "type": "string" },
         "id": { "$ref": "#/$defs/id" },
         "name": { "type": "string" },
         "type": { "type": "string" },
@@ -174,6 +176,7 @@
       "type": "object",
       "required": ["id", "name", "type", "status"],
       "properties": {
+        "pronunciation": { "type": "string" },
         "id": { "$ref": "#/$defs/id" },
         "name": { "type": "string" },
         "type": { "enum": ["family", "guild", "government", "military", "religion", "company", "community", "criminal", "other"] },
@@ -187,6 +190,7 @@
       "type": "object",
       "required": ["id", "name", "type", "status"],
       "properties": {
+        "pronunciation": { "type": "string" },
         "id": { "$ref": "#/$defs/id" },
         "name": { "type": "string" },
         "type": { "enum": ["object", "weapon", "document", "technology", "relic", "symbol", "resource", "other"] },
@@ -304,6 +308,7 @@
       "type": "object",
       "required": ["id", "term", "category"],
       "properties": {
+        "pronunciation": { "type": "string" },
         "id": { "$ref": "#/$defs/id" },
         "term": { "type": "string" },
         "category": { "enum": ["person", "place", "faction", "artifact", "concept", "term", "other"] },

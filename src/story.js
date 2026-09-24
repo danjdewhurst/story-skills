@@ -13,6 +13,7 @@ import { checkNames, existingNames } from "./names.js";
 import { STORY_FORMS, formRangeWarning } from "./forms.js";
 import { copyrightPage, publishingMeta, validatePublishing } from "./publishing.js";
 import { DEFAULT_TRIM, escapeHtml, printHtml, reviewHtml } from "./html.js";
+import { narrationScript, pronunciationGuide } from "./narration.js";
 import { DEFAULT_PASSES, nextPass, readPasses, updatePasses, validatePasses } from "./passes.js";
 import { CHAPTER_HOOKS, SCENE_OUTCOMES, buildPacing } from "./pacing.js";
 import { compareChapters, proseParagraphs } from "./compare.js";
@@ -327,7 +328,8 @@ export function scanProject(root) {
       locations: asArray(data.locations),
       aliases: asArray(data.aliases),
       voiceWords: asArray(data["voice-words"]),
-      voiceAvoid: asArray(data["voice-avoid"])
+      voiceAvoid: asArray(data["voice-avoid"]),
+      pronunciation: data.pronunciation
     }), scanErrors),
     locations: readEntityFiles(projectRoot, path.join("worldbuilding", "locations"), (id, file, data) => ({
       id,
@@ -336,7 +338,8 @@ export function scanProject(root) {
       type: data.type ?? "",
       region: data.region ?? "",
       notableCharacters: asArray(data["notable-characters"]),
-      routes: asArray(data.routes)
+      routes: asArray(data.routes),
+      pronunciation: data.pronunciation
     }), scanErrors),
     systems: readEntityFiles(projectRoot, path.join("worldbuilding", "systems"), (id, file, data) => ({
       id,
@@ -351,7 +354,8 @@ export function scanProject(root) {
       type: data.type ?? "",
       status: data.status ?? "",
       members: asArray(data.members),
-      locations: asArray(data.locations)
+      locations: asArray(data.locations),
+      pronunciation: data.pronunciation
     }), scanErrors),
     artifacts: readEntityFiles(projectRoot, path.join("worldbuilding", "artifacts"), (id, file, data) => ({
       id,
@@ -360,7 +364,8 @@ export function scanProject(root) {
       type: data.type ?? "",
       status: data.status ?? "",
       owner: data.owner ?? "",
-      location: data.location ?? ""
+      location: data.location ?? "",
+      pronunciation: data.pronunciation
     }), scanErrors),
     arcs: readEntityFiles(projectRoot, path.join("plot", "arcs"), (id, file, data) => ({
       id,
@@ -450,7 +455,8 @@ export function scanProject(root) {
       file,
       term: data.term ?? titleCaseSlug(id),
       category: data.category ?? "",
-      aliases: asArray(data.aliases)
+      aliases: asArray(data.aliases),
+      pronunciation: data.pronunciation
     }), scanErrors),
     research: readEntityFiles(projectRoot, RESEARCH_DIR, (id, file, data) => ({
       id,
@@ -531,6 +537,7 @@ export function validateProjectOf(project) {
   validateProgressLog(project, errors);
   validateFormRange(project, warnings);
   validatePublishing(project.story.data, errors, warnings);
+  validatePronunciations(project, errors);
   collectStrayFileWarnings(project, warnings);
 
   const indexChecks = [
@@ -1562,7 +1569,9 @@ export function buildBook(root, options = {}) {
   }
 
   const manuscript = manuscriptParts(project);
-  if (format === "html" || format === "print") {
+  if (format === "narration") {
+    writeFile(output.outFile, narrationScript(manuscript, pronunciationGuide(project)), output.writeOptions);
+  } else if (format === "html" || format === "print") {
     const book = htmlBook(manuscript);
     const text = format === "html" ? reviewHtml(book) : printHtml(book, options.trim === undefined ? DEFAULT_TRIM : String(options.trim));
     writeFile(output.outFile, text, output.writeOptions);
@@ -4079,7 +4088,8 @@ const BUILD_EXTENSIONS = {
   docx: "docx",
   shunn: "shunn.md",
   html: "html",
-  print: "print.html"
+  print: "print.html",
+  narration: "narration.md"
 };
 
 function normalizeBuildFormat(value) {
@@ -4138,6 +4148,15 @@ function validateStoryFrontmatter(project, errors) {
 
   if (data["schema-version"] !== undefined && data["schema-version"] !== STORY_SCHEMA_VERSION) {
     errors.push(`story.md schema-version must be ${STORY_SCHEMA_VERSION}`);
+  }
+}
+
+function validatePronunciations(project, errors) {
+  const entities = [project.characters, project.locations, project.factions, project.artifacts, project.glossaryTerms].flat();
+  for (const entity of entities) {
+    if (entity.pronunciation !== undefined && typeof entity.pronunciation !== "string") {
+      errors.push(`${relative(project, entity.file)} frontmatter field pronunciation must be text`);
+    }
   }
 }
 

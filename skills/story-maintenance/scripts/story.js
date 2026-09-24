@@ -2799,6 +2799,72 @@ function cssString(value) {
   return String(value).replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, " ");
 }
 
+// src/narration.js
+var NARRATION_WORDS_PER_MINUTE = 155;
+function narrationScript(manuscript, guide) {
+  const authors = manuscript.meta.authors.join(" and ");
+  const sections = [
+    ...manuscript.front.filter((entry) => entry.id !== "copyright").map((entry) => ({ title: entry.title, body: entry.body })),
+    ...manuscript.chapters.map((chapter) => ({ title: `Chapter ${chapter.number}: ${chapter.title}`, body: chapter.body })),
+    ...manuscript.back.map((entry) => ({ title: entry.title, body: entry.body }))
+  ].map((section) => ({ ...section, words: wordCount(section.body) }));
+  const totalWords = sections.reduce((sum, section) => sum + section.words, 0);
+  const lines = [
+    `# ${manuscript.title}: Narration Script`,
+    "",
+    `Estimated finished runtime: ${formatRuntime(totalWords)} at ${NARRATION_WORDS_PER_MINUTE} words per minute (${totalWords} words). Narration pace varies; time a sample chapter and rescale.`,
+    "",
+    "## Pronunciation Guide",
+    ""
+  ];
+  if (guide.length === 0) {
+    lines.push("No pronunciations recorded. Add `pronunciation:` to character, location, faction, artifact, and glossary term files.");
+  } else {
+    lines.push("| Name | Say it | Kind |", "| --- | --- | --- |");
+    for (const entry of guide) {
+      lines.push(`| ${cell2(entry.name)} | ${cell2(entry.pronunciation)} | ${entry.kind} |`);
+    }
+  }
+  lines.push("", "## Opening Credits", "", `${manuscript.title}.${authors === "" ? "" : ` Written by ${authors}.`} Narrated by [narrator].`);
+  for (const section of sections) {
+    lines.push("", `## ${section.title}`, "", `[${formatMinutes(section.words)}]`, "", narrationBody(section.body));
+  }
+  lines.push("", "## Closing Credits", "", `The end. You have been listening to ${manuscript.title}${authors === "" ? "" : `, written by ${authors}`}, narrated by [narrator].`, "");
+  return lines.join(`
+`);
+}
+function pronunciationGuide(project) {
+  const guide = [];
+  const add = (kind, name, pronunciation) => {
+    if (typeof pronunciation === "string" && pronunciation.trim() !== "") {
+      guide.push({ kind, name: String(name), pronunciation: pronunciation.trim() });
+    }
+  };
+  project.characters.filter((character) => character.status !== "cut").forEach((character) => add("character", character.name, character.pronunciation));
+  project.locations.forEach((location) => add("location", location.name, location.pronunciation));
+  project.factions.forEach((faction) => add("faction", faction.name, faction.pronunciation));
+  project.artifacts.forEach((artifact) => add("artifact", artifact.name, artifact.pronunciation));
+  project.glossaryTerms.forEach((term) => add("term", term.term, term.pronunciation));
+  return guide.sort((left, right) => left.name.localeCompare(right.name, "en") || left.kind.localeCompare(right.kind, "en"));
+}
+function narrationBody(body) {
+  return String(body).replace(/\r\n?/g, `
+`).split(/\n[ \t]*\n\s*/).map((paragraph) => paragraph.trim()).filter(Boolean).map((paragraph) => /^([*_-])( ?\1){2,}$/.test(paragraph) ? "[pause]" : paragraph).join(`
+
+`);
+}
+function formatRuntime(words) {
+  const minutes = Math.round(words / NARRATION_WORDS_PER_MINUTE);
+  return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
+}
+function formatMinutes(words) {
+  const minutes = words / NARRATION_WORDS_PER_MINUTE;
+  return minutes < 1 ? "under 1 min" : `about ${Math.round(minutes)} min`;
+}
+function cell2(value) {
+  return String(value).replace(/\|/g, "\\|");
+}
+
 // src/passes.js
 var PASS_STATUSES = new Set(["pending", "in-progress", "done"]);
 var DEFAULT_PASSES = [
@@ -3820,7 +3886,8 @@ function scanProject(root) {
       locations: asArray(data.locations),
       aliases: asArray(data.aliases),
       voiceWords: asArray(data["voice-words"]),
-      voiceAvoid: asArray(data["voice-avoid"])
+      voiceAvoid: asArray(data["voice-avoid"]),
+      pronunciation: data.pronunciation
     }), scanErrors),
     locations: readEntityFiles(projectRoot, path4.join("worldbuilding", "locations"), (id, file, data) => ({
       id,
@@ -3829,7 +3896,8 @@ function scanProject(root) {
       type: data.type ?? "",
       region: data.region ?? "",
       notableCharacters: asArray(data["notable-characters"]),
-      routes: asArray(data.routes)
+      routes: asArray(data.routes),
+      pronunciation: data.pronunciation
     }), scanErrors),
     systems: readEntityFiles(projectRoot, path4.join("worldbuilding", "systems"), (id, file, data) => ({
       id,
@@ -3844,7 +3912,8 @@ function scanProject(root) {
       type: data.type ?? "",
       status: data.status ?? "",
       members: asArray(data.members),
-      locations: asArray(data.locations)
+      locations: asArray(data.locations),
+      pronunciation: data.pronunciation
     }), scanErrors),
     artifacts: readEntityFiles(projectRoot, path4.join("worldbuilding", "artifacts"), (id, file, data) => ({
       id,
@@ -3853,7 +3922,8 @@ function scanProject(root) {
       type: data.type ?? "",
       status: data.status ?? "",
       owner: data.owner ?? "",
-      location: data.location ?? ""
+      location: data.location ?? "",
+      pronunciation: data.pronunciation
     }), scanErrors),
     arcs: readEntityFiles(projectRoot, path4.join("plot", "arcs"), (id, file, data) => ({
       id,
@@ -3940,7 +4010,8 @@ function scanProject(root) {
       file,
       term: data.term ?? titleCaseSlug(id),
       category: data.category ?? "",
-      aliases: asArray(data.aliases)
+      aliases: asArray(data.aliases),
+      pronunciation: data.pronunciation
     }), scanErrors),
     research: readEntityFiles(projectRoot, RESEARCH_DIR, (id, file, data) => ({
       id,
@@ -4016,6 +4087,7 @@ function validateProjectOf(project) {
   validateProgressLog(project, errors);
   validateFormRange(project, warnings);
   validatePublishing(project.story.data, errors, warnings);
+  validatePronunciations(project, errors);
   collectStrayFileWarnings(project, warnings);
   const indexChecks = [
     [path4.join("characters", "_index.md"), project.characters.map((item) => `](${item.id}.md)`)],
@@ -4908,7 +4980,9 @@ function buildBook(root, options = {}) {
     return { ...result, format };
   }
   const manuscript = manuscriptParts(project);
-  if (format === "html" || format === "print") {
+  if (format === "narration") {
+    writeFile(output.outFile, narrationScript(manuscript, pronunciationGuide(project)), output.writeOptions);
+  } else if (format === "html" || format === "print") {
     const book = htmlBook(manuscript);
     const text = format === "html" ? reviewHtml(book) : printHtml(book, options.trim === undefined ? DEFAULT_TRIM : String(options.trim));
     writeFile(output.outFile, text, output.writeOptions);
@@ -7116,7 +7190,8 @@ var BUILD_EXTENSIONS = {
   docx: "docx",
   shunn: "shunn.md",
   html: "html",
-  print: "print.html"
+  print: "print.html",
+  narration: "narration.md"
 };
 function normalizeBuildFormat(value) {
   const format = String(value).trim().toLowerCase();
@@ -7168,6 +7243,14 @@ function validateStoryFrontmatter(project, errors) {
   }
   if (data["schema-version"] !== undefined && data["schema-version"] !== STORY_SCHEMA_VERSION) {
     errors.push(`story.md schema-version must be ${STORY_SCHEMA_VERSION}`);
+  }
+}
+function validatePronunciations(project, errors) {
+  const entities = [project.characters, project.locations, project.factions, project.artifacts, project.glossaryTerms].flat();
+  for (const entity of entities) {
+    if (entity.pronunciation !== undefined && typeof entity.pronunciation !== "string") {
+      errors.push(`${relative2(project, entity.file)} frontmatter field pronunciation must be text`);
+    }
   }
 }
 function validateFormRange(project, warnings) {
@@ -8212,7 +8295,7 @@ var OPTIONS = [
   { name: "against", value: "<path>", help: ["Earlier draft as another project folder for compare"] },
   { name: "path", value: "<path>", help: ["Project root for every command except init and", "import"] },
   { name: "out", value: "<file>", help: ["Output path for export/build/synopsis/diagram"] },
-  { name: "format", value: "<name>", help: ["Output format for build (markdown, epub, docx,", "shunn, html, print)"] },
+  { name: "format", value: "<name>", help: ["Output format for build (markdown, epub, docx,", "shunn, html, print, narration)"] },
   { name: "trim", value: "<size>", help: ["Trim size for build --format print (5x8,", "5.25x8, 5.5x8.5, 6x9, a5; default 5.5x8.5)"] },
   { name: "shunn", help: ["Apply Shunn manuscript formatting (with --format", "docx)"] },
   { name: "at", value: "<chapter-id>", help: ["Chapter id for knowledge"] },
@@ -8821,7 +8904,8 @@ var COMMANDS = [
     summary: [
       "Build a disposable book artifact in dist/: markdown,",
       "epub, docx, shunn, html (review copy with paragraph",
-      "anchors), or print (paged-media interior)"
+      "anchors), print (paged-media interior), or",
+      "narration (audiobook script)"
     ],
     project: "positional",
     run({ parsed, io, root }) {
