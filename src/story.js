@@ -7,6 +7,7 @@ import { FRONTMATTER_PATTERN, parseFrontmatter, replaceFrontmatter, stringifyFro
 import { chapterProse, escapeRegExp, extractSection, kebabCase, titleCaseSlug, wordCount } from "./markdown.js";
 import { buildTimeline } from "./timeline.js";
 import { buildClueMatrix } from "./clues.js";
+import { buildDiagram } from "./diagram.js";
 import { CHAPTER_HOOKS, SCENE_OUTCOMES, buildPacing } from "./pacing.js";
 import { compareChapters, proseParagraphs } from "./compare.js";
 import { PROGRESS_FILE, cleanSessions, computeProgress, localDate, withSession } from "./progress.js";
@@ -1397,6 +1398,18 @@ export function clueReport(root) {
   const project = scanProject(root);
   const matrix = buildClueMatrix(project);
   return { ok: project.fileErrors.length === 0, errors: [...project.fileErrors], ...matrix };
+}
+
+// Mermaid source for one diagram kind, printed or written to --out.
+export function diagramProject(root, options = {}) {
+  const project = scanProject(root);
+  const text = buildDiagram(project, options.kind);
+  if (options.out === undefined) {
+    return { text };
+  }
+  const output = resolveOutputPath(project, options.out, "");
+  writeFile(output.outFile, text, output.writeOptions);
+  return { text, outFile: output.outFile };
 }
 
 // Pacing dashboard over chapters and scene records. Findings are advisory.

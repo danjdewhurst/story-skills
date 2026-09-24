@@ -166,6 +166,16 @@ Route travel: when locations declare `routes`, `story continuity` follows each c
 
 `story knowledge <character-id> --at <chapter-id>` answers what a character knew at a story point: `knowledge-state` entries for the character whose `learned-in` chapter is at or before the given chapter, plus entries without `learned-in` (pre-existing knowledge).
 
+### Diagrams
+
+`story diagram <kind>` prints [Mermaid](https://mermaid.js.org) source built from frontmatter, or writes it with `--out` (for example `--out dist/family.mmd`). GitHub, most markdown editors, and mermaid.live render it. It reads the same fields the checks trust, so rebuild it after editing instead of hand-editing the output.
+
+- `relationships` - every character, with one edge per related pair from `relationships`. Parent, grandparent, aunt, and uncle links are heavy arrows from the elder side; other family links (sibling, spouse, partner, cousin) are heavy lines; everything else is dotted. Deceased characters are drawn dashed. This is the family tree.
+- `locations` - every location with its region, joined by `routes` labelled with hours and mode. A two-way route is a line; a pair that declares a route each way is two arrows.
+- `timeline` - dated scenes and chapters in story-time order, grouped by day, noting entries told out of order (the same data as `story timeline`).
+- `clues` - chapters in reading order with an arrow from each clue's planting chapter to its reveal; red herrings are dotted, and unrevealed clues point at a "not yet revealed" node. Dropped and abandoned clues are left out.
+- `arcs` - each arc joined to the chapters whose chapter or scene `arcs-advanced` names it.
+
 ### Glossary
 
 Glossary terms require `term` and `category`, plus optional `aliases`.
