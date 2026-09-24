@@ -105,7 +105,9 @@
         "arc-type": { "enum": ["change-positive", "change-negative", "flat"] },
         "lie": { "type": "string" },
         "truth": { "type": "string" },
-        "ghost-wound": { "type": "string" }
+        "ghost-wound": { "type": "string" },
+        "voice-words": { "$ref": "#/$defs/stringList" },
+        "voice-avoid": { "$ref": "#/$defs/stringList" }
       }
     },
     "location": {

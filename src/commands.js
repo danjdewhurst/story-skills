@@ -8,6 +8,7 @@ import { formatProgress } from "./progress.js";
 import { formatProseReport } from "./prose.js";
 import { formatSeriesReport } from "./series.js";
 import { formatTimeline } from "./timeline.js";
+import { formatVoices } from "./voices.js";
 import {
   buildBook,
   checkProjectContinuity,
@@ -35,7 +36,8 @@ import {
   storyTimeline,
   synopsisBook,
   validateLinks,
-  validateProject
+  validateProject,
+  voicesReport
 } from "./story.js";
 
 // Every CLI command, in help order. `project` says how the command finds its
@@ -285,6 +287,21 @@ export const COMMANDS = [
       const report = clueReport(root());
       io.stdout.write(formatClueMatrix(report));
       return reportResult(io, report, "Clue check complete", "Clue check failed");
+    }
+  },
+  {
+    name: "voices",
+    usage: "voices [path]",
+    summary: [
+      "Fingerprint each character's tagged dialogue and flag",
+      "voice-avoid words, unused voice-words, and",
+      "characters who sound alike"
+    ],
+    project: "positional",
+    run({ io, root }) {
+      const report = voicesReport(root());
+      io.stdout.write(formatVoices(report));
+      return reportResult(io, report, "Voice check complete", "Voice check failed");
     }
   },
   {

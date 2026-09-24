@@ -79,6 +79,8 @@ Optional scalar: `died-in`, the chapter id in which the character dies on the pa
 
 Optional freeform scalar: `arc`, a short theme label for the character's personal arc (e.g. `redemption`). It is not validated as an arc id, so it never triggers link errors; set it with `story add character --arc <theme>`.
 
+Optional voice lists: `voice-words`, the words and phrases the character reaches for, and `voice-avoid`, the words they would never say. `story voices` reads both.
+
 `status: cut` keeps the file for a character removed in discovery drafting; the character stays out of canon but remains on record with a reason.
 
 Optional arc-craft fields (hand-edit only — no CLI flags; edit the character file directly):
@@ -221,6 +223,12 @@ Files in `research/` record the real-world facts the story relies on. Create the
 The body records the decisions a copyeditor tracks: voice, spelling and usage, capitalisation, hyphenation, numbers, dialogue punctuation, and one line per character voice linked to the character file. See the `voice-style` skill.
 
 `story prose` is advisory: it reports counts per chapter and raises warnings for avoided spellings, filter words or -ly adverbs over 10 or 12 per 1,000 narration words (once a chapter has 300 narration words), three or more said-bookism tags in a chapter, uniform sentence lengths (spread under 5 words over 20 or more sentences), and similar character first names. It exits 0 unless a project file cannot be read.
+
+### Dialogue Voices
+
+`story voices` fingerprints each character's dialogue. A quoted line is attributed when the paragraph's narration names the speaker next to a speech verb (`"...," Mara said`, `said Mara`, `Mara asked`) by full name, first name, or alias; otherwise, when the narration names exactly one character (an action beat), the line is theirs. Any other quoted line is counted as unattributed and never guessed. Cut characters are skipped.
+
+For each speaking character it reports lines, words, mean sentence length, contractions per 100 words, the share of sentences that are questions and exclamations, and up to five signature words: words of four or more letters, used at least twice, and used more than twice as often per word spoken as in everyone else's dialogue. It warns when a character says a `voice-avoid` word; when a character with five or more lines never says one of their `voice-words`; and when two characters with five or more lines each have sentence lengths within 1.5 words, contraction rates within 1.5 per 100 words, and question and exclamation shares within 10 points ("may sound alike"). Findings are advisory; the command exits 0 on a readable project.
 
 ## CLI Flag Values
 

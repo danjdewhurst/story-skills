@@ -8,6 +8,7 @@ import { chapterProse, escapeRegExp, extractSection, kebabCase, titleCaseSlug, w
 import { buildTimeline } from "./timeline.js";
 import { buildClueMatrix } from "./clues.js";
 import { buildDiagram } from "./diagram.js";
+import { buildVoices } from "./voices.js";
 import { CHAPTER_HOOKS, SCENE_OUTCOMES, buildPacing } from "./pacing.js";
 import { compareChapters, proseParagraphs } from "./compare.js";
 import { PROGRESS_FILE, cleanSessions, computeProgress, localDate, withSession } from "./progress.js";
@@ -310,7 +311,10 @@ export function scanProject(root) {
       arc: String(data.arc ?? ""),
       diedIn: String(data["died-in"] ?? ""),
       relationships: asArray(data.relationships),
-      locations: asArray(data.locations)
+      locations: asArray(data.locations),
+      aliases: asArray(data.aliases),
+      voiceWords: asArray(data["voice-words"]),
+      voiceAvoid: asArray(data["voice-avoid"])
     }), scanErrors),
     locations: readEntityFiles(projectRoot, path.join("worldbuilding", "locations"), (id, file, data) => ({
       id,
@@ -1410,6 +1414,16 @@ export function diagramProject(root, options = {}) {
   const output = resolveOutputPath(project, options.out, "");
   writeFile(output.outFile, text, output.writeOptions);
   return { text, outFile: output.outFile };
+}
+
+// Dialogue fingerprints per character from attributed speech. Advisory.
+export function voicesReport(root) {
+  const project = scanProject(root);
+  const chapters = project.chapters.map((chapter) => ({
+    id: chapter.id,
+    paragraphs: proseParagraphs(chapterProse(readMarkdown(chapter.file, project.root).body))
+  }));
+  return { ok: project.fileErrors.length === 0, errors: [...project.fileErrors], ...buildVoices(project, chapters) };
 }
 
 // Pacing dashboard over chapters and scene records. Findings are advisory.
@@ -3985,6 +3999,8 @@ function validateCharacters(project, errors) {
     validateStringArray(data, "aliases", label, errors);
     validateStringArray(data, "locations", label, errors);
     validateStringArray(data, "tags", label, errors);
+    validateStringArray(data, "voice-words", label, errors);
+    validateStringArray(data, "voice-avoid", label, errors);
     validateRelationships(data, label, errors);
   }
 }
