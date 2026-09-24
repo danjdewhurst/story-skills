@@ -97,6 +97,15 @@ describe("location routes", () => {
     ]);
   });
 
+  test("places in separate route networks are not compared", () => {
+    const root = routeProject();
+    writeLocation(root, "isle", "routes:\n  - to: lighthouse\n    hours: 1");
+    writeLocation(root, "lighthouse", "");
+    writeScene(root, "chapter-01", 1, "location: harbor\ndate: 2024-05-01\ntime: 08:00\ncharacters:\n  - mara");
+    writeScene(root, "chapter-01", 2, "location: isle\ndate: 2024-05-01\ntime: 08:05\ncharacters:\n  - mara");
+    expect(checkProjectContinuity(root).errors).toEqual([]);
+  });
+
   test("rename and remove keep route targets current", () => {
     const root = routeProject();
     renameEntity(root, { kind: "location", id: "mill", name: "Old Mill" });
