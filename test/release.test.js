@@ -43,7 +43,7 @@ describe("release script", () => {
       fs.mkdirSync(path.join(dir, path.dirname(relativePath)), { recursive: true });
       fs.writeFileSync(path.join(dir, relativePath), '{\n  "name": "story-skills",\n  "version": "0.5.0"\n}\n', "utf8");
     }
-    for (const name of ["story-checks.yml", "draft-next-chapter.yml"]) {
+    for (const name of ["story-checks.yml", "draft-next-chapter.yml", "review-copy.yml"]) {
       fs.writeFileSync(path.join(dir, "templates", "github", name), 'env:\n  STORY_REF: "v0.5.0"\n', "utf8");
     }
     fs.mkdirSync(path.join(dir, "src"));
@@ -54,11 +54,12 @@ describe("release script", () => {
       ".claude-plugin/plugin.json",
       "src/version.js",
       "templates/github/story-checks.yml",
-      "templates/github/draft-next-chapter.yml"
+      "templates/github/draft-next-chapter.yml",
+      "templates/github/review-copy.yml"
     ]);
     expect(JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf8")).version).toBe("0.6.0");
     expect(fs.readFileSync(path.join(dir, "src", "version.js"), "utf8")).toBe('// note\nexport const VERSION = "0.6.0";\n');
-    for (const name of ["story-checks.yml", "draft-next-chapter.yml"]) {
+    for (const name of ["story-checks.yml", "draft-next-chapter.yml", "review-copy.yml"]) {
       expect(fs.readFileSync(path.join(dir, "templates", "github", name), "utf8")).toContain('STORY_REF: "v0.6.0"');
     }
     fs.writeFileSync(path.join(dir, "templates", "github", "story-checks.yml"), "env: {}\n", "utf8");

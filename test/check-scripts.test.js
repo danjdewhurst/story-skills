@@ -239,7 +239,7 @@ describe("check-examples helpers", () => {
 });
 
 describe("github workflows", () => {
-  const workflowFiles = [".github/workflows/ci.yml", "templates/github/story-checks.yml", "templates/github/draft-next-chapter.yml"];
+  const workflowFiles = [".github/workflows/ci.yml", "templates/github/story-checks.yml", "templates/github/draft-next-chapter.yml", "templates/github/review-copy.yml"];
 
   test("each workflow declares top-level structure", () => {
     for (const relativePath of workflowFiles) {
@@ -281,12 +281,22 @@ describe("github workflows", () => {
   });
 
   test("story templates invoke the deterministic story checks", () => {
-    for (const relativePath of ["templates/github/story-checks.yml", "templates/github/draft-next-chapter.yml"]) {
+    for (const relativePath of ["templates/github/story-checks.yml", "templates/github/draft-next-chapter.yml", "templates/github/review-copy.yml"]) {
       const template = readRepo(relativePath);
       for (const command of ["story validate", "story links", "story continuity"]) {
         expect(template).toContain(command);
       }
     }
+  });
+
+  test("the review copy template builds html and publishes it with Pages", () => {
+    const template = readRepo("templates/github/review-copy.yml");
+    expect(template).toContain("story build \"$STORY_DIR\" --format html");
+    expect(template).toContain("actions/deploy-pages@");
+    expect(template).toContain("pages: write");
+    const note = readRepo("templates/github/ISSUE_TEMPLATE/manuscript-note.yml");
+    expect(note).toContain("id: anchor");
+    expect(note).toContain("ch03-p12");
   });
 
   test("story templates pin STORY_REF to the package version", () => {
@@ -301,7 +311,8 @@ describe("github workflows", () => {
     const readFile = (filePath) => (filePath.endsWith("story-checks.yml") ? 'STORY_REF: "v9.9.9"\n' : "no ref here\n");
     expect(checkTemplateStoryRef([], "0.5.0", "/templates", readFile)).toEqual([
       "templates/github/story-checks.yml STORY_REF mismatch: expected v0.5.0, got v9.9.9",
-      "templates/github/draft-next-chapter.yml is missing STORY_REF"
+      "templates/github/draft-next-chapter.yml is missing STORY_REF",
+      "templates/github/review-copy.yml is missing STORY_REF"
     ]);
   });
 

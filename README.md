@@ -193,6 +193,13 @@ Copy both files into `.github/workflows/` in the repository that holds your stor
 
 GitHub doesn't start `story-checks.yml` for pull requests opened with the built-in `GITHUB_TOKEN`, so the draft workflow runs the same checks itself after drafting. Pass a personal access token as `github_token` if you also want the checks workflow to run on those PRs.
 
+Readers who never open a terminal can review the book too:
+
+- [`review-copy.yml`](templates/github/review-copy.yml) builds `story build --format html` on every push to `main` and publishes it to GitHub Pages. Every paragraph in the review copy carries a label such as `ch03-p12`, so a note can point at an exact place.
+- [`ISSUE_TEMPLATE/manuscript-note.yml`](templates/github/ISSUE_TEMPLATE/manuscript-note.yml) is an issue form that asks readers for that label, the kind of note, and how much it affected their reading. The feedback-triage skill turns those issues into a feedback round.
+
+Copy the workflow into `.github/workflows/` and the form into `.github/ISSUE_TEMPLATE/`, then set **Settings > Pages > Source** to GitHub Actions. Pages sites are public unless your plan supports private Pages; for a private manuscript, delete the deploy job and share the workflow artifact instead.
+
 ## Import an existing manuscript
 
 Most writers don't start from a blank page. `story import` builds a Story Skills project from work in progress:

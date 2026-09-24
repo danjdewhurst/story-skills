@@ -1,0 +1,57 @@
+# Manuscript note - an issue form for readers of the review copy.
+#
+# Copy this file to .github/ISSUE_TEMPLATE/manuscript-note.yml in the
+# repository that holds your story project. Readers of the review copy
+# (review-copy.yml) open an issue per note, quoting the paragraph label shown
+# beside each paragraph, so every note points at an exact place in the book.
+# The feedback-triage skill reads these issues into a feedback round.
+
+name: Manuscript note
+description: Leave a note on a paragraph of the review copy.
+title: "[ch00-p0] "
+labels: ["manuscript-note"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reading. Each paragraph in the review copy has a small label such as `ch03-p12` (chapter 3, paragraph 12). Put it in the title and below so the author can find the spot.
+  - type: input
+    id: anchor
+    attributes:
+      label: Paragraph label
+      description: The label shown beside the paragraph, or the first and last labels of a passage.
+      placeholder: ch03-p12 or ch03-p12 to ch03-p15
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of note is this?
+      options:
+        - Typo or wording
+        - Confusing
+        - Continuity (contradicts something earlier)
+        - Pacing (slow or rushed)
+        - Character (feels off)
+        - Sensitivity or authenticity
+        - Loved this
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: note
+    attributes:
+      label: Your note
+      description: What you noticed and how it made you feel as a reader. You don't need to suggest a fix.
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: How much did it affect your reading?
+      options:
+        - Barely noticed
+        - Pulled me out for a moment
+        - Made me want to stop reading
+    validations:
+      required: false
