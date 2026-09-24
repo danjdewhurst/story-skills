@@ -210,6 +210,7 @@ Files in `matter/` hold the pages around the chapters: dedication, epigraph, cop
 - `placement` (required) is `front` or `back`.
 - `order` is a non-negative integer; pages sort by `order`, then by id. `story add matter` numbers new pages after the last one in their placement.
 - `heading` defaults to `true`. Set `heading: false` for pages that print no title, such as a dedication or epigraph.
+- `permission` records the rights status of quoted material on the page (an epigraph, song lyrics, a poem): `not-needed`, `pending`, `granted`, or `public-domain`. `rights-holder` names who granted it and `credit` is the credit line the grant requires. `story validate` warns when permission is `pending` on a `complete` story, and when it is `granted` with no `rights-holder`. See the `editorial-review` skill.
 
 The body is the page text; a leading `# Heading` line is dropped, like a chapter's. `story export` and every `story build` format except Shunn place front matter after the book title and back matter after the last chapter. Shunn manuscripts are for submission and leave matter out. A matter file with no text is left out of export and build, and `story validate` warns about it.
 

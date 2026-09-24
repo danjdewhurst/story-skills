@@ -3740,6 +3740,7 @@ var TERM_CATEGORIES = new Set(["person", "place", "faction", "artifact", "concep
 var STYLE_DIALECTS = new Set(["british", "american", "unspecified"]);
 var STYLE_SHEET_FILE = "style-sheet.md";
 var MATTER_PLACEMENTS = new Set(["front", "back"]);
+var MATTER_PERMISSIONS = new Set(["not-needed", "pending", "granted", "public-domain"]);
 var MATTER_DIR = "matter";
 var RESEARCH_STATUSES = new Set(["open", "verified", "disputed"]);
 var RESEARCH_ACCURACY = new Set(["must-be-accurate", "blended", "invented"]);
@@ -7883,6 +7884,15 @@ function validateMatter(project, errors, warnings) {
     }
     if (data.heading !== undefined && typeof data.heading !== "boolean") {
       errors.push(`${label2} heading must be true or false`);
+    }
+    validateEnum(data, "permission", MATTER_PERMISSIONS, label2, errors);
+    requireScalar(data, "rights-holder", label2, errors);
+    requireScalar(data, "credit", label2, errors);
+    if (data.permission === "pending" && project.story.data.status === "complete") {
+      warnings.push(`${label2} permission is still pending and the story is complete`);
+    }
+    if (data.permission === "granted" && (typeof data["rights-holder"] !== "string" || data["rights-holder"].trim() === "")) {
+      warnings.push(`${label2} permission is granted but no rights-holder is recorded`);
     }
   }
 }

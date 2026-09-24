@@ -79,6 +79,7 @@ const TERM_CATEGORIES = new Set(["person", "place", "faction", "artifact", "conc
 export const STYLE_DIALECTS = new Set(["british", "american", "unspecified"]);
 export const STYLE_SHEET_FILE = "style-sheet.md";
 const MATTER_PLACEMENTS = new Set(["front", "back"]);
+const MATTER_PERMISSIONS = new Set(["not-needed", "pending", "granted", "public-domain"]);
 const MATTER_DIR = "matter";
 const RESEARCH_STATUSES = new Set(["open", "verified", "disputed"]);
 const RESEARCH_ACCURACY = new Set(["must-be-accurate", "blended", "invented"]);
@@ -4764,6 +4765,17 @@ function validateMatter(project, errors, warnings) {
     }
     if (data.heading !== undefined && typeof data.heading !== "boolean") {
       errors.push(`${label} heading must be true or false`);
+    }
+    // Quoted material (an epigraph, lyrics, a poem) needs the rights
+    // holder's permission before the book is published.
+    validateEnum(data, "permission", MATTER_PERMISSIONS, label, errors);
+    requireScalar(data, "rights-holder", label, errors);
+    requireScalar(data, "credit", label, errors);
+    if (data.permission === "pending" && project.story.data.status === "complete") {
+      warnings.push(`${label} permission is still pending and the story is complete`);
+    }
+    if (data.permission === "granted" && (typeof data["rights-holder"] !== "string" || data["rights-holder"].trim() === "")) {
+      warnings.push(`${label} permission is granted but no rights-holder is recorded`);
     }
   }
 }
