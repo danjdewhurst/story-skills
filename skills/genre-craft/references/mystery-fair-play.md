@@ -93,8 +93,9 @@ way the CLI writes them. `characters` names who can notice the clue (the
 detective, the witness); a clue nobody can notice cannot be played fair.
 
 - `planted` must precede `payoff`. `story continuity` errors when payoff
-  comes before plant. The Chekhov warning (planted three or more chapters
-  ago with no payoff yet) fires only when `status` is `planted`. A clue kept
+  comes before plant. The Chekhov warning fires only when `status` is
+  `planted`: as soon as a recorded `payoff` chapter is drafted, or, with no
+  payoff recorded, once the plant is three or more chapters back. A clue kept
   at `status: planned` with a `planted` chapter records where it will go;
   once that chapter has prose, `story continuity` warns until the status is
   `planted`. A completed story that still has a `planned` or `planted`
