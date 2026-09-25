@@ -4,7 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { checkCoverage, parseLcov } from "../scripts/check-coverage.js";
 import { collectResult, compareFindings } from "../scripts/check-examples.js";
-import { checkMarketplaces, checkSkillFrontmatter, checkTemplateStoryRef, checkVersionModule, expectEqual } from "../scripts/check-metadata.js";
+import { docVersionFiles } from "../scripts/doc-versions.js";
+import { checkDocVersions, checkMarketplaces, checkSkillFrontmatter, checkTemplateStoryRef, checkVersionModule, expectEqual } from "../scripts/check-metadata.js";
 import { checkFixtureSkill } from "../scripts/check-evals.js";
 import { PREFLIGHT } from "../scripts/release.js";
 import { spawnSync } from "node:child_process";
@@ -305,6 +306,21 @@ describe("github workflows", () => {
       fs.readFileSync(filePath, "utf8")
     );
     expect(failures).toEqual([]);
+  });
+
+  test("doc version examples match the package version", () => {
+    const packageJson = JSON.parse(readRepo("package.json"));
+    const files = docVersionFiles(repoRoot);
+    expect(files).toContain("README.md");
+    expect(files).toContain("docs/getting-started.md");
+    expect(checkDocVersions([], packageJson.version, files, readRepo)).toEqual([]);
+  });
+
+  test("checkDocVersions flags stale version examples with file and line", () => {
+    const readFile = (relativePath) => (relativePath === "docs/a.md" ? "intro\nnpm install -g story-skills@0.4.0\n" : "0.5.0\n");
+    expect(checkDocVersions([], "0.5.0", ["docs/a.md", "docs/b.md"], readFile)).toEqual([
+      "docs/a.md:2 version example mismatch: expected 0.5.0, got 0.4.0"
+    ]);
   });
 
   test("checkTemplateStoryRef flags missing and stale refs", () => {

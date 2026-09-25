@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseFrontmatter } from "../src/frontmatter.js";
+import { docVersionFiles, staleDocVersions } from "./doc-versions.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -54,6 +55,15 @@ export function checkTemplateStoryRef(failures, packageVersion, templatesDir, re
       continue;
     }
     expectEqual(failures, `templates/github/${name} STORY_REF`, `v${packageVersion}`, match[1]);
+  }
+  return failures;
+}
+
+export function checkDocVersions(failures, packageVersion, relativePaths, readFile) {
+  for (const relativePath of relativePaths) {
+    for (const { line, found } of staleDocVersions(readFile(relativePath), packageVersion)) {
+      failures.push(`${relativePath}:${line} version example mismatch: expected ${packageVersion}, got ${found}`);
+    }
   }
   return failures;
 }
@@ -145,6 +155,10 @@ function main() {
 
   checkTemplateStoryRef(failures, packageJson.version, path.join(repoRoot, "templates", "github"), (filePath) =>
     fs.readFileSync(filePath, "utf8")
+  );
+
+  checkDocVersions(failures, packageJson.version, docVersionFiles(repoRoot), (relativePath) =>
+    fs.readFileSync(path.join(repoRoot, relativePath), "utf8")
   );
 
   const marketplaceFailures = checkMarketplaces({

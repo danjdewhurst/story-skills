@@ -36,9 +36,9 @@ The CLI needs Node 18 or newer and has no runtime dependencies. In a CI job, use
 
 | Source | Command | Notes |
 |---|---|---|
-| npm, pinned | `npx --yes --package story-skills@0.9.0 story <command>` | Fetches the published package. |
-| npm, installed once per job | `npm install -g story-skills@0.9.0`, then `story <command>` | Faster when a job runs several commands. |
-| GitHub tag | `npx --yes --package github:danjdewhurst/story-skills#v0.9.0 story <command>` | What the templates use. Fetches the tagged release from GitHub, because the templates predate the npm package. |
+| npm, pinned | `npx --yes --package story-skills@0.9.1 story <command>` | Fetches the published package. |
+| npm, installed once per job | `npm install -g story-skills@0.9.1`, then `story <command>` | Faster when a job runs several commands. |
+| GitHub tag | `npx --yes --package github:danjdewhurst/story-skills#v0.9.1 story <command>` | What the templates use. Fetches the tagged release from GitHub, because the templates predate the npm package. |
 | Bundled fallback | `node <skills-dir>/story-maintenance/scripts/story.js <command>` | No network needed if your repository already contains the skills, for example under `.claude/skills/`. |
 
 Always pin a version. An unpinned `npx story-skills` can pick up a new release mid-book and start reporting findings your project has never seen. Local installs can track the latest release; CI should pin, because new releases can add checks.
@@ -46,11 +46,11 @@ Always pin a version. An unpinned `npx story-skills` can pick up a new release m
 To confirm which version a job is using:
 
 ```shell
-npx --yes --package story-skills@0.9.0 story --version
+npx --yes --package story-skills@0.9.1 story --version
 ```
 
 ```text
-0.9.0
+0.9.1
 ```
 
 ### Exit codes
@@ -343,7 +343,7 @@ Set `STORY_DIR` at the top of each workflow file when the story project lives in
 ```yaml
 env:
   STORY_DIR: "books/the-last-ember"
-  STORY_REF: "v0.9.0"
+  STORY_REF: "v0.9.1"
 ```
 
 For several books in one repository, copy the check steps once per book, or turn `STORY_DIR` into a matrix value. For a linked series, add a `story series "$STORY_DIR"` step: it exits 1 when canon contradicts itself across books. The `story links` step is what catches a missing series backlink. See [Series](series.md).
@@ -424,7 +424,7 @@ story links "$STORY_DIR" || exit 1
 story continuity "$STORY_DIR" || exit 1
 ```
 
-The hook assumes `story` is on your `PATH`, for example after `npm install -g story-skills`. If it is not, replace `story` with `npx --yes story-skills@0.9.0` or with `node <skills-dir>/story-maintenance/scripts/story.js`. Warnings do not block the commit.
+The hook assumes `story` is on your `PATH`, for example after `npm install -g story-skills`. If it is not, replace `story` with `npx --yes story-skills@0.9.1` or with `node <skills-dir>/story-maintenance/scripts/story.js`. Warnings do not block the commit.
 
 The hook only checks. It does not run `story wordcount --write` or `story reindex`, because a hook that rewrites files leaves those changes unstaged. Run those yourself, or ask your agent to, after changing chapters or entities; the skills already direct agents to do this. See [Writing workflows](writing-workflows.md).
 
@@ -461,7 +461,7 @@ repos:
 Nothing in the checks is specific to GitHub. Any CI system with Node 18 or newer can run them:
 
 ```shell
-npm install -g story-skills@0.9.0
+npm install -g story-skills@0.9.1
 story validate .
 story links .
 story continuity .
