@@ -1910,7 +1910,7 @@ describe("review-findings hardening", () => {
     expect(() => scanProject(root)).toThrow("exceeds the 5000 file limit");
   });
 
-  test("rename refuses to scan past the directory depth cap", () => {
+  test("rename skips folders past the directory depth cap", () => {
     const cwd = makeTempDir();
     const root = createStoryProject({ title: "Deep", cwd }).root;
     writeMarkdown(path.join(root, "characters", "deep-char.md"), `
@@ -1923,8 +1923,10 @@ status: alive
       dir = path.join(dir, `level-${i}`);
     }
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, "note.md"), "# Deep note\n", "utf8");
-    expect(() => renameEntity(root, { kind: "character", id: "deep-char", name: "Deeper Char" })).toThrow("beyond depth 10");
+    fs.writeFileSync(path.join(dir, "note.md"), "# Deep note [deep-char](../deep-char.md)\n", "utf8");
+    // An unrelated deep notes tree must not block a rename; it is not scanned.
+    expect(renameEntity(root, { kind: "character", id: "deep-char", name: "Deeper Char" }).id).toBe("deeper-char");
+    expect(fs.readFileSync(path.join(dir, "note.md"), "utf8")).toContain("deep-char.md");
   });
 
   test("rename refuses to scan past the file count cap", () => {

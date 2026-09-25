@@ -807,3 +807,170 @@ describe("round three", () => {
     expect(result.errors.join("\n")).toContain("continuity/exemptions.md: Refusing to read through symlink");
   });
 });
+
+describe("round four", () => {
+  test("~~~ separators and unclosed fences never hide text from counts", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", "First part has five words.\n\n~~~\n\nSecond part has five words.\n\n\\~\\~\\~\n\nThird part has five words.\n\n```\nUnclosed fence still counts.");
+    expect(computeWordCounts(root).total).toBe(19);
+    const html = fs.readFileSync(buildBook(root, { format: "html" }).outFile, "utf8");
+    expect(html.match(/class="scene-break"/g)).toHaveLength(2);
+    createEntity(root, { kind: "chapter", name: "Two", number: 2 });
+    appendProse(root, "chapters/chapter-02.md", "Words outside.\n\n```\nclosed code here\n```");
+    expect(computeWordCounts(root).chapters[1].wordCount).toBe(2);
+  });
+
+  test("writes keep file permissions and refuse read-only files", () => {
+    if (process.getuid?.() === 0) {
+      return;
+    }
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", "Some words here.");
+    const chapter = path.join(root, "chapters", "chapter-01.md");
+    fs.chmodSync(chapter, 0o444);
+    expect(() => computeWordCounts(root, { write: true })).toThrow("EACCES");
+    fs.chmodSync(chapter, 0o600);
+    computeWordCounts(root, { write: true });
+    expect(fs.statSync(chapter).mode & 0o777).toBe(0o600);
+  });
+
+  test("a hard-linked target is replaced with its permissions kept", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    const outDir = makeTempDir();
+    const target = path.join(outDir, "book.md");
+    fs.writeFileSync(target, "old");
+    fs.chmodSync(target, 0o640);
+    fs.linkSync(target, path.join(outDir, "other.md"));
+    exportManuscript(root, { out: target });
+    expect(fs.statSync(target).mode & 0o777).toBe(0o640);
+    expect(fs.readFileSync(path.join(outDir, "other.md"), "utf8")).toBe("old");
+    expect(fs.readdirSync(outDir).sort()).toEqual(["book.md", "other.md"]);
+  });
+
+  test("a failed hard-link replacement leaves no temporary file", async () => {
+    if (process.getuid?.() === 0) {
+      return;
+    }
+    const { writeFile } = await import("../src/story.js");
+    const dir = makeTempDir();
+    const target = path.join(dir, "book.md");
+    fs.writeFileSync(target, "old");
+    fs.linkSync(target, path.join(makeTempDir(), "elsewhere.md"));
+    fs.chmodSync(dir, 0o555);
+    try {
+      expect(() => writeFile(target, "new")).toThrow();
+      expect(fs.readdirSync(dir)).toEqual(["book.md"]);
+    } finally {
+      fs.chmodSync(dir, 0o755);
+    }
+  });
+
+  test("import dash conversion leaves URLs, tables, indented code, and unclosed comments", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "src.md"), [
+      "# Chapter 1: One",
+      "",
+      "See [the site](https://example.com/a--b) and https://x.org/--flag now -- then.",
+      "",
+      "| a | b |",
+      "|---|---|",
+      "",
+      "    indented -- code",
+      "",
+      "End -- here <!-- note -- unclosed"
+    ].join("\n"));
+    const project = scanProject(importManuscript({ source: "src.md", title: "S", cwd, dir: "s" }).root);
+    const text = fs.readFileSync(project.chapters[0].file, "utf8");
+    expect(text).toContain("(https://example.com/a--b)");
+    expect(text).toContain("https://x.org/--flag now – then.");
+    expect(text).toContain("|---|---|");
+    expect(text).toContain("    indented -- code");
+    expect(text).toContain("End – here <!-- note -- unclosed");
+  });
+
+  test("prose keeps words apart across a comment", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", "It was really<!--x-->quiet.");
+    expect(proseReport(root).chapters[0].analysis.adverbs).toEqual([{ word: "really", count: 1 }]);
+  });
+
+  test("a long id is not pushed over the file name limit", () => {
+    const root = newProject();
+    const name = "a".repeat(248);
+    expect(createEntity(root, { kind: "character", name }).id).toBe(name);
+  });
+
+  test("an unclosed fence in a registry section does not duplicate headings", () => {
+    const root = newProject();
+    const index = path.join(root, "characters", "_index.md");
+    fs.writeFileSync(index, fs.readFileSync(index, "utf8").replace("## Relationship Map", "## My Notes\n\n```\nunclosed fence\n\n## Relationship Map"));
+    reindexProject(root);
+    expect(fs.readFileSync(index, "utf8").match(/^## Relationship Map$/gm)).toHaveLength(1);
+  });
+
+  test("init refuses a story id Windows reserves", () => {
+    const cwd = makeTempDir();
+    expect(() => createStoryProject({ cwd, title: "Con" })).toThrow("Windows reserves the file name con");
+    expect(() => createStoryProject({ cwd, title: "Fine Title", dir: "AUX" })).toThrow("Cannot use folder AUX: Windows reserves that name");
+    expect(fs.readdirSync(cwd)).toEqual([]);
+  });
+
+  test("rename and remove leave node_modules alone", () => {
+    const root = newProject();
+    createEntity(root, { kind: "character", name: "Mara Quill" });
+    const vendored = path.join(root, "node_modules", "story-skills", "examples", "x", "characters");
+    fs.mkdirSync(vendored, { recursive: true });
+    const vendoredFile = path.join(vendored, "theo.md");
+    fs.writeFileSync(vendoredFile, "---\nname: Theo\nrelationships:\n  - character: mara-quill\n    type: sibling\n---\n");
+    renameEntity(root, { kind: "character", id: "mara-quill", name: "Mara Tide" });
+    removeEntity(root, { kind: "character", id: "mara-tide" });
+    expect(fs.readFileSync(vendoredFile, "utf8")).toContain("character: mara-quill");
+  });
+
+  test("continuity route checks stay fast with a busy character and a big map", () => {
+    const root = newProject();
+    createEntity(root, { kind: "character", name: "Mara" });
+    for (let index = 0; index < 60; index += 1) {
+      const routes = index < 59 ? `\nroutes:\n  - to: loc-${index + 1}\n    hours: 1` : "";
+      writeMarkdown(path.join(root, "worldbuilding", "locations", `loc-${index}.md`), `name: Loc ${index}\ntype: city${routes}`);
+    }
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    const scenes = path.join(root, "scenes");
+    for (let index = 0; index < 600; index += 1) {
+      const day = String(1 + Math.floor(index / 24)).padStart(2, "0");
+      const hour = String(index % 24).padStart(2, "0");
+      writeMarkdown(path.join(scenes, `chapter-01-scene-${String(index + 1).padStart(3, "0")}.md`), `title: S${index}\nchapter: chapter-01\nscene: ${index + 1}\nstatus: draft\nlocation: loc-${index % 60}\ncharacters:\n  - mara\ndate: 2024-01-${day}\ntime: "${hour}:00"`);
+    }
+    const started = performance.now();
+    checkProjectContinuity(root);
+    expect(performance.now() - started).toBeLessThan(4000);
+  });
+
+  test("Shunn title pages name every co-author", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    const story = path.join(root, "story.md");
+    fs.writeFileSync(story, fs.readFileSync(story, "utf8").replace("---\ntitle:", "---\nauthors:\n  - Ann Lee\n  - Bo Chen\ntitle:"));
+    const text = fs.readFileSync(buildBook(root, { format: "shunn" }).outFile, "utf8");
+    expect(text).toContain("Ann Lee and Bo Chen");
+  });
+
+  test("route checks find the shortest path through a branching map", () => {
+    const root = newProject();
+    createEntity(root, { kind: "character", name: "Mara" });
+    const routes = { a: [["b", 5], ["c", 1], ["e", 3], ["f", 9], ["g", 4]], b: [["d", 1]], c: [["b", 1], ["d", 7], ["f", 2]], d: [], e: [["d", 2]], f: [["d", 6]], g: [["d", 8]] };
+    for (const [id, edges] of Object.entries(routes)) {
+      const list = edges.length === 0 ? "" : `\nroutes:\n${edges.map(([to, hours]) => `  - to: ${to}\n    hours: ${hours}`).join("\n")}`;
+      writeMarkdown(path.join(root, "worldbuilding", "locations", `${id}.md`), `name: ${id.toUpperCase()}\ntype: city${list}`);
+    }
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    createEntity(root, { kind: "scene", name: "S1", chapter: "chapter-01", character: "mara", location: "a", date: "2024-01-01", time: "00:00" });
+    createEntity(root, { kind: "scene", name: "S2", chapter: "chapter-01", character: "mara", location: "d", date: "2024-01-01", time: "02:00" });
+    const error = checkProjectContinuity(root).errors.find((entry) => entry.includes("fastest route"));
+    expect(error).toContain("takes 3h");
+  });
+});

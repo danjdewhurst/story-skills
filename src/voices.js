@@ -124,8 +124,12 @@ function speakerPatterns(characters) {
       if (alternatives === "") {
         return null;
       }
+      // The first letters-and-digits run of each name: a paragraph can only
+      // name this speaker if it contains one of these as a whole word.
+      const keys = new Set([...names].map((entry) => entry.split(NON_WORD)[0]));
       return {
         id: character.id,
+        keys,
         name: new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternatives})(?![\\p{L}\\p{N}])`, "u"),
         subject: new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternatives})\\s+(?:${verbs})(?![\\p{L}\\p{N}])`, "u"),
         inverted: new RegExp(`(?<![\\p{L}\\p{N}])(?:${verbs})\\s+(?:${alternatives})(?![\\p{L}\\p{N}])`, "u")
@@ -134,8 +138,14 @@ function speakerPatterns(characters) {
     .filter(Boolean);
 }
 
-function attribute(paragraph, speakers) {
+const NON_WORD = /[^\p{L}\p{N}]+/u;
+
+function attribute(paragraph, allSpeakers) {
   const narration = stripQuotes(paragraph);
+  // Test only speakers whose name could appear, so the per-speaker patterns
+  // run for a handful of speakers rather than the whole cast.
+  const words = new Set(narration.split(NON_WORD));
+  const speakers = allSpeakers.filter((speaker) => [...speaker.keys].some((key) => key === "" || words.has(key)));
   // "Sera told Kael": the name before the verb is the speaker, so subject
   // tags win over inverted ones ("said Sera").
   for (const form of ["subject", "inverted"]) {

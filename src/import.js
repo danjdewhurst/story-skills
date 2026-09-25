@@ -258,13 +258,13 @@ function normalizeSource(text, name) {
   if (/\.te?xt$/i.test(name)) {
     return text.replace(/^[ \t]+/gm, "");
   }
-  // Code, HTML comments, and lines of only dashes (scene breaks) keep their
-  // hyphens.
+  // Code, HTML comments, link targets and URLs, table separator rows,
+  // indented code, and lines of only dashes (scene breaks) keep their hyphens.
   return splitFences(text).map((part) => (part.fenced ? part.text : protectComments(part.text, (prose) => prose
     .split("\n")
-    .map((line) => (/^\s*(?:-\s*){3,}$/.test(line)
+    .map((line) => (/^\s*(?:-\s*){3,}$/.test(line) || /^\s*\|?[\s:|-]*-[\s:|-]*\|[\s:|-]*$/.test(line) || /^(?: {4}|\t)/.test(line)
       ? line
-      : line.split(/(`[^`]*`)/).map((piece, index) => (index % 2 === 1
+      : line.split(/(`[^`]*`|\]\([^)\s]*\)|<[a-z][a-z0-9+.-]*:[^>\s]*>|\b[a-z][a-z0-9+.-]*:\/\/\S+)/i).map((piece, index) => (index % 2 === 1
         ? piece
         : piece.replace(/(^|[^-])---(?!-)/g, "$1—").replace(/(^|[^-])--(?!-)/g, "$1–"))).join("")))
     .join("\n")))).join("");
@@ -276,9 +276,13 @@ function protectComments(text, change) {
   let position = 0;
   while (position < text.length) {
     const open = text.indexOf("<!--", position);
-    const close = open === -1 ? -1 : text.indexOf("-->", open + 4);
-    if (close === -1) {
+    if (open === -1) {
       return result + change(text.slice(position));
+    }
+    const close = text.indexOf("-->", open + 4);
+    if (close === -1) {
+      // An unclosed comment still hides the rest from conversion.
+      return result + change(text.slice(position, open)) + text.slice(open);
     }
     result += change(text.slice(position, open)) + text.slice(open, close + 3);
     position = close + 3;

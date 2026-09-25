@@ -5,7 +5,7 @@ import path from "node:path";
 import { checkContinuity, storyDateError, storyTimeError } from "./continuity.js";
 import { FRONTMATTER_PATTERN, parseFrontmatter, replaceFrontmatter, stringifyFrontmatter } from "./frontmatter.js";
 import { readTextFile } from "./files.js";
-import { chapterProse, escapeRegExp, extractSection, hasUnclosedComment, isSceneBreak, kebabCase, titleCaseSlug, wordCount } from "./markdown.js";
+import { chapterProse, escapeRegExp, extractSection, fencedLineIndexes, hasUnclosedComment, isSceneBreak, kebabCase, titleCaseSlug, wordCount } from "./markdown.js";
 import { buildTimeline } from "./timeline.js";
 import { buildClueMatrix } from "./clues.js";
 import { buildDiagram } from "./diagram.js";
@@ -162,6 +162,11 @@ export function createStoryProject(options) {
   }
   const root = path.resolve(cwd, options.dir ?? titleId);
   const storyId = deriveStoryId(title, root);
+  // The story id names the default folder and every build file.
+  assertPortableId(storyId, "story");
+  if (WINDOWS_RESERVED_ID.test(path.basename(root).toLowerCase())) {
+    throw new Error(`Cannot use folder ${path.basename(root)}: Windows reserves that name. Choose another --dir`);
+  }
   if (!storyId) {
     throw new Error('Cannot derive a story id from title "' + title + '" or folder "' + path.basename(root) + '": use an ASCII folder name with --dir');
   }
@@ -1313,19 +1318,16 @@ function customSections(existing, generated) {
   return sections;
 }
 
-// Level 1 and 2 ATX headings with their line numbers, skipping fenced code.
+// Level 1 and 2 ATX headings with their line numbers, skipping closed
+// fenced code (see fencedLineIndexes).
 function markdownHeadings(markdown) {
+  const lines = markdown.split("\n");
+  const fenced = fencedLineIndexes(lines);
   const headings = [];
-  let fence = null;
-  for (const [line, text] of markdown.split("\n").entries()) {
-    const fenceMatch = /^ {0,3}(`{3,}|~{3,})/.exec(text);
-    if (fenceMatch && (fence === null || fenceMatch[1][0] === fence[0] && fenceMatch[1].length >= fence.length)) {
-      fence = fence === null ? fenceMatch[1] : null;
-    } else if (fence === null) {
-      const heading = /^(#{1,2}) +(.+?)[ \t]*$/.exec(text);
-      if (heading) {
-        headings.push({ level: heading[1].length, text: heading[2], line });
-      }
+  for (const [line, text] of lines.entries()) {
+    const heading = fenced.has(line) ? null : /^(#{1,2}) +(.+?)[ \t]*$/.exec(text);
+    if (heading) {
+      headings.push({ level: heading[1].length, text: heading[2], line });
     }
   }
   return headings;
@@ -1609,7 +1611,7 @@ export function voicesReport(root) {
   const project = scanProject(root);
   const chapters = project.chapters.map((chapter) => ({
     id: chapter.id,
-    paragraphs: proseParagraphs(chapterProse(readMarkdown(chapter.file, project.root).body))
+    paragraphs: proseParagraphs(chapterProse(readMarkdown(chapter.file, project.root).body, " "))
   }));
   return { ok: project.fileErrors.length === 0, errors: [...project.fileErrors], ...buildVoices(project, chapters) };
 }
@@ -1632,7 +1634,7 @@ export function proseReport(root) {
   for (const chapter of project.chapters) {
     // Chapters that failed to parse are already in fileErrors, not here.
     const label = relative(project, chapter.file);
-    const analysis = analyzeChapter(chapterProse(readMarkdown(chapter.file, project.root).body), rules);
+    const analysis = analyzeChapter(chapterProse(readMarkdown(chapter.file, project.root).body, " "), rules);
     chapters.push({ file: label, title: chapter.title, analysis });
     warnings.push(...chapterFindings(label, analysis));
   }
@@ -1911,8 +1913,10 @@ function truncateWords(text, budget) {
 function shunnMeta(project) {
   const data = project.story.data;
   return {
-    title: data.title ?? project.storyId,
-    author: data.author === undefined ? "" : String(data.author),
+    title: project.title,
+    // Like every other build, `authors` wins over `author`, so a co-written
+    // book gets a full byline.
+    author: publishingMeta(data).authors.join(" and "),
     contact: asArray(data.contact),
     words: project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0)
   };
@@ -2693,7 +2697,8 @@ const WINDOWS_RESERVED_ID = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/;
 
 function assertPortableId(id, kind) {
   if (WINDOWS_RESERVED_ID.test(id)) {
-    throw new Error(`Cannot use ${kind} id ${id}: Windows reserves the file name ${id}.md. Choose a longer name, such as "${id} ${kind}"`);
+    const file = kind === "story" ? id : `${id}.md`;
+    throw new Error(`Cannot use ${kind} id ${id}: Windows reserves the file name ${file}. Choose a longer name, such as "${id} ${kind}"`);
   }
 }
 
@@ -3487,15 +3492,21 @@ function addFrontmatterListValue(root, relativePath, field, value) {
   }
 }
 
+// Folders that never hold project prose: build output, installed packages
+// (a local story-skills install ships its own examples), and dot-folders.
+const SKIPPED_SCAN_DIRECTORIES = new Set(["dist", "node_modules"]);
+
+// Markdown files a rename or remove may rewrite. Folders deeper than the
+// scan limit are skipped rather than fatal, so an unrelated deep notes tree
+// cannot block the command.
 function markdownFiles(root, depth = 0, collected = null) {
   const files = collected ?? [];
-  if (depth > MAX_SCAN_DEPTH) {
-    throw new Error('Refusing to scan beyond depth ' + MAX_SCAN_DEPTH + ' under ' + root);
-  }
   for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
     const fullPath = path.join(root, entry.name);
-    if (entry.isDirectory() && entry.name !== 'dist' && !entry.name.startsWith('.')) {
-      markdownFiles(fullPath, depth + 1, files);
+    if (entry.isDirectory() && !SKIPPED_SCAN_DIRECTORIES.has(entry.name) && !entry.name.startsWith('.')) {
+      if (depth < MAX_SCAN_DEPTH) {
+        markdownFiles(fullPath, depth + 1, files);
+      }
     } else if (entry.isFile() && entry.name.endsWith('.md')) {
       files.push(fullPath);
       if (files.length > MAX_SCAN_FILES) {
@@ -4253,11 +4264,20 @@ function readMarkdown(filePath, root) {
 
 export function writeFile(filePath, contents, options = {}) {
   const target = prepareWriteTarget(filePath, options.root);
-  // Write a sibling file and rename it into place, so a hard link at the
-  // target (to a chapter, say) is replaced rather than written through.
-  const temporary = path.join(path.dirname(target), `.${path.basename(target)}.${process.pid}.tmp`);
+  const existing = lstatIfExists(target);
+  if (!existing || existing.nlink <= 1) {
+    // In place, so the file keeps its permissions and a read-only file
+    // stays refused.
+    fs.writeFileSync(target, contents, "utf8");
+    return;
+  }
+  // A hard link (to a chapter, say) is replaced with a new file rather than
+  // written through, keeping the old file's permissions.
+  fs.accessSync(target, fs.constants.W_OK);
+  const temporary = path.join(path.dirname(target), `.story-${process.pid}.tmp`);
   try {
-    fs.writeFileSync(temporary, contents, "utf8");
+    fs.writeFileSync(temporary, contents, { encoding: "utf8", mode: existing.mode & 0o777 });
+    fs.chmodSync(temporary, existing.mode & 0o777);
     fs.renameSync(temporary, target);
   } catch (error) {
     fs.rmSync(temporary, { force: true });
