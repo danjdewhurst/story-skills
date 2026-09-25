@@ -24,7 +24,7 @@ export function checkContinuity(project) {
     highestChapter: project.chapters.reduce((max, chapter) => Math.max(max, chapter.number), 0)
   };
 
-  checkCharacterDeaths(project, context, errors);
+  checkCharacterDeaths(project, context, errors, warnings);
   checkChapterCasts(project, warnings);
   checkSceneCasts(project, warnings);
   checkChapterSequence(project, warnings);
@@ -70,9 +70,18 @@ function dismissFinding(finding, exemptions, kept, dismissed) {
   }
 }
 
-function checkCharacterDeaths(project, context, errors) {
+function checkCharacterDeaths(project, context, errors, warnings) {
   for (const character of project.characters) {
     if (!character.diedIn) {
+      // Deceased with no died-in means dead before the story starts, so any
+      // appearance in a cast is a posthumous one.
+      if (character.status === "deceased") {
+        for (const entry of [...project.chapters, ...project.scenes]) {
+          if (castIncludes(entry, character.id)) {
+            warnings.push(`${relative(project, entry.file)} lists ${character.id}, who died before the story (deceased with no died-in); move appearances to mentions`);
+          }
+        }
+      }
       continue;
     }
 
@@ -406,7 +415,9 @@ function relative(project, file) {
 // later chapters or scenes. The destruction chapter is recorded in
 // object-state `since`; later scenes whose state-changes target the artifact
 // are errors, and later chapters/scenes listing it in mentions or characters
-// are errors. Entries with no `since` cannot be checked and warn instead.
+// are errors. An entry with no `since` was destroyed or lost before this book
+// (carried from an earlier one), so any scene that uses it is an error;
+// mentions stay allowed, since characters remember it.
 function checkPropCustody(project, context, errors, warnings) {
   const destroyed = [];
   if (project.continuity) {
@@ -423,7 +434,7 @@ function checkPropCustody(project, context, errors, warnings) {
       const artifact = String(entry.artifact ?? "");
       const since = entry.since === undefined || entry.since === null ? "" : String(entry.since);
       if (since === "") {
-        warnings.push(`${entryLabel} is destroyed/lost with no since chapter; custody cannot be checked`);
+        destroyed.push({ artifact, since: "", sinceNumber: -Infinity, beforeStory: true });
         continue;
       }
       const sinceNumber = context.chapterNumbers.get(since);
@@ -435,7 +446,7 @@ function checkPropCustody(project, context, errors, warnings) {
     }
   }
 
-  for (const { artifact, since, sinceNumber } of destroyed) {
+  for (const { artifact, since, sinceNumber, beforeStory } of destroyed) {
     if (artifact === "") {
       continue;
     }
@@ -446,14 +457,14 @@ function checkPropCustody(project, context, errors, warnings) {
       }
       const sceneLabel = relative(project, scene.file);
       if (scene.stateChanges.some((change) => stateChangeTargets(change, artifact))) {
-        errors.push(`${sceneLabel} uses ${artifact}, destroyed/lost since ${since}`);
+        errors.push(`${sceneLabel} uses ${artifact}, destroyed/lost ${beforeStory ? "before the story" : `since ${since}`}`);
       }
-      if (scene.mentions.includes(artifact)) {
+      if (!beforeStory && scene.mentions.includes(artifact)) {
         errors.push(`${sceneLabel} mentions ${artifact}, destroyed/lost since ${since}`);
       }
     }
     for (const chapter of project.chapters) {
-      if (chapter.number <= sinceNumber) {
+      if (beforeStory || chapter.number <= sinceNumber) {
         continue;
       }
       if (chapter.mentions.includes(artifact)) {

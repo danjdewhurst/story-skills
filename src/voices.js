@@ -100,6 +100,12 @@ export function buildVoices(project, chapters) {
   };
 }
 
+// Personal pronouns that tag speech; "it" and "you" are left out because
+// "It went on raining" is narration, not a tag.
+const PRONOUNS = "he|she|they|i|we";
+const VERB_ALTERNATION = SPEECH_VERBS.map((verb) => verb.replace(/ /g, "\\s+")).join("|");
+const PRONOUN_TAG = new RegExp(`(?<![\\p{L}\\p{N}])(?:(?:${PRONOUNS})\\s+(?:${VERB_ALTERNATION})|(?:${VERB_ALTERNATION})\\s+(?:${PRONOUNS}))(?![\\p{L}\\p{N}])`, "iu");
+
 // Names are proper nouns, so they match case-sensitively ("the lord's hall"
 // is not Lord Maren); speech verbs match in either case.
 function speakerPatterns(characters) {
@@ -158,6 +164,11 @@ function attribute(paragraph, allSpeakers) {
     if (tagged.length > 1) {
       return null;
     }
+  }
+  // A pronoun tag ("she said") names nobody, so a character merely named
+  // nearby in the narration is not taken to be the speaker.
+  if (PRONOUN_TAG.test(narration)) {
+    return null;
   }
   const named = speakers.filter((speaker) => speaker.name.test(narration));
   return named.length === 1 ? named[0].id : null;

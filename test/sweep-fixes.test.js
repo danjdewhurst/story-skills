@@ -1081,3 +1081,94 @@ describe("round five", () => {
   });
 });
 
+describe("round six", () => {
+  test("skill notes without frontmatter do not block rename or remove", () => {
+    const root = newProject();
+    createEntity(root, { kind: "character", name: "Mara" });
+    fs.writeFileSync(path.join(root, "continuity", "motifs.md"), "# Motifs\n\n| Motif | Chapters |\n|---|---|\n| salt | 1 |\n");
+    fs.writeFileSync(path.join(root, "continuity", "theme-audit.md"), "# Theme audit\n\nMara carries the lie.\n");
+    expect(renameEntity(root, { kind: "character", id: "mara", name: "Mara Quill" }).id).toBe("mara-quill");
+    expect(removeEntity(root, { kind: "character", id: "mara-quill" }).id).toBe("mara-quill");
+  });
+
+  test("pre-0.10.0 relationship pairs warn instead of failing links", () => {
+    const root = newProject();
+    writeMarkdown(path.join(root, "characters", "ilya.md"), "name: Ilya\nrole: antagonist\nstatus: alive\nrelationships:\n  - character: theo\n    type: former-supervisor\n  - character: mara\n    type: adversary");
+    writeMarkdown(path.join(root, "characters", "theo.md"), "name: Theo\nrole: supporting\nstatus: alive\nrelationships:\n  - character: ilya\n    type: former-supervisor");
+    writeMarkdown(path.join(root, "characters", "mara.md"), "name: Mara\nrole: protagonist\nstatus: alive\nrelationships:\n  - character: ilya\n    type: antagonist");
+    const result = validateLinks(root);
+    expect(result.errors).toEqual([]);
+    expect(result.warnings).toContain("characters/ilya.md relationship adversary to mara has backlink antagonist, a pairing from before story-skills 0.10.0; change the backlink to adversary");
+    expect(result.warnings.filter((warning) => warning.includes("change the backlink to former-subordinate"))).toHaveLength(2);
+  });
+
+  test("a character who died before the story is flagged in a cast", () => {
+    const root = newProject();
+    writeMarkdown(path.join(root, "characters", "tam.md"), "name: Tam\nrole: minor\nstatus: deceased");
+    createEntity(root, { kind: "chapter", name: "One", number: 1, pov: "tam" });
+    expect(checkProjectContinuity(root).warnings).toContain("chapters/chapter-01.md lists tam, who died before the story (deceased with no died-in); move appearances to mentions");
+  });
+
+  test("next asks for post-hoc notes on discovered chapters", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1, mode: "discovered" });
+    const titles = () => projectActions(root).actions.map((item) => `${item.title}: ${item.detail}`).join("\n");
+    expect(titles()).toContain("Reconcile discovered chapters: Run the discovery-drafting reconcile loop and add ## Chapter Notes (post-hoc) for chapter-01.");
+    const chapter = path.join(root, "chapters", "chapter-01.md");
+    fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace("## Chapter Text", "## Chapter Notes (post-hoc)\n\nFound the harbour.\n\n## Chapter Text"));
+    expect(titles()).not.toContain("Reconcile discovered chapters");
+  });
+
+  test("a missing registry points to story migrate, and abandoned stories get no draft suggestion", () => {
+    const root = newProject();
+    fs.rmSync(path.join(root, "continuity", "clues"), { recursive: true });
+    expect(validateProject(root).errors).toContain("Missing required path: continuity/clues/_index.md (story migrate adds missing registries)");
+    migrateProject(root);
+    const story = path.join(root, "story.md");
+    fs.writeFileSync(story, fs.readFileSync(story, "utf8").replace(/status: \w+/, "status: abandoned"));
+    expect(projectActions(root).actions.map((item) => item.title).join("\n")).not.toContain("Draft chapter");
+  });
+
+  test("add scene copies only existing characters and locations onto the chapter", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    createEntity(root, { kind: "scene", name: "Dock", chapter: "chapter-01", character: "nobody", location: "nowhere" });
+    const chapter = scanProject(root).chapters[0];
+    expect(chapter.characters).toEqual([]);
+    expect(chapter.locations).toEqual([]);
+  });
+
+  test("voices leaves a pronoun-tagged line unattributed", () => {
+    const root = newProject();
+    writeMarkdown(path.join(root, "characters", "tam.md"), "name: Tam\nrole: minor\nstatus: alive");
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", "\u2018It\u2019s nothing,\u2019 she said, holding it the way Tam used to hold shells.");
+    const report = invoke(path.dirname(root), ["voices", root]);
+    expect(report.out).toContain("Voices: 0 speaking characters, 1 unattributed lines");
+  });
+
+  test("init --follows gives the earlier book the series id", () => {
+    const cwd = makeTempDir();
+    const first = createStoryProject({ cwd, title: "First" }).root;
+    createStoryProject({ cwd, title: "Second", follows: [first], series: "tides" });
+    expect(scanProject(first).story.data.series).toBe("tides");
+  });
+
+  test("add matter --heading false makes a page without a title", () => {
+    const root = newProject();
+    const result = invoke(path.dirname(root), ["add", "matter", "Dedication", "--heading", "false", "--path", root]);
+    expect(result.code).toBe(0);
+    expect(fs.readFileSync(path.join(root, "matter", "dedication.md"), "utf8")).toContain("heading: false");
+  });
+
+  test("the metadata checklist lists pending permissions", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    createEntity(root, { kind: "matter", name: "Epigraph" });
+    const epigraph = path.join(root, "matter", "epigraph.md");
+    fs.writeFileSync(epigraph, fs.readFileSync(epigraph, "utf8").replace("heading: true", "heading: true\npermission: pending") + "A quoted line.\n");
+    const sheet = fs.readFileSync(buildBook(root, { format: "metadata" }).outFile, "utf8");
+    expect(sheet).toContain("Permissions cleared for quoted matter (`permission`; pending: epigraph)");
+  });
+});
+

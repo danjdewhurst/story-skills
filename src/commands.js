@@ -51,7 +51,7 @@ const ADD_OPTIONS = [
   "sequel", "outcome", "hook", "location", "locations", "character", "characters", "mention", "mentions",
   "member", "members", "owner", "arc", "arcs", "introduced", "resolved", "planted", "payoff",
   "significance-delayed", "red-herring", "category", "alias", "aliases", "region", "population",
-  "controlled-by", "prevalence", "acts", "act", "placement", "order", "source", "sources", "used-in",
+  "controlled-by", "prevalence", "acts", "act", "placement", "order", "heading", "source", "sources", "used-in",
   "accuracy", "confidence", "method", "risk", "theme", "themes", "pov"
 ];
 
@@ -93,7 +93,7 @@ export const COMMANDS = [
       });
       io.stdout.write(`Created story project: ${result.root}\n`);
       for (const linkedBook of result.linkedBooks) {
-        io.stdout.write(`Linked series backlink in ${path.join(linkedBook, "story.md")}\n`);
+        io.stdout.write(`Updated series links in ${path.join(linkedBook, "story.md")}\n`);
       }
       return 0;
     }

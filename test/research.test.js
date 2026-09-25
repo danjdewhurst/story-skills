@@ -98,10 +98,11 @@ describe("research notes", () => {
     expect(validateLinks(root).errors).toEqual([]);
   });
 
-  test("links reports missing chapters in used-in", () => {
+  test("links accepts scheduled used-in chapters and reports typos", () => {
     const { root } = researchProject();
-    createEntity(root, { kind: "research", name: "Lamp Oil", "used-in": ["chapter-01", "chapter-09"] });
-    expect(validateLinks(root).errors).toEqual(["research/lamp-oil.md references missing chapter chapter-09"]);
+    createEntity(root, { kind: "research", name: "Lamp Oil", "used-in": ["chapter-01", "chapter-09", "chapter-1"] });
+    // chapter-09 is not written yet; chapter-1 is a typo of chapter-01.
+    expect(validateLinks(root).errors).toEqual(["research/lamp-oil.md references missing chapter chapter-1"]);
   });
 
   test("removing a chapter scrubs used-in and report counts notes", () => {

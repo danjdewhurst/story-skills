@@ -83,6 +83,7 @@ export const OPTIONS = [
   { name: "act", value: "<name>", repeatable: true },
   { name: "placement", value: "<front|back>", help: ["Placement for add matter (default front)"] },
   { name: "order", value: "<n>", help: ["Order within its placement for add matter"] },
+  { name: "heading", help: ["Print the page title for add matter; --heading", "false for a dedication or epigraph"] },
   { name: "source", value: "<text>", repeatable: true, help: ["Source for add research; repeatable"] },
   { name: "sources", value: "<texts>", repeatable: true },
   { name: "used-in", value: "<chapter-id>", repeatable: true, help: ["Chapter that relies on add research; repeatable"] },

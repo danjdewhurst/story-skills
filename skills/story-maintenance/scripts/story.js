@@ -643,7 +643,7 @@ function checkContinuity(project) {
     latestChapter: project.chapters.filter((chapter) => chapter.status !== "outline").reduce((max, chapter) => Math.max(max, chapter.number), 0),
     highestChapter: project.chapters.reduce((max, chapter) => Math.max(max, chapter.number), 0)
   };
-  checkCharacterDeaths(project, context, errors);
+  checkCharacterDeaths(project, context, errors, warnings);
   checkChapterCasts(project, warnings);
   checkSceneCasts(project, warnings);
   checkChapterSequence(project, warnings);
@@ -678,9 +678,16 @@ function dismissFinding(finding, exemptions, kept, dismissed) {
     kept.push(finding);
   }
 }
-function checkCharacterDeaths(project, context, errors) {
+function checkCharacterDeaths(project, context, errors, warnings) {
   for (const character of project.characters) {
     if (!character.diedIn) {
+      if (character.status === "deceased") {
+        for (const entry of [...project.chapters, ...project.scenes]) {
+          if (castIncludes(entry, character.id)) {
+            warnings.push(`${relative(project, entry.file)} lists ${character.id}, who died before the story (deceased with no died-in); move appearances to mentions`);
+          }
+        }
+      }
       continue;
     }
     const label = relative(project, character.file);
@@ -972,7 +979,7 @@ function checkPropCustody(project, context, errors, warnings) {
       const artifact = String(entry.artifact ?? "");
       const since = entry.since === undefined || entry.since === null ? "" : String(entry.since);
       if (since === "") {
-        warnings.push(`${entryLabel} is destroyed/lost with no since chapter; custody cannot be checked`);
+        destroyed.push({ artifact, since: "", sinceNumber: -Infinity, beforeStory: true });
         continue;
       }
       const sinceNumber = context.chapterNumbers.get(since);
@@ -983,7 +990,7 @@ function checkPropCustody(project, context, errors, warnings) {
       destroyed.push({ artifact, since, sinceNumber });
     }
   }
-  for (const { artifact, since, sinceNumber } of destroyed) {
+  for (const { artifact, since, sinceNumber, beforeStory } of destroyed) {
     if (artifact === "") {
       continue;
     }
@@ -994,14 +1001,14 @@ function checkPropCustody(project, context, errors, warnings) {
       }
       const sceneLabel = relative(project, scene.file);
       if (scene.stateChanges.some((change) => stateChangeTargets(change, artifact))) {
-        errors.push(`${sceneLabel} uses ${artifact}, destroyed/lost since ${since}`);
+        errors.push(`${sceneLabel} uses ${artifact}, destroyed/lost ${beforeStory ? "before the story" : `since ${since}`}`);
       }
-      if (scene.mentions.includes(artifact)) {
+      if (!beforeStory && scene.mentions.includes(artifact)) {
         errors.push(`${sceneLabel} mentions ${artifact}, destroyed/lost since ${since}`);
       }
     }
     for (const chapter of project.chapters) {
-      if (chapter.number <= sinceNumber) {
+      if (beforeStory || chapter.number <= sinceNumber) {
         continue;
       }
       if (chapter.mentions.includes(artifact)) {
@@ -1359,6 +1366,215 @@ function readTextFile(filePath) {
     throw new Error(`Refusing to read oversized file ${filePath}: ${stats.size} bytes exceeds the ${MAX_READ_BYTES} byte limit`);
   }
   return fs.readFileSync(filePath, "utf8");
+}
+
+// src/options.js
+var OPTIONS = [
+  { name: "title", value: "<name>", help: ["Story title for import"] },
+  { name: "dir", value: "<path>", help: ["Target directory for init or import"] },
+  { name: "genre", value: "<name>", help: ["Story genre for init"] },
+  { name: "sub-genre", value: "<name>", help: ["Story sub-genre for init"] },
+  { name: "setting-era", value: "<name>", help: ["Setting era for init"] },
+  { name: "theme", value: "<name>", repeatable: true, help: ["Theme for init or add arc; repeatable"] },
+  { name: "themes", value: "<a,b>", repeatable: true, help: ["Comma-separated themes for init or add arc"] },
+  { name: "pov", value: "<style|id>", help: ["POV style for init; POV character id for add", "chapter/scene (also added to characters)"] },
+  { name: "tense", value: "<tense>", help: ["Narrative tense for init"] },
+  { name: "form", value: "<form>", help: ["Story form for init (novel, novella, novelette,", "short-story, flash, serial, picture-book,", "chapter-book); sets a default target-words"] },
+  { name: "synopsis", value: "<text>", help: ["Starter synopsis for init"] },
+  { name: "series", value: "<id>", help: ["Series id for init"] },
+  { name: "book-number", value: "<n>", help: ["Publication order for init"] },
+  { name: "follows", value: "<path>", repeatable: true, help: ["Init a sequel set after this story project;", "repeatable"] },
+  { name: "precedes", value: "<path>", repeatable: true, help: ["Init a prequel set before this story project;", "repeatable"] },
+  {
+    name: "force",
+    help: [
+      "Let init/import use an existing directory: add",
+      "missing starter files, never overwrite existing",
+      "ones; import also replaces every chapter-NN.md file"
+    ]
+  },
+  { name: "write", help: ["Update chapter word-count frontmatter"] },
+  { name: "log", help: ["Record today's word count in progress.md"] },
+  { name: "ref", value: "<git-ref>", help: ["Earlier draft as a git branch, tag, or commit", "for compare"] },
+  { name: "against", value: "<path>", help: ["Earlier draft as another project folder for compare"] },
+  { name: "path", value: "<path>", help: ["Project root for every command except init and", "import"] },
+  { name: "out", value: "<file>", help: ["Output path for export/build/synopsis/diagram"] },
+  { name: "format", value: "<name>", help: ["Output format for build (markdown, epub, docx,", "shunn, html, print, narration, metadata)"] },
+  { name: "trim", value: "<size>", help: ["Trim size for build --format print (5x8,", "5.25x8, 5.5x8.5, 6x9, a5; default 5.5x8.5)"] },
+  { name: "shunn", help: ["Apply Shunn manuscript formatting (with --format", "docx)"] },
+  { name: "at", value: "<chapter-id>", help: ["Chapter id for knowledge"] },
+  { name: "init", help: ["Add the default revision passes for passes"] },
+  { name: "start", value: "<pass>", help: ["Mark a revision pass in progress for passes"] },
+  { name: "done", value: "<pass>", help: ["Mark a revision pass done for passes"] },
+  { name: "pages", value: "<n>", help: ["Synopsis length for synopsis (1 or 3)"] },
+  { name: "actionable", help: ["Include next actions in report"] },
+  { name: "number", value: "<n>", help: ["Chapter number for add chapter"] },
+  { name: "chapter", value: "<id>", help: ["Chapter id for add scene"] },
+  { name: "scene", value: "<n>", help: ["Scene number for add scene"] },
+  { name: "type", value: "<name>", help: ["Entity type for add"] },
+  { name: "role", value: "<name>", help: ["Character role for add character"] },
+  { name: "status", value: "<name>", help: ["Entity status for add"] },
+  { name: "mode", value: "<name>", help: ["Mode for add chapter (e.g. discovered)"] },
+  { name: "date", value: "<date>", help: ["Story date (YYYY-MM-DD) for add chapter/scene;", "the session date for progress (default today)"] },
+  { name: "time", value: "<time>", help: ["Story time (HH:MM or dawn, morning, midday,", "afternoon, evening, night) for add chapter/scene"] },
+  { name: "travel-hours", value: "<n>", help: ["Travel hours for add scene"] },
+  { name: "dilemma", value: "<text>", help: ["Dilemma for add scene sequel unit"] },
+  { name: "sequel", help: ["Mark scene as sequel unit for add scene"] },
+  { name: "outcome", value: "<name>", help: ["Scene outcome for add scene (yes, no, yes-but,", "no-and)"] },
+  { name: "hook", value: "<name>", help: ["Chapter-ending hook for add chapter (cliffhanger,", "question, revelation, reversal, decision,", "emotional, resolution)"] },
+  { name: "location", value: "<id>", repeatable: true, help: ["Location reference for add"] },
+  { name: "locations", value: "<ids>", repeatable: true },
+  { name: "character", value: "<id>", repeatable: true, help: ["Character reference for add; repeatable"] },
+  { name: "characters", value: "<ids>", repeatable: true },
+  { name: "mention", value: "<id>", repeatable: true, help: ["Mentioned character for add chapter/scene;", "repeatable"] },
+  { name: "mentions", value: "<ids>", repeatable: true },
+  { name: "member", value: "<id>", repeatable: true, help: ["Faction member reference for add faction; repeatable"] },
+  { name: "members", value: "<ids>", repeatable: true },
+  { name: "owner", value: "<id>", help: ["Owner reference for add artifact"] },
+  { name: "arc", value: "<id>", repeatable: true, help: ["Arc reference for add (arc theme for add", "character); repeatable"] },
+  { name: "arcs", value: "<ids>", repeatable: true },
+  { name: "introduced", value: "<id>", help: ["Chapter id for add question"] },
+  { name: "resolved", value: "<id>", help: ["Chapter id for add question"] },
+  { name: "planted", value: "<id>", help: ["Chapter id for add promise/clue"] },
+  { name: "payoff", value: "<id>", help: ["Chapter id for add promise/clue"] },
+  { name: "significance-delayed", help: ["Significance is delayed for add clue"] },
+  { name: "red-herring", help: ["Mark add clue as a red herring"] },
+  { name: "category", value: "<name>", help: ["Category for add term"] },
+  { name: "alias", value: "<name>", repeatable: true, help: ["Alias for add term; repeatable"] },
+  { name: "aliases", value: "<names>", repeatable: true },
+  { name: "region", value: "<name>", help: ["Region for add location"] },
+  { name: "population", value: "<name>", help: ["Population for add location"] },
+  { name: "controlled-by", value: "<id>", help: ["Controlling faction for add location"] },
+  { name: "prevalence", value: "<name>", help: ["Prevalence for add system"] },
+  { name: "acts", value: "<a,b>", repeatable: true, help: ["Comma-separated acts for add arc; repeatable"] },
+  { name: "act", value: "<name>", repeatable: true },
+  { name: "placement", value: "<front|back>", help: ["Placement for add matter (default front)"] },
+  { name: "order", value: "<n>", help: ["Order within its placement for add matter"] },
+  { name: "heading", help: ["Print the page title for add matter; --heading", "false for a dedication or epigraph"] },
+  { name: "source", value: "<text>", repeatable: true, help: ["Source for add research; repeatable"] },
+  { name: "sources", value: "<texts>", repeatable: true },
+  { name: "used-in", value: "<chapter-id>", repeatable: true, help: ["Chapter that relies on add research; repeatable"] },
+  { name: "accuracy", value: "<level>", help: ["Accuracy for add research (must-be-accurate,", "blended, invented)"] },
+  { name: "confidence", value: "<level>", help: ["Confidence for add research (high, medium, low)"] },
+  { name: "method", value: "<name>", help: ["Research method for add research (fact, interview,", "site-visit, expert-review, reading)"] },
+  { name: "risk", value: "<name>", repeatable: true, help: ["Risk area for add research (legal, medical,", "weapons, safety, cultural, defamation,", "technical); repeatable"] }
+];
+var BOOLEAN_OPTIONS = new Set(OPTIONS.filter((option) => option.value === undefined).map((option) => option.name));
+var VALUE_OPTIONS = new Set(OPTIONS.filter((option) => option.value !== undefined).map((option) => option.name));
+var REPEATABLE_OPTIONS = new Set(OPTIONS.filter((option) => option.repeatable).map((option) => option.name));
+var OPTION_COLUMN = 28;
+function formatOptionsHelp() {
+  const rows = OPTIONS.filter((option) => option.help).map((option) => ({ flag: `--${option.name}${option.value ? ` ${option.value}` : ""}`, help: option.help })).concat([
+    { flag: "-h, --help", help: ["Show this help"] },
+    { flag: "-v, --version", help: ["Show the story CLI version"] }
+  ]);
+  const lines = [];
+  for (const row of rows) {
+    const head = `  ${row.flag}`;
+    const [first, ...rest] = row.help;
+    lines.push(head.length < OPTION_COLUMN ? `${head.padEnd(OPTION_COLUMN)}${first}` : `${head}  ${first}`);
+    for (const line of rest) {
+      lines.push(`${" ".repeat(OPTION_COLUMN)}${line}`);
+    }
+  }
+  return lines;
+}
+function isKnownOptionToken(token) {
+  if (token === "-h" || token === "-v") {
+    return true;
+  }
+  if (!token.startsWith("--")) {
+    return false;
+  }
+  const equalIndex = token.indexOf("=");
+  const key = token.slice(2, equalIndex === -1 ? undefined : equalIndex);
+  return key === "help" || key === "version" || BOOLEAN_OPTIONS.has(key) || VALUE_OPTIONS.has(key);
+}
+function addOption(options, key, value) {
+  const stored = BOOLEAN_OPTIONS.has(key) ? normalizeBooleanValue(key, value) : value;
+  if (options[key] === undefined || !REPEATABLE_OPTIONS.has(key)) {
+    options[key] = stored;
+  } else {
+    options[key] = Array.isArray(options[key]) ? options[key].concat(stored) : [options[key], stored];
+  }
+}
+function normalizeBooleanValue(key, value) {
+  if (typeof value !== "string") {
+    return Boolean(value);
+  }
+  const lower = value.trim().toLowerCase();
+  if (lower === "false" || lower === "0" || lower === "no" || lower === "off") {
+    return false;
+  }
+  if (lower === "true" || lower === "1" || lower === "yes" || lower === "on") {
+    return true;
+  }
+  throw new Error(`Unknown value "${value}" for --${key}: expected true or false`);
+}
+function isTruthy(value) {
+  const current = Array.isArray(value) ? value[value.length - 1] : value;
+  if (typeof current === "string") {
+    const lower = current.trim().toLowerCase();
+    if (lower === "false" || lower === "0" || lower === "no" || lower === "off" || lower === "") {
+      return false;
+    }
+    return true;
+  }
+  return Boolean(current);
+}
+function isBooleanLiteralToken(token) {
+  return typeof token === "string" && /^(true|false|0|1|yes|no|on|off)$/i.test(token);
+}
+function parseArgs(argv) {
+  const positionals = [];
+  const options = {};
+  for (let index = 0;index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === "-h" || arg === "--help") {
+      options.help = true;
+      continue;
+    }
+    if (arg === "-v" || arg === "--version") {
+      options.version = true;
+      continue;
+    }
+    if (!arg.startsWith("--")) {
+      positionals.push(arg);
+      continue;
+    }
+    const equalIndex = arg.indexOf("=");
+    const key = arg.slice(2, equalIndex === -1 ? undefined : equalIndex);
+    const inlineValue = equalIndex === -1 ? undefined : arg.slice(equalIndex + 1);
+    if (BOOLEAN_OPTIONS.has(key)) {
+      if (inlineValue !== undefined) {
+        addOption(options, key, inlineValue);
+        continue;
+      }
+      const nextToken = argv[index + 1];
+      if (isBooleanLiteralToken(nextToken)) {
+        addOption(options, key, nextToken);
+        index += 1;
+        continue;
+      }
+      addOption(options, key, true);
+      continue;
+    }
+    if (VALUE_OPTIONS.has(key)) {
+      if (inlineValue !== undefined) {
+        addOption(options, key, inlineValue);
+        continue;
+      }
+      const nextValue = argv[index + 1];
+      if (nextValue === undefined || isKnownOptionToken(nextValue) || nextValue.startsWith("--")) {
+        throw new Error(`Missing value for --${key}: expected a value`);
+      }
+      addOption(options, key, nextValue);
+      index += 1;
+      continue;
+    }
+    throw new Error(`Unknown option --${key}`);
+  }
+  return { positionals, options };
 }
 
 // src/timeline.js
@@ -2618,6 +2834,9 @@ function buildVoices(project, chapters) {
     warnings
   };
 }
+var PRONOUNS = "he|she|they|i|we";
+var VERB_ALTERNATION = SPEECH_VERBS.map((verb) => verb.replace(/ /g, "\\s+")).join("|");
+var PRONOUN_TAG = new RegExp(`(?<![\\p{L}\\p{N}])(?:(?:${PRONOUNS})\\s+(?:${VERB_ALTERNATION})|(?:${VERB_ALTERNATION})\\s+(?:${PRONOUNS}))(?![\\p{L}\\p{N}])`, "iu");
 function speakerPatterns(characters) {
   const verbs = SPEECH_VERBS.flatMap((verb) => [verb, `${verb[0].toUpperCase()}${verb.slice(1)}`]).map((verb) => verb.replace(/ /g, "\\s+")).join("|");
   return characters.filter((character) => character.status !== "cut").map((character) => {
@@ -2660,6 +2879,9 @@ function attribute(paragraph, allSpeakers) {
     if (tagged.length > 1) {
       return null;
     }
+  }
+  if (PRONOUN_TAG.test(narration)) {
+    return null;
   }
   const named = speakers.filter((speaker) => speaker.name.test(narration));
   return named.length === 1 ? named[0].id : null;
@@ -2957,6 +3179,7 @@ function metadataSheet(input) {
     ["Cover image (`cover`)", typeof data.cover === "string" && data.cover !== ""],
     ["Cover alt text (`cover-alt`)", meta.coverAlt !== ""],
     ["AI-use statement decided (`ai-disclosure`)", meta.aiDisclosure !== ""],
+    [`Permissions cleared for quoted matter (\`permission\`${(input.pendingPermissions ?? []).length > 0 ? `; pending: ${input.pendingPermissions.join(", ")}` : ""})`, (input.pendingPermissions ?? []).length === 0],
     ["Story status is complete", data.status === "complete"]
   ];
   return [
@@ -3650,16 +3873,22 @@ function validateSeriesLinks(root, data, errors) {
     }
   }
 }
-function withSeriesBacklink(targetRoot, field, linkedRoot) {
+function withSeriesBacklink(targetRoot, field, linkedRoot, seriesId) {
   const storyPath = path3.join(targetRoot, "story.md");
   const markdown = readTextFile(storyPath);
   const { data } = parseFrontmatter(markdown, storyPath);
   const current = data[field];
   const existing = Array.isArray(current) ? current : typeof current === "string" && current.trim() !== "" ? [current] : [];
-  if (seriesLinks(targetRoot, { [field]: existing }, field).includes(linkedRoot)) {
+  const linked = seriesLinks(targetRoot, { [field]: existing }, field).includes(linkedRoot);
+  const addSeries = data.series === undefined && seriesId !== undefined;
+  if (linked && !addSeries) {
     return null;
   }
-  return replaceFrontmatter(markdown, { ...data, [field]: existing.concat(seriesLinkPath(targetRoot, linkedRoot)) });
+  return replaceFrontmatter(markdown, {
+    ...data,
+    ...addSeries ? { series: seriesId } : {},
+    ...linked ? {} : { [field]: existing.concat(seriesLinkPath(targetRoot, linkedRoot)) }
+  });
 }
 function buildSeries(startRoot, scan) {
   const errors = [];
@@ -3680,6 +3909,10 @@ function buildSeries(startRoot, scan) {
   const seriesIds = [...new Set(books.map((book) => book.series).filter((series) => series !== undefined))].sort();
   if (seriesIds.length > 1) {
     errors.push(`Linked books belong to different series: ${seriesIds.join(", ")}`);
+  }
+  const unnamed = books.filter((book) => book.series === undefined);
+  if (seriesIds.length === 1 && unnamed.length > 0) {
+    warnings.push(`Linked books ${unnamed.map((book) => book.title).join(", ")} set no series id; add series: ${seriesIds[0]}`);
   }
   checkDuplicateBookNumbers(books, errors);
   const chronology = chronologicalOrder(books, errors);
@@ -4101,6 +4334,10 @@ var RELATIONSHIP_INVERSES = new Map([
   ["former-supervisor", ["former-subordinate"]],
   ["former-subordinate", ["former-supervisor"]]
 ]);
+var LEGACY_RELATIONSHIP_PAIRS = new Set([
+  "former-supervisor>former-supervisor",
+  "adversary>antagonist"
+]);
 var SYMMETRIC_RELATIONSHIPS = new Set([
   "sibling",
   "spouse",
@@ -4184,7 +4421,7 @@ function createStoryProject(options) {
   writeStarterFile(path4.join(root, STYLE_SHEET_FILE), styleSheet(), { root });
   const linkedBooks = [];
   for (const book of storyWritten ? series.linked : []) {
-    const updated = withSeriesBacklink(book.root, book.inverse, root);
+    const updated = withSeriesBacklink(book.root, book.inverse, root, series.series);
     if (updated !== null) {
       writeFile(path4.join(book.root, "story.md"), updated, { root: book.root });
       linkedBooks.push(book.root);
@@ -4354,6 +4591,7 @@ function scanProject(root) {
       date: String(data.date ?? ""),
       time: String(data.time ?? ""),
       mode: String(data.mode ?? ""),
+      hasPostHocNotes: /^## Chapter Notes \(post-hoc\)\s*$/m.test(markdown.body),
       hook: typeof data.hook === "string" ? data.hook : ""
     }), scanErrors).sort((left, right) => left.number - right.number || left.file.localeCompare(right.file, "en")),
     scenes: readEntityFiles(projectRoot, "scenes", (id, file, data) => ({
@@ -4434,6 +4672,7 @@ function scanProject(root) {
       placement: String(data.placement ?? ""),
       order: Number.isInteger(data.order) ? data.order : 0,
       heading: data.heading !== false,
+      permission: typeof data.permission === "string" ? data.permission : "",
       empty: chapterProse(markdown.body).trim() === ""
     }), scanErrors).sort((left, right) => left.order - right.order || left.id.localeCompare(right.id, "en")),
     exemptions: readExemptions(projectRoot, scanErrors),
@@ -4451,7 +4690,7 @@ function validateProjectOf(project) {
   const projectRoot = project.root;
   for (const requiredPath of REQUIRED_PATHS) {
     if (!fs3.existsSync(path4.join(projectRoot, requiredPath))) {
-      errors.push(`Missing required path: ${requiredPath}`);
+      errors.push(`Missing required path: ${requiredPath} (story migrate adds missing registries)`);
     }
   }
   for (const scanError of project.fileErrors ?? []) {
@@ -4592,7 +4831,10 @@ function validateLinksOf(project) {
               matched = true;
             }
           }
-          if (!matched) {
+          const legacy = !matched && types.some((type) => LEGACY_RELATIONSHIP_PAIRS.has(`${relationship.type}>${type}`));
+          if (legacy) {
+            warnings.push(`${label2} relationship ${relationship.type} to ${target} has backlink ${types.join(", ")}, a pairing from before story-skills 0.10.0; change the backlink to ${expectedTypes.join(" or ")}`);
+          } else if (!matched) {
             errors.push(`${label2} relationship ${relationship.type} to ${target} expects backlink type ${expectedTypes.join(" or ")}, got ${types.join(", ") || "none"}`);
           }
         }
@@ -4713,7 +4955,7 @@ function validateLinksOf(project) {
   for (const note of project.research) {
     const label2 = relative2(project, note.file);
     for (const chapterId of note.usedIn) {
-      checkIdReference(errors, label2, chapterId, "chapter", hasChapter);
+      checkIdReference(errors, label2, chapterId, "chapter", hasScheduledChapter);
     }
   }
   for (const question of project.questions) {
@@ -5475,7 +5717,8 @@ function buildBook(root, options = {}) {
       meta: manuscript.meta,
       words,
       pages: { "5.5x8.5": estimatePages(words, "5.5x8.5"), "6x9": estimatePages(words, "6x9") },
-      hasCopyrightPage: manuscript.front.concat(manuscript.back).some((entry) => entry.copyright)
+      hasCopyrightPage: manuscript.front.concat(manuscript.back).some((entry) => entry.copyright),
+      pendingPermissions: project.matter.filter((entry) => entry.permission === "pending").map((entry) => entry.id)
     }), output.writeOptions);
   } else if (format === "narration") {
     writeFile(output.outFile, narrationScript(manuscript, pronunciationGuide(project)), output.writeOptions);
@@ -6192,6 +6435,10 @@ function buildProjectActions(project, validation, links, continuity, displayPath
   if (chaptersWithoutScenes.length > 0) {
     actions.push(action("P1", "Add scene records", `Create machine-readable scene files for ${chaptersWithoutScenes.length} chapters so continuity has durable state.`));
   }
+  const unreconciled = project.chapters.filter((chapter) => chapter.mode === "discovered" && !chapter.hasPostHocNotes);
+  if (unreconciled.length > 0) {
+    actions.push(action("P1", "Reconcile discovered chapters", `Run the discovery-drafting reconcile loop and add ## Chapter Notes (post-hoc) for ${unreconciled.map((chapter) => chapter.id).join(", ")}.`));
+  }
   const openQuestions = [];
   for (const question of project.questions) {
     if (question.status === "open") {
@@ -6239,7 +6486,7 @@ function buildProjectActions(project, validation, links, continuity, displayPath
   const nextLabel = activeArcNames.length > 0 ? `advance ${activeArcNames.join(", ")}` : "establish the next story beat";
   const maintenanceCount = actions.length;
   const storyStatus = project.story.data.status;
-  const drafting = storyStatus !== "revising" && storyStatus !== "complete" && !(project.arcs.length > 0 && project.arcs.every((arc) => arc.status === "resolved"));
+  const drafting = !["revising", "complete", "abandoned"].includes(storyStatus) && !(project.arcs.length > 0 && project.arcs.every((arc) => arc.status === "resolved"));
   if (drafting) {
     actions.push(action("P2", `Draft chapter ${nextNumber}`, `Use story add chapter "Chapter ${nextNumber}" --number ${nextNumber}${where === "." ? "" : ` --path ${where}`}, then outline scenes to ${nextLabel}.`));
   }
@@ -6844,7 +7091,8 @@ function matterFile(project, title, options) {
       throw new Error(`matter order must be a non-negative integer, got ${options.order}`);
     }
   }
-  return `${stringifyFrontmatter({ title, placement, order, heading: true })}# ${title}
+  const heading = options.heading === undefined ? true : isTruthy(options.heading);
+  return `${stringifyFrontmatter({ title, placement, order, heading })}# ${title}
 
 `;
 }
@@ -6996,10 +7244,14 @@ function planReferenceRewrites(root, context, overrides, transform, transformBod
   }
   return plan;
 }
+var FRONTMATTER_FILES = new Set([
+  path4.join("plot", "timeline.md"),
+  path4.join("continuity", "state.md"),
+  path4.join("continuity", "exemptions.md")
+]);
 function isProjectSourceFile(root, file) {
   const relativePath = path4.relative(root, file);
-  const [first] = relativePath.split(path4.sep);
-  return SOURCE_ROOT_FILES.has(relativePath) || SOURCE_DIRECTORIES.includes(first);
+  return SOURCE_ROOT_FILES.has(relativePath) || FRONTMATTER_FILES.has(relativePath) || path4.basename(relativePath) === "_index.md" || ENTITY_SCAN_DIRS.includes(path4.dirname(relativePath));
 }
 function reconcileChapterStatuses(before, after) {
   const next = { ...after };
@@ -7070,13 +7322,14 @@ function applyEntityBacklinks(root, kind, id, data) {
   }
   if (kind === "scene" && isKebabId2(data.chapter)) {
     const chapterFile2 = path4.join("chapters", `${data.chapter}.md`);
-    if (isKebabId2(data.location)) {
+    const exists = (dir, id2) => fs3.existsSync(path4.join(root, dir, `${id2}.md`));
+    if (isKebabId2(data.location) && exists(path4.join("worldbuilding", "locations"), data.location)) {
       addFrontmatterListValue(root, chapterFile2, "locations", data.location);
     }
     const chapterPath = path4.join(root, chapterFile2);
     const mentions = fs3.existsSync(chapterPath) ? asArray(readMarkdown(chapterPath, root).data.mentions) : [];
     for (const characterId of asArray(data.characters)) {
-      if (isKebabId2(characterId) && !mentions.includes(characterId)) {
+      if (isKebabId2(characterId) && exists("characters", characterId) && !mentions.includes(characterId)) {
         addFrontmatterListValue(root, chapterFile2, "characters", characterId);
       }
     }
@@ -9177,214 +9430,6 @@ ${prose}
 `;
 }
 
-// src/options.js
-var OPTIONS = [
-  { name: "title", value: "<name>", help: ["Story title for import"] },
-  { name: "dir", value: "<path>", help: ["Target directory for init or import"] },
-  { name: "genre", value: "<name>", help: ["Story genre for init"] },
-  { name: "sub-genre", value: "<name>", help: ["Story sub-genre for init"] },
-  { name: "setting-era", value: "<name>", help: ["Setting era for init"] },
-  { name: "theme", value: "<name>", repeatable: true, help: ["Theme for init or add arc; repeatable"] },
-  { name: "themes", value: "<a,b>", repeatable: true, help: ["Comma-separated themes for init or add arc"] },
-  { name: "pov", value: "<style|id>", help: ["POV style for init; POV character id for add", "chapter/scene (also added to characters)"] },
-  { name: "tense", value: "<tense>", help: ["Narrative tense for init"] },
-  { name: "form", value: "<form>", help: ["Story form for init (novel, novella, novelette,", "short-story, flash, serial, picture-book,", "chapter-book); sets a default target-words"] },
-  { name: "synopsis", value: "<text>", help: ["Starter synopsis for init"] },
-  { name: "series", value: "<id>", help: ["Series id for init"] },
-  { name: "book-number", value: "<n>", help: ["Publication order for init"] },
-  { name: "follows", value: "<path>", repeatable: true, help: ["Init a sequel set after this story project;", "repeatable"] },
-  { name: "precedes", value: "<path>", repeatable: true, help: ["Init a prequel set before this story project;", "repeatable"] },
-  {
-    name: "force",
-    help: [
-      "Let init/import use an existing directory: add",
-      "missing starter files, never overwrite existing",
-      "ones; import also replaces every chapter-NN.md file"
-    ]
-  },
-  { name: "write", help: ["Update chapter word-count frontmatter"] },
-  { name: "log", help: ["Record today's word count in progress.md"] },
-  { name: "ref", value: "<git-ref>", help: ["Earlier draft as a git branch, tag, or commit", "for compare"] },
-  { name: "against", value: "<path>", help: ["Earlier draft as another project folder for compare"] },
-  { name: "path", value: "<path>", help: ["Project root for every command except init and", "import"] },
-  { name: "out", value: "<file>", help: ["Output path for export/build/synopsis/diagram"] },
-  { name: "format", value: "<name>", help: ["Output format for build (markdown, epub, docx,", "shunn, html, print, narration, metadata)"] },
-  { name: "trim", value: "<size>", help: ["Trim size for build --format print (5x8,", "5.25x8, 5.5x8.5, 6x9, a5; default 5.5x8.5)"] },
-  { name: "shunn", help: ["Apply Shunn manuscript formatting (with --format", "docx)"] },
-  { name: "at", value: "<chapter-id>", help: ["Chapter id for knowledge"] },
-  { name: "init", help: ["Add the default revision passes for passes"] },
-  { name: "start", value: "<pass>", help: ["Mark a revision pass in progress for passes"] },
-  { name: "done", value: "<pass>", help: ["Mark a revision pass done for passes"] },
-  { name: "pages", value: "<n>", help: ["Synopsis length for synopsis (1 or 3)"] },
-  { name: "actionable", help: ["Include next actions in report"] },
-  { name: "number", value: "<n>", help: ["Chapter number for add chapter"] },
-  { name: "chapter", value: "<id>", help: ["Chapter id for add scene"] },
-  { name: "scene", value: "<n>", help: ["Scene number for add scene"] },
-  { name: "type", value: "<name>", help: ["Entity type for add"] },
-  { name: "role", value: "<name>", help: ["Character role for add character"] },
-  { name: "status", value: "<name>", help: ["Entity status for add"] },
-  { name: "mode", value: "<name>", help: ["Mode for add chapter (e.g. discovered)"] },
-  { name: "date", value: "<date>", help: ["Story date (YYYY-MM-DD) for add chapter/scene;", "the session date for progress (default today)"] },
-  { name: "time", value: "<time>", help: ["Story time (HH:MM or dawn, morning, midday,", "afternoon, evening, night) for add chapter/scene"] },
-  { name: "travel-hours", value: "<n>", help: ["Travel hours for add scene"] },
-  { name: "dilemma", value: "<text>", help: ["Dilemma for add scene sequel unit"] },
-  { name: "sequel", help: ["Mark scene as sequel unit for add scene"] },
-  { name: "outcome", value: "<name>", help: ["Scene outcome for add scene (yes, no, yes-but,", "no-and)"] },
-  { name: "hook", value: "<name>", help: ["Chapter-ending hook for add chapter (cliffhanger,", "question, revelation, reversal, decision,", "emotional, resolution)"] },
-  { name: "location", value: "<id>", repeatable: true, help: ["Location reference for add"] },
-  { name: "locations", value: "<ids>", repeatable: true },
-  { name: "character", value: "<id>", repeatable: true, help: ["Character reference for add; repeatable"] },
-  { name: "characters", value: "<ids>", repeatable: true },
-  { name: "mention", value: "<id>", repeatable: true, help: ["Mentioned character for add chapter/scene;", "repeatable"] },
-  { name: "mentions", value: "<ids>", repeatable: true },
-  { name: "member", value: "<id>", repeatable: true, help: ["Faction member reference for add faction; repeatable"] },
-  { name: "members", value: "<ids>", repeatable: true },
-  { name: "owner", value: "<id>", help: ["Owner reference for add artifact"] },
-  { name: "arc", value: "<id>", repeatable: true, help: ["Arc reference for add (arc theme for add", "character); repeatable"] },
-  { name: "arcs", value: "<ids>", repeatable: true },
-  { name: "introduced", value: "<id>", help: ["Chapter id for add question"] },
-  { name: "resolved", value: "<id>", help: ["Chapter id for add question"] },
-  { name: "planted", value: "<id>", help: ["Chapter id for add promise/clue"] },
-  { name: "payoff", value: "<id>", help: ["Chapter id for add promise/clue"] },
-  { name: "significance-delayed", help: ["Significance is delayed for add clue"] },
-  { name: "red-herring", help: ["Mark add clue as a red herring"] },
-  { name: "category", value: "<name>", help: ["Category for add term"] },
-  { name: "alias", value: "<name>", repeatable: true, help: ["Alias for add term; repeatable"] },
-  { name: "aliases", value: "<names>", repeatable: true },
-  { name: "region", value: "<name>", help: ["Region for add location"] },
-  { name: "population", value: "<name>", help: ["Population for add location"] },
-  { name: "controlled-by", value: "<id>", help: ["Controlling faction for add location"] },
-  { name: "prevalence", value: "<name>", help: ["Prevalence for add system"] },
-  { name: "acts", value: "<a,b>", repeatable: true, help: ["Comma-separated acts for add arc; repeatable"] },
-  { name: "act", value: "<name>", repeatable: true },
-  { name: "placement", value: "<front|back>", help: ["Placement for add matter (default front)"] },
-  { name: "order", value: "<n>", help: ["Order within its placement for add matter"] },
-  { name: "source", value: "<text>", repeatable: true, help: ["Source for add research; repeatable"] },
-  { name: "sources", value: "<texts>", repeatable: true },
-  { name: "used-in", value: "<chapter-id>", repeatable: true, help: ["Chapter that relies on add research; repeatable"] },
-  { name: "accuracy", value: "<level>", help: ["Accuracy for add research (must-be-accurate,", "blended, invented)"] },
-  { name: "confidence", value: "<level>", help: ["Confidence for add research (high, medium, low)"] },
-  { name: "method", value: "<name>", help: ["Research method for add research (fact, interview,", "site-visit, expert-review, reading)"] },
-  { name: "risk", value: "<name>", repeatable: true, help: ["Risk area for add research (legal, medical,", "weapons, safety, cultural, defamation,", "technical); repeatable"] }
-];
-var BOOLEAN_OPTIONS = new Set(OPTIONS.filter((option) => option.value === undefined).map((option) => option.name));
-var VALUE_OPTIONS = new Set(OPTIONS.filter((option) => option.value !== undefined).map((option) => option.name));
-var REPEATABLE_OPTIONS = new Set(OPTIONS.filter((option) => option.repeatable).map((option) => option.name));
-var OPTION_COLUMN = 28;
-function formatOptionsHelp() {
-  const rows = OPTIONS.filter((option) => option.help).map((option) => ({ flag: `--${option.name}${option.value ? ` ${option.value}` : ""}`, help: option.help })).concat([
-    { flag: "-h, --help", help: ["Show this help"] },
-    { flag: "-v, --version", help: ["Show the story CLI version"] }
-  ]);
-  const lines = [];
-  for (const row of rows) {
-    const head = `  ${row.flag}`;
-    const [first, ...rest] = row.help;
-    lines.push(head.length < OPTION_COLUMN ? `${head.padEnd(OPTION_COLUMN)}${first}` : `${head}  ${first}`);
-    for (const line of rest) {
-      lines.push(`${" ".repeat(OPTION_COLUMN)}${line}`);
-    }
-  }
-  return lines;
-}
-function isKnownOptionToken(token) {
-  if (token === "-h" || token === "-v") {
-    return true;
-  }
-  if (!token.startsWith("--")) {
-    return false;
-  }
-  const equalIndex = token.indexOf("=");
-  const key = token.slice(2, equalIndex === -1 ? undefined : equalIndex);
-  return key === "help" || key === "version" || BOOLEAN_OPTIONS.has(key) || VALUE_OPTIONS.has(key);
-}
-function addOption(options, key, value) {
-  const stored = BOOLEAN_OPTIONS.has(key) ? normalizeBooleanValue(key, value) : value;
-  if (options[key] === undefined || !REPEATABLE_OPTIONS.has(key)) {
-    options[key] = stored;
-  } else {
-    options[key] = Array.isArray(options[key]) ? options[key].concat(stored) : [options[key], stored];
-  }
-}
-function normalizeBooleanValue(key, value) {
-  if (typeof value !== "string") {
-    return Boolean(value);
-  }
-  const lower = value.trim().toLowerCase();
-  if (lower === "false" || lower === "0" || lower === "no" || lower === "off") {
-    return false;
-  }
-  if (lower === "true" || lower === "1" || lower === "yes" || lower === "on") {
-    return true;
-  }
-  throw new Error(`Unknown value "${value}" for --${key}: expected true or false`);
-}
-function isTruthy(value) {
-  const current = Array.isArray(value) ? value[value.length - 1] : value;
-  if (typeof current === "string") {
-    const lower = current.trim().toLowerCase();
-    if (lower === "false" || lower === "0" || lower === "no" || lower === "off" || lower === "") {
-      return false;
-    }
-    return true;
-  }
-  return Boolean(current);
-}
-function isBooleanLiteralToken(token) {
-  return typeof token === "string" && /^(true|false|0|1|yes|no|on|off)$/i.test(token);
-}
-function parseArgs(argv) {
-  const positionals = [];
-  const options = {};
-  for (let index = 0;index < argv.length; index += 1) {
-    const arg = argv[index];
-    if (arg === "-h" || arg === "--help") {
-      options.help = true;
-      continue;
-    }
-    if (arg === "-v" || arg === "--version") {
-      options.version = true;
-      continue;
-    }
-    if (!arg.startsWith("--")) {
-      positionals.push(arg);
-      continue;
-    }
-    const equalIndex = arg.indexOf("=");
-    const key = arg.slice(2, equalIndex === -1 ? undefined : equalIndex);
-    const inlineValue = equalIndex === -1 ? undefined : arg.slice(equalIndex + 1);
-    if (BOOLEAN_OPTIONS.has(key)) {
-      if (inlineValue !== undefined) {
-        addOption(options, key, inlineValue);
-        continue;
-      }
-      const nextToken = argv[index + 1];
-      if (isBooleanLiteralToken(nextToken)) {
-        addOption(options, key, nextToken);
-        index += 1;
-        continue;
-      }
-      addOption(options, key, true);
-      continue;
-    }
-    if (VALUE_OPTIONS.has(key)) {
-      if (inlineValue !== undefined) {
-        addOption(options, key, inlineValue);
-        continue;
-      }
-      const nextValue = argv[index + 1];
-      if (nextValue === undefined || isKnownOptionToken(nextValue) || nextValue.startsWith("--")) {
-        throw new Error(`Missing value for --${key}: expected a value`);
-      }
-      addOption(options, key, nextValue);
-      index += 1;
-      continue;
-    }
-    throw new Error(`Unknown option --${key}`);
-  }
-  return { positionals, options };
-}
-
 // src/commands.js
 var ADD_OPTIONS = [
   "number",
@@ -9429,6 +9474,7 @@ var ADD_OPTIONS = [
   "act",
   "placement",
   "order",
+  "heading",
   "source",
   "sources",
   "used-in",
@@ -9470,7 +9516,7 @@ var COMMANDS = [
       io.stdout.write(`Created story project: ${result.root}
 `);
       for (const linkedBook of result.linkedBooks) {
-        io.stdout.write(`Linked series backlink in ${path6.join(linkedBook, "story.md")}
+        io.stdout.write(`Updated series links in ${path6.join(linkedBook, "story.md")}
 `);
       }
       return 0;

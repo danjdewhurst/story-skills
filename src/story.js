@@ -5,6 +5,7 @@ import path from "node:path";
 import { checkContinuity, storyDateError, storyTimeError } from "./continuity.js";
 import { FRONTMATTER_PATTERN, parseFrontmatter, replaceFrontmatter, stringifyFrontmatter } from "./frontmatter.js";
 import { readTextFile } from "./files.js";
+import { isTruthy } from "./options.js";
 import { chapterProse, escapeRegExp, extractSection, fencedLineIndexes, hasUnclosedComment, isSceneBreak, kebabCase, titleCaseSlug, wordCount } from "./markdown.js";
 import { buildTimeline } from "./timeline.js";
 import { buildClueMatrix } from "./clues.js";
@@ -130,6 +131,13 @@ const RELATIONSHIP_INVERSES = new Map([
   ["former-subordinate", ["former-supervisor"]]
 ]);
 
+// Backlinks the pre-0.10.0 reference allowed: former-supervisor both ways,
+// and adversary answered by antagonist.
+const LEGACY_RELATIONSHIP_PAIRS = new Set([
+  "former-supervisor>former-supervisor",
+  "adversary>antagonist"
+]);
+
 const SYMMETRIC_RELATIONSHIPS = new Set([
   "sibling",
   "spouse",
@@ -226,7 +234,7 @@ export function createStoryProject(options) {
   // An existing story.md is preserved under --force, so only add backlinks
   // when this run wrote the forward links they must mirror.
   for (const book of storyWritten ? series.linked : []) {
-    const updated = withSeriesBacklink(book.root, book.inverse, root);
+    const updated = withSeriesBacklink(book.root, book.inverse, root, series.series);
     if (updated !== null) {
       writeFile(path.join(book.root, "story.md"), updated, { root: book.root });
       linkedBooks.push(book.root);
@@ -423,6 +431,7 @@ export function scanProject(root) {
       date: String(data.date ?? ""),
       time: String(data.time ?? ""),
       mode: String(data.mode ?? ""),
+      hasPostHocNotes: /^## Chapter Notes \(post-hoc\)\s*$/m.test(markdown.body),
       hook: typeof data.hook === "string" ? data.hook : ""
     }), scanErrors).sort((left, right) => left.number - right.number || left.file.localeCompare(right.file, "en")),
     scenes: readEntityFiles(projectRoot, "scenes", (id, file, data) => ({
@@ -506,6 +515,7 @@ export function scanProject(root) {
       placement: String(data.placement ?? ""),
       order: Number.isInteger(data.order) ? data.order : 0,
       heading: data.heading !== false,
+      permission: typeof data.permission === "string" ? data.permission : "",
       empty: chapterProse(markdown.body).trim() === ""
     }), scanErrors).sort((left, right) => left.order - right.order || left.id.localeCompare(right.id, "en")),
     exemptions: readExemptions(projectRoot, scanErrors),
@@ -525,7 +535,7 @@ export function validateProjectOf(project) {
   const projectRoot = project.root;
   for (const requiredPath of REQUIRED_PATHS) {
     if (!fs.existsSync(path.join(projectRoot, requiredPath))) {
-      errors.push(`Missing required path: ${requiredPath}`);
+      errors.push(`Missing required path: ${requiredPath} (story migrate adds missing registries)`);
     }
   }
   for (const scanError of project.fileErrors ?? []) {
@@ -692,7 +702,12 @@ export function validateLinksOf(project) {
               matched = true;
             }
           }
-          if (!matched) {
+          const legacy = !matched && types.some((type) => LEGACY_RELATIONSHIP_PAIRS.has(`${relationship.type}>${type}`));
+          if (legacy) {
+            // Pairings the relationship reference recommended before 0.10.0
+            // warn rather than fail, so an upgrade does not break CI.
+            warnings.push(`${label} relationship ${relationship.type} to ${target} has backlink ${types.join(", ")}, a pairing from before story-skills 0.10.0; change the backlink to ${expectedTypes.join(" or ")}`);
+          } else if (!matched) {
             errors.push(`${label} relationship ${relationship.type} to ${target} expects backlink type ${expectedTypes.join(" or ")}, got ${types.join(", ") || "none"}`);
           }
         }
@@ -822,8 +837,9 @@ export function validateLinksOf(project) {
 
   for (const note of project.research) {
     const label = relative(project, note.file);
+    // Research is often done before the chapter that needs it is written.
     for (const chapterId of note.usedIn) {
-      checkIdReference(errors, label, chapterId, "chapter", hasChapter);
+      checkIdReference(errors, label, chapterId, "chapter", hasScheduledChapter);
     }
   }
 
@@ -1709,7 +1725,8 @@ export function buildBook(root, options = {}) {
       meta: manuscript.meta,
       words,
       pages: { "5.5x8.5": estimatePages(words, "5.5x8.5"), "6x9": estimatePages(words, "6x9") },
-      hasCopyrightPage: manuscript.front.concat(manuscript.back).some((entry) => entry.copyright)
+      hasCopyrightPage: manuscript.front.concat(manuscript.back).some((entry) => entry.copyright),
+      pendingPermissions: project.matter.filter((entry) => entry.permission === "pending").map((entry) => entry.id)
     }), output.writeOptions);
   } else if (format === "narration") {
     writeFile(output.outFile, narrationScript(manuscript, pronunciationGuide(project)), output.writeOptions);
@@ -2497,6 +2514,12 @@ function buildProjectActions(project, validation, links, continuity, displayPath
   if (chaptersWithoutScenes.length > 0) {
     actions.push(action("P1", "Add scene records", `Create machine-readable scene files for ${chaptersWithoutScenes.length} chapters so continuity has durable state.`));
   }
+  // The discovery-drafting reconcile loop ends with post-hoc notes; a
+  // discovered chapter without them has not been reconciled.
+  const unreconciled = project.chapters.filter((chapter) => chapter.mode === "discovered" && !chapter.hasPostHocNotes);
+  if (unreconciled.length > 0) {
+    actions.push(action("P1", "Reconcile discovered chapters", `Run the discovery-drafting reconcile loop and add ## Chapter Notes (post-hoc) for ${unreconciled.map((chapter) => chapter.id).join(", ")}.`));
+  }
   const openQuestions = [];
   for (const question of project.questions) {
     if (question.status === "open") {
@@ -2548,7 +2571,7 @@ function buildProjectActions(project, validation, links, continuity, displayPath
   // A book under revision or finished, or whose arcs are all resolved, needs
   // no new chapter.
   const storyStatus = project.story.data.status;
-  const drafting = storyStatus !== "revising" && storyStatus !== "complete"
+  const drafting = !["revising", "complete", "abandoned"].includes(storyStatus)
     && !(project.arcs.length > 0 && project.arcs.every((arc) => arc.status === "resolved"));
   if (drafting) {
     actions.push(action("P2", `Draft chapter ${nextNumber}`, `Use story add chapter "Chapter ${nextNumber}" --number ${nextNumber}${where === "." ? "" : ` --path ${where}`}, then outline scenes to ${nextLabel}.`));
@@ -3202,7 +3225,9 @@ function matterFile(project, title, options) {
       throw new Error(`matter order must be a non-negative integer, got ${options.order}`);
     }
   }
-  return `${stringifyFrontmatter({ title, placement, order, heading: true })}# ${title}
+  // --heading false suits a dedication or epigraph, which prints no title.
+  const heading = options.heading === undefined ? true : isTruthy(options.heading);
+  return `${stringifyFrontmatter({ title, placement, order, heading })}# ${title}
 
 `;
 }
@@ -3398,10 +3423,21 @@ function planReferenceRewrites(root, context, overrides, transform, transformBod
 // Entity files and registries always carry frontmatter, so one without it is
 // broken and must not be skipped. Other markdown (a README, drafts) may be
 // plain.
+// Only entity files, registries, and the fixed project files count: notes
+// a skill keeps beside them (continuity/motifs.md, continuity/theme-audit.md)
+// may be plain markdown.
+const FRONTMATTER_FILES = new Set([
+  path.join("plot", "timeline.md"),
+  path.join("continuity", "state.md"),
+  path.join("continuity", "exemptions.md")
+]);
+
 function isProjectSourceFile(root, file) {
   const relativePath = path.relative(root, file);
-  const [first] = relativePath.split(path.sep);
-  return SOURCE_ROOT_FILES.has(relativePath) || SOURCE_DIRECTORIES.includes(first);
+  return SOURCE_ROOT_FILES.has(relativePath)
+    || FRONTMATTER_FILES.has(relativePath)
+    || path.basename(relativePath) === "_index.md"
+    || ENTITY_SCAN_DIRS.includes(path.dirname(relativePath));
 }
 
 // Clearing a removed chapter from a promise, clue, or question also walks
@@ -3485,15 +3521,17 @@ function applyEntityBacklinks(root, kind, id, data) {
 
   if (kind === "scene" && isKebabId(data.chapter)) {
     // The chapter lists everyone and everywhere its scenes use; continuity
-    // warns when it does not.
+    // warns when it does not. Unknown ids stay on the scene only, where
+    // links reports them once.
     const chapterFile = path.join("chapters", `${data.chapter}.md`);
-    if (isKebabId(data.location)) {
+    const exists = (dir, id) => fs.existsSync(path.join(root, dir, `${id}.md`));
+    if (isKebabId(data.location) && exists(path.join("worldbuilding", "locations"), data.location)) {
       addFrontmatterListValue(root, chapterFile, "locations", data.location);
     }
     const chapterPath = path.join(root, chapterFile);
     const mentions = fs.existsSync(chapterPath) ? asArray(readMarkdown(chapterPath, root).data.mentions) : [];
     for (const characterId of asArray(data.characters)) {
-      if (isKebabId(characterId) && !mentions.includes(characterId)) {
+      if (isKebabId(characterId) && exists("characters", characterId) && !mentions.includes(characterId)) {
         addFrontmatterListValue(root, chapterFile, "characters", characterId);
       }
     }
