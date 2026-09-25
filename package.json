@@ -13,9 +13,11 @@
   "files": [
     "bin",
     "docs",
+    "examples",
     "schemas",
     "src",
     "skills",
+    "templates",
     "README.md",
     "LICENSE"
   ],
