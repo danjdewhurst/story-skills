@@ -175,7 +175,7 @@ Because chapter and scene ids come from their numbers, `story rename chapter` an
 
 ## Frontmatter syntax
 
-Every entity file, registry, and state file starts with a frontmatter block between two `---` lines. A file without one fails with `is missing YAML frontmatter`. Skill notes kept beside them, such as `continuity/motifs.md` and `continuity/theme-audit.md`, may be plain markdown. A UTF-8 byte order mark and Windows line endings are accepted.
+Every entity file, registry, and state file starts with a frontmatter block between two `---` lines. A file without one fails with `is missing YAML frontmatter`. Skill notes kept beside them, such as `continuity/motifs.md` and `continuity/theme-audit.md`, may be plain markdown, as may an `_index.md` in a folder the CLI does not manage, such as `notes/_index.md`. A UTF-8 byte order mark and Windows line endings are accepted.
 
 The CLI uses its own YAML parser, which supports a deliberate subset of YAML:
 
@@ -269,6 +269,10 @@ warning: chapters/chapter-01.md opens an HTML comment (<!--) that never closes, 
 ```text
 warning: chapters/chapter-01.md declares 1200 words but contains 993
 ```
+
+A `word-count` that is not an integer, such as `lots`, is an error instead (`frontmatter field word-count must be an integer`), and is not compared with the prose.
+
+Word counts and builds remove an HTML comment without leaving a gap, so `really<!--x-->quiet` counts as one word. `story prose` and `story voices` put a space where the comment was, so they read it as two words, `really` and `quiet`.
 
 ## Story file
 
@@ -1122,7 +1126,7 @@ It also warns when three or more genuine (non-red-herring) clues include none th
 
 ### Dialogue voices
 
-`story voices` fingerprints each character's dialogue from the chapter prose. A quoted line (straight `"..."`, curly `“...”`, or British `‘...’`) is attributed when the paragraph's narration names the speaker next to a speech verb (`"...," Mara said`, `said Mara`, `Mara asked`) by full name, given name, or alias. A name-before-verb tag wins over verb-before-name, so `Sera told Kael` gives the line to Sera. Otherwise, when the narration names exactly one character (an action beat), the line is theirs. Names match case-sensitively as proper nouns, and titles are skipped for the given name (`Lord Maren` also matches `Maren`). Pronoun tags (`she said`) are never attributed, so in close third person the POV character is often under-counted. Any other quoted line is counted as unattributed and never guessed. Cut characters are skipped.
+`story voices` fingerprints each character's dialogue from the chapter prose. A quoted line (straight `"..."`, curly `“...”`, or British `‘...’`) is attributed when the paragraph's narration names the speaker next to a speech verb (`"...," Mara said`, `said Mara`, `Mara asked`) by full name, given name, or alias. A name-before-verb tag wins over verb-before-name, so `Sera told Kael` gives the line to Sera. Otherwise, when the narration names exactly one character (an action beat), the line is theirs. Names match case-sensitively as proper nouns, and titles are skipped for the given name (`Lord Maren` also matches `Maren`). Pronoun tags (`she said`, `said he`) are never attributed, and a paragraph with one is left unattributed; a pronoun and speech verb count as a tag only within about 40 characters after a closing quote or before an opening one, so `She said nothing more` elsewhere in the narration does not block an action beat. In close third person the POV character is often under-counted. Any other quoted line is counted as unattributed and never guessed. Cut characters are skipped.
 
 For each speaking character it reports lines, words, mean sentence length, contractions per 100 words, the share of sentences that are questions and exclamations, and up to five signature words: words of four or more letters, used at least twice, and used more than twice as often per word spoken as in everyone else's dialogue. It warns when:
 
@@ -1202,6 +1206,8 @@ Location and system `type` are free text. `language` in `story.md` has no fixed 
 Project validation failed: 1 errors, 0 warnings, 0 dismissed
 error: characters/kael-voss.md frontmatter field status has unsupported value dead
 ```
+
+A YAML list where a single value belongs reads `<file> frontmatter field <field> must be a single value, not a list`, for example `status:` followed by `- alive` and `- missing`.
 
 ### What the status values mean
 

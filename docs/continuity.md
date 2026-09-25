@@ -510,7 +510,7 @@ story timeline .
 
 **POV balance** totals chapter `pov` by chapter count and prose words, largest share first. Chapters with no `pov` are grouped as `unspecified`.
 
-**Character presence** counts the chapters in which each character appears in `characters` (on the chapter or on any of its scenes; `mentions` do not count). It shows the span from first to last appearance, the longest absence, and how many chapters at the end of the book they are missing from. Absences are counted in chapter positions, so gaps in chapter numbering do not inflate them.
+**Character presence** counts the chapters in which each character appears in `characters` or as `pov` (on the chapter or on any of its scenes; `mentions` do not count). It shows the span from first to last appearance, the longest absence, and how many chapters at the end of the book they are missing from. Absences are counted in chapter positions, so gaps in chapter numbering do not inflate them.
 
 With the scene dates from [Clock and travel time](#clock-and-travel-time) on the repaired unraveled thread:
 
@@ -535,7 +535,7 @@ Character presence:
 Timeline built: 0 errors, 0 warnings, 0 dismissed
 ```
 
-Without dates, the chronology reads `- None: add date (YYYY-MM-DD) and time to scenes or chapters to order them` and every scene is listed under `Undated (reading order)`. POV balance and presence still work. The unmodified example, where chapter 4 still lists Edran and chapter 3 omits Nessa, shows the other presence notes:
+Without dates, the chronology reads `- None: add date (YYYY-MM-DD) and time to scenes or chapters to order them` and every scene is listed under `Undated (reading order)`. POV balance and presence still work. The unmodified example, where chapter 4 still lists Edran, shows a longest absence. Chapter 3 omits Nessa from `characters`, but she is its `pov`, so she still counts as present there:
 
 ```text
 $ story timeline examples/the-unraveled-thread
@@ -543,8 +543,10 @@ $ story timeline examples/the-unraveled-thread
 Character presence:
 - jonas-reed: 4 of 4 chapters, chapters 1-4
 - edran-vale: 3 of 4 chapters, chapters 1-4, longest absence 1 chapter after chapter 2
-- nessa-thorn: not present in any chapter
+- nessa-thorn: 1 of 4 chapters, chapter 3, absent from the last 1 chapter
 ```
+
+A character no chapter or scene lists in `characters` or `pov` reads `not present in any chapter`.
 
 Read it for:
 
@@ -674,7 +676,7 @@ To see the same plant-to-reveal flow as a picture, run [`story diagram clues`](#
 story prose .
 ```
 
-`story prose` is an advisory prose lint. It counts; it never scores or rewrites. It reads only chapter prose: the text after `## Chapter Text` (or, failing that, after the outline and its `---` divider), without headings, HTML comments, code between closed `` ``` `` fences (as in word counts), or scene-break rules. Quoted dialogue (straight `"..."`, curly `“...”`, or British `‘...’`, paired the same way as in [`story voices`](#story-voices)) is removed before the filter-word and adverb counts, so a character's own words are not held against the narration. A heading line is dropped on its own, so prose that follows a heading without a blank line still counts.
+`story prose` is an advisory prose lint. It counts; it never scores or rewrites. It reads only chapter prose: the text after `## Chapter Text` (or, failing that, after the outline and its `---` divider), without headings, HTML comments, code between closed `` ``` `` fences (as in word counts), or scene-break rules. A removed comment leaves a space, so the words on either side stay separate: `really<!--x-->quiet` is two words here, though word counts and builds join it into one. Quoted dialogue (straight `"..."`, curly `“...”`, or British `‘...’`, paired the same way as in [`story voices`](#story-voices)) is removed before the filter-word and adverb counts, so a character's own words are not held against the narration. A heading line is dropped on its own, so prose that follows a heading without a blank line still counts.
 
 From [`examples/the-last-ember`](../examples/the-last-ember/), which has a style sheet:
 
@@ -776,7 +778,7 @@ It never guesses who is speaking. A paragraph's quoted lines (straight `"..."`, 
 1. A speech tag: the character's name next to a speech verb such as `said`, `asked`, `replied`, `whispered`, `muttered`, `called`, `snapped`, or `went on`. A name before the verb wins over one after it, so in `"...," Sera told Kael` the line is Sera's, and `said Kael` gives it to Kael.
 2. Failing that, an action beat: narration that names exactly one character (`Kael shouldered his pack. "For the record..."`).
 
-Anything else is counted as unattributed. A character is matched by their full `name`, their given name (the first word that is not a title, so `Lord Maren` also matches `Maren`), and their `aliases`, case-sensitively. Pronoun tags (`she said`, `said he`) are never attributed, and a paragraph whose narration has one is left unattributed rather than credited to a character it merely names (`'It's nothing,' she said, holding it the way Tam used to`), so in close third person the POV character is often under-counted. Characters with `status: cut` are ignored.
+Anything else is counted as unattributed. A character is matched by their full `name`, their given name (the first word that is not a title, so `Lord Maren` also matches `Maren`), and their `aliases`, case-sensitively. Pronoun tags (`she said`, `said he`, with `he`, `she`, `they`, `I`, or `we`) are never attributed, and a paragraph with one is left unattributed rather than credited to a character it merely names (`'It's nothing,' she said, holding it the way Tam used to`), so in close third person the POV character is often under-counted. A pronoun and speech verb count as a tag only right after a closing quote or right before an opening one (within about 40 characters); elsewhere in the paragraph they are narration, so `Mara set the ledger down. She said nothing more, and then: "We should go."` is still Mara's action beat. Characters with `status: cut` are ignored.
 
 ### What it prints
 

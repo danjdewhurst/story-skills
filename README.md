@@ -131,7 +131,7 @@ npm install -g story-skills   # then: story --help
 
 To try unreleased changes, run it straight from GitHub with `npx --yes --package github:danjdewhurst/story-skills story --help`.
 
-From a clone, use `bun install` and then `bun run story --help`. Copied-skill installs don't need either: `story-maintenance` bundles a `scripts/story.js` fallback that agents run with Node.
+From a clone, use `bun install` and then `bun run story -- --help`. Copied-skill installs don't need either: `story-maintenance` bundles a `scripts/story.js` fallback that agents run with Node.
 
 The CLI is for maintenance only. Agents write story content directly to markdown files and never create project-local build or generator scripts to emit the story.
 
@@ -204,7 +204,7 @@ Every command and option is in the [CLI reference](docs/cli-reference.md). For a
 A story project with deterministic checks is one an agent can advance unattended. The [`templates/github/`](templates/github/) workflows turn a story repository into a self-drafting book:
 
 - [`story-checks.yml`](templates/github/story-checks.yml) runs `story validate`, `story links`, `story continuity`, and `story report --actionable` on every push and pull request, so a chapter PR can't merge with a continuity contradiction.
-- [`draft-next-chapter.yml`](templates/github/draft-next-chapter.yml) runs [Claude Code](https://github.com/anthropics/claude-code-action) on a schedule. It asks `story next` for the next action, drafts the next chapter with the chapter-writing skill, updates scene records and continuity state, runs the maintenance checks, and opens a pull request for review.
+- [`draft-next-chapter.yml`](templates/github/draft-next-chapter.yml) runs [Claude Code](https://github.com/anthropics/claude-code-action) on a schedule. It asks `story next` for the next action, drafts the next chapter with the chapter-writing skill, updates scene records and continuity state, runs the maintenance checks, and opens a pull request for review. When `story next` suggests no chapter (the story is revising or complete, or every arc is resolved), it stops without drafting.
 
 Copy both files into `.github/workflows/` in the repository that holds your story project, add an `ANTHROPIC_API_KEY` secret, and review one chapter PR each morning.
 
@@ -303,10 +303,10 @@ The plugin install in [Quick start](#quick-start) is the recommended path. For l
 git clone https://github.com/danjdewhurst/story-skills.git
 
 # User-wide
-cp -r story-skills/skills/* ~/.agents/skills/
+mkdir -p ~/.agents/skills && cp -r story-skills/skills/* ~/.agents/skills/
 
 # Or repo-scoped
-cp -r story-skills/skills/* .agents/skills/
+mkdir -p .agents/skills && cp -r story-skills/skills/* .agents/skills/
 ```
 
 </details>
@@ -320,11 +320,11 @@ cp -r story-skills/skills/* .agents/skills/
 git clone https://github.com/danjdewhurst/story-skills.git
 
 # Copy skills to your project (either works)
-cp -r story-skills/skills/* .github/skills/
-cp -r story-skills/skills/* .agents/skills/
+mkdir -p .github/skills && cp -r story-skills/skills/* .github/skills/
+mkdir -p .agents/skills && cp -r story-skills/skills/* .agents/skills/
 
 # Or install globally
-cp -r story-skills/skills/* ~/.copilot/skills/
+mkdir -p ~/.copilot/skills && cp -r story-skills/skills/* ~/.copilot/skills/
 ```
 
 Copilot can activate a skill when your request matches its description, or you can invoke one manually.
@@ -338,7 +338,7 @@ Copilot can activate a skill when your request matches its description, or you c
 
 ```shell
 git clone https://github.com/danjdewhurst/story-skills.git
-cp -r story-skills/skills/* .agents/skills/
+mkdir -p .agents/skills && cp -r story-skills/skills/* .agents/skills/
 ```
 
 </details>
@@ -352,10 +352,10 @@ cp -r story-skills/skills/* .agents/skills/
 git clone https://github.com/danjdewhurst/story-skills.git
 
 # Copy skills to your project
-cp -r story-skills/skills/* .windsurf/skills/
+mkdir -p .windsurf/skills && cp -r story-skills/skills/* .windsurf/skills/
 
 # Or install globally
-cp -r story-skills/skills/* ~/.codeium/windsurf/skills/
+mkdir -p ~/.codeium/windsurf/skills && cp -r story-skills/skills/* ~/.codeium/windsurf/skills/
 ```
 
 Cascade can invoke a matching skill automatically, or you can use `@skill-name` to invoke one directly.
@@ -392,10 +392,10 @@ Gemini can activate a skill when your request matches its description.
 git clone https://github.com/danjdewhurst/story-skills.git
 
 # Copy skills to your project
-cp -r story-skills/skills/* .opencode/skills/
+mkdir -p .opencode/skills && cp -r story-skills/skills/* .opencode/skills/
 
 # Or install globally
-cp -r story-skills/skills/* ~/.config/opencode/skills/
+mkdir -p ~/.config/opencode/skills && cp -r story-skills/skills/* ~/.config/opencode/skills/
 ```
 
 OpenCode also searches common skill paths such as `.claude/skills/`, so it can find project-level skills installed for other agents.

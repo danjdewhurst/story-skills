@@ -76,7 +76,25 @@ Absolute paths in output are shortened to `~/stories/...`.
 
 ### Help and version
 
-`story --help`, `story -h`, `story help`, and `story` with no command all print the usage summary to stdout and exit 0. `--help` wins over any command it is combined with, so `story build --help` prints the same summary.
+`story --help`, `story -h`, `story help`, and `story` with no command all print the usage summary, with every command and option, to stdout and exit 0. `story help <command>` and `story <command> --help` print that command's usage line, summary, and only the options it reads, plus `--path` (for commands that take a project), `-h`, and `-v`:
+
+```shell
+story help validate
+```
+
+```text
+Usage: story validate [path] [options]
+
+Check project structure, frontmatter, and registries
+
+Options:
+  --path <path>             Project root for every command except init and
+                            import
+  -h, --help                Show this help
+  -v, --version             Show the story CLI version
+```
+
+`story help` with a name that is not a command prints the full summary.
 
 `story --version` (or `-v`) prints the version and exits 0. It wins over everything else on the line, including `--help`:
 
@@ -88,7 +106,13 @@ story --version
 0.10.5
 ```
 
-An unknown command prints `Unknown command: <name>` followed by the usage summary to stderr, and exits 1.
+An unknown command prints `Unknown command: <name>`, with a suggestion when the name is close to a real command, and a pointer to the help, to stderr, and exits 1:
+
+```text
+$ story valdate
+Unknown command: valdate; did you mean validate?
+Run story --help to list commands.
+```
 
 The help text is generated from the command and option registries in [`src/commands.js`](../src/commands.js) and [`src/options.js`](../src/options.js), so it always matches what the CLI accepts. The version comes from [`src/version.js`](../src/version.js).
 
@@ -152,9 +176,17 @@ Every command, including `validate`, `next`, and `doctor`, reports that same lin
 - For options that are not repeatable, the last value wins: `--out a.md --out b.md` writes `b.md`.
 - Unknown options, missing values, extra positional arguments, and options the command does not read are errors. Each command accepts only its own options plus `--path`:
 
+An unknown option close to a real one gets the same kind of suggestion, naming every equally close option (up to three). A single-dash word such as `-x` is an unknown option, not a path; a lone `-` or a negative number stays a positional argument.
+
 ```text
 $ story validate --verbose
 Unknown option --verbose
+
+$ story build --formt epub
+Unknown option --formt; did you mean --form or --format?
+
+$ story validate -x
+Unknown option -x
 
 $ story export --out
 Missing value for --out: expected a value
@@ -197,7 +229,9 @@ story export --out ../outside.md
 Refusing to access path outside project root: ~/stories/outside.md
 ```
 
-An absolute `--out` path is written where you say. Generated and rewritten files are written in place and keep their permissions, so a read-only file is refused (`EACCES: permission denied`). The exception is a target that is a hard link, such as an `--out` path linked to a chapter: it is replaced by a new file with the old file's permissions, so the linked file is left unchanged. If the new file cannot be written, for example in a read-only directory, the command fails with `Cannot replace hard-linked <path>: <code>` (such as `EACCES`). The CLI also refuses to write through symlinks or into symlinked project directories, and it never reads a project text file that is a symlink, a device or FIFO, or larger than 5 MiB (see [Scanning limits and safety](project-format.md#scanning-limits-and-safety)). Scans skip `dist/`, `node_modules/`, and dot-directories, so build output never feeds back into checks.
+An absolute `--out` path is written where you say. Generated and rewritten files are written in place and keep their permissions, so a read-only file is refused (`Cannot open dist/manuscript.md: permission denied`). The exception is a target that is a hard link, such as an `--out` path linked to a chapter: it is replaced by a new file with the old file's permissions, so the linked file is left unchanged. If the new file cannot be written, for example in a read-only directory, the command fails with `Cannot replace <path>: permission denied`, naming the target rather than the temporary file. The CLI also refuses to write through symlinks or into symlinked project directories, and it never reads a project text file that is a symlink, a device or FIFO, or larger than 5 MiB (see [Scanning limits and safety](project-format.md#scanning-limits-and-safety)). Scans skip `dist/`, `node_modules/`, and dot-directories, so build output never feeds back into checks.
+
+A file-system failure reads `Cannot <action> <path>: <reason>`, with the path relative to the current directory when it is inside it. The action is `open`, `list`, `check`, `replace`, `create the folder`, `delete`, `copy`, or `write to`, and the reason is `permission denied`, `no such file or folder`, `it is a folder, not a file`, `a part of the path is not a folder`, `the file system is read-only`, `no space left on the device`, or `the name is too long`.
 
 `--out` on `export`, `build`, `synopsis`, and `diagram` never overwrites project source: `story.md`, `style-sheet.md`, `progress.md`, or anything under `characters/`, `chapters/`, `scenes/`, `worldbuilding/`, `plot/`, `continuity/`, `glossary/`, `matter/`, or `research/`. Folder names match in any letter case (`Chapters/x.md` is refused), and a path through a symlink is checked against the real folder it points to, so `lnk/x.md` is refused when `lnk` links to `chapters`. The real path is compared in any letter case as well, so an absolute path typed in another case on a case-insensitive disk (the macOS default) is caught. It must also name a file, not a directory; `--out dist` is refused even before `dist/` exists:
 
@@ -220,6 +254,8 @@ Cannot reindex: fix this file first (story validate reports it):
 ```
 
 The other commands name themselves: `Cannot count words`, `Cannot export`, `Cannot build`, `Cannot build a synopsis`, `Cannot add`, `Cannot migrate`, `Cannot rename`, and `Cannot remove`. With several files the line reads `fix these files first (story validate reports them)`. `rename` and `remove` also read every other markdown file before writing, and stop with `<file>: <error>; nothing was changed` when one of those fails to parse. A `style-sheet.md` or `progress.md` that fails to parse does not block them; `story validate` reports it.
+
+A parse error names the file by its path inside the project, never an absolute path, for every file including `story.md`, the registries, `progress.md`, and `style-sheet.md`: `story.md: is missing YAML frontmatter`. When `story.md` cannot be read, `validate` reports that once rather than also listing each required field as missing.
 
 ## Setup commands
 
@@ -330,7 +366,7 @@ See [Series](series.md) for how linked books are ordered and checked, and [Getti
 story import <source> --title <name> [options]
 ```
 
-Creates a new project from an existing manuscript. `<source>` is a single `.md`, `.markdown`, or `.txt` file, or a directory of them. `--title` is required.
+Creates a new project from an existing manuscript. `<source>` is a single `.md`, `.markdown`, or `.txt` file, or a directory of them. `--title` is required. A directory that already has a `story.md` is refused, since it is a story project rather than a draft: `drafts/salt-road is already a story project (it has story.md); import reads manuscript files, so point it at the draft instead`.
 
 - A file with `Chapter` headings (any heading level, with arabic, roman, or spelled-out numerals up to ninety-nine, or none) is split at each heading, and `Prologue`, `Epilogue`, `Interlude`, and `Afterword` headings become chapters of their own. Text before the first chapter heading becomes a chapter titled `Opening`.
 - A file without markdown chapter headings is split on plain-text chapter lines standing alone between blank lines, such as `Chapter 3`, `CHAPTER ONE: Arrival`, `Prologue`, or `Epilogue: After`. The number or word must stand alone or be followed by a separator (`:`, `.`, `-`, `–`, `—`), with or without a title (a bare `Prologue:` splits, and `Chapter 3:` is titled `Chapter 3`), so `Chapter 12 was the worst.` and `Chapter Nine Lives of a Cat` do not split. A single short line before the first one is treated as the book title.
@@ -767,7 +803,7 @@ Shows three read-only views:
 
 - **Chronology**: scenes (and chapters with no scene records) that have a `date` in story order, sorted by `date` and then `time`. An entry told after events that happen later in story time is marked `[told in chapter N, after later events]`. Undated entries are listed separately in reading order.
 - **POV balance**: chapters and words per POV character.
-- **Character presence**: how many chapters each character appears in, their longest absence, and whether they drop out before the end.
+- **Character presence**: how many chapters each character appears in (in `characters` or as `pov`, on the chapter or a scene), their longest absence, and whether they drop out before the end.
 
 `timeline` reports no findings of its own; clock errors belong to `continuity`.
 
@@ -1110,7 +1146,7 @@ With no clues it prints `- None: add clues with story add clue "Name" --planted 
 story voices [path]
 ```
 
-Builds a dialogue fingerprint for each character who speaks: lines and words of dialogue, average sentence length, contractions per 100 words, the share of questions and exclamations, and up to five signature words (words the character uses at least twice, at more than twice the rate of the other speakers; common words are ignored). A line is attributed only when its paragraph names the speaker next to a speech verb (`"...," Mara said` or `said Mara`) or, failing that, when the narration names exactly one character and has no pronoun tag (`she said`, `said he`). Other quoted lines are counted as unattributed, never guessed. Names match a character's full name, given name, and `aliases`.
+Builds a dialogue fingerprint for each character who speaks: lines and words of dialogue, average sentence length, contractions per 100 words, the share of questions and exclamations, and up to five signature words (words the character uses at least twice, at more than twice the rate of the other speakers; common words are ignored). A line is attributed only when its paragraph names the speaker next to a speech verb (`"...," Mara said` or `said Mara`) or, failing that, when the narration names exactly one character and has no pronoun tag (`she said`, `said he`) right after a closing quote or right before an opening one. A pronoun and speech verb elsewhere in the paragraph (`She said nothing more`) is narration and does not block the action beat. Other quoted lines are counted as unattributed, never guessed. Names match a character's full name, given name, and `aliases`.
 
 It warns when:
 
@@ -1424,6 +1460,21 @@ Options by kind:
 
 On `add chapter` and `add scene`, `--pov` names the POV character, and `add` also puts that id first in `characters` when it is not already listed.
 
+Options that name other entities or chapters (`--chapter`, `--planted`, `--payoff`, `--introduced`, `--resolved`, `--used-in`, `--location`, `--character`, `--mention`, `--member`, `--owner`, `--arc`, `--controlled-by`, and their plural forms) must be kebab-case ids, and so must `--pov` on `add chapter` and `add scene`. A character's `--arc` is exempt: it is a free-text arc theme. A name is refused before anything is written, since it could never resolve, and the example in the message matches the option (`port-kestrel` for a location, `the-long-road` for an arc):
+
+```text
+$ story add promise "The Ledger" --planted "Chapter 1"
+--planted "Chapter 1" must be a kebab-case id (such as chapter-01)
+
+$ story add chapter "Two" --pov "Mara Quill"
+--pov "Mara Quill" must be a character id (such as mara-quill)
+
+$ story add chapter "Two" --number 0
+chapter number must be a positive integer, got 0
+```
+
+`add scene` needs an existing chapter. With no chapters it fails with `No chapters yet: add one with story add chapter before adding a scene`, and a `--chapter` id with no chapter file fails with `chapter chapter-99 does not exist: add it with story add chapter, or pass --chapter with an existing chapter id`.
+
 `add scene` also adds its `location` to the chapter's `locations` and each of its `characters` to the chapter's `characters`, unless the chapter already lists that character in `mentions`. Only ids that have an entity file are copied; an unknown id stays on the scene, where `story links` reports it.
 
 Location and system `--type`, location `--status`, and system `--prevalence` are free text. `--date` must be a real `YYYY-MM-DD` day; `--time` is `HH:MM` or one of `dawn`, `morning`, `midday`, `afternoon`, `evening`, `night`; `--travel-hours` is a number zero or above; `--number` and `--scene` are positive integers; `--order` is a non-negative integer. Repeating `--location` on `add artifact` or `add scene`, or `--arc` on `add character`, writes a list that `story validate` rejects, because those flags are repeatable elsewhere. Other single-value flags keep the last value given.
@@ -1512,7 +1563,7 @@ Sets the entity's name or title and, when the new name gives a different id, ren
 
 Chapter and scene ids come from their numbers, so renaming one changes only its title. `rename` also updates the entity's first heading when it shows the old name, such as `# Ilse Marrow` or `# Chapter 1: Low Tide`.
 
-Every rewrite is planned before anything is written, so a file that fails to parse leaves the project unchanged. An entity file (a file directly in an entity folder), an `_index.md` registry, or one of `story.md`, `style-sheet.md`, `progress.md`, `plot/timeline.md`, `continuity/state.md`, and `continuity/exemptions.md` with no YAML frontmatter stops it the same way, with `<file> is missing YAML frontmatter; nothing was changed`. Other markdown, such as `continuity/motifs.md`, `continuity/theme-audit.md`, or a README, may be plain. `rename` refuses if an entity with the new id already exists, or if the new id is one Windows reserves as a file name, as `add` does (`Cannot use character id aux: Windows reserves the file name aux.md. ...`).
+Every rewrite is planned before anything is written, so a file that fails to parse leaves the project unchanged. An entity file (a file directly in an entity folder), one of the registries the CLI writes (the `_index.md` in `characters/`, `worldbuilding/`, `plot/`, `chapters/`, `scenes/`, `continuity/questions/`, `continuity/promises/`, `continuity/clues/`, `glossary/`, `matter/`, and `research/`), or one of `story.md`, `style-sheet.md`, `progress.md`, `plot/timeline.md`, `continuity/state.md`, and `continuity/exemptions.md` with no YAML frontmatter stops it the same way, with `<file> is missing YAML frontmatter; nothing was changed`. Other markdown, such as `continuity/motifs.md`, `continuity/theme-audit.md`, a README, or an `_index.md` in a folder of your own such as `notes/`, may be plain. `rename` refuses if an entity with the new id already exists, or if the new id is one Windows reserves as a file name, as `add` does (`Cannot use character id aux: Windows reserves the file name aux.md. ...`).
 
 ```text
 $ story rename character ilse-marrow "Ilse Varrow"
@@ -1646,6 +1697,8 @@ Unsupported trim size: 7x10. Supported sizes: 5x8, 5.25x8, 5.5x8.5, 6x9, a5
 $ story build --format pdf
 Unsupported build format: pdf. Supported formats: markdown, epub, docx, shunn, html, print, narration, metadata
 ```
+
+An empty value (`--format=`) reads `Unsupported build format: (empty). ...`.
 
 The start of the metadata sheet for [`examples/harbor-of-second-light`](../examples/harbor-of-second-light/), whose `story.md` sets `author`, `language`, `description`, `keywords`, and `subjects`:
 

@@ -55,8 +55,8 @@ To work on the skills locally without the plugin, copy them into a directory Cod
 
 ```shell
 git clone https://github.com/danjdewhurst/story-skills.git
-cp -r story-skills/skills/* ~/.agents/skills/   # user-wide
-cp -r story-skills/skills/* .agents/skills/     # or this repository only
+mkdir -p ~/.agents/skills && cp -r story-skills/skills/* ~/.agents/skills/   # user-wide
+mkdir -p .agents/skills && cp -r story-skills/skills/* .agents/skills/       # or this repository only
 ```
 
 ### Other agents: the Agent Skills CLI
@@ -85,7 +85,7 @@ If your agent has no installer, clone the repository and copy every folder in `s
 
 ```shell
 git clone https://github.com/danjdewhurst/story-skills.git
-cp -r story-skills/skills/* <skills-directory>/
+mkdir -p <skills-directory> && cp -r story-skills/skills/* <skills-directory>/
 ```
 
 | Agent | Project directory | Global directory |
@@ -491,7 +491,7 @@ Project is valid: 0 errors, 0 warnings, 0 dismissed
 | `story links .` | Checks that every id reference points at a real file and that backlinks exist |
 | `story validate .` | Checks required files, the schema version, frontmatter fields and values, and registries |
 
-Then check the story itself and ask what to do next:
+Then check the story itself and ask what to do next. The output below assumes the skill set `current-chapter: 1` in `continuity/state.md` after drafting; if you are running the commands yourself, set it first, or `story continuity` warns `continuity/state.md current-chapter 0 is behind the latest chapter 1`.
 
 ```shell
 story continuity .
@@ -608,10 +608,10 @@ Once chapter 1 exists, these are the usual next steps:
 - **Track setups and payoffs.** Use `story add question`, `story add promise`, and `story add clue` so that `story continuity` can check that every setup pays off, and in the right order. See [Continuity and analysis](continuity.md).
 - **Track progress.** Add `target-words` and `deadline` to `story.md`, then run `story progress . --log` after each session. See [Continuity and analysis](continuity.md#story-progress).
 - **Check names and voices.** Ask "Name a character" and the agent runs `story names` to catch clashes and look-alikes before a name sticks. Once there is dialogue, `story voices .` checks that each character sounds like themselves. See [Writing workflows](writing-workflows.md#voice-and-house-style).
-- **Revise in named passes.** When the draft is done, ask "Set up the revision passes". `story passes . --init` writes a ladder from structure down to proof, and `story next .` tells you which pass comes next. Commit and run `git tag draft-1` before a pass, then `story compare . --ref draft-1` shows what it changed. See [Writing workflows](writing-workflows.md#revision-passes).
+- **Revise in named passes.** When the draft is done, ask "Set up the revision passes". `story passes . --init` writes a ladder from structure down to proof, and `story next .` tells you which pass comes next. If the project is not a git repository yet, run `git init` and add `dist/` to `.gitignore` first (see [Output paths and what is disposable](manuscripts.md#output-paths-and-what-is-disposable)). Commit and run `git tag draft-1` before a pass, then `story compare . --ref draft-1` shows what it changed. See [Writing workflows](writing-workflows.md#revision-passes).
 - **Polish the prose.** Ask "Line edit chapter 1". The `line-editing` skill proposes each change with a before, an after, and a reason, and applies only the ones you accept. See [Writing workflows](writing-workflows.md#line-editing).
 - **Share a review copy.** `story build . --format html` writes one HTML file that beta readers open in a browser, with a label on every paragraph for them to cite. See [Writing workflows](writing-workflows.md#feedback-triage).
-- **Build the book.** `story build .` writes a single markdown manuscript to `dist/`, and `story build . --format epub` (or `docx`, `shunn`, `html`, `print`, `narration`, `metadata`) writes other formats there. The [`publishing`](../skills/publishing/SKILL.md) skill takes a finished book through metadata, the print interior, and launch, and [`adaptation`](../skills/adaptation/SKILL.md) turns it into an audiobook script, screenplay, or translation. Treat `dist/` as disposable. If you use `story export` instead, keep its output in `dist/` too, for example `story export . --out dist/manuscript.md`. Written to the project root, `manuscript.md` makes `story validate` warn that the file is not part of the story project model. See [Import, export, and builds](manuscripts.md).
+- **Build the book.** `story build .` writes a single markdown manuscript to `dist/`, and `story build . --format epub` (or `docx`, `shunn`, `html`, `print`, `narration`, `metadata`) writes other formats there. The [`publishing`](../skills/publishing/SKILL.md) skill takes a finished book through metadata, the print interior, and launch, and [`adaptation`](../skills/adaptation/SKILL.md) turns it into an audiobook script, screenplay, or translation. Treat `dist/` as disposable. `story export .` writes `dist/manuscript.md` by default. Only an explicit `--out` outside `dist/`, such as `--out manuscript.md` in the project root, makes `story validate` warn that the file is not part of the story project model. See [Import, export, and builds](manuscripts.md).
 - **Bring in an existing draft.** `story import draft.md --title "Your Title"` splits a manuscript into a project. See [Import, export, and builds](manuscripts.md).
 - **Write a sequel or prequel.** See [Series](series.md).
 - **Automate it.** The GitHub Actions templates run the checks on every pull request and can draft a chapter on a schedule. See [Automation and CI](automation.md).
