@@ -9,7 +9,9 @@ and which are declined with a recorded reason. `readiness` is one of
 ```yaml
 ---
 round: {N}
-readers: [{reader-1-kebab}, {reader-2-kebab}, ...]
+readers:
+  - {reader-1-kebab}
+  - {reader-2-kebab}
 readiness: needs-revision
 ---
 
