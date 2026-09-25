@@ -244,6 +244,7 @@ With `--force`, import adds any missing starter files and leaves other existing 
 - Each source file can be at most 5 MiB, and a source folder can contain at most 500 importable files.
 - A source that is a symlink is refused. Inside a source folder, a symlink to a document is refused and any other symlink is skipped.
 - Import never follows a symlinked target directory.
+- A source folder that has a `story.md` is refused as a story project, so a project's bible files are never imported as chapters.
 
 ### After importing
 
@@ -945,7 +946,7 @@ The result is a draft, not submission copy. Literary agents expect present tense
 
 - An absolute path can point anywhere, such as `--out ~/Desktop/the-salt-road.epub`.
 - Missing parent folders are created. For a relative path, writing through a symlinked folder is refused. Writing onto a symlinked file is always refused.
-- The output is written in place, so an existing file keeps its permissions and a read-only one is refused (`EACCES: permission denied`). An `--out` file that is a hard link to another file is instead replaced by a new file with the same permissions, and the file it was linked to is left unchanged. When that replacement fails, the error reads `Cannot replace hard-linked <path>: <code>`.
+- The output is written in place, so an existing file keeps its permissions and a read-only one is refused (`Cannot open dist/manuscript.md: permission denied`). An `--out` file that is a hard link to another file is instead replaced by a new file with the same permissions, and the file it was linked to is left unchanged. When that replacement fails, the error reads `Cannot replace hard-linked <path>: <code>`.
 - An existing output file is overwritten without asking, but project source never is. `--out` naming `story.md`, `style-sheet.md`, `progress.md`, or a path under `characters/`, `chapters/`, `scenes/`, `worldbuilding/`, `plot/`, `continuity/`, `glossary/`, `matter/`, or `research/` is refused:
 
   ```text
@@ -968,6 +969,7 @@ Treat everything in `dist/` as disposable. It is regenerated from the markdown o
 | `Unsupported tense "<tense>": ...` | `--tense` is not `past`, `present`, `future`, or `mixed` | Use one of those values. |
 | `Refusing to import symlinked source: <path>` | The source, or a document inside a source folder, is a symlink | Import the real file or folder. |
 | `Import source not found: <path>` | The source path is wrong | Check the path; it is relative to the current directory. |
+| `<source> is already a story project (it has story.md); ...` | The source folder is a Story Skills project, not a draft | Point `import` at the manuscript files. |
 | `No markdown or text files found in <dir>` | The folder has no `.md`, `.markdown`, or `.txt` files at its top level | Point at the folder that contains the chapter files. |
 | `No chapter content found in import source` | Every document was empty after frontmatter was removed | Check the source files. |
 | `<dir> already exists. Use --force ...` | The import target exists | Choose another `--dir`, or back up and use `--force`. |
