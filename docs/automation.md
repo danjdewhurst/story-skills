@@ -237,9 +237,10 @@ To try it without waiting for the schedule, open the Actions tab, pick **Draft t
 3. **Draft with Claude Code.** The agent is prompted to:
    1. run `story next` and read `story.md`, `chapters/_index.md`, `continuity/state.md`, open questions, promises, and the active arcs;
    2. if `story next` reports a P0 maintenance issue, fix it on a `draft/maintenance-<date>` branch, open a maintenance PR, and stop;
-   3. otherwise draft the next chapter on a branch named `draft/chapter-<number>`, following the `chapter-writing` skill: outline first, prose under `## Chapter Text`, accurate frontmatter, matching scene records, and updates to continuity state, promises, questions, and the timeline;
-   4. run `story wordcount --write`, `story reindex`, `story validate`, `story links`, and `story continuity`, and make them pass;
-   5. commit, push the branch with `git push -u origin draft/chapter-<number>`, and open a PR titled `Draft chapter <number>: <title>` that summarises the beats, the arcs advanced, and the promises planted or paid off.
+   3. if `story next` suggests no "Draft chapter" (the story is revising or complete, or every arc is resolved), stop without drafting;
+   4. otherwise draft the next chapter on a branch named `draft/chapter-<number>`, following the `chapter-writing` skill: outline first, prose under `## Chapter Text`, accurate frontmatter, matching scene records, and updates to continuity state, promises, questions, and the timeline;
+   5. run `story wordcount --write`, `story reindex`, `story validate`, `story links`, and `story continuity`, and make them pass;
+   6. commit, push the branch with `git push -u origin draft/chapter-<number>`, and open a PR titled `Draft chapter <number>: <title>` that summarises the beats, the arcs advanced, and the promises planted or paid off.
 4. **Check the result.** The workflow then runs `story validate`, `story links`, and `story continuity` itself, so a run whose chapter still has errors fails visibly.
 
 The PR is a draft for you to edit, not a finished chapter. [Writing workflows](writing-workflows.md) describes the chapter-writing process the agent follows, and what to look for when you revise.

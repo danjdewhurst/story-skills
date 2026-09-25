@@ -197,7 +197,7 @@ story export --out ../outside.md
 Refusing to access path outside project root: ~/stories/outside.md
 ```
 
-An absolute `--out` path is written where you say. Generated and rewritten files are written in place and keep their permissions, so a read-only file is refused (`EACCES: permission denied`). The exception is a target that is a hard link, such as an `--out` path linked to a chapter: it is replaced by a new file with the old file's permissions, so the linked file is left unchanged. The CLI also refuses to write through symlinks or into symlinked project directories, and it never reads a project text file that is a symlink, a device or FIFO, or larger than 5 MiB (see [Scanning limits and safety](project-format.md#scanning-limits-and-safety)). Scans skip `dist/`, `node_modules/`, and dot-directories, so build output never feeds back into checks.
+An absolute `--out` path is written where you say. Generated and rewritten files are written in place and keep their permissions, so a read-only file is refused (`EACCES: permission denied`). The exception is a target that is a hard link, such as an `--out` path linked to a chapter: it is replaced by a new file with the old file's permissions, so the linked file is left unchanged. If the new file cannot be written, for example in a read-only directory, the command fails with `Cannot replace hard-linked <path>: <code>` (such as `EACCES`). The CLI also refuses to write through symlinks or into symlinked project directories, and it never reads a project text file that is a symlink, a device or FIFO, or larger than 5 MiB (see [Scanning limits and safety](project-format.md#scanning-limits-and-safety)). Scans skip `dist/`, `node_modules/`, and dot-directories, so build output never feeds back into checks.
 
 `--out` on `export`, `build`, `synopsis`, and `diagram` never overwrites project source: `story.md`, `style-sheet.md`, `progress.md`, or anything under `characters/`, `chapters/`, `scenes/`, `worldbuilding/`, `plot/`, `continuity/`, `glossary/`, `matter/`, or `research/`. Folder names match in any letter case (`Chapters/x.md` is refused), and a path through a symlink is checked against the real folder it points to, so `lnk/x.md` is refused when `lnk` links to `chapters`. The real path is compared in any letter case as well, so an absolute path typed in another case on a case-insensitive disk (the macOS default) is caught. It must also name a file, not a directory; `--out dist` is refused even before `dist/` exists:
 
@@ -337,7 +337,7 @@ Creates a new project from an existing manuscript. `<source>` is a single `.md`,
 - A file with neither becomes one chapter, titled by its first `#` heading or by its file name.
 - A directory is imported in natural file-name order (`chapter-2` before `chapter-10`). Files with no number in their name come after the numbered ones, except prologue, preface, foreword, introduction, and prelude files, which come first. Symlinks are never followed; a symlink to a document is refused.
 - Leading YAML frontmatter in source files is dropped, and a trailing Pandoc attribute block on a heading (`# Chapter 1: Arrival {#arrival .unnumbered}`) is dropped from the title.
-- In `.md` and `.markdown` sources, Pandoc's `---` becomes an em dash and `--` an en dash, except inside inline code, closed `` ``` `` code fences, HTML comments (everything after a `<!--` that never closes), link targets (`](...)`), autolinks (`<https://...>`), and bare URLs, and on lines made only of dashes (scene breaks), table separator rows (`|---|---|`), and indented code lines (four spaces or a tab). In `.txt` sources, leading tabs and spaces are removed from every line, so indented paragraphs do not become code blocks.
+- In `.md` and `.markdown` sources, Pandoc's `---` becomes an em dash and `--` an en dash, except inside inline code, closed `` ``` `` code fences, HTML comments (everything after a `<!--` that never closes), link targets (`](...)`), autolinks (`<https://...>`), bare URLs, and `mailto:` addresses, and on lines made only of dashes (scene breaks), table separator rows (`|---|---|`), and indented code lines (four spaces or a tab). An indented line that continues a list item is prose and is converted. In `.txt` sources, leading tabs and spaces are removed from every line, so indented paragraphs do not become code blocks.
 
 Each chapter is written to `chapters/chapter-NN.md` with `status: draft` and its word count, and the registries are rebuilt. `import` then prints up to 25 capitalised names that appear three or more times, as candidates for `story add character` or `story add location`.
 
@@ -525,7 +525,7 @@ Checks that references between entities point at entities that exist and that tw
 - a character's `died-in` chapter
 - arc characters, faction members and locations, and artifact owners and locations
 - chapter and scene POV, `characters`, `mentions` (a character or an artifact), locations, and `arcs-advanced`, and each scene's chapter
-- the chapter, character, and arc ids in questions, promises, and clues, and the `used-in` chapters of research notes. A promise or clue `payoff`, and its `planted` while `status: planned`, may name a scheduled `chapter-NN` that has no chapter file yet, unless its number is 0 or belongs to an existing chapter under another id (`chapter-1` beside `chapter-01`)
+- the chapter, character, and arc ids in questions, promises, and clues, and the `used-in` chapters of research notes. A promise or clue `payoff`, its `planted` while `status: planned`, and an `open` question's `introduced` may name a scheduled `chapter-NN` that has no chapter file yet, unless its number is 0 or belongs to an existing chapter under another id (`chapter-1` beside `chapter-01`)
 - chapter ids and markdown links in the bodies of `plot/timeline.md` and arc files
 - the `follows` and `precedes` links in `story.md`, which must point at story projects that link back
 
@@ -799,7 +799,7 @@ Timeline built: 0 errors, 0 warnings, 0 dismissed
 story prose [path]
 ```
 
-An advisory prose lint. For each chapter it reports sentence count, average and longest sentence length and their spread, filter words and `-ly` adverbs per 1,000 narration words, dialogue tags and said-bookisms, words echoed within 30 words, and watch words and avoided spellings from `style-sheet.md`. Across the manuscript it lists repeated four-word phrases and characters with similar first names.
+An advisory prose lint. For each chapter it reports sentence count, average and longest sentence length and their spread, filter words and `-ly` adverbs per 1,000 narration words, dialogue tags and said-bookisms, words echoed within 30 words, and watch words and avoided spellings from `style-sheet.md`. Across the manuscript it lists repeated four-word phrases and characters with similar first names. Like `wordcount`, it ignores code between closed `` ``` `` fences.
 
 Style findings are warnings and never fail the run. `prose` exits 1 only when a file's frontmatter fails to parse.
 
@@ -929,8 +929,8 @@ Checks:
 - Continuity: ok (0 errors, 0 warnings)
 
 Next Actions:
-- [P3] Project is mechanically healthy: No deterministic maintenance issues are blocking the next writing pass.
 - [P2] Draft chapter 2: Use story add chapter "Chapter 2" --number 2, then outline scenes to advance Sera's Reclamation.
+- [P3] Project is mechanically healthy: No deterministic maintenance issues are blocking the next writing pass.
 ```
 
 `report` always exits 0 on a readable project.
@@ -950,7 +950,7 @@ Runs `validate`, `links`, and `continuity`, then lists prioritised actions:
 | `P2` | Track open questions, review pending promises and open clues, draft the next chapter, create a first character |
 | `P3` | Nothing is blocking the next writing pass |
 
-Actions are sorted by priority, P0 first; actions with the same priority keep the order the checks produce them. The one exception is the P3 "Project is mechanically healthy" line, which comes first when it appears.
+Actions are sorted by priority, P0 first; actions with the same priority keep the order the checks produce them. The draft-next-chapter action is left out when `story.md` has `status: revising` or `status: complete`, or when every arc is `resolved`.
 
 Suggested commands use the project path as you typed it, or `.` when you gave none: `story next drafts/salt-road` suggests `Run story continuity drafts/salt-road and ...` and `story passes drafts/salt-road --init`.
 
@@ -983,7 +983,6 @@ Checks: validate ok (0 errors, 1 warnings), links ok (0 errors, 0 warnings), con
 Actions:
 - [P1] Revision pass: character: Wants, arcs, motivation, and who knows what when. Run story voices, story knowledge <id> --at <chapter>, story diagram relationships. Mark it with story passes --done character.
 - [P2] Review open clues: 2 clues are still planned or planted.
-- [P2] Draft chapter 2: Use story add chapter "Chapter 2" --number 2, then outline scenes to advance The Long Crossing.
 ```
 
 ### doctor
@@ -1135,7 +1134,7 @@ kael-voss: 9 lines, 76 words
   Signature words: jumpy, good, looking, sera, soldiers
 Voice check complete: 0 errors, 2 warnings, 0 dismissed
 warning: kael-voss says "soldiers", which is in their voice-avoid list (chapter-01)
-warning: kael-voss never says "reckon" from their voice-words list in 9 lines of dialogue
+warning: kael-voss does not say "reckon" from their voice-words list in 9 attributed lines of dialogue
 ```
 
 With no attributed dialogue it prints `- None: tag dialogue with a character's name and a speech verb ("...," Mara said)`.
@@ -1425,6 +1424,8 @@ Options by kind:
 
 On `add chapter` and `add scene`, `--pov` names the POV character, and `add` also puts that id first in `characters` when it is not already listed.
 
+`add scene` also adds its `location` to the chapter's `locations` and each of its `characters` to the chapter's `characters`, unless the chapter already lists that character in `mentions`.
+
 Location and system `--type`, location `--status`, and system `--prevalence` are free text. `--date` must be a real `YYYY-MM-DD` day; `--time` is `HH:MM` or one of `dawn`, `morning`, `midday`, `afternoon`, `evening`, `night`; `--travel-hours` is a number zero or above; `--number` and `--scene` are positive integers; `--order` is a non-negative integer. Repeating `--location` on `add artifact` or `add scene`, or `--arc` on `add character`, writes a list that `story validate` rejects, because those flags are repeatable elsewhere. Other single-value flags keep the last value given.
 
 `--source` keeps each value whole, because citations contain commas. Repeat the flag for more sources. Other list options split on commas.
@@ -1683,7 +1684,7 @@ Like `export`, `build` refuses to run while a project file fails to parse, and r
 story synopsis [path] [--pages 1|3] [--out <file>]
 ```
 
-Builds a mechanical synopsis from the project: a premise (the first sentence of the `## Synopsis` section in `story.md`), then for each arc up to two sentences from `## Setup`, up to two from `## Rising Action`, and a line starting `Because` that joins the first sentence of `## Climax` and of `## Resolution`, lowercasing the climax's first word when it is a whole common opener such as `She` or `The` but not a name (`A.J.` and `He-Man` keep their capitals). Titles such as `Dr.`, `e.g.`, initials, and dotted initialisms such as `U.S.` never end a sentence; `No.`, `vs.`, `etc.`, `a.m.`, and `p.m.` end one unless the next word starts in lower case or with a digit. If the text exceeds the page budget, it drops rising action, then resolution, then truncates with an ellipsis.
+Builds a mechanical synopsis from the project: a `Logline:` line (the first sentence of the `## Synopsis` section in `story.md`, or `No logline recorded.`), then for each arc up to two sentences from `## Setup`, up to two from `## Rising Action`, and a line starting `Because` that joins the first sentence of `## Climax` and of `## Resolution`, lowercasing the climax's first word when it is a whole common opener such as `She` or `The` but not a name (`A.J.` and `He-Man` keep their capitals). Titles such as `Dr.`, `e.g.`, initials, and dotted initialisms such as `U.S.` never end a sentence; `No.`, `vs.`, `etc.`, `a.m.`, and `p.m.` end one unless the next word starts in lower case or with a digit. `--pages 3` takes up to four Setup sentences, eight Rising Action sentences, and two each from Climax and Resolution. If the text exceeds the page budget, it drops rising action, then resolution, then truncates with an ellipsis.
 
 | Option | Effect | Default |
 |---|---|---|
@@ -1697,7 +1698,7 @@ story synopsis
 ```text
 # Synopsis: The Last Ember
 
-Premise: In a world where magic flows from living embers — fragments of a dying god's heart — Sera Voss returns to the Ashen Citadel to reclaim her birthright from Lord Maren, the usurper who murdered her parents and seized control of the Northern Reach.
+Logline: In a world where magic flows from living embers — fragments of a dying god's heart — Sera Voss returns to the Ashen Citadel to reclaim her birthright from Lord Maren, the usurper who murdered her parents and seized control of the Northern Reach.
 
 ## Sera's Reclamation
 
