@@ -257,7 +257,7 @@ error: continuity/questions/who-was-the-drowned-man.md references missing chapte
 error: continuity/promises/the-lamp-log.md references missing chapter chapter-01
 ```
 
-`story validate` still passes, because it checks structure rather than references. The character error clears in step 3. Chapter ids in ledgers, arc bodies, and `plot/timeline.md` stay errors until those chapters exist, so either scaffold them with `story add chapter` or expect these errors until you draft that far. If you would rather keep `story links` clean throughout, build the cast before the arc.
+`story validate` still passes, because it checks structure rather than references. The character error clears in step 3. Chapter ids in ledgers, arc bodies, and `plot/timeline.md` stay errors until those chapters exist, so either scaffold them with `story add chapter` or expect these errors until you draft that far. The exception is a promise or clue that is scheduled rather than on the page: its `payoff`, and its `planted` chapter while `status: planned` (`story add promise "The Lamp Log" --planted chapter-01 --status planned`), may name a chapter that has no file yet. If you would rather keep `story links` clean throughout, build the cast before the arc.
 
 ### 3. Build the cast
 
@@ -445,16 +445,14 @@ warning: 6 scene units in a row with no sequel (chapter-01-scene-01 to chapter-0
 
 Nell has been getting what she wants too easily since chapter 2, and she never stops to react. The warnings are prompts to reread, not rules; [Scene-level craft](#scene-level-craft) is where they get fixed.
 
-`story next .` summarises continuity warnings as a single action. Run `story continuity .` to see them in full, because that is where most first-draft slips show up. Here is what it reported on the example chapter before the cast lists were filled in:
+`story next .` summarises continuity warnings as a single action. Run `story continuity .` to see them in full, because that is where most first-draft slips show up. Here is what it reported on the example chapter straight after the scaffold commands above:
 
 ```text
-Continuity is consistent: 0 errors, 3 warnings, 0 dismissed
-warning: chapters/chapter-01.md POV character nell-carrow is not listed in characters
-warning: scenes/chapter-01-scene-01.md POV character nell-carrow is not listed in characters
+Continuity is consistent: 0 errors, 1 warnings, 0 dismissed
 warning: scenes/chapter-01-scene-01.md is set in gannet-point-light but chapters/chapter-01.md does not list that location
 ```
 
-Adding `nell-carrow` to both `characters` lists and `gannet-point-light` to the chapter's `locations` clears all three. `story continuity` also warns when `current-chapter` in `continuity/state.md` falls behind the latest drafted chapter, but it cannot tell whether the state entries themselves are complete, so bringing the state forward stays part of step 5.
+`--pov` already put `nell-carrow` in both `characters` lists, so only the location is missing. Adding `gannet-point-light` to the chapter's `locations` clears it. `story continuity` also warns when `current-chapter` in `continuity/state.md` falls behind the latest drafted chapter, but it cannot tell whether the state entries themselves are complete, so bringing the state forward stays part of step 5.
 
 `--form novel` already set `target-words: 80000` in `story.md`; add a `deadline` and `story progress` measures pace against both. `--log` also appends the session to `progress.md`:
 

@@ -94,9 +94,10 @@ detective, the witness); a clue nobody can notice cannot be played fair.
 
 - `planted` must precede `payoff`. `story continuity` errors when payoff
   comes before plant. The Chekhov warning (planted three or more chapters
-  ago with no payoff yet) fires only when `status` is `planted`. `--planted`
-  alone does not change status, so set `status: planted` when the clue is
-  on the page. A completed story that still has a `planned` or `planted`
+  ago with no payoff yet) fires only when `status` is `planted`. A clue kept
+  at `status: planned` with a `planted` chapter records where it will go;
+  once that chapter has prose, `story continuity` warns until the status is
+  `planted`. A completed story that still has a `planned` or `planted`
   clue is an error.
 - A clue with `significance-delayed: true` is fair play *only if* the clue
   itself was visible; delayed significance is the game, hidden clues are

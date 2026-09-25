@@ -22,14 +22,14 @@ All output shown was captured by running the commands against copies of the exam
 | Command | Reads | Writes | Default output |
 |---------|-------|--------|----------------|
 | `story import <source>` | A manuscript file or a folder of chapter files | A new story project | `./<title-in-kebab-case>/` |
-| `story export [path]` | `story.md`, `chapters/`, `matter/` | One markdown manuscript | `manuscript.md` in the project root |
+| `story export [path]` | `story.md`, `chapters/`, `matter/` | One markdown manuscript | `dist/manuscript.md` |
 | `story build [path]` | `story.md`, `chapters/`, `matter/`, the cover image, and (for narration) `pronunciation` fields in the bible | One book file, script, or sheet | `dist/<story-id>.<ext>` |
 | `story synopsis [path]` | `story.md` and `plot/arcs/` | A synopsis scaffold | Printed to stdout |
 
 ```mermaid
 flowchart LR
   draft["Existing draft<br/>(.md, .markdown, .txt)"] -->|story import| project["Story project<br/>story.md, chapters/, matter/, plot/arcs/"]
-  project -->|story export| manuscript["manuscript.md"]
+  project -->|story export| manuscript["dist/manuscript.md"]
   project -->|story build| dist["dist/<br/>.md, .epub, .docx, .shunn.md,<br/>.html, .print.html, .narration.md, .metadata.md"]
   project -->|story synopsis| synopsis["Synopsis<br/>(stdout or --out)"]
 ```
@@ -123,35 +123,40 @@ Import fills in `word-count` and rebuilds the chapter registry, so you do not ne
 
 ### How chapters are split
 
-A chapter heading is a markdown heading of any level (`#` to `######`) whose text starts with the word `Chapter`, in any letter case (`CHAPTER 9 - Loud` counts too):
+A chapter heading is a markdown heading of any level (`#` to `######`) whose text starts with the word `Chapter`, in any letter case (`CHAPTER 9 - Loud` counts too), or is a `Prologue`, `Epilogue`, `Interlude`, or `Afterword` heading:
 
 | Heading in the source | Chapter title |
 |-----------------------|---------------|
 | `## Chapter 1: The Well` | `The Well` |
 | `## Chapter 2 — The Dunes` | `The Dunes` |
 | `### Chapter IV: Storm` | `Storm` |
+| `## Chapter One: Arrival` | `Arrival` |
 | `# Chapter 7. The Bridge` | `The Bridge` |
 | `## Chapter 5` | `Chapter 5` |
 | `# Chapter I Am Legend` | `I Am Legend` |
+| `# Prologue` | `Prologue` |
+| `## Epilogue` | `Epilogue` |
 | `# Chapterhouse` | Not a chapter heading |
 | `# Chapters` | Not a chapter heading |
 
 The rules behind the table:
 
-- The number after `Chapter` is optional and can be arabic (`12`) or roman (`IV`). A `:`, `.`, `-`, en dash, or em dash may separate it from the title.
+- The number after `Chapter` is optional and can be arabic (`12`), roman (`IV`), or spelled out up to ninety-nine (`One`, `Twenty-One`). A `:`, `.`, `-`, en dash, or em dash may separate it from the title.
+- A `Prologue`, `Epilogue`, `Interlude`, or `Afterword` heading keeps its whole text as the title.
 - Because the number is optional, a heading such as `## Chapter Notes` also starts a chapter (titled `Notes`).
 - The source number is discarded. Chapters are renumbered 1, 2, 3, and so on in the order they appear.
 - When a heading has no title after the number, the whole heading text becomes the title.
 
-Import processes each source document in four steps:
+Import processes each source document in five steps:
 
 1. Leading YAML frontmatter is removed, including frontmatter written by tools such as Pandoc or Obsidian that the CLI's own parser would reject. A leading `---` scene break is kept.
 2. If the document has chapter headings, each heading starts a chapter and everything up to the next chapter heading is its prose. Text before the first chapter heading becomes a chapter titled `Opening`, with a leading `# Title` line removed.
-3. If the document has no chapter headings, the whole document becomes one chapter. Its title is the first `# ` heading in the document, and any text before that heading is kept in the prose. With no `# ` heading, the title comes from the file name: `02-smoke.txt` becomes `02 Smoke`.
-4. Chapters whose prose is empty are dropped.
+3. If the document has no markdown chapter headings, as in a manuscript saved as plain text, it is split on chapter lines instead. A chapter line stands alone between blank lines, is at most 80 characters, and is either `Chapter` with a number (`Chapter 3`, `CHAPTER ONE: Arrival`) or one of `Prologue`, `Epilogue`, `Interlude`, and `Afterword`. A sentence that merely starts with `Chapter` does not split. A single short line before the first chapter line is taken as the book title and dropped; longer text there becomes an `Opening` chapter.
+4. If the document has neither, the whole document becomes one chapter. Its title is the first `# ` heading in the document, and any text before that heading is kept in the prose. With no `# ` heading, the title comes from the file name: `02-smoke.txt` becomes `02 Smoke`.
+5. Chapters whose prose is empty are dropped.
 
 > [!NOTE]
-> Only `Chapter` headings split a document. A `# Prologue` or `## Part Two` heading inside a single manuscript file stays in the prose of the chapter around it. If your draft uses other markers, rename them to `Chapter` headings before importing, or split the draft into one file per chapter and import the folder.
+> Only `Chapter`, `Prologue`, `Epilogue`, `Interlude`, and `Afterword` headings split a document. A `## Part Two` heading inside a single manuscript file stays in the prose of the chapter around it. If your draft uses other markers, rename them to `Chapter` headings before importing, or split the draft into one file per chapter and import the folder.
 
 ### Importing a folder of chapter files
 
@@ -199,7 +204,7 @@ The [`story-maintenance`](../skills/story-maintenance/SKILL.md) skill follows an
 
 ### Import options
 
-`--title` is required. Import takes the same scaffold options as `story init`, except the series options and `--form`. Import ignores `--form` without an error; set `form` (and `target-words`, if you want one) in `story.md` after importing.
+`--title` is required. Import takes the same scaffold options as `story init`, except the series options and `--form`. Passing `--form` or a series option to import is an error (`--form does not apply to story import`); set `form` (and `target-words`, if you want one) in `story.md` after importing.
 
 | Option | Effect |
 |--------|--------|
@@ -271,6 +276,8 @@ Only chapter prose goes in. Scene files, outlines, notes, and the bible do not. 
 - Otherwise, if it has a `## Outline` section, the prose is everything after the first `---` line following the outline. With no `---`, it is everything after `## Outline`.
 - Otherwise, the prose is the whole body with a leading `# ` heading removed.
 
+HTML comments (`<!-- ... -->`) in the prose are left out of the word count and of every build format, so they are a safe place for notes to yourself.
+
 `story wordcount` uses the same rule, so the manuscript contains exactly the words that were counted. Keep notes and TODOs above `## Chapter Text`, or they end up in the book. The [reconcile loop](../skills/discovery-drafting/references/reconcile-loop.md) puts its post-hoc chapter notes there for this reason.
 
 Each chapter gets the heading `Chapter N: Title`, built from its `number` and `title` frontmatter. Two chapters with the same `number` stop every export and build:
@@ -281,8 +288,14 @@ Duplicate chapter number 3: refusing to build with colliding EPUB ids
 
 A project with no chapters cannot be exported or built (`No chapters found to export`).
 
+A chapter `number` that is not a positive integer also stops them:
+
+```text
+chapters/chapter-03.md: chapter number must be a positive integer to build
+```
+
 > [!IMPORTANT]
-> Export and build do not validate the project first, and a chapter file whose frontmatter cannot be parsed is silently left out. Run `story validate .` before you build a copy to send anyone.
+> Export, build, and synopsis refuse to run while an entity file, registry, or `story.md` fails to parse (`Cannot export: fix this file first`, `Cannot build: ...`, `Cannot build a synopsis: ...`), but they do not run the other checks. Run `story validate .` before you build a copy to send anyone.
 
 ## Front and back matter
 
@@ -441,15 +454,15 @@ The prose is copied as written, markdown included. Every heading is level 1, so 
 | Option | Effect |
 |--------|--------|
 | `[path]` or `--path <path>` | Project root. Defaults to the current directory. |
-| `--out <file>` | Output file. Defaults to `manuscript.md` in the project root. See [Output paths](#output-paths-and-what-is-disposable). |
+| `--out <file>` | Output file. Defaults to `dist/manuscript.md`. See [Output paths](#output-paths-and-what-is-disposable). |
 
-Without `--out`, the manuscript lands in the project root, and `story validate` then warns about it:
+With `--out manuscript.md`, the manuscript lands in the project root, and `story validate` then warns about it:
 
 ```text
 warning: manuscript.md is not part of the story project model and is ignored
 ```
 
-The warning is harmless, and writing to `dist/` avoids it. `story build` with the default `markdown` format produces the same file in `dist/`, with the comment `Generated by story build.` instead.
+The warning is harmless, and the default `dist/` path avoids it. `story build` with the default `markdown` format produces the same file in `dist/`, with the comment `Generated by story build.` instead.
 
 ## Build a book
 
@@ -497,8 +510,8 @@ The confirmation always counts chapters, even for the metadata sheet.
 |--------|--------|
 | `[path]` or `--path <path>` | Project root. Defaults to the current directory. |
 | `--format <name>` | `markdown` (or `md`), `epub`, `docx`, `shunn`, `html`, `print`, `narration`, or `metadata`. Case-insensitive. Defaults to `markdown`. |
-| `--shunn` | With `--format docx`, apply Shunn formatting. Ignored with every other format. |
-| `--trim <size>` | With `--format print`, the trim size: `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5`. Defaults to `5.5x8.5`. Ignored with every other format. |
+| `--shunn` | With `--format docx`, apply Shunn formatting. An error with every other format. |
+| `--trim <size>` | With `--format print`, the trim size: `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5`. Defaults to `5.5x8.5`. An error with every other format. |
 | `--out <file>` | Output file instead of the default in `dist/`. |
 
 Any other format is an error:
@@ -832,6 +845,9 @@ The markdown export copies prose as written, and the narration script nearly doe
 | Blank line | Paragraph break. Line breaks inside a paragraph become spaces. |
 | `**bold**` or `__bold__` | Bold (the `.shunn.md` build keeps the markup) |
 | `*italic*` or `_italic_` | Italic (the `.shunn.md` build keeps the markup). Underscores inside a word, as in `snake_case`, stay literal. |
+| `***both***`, or emphasis nested inside emphasis (`*a **b** c*`) | Bold and italic together, following the CommonMark emphasis rules |
+| A backslash before a markdown character, as in `\*literal\*` | The character itself, without the backslash |
+| `<!-- comment -->` | Left out, as it is from word counts and every other build format |
 | Three or more `-`, `*`, or `_` on a line of their own, optionally spaced (`---`, `***`, `* * *`) | Scene break, written as `* * *` |
 | `#` heading markers | Removed; the heading text becomes an ordinary paragraph |
 | `>` blockquote markers | Removed, so a quoted epigraph or letter reads as plain text |
@@ -840,7 +856,7 @@ Links, images, lists, and other markdown are not converted and appear as their l
 
 ### Reproducible builds
 
-Builds are deterministic: the same sources produce byte-identical files. The HTML, print, narration, and metadata builds contain no dates or timestamps, so a diff between two builds shows only what changed in the book. EPUB and DOCX packages use fixed ZIP timestamps. The EPUB `dcterms:modified` date comes from the `SOURCE_DATE_EPOCH` environment variable (seconds since the Unix epoch) when it is set, and is `2000-01-01T00:00:00Z` otherwise:
+Builds are deterministic: the same sources produce byte-identical files. The HTML, print, narration, and metadata builds contain no dates or timestamps, so a diff between two builds shows only what changed in the book. EPUB and DOCX packages date every ZIP entry 1980-01-01, and drop control characters that XML does not allow. The EPUB `dcterms:modified` date comes from the `SOURCE_DATE_EPOCH` environment variable (whole seconds since the Unix epoch) when it is set, and is `2000-01-01T00:00:00Z` otherwise, including when the value is not a whole number of seconds or falls after the year 9999:
 
 ```shell
 SOURCE_DATE_EPOCH=1700000000 story build . --format epub
@@ -865,24 +881,24 @@ Premise: In a world where magic flows from living embers — fragments of a dyin
 
 ## Sera's Reclamation
 
-Sera and Kael have survived twelve years in the Whispering Vale.  The embers are fading — even in the Vale, the wild motes grow dimmer each season.
+Sera and Kael have survived twelve years in the Whispering Vale. The embers are fading — even in the Vale, the wild motes grow dimmer each season.
 
-Sera gathers information, allies, and ember power.  She discovers the ember well beneath the citadel isn't just sealed — it's being drained.
+Sera gathers information, allies, and ember power. She discovers the ember well beneath the citadel isn't just sealed — it's being drained.
 
 Because Sera infiltrates the citadel through the Whisper Gate. Sera chooses to unseal the ember well and release its power back into the land rather than claim it.
 ```
 
 The scaffold is built from:
 
-1. **Premise**: the first sentence of the `## Synopsis` section in `story.md`, or `No premise recorded.` when that section is empty.
+1. **Premise**: the first sentence of the `## Synopsis` section in `story.md`, or `No premise recorded.` when that section is empty or holds only the starter text that `init` or `import` wrote.
 2. **One section per arc** in `plot/arcs/`, in file-name order, headed with the arc's `name`:
    - the first two sentences of its `## Setup` section,
    - the first two sentences of its `## Rising Action` section,
    - a line starting `Because`, followed by the first sentence of `## Climax` and the first sentence of `## Resolution`.
 
-Sections an arc does not have are skipped; an arc with none of them gets only its heading. An arc without a `name` is headed with its file name in title case.
+Sections an arc does not have are skipped; an arc with none of them gets only its heading. The starter sentences that `story add arc` writes (`Initial state and inciting pressure.`, `First escalation.`, and so on) are skipped too, so an unfilled arc adds nothing but its heading. An arc without a `name` is headed with its file name in title case.
 
-Sentences end at `.`, `?`, or `!` followed by a space. A period after `Dr`, `Mr`, `Mrs`, `Ms`, `St`, or a single capital letter (an initial) does not end a sentence, and a final sentence with no closing punctuation gets a period. When two sentences from one section are joined, the second keeps its leading space, which is why the sample above shows two spaces between them.
+Sentences end at `.`, `?`, or `!` followed by a space. A period after `Dr`, `Mr`, `Mrs`, `Ms`, `St`, or a single capital letter (an initial) does not end a sentence, and a final sentence with no closing punctuation gets a period. In a list, each item counts as one sentence, without its bullet or number, and gets a period if it has no closing punctuation.
 
 | Option | Effect |
 |--------|--------|
@@ -894,7 +910,7 @@ When the scaffold runs over budget, it is cut back in steps until it fits:
 
 1. Every arc's rising action is dropped.
 2. Every arc's resolution is dropped.
-3. The text is truncated at the word limit and ends with `…`.
+3. The text is truncated at the word limit and ends with `…`. Headings and paragraph breaks before the cut are kept, and a heading left with nothing under it is dropped.
 
 A 3-page synopsis therefore keeps detail that a 1-page synopsis drops.
 
@@ -910,7 +926,7 @@ The result is a draft, not submission copy. Literary agents expect present tense
 
 ## Output paths and what is disposable
 
-`--out` works the same way for `export`, `build`, and `synopsis`:
+`--out` works the same way for `export`, `build`, `synopsis`, and `diagram`:
 
 - A relative `--out` path is resolved against the **project root**, not your current directory. `story export ~/stories/the-salt-road --out dist/book.md` writes `~/stories/the-salt-road/dist/book.md`.
 - A relative path must stay inside the project. `--out ../outside.md` is refused:
@@ -921,7 +937,13 @@ The result is a draft, not submission copy. Literary agents expect present tense
 
 - An absolute path can point anywhere, such as `--out ~/Desktop/the-salt-road.epub`.
 - Missing parent folders are created. For a relative path, writing through a symlinked folder is refused. Writing onto a symlinked file is always refused.
-- An existing output file is overwritten without asking.
+- An existing output file is overwritten without asking, but project source never is. `--out` naming `story.md`, `style-sheet.md`, `progress.md`, or a path under `characters/`, `chapters/`, `scenes/`, `worldbuilding/`, `plot/`, `continuity/`, `glossary/`, `matter/`, or `research/` is refused:
+
+  ```text
+  Refusing to write generated output to chapters/chapter-01.md: it is project source. Use a path such as dist/ instead
+  ```
+
+- `--out` must name a file. An existing directory is refused with `--out dist is a directory: give a file path`.
 
 Treat everything in `dist/` as disposable. It is regenerated from the markdown on every build, so never edit a built file to fix the book: change the chapter or matter file and build again. `story validate` and `story links` do not read `dist/`, and `story rename` and `story remove` never rewrite references inside it. The CLI does not create a `.gitignore`, so add `dist/` to your story repository's `.gitignore` unless you want to commit a particular build.
 
@@ -932,7 +954,7 @@ Treat everything in `dist/` as disposable. It is regenerated from the markdown o
 | Message | Cause | Fix |
 |---------|-------|-----|
 | `A story title is required` | `story import` without `--title` | Add `--title "Your Title"`. |
-| `Cannot derive a story id from title ...` | The title has no ASCII letters or digits | Use a title that contains some. |
+| `Cannot derive a story id from title ...` | The title has no ASCII letters or digits | Pass `--dir` with an ASCII folder name; the story id comes from the folder name. |
 | `Unsupported tense "<tense>": ...` | `--tense` is not `past`, `present`, `future`, or `mixed` | Use one of those values. |
 | `Refusing to import symlinked source: <path>` | The source, or a document inside a source folder, is a symlink | Import the real file or folder. |
 | `Import source not found: <path>` | The source path is wrong | Check the path; it is relative to the current directory. |
@@ -949,6 +971,10 @@ Treat everything in `dist/` as disposable. It is regenerated from the markdown o
 | `Unsupported synopsis length: <n>. Supported pages: 1, 3` | An unsupported `--pages` value | Use `1` or `3`. |
 | `Refusing to access path outside project root: <path>` | A relative `--out` that leaves the project | Use a path inside the project, or an absolute path. |
 | `Refusing to write through symlink: <path>` | The `--out` file is a symlink | Delete the symlink or choose another file. |
+| `Refusing to write generated output to <path>: it is project source. ...` | `--out` names a project file or a path inside an entity folder | Write to `dist/` or another folder outside the project source. |
+| `--out <path> is a directory: give a file path` | `--out` names an existing directory | Add a file name, such as `dist/book.epub`. |
+| `Cannot export: fix this file first ...`, `Cannot build: ...`, or `Cannot build a synopsis: ...` | An entity file, registry, or `story.md` fails to parse | Fix the listed files; `story validate` reports them too. |
+| `<file>: chapter number must be a positive integer to build` | A chapter's `number` is set but is not a positive integer, such as `three` or `0` | Set `number` to the chapter's number. |
 
 ## See also
 

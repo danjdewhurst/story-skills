@@ -140,7 +140,7 @@ story report /tmp
 /tmp is not a story project: missing story.md
 ```
 
-`validate` is the exception: it lists every missing required path instead, which makes it useful for diagnosing a half-built project.
+Every command, including `validate`, `next`, and `doctor`, reports that same line. Once `story.md` is in place, `validate` lists every other missing required file, which makes it useful for diagnosing a half-built project.
 
 ### Option syntax
 
@@ -150,7 +150,7 @@ story report /tmp
 - Repeatable options collect every value, and list options also split on commas, so `--character ilse-marrow --character tobin-reyes` and `--characters ilse-marrow,tobin-reyes` produce the same list. `--source`, `--follows`, and `--precedes` keep each value whole.
 - Do not mix a singular flag with its plural alias in one `add` command: when both are given, the plural form wins and the singular values are dropped (except `add character --arc`, which is single-valued and has no plural alias). `init` and `import` are the exception: they combine `--theme` and `--themes`.
 - For options that are not repeatable, the last value wins: `--out a.md --out b.md` writes `b.md`.
-- Unknown options and missing values are errors:
+- Unknown options, missing values, extra positional arguments, and options the command does not read are errors. Each command accepts only its own options plus `--path`:
 
 ```text
 $ story validate --verbose
@@ -158,6 +158,12 @@ Unknown option --verbose
 
 $ story export --out
 Missing value for --out: expected a value
+
+$ story validate . extra
+Unexpected argument for story validate [path]: extra
+
+$ story timeline --trim 6x9
+--trim does not apply to story timeline
 ```
 
 ### Output streams and exit codes
@@ -175,7 +181,7 @@ The examples on this page show stdout and stderr together, as a terminal does.
 | Exit code | Meaning |
 |---|---|
 | `0` | The command succeeded. For checks, there were no errors. Warnings and dismissed findings do not change the exit code. |
-| `1` | A check found at least one error, the command failed (unknown command or option, missing value, invalid argument, missing project, refused write), or `knowledge` was called without its required arguments. |
+| `1` | A check found at least one error, the command failed (unknown command or option, missing value, unexpected argument or option, missing project, refused write), or `knowledge` was called without its required arguments. |
 
 `report`, `next`, and `doctor` summarise check results but always exit 0 on a readable project. `prose`, `pacing`, `clues`, and `voices` report every craft finding as a warning, so they exit 1 only when a file fails to parse. `passes` exits 1 only when it refuses a change. `names` exits 1 when a candidate clashes with an existing name. Use `validate`, `links`, and `continuity` when you need a failing exit code, for example in CI (see [Automation and CI](automation.md)).
 
@@ -193,6 +199,28 @@ Refusing to access path outside project root: ~/stories/outside.md
 
 An absolute `--out` path is written where you say. The CLI also refuses to write through symlinks or into symlinked project directories. Scans skip `dist/` and dot-directories, so build output never feeds back into checks.
 
+`--out` on `export`, `build`, `synopsis`, and `diagram` never overwrites project source: `story.md`, `style-sheet.md`, `progress.md`, or anything under `characters/`, `chapters/`, `scenes/`, `worldbuilding/`, `plot/`, `continuity/`, `glossary/`, `matter/`, or `research/`. It must also name a file, not an existing directory:
+
+```text
+$ story export --out chapters/chapter-01.md
+Refusing to write generated output to chapters/chapter-01.md: it is project source. Use a path such as dist/ instead
+
+$ story build --out dist
+--out dist is a directory: give a file path
+```
+
+### Files that fail to parse
+
+Commands that rewrite registries or assemble chapters stop when an entity file, a registry, or `story.md` fails to parse, because carrying on would silently drop that file. `reindex`, `wordcount`, `export`, `build`, `synopsis`, `add`, `migrate`, `rename`, and `remove` name the files and change nothing:
+
+```text
+$ story reindex
+Cannot reindex: fix this file first (story validate reports it):
+- characters/old-bram.md: Duplicate frontmatter key: name
+```
+
+The other commands name themselves: `Cannot count words`, `Cannot export`, `Cannot build`, `Cannot build a synopsis`, `Cannot add`, `Cannot migrate`, `Cannot rename`, and `Cannot remove`. With several files the line reads `fix these files first (story validate reports them)`. `rename` and `remove` also read every other markdown file before writing, and stop with `<file>: <error>; nothing was changed` when one of those fails to parse. A `style-sheet.md` or `progress.md` that fails to parse does not block them; `story validate` reports it.
+
 ## Setup commands
 
 ### init
@@ -201,7 +229,7 @@ An absolute `--out` path is written where you say. The CLI also refuses to write
 story init <title> [options]
 ```
 
-Scaffolds a new story project: `story.md`, `style-sheet.md`, `plot/timeline.md`, `continuity/state.md`, every required directory, and empty registries. The story id is the kebab-case form of the title (`The Salt Road` becomes `the-salt-road`), and the project goes in a directory of that name unless you pass `--dir`. The title must contain at least one ASCII letter or digit.
+Scaffolds a new story project: `story.md`, `style-sheet.md`, `plot/timeline.md`, `continuity/state.md`, every entity folder, and empty registries. The story id is the kebab-case form of the title (`The Salt Road` becomes `the-salt-road`), and the project goes in a directory of that name unless you pass `--dir`. A title with no ASCII letters or digits, such as `Война и мир`, has no kebab-case form, so it needs `--dir` with an ASCII folder name; the story id then comes from the folder name (`story init "Война и мир" --dir voina` gives the id `voina`).
 
 | Option | Effect | Default |
 |---|---|---|
@@ -294,14 +322,15 @@ story import <source> --title <name> [options]
 
 Creates a new project from an existing manuscript. `<source>` is a single `.md`, `.markdown`, or `.txt` file, or a directory of them. `--title` is required.
 
-- A file with `Chapter` headings (any heading level, with arabic or roman numerals, or none) is split at each heading. Text before the first chapter heading becomes a chapter titled `Opening`.
-- A file without chapter headings becomes one chapter, titled by its first `#` heading or by its file name.
+- A file with `Chapter` headings (any heading level, with arabic, roman, or spelled-out numerals up to ninety-nine, or none) is split at each heading, and `Prologue`, `Epilogue`, `Interlude`, and `Afterword` headings become chapters of their own. Text before the first chapter heading becomes a chapter titled `Opening`.
+- A file without markdown chapter headings is split on plain-text chapter lines standing alone between blank lines, such as `Chapter 3`, `CHAPTER ONE: Arrival`, `Prologue`, or `Epilogue`. A single short line before the first one is treated as the book title.
+- A file with neither becomes one chapter, titled by its first `#` heading or by its file name.
 - A directory is imported in natural file-name order (`chapter-2` before `chapter-10`). Files with no number in their name come after the numbered ones, except prologue, preface, foreword, introduction, and prelude files, which come first. Symlinks are never followed; a symlink to a document is refused.
 - Leading YAML frontmatter in source files is dropped.
 
 Each chapter is written to `chapters/chapter-NN.md` with `status: draft` and its word count, and the registries are rebuilt. `import` then prints up to 25 capitalised names that appear three or more times, as candidates for `story add character` or `story add location`.
 
-`import` accepts `--dir`, `--genre`, `--sub-genre`, `--setting-era`, `--theme`, `--themes`, `--pov`, `--tense`, `--synopsis`, and `--force`, with the same meaning as for `init`. It ignores the series options (`--series`, `--book-number`, `--follows`, `--precedes`) and `--form` without an error; add `form` to `story.md` by hand after importing. Without `--synopsis`, the synopsis placeholder names the source file.
+`import` accepts `--dir`, `--genre`, `--sub-genre`, `--setting-era`, `--theme`, `--themes`, `--pov`, `--tense`, `--synopsis`, and `--force`, with the same meaning as for `init`. The series options (`--series`, `--book-number`, `--follows`, `--precedes`) and `--form` are errors (`--form does not apply to story import`); add `form` to `story.md` by hand after importing. Without `--synopsis`, the synopsis placeholder names the source file.
 
 > [!WARNING]
 > With `--force` on an existing directory, `import` deletes every `chapter-NN.md` in `chapters/` before writing the imported chapters, and the frontmatter you filled in on those chapters is lost. Commit or back up the project first.
@@ -327,17 +356,16 @@ See [Import, export, and builds](manuscripts.md) for the full import workflow.
 story migrate [path]
 ```
 
-Upgrades a project to the current schema (version 2). It creates any missing v2 directories and starter files (`scenes/`, `continuity/state.md` and the question, promise, and clue ledgers, `glossary/`, and the `worldbuilding/factions/` and `worldbuilding/artifacts/` folders), sets `schema-version: 2` in `story.md`, and runs `reindex`. Existing files are never overwritten. On a project that is already current it still runs `reindex`, so a stale registry is rebuilt and counted as a change.
+Upgrades a project to the current schema (version 2). It creates every folder `story init` creates when it is missing, and any missing v2 starter files (`scenes/_index.md`, `continuity/state.md` and the question, promise, and clue ledgers, and `glossary/_index.md`), sets `schema-version: 2` in `story.md`, and runs `reindex`. Existing files are never overwritten. On a project that is already current it still runs `reindex`, so a stale registry is rebuilt and counted as a change.
 
 On a copy of a project with `schema-version: 1` and no clue ledger or glossary:
 
 ```text
 $ story validate
-Project validation failed: 4 errors, 0 warnings, 0 dismissed
+Project validation failed: 3 errors, 0 warnings, 0 dismissed
 error: Missing required path: continuity/clues/_index.md
-error: Missing required path: continuity/clues
 error: Missing required path: glossary/_index.md
-error: Missing required path: glossary/terms
+error: story.md schema-version must be 2
 
 $ story migrate
 Migrated project to current schema: 5 changes
@@ -374,7 +402,7 @@ story validate [path]
 
 Checks that the project is structurally sound:
 
-- every required file and directory exists
+- every required file exists (entity folders are optional)
 - every markdown file's YAML frontmatter parses, and required fields are present with valid values and types
 - entity ids are kebab-case and enum fields (roles, statuses, types) use allowed values
 - each registry `_index.md` links every entity file (warning)
@@ -419,7 +447,9 @@ story reindex [path]
 
 Rebuilds every registry table from the entity files on disk: `characters/_index.md`, `worldbuilding/_index.md`, `plot/_index.md`, `chapters/_index.md`, `scenes/_index.md`, the question, promise, and clue registries under `continuity/`, and `glossary/_index.md`. It also rebuilds `matter/_index.md` and `research/_index.md` when those folders exist, and sets the `story` field in `plot/timeline.md` and `continuity/state.md` to the current story id.
 
-Hand-written sections of the registries survive a reindex: `## Relationship Map` and `## Family Trees` in the character registry, `## World Overview` in the world registry, and `## Story Structure`, `## Theme Tracking`, and the `structure` field in the plot registry. Files whose content would not change are not rewritten.
+Hand-written sections of the registries survive a reindex: `## Relationship Map` and `## Family Trees` in the character registry, `## World Overview` in the world registry, and `## Story Structure`, `## Theme Tracking`, and the `structure` field in the plot registry. Any other `## ` section that reindex does not generate is kept too, after the generated sections. Files whose content would not change are not rewritten, and a registry with CRLF line endings keeps them.
+
+`reindex` refuses to run while an entity file, registry, or `story.md` fails to parse, because the rebuilt registry would drop that file; see [Files that fail to parse](#files-that-fail-to-parse).
 
 Run it after you create, rename, or delete an entity file by hand. `add`, `rename`, `remove`, `migrate`, and `wordcount --write` reindex for you.
 
@@ -445,7 +475,7 @@ Registries already up to date
 story wordcount [path] [--write]
 ```
 
-Counts the prose words in each chapter and prints a total. Only the chapter's prose counts: the text after `## Chapter Text`; failing that, the text after the first `---` divider below `## Outline` (or everything after `## Outline` if there is no divider); failing that, the body without its leading `#` heading. Inline and fenced code, images, link targets, and markdown symbols are ignored; hyphenated words and contractions count once.
+Counts the prose words in each chapter and prints a total. Only the chapter's prose counts: the text after `## Chapter Text`; failing that, the text after the first `---` divider below `## Outline` (or everything after `## Outline` if there is no divider); failing that, the body without its leading `#` heading. HTML comments, inline and fenced code, images, link targets, and markdown symbols are ignored; hyphenated words and contractions count once.
 
 | Option | Effect |
 |---|---|
@@ -482,7 +512,7 @@ Checks that references between entities point at entities that exist and that tw
 - a character's `died-in` chapter
 - arc characters, faction members and locations, and artifact owners and locations
 - chapter and scene POV, `characters`, `mentions` (a character or an artifact), locations, and `arcs-advanced`, and each scene's chapter
-- the chapter, character, and arc ids in questions, promises, and clues, and the `used-in` chapters of research notes
+- the chapter, character, and arc ids in questions, promises, and clues, and the `used-in` chapters of research notes. A promise or clue `payoff`, and its `planted` while `status: planned`, may name a scheduled `chapter-NN` beyond the last chapter file
 - chapter ids and markdown links in the bodies of `plot/timeline.md` and arc files
 - the `follows` and `precedes` links in `story.md`, which must point at story projects that link back
 
@@ -839,7 +869,7 @@ See [Series](series.md).
 story report [path] [--actionable]
 ```
 
-Prints a project summary: metadata (with a `Form:` line when `story.md` sets `form`), entity counts, total words (and percentage of `target-words`, when set), a line per chapter and arc, and the result of `validate`, `links`, and `continuity`.
+Prints a project summary: metadata (with a `Form:` line when `story.md` sets `form`), entity counts, total words (and percentage of `target-words`, when set), a line per chapter and arc, and the result of `validate`, `links`, and `continuity`. A metadata field that `story.md` does not set, such as `status` or `pov`, prints as `unset`, and a missing `title` shows the project folder name.
 
 | Option | Effect |
 |---|---|
@@ -908,6 +938,8 @@ Runs `validate`, `links`, and `continuity`, then lists prioritised actions:
 | `P3` | Nothing is blocking the next writing pass |
 
 Actions are sorted by priority, P0 first; actions with the same priority keep the order the checks produce them. The one exception is the P3 "Project is mechanically healthy" line, which comes first when it appears.
+
+Suggested commands use the project path as you typed it, or `.` when you gave none: `story next drafts/salt-road` suggests `Run story continuity drafts/salt-road and ...` and `story passes drafts/salt-road --init`.
 
 Always exits 0 on a readable project.
 
@@ -1148,7 +1180,7 @@ warning: "Marek" looks like character lord-maren (Lord Maren)
 story diagram <kind> [--out <file>] [--path <project>]
 ```
 
-Prints [Mermaid](https://mermaid.js.org/) diagram source generated from frontmatter. The source is plain text, so it diffs cleanly and renders on GitHub and in most markdown editors. Regenerate it whenever the bible changes rather than editing it.
+Prints [Mermaid](https://mermaid.js.org/) diagram source generated from frontmatter. The source is plain text, so it diffs cleanly and renders on GitHub and in most markdown editors. Regenerate it whenever the bible changes rather than editing it. Node ids are entity ids with hyphens turned into underscores; an id that is a Mermaid keyword, such as `end` or `graph`, gets `_node` appended.
 
 | Kind | What it draws | Reads |
 |---|---|---|
@@ -1160,7 +1192,7 @@ Prints [Mermaid](https://mermaid.js.org/) diagram source generated from frontmat
 
 | Option | Effect | Default |
 |---|---|---|
-| `--out <file>` | Write the source to this path, relative to the project root, instead of stdout | Print to stdout |
+| `--out <file>` | Write the source to this path, relative to the project root, instead of stdout. Project source paths are refused (see [Where commands write](#where-commands-write)) | Print to stdout |
 | `--path <path>` | Project root | Current directory |
 
 `diagram` prints and writes nothing while any project file fails to parse, because the diagram would silently drop entities; it reports the parse errors on stderr and exits 1. An unknown or missing kind exits 1:
@@ -1237,7 +1269,15 @@ Shows the named revision passes recorded in `revision-passes` in `story.md`, and
 | `--start <pass>` | Mark a pass `in-progress`, adding it if it is new |
 | `--done <pass>` | Mark a pass `done`, adding it if it is new |
 
-Pass names are kebab-case; any name works, so you can add your own, such as `sensitivity-read`. When a change is made, `passes` prints `Updated revision-passes in story.md` before the list. It rewrites only the `revision-passes` entry and refuses to change a `story.md` that fails to parse or has malformed passes. Without options it only reads. The next pass is the one in progress, or else the first one not done; `story next` suggests it when `story.md` has `status: revising` (see [next](#next)).
+Pass names are kebab-case; any name works, so you can add your own, such as `sensitivity-read`. Adding a name outside the default ladder prints a note on stderr, with a suggestion when the name is within two edits of a default pass, so a typo does not slip in unnoticed:
+
+```text
+$ story passes --start charcter
+note: Added custom pass charcter, which is not in the default ladder; did you mean character?
+Updated revision-passes in story.md
+```
+
+When a change is made, `passes` prints `Updated revision-passes in story.md` before the list. It rewrites only the `revision-passes` entry and refuses to change a `story.md` that fails to parse or has malformed passes. Without options it only reads. The next pass is the one in progress, or else the first one not done; `story next` suggests it when `story.md` has `status: revising` (see [next](#next)).
 
 With no passes recorded, `passes` lists the default ladder and suggests `--init`. In The Salt Road, after `story passes --init` and `story passes --done structure`:
 
@@ -1314,7 +1354,15 @@ Kinds are case-insensitive. Ids are lowercase kebab-case: accents are stripped, 
 story add <kind> <name> [options] [--path <project>]
 ```
 
-Creates an entity file with starter frontmatter and body sections, then reindexes. It refuses to overwrite an existing file. Options that do not apply to the kind are ignored.
+Creates an entity file with starter frontmatter and body sections, then reindexes. It refuses to overwrite an existing file. Options that belong to another kind are ignored; an option no kind reads, such as `--trim`, is an error (`--trim does not apply to story add`). A missing or unknown kind is also an error:
+
+```text
+$ story add
+An entity kind is required: expected one of character, location, system, faction, artifact, arc, chapter, scene, question, promise, clue, term, matter, research
+
+$ story add villain "Lord Maren"
+Unsupported entity kind: villain: expected one of character, location, system, faction, artifact, arc, chapter, scene, question, promise, clue, term, matter, research
+```
 
 For characters and locations, `add` also writes the backlink on the other side: adding a character with `--location gull-harbour` appends the character to that location's `notable-characters`, and adding a location with `--character` appends the location to each character's `locations`.
 
@@ -1330,7 +1378,7 @@ Options by kind:
 | `arc` | `--type`, `--status`, `--character` (`characters`), `--theme`/`--themes` (`themes`), `--acts` (`acts`) | `subplot`, `planned` |
 | `chapter` | `--number`, `--pov`, `--location` (`locations`), `--character` (`characters`), `--mention` (`mentions`), `--arc` (`arcs-advanced`), `--status`, `--mode`, `--date`, `--time`, `--hook` | One more than the highest chapter number, `outline`; no `hook` |
 | `scene` | `--chapter`, `--scene`, `--pov`, `--location` (`location`, a single id; give it once), `--character` (`characters`), `--mention` (`mentions`), `--arc` (`arcs-advanced`), `--status`, `--date`, `--time`, `--travel-hours`, `--sequel`, `--outcome`, `--dilemma` | Latest chapter, one more than that chapter's highest scene number, `outline`; no `outcome` |
-| `question` | `--status`, `--introduced`, `--resolved`, `--character` (`characters`) | `open` |
+| `question` | `--status`, `--introduced`, `--resolved`, `--character` (`characters`) | `answered` with `--resolved`, otherwise `open`; `--status open` with `--resolved` is an error |
 | `promise` | `--status`, `--planted`, `--payoff`, `--arc` (`arcs`), `--character` (`characters`) | `planted` with `--planted`, otherwise `planned` |
 | `clue` | `--status`, `--planted`, `--payoff`, `--significance-delayed`, `--red-herring`, `--character` (`characters`), `--arc` (`arcs`) | `planted` with `--planted`, otherwise `planned`; `red-herring` written only when set |
 | `term` | `--category`, `--alias` (`aliases`) | `term` |
@@ -1361,6 +1409,8 @@ Options by kind:
 | research `--method` | `fact`, `interview`, `site-visit`, `expert-review`, `reading` |
 | research `--risk` | `legal`, `medical`, `weapons`, `safety`, `cultural`, `defamation`, `technical` (repeatable) |
 | matter `--placement` | `front`, `back` |
+
+On `add chapter` and `add scene`, `--pov` names the POV character, and `add` also puts that id first in `characters` when it is not already listed.
 
 Location and system `--type`, location `--status`, and system `--prevalence` are free text. `--date` must be a real `YYYY-MM-DD` day; `--time` is `HH:MM` or one of `dawn`, `morning`, `midday`, `afternoon`, `evening`, `night`; `--travel-hours` is a number zero or above; `--number` and `--scene` are positive integers; `--order` is a non-negative integer. Repeating `--location` on `add artifact` or `add scene`, or `--arc` on `add character`, writes a list that `story validate` rejects, because those flags are repeatable elsewhere. Other single-value flags keep the last value given.
 
@@ -1446,9 +1496,9 @@ story rename <kind> <id> <new name> [--path <project>]
 
 Sets the entity's name or title and, when the new name gives a different id, renames the file and rewrites every reference to the old id. References are the id-valued frontmatter fields (such as `characters`, `pov`, `locations`, `owner`, `planted`, `learned-in`, a location route's `to`, and the entries in `continuity/state.md`) and markdown links that resolve to the entity's file. Prose is never changed, so update names in the chapter text yourself.
 
-Chapter and scene ids come from their numbers, so renaming one changes only its title.
+Chapter and scene ids come from their numbers, so renaming one changes only its title. `rename` also updates the entity's first heading when it shows the old name, such as `# Ilse Marrow` or `# Chapter 1: Low Tide`.
 
-Every rewrite is planned before anything is written, so a file that fails to parse leaves the project unchanged. `rename` refuses if an entity with the new id already exists.
+Every rewrite is planned before anything is written, so a file that fails to parse leaves the project unchanged. An entity file or registry with no YAML frontmatter stops it the same way, with `<file> is missing YAML frontmatter; nothing was changed`. `rename` refuses if an entity with the new id already exists.
 
 ```text
 $ story rename character ilse-marrow "Ilse Varrow"
@@ -1464,7 +1514,16 @@ Renamed chapter chapter-01 to chapter-01: ~/stories/the-salt-road/chapters/chapt
 story remove <kind> <id> [--path <project>]
 ```
 
-Deletes the entity file and scrubs its id from every reference field. List entries are removed, single-value fields are cleared, and whole entries in `relationships`, `character-state`, `knowledge-state`, `object-state`, and location `routes` are dropped when they are about the removed entity. Prose and markdown links in file bodies are never changed. `story links` reports leftover body links and chapter ids only in `plot/timeline.md` and arc files; find any others by hand, for example with `grep -rn brass-sounding-line .`. As with `rename`, every file is parsed before anything is deleted, so a file that fails to parse leaves the project unchanged.
+Deletes the entity file and scrubs its id from every reference field. List entries are removed, single-value fields are cleared, and whole entries in `relationships`, `character-state`, `knowledge-state`, `object-state`, and location `routes` are dropped when they are about the removed entity. Prose and markdown links in file bodies are never changed. `story links` reports leftover body links and chapter ids only in `plot/timeline.md` and arc files; find any others by hand, for example with `grep -rn brass-sounding-line .`. As with `rename`, every file is parsed before anything is deleted, so a file that fails to parse or has no frontmatter leaves the project unchanged.
+
+`remove chapter` refuses while scenes still point at the chapter, so remove those first:
+
+```text
+$ story remove chapter chapter-01
+chapter chapter-01 still has scenes: chapter-01-scene-01. Remove them first with story remove scene <id>
+```
+
+Removing a chapter also walks back statuses that depended on it. A `planted` promise or clue whose `planted` chapter is cleared becomes `planned`; a `paid-off` one whose `payoff` is cleared becomes `planted`, or `planned` when its `planted` chapter is gone too; an `answered` or `resolved` question whose `resolved` chapter is cleared becomes `open`.
 
 ```text
 $ story remove artifact brass-sounding-line
@@ -1490,26 +1549,25 @@ Writes one markdown manuscript: the story title, front matter pages, every chapt
 
 | Option | Effect | Default |
 |---|---|---|
-| `--out <file>` | Output path, relative to the project root | `manuscript.md` |
+| `--out <file>` | Output path, relative to the project root | `dist/manuscript.md` |
 
 ```text
 $ story export
-Exported 1 chapters to ~/stories/the-last-ember/manuscript.md
+Exported 1 chapters to ~/stories/the-last-ember/dist/manuscript.md
 
 $ story export --out drafts/manuscript.md
 Exported 1 chapters to ~/stories/the-last-ember/drafts/manuscript.md
 ```
 
-A manuscript written to the project root is not part of the project model, so `validate` warns about it:
+A manuscript written to the project root with `--out manuscript.md` is not part of the project model, so `validate` warns about it:
 
 ```text
 warning: manuscript.md is not part of the story project model and is ignored
 ```
 
-Prefer `build`, which writes to `dist/`, when you do not need a specific path. `export` fails with `No chapters found to export` on a project without chapters, and, like `build`, refuses two chapters with the same number or a matter file whose name is not kebab-case.
+`export` fails with `No chapters found to export` on a project without chapters, and, like `build`, refuses two chapters with the same number or a matter file whose name is not kebab-case.
 
-> [!WARNING]
-> `export` does not validate the project first, and a chapter file whose frontmatter cannot be parsed is silently left out of the manuscript. Run `story validate` before you export a copy to send anyone.
+`export` refuses to run while an entity file, registry, or `story.md` fails to parse (see [Files that fail to parse](#files-that-fail-to-parse)). It does not run the other checks, so run `story validate` before you export a copy to send anyone.
 
 ### build
 
@@ -1517,13 +1575,13 @@ Prefer `build`, which writes to `dist/`, when you do not need a specific path. `
 story build [path] [--format <name>] [--shunn] [--trim <size>] [--out <file>]
 ```
 
-Builds a disposable book file in `dist/`. Builds are deterministic: the same sources give byte-identical output. EPUB timestamps use `SOURCE_DATE_EPOCH` when it is set and a fixed date otherwise.
+Builds a disposable book file in `dist/`. Builds are deterministic: the same sources give byte-identical output. EPUB timestamps use `SOURCE_DATE_EPOCH` when it is set to whole seconds with a year no later than 9999, and a fixed date otherwise. Default file names cap the story id at 100 characters.
 
 | Option | Effect | Default |
 |---|---|---|
 | `--format <name>` | `markdown` (or `md`), `epub`, `docx`, `shunn`, `html`, `print`, `narration`, or `metadata` | `markdown` |
-| `--shunn` | With `--format docx`, apply Shunn manuscript formatting. Ignored for other formats | Off |
-| `--trim <size>` | With `--format print`, the trim size: `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5`. Ignored for other formats | `5.5x8.5` |
+| `--shunn` | With `--format docx`, apply Shunn manuscript formatting. An error with any other format | Off |
+| `--trim <size>` | With `--format print`, the trim size: `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5`. An error with any other format | `5.5x8.5` |
 | `--out <file>` | Output path, relative to the project root | `dist/<story-id>.<ext>` |
 
 | Format | Default output | Contents |
@@ -1604,8 +1662,7 @@ The sheet goes on with the description and a readiness checklist. See [Import, e
 
 `build` refuses a project with no chapters, two chapters with the same number, or a matter file whose name is not kebab-case. A `cover` that is missing, outside the project, or not a `.gif`, `.jpeg`, `.jpg`, `.png`, or `.webp` image fails the EPUB build and `validate`. Keep `dist/` out of version control.
 
-> [!WARNING]
-> Like `export`, `build` does not validate the project first and silently leaves out any chapter whose frontmatter cannot be parsed. Run `story validate` before you build a copy to send anyone.
+Like `export`, `build` refuses to run while a project file fails to parse, and refuses a chapter whose `number` is not a positive integer (`chapters/chapter-03.md: chapter number must be a positive integer to build`). It does not run the other checks, so run `story validate` before you build a copy to send anyone.
 
 ### synopsis
 
@@ -1631,9 +1688,9 @@ Premise: In a world where magic flows from living embers — fragments of a dyin
 
 ## Sera's Reclamation
 
-Sera and Kael have survived twelve years in the Whispering Vale.  The embers are fading — even in the Vale, the wild motes grow dimmer each season.
+Sera and Kael have survived twelve years in the Whispering Vale. The embers are fading — even in the Vale, the wild motes grow dimmer each season.
 
-Sera gathers information, allies, and ember power.  She discovers the ember well beneath the citadel isn't just sealed — it's being drained.
+Sera gathers information, allies, and ember power. She discovers the ember well beneath the citadel isn't just sealed — it's being drained.
 
 Because Sera infiltrates the citadel through the Whisper Gate. Sera chooses to unseal the ember well and release its power back into the land rather than claim it.
 ```
@@ -1650,7 +1707,7 @@ The output is a scaffold. The [submission skill](../skills/submission/SKILL.md) 
 
 ## Option index
 
-Every option the CLI accepts, in the order `story --help` lists them. "Repeatable" options collect every value; for the rest, the last value wins.
+Every option the CLI accepts, in the order `story --help` lists them. "Repeatable" options collect every value; for the rest, the last value wins. Passing an option to a command outside its "Used by" list, such as `--trim` to `timeline`, is an error; the one exception is `add`, which ignores an option that belongs to another entity kind.
 
 | Option | Value | Used by | Notes |
 |---|---|---|---|
@@ -1661,7 +1718,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--setting-era` | `<name>` | `init`, `import` | |
 | `--theme` | `<name>` | `init`, `import`, `add arc` | Repeatable |
 | `--themes` | `<a,b>` | `init`, `import`, `add arc` | Comma-separated; repeatable |
-| `--pov` | `<style>` | `init`, `import`, `add chapter`, `add scene` | |
+| `--pov` | `<style\|id>` | `init`, `import`, `add chapter`, `add scene` | A POV style for `init` and `import`; a POV character id for `add chapter` and `add scene`, which also adds it to `characters` |
 | `--tense` | `<tense>` | `init`, `import` | `past`, `present`, `future`, `mixed` |
 | `--form` | `<form>` | `init` | `novel`, `novella`, `novelette`, `short-story`, `flash`, `serial`, `picture-book`, `chapter-book`; sets `target-words` |
 | `--synopsis` | `<text>` | `init`, `import` | |
@@ -1677,8 +1734,8 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--path` | `<path>` | Every command except `init` and `import` | Project root |
 | `--out` | `<file>` | `export`, `build`, `synopsis`, `diagram` | Relative to the project root |
 | `--format` | `<name>` | `build` | `markdown`, `md`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata` |
-| `--trim` | `<size>` | `build` | With `--format print`: `5x8`, `5.25x8`, `5.5x8.5` (default), `6x9`, `a5` |
-| `--shunn` | | `build` | Boolean; with `--format docx` |
+| `--trim` | `<size>` | `build` | Only with `--format print`: `5x8`, `5.25x8`, `5.5x8.5` (default), `6x9`, `a5` |
+| `--shunn` | | `build` | Boolean; only with `--format docx` |
 | `--at` | `<chapter-id>` | `knowledge` | Required for `knowledge` |
 | `--init` | | `passes` | Boolean; adds the missing default passes |
 | `--start` | `<pass>` | `passes` | Kebab-case pass name; marks it `in-progress` |
@@ -1706,7 +1763,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--owner` | `<id>` | `add artifact` | |
 | `--arc` | `<id>` | `add character`, `chapter`, `scene`, `promise`, `clue` | Repeatable; alias `--arcs`. For `add character` it sets the single `arc` theme label: give it once; `--arcs` is ignored there |
 | `--introduced` | `<id>` | `add question` | Chapter id |
-| `--resolved` | `<id>` | `add question` | Chapter id |
+| `--resolved` | `<id>` | `add question` | Chapter id; defaults `status` to `answered` |
 | `--planted` | `<id>` | `add promise`, `add clue` | Chapter id |
 | `--payoff` | `<id>` | `add promise`, `add clue` | Chapter id |
 | `--significance-delayed` | | `add clue` | Boolean |

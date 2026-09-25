@@ -106,7 +106,7 @@ There is no `--json` or other machine-readable output mode. Output is plain text
 - `compare`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `names`, and `series` write their report to stdout and the same summary and finding lines to stderr.
 - Every other command writes its report or confirmation to stdout.
 - A command that cannot run, for example because of an unknown option or a missing argument, prints one error line to stderr. An unknown command also prints the full help text after the error.
-- Pointing a check at a directory that is not a story project is not a usage error: `validate` reports each missing required file as an `error:` finding and exits 1.
+- Pointing any command at a directory without `story.md` prints `<path> is not a story project: missing story.md` to stderr and exits 1. In a project that has `story.md`, `validate` reports each other missing required file as an `error:` finding and exits 1.
 
 To capture findings, redirect stderr:
 

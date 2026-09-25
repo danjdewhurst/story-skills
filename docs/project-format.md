@@ -39,7 +39,7 @@ For the ideas behind the format, read [Core concepts](concepts.md). For command 
 
 ## Project layout
 
-A full project looks like this. Only the paths in the [required-paths table](#required-paths) below must exist; entity files, `dist/`, and paths marked optional can be absent. A missing required path makes `story validate` report `Missing required path`.
+A full project looks like this. Only the files in the [required-paths table](#required-paths) below must exist; entity folders, entity files, `dist/`, and paths marked optional can be absent. A missing required path makes `story validate` report `Missing required path`.
 
 ```text
 story.md                          story bible and project metadata
@@ -95,33 +95,27 @@ dist/                             optional: disposable output of story build
 
 `story init` creates every directory and registry above except `matter/`, `research/`, `feedback/`, `submission/`, `publishing/`, `adaptations/`, and `.github/`, plus `story.md`, `style-sheet.md`, `plot/timeline.md`, and `continuity/state.md`. It creates no entity files, and none of `progress.md`, `continuity/exemptions.md`, `continuity/motifs.md`, `continuity/theme-audit.md`, or `dist/`.
 
-`story export` writes `manuscript.md` at the project root by default. That file is export output, not part of the project: `story validate` warns about it (see [Files the tools ignore](#files-the-tools-ignore)).
+`story export` writes `dist/manuscript.md` by default. Like everything in `dist/`, it is disposable output, not part of the project.
 
 ### Required paths
 
-`story validate` requires these paths:
+`story validate` requires these files:
 
-| Required path | Kind |
+| Required file | Kind |
 |---------------|------|
-| `story.md` | file |
-| `characters/_index.md` | file |
-| `worldbuilding/_index.md` | file |
-| `worldbuilding/locations`, `worldbuilding/systems`, `worldbuilding/factions`, `worldbuilding/artifacts` | directories |
-| `plot/_index.md`, `plot/timeline.md` | files |
-| `plot/arcs` | directory |
-| `chapters/_index.md` | file |
-| `scenes/_index.md` | file |
-| `continuity/state.md` | file |
-| `continuity/questions/_index.md`, `continuity/promises/_index.md`, `continuity/clues/_index.md` | files |
-| `continuity/questions`, `continuity/promises`, `continuity/clues` | directories |
-| `glossary/_index.md` | file |
-| `glossary/terms` | directory |
+| `story.md` | project metadata |
+| `characters/_index.md`, `worldbuilding/_index.md`, `plot/_index.md`, `chapters/_index.md`, `scenes/_index.md`, `glossary/_index.md` | registries |
+| `continuity/questions/_index.md`, `continuity/promises/_index.md`, `continuity/clues/_index.md` | registries |
+| `plot/timeline.md` | story timeline |
+| `continuity/state.md` | continuity state |
+
+Entity folders such as `worldbuilding/locations/`, `plot/arcs/`, and `glossary/terms/` are not required. Git does not track empty folders, so a fresh clone of a new project lacks them and still validates; `story add` creates a folder when it writes the first entity into it.
 
 ### Files the tools ignore
 
 The CLI reads only the files described on this page. Two kinds of extra file produce a warning from `story validate`:
 
-- A `.md` file at the project root other than `story.md`, `style-sheet.md`, and `progress.md`. This includes a `README.md`, and the `manuscript.md` that `story export` writes by default; pass `--out` to put the export somewhere else, such as `dist/`.
+- A `.md` file at the project root other than `story.md`, `style-sheet.md`, and `progress.md`. This includes a `README.md`, and a `manuscript.md` written there with `story export --out manuscript.md`; the default export path, `dist/manuscript.md`, avoids the warning.
 - A `.md` file in a subdirectory of an entity directory, such as `characters/minor/old-nell.md`. Entity directories are flat.
 
 ```text
@@ -150,7 +144,7 @@ When `story add` or `story init` derives an id from a name, it:
 3. lowercases, and
 4. replaces every run of other characters with one hyphen and trims hyphens from the ends.
 
-The story id is derived the same way from the `title` in `story.md` (`The Last Ember` becomes `the-last-ember`). Registries and state files record it in their `story` field.
+The story id is derived the same way from the `title` in `story.md` (`The Last Ember` becomes `the-last-ember`), or from the project directory name when the title has no ASCII letters or digits. Registries and state files record it in their `story` field.
 
 Chapters and scenes use fixed filename patterns instead of names:
 
@@ -246,7 +240,7 @@ The chapter starter file from `story add chapter` uses the first layout:
 
 ### How words are counted
 
-A word is a run of letters or digits in any script. Straight or curly apostrophes and hyphens join a word, so `don’t` and `well-known` each count once; `U.S.A` counts as three words. Before counting, the CLI removes fenced code blocks, inline code, and images, keeps a link's visible text, and treats the markdown characters `# > * _ ~ | :` as spaces.
+A word is a run of letters or digits in any script. Straight or curly apostrophes and hyphens join a word, so `don’t` and `well-known` each count once; `U.S.A` counts as three words. Before counting, the CLI removes HTML comments (`<!-- ... -->`), fenced code blocks, inline code, and images, keeps a link's visible text, and treats the markdown characters `# > * _ ~ | :` as spaces.
 
 `story wordcount . --write` stores the result in each chapter's `word-count`. `story validate` warns when the stored value differs from the prose:
 
@@ -275,7 +269,7 @@ tense: past
 
 | Field | Type | Required | Meaning |
 |-------|------|----------|---------|
-| `title` | string | yes | Book title. The story id is derived from it (from the directory name if `title` is missing). |
+| `title` | string | yes | Book title. The story id is derived from it, or from the project directory name when `title` is missing or has no ASCII letters or digits (`Война и мир`). Reports and builds show the directory name when `title` is missing. |
 | `schema-version` | integer | yes | Must be `2`. `story migrate` sets it. |
 | `genre` | string | yes | Free text, for example `fantasy`. `story init` defaults it to `fiction`. |
 | `status` | enum | yes | `planning`, `drafting`, `in-progress`, `revising`, `complete`, or `abandoned`. `story init` sets `planning`. |
@@ -461,7 +455,8 @@ Every relationship needs a backlink: if Sera lists Kael, Kael must list Sera. Fo
 | `nephew`, `niece` | `uncle` or `aunt` |
 | `mentor` / `student` | `student` / `mentor` |
 | `employer` / `subordinate` | `subordinate` / `employer` |
-| `sibling`, `spouse`, `partner`, `friend`, `ally`, `rival`, `enemy`, `cousin`, `colleague`, `foil`, `confidant`, `love-interest` | the same type |
+| `former-supervisor` / `former-subordinate` | `former-subordinate` / `former-supervisor` |
+| `sibling`, `spouse`, `partner`, `in-law`, `friend`, `ally`, `rival`, `enemy`, `adversary`, `cousin`, `colleague`, `foil`, `confidant`, `love-interest` | the same type |
 
 Any other type (such as `antagonist`) is allowed, and the backlink may use any type.
 
@@ -601,7 +596,7 @@ word-count: 1489
 | Field | Type | Required | Meaning |
 |-------|------|----------|---------|
 | `title` | string | yes | Chapter title. |
-| `number` | integer ≥ 1 | yes | Must match the filename and be unique. |
+| `number` | integer ≥ 1 | yes | Must match the filename and be unique. When it is set to something other than a positive integer, `story validate` errors, the reports and diagrams use the number in the file name, and `story export` and `story build` refuse to run. |
 | `status` | enum | yes | `outline`, `draft`, `revised`, `final`, or `complete` (default `outline`). |
 | `pov` | character id | no | Point-of-view character. |
 | `locations` | list of location ids | no | Where the chapter takes place. |
@@ -786,7 +781,7 @@ Files: `continuity/clues/<clue-id>.md`, a clue ledger for mysteries and fair-pla
 | `arcs` | list of arc ids | no | Arcs the clue belongs to. |
 | `characters` | list of character ids | no | Characters involved; for [`story clues`](#clue-grid), the characters who could notice it. |
 
-`story add promise` and `story add clue` set `status: planted` when you pass `--planted`, and `status: planned` otherwise; `--status` overrides both. `story add clue --significance-delayed` and `--red-herring` set those flags. `story validate` errors when either flag is not `true` or `false`.
+`story add promise` and `story add clue` set `status: planted` when you pass `--planted`, and `status: planned` otherwise; `--status` overrides both. To schedule a setup in a chapter you have not drafted, pass `--status planned` with `--planted`; `story continuity` warns once that chapter has prose and the status is still `planned`. `story add clue --significance-delayed` and `--red-herring` set those flags. `story validate` errors when either flag is not `true` or `false`.
 
 For promises and clues, `story continuity` errors when `payoff` comes before `planted`, when a `paid-off` entry has no `payoff` chapter, and when a `planted` entry has no `planted` chapter. It warns when a `planted` entry was planted at least three chapters before the latest chapter past `outline` and its `payoff` is unset or already behind that chapter, and when a promise records a `planted` chapter but is still `planned`. When `story.md` has `status: complete`, any `open` question or `planned` or `planted` promise or clue is an error.
 
@@ -971,7 +966,7 @@ warning: characters/_index.md is missing registry link ](sera-voss.md)
 
 `plot/_index.md` also requires `structure` (see [Plot registry and timeline](#plot-registry-and-timeline)). The matter and research registries are optional; `story reindex` keeps each one current once its directory exists.
 
-Reindex regenerates the whole registry body apart from the sections in the last column, so anything else you write in a registry is replaced. Put notes in the kept sections or in entity files. Rows are ordered by filename, except chapters (by number), scenes (by chapter id, then scene number), and matter (by `order`, then id, with front and back pages interleaved). The chapter registry's word counts come from the prose, not from `word-count` frontmatter.
+Reindex regenerates the headings, tables, and totals it writes, and keeps the sections in the last column where they are. It also keeps any other `## ` section you add that it does not generate, such as `## Notes`, and appends it after the generated sections. Text outside a `## ` section, such as a line under the `# ` title, is replaced. A registry saved with CRLF line endings keeps them. Rows are ordered by filename, except chapters (by number), scenes (by chapter id, then scene number), and matter (by `order`, then id, with front and back pages interleaved). The chapter registry's word counts come from the prose, not from `word-count` frontmatter.
 
 A registry looks like this:
 
@@ -1022,12 +1017,14 @@ Fields that name another entity hold its id. `story links` checks that each id i
 | Scene | `location` | Location |
 | Chapter, scene | `arcs-advanced` | Arc |
 | Question | `introduced`, `resolved` | Chapter |
-| Promise, clue | `planted`, `payoff` | Chapter |
+| Promise, clue | `planted`, `payoff` | Chapter; may be a scheduled `chapter-NN` beyond the last chapter file (see below) |
 | Question, promise, clue | `characters` | Character |
 | Promise, clue | `arcs` | Arc |
 | Research note | `used-in` | Chapter |
 | `plot/timeline.md`, arc bodies | any `chapter-NN` token | Chapter |
 | `plot/timeline.md`, arc bodies | relative links to `.md` files, except `_index.md` and `*` wildcard targets (links to non-entity files such as `story.md` are reported missing) | Existing entity file, named by its kebab-case id, inside the project |
+
+A promise or clue can schedule its setup and payoff ahead of the drafted book: `payoff`, and `planted` while `status: planned`, may name a `chapter-NN` that has no file yet. Once the status is `planted` or `paid-off`, the `planted` chapter must exist, and once it is `paid-off`, so must the `payoff` chapter.
 
 `story continuity`, not `story links`, checks the ids in `continuity/state.md`: `character`, `location`, `artifact`, `owner`, `learned-in`, and `since` must name existing entities, and `fact` must be kebab-case.
 
@@ -1044,9 +1041,10 @@ The CLI reference covers [`rename`](cli-reference.md#rename) and [`remove`](cli-
 A failed check names the file and the broken reference, and exits with status 1:
 
 ```text
-Link check failed: 2 errors, 0 warnings, 0 dismissed
-error: characters/ilya-venn.md relationship mentor to theo-quill expects backlink type student, got former-supervisor
+Link check failed: 3 errors, 0 warnings, 0 dismissed
+error: characters/ilya-venn.md relationship mentor to theo-quill expects backlink type student, got former-subordinate
 error: characters/mara-quill.md relationship to theo-quill is missing backlink
+error: characters/theo-quill.md relationship former-subordinate to ilya-venn expects backlink type former-supervisor, got mentor
 ```
 
 ## Dates and times
@@ -1210,8 +1208,8 @@ Scene status is not read by any check beyond validation; chapter status drives t
 
 | Value | Meaning | CLI behaviour |
 |-------|---------|---------------|
-| `open` | Raised and not yet answered. | `story add question` default. Error if `resolved` is set, and when `story.md` is `complete`. Counted by `story next`. |
-| `answered`, `resolved` | Answered on the page. | Error if no `resolved` chapter is recorded. The CLI treats the two the same. |
+| `open` | Raised and not yet answered. | `story add question` default without `--resolved`. Error if `resolved` is set, and when `story.md` is `complete`. Counted by `story next`. |
+| `answered`, `resolved` | Answered on the page. | `story add question --resolved` defaults to `answered`. Error if no `resolved` chapter is recorded. The CLI treats the two the same. |
 | `dropped` | Deliberately left unanswered, but still part of the book. | Still checked: `resolved` must not come before `introduced`. |
 | `abandoned` | Cut from the book, kept on record. | Skipped entirely by `story continuity`. |
 
@@ -1229,7 +1227,7 @@ So `dropped` and `abandoned` differ only in how much checking remains: a dropped
 
 ## Scanning limits and safety
 
-The CLI refuses to read or write project files outside the project root. The exceptions are deliberate: an absolute `--out` path for `story export`, `story build`, or `story synopsis`, and the linked books that `follows` and `precedes` name. It applies these limits while scanning:
+The CLI refuses to read or write project files outside the project root. The exceptions are deliberate: an absolute `--out` path for `story export`, `story build`, `story synopsis`, or `story diagram`, and the linked books that `follows` and `precedes` name. It applies these limits while scanning:
 
 - A file larger than 5 MiB is refused with an error.
 - More than 5,000 entity files in one directory, or more than 5,000 markdown files found in one recursive scan, stops the command with an error.
@@ -1262,7 +1260,7 @@ story validate .
 
 Migration:
 
-1. creates the directories `worldbuilding/factions`, `worldbuilding/artifacts`, `scenes`, `continuity/questions`, `continuity/promises`, `continuity/clues`, and `glossary/terms` when they are missing,
+1. creates every folder `story init` creates (`characters`, the four `worldbuilding` entity folders, `plot/arcs`, `chapters`, `scenes`, the three `continuity` ledgers, and `glossary/terms`) when it is missing,
 2. creates `scenes/_index.md`, `continuity/state.md`, and the question, promise, clue, and glossary registries when they are missing,
 3. sets `schema-version: 2` in `story.md` when it is missing or has any other value, leaving the rest of the file as it was, and
 4. runs `story reindex`, which also rebuilds (or creates) the character, world, plot, and chapter registries.
@@ -1276,7 +1274,7 @@ $ story migrate .
 Project already uses the current schema
 ```
 
-Migration does not create `plot/timeline.md`, `plot/arcs`, `worldbuilding/locations`, or `worldbuilding/systems`. If `story validate` still reports a missing required path, fill the gaps with `story init --force`, which adds missing starter files and never overwrites existing ones (it also adds `style-sheet.md` if you have none). Use the book's exact title, then reindex:
+Migration does not create `plot/timeline.md`. If `story validate` still reports a missing required path, fill the gaps with `story init --force`, which adds missing starter files and never overwrites existing ones (it also adds `style-sheet.md` if you have none). Use the book's exact title, then reindex:
 
 ```shell
 story init "Harbor of Second Light" --dir . --force

@@ -40,7 +40,7 @@ story init "{Title}" --form "{form}" --genre "{genre}" --sub-genre "{sub-genre}"
 
 Publishing metadata (`isbn`, `publisher`, `publication-date`, `description`, `keywords`, `subjects`, `copyright`, `cover-alt`, `ai-disclosure`, `language`) is optional and can wait until the book is ready to publish; the `publishing` skill fills it in. Do not ask for it at init.
 
-The title must contain ASCII letters or digits, because the story id recorded in every registry is derived from it (`--dir` sets only the directory). `init` refuses an existing directory unless you pass `--force`; with `--force` it only creates missing starter files and never overwrites an existing `story.md`, registry, timeline, or `continuity/state.md`.
+The story id recorded in every registry is the kebab-case form of the title (`--dir` sets only the directory). A title with no ASCII letters or digits, such as `Война и мир`, needs `--dir` with an ASCII folder name, and the story id then comes from the folder name. `init` refuses an existing directory unless you pass `--force`; with `--force` it only creates missing starter files and never overwrites an existing `story.md`, registry, timeline, or `continuity/state.md`.
 
 If `story` is not installed, use `bun run story --` from the Story Skills repository checkout or the bundled fallback `node ../story-maintenance/scripts/story.js` with the same arguments, resolving the path relative to this skill folder:
 

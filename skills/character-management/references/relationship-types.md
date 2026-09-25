@@ -33,6 +33,7 @@ Use these types in character frontmatter `relationships[].type` field.
 | student | Learner/protege |
 | employer | Boss or authority figure |
 | former-supervisor | Former boss or authority figure |
+| former-subordinate | Once worked under the other character |
 | subordinate | Works under the other character |
 | colleague | Works alongside |
 
@@ -40,15 +41,15 @@ Use these types in character frontmatter `relationships[].type` field.
 
 | Type | Description |
 |------|-------------|
-| protagonist | Main character in opposition or partnership |
-| antagonist | Primary opposition to this character |
+| protagonist | Main character in opposition or partnership (any backlink type) |
+| antagonist | Primary opposition to this character (any backlink type) |
 | love-interest | Romantic interest |
 | foil | Character who contrasts/highlights traits |
 | confidant | Character they confide in |
 
 ## Usage
 
-The type set is open and extensible: the CLI does not enum-check `relationships[].type`, so any kebab-case value passes `story validate`. Prefer a type from this reference when one fits; when none does, coin a descriptive kebab-case type (e.g. `former-supervisor`) and use it consistently on both sides.
+The type set is open and extensible: the CLI does not enum-check `relationships[].type`, so any kebab-case value passes `story validate`. Prefer a type from this reference when one fits; when none does, coin a descriptive kebab-case type and use it consistently. `story links` checks the backlink type only for the inverse pairs and symmetric types below; any other type accepts any backlink type.
 
 Relationships are bidirectional. When adding a relationship to one character, add the inverse to the other:
 
@@ -62,6 +63,7 @@ Inverse pairs:
 - uncle or aunt <-> nephew or niece (either gendered inverse is valid, e.g. uncle <-> niece)
 - mentor <-> student
 - employer <-> subordinate
+- former-supervisor <-> former-subordinate
 
 Symmetric types (same both ways):
-- sibling, spouse, partner, friend, ally, rival, enemy, adversary, cousin, colleague, foil, confidant, love-interest, former-supervisor
+- sibling, spouse, partner, in-law, friend, ally, rival, enemy, adversary, cousin, colleague, foil, confidant, love-interest
