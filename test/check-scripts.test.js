@@ -265,6 +265,29 @@ describe("github workflows", () => {
     }
   });
 
+  test("templates pin the same action versions as ci", () => {
+    // Dependabot only updates .github/workflows, so the templates users copy
+    // must follow ci.yml by hand; this fails until they do.
+    const pins = (text) => new Map(usesRefs(text).map(({ ref }) => ref.split("@")));
+    const ci = pins(readRepo(".github/workflows/ci.yml"));
+    for (const relativePath of workflowFiles.slice(1)) {
+      for (const [action, sha] of pins(readRepo(relativePath))) {
+        if (ci.has(action)) {
+          expect(`${relativePath} ${action}@${sha}`).toBe(`${relativePath} ${action}@${ci.get(action)}`);
+        }
+      }
+    }
+  });
+
+  test("every template job has a timeout", () => {
+    // Story checks run on pull requests, so a hostile or huge project must
+    // not hold a runner for GitHub's six-hour default.
+    for (const relativePath of workflowFiles.slice(1)) {
+      const text = readRepo(relativePath);
+      expect(text.match(/^ {4}runs-on:/gm)?.length, relativePath).toBe(text.match(/^ {4}timeout-minutes: \d+$/gm)?.length);
+    }
+  });
+
   test("ci runs the release-gate checks and the Node fallback", () => {
     const ci = readRepo(".github/workflows/ci.yml");
     for (const step of ["bun run check:metadata", "bun run check:evals", "bun run test:coverage", "bun run test:examples"]) {

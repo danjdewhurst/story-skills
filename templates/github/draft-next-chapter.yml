@@ -27,7 +27,10 @@
 # trusted pushes here. This workflow runs on `schedule` and manual
 # `workflow_dispatch` only — never on `pull_request` or `pull_request_target`
 # — so fork PRs cannot exfiltrate the secrets, and the agent's shell access is
-# limited to the allowlisted story/git/gh commands below.
+# limited to the allowlisted story/git/gh commands below. Pushes are limited
+# to draft/ branches by prefix, which a refspec could still stretch, so also
+# protect your default branch (require pull requests) in the repository
+# settings.
 #
 # GitHub does not start other workflows for pull requests opened with the
 # built-in GITHUB_TOKEN, so story-checks.yml will not run on the drafted PR by
@@ -57,6 +60,7 @@ env:
 jobs:
   draft:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     permissions:
       contents: write
       pull-requests: write
@@ -81,19 +85,19 @@ jobs:
 
       - name: Check out repository
         if: steps.guard.outputs.skip != 'true'
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Set up Node
         if: steps.guard.outputs.skip != 'true'
-        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
 
       - name: Draft the next chapter
         if: steps.guard.outputs.skip != 'true'
-        uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1
+        uses: anthropics/claude-code-action@9171db3e57d6a3140a37ddc2ba92788584e0ead6 # v1.0.234
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -107,7 +111,8 @@ jobs:
                read story.md, chapters/_index.md, continuity/state.md, open
                questions, promises, and the active arc files.
             2. If the next actions report any P0 maintenance issues, fix those
-               first and stop after opening a maintenance PR.
+               first on a branch named draft/maintenance-<date> instead, and
+               stop after opening that maintenance PR.
             3. Otherwise draft the next chapter following the chapter-writing
                skill: outline first, then prose under "## Chapter Text", with
                accurate frontmatter (pov, status, word-count, locations, characters, mentions, arcs-advanced).
@@ -119,11 +124,12 @@ jobs:
                npx --yes --package github:danjdewhurst/story-skills#${{ env.STORY_REF }} story validate ${{ env.STORY_DIR }}
                npx --yes --package github:danjdewhurst/story-skills#${{ env.STORY_REF }} story links ${{ env.STORY_DIR }}
                npx --yes --package github:danjdewhurst/story-skills#${{ env.STORY_REF }} story continuity ${{ env.STORY_DIR }}
-            5. Commit, push the branch, and open a pull request titled
+            5. Commit, push the branch with `git push -u origin draft/chapter-<number>`,
+               and open a pull request titled
                "Draft chapter <number>: <title>" summarizing the beats, the arcs
                advanced, and any promises planted or paid off.
           claude_args: |
-            --allowedTools "Bash(npx --yes --package github:danjdewhurst/story-skills#${{ env.STORY_REF }} story:*),Bash(git checkout -b:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(gh pr create:*),Read,Write,Edit,Glob,Grep"
+            --allowedTools "Bash(npx --yes --package github:danjdewhurst/story-skills#${{ env.STORY_REF }} story:*),Bash(git checkout -b:*),Bash(git add:*),Bash(git commit:*),Bash(git push -u origin draft/:*),Bash(gh pr create:*),Read,Write,Edit,Glob,Grep"
 
       - name: Validate structure, frontmatter, and registries
         if: steps.guard.outputs.skip != 'true'
