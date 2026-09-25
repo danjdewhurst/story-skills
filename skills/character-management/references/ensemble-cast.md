@@ -4,7 +4,7 @@ Guidance for managing multiple significant characters — ensemble stories, larg
 
 ## Anchor Character
 
-Designate one anchor character: the POV or emotional center the reader returns to. The anchor carries the main thematic question and gets the most page time. Without an anchor, ensembles drift — every scene feels like a reset. Record the anchor in `story.md` under `## Notes`, or inside the Relationship Map or Family Trees sections of `characters/_index.md`. `story reindex` rewrites that index and keeps only those two sections, so a separate `## Notes` heading on the index is deleted. Weigh scene count against the anchor during revision.
+Designate one anchor character: the POV or emotional center the reader returns to. The anchor carries the main thematic question and gets the most page time. Without an anchor, ensembles drift — every scene feels like a reset. Record the anchor in `story.md` under `## Notes`, or inside the Relationship Map or Family Trees sections of `characters/_index.md`. `story reindex` rewrites that index but keeps those two sections and any other `## ` section it does not generate, such as `## Notes`, moving the extra ones after the generated sections. Weigh scene count against the anchor during revision.
 
 ## A/B/C Story Braiding
 
