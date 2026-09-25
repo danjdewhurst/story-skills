@@ -114,6 +114,7 @@ describe("add", () => {
   test("promise and clue default to planted status when --planted is given", () => {
     const cwd = makeTempDir();
     const { root } = createStoryProject({ cwd, title: "Planted Defaults" });
+    expect(invoke(cwd, ["add", "chapter", "One", "--number", "1", "--path", root]).code).toBe(0);
     expect(invoke(cwd, ["add", "promise", "The warning", "--planted", "chapter-01", "--path", root]).code).toBe(0);
     expect(invoke(cwd, ["add", "clue", "The torn page", "--planted", "chapter-01", "--payoff", "chapter-03", "--path", root]).code).toBe(0);
     expect(invoke(cwd, ["add", "promise", "Unplanted", "--path", root]).code).toBe(0);
@@ -122,6 +123,9 @@ describe("add", () => {
     expect(frontmatter(path.join(root, "continuity", "clues", "the-torn-page.md")).status).toBe("planted");
     expect(frontmatter(path.join(root, "continuity", "promises", "unplanted.md")).status).toBe("planned");
     expect(frontmatter(path.join(root, "continuity", "clues", "overridden.md")).status).toBe("planned");
+    // Planted in a chapter not written yet is still a plan.
+    expect(invoke(cwd, ["add", "promise", "Later", "--planted", "chapter-05", "--path", root]).code).toBe(0);
+    expect(frontmatter(path.join(root, "continuity", "promises", "later.md")).status).toBe("planned");
   });
 });
 

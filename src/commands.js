@@ -466,7 +466,7 @@ export const COMMANDS = [
         id: parsed.positionals[2],
         name: parsed.positionals.slice(3).join(" ")
       });
-      io.stdout.write(`Renamed ${result.kind} ${result.oldId} to ${result.id}: ${result.file}\n`);
+      io.stdout.write(`${result.resumed ? "Finished an interrupted rename of" : "Renamed"} ${result.kind} ${result.oldId} to ${result.id}: ${result.file}\n`);
       return 0;
     }
   },

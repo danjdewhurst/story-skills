@@ -108,8 +108,8 @@ const PRONOUN_TAG_SOURCE = `(?:(?:${PRONOUNS})\\s+(?:${VERB_ALTERNATION})|(?:${V
 // A tag right after a closing quote (`"...," she said`) or right before an
 // opening one (`She said, "..."`); a pronoun and verb elsewhere in the
 // paragraph ("She said nothing more") is narration.
-const TAG_AFTER_QUOTE = new RegExp(`^[\\s,.;:!?—–-]*${PRONOUN_TAG_SOURCE}`, "iu");
-const TAG_BEFORE_QUOTE = new RegExp(`(?<![\\p{L}\\p{N}])${PRONOUN_TAG_SOURCE}[\\s,:—–-]*$`, "iu");
+const TAG_AFTER_QUOTE = new RegExp(`^[\\s,.;:!?…()—–-]*${PRONOUN_TAG_SOURCE}`, "iu");
+const TAG_BEFORE_QUOTE = new RegExp(`(?<![\\p{L}\\p{N}])${PRONOUN_TAG_SOURCE}[\\s,:…()—–-]*$`, "iu");
 const TAG_WINDOW = 40;
 
 function hasPronounTag(paragraph) {
