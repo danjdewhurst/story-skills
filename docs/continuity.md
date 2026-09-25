@@ -1,6 +1,12 @@
 # Continuity and analysis
 
-This page is for writers and agents who want to know what the `story` CLI can check about a manuscript, and what to do when it finds something. It covers the continuity engine (deaths, casts, promises, questions, clues, state, prop custody, and clock), exemptions, and the analysis commands: `knowledge`, `timeline`, `prose`, `progress`, `compare`, `report`, `next`, and `doctor`. All of them are read-only except `story progress --log`, which adds or replaces today's entry in `progress.md`.
+This page is for writers and agents who want to know what the `story` CLI can check about a manuscript, and what to do when it finds something. It covers the continuity engine (deaths, casts, promises, questions, clues, state, prop custody, clock, and route travel), exemptions, and the analysis commands: `knowledge`, `timeline`, `pacing`, `clues`, `prose`, `voices`, `names`, `diagram`, `progress`, `compare`, `passes`, `report`, `next`, and `doctor`.
+
+All of them are read-only except three:
+
+- `story progress --log` adds or replaces today's entry in `progress.md`.
+- `story passes` with `--init`, `--start`, or `--done` rewrites the `revision-passes` list in `story.md`.
+- `story diagram --out` writes the diagram to a file.
 
 All of these commands are deterministic. They read your markdown frontmatter and chapter prose, never call a model, never rewrite prose, and give the same answer every time for the same files. They only flag contradictions that the frontmatter makes visible. Judgement calls, such as whether a character acts on knowledge they have not learned yet, are left to you or to the [`revision-continuity`](../skills/revision-continuity/SKILL.md) skill.
 
@@ -10,13 +16,19 @@ For flags and exit codes of every command, see the [CLI reference](cli-reference
 
 - [At a glance](#at-a-glance)
 - [Find your message](#find-your-message)
-- [Story continuity](#story-continuity): [how findings are reported](#how-findings-are-reported), [deaths](#deaths-and-posthumous-appearances), [casts](#casts-and-locations), [promises, questions, and clues](#promises-questions-and-clues), [state](#continuity-state), [prop custody](#prop-custody), [clock](#clock-and-travel-time), [worked example](#worked-example-fixing-the-unraveled-thread)
+- [Story continuity](#story-continuity): [how findings are reported](#how-findings-are-reported), [deaths](#deaths-and-posthumous-appearances), [casts](#casts-and-locations), [promises, questions, and clues](#promises-questions-and-clues), [state](#continuity-state), [prop custody](#prop-custody), [clock](#clock-and-travel-time), [route travel](#route-travel), [worked example](#worked-example-fixing-the-unraveled-thread)
 - [Exemptions](#exemptions)
 - [Story knowledge](#story-knowledge)
 - [Story timeline](#story-timeline)
+- [Story pacing](#story-pacing)
+- [Story clues](#story-clues)
 - [Story prose](#story-prose)
+- [Story voices](#story-voices)
+- [Story names](#story-names)
+- [Story diagram](#story-diagram)
 - [Story progress](#story-progress)
 - [Story compare](#story-compare)
+- [Story passes](#story-passes)
 - [Report, next, and doctor](#report-next-and-doctor)
 - [When to run what](#when-to-run-what)
 
@@ -27,14 +39,22 @@ For flags and exit codes of every command, see the [CLI reference](cli-reference
 | [`story continuity [path]`](#story-continuity) | Does the recorded story contradict itself? |
 | [`story knowledge <id> --at <chapter-id>`](#story-knowledge) | What did this character know by this chapter? |
 | [`story timeline [path]`](#story-timeline) | What order do events happen in story time? Whose book is it? Who disappears? |
+| [`story pacing [path]`](#story-pacing) | Do scenes cost the characters enough, do chapters end with a pull, and are any chapters out of proportion? |
+| [`story clues [path]`](#story-clues) | Where is each clue planted and revealed, and does the mystery play fair? |
 | [`story prose [path]`](#story-prose) | Where does the prose lean on filter words, adverbs, said-bookisms, or off-sheet spellings? |
+| [`story voices [path]`](#story-voices) | How does each character talk, and do any two sound alike? |
+| [`story names <name...>`](#story-names) | Is this candidate name already taken, or too close to one in use? |
+| [`story diagram <kind>`](#story-diagram) | What do the family tree, route map, timeline, clue flow, or arc map look like? |
 | [`story progress [path]`](#story-progress) | How far along is the draft against its targets and deadline? |
 | [`story compare [path]`](#story-compare) | How much did this revision pass change? |
+| [`story passes [path]`](#story-passes) | Which revision pass am I on, and what should it check? |
 | [`story report [path]`](#story-report) | What is in this project and do the checks pass? |
 | [`story next [path]`](#story-next) | What should I do next? |
 | [`story doctor [path]`](#story-doctor) | What is broken and how do I repair it? |
 
-Every command except `knowledge` takes the project as an optional positional path or `--path`. `knowledge` takes only `--path`, because its positional argument is the character id. Of these, only `continuity` fails because of what the story says. The others exit 1 only on bad arguments or files that do not parse; `prose` findings are always warnings, and `report`, `next`, and `doctor` exit 0 whatever the checks find. For when each command exits 1, see [Output streams and exit codes](cli-reference.md#output-streams-and-exit-codes).
+Most commands take the project as an optional positional path or `--path`. `knowledge`, `names`, and `diagram` take only `--path`, because their positional arguments are a character id, candidate names, and a diagram kind.
+
+Only `continuity` and `names` fail because of what the story says: `continuity` on a contradiction, `names` on a candidate that is already taken. The others exit 1 only on bad arguments or files that do not parse. `pacing`, `clues`, `prose`, and `voices` findings are always warnings, and `report`, `next`, and `doctor` exit 0 whatever the checks find. For when each command exits 1, see [Output streams and exit codes](cli-reference.md#output-streams-and-exit-codes).
 
 ## Find your message
 
@@ -50,9 +70,16 @@ Every finding starts with a severity and, usually, a file path. Match the rest o
 | `current-chapter … is behind`, `current-chapter … is ahead`, `state.md … references missing`, `is missing knows`, `repeats fact`, `must be a kebab-case id`, `conflicts with`, `must be a mapping` | `continuity` | [Continuity state](#continuity-state) |
 | `uses <artifact>, destroyed/lost since`, `mentions <artifact>, destroyed/lost since`, `destroyed/lost with no since chapter`, `references missing since chapter` | `continuity` | [Prop custody](#prop-custody) |
 | `timestamp runs backward`, `allows only …h for travel`, `is earlier than Chapter`, `malformed date`, `malformed time`, `negative travel-hours` | `continuity` | [Clock and travel time](#clock-and-travel-time) |
+| `puts <character> at <location> …, but the fastest route takes` | `continuity` | [Route travel](#route-travel) |
 | `dismissed:` | `continuity` | [Exemptions](#exemptions) |
+| `has no hook`, `end in an outright yes`, `with no sequel`, `end on resolution`, `the median chapter` | `pacing` | [Pacing findings](#pacing-findings) |
+| `never planted: readers cannot play fair`, `late plant`, `lists no characters`, `red herring with no payoff`, `no clue is significance-delayed` | `clues` | [Fair-play findings](#fair-play-findings) |
 | `filter words per 1,000`, `-ly adverbs per 1,000`, `said-bookism dialogue tags`, `sentence lengths are uniform`, `have similar first names` | `prose` | [What each line measures](#what-each-line-measures) |
 | `style sheet prefers`, `british dialect prefers`, `american dialect prefers` | `prose` | [The style sheet](#the-style-sheet) |
+| `which is in their voice-avoid list`, `from their voice-words list`, `may sound alike` | `voices` | [Voice findings](#voice-findings) |
+| `clashes with`, `looks like`, `shares an initial with` | `names` | [Story names](#story-names) |
+| `Unknown diagram kind` | `diagram` | [Story diagram](#story-diagram) |
+| `Revision pass names must be kebab-case`, `Fix revision-passes in story.md` | `passes` | [Story passes](#story-passes) |
 | `is not a story project: missing story.md` | any | The folder has no `story.md`. Pass the project root, or run `story init` first. |
 
 ## Story continuity
@@ -81,19 +108,20 @@ Chapter order is always the chapter's `number`. Chapter references such as `died
 
 ### How findings are reported
 
-`continuity`, `timeline`, `prose`, `progress`, and `compare` all report the same way. On stderr they print one summary line first, like the first line above, and then each finding on its own line:
+`continuity`, `timeline`, `pacing`, `clues`, `prose`, `voices`, `names`, `progress`, and `compare` all report the same way. On stderr they print one summary line first, like the first line above, and then each finding on its own line:
 
 - **error** lines are contradictions. They make the command exit 1.
 - **warning** lines are things that are probably wrong or stale. They never change the exit code.
-- **dismissed** lines are findings that match an entry in `continuity/exemptions.md`. They are shown so nothing is hidden, but they do not count as errors or warnings. See [Exemptions](#exemptions).
+- **dismissed** lines are findings that match an entry in `continuity/exemptions.md`. They are shown so nothing is hidden, but they do not count as errors or warnings. Only `continuity` applies exemptions. See [Exemptions](#exemptions).
 
-The report itself (timeline sections, prose counts, progress figures) goes to stdout, so you can redirect it to a file without the findings. File paths in findings are relative to the project root, so you can open them directly.
+The report itself (timeline sections, pacing and clue grids, prose counts, voice profiles, progress figures) goes to stdout, so you can redirect it to a file without the findings. File paths in findings are relative to the project root, so you can open them directly.
 
 ### What the checker reads
 
 | File | Fields |
 |------|--------|
 | `characters/*.md` | `status`, `died-in` |
+| `worldbuilding/locations/*.md` | `routes` |
 | `chapters/chapter-NN.md` | `number`, `status`, `pov`, `characters`, `mentions`, `locations`, `date`, `time` |
 | `scenes/*.md` | `chapter`, `scene`, `pov`, `characters`, `mentions`, `location`, `state-changes`, `date`, `time`, `travel-hours` |
 | `continuity/promises/*.md` | `status`, `planted`, `payoff` |
@@ -156,7 +184,7 @@ characters:
 arcs: []
 ```
 
-`story add promise` and `story add clue` default to `status: planted` when you pass `--planted`, and to `planned` otherwise. Clues also accept `significance-delayed: true` for evidence whose meaning the reader should only see later. The checker records that flag but does not act on it.
+`story add promise` and `story add clue` default to `status: planted` when you pass `--planted`, and to `planned` otherwise. Clues accept two more flags: `significance-delayed: true` (`--significance-delayed`) for evidence whose meaning the reader should only see later, and `red-herring: true` (`--red-herring`) for evidence that points the wrong way. `story continuity` checks clues exactly like promises and ignores both flags; [`story clues`](#story-clues) uses them for its fair-play checks.
 
 Entries with `status: abandoned` are skipped entirely. Everything else is checked:
 
@@ -324,6 +352,58 @@ warning: scenes/chapter-03-scene-01.md timestamp runs backward
 
 Scenes with `flashback-to` are still checked. That field is a free-form note (for example `flashback-to: the night of the fire`) that `story timeline` displays; it does not suppress the backward-timestamp warning.
 
+### Route travel
+
+`travel-hours` is a figure you assert scene by scene. Location `routes` let the checker work the journey out for itself. Each route on a location names another location and the fastest journey there, in hours:
+
+```yaml
+# worldbuilding/locations/port-kestrel.md
+routes:
+  - to: bellwether-reef
+    hours: 0.5
+    mode: dive skiff
+```
+
+| Field | Meaning |
+|-------|---------|
+| `to` | A location id. `story links` reports `route references missing location <id>` and `route points at itself`. |
+| `hours` | The fastest journey, as a positive number. `story validate` rejects zero, negative, and quoted values. |
+| `mode` | Optional free text, such as `dive skiff` or `cart`. `story diagram locations` prints it on the edge. |
+
+A route is two-way unless the destination records its own route back, in which case each direction uses its own hours (a river that is quicker downstream, for example). The checker finds the fastest path through any number of places, so a harbour-to-mill route and a mill-to-keep route together give a harbour-to-keep time.
+
+Once any location has a valid route, `story continuity` follows every character through the dated scene records. A character is sighted at a scene's `location` when they are its `pov` or are listed in its `characters`; `mentions` do not count. For each sighting, the checker looks back at every earlier sighting of the same character at a different connected place, and reports an error if even the fastest route could not cover the distance in the time between them. Each scene is reported at most once per character.
+
+Scene times are read generously, so only journeys that are impossible on any reading are reported:
+
+| Scene `time` | Treated as |
+|--------------|-----------|
+| `HH:MM` | That exact minute |
+| `dawn` | 04:00 to 06:59 |
+| `morning` | 05:00 to 11:59 |
+| `midday` | 11:00 to 13:59 |
+| `afternoon` | 12:00 to 17:59 |
+| `evening` | 17:00 to 21:59 |
+| `night` | 20:00 to 23:59 |
+| none | Any time that day |
+
+Scenes without a valid `date`, scenes without a `location`, and places with no routes at all are left out. The route check runs alongside the `travel-hours` check and does not replace it.
+
+From a copy of [`examples/harbor-of-second-light`](../examples/harbor-of-second-light/), whose Port Kestrel file carries the route above. The copy dates chapter 1's reef scene `2041-03-02` at `"05:40"`, and adds a second scene in which Mara is on the council steps in Port Kestrel twenty minutes later (`story add scene "Council Steps" --chapter chapter-01 --location port-kestrel --pov mara-quill --character mara-quill --date 2041-03-02 --time 06:00`):
+
+```text
+$ story continuity .
+Continuity check failed: 1 errors, 0 warnings, 0 dismissed
+error: scenes/chapter-01-scene-02.md puts mara-quill at port-kestrel 0.3h after scenes/chapter-01-scene-01.md at bellwether-reef, but the fastest route takes 0.5h
+```
+
+| Severity | Message | Fix |
+|----------|---------|-----|
+| error | `<scene> puts <character> at <location> <n>h after <earlier scene> at <location>, but the fastest route takes <m>h` | Move the later scene later, move the character to a nearer place, or take them out of one scene's cast. If a faster way exists (a boat, a portal), add it as a route. |
+| error | The same, with `at most <n>h` | As above. `at most` means one of the two scenes has a named part of day or no time, and even the widest reading is too short. Giving both scenes an `HH:MM` time makes the gap exact. |
+
+Record routes with the [`worldbuilding`](../skills/worldbuilding/SKILL.md) skill, whose [`maps-and-routes.md`](../skills/worldbuilding/references/maps-and-routes.md) reference covers recording them. To see the network, run [`story diagram locations`](#story-diagram).
+
 ### Worked example: fixing the unraveled thread
 
 Each finding in the [example output](#story-continuity) has a direct fix:
@@ -376,7 +456,7 @@ Copy the pattern from the finding itself, and keep it specific: include the file
 
 `story validate` checks the file: `type` must be `exemption-log`, `exemptions` must be a list, and each entry needs a non-empty `pattern` of at least 4 characters and a non-empty `reason`. If the file is missing or does not parse, `story continuity` applies no exemptions.
 
-Exemptions apply only to `story continuity`. They do not affect `validate`, `links`, `prose`, or `series`.
+Exemptions apply only to `story continuity`. They do not affect `validate`, `links`, `pacing`, `clues`, `prose`, `voices`, `names`, or `series`.
 
 ## Story knowledge
 
@@ -464,6 +544,122 @@ Read it for:
 - **Scenes told out of order.** Every `told in chapter` marker should be a flashback or a deliberate reordering. If it is not, a date is wrong.
 - **POV share.** A POV character with a large share of the book, or one who narrates a single chapter, is a structural choice worth confirming.
 - **Vanishing characters.** A long `longest absence`, or a supporting character absent from the last several chapters, often means a dropped subplot. A character `not present in any chapter` is either still to come or a candidate to cut.
+
+To draw the chronology as a picture, run [`story diagram timeline`](#story-diagram).
+
+## Story pacing
+
+```shell
+story pacing .
+```
+
+`story pacing` is a dashboard of how each chapter moves. It reads frontmatter only, never prose meaning, and every finding is a warning, so it exits 0 on any readable project. Three optional fields drive it:
+
+| Field | On | Values | Meaning |
+|-------|----|--------|---------|
+| `outcome` | scene | `yes`, `no`, `yes-but`, `no-and` | Whether the POV character gets what they wanted in the scene. `yes-but` (they get it at a cost) and `no-and` (they fail and things get worse) are the complicating outcomes. |
+| `sequel` | scene | `true` | The scene is a sequel unit: the character reacts, weighs a `dilemma`, and decides. Sequels are counted separately and their `outcome` is ignored. |
+| `hook` | chapter | `cliffhanger`, `question`, `revelation`, `reversal`, `decision`, `emotional`, `resolution` | How the chapter's last page pulls the reader on. `resolution` is the one ending that lets them put the book down. |
+
+Set them with `story add scene --outcome yes-but`, `story add scene --sequel --dilemma "<text>"`, and `story add chapter --hook question`, or by hand. `story validate` rejects any other `outcome` or `hook` value.
+
+From [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/):
+
+```text
+$ story pacing examples/the-unraveled-thread
+Pacing: 4 scenes, 0 sequels, 4 of 4 chapters with hooks
+Outcomes: 75% of recorded outcomes are setbacks or complications
+Median chapter: 28 words
+
+Ch  Words  Scenes  Sequels  Outcomes (yes/no/yes-but/no-and)  Hook
+ 1     34       1        0  0/0/1/0                           question
+ 2     31       1        0  0/0/0/1                           decision
+ 3     24       1        0  1/0/0/0                           revelation
+ 4     22       1        0  0/0/1/0                           cliffhanger
+Pacing check complete: 0 errors, 1 warnings, 0 dismissed
+warning: 4 scene units in a row with no sequel (chapter-01-scene-01 to chapter-04-scene-01): give the POV character room to react and decide
+```
+
+How to read it:
+
+- **The header** counts scenes (not sequels), sequels, and chapters with a `hook`. The outcome line is the share of recorded outcomes that are anything but `yes`; a book where most scenes go the hero's way has little pressure. The median is taken over chapters that have prose.
+- **Each row** is one chapter in number order: its prose words, its scene and sequel records (matched by the scene's `chapter`), the count of each outcome, and its hook, or `-` if none is set.
+- Scene records are what count. A chapter with no scene files shows zero scenes and zero outcomes, so run `story add scene` for each scene you want measured.
+
+### Pacing findings
+
+| Message | Appears when | Fix |
+|---------|--------------|-----|
+| `<chapter> has no hook: record how the chapter ending pulls the reader on` | A chapter with status `draft`, `revised`, `final`, or `complete` has no `hook`. Outline chapters are not flagged. | Decide how the chapter ends and record it. If the ending does not pull, rewrite the last page. |
+| `<n> scenes in a row end in an outright yes (<first> to <last>): raise the cost with yes-but or no-and` | Three or more consecutive non-sequel scenes, in reading order across chapters, have `outcome: yes`. A scene with another outcome, or none, breaks the run; a sequel does not. | Make one of the wins cost something (`yes-but`) or fail (`no`, `no-and`). |
+| `<n> scene units in a row with no sequel (<first> to <last>): give the POV character room to react and decide` | Four or more consecutive scene records with no `sequel: true` between them. | Add a sequel beat where the character absorbs the last setback and chooses what to do next, and record it with `story add scene --sequel`. Fast thrillers can leave this warning standing. |
+| `<n> chapters in a row end on resolution (<first> to <last>): readers can put the book down` | Three or more consecutive chapters have `hook: resolution`. | End at least one of them on an open question, decision, or reversal, or merge chapters so the calm sits mid-chapter. |
+| `<chapter> runs <n> words, over twice the median chapter (<m>): consider splitting it` | At least three chapters have prose and this one is more than twice the median. | Split it at a scene break, or accept a deliberately long set piece. |
+| `<chapter> runs <n> words, under half the median chapter (<m>): check it earns its place` | As above, under half the median. | Merge it with a neighbour, expand it, or keep it as a deliberate short chapter. |
+
+In a copy of the unraveled thread with chapters 2 to 4 ending in `outcome: yes` scenes and `hook: resolution`, and a sequel scene added to chapter 1 (`story add scene "Jonas Counts the Cost" --chapter chapter-01 --pov jonas-reed --character jonas-reed --sequel --dilemma "Burn the ledger or read it"`), the no-sequel run is broken and the other two warnings appear:
+
+```text
+Ch  Words  Scenes  Sequels  Outcomes (yes/no/yes-but/no-and)  Hook
+ 1     34       1        1  0/0/1/0                           question
+ 2     31       1        0  1/0/0/0                           resolution
+ 3     24       1        0  1/0/0/0                           resolution
+ 4     22       1        0  1/0/0/0                           resolution
+Pacing check complete: 0 errors, 2 warnings, 0 dismissed
+warning: 3 scenes in a row end in an outright yes (chapter-02-scene-01 to chapter-04-scene-01): raise the cost with yes-but or no-and
+warning: 3 chapters in a row end on resolution (chapter-02 to chapter-04): readers can put the book down
+```
+
+The thresholds are rules of thumb, not rules. The [`scene-craft`](../skills/scene-craft/SKILL.md) and [`plot-structure`](../skills/plot-structure/SKILL.md) skills explain the scene and sequel pattern, and the `chapter-writing` skill runs `story pacing` after each chapter.
+
+## Story clues
+
+```shell
+story clues .
+```
+
+`story clues` is the fair-play view of the clue ledger (`continuity/clues/`). It draws a grid of which chapter plants each clue and which reveals it, and warns about what a mystery reader would call cheating. `story continuity` still owns the hard errors, such as a clue revealed before it is planted; everything here is a warning, so the command exits 0 on any readable project.
+
+It reads these clue fields:
+
+| Field | Used for |
+|-------|----------|
+| `planted`, `payoff` | The `P` and `R` cells, and the late-plant and unplanted checks |
+| `status` | Only `planned`, `planted`, and `paid-off` clues are checked. `dropped` and `abandoned` clues still get a grid row but no findings. |
+| `characters` | Who could notice the clue |
+| `red-herring` | `true` for false evidence. Marked `~` in the grid; its `payoff` is the chapter that debunks it. |
+| `significance-delayed` | `true` when the clue is shown before the reader can understand it. Marked `delayed` in the grid. |
+
+From [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/), which carries three clues, two of them flawed on purpose:
+
+```text
+$ story clues examples/the-unraveled-thread
+Clues: 3 live (1 red herring), 3 planted, 2 revealed
+
+Clue                       1  2  3  4
+edrans-margin-notes        P  .  .  R  paid-off, delayed
+the-constables-silence ~   .  P  .  .  planted
+the-burned-page            .  .  P  R  paid-off
+
+P planted, R revealed, x both, ~ red herring
+Clue check complete: 0 errors, 2 warnings, 0 dismissed
+warning: clue the-constables-silence is a red herring with no payoff: record the chapter that debunks it
+warning: clue the-burned-page is planted in the chapter before its reveal (chapter-03 -> chapter-04): late plant gives readers no time to notice it
+```
+
+The columns are chapter numbers, in order. Rows are sorted by the chapter that plants them; clues with no `planted` chapter come last. `x` means planted and revealed in the same chapter. After each row come the clue's status and `delayed` if the flag is set. The header counts live clues (`planned`, `planted`, or `paid-off`) and how many of them record a `planted` and a `payoff` chapter.
+
+### Fair-play findings
+
+| Message | Fix |
+|---------|-----|
+| `clue <id> is revealed in <chapter> but never planted: readers cannot play fair` | Plant the clue earlier and record `planted`, or cut the reveal's reliance on it. |
+| `clue <id> is planted in the same chapter as its reveal` or `in the chapter before its reveal (<planted> -> <payoff>): late plant gives readers no time to notice it` | Move the plant at least two chapters before the reveal. Distance is counted in chapter positions, so gaps in numbering do not help. |
+| `clue <id> lists no characters: record who could notice it` | List the characters who see, hear, or could find the clue. A clue no one can notice is not fair evidence. |
+| `clue <id> is a red herring with no payoff: record the chapter that debunks it` | Write the scene that explains the false lead away, and set `payoff` to its chapter. |
+| `no clue is significance-delayed: every clue announces its meaning when planted` | Appears once the book has three or more live clues that are not red herrings and none has `significance-delayed: true`. Hide at least one clue in plain sight, and set the flag. |
+
+To see the same plant-to-reveal flow as a picture, run [`story diagram clues`](#story-diagram). The [`genre-craft`](../skills/genre-craft/SKILL.md) skill's [mystery fair-play reference](../skills/genre-craft/references/mystery-fair-play.md) covers planting technique and red-herring discipline.
 
 ## Story prose
 
@@ -556,7 +752,188 @@ Matches are case-insensitive whole words, so `grey-haired` still counts as a use
 
 ### Acting on the report
 
-Treat the counts as a list of places to reread, not a list of errors. Filter words and adverbs above the threshold usually mark a passage told at a distance; said-bookisms usually mean the action should be its own beat. A repeated phrase across the manuscript is often a tic. An avoided spelling is a copyedit fix. Similar names are cheapest to fix before the draft is finished. The [`revision-continuity`](../skills/revision-continuity/SKILL.md) skill uses this report for line-edit and copyedit passes.
+Treat the counts as a list of places to reread, not a list of errors. Filter words and adverbs above the threshold usually mark a passage told at a distance; said-bookisms usually mean the action should be its own beat. A repeated phrase across the manuscript is often a tic. An avoided spelling is a copyedit fix. Similar names are cheapest to fix before the draft is finished, and [`story names`](#story-names) catches them before a name is used at all. The [`line-editing`](../skills/line-editing/SKILL.md) skill uses this report for its line-edit and copyedit passes.
+
+## Story voices
+
+```shell
+story voices .
+```
+
+`story voices` fingerprints each character's dialogue from the chapter prose, so you can see whether characters sound different from each other and from how you described them. It is advisory: every finding is a warning, and it exits 0 on any readable project.
+
+### How lines are attributed
+
+It never guesses who is speaking. A paragraph's quoted lines (straight `"..."`, curly `“...”`, or British `‘...’`) go to a character only when the narration around them says who spoke:
+
+1. A speech tag: the character's name next to a speech verb such as `said`, `asked`, `replied`, `whispered`, `muttered`, `called`, `snapped`, or `went on`. A name before the verb wins over one after it, so in `"...," Sera told Kael` the line is Sera's, and `said Kael` gives it to Kael.
+2. Failing that, an action beat: narration that names exactly one character (`Kael shouldered his pack. "For the record..."`).
+
+Anything else is counted as unattributed. A character is matched by their full `name`, their given name (the first word that is not a title, so `Lord Maren` also matches `Maren`), and their `aliases`, case-sensitively. Pronoun tags (`she said`) are never attributed, so in close third person the POV character is often under-counted. Characters with `status: cut` are ignored.
+
+### What it prints
+
+From [`examples/the-last-ember`](../examples/the-last-ember/):
+
+```text
+$ story voices examples/the-last-ember
+Voices: 1 speaking characters, 35 unattributed lines
+
+kael-voss: 9 lines, 76 words
+  Sentence length 5.1, contractions 2.6 per 100 words, questions 7%, exclamations 0%
+  Signature words: jumpy, good, looking, sera, soldiers
+Voice check complete: 0 errors, 0 warnings, 0 dismissed
+```
+
+Sera speaks most of the chapter's dialogue, but always with `she said`, so none of it is attributed. Each profile, largest first, shows:
+
+- **Lines and words** of attributed dialogue.
+- **Sentence length**: mean words per spoken sentence.
+- **Contractions** per 100 words spoken (`don't`, `we're`, `I'd`).
+- **Questions** and **exclamations**: the share of spoken sentences ending in `?` or `!`.
+- **Signature words**: up to five words of four or more letters that the character says at least twice and more than twice as often, per word spoken, as everyone else combined. Common words are left out. `none yet` means nothing stands out.
+
+Two optional character fields record the voice you intend:
+
+```yaml
+# characters/kael-voss.md
+voice-words:
+  - for the record
+  - aye
+voice-avoid:
+  - good
+```
+
+`voice-words` are words and phrases the character does say; `voice-avoid` are ones they would never say. Both are lists of strings, matched as whole words or phrases, case-insensitively, with either straight or curly apostrophes. The [`voice-style`](../skills/voice-style/SKILL.md) skill records them.
+
+### Voice findings
+
+In a copy of the last ember with those fields on Kael, and six of Sera's `she said` tags changed to `Sera said` or `Sera murmured`:
+
+```text
+$ story voices .
+Voices: 2 speaking characters, 29 unattributed lines
+
+kael-voss: 9 lines, 76 words
+  Sentence length 5.1, contractions 2.6 per 100 words, questions 7%, exclamations 0%
+  Signature words: jumpy, good, looking, sera, soldiers
+
+sera-voss: 6 lines, 28 words
+  Sentence length 4.7, contractions 0.0 per 100 words, questions 0%, exclamations 0%
+  Signature words: none yet
+Voice check complete: 0 errors, 2 warnings, 0 dismissed
+warning: kael-voss says "good", which is in their voice-avoid list (chapter-01)
+warning: kael-voss never says "aye" from their voice-words list in 9 lines of dialogue
+```
+
+| Message | Appears when | Fix |
+|---------|--------------|-----|
+| `<id> says "<phrase>", which is in their voice-avoid list (<chapters>)` | Any attributed line contains the phrase. The chapters that use it are listed. | Rewrite the line, or remove the phrase from `voice-avoid` if the character has changed. |
+| `<id> never says "<phrase>" from their voice-words list in <n> lines of dialogue` | The character has five or more attributed lines and none uses the phrase. | Work the phrase in where it fits, or drop it from `voice-words`. |
+| `<a> and <b> may sound alike: similar sentence length, contractions, questions, and exclamations` | Both have five or more lines, and all four measures are close: sentence length within 1.5 words, contractions within 1.5 per 100 words, and question and exclamation shares each within 10 points. | Separate them on more than one axis: sentence length, contractions, vocabulary, what they ask about. Here Kael and Sera are not flagged, because their contraction rates differ by 2.6. |
+
+A low line count may mean few named tags rather than few lines. When a result matters, name the tags in a sample chapter and rerun.
+
+## Story names
+
+```shell
+story names "Ilse Varn" "Teodor" --path .
+```
+
+`story names` checks candidate names before they go into the bible. It compares each one against every name already in use: character names, given names, and aliases (skipping `status: cut` characters), and the names of locations, factions, artifacts, systems, and glossary terms with their aliases. Pass one or more names, quoting any with spaces. It needs at least one name, and prints `Usage: story names <name...> [--path <project>]` otherwise.
+
+From a copy of [`examples/harbor-of-second-light`](../examples/harbor-of-second-light/), whose cast is Mara Quill (protagonist), Theo Quill, and Councillor Ilya Venn (antagonist):
+
+```text
+$ story names "Mara" "Marra Quinn" "Ilse Varn" "Teodor" "Ivo" "Wren Calder" --path .
+Mara: taken
+Marra Quinn: check
+Ilse Varn: check
+Teodor: clear
+Ivo: check
+Wren Calder: clear
+Name check failed: 1 errors, 3 warnings, 0 dismissed
+error: "Mara" clashes with character mara-quill (Mara)
+warning: "Marra Quinn" looks like character mara-quill (Mara Quill)
+warning: "Ilse Varn" shares an initial with antagonist ilya-venn (Councillor Ilya Venn)
+warning: "Ivo" shares an initial with antagonist ilya-venn (Councillor Ilya Venn)
+```
+
+Each candidate gets one verdict on stdout: `taken` (an error), `check` (a warning), or `clear`. Names are compared ignoring case, accents, and punctuation.
+
+| Severity | Message | Appears when |
+|----------|---------|--------------|
+| error | `"<name>" clashes with <kind> <id> (<existing>)` | The candidate matches an existing name or alias exactly, or its given name matches a character's given name. `"Port Kestrel"` clashes with the location of that name. |
+| warning | `"<name>" looks like <kind> <id> (<existing>)` | The given names (for characters) or single-word names look alike: both three letters or more, and they share their first four letters, or share a first letter and are one edit apart (two edits when both have five letters or more). Multi-word place and term names are only compared exactly. |
+| warning | `"<name>" shares an initial with <role> <id> (<existing>)` | The candidate's given name starts with the same letter as a `protagonist`, `antagonist`, `deuteragonist`, or `narrator`, and does not already look like it. Readers skim names by their first letter. |
+
+The command exits 1 when any candidate clashes, and 0 when there are only warnings. Titles and articles (`Lord`, `Captain`, `The`, and so on) are skipped when finding a given name, so `Captain Mara Dole` clashes with Mara Quill. It checks only the current project; for a series, run it in each book. The [`character-management`](../skills/character-management/SKILL.md) and [`worldbuilding`](../skills/worldbuilding/SKILL.md) skills run it before settling a name, and [`story prose`](#story-prose) catches similar first names among characters already in the bible.
+
+## Story diagram
+
+```shell
+story diagram <kind> [--path <project>] [--out <file>]
+```
+
+`story diagram` prints [Mermaid](https://mermaid.js.org/) source generated from frontmatter. The output is text, so it diffs cleanly, renders on GitHub and in most markdown editors, and can be rebuilt at any time from the same fields the checks read.
+
+| Kind | Draws | From |
+|------|-------|------|
+| `relationships` | A family tree and relationship map. Family links (`parent`, `sibling`, `spouse`, `cousin`, and so on) are solid lines, with an arrow from the elder side for `parent`, `grandparent`, `aunt`, and `uncle`; other relationships are dotted and labelled with their `type`. Deceased characters have a dashed outline. | Character `relationships`, `status` |
+| `locations` | The route network, each place labelled with its `region`, each edge with its hours and `mode`. An arrow means both directions declare their own route; a plain line is a two-way route declared once. | Location `routes`, `region` |
+| `timeline` | A Mermaid timeline of dated scenes and scene-less chapters, grouped by date, with `(told in chapter N)` on anything told out of order | The same chronology as [`story timeline`](#story-timeline) |
+| `clues` | Chapters in order, with an arrow from each clue's plant chapter to its reveal. Red herrings are dotted; clues with no reveal point at a `not yet revealed` node. Dropped and abandoned clues, and clues with no known `planted` chapter, are left out. | Clue `planted`, `payoff`, `status`, `red-herring` |
+| `arcs` | Each arc linked to the chapters that advance it | Chapter and scene `arcs-advanced` |
+
+From [`examples/harbor-of-second-light`](../examples/harbor-of-second-light/):
+
+```text
+$ story diagram relationships --path examples/harbor-of-second-light
+flowchart LR
+  ilya_venn["Councillor Ilya Venn"]
+  mara_quill["Mara Quill"]
+  theo_quill["Theo Quill"]
+  ilya_venn -.-|adversary| mara_quill
+  ilya_venn -.-|former-supervisor| theo_quill
+  mara_quill ===|sibling| theo_quill
+  classDef deceased stroke-dasharray: 4 4,color:#888
+  class theo_quill deceased
+$ story diagram locations --path examples/harbor-of-second-light
+flowchart LR
+  bellwether_reef["Bellwether Reef<br/>Western Shoals"]
+  port_kestrel["Port Kestrel<br/>Western Shoals"]
+  port_kestrel ---|0.5h dive skiff| bellwether_reef
+```
+
+And the clue flow of [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/), matching the [`story clues`](#story-clues) grid:
+
+```text
+$ story diagram clues --path examples/the-unraveled-thread
+flowchart LR
+  chapter_01["1. The Ledger in the Ash"]
+  chapter_02["2. The Millpond"]
+  chapter_03["3. The Dry Side of Mill Row"]
+  chapter_04["4. The Lock Gate"]
+  chapter_01 ~~~ chapter_02
+  chapter_02 ~~~ chapter_03
+  chapter_03 ~~~ chapter_04
+  chapter_01 -->|Edran's Margin Notes| chapter_04
+  chapter_03 -->|The Burned Page| chapter_04
+  chapter_02 -.->|The Constable's Silence (red herring)| unrevealed(("not yet revealed"))
+  classDef open stroke-dasharray: 4 4
+  class unrevealed open
+```
+
+Node ids replace hyphens with underscores, because Mermaid cannot always parse hyphens next to arrows; the labels carry the readable names. In the timeline, colons in times and titles become `∶`, because Mermaid's timeline syntax splits on colons.
+
+To paste a diagram into a markdown file, wrap it in a fenced block with the language `mermaid`. To save it instead, pass `--out`:
+
+```text
+$ story diagram timeline --out dist/timeline.mmd
+Wrote timeline diagram to /home/you/books/the-unraveled-thread/dist/timeline.mmd
+```
+
+A relative `--out` path is resolved against the project root and must stay inside it; `dist/` keeps diagrams with the other disposable build output. Nothing is written if any project file fails to parse, because a diagram drawn from a partial scan would silently drop entities. A missing or unknown kind exits 1 with `Unknown diagram kind: <kind>. Supported kinds: relationships, locations, timeline, clues, arcs`.
 
 ## Story progress
 
@@ -668,6 +1045,76 @@ How to read it:
 
 The [`revision-continuity`](../skills/revision-continuity/SKILL.md) skill takes a snapshot before any multi-chapter pass and runs `story compare` afterwards; see [Writing workflows](writing-workflows.md#revision-passes).
 
+## Story passes
+
+```shell
+story passes .
+story passes . --init
+story passes . --start pacing
+story passes . --done pacing
+```
+
+A full revision works best as a ladder of separate passes, each looking for one kind of problem, from the largest (structure) to the smallest (proof), so you do not polish sentences a structural change will cut. `story passes` keeps that ladder in the `revision-passes` list in `story.md`, so it survives between sessions.
+
+Without any passes recorded, it prints the default ladder and the checks each pass runs:
+
+```text
+$ story passes .
+Revision passes: none recorded. Run story passes --init to add the default ladder:
+
+- structure: Order of events, act turns, scenes that do not change anything (story timeline, story pacing, story diagram arcs)
+- character: Wants, arcs, motivation, and who knows what when (story voices, story knowledge <id> --at <chapter>, story diagram relationships)
+- theme: Premise, counter-premise, motifs, and the lie/truth arc (story report)
+- continuity: Deaths, props, travel, promises, clues, and backlinks (story continuity, story clues, story links)
+- pacing: Scene outcomes, sequels, chapter hooks, and chapter lengths (story pacing)
+- line: Sentence-level clarity, rhythm, and distinct voices (story prose, story voices)
+- copyedit: Spelling, usage, and consistency against the style sheet (story prose)
+- proof: Typos and layout in the built book (story build --format print, story build --format html)
+```
+
+| Option | Effect |
+|--------|--------|
+| `--init` | Adds each default pass that is not already listed, with `status: pending`, after any existing passes. Existing entries keep their status. |
+| `--start <pass>` | Sets the pass to `in-progress`, adding it to the end of the list if it is new |
+| `--done <pass>` | Sets the pass to `done`, adding it if it is new |
+
+Any kebab-case name works as a pass, so you can add your own (`--start sensitivity-read`). A custom pass has no focus or checks listed. When the list changes, the command prints `Updated revision-passes in story.md` and rewrites only that frontmatter entry; the rest of `story.md` is kept. It then prints the checklist. From a copy of the unraveled thread after `--init`, `--done structure`, and `--start character`:
+
+```text
+$ story passes . --start character
+Updated revision-passes in story.md
+Revision passes: 1 of 8 done
+
+[x] structure - Order of events, act turns, scenes that do not change anything (story timeline, story pacing, story diagram arcs)
+[~] character - Wants, arcs, motivation, and who knows what when (story voices, story knowledge <id> --at <chapter>, story diagram relationships)
+[ ] theme - Premise, counter-premise, motifs, and the lie/truth arc (story report)
+[ ] continuity - Deaths, props, travel, promises, clues, and backlinks (story continuity, story clues, story links)
+[ ] pacing - Scene outcomes, sequels, chapter hooks, and chapter lengths (story pacing)
+[ ] line - Sentence-level clarity, rhythm, and distinct voices (story prose, story voices)
+[ ] copyedit - Spelling, usage, and consistency against the style sheet (story prose)
+[ ] proof - Typos and layout in the built book (story build --format print, story build --format html)
+
+Next: character (in progress); mark it with story passes --done character
+```
+
+`[x]` is done, `[~]` in progress, and `[ ]` pending. The next pass is the first one in progress, or else the first one not done. When every pass is done, the last line reads `All passes done.` The file now holds:
+
+```yaml
+# story.md
+revision-passes:
+  - pass: structure
+    status: done
+  - pass: character
+    status: in-progress
+  - pass: theme
+    status: pending
+  # ...and so on to proof
+```
+
+`story passes` exits 0 unless it cannot write: a pass name that is not kebab-case exits 1 with `Revision pass names must be kebab-case, got <name>`, and a `revision-passes` list that `story validate` would reject exits 1 with `Fix revision-passes in story.md before changing it: ...`. `story validate` requires a list of objects, each with a kebab-case `pass` listed once and an optional `status` of `pending` (the default), `in-progress`, or `done`.
+
+While `story.md` has `status: revising`, [`story next`](#story-next) turns the ladder into an action: `Plan revision passes` when none are recorded, then `Revision pass: <name>` with the pass's focus and checks, until every pass is done. The [`revision-continuity`](../skills/revision-continuity/SKILL.md) skill works through the passes one at a time.
+
 ## Report, next, and doctor
 
 These three commands run `validate`, `links`, and `continuity` together and summarise the results. They exit 0 whatever the checks find (only a folder without `story.md` makes them exit 1): use them to decide what to do, and use the individual checks in scripts and CI.
@@ -684,6 +1131,7 @@ Story ID: the-unraveled-thread
 Schema version: 2
 Status: drafting
 Genre: mystery / village-noir
+Form: novel
 POV/Tense: third-person-limited / past
 
 Inventory:
@@ -697,7 +1145,7 @@ Inventory:
 - Scenes: 4
 - Questions: 1
 - Promises: 2
-- Clues: 0
+- Clues: 3
 - Glossary terms: 0
 - Total words: 111
 
@@ -719,10 +1167,11 @@ Next Actions:
 - [P0] Fix continuity contradictions: Run story continuity . and repair 4 deterministic continuity errors.
 - [P1] Review continuity warnings: Run story continuity . and review 3 continuity warnings.
 - [P2] Review promises and payoffs: 1 setup/payoff promises need planting or payoff decisions.
+- [P2] Review open clues: 1 clues are still planned or planted.
 - [P2] Draft chapter 5: Use story add chapter "Chapter 5" --number 5, then outline scenes to advance The Ledger Trail.
 ```
 
-The report also shows `Series` when `story.md` sets one, `Research notes` when there are any, and `Target words` with a percentage when `target-words` is set.
+The report also shows `Series` when `story.md` sets one, `Form` when it sets a `form`, `Research notes` when there are any, and `Target words` with a percentage when `target-words` is set. The `Checks` lines cover `validate`, `links`, and `continuity` only; the advisory commands (`pacing`, `clues`, `prose`, `voices`) are not run, so run them yourself.
 
 ### story next
 
@@ -738,6 +1187,27 @@ Actions:
 - [P3] Project is mechanically healthy: No deterministic maintenance issues are blocking the next writing pass.
 - [P2] Draft chapter 2: Use story add chapter "Chapter 2" --number 2, then outline scenes to advance Sera's Reclamation.
 ```
+
+The last ember follows another book, so run this with its sibling [`the-fall-of-the-citadel`](../examples/the-fall-of-the-citadel/) beside it; a copy on its own reports a broken series link.
+
+When `story.md` has `status: revising`, `story next` also names the current [revision pass](#story-passes). From the copy of the unraveled thread in [Story passes](#story-passes), with `character` in progress:
+
+```text
+$ story next .
+# Next Writing Actions: The Unraveled Thread
+
+Checks: validate ok (0 errors, 0 warnings), links ok (0 errors, 0 warnings), continuity failed (4 errors, 3 warnings)
+
+Actions:
+- [P0] Fix continuity contradictions: Run story continuity . and repair 4 deterministic continuity errors.
+- [P1] Review continuity warnings: Run story continuity . and review 3 continuity warnings.
+- [P2] Review promises and payoffs: 1 setup/payoff promises need planting or payoff decisions.
+- [P2] Review open clues: 1 clues are still planned or planted.
+- [P1] Revision pass: character: Wants, arcs, motivation, and who knows what when. Run story voices, story knowledge <id> --at <chapter>, story diagram relationships. Mark it with story passes --done character.
+- [P2] Draft chapter 5: Use story add chapter "Chapter 5" --number 5, then outline scenes to advance The Ledger Trail.
+```
+
+Before any passes are recorded, the same line reads `[P1] Plan revision passes: Run story passes --init to record the structure-to-proof pass ladder, then work one pass at a time.` A custom pass reads `Work through this pass.` with no checks. Once every pass is done, the line disappears.
 
 ### story doctor
 
@@ -758,12 +1228,13 @@ Actions:
 - [P0] Fix continuity contradictions: Run story continuity . and repair 4 deterministic continuity errors.
 - [P1] Review continuity warnings: Run story continuity . and review 3 continuity warnings.
 - [P2] Review promises and payoffs: 1 setup/payoff promises need planting or payoff decisions.
+- [P2] Review open clues: 1 clues are still planned or planted.
 - [P2] Draft chapter 5: Use story add chapter "Chapter 5" --number 5, then outline scenes to advance The Ledger Trail.
 ```
 
 ### Actions and priorities
 
-All three commands build the same action list, in this order:
+All three commands build the same action list, in this order. The list is not re-sorted by priority, so the revision-pass line sits among the P2 lines:
 
 | Priority | Action | Appears when |
 |----------|--------|--------------|
@@ -776,6 +1247,8 @@ All three commands build the same action list, in this order:
 | P2 | Track open questions | A question has `status: open` |
 | P2 | Review promises and payoffs | A promise is `planned` or `planted` |
 | P2 | Review open clues | A clue is `planned` or `planted` |
+| P1 | Plan revision passes | `story.md` has `status: revising` and no `revision-passes` |
+| P1 | Revision pass: `<name>` | `story.md` has `status: revising` and a pass that is not done |
 | P2 | Draft chapter N | Always: the chapter after the highest number, naming up to three unresolved arcs |
 | P2 | Create first character | The project has no characters |
 | P3 | Project is mechanically healthy | Nothing else applies except drafting the next chapter; listed first |
@@ -787,10 +1260,15 @@ Work down from P0. P0 and P1 items are mechanical and have a command to run. P2 
 | Moment | Commands |
 |--------|----------|
 | Start of a session | `story next .` |
-| After drafting or revising a chapter | `story wordcount . --write`, `story reindex .`, `story links .`, `story validate .`, `story continuity .` |
+| Before naming a character, place, or term | `story names "<candidate>" --path .` |
+| After drafting or revising a chapter | `story wordcount . --write`, `story reindex .`, `story links .`, `story validate .`, `story continuity .`, `story pacing .` |
 | Before writing a scene that turns on a secret | `story knowledge <id> --at <chapter-id>` |
-| Planning structure or pacing | `story timeline .` |
-| Line edit or copyedit | `story prose .` |
+| Planning structure or pacing | `story timeline .`, `story pacing .`, `story diagram arcs` |
+| Planting or revealing a mystery clue | `story clues .`, `story diagram clues` |
+| Adding places and journeys | `story diagram locations`, then `story continuity .` for route travel |
+| After dialogue changes | `story voices .` |
+| Line edit or copyedit | `story prose .`, `story voices .` |
+| Starting or finishing a revision pass | `story passes .`, `story passes . --done <pass>` |
 | End of a session | `story progress . --log` |
 | After a multi-chapter revision pass | `story compare . --ref <snapshot>` |
 | Something is failing and you do not know why | `story doctor .` |
@@ -802,6 +1280,6 @@ Books linked with `follows` or `precedes` also need `story series .`, which chec
 - [CLI reference](cli-reference.md): every command and flag
 - [Project format reference](project-format.md): every frontmatter field these checks read
 - [Writing workflows](writing-workflows.md): the revision passes that use these commands
-- [Skills catalogue](skills.md): the `revision-continuity`, `voice-style`, and `story-maintenance` skills
+- [Skills catalogue](skills.md): the `revision-continuity`, `line-editing`, `voice-style`, `scene-craft`, `genre-craft`, `worldbuilding`, and `story-maintenance` skills
 - [Series](series.md): shared canon and `fact` ids across books
 - [Documentation index](README.md): every page, by audience and task

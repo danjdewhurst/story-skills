@@ -23,7 +23,7 @@ This page explains the model behind Story Skills: how a story project is laid ou
 - Entities refer to each other by id. Some references must be mirrored in the other file. These mirrored references are called backlinks.
 - Each entity folder has an `_index.md` registry that the CLI generates from the entity files. You rebuild registries; you don't edit them.
 - Chapter word counts are measured from the prose and stored in frontmatter, so they can be checked and totalled.
-- Skills make the creative decisions and write the story files. The `story` CLI does the mechanical work: it checks, reindexes, counts, and exports, and it never composes or revises prose.
+- Skills make the creative decisions and write the story files. The `story` CLI does the mechanical work: it checks, measures, reindexes, counts, and exports, and it never composes or revises prose.
 
 ## A project is a folder of markdown
 
@@ -93,6 +93,8 @@ warning: notes.md is not part of the story project model and is ignored
 warning: characters/drafts/old-kael.md is nested inside an entity directory and is ignored
 ```
 
+Some skills keep working notes in their own folders, such as `feedback/`, `submission/`, `publishing/`, and `adaptations/`. The CLI ignores those folders without a warning; see [Files the tools ignore](project-format.md#files-the-tools-ignore).
+
 Nothing else lives in a project: no generator scripts and no build scripts that produce story content. Skills write markdown directly, and the CLI runs from wherever it is installed. Build output goes to a disposable `dist/` folder; see [Import, export, and builds](manuscripts.md).
 
 ## Frontmatter and body
@@ -134,20 +136,20 @@ An entity is anything with its own file and id. `story add <kind> <name>` create
 
 | Kind (`story add`) | Directory | Registry | What it records |
 |--------------------|-----------|----------|-----------------|
-| `character` | `characters/` | `characters/_index.md` | A person, with role, status, relationships, and the locations they're tied to |
-| `location` | `worldbuilding/locations/` | `worldbuilding/_index.md` | A place, with its notable characters and controlling faction |
+| `character` | `characters/` | `characters/_index.md` | A person, with role, status, relationships, the locations they're tied to, and optional voice notes (`voice-words`, `voice-avoid`) |
+| `location` | `worldbuilding/locations/` | `worldbuilding/_index.md` | A place, with its notable characters, controlling faction, and `routes` (travel times) to other places |
 | `system` | `worldbuilding/systems/` | `worldbuilding/_index.md` | A magic system, political order, technology, religion, and so on |
 | `faction` | `worldbuilding/factions/` | `worldbuilding/_index.md` | An organised group, with members and locations |
 | `artifact` | `worldbuilding/artifacts/` | `worldbuilding/_index.md` | An object that matters to the plot, with owner, location, and status |
 | `arc` | `plot/arcs/` | `plot/_index.md` | A plot or character arc, with participants, themes, and acts |
-| `chapter` | `chapters/` | `chapters/_index.md` | Chapter prose, plus POV, cast, locations, arcs advanced, and word count |
-| `scene` | `scenes/` | `scenes/_index.md` | A scene record for a chapter: POV, location, cast, mentions, and state changes |
+| `chapter` | `chapters/` | `chapters/_index.md` | Chapter prose, plus POV, cast, locations, arcs advanced, word count, and the ending `hook` |
+| `scene` | `scenes/` | `scenes/_index.md` | A scene record for a chapter: POV, location, cast, mentions, state changes, and the scene `outcome` |
 | `question` | `continuity/questions/` | `continuity/questions/_index.md` | A dramatic question and the chapters where it is introduced and resolved |
 | `promise` | `continuity/promises/` | `continuity/promises/_index.md` | A setup and its payoff, by chapter |
-| `clue` | `continuity/clues/` | `continuity/clues/_index.md` | A clue for the clue ledger, planted and paid off by chapter |
+| `clue` | `continuity/clues/` | `continuity/clues/_index.md` | A clue for the clue ledger, planted and paid off by chapter, or a red herring and the chapter that debunks it |
 | `term` | `glossary/terms/` | `glossary/_index.md` | A glossary term, with category and aliases |
-| `research` | `research/` (optional) | `research/_index.md` | A real-world fact the story relies on, with sources and the chapters that use it |
-| `matter` | `matter/` (optional) | `matter/_index.md` | A front- or back-matter page such as a dedication or acknowledgments |
+| `research` | `research/` (optional) | `research/_index.md` | A real-world fact the story relies on, with sources, the chapters that use it, and how accurate, risky, and reviewed it is |
+| `matter` | `matter/` (optional) | `matter/_index.md` | A front- or back-matter page such as a dedication or acknowledgments, with the permission status of any quoted material |
 
 `story add` also accepts plural and alternate spellings of the kinds, such as `characters`, `glossary-term`, or `research-note`.
 
@@ -155,14 +157,14 @@ Some files hold one thing per project and are not entities:
 
 | File | Frontmatter `type` | Purpose |
 |------|--------------------|---------|
-| `story.md` | none | The story bible: title, `schema-version: 2`, genre, status, themes, POV, tense, and optional series and craft fields |
+| `story.md` | none | The story bible: title, `schema-version: 2`, genre, status, themes, POV, tense, and optional fields for the series, craft, `form` and word target, named `revision-passes`, and publishing metadata |
 | `continuity/state.md` | `continuity-state` | Durable state carried between chapters: `character-state`, `object-state`, and `knowledge-state` |
 | `plot/timeline.md` | `timeline` | The story timeline. Chapter ids in its body are checked by `story links`. |
 | `continuity/exemptions.md` (optional) | `exemption-log` | Continuity findings you've dismissed on purpose, each with a reason |
 | `style-sheet.md` (optional) | `style-sheet` | House style that `story prose` reads |
 | `progress.md` (optional) | `progress-log` | Daily word counts written by `story progress --log` |
 
-Every field of every kind is listed in the [project format reference](project-format.md).
+Characters, locations, factions, artifacts, and glossary terms can also carry a `pronunciation` respelling for the audiobook narration build. Every field of every kind is listed in the [project format reference](project-format.md).
 
 ## Identifiers
 
@@ -282,7 +284,7 @@ error: characters/orrin-hale.md location ashen-citadel is missing notable-charac
 error: characters/sera-voss.md relationship friend to orrin-hale expects backlink type friend, got mentor
 ```
 
-Every other reference goes one way. A chapter lists its `characters`, but a character doesn't list its chapters. The `Character presence` section of `story timeline` shows that reverse view instead. [Series](series.md) covers links between books, and the `character-management` skill's [relationship reference](../skills/character-management/references/relationship-types.md) covers relationship types.
+Every other reference goes one way. A chapter lists its `characters`, but a character doesn't list its chapters. The `Character presence` section of `story timeline` shows that reverse view instead. A location's `routes` are also stored on one side only, but they count both ways: a route from the port to the reef is also a route back, unless the reef declares its own route with a different time. [Series](series.md) covers links between books, and the `character-management` skill's [relationship reference](../skills/character-management/references/relationship-types.md) covers relationship types.
 
 ## Word counts
 
@@ -316,7 +318,7 @@ chapters/chapter-01.md: 1005
 Total: 1005
 ```
 
-`--write` updates the chapter's `word-count` and then reindexes, so the chapter registry's row and `## Total Word Count` match. Without `--write`, `story wordcount` only prints the counts. `story progress` measures these counts against `target-words` and `deadline`; see [Continuity and analysis](continuity.md#story-progress).
+`--write` updates the chapter's `word-count` and then reindexes, so the chapter registry's row and `## Total Word Count` match. Without `--write`, `story wordcount` only prints the counts. `story progress` measures these counts against `target-words` and `deadline`; see [Continuity and analysis](continuity.md#story-progress). `story init --form` sets a default `target-words` for the chosen form, and `story validate` warns when the target, or the prose of a `complete` story, falls outside the form's usual range; see [Story form](project-format.md#story-form).
 
 ## Skills and the CLI
 
@@ -326,11 +328,23 @@ Story Skills splits the work in two:
 |-|--------|-------------|
 | What it is | `SKILL.md` instructions in [`skills/`](../skills/) that an agent loads | A Node program with no runtime dependencies |
 | Kind of work | Creative judgement: what happens next, who a character is, whether a scene works, how to fix a contradiction | Mechanical checks and upkeep: is the file valid, does the id exist, did the dead character come back, how many words |
-| Writes | Story content: prose, bible entries, frontmatter values, continuity state | Registries, `word-count` values, reference rewrites on rename and remove, new entity files from templates, exports and builds |
+| Writes | Story content: prose, bible entries, frontmatter values, continuity state | Registries, `word-count` values, reference rewrites on rename and remove, new entity files from templates, revision-pass status, Mermaid diagrams, exports and builds |
 | Never does | Invents its own generator or build scripts to emit story content | Composes or revises prose, or makes a story decision |
-| Output | Changes to markdown files, and questions for you | Findings with file paths. `validate`, `links`, `continuity`, `compare`, `progress`, `timeline`, `prose`, and `series` exit 1 when they find errors (warnings alone exit 0); `next`, `doctor`, and `report` always exit 0 |
+| Output | Changes to markdown files, and questions for you | Findings with file paths. `validate`, `links`, `continuity`, `compare`, `progress`, `timeline`, `series`, and `names` exit 1 when they find errors (warnings alone exit 0). `prose`, `pacing`, `clues`, `voices`, and `diagram` report only advisory warnings, and exit 1 only when a project file cannot be read. `next`, `doctor`, and `report` always exit 0, and `passes` exits 0 unless it refuses a change |
 
 Each skill ends its workflow by running the maintenance commands that fit what it changed. After adding, removing, renaming, or revising entities, that means some of `story reindex`, `story wordcount --write`, `story links`, and `story validate`, plus `story continuity` after drafting or revision. When a command reports findings, the agent decides how to fix them. It fixes structural problems such as a missing backlink or a stale registry directly. It raises story problems with you, such as a character appearing after their death, and never rewrites prose only to make a check pass.
+
+Beyond the pass-or-fail checks, the CLI has read-only views that measure the manuscript for the craft skills:
+
+| Command | What it shows | Fields it reads |
+|---------|---------------|-----------------|
+| `story pacing` | Scene units, sequels, scene outcomes, chapter hooks, and chapter lengths, with runs that go slack | Scene `sequel` and `outcome`, chapter `hook` |
+| `story clues` | A fair-play grid of where each clue is planted and revealed | Clue `planted`, `payoff`, `characters`, `red-herring`, `significance-delayed` |
+| `story voices` | A fingerprint of each character's tagged dialogue, and characters who sound alike | Chapter prose, character names and aliases, `voice-words`, `voice-avoid` |
+| `story names` | Whether a candidate name clashes with, or looks like, a name already in the bible | Every character, place, faction, artifact, system, and glossary name |
+| `story diagram` | Mermaid source for the family tree, route map, timeline, clue map, or arc map | Relationships, `routes`, dates, clues, and `arcs-advanced` |
+
+Apart from a name clash, which `story names` reports as an error, their findings are advisory. Three easy wins in a row or two characters who sound alike is a prompt for the writer, not an error to clear. The same division holds for revision. `story passes` keeps a checklist of named passes in `story.md`, from structure down to proof. While the story is `revising`, `story next` points at the current pass. The skill does the revising, and the CLI only records which passes are done. The [project format reference](project-format.md#analysis-views) has the exact rules for each view.
 
 ```mermaid
 flowchart LR
@@ -340,7 +354,7 @@ flowchart LR
     Agent -->|runs| CLI["story CLI<br/>or bundled fallback"]
     CLI -->|"reindex, wordcount --write,<br/>add / rename / remove"| Project
     Project -->|scanned by| CLI
-    CLI -->|"findings from validate, links,<br/>continuity, next, doctor"| Agent
+    CLI -->|"findings from validate, links,<br/>continuity, pacing, next, doctor"| Agent
     Agent -->|"fixes structure,<br/>asks you about story problems"| Project
 ```
 

@@ -18,7 +18,7 @@ Primary paths:
 - `docs/` - user and contributor documentation, indexed by `docs/README.md`: getting started, core concepts, the project format (schema v2) reference, the CLI reference, the skills catalogue, writing workflows, continuity and analysis, series, import/export/builds, automation and CI, and the development guide
 - `assets/` - plugin logo, screenshot, social preview, and the README demo GIF (regenerate the GIF with `vhs assets/demo.tape`)
 - `schemas/story.schema.json` - JSON schema for story project frontmatter; `test:examples` validates every example against it, so update both together
-- `templates/github/` - GitHub Actions workflows users copy into a story repository for checks and scheduled chapter drafting
+- `templates/github/` - files users copy into a story repository: GitHub Actions workflows for checks (`story-checks.yml`), scheduled chapter drafting (`draft-next-chapter.yml`), and an HTML review copy on GitHub Pages (`review-copy.yml`), plus the `ISSUE_TEMPLATE/manuscript-note.yml` reader-note form. The release script and `check:metadata` keep `STORY_REF` in all three workflows at the package version
 - `.codex-plugin/`, `.claude-plugin/`, `.agents/` - plugin and marketplace metadata
 - `plugins/story-skills` - symlink to the repo root. Codex marketplace entries must point at a child plugin directory, so keep it a symlink rather than a copy.
 

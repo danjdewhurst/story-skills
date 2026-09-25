@@ -62,7 +62,7 @@ story-skills/
 ├── test/                         # Bun tests (*.test.js) and helpers.js
 ├── scripts/                      # check scripts and the release script
 ├── evals/                        # skill regression harness (repo tooling only)
-├── templates/github/             # workflows users copy into story repositories
+├── templates/github/             # workflows and an issue form users copy into story repositories
 ├── docs/                         # this documentation (shipped in the npm package)
 ├── assets/                       # logo, screenshot, social preview, demo GIF + VHS tape
 ├── .github/                      # CI, publish workflow, Dependabot
@@ -94,7 +94,8 @@ flowchart LR
   D --> E["command.run({ parsed, io, cwd, root })"]
   E --> F["src/story.js operations"]
   F --> G["scanProject(root)"]
-  G --> H["feature modules: continuity, timeline, prose, series, progress, compare"]
+  G --> H["analysis modules: continuity, timeline, prose, voices, pacing, clues, names, series, progress, compare, passes"]
+  F --> I["output modules: diagram, html, narration, publishing"]
 ```
 
 ### Module responsibilities
@@ -103,14 +104,24 @@ flowchart LR
 | --- | --- |
 | `bin/story.js` | Entry point. Passes `process.argv`, `cwd`, `stdout`, and `stderr` to `runCli` and sets `process.exitCode`. |
 | `src/cli.js` | Builds `HELP` from the registries, handles `--help` and `--version`, looks up the command, rejects `--path` on commands that create projects, resolves the project root, and turns thrown errors into a message on stderr and exit code 1. |
-| `src/commands.js` | The `COMMANDS` registry: every command's name, usage, help summary, project-path mode, and `run` function. Also the internal `reportResult` helper, which writes the standard `N errors, N warnings, N dismissed` summary and each finding to stderr and returns the exit code. |
-| `src/options.js` | The `OPTIONS` registry, `parseArgs`, `formatOptionsHelp`, and `isTruthy`. |
-| `src/story.js` | The bulk of the CLI: `scanProject`, validation, link checks, reindexing, word counts, `add` / `rename` / `remove`, migration, reports, export, EPUB/DOCX/Shunn builds, synopsis, and all path-safety guards. |
+| `src/commands.js` | The `COMMANDS` registry: every command's name, usage, help summary, project-path mode, and `run` function, in help order (the analysis commands `diagram`, `names`, `pacing`, `clues`, and `voices` sit after `prose`; `passes` sits after `series`). Also the internal `reportResult` helper, which writes the standard `N errors, N warnings, N dismissed` summary and each finding to stderr and returns the exit code. |
+| `src/options.js` | The `OPTIONS` registry, `parseArgs`, `formatOptionsHelp`, and `isTruthy`. Includes the flags for `init --form`, `build --trim`, `passes --init` / `--start` / `--done`, `add scene --outcome`, `add chapter --hook`, `add clue --red-herring`, and `add research --accuracy` / `--confidence` / `--method` / `--risk`. |
+| `src/story.js` | The bulk of the CLI: `scanProject`, validation, link checks, reindexing, word counts, `add` / `rename` / `remove`, migration, reports, export, synopsis, and all path-safety guards. It also holds the file-reading wrappers for the newer commands (`clueReport`, `diagramProject`, `namesReport`, `pacingReport`, `projectPasses`, `voicesReport`) and `buildBook`, which writes the EPUB, DOCX, and Shunn formats itself and hands `html`, `print`, `narration`, and `metadata` to the output modules below. |
 | `src/frontmatter.js` | A dependency-free parser and writer for the YAML subset the project format uses (`parseFrontmatter`, `stringifyFrontmatter`, `replaceFrontmatter`). |
 | `src/markdown.js` | Text helpers: `kebabCase`, `titleCaseSlug`, word splitting and counting, `chapterProse`, `extractSection`. |
-| `src/continuity.js` | `checkContinuity(project)`: character deaths, chapter and scene casts, chapter sequence, promise, question, and clue ordering, story completion, durable state, prop custody, and the story clock. Applies `continuity/exemptions.md` to move matching findings into `dismissed`. Also exports the story date and time parsers. |
+| `src/continuity.js` | `checkContinuity(project)`: character deaths, chapter and scene casts, chapter sequence, promise, question, and clue ordering, story completion, durable state, prop custody, and the story clock, including route travel (a character seen at two places faster than the shortest path through location `routes` allows). Applies `continuity/exemptions.md` to move matching findings into `dismissed`. Also exports the story date and time parsers. |
 | `src/timeline.js` | Read-only timeline, POV balance, and character presence for `story timeline`. |
-| `src/prose.js` | Deterministic prose counts and thresholds for `story prose`. |
+| `src/prose.js` | Deterministic prose counts and thresholds for `story prose`. Also exports `editDistance`, which `names.js` uses for look-alike names. |
+| `src/voices.js` | Dialogue fingerprints for `story voices`: attributes speech only from a named speech tag or a single-name action beat, then compares characters and checks `voice-words` and `voice-avoid`. `story.js` reads the chapter prose and passes in paragraphs. |
+| `src/pacing.js` | The `story pacing` dashboard: scenes, sequels, scene outcomes, and chapter hooks per chapter, with advisory findings. Exports the allowed `SCENE_OUTCOMES` and `CHAPTER_HOOKS`, which validation also uses. |
+| `src/clues.js` | The fair-play plant/reveal grid for `story clues`. Advisory only; `continuity.js` owns the hard clue-ordering errors. |
+| `src/names.js` | `story names`: collects every existing name, alias, and glossary term and checks candidates against them. Exact clashes are errors; look-alikes and shared initials are warnings. |
+| `src/diagram.js` | Mermaid source for `story diagram` (`relationships`, `locations`, `timeline`, `clues`, `arcs`). Reuses `buildTimeline` from `timeline.js`. |
+| `src/passes.js` | Reads, validates, and updates the `revision-passes` list in `story.md` for `story passes`, and supplies the default pass ladder and the next pass for `story next`. |
+| `src/forms.js` | `STORY_FORMS` (novel, novella, short story, and so on) with their usual word ranges and default targets, for `init --form` and the out-of-range warning in `validate`. |
+| `src/publishing.js` | Publishing metadata in `story.md`: validation, ISBN normalisation, the generated copyright page, and the retailer sheet for `build --format metadata`. |
+| `src/html.js` | The single-file HTML review copy with paragraph anchors such as `ch03-p12` (`--format html`), the paged-media print interior (`--format print`), trim sizes, and page estimates. |
+| `src/narration.js` | The audiobook narration script for `--format narration`: pronunciation guide, credits, and runtime estimates at 155 words per minute. |
 | `src/series.js` | Series links, backlinks, and shared-canon checks across books. |
 | `src/progress.js` | Pure progress arithmetic and the `progress.md` session log. |
 | `src/compare.js` | Chapter-by-chapter comparison with an earlier draft. |
@@ -120,9 +131,11 @@ flowchart LR
 Most commands follow the same pattern. A function in `src/story.js` takes the project root, calls `scanProject(root)` to read every entity file into one in-memory project object, and passes that object to a pure function in a feature module. For example, `checkProjectContinuity(root)` is `checkContinuity(scanProject(root))`. What happens next depends on the kind of command:
 
 - Check commands such as `validate`, `links`, and `continuity` get back `{ ok, errors, warnings }` (plus `dismissed` for continuity) and hand it to `reportResult`.
-- Report commands (`compare`, `progress`, `timeline`, `prose`, and `series`) pass their result to a `format*` function from the feature module and write the text to stdout, then hand the same result to `reportResult` for the stderr summary and exit code.
+- Report commands (`compare`, `progress`, `timeline`, `prose`, `voices`, `pacing`, `clues`, `names`, and `series`) pass their result to a `format*` function from the feature module and write the text to stdout, then hand the same result to `reportResult` for the stderr summary and exit code.
 
-Keep new analysis code in that shape: pure functions over the scanned project, with file I/O left to `story.js`.
+- `diagram` prints Mermaid source to stdout, or writes it with `--out` once the scan is clean. `passes` prints the pass list, rewrites only the `revision-passes` entry in `story.md` when asked to change it, and always exits 0.
+
+Keep new analysis code in that shape: pure functions over the scanned project, with file I/O left to `story.js`. The output modules (`html.js`, `narration.js`, `publishing.js`, `diagram.js`) follow the same rule: they return strings, and `story.js` writes them.
 
 For what the commands do from a user's point of view, see the [CLI reference](cli-reference.md). For the files they read and write, see the [Project format reference](project-format.md).
 
@@ -224,7 +237,9 @@ Never edit the generated file by hand, and always commit it alongside the `src/`
 
 ## Tests
 
-Tests use Bun's built-in runner (`bun:test`) and live in `test/*.test.js`, roughly one file per feature: `cli.test.js`, `registry.test.js`, `continuity.test.js`, `prose.test.js`, `series.test.js`, `shunn-docx.test.js`, `check-scripts.test.js`, and so on.
+Tests use Bun's built-in runner (`bun:test`) and live in `test/*.test.js`, roughly one file per feature: `cli.test.js`, `registry.test.js`, `continuity.test.js`, `prose.test.js`, `series.test.js`, `shunn-docx.test.js`, `check-scripts.test.js`, and so on. At the time of writing the suite is 538 tests across 45 files.
+
+The newer commands and fields each have their own file: `voices.test.js`, `pacing.test.js`, `clue-matrix.test.js` (the `story clues` grid; `clue.test.js` covers clue entities), `names.test.js`, `diagram.test.js`, `passes.test.js`, `form.test.js`, `routes.test.js` (location routes and travel-time continuity), `research-review.test.js` (research accuracy, method, and risk), `matter-permissions.test.js`, `publishing.test.js`, `html-build.test.js`, `narration.test.js`, and `metadata-build.test.js`. `review-fixes.test.js` holds regression tests for bugs found in review across those features.
 
 ```shell
 bun run test                              # the whole suite
@@ -240,7 +255,7 @@ bun test ./test/cli.test.js -t "repeated" # tests whose names match a pattern
 
 Most CLI tests call `runCli` directly with `memoryIo` rather than spawning a process, so they are fast and count toward coverage. Build a project in a temp directory, run commands against it, and assert on the exit code, stdout, stderr, and resulting files. Never point a test that writes files at `examples/`.
 
-Beyond the CLI, the tests also check repository invariants: `test/check-scripts.test.js` verifies that every GitHub Actions `uses:` reference in `.github/workflows/ci.yml` and the templates is pinned to a 40-character commit SHA with a version comment, that CI still runs the release-gate checks and the Node 18 floor, and that Dependabot watches GitHub Actions. `test/release.test.js` covers the release script's version handling.
+Beyond the CLI, the tests also check repository invariants: `test/check-scripts.test.js` verifies that every GitHub Actions `uses:` reference in `.github/workflows/ci.yml` and the three workflow templates is pinned to a 40-character commit SHA with a version comment, that CI still runs the release-gate checks and the Node 18 floor, that Dependabot watches GitHub Actions, and that `review-copy.yml` builds the HTML review copy and deploys it with GitHub Pages while the `manuscript-note.yml` issue form asks for a paragraph anchor. `test/release.test.js` covers the release script's version handling.
 
 ### Coverage gate
 
@@ -288,7 +303,7 @@ When you change the project format, update the examples, the schema, and the tes
 - `continuity`: the durable state from `continuity/state.md` and the `exemptions` list from `continuity/exemptions.md`.
 - `progressLog` and `styleSheet`, when `progress.md` and `style-sheet.md` exist.
 
-It then validates the document with a small built-in validator. The validator supports only the keywords the schema uses: `$schema`, `$id`, `$comment`, `$defs`, `title`, `description`, `$ref`, `type`, `required`, `properties`, `items`, `enum`, `const`, `pattern`, `minimum`, and `minLength`. It walks the whole schema first and throws on any other keyword, so the schema cannot quietly outgrow the validator. If you need a new keyword, add support for it in `check-schema.js` with tests.
+It then validates the document with a small built-in validator. The validator supports only the keywords the schema uses: `$schema`, `$id`, `$comment`, `$defs`, `title`, `description`, `$ref`, `type`, `required`, `properties`, `items`, `enum`, `const`, `pattern`, `minimum`, `exclusiveMinimum`, and `minLength`. `type` may be a single type or an array of types, such as `["string", "integer"]`. It walks the whole schema first and throws on any other keyword, so the schema cannot quietly outgrow the validator. If you need a new keyword, add support for it in `check-schema.js` with tests.
 
 The schema check runs as part of `test:examples` and in `test/schema.test.js`, which also checks that projects scaffolded by `story init` and `story add` match the schema. You can run it on its own:
 
@@ -318,7 +333,7 @@ Metadata is aligned for story-skills@0.8.2.
 - `VERSION` in `src/version.js` against the package version.
 - `.codex-plugin/plugin.json` `skills` must be `./skills/`.
 - Every directory in `skills/` must contain a `SKILL.md` whose frontmatter `name` equals the directory name and whose `description` is non-empty.
-- `STORY_REF` in `templates/github/story-checks.yml` and `templates/github/draft-next-chapter.yml` must equal `v<package version>`.
+- `STORY_REF` in `templates/github/story-checks.yml`, `templates/github/draft-next-chapter.yml`, and `templates/github/review-copy.yml` must equal `v<package version>`.
 - `.claude-plugin/marketplace.json` and `.agents/plugins/marketplace.json` must name the package, list a plugin with the package name, and carry no version that differs from the package. The Codex entry must point at `./plugins/story-skills`, and that path must exist.
 
 Marketplace entries are deliberately unversioned, so there is only one place per manifest for a version to live.
@@ -434,9 +449,9 @@ The `test` job uses Bun 1.3.14 and runs, in order:
 
 The `node` job runs on Node 18, 20, and 22 without Bun. It runs `node scripts/check-examples.js`, then `--version` and `validate examples/the-last-ember` against both the source CLI (`node bin/story.js`) and the bundled fallback. This is what keeps the Node 18 floor in `engines.node` honest; `test/check-scripts.test.js` fails if the matrix stops including the floor.
 
-Every action in the repository's workflows and in `templates/github/` is pinned to a full commit SHA with the version tag in a trailing comment, and [`.github/dependabot.yml`](../.github/dependabot.yml) proposes weekly updates for the `github-actions` ecosystem. `test/check-scripts.test.js` enforces the pinning for `ci.yml` and both templates, so a new `uses:` line with a moving tag there fails `bun run test`. `publish.yml` is pinned the same way, but no test checks it, so keep it pinned by hand.
+Every action in the repository's workflows and in `templates/github/` is pinned to a full commit SHA with the version tag in a trailing comment, and [`.github/dependabot.yml`](../.github/dependabot.yml) proposes weekly updates for the `github-actions` ecosystem. `test/check-scripts.test.js` enforces the pinning for `ci.yml` and the three workflow templates, so a new `uses:` line with a moving tag there fails `bun run test`. `publish.yml` is pinned the same way, but no test checks it, so keep it pinned by hand.
 
-The templates in `templates/github/` are for users' story repositories, not this one. They are covered in [Automation and CI](automation.md).
+The templates in `templates/github/` are for users' story repositories, not this one: `story-checks.yml`, `draft-next-chapter.yml`, `review-copy.yml`, and the `ISSUE_TEMPLATE/manuscript-note.yml` issue form. They are covered in [Automation and CI](automation.md).
 
 To reproduce CI locally before opening a pull request, run the `test` job's steps in the same order. [`AGENTS.md`](../AGENTS.md) lists the same gates; if the two ever disagree, follow `ci.yml`.
 
@@ -477,7 +492,7 @@ Usage: bun run release <patch|minor|major|MAJOR.MINOR.PATCH> [--dry-run]
 [`scripts/release.js`](../scripts/release.js) does the following.
 
 1. **Preflight.** Aborts unless the current branch is `main`, the working tree is clean, local `main` matches `origin/main` after fetching `main` and tags, the tag does not already exist, `gh` is installed and logged in, no GitHub release exists for the tag, and `npm view story-skills@<version>` shows the version is unpublished. It then runs `check:metadata`, `check:evals`, `eval:selftest`, `test:coverage`, `test:examples`, and `check:node-help`. With `--dry-run` it stops here and prints the plan.
-2. **Bump.** Writes the new version into `package.json`, `.codex-plugin/plugin.json`, `.claude-plugin/plugin.json`, and `src/version.js`, and sets `STORY_REF` to `v<version>` in both files in `templates/github/`. It then runs `build:fallback` (the fallback inlines the version) and `check:metadata`.
+2. **Bump.** Writes the new version into `package.json`, `.codex-plugin/plugin.json`, `.claude-plugin/plugin.json`, and `src/version.js`, and sets `STORY_REF` to `v<version>` in the three workflow templates in `templates/github/`. It then runs `build:fallback` (the fallback inlines the version) and `check:metadata`.
 3. **Commit and tag.** Commits those files and the fallback as `chore: release X.Y.Z` and creates an annotated tag `vX.Y.Z`.
 4. **Push.** Runs `git push --atomic origin main vX.Y.Z`, so the remote accepts both refs or neither. A published tag can never point at a commit that is not on `main`.
 5. **GitHub release.** Runs `gh release create vX.Y.Z --title vX.Y.Z --generate-notes --verify-tag`, then prints the release URL and a link to the Publish workflow.

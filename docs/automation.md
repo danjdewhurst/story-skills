@@ -1,6 +1,6 @@
 # Automation and CI
 
-This page is for writers and maintainers who keep a story project in a git repository and want its checks to run automatically. It covers the two GitHub Actions templates that ship with Story Skills, how to run the `story` CLI from scripts and CI, and how to check a project before each commit.
+This page is for writers and maintainers who keep a story project in a git repository and want its checks to run automatically. It covers the three GitHub Actions templates and the issue form that ship with Story Skills, how to run the `story` CLI from scripts and CI, and how to check a project before each commit.
 
 **On this page**
 
@@ -9,21 +9,24 @@ This page is for writers and maintainers who keep a story project in a git repos
 - [The GitHub Actions templates](#the-github-actions-templates)
 - [Story checks workflow](#story-checks-workflow)
 - [Draft the next chapter workflow](#draft-the-next-chapter-workflow)
+- [Review copy workflow](#review-copy-workflow)
+- [Manuscript note issue form](#manuscript-note-issue-form)
 - [Customising the workflows](#customising-the-workflows)
 - [Checking before each commit](#checking-before-each-commit)
 - [Other CI systems](#other-ci-systems)
 
 ## What you can automate
 
-The `story` CLI is deterministic: the same project always produces the same findings, and it never asks questions. That makes three kinds of automation practical:
+The `story` CLI is deterministic: the same project always produces the same findings, and it never asks questions. That makes four kinds of automation practical:
 
 | Goal | How |
 |---|---|
 | Stop a broken chapter from merging | Run `story validate`, `story links`, and `story continuity` on every push and pull request. [`templates/github/story-checks.yml`](../templates/github/story-checks.yml) does this. |
 | Draft chapters on a schedule | Let Claude Code draft the next chapter and open a pull request for you to review. [`templates/github/draft-next-chapter.yml`](../templates/github/draft-next-chapter.yml) does this. |
+| Give reviewers a current, citable copy of the book | Build the HTML review copy on every push to `main` and publish it to GitHub Pages; readers file notes through an issue form. [`templates/github/review-copy.yml`](../templates/github/review-copy.yml) and [`templates/github/ISSUE_TEMPLATE/manuscript-note.yml`](../templates/github/ISSUE_TEMPLATE/manuscript-note.yml) do this. |
 | Catch problems before they are committed | Run the same checks from a git pre-commit hook. See [Checking before each commit](#checking-before-each-commit). |
 
-The checks are the deterministic ones described in [Continuity and analysis](continuity.md) and the [CLI reference](cli-reference.md). The one creative step, drafting, is done by an agent and always arrives as a pull request for you to review.
+The checks are the deterministic ones described in [Continuity and analysis](continuity.md) and the [CLI reference](cli-reference.md), and the review copy is an ordinary `story build`. The one creative step, drafting, is done by an agent and always arrives as a pull request for you to review.
 
 ## Running the CLI non-interactively
 
@@ -60,7 +63,9 @@ Every command exits `0` on success and `1` on failure. Warnings never change the
 | `links` | A cross-reference points at a missing file, or a required backlink is missing. |
 | `continuity` | A continuity contract is broken, such as a dead character listed in a later chapter or a payoff before its setup. Findings matched by `continuity/exemptions.md` are dismissed and do not count. |
 | `series` | A linked path is not a story project, the chronology has a cycle, two books share a `book-number`, linked books declare different series, or shared canon contradicts itself, such as a character who died in an earlier book appearing later. A missing series backlink is caught by `links`, not `series`. |
-| `compare`, `progress`, `timeline`, `prose` | A project file cannot be parsed. Their own findings are advisory. |
+| `compare`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices` | A project file cannot be parsed. Their own findings are advisory. |
+| `names` | A candidate name clashes with an existing one. |
+| `passes` | It refuses a change, such as a pass name that is not kebab-case or a `story.md` that cannot be parsed. |
 | `report`, `next`, `doctor` | Never, on a readable project. They summarise the checks but always exit 0. |
 | Any command | Unknown command or option, missing option value, invalid argument, or a refused write. |
 
@@ -98,7 +103,7 @@ exit=1
 There is no `--json` or other machine-readable output mode. Output is plain text with stable line prefixes, so you can filter it with standard tools.
 
 - `validate`, `links`, and `continuity` write only to **stderr**: one summary line, then one line per finding, prefixed `error:`, `warning:`, or `dismissed:`. Nothing goes to stdout.
-- `compare`, `progress`, `timeline`, `prose`, and `series` write their report to stdout and the same summary and finding lines to stderr.
+- `compare`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `names`, and `series` write their report to stdout and the same summary and finding lines to stderr.
 - Every other command writes its report or confirmation to stdout.
 - A command that cannot run, for example because of an unknown option or a missing argument, prints one error line to stderr. An unknown command also prints the full help text after the error.
 - Pointing a check at a directory that is not a story project is not a usage error: `validate` reports each missing required file as an `error:` finding and exits 1.
@@ -145,14 +150,16 @@ git diff --exit-code
 
 ## The GitHub Actions templates
 
-Story Skills ships two workflows in [`templates/github/`](../templates/github/). Copy them into the repository that holds your story project; they do not run in the Story Skills repository itself.
+Story Skills ships three workflows and one issue form in [`templates/github/`](../templates/github/). Copy them into the repository that holds your story project; they do not run in the Story Skills repository itself.
 
-| Template | Runs on | Needs | What it does |
-|---|---|---|---|
-| [`story-checks.yml`](../templates/github/story-checks.yml) | Push to `main`, every pull request | Nothing | Runs `validate`, `links`, `continuity`, and `report --actionable`. |
-| [`draft-next-chapter.yml`](../templates/github/draft-next-chapter.yml) | Weekday schedule, manual dispatch | `ANTHROPIC_API_KEY` secret, the skills committed to the repository | Drafts the next chapter with Claude Code, runs the checks, and opens a pull request. |
+| Template | Copy to | Runs on | Needs | What it does |
+|---|---|---|---|---|
+| [`story-checks.yml`](../templates/github/story-checks.yml) | `.github/workflows/` | Push to `main`, every pull request | Nothing | Runs `validate`, `links`, `continuity`, and `report --actionable`. |
+| [`draft-next-chapter.yml`](../templates/github/draft-next-chapter.yml) | `.github/workflows/` | Weekday schedule, manual dispatch | `ANTHROPIC_API_KEY` secret, the skills committed to the repository | Drafts the next chapter with Claude Code, runs the checks, and opens a pull request. |
+| [`review-copy.yml`](../templates/github/review-copy.yml) | `.github/workflows/` | Push to `main`, manual dispatch | GitHub Pages set to deploy from GitHub Actions | Runs the checks, builds the HTML review copy, and publishes it to GitHub Pages. |
+| [`ISSUE_TEMPLATE/manuscript-note.yml`](../templates/github/ISSUE_TEMPLATE/manuscript-note.yml) | `.github/ISSUE_TEMPLATE/` | A reader opening an issue | A `manuscript-note` label | Gives readers a form for a note on one paragraph of the review copy. |
 
-Together they let you write a book through pull requests: the draft workflow proposes a chapter, the checks keep contradictions out, and you review and merge.
+Together they let you write a book through pull requests and review it in the open: the draft workflow proposes a chapter, the checks keep contradictions out, you review and merge, and the review copy puts the merged book in front of readers, whose notes come back as issues.
 
 ```mermaid
 flowchart LR
@@ -165,7 +172,7 @@ flowchart LR
     G --> A
 ```
 
-Both templates:
+All three workflows:
 
 - run the CLI with `npx` from the GitHub tag in `STORY_REF`, using Node 24 from `actions/setup-node`;
 - read the project from `STORY_DIR`, which defaults to the repository root (`.`);
@@ -252,11 +259,86 @@ GitHub does not start other workflows for events caused by the built-in `GITHUB_
 
 If you want `story-checks.yml` to run on drafted PRs as well, for example because it is a required status check, replace `github_token: ${{ secrets.GITHUB_TOKEN }}` in the Claude Code step with a personal access token or GitHub App token stored as a secret.
 
+## Review copy workflow
+
+[`review-copy.yml`](../templates/github/review-copy.yml) gives beta readers, critique partners, and editors a link instead of a terminal. On every push to `main` it checks the project, builds the [HTML review copy](manuscripts.md#html-review-copy) with `story build --format html`, and publishes it to GitHub Pages. Every paragraph in the copy carries a label such as `ch03-p12` (chapter 3, paragraph 12), and the [manuscript note issue form](#manuscript-note-issue-form) asks readers for that label, so each note points at an exact paragraph.
+
+### Install it
+
+1. Copy `templates/github/review-copy.yml` to `.github/workflows/` in your story repository.
+2. In Settings, then Pages, set **Source** to **GitHub Actions**.
+3. Decide who may read the book (see [Keeping the manuscript private](#keeping-the-manuscript-private)) before the first push.
+4. If the project is not at the repository root, set `STORY_DIR`.
+5. Check `STORY_REF`. The `html` format is newer than Story Skills 0.8.2, so `STORY_REF` must name a later release. A template copied from a release that includes it already does, because the release process sets `STORY_REF` to its own version. With an older tag, the build step fails with `Unsupported build format: html`.
+6. Commit and push to `main`, or run **Review copy** from the Actions tab.
+
+The address of the site is shown on the run's `deploy` job, on the `github-pages` environment, and in Settings, then Pages. For a project site it is usually `https://<owner>.github.io/<repository>/`. A link to a paragraph adds its label, such as `https://<owner>.github.io/<repository>/#ch03-p12`, which opens the copy at that paragraph and highlights it.
+
+### Triggers, permissions, and jobs
+
+| Setting | Value | Why |
+|---|---|---|
+| Triggers | `push` to `main` and `workflow_dispatch` | Readers see the merged book, not work in progress on other branches. Never runs on pull requests. |
+| `permissions` | `contents: read` for the workflow; `pages: write` and `id-token: write` for the `deploy` job only | The build only reads the repository. Deploying to Pages needs write access to Pages and an OIDC token, and only the job that deploys gets them. |
+| `concurrency` | Group `review-copy`, `cancel-in-progress: false` | A deployment that has started finishes instead of being cancelled mid-upload by the next push. |
+| Secrets | None | The built-in token is enough. |
+
+The `build` job:
+
+1. Checks out the repository and sets up Node 24.
+2. Runs `story validate`, `story links`, and `story continuity`. If any of them fails, nothing is built or published, so readers never get a copy with broken references or a contradicted continuity contract. Readers keep the last good copy.
+3. Builds the review copy with `story build "$STORY_DIR" --format html --out "$GITHUB_WORKSPACE/review-site/index.html"`. The `--out` path is absolute because a relative `--out` is resolved against the project root and may not leave it; see [Output paths](manuscripts.md#output-paths-and-what-is-disposable).
+4. Uploads `index.html` as a workflow artifact named `review-copy`, which you can download from the run page.
+5. Uploads the `review-site` folder as the Pages site.
+
+The `deploy` job then publishes that site with `actions/deploy-pages` to the `github-pages` environment.
+
+The workflow builds from the markdown on every run and commits nothing, so `dist/` stays out of the repository.
+
+### Keeping the manuscript private
+
+A GitHub Pages site is public, even when the repository is private, unless your GitHub plan supports private Pages with access control. Publishing an unpublished book on the open web can matter to publishers and to some contests. If the manuscript must stay private:
+
+- delete the `deploy` job and the **Upload the Pages site** step, and
+- share the `review-copy` workflow artifact instead. Anyone with read access to the repository can download it from the run page; readers then open `index.html` in a browser.
+
+The [`editorial-review`](../skills/editorial-review/SKILL.md) skill asks before creating files in `.github/` and warns about Pages visibility before it sets this up.
+
+### Review rounds and changing labels
+
+A paragraph label is the paragraph's position in its chapter, so it changes when you add or remove paragraphs earlier in that chapter. Because this workflow republishes on every push, a note made last week may point at a paragraph that has since moved. Tag the commit when you send readers the link for a round, for example `beta-round-1`, and resolve notes against that tag; `story compare . --ref beta-round-1` shows which chapters have changed since. See [Import, export, and builds](manuscripts.md#html-review-copy) for how labels are numbered.
+
+## Manuscript note issue form
+
+[`ISSUE_TEMPLATE/manuscript-note.yml`](../templates/github/ISSUE_TEMPLATE/manuscript-note.yml) is a GitHub issue form for readers of the review copy. Each note becomes an issue labelled `manuscript-note`, with the paragraph label in its title and body.
+
+### Install it
+
+1. Copy the file to `.github/ISSUE_TEMPLATE/manuscript-note.yml` in your story repository.
+2. Create a label named `manuscript-note` (Issues, then Labels, then **New label**). GitHub applies only labels that already exist, so without it the issues arrive unlabelled.
+3. Commit and push. The form appears under **New issue**.
+
+Give readers a direct link to the form alongside the review copy: `https://github.com/<owner>/<repository>/issues/new?template=manuscript-note.yml`. Readers need a GitHub account and permission to open issues: anyone can on a public repository, and only collaborators can on a private one.
+
+### What the form asks
+
+| Field | Type | Required | Contents |
+|---|---|---|---|
+| Issue title | Text, starting `[ch00-p0] ` | Yes | Readers replace `ch00-p0` with the paragraph label and add a short summary. |
+| Paragraph label | Short text | Yes | One label, such as `ch03-p12`, or the first and last of a passage, such as `ch03-p12 to ch03-p15`. |
+| What kind of note is this? | Dropdown | Yes | Typo or wording; Confusing; Continuity (contradicts something earlier); Pacing (slow or rushed); Character (feels off); Sensitivity or authenticity; Loved this; Other. |
+| Your note | Long text | Yes | What the reader noticed and how it made them feel. The form tells them they need not suggest a fix. |
+| How much did it affect your reading? | Dropdown | No | Barely noticed; Pulled me out for a moment; Made me want to stop reading. |
+
+### From issues to revisions
+
+The notes are raw reader reactions, not decisions. The [`feedback-triage`](../skills/feedback-triage/SKILL.md) skill records them in one file per reader under `feedback/round-<N>/`, keeps each note's paragraph label in its **Where** line, and weighs them against your intent before anything changes in the manuscript. See [Skills catalogue](skills.md#feedback-triage) and [Writing workflows](writing-workflows.md).
+
 ## Customising the workflows
 
 ### Project location
 
-Set `STORY_DIR` at the top of each file when the story project lives in a subdirectory:
+Set `STORY_DIR` at the top of each workflow file when the story project lives in a subdirectory:
 
 ```yaml
 env:
@@ -268,7 +350,7 @@ For several books in one repository, copy the check steps once per book, or turn
 
 ### CLI version
 
-`STORY_REF` is the Story Skills release tag the CLI is fetched from. The release process sets it to the release's own version, so a template copied from a given release already points at that release. Bump it in both files when you want a newer release, and run the checks locally first, because new releases can add checks. Releases are listed on the [GitHub releases page](https://github.com/danjdewhurst/story-skills/releases).
+`STORY_REF` is the Story Skills release tag the CLI is fetched from. The release process sets it to the release's own version, so a template copied from a given release already points at that release. Bump it in every workflow file you use when you want a newer release, and run the checks locally first, because new releases can add checks. Releases are listed on the [GitHub releases page](https://github.com/danjdewhurst/story-skills/releases).
 
 To use the npm package instead of the GitHub tag, replace `github:danjdewhurst/story-skills#$STORY_REF` with `story-skills@<version>` in each `npx --package` value. In `draft-next-chapter.yml`, the prompt commands and the `Bash(...)` rule in `--allowedTools` spell it `github:danjdewhurst/story-skills#${{ env.STORY_REF }}` instead; change those together, so they still match.
 
@@ -287,7 +369,7 @@ Delete the `schedule` block to draft only when you run the workflow by hand.
 
 ### Branches
 
-`story-checks.yml` runs on pushes to `main` and on all pull requests. If your default branch has another name, change `branches: [main]`.
+`story-checks.yml` runs on pushes to `main` and on all pull requests, and `review-copy.yml` on pushes to `main`. If your default branch has another name, change `branches: [main]` in both. To publish the review copy from a different branch, such as a `beta` branch you merge into when a round starts, name that branch instead.
 
 ### Extra steps
 

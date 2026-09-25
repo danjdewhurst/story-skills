@@ -1,6 +1,6 @@
 # Import, export, and builds
 
-This page is for writers who want to bring an existing draft into Story Skills or get a finished book out of it. It covers `story import`, front and back matter, `story export`, `story build` (markdown, EPUB, DOCX, and Shunn manuscript format), and `story synopsis`.
+This page is for writers who want to bring an existing draft into Story Skills or get a finished book out of it. It covers `story import`, front and back matter, the publishing fields in `story.md`, `story export`, `story build` (markdown, EPUB, DOCX, Shunn manuscript format, an HTML review copy, a print interior, an audiobook narration script, and a retailer metadata sheet), and `story synopsis`.
 
 All output shown was captured by running the commands against copies of the examples, with absolute paths shortened to `~/stories`.
 
@@ -10,8 +10,9 @@ All output shown was captured by running the commands against copies of the exam
 - [Import an existing manuscript](#import-an-existing-manuscript)
 - [What goes into a manuscript](#what-goes-into-a-manuscript)
 - [Front and back matter](#front-and-back-matter)
+- [Publishing metadata in story.md](#publishing-metadata-in-storymd)
 - [Export a markdown manuscript](#export-a-markdown-manuscript)
-- [Build a book](#build-a-book): [EPUB](#epub), [DOCX](#docx), [Shunn](#shunn-standard-manuscript-format)
+- [Build a book](#build-a-book): [EPUB](#epub), [DOCX](#docx), [Shunn](#shunn-standard-manuscript-format), [HTML review copy](#html-review-copy), [print interior](#print-interior), [narration script](#narration-script), [retailer metadata sheet](#retailer-metadata-sheet)
 - [Build a synopsis](#build-a-synopsis)
 - [Output paths and what is disposable](#output-paths-and-what-is-disposable)
 - [Common errors](#common-errors)
@@ -22,18 +23,26 @@ All output shown was captured by running the commands against copies of the exam
 |---------|-------|--------|----------------|
 | `story import <source>` | A manuscript file or a folder of chapter files | A new story project | `./<title-in-kebab-case>/` |
 | `story export [path]` | `story.md`, `chapters/`, `matter/` | One markdown manuscript | `manuscript.md` in the project root |
-| `story build [path]` | `story.md`, `chapters/`, `matter/`, the cover image | One book file | `dist/<story-id>.<ext>` |
+| `story build [path]` | `story.md`, `chapters/`, `matter/`, the cover image, and (for narration) `pronunciation` fields in the bible | One book file, script, or sheet | `dist/<story-id>.<ext>` |
 | `story synopsis [path]` | `story.md` and `plot/arcs/` | A synopsis scaffold | Printed to stdout |
 
 ```mermaid
 flowchart LR
   draft["Existing draft<br/>(.md, .markdown, .txt)"] -->|story import| project["Story project<br/>story.md, chapters/, matter/, plot/arcs/"]
   project -->|story export| manuscript["manuscript.md"]
-  project -->|story build| dist["dist/<br/>.md, .epub, .docx, .shunn.md"]
+  project -->|story build| dist["dist/<br/>.md, .epub, .docx, .shunn.md,<br/>.html, .print.html, .narration.md, .metadata.md"]
   project -->|story synopsis| synopsis["Synopsis<br/>(stdout or --out)"]
 ```
 
-Two skills drive these commands. [`story-maintenance`](../skills/story-maintenance/SKILL.md) handles import, export, and builds; [`submission`](../skills/submission/SKILL.md) builds Shunn manuscripts and rewrites the synopsis scaffold into submission copy. See the [Skills catalogue](skills.md) for both, and the [CLI reference](cli-reference.md) for installing and running the CLI.
+Several skills drive these commands:
+
+- [`story-maintenance`](../skills/story-maintenance/SKILL.md) handles import, export, and builds.
+- [`submission`](../skills/submission/SKILL.md) builds Shunn manuscripts and rewrites the synopsis scaffold into submission copy.
+- [`publishing`](../skills/publishing/SKILL.md) fills the publishing fields in `story.md`, then works through the metadata sheet, the EPUB, and the print interior.
+- [`editorial-review`](../skills/editorial-review/SKILL.md) builds DOCX and HTML review copies for editors and beta readers, and tracks permissions for quoted matter.
+- [`adaptation`](../skills/adaptation/SKILL.md) builds the narration script for an audiobook.
+
+See the [Skills catalogue](skills.md) for all of them, and the [CLI reference](cli-reference.md) for installing and running the CLI.
 
 ## Import an existing manuscript
 
@@ -190,7 +199,7 @@ The [`story-maintenance`](../skills/story-maintenance/SKILL.md) skill follows an
 
 ### Import options
 
-`--title` is required. Import takes the same scaffold options as `story init`, except the series options.
+`--title` is required. Import takes the same scaffold options as `story init`, except the series options and `--form`. Import ignores `--form` without an error; set `form` (and `target-words`, if you want one) in `story.md` after importing.
 
 | Option | Effect |
 |--------|--------|
@@ -248,12 +257,13 @@ A typical next pass:
 
 ## What goes into a manuscript
 
-Export and every build format assemble the book from the same parts, in this order:
+Export and the book formats assemble the book from the same parts, in this order. The Shunn builds leave out every matter page, the narration script leaves out the copyright page, and the metadata sheet contains no prose at all.
 
 1. The title from `story.md`.
-2. Front matter pages from `matter/` with `placement: front`, by `order`.
-3. Chapters from `chapters/`, by their `number` frontmatter (or the number in the file name when `number` is missing).
-4. Back matter pages with `placement: back`, by `order`.
+2. A generated copyright page, when `story.md` sets `copyright` and no matter page is already a copyright page. See [Publishing metadata in story.md](#publishing-metadata-in-storymd).
+3. Front matter pages from `matter/` with `placement: front`, by `order`.
+4. Chapters from `chapters/`, by their `number` frontmatter (or the number in the file name when `number` is missing).
+5. Back matter pages with `placement: back`, by `order`.
 
 Only chapter prose goes in. Scene files, outlines, notes, and the bible do not. The CLI finds a chapter's prose this way:
 
@@ -310,6 +320,13 @@ heading: true
 | `placement` | Yes | `front` or `back` | Before or after the chapters. `story add matter` defaults to `front`; `--placement` sets it. |
 | `order` | No | Integer, 0 or more | Position within its placement. `story add matter` uses one more than the highest `order` already in that placement; `--order` sets it. Ties sort by file name. |
 | `heading` | No | `true` or `false` | Whether the page shows its title as a heading. Defaults to `true`. Set `false` for a dedication or epigraph. |
+| `permission` | No | `not-needed`, `pending`, `granted`, or `public-domain` | Whether quoted material on the page, such as an epigraph, lyrics, or a poem, is cleared for publication. |
+| `rights-holder` | No | Text | Who granted permission for quoted material. |
+| `credit` | No | Text | The credit line the rights holder asked for. |
+
+The three permission fields are for your records; no build prints them. `story validate` checks their values and warns when a page's `permission` is still `pending` while `story.md` has `status: complete`, or is `granted` with no `rights-holder`. Put the credit line in the page text yourself. The [`editorial-review`](../skills/editorial-review/SKILL.md) skill walks through clearing permissions.
+
+A matter page whose id is `copyright`, or whose title contains the word "Copyright" in any letter case, counts as the book's copyright page. The EPUB marks it as a copyright page, the print interior places it before the contents, and the narration script skips it.
 
 Matter file names must be kebab-case, because they become EPUB file names. A build stops on a name such as `matter/About_Me.md` with `matter/About_Me.md: matter file names must be kebab-case to build`.
 
@@ -322,6 +339,60 @@ warning: matter/acknowledgments.md has no text and is left out of export and bui
 The [`the-last-ember`](../examples/the-last-ember/matter/epigraph.md) example has an epigraph with `heading: false`.
 
 Write matter text yourself. The `story-maintenance` skill will not invent acknowledgments, biographical facts, or copyright details; it asks you for them.
+
+## Publishing metadata in story.md
+
+`story.md` can hold the details that retailers, distributors, and ebook readers need. Every field is optional. The book formats read them, and `story validate` checks their shape. The [Project format reference](project-format.md) lists every `story.md` field; these are the ones builds use:
+
+| Field | Type | Used by |
+|-------|------|---------|
+| `author` | Text | The author in the EPUB (`dc:creator`), HTML, print, narration, and metadata builds, and the byline in both Shunn builds. The plain DOCX build does not use it. |
+| `authors` | List of text | Replaces `author` for co-authored books in every build except Shunn, which reads only `author`. `validate` warns when both are set. |
+| `language` | BCP 47 tag, such as `en`, `en-GB`, or `fr` | EPUB `dc:language` and the `lang` attribute of every EPUB document; the `lang` attribute of the HTML and print builds; the metadata sheet. Defaults to `en`. |
+| `isbn` | ISBN-13 or ISBN-10, hyphens and spaces allowed | The EPUB identifier (`urn:isbn:...`) in place of the story id; the generated copyright page; the metadata sheet. `validate` checks the checksum. Quote it, so a leading zero survives. |
+| `publisher` | Text | EPUB `dc:publisher`, the generated copyright page, the metadata sheet. |
+| `publication-date` | Date, such as `2026-10-01` | EPUB `dc:date`, the metadata sheet. |
+| `description` | Text | EPUB `dc:description`, the metadata sheet. |
+| `keywords` | List of text | The metadata sheet. `validate` warns above 7. |
+| `subjects` | List of BISAC codes, such as `FIC022000` | EPUB `dc:subject`, the metadata sheet. `validate` rejects anything not shaped like a BISAC code. |
+| `copyright` | Text, such as `Copyright © 2026 Ada Writer` | EPUB `dc:rights`, the generated copyright page, the metadata sheet. |
+| `cover-alt` | Text | The EPUB cover image's alt text, instead of `Cover of <title>`; the metadata sheet. |
+| `ai-disclosure` | Text | The generated copyright page and the metadata sheet. |
+| `form` | `flash`, `short-story`, `novelette`, `novella`, `novel`, `serial`, `picture-book`, or `chapter-book` | The metadata sheet. `story init --form` sets it along with a default `target-words`, and `validate` warns when `target-words`, or the finished manuscript, falls outside the form's usual range. |
+
+A value that fails validation does not stop a build: builds never validate the project first. An ISBN with a bad checksum, for example, is dropped, and the EPUB falls back to the story id as its identifier. Run `story validate .` before building a copy to send out.
+
+### The generated copyright page
+
+When `story.md` sets `copyright` and no matter page is a copyright page, `story export` and the markdown, EPUB, DOCX, HTML, and print builds add one as the first front matter page, without a heading. The Shunn builds and the narration script leave it out. On a copy of *The Last Ember* with these fields added:
+
+```yaml
+author: Ada Writer
+language: en-GB
+isbn: "978-0-306-40615-7"
+publisher: Ember Press
+copyright: "Copyright © 2026 Ada Writer"
+```
+
+`story export` starts:
+
+```markdown
+# The Last Ember
+
+<!-- Generated by story export. -->
+
+Copyright © 2026 Ada Writer
+
+All rights reserved.
+
+Published by Ember Press
+
+ISBN 9780306406157
+
+> An ember given is a fire kept. An ember taken is a debt the mountain remembers.
+```
+
+The page holds the `copyright` line, `All rights reserved.`, then `Published by` the `publisher`, the `isbn`, and the `ai-disclosure` text when each is set. The ISBN is printed as bare digits. For different wording, such as a Creative Commons licence or a disclaimer, write your own page with `story add matter "Copyright" --order 0` and set `heading: false`; the generated page is then left out. The [`publishing`](../skills/publishing/SKILL.md) skill has a template for it.
 
 ## Export a markdown manuscript
 
@@ -382,7 +453,7 @@ The warning is harmless, and writing to `dist/` avoids it. `story build` with th
 
 ## Build a book
 
-`story build` writes one book file into `dist/`. Pick the format with `--format`:
+`story build` writes one file into `dist/`. Pick the format with `--format`:
 
 | `--format` | Output | Default file | Includes matter |
 |------------|--------|--------------|-----------------|
@@ -391,6 +462,10 @@ The warning is harmless, and writing to `dist/` avoids it. `story build` with th
 | `docx` | Word document | `dist/<story-id>.docx` | Yes |
 | `docx` with `--shunn` | Word document in Shunn manuscript format | `dist/<story-id>.docx` | No |
 | `shunn` | Plain-text Shunn manuscript | `dist/<story-id>.shunn.md` | No |
+| `html` | Single-file review copy with a label on every paragraph | `dist/<story-id>.html` | Yes |
+| `print` | Print interior as HTML with CSS paged media, to render to PDF | `dist/<story-id>.print.html` | Yes |
+| `narration` | Audiobook narration script with a pronunciation guide and runtimes | `dist/<story-id>.narration.md` | Yes, except the copyright page |
+| `metadata` | Retailer metadata sheet with a readiness checklist | `dist/<story-id>.metadata.md` | No prose at all |
 
 The story id is the kebab-case title from `story.md`. Build every format of the example *The Last Ember* like this:
 
@@ -399,6 +474,10 @@ story build .
 story build . --format epub
 story build . --format docx
 story build . --format shunn
+story build . --format html
+story build . --format print
+story build . --format narration
+story build . --format metadata
 ```
 
 ```text
@@ -406,33 +485,39 @@ Built 1 chapters as markdown to ~/stories/the-last-ember/dist/the-last-ember.md
 Built 1 chapters as epub to ~/stories/the-last-ember/dist/the-last-ember.epub
 Built 1 chapters as docx to ~/stories/the-last-ember/dist/the-last-ember.docx
 Built 1 chapters as shunn to ~/stories/the-last-ember/dist/the-last-ember.shunn.md
+Built 1 chapters as html to ~/stories/the-last-ember/dist/the-last-ember.html
+Built 1 chapters as print to ~/stories/the-last-ember/dist/the-last-ember.print.html
+Built 1 chapters as narration to ~/stories/the-last-ember/dist/the-last-ember.narration.md
+Built 1 chapters as metadata to ~/stories/the-last-ember/dist/the-last-ember.metadata.md
 ```
+
+The confirmation always counts chapters, even for the metadata sheet.
 
 | Option | Effect |
 |--------|--------|
 | `[path]` or `--path <path>` | Project root. Defaults to the current directory. |
-| `--format <name>` | `markdown` (or `md`), `epub`, `docx`, or `shunn`. Case-insensitive. Defaults to `markdown`. |
+| `--format <name>` | `markdown` (or `md`), `epub`, `docx`, `shunn`, `html`, `print`, `narration`, or `metadata`. Case-insensitive. Defaults to `markdown`. |
 | `--shunn` | With `--format docx`, apply Shunn formatting. Ignored with every other format. |
+| `--trim <size>` | With `--format print`, the trim size: `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5`. Defaults to `5.5x8.5`. Ignored with every other format. |
 | `--out <file>` | Output file instead of the default in `dist/`. |
 
 Any other format is an error:
 
 ```text
-Unsupported build format: pdf. Supported formats: markdown, epub, docx, shunn
+Unsupported build format: pdf. Supported formats: markdown, epub, docx, shunn, html, print, narration, metadata
 ```
 
-For a PDF, open the DOCX in a word processor and export it, or convert the markdown build with a tool such as Pandoc.
+For a book PDF, build the [print interior](#print-interior) and render it with a paged-media engine. For a quick PDF of a manuscript, open the DOCX in a word processor and export it.
 
 `--format docx` and `--format docx --shunn` write to the same default file, so the second build replaces the first. Pass `--out` to keep both.
 
 ### EPUB
 
-The EPUB build is an EPUB 3 package with one XHTML document per matter page and per chapter, and a navigation document that lists them in reading order. Two optional `story.md` fields feed it:
+The EPUB build is an EPUB 3 package with one XHTML document per matter page and per chapter, and a navigation document that lists them in reading order under a `Contents` heading. It reads the [publishing metadata](#publishing-metadata-in-storymd) in `story.md`, and one more field:
 
 | Field | Effect |
 |-------|--------|
-| `author` | Written as the book's `dc:creator`. |
-| `cover` | Path to a cover image inside the project, such as `art/cover.jpg`. The image is embedded as the EPUB cover and shown on a cover page before the front matter. |
+| `cover` | Path to a cover image inside the project, such as `art/cover.jpg`. The image is embedded as the EPUB cover and shown on a cover page before the front matter. Its alt text is `cover-alt`, or `Cover of <title>` when that is not set. |
 
 ```yaml
 author: Ada Writer
@@ -445,7 +530,7 @@ The cover must be a `.gif`, `.jpeg`, `.jpg`, `.png`, or `.webp` file inside the 
 story.md cover art/cover.png does not exist
 ```
 
-Other formats ignore `cover`, so a DOCX build succeeds even with a broken cover path. With the cover and author set, *The Last Ember* builds to these entries:
+Other formats do not read the image, so a DOCX build succeeds even with a broken cover path. With the cover and author set, *The Last Ember* builds to these entries:
 
 ```text
 mimetype
@@ -458,7 +543,29 @@ OEBPS/front-epigraph.xhtml
 OEBPS/chapter-01.xhtml
 ```
 
-Chapter documents are named `chapter-NN.xhtml`, and matter documents `front-<id>.xhtml` or `back-<id>.xhtml`. A `.jpeg` cover is stored as `images/cover.jpg`. The package identifier is the story id, and the language is always `en`.
+Chapter documents are named `chapter-NN.xhtml`, and matter documents `front-<id>.xhtml` or `back-<id>.xhtml`; a [generated copyright page](#the-generated-copyright-page) is `front-copyright.xhtml`. A `.jpeg` cover is stored as `images/cover.jpg`.
+
+The package metadata comes from `story.md`:
+
+- The identifier is `urn:isbn:<digits>` when `isbn` is set and valid, and the story id otherwise.
+- Each name in `authors` (or the single `author`) becomes its own `dc:creator`.
+- `language` sets `dc:language` and the `lang` of every document. It defaults to `en`.
+- `publisher`, `publication-date`, `description`, each `subjects` code, and `copyright` become `dc:publisher`, `dc:date`, `dc:description`, `dc:subject`, and `dc:rights`. Fields that are not set are left out.
+
+Each document is tagged for reading systems: chapters as `bodymatter chapter`, matter pages as `frontmatter` or `backmatter`, a copyright page as `copyright-page`, and the cover page as `cover`. A hidden landmarks list points at the first chapter, so readers open at the story. The package also carries EPUB Accessibility discovery metadata: a text-only access mode, a table of contents, a single reading order, structural navigation, no hazards, and, when there is a cover, a described cover image.
+The copy of *The Last Ember* with the fields from [The generated copyright page](#the-generated-copyright-page) and no cover produces this metadata (abridged):
+
+```xml
+<dc:identifier id="book-id">urn:isbn:9780306406157</dc:identifier>
+<dc:title>The Last Ember</dc:title>
+<dc:creator>Ada Writer</dc:creator>
+<dc:language>en-GB</dc:language>
+<dc:publisher>Ember Press</dc:publisher>
+<dc:rights>Copyright © 2026 Ada Writer</dc:rights>
+<meta property="dcterms:modified">2000-01-01T00:00:00Z</meta>
+<meta property="schema:accessMode">textual</meta>
+<meta property="schema:accessibilityFeature">tableOfContents</meta>
+```
 
 ### DOCX
 
@@ -468,7 +575,7 @@ The DOCX build is a Word document with:
 - each chapter, and each matter page with `heading: true`, under a `Heading 1` style,
 - one Word paragraph per prose paragraph, with bold and italic carried over.
 
-The `author` field is not used. For page layout, fonts, and headers, open the file in a word processor and apply your own styles.
+The `author` and `authors` fields are not used. For page layout, fonts, and headers, open the file in a word processor and apply your own styles.
 
 ### Shunn standard manuscript format
 
@@ -483,7 +590,7 @@ Both read two `story.md` fields for the title page:
 
 | Field | Type | Used for |
 |-------|------|----------|
-| `author` | Text | The byline under `by`. Left out when missing. |
+| `author` | Text | The byline under `by`. Left out when missing. The Shunn builds do not read `authors`, so set `author` for a co-authored book too. |
 | `contact` | List of text lines (a single string also works) | Your name, address, email, and so on, one line each. |
 
 ```yaml
@@ -520,11 +627,206 @@ The DOCX version uses Courier New at 12 point and double line spacing throughout
 
 The [`submission`](../skills/submission/SKILL.md) skill runs these builds as part of preparing a submission package.
 
-### How prose is converted for EPUB, DOCX, and Shunn
+### HTML review copy
 
-The markdown export copies prose as written. The EPUB, DOCX, and Shunn builds convert it to paragraphs:
+`--format html` writes one self-contained HTML file for readers who never open a terminal: beta readers, critique partners, editors, and agents. It holds the title, the byline, a short note telling readers how to cite a paragraph, a contents list, and every matter page and chapter in reading order. It loads nothing from the network, works offline, and follows the reader's light or dark setting.
 
-| In the chapter prose | In EPUB, DOCX, and Shunn output |
+Every paragraph carries a small label that is also its link target: `ch03-p12` is chapter 3, paragraph 12. Readers quote the label in an email, a comment, or a GitHub issue, so each note points at an exact paragraph. On *Harbor of Second Light*, unchanged:
+
+```shell
+story build . --format html
+```
+
+```text
+Built 1 chapters as html to ~/stories/harbor-of-second-light/dist/harbor-of-second-light.html
+```
+
+The body of the file starts:
+
+```html
+<header>
+<h1>Harbor of Second Light</h1>
+<p class="byline">Morgan Hale</p>
+<p class="note">Review copy. Every paragraph has a label such as <code>ch03-p12</code> (chapter 3, paragraph 12). Quote the label with each note so the author can find the exact spot.</p>
+</header>
+<nav aria-label="Contents"><h2>Contents</h2><ol>
+<li><a href="#ch01">Chapter 1: The Bell Under the Reef</a></li>
+</ol></nav>
+<section id="ch01" class="chapter"><h2>Chapter 1: The Bell Under the Reef</h2>
+<p id="ch01-p1"><a class="anchor" href="#ch01-p1" title="Link to ch01-p1">ch01-p1</a>The bell was ringing under the reef.</p>
+```
+
+How the labels are made:
+
+| Part | Section id | Paragraph labels |
+|------|------------|------------------|
+| Chapter | `ch` and the chapter `number`, padded to two digits: `ch01`, `ch12` | `ch01-p1`, `ch01-p2`, and so on |
+| Front matter page | `matter-front-<id>` | `front-<id>-p1`, such as `front-epigraph-p1` |
+| Back matter page | `matter-back-<id>` | `back-<id>-p1`, such as `back-acknowledgments-p1` |
+| Generated copyright page | `matter-front-copyright` | `front-copyright-p1` |
+
+Paragraphs are numbered from 1 within each chapter or page. A scene break is drawn as `* * *` and takes no number: in *Harbor of Second Light*, `ch01-p37` is the last paragraph before the break and `ch01-p38` the first after it. Prose is converted as in the [table below](#how-prose-is-converted-for-epub-docx-shunn-html-and-print), and all text is HTML-escaped. A matter page with `heading: false` gets a visually hidden heading, so screen readers still announce it. The label is faint until the reader hovers over or links to a paragraph; on a narrow screen it sits above the paragraph.
+
+A label depends only on its chapter's `number` and that chapter's own paragraphs, so editing chapter 5 never moves a label in chapter 3. Revising a chapter does shift the labels after the edit within that chapter. When notes come back, match them to the build they were made against: tag the commit you shared, then run `story compare . --ref <tag>` to see what has moved since. The [`editorial-review`](../skills/editorial-review/SKILL.md) skill runs review rounds this way, and [`line-editing`](../skills/line-editing/SKILL.md) cites its own notes with the same labels.
+
+For a project in a GitHub repository, the `review-copy.yml` workflow template rebuilds this file on every push and publishes it to GitHub Pages, and the `manuscript-note.yml` issue form asks readers for the label. See [Automation and CI](automation.md#review-copy-workflow).
+
+### Print interior
+
+`--format print` writes the interior of a paperback as one HTML file styled with CSS paged media. It is not a PDF. Render it to PDF with a paged-media engine such as [Paged.js](https://pagedjs.org/) (`pagedjs-cli`), [WeasyPrint](https://weasyprint.org/), or [Prince](https://www.princexml.com/), then send the PDF to your printer. Pick a trim size with `--trim`:
+
+```shell
+story build . --format print --trim 6x9
+```
+
+```text
+Built 1 chapters as print to ~/stories/harbor-of-second-light/dist/harbor-of-second-light.print.html
+```
+
+| `--trim` | Page size | Words per page, for the estimate |
+|----------|-----------|----------------------------------|
+| `5x8` | 5 × 8 in | 230 |
+| `5.25x8` | 5.25 × 8 in | 250 |
+| `5.5x8.5` (default) | 5.5 × 8.5 in | 275 |
+| `6x9` | 6 × 9 in | 300 |
+| `a5` | 148 × 210 mm | 270 |
+
+Any other size stops the build with `Unsupported trim size: 7x10. Supported sizes: 5x8, 5.25x8, 5.5x8.5, 6x9, a5`. The trim is not part of the default file name, so pass `--out` to keep interiors for two trims side by side.
+
+The file opens with a comment that records the trim, the estimated page count, and how to render it:
+
+```html
+<!-- Print interior for 6x9 trim (6in x 9in), about 5 pages.
+     Render to PDF with a CSS paged-media engine, for example:
+       npx pagedjs-cli book.print.html -o book.pdf
+       weasyprint book.print.html book.pdf
+       prince book.print.html -o book.pdf
+     Check the printer's current specs for margins, bleed, and fonts before upload. -->
+```
+
+The layout:
+
+- **Page order.** A title page with the title and author; the copyright page, if there is one, on the page after it; a contents page listing the chapters with page numbers; the other front matter; the chapters; the back matter. The title page, contents, other front matter pages, chapters, and back matter pages each start on a right-hand page.
+- **Running heads and page numbers.** Left-hand pages show the author at the top (the title when no author is set); right-hand pages show the current chapter title. Chapter and back matter pages have a centred page number at the foot. Front matter pages and blank pages have neither.
+- **Margins.** 0.75 in top and bottom, 0.5 in on the outside edge. The inside (gutter) margin widens with the estimated page count so text does not disappear into the spine: 0.625 in up to 150 pages, 0.75 in up to 300, 0.875 in up to 500, and 1 in beyond.
+- **Text.** 11 pt Georgia, or a similar serif, at 1.4 line spacing, justified and hyphenated, with indented paragraphs. The first paragraph of a chapter, and the first after a scene break, is not indented, and a chapter's first letter is enlarged. Scene breaks are centred asterisks.
+- **Matter pages.** Paragraphs are not indented. Front matter pages are centred, apart from the copyright page, which is left-aligned at 9 pt.
+
+The page estimate is chapter words divided by the trim's words per page, rounded up. It is for planning; the rendered PDF's real page count is what printers use to price the book and size the spine. Check the rendered PDF against your printer's current requirements for margins, bleed, and fonts before ordering a proof. Opened in a browser, the file shows the text in one column at the trim width, which is useful for proofreading but is not the paged layout.
+
+The [`publishing`](../skills/publishing/SKILL.md) skill covers choosing a trim, rendering the PDF, and checking the proof.
+
+### Narration script
+
+`--format narration` writes a markdown script for recording an audiobook, whether you narrate it, hire a narrator, or use a synthetic voice. On *Harbor of Second Light*:
+
+```shell
+story build . --format narration
+```
+
+```markdown
+# Harbor of Second Light: Narration Script
+
+Estimated finished runtime: 0h 10m at 155 words per minute (1489 words). Narration pace varies; time a sample chapter and rescale.
+
+## Pronunciation Guide
+
+| Name | Say it | Kind |
+| --- | --- | --- |
+| Councillor Ilya Venn | EEL-ya VEN | character |
+
+## Opening Credits
+
+Harbor of Second Light. Written by Morgan Hale. Narrated by [narrator].
+
+## Chapter 1: The Bell Under the Reef
+
+[about 10 min]
+
+The bell was ringing under the reef.
+```
+
+The script ends with closing credits: `The end. You have been listening to Harbor of Second Light, written by Morgan Hale, narrated by [narrator].` Replace `[narrator]` with the narrator's name.
+
+What goes in:
+
+- **Pronunciation guide.** Every `pronunciation` field on a character, location, faction, artifact, or glossary term, sorted by name. Characters with `status: cut` are left out. When there are none, the section says how to add them. Use plain respelling, such as `pronunciation: "SEER-ah VOSS"`; `story validate` rejects a value that is not text.
+- **Sections.** Every front matter page except the copyright page, every chapter as `Chapter N: Title`, then every back matter page. Each opens with its estimated runtime, `[about N min]` or `[under 1 min]`.
+- **Text.** Paragraphs as written, with markdown emphasis kept so the narrator can see where the stress falls. A scene break becomes `[pause]`. Blockquote markers are kept as well, so an epigraph reads `> An ember given is a fire kept.`
+- **Runtime.** Every word in those sections, matter included, at 155 words per minute, rounded to the minute. Pace varies by narrator and genre, so time a sample chapter and rescale.
+
+The [`adaptation`](../skills/adaptation/SKILL.md) skill prepares an audiobook from this script and writes it to `adaptations/audiobook/narration-script.md` with `--out`. The [`worldbuilding`](../skills/worldbuilding/SKILL.md) and [`character-management`](../skills/character-management/SKILL.md) skills add pronunciations when they create invented names.
+
+### Retailer metadata sheet
+
+`--format metadata` writes a markdown sheet with the fields a retailer or distributor upload form asks for, filled from `story.md`, then a checklist of what is still missing. Use it to fill in KDP, IngramSpark, Draft2Digital, and similar forms, and to see what the book still needs. The build succeeds however many fields are missing. *Harbor of Second Light* sets `author`, `language`, `description`, `keywords`, `subjects`, and `form`:
+
+```shell
+story build . --format metadata
+```
+
+```markdown
+# Harbor of Second Light: Retailer Metadata
+
+Generated from story.md. Retailer limits change; check each retailer's current requirements before upload.
+
+| Field | Value |
+| --- | --- |
+| Title | Harbor of Second Light |
+| Series | (missing) |
+| Author(s) | Morgan Hale |
+| ISBN | (missing) |
+| Publisher | (missing) |
+| Publication date | (missing) |
+| Language | en |
+| Genre | science-fiction / coastal-mystery |
+| Form | novel |
+| Word count | 1489 |
+| Estimated print pages | 6 at 5.5x8.5, 5 at 6x9 |
+| Description | 170 characters (limit 4000) |
+| Keywords | 4 of 7: floating city; memory archive; salvage diver; near-future mystery |
+| BISAC subjects | FIC028000; FIC022000 |
+| Copyright | (missing) |
+| Cover | (missing) |
+| Cover alt text | (missing) |
+| AI disclosure | (missing) |
+
+## Description
+
+When a storm exposes an illegal memory archive beneath a floating harbor, salvage diver Mara Quill finds proof that her dead brother was not the saboteur everyone blames.
+
+## Readiness
+
+- [x] Author named (`author` or `authors`)
+- [ ] ISBN for this edition (`isbn`), or a retailer-assigned identifier
+- [ ] Publisher or imprint (`publisher`)
+- [ ] Publication date (`publication-date`)
+- [x] Description under 4000 characters (`description`)
+- [x] Keywords, up to 7 (`keywords`)
+- [x] BISAC subjects (`subjects`)
+- [ ] Copyright line (`copyright`) or copyright matter page
+- [ ] Cover image (`cover`)
+- [ ] Cover alt text (`cover-alt`)
+- [ ] AI-use statement decided (`ai-disclosure`)
+- [ ] Story status is complete
+```
+
+Notes on the fields:
+
+- **Series** is the `series` id, with `, book N` when `book-number` is set, such as `the-ember-cycle, book 1`.
+- **Word count** is chapter prose only, as `story wordcount` counts it.
+- **Estimated print pages** uses the [print interior](#print-interior) estimate for the two most common trims.
+- **Description** shows its length against a 4,000-character limit; the full text follows under `## Description`.
+- **Cover** is the `cover` path as written. The sheet does not check that the file exists; `story validate` does.
+- The copyright item is ticked by either a `copyright` line or a copyright matter page.
+
+The limits are common defaults, not any one retailer's rules. The [`publishing`](../skills/publishing/SKILL.md) skill fills the missing fields with you, rebuilds the sheet until the checklist is clean, and checks each field against the retailer's current requirements.
+
+### How prose is converted for EPUB, DOCX, Shunn, HTML, and print
+
+The markdown export copies prose as written, and the narration script nearly does (see [Narration script](#narration-script)). The EPUB, DOCX, Shunn, HTML, and print builds convert it to paragraphs:
+
+| In the chapter prose | In EPUB, DOCX, Shunn, HTML, and print output |
 |----------------------|---------------------------------|
 | Blank line | Paragraph break. Line breaks inside a paragraph become spaces. |
 | `**bold**` or `__bold__` | Bold (the `.shunn.md` build keeps the markup) |
@@ -537,7 +839,7 @@ Links, images, lists, and other markdown are not converted and appear as their l
 
 ### Reproducible builds
 
-Builds are deterministic: the same sources produce byte-identical files. EPUB and DOCX packages use fixed ZIP timestamps. The EPUB `dcterms:modified` date comes from the `SOURCE_DATE_EPOCH` environment variable (seconds since the Unix epoch) when it is set, and is `2000-01-01T00:00:00Z` otherwise:
+Builds are deterministic: the same sources produce byte-identical files. The HTML, print, narration, and metadata builds contain no dates or timestamps, so a diff between two builds shows only what changed in the book. EPUB and DOCX packages use fixed ZIP timestamps. The EPUB `dcterms:modified` date comes from the `SOURCE_DATE_EPOCH` environment variable (seconds since the Unix epoch) when it is set, and is `2000-01-01T00:00:00Z` otherwise:
 
 ```shell
 SOURCE_DATE_EPOCH=1700000000 story build . --format epub
@@ -641,7 +943,8 @@ Treat everything in `dist/` as disposable. It is regenerated from the markdown o
 | `Duplicate chapter number N: ...` | Two chapters share a `number` | Renumber one of them, then run `story reindex .`. |
 | `... matter file names must be kebab-case to build` | A `matter/` file name is not kebab-case | Rename the file to a kebab-case name, such as `about-me.md`, then run `story reindex .`. |
 | `story.md cover <path> ...` | The cover path is missing, outside the project, or not a supported image | Fix `cover` in `story.md`, or remove it. |
-| `Unsupported build format: <name>. ...` | An unknown `--format` | Use `markdown`, `epub`, `docx`, or `shunn`. |
+| `Unsupported build format: <name>. ...` | An unknown `--format` | Use `markdown`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, or `metadata`. |
+| `Unsupported trim size: <size>. ...` | An unknown `--trim` with `--format print` | Use `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5`. |
 | `Unsupported synopsis length: <n>. Supported pages: 1, 3` | An unsupported `--pages` value | Use `1` or `3`. |
 | `Refusing to access path outside project root: <path>` | A relative `--out` that leaves the project | Use a path inside the project, or an absolute path. |
 | `Refusing to write through symlink: <path>` | The `--out` file is a symlink | Delete the symlink or choose another file. |

@@ -1,6 +1,6 @@
 # Writing workflows
 
-This page is for writers who draft with an AI agent (Claude Code, Codex, or another Agent Skills host) and want to know which skills to use, in what order, and which checks to run. It walks through complete workflows, from a blank project to a submission package, with the prompts you would type and the project state each one leaves behind.
+This page is for writers who draft with an AI agent (Claude Code, Codex, or another Agent Skills host) and want to know which skills to use, in what order, and which checks to run. It walks through complete workflows, from a first spark of an idea to a published book, with the prompts you would type and the project state each one leaves behind.
 
 For what the files mean, see [Core concepts](concepts.md) and the [Project format reference](project-format.md). For every command and flag, see the [CLI reference](cli-reference.md). For a one-paragraph summary of each skill, see the [Skills catalogue](skills.md).
 
@@ -10,15 +10,20 @@ Each workflow stands on its own, so skip the ones that do not apply to your book
 
 | Workflow | Use it when | Main skills |
 |----------|-------------|-------------|
+| [Premise workshop](#premise-workshop) | You have a spark, several ideas, or an untested premise, and no project yet | `premise-workshop` |
 | [Plotting-first](#plotting-first-from-premise-to-chapter-one) | You want the structure, cast, and world planned before any prose | `plot-structure`, `chapter-writing` |
 | [Discovery drafting](#discovery-drafting) | You want to write without an outline and build the bible afterwards | `discovery-drafting` |
 | [Scene-level craft](#scene-level-craft) | A single scene needs planning or repair | `scene-craft` |
-| [Theme](#theme) | You want the premise, arcs, and motifs to carry the theme | `theme-craft` |
+| [Theme](#theme) | You want the controlling idea, arcs, and motifs to carry the theme | `theme-craft` |
 | [Voice and house style](#voice-and-house-style) | You want consistent spelling, usage, and voice across chapters | `voice-style` |
 | [Research](#research) | The book depends on real-world facts | `research` |
-| [Revision passes](#revision-passes) | You have a draft to improve | `revision-continuity` |
+| [Revision passes](#revision-passes) | You have a draft to improve, one named pass at a time | `revision-continuity` |
+| [Line editing](#line-editing) | The structure is settled and the sentences need work | `line-editing` |
 | [Feedback triage](#feedback-triage) | Alpha or beta readers have sent notes | `feedback-triage` |
-| [Submission prep](#submission-prep) | The manuscript is finished and going to agents or retailers | `submission` |
+| [Editorial review](#editorial-review) | You need a sensitivity reader, permissions, an AI-use statement, an editor, or a co-author | `editorial-review` |
+| [Submission prep](#submission-prep) | The manuscript is finished and going to agents or magazines | `submission` |
+| [Publishing](#publishing) | You are self-publishing, or managing rights and a contract | `publishing` |
+| [Adaptation](#adaptation) | You want an audiobook script, screenplay, picture book, comic, interactive version, or translation | `adaptation` |
 
 Every workflow has the same layout: the goal, the skills involved, numbered steps with example prompts, the checks to run, and the result. If you are new, read [How the workflows fit together](#how-the-workflows-fit-together) and [Before you start](#before-you-start) first. [Checks by workflow](#checks-by-workflow) at the end is a quick reference.
 
@@ -28,27 +33,31 @@ A Story Skills project moves through the same broad stages whatever your method.
 
 ```mermaid
 flowchart LR
-    A[story-init] --> B{Plan or discover?}
+    P[premise-workshop] --> A[story-init]
+    A --> B{Plan or discover?}
     B -->|Plan| C[plot-structure<br/>character-management<br/>worldbuilding<br/>theme-craft<br/>genre-craft]
     C --> D[chapter-writing<br/>+ scene-craft]
     B -->|Discover| E[discovery-drafting<br/>reconcile loop]
     D --> F[voice-style<br/>research]
     E --> F
-    F --> G[revision-continuity]
-    G --> H[feedback-triage]
+    F --> G[revision-continuity<br/>named passes]
+    G --> L[line-editing]
+    L --> H[feedback-triage<br/>editorial-review]
     H -->|needs-revision| G
-    H -->|ready| I[submission]
+    H -->|ready| I[submission<br/>publishing<br/>adaptation]
 ```
 
 | Stage | Skills | Main CLI checks |
 |-------|--------|-----------------|
+| Find the idea | `premise-workshop` | `story init --form`, `story names` |
 | Set up | `story-init` | `story init`, `story validate`, `story next` |
-| Plan | `plot-structure`, `character-management`, `worldbuilding`, `theme-craft`, `genre-craft` | `story reindex`, `story links`, `story validate` |
-| Draft | `chapter-writing` or `discovery-drafting`, with `scene-craft` | `story wordcount --write`, `story continuity`, `story progress --log` |
-| Keep it consistent | `voice-style`, `research` | `story prose`, `story validate` |
-| Revise | `revision-continuity`, `theme-craft` (theme audit) | `story continuity`, `story doctor`, `story compare` |
-| Get outside readers | `feedback-triage` | `story continuity`, `story validate` |
-| Send it out | `submission` | `story synopsis`, `story build --format shunn` |
+| Plan | `plot-structure`, `character-management`, `worldbuilding`, `theme-craft`, `genre-craft` | `story reindex`, `story links`, `story validate`, `story names`, `story diagram`, `story clues` |
+| Draft | `chapter-writing` or `discovery-drafting`, with `scene-craft` | `story wordcount --write`, `story continuity`, `story pacing`, `story progress --log` |
+| Keep it consistent | `voice-style`, `research` | `story prose`, `story voices`, `story validate` |
+| Revise | `revision-continuity`, `theme-craft` (theme audit) | `story passes`, `story next`, `story continuity`, `story pacing`, `story clues`, `story doctor`, `story compare` |
+| Polish | `line-editing` | `story prose`, `story voices`, `story build --format narration`/`html`/`print` |
+| Get outside readers | `feedback-triage`, `editorial-review` | `story build --format html`, `story continuity`, `story validate` |
+| Send it out | `submission`, `publishing`, `adaptation` | `story synopsis`, `story build --format shunn`/`epub`/`print`/`metadata`/`narration` |
 
 Sequels and prequels add `series-continuity` on top of any of these; see [Series](series.md).
 
@@ -56,7 +65,7 @@ Sequels and prequels add `series-continuity` on top of any of these; see [Series
 
 ### How skills get picked up
 
-You do not call a skill by name. Each skill's `description` lists the phrases that trigger it, so the agent loads the right one when you ask in plain language: "start a new story" loads `story-init`, "write the next chapter" loads `chapter-writing`, "process beta reader feedback" loads `feedback-triage`. You can also name the skill directly ("use the scene-craft skill to check this scene") when a request could match more than one.
+You do not call a skill by name. Each skill's `description` lists the phrases that trigger it, so the agent loads the right one when you ask in plain language: "I have an idea for a story" loads `premise-workshop`, "start a new story" loads `story-init`, "write the next chapter" loads `chapter-writing`, "line edit chapter 3" loads `line-editing`, "process beta reader feedback" loads `feedback-triage`. Each phrase has one owner, so similar requests can land on different skills: "premise" on its own goes to `premise-workshop`, while "controlling idea" goes to `theme-craft`. You can also name the skill directly ("use the scene-craft skill to check this scene") when a request could match more than one.
 
 The prompts on this page are examples. Rephrase them freely; the skill asks for anything it needs that is not in the project files.
 
@@ -80,32 +89,120 @@ Almost every workflow ends with some subset of these five commands:
 
 `story add` rebuilds the registries itself, so you only need `story reindex .` after editing files by hand. `story next .` runs `validate`, `links`, and `continuity` and turns their results into a prioritised to-do list, which makes it a good way to start a session.
 
+## Premise workshop
+
+**Goal:** turn a spark into a premise that can carry a book, choose its form, and hand a brief to `story-init`, before any project folder exists.
+
+**Skill:** [`premise-workshop`](../skills/premise-workshop/SKILL.md), which hands off to `story-init`. Skip it if you already know your premise, form, and genre.
+
+The running example on this page is a new book, *The Gannet Point Light*: a 1950s coastal mystery about Nell Carrow, a lighthouse keeper's daughter. It is a different project from *The Sunken Ledger* in [Getting started](getting-started.md), and every later workflow on this page keeps using it.
+
+### 1. Capture the spark
+
+```text
+I have an idea for a story. A lighthouse keeper's daughter finds a drowned
+man in the tide room under the light.
+```
+
+The skill takes the spark in your words and doesn't improve it yet. It sorts it (here, an image with a character attached) and asks what drew you to it. The answer is often the book's real subject, so it is kept in the notes as the check on later drift.
+
+### 2. Generate what-ifs and pick one
+
+The skill offers 8 to 12 short what-ifs from different angles, using its [what-if reference](../skills/premise-workshop/references/what-if-generation.md): invert the spark, raise the cost, move it in time or place, give it to the wrong person. For example, *what if her father recognises the drowned man and says he doesn't?* It says which ones already imply conflict but doesn't rank them unless you ask. You pick one to three, or combine them.
+
+### 3. Test the logline, premise, and stakes
+
+```text
+Workshop the logline for the father one. Is this idea strong enough?
+```
+
+For each pick the skill drafts a logline (protagonist, want, obstacle, stakes) and runs the [premise tests](../skills/premise-workshop/references/premise-tests.md): an active protagonist, opposition that can win, a choice at the end, personal stakes, and a situation big enough for the length. Each test is reported as pass, weak, or fail with one sentence of why and one suggested revision.
+
+It then drafts the controlling idea as `premise` and its opposite as `counter-premise` (value plus cause, as working hypotheses), and writes the stakes on three levels: external, relational, and internal. The logline is kept for the Synopsis section; `premise` in `story.md` is always the controlling idea.
+
+### 4. Choose the form and a title
+
+```text
+Short story or novel? And give me some title ideas.
+```
+
+The [form reference](../skills/premise-workshop/references/form-choice.md) counts the idea's moving parts (POV characters, threads, locations, time span) and recommends one of `novel`, `novella`, `novelette`, `short-story`, `flash`, `serial`, `picture-book`, or `chapter-book`, with the trade-offs. You decide. Titles come from the families in [title and comps](../skills/premise-workshop/references/title-and-comps.md), cut to a shortlist of five and tested against the logline and the shelf. The skill also asks for two or three recent books the idea sits beside, and never invents a title, author, or sales claim; without web search to confirm each book, the list is marked unverified.
+
+### 5. Hand off to story-init
+
+The skill shows a one-screen brief (working title, logline, premise, counter-premise, stakes, form, genre and sub-genre, POV and tense if known, themes, comps). On your approval it follows `story-init` with that brief, so you are not asked the same questions twice. Workshop text is your own words, so it quotes every value in single quotes for the shell, writing an apostrophe inside a value as `'\''`:
+
+```shell
+story init 'The Gannet Point Light' --form novel --genre mystery --sub-genre coastal \
+  --setting-era 1950s --pov third-person-limited --tense past \
+  --synopsis 'A lighthouse keeper'\''s daughter finds a drowned man in the tide room.' \
+  --theme grief --theme duty
+```
+
+It then writes `premise` and `counter-premise` into `story.md` by hand, and moves the stakes, the what-ifs worth keeping, the title shortlist, and the comps into its `## Notes` section. If you asked it to save work before the project existed, that went into a `premise-notes.md` in the current directory; it offers to move the file into the project as `notes/premise-notes.md` and deletes it only when you ask.
+
+Once the project exists, `story names` checks title words and new names against every character, alias, location, faction, artifact, system, and glossary term. An exact clash fails the check. Later in the book, with Nell and Silas created:
+
+```shell
+story names "Gannet" "Nell" "Silas Carrow" --path .
+```
+
+```text
+Gannet: clear
+Nell: taken
+Silas Carrow: taken
+Name check failed: 2 errors, 0 warnings, 0 dismissed
+error: "Nell" clashes with character nell-carrow (Nell)
+error: "Silas Carrow" clashes with character silas-carrow (Silas Carrow)
+```
+
+Multi-word names are only checked for exact clashes, which is why `Gannet` is clear even though the book has a location called Gannet Point Light. Pass a multi-word title's distinctive word on its own when you want it checked for look-alikes.
+
+### Checks
+
+```shell
+story validate .
+story report .
+```
+
+`story report` shows the form beside the genre, and `story validate` warns when `target-words` sits outside the form's usual range. Raise a short story's target to 40,000 by hand, for example, and it reports:
+
+```text
+warning: story.md target-words 40000 is outside the usual short-story range of 1000-7500 words
+```
+
+Once `status` is `complete`, it gives the same warning for the manuscript's actual length. Either adjust the target or confirm the choice.
+
+### Result
+
+A new project whose `story.md` has `form`, a default `target-words` for that form, the logline in `## Synopsis`, `premise` and `counter-premise`, and the workshop's stakes, titles, and comps in `## Notes`. The next workflow picks up from here.
+
 ## Plotting-first: from premise to chapter one
 
 **Goal:** plan the story's structure, cast, and world before drafting, then write chapters from approved outlines.
 
-**Skills, in order:** `story-init` → `plot-structure` → `character-management` → `worldbuilding` → (`theme-craft`, `genre-craft`) → `chapter-writing`.
-
-The running example on this page is a new book, *The Gannet Point Light*: a 1950s coastal mystery about Nell Carrow, a lighthouse keeper's daughter. It is a different project from *The Tide Room* in [Getting started](getting-started.md), and the later workflows on this page keep using it.
+**Skills, in order:** (`premise-workshop`) → `story-init` → `plot-structure` → `character-management` → `worldbuilding` → (`theme-craft`, `genre-craft`) → `chapter-writing`.
 
 ### 1. Create the project
 
+If you ran the [premise workshop](#premise-workshop), the project already exists. Otherwise:
+
 ```text
-Start a new story. It's a coastal mystery set in the 1950s, third-person
+Start a new story. It's a coastal mystery novel set in the 1950s, third-person
 limited, past tense. A lighthouse keeper's daughter finds a drowned man in
 the tide room. Themes: grief and duty.
 ```
 
-The [`story-init`](../skills/story-init/SKILL.md) skill asks for anything missing (title, sub-genre, setting era, 2 to 4 themes, POV, tense), then scaffolds the project with the CLI:
+The [`story-init`](../skills/story-init/SKILL.md) skill asks for anything missing (title, form, sub-genre, setting era, 2 to 4 themes, POV, tense), then scaffolds the project with the CLI:
 
 ```shell
-story init "The Gannet Point Light" --genre mystery --sub-genre coastal \
+story init "The Gannet Point Light" --form novel --genre mystery --sub-genre coastal \
   --setting-era 1950s --pov third-person-limited --tense past \
   --synopsis "A lighthouse keeper's daughter finds a drowned man in the tide room." \
   --theme grief --theme duty
 ```
 
-It then fills in the `story.md` bible: the synopsis, a Tone & Style section derived from the genre and themes, and a working `premise` and `counter-premise`. Treat both as guesses. The skill says to revise the premise later if the draft argues something different, rather than bending the draft to fit.
+`--form novel` records the form and sets `target-words: 80000`. Without `--form`, `story init` writes neither field, so the skill passes `--form novel` when you don't choose. It then fills in the `story.md` bible: the synopsis, a Tone & Style section derived from the genre and themes, and a working `premise` and `counter-premise`. Treat both as guesses. The skill says to revise the premise later if the draft argues something different, rather than bending the draft to fit.
 
 The skill finishes with `story validate` and suggests `story next` as a next step. A fresh project is valid, and `story next` tells you where to go:
 
@@ -171,11 +268,52 @@ light alongside her father since her mother drowned.
 
 [`character-management`](../skills/character-management/SKILL.md) asks for a role (`protagonist`, `antagonist`, `supporting`, `minor`, `narrator`, or `deuteragonist`) and then works through appearance, personality, backstory, external want and internal need, voice (it will ask for sample dialogue), arc, and key life events. It writes `characters/nell-carrow.md` from its [character template](../skills/character-management/references/character-template.md), or runs `story add character "Nell Carrow" --role protagonist` and fills the file in.
 
+Before settling a name, the skill checks it with `story names`. With Nell, Silas, and Edwin Marsh already in the book:
+
+```shell
+story names "Nora Pike" "Neil" "Silas" "Tamsin"
+```
+
+```text
+Nora Pike: check
+Neil: check
+Silas: taken
+Tamsin: clear
+Name check failed: 1 errors, 2 warnings, 0 dismissed
+error: "Silas" clashes with character silas-carrow (Silas)
+warning: "Nora Pike" shares an initial with protagonist nell-carrow (Nell Carrow)
+warning: "Neil" looks like character nell-carrow (Nell Carrow)
+```
+
+An exact clash is an error and the command exits 1. Look-alikes and a shared initial with a major character are warnings for you to weigh.
+
+The voice discussion also fills two short lists that make the voice checkable later: `voice-words` (words the character reaches for) and `voice-avoid` (words they would never say). An invented or easily misread name gets a `pronunciation`, which the audiobook script uses.
+
+```yaml
+voice-words:
+  - "reckon"
+voice-avoid:
+  - "love"
+```
+
 Relationships are always written both ways. Ask for one and the skill adds the inverse to the other character's file and updates the Relationship Map in `characters/_index.md`:
 
 ```text
 Silas Carrow is Nell's father. Add the relationship and start a family tree.
 ```
+
+`story diagram relationships` draws the graph from every character's frontmatter as Mermaid source, which GitHub and many editors render. With Silas as Nell's parent and Edwin as his rival:
+
+```text
+flowchart LR
+  edwin_marsh["Edwin Marsh"]
+  nell_carrow["Nell Carrow"]
+  silas_carrow["Silas Carrow"]
+  edwin_marsh -.-|rival| silas_carrow
+  silas_carrow ==>|parent| nell_carrow
+```
+
+Family edges are drawn heavier than other relationships, so the family tree stands out. Add `--out dist/relationships.mmd` to save it, and regenerate it after changes rather than editing it.
 
 ### 4. Build the world
 
@@ -186,6 +324,30 @@ Add the Coastguard Board as a government faction.
 ```
 
 [`worldbuilding`](../skills/worldbuilding/SKILL.md) handles locations, systems (magic, political, technology, religion, economic, military, social, education), factions, and artifacts. Each goes in its own folder under `worldbuilding/` and is cross-linked to the characters who use it: a location's `notable-characters` must match each character's `locations` list, a faction's `members` must be real character ids, and an artifact's `owner` must be a real character or faction. `story links` reports any reference that points nowhere and any location or character that is missing its backlink.
+
+Travel between places goes in the location file as `routes`, so the CLI can check it:
+
+```text
+How long does it take to walk from the light to the harbor? Add the route.
+```
+
+```yaml
+routes:
+  - to: porthkennack-harbor
+    hours: 1.5
+    mode: on foot
+```
+
+A route is two-way unless the other location declares its own. Once scenes carry `date`, `time`, and `location`, `story continuity` reports an error when a character is in two places joined by a route with less story time between them than the route's `hours`. `story diagram locations` draws the route network:
+
+```text
+flowchart LR
+  gannet_point_light["Gannet Point Light"]
+  porthkennack_harbor["Porthkennack Harbor"]
+  gannet_point_light ---|1.5h on foot| porthkennack_harbor
+```
+
+The skill's references also cover [calendars](../skills/worldbuilding/references/calendars.md), [naming languages](../skills/worldbuilding/references/naming-languages.md), and [economy and logistics](../skills/worldbuilding/references/economy-logistics.md), including a table of travel speeds by mode for setting plausible `hours`.
 
 ### 5. Add the thematic and genre layers (optional)
 
@@ -200,10 +362,31 @@ This is a mystery. Set up the fair-play rules and the clue ledger.
 [`theme-craft`](../skills/theme-craft/SKILL.md) adds `arc-type`, `lie`, `truth`, and `ghost-wound` to character files; see [Theme](#theme) below. [`genre-craft`](../skills/genre-craft/SKILL.md) loads the pack for the genre in `story.md` (mystery, romance, thriller, horror, MG/YA, science fiction, or serial) and applies its constraints up front. For a mystery that means ledgering every clue:
 
 ```shell
-story add clue "The wet footprints" --planted chapter-02 --payoff chapter-09 --significance-delayed
+story add clue "The wet footprints" --planted chapter-01 --payoff chapter-03 --significance-delayed
+story add clue "The altered lamp log" --planted chapter-02 --payoff chapter-03
+story add clue "The harbormaster's boots" --planted chapter-02 --red-herring
 ```
 
-`--significance-delayed` marks a clue the reader sees before understanding it. `story continuity` reports a payoff chapter that comes before the planted chapter as an error.
+`--significance-delayed` marks a clue the reader sees before understanding it, and `--red-herring` a clue meant to mislead, whose `payoff` is the chapter that debunks it. `story continuity` reports a payoff chapter that comes before the planted chapter as an error. `story clues` lays the ledger out chapter by chapter and checks fair play. Once the first three chapters are drafted and the clues are on the page, it reports:
+
+```text
+Clues: 3 live (1 red herring), 3 planted, 2 revealed
+
+Clue                        1  2  3
+the-wet-footprints          P  .  R  planted, delayed
+the-altered-lamp-log        .  P  R  planted
+the-harbormasters-boots ~   .  P  .  planted
+
+P planted, R revealed, x both, ~ red herring
+Clue check complete: 0 errors, 5 warnings, 0 dismissed
+warning: clue the-wet-footprints lists no characters: record who could notice it
+warning: clue the-altered-lamp-log is planted in the chapter before its reveal (chapter-02 -> chapter-03): late plant gives readers no time to notice it
+warning: clue the-altered-lamp-log lists no characters: record who could notice it
+warning: clue the-harbormasters-boots lists no characters: record who could notice it
+warning: clue the-harbormasters-boots is a red herring with no payoff: record the chapter that debunks it
+```
+
+The late-plant warning is the one to act on: move the lamp log earlier, or the reveal in chapter 3 isn't fair. `story diagram clues` draws the same ledger as a plant-to-reveal flow. [Continuity and analysis](continuity.md) explains each warning.
 
 Record any deliberate break from a genre's conventions in `story.md` with a reason, so a later audit does not "fix" it.
 
@@ -217,17 +400,17 @@ Write the next chapter.
 
 1. **Gather context.** It reads `story.md`, `style-sheet.md`, the chapter, plot, and scene registries, `plot/timeline.md`, `continuity/state.md`, the open questions and promises, the previous chapter, and the active arcs.
 2. **Scope the chapter.** It asks what the chapter covers, whose POV, and which locations, and suggests the next beats from the arcs.
-3. **Outline.** It proposes a beat-by-beat outline: what each beat accomplishes, POV and location, which plot points advance, what to plant or pay off, and which state changes to record. You approve or revise it before any prose is written.
-4. **Draft.** It writes the prose in the POV character's voice and the tense from `story.md`, into `chapters/chapter-NN.md`, with the approved outline kept above `## Chapter Text`. Word counts start at that heading, so the outline never inflates them. It also creates a `scenes/chapter-NN-scene-NN.md` record for each scene.
-5. **Update everything else.** Chapter registry, timeline, arc plot points, scene records, `continuity/state.md`, foreshadowing status. It flags character changes (an injury, a revelation) for you to confirm.
+3. **Outline.** It proposes a beat-by-beat outline: what each beat accomplishes, POV and location, which plot points advance, what to plant or pay off, which state changes to record, each scene's intended `outcome` (`yes`, `no`, `yes-but`, `no-and`), and how the chapter ends. You approve or revise it before any prose is written.
+4. **Draft.** It writes the prose in the POV character's voice and the tense from `story.md`, into `chapters/chapter-NN.md`, with the approved outline kept above `## Chapter Text`. Word counts start at that heading, so the outline never inflates them. Each speaker uses the `voice-words` and avoids the `voice-avoid` words in their character file. It also creates a `scenes/chapter-NN-scene-NN.md` record for each scene.
+5. **Update everything else.** Chapter registry, timeline, arc plot points, scene records, `continuity/state.md`, foreshadowing status. It sets each scene's `outcome` and the chapter's `hook` (`cliffhanger`, `question`, `revelation`, `reversal`, `decision`, `emotional`, `resolution`) to what actually happened on the page, not what the outline planned. It flags character changes (an injury, a revelation) for you to confirm.
 
-The chapter-writing skill checks whether the separate [`better-writing`](https://github.com/forjd/better-writing) skill is installed. If it is, the agent uses it for a final prose pass. If not, the agent asks before installing anything and otherwise falls back to its own [writing guidelines](../skills/chapter-writing/references/writing-guidelines.md).
+The in-repo [`line-editing`](../skills/line-editing/SKILL.md) skill owns the prose-quality pass on a drafted chapter; see [Line editing](#line-editing). The chapter-writing skill also checks whether the separate [`better-writing`](https://github.com/forjd/better-writing) skill is installed, an optional complement. If it is, the agent uses it for a final prose pass. If not, the agent asks before installing anything and otherwise falls back to its own [writing guidelines](../skills/chapter-writing/references/writing-guidelines.md).
 
-The chapter and scene scaffolds come from the CLI:
+The chapter and scene scaffolds come from the CLI, which can set the pacing fields up front:
 
 ```shell
-story add chapter "The Drowned Man" --number 1 --pov nell-carrow --arc the-drowned-stranger
-story add scene "Low Water" --chapter chapter-01 --scene 1 --pov nell-carrow --location gannet-point-light
+story add chapter "The Drowned Man" --number 1 --pov nell-carrow --arc the-drowned-stranger --hook cliffhanger
+story add scene "Low Water" --chapter chapter-01 --scene 1 --pov nell-carrow --location gannet-point-light --outcome yes
 ```
 
 ### Checks
@@ -240,8 +423,27 @@ story reindex .
 story links .
 story validate .
 story next .
+story pacing .
 story progress . --log
 ```
+
+`story pacing .` shows the new chapter beside the rest of the book. Later in the draft, with three short chapters of *The Gannet Point Light* written:
+
+```text
+Pacing: 6 scenes, 0 sequels, 3 of 3 chapters with hooks
+Outcomes: 17% of recorded outcomes are setbacks or complications
+Median chapter: 113 words
+
+Ch  Words  Scenes  Sequels  Outcomes (yes/no/yes-but/no-and)  Hook
+ 1    124       2        0  1/0/0/1                           cliffhanger
+ 2    113       2        0  2/0/0/0                           question
+ 3     89       2        0  2/0/0/0                           resolution
+Pacing check complete: 0 errors, 2 warnings, 0 dismissed
+warning: 4 scenes in a row end in an outright yes (chapter-02-scene-01 to chapter-03-scene-02): raise the cost with yes-but or no-and
+warning: 6 scene units in a row with no sequel (chapter-01-scene-01 to chapter-03-scene-02): give the POV character room to react and decide
+```
+
+Nell has been getting what she wants too easily since chapter 2, and she never stops to react. The warnings are prompts to reread, not rules; [Scene-level craft](#scene-level-craft) is where they get fixed.
 
 `story next .` summarises continuity warnings as a single action. Run `story continuity .` to see them in full, because that is where most first-draft slips show up. Here is what it reported on the example chapter before the cast lists were filled in:
 
@@ -254,7 +456,7 @@ warning: scenes/chapter-01-scene-01.md is set in gannet-point-light but chapters
 
 Adding `nell-carrow` to both `characters` lists and `gannet-point-light` to the chapter's `locations` clears all three. `story continuity` also warns when `current-chapter` in `continuity/state.md` falls behind the latest drafted chapter, but it cannot tell whether the state entries themselves are complete, so bringing the state forward stays part of step 5.
 
-Set `target-words` and `deadline` in `story.md` and `story progress` measures pace against them. `--log` also appends the session to `progress.md`:
+`--form novel` already set `target-words: 80000` in `story.md`; add a `deadline` and `story progress` measures pace against both. `--log` also appends the session to `progress.md`:
 
 ```text
 Logged 132 words for 2026-09-24 in /path/to/the-gannet-point-light/progress.md
@@ -269,7 +471,7 @@ Progress checked: 0 errors, 0 warnings, 0 dismissed
 
 ```text
 the-gannet-point-light/
-├── story.md                 # bible with premise, themes, target-words
+├── story.md                 # bible with premise, themes, form, target-words
 ├── style-sheet.md
 ├── progress.md              # session log from story progress --log
 ├── characters/              # nell-carrow.md, silas-carrow.md + _index.md
@@ -415,6 +617,8 @@ The scene after the body is found feels rushed. Plan a sequel for it.
 Chapter 4's argument between Nell and Silas reads flat. Check the subtext.
 Does chapter one's first page hook?
 I need a flashback to the night Nell's mother drowned. Where should it go?
+Pacing flags four easy wins in a row. Rework the scene outcomes.
+Chapter 3 ends too neatly. Give it a better chapter hook.
 ```
 
 [`scene-craft`](../skills/scene-craft/SKILL.md) starts by identifying which problem you have, then loads the matching reference:
@@ -422,7 +626,7 @@ I need a flashback to the night Nell's mother drowned. Where should it go?
 | Symptom | Reference |
 |---------|-----------|
 | Incidents with no breathing room | [Scene and sequel](../skills/scene-craft/references/scene-sequel.md): reaction, dilemma, decision |
-| The middle sags or resolves too easily | [Try/fail cycles](../skills/scene-craft/references/try-fail.md) |
+| The middle sags, resolves too easily, or `story pacing` flags a run of `yes` outcomes | [Try/fail cycles](../skills/scene-craft/references/try-fail.md) and scene outcomes |
 | Several POVs or timelines to order | [Scene cards](../skills/scene-craft/references/scene-cards.md) |
 | Flat conversation or voices that blur | [Dialogue subtext](../skills/scene-craft/references/dialogue-subtext.md) and the tag-swap test |
 | Distant narration or head-hopping | [Deep POV and psychic distance](../skills/scene-craft/references/deep-pov.md) |
@@ -468,9 +672,20 @@ The scaffold's body has only `## Purpose` and `## Continuity Notes`; the skill a
 
 For flashbacks, the skill sets `flashback-to:` (a free-text note that `story validate` checks is a single value and continuity checks ignore) and moves characters who appear only in the flashback to `mentions`, so `story continuity` does not flag a dead character as present.
 
+Every goal-driven scene records its `outcome`: does the POV character get what they want? The [try/fail reference](../skills/scene-craft/references/try-fail.md) explains the four values:
+
+| `outcome` | Meaning | Effect on pressure |
+|-----------|---------|--------------------|
+| `yes` | Goal achieved cleanly | Releases pressure; use sparingly |
+| `no` | Goal blocked | Holds pressure |
+| `yes-but` | Goal achieved at a cost or with a new problem | Complicates; raises pressure |
+| `no-and` | Goal blocked and things get worse | Complicates; raises pressure most |
+
+The skill prefers the complicating `yes-but` and `no-and`. Sequel scenes react rather than pursue a goal, so they have no `outcome`. When a scene ends its chapter, the skill also sets the chapter's `hook`: `cliffhanger`, `question`, `revelation`, `reversal`, `decision`, `emotional`, or `resolution`.
+
 ### 4. Leave deliberate rule-breaking alone
 
-The skill will not rewrite prose just to satisfy a checklist. If a scene breaks a rule on purpose (a deliberate info dump, say), it notes that in the scene's planning notes so a later audit leaves it alone.
+The skill will not rewrite prose just to satisfy a checklist. If a scene breaks a rule on purpose (a deliberate info dump, say), it notes that in the scene's planning notes so a later audit leaves it alone. The same goes for `story pacing` warnings: a quiet `resolution` chapter after the climax is right.
 
 ### Checks
 
@@ -479,11 +694,14 @@ story reindex .
 story links .
 story validate .
 story continuity .
+story pacing .
 ```
+
+`story pacing` warns after three or more consecutive `yes` outcomes, four or more scene units without a sequel, three or more chapters in a row ending on `resolution`, chapters more than twice or less than half the median length (once three chapters have prose), and drafted chapters with no `hook`. Scene outcomes and chapter hooks are fixed here; act structure and a sagging middle belong to [`plot-structure`](../skills/plot-structure/SKILL.md).
 
 ### Result
 
-Scene files in `scenes/` carry `sequel`, `dilemma`, `flashback-to`, and complete `state-changes`, plus planning sections in the body. Canon changes (new knowledge, moved objects, changed relationships) are reflected in `continuity/state.md` and the affected entity files.
+Scene files in `scenes/` carry `outcome`, `sequel`, `dilemma`, `flashback-to`, and complete `state-changes`, plus planning sections in the body, and chapters carry a `hook`. Canon changes (new knowledge, moved objects, changed relationships) are reflected in `continuity/state.md` and the affected entity files.
 
 ## Theme
 
@@ -494,10 +712,10 @@ Scene files in `scenes/` carry `sequel`, `dilemma`, `flashback-to`, and complete
 ### 1. Set a working premise
 
 ```text
-Help me sharpen the premise and counter-premise.
+Help me sharpen the controlling idea and its counter-argument.
 ```
 
-The skill writes a one-sentence controlling idea (value plus cause) and its counter-premise, stored as `premise:` and `counter-premise:` in `story.md`. If you would rather find the theme in the draft, the skill records `premise: tbd-discovery` and moves on.
+The skill writes a one-sentence controlling idea (value plus cause) and its counter-premise, stored as `premise:` and `counter-premise:` in `story.md`. If you would rather find the theme in the draft, the skill records `premise: tbd-discovery` and moves on. Ask for the controlling idea or the thematic argument rather than "the premise": that word on its own loads `premise-workshop`, which is for testing an idea before the book exists.
 
 ### 2. Give the main characters a lie and a truth
 
@@ -545,7 +763,7 @@ story validate .
 
 **Goal:** keep the voice and surface conventions the same across chapters, sessions, and agents.
 
-**Skill:** [`voice-style`](../skills/voice-style/SKILL.md). `chapter-writing`, `discovery-drafting`, and `revision-continuity` all read the style sheet it maintains. Start once there is a first chapter or a writing sample.
+**Skill:** [`voice-style`](../skills/voice-style/SKILL.md). `chapter-writing`, `discovery-drafting`, `revision-continuity`, and `line-editing` all read the style sheet it maintains. Start once there is a first chapter or a writing sample. This workflow records and checks the voice; rewriting lines so the characters sound different is [Line editing](#line-editing).
 
 ### 1. Build the style sheet
 
@@ -597,15 +815,44 @@ warning: chapters/chapter-01.md uses "grey" once; american dialect prefers "gray
 
 The chapter opens with "The tide had gone out slowly", but `slowly` is in `allow-words`, so it is not counted as an adverb.
 
-### 3. Act on the findings
+### 3. Check the dialogue voices
+
+```text
+Check the character voice fingerprints.
+```
+
+The style sheet's Character Voices section gives one line per major speaker, linked to the character file, which stays canon. The character file's `voice-words` and `voice-avoid` lists make the voice checkable, and `story voices .` fingerprints each character's dialogue against them. On the first three chapters:
+
+```text
+Voices: 3 speaking characters, 0 unattributed lines
+
+silas-carrow: 15 lines, 73 words
+  Sentence length 3.8, contractions 1.4 per 100 words, questions 0%, exclamations 0%
+  Signature words: always, done, fetch, light's
+
+nell-carrow: 13 lines, 62 words
+  Sentence length 4.8, contractions 4.8 per 100 words, questions 23%, exclamations 0%
+  Signature words: someone
+
+edwin-marsh: 3 lines, 10 words
+  Sentence length 2.5, contractions 10.0 per 100 words, questions 0%, exclamations 0%
+  Signature words: terrible
+Voice check complete: 0 errors, 1 warnings, 0 dismissed
+warning: nell-carrow never says "reckon" from their voice-words list in 13 lines of dialogue
+```
+
+It also warns when a character says one of their `voice-avoid` words, and when two characters with five or more lines each have near-identical fingerprints ("X and Y may sound alike"). A line counts only when the narration names the speaker beside a speech verb (`"...," Nell said`, `said Silas`), or when the paragraph's narration names exactly one character. Pronoun tags (`she said`) are never attributed, so in close third person the POV character is often under-counted.
+
+### 4. Act on the findings
 
 How the skill handles findings:
 
 - Avoided spellings are always fixed.
 - Rates, echoes, and repeated phrases are prompts to reread, not orders. If a flagged word is right, it stays, and a word the book uses on purpose goes into `allow-words`.
-- Similar character names are raised with you first. If you agree to a rename, it uses `story rename character <id> "<New Name>"` so every reference follows.
+- Similar character names are raised with you first. If you agree to a rename, it checks the replacement with `story names "<Candidate>"`, then uses `story rename character <id> "<New Name>"` so every reference follows.
+- For `story voices` warnings, it revises the dialogue, or, when the draft has found a better voice, asks you before updating the character's `voice-words` or `voice-avoid`. Here, either Nell starts saying "reckon" or the word comes off her list.
 
-`story prose` exits 0 unless a file cannot be read, so it never blocks anything. See [Continuity and analysis](continuity.md#what-each-line-measures) for what each count measures.
+`story prose` and `story voices` exit 0 unless a file cannot be read, so they never block anything. See [Continuity and analysis](continuity.md#what-each-line-measures) for what each count measures.
 
 ### Checks
 
@@ -614,13 +861,14 @@ After editing the style sheet or revising prose:
 ```shell
 story validate .
 story prose .
+story voices .
 story wordcount . --write
 story links .
 ```
 
 ### Result
 
-`style-sheet.md` records the book's `dialect`, `preferred` spellings, `watch-words`, and `allow-words` in frontmatter, with voice, usage, and character-voice decisions in the body. Chapters use the preferred spellings, and any rename has gone through `story rename` so every reference follows.
+`style-sheet.md` records the book's `dialect`, `preferred` spellings, `watch-words`, and `allow-words` in frontmatter, with voice, usage, and character-voice decisions in the body. Character files carry `voice-words` and `voice-avoid`. Chapters use the preferred spellings, and any rename has gone through `story rename` so every reference follows.
 
 ## Research
 
@@ -631,32 +879,56 @@ story links .
 ```text
 Research how a 1950s lighthouse lamp rotation actually worked. Chapter 1 depends on it.
 Is it accurate that a body would surface after three days in cold water?
+I'm interviewing a retired keeper next week. Help me prepare.
 Fact-check chapter 6 before I mark it final.
 ```
 
 ### 1. Open a note
 
-The skill opens a note for each topic with the CLI, which creates the `research/` folder and registry on first use:
+The skill opens a note for each topic with the CLI, which creates the `research/` folder and registry on first use, and sets the fields that describe the note:
 
 ```shell
-story add research "Lighthouse lamp rotation" --used-in chapter-01
+story add research "Lighthouse lamp rotation" --used-in chapter-01 \
+  --accuracy must-be-accurate --method fact --confidence low
+story add research "Drowning and cold water" --used-in chapter-01 \
+  --accuracy must-be-accurate --method expert-review --confidence low --risk medical
 ```
+
+| Field | Values | Meaning |
+|-------|--------|---------|
+| `accuracy` | `must-be-accurate`, `blended`, `invented` | How closely the prose must match reality. `invented` notes are a consistency record: they need no sources and never trigger the open-research warning |
+| `method` | `fact`, `reading`, `interview`, `site-visit`, `expert-review` | Where the knowledge comes from |
+| `confidence` | `high`, `medium`, `low` | How sure the findings are; start low and raise it as sources agree |
+| `risk` | `legal`, `medical`, `weapons`, `safety`, `cultural`, `defamation`, `technical` | Getting it wrong could harm a reader, a real person, or you. Pass `--risk` once per value |
 
 The note has `## Question`, `## Findings`, and `## Story Use` sections and starts at `status: open`. Add `--source "<citation or URL>"` (repeatable) to record sources up front.
 
-### 2. Research and record sources
+### 2. Plan the investigation
 
-The agent uses whatever research tools the session has (web search, documents you supply). With none, it lists what needs checking and asks you for sources. Every finding is recorded with its source, and every source goes into the `sources` list.
+The skill breaks the question into the specific things the prose asserts ("could she walk from the light to the harbour in 90 minutes in 1953?" rather than "1950s Cornwall") and writes a `## Search Plan` in the note: terms to search, archives and reference works to try, people who would know, which sources are primary, and what counts as enough. For an interview or site visit it prepares questions and consent first, following [interviews and site visits](../skills/research/references/interviews-and-site-visits.md).
 
-### 3. Set the status honestly
+### 3. Research and record sources
+
+The agent uses whatever research tools the session has (web search, documents you supply). With none, it gives you the search plan and asks you for sources. Every finding is recorded with a full citation (author or institution, title, date, page or URL), with exact wording quoted where a claim rests on it, and every source goes into the `sources` list. `confidence` follows the evidence: `high` for a primary source or independent agreement, `medium` for one good secondary source, `low` for anything recalled or single and weak.
+
+### 4. Set the status honestly
 
 A fact the agent recalls without a source stays `open`. A note becomes `verified` only when every finding the chapters rely on has a source. When sources disagree it becomes `disputed`, with both sides recorded.
 
-### 4. Connect it to the story
+### 5. Flag risk; never advise
+
+A note with any `risk` needs a qualified human reviewer (a clinician, lawyer, weapons or safety specialist, cultural reader, or engineer, as fits) before its chapters are final. The skill never gives legal, medical, or safety advice itself and never treats its own research as the review. Once the reviewer has read the passage, their name or role goes in `reviewed-by`, which you edit by hand because `story add` has no flag for it:
+
+```yaml
+reviewed-by:
+  - "Dr A. Patel, A&E consultant"
+```
+
+Sensitivity and authenticity reads, and portrayals of real people, go through [Editorial review](#editorial-review); the reader's notes are triaged through `feedback-triage`.
+
+### 6. Connect it to the story
 
 `used-in` lists every chapter that relies on the note. `## Story Use` records deliberate departures (a compressed timeline, an invented institution); a recorded departure is a choice, not an error.
-
-For sensitive or lived-experience topics the skill suggests an authenticity reader as well as sources, and records their notes through `feedback-triage`.
 
 ### Checks
 
@@ -666,54 +938,106 @@ story links .
 story validate .
 ```
 
-`story validate` catches the case that matters most: a settled chapter resting on unsettled research. Marking chapter 1 `final` while its note is still open gives:
+`story validate` catches the case that matters most: a settled chapter resting on unsettled or unreviewed research. Marking chapter 1 `final` while the drowning note is still open and unreviewed gives:
 
 ```text
 Project is valid: 0 errors, 2 warnings, 0 dismissed
-warning: research/lighthouse-lamp-rotation.md is open but chapter-01 relies on it and is final
-warning: chapters/chapter-02.md has no machine-readable scene records
+warning: research/drowning-and-cold-water.md is open but chapter-01 relies on it and is final
+warning: research/drowning-and-cold-water.md carries medical risk but has no reviewed-by, and chapter-01 relies on it
 ```
 
 It also warns about a `verified` note with no sources.
 
 ### Result
 
-The project gains a `research/` folder with an `_index.md` registry and one kebab-case note per topic, each listing its `sources` and `used-in` chapters. `story rename` and `story remove` keep `used-in` current when chapters change.
+The project gains a `research/` folder with an `_index.md` registry and one kebab-case note per topic, each listing its `sources`, `used-in` chapters, and the `accuracy`, `method`, `confidence`, `risk`, and `reviewed-by` fields that apply. `story rename` and `story remove` keep `used-in` current when chapters change.
 
 ## Revision passes
 
-**Goal:** improve a draft in deliberate passes without breaking continuity, and be able to see and undo what each pass changed.
+**Goal:** improve a draft in deliberate passes, big structural changes before polish, without breaking continuity, and be able to see and undo what each pass changed.
 
-**Skill:** [`revision-continuity`](../skills/revision-continuity/SKILL.md), with `theme-craft`, `voice-style`, `research`, and `genre-craft` supplying the specialised audits.
+**Skill:** [`revision-continuity`](../skills/revision-continuity/SKILL.md), with `theme-craft`, `voice-style`, `research`, and `genre-craft` supplying the specialised audits and [`line-editing`](#line-editing) taking the line, copyedit, and proof passes.
 
-### 1. Pick a pass
+### 1. Set up the pass ladder
 
-The skill asks which pass you want unless you say. Each one reads and updates a specific set of files:
+```text
+The first draft is done. Set up the revision passes.
+```
 
-| Pass | Ask for it with | What it does |
-|------|-----------------|--------------|
-| Continuity audit | "Continuity check chapters 1 to 10" | Contradictions, stale references, timeline problems, missing backlinks, word-count drift |
-| Developmental revision | "Developmental edit: the middle drags" | Structure, scene purpose, motivation, pacing, stakes, arc progression |
-| Reverse outline | "Reverse-outline the draft" | One line per chapter written from the prose alone, then compared with the plot files |
-| Theme audit | "Does the ending prove the premise?" | Ending against the opening's value question, consequence against commentary, motif payoff |
-| Pacing waveform | "Map the tension across the book" | Tension per chapter, dead zones, back-to-back peaks; uses `story timeline .` for POV balance |
-| Reveal economy | "Are my reveals earned?" | Every reveal planted beforehand, reveals spaced rather than clustered |
-| Removability audit | "Which scenes could I cut?" | Scenes whose removal changes nothing downstream: wire them in, fold them, or cut them |
-| Line edit | "Line edit chapter 3" | Clarity, voice, rhythm, dialogue, sensory detail, guided by `story prose .` |
-| Copyedit | "Copyedit against the style sheet" | Hyphenation, capitals, names, numbers, surface details like hair colour and room layouts |
-| Fact check | "Fact-check chapter 6" | Research notes whose `used-in` lists the chapter |
-| Proof/polish | "Proofread chapter 12" | Small wording, grammar, repetition, and formatting fixes |
+A full revision is tracked as a ladder of named passes in `story.md` `revision-passes`, so it happens in order (there is no point polishing sentences a structural pass may cut) and survives between sessions. The skill writes the default ladder and sets `status: revising`:
+
+```shell
+story passes . --init
+```
+
+```text
+Updated revision-passes in story.md
+Revision passes: 0 of 8 done
+
+[ ] structure - Order of events, act turns, scenes that do not change anything (story timeline, story pacing, story diagram arcs)
+[ ] character - Wants, arcs, motivation, and who knows what when (story voices, story knowledge <id> --at <chapter>, story diagram relationships)
+[ ] theme - Premise, counter-premise, motifs, and the lie/truth arc (story report)
+[ ] continuity - Deaths, props, travel, promises, clues, and backlinks (story continuity, story clues, story links)
+[ ] pacing - Scene outcomes, sequels, chapter hooks, and chapter lengths (story pacing)
+[ ] line - Sentence-level clarity, rhythm, and distinct voices (story prose, story voices)
+[ ] copyedit - Spelling, usage, and consistency against the style sheet (story prose)
+[ ] proof - Typos and layout in the built book (story build --format print, story build --format html)
+
+Next: structure; mark it with story passes --done structure
+```
+
+`--init` keeps any entries already there. Each pass runs the checks shown beside it. `story passes . --start <pass>` marks one `in-progress` (`[~]`), and `story passes . --done <pass>` marks it done, only when its checks are clean or every remaining finding is a recorded decision. A new kebab-case name such as `fact-check` or `sensitivity` with `--start` appends a custom pass.
+
+With `status: revising`, `story next .` recommends the next unfinished pass, so a new session starts where the last one stopped:
+
+```text
+What pass is next?
+```
+
+```text
+# Next Writing Actions: The Gannet Point Light
+
+Checks: validate ok (0 errors, 0 warnings), links ok (0 errors, 0 warnings), continuity ok (0 errors, 0 warnings)
+
+Actions:
+- [P2] Review open clues: 3 clues are still planned or planted.
+- [P1] Revision pass: character: Wants, arcs, motivation, and who knows what when. Run story voices, story knowledge <id> --at <chapter>, story diagram relationships. Mark it with story passes --done character.
+- [P2] Draft chapter 4: Use story add chapter "Chapter 4" --number 4, then outline scenes to advance The Drowned Stranger.
+```
+
+That was after `structure` was marked done. A pass marked `in-progress` comes ahead of the first pending one.
+
+### 2. Pick a pass
+
+Within a ladder pass, or for a one-off job, the skill asks which pass you want unless you say. Each one reads and updates a specific set of files:
+
+| Pass | Ask for it with | Ladder pass | What it does |
+|------|-----------------|-------------|--------------|
+| Continuity audit | "Continuity check chapters 1 to 10" | `continuity` | Contradictions, stale references, timeline and travel problems, missing backlinks, word-count drift |
+| Developmental revision | "Developmental edit: the middle drags" | `structure`, `character` | Structure, scene purpose, motivation, pacing, stakes, arc progression |
+| Reverse outline | "Reverse-outline the draft" | `structure` | One line per chapter written from the prose alone, then compared with the plot files |
+| Theme audit | "Does the ending prove the controlling idea?" | `theme` | Ending against the opening's value question, consequence against commentary, motif payoff |
+| Pacing waveform | "Run a pacing check as a revision pass" | `structure`, `pacing` | Tension per chapter and dead zones, from `story pacing .` (outcomes, sequels, hooks, length outliers) and `story timeline .` for POV balance |
+| Reveal economy | "Run a clue check. Are my reveals earned?" | `continuity` | Every reveal planted beforehand and spaced out, from `story clues .`; `story diagram clues` draws the flow |
+| Removability audit | "Which scenes could I cut?" | `structure` | Scenes whose removal changes nothing downstream: wire them in, fold them, or cut them |
+| Voice differentiation | "Everyone sounds the same" | `character`, `line` | `story voices .` fingerprints; handed to `line-editing` for the rewrite |
+| Line edit | "Line edit chapter 3" | `line` | Handled by [`line-editing`](#line-editing) |
+| Copyedit | "Copyedit against the style sheet" | `copyedit` | Handled by `line-editing` |
+| Fact check | "Fact-check chapter 6" | `continuity` or a custom `fact-check` | Research notes whose `used-in` lists the chapter |
+| Proof/polish | "Proofread chapter 12" | `proof` | Handled by `line-editing`, on a built copy rather than the source |
+
+"Line edit", "copyedit", "proofread", and "everyone sounds the same" load `line-editing` directly; the other prompts load `revision-continuity`.
 
 For genre books, add the audit checklist at the end of the relevant [`genre-craft`](../skills/genre-craft/SKILL.md) pack (fair play for a mystery, the HEA contract for romance, the ticking clock for a thriller) to a developmental pass.
 
-### 2. Snapshot before a multi-chapter pass
+### 3. Snapshot before a multi-chapter pass
 
 Before any pass that touches more than one chapter, the skill takes a snapshot named after the draft it preserves (`draft-1`, `pre-beta-edit`):
 
 - **In a git repository**, it asks before committing, then commits and tags: `git add -A && git commit -m "Draft 1 before developmental pass" && git tag draft-1`. It never pushes, rewrites history, or deletes tags without your approval.
 - **Without git**, it offers `git init`. If you decline, it copies the project folder next to the original (`../the-gannet-point-light-draft-1`), never inside it, where `story` commands would scan the copy.
 
-### 3. Plan, edit, and update
+### 4. Plan, edit, and update
 
 The skill reads the chapter, its neighbours, the scene files, and every entity the chapter references, and writes a short plan: what changes, what must stay fixed, and which other files are affected. It then edits the markdown directly and updates what depends on it: chapter `status` (`draft` to `revised`, and to `final` only when appropriate), the timeline, scene records, continuity state and ledgers, arc foreshadowing, and character or location files.
 
@@ -721,7 +1045,7 @@ The skill reads the chapter, its neighbours, the scene files, and every entity t
 Revise chapter 3 so Nell hides the log instead of burning it. Keep continuity.
 ```
 
-### 4. Compare with the snapshot
+### 5. Compare with the snapshot
 
 After the pass, the skill reports how deep it went:
 
@@ -745,6 +1069,14 @@ Comparison complete: 0 errors, 0 warnings, 0 dismissed
 
 Chapter 1's prose is a single paragraph, so one changed word leaves 0% of its paragraphs unchanged. Chapters are matched by id, so a renumbered chapter shows as one removed and one added. `story compare` reads git but never commits or tags.
 
+### 6. Close the pass
+
+When the pass's checks are clean, or every remaining finding is a decision you have recorded, the skill marks it done and `story next .` moves on to the next rung:
+
+```shell
+story passes . --done structure
+```
+
 ### Checks
 
 ```shell
@@ -756,13 +1088,113 @@ story continuity .
 story doctor .
 ```
 
-The skill runs `story compare` from step 4 as well. If `story.md` has `follows` or `precedes` links to other books, the skill also runs `story series .`; see [Series](series.md).
+Structural and reveal passes add `story pacing .` and `story clues .`, and a pass that changed dialogue adds `story voices .`. The skill runs `story compare` from step 5 as well. If `story.md` has `follows` or `precedes` links to other books, the skill also runs `story series .`; see [Series](series.md).
 
-For a continuity audit, `story continuity .` goes first and the agent checks what it cannot: character knowledge, carried-forward injuries and alliances, travel time, world rules, and whether frontmatter lists every major character and location in the prose. `story knowledge <character> --at <chapter>` answers "did she know this yet?" from `continuity/state.md`. See [Continuity and analysis](continuity.md) for both commands and for [exemptions](continuity.md#exemptions).
+For a continuity audit, `story continuity .` goes first and the agent checks what it cannot: character knowledge, carried-forward injuries and alliances, travel time between places with no recorded `routes`, world rules, and whether frontmatter lists every major character and location in the prose. `story continuity` already reports a character who crosses a recorded route faster than its `hours` allow, and `story diagram timeline` draws dated scenes in story order. `story knowledge <character> --at <chapter>` answers "did she know this yet?" from `continuity/state.md`. See [Continuity and analysis](continuity.md) for these commands and for [exemptions](continuity.md#exemptions).
 
 ### Result
 
-You end up with revised chapters at `status: revised`, updated scene and continuity records, a git tag or sibling folder holding the previous draft, and, depending on the pass, an updated `plot/timeline.md`, `continuity/theme-audit.md`, or `style-sheet.md`. For an audit you asked to read rather than apply, the agent returns findings ordered by severity with file references and concrete fixes, and changes nothing.
+You end up with revised chapters at `status: revised`, updated scene and continuity records, a git tag or sibling folder holding the previous draft, `revision-passes` in `story.md` showing which rungs are done, and, depending on the pass, an updated `plot/timeline.md`, `continuity/theme-audit.md`, or `style-sheet.md`. For an audit you asked to read rather than apply, the agent returns findings ordered by severity with file references and concrete fixes, and changes nothing.
+
+## Line editing
+
+**Goal:** polish the prose sentence by sentence, keep every speaker distinct, bring the text into line with the style sheet, and proof the book as a reader will see it, without losing your voice.
+
+**Skill:** [`line-editing`](../skills/line-editing/SKILL.md). It comes after the structural passes; line-editing a chapter that a structural pass then cuts is wasted work. It reads the style sheet that `voice-style` maintains (and sends you there first if it is missing or thin), and hands anything that would change events or who knows what back to `revision-continuity`.
+
+### 1. Scope the edit
+
+```text
+Line edit chapter 1. Keep it light.
+```
+
+The skill asks which chapters, which pass (line edit, voice differentiation, copyedit, read-aloud, or proof), and how heavy: **light** (errors and clear improvements only, the default), **medium** (tighten and clarify), or **heavy** (restructure sentences and paragraphs). It never rewrites a passage wholesale without your permission. Before a multi-chapter pass it takes a snapshot, then marks the rung in the ladder:
+
+```shell
+story passes . --start line
+```
+
+### 2. Review the edits
+
+The skill reads `story.md`, the style sheet's Voice section, and the chapter, runs `story prose .`, and works paragraph by paragraph through clarity, precision, economy, rhythm, POV distance, and voice ([line edit checklist](../skills/line-editing/references/line-edit-checklist.md)). Edits arrive in batches of about 20, highest impact first, in the [edit note format](../skills/line-editing/references/edit-note-format.md):
+
+```markdown
+**ch01-p5** · economy
+> Before: Silas came down the steps slowly.
+> After: Silas took the steps one at a time.
+Why: replaces the -ly adverb with an action the reader can see.
+```
+
+The location is the paragraph anchor the HTML review copy uses (`ch01-p5`: chapter 1, paragraph 5). Every rationale names an effect, never "sounds better". You reply with the numbers to accept, reject, or discuss, and only accepted edits are applied, directly in the chapter markdown. When a rejection rests on a rule (a deliberate fragment, a character's grammar), the rule goes into `style-sheet.md` or the character file so the edit isn't proposed again. Where the fix depends on what you meant, the skill asks a query instead of editing.
+
+### 3. Make the voices distinct
+
+```text
+Everyone sounds the same in chapter 4.
+```
+
+The skill runs `story voices .` (see [Voice and house style](#voice-and-house-style) for the output) and, for a pair flagged as sounding alike, proposes line-level changes that follow each character's Voice & Speech Patterns: vocabulary, sentence length, what each avoids saying, how each deflects. A character with no voice notes gets proposed `voice-words` and `voice-avoid` lists drawn from their best lines, added only with your approval. Pronoun-tagged lines are invisible to the report, so it reads those by hand.
+
+### 4. Copyedit
+
+```text
+Copyedit chapters 1 to 3 against the style sheet.
+```
+
+The skill marks `story passes . --start copyedit`, fixes every avoided spelling that `story prose .` reports, then works through the [copyedit checklist](../skills/line-editing/references/copyedit-checklist.md): grammar, punctuation, dialogue punctuation, capitalisation, hyphenation, numbers, and consistency of names and terms against the glossary. Each new decision goes into `style-sheet.md` in the same change, so the next chapter follows it. The skill tells you plainly that this is a consistency pass, not a substitute for a professional copyeditor on a book going to print.
+
+### 5. Read it aloud
+
+```text
+Do a read-aloud pass on chapter 2.
+```
+
+Following the [read-aloud guide](../skills/line-editing/references/read-aloud-guide.md), the skill builds the narration script:
+
+```shell
+story build . --format narration
+```
+
+```text
+Built 3 chapters as narration to /path/to/the-gannet-point-light/dist/the-gannet-point-light.narration.md
+```
+
+It offers to play chapters through the system's text-to-speech if one is installed (`say` on macOS, `espeak-ng` or `spd-say` on Linux), asking before installing anything. Stumbles, unintended rhymes, tongue-twisters, and runs of same-length sentences become edit notes.
+
+### 6. Proof the built copy
+
+```text
+Proofread the book.
+```
+
+Proofing happens on what a reader will see, not the markdown source. The skill marks `story passes . --start proof` and builds both copies:
+
+```shell
+story build . --format html
+story build . --format print --trim 6x9
+```
+
+It checks for typos introduced by editing, doubled or missing words, broken scene breaks, chapter headings, matter pages, and widows and orphans in the print copy, citing each by paragraph anchor. Rendering the print HTML to PDF needs a paged-media engine you install (Paged.js CLI, WeasyPrint, or Prince); see [Import, export, and builds](manuscripts.md).
+
+### 7. Close the pass
+
+The skill summarises what changed, what was kept on purpose, and any style-sheet or character-file updates. It moves chapter `status` from `draft` to `revised` only when you agree, and marks the rung done with `story passes . --done line` (or `copyedit`, or `proof`).
+
+### Checks
+
+After editing chapters, character voice fields, or the style sheet:
+
+```shell
+story wordcount . --write
+story prose .
+story voices .
+story links .
+story validate .
+```
+
+### Result
+
+Chapters carry the accepted edits and, where you agreed, `status: revised`. `style-sheet.md` records every new decision, character files carry any agreed voice lists, and `revision-passes` shows `line`, `copyedit`, and `proof` as done. The HTML, print, and narration builds sit in `dist/`, which is disposable.
 
 ## Feedback triage
 
@@ -778,13 +1210,27 @@ I'm sending chapters 1 to 12 to three beta readers: Maria Chen, Tom Ashby, and P
 
 The skill creates `feedback/round-1/` with a stub per reader (`maria-chen.md`, `tom-ashby.md`, `priya-nair.md`) from its [feedback template](../skills/feedback-triage/references/feedback-template.md). The frontmatter records `reader`, `round`, `chapters-read`, and `overall-verdict`. The list of stubs is the round's checklist. Two to four readers is typical; the skill treats one reader as a data point rather than a round.
 
+It also builds a review copy your readers can open in any web browser, without a terminal:
+
+```shell
+story build . --format html
+```
+
+```text
+Built 3 chapters as html to /path/to/the-gannet-point-light/dist/the-gannet-point-light.html
+```
+
+The single HTML file has a table of contents and a small clickable label beside every paragraph (`ch03-p12` is chapter 3, paragraph 12). Readers put that label at the start of each note, so every note points at an exact place. The feedback template includes a short note to send with the file, asking readers for reactions rather than fixes.
+
+If the project is on GitHub, the skill can offer two templates from the Story Skills repository, copied into your repository only with your approval: [`templates/github/review-copy.yml`](../templates/github/review-copy.yml) publishes the HTML copy to GitHub Pages on every push to `main`, and [`manuscript-note.yml`](../templates/github/ISSUE_TEMPLATE/manuscript-note.yml) gives readers an issue form with the anchor, a note type (typo or wording, confusing, continuity, pacing, character, sensitivity or authenticity, loved this, other), how much it affected their reading, and the note. Create a `manuscript-note` label first, because GitHub only applies labels that exist, and remember that a public Pages site makes the manuscript public. [Automation and CI](automation.md) covers the workflows.
+
 ### 2. Collect feedback
 
 ```text
 Here are Maria's notes. Record them.
 ```
 
-Notes are quoted or closely paraphrased, never invented, and ambiguous notes are marked as ambiguous. Each problem gets a canon check: verified against the bible, contradicts canon (usually a sign that a setup is missing), or outside canon scope.
+Notes are quoted or closely paraphrased, never invented, and ambiguous notes are marked as ambiguous. Each note keeps its paragraph anchor in its **Where** line; chapter or page references from other formats are converted to anchors when the location is unambiguous. Each problem gets a canon check: verified against the bible, contradicts canon (usually a sign that a setup is missing), or outside canon scope. Anchors are paragraph positions, so a revision moves them: rebuild and resend the review copy for each round rather than reusing old anchors.
 
 The rule that matters most is that **nothing gets revised until every reader in the round has reported.** Revising on partial feedback tunes the book to the first reader and spoils the others' reads. If a reader is late, you either wait or close the round without them, and the synthesis records that.
 
@@ -809,9 +1255,12 @@ The result is `feedback/round-1/synthesis.md` (see the [synthesis template](../s
 
 On `needs-revision` or `not-ready`, the plan goes to `revision-continuity`, which makes the edits. On `ready`, the round is closed and you move to the next round, the next drafting stage, or submission.
 
+Rounds with a professional editor, and sensitivity or authenticity reads, are set up by [Editorial review](#editorial-review) and then synthesised here in the same file shape.
+
 ### Checks
 
 ```shell
+story build . --format html
 story reindex .
 story links .
 story validate .
@@ -831,11 +1280,115 @@ feedback/
     └── synthesis.md      # readiness: needs-revision, plus the revision plan
 ```
 
+## Editorial review
+
+**Goal:** handle the work that involves people outside the agent: sensitivity and authenticity readers, real people and permissions, an AI-use statement, rounds with a human editor, and co-authors.
+
+**Skill:** [`editorial-review`](../skills/editorial-review/SKILL.md), which hands reader and editor notes to `feedback-triage`. It prepares materials, tracks state in frontmatter, and flags risk. It gives no legal advice, contacts nobody, and never records a review, permission, or disclosure you haven't confirmed. Each part below stands on its own.
+
+### Sensitivity and authenticity reads
+
+```text
+Nell's mother was Deaf. Do I need a sensitivity reader?
+```
+
+The skill finds the characters, settings, and research notes that touch lived experience you don't share, marks the notes that ground them with `risk: [cultural]` (adding `medical`, `legal`, or others as they apply), or opens one:
+
+```shell
+story add research "Deaf community in 1930s Cornwall" --accuracy must-be-accurate \
+  --method expert-review --risk cultural --used-in chapter-04
+```
+
+It drafts a brief from its [reader brief template](../skills/editorial-review/references/sensitivity-reader-brief.md) (the chapters, characters, specific questions, your research so far, deadline, and fee), saved as `feedback/briefs/{reader-kebab}.md` or used as the body of your email. Sensitivity reading is paid professional work; the skill helps you budget and find readers, and never suggests asking community members to do it for free. It builds what the reader receives: `story build . --format docx` for a reader who comments in Word, or `--format html` for paragraph-anchored notes.
+
+The returned notes become a feedback round and go through [Feedback triage](#feedback-triage). Once they are incorporated, the reader goes in the research note's `reviewed-by`, by name only with their consent and otherwise by role (`sensitivity reader, Deaf culture`). Until then, `story validate` warns whenever a final chapter relies on the note.
+
+### Real people and defamation
+
+```text
+The harbourmaster is based on a real man. Is that a problem?
+```
+
+Following [real people and permissions](../skills/editorial-review/references/real-people-and-permissions.md), the skill lists every real or recognisable person and organisation, classifies each portrayal, and flags risky ones in a research note with `risk: [defamation]` or `legal`. It says plainly that this is a flagging exercise, not legal advice, and recommends a publishing lawyer's review before publication whenever a living person or a real organisation is shown doing something discreditable.
+
+### Permissions for quoted material
+
+```text
+Can I use song lyrics as the epigraph?
+```
+
+The skill finds every epigraph, lyric, poem, and extract, usually in `matter/`, and records their state in the matter file's frontmatter:
+
+```yaml
+---
+title: Epigraph
+placement: front
+order: 1
+heading: false
+permission: pending
+rights-holder: ""
+credit: ""
+---
+```
+
+`permission` is `not-needed`, `pending`, `granted`, or `public-domain`, and `credit` is the exact line the rights-holder requires. Song lyrics almost always need permission, fair use is a narrow and uncertain defence, and public-domain status depends on country and date. The skill never sets `granted` or `public-domain` without your confirmation, or `granted` without a rights-holder. Once the book is `complete`, `story validate` catches anything left open:
+
+```text
+warning: matter/epigraph.md permission is still pending and the story is complete
+```
+
+It also warns about `granted` with no `rights-holder`.
+
+### AI-use disclosure
+
+```text
+Do I need to disclose AI use?
+```
+
+The skill asks how AI tools were used on this book (brainstorming, outlining, drafting, editing, research, cover art, translation) and roughly how much of the published text was generated rather than written or rewritten by you. From your answers only, it drafts a plain statement for `ai-disclosure` in `story.md`, never minimising or inflating it:
+
+```yaml
+ai-disclosure: "Outlining and line-level editing suggestions used an AI assistant; all prose was written and revised by the author."
+```
+
+Expectations differ between retailers, agents, publishers, and magazines, and they change, so the skill asks you to check each one's current terms rather than quoting policy from memory. `story build . --format metadata` shows the statement on the retailer sheet.
+
+### A round with a human editor
+
+```text
+Send the manuscript to my editor as a Word file.
+```
+
+Following [editor rounds](../skills/editorial-review/references/editor-rounds.md), the skill asks before committing and tagging the draft sent (`sent-to-editor-1`), then builds what the editor wants: `story build . --format docx` for Track Changes, or `--format shunn` for manuscript format. When the edits come back, you accept or reject them in Word, and the agent carries the accepted text into the chapter markdown, chapter by chapter, never with a bulk script. Queries that change events go to `revision-continuity`, and the editorial letter goes through `feedback-triage`. Afterwards, `story compare . --ref sent-to-editor-1` shows how deep the round went.
+
+### Co-authors and backups
+
+```text
+My sister is co-writing book two with me. How do we share the project?
+```
+
+Following [collaboration](../skills/editorial-review/references/collaboration.md), the skill lists every author under `authors` in `story.md` and sets up one git branch per author or per chapter, pull requests to `main`, a `CODEOWNERS` file for shared-world canon, and a remote pushed after every session as the backup. Two people typing in the same file at once doesn't fit the markdown model; take turns per file through branches. The skill never commits, pushes, or changes branches without your approval.
+
+### Checks
+
+After adding or editing research notes, matter pages, `story.md` metadata, or chapters:
+
+```shell
+story reindex .
+story links .
+story validate .
+story wordcount . --write
+```
+
+### Result
+
+Research notes carry `risk` and, once reviewed, `reviewed-by`. Matter pages that quote others carry `permission`, `rights-holder`, and `credit`. `story.md` has `ai-disclosure` and, for a shared book, `authors`. Reader and editor notes sit in `feedback/` rounds, and the snapshot tag shows what the editor saw.
+
 ## Submission prep
 
-**Goal:** check that a finished manuscript is ready, draft the package agents or retailers expect, build it in submission format, and track where it has gone.
+**Goal:** check that a finished manuscript is ready, draft the package agents or magazines expect, build it in submission format, and track where it has gone.
 
-**Skill:** [`submission`](../skills/submission/SKILL.md). It prepares materials and records outcomes; you send everything yourself.
+**Skill:** [`submission`](../skills/submission/SKILL.md). It prepares materials and records outcomes; you send everything yourself. Self-publishing production (ISBNs, retailer metadata, print, launch, rights) belongs to [Publishing](#publishing), which reuses the blurb drafted here.
 
 The skill reads `status`, `genre`, `sub-genre`, `premise`, `author`, and `contact` from `story.md`. If `status` is not `complete` or `revising`, it tells you the package can be drafted now but the readiness check will fail until the draft is finished.
 
@@ -899,7 +1452,15 @@ story build . --format docx --shunn
 story build . --format shunn
 ```
 
-The first writes a Shunn-format Word file to `dist/<story-id>.docx`; the second writes a Shunn-format markdown file to `dist/<story-id>.shunn.md`. Shunn builds leave out `matter/` pages. For self-publishing, use `story build . --format epub` or `--format docx`. Builds go to `dist/`; see [Import, export, and builds](manuscripts.md#build-a-book) for formats and output paths.
+The first writes a Shunn-format Word file to `dist/<story-id>.docx`; the second writes a Shunn-format markdown file to `dist/<story-id>.shunn.md`. Shunn builds leave out `matter/` pages. For self-publishing, the skill hands off to [Publishing](#publishing) for the EPUB and print builds. Builds go to `dist/`; see [Import, export, and builds](manuscripts.md#build-a-book) for formats and output paths.
+
+To check the pitch facts against one page, the skill also builds the metadata sheet:
+
+```shell
+story build . --format metadata
+```
+
+It lists title, series, author, word count, description length against common retailer limits, keywords, subjects, and a checklist of missing fields; [Publishing](#publishing) shows the output. If `story.md` has an `ai-disclosure`, the skill asks you to check each agent's or market's policy on AI-assisted work and disclose as they require.
 
 ### 4. Track submissions
 
@@ -938,24 +1499,273 @@ the-gannet-point-light/
 └── dist/             # disposable build output; safe to delete and rebuild
 ```
 
+## Publishing
+
+**Goal:** take a final manuscript through metadata, ISBNs, the copyright page, the ebook and print builds, distribution, pricing, launch, and rights.
+
+**Skill:** [`publishing`](../skills/publishing/SKILL.md). It prepares, checks, and records; you make every account, upload, purchase, payment, and signature. It never invents an ISBN, publisher, date, price, review, or sales claim (it leaves `[TODO: author to supply]`), never states current retailer specs or royalty rates as fact, and treats legal, tax, and contract questions as matters for an agent, a publishing lawyer, an accountant, or an author organisation's contract-vetting service. Most of it applies to self-publishing; the rights and contract steps apply to a traditional deal too.
+
+If `status` is not `complete`, the skill says metadata and launch planning can start now but every file must be rebuilt after the last revision.
+
+### 1. Readiness
+
+```text
+Help me self-publish this book. Is it ready?
+```
+
+The skill runs the checks and builds the metadata sheet:
+
+```shell
+story validate .
+story links .
+story continuity .
+story prose .
+story wordcount . --write
+story build . --format metadata
+```
+
+The sheet ends in a readiness checklist of every missing field. For *The Gannet Point Light* before any publishing fields were set:
+
+```text
+| Field | Value |
+| --- | --- |
+| Title | The Gannet Point Light |
+| Series | (missing) |
+| Author(s) | (missing) |
+| ISBN | (missing) |
+| Publisher | (missing) |
+| Publication date | (missing) |
+| Language | en |
+| Genre | mystery / coastal |
+| Form | novel |
+| Word count | 326 |
+| Estimated print pages | 2 at 5.5x8.5, 2 at 6x9 |
+| Description | (missing) |
+...
+
+## Readiness
+
+- [ ] Author named (`author` or `authors`)
+- [ ] ISBN for this edition (`isbn`), or a retailer-assigned identifier
+- [ ] Publisher or imprint (`publisher`)
+- [ ] Publication date (`publication-date`)
+- [ ] Description under 4000 characters (`description`)
+- [ ] Keywords, up to 7 (`keywords`)
+- [ ] BISAC subjects (`subjects`)
+- [ ] Copyright line (`copyright`) or copyright matter page
+- [ ] Cover image (`cover`)
+- [ ] Cover alt text (`cover-alt`)
+- [ ] AI-use statement decided (`ai-disclosure`)
+- [ ] Story status is complete
+```
+
+`story validate` only warns about a pending permission once the story is `complete`, and about unreviewed risky research only when a final chapter uses it, so the skill also searches directly and reports everything outstanding, whatever the chapter status:
+
+```shell
+grep -l "permission: pending" matter/*.md
+grep -l "^risk:" research/*.md
+```
+
+If `story passes .` shows unfinished revision passes, it says so before production starts.
+
+### 2. Metadata, ISBNs, and the copyright page
+
+```text
+Fill in the book metadata. I've bought an ISBN for the ebook.
+```
+
+Using the [metadata checklist](../skills/publishing/references/metadata-checklist.md), the skill fills the `story.md` fields `isbn`, `publisher`, `publication-date`, `language`, `description`, `keywords`, `subjects`, `copyright`, `cover-alt`, `ai-disclosure`, and `authors` for a co-written book. The description comes from `submission/blurb.md` when it exists. It explains the ISBN choices (one per format and edition, who issues them in your country, the trade-offs of a free retailer ISBN) and records only the ISBN you supply. One `story.md` holds one edition, so when the ebook and print ISBNs differ, it sets the one being built before each build and keeps both on the copyright page and in `publishing/rights.md`.
+
+The copyright page is a matter page ordered first, filled from the [copyright page template](../skills/publishing/references/copyright-page.md) with `heading: false`:
+
+```shell
+story add matter "Copyright" --order 0
+```
+
+Without it, every build except Shunn generates a minimal copyright page from `copyright`. Quoted pages get their permission fields, as in [Editorial review](#editorial-review). The skill rebuilds the metadata sheet until the checklist is clean.
+
+### 3. Build the ebook and print interior
+
+```text
+Build the EPUB and a 6x9 paperback interior.
+```
+
+```shell
+story build . --format epub
+story build . --format print --trim 6x9
+```
+
+The EPUB carries accessibility metadata, language, semantic chapter and matter markup, a landmarks nav, the cover with `cover-alt`, and the metadata fields. If you have EPUBCheck or Ace by DAISY installed, the skill runs them on the file in `dist/` and fixes errors before upload, and asks you to open the book in a reading app and the retailer's previewer.
+
+The print build is HTML with CSS paged media: the trim size (`5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5`; default `5.5x8.5`), mirrored margins, running heads, page numbers, chapters opening on the right, and a copyright page. You render it to PDF with a paged-media engine you have installed, such as `pagedjs-cli`, WeasyPrint, or Prince; the CLI bundles none. Following the [print interior reference](../skills/publishing/references/print-interior.md), the skill checks the PDF against the printer's file requirements and tells you to get the spine width and cover wrap from the printer's cover calculator, using the PDF's real page count, and to order a printed proof. See [Import, export, and builds](manuscripts.md) for every build format.
+
+### 4. Distribution, pricing, and retailer copy
+
+```text
+Should I go wide or into Kindle Unlimited?
+```
+
+The [launch plan reference](../skills/publishing/references/launch-plan.md) lays out KDP, IngramSpark, aggregators such as Draft2Digital, and direct sales, and the trade-off between exclusivity and going wide. You decide, and the skill records the choice in `publishing/launch-plan.md`. Pricing is discussed through considerations, not a formula. Retailer copy goes into `publishing/retailer-copy.md`: the first two lines that show before "read more", the long description (checked against the metadata sheet's character count), series-page copy when `series` is set, and enhanced-content ideas. The chosen long description is copied into `description`.
+
+### 5. Plan the launch
+
+```text
+Build a launch plan with an ARC team and a newsletter.
+```
+
+`publishing/launch-plan.md` follows a T-90 to T+30 timeline: ARC team, newsletter and reader magnet, street team, preorder, launch week, and paid ads with a test budget and stop rules. As you report what happened, the skill updates the plan; it never fills in results you didn't give it.
+
+### 6. Rights and contracts
+
+```text
+I've been offered an audio deal. What should I check in the contract?
+```
+
+The skill keeps `publishing/rights.md`: every right (print, ebook, audio, translation by language or territory, film and TV, and the rest), who holds it, the term, and the reversion terms. It reads a contract offer against the [contract red flags](../skills/publishing/references/contract-red-flags.md) and lists each matching clause with the question to ask, states that this is not legal advice, and recommends a lawyer or agent before you sign. For a right you want to license, it drafts a one-sheet from the [rights one-sheet template](../skills/publishing/references/rights-one-sheet.md), such as `publishing/one-sheet-audio.md`.
+
+### Checks
+
+After editing `story.md` metadata, adding matter pages, or changing the manuscript:
+
+```shell
+story reindex .
+story wordcount . --write
+story validate .
+story build . --format metadata
+```
+
+After any manuscript change, the skill rebuilds every format and rechecks the page count and spine width before you re-upload.
+
+### Result
+
+```text
+the-gannet-point-light/
+├── story.md          # isbn, publisher, publication-date, description, keywords, subjects, ...
+├── matter/
+│   └── copyright.md
+├── publishing/
+│   ├── launch-plan.md
+│   ├── retailer-copy.md
+│   ├── rights.md
+│   └── one-sheet-audio.md
+└── dist/             # EPUB, print HTML, and metadata sheet; rebuild rather than edit
+```
+
+Each planning file has a `type` (`launch-plan`, `retailer-copy`, `rights-inventory`, `rights-one-sheet`) and `updated` in its frontmatter. The CLI doesn't validate `publishing/`, and builds never include it.
+
+## Adaptation
+
+**Goal:** turn the book into another form or language while the story project stays the source of truth.
+
+**Skill:** [`adaptation`](../skills/adaptation/SKILL.md). Adaptation files live in `adaptations/`; a translation becomes its own project folder. The skill never changes the source manuscript to suit an adaptation without your approval, and never puts adaptation `.md` files in the project root, where `story validate` reports them as stray files. If `status` is not `revising` or `complete`, it warns that adapting a draft that is still changing means redoing the adaptation. Rights and contracts for audio, film, and translation belong to [Publishing](#publishing).
+
+### Audiobook
+
+```text
+Make an audiobook narration script.
+```
+
+The skill first adds `pronunciation` (plain respelling with the stressed syllable in capitals, such as `SEER-sha`) to every character, location, faction, artifact, and glossary term a narrator could say wrong, asking you for any you haven't decided. It never invents a pronunciation for a real place, person, or language. Then:
+
+```shell
+story build . --format narration --out adaptations/audiobook/narration-script.md
+```
+
+The script opens with the runtime and a pronunciation guide, then gives each chapter with its estimated finished runtime at 155 words per minute, scene breaks as `[pause]`:
+
+```text
+# The Gannet Point Light: Narration Script
+
+Estimated finished runtime: 0h 02m at 155 words per minute (326 words). Narration pace varies; time a sample chapter and rescale.
+
+## Pronunciation Guide
+
+| Name | Say it | Kind |
+| --- | --- | --- |
+| Edwin Marsh | ED-win | character |
+
+## Opening Credits
+
+The Gannet Point Light. Narrated by [narrator].
+
+## Chapter 1: Chapter 1
+
+[under 1 min]
+```
+
+Following the [audiobook reference](../skills/adaptation/references/audiobook.md), the skill reviews the script for what reads badly aloud (long untagged dialogue runs, visual jokes, letters, maps, tables) and records narrator notes in `adaptations/audiobook/production.md`, with the production checklist: route (ACX, Findaway Voices by Spotify, or another), audition script, retail sample, chapter file list, credits, and AI narration disclosure. Platform specs change, so it gives working figures and asks you to check.
+
+### Screenplay, comics, and interactive fiction
+
+```text
+Adapt the book to a screenplay.
+```
+
+For a screenplay, the skill builds a scene list from the scene records (reading order, or `story timeline .` for story-time order), marks each scene keep, merge, cut, or externalise, and saves `adaptations/screenplay/scene-list.md`. It then writes `adaptations/screenplay/the-gannet-point-light.fountain` act by act at about one page per minute ([Fountain reference](../skills/adaptation/references/fountain.md)). A comics adaptation gets a page plan and a full script with pages, panels, captions, balloons, and SFX ([comics script](../skills/adaptation/references/comics-script.md)). Interactive fiction gets a branch map in `adaptations/interactive/branch-map.md` and Ink or Twine source ([interactive fiction](../skills/adaptation/references/interactive-fiction.md)). Every adaptation file keeps the story's scene, character, and location ids, so each adapted scene traces back to its source.
+
+### Picture book
+
+```text
+Plan this as a picture book.
+```
+
+A picture book is its own project: `story init "Title" --form picture-book` sets a 500-word target. The skill plans 32 pages and 14 story spreads, with a page-turn beat on each, in `adaptations/picture-book/pagination.md`. The text stays in chapters, one per spread, and illustration briefs and art notes stay in the plan, not the prose ([picture book reference](../skills/adaptation/references/picture-book.md)).
+
+### Translation
+
+```text
+Prepare the book for a Spanish translation.
+```
+
+Following the [translation reference](../skills/adaptation/references/translation.md), the skill turns the glossary into a term base (a `## Translations` section on each term, plus `pronunciation` where it helps) and checks translated names with `story names`. It copies the project to a new folder without `dist/`, sets `language`, removes `series`, `book-number`, `follows`, and `precedes` from the copied `story.md` (copied values break `story links` and `story series`), keeps every id as the English kebab-case id, and writes a target-language style sheet. After translation it checks the new project and compares the chapter sets:
+
+```shell
+story validate ../the-gannet-point-light-es
+story links ../the-gannet-point-light-es
+story continuity ../the-gannet-point-light-es
+story compare ../the-gannet-point-light-es --against .
+```
+
+### Checks
+
+After adding `pronunciation` or glossary translations, or setting `form` or `language`:
+
+```shell
+story reindex .
+story links .
+story validate .
+```
+
+After changing chapters in a picture-book or translated project, also run `story wordcount . --write`.
+
+### Result
+
+The source project gains `pronunciation` fields and glossary translations, and an `adaptations/` folder with `audiobook/`, `screenplay/`, `picture-book/`, `comics/`, or `interactive/` as needed. Markdown planning files carry a `type` (`audiobook-production`, `scene-list`, `pagination-plan`, `page-plan`, `branch-map`, `translation-notes`) and `updated`. The CLI doesn't validate `adaptations/`, and builds never include it. A translated edition sits beside the source as a separate project with the same ids and its own `language`, `isbn`, and metadata.
+
 ## Checks by workflow
 
 Which commands each skill runs when it finishes. All take the project path, `.` here.
 
 | Workflow | `wordcount --write` | `reindex` | `links` | `validate` | `continuity` | Other |
 |----------|:---:|:---:|:---:|:---:|:---:|-------|
-| Project setup (`story-init`) | | | | ✓ | | `next` (suggested) |
-| Plot, character, world (`plot-structure`, `character-management`, `worldbuilding`) | | ✓ | ✓ | ✓ | | |
-| Outline-first chapter (`chapter-writing`) | ✓ | ✓ | ✓ | ✓ | | `next`, `progress --log` |
+| Premise workshop (`premise-workshop`) | | | | ✓ | | `init --form`, `names`, `report` |
+| Project setup (`story-init`) | | | | ✓ | | `init --form`, `next` (suggested) |
+| Plot (`plot-structure`) | | ✓ | ✓ | ✓ | | `timeline`, `pacing`, `clues`, `diagram timeline`/`arcs`/`clues` |
+| Character, world (`character-management`, `worldbuilding`) | | ✓ | ✓ | ✓ | | `names`, `diagram relationships`/`locations` |
+| Outline-first chapter (`chapter-writing`) | ✓ | ✓ | ✓ | ✓ | | `next`, `pacing`, `progress --log` |
 | Discovery chapter (`discovery-drafting`) | ✓ | ✓ | ✓ | ✓ | ✓ | `progress --log` |
-| Scene craft (`scene-craft`) | | ✓ | ✓ | ✓ | ✓ | |
+| Scene craft (`scene-craft`) | | ✓ | ✓ | ✓ | ✓ | `pacing` |
 | Theme (`theme-craft`) | | ✓ | ✓ | ✓ | | |
-| Voice (`voice-style`) | ✓ | | ✓ | ✓ | | `prose` |
-| Genre packs (`genre-craft`) | | ✓ | ✓ | ✓ | ✓ | |
+| Voice (`voice-style`) | ✓ | | ✓ | ✓ | | `prose`, `voices` |
+| Genre packs (`genre-craft`) | | ✓ | ✓ | ✓ | ✓ | `clues` (mystery), `pacing` (thriller, serial) |
 | Research (`research`) | | ✓ | ✓ | ✓ | | |
-| Revision (`revision-continuity`) | ✓ | ✓ | ✓ | ✓ | ✓ | `doctor`, `compare`, `series` if linked |
-| Feedback (`feedback-triage`) | | ✓ | ✓ | ✓ | ✓ | |
-| Submission (`submission`) | ✓ | | ✓ | ✓ | ✓ | `prose`, `report`, `synopsis`, `build` |
+| Revision (`revision-continuity`) | ✓ | ✓ | ✓ | ✓ | ✓ | `passes`, `next`, `doctor`, `pacing`, `clues`, `voices`, `compare`, `series` if linked |
+| Line editing (`line-editing`) | ✓ | | ✓ | ✓ | | `passes`, `prose`, `voices`, `build --format narration`/`html`/`print` |
+| Feedback (`feedback-triage`) | | ✓ | ✓ | ✓ | ✓ | `build --format html` |
+| Editorial review (`editorial-review`) | ✓ | ✓ | ✓ | ✓ | | `add research`, `build --format docx`/`html`/`metadata`, `compare --ref` |
+| Submission (`submission`) | ✓ | | ✓ | ✓ | ✓ | `prose`, `report`, `synopsis`, `build`, `build --format metadata` |
+| Publishing (`publishing`) | ✓ | ✓ | ✓ | ✓ | ✓ | `prose`, `passes`, `add matter`, `build --format metadata`/`epub`/`print` |
+| Adaptation (`adaptation`) | ✓ | ✓ | ✓ | ✓ | | `build --format narration`, `timeline`, `names`, `compare --against` |
 
 When in doubt, `story doctor .` runs the health checks and prints a repair step for each finding. For automating these checks on every push, see [Automation and CI](automation.md).
 
