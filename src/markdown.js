@@ -36,11 +36,11 @@ export function splitWords(markdown) {
 }
 
 // A scene break paragraph: three or more of the same marker, optionally
-// spaced (`* * *`, `---`), also when Pandoc escapes it (`\* \* \*`), or a
+// spaced (`* * *`, `---`, `~~~`), also when Pandoc escapes it (`\* \* \*`), or a
 // lone `#` as in Scrivener and manuscript convention.
 export function isSceneBreak(paragraph) {
-  const text = String(paragraph).replace(/\\([*_-])/g, "$1").trim();
-  return text === "#" || /^([*_-])( ?\1){2,}$/.test(text);
+  const text = String(paragraph).replace(/\\([*_~-])/g, "$1").trim();
+  return text === "#" || /^([*_~-])( ?\1){2,}$/.test(text);
 }
 
 export function wordCount(markdown) {
@@ -49,8 +49,9 @@ export function wordCount(markdown) {
 
 // The prose of a chapter or matter page, without its outline and without
 // HTML comments, which are notes to the author rather than book text.
-export function chapterProse(markdownBody) {
-  return scanComments(proseSection(markdownBody)).text;
+// `commentReplacement` stands in for each comment (see scanComments).
+export function chapterProse(markdownBody, commentReplacement = "") {
+  return scanComments(proseSection(markdownBody), commentReplacement).text;
 }
 
 // True when the prose opens a comment it never closes, so the `<!--` and the
@@ -63,7 +64,9 @@ export function hasUnclosedComment(prose) {
 // literal text, so a `<!--` inside them neither opens a comment nor closes
 // one. Each segment is searched once for `-->`, so any number of unclosed
 // openers stays linear.
-export function scanComments(text) {
+// `replacement` stands in for each comment: builds drop comments outright,
+// as CommonMark does, while prose analysis keeps words on either side apart.
+export function scanComments(text, replacement = "") {
   let unclosed = false;
   const parts = splitFences(text).map((part) => {
     if (part.fenced) {
@@ -94,7 +97,7 @@ export function scanComments(text) {
         result += source.slice(position);
         break;
       }
-      result += source.slice(position, open);
+      result += source.slice(position, open) + replacement;
       position = close + 3;
     }
     return result;
@@ -102,28 +105,44 @@ export function scanComments(text) {
   return { text: parts.join(""), unclosed };
 }
 
-// Splits markdown into fenced code blocks and the text between them.
-export function splitFences(text) {
-  const parts = [];
-  let fence = null;
-  let current = "";
-  for (const line of text.split(/(?<=\n)/)) {
-    const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line);
-    const opens = fence === null && marker;
-    const closes = fence !== null && marker && marker[1][0] === fence[0] && marker[1].length >= fence.length;
-    if (opens) {
-      parts.push({ fenced: false, text: current });
-      current = line;
-      fence = marker[1];
-    } else if (closes) {
-      parts.push({ fenced: true, text: current + line });
-      current = "";
-      fence = null;
-    } else {
-      current += line;
+// Line indexes inside closed backtick code fences, fence lines included.
+// Only a backtick fence that closes counts: builds print fences as text,
+// and manuscripts use `~~~` as a scene separator, so an unclosed fence or a
+// tilde line never hides the text after it from counts and checks.
+export function fencedLineIndexes(lines) {
+  const fenced = new Set();
+  let open = null;
+  for (const [index, line] of lines.entries()) {
+    const marker = /^ {0,3}(`{3,})/.exec(line);
+    if (!marker) {
+      continue;
+    }
+    if (open === null) {
+      open = { index, fence: marker[1] };
+    } else if (marker[1].length >= open.fence.length && line.trim() === marker[1]) {
+      for (let inside = open.index; inside <= index; inside += 1) {
+        fenced.add(inside);
+      }
+      open = null;
     }
   }
-  parts.push({ fenced: fence !== null, text: current });
+  return fenced;
+}
+
+// Splits markdown into closed fenced code blocks and the text between them.
+export function splitFences(text) {
+  const lines = text.split(/(?<=\n)/);
+  const fenced = fencedLineIndexes(lines.map((line) => line.replace(/\r?\n$/, "")));
+  const parts = [];
+  for (const [index, line] of lines.entries()) {
+    const isFenced = fenced.has(index);
+    const last = parts[parts.length - 1];
+    if (last && last.fenced === isFenced) {
+      last.text += line;
+    } else {
+      parts.push({ fenced: isFenced, text: line });
+    }
+  }
   return parts;
 }
 

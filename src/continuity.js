@@ -574,27 +574,37 @@ function checkRouteTravel(project, errors) {
     }
   }
 
-  const distances = new Map();
+  // One shortest-path search per starting location, reused for every
+  // destination, keeps large route maps fast.
+  const routesFrom = new Map();
   const distance = (from, to) => {
-    const key = `${from}>${to}`;
-    if (!distances.has(key)) {
-      distances.set(key, shortestRouteHours(graph, from, to));
+    if (!routesFrom.has(from)) {
+      routesFrom.set(from, shortestRoutesFrom(graph, from));
     }
-    return distances.get(key);
+    return routesFrom.get(from).get(to);
   };
+  // No route is longer than every leg added together, so once the gap
+  // reaches that, earlier sightings cannot conflict.
+  let longestRoute = 0;
+  for (const edges of graph.values()) {
+    for (const hours of edges.values()) {
+      longestRoute += hours;
+    }
+  }
   for (const [characterId, list] of [...sightings.entries()].sort(([left], [right]) => left.localeCompare(right, "en"))) {
     list.sort((left, right) => left.earliest - right.earliest || left.latest - right.latest || left.label.localeCompare(right.label, "en"));
     for (let index = 1; index < list.length; index += 1) {
       const current = list[index];
       for (let back = index - 1; back >= 0; back -= 1) {
         const previous = list[back];
-        if (previous.scene.location === current.scene.location) {
-          continue;
-        }
-        const needed = distance(previous.scene.location, current.scene.location);
         // Overlapping windows (an untimed day and a time on it) could fall in
-        // either order, so the gap is the larger of the two readings.
+        // either order, so the gap is the larger of the two readings. It
+        // only grows as the search moves to earlier sightings.
         const elapsed = Math.max(current.latest - previous.earliest, previous.latest - current.earliest) / 60;
+        if (elapsed >= longestRoute) {
+          break;
+        }
+        const needed = previous.scene.location === current.scene.location ? undefined : distance(previous.scene.location, current.scene.location);
         if (needed !== undefined && elapsed < needed) {
           // Round the gap down and the route up so a near miss (10.98h
           // against 11h) never reads as equal.
@@ -640,31 +650,61 @@ function routeGraph(locations) {
   return graph;
 }
 
-function shortestRouteHours(graph, from, to) {
+// Dijkstra from one location with a binary heap: the fewest hours to every
+// reachable location.
+function shortestRoutesFrom(graph, from) {
   const distances = new Map([[from, 0]]);
-  const settled = new Set();
-  let current = from;
-  while (current !== undefined) {
-    const best = distances.get(current);
-    if (current === to) {
-      return best;
+  const heap = [[0, from]];
+  const push = (entry) => {
+    heap.push(entry);
+    let index = heap.length - 1;
+    while (index > 0) {
+      const parent = (index - 1) >> 1;
+      if (heap[parent][0] <= heap[index][0]) {
+        break;
+      }
+      [heap[parent], heap[index]] = [heap[index], heap[parent]];
+      index = parent;
     }
-    settled.add(current);
+  };
+  const pop = () => {
+    const top = heap[0];
+    const last = heap.pop();
+    if (heap.length > 0) {
+      heap[0] = last;
+      let index = 0;
+      for (;;) {
+        const left = index * 2 + 1;
+        const right = left + 1;
+        let smallest = index;
+        if (left < heap.length && heap[left][0] < heap[smallest][0]) {
+          smallest = left;
+        }
+        if (right < heap.length && heap[right][0] < heap[smallest][0]) {
+          smallest = right;
+        }
+        if (smallest === index) {
+          break;
+        }
+        [heap[smallest], heap[index]] = [heap[index], heap[smallest]];
+        index = smallest;
+      }
+    }
+    return top;
+  };
+  while (heap.length > 0) {
+    const [best, current] = pop();
+    if (best > distances.get(current)) {
+      continue;
+    }
     for (const [next, hours] of graph.get(current) ?? []) {
       if (!distances.has(next) || best + hours < distances.get(next)) {
         distances.set(next, best + hours);
-      }
-    }
-    current = undefined;
-    let nearest = Infinity;
-    for (const [node, distance] of distances) {
-      if (!settled.has(node) && distance < nearest) {
-        nearest = distance;
-        current = node;
+        push([best + hours, next]);
       }
     }
   }
-  return undefined;
+  return distances;
 }
 
 function formatHours(hours, round = Math.round) {

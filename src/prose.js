@@ -263,7 +263,7 @@ export function formatProseReport(report) {
 
 // Prose paragraphs without headings, HTML comments, or scene-break rules.
 function proseParagraphs(prose) {
-  return scanComments(String(prose)).text
+  return scanComments(String(prose), " ").text
     .split(/\r?\n\s*\r?\n/)
     // Drop heading lines, not the prose that follows one without a blank line.
     .map((paragraph) => paragraph.split(/\r?\n/).filter((line) => !/^\s{0,3}#/.test(line)).join(" "))

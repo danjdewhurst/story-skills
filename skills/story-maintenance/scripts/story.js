@@ -498,19 +498,19 @@ function splitWords(markdown) {
   return normalized.match(WORD_PATTERN) ?? [];
 }
 function isSceneBreak(paragraph) {
-  const text = String(paragraph).replace(/\\([*_-])/g, "$1").trim();
-  return text === "#" || /^([*_-])( ?\1){2,}$/.test(text);
+  const text = String(paragraph).replace(/\\([*_~-])/g, "$1").trim();
+  return text === "#" || /^([*_~-])( ?\1){2,}$/.test(text);
 }
 function wordCount(markdown) {
   return splitWords(markdown).length;
 }
-function chapterProse(markdownBody) {
-  return scanComments(proseSection(markdownBody)).text;
+function chapterProse(markdownBody, commentReplacement = "") {
+  return scanComments(proseSection(markdownBody), commentReplacement).text;
 }
 function hasUnclosedComment(prose) {
   return scanComments(String(prose)).unclosed;
 }
-function scanComments(text) {
+function scanComments(text, replacement = "") {
   let unclosed = false;
   const parts = splitFences(text).map((part) => {
     if (part.fenced) {
@@ -542,34 +542,45 @@ function scanComments(text) {
         result += source.slice(position);
         break;
       }
-      result += source.slice(position, open);
+      result += source.slice(position, open) + replacement;
       position = close + 3;
     }
     return result;
   });
   return { text: parts.join(""), unclosed };
 }
-function splitFences(text) {
-  const parts = [];
-  let fence = null;
-  let current = "";
-  for (const line of text.split(/(?<=\n)/)) {
-    const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line);
-    const opens = fence === null && marker;
-    const closes = fence !== null && marker && marker[1][0] === fence[0] && marker[1].length >= fence.length;
-    if (opens) {
-      parts.push({ fenced: false, text: current });
-      current = line;
-      fence = marker[1];
-    } else if (closes) {
-      parts.push({ fenced: true, text: current + line });
-      current = "";
-      fence = null;
-    } else {
-      current += line;
+function fencedLineIndexes(lines) {
+  const fenced = new Set;
+  let open = null;
+  for (const [index, line] of lines.entries()) {
+    const marker = /^ {0,3}(`{3,})/.exec(line);
+    if (!marker) {
+      continue;
+    }
+    if (open === null) {
+      open = { index, fence: marker[1] };
+    } else if (marker[1].length >= open.fence.length && line.trim() === marker[1]) {
+      for (let inside = open.index;inside <= index; inside += 1) {
+        fenced.add(inside);
+      }
+      open = null;
     }
   }
-  parts.push({ fenced: fence !== null, text: current });
+  return fenced;
+}
+function splitFences(text) {
+  const lines = text.split(/(?<=\n)/);
+  const fenced = fencedLineIndexes(lines.map((line) => line.replace(/\r?\n$/, "")));
+  const parts = [];
+  for (const [index, line] of lines.entries()) {
+    const isFenced = fenced.has(index);
+    const last = parts[parts.length - 1];
+    if (last && last.fenced === isFenced) {
+      last.text += line;
+    } else {
+      parts.push({ fenced: isFenced, text: line });
+    }
+  }
   return parts;
 }
 function withoutFencedCode(text) {
@@ -1087,25 +1098,30 @@ function checkRouteTravel(project, errors) {
       sightings.set(characterId, list);
     }
   }
-  const distances = new Map;
+  const routesFrom = new Map;
   const distance = (from, to) => {
-    const key = `${from}>${to}`;
-    if (!distances.has(key)) {
-      distances.set(key, shortestRouteHours(graph, from, to));
+    if (!routesFrom.has(from)) {
+      routesFrom.set(from, shortestRoutesFrom(graph, from));
     }
-    return distances.get(key);
+    return routesFrom.get(from).get(to);
   };
+  let longestRoute = 0;
+  for (const edges of graph.values()) {
+    for (const hours of edges.values()) {
+      longestRoute += hours;
+    }
+  }
   for (const [characterId, list] of [...sightings.entries()].sort(([left], [right]) => left.localeCompare(right, "en"))) {
     list.sort((left, right) => left.earliest - right.earliest || left.latest - right.latest || left.label.localeCompare(right.label, "en"));
     for (let index = 1;index < list.length; index += 1) {
       const current = list[index];
       for (let back = index - 1;back >= 0; back -= 1) {
         const previous = list[back];
-        if (previous.scene.location === current.scene.location) {
-          continue;
-        }
-        const needed = distance(previous.scene.location, current.scene.location);
         const elapsed = Math.max(current.latest - previous.earliest, previous.latest - current.earliest) / 60;
+        if (elapsed >= longestRoute) {
+          break;
+        }
+        const needed = previous.scene.location === current.scene.location ? undefined : distance(previous.scene.location, current.scene.location);
         if (needed !== undefined && elapsed < needed) {
           const gap = previous.exact && current.exact ? formatHours(elapsed, Math.floor) : `at most ${formatHours(elapsed, Math.floor)}`;
           errors.push(`${current.label} puts ${characterId} at ${current.scene.location} ${gap} after ${previous.label} at ${previous.scene.location}, but the fastest route takes ${formatHours(needed, Math.ceil)}`);
@@ -1145,31 +1161,59 @@ function routeGraph(locations) {
   }
   return graph;
 }
-function shortestRouteHours(graph, from, to) {
+function shortestRoutesFrom(graph, from) {
   const distances = new Map([[from, 0]]);
-  const settled = new Set;
-  let current = from;
-  while (current !== undefined) {
-    const best = distances.get(current);
-    if (current === to) {
-      return best;
+  const heap = [[0, from]];
+  const push = (entry) => {
+    heap.push(entry);
+    let index = heap.length - 1;
+    while (index > 0) {
+      const parent = index - 1 >> 1;
+      if (heap[parent][0] <= heap[index][0]) {
+        break;
+      }
+      [heap[parent], heap[index]] = [heap[index], heap[parent]];
+      index = parent;
     }
-    settled.add(current);
+  };
+  const pop = () => {
+    const top = heap[0];
+    const last = heap.pop();
+    if (heap.length > 0) {
+      heap[0] = last;
+      let index = 0;
+      for (;; ) {
+        const left = index * 2 + 1;
+        const right = left + 1;
+        let smallest = index;
+        if (left < heap.length && heap[left][0] < heap[smallest][0]) {
+          smallest = left;
+        }
+        if (right < heap.length && heap[right][0] < heap[smallest][0]) {
+          smallest = right;
+        }
+        if (smallest === index) {
+          break;
+        }
+        [heap[smallest], heap[index]] = [heap[index], heap[smallest]];
+        index = smallest;
+      }
+    }
+    return top;
+  };
+  while (heap.length > 0) {
+    const [best, current] = pop();
+    if (best > distances.get(current)) {
+      continue;
+    }
     for (const [next, hours] of graph.get(current) ?? []) {
       if (!distances.has(next) || best + hours < distances.get(next)) {
         distances.set(next, best + hours);
-      }
-    }
-    current = undefined;
-    let nearest = Infinity;
-    for (const [node, distance] of distances) {
-      if (!settled.has(node) && distance < nearest) {
-        nearest = distance;
-        current = node;
+        push([best + hours, next]);
       }
     }
   }
-  return;
+  return distances;
 }
 function formatHours(hours, round = Math.round) {
   return `${round(Math.round(hours * 1e6) / 1e5) / 10}h`;
@@ -2105,7 +2149,7 @@ function formatProseReport(report) {
 `;
 }
 function proseParagraphs2(prose) {
-  return scanComments(String(prose)).text.split(/\r?\n\s*\r?\n/).map((paragraph) => paragraph.split(/\r?\n/).filter((line) => !/^\s{0,3}#/.test(line)).join(" ")).map((paragraph) => paragraph.replace(/\s+/g, " ").trim()).filter((paragraph) => paragraph !== "" && !/^([*_-])( ?\1){2,}$/.test(paragraph));
+  return scanComments(String(prose), " ").text.split(/\r?\n\s*\r?\n/).map((paragraph) => paragraph.split(/\r?\n/).filter((line) => !/^\s{0,3}#/.test(line)).join(" ")).map((paragraph) => paragraph.replace(/\s+/g, " ").trim()).filter((paragraph) => paragraph !== "" && !/^([*_-])( ?\1){2,}$/.test(paragraph));
 }
 function splitSentences(paragraph) {
   const sentences = [];
@@ -2592,16 +2636,21 @@ function speakerPatterns(characters) {
     if (alternatives === "") {
       return null;
     }
+    const keys = new Set([...names].map((entry) => entry.split(NON_WORD)[0]));
     return {
       id: character.id,
+      keys,
       name: new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternatives})(?![\\p{L}\\p{N}])`, "u"),
       subject: new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternatives})\\s+(?:${verbs})(?![\\p{L}\\p{N}])`, "u"),
       inverted: new RegExp(`(?<![\\p{L}\\p{N}])(?:${verbs})\\s+(?:${alternatives})(?![\\p{L}\\p{N}])`, "u")
     };
   }).filter(Boolean);
 }
-function attribute(paragraph, speakers) {
+var NON_WORD = /[^\p{L}\p{N}]+/u;
+function attribute(paragraph, allSpeakers) {
   const narration = stripQuotes(paragraph);
+  const words = new Set(narration.split(NON_WORD));
+  const speakers = allSpeakers.filter((speaker) => [...speaker.keys].some((key) => key === "" || words.has(key)));
   for (const form of ["subject", "inverted"]) {
     const tagged = speakers.filter((speaker) => speaker[form].test(narration));
     if (tagged.length === 1) {
@@ -4079,6 +4128,10 @@ function createStoryProject(options) {
   }
   const root = path4.resolve(cwd, options.dir ?? titleId);
   const storyId = deriveStoryId(title, root);
+  assertPortableId(storyId, "story");
+  if (WINDOWS_RESERVED_ID.test(path4.basename(root).toLowerCase())) {
+    throw new Error(`Cannot use folder ${path4.basename(root)}: Windows reserves that name. Choose another --dir`);
+  }
   if (!storyId) {
     throw new Error('Cannot derive a story id from title "' + title + '" or folder "' + path4.basename(root) + '": use an ASCII folder name with --dir');
   }
@@ -5091,18 +5144,14 @@ function customSections(existing, generated) {
   return sections;
 }
 function markdownHeadings(markdown) {
+  const lines = markdown.split(`
+`);
+  const fenced = fencedLineIndexes(lines);
   const headings = [];
-  let fence = null;
-  for (const [line, text] of markdown.split(`
-`).entries()) {
-    const fenceMatch = /^ {0,3}(`{3,}|~{3,})/.exec(text);
-    if (fenceMatch && (fence === null || fenceMatch[1][0] === fence[0] && fenceMatch[1].length >= fence.length)) {
-      fence = fence === null ? fenceMatch[1] : null;
-    } else if (fence === null) {
-      const heading = /^(#{1,2}) +(.+?)[ \t]*$/.exec(text);
-      if (heading) {
-        headings.push({ level: heading[1].length, text: heading[2], line });
-      }
+  for (const [line, text] of lines.entries()) {
+    const heading = fenced.has(line) ? null : /^(#{1,2}) +(.+?)[ \t]*$/.exec(text);
+    if (heading) {
+      headings.push({ level: heading[1].length, text: heading[2], line });
     }
   }
   return headings;
@@ -5340,7 +5389,7 @@ function voicesReport(root) {
   const project = scanProject(root);
   const chapters = project.chapters.map((chapter) => ({
     id: chapter.id,
-    paragraphs: proseParagraphs(chapterProse(readMarkdown(chapter.file, project.root).body))
+    paragraphs: proseParagraphs(chapterProse(readMarkdown(chapter.file, project.root).body, " "))
   }));
   return { ok: project.fileErrors.length === 0, errors: [...project.fileErrors], ...buildVoices(project, chapters) };
 }
@@ -5356,7 +5405,7 @@ function proseReport(root) {
   const chapters = [];
   for (const chapter of project.chapters) {
     const label2 = relative2(project, chapter.file);
-    const analysis = analyzeChapter(chapterProse(readMarkdown(chapter.file, project.root).body), rules);
+    const analysis = analyzeChapter(chapterProse(readMarkdown(chapter.file, project.root).body, " "), rules);
     chapters.push({ file: label2, title: chapter.title, analysis });
     warnings.push(...chapterFindings(label2, analysis));
   }
@@ -5638,8 +5687,8 @@ function truncateWords(text, budget) {
 function shunnMeta(project) {
   const data = project.story.data;
   return {
-    title: data.title ?? project.storyId,
-    author: data.author === undefined ? "" : String(data.author),
+    title: project.title,
+    author: publishingMeta(data).authors.join(" and "),
     contact: asArray(data.contact),
     words: project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0)
   };
@@ -6325,7 +6374,8 @@ function normalizeKind(kind) {
 var WINDOWS_RESERVED_ID = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/;
 function assertPortableId(id, kind) {
   if (WINDOWS_RESERVED_ID.test(id)) {
-    throw new Error(`Cannot use ${kind} id ${id}: Windows reserves the file name ${id}.md. Choose a longer name, such as "${id} ${kind}"`);
+    const file = kind === "story" ? id : `${id}.md`;
+    throw new Error(`Cannot use ${kind} id ${id}: Windows reserves the file name ${file}. Choose a longer name, such as "${id} ${kind}"`);
   }
 }
 function requireKebabId(id, label2) {
@@ -7033,15 +7083,15 @@ function addFrontmatterListValue(root, relativePath, field, value) {
     }), { root });
   }
 }
+var SKIPPED_SCAN_DIRECTORIES = new Set(["dist", "node_modules"]);
 function markdownFiles(root, depth = 0, collected = null) {
   const files = collected ?? [];
-  if (depth > MAX_SCAN_DEPTH) {
-    throw new Error("Refusing to scan beyond depth " + MAX_SCAN_DEPTH + " under " + root);
-  }
   for (const entry of fs3.readdirSync(root, { withFileTypes: true })) {
     const fullPath = path4.join(root, entry.name);
-    if (entry.isDirectory() && entry.name !== "dist" && !entry.name.startsWith(".")) {
-      markdownFiles(fullPath, depth + 1, files);
+    if (entry.isDirectory() && !SKIPPED_SCAN_DIRECTORIES.has(entry.name) && !entry.name.startsWith(".")) {
+      if (depth < MAX_SCAN_DEPTH) {
+        markdownFiles(fullPath, depth + 1, files);
+      }
     } else if (entry.isFile() && entry.name.endsWith(".md")) {
       files.push(fullPath);
       if (files.length > MAX_SCAN_FILES) {
@@ -7654,9 +7704,16 @@ function readMarkdown(filePath, root) {
 }
 function writeFile(filePath, contents, options = {}) {
   const target = prepareWriteTarget(filePath, options.root);
-  const temporary = path4.join(path4.dirname(target), `.${path4.basename(target)}.${process.pid}.tmp`);
+  const existing = lstatIfExists(target);
+  if (!existing || existing.nlink <= 1) {
+    fs3.writeFileSync(target, contents, "utf8");
+    return;
+  }
+  fs3.accessSync(target, fs3.constants.W_OK);
+  const temporary = path4.join(path4.dirname(target), `.story-${process.pid}.tmp`);
   try {
-    fs3.writeFileSync(temporary, contents, "utf8");
+    fs3.writeFileSync(temporary, contents, { encoding: "utf8", mode: existing.mode & 511 });
+    fs3.chmodSync(temporary, existing.mode & 511);
     fs3.renameSync(temporary, target);
   } catch (error) {
     fs3.rmSync(temporary, { force: true });
@@ -8971,7 +9028,7 @@ function normalizeSource(text, name) {
     return text.replace(/^[ \t]+/gm, "");
   }
   return splitFences(text).map((part) => part.fenced ? part.text : protectComments(part.text, (prose) => prose.split(`
-`).map((line) => /^\s*(?:-\s*){3,}$/.test(line) ? line : line.split(/(`[^`]*`)/).map((piece, index) => index % 2 === 1 ? piece : piece.replace(/(^|[^-])---(?!-)/g, "$1—").replace(/(^|[^-])--(?!-)/g, "$1–")).join("")).join(`
+`).map((line) => /^\s*(?:-\s*){3,}$/.test(line) || /^\s*\|?[\s:|-]*-[\s:|-]*\|[\s:|-]*$/.test(line) || /^(?: {4}|\t)/.test(line) ? line : line.split(/(`[^`]*`|\]\([^)\s]*\)|<[a-z][a-z0-9+.-]*:[^>\s]*>|\b[a-z][a-z0-9+.-]*:\/\/\S+)/i).map((piece, index) => index % 2 === 1 ? piece : piece.replace(/(^|[^-])---(?!-)/g, "$1—").replace(/(^|[^-])--(?!-)/g, "$1–")).join("")).join(`
 `))).join("");
 }
 function protectComments(text, change) {
@@ -8979,9 +9036,12 @@ function protectComments(text, change) {
   let position = 0;
   while (position < text.length) {
     const open = text.indexOf("<!--", position);
-    const close = open === -1 ? -1 : text.indexOf("-->", open + 4);
-    if (close === -1) {
+    if (open === -1) {
       return result + change(text.slice(position));
+    }
+    const close = text.indexOf("-->", open + 4);
+    if (close === -1) {
+      return result + change(text.slice(position, open)) + text.slice(open);
     }
     result += change(text.slice(position, open)) + text.slice(open, close + 3);
     position = close + 3;
