@@ -35,6 +35,7 @@ import {
   proseReport,
   reindexProject,
   removeEntity,
+  shellWord,
   renameEntity,
   seriesReport,
   storyTimeline,
@@ -386,7 +387,8 @@ export const COMMANDS = [
       if (result.changed) {
         io.stdout.write("Updated revision-passes in story.md\n");
       }
-      io.stdout.write(formatPasses(result.passes));
+      const where = shellWord(displayPath(parsed));
+      io.stdout.write(formatPasses(result.passes, where === "." ? "story passes" : `story passes ${where}`));
       return 0;
     }
   },

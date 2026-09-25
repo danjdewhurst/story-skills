@@ -101,7 +101,7 @@ describe("synopsis builder", () => {
     writeArc(root, "test-arc", "## Climax\n\nShe confronts the miller at dawn! The mill burns behind them.\n");
 
     const { text } = synopsisBook(root);
-    expect(text).toContain("Because She confronts the miller at dawn!");
+    expect(text).toContain("Because she confronts the miller at dawn!");
     expect(text).not.toContain("The mill burns behind them.");
   });
 
@@ -128,7 +128,7 @@ describe("synopsis builder", () => {
     const { text } = synopsisBook(root);
     const setupIndex = text.indexOf("Mara arrives in the valley");
     const risingIndex = text.indexOf("She finds the mill door ajar");
-    const chainIndex = text.indexOf("Because She confronts the miller at dawn. The valley keeps its secret.");
+    const chainIndex = text.indexOf("Because she confronts the miller at dawn. The valley keeps its secret.");
     expect(setupIndex).toBeGreaterThan(-1);
     expect(risingIndex).toBeGreaterThan(setupIndex);
     expect(chainIndex).toBeGreaterThan(risingIndex);
@@ -207,7 +207,7 @@ The valley keeps its secret.`);
     const { text } = synopsisBook(root, { pages: 1 });
     expect(countWords(text)).toBeLessThanOrEqual(500);
     expect(text).not.toContain("UNIQUE-RISING-WORD");
-    expect(text).toContain("Because She confronts the miller. The valley keeps its secret.");
+    expect(text).toContain("Because she confronts the miller. The valley keeps its secret.");
   });
 
   test("a 3-page synopsis keeps content the 1-page version trims", () => {

@@ -40,7 +40,14 @@ export function wordCount(markdown) {
 // The prose of a chapter or matter page, without its outline and without
 // HTML comments, which are notes to the author rather than book text.
 export function chapterProse(markdownBody) {
-  return proseSection(markdownBody).replace(/<!--[\s\S]*?-->/g, "");
+  // A comment written inside a code span is literal text.
+  return proseSection(markdownBody).replace(/`[^`\n]*`|<!--[\s\S]*?-->/g, (match) => (match.startsWith("`") ? match : ""));
+}
+
+// True when the prose still opens a comment it never closes, so the rest of
+// the text would show in the book with a stray `<!--`.
+export function hasUnclosedComment(prose) {
+  return String(prose).replace(/`[^`\n]*`/g, "").includes("<!--");
 }
 
 function proseSection(markdownBody) {

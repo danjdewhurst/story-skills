@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { checkContinuity, storyDateError, storyTimeError } from "./continuity.js";
 import { FRONTMATTER_PATTERN, parseFrontmatter, replaceFrontmatter, stringifyFrontmatter } from "./frontmatter.js";
-import { chapterProse, escapeRegExp, extractSection, kebabCase, titleCaseSlug, wordCount } from "./markdown.js";
+import { chapterProse, escapeRegExp, extractSection, hasUnclosedComment, kebabCase, titleCaseSlug, wordCount } from "./markdown.js";
 import { buildTimeline } from "./timeline.js";
 import { buildClueMatrix } from "./clues.js";
 import { buildDiagram } from "./diagram.js";
@@ -413,6 +413,7 @@ export function scanProject(root) {
       declaredWordCount: Number(data["word-count"] ?? 0),
       targetWords: Number.isInteger(data["target-words"]) && data["target-words"] > 0 ? data["target-words"] : 0,
       wordCount: wordCount(chapterProse(markdown.body)),
+      unclosedComment: hasUnclosedComment(chapterProse(markdown.body)),
       date: String(data.date ?? ""),
       time: String(data.time ?? ""),
       mode: String(data.mode ?? ""),
@@ -592,6 +593,10 @@ export function validateProjectOf(project) {
       warnings.push(`${path.relative(projectRoot, chapter.file)} declares ${chapter.declaredWordCount} words but contains ${chapter.wordCount}`);
     }
 
+    if (chapter.unclosedComment) {
+      warnings.push(`${path.relative(projectRoot, chapter.file)} opens an HTML comment (<!--) that never closes, so the text after it shows in builds and word counts`);
+    }
+
     if (!project.scenes.some((scene) => scene.chapter === chapter.id)) {
       warnings.push(`${path.relative(projectRoot, chapter.file)} has no machine-readable scene records`);
     }
@@ -619,13 +624,10 @@ export function validateLinksOf(project) {
   const hasLocation = (id) => locations.has(id);
   const hasChapter = (id) => chapters.has(id);
   // A promise or clue may schedule its chapters ahead of drafting: a
-  // `chapter-NN` past the last chapter file is a plan, not a broken link,
-  // until the status says the setup or payoff is already on the page.
-  const highestChapter = project.chapters.reduce((max, chapter) => Math.max(max, Number.isFinite(chapter.number) ? chapter.number : 0), 0);
-  const hasScheduledChapter = (id) => {
-    const match = /^chapter-(\d+)$/.exec(id);
-    return chapters.has(id) || (match !== null && Number.parseInt(match[1], 10) > highestChapter);
-  };
+  // `chapter-NN` with no file yet is a plan, not a broken link, until the
+  // status says the setup or payoff is already on the page. `continuity`
+  // reads the same ids by their number.
+  const hasScheduledChapter = (id) => chapters.has(id) || /^chapter-\d+$/.test(id);
   const hasArc = (id) => arcs.has(id);
   // `mentions` may name characters or artifacts; prop custody checks read
   // artifact ids there.
@@ -958,7 +960,9 @@ export function knowledgeAtChapter(root, characterId, atChapterId) {
   const project = scanProject(root);
   const characters = new Map(project.characters.map((character) => [character.id, character]));
   if (!characters.has(characterId)) {
-    throw new Error(`Unknown character ${characterId}`);
+    // A character whose file fails to parse exists; say why it cannot be read.
+    const parseError = project.fileErrors.find((error) => error.startsWith(`${path.join("characters", `${characterId}.md`)}:`));
+    throw new Error(parseError ?? `Unknown character ${characterId}`);
   }
 
   const chapterNumbers = new Map(project.chapters.map((chapter) => [chapter.id, chapter.number]));
@@ -1250,17 +1254,37 @@ function writeRegistry(filePath, build, changed, root) {
 }
 
 function customSections(existing, generated) {
-  const headingPattern = /^## +(.+?)[ \t]*$/gm;
-  const generatedHeadings = new Set([...generated.matchAll(headingPattern)].map((match) => match[1]));
+  // A generated heading may carry a value (`## Total Word Count: 993`), so
+  // headings compare without a trailing `: <number>`. Each generated heading
+  // claims one existing section; a second section with the same heading is
+  // hand-written and kept.
+  const headingKey = (text) => text.replace(/:\s*\d[\d,]*$/, "");
+  const unclaimed = new Map();
+  for (const match of generated.matchAll(/^## +(.+?)[ \t]*$/gm)) {
+    const key = headingKey(match[1]);
+    unclaimed.set(key, (unclaimed.get(key) ?? 0) + 1);
+  }
   const body = existing.replace(/^---\n[\s\S]*?\n---\n/, "");
+  // A section runs to the next heading of level 1 or 2, so a section above
+  // the title never swallows the `# Title` line.
+  const headings = [...body.matchAll(/^(#{1,2}) +(.+?)[ \t]*$/gm)];
   const sections = [];
-  const matches = [...body.matchAll(headingPattern)];
-  for (const [index, match] of matches.entries()) {
-    if (generatedHeadings.has(match[1])) {
+  for (const [index, match] of headings.entries()) {
+    if (match[1] !== "##") {
       continue;
     }
-    const end = index + 1 < matches.length ? matches[index + 1].index : body.length;
-    sections.push(body.slice(match.index, end).trim());
+    const key = headingKey(match[2]);
+    const claimed = (unclaimed.get(key) ?? 0) > 0;
+    if (claimed) {
+      unclaimed.set(key, unclaimed.get(key) - 1);
+    }
+    // A stale copy of a generated value heading (left by 0.10.0, which kept
+    // each old `## Total Word Count: N`) is dropped, not kept as custom.
+    const stale = key !== match[2] && unclaimed.has(key);
+    if (!claimed && !stale) {
+      const end = index + 1 < headings.length ? headings[index + 1].index : body.length;
+      sections.push(body.slice(match.index, end).trim());
+    }
   }
   return sections;
 }
@@ -1733,6 +1757,12 @@ function synopsisSentences(section) {
   return splitSentences(text).filter((sentence) => !SCAFFOLD_SENTENCES.has(sentence));
 }
 
+// Words that end in a full stop without ending the sentence.
+const ABBREVIATIONS = /(?:^|[\s(“"‘'])(?:Dr|Mr|Mrs|Ms|St|Mt|Jr|Sr|Prof|Capt|Gen|Col|Lt|Sgt|Rev|Fr|No|vs|etc|e\.g|i\.e|a\.m|p\.m|[A-Za-z])$/;
+// A sentence ends at . ! ? or … plus any closing quotes or brackets, before
+// a space or the end of the text.
+const SENTENCE_END = /[.!?…]["”’')\]]*(?= |$)/g;
+
 function splitSentences(text) {
   const normalized = String(text).replace(/\s+/g, " ").trim();
   if (normalized === "") {
@@ -1740,23 +1770,20 @@ function splitSentences(text) {
   }
   const sentences = [];
   let start = 0;
-  for (let index = 0; index < normalized.length; index += 1) {
-    const char = normalized[index];
-    const next = normalized[index + 1];
-    const boundary = (char === "." || char === "?" || char === "!") && (next === undefined || next === " ");
-    const token = char === "." ? /([A-Za-z]+)$/.exec(normalized.slice(0, index)) : null;
-    const abbreviation = token !== null && (/^(Dr|Mr|Mrs|Ms|St)$/.test(token[1]) || /^[A-Z]$/.test(token[1]));
-    if (!boundary || abbreviation) {
+  for (const match of normalized.matchAll(SENTENCE_END)) {
+    const before = normalized.slice(start, match.index);
+    if (match[0].startsWith(".") && ABBREVIATIONS.test(before)) {
       continue;
     }
-    sentences.push(normalized.slice(start, index + 1).trim());
-    start = index + 1;
+    const end = match.index + match[0].length;
+    sentences.push(normalized.slice(start, end).trim());
+    start = end;
   }
   const tail = normalized.slice(start).trim();
   if (tail !== "") {
-    sentences.push(/[.!?]$/.test(tail) ? tail : `${tail}.`);
+    sentences.push(/[.!?…]["”’')\]]*$/.test(tail) ? tail : `${tail}.`);
   }
-  return sentences;
+  return sentences.filter((sentence) => sentence !== "");
 }
 
 function takeSentences(text, count) {
@@ -1782,10 +1809,23 @@ function renderSynopsis(title, premise, project, level) {
     const resolution = level < 2 ? takeSentences(extractSection(markdown.body, "Resolution"), 1) : [];
     const chain = climax.concat(resolution);
     if (chain.length > 0) {
-      lines.push(`Because ${chain.join(" ")}`, "");
+      lines.push(`Because ${lowercaseCommonStart(chain.join(" "))}`, "");
     }
   }
   return `${lines.join("\n").trimEnd()}\n`;
+}
+
+// Sentence openers that are not names, so "Because She chooses" reads
+// "Because she chooses"; a name keeps its capital.
+const COMMON_OPENERS = new Set([
+  "a", "an", "the", "he", "she", "they", "it", "we", "you", "his", "her", "their", "its", "our", "my", "your",
+  "this", "that", "these", "those", "when", "after", "before", "once", "in", "at", "on", "with", "without", "by",
+  "as", "if", "even", "every", "all", "both", "no", "none", "only", "then", "there", "here", "one", "each"
+]);
+
+function lowercaseCommonStart(text) {
+  const first = /^[A-Za-z]+/.exec(text)?.[0] ?? "";
+  return COMMON_OPENERS.has(first.toLowerCase()) ? `${text[0].toLowerCase()}${text.slice(1)}` : text;
 }
 
 // Cuts the synopsis at the word budget line by line, so headings and
@@ -2451,7 +2491,7 @@ function buildProjectActions(project, validation, links, continuity, displayPath
   return actions;
 }
 
-function shellWord(value) {
+export function shellWord(value) {
   const text = String(value);
   return /^[A-Za-z0-9_./~:@%+=,-]+$/.test(text) ? text : `'${text.replace(/'/g, "'\\''")}'`;
 }
@@ -3803,29 +3843,56 @@ function inlineRuns(text) {
     nodes.push({ text: buffer });
   }
 
-  for (let closeIndex = 0; closeIndex < nodes.length; closeIndex += 1) {
-    const closer = nodes[closeIndex];
-    while (closer.delimiter && closer.close && closer.count > 0) {
-      let openIndex = closeIndex - 1;
-      while (openIndex >= 0 && !canPairEmphasis(nodes[openIndex], closer)) {
-        openIndex -= 1;
+  // The CommonMark delimiter stack: openers wait on `stack`; a closer pairs
+  // with the nearest usable opener and drops every delimiter between them.
+  // `bottom` remembers, per kind of closer, how far down a search already
+  // failed, so unmatched delimiters are not rescanned. Emphasis depth is
+  // recorded as +1/-1 marks and summed once, so each pair costs O(1).
+  const stack = [];
+  const bottom = new Map();
+  const depth = { strong: new Array(nodes.length + 1).fill(0), em: new Array(nodes.length + 1).fill(0) };
+  for (const [closeIndex, closer] of nodes.entries()) {
+    if (!closer.delimiter) {
+      continue;
+    }
+    const key = `${closer.delimiter}${closer.open ? 1 : 0}${closer.original % 3}`;
+    while (closer.close && closer.count > 0) {
+      const floor = bottom.get(key) ?? 0;
+      let position = stack.length - 1;
+      while (position >= floor && !canPairEmphasis(nodes[stack[position]], closer)) {
+        position -= 1;
       }
-      if (openIndex < 0) {
+      if (position < floor) {
+        bottom.set(key, stack.length);
         break;
       }
+      const openIndex = stack[position];
       const opener = nodes[openIndex];
       const used = opener.count >= 2 && closer.count >= 2 ? 2 : 1;
       opener.count -= used;
       closer.count -= used;
-      for (let inner = openIndex + 1; inner < closeIndex; inner += 1) {
-        nodes[inner][used === 2 ? "strong" : "em"] = (nodes[inner][used === 2 ? "strong" : "em"] ?? 0) + 1;
-        if (nodes[inner].delimiter) {
-          // Delimiters inside a matched pair can no longer pair outward.
-          nodes[inner].open = false;
-          nodes[inner].close = false;
+      const marks = depth[used === 2 ? "strong" : "em"];
+      marks[openIndex + 1] += 1;
+      marks[closeIndex] -= 1;
+      // Delimiters between the pair can no longer pair outward.
+      stack.length = opener.count > 0 ? position + 1 : position;
+      for (const [other, value] of bottom) {
+        if (value > stack.length) {
+          bottom.set(other, stack.length);
         }
       }
     }
+    if (closer.open && closer.count > 0) {
+      stack.push(closeIndex);
+    }
+  }
+  let strongDepth = 0;
+  let emDepth = 0;
+  for (const [index, node] of nodes.entries()) {
+    strongDepth += depth.strong[index];
+    emDepth += depth.em[index];
+    node.strong = strongDepth;
+    node.em = emDepth;
   }
 
   const runs = [];
@@ -3846,13 +3913,13 @@ function inlineRuns(text) {
   return runs;
 }
 
+// Openers on the stack can open and have characters left, so only the
+// delimiter and CommonMark's rule of three decide: in *foo**bar* the **
+// cannot close the *.
 function canPairEmphasis(opener, closer) {
-  if (opener.delimiter !== closer.delimiter || !opener.open || opener.count === 0) {
-    return false;
-  }
-  // CommonMark's rule of three: in *foo**bar* the ** cannot close the *.
   const both = opener.close || closer.open;
-  return !(both && (opener.original + closer.original) % 3 === 0 && !(opener.original % 3 === 0 && closer.original % 3 === 0));
+  const ruleOfThree = both && (opener.original + closer.original) % 3 === 0 && !(opener.original % 3 === 0 && closer.original % 3 === 0);
+  return opener.delimiter === closer.delimiter && !ruleOfThree;
 }
 
 // HTML or XHTML markup for one run; `escape` is the matching text escaper.
@@ -4261,14 +4328,32 @@ const SOURCE_ROOT_FILES = new Set(["story.md", STYLE_SHEET_FILE, PROGRESS_FILE])
 const SOURCE_DIRECTORIES = ["characters", "chapters", "scenes", "worldbuilding", "plot", "continuity", "glossary", MATTER_DIR, RESEARCH_DIR];
 
 function assertNotProjectSource(project, outFile) {
-  const relativePath = path.relative(project.root, outFile);
-  if (relativePath === "" || relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
-    return;
+  // Check the path as typed and the real path behind any symlinked folder
+  // (`lnk -> chapters`), case-insensitively for case-insensitive disks.
+  for (const [root, target] of [[project.root, outFile], [fs.realpathSync(project.root), realPathThroughAncestors(outFile)]]) {
+    const relativePath = path.relative(root, target);
+    if (relativePath === "" || relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+      continue;
+    }
+    const lower = relativePath.toLowerCase();
+    const [first] = lower.split(path.sep);
+    if (SOURCE_ROOT_FILES.has(lower) || SOURCE_DIRECTORIES.includes(first)) {
+      throw new Error(`Refusing to write generated output to ${path.relative(project.root, outFile)}: it is project source. Use a path such as dist/ instead`);
+    }
   }
-  const [first] = relativePath.split(path.sep);
-  if (SOURCE_ROOT_FILES.has(relativePath) || SOURCE_DIRECTORIES.includes(first)) {
-    throw new Error(`Refusing to write generated output to ${relativePath}: it is project source. Use a path such as dist/ instead`);
+}
+
+// The real path of the nearest existing ancestor, with the missing tail
+// appended, so a new file under a symlinked folder resolves to its target.
+// The walk stops at the latest at the filesystem root, which always exists.
+function realPathThroughAncestors(target) {
+  const missing = [];
+  let current = target;
+  while (!fs.existsSync(current)) {
+    missing.unshift(path.basename(current));
+    current = path.dirname(current);
   }
+  return path.join(fs.realpathSync(current), ...missing);
 }
 
 function resolveOutputPath(project, out, defaultRelativePath, enforceRoot) {
@@ -4276,7 +4361,7 @@ function resolveOutputPath(project, out, defaultRelativePath, enforceRoot) {
   const outFile = path.resolve(project.root, rawOut);
   const shouldEnforceRoot = enforceRoot ?? !path.isAbsolute(String(rawOut));
   assertNotProjectSource(project, outFile);
-  if (lstatIfExists(outFile)?.isDirectory()) {
+  if (lstatIfExists(outFile)?.isDirectory() || outFile === path.join(project.root, "dist")) {
     throw new Error(`--out ${rawOut} is a directory: give a file path`);
   }
   return {

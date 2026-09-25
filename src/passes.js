@@ -104,10 +104,12 @@ export function nextPass(passes) {
   return passes.find((entry) => entry.status === "in-progress") ?? passes.find((entry) => entry.status !== "done") ?? null;
 }
 
-export function formatPasses(passes) {
+// `command` is how the user runs passes on this project, such as
+// `story passes` or `story passes drafts/book`.
+export function formatPasses(passes, command = "story passes") {
   const lines = [];
   if (passes.length === 0) {
-    lines.push("Revision passes: none recorded. Run story passes --init to add the default ladder:", "");
+    lines.push(`Revision passes: none recorded. Run ${command} --init to add the default ladder:`, "");
     for (const entry of DEFAULT_PASSES) {
       lines.push(`- ${entry.pass}: ${entry.focus} (${entry.checks.join(", ")})`);
     }
@@ -122,6 +124,6 @@ export function formatPasses(passes) {
     lines.push(`${mark} ${entry.pass}${detail}`);
   }
   const upcoming = nextPass(passes);
-  lines.push("", upcoming === null ? "All passes done." : `Next: ${upcoming.pass}${upcoming.status === "in-progress" ? " (in progress)" : ""}; mark it with story passes --done ${upcoming.pass}`);
+  lines.push("", upcoming === null ? "All passes done." : `Next: ${upcoming.pass}${upcoming.status === "in-progress" ? " (in progress)" : ""}; mark it with ${command} --done ${upcoming.pass}`);
   return `${lines.join("\n")}\n`;
 }
