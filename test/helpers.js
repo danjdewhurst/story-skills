@@ -2,8 +2,20 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-export function makeTempDir() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), "story-skills-"));
+const tempDirs = [];
+
+// Removes every temp dir made so far. test/setup.js runs it after the whole
+// test run, so repeated runs do not fill the disk.
+export function removeTempDirs() {
+  for (const dir of tempDirs.splice(0)) {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+export function makeTempDir(prefix = "story-skills-") {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  tempDirs.push(dir);
+  return dir;
 }
 
 export function memoryIo(cwd) {
