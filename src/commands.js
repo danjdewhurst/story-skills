@@ -26,6 +26,7 @@ import {
   formatProjectReport,
   knowledgeAtChapter,
   migrateProject,
+  moveEntity,
   namesReport,
   pacingReport,
   projectPasses,
@@ -483,6 +484,29 @@ export const COMMANDS = [
         id: parsed.positionals[2]
       });
       io.stdout.write(`Removed ${result.kind} ${result.id}: ${result.file}\n`);
+      return 0;
+    }
+  },
+  {
+    name: "move",
+    usage: "move <kind> <id>",
+    summary: [
+      "Renumber a chapter (--number) or move a scene",
+      "(--chapter, --scene): renames files and rewrites",
+      "references"
+    ],
+    project: "flag",
+    args: 2,
+    options: ["number", "chapter", "scene"],
+    run({ parsed, io, root }) {
+      const result = moveEntity(root(), {
+        kind: parsed.positionals[1],
+        id: parsed.positionals[2],
+        number: parsed.options.number,
+        chapter: parsed.options.chapter,
+        scene: parsed.options.scene
+      });
+      io.stdout.write(`Moved ${result.kind} ${result.oldId} to ${result.id}: ${result.file}${result.moved > 1 ? ` (with ${result.moved - 1} ${result.moved === 2 ? "scene" : "scenes"})` : ""}\n`);
       return 0;
     }
   },

@@ -2518,9 +2518,9 @@ var OPTIONS = [
   { name: "done", value: "<pass>", help: ["Mark a revision pass done for passes"] },
   { name: "pages", value: "<n>", help: ["Synopsis length for synopsis (1 or 3)"] },
   { name: "actionable", help: ["Include next actions in report"] },
-  { name: "number", value: "<n>", help: ["Chapter number for add chapter"] },
-  { name: "chapter", value: "<id>", help: ["Chapter id for add scene"] },
-  { name: "scene", value: "<n>", help: ["Scene number for add scene"] },
+  { name: "number", value: "<n>", help: ["Chapter number for add chapter or move chapter"] },
+  { name: "chapter", value: "<id>", help: ["Chapter id for add scene or move scene"] },
+  { name: "scene", value: "<n>", help: ["Scene number for add scene or move scene"] },
   { name: "type", value: "<name>", help: ["Entity type for add"] },
   { name: "role", value: "<name>", help: ["Character role for add character"] },
   { name: "status", value: "<name>", help: ["Entity status for add"] },
@@ -6171,6 +6171,122 @@ function removeEntity(root, options) {
   fs3.rmSync(file);
   const reindexed = reindexProject(project.root);
   return { kind, id, file, changed: [file].concat(reindexed.changed) };
+}
+function moveEntity(root, options) {
+  const project = scanProject(root);
+  assertProjectParses(project, "move");
+  const kind = normalizeKind(options.kind);
+  const id = String(options.id ?? "").trim();
+  if (!id) {
+    throw new Error("move requires a chapter or scene id");
+  }
+  requireKebabId(id, `${kind} id`);
+  if (kind === "chapter") {
+    return moveChapter(project, id, options);
+  }
+  if (kind === "scene") {
+    return moveScene(project, id, options);
+  }
+  throw new Error(`story move works on chapters and scenes, not ${kind}s; use story rename to change other ids`);
+}
+function moveChapter(project, oldId, options) {
+  const chapter = project.chapters.find((entry) => entry.id === oldId);
+  if (!chapter) {
+    throw new Error(`chapter ${oldId} does not exist`);
+  }
+  if (options.number === undefined) {
+    throw new Error("move chapter requires --number <n>");
+  }
+  const number = requirePositiveInteger(options.number, "chapter number");
+  const newId = `chapter-${String(number).padStart(2, "0")}`;
+  const newFile = path4.join(project.root, "chapters", `${newId}.md`);
+  if (newId === oldId) {
+    throw new Error(`${oldId} is already chapter ${number}`);
+  }
+  const taken = project.chapters.find((entry) => entry.number === number && entry.id !== oldId);
+  const markdown = readMarkdown(chapter.file, project.root);
+  const renumbered = replaceFrontmatter(markdown.rawMarkdown, { ...markdown.data, number }).replace(/^(#[ \t]+Chapter[ \t]+)\d+(?=[ \t]*(?::|$))/m, `$1${number}`);
+  const scenes = project.scenes.filter((scene) => scene.chapter === oldId);
+  const sceneMoves = scenes.map((scene) => ({
+    oldFile: scene.file,
+    newFile: path4.join(project.root, "scenes", `${newId}-scene-${String(scene.scene).padStart(2, "0")}.md`)
+  }));
+  const context = entityReferenceContext(project.root, "chapter", oldId);
+  const sceneContexts = scenes.map((scene) => ({ context: entityReferenceContext(project.root, "scene", scene.id), newId: `${newId}-scene-${String(scene.scene).padStart(2, "0")}` }));
+  const plan = planReferenceRewrites(project.root, context, new Map([[chapter.file, renumbered]]), idRenamer(oldId, newId), (body, file) => renameIdTokens(project.root, file, sceneContexts.reduce((text, entry) => renameLinkTargets(project.root, file, text, entry.context, entry.newId), renameLinkTargets(project.root, file, body, context, newId)), oldId, newId));
+  const statePath = path4.join(project.root, "continuity", "state.md");
+  if (fs3.existsSync(statePath)) {
+    const stateText = plan.get(statePath) ?? readTextFile(statePath);
+    const stateData = parseFrontmatter(stateText, statePath).data;
+    if (stateData["current-chapter"] === chapter.number) {
+      plan.set(statePath, replaceFrontmatter(stateText, { ...stateData, "current-chapter": number }));
+    }
+  }
+  if (taken && readTextFile(taken.file) !== plan.get(chapter.file)) {
+    throw new Error(`${newId} already exists: move it first. To make room, renumber from the highest chapter down`);
+  }
+  const moves = [{ oldFile: chapter.file, newFile }, ...sceneMoves];
+  commitMoves(project.root, plan, moves);
+  const reindexed = reindexProject(project.root);
+  return { kind: "chapter", oldId, id: newId, file: newFile, moved: moves.length, changed: moves.map((move) => move.newFile).concat(reindexed.changed) };
+}
+function moveScene(project, oldId, options) {
+  const scene = project.scenes.find((entry) => entry.id === oldId);
+  if (!scene) {
+    throw new Error(`scene ${oldId} does not exist`);
+  }
+  if (options.chapter === undefined && options.scene === undefined) {
+    throw new Error("move scene requires --chapter <id>, --scene <n>, or both");
+  }
+  const chapterId = String(options.chapter ?? scene.chapter).trim();
+  requireKebabId(chapterId, "chapter id");
+  if (!project.chapters.some((entry) => entry.id === chapterId)) {
+    throw new Error(`chapter ${chapterId} does not exist`);
+  }
+  const number = options.scene === undefined ? nextSceneNumber(project, chapterId) : requirePositiveInteger(options.scene, "scene number");
+  const newId = `${chapterId}-scene-${String(number).padStart(2, "0")}`;
+  const newFile = path4.join(project.root, "scenes", `${newId}.md`);
+  if (newId === oldId) {
+    throw new Error(`${oldId} is already scene ${number} of ${chapterId}`);
+  }
+  const markdown = readMarkdown(scene.file, project.root);
+  const moved = replaceFrontmatter(markdown.rawMarkdown, { ...markdown.data, chapter: chapterId, scene: number });
+  const context = entityReferenceContext(project.root, "scene", oldId);
+  const plan = planReferenceRewrites(project.root, context, new Map([[scene.file, moved]]), idRenamer(oldId, newId), (body, file) => renameIdTokens(project.root, file, renameLinkTargets(project.root, file, body, context, newId), oldId, newId));
+  const existing = project.scenes.find((entry) => entry.id === newId);
+  if (existing && readTextFile(existing.file) !== plan.get(scene.file)) {
+    throw new Error(`${newId} already exists: move it first`);
+  }
+  commitMoves(project.root, plan, [{ oldFile: scene.file, newFile }]);
+  applyEntityBacklinks(project.root, "scene", newId, readMarkdown(newFile, project.root).data);
+  const reindexed = reindexProject(project.root);
+  return { kind: "scene", oldId, id: newId, file: newFile, moved: 1, changed: [newFile].concat(reindexed.changed) };
+}
+function idRenamer(oldId, newId) {
+  return (value) => value === oldId ? newId : value;
+}
+function renameIdTokens(root, file, body, oldId, newId) {
+  const relativePath = path4.relative(root, file);
+  if (relativePath !== path4.join("plot", "timeline.md") && path4.dirname(relativePath) !== path4.join("plot", "arcs")) {
+    return body;
+  }
+  return body.replace(new RegExp(`(?<![\\w-])${escapeRegExp(oldId)}-scene-(\\d+)(?![\\w-])`, "g"), `${newId}-scene-$1`).replace(new RegExp(`(?<![\\w-])${escapeRegExp(oldId)}(?![\\w-])`, "g"), newId);
+}
+function commitMoves(root, plan, moves) {
+  const contents = moves.map((move) => plan.get(move.oldFile) ?? readTextFile(move.oldFile));
+  moves.forEach((move, index) => {
+    if (fs3.existsSync(move.newFile) && readTextFile(move.newFile) !== contents[index]) {
+      throw new Error(`${path4.relative(root, move.newFile)} already exists; nothing was changed`);
+    }
+  });
+  for (const move of moves) {
+    plan.delete(move.oldFile);
+  }
+  writeReferencePlan(root, plan);
+  moves.forEach((move, index) => writeFile(move.newFile, contents[index], { root }));
+  for (const move of moves) {
+    fs3.rmSync(move.oldFile);
+  }
 }
 function storyBible(options) {
   const data = {
@@ -10042,6 +10158,30 @@ var COMMANDS = [
         id: parsed.positionals[2]
       });
       io.stdout.write(`Removed ${result.kind} ${result.id}: ${result.file}
+`);
+      return 0;
+    }
+  },
+  {
+    name: "move",
+    usage: "move <kind> <id>",
+    summary: [
+      "Renumber a chapter (--number) or move a scene",
+      "(--chapter, --scene): renames files and rewrites",
+      "references"
+    ],
+    project: "flag",
+    args: 2,
+    options: ["number", "chapter", "scene"],
+    run({ parsed, io, root }) {
+      const result = moveEntity(root(), {
+        kind: parsed.positionals[1],
+        id: parsed.positionals[2],
+        number: parsed.options.number,
+        chapter: parsed.options.chapter,
+        scene: parsed.options.scene
+      });
+      io.stdout.write(`Moved ${result.kind} ${result.oldId} to ${result.id}: ${result.file}${result.moved > 1 ? ` (with ${result.moved - 1} ${result.moved === 2 ? "scene" : "scenes"})` : ""}
 `);
       return 0;
     }
