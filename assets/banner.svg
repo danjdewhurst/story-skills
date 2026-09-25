@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="508" height="126" viewBox="0 0 508 126" role="img" aria-label="Story Skills">
+  <title>Story Skills</title>
+  <style>
+    text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 20px; font-weight: 700; white-space: pre; fill: #1f2328; stroke: #1f2328; stroke-width: 1.2px; stroke-linejoin: round; }
+    @media (prefers-color-scheme: dark) { text { fill: #f0f6fc; stroke: #f0f6fc; } }
+  </style>
+  <text x="8" y="25" xml:space="preserve" textLength="492" lengthAdjust="spacingAndGlyphs"> ___ _                  ___ _   _ _ _    </text>
+  <text x="8" y="47" xml:space="preserve" textLength="492" lengthAdjust="spacingAndGlyphs">/ __| |_ ___ _ _ _  _  / __| |_(_) | |___</text>
+  <text x="8" y="69" xml:space="preserve" textLength="492" lengthAdjust="spacingAndGlyphs">\__ \  _/ _ \ '_| || | \__ \ / / | | (_-&lt;</text>
+  <text x="8" y="91" xml:space="preserve" textLength="492" lengthAdjust="spacingAndGlyphs">|___/\__\___/_|  \_, | |___/_\_\_|_|_/__/</text>
+  <text x="8" y="113" xml:space="preserve" textLength="492" lengthAdjust="spacingAndGlyphs">                 |__/                    </text>
+</svg>
