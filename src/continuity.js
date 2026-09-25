@@ -167,8 +167,9 @@ function checkPromises(project, context, errors, warnings) {
       errors.push(`${label} is planted but has no planted chapter`);
     }
 
-    if (promise.status === "planned" && promise.planted) {
-      warnings.push(`${label} records planted chapter ${promise.planted} but status is still planned`);
+    const stale = stalePlannedWarning(label, promise, plantedNumber, context.latestChapter);
+    if (stale) {
+      warnings.push(stale);
     }
 
     const chekhov = chekhovWarning(label, promise.planted, plantedNumber, promise.payoff, referencedChapterNumber(context.chapterNumbers, promise.payoff), context.latestChapter);
@@ -246,11 +247,25 @@ function checkClues(project, context, errors, warnings) {
       errors.push(`${label} is planted but no plant chapter recorded`);
     }
 
+    const stale = stalePlannedWarning(label, clue, plantedNumber, context.latestChapter);
+    if (stale) {
+      warnings.push(stale);
+    }
+
     const chekhov = chekhovWarning(label, clue.planted, plantedNumber, clue.payoff, referencedChapterNumber(context.chapterNumbers, clue.payoff), context.latestChapter);
     if (clue.status === "planted" && chekhov) {
       warnings.push(chekhov);
     }
   }
+}
+
+// `status: planned` with a `planted` chapter records where a setup will go.
+// Once that chapter has prose, the setup should be on the page.
+function stalePlannedWarning(label, entry, plantedNumber, latestChapter) {
+  if (entry.status !== "planned" || !entry.planted || plantedNumber === undefined || plantedNumber > latestChapter) {
+    return "";
+  }
+  return `${label} records planted chapter ${entry.planted} but status is still planned`;
 }
 
 function referencedChapterNumber(chapterNumbers, id) {
@@ -320,7 +335,7 @@ function checkContinuityState(project, context, errors, warnings) {
       if (!isKebabId(fact)) {
         errors.push(`${entryLabel} fact ${fact || "(empty)"} must be a kebab-case id`);
       } else {
-        const key = `${entry.character} ${fact}`;
+        const key = `${entry.character}\u0000${fact}`;
         if (knownFacts.has(key)) {
           errors.push(`${entryLabel} repeats fact ${fact} for ${entry.character} from knowledge-state[${knownFacts.get(key)}]`);
         } else {
@@ -578,8 +593,10 @@ function checkRouteTravel(project, errors) {
         // either order, so the gap is the larger of the two readings.
         const elapsed = Math.max(current.latest - previous.earliest, previous.latest - current.earliest) / 60;
         if (needed !== undefined && elapsed < needed) {
-          const gap = previous.exact && current.exact ? formatHours(elapsed) : `at most ${formatHours(elapsed)}`;
-          errors.push(`${current.label} puts ${characterId} at ${current.scene.location} ${gap} after ${previous.label} at ${previous.scene.location}, but the fastest route takes ${formatHours(needed)}`);
+          // Round the gap down and the route up so a near miss (10.98h
+          // against 11h) never reads as equal.
+          const gap = previous.exact && current.exact ? formatHours(elapsed, Math.floor) : `at most ${formatHours(elapsed, Math.floor)}`;
+          errors.push(`${current.label} puts ${characterId} at ${current.scene.location} ${gap} after ${previous.label} at ${previous.scene.location}, but the fastest route takes ${formatHours(needed, Math.ceil)}`);
           break;
         }
       }
@@ -647,8 +664,8 @@ function shortestRouteHours(graph, from, to) {
   return undefined;
 }
 
-function formatHours(hours) {
-  return `${Math.round(hours * 10) / 10}h`;
+function formatHours(hours, round = Math.round) {
+  return `${round(Math.round(hours * 1e6) / 1e5) / 10}h`;
 }
 
 function checkCrossChapterSceneClock(project, scenesByChapter, errors, warnings) {

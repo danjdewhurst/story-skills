@@ -14,7 +14,7 @@ import { STORY_FORMS, formRangeWarning } from "./forms.js";
 import { copyrightPage, metadataSheet, publishingMeta, validatePublishing } from "./publishing.js";
 import { DEFAULT_TRIM, escapeHtml, estimatePages, printHtml, reviewHtml } from "./html.js";
 import { narrationScript, pronunciationGuide } from "./narration.js";
-import { DEFAULT_PASSES, nextPass, readPasses, updatePasses, validatePasses } from "./passes.js";
+import { DEFAULT_PASSES, addedPassNotes, nextPass, readPasses, updatePasses, validatePasses } from "./passes.js";
 import { CHAPTER_HOOKS, SCENE_OUTCOMES, buildPacing } from "./pacing.js";
 import { compareChapters, proseParagraphs } from "./compare.js";
 import { PROGRESS_FILE, cleanSessions, computeProgress, localDate, withSession } from "./progress.js";
@@ -23,28 +23,39 @@ import { buildSeries, readBookFrontmatter, seriesLinkPath, validateSeriesLinks, 
 
 export const STORY_SCHEMA_VERSION = 2;
 
+// Only files are required. Entity folders such as worldbuilding/locations or
+// plot/arcs start empty, and git does not keep empty directories, so a fresh
+// clone of a new project would otherwise fail validation. Folders that hold a
+// registry are implied by that registry file.
 const REQUIRED_PATHS = [
   "story.md",
   "characters/_index.md",
   "worldbuilding/_index.md",
-  "worldbuilding/locations",
-  "worldbuilding/systems",
-  "worldbuilding/factions",
-  "worldbuilding/artifacts",
   "plot/_index.md",
-  "plot/arcs",
   "plot/timeline.md",
   "chapters/_index.md",
   "scenes/_index.md",
   "continuity/state.md",
   "continuity/questions/_index.md",
-  "continuity/questions",
   "continuity/promises/_index.md",
-  "continuity/promises",
   "continuity/clues/_index.md",
-  "continuity/clues",
-  "glossary/_index.md",
-  "glossary/terms"
+  "glossary/_index.md"
+];
+
+// Every folder init creates; migrate restores any that are missing.
+const PROJECT_DIRECTORIES = [
+  "characters",
+  path.join("worldbuilding", "locations"),
+  path.join("worldbuilding", "systems"),
+  path.join("worldbuilding", "factions"),
+  path.join("worldbuilding", "artifacts"),
+  path.join("plot", "arcs"),
+  "chapters",
+  "scenes",
+  path.join("continuity", "questions"),
+  path.join("continuity", "promises"),
+  path.join("continuity", "clues"),
+  path.join("glossary", "terms")
 ];
 
 const INDEX_SCHEMAS = [
@@ -113,7 +124,9 @@ const RELATIONSHIP_INVERSES = new Map([
   ["mentor", ["student"]],
   ["student", ["mentor"]],
   ["employer", ["subordinate"]],
-  ["subordinate", ["employer"]]
+  ["subordinate", ["employer"]],
+  ["former-supervisor", ["former-subordinate"]],
+  ["former-subordinate", ["former-supervisor"]]
 ]);
 
 const SYMMETRIC_RELATIONSHIPS = new Set([
@@ -124,7 +137,9 @@ const SYMMETRIC_RELATIONSHIPS = new Set([
   "ally",
   "rival",
   "enemy",
+  "adversary",
   "cousin",
+  "in-law",
   "colleague",
   "foil",
   "confidant",
@@ -137,14 +152,18 @@ export function createStoryProject(options) {
     throw new Error("A story title is required");
   }
 
-  const storyId = kebabCase(title);
   const cwd = options.cwd ?? process.cwd();
-  if (!storyId) {
-    // Registries record the story id derived from the title, so a title with
-    // no kebab-case form can never validate, even with an explicit --dir.
-    throw new Error('Cannot derive a story id from title "' + title + '": use a title containing ASCII letters or digits');
+  // A title with no ASCII letters or digits (a translated edition, say) takes
+  // its story id from the project folder, as scanProject does.
+  const titleId = kebabCase(title);
+  if (!titleId && options.dir === undefined) {
+    throw new Error('Cannot derive a story id from title "' + title + '": pass --dir with an ASCII folder name, or use a title containing ASCII letters or digits');
   }
-  const root = path.resolve(cwd, options.dir ?? storyId);
+  const root = path.resolve(cwd, options.dir ?? titleId);
+  const storyId = deriveStoryId(title, root);
+  if (!storyId) {
+    throw new Error('Cannot derive a story id from title "' + title + '" or folder "' + path.basename(root) + '": use an ASCII folder name with --dir');
+  }
   // --force overwrites starter files and import --force deletes chapter
   // files, so never follow a symlinked project root to another directory.
   if (lstatIfExists(root)?.isSymbolicLink()) {
@@ -164,18 +183,9 @@ export function createStoryProject(options) {
   const series = resolveSeriesOptions(root, cwd, options);
   const inherited = series.linked[0]?.data ?? {};
   const themes = normalizeList(options.themes, ["change"]);
-  fs.mkdirSync(path.join(root, "characters"), { recursive: true });
-  fs.mkdirSync(path.join(root, "worldbuilding", "locations"), { recursive: true });
-  fs.mkdirSync(path.join(root, "worldbuilding", "systems"), { recursive: true });
-  fs.mkdirSync(path.join(root, "worldbuilding", "factions"), { recursive: true });
-  fs.mkdirSync(path.join(root, "worldbuilding", "artifacts"), { recursive: true });
-  fs.mkdirSync(path.join(root, "plot", "arcs"), { recursive: true });
-  fs.mkdirSync(path.join(root, "chapters"), { recursive: true });
-  fs.mkdirSync(path.join(root, "scenes"), { recursive: true });
-  fs.mkdirSync(path.join(root, "continuity", "questions"), { recursive: true });
-  fs.mkdirSync(path.join(root, "continuity", "promises"), { recursive: true });
-  fs.mkdirSync(path.join(root, "continuity", "clues"), { recursive: true });
-  fs.mkdirSync(path.join(root, "glossary", "terms"), { recursive: true });
+  for (const directory of PROJECT_DIRECTORIES) {
+    fs.mkdirSync(path.join(root, directory), { recursive: true });
+  }
 
   const storyWritten = writeStarterFile(path.join(root, "story.md"), storyBible({
     title,
@@ -288,6 +298,12 @@ function seriesBookNumbers(linked) {
   return numbers;
 }
 
+// The story id is the kebab-case title, or the project folder name when the
+// title is missing or has no ASCII letters or digits.
+function deriveStoryId(title, root) {
+  return kebabCase(String(title ?? "")) || kebabCase(path.basename(root));
+}
+
 export function scanProject(root) {
   const projectRoot = path.resolve(root);
   const scanErrors = [];
@@ -299,7 +315,8 @@ export function scanProject(root) {
     scanErrors.push(`story.md: ${error.message}`);
     story = { data: { title: path.basename(projectRoot) }, body: "", rawMarkdown: "" };
   }
-  const storyId = kebabCase(story.data.title ?? path.basename(projectRoot));
+  const storyId = deriveStoryId(story.data.title, projectRoot);
+  const titleText = typeof story.data.title === "string" || typeof story.data.title === "number" ? String(story.data.title).trim() : "";
 
   let continuity = null;
   const continuityPath = path.join(projectRoot, "continuity", "state.md");
@@ -316,6 +333,8 @@ export function scanProject(root) {
     root: projectRoot,
     story,
     storyId,
+    // Display title: story.md `title`, else the folder name.
+    title: titleText || path.basename(projectRoot),
     fileErrors: scanErrors,
     characters: readEntityFiles(projectRoot, "characters", (id, file, data) => ({
       id,
@@ -381,7 +400,10 @@ export function scanProject(root) {
       id,
       file,
       title: data.title ?? titleCaseSlug(id),
-      number: Number(data.number ?? chapterNumberFromFile(file) ?? 0),
+      // validate reports a number that is not a positive integer; views use
+      // the file name's number instead of printing NaN, and builds refuse.
+      number: chapterNumber(data.number, file),
+      numberValid: data.number === undefined || isPositiveIntegerValue(data.number),
       pov: data.pov ?? "",
       status: data.status ?? "",
       characters: asArray(data.characters),
@@ -487,21 +509,7 @@ export function scanProject(root) {
 }
 
 export function validateProject(root) {
-  const projectRoot = path.resolve(root);
-  const errors = [];
-  const warnings = [];
-
-  for (const requiredPath of REQUIRED_PATHS) {
-    if (!fs.existsSync(path.join(projectRoot, requiredPath))) {
-      errors.push(`Missing required path: ${requiredPath}`);
-    }
-  }
-
-  if (errors.length > 0) {
-    return { ok: false, errors, warnings };
-  }
-
-  return validateProjectOf(scanProject(projectRoot));
+  return validateProjectOf(scanProject(root));
 }
 
 export function validateProjectOf(project) {
@@ -610,6 +618,14 @@ export function validateLinksOf(project) {
   const hasCharacter = (id) => characters.has(id);
   const hasLocation = (id) => locations.has(id);
   const hasChapter = (id) => chapters.has(id);
+  // A promise or clue may schedule its chapters ahead of drafting: a
+  // `chapter-NN` past the last chapter file is a plan, not a broken link,
+  // until the status says the setup or payoff is already on the page.
+  const highestChapter = project.chapters.reduce((max, chapter) => Math.max(max, Number.isFinite(chapter.number) ? chapter.number : 0), 0);
+  const hasScheduledChapter = (id) => {
+    const match = /^chapter-(\d+)$/.exec(id);
+    return chapters.has(id) || (match !== null && Number.parseInt(match[1], 10) > highestChapter);
+  };
   const hasArc = (id) => arcs.has(id);
   // `mentions` may name characters or artifacts; prop custody checks read
   // artifact ids there.
@@ -800,9 +816,8 @@ export function validateLinksOf(project) {
 
   for (const promise of project.promises) {
     const label = relative(project, promise.file);
-    for (const chapterId of [promise.planted, promise.payoff].filter(Boolean)) {
-      checkIdReference(errors, label, chapterId, "chapter", hasChapter);
-    }
+    checkIdReference(errors, label, promise.planted, "chapter", promise.status === "planned" ? hasScheduledChapter : hasChapter);
+    checkIdReference(errors, label, promise.payoff, "chapter", promise.status === "paid-off" ? hasChapter : hasScheduledChapter);
     for (const arcId of promise.arcs) {
       checkIdReference(errors, label, arcId, "arc", hasArc);
     }
@@ -813,9 +828,8 @@ export function validateLinksOf(project) {
 
   for (const clue of project.clues) {
     const label = relative(project, clue.file);
-    for (const chapterId of [clue.planted, clue.payoff].filter(Boolean)) {
-      checkIdReference(errors, label, chapterId, "chapter", hasChapter);
-    }
+    checkIdReference(errors, label, clue.planted, "chapter", clue.status === "planned" ? hasScheduledChapter : hasChapter);
+    checkIdReference(errors, label, clue.payoff, "chapter", clue.status === "paid-off" ? hasChapter : hasScheduledChapter);
     for (const arcId of clue.arcs) {
       checkIdReference(errors, label, arcId, "arc", hasArc);
     }
@@ -990,7 +1004,7 @@ export function seriesReport(root) {
   return buildSeries(projectRoot, scanProject);
 }
 
-export function projectReport(root) {
+export function projectReport(root, options = {}) {
   const project = scanProject(root);
   const validation = validateProjectOf(project);
   const links = validateLinksOf(project);
@@ -999,7 +1013,7 @@ export function projectReport(root) {
 
   return {
     root: project.root,
-    title: project.story.data.title,
+    title: project.title,
     storyId: project.storyId,
     schemaVersion: project.story.data["schema-version"],
     series: project.story.data.series,
@@ -1043,7 +1057,7 @@ export function projectReport(root) {
     validation,
     links,
     continuity,
-    actions: buildProjectActions(project, validation, links, continuity)
+    actions: buildProjectActions(project, validation, links, continuity, options.displayPath)
   };
 }
 
@@ -1052,12 +1066,12 @@ export function formatProjectReport(report, options = {}) {
     `# ${report.title}`,
     "",
     `Story ID: ${report.storyId}`,
-    `Schema version: ${report.schemaVersion}`,
+    `Schema version: ${report.schemaVersion ?? "unset"}`,
     ...(report.series === undefined ? [] : [`Series: ${report.series}${report.bookNumber === undefined ? "" : ` (book ${report.bookNumber})`}`]),
-    `Status: ${report.status}`,
-    `Genre: ${[report.genre, report.subGenre].filter(Boolean).join(" / ")}`,
+    `Status: ${report.status ?? "unset"}`,
+    `Genre: ${[report.genre, report.subGenre].filter(Boolean).join(" / ") || "unset"}`,
     ...(report.form ? [`Form: ${report.form}`] : []),
-    `POV/Tense: ${report.pov} / ${report.tense}`,
+    `POV/Tense: ${report.pov ?? "unset"} / ${report.tense ?? "unset"}`,
     "",
     "Inventory:",
     `- Characters: ${report.counts.characters}`,
@@ -1112,16 +1126,16 @@ export function formatProjectReport(report, options = {}) {
   return `${lines.join("\n")}\n`;
 }
 
-export function projectActions(root) {
+export function projectActions(root, options = {}) {
   const project = scanProject(root);
   const validation = validateProjectOf(project);
   const links = validateLinksOf(project);
   const continuity = checkContinuity(project);
   return {
     root: project.root,
-    title: project.story.data.title,
+    title: project.title,
     storyId: project.storyId,
-    actions: buildProjectActions(project, validation, links, continuity),
+    actions: buildProjectActions(project, validation, links, continuity, options.displayPath),
     validation,
     links,
     continuity
@@ -1159,61 +1173,96 @@ export function formatDoctorReport(report) {
 
 export function reindexProject(root) {
   const project = scanProject(root);
+  assertProjectParses(project, "reindex");
   const changed = [];
-  const charactersIndexPath = path.join(project.root, "characters", "_index.md");
-  const worldIndexPath = path.join(project.root, "worldbuilding", "_index.md");
-  const plotIndexPath = path.join(project.root, "plot", "_index.md");
-  const chaptersIndexPath = path.join(project.root, "chapters", "_index.md");
-  const scenesIndexPath = path.join(project.root, "scenes", "_index.md");
-  const questionsIndexPath = path.join(project.root, "continuity", "questions", "_index.md");
-  const promisesIndexPath = path.join(project.root, "continuity", "promises", "_index.md");
-  const cluesIndexPath = path.join(project.root, "continuity", "clues", "_index.md");
-  const glossaryIndexPath = path.join(project.root, "glossary", "_index.md");
-  const existingCharacters = safeRead(charactersIndexPath, project.root);
-  const existingWorld = safeRead(worldIndexPath, project.root);
-  const existingPlot = safeRead(plotIndexPath, project.root);
-  let plotStructure = 'three-act';
-  if (fs.existsSync(plotIndexPath)) {
-    plotStructure = parseFrontmatter(existingPlot, 'plot/_index.md').data.structure ?? 'three-act';
+  const at = (...parts) => path.join(project.root, ...parts);
+  const existingPlot = readRegistrySource(at("plot", "_index.md"), project.root);
+  let plotStructure = "three-act";
+  if (fs.existsSync(at("plot", "_index.md"))) {
+    plotStructure = parseFrontmatter(existingPlot, "plot/_index.md").data.structure ?? "three-act";
   }
 
-  writeChanged(charactersIndexPath, characterIndex(
+  writeRegistry(at("characters", "_index.md"), (existing) => characterIndex(
     project.storyId,
     project.characters,
-    extractSection(existingCharacters, "Relationship Map"),
-    extractSection(existingCharacters, "Family Trees")
+    extractSection(existing, "Relationship Map"),
+    extractSection(existing, "Family Trees")
   ), changed, project.root);
-  writeChanged(worldIndexPath, worldIndex(
+  writeRegistry(at("worldbuilding", "_index.md"), (existing) => worldIndex(
     project.storyId,
     project.locations,
     project.systems,
     project.factions,
     project.artifacts,
-    extractSection(existingWorld, "World Overview")
+    extractSection(existing, "World Overview")
   ), changed, project.root);
-  writeChanged(plotIndexPath, plotIndex(
+  writeRegistry(at("plot", "_index.md"), (existing) => plotIndex(
     project.storyId,
     plotStructure,
     project.arcs,
-    extractSection(existingPlot, "Story Structure"),
-    extractSection(existingPlot, "Theme Tracking")
+    extractSection(existing, "Story Structure"),
+    extractSection(existing, "Theme Tracking")
   ), changed, project.root);
-  writeChanged(chaptersIndexPath, chapterIndex(project.storyId, project.chapters), changed, project.root);
-  writeChanged(scenesIndexPath, sceneIndex(project.storyId, project.scenes), changed, project.root);
-  writeChanged(questionsIndexPath, questionIndex(project.storyId, project.questions), changed, project.root);
-  writeChanged(promisesIndexPath, promiseIndex(project.storyId, project.promises), changed, project.root);
-  writeChanged(cluesIndexPath, clueIndex(project.storyId, project.clues), changed, project.root);
-  writeChanged(glossaryIndexPath, glossaryIndex(project.storyId, project.glossaryTerms), changed, project.root);
-  if (fs.existsSync(path.join(project.root, MATTER_DIR))) {
-    writeChanged(path.join(project.root, MATTER_DIR, "_index.md"), matterIndex(project.storyId, project.matter), changed, project.root);
+  writeRegistry(at("chapters", "_index.md"), () => chapterIndex(project.storyId, project.chapters), changed, project.root);
+  writeRegistry(at("scenes", "_index.md"), () => sceneIndex(project.storyId, project.scenes), changed, project.root);
+  writeRegistry(at("continuity", "questions", "_index.md"), () => questionIndex(project.storyId, project.questions), changed, project.root);
+  writeRegistry(at("continuity", "promises", "_index.md"), () => promiseIndex(project.storyId, project.promises), changed, project.root);
+  writeRegistry(at("continuity", "clues", "_index.md"), () => clueIndex(project.storyId, project.clues), changed, project.root);
+  writeRegistry(at("glossary", "_index.md"), () => glossaryIndex(project.storyId, project.glossaryTerms), changed, project.root);
+  if (fs.existsSync(at(MATTER_DIR))) {
+    writeRegistry(at(MATTER_DIR, "_index.md"), () => matterIndex(project.storyId, project.matter), changed, project.root);
   }
-  if (fs.existsSync(path.join(project.root, RESEARCH_DIR))) {
-    writeChanged(path.join(project.root, RESEARCH_DIR, "_index.md"), researchIndex(project.storyId, project.research), changed, project.root);
+  if (fs.existsSync(at(RESEARCH_DIR))) {
+    writeRegistry(at(RESEARCH_DIR, "_index.md"), () => researchIndex(project.storyId, project.research), changed, project.root);
   }
-  refreshStoryField(path.join(project.root, "plot", "timeline.md"), project.storyId, changed, project.root);
-  refreshStoryField(path.join(project.root, "continuity", "state.md"), project.storyId, changed, project.root);
+  refreshStoryField(at("plot", "timeline.md"), project.storyId, changed, project.root);
+  refreshStoryField(at("continuity", "state.md"), project.storyId, changed, project.root);
 
   return { changed };
+}
+
+// Commands that rewrite registries or aggregate chapters would silently drop
+// a file that fails to parse, so they stop and name it instead.
+function assertProjectParses(project, action) {
+  // The style sheet and progress log never feed registries or chapters.
+  const errors = (project.fileErrors ?? [])
+    .filter((error) => !error.startsWith(`${STYLE_SHEET_FILE}:`) && !error.startsWith(`${PROGRESS_FILE}:`));
+  if (errors.length > 0) {
+    throw new Error(`Cannot ${action}: fix ${errors.length === 1 ? "this file first (story validate reports it)" : "these files first (story validate reports them)"}:\n${errors.map((error) => `- ${error}`).join("\n")}`);
+  }
+}
+
+function readRegistrySource(filePath, root) {
+  return safeRead(filePath, root).replace(/\r\n/g, "\n");
+}
+
+// Regenerates a registry from its entity files. `build` receives the current
+// registry (LF line endings) to carry over its hand-written sections; any
+// other `## ` section the generator does not produce is appended unchanged,
+// and a CRLF registry stays CRLF.
+function writeRegistry(filePath, build, changed, root) {
+  const raw = safeRead(filePath, root);
+  const existing = raw.replace(/\r\n/g, "\n");
+  const generated = build(existing);
+  const custom = customSections(existing, generated);
+  const contents = custom.length === 0 ? generated : `${generated.replace(/\n*$/, "\n")}\n${custom.join("\n\n")}\n`;
+  writeChanged(filePath, raw.includes("\r\n") ? contents.replace(/\n/g, "\r\n") : contents, changed, root);
+}
+
+function customSections(existing, generated) {
+  const headingPattern = /^## +(.+?)[ \t]*$/gm;
+  const generatedHeadings = new Set([...generated.matchAll(headingPattern)].map((match) => match[1]));
+  const body = existing.replace(/^---\n[\s\S]*?\n---\n/, "");
+  const sections = [];
+  const matches = [...body.matchAll(headingPattern)];
+  for (const [index, match] of matches.entries()) {
+    if (generatedHeadings.has(match[1])) {
+      continue;
+    }
+    const end = index + 1 < matches.length ? matches[index + 1].index : body.length;
+    sections.push(body.slice(match.index, end).trim());
+  }
+  return sections;
 }
 
 function refreshStoryField(filePath, storyId, changed, root) {
@@ -1243,6 +1292,7 @@ function refreshStoryField(filePath, storyId, changed, root) {
 
 export function computeWordCounts(root, options = {}) {
   const project = scanProject(root);
+  assertProjectParses(project, "count words");
   const chapters = [];
 
   for (const chapter of project.chapters) {
@@ -1467,12 +1517,13 @@ export function projectPasses(root, change = {}) {
   }
   const current = asArray(project.story.data["revision-passes"]);
   const next = updatePasses(current, change);
+  const notes = addedPassNotes(readPasses({ "revision-passes": current }), readPasses({ "revision-passes": next }));
   const raw = safeRead(storyPath, project.root);
   const changed = JSON.stringify(next) !== JSON.stringify(current);
   if (changed) {
     writeFile(storyPath, replaceFrontmatter(raw, { ...parseFrontmatter(raw, storyPath).data, "revision-passes": next }), { root: project.root });
   }
-  return { passes: readPasses({ "revision-passes": next }), changed };
+  return { passes: readPasses({ "revision-passes": next }), changed, notes };
 }
 
 // Collision check for candidate names against every name in the bible.
@@ -1538,13 +1589,9 @@ export function proseReport(root) {
 
 export function exportManuscript(root, options = {}) {
   const project = scanProject(root);
-  if (project.chapters.length === 0) {
-    throw new Error("No chapters found to export");
-  }
-
-  const output = resolveOutputPath(project, options.out, "manuscript.md", options.enforceRoot);
+  const manuscript = manuscriptParts(project, options.generatedBy === undefined ? "export" : "build");
+  const output = resolveOutputPath(project, options.out, path.join("dist", "manuscript.md"), options.enforceRoot);
   const generatedBy = options.generatedBy ?? "story export";
-  const manuscript = manuscriptParts(project);
   const lines = [`# ${manuscript.title}`, "", `<!-- Generated by ${generatedBy}. -->`, ""];
   const pushMatter = (entry) => {
     if (entry.heading) {
@@ -1565,9 +1612,15 @@ export function exportManuscript(root, options = {}) {
 
 export function buildBook(root, options = {}) {
   const format = normalizeBuildFormat(options.format ?? "markdown");
+  if (options.trim !== undefined && format !== "print") {
+    throw new Error("--trim applies only to --format print");
+  }
+  if (options.shunn && format !== "docx") {
+    throw new Error("--shunn applies only to --format docx (use --format shunn for a Shunn markdown manuscript)");
+  }
   const project = scanProject(root);
   const extension = BUILD_EXTENSIONS[format];
-  const output = resolveOutputPath(project, options.out, path.join("dist", `${project.storyId}.${extension}`));
+  const output = resolveOutputPath(project, options.out, path.join("dist", `${fileStem(project.storyId)}.${extension}`));
 
   if (format === "markdown") {
     const result = exportManuscript(project.root, {
@@ -1620,8 +1673,9 @@ export function synopsisBook(root, options = {}) {
   }
 
   const project = scanProject(root);
+  assertProjectParses(project, "build a synopsis");
   const budget = pages === 1 ? 500 : 1500;
-  const title = project.story.data.title ?? project.storyId;
+  const title = project.title;
   const premise = synopsisPremise(project);
 
   let text = renderSynopsis(title, premise, project, 0);
@@ -1638,14 +1692,45 @@ export function synopsisBook(root, options = {}) {
   if (options.out === undefined) {
     return { text };
   }
-  const output = resolveOutputPath(project, options.out, path.join("dist", `${project.storyId}.synopsis.md`));
+  const output = resolveOutputPath(project, options.out, path.join("dist", `${fileStem(project.storyId)}.synopsis.md`));
   writeFile(output.outFile, text, output.writeOptions);
   return { text, outFile: output.outFile };
 }
 
+// Starter text that init, import, and add arc write. A synopsis must never
+// quote it as if it were the story.
+const SCAFFOLD_SENTENCES = new Set([
+  "Add a 2-3 sentence synopsis here.",
+  "Replace with a 2-3 sentence synopsis.",
+  "Initial state and inciting pressure.",
+  "First escalation.",
+  "Second escalation.",
+  "Reversal or complication.",
+  "Decision point or highest tension.",
+  "What changes because of this arc."
+]);
+
 function synopsisPremise(project) {
-  const sentences = splitSentences(extractSection(project.story.body, "Synopsis"));
+  const sentences = synopsisSentences(extractSection(project.story.body, "Synopsis"))
+    .filter((sentence) => !/^Imported from .+\.$/.test(sentence));
   return sentences.length > 0 ? sentences[0] : "No premise recorded.";
+}
+
+// Sentences of a synopsis section: list markers are dropped and each list
+// item ends as a sentence, and scaffold text is skipped.
+function synopsisSentences(section) {
+  const text = String(section)
+    .split(/\r?\n/)
+    .map((line) => {
+      const item = /^\s*(?:[-*+]|\d+[.)])\s+(.*)$/.exec(line);
+      if (!item) {
+        return line;
+      }
+      const content = item[1].trim();
+      return /[.!?]$/.test(content) ? content : `${content}.`;
+    })
+    .join("\n");
+  return splitSentences(text).filter((sentence) => !SCAFFOLD_SENTENCES.has(sentence));
 }
 
 function splitSentences(text) {
@@ -1664,7 +1749,7 @@ function splitSentences(text) {
     if (!boundary || abbreviation) {
       continue;
     }
-    sentences.push(normalized.slice(start, index + 1));
+    sentences.push(normalized.slice(start, index + 1).trim());
     start = index + 1;
   }
   const tail = normalized.slice(start).trim();
@@ -1675,7 +1760,7 @@ function splitSentences(text) {
 }
 
 function takeSentences(text, count) {
-  return splitSentences(text).slice(0, count);
+  return synopsisSentences(text).slice(0, count);
 }
 
 function renderSynopsis(title, premise, project, level) {
@@ -1703,16 +1788,34 @@ function renderSynopsis(title, premise, project, level) {
   return `${lines.join("\n").trimEnd()}\n`;
 }
 
+// Cuts the synopsis at the word budget line by line, so headings and
+// paragraph breaks survive and only the last paragraph is cut short.
 function truncateWords(text, budget) {
-  const tokens = text.split(/\s+/).filter((word) => word !== "");
   const kept = [];
-  for (const token of tokens) {
-    if (wordCount(kept.concat(token).join(" ")) > budget) {
-      break;
+  let used = 0;
+  for (const line of text.trimEnd().split("\n")) {
+    const words = wordCount(line);
+    if (used + words <= budget) {
+      kept.push(line);
+      used += words;
+      continue;
     }
-    kept.push(token);
+    const tokens = [];
+    for (const token of line.split(/\s+/).filter((part) => part !== "")) {
+      const tokenWords = wordCount(token);
+      if (used + tokenWords > budget) {
+        break;
+      }
+      tokens.push(token);
+      used += tokenWords;
+    }
+    if (tokens.length > 0 && !/^#/.test(line)) {
+      kept.push(tokens.join(" "));
+    }
+    break;
   }
-  return `${kept.join(" ")}…\n`;
+  // Never end on a blank line or a heading with nothing under it.
+  return `${kept.join("\n").replace(/(?:\n(?:#[^\n]*)?[ \t]*)+$/, "")}…\n`;
 }
 
 function shunnMeta(project) {
@@ -1729,18 +1832,11 @@ export function migrateProject(root) {
   const projectRoot = path.resolve(root);
   const storyPath = requireStoryFile(projectRoot);
   const story = readMarkdown(storyPath, projectRoot);
-  const storyId = kebabCase(story.data.title ?? path.basename(projectRoot));
+  assertProjectParses(scanProject(projectRoot), "migrate");
+  const storyId = deriveStoryId(story.data.title, projectRoot);
   const changed = [];
 
-  for (const directory of [
-    path.join("worldbuilding", "factions"),
-    path.join("worldbuilding", "artifacts"),
-    "scenes",
-    path.join("continuity", "questions"),
-    path.join("continuity", "promises"),
-    path.join("continuity", "clues"),
-    path.join("glossary", "terms")
-  ]) {
+  for (const directory of PROJECT_DIRECTORIES) {
     ensureDirectory(path.join(projectRoot, directory), changed, projectRoot);
   }
 
@@ -1789,6 +1885,7 @@ function requireEntityEnumOptions(kind, options) {
 
 export function createEntity(root, options) {
   const project = scanProject(root);
+  assertProjectParses(project, "add");
   const kind = normalizeKind(options.kind);
   requireEntityEnumOptions(kind, options);
   const name = String(options.name ?? "").trim();
@@ -1809,6 +1906,7 @@ export function createEntity(root, options) {
 
 export function renameEntity(root, options) {
   const project = scanProject(root);
+  assertProjectParses(project, "rename");
   const kind = normalizeKind(options.kind);
   const oldId = String(options.id ?? "").trim();
   const name = String(options.name ?? "").trim();
@@ -1838,7 +1936,7 @@ export function renameEntity(root, options) {
   }
 
   const data = { ...markdown.data, [config.titleField]: name };
-  const retitled = replaceFrontmatter(markdown.rawMarkdown, data);
+  const retitled = retitleHeading(replaceFrontmatter(markdown.rawMarkdown, data), markdown.data[config.titleField], name);
   if (newFile === oldFile) {
     writeFile(oldFile, retitled, { root: project.root });
   } else {
@@ -1856,8 +1954,20 @@ export function renameEntity(root, options) {
   return { kind, oldId, id: newId, file: newFile, changed: [newFile].concat(reindexed.changed) };
 }
 
+// Updates the first heading that shows the old name (`# Old Name`, or
+// `# Chapter 3: Old Name`) so the file body matches its new frontmatter.
+function retitleHeading(markdown, oldName, newName) {
+  const oldText = String(oldName ?? "").trim();
+  const match = FRONTMATTER_PATTERN.exec(markdown);
+  const header = match ? match[0] : "";
+  const body = markdown.slice(header.length);
+  const heading = new RegExp(`^(#[ \\t]+(?:Chapter \\d+:[ \\t]+)?)${escapeRegExp(oldText)}([ \\t]*)(?=\\r?$)`, "m");
+  return `${header}${body.replace(heading, (whole, prefix, trailing) => `${prefix}${newName}${trailing}`)}`;
+}
+
 export function removeEntity(root, options) {
   const project = scanProject(root);
+  assertProjectParses(project, "remove");
   const kind = normalizeKind(options.kind);
   const id = String(options.id ?? "").trim();
   if (!id) {
@@ -1870,6 +1980,15 @@ export function removeEntity(root, options) {
   assertSafeProjectPath(file, project.root);
   if (!fs.existsSync(file)) {
     throw new Error(`${kind} ${id} does not exist`);
+  }
+
+  if (kind === "chapter") {
+    // A scene's chapter is required, so scrubbing it would leave the scene
+    // invalid; the scenes go first.
+    const scenes = project.scenes.filter((scene) => scene.chapter === id);
+    if (scenes.length > 0) {
+      throw new Error(`chapter ${id} still has scenes: ${scenes.map((scene) => scene.id).join(", ")}. Remove them first with story remove scene <id>`);
+    }
   }
 
   const plan = removeEntityReferences(project.root, kind, id, new Map([[file, null]]));
@@ -2229,19 +2348,23 @@ Why each \`watch-words\` entry is there.
 `;
 }
 
-function buildProjectActions(project, validation, links, continuity) {
+// `displayPath` is the project path as the user typed it, so suggested
+// commands run from where the user is; it defaults to ".".
+function buildProjectActions(project, validation, links, continuity, displayPath = ".") {
+  const where = shellWord(displayPath);
+  const passesCommand = where === "." ? "story passes" : `story passes ${where}`;
   const actions = [];
   if (validation.errors.length > 0) {
-    actions.push(action("P0", "Fix validation errors", `Run story validate . and repair ${validation.errors.length} schema or registry errors.`));
+    actions.push(action("P0", "Fix validation errors", `Run story validate ${where} and repair ${validation.errors.length} schema or registry errors.`));
   }
   if (links.errors.length > 0) {
-    actions.push(action("P0", "Fix broken references", `Run story links . and repair ${links.errors.length} missing references or backlinks.`));
+    actions.push(action("P0", "Fix broken references", `Run story links ${where} and repair ${links.errors.length} missing references or backlinks.`));
   }
   if (continuity.errors.length > 0) {
-    actions.push(action("P0", "Fix continuity contradictions", `Run story continuity . and repair ${continuity.errors.length} deterministic continuity errors.`));
+    actions.push(action("P0", "Fix continuity contradictions", `Run story continuity ${where} and repair ${continuity.errors.length} deterministic continuity errors.`));
   }
   if (continuity.warnings.length > 0) {
-    actions.push(action("P1", "Review continuity warnings", `Run story continuity . and review ${continuity.warnings.length} continuity warnings.`));
+    actions.push(action("P1", "Review continuity warnings", `Run story continuity ${where} and review ${continuity.warnings.length} continuity warnings.`));
   }
   const staleChapters = [];
   const chaptersWithoutScenes = [];
@@ -2264,7 +2387,7 @@ function buildProjectActions(project, validation, links, continuity) {
     }
   }
   if (staleChapters.length > 0) {
-    actions.push(action("P1", "Refresh word counts", `Run story wordcount . --write for ${staleChapters.length} chapters with stale counts.`));
+    actions.push(action("P1", "Refresh word counts", `Run story wordcount ${where} --write for ${staleChapters.length} chapters with stale counts.`));
   }
   if (chaptersWithoutScenes.length > 0) {
     actions.push(action("P1", "Add scene records", `Create machine-readable scene files for ${chaptersWithoutScenes.length} chapters so continuity has durable state.`));
@@ -2300,11 +2423,11 @@ function buildProjectActions(project, validation, links, continuity) {
     const passes = readPasses(project.story.data);
     const upcoming = nextPass(passes);
     if (passes.length === 0) {
-      actions.push(action("P1", "Plan revision passes", "Run story passes --init to record the structure-to-proof pass ladder, then work one pass at a time."));
+      actions.push(action("P1", "Plan revision passes", `Run ${passesCommand} --init to record the structure-to-proof pass ladder, then work one pass at a time.`));
     } else if (upcoming !== null) {
       const known = DEFAULT_PASSES.find((entry) => entry.pass === upcoming.pass);
       const checks = known ? ` Run ${known.checks.join(", ")}.` : "";
-      actions.push(action("P1", `Revision pass: ${upcoming.pass}`, `${known ? `${known.focus}.` : "Work through this pass."}${checks} Mark it with story passes --done ${upcoming.pass}.`));
+      actions.push(action("P1", `Revision pass: ${upcoming.pass}`, `${known ? `${known.focus}.` : "Work through this pass."}${checks} Mark it with ${passesCommand} --done ${upcoming.pass}.`));
     }
   }
   const activeArcNames = [];
@@ -2316,9 +2439,9 @@ function buildProjectActions(project, validation, links, continuity) {
   const nextLabel = activeArcNames.length > 0
     ? `advance ${activeArcNames.join(", ")}`
     : "establish the next story beat";
-  actions.push(action("P2", `Draft chapter ${nextNumber}`, `Use story add chapter "Chapter ${nextNumber}" --number ${nextNumber}, then outline scenes to ${nextLabel}.`));
+  actions.push(action("P2", `Draft chapter ${nextNumber}`, `Use story add chapter "Chapter ${nextNumber}" --number ${nextNumber}${where === "." ? "" : ` --path ${where}`}, then outline scenes to ${nextLabel}.`));
   if (project.characters.length === 0) {
-    actions.push(action("P2", "Create first character", "Use story add character \"Name\" --role protagonist before drafting prose."));
+    actions.push(action("P2", "Create first character", `Use story add character "Name" --role protagonist${where === "." ? "" : ` --path ${where}`} before drafting prose.`));
   }
   // Array#sort is stable (ES2019+), so actions sharing a priority keep their insertion order.
   actions.sort((left, right) => left.priority.localeCompare(right.priority));
@@ -2326,6 +2449,11 @@ function buildProjectActions(project, validation, links, continuity) {
     actions.unshift(action("P3", "Project is mechanically healthy", "No deterministic maintenance issues are blocking the next writing pass."));
   }
   return actions;
+}
+
+function shellWord(value) {
+  const text = String(value);
+  return /^[A-Za-z0-9_./~:@%+=,-]+$/.test(text) ? text : `'${text.replace(/'/g, "'\\''")}'`;
 }
 
 function action(priority, title, detail) {
@@ -2392,8 +2520,6 @@ function buildEntity(project, kind, name, options) {
       return entityResult(project, kind, id, matterFile(project, name, options));
     case "research":
       return entityResult(project, kind, id, researchFile(name, options));
-    default:
-      entityConfig(kind);
   }
 }
 
@@ -2419,11 +2545,8 @@ function entityConfig(kind) {
     matter: { dir: MATTER_DIR, titleField: "title" },
     research: { dir: RESEARCH_DIR, titleField: "title" }
   };
-  const config = configs[kind];
-  if (!config) {
-    throw new Error(`Unsupported entity kind: ${kind}`);
-  }
-  return config;
+  // normalizeKind has already rejected unknown kinds.
+  return configs[kind];
 }
 
 const KIND_ALIASES = {
@@ -2462,7 +2585,14 @@ const KIND_ALIASES = {
 
 function normalizeKind(kind) {
   const normalized = String(kind ?? '').trim().toLowerCase();
-  return KIND_ALIASES[normalized] ?? normalized;
+  const expected = [...new Set(Object.values(KIND_ALIASES))].join(', ');
+  if (normalized === '') {
+    throw new Error(`An entity kind is required: expected one of ${expected}`);
+  }
+  if (!Object.hasOwn(KIND_ALIASES, normalized)) {
+    throw new Error(`Unsupported entity kind: ${kind}: expected one of ${expected}`);
+  }
+  return KIND_ALIASES[normalized];
 }
 
 function requireKebabId(id, label) {
@@ -2705,7 +2835,7 @@ function chapterFile(title, number, options) {
     number,
     pov: options.pov ?? "",
     locations: normalizeList(options.locations ?? options.location, []),
-    characters: normalizeList(options.characters ?? options.character, []),
+    characters: castWithPov(options),
     mentions: normalizeList(options.mentions ?? options.mention, []),
     "arcs-advanced": normalizeList(options.arcs ?? options.arc, []),
     status: options.status ?? "outline",
@@ -2755,7 +2885,7 @@ function sceneFile(title, chapter, scene, options) {
     scene,
     pov: options.pov ?? "",
     location: options.location ?? "",
-    characters: normalizeList(options.characters ?? options.character, []),
+    characters: castWithPov(options),
     mentions: normalizeList(options.mentions ?? options.mention, []),
     "arcs-advanced": normalizeList(options.arcs ?? options.arc, []),
     status: options.status ?? "outline",
@@ -2781,10 +2911,23 @@ Character state, object state, knowledge changes, and timeline facts.
 `;
 }
 
+// The POV character is on the page, so it belongs in the cast; continuity
+// warns about a POV missing from `characters`.
+function castWithPov(options) {
+  const characters = normalizeList(options.characters ?? options.character, []);
+  const pov = String(options.pov ?? "").trim();
+  return pov === "" || characters.includes(pov) ? characters : [pov, ...characters];
+}
+
 function questionFile(title, options) {
+  const resolved = String(options.resolved ?? "").trim();
+  if (resolved !== "" && options.status === "open") {
+    throw new Error("A question with --resolved cannot have status open: use --status answered or resolved");
+  }
   return `${stringifyFrontmatter({
     title,
-    status: options.status ?? "open",
+    // A resolved chapter means the answer is on the page.
+    status: options.status ?? (resolved === "" ? "open" : "answered"),
     introduced: options.introduced ?? "",
     resolved: options.resolved ?? "",
     characters: normalizeList(options.characters ?? options.character, [])
@@ -3096,6 +3239,9 @@ function planReferenceRewrites(root, context, overrides, transform, transformBod
       text = fs.readFileSync(file, "utf8");
     }
     const match = FRONTMATTER_PATTERN.exec(text);
+    if (!match && isProjectSourceFile(root, file)) {
+      throw new Error(`${path.relative(root, file)} is missing YAML frontmatter; nothing was changed`);
+    }
     let header = "";
     let body = text;
     if (match) {
@@ -3109,7 +3255,10 @@ function planReferenceRewrites(root, context, overrides, transform, transformBod
         } catch (error) {
           throw new Error(`${path.relative(root, file)}: ${error.message}; nothing was changed`);
         }
-        const nextData = transformReferences(data, transform, context);
+        let nextData = transformReferences(data, transform, context);
+        if (context.kind === "chapter") {
+          nextData = reconcileChapterStatuses(data, nextData);
+        }
         if (JSON.stringify(nextData) !== JSON.stringify(data)) {
           header = replaceFrontmatter(header, nextData);
         }
@@ -3121,6 +3270,31 @@ function planReferenceRewrites(root, context, overrides, transform, transformBod
     }
   }
   return plan;
+}
+
+// Entity files and registries always carry frontmatter, so one without it is
+// broken and must not be skipped. Other markdown (a README, drafts) may be
+// plain.
+function isProjectSourceFile(root, file) {
+  const relativePath = path.relative(root, file);
+  const [first] = relativePath.split(path.sep);
+  return SOURCE_ROOT_FILES.has(relativePath) || SOURCE_DIRECTORIES.includes(first);
+}
+
+// Clearing a removed chapter from a promise, clue, or question also walks
+// back a status that claimed the cleared chapter had happened.
+function reconcileChapterStatuses(before, after) {
+  const next = { ...after };
+  if (before.planted && !next.planted && (next.status === "planted" || next.status === "paid-off")) {
+    next.status = "planned";
+  }
+  if (before.payoff && !next.payoff && next.status === "paid-off") {
+    next.status = "planted";
+  }
+  if (before.resolved && !next.resolved && (next.status === "answered" || next.status === "resolved")) {
+    next.status = "open";
+  }
+  return next;
 }
 
 function writeReferencePlan(root, plan) {
@@ -3234,9 +3408,16 @@ function markdownFiles(root, depth = 0, collected = null) {
   return files;
 }
 
-function manuscriptParts(project) {
+function manuscriptParts(project, action = "build") {
+  assertProjectParses(project, action);
   if (project.chapters.length === 0) {
     throw new Error("No chapters found to export");
+  }
+
+  for (const chapter of project.chapters) {
+    if (!chapter.numberValid || chapter.number <= 0) {
+      throw new Error(`${relative(project, chapter.file)}: chapter number must be a positive integer to build`);
+    }
   }
 
   const seenNumbers = new Set();
@@ -3285,7 +3466,7 @@ function manuscriptParts(project) {
   }
 
   return {
-    title: project.story.data.title,
+    title: project.title,
     author: meta.authors.join(" and "),
     meta,
     front,
@@ -3307,9 +3488,11 @@ function epubModifiedTimestamp() {
   // instead of the current time so local builds are deterministic too.
   const raw = process.env.SOURCE_DATE_EPOCH;
   if (raw !== undefined && raw !== "") {
-    const seconds = Number(raw);
-    if (Number.isFinite(seconds)) {
-      return new Date(seconds * 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
+    // Only whole seconds that give a four-digit year are used; anything else
+    // (a fraction, 1e20) falls back to the default like a non-number does.
+    const date = /^\d+$/.test(raw.trim()) ? new Date(Number(raw.trim()) * 1000) : null;
+    if (date !== null && !Number.isNaN(date.getTime()) && date.getUTCFullYear() <= 9999) {
+      return date.toISOString().replace(/\.\d{3}Z$/, "Z");
     }
   }
   return "2000-01-01T00:00:00Z";
@@ -3406,10 +3589,7 @@ function epubAccessibilityMeta(hasCover) {
 function xhtmlParagraphs(body) {
   const paragraphs = [];
   for (const paragraph of markdownParagraphs(body)) {
-    const runs = inlineRuns(paragraph).map((run) => {
-      const text = xmlEscape(run.text);
-      return run.style ? `<${run.style}>${text}</${run.style}>` : text;
-    });
+    const runs = inlineRuns(paragraph).map((run) => runMarkup(run, xmlEscape));
     paragraphs.push(`<p>${runs.join("")}</p>`);
   }
   return paragraphs.join("");
@@ -3435,7 +3615,7 @@ function matterXhtml(entry, placement = "front", lang = "en") {
 function htmlBook(manuscript) {
   const paragraphs = (body) => markdownParagraphs(body).map((paragraph) => (paragraph === "* * *"
     ? null
-    : inlineRuns(paragraph).map((run) => (run.style ? `<${run.style}>${escapeHtml(run.text)}</${run.style}>` : escapeHtml(run.text))).join("")));
+    : inlineRuns(paragraph).map((run) => runMarkup(run, escapeHtml)).join("")));
   const matter = (placement) => (entry) => ({
     key: `${placement}-${entry.id}`,
     kind: entry.copyright ? `${placement} copyright-page` : placement,
@@ -3506,13 +3686,7 @@ function shunnRunXml(text, decoration) {
 }
 
 function shunnTextRunXml(run) {
-  if (run.style === "strong") {
-    return shunnRunXml(run.text, "<w:b/>");
-  }
-  if (run.style === "em") {
-    return shunnRunXml(run.text, "<w:i/>");
-  }
-  return shunnRunXml(run.text, "");
+  return shunnRunXml(run.text, `${run.strong ? "<w:b/>" : ""}${run.em ? "<w:i/>" : ""}`);
 }
 
 function shunnParagraphXml(runXml, centered) {
@@ -3570,47 +3744,127 @@ function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {}) {
   writeFile(outFile, `${lines.join("\n").trimEnd()}\n`, writeOptions);
 }
 
-function paragraphXml(text, style = "", runs = [{ text, style: "" }]) {
+function paragraphXml(text, style = "", runs = [{ text }]) {
   const styleXml = style ? `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>` : "";
   const runXml = runs.map((run) => {
-    const runStyle = run.style === "strong" ? "<w:rPr><w:b/></w:rPr>" : run.style === "em" ? "<w:rPr><w:i/></w:rPr>" : "";
+    const decoration = `${run.strong ? "<w:b/>" : ""}${run.em ? "<w:i/>" : ""}`;
+    const runStyle = decoration === "" ? "" : `<w:rPr>${decoration}</w:rPr>`;
     return `<w:r>${runStyle}<w:t xml:space="preserve">${xmlEscape(run.text)}</w:t></w:r>`;
   });
   return `<w:p>${styleXml}${runXml.join("")}</w:p>`;
 }
 
-// Markdown emphasis: **bold** / __bold__ and *italic* / _italic_. The marked
-// text must start and end with a non-space character, as in CommonMark.
-const INLINE_EMPHASIS_PATTERN = /(\*\*|__)(\S(?:[\s\S]*?\S)?)\1|(\*|_)(\S(?:[^*_]*?\S)?)\3/g;
-
-// Underscores inside a word (snake_case_word) are literal, as in CommonMark.
-function isIntrawordUnderscore(text, match) {
-  const delimiter = match[1] ?? match[3];
-  if (!delimiter.startsWith("_")) {
-    return false;
-  }
-  const before = text[match.index - 1] ?? " ";
-  const after = text[match.index + match[0].length] ?? " ";
-  return /[\p{L}\p{N}]/u.test(before) || /[\p{L}\p{N}]/u.test(after);
-}
-
+// Markdown emphasis: **bold** / __bold__, *italic* / _italic_, and both
+// nested (***both***, *a **b** c*), following the CommonMark delimiter rules:
+// a run opens when it is left-flanking and closes when right-flanking, an
+// underscore inside a word is literal, and a backslash escapes punctuation.
+// Returns runs of { text, strong, em }.
 function inlineRuns(text) {
-  const runs = [];
-  let last = 0;
-  for (const match of text.matchAll(INLINE_EMPHASIS_PATTERN)) {
-    if (isIntrawordUnderscore(text, match)) {
+  const nodes = [];
+  let buffer = "";
+  const isSpace = (char) => char === undefined || /\s/u.test(char);
+  const isPunct = (char) => char !== undefined && /[\p{P}\p{S}]/u.test(char);
+  for (let index = 0; index < text.length;) {
+    const char = text[index];
+    if (char === "\\" && /[!-/:-@[-`{-~]/.test(text[index + 1] ?? "")) {
+      buffer += text[index + 1];
+      index += 2;
       continue;
     }
-    if (match.index > last) {
-      runs.push({ text: text.slice(last, match.index), style: "" });
+    if (char !== "*" && char !== "_") {
+      buffer += char;
+      index += 1;
+      continue;
     }
-    runs.push(match[1] ? { text: match[2], style: "strong" } : { text: match[4], style: "em" });
-    last = match.index + match[0].length;
+    let end = index;
+    while (text[end] === char) {
+      end += 1;
+    }
+    if (buffer !== "") {
+      nodes.push({ text: buffer });
+      buffer = "";
+    }
+    const before = text[index - 1];
+    const after = text[end];
+    const left = !isSpace(after) && (!isPunct(after) || isSpace(before) || isPunct(before));
+    const right = !isSpace(before) && (!isPunct(before) || isSpace(after) || isPunct(after));
+    nodes.push({
+      delimiter: char,
+      count: end - index,
+      original: end - index,
+      open: char === "*" ? left : left && (!right || isPunct(before)),
+      close: char === "*" ? right : right && (!left || isPunct(after)),
+      strong: 0,
+      em: 0
+    });
+    index = end;
   }
-  if (last < text.length) {
-    runs.push({ text: text.slice(last), style: "" });
+  if (buffer !== "") {
+    nodes.push({ text: buffer });
+  }
+
+  for (let closeIndex = 0; closeIndex < nodes.length; closeIndex += 1) {
+    const closer = nodes[closeIndex];
+    while (closer.delimiter && closer.close && closer.count > 0) {
+      let openIndex = closeIndex - 1;
+      while (openIndex >= 0 && !canPairEmphasis(nodes[openIndex], closer)) {
+        openIndex -= 1;
+      }
+      if (openIndex < 0) {
+        break;
+      }
+      const opener = nodes[openIndex];
+      const used = opener.count >= 2 && closer.count >= 2 ? 2 : 1;
+      opener.count -= used;
+      closer.count -= used;
+      for (let inner = openIndex + 1; inner < closeIndex; inner += 1) {
+        nodes[inner][used === 2 ? "strong" : "em"] = (nodes[inner][used === 2 ? "strong" : "em"] ?? 0) + 1;
+        if (nodes[inner].delimiter) {
+          // Delimiters inside a matched pair can no longer pair outward.
+          nodes[inner].open = false;
+          nodes[inner].close = false;
+        }
+      }
+    }
+  }
+
+  const runs = [];
+  for (const node of nodes) {
+    const value = node.delimiter ? node.delimiter.repeat(node.count) : node.text;
+    if (value === "") {
+      continue;
+    }
+    const strong = (node.strong ?? 0) > 0;
+    const em = (node.em ?? 0) > 0;
+    const previous = runs[runs.length - 1];
+    if (previous && previous.strong === strong && previous.em === em) {
+      previous.text += value;
+    } else {
+      runs.push({ text: value, strong, em });
+    }
   }
   return runs;
+}
+
+function canPairEmphasis(opener, closer) {
+  if (opener.delimiter !== closer.delimiter || !opener.open || opener.count === 0) {
+    return false;
+  }
+  // CommonMark's rule of three: in *foo**bar* the ** cannot close the *.
+  const both = opener.close || closer.open;
+  return !(both && (opener.original + closer.original) % 3 === 0 && !(opener.original % 3 === 0 && closer.original % 3 === 0));
+}
+
+// HTML or XHTML markup for one run; `escape` is the matching text escaper.
+function runMarkup(run, escape) {
+  let markup = escape(run.text);
+  if (run.em) {
+    markup = `<em>${markup}</em>`;
+  }
+  if (run.strong) {
+    markup = `<strong>${markup}</strong>`;
+  }
+  return markup;
 }
 
 // A thematic break: three or more of the same marker, optionally spaced.
@@ -3635,6 +3889,11 @@ function markdownParagraphs(markdown) {
   return paragraphs;
 }
 
+// Every entry is stamped 1980-01-01 00:00, the earliest valid MS-DOS date
+// (day and month are 1-based, so an all-zero field is invalid), which keeps
+// builds byte-identical.
+const ZIP_DOS_DATE = (0 << 9) | (1 << 5) | 1;
+
 function writeZip(outFile, entries, writeOptions = {}) {
   const localParts = [];
   const centralParts = [];
@@ -3650,7 +3909,7 @@ function writeZip(outFile, entries, writeOptions = {}) {
     localHeader.writeUInt16LE(0, 6);
     localHeader.writeUInt16LE(0, 8);
     localHeader.writeUInt16LE(0, 10);
-    localHeader.writeUInt16LE(0, 12);
+    localHeader.writeUInt16LE(ZIP_DOS_DATE, 12);
     localHeader.writeUInt32LE(crc, 14);
     localHeader.writeUInt32LE(content.length, 18);
     localHeader.writeUInt32LE(content.length, 22);
@@ -3665,7 +3924,7 @@ function writeZip(outFile, entries, writeOptions = {}) {
     centralHeader.writeUInt16LE(0, 8);
     centralHeader.writeUInt16LE(0, 10);
     centralHeader.writeUInt16LE(0, 12);
-    centralHeader.writeUInt16LE(0, 14);
+    centralHeader.writeUInt16LE(ZIP_DOS_DATE, 14);
     centralHeader.writeUInt32LE(crc, 16);
     centralHeader.writeUInt32LE(content.length, 20);
     centralHeader.writeUInt32LE(content.length, 24);
@@ -3713,8 +3972,13 @@ for (let index = 0; index < 256; index += 1) {
   CRC_TABLE.push(value >>> 0);
 }
 
+// XML 1.0 forbids most C0 control characters, U+FFFE, U+FFFF, and unpaired
+// surrogates even when escaped, so they are dropped.
+const XML_INVALID_CHARACTERS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+
 function xmlEscape(value) {
   return String(value)
+    .replace(XML_INVALID_CHARACTERS, "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
@@ -3761,7 +4025,9 @@ function readEntityFiles(root, relativeDir, mapEntity, scanErrors) {
     } catch (error) {
       // Every caller passes a scanErrors array, so per-file failures are
       // always collected instead of thrown.
-      scanErrors.push(`${label}: ${error.message}`);
+      // Parse errors name the absolute path; the label already names the file.
+      const message = error.message.startsWith(`${fullPath} `) ? error.message.slice(fullPath.length + 1) : error.message;
+      scanErrors.push(`${label}: ${message}`);
     }
   }
   return entities;
@@ -3979,10 +4245,40 @@ function extractMarkdownLinkTargets(body) {
   return targets;
 }
 
+// Build artifacts are named after the story id; keep the name well inside
+// file-system limits (255 bytes) for very long titles.
+function fileStem(storyId) {
+  if (storyId.length <= 100) {
+    return storyId;
+  }
+  const cut = storyId.slice(0, 100);
+  return cut.slice(0, cut.lastIndexOf("-") > 0 ? cut.lastIndexOf("-") : 100);
+}
+
+// Paths that hold project source. Generated output must never land there:
+// an --out pointing at a chapter would silently replace the prose.
+const SOURCE_ROOT_FILES = new Set(["story.md", STYLE_SHEET_FILE, PROGRESS_FILE]);
+const SOURCE_DIRECTORIES = ["characters", "chapters", "scenes", "worldbuilding", "plot", "continuity", "glossary", MATTER_DIR, RESEARCH_DIR];
+
+function assertNotProjectSource(project, outFile) {
+  const relativePath = path.relative(project.root, outFile);
+  if (relativePath === "" || relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+    return;
+  }
+  const [first] = relativePath.split(path.sep);
+  if (SOURCE_ROOT_FILES.has(relativePath) || SOURCE_DIRECTORIES.includes(first)) {
+    throw new Error(`Refusing to write generated output to ${relativePath}: it is project source. Use a path such as dist/ instead`);
+  }
+}
+
 function resolveOutputPath(project, out, defaultRelativePath, enforceRoot) {
   const rawOut = out ?? defaultRelativePath;
   const outFile = path.resolve(project.root, rawOut);
   const shouldEnforceRoot = enforceRoot ?? !path.isAbsolute(String(rawOut));
+  assertNotProjectSource(project, outFile);
+  if (lstatIfExists(outFile)?.isDirectory()) {
+    throw new Error(`--out ${rawOut} is a directory: give a file path`);
+  }
   return {
     outFile,
     enforceRoot: shouldEnforceRoot,
@@ -4213,6 +4509,10 @@ function validateFormRange(project, warnings) {
 function validateIndexFrontmatter(project, errors) {
   for (const [relativePath, expectedType] of INDEX_SCHEMAS) {
     const label = relativePath;
+    // A missing registry is already reported as a missing required path.
+    if (!fs.existsSync(path.join(project.root, relativePath))) {
+      continue;
+    }
     const data = readValidationData(path.join(project.root, relativePath), project.root, label, errors);
     if (!data) {
       continue;
@@ -4959,6 +5259,15 @@ function requireFields(data, fields, label, errors) {
 
 const CHAPTER_FILENAME_PATTERN = /^chapter-(\d+)\.md$/;
 const SCENE_FILENAME_PATTERN = /^(.+)-scene-(\d+)\.md$/;
+
+function isPositiveIntegerValue(value) {
+  const number = Number(value);
+  return value !== "" && value !== null && typeof value !== "boolean" && Number.isInteger(number) && number > 0;
+}
+
+function chapterNumber(value, file) {
+  return value !== undefined && isPositiveIntegerValue(value) ? Number(value) : chapterNumberFromFile(file);
+}
 
 function chapterNumberFromFile(file) {
   const match = CHAPTER_FILENAME_PATTERN.exec(path.basename(file));

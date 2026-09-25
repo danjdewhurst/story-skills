@@ -1,0 +1,465 @@
+import { describe, expect, test } from "bun:test";
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import { runCli } from "../src/cli.js";
+import { importManuscript } from "../src/import.js";
+import {
+  buildBook,
+  checkProjectContinuity,
+  computeWordCounts,
+  createEntity,
+  createStoryProject,
+  diagramProject,
+  exportManuscript,
+  migrateProject,
+  pacingReport,
+  projectActions,
+  projectPasses,
+  proseReport,
+  reindexProject,
+  removeEntity,
+  renameEntity,
+  scanProject,
+  synopsisBook,
+  validateLinks,
+  validateProject
+} from "../src/story.js";
+import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+
+function invoke(cwd, argv) {
+  const io = memoryIo(cwd);
+  const code = runCli(argv, io);
+  return { code, out: io.output(), err: io.error() };
+}
+
+function newProject(title = "Sweep") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title }).root;
+}
+
+function appendProse(root, file, prose) {
+  fs.appendFileSync(path.join(root, file), `\n${prose}\n`);
+}
+
+describe("project structure", () => {
+  test("a fresh project validates after a git round trip drops its empty folders", () => {
+    const root = newProject();
+    for (const dir of ["worldbuilding/locations", "worldbuilding/systems", "plot/arcs", "glossary/terms"]) {
+      fs.rmSync(path.join(root, dir), { recursive: true });
+    }
+    expect(validateProject(root).errors).toEqual([]);
+    createEntity(root, { kind: "location", name: "Port" });
+    expect(fs.existsSync(path.join(root, "worldbuilding", "locations", "port.md"))).toBe(true);
+  });
+
+  test("migrate restores every folder init creates", () => {
+    const root = newProject();
+    for (const dir of ["worldbuilding/locations", "worldbuilding/systems", "plot/arcs"]) {
+      fs.rmSync(path.join(root, dir), { recursive: true });
+    }
+    migrateProject(root);
+    for (const dir of ["worldbuilding/locations", "worldbuilding/systems", "plot/arcs"]) {
+      expect(fs.existsSync(path.join(root, dir))).toBe(true);
+    }
+  });
+
+  test("validate outside a project says so instead of listing every path", () => {
+    const result = invoke(makeTempDir(), ["validate"]);
+    expect(result.code).toBe(1);
+    expect(result.err).toContain("is not a story project: missing story.md");
+    expect(result.err).not.toContain("Missing required path");
+  });
+
+  test("validate and doctor report the same errors on a partial project", () => {
+    const root = newProject();
+    fs.rmSync(path.join(root, "scenes"), { recursive: true });
+    expect(projectActions(root).validation.errors).toEqual(validateProject(root).errors);
+  });
+});
+
+describe("argument checking", () => {
+  test("extra positional arguments are an error", () => {
+    const root = newProject();
+    const cwd = path.dirname(root);
+    const result = invoke(cwd, ["continuity", root, root]);
+    expect(result.code).toBe(1);
+    expect(result.err).toContain("Unexpected argument for story continuity [path]");
+    expect(invoke(cwd, ["remove", "character", "x", "extra", "--path", root]).err).toContain("Unexpected argument");
+    expect(invoke(cwd, ["diagram", "locations", "extra", "--path", root]).err).toContain("Unexpected argument");
+  });
+
+  test("flags a command does not read are an error", () => {
+    const root = newProject();
+    const result = invoke(path.dirname(root), ["timeline", root, "--at", "chapter-01"]);
+    expect(result.code).toBe(1);
+    expect(result.err).toContain("--at does not apply to story timeline");
+  });
+
+  test("build rejects --trim and --shunn for other formats", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    expect(() => buildBook(root, { format: "epub", trim: "6x9" })).toThrow("--trim applies only to --format print");
+    expect(() => buildBook(root, { format: "html", shunn: true })).toThrow("--shunn applies only to --format docx");
+  });
+
+  test("add names a missing or unknown kind", () => {
+    const root = newProject();
+    expect(invoke(path.dirname(root), ["add", "--path", root]).err).toContain("An entity kind is required: expected one of character");
+    expect(invoke(path.dirname(root), ["add", "character=Foo", "--path", root]).err).toContain("Unsupported entity kind: character=Foo");
+  });
+});
+
+describe("files that fail to parse", () => {
+  test("wordcount, reindex, export, and build refuse instead of dropping the file", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    const chapter = path.join(root, "chapters", "chapter-01.md");
+    const registry = fs.readFileSync(path.join(root, "chapters", "_index.md"), "utf8");
+    fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace("---\n", "---\n  bad-indent: x\n"));
+    expect(() => computeWordCounts(root)).toThrow("Cannot count words: fix this file first");
+    expect(() => reindexProject(root)).toThrow("Cannot reindex");
+    expect(() => exportManuscript(root)).toThrow("Cannot export");
+    expect(() => buildBook(root, { format: "epub" })).toThrow("Cannot build");
+    expect(fs.readFileSync(path.join(root, "chapters", "_index.md"), "utf8")).toBe(registry);
+    expect(invoke(path.dirname(root), ["wordcount", root]).code).toBe(1);
+  });
+
+  test("add and synopsis refuse before writing anything", () => {
+    const root = newProject();
+    fs.writeFileSync(path.join(root, "characters", "broken.md"), "# No frontmatter\n");
+    expect(() => createEntity(root, { kind: "character", name: "Mara" })).toThrow("Cannot add: fix this file first (story validate reports it):\n- characters/broken.md: is missing YAML frontmatter");
+    expect(fs.existsSync(path.join(root, "characters", "mara.md"))).toBe(false);
+    expect(() => synopsisBook(root)).toThrow("Cannot build a synopsis");
+    expect(() => exportManuscript(root)).toThrow("Cannot export");
+  });
+
+  test("a broken style sheet does not block reindex", () => {
+    const root = newProject();
+    fs.writeFileSync(path.join(root, "style-sheet.md"), "---\n: bad\n---\n");
+    expect(() => reindexProject(root)).not.toThrow();
+  });
+
+  test("rename aborts when an entity file or registry has no frontmatter", () => {
+    const root = newProject();
+    createEntity(root, { kind: "character", name: "Mara Quill" });
+    createEntity(root, { kind: "location", name: "Port", "notable-characters": "mara-quill" });
+    const location = path.join(root, "worldbuilding", "locations", "port.md");
+    const locationText = fs.readFileSync(location, "utf8");
+    fs.writeFileSync(location, locationText.replace(/^---\n/, ""));
+    expect(() => renameEntity(root, { kind: "character", id: "mara-quill", name: "Mara Q" })).toThrow("Cannot rename: fix this file first");
+    fs.writeFileSync(location, locationText);
+    const registry = path.join(root, "worldbuilding", "_index.md");
+    fs.writeFileSync(registry, fs.readFileSync(registry, "utf8").replace(/^---\n[\s\S]*?\n---\n/, ""));
+    expect(() => renameEntity(root, { kind: "character", id: "mara-quill", name: "Mara Q" })).toThrow("worldbuilding/_index.md is missing YAML frontmatter; nothing was changed");
+    expect(fs.existsSync(path.join(root, "characters", "mara-quill.md"))).toBe(true);
+  });
+});
+
+describe("registries", () => {
+  test("reindex keeps hand-written sections", () => {
+    const root = newProject();
+    const index = path.join(root, "characters", "_index.md");
+    fs.appendFileSync(index, "\n## My Notes\n\nKeep this.\n");
+    createEntity(root, { kind: "character", name: "Mara" });
+    const text = fs.readFileSync(index, "utf8");
+    expect(text).toContain("## My Notes\n\nKeep this.");
+    expect(text).toContain("[mara](mara.md)");
+    expect(reindexProject(root).changed).toEqual([]);
+  });
+
+  test("reindex keeps CRLF registries CRLF", () => {
+    const root = newProject();
+    const index = path.join(root, "characters", "_index.md");
+    fs.writeFileSync(index, fs.readFileSync(index, "utf8").replace(/\n/g, "\r\n"));
+    createEntity(root, { kind: "character", name: "Mara" });
+    const text = fs.readFileSync(index, "utf8");
+    expect(text).toContain("[mara](mara.md)");
+    expect(text.replace(/\r\n/g, "")).not.toContain("\n");
+  });
+});
+
+describe("entity commands", () => {
+  test("remove chapter refuses while scenes point at it and walks back statuses", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    createEntity(root, { kind: "chapter", name: "Two", number: 2 });
+    createEntity(root, { kind: "scene", name: "Dock", chapter: "chapter-01" });
+    createEntity(root, { kind: "clue", name: "Bell", planted: "chapter-01" });
+    createEntity(root, { kind: "promise", name: "Oath", planted: "chapter-01", payoff: "chapter-01", status: "paid-off" });
+    createEntity(root, { kind: "promise", name: "Debt", planted: "chapter-02", payoff: "chapter-01", status: "paid-off" });
+    createEntity(root, { kind: "question", name: "Who", introduced: "chapter-02", resolved: "chapter-01" });
+    expect(() => removeEntity(root, { kind: "chapter", id: "chapter-01" })).toThrow("chapter chapter-01 still has scenes: chapter-01-scene-01");
+    removeEntity(root, { kind: "scene", id: "chapter-01-scene-01" });
+    removeEntity(root, { kind: "chapter", id: "chapter-01" });
+    const project = scanProject(root);
+    expect(project.clues[0].status).toBe("planned");
+    expect(project.promises.map((promise) => [promise.id, promise.status])).toEqual([["debt", "planted"], ["oath", "planned"]]);
+    expect(project.questions[0].status).toBe("open");
+    expect(validateProject(root).errors).toEqual([]);
+    expect(checkProjectContinuity(root).errors).toEqual([]);
+  });
+
+  test("rename updates the entity heading", () => {
+    const root = newProject();
+    createEntity(root, { kind: "character", name: "Mara Quill" });
+    createEntity(root, { kind: "chapter", name: "Arrival", number: 3 });
+    renameEntity(root, { kind: "character", id: "mara-quill", name: "Mara Venn" });
+    renameEntity(root, { kind: "chapter", id: "chapter-03", name: "Departure" });
+    expect(fs.readFileSync(path.join(root, "characters", "mara-venn.md"), "utf8")).toContain("\n# Mara Venn\n");
+    expect(fs.readFileSync(path.join(root, "chapters", "chapter-03.md"), "utf8")).toContain("\n# Chapter 3: Departure\n");
+  });
+
+  test("add question --resolved records an answered question", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    createEntity(root, { kind: "chapter", name: "Three", number: 3 });
+    createEntity(root, { kind: "question", name: "Who", introduced: "chapter-01", resolved: "chapter-03" });
+    expect(scanProject(root).questions[0].status).toBe("answered");
+    expect(checkProjectContinuity(root).errors).toEqual([]);
+    expect(() => createEntity(root, { kind: "question", name: "Why", resolved: "chapter-03", status: "open" })).toThrow("cannot have status open");
+  });
+
+  test("add chapter and scene --pov put the POV character in the cast", () => {
+    const root = newProject();
+    createEntity(root, { kind: "character", name: "Mara" });
+    createEntity(root, { kind: "chapter", name: "One", number: 1, pov: "mara" });
+    createEntity(root, { kind: "scene", name: "Dock", chapter: "chapter-01", pov: "mara" });
+    const project = scanProject(root);
+    expect(project.chapters[0].characters).toEqual(["mara"]);
+    expect(project.scenes[0].characters).toEqual(["mara"]);
+    expect(checkProjectContinuity(root).warnings.join("\n")).not.toContain("is not listed in characters");
+  });
+
+  test("init takes the story id from --dir when the title has no ASCII letters", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Война и мир", dir: "war-and-peace" });
+    expect(created.storyId).toBe("war-and-peace");
+    createEntity(created.root, { kind: "chapter", name: "One", number: 1 });
+    const built = buildBook(created.root, { format: "epub" });
+    expect(path.basename(built.outFile)).toBe("war-and-peace.epub");
+    expect(validateProject(created.root).errors).toEqual([]);
+  });
+});
+
+describe("continuity ledger", () => {
+  test("links accept promise and clue chapters scheduled past the last chapter", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    createEntity(root, { kind: "clue", name: "Locket", planted: "chapter-01", payoff: "chapter-05" });
+    createEntity(root, { kind: "promise", name: "Duel", planted: "chapter-04", status: "planned" });
+    expect(validateLinks(root).errors).toEqual([]);
+    createEntity(root, { kind: "clue", name: "Ring", planted: "chapter-04" });
+    expect(validateLinks(root).errors).toContain("continuity/clues/ring.md references missing chapter chapter-04");
+  });
+
+  test("planned status with a drafted planted chapter warns for clues and promises alike", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1, status: "draft" });
+    createEntity(root, { kind: "clue", name: "Locket", planted: "chapter-01", status: "planned" });
+    createEntity(root, { kind: "promise", name: "Duel", planted: "chapter-01", status: "planned" });
+    createEntity(root, { kind: "clue", name: "Ring", planted: "chapter-03", status: "planned" });
+    const warnings = checkProjectContinuity(root).warnings;
+    expect(warnings).toContain("continuity/clues/locket.md records planted chapter chapter-01 but status is still planned");
+    expect(warnings).toContain("continuity/promises/duel.md records planted chapter chapter-01 but status is still planned");
+    expect(warnings.join("\n")).not.toContain("ring.md");
+  });
+});
+
+describe("reports and views", () => {
+  test("a non-integer chapter number falls back to the file name in views and blocks builds", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 3 });
+    const chapter = path.join(root, "chapters", "chapter-03.md");
+    fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace("number: 3", 'number: "3a"'));
+    expect(pacingReport(root).rows?.[0]?.number ?? scanProject(root).chapters[0].number).toBe(3);
+    expect(() => buildBook(root, { format: "html" })).toThrow("chapters/chapter-03.md: chapter number must be a positive integer to build");
+  });
+
+  test("next suggests commands for the path the user typed", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    // A chapter number gap is a continuity warning.
+    createEntity(root, { kind: "chapter", name: "Three", number: 3 });
+    const cwd = path.dirname(root);
+    const result = invoke(cwd, ["next", path.basename(root)]);
+    expect(result.out).toContain(`Run story continuity ${path.basename(root)} and`);
+    expect(invoke(root, ["next"]).out).toContain("Run story continuity . and");
+  });
+
+  test("report shows unset instead of undefined", () => {
+    const root = newProject();
+    fs.writeFileSync(path.join(root, "story.md"), "---\nschema-version: 2\n---\n# Story\n");
+    const result = invoke(path.dirname(root), ["report", root]);
+    expect(result.out).not.toContain("undefined");
+    expect(result.out).toContain(`# ${path.basename(root)}`);
+    expect(result.out).toContain("Status: unset");
+  });
+
+  test("passes notes a custom pass that looks like a typo", () => {
+    const root = newProject();
+    const result = projectPasses(root, { done: "strucutre" });
+    expect(result.notes).toEqual(["Added custom pass strucutre, which is not in the default ladder; did you mean structure?"]);
+    expect(projectPasses(root, { done: "structure" }).notes).toEqual([]);
+    const cli = invoke(path.dirname(root), ["passes", root, "--start", "sensitivity-read"]);
+    expect(cli.err).toContain("note: Added custom pass sensitivity-read, which is not in the default ladder\n");
+  });
+
+  test("diagram ids never collide with Mermaid keywords", () => {
+    const root = newProject();
+    createEntity(root, { kind: "character", name: "End" });
+    const text = diagramProject(root, { kind: "relationships" }).text;
+    expect(text).toContain('end_node["End"]');
+    expect(text).not.toMatch(/^\s+end\[/m);
+  });
+
+  test("route errors round the gap down and the route up", () => {
+    const root = newProject();
+    createEntity(root, { kind: "character", name: "Mara" });
+    writeMarkdown(path.join(root, "worldbuilding", "locations", "a.md"), "name: A\ntype: city\nroutes:\n  - to: b\n    hours: 11");
+    writeMarkdown(path.join(root, "worldbuilding", "locations", "b.md"), "name: B\ntype: city\nroutes:\n  - to: a\n    hours: 11");
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    createEntity(root, { kind: "scene", name: "S1", chapter: "chapter-01", character: "mara", location: "a", date: "2024-01-01", time: "00:00" });
+    createEntity(root, { kind: "scene", name: "S2", chapter: "chapter-01", character: "mara", location: "b", date: "2024-01-01", time: "10:59" });
+    const error = checkProjectContinuity(root).errors.find((entry) => entry.includes("fastest route"));
+    expect(error).toContain("10.9h after");
+    expect(error).toContain("takes 11h");
+  });
+});
+
+describe("prose lint", () => {
+  test("British single-quoted dialogue is dialogue, and its tags count", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", "‘I really felt it,’ Bob said. ‘I saw it. Honestly.’");
+    const analysis = proseReport(root).chapters[0].analysis;
+    expect(analysis.filterWords).toEqual([]);
+    expect(analysis.adverbs).toEqual([]);
+    expect(analysis.plainTags).toEqual([{ word: "said", count: 1 }]);
+  });
+
+  test("prose right after a heading line still counts", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", "### Part One\nThe tide came in over the harbour wall at dusk.");
+    expect(proseReport(root).chapters[0].analysis.words).toBe(10);
+  });
+});
+
+describe("builds", () => {
+  function bookProject(prose) {
+    const root = newProject("Book");
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", prose);
+    return root;
+  }
+
+  test("--out refuses project source and directories", () => {
+    const root = bookProject("Text.");
+    const chapter = fs.readFileSync(path.join(root, "chapters", "chapter-01.md"), "utf8");
+    expect(() => buildBook(root, { out: "chapters/chapter-01.md" })).toThrow("Refusing to write generated output to chapters/chapter-01.md");
+    expect(() => exportManuscript(root, { out: "story.md" })).toThrow("it is project source");
+    expect(() => synopsisBook(root, { out: path.join(root, "plot", "s.md") })).toThrow("it is project source");
+    fs.mkdirSync(path.join(root, "dist"));
+    expect(() => buildBook(root, { out: "dist" })).toThrow("--out dist is a directory");
+    expect(fs.readFileSync(path.join(root, "chapters", "chapter-01.md"), "utf8")).toBe(chapter);
+  });
+
+  test("export defaults to dist/manuscript.md", () => {
+    const root = bookProject("Text.");
+    expect(exportManuscript(root).outFile).toBe(path.join(root, "dist", "manuscript.md"));
+    expect(validateProject(root).warnings.join("\n")).not.toContain("manuscript.md");
+  });
+
+  test("HTML comments stay out of word counts and builds", () => {
+    const root = bookProject("Visible words here.\n\n<!-- TODO: fix this scene -->");
+    expect(computeWordCounts(root).total).toBe(3);
+    const html = fs.readFileSync(buildBook(root, { format: "html" }).outFile, "utf8");
+    expect(html).not.toContain("TODO");
+  });
+
+  test("emphasis follows CommonMark", () => {
+    const root = bookProject("***both*** and *a **b** c* and \\*literal\\* and snake_case_word and ** spaced ** and *foo**bar*");
+    const html = fs.readFileSync(buildBook(root, { format: "html" }).outFile, "utf8");
+    expect(html).toContain("<strong><em>both</em></strong>");
+    expect(html).toContain("<em>a </em><strong><em>b</em></strong><em> c</em>");
+    expect(html).toContain("*literal*");
+    expect(html).toContain("snake_case_word");
+    expect(html).toContain("** spaced **");
+    // The rule of three: ** cannot close a single *.
+    expect(html).toContain("<em>foo**bar</em>");
+  });
+
+  test("XML-invalid characters are dropped from EPUB and DOCX", () => {
+    const root = bookProject("Bell\u0001 rang￾.");
+    for (const format of ["epub", "docx"]) {
+      const outFile = buildBook(root, { format }).outFile;
+      const listing = execFileSync("unzip", ["-p", outFile], { encoding: "utf8" });
+      expect(listing).toContain("Bell rang.");
+      expect(listing).not.toContain("\u0001");
+    }
+  });
+
+  test("zip entries carry a valid date", () => {
+    const root = bookProject("Text.");
+    const outFile = buildBook(root, { format: "epub" }).outFile;
+    const buffer = fs.readFileSync(outFile);
+    expect(buffer.readUInt16LE(12)).toBe(33);
+  });
+
+  test("a long title keeps the default file name within limits", () => {
+    const cwd = makeTempDir();
+    const root = createStoryProject({ cwd, title: "word ".repeat(80), dir: "long" }).root;
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    expect(path.basename(buildBook(root, { format: "html" }).outFile).length).toBeLessThanOrEqual(110);
+  });
+});
+
+describe("synopsis", () => {
+  test("skips starter text and turns list items into sentences", () => {
+    const root = newProject();
+    createEntity(root, { kind: "arc", name: "Main" });
+    const arc = path.join(root, "plot", "arcs", "main.md");
+    fs.writeFileSync(arc, fs.readFileSync(arc, "utf8").replace("1. First escalation\n2. Second escalation", "1. The tide turns\n2. The bell rings"));
+    const text = synopsisBook(root).text;
+    expect(text).toContain("Premise: No premise recorded.");
+    expect(text).not.toContain("Initial state and inciting pressure");
+    expect(text).not.toContain("Decision point");
+    expect(text).toContain("The tide turns. The bell rings.");
+    expect(text).not.toMatch(/ {2}/);
+  });
+
+  test("truncation keeps headings and paragraphs", () => {
+    const root = newProject();
+    for (let index = 1; index <= 30; index += 1) {
+      createEntity(root, { kind: "arc", name: `Arc ${index}` });
+      const arc = path.join(root, "plot", "arcs", `arc-${index}.md`);
+      const setup = Array.from({ length: 3 }, (_, n) => `Setup sentence ${n} for arc ${index} with several more words.`).join(" ");
+      fs.writeFileSync(arc, fs.readFileSync(arc, "utf8").replace("Initial state and inciting pressure.", setup));
+    }
+    const text = synopsisBook(root).text;
+    expect(text).toContain("\n## Arc 1\n\n");
+    expect(text).not.toMatch(/\S ## Arc/);
+    expect(text.trimEnd().endsWith("…")).toBe(true);
+  });
+});
+
+describe("import", () => {
+  function importText(text, name = "draft.txt") {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, name), text);
+    const result = importManuscript({ source: name, title: "Imported", cwd, dir: "out" });
+    return { result, project: scanProject(result.root) };
+  }
+
+  test("splits plain-text chapter lines", () => {
+    const { result, project } = importText("The Book\n\nChapter 1\n\nHello there.\n\nCHAPTER TWO: Arrival\n\nChapter and verse were quoted.\n\nEpilogue\n\nAfter.\n");
+    expect(result.chapters).toBe(3);
+    expect(project.chapters.map((chapter) => chapter.title)).toEqual(["Chapter 1", "Arrival", "Epilogue"]);
+  });
+
+  test("prologue and epilogue headings are chapters and spelled-out numbers leave titles", () => {
+    const { project } = importText("# Book\n\n## Prologue\n\nBefore.\n\n## Chapter One: Arrival\n\nA.\n\n## Chapter Twenty-One\n\nB.\n\n## Epilogue\n\nAfter.\n", "draft.md");
+    expect(project.chapters.map((chapter) => chapter.title)).toEqual(["Prologue", "Arrival", "Chapter Twenty-One", "Epilogue"]);
+  });
+});

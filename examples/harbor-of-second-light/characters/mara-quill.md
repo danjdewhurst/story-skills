@@ -11,7 +11,7 @@ relationships:
   - character: theo-quill
     type: sibling
   - character: ilya-venn
-    type: antagonist
+    type: adversary
 locations:
   - port-kestrel
   - bellwether-reef

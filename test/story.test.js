@@ -314,7 +314,7 @@ word-count: 0
 
   test("reports missing structure, frontmatter fields, registry warnings, word-count warnings, and link errors", () => {
     const cwd = makeTempDir();
-    expect(validateProject(cwd).errors).toContain("Missing required path: story.md");
+    expect(() => validateProject(cwd)).toThrow("is not a story project: missing story.md");
 
     const created = createStoryProject({ cwd, title: "Broken Links", force: false });
     writeMarkdown(path.join(created.root, "characters", "orphan.md"), `
@@ -1303,7 +1303,7 @@ status: draft
     const links = validateLinks(created.root);
     expect(links.ok).toBe(false);
     expect(links.errors.join("\n")).toContain("characters/broken.md");
-    expect(() => reindexProject(created.root)).not.toThrow();
+    expect(() => reindexProject(created.root)).toThrow("Cannot reindex: fix these files first");
   });
 
   test("anchors chapter filenames and enforces scene patterns with duplicate detection", () => {
@@ -1886,8 +1886,9 @@ describe("review-findings hardening", () => {
     const cwd = makeTempDir();
     const before = fs.readdirSync(cwd);
     expect(() => createStoryProject({ title: "!!!", cwd })).toThrow("Cannot derive a story id");
-    expect(() => createStoryProject({ title: "!!!", cwd, dir: "punctuated" })).toThrow("Cannot derive a story id");
+    expect(() => createStoryProject({ title: "!!!", cwd, dir: "!!!" })).toThrow("Cannot derive a story id");
     expect(fs.readdirSync(cwd)).toEqual(before);
+    expect(createStoryProject({ title: "!!!", cwd, dir: "punctuated" }).storyId).toBe("punctuated");
   });
 
   test("oversized entity files surface as scan errors instead of being read", () => {

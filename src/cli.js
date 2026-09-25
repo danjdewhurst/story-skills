@@ -67,11 +67,36 @@ export function runCli(argv, io) {
       return 1;
     }
 
+    const usageError = commandUsageError(command, parsed);
+    if (usageError) {
+      io.stderr.write(`${usageError}\n`);
+      return 1;
+    }
+
     return command.run({ parsed, io, cwd, root: () => resolveRoot(cwd, parsed, name) });
   } catch (error) {
     io.stderr.write(`${error.message}\n`);
     return 1;
   }
+}
+
+function commandUsageError(command, parsed) {
+  const maxArgs = command.args ?? (command.project === "positional" ? 1 : 0);
+  const extra = parsed.positionals.slice(1 + maxArgs);
+  if (extra.length > 0) {
+    const plural = extra.length === 1 ? "" : "s";
+    return `Unexpected argument${plural} for story ${command.usage}: ${extra.join(" ")}`;
+  }
+  const allowed = new Set(command.options ?? []);
+  if (command.project !== "none") {
+    allowed.add("path");
+  }
+  for (const key of Object.keys(parsed.options)) {
+    if (key !== "help" && key !== "version" && !allowed.has(key)) {
+      return `--${key} does not apply to story ${command.name}`;
+    }
+  }
+  return null;
 }
 
 function lastOptionValue(value) {

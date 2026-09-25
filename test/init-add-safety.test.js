@@ -24,12 +24,16 @@ function setFrontmatterLine(file, pattern, replacement) {
 }
 
 describe("init", () => {
-  test("rejects a title with no kebab-case form even with --dir", () => {
+  test("a title with no kebab-case form takes its story id from --dir", () => {
     const cwd = makeTempDir();
-    expect(() => createStoryProject({ cwd, title: "東京物語", dir: "tk" })).toThrow("Cannot derive a story id");
-    expect(fs.existsSync(path.join(cwd, "tk"))).toBe(false);
+    expect(() => createStoryProject({ cwd, title: "東京物語" })).toThrow("Cannot derive a story id");
+    expect(fs.readdirSync(cwd)).toEqual([]);
     const result = invoke(cwd, ["init", "東京物語", "--dir", "tk"]);
-    expect(result.code).toBe(1);
+    expect(result.code).toBe(0);
+    const created = scanProject(path.join(cwd, "tk"));
+    expect(created.storyId).toBe("tk");
+    expect(created.title).toBe("東京物語");
+    expect(validateProject(path.join(cwd, "tk")).errors).toEqual([]);
   });
 
   test("--force adds missing starter files and never overwrites existing ones", () => {

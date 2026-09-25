@@ -155,7 +155,7 @@ function attribute(paragraph, speakers) {
 // British single quotes open after a non-letter and close before one, so an
 // apostrophe inside a word (don’t) never ends the quote.
 const SINGLE_QUOTE = "(?<![\\p{L}\\p{N}])‘((?:[^‘’]|’(?=[\\p{L}\\p{N}]))*)’(?![\\p{L}\\p{N}])";
-const QUOTE_PATTERN = new RegExp(`“([^”]*)”|"([^"]*)"|${SINGLE_QUOTE}`, "gu");
+export const QUOTE_PATTERN = new RegExp(`“([^”]*)”|"([^"]*)"|${SINGLE_QUOTE}`, "gu");
 
 export function quotedSpans(paragraph) {
   const spans = [];

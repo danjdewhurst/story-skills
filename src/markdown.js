@@ -37,7 +37,13 @@ export function wordCount(markdown) {
   return splitWords(markdown).length;
 }
 
+// The prose of a chapter or matter page, without its outline and without
+// HTML comments, which are notes to the author rather than book text.
 export function chapterProse(markdownBody) {
+  return proseSection(markdownBody).replace(/<!--[\s\S]*?-->/g, "");
+}
+
+function proseSection(markdownBody) {
   const chapterTextMatch = /^## Chapter Text\s*$/im.exec(markdownBody);
   if (chapterTextMatch) {
     return markdownBody.slice(chapterTextMatch.index + chapterTextMatch[0].length);
