@@ -327,7 +327,7 @@ export function scanProject(root) {
     story = readMarkdown(storyPath, projectRoot);
   } catch (error) {
     scanErrors.push(`story.md: ${error.message}`);
-    story = { data: { title: path.basename(projectRoot) }, body: "", rawMarkdown: "" };
+    story = { data: { title: path.basename(projectRoot) }, body: "", rawMarkdown: "", unreadable: true };
   }
   const storyId = deriveStoryId(story.data.title, projectRoot);
   const titleText = typeof story.data.title === "string" || typeof story.data.title === "number" ? String(story.data.title).trim() : "";
@@ -424,7 +424,9 @@ export function scanProject(root) {
       mentions: asArray(data.mentions),
       locations: asArray(data.locations),
       arcsAdvanced: asArray(data["arcs-advanced"]),
-      declaredWordCount: Number(data["word-count"] ?? 0),
+      // A non-integer count is a validate error; null keeps it out of the
+      // declared-versus-actual comparison instead of printing NaN.
+      declaredWordCount: data["word-count"] === undefined ? 0 : Number.isInteger(data["word-count"]) ? data["word-count"] : null,
       targetWords: Number.isInteger(data["target-words"]) && data["target-words"] > 0 ? data["target-words"] : 0,
       wordCount: wordCount(chapterProse(markdown.body)),
       unclosedComment: hasUnclosedComment(chapterProse(markdown.body)),
@@ -610,7 +612,7 @@ export function validateProjectOf(project) {
   }
 
   for (const chapter of project.chapters) {
-    if (chapter.declaredWordCount !== chapter.wordCount) {
+    if (chapter.declaredWordCount !== null && chapter.declaredWordCount !== chapter.wordCount) {
       warnings.push(`${path.relative(projectRoot, chapter.file)} declares ${chapter.declaredWordCount} words but contains ${chapter.wordCount}`);
     }
 
@@ -2001,11 +2003,38 @@ function requireEntityEnumOptions(kind, options) {
   }
 }
 
+// Options whose values are entity or chapter ids; a value that is not a
+// kebab-case id can never resolve, so add refuses it up front.
+const REFERENCE_OPTIONS = ["chapter", "planted", "payoff", "introduced", "resolved", "used-in", "location", "locations", "character", "characters", "mention", "mentions", "member", "members", "owner", "arc", "arcs", "controlled-by"];
+
+const REFERENCE_EXAMPLES = {
+  chapter: "chapter-01", planted: "chapter-01", payoff: "chapter-01", introduced: "chapter-01", resolved: "chapter-01", "used-in": "chapter-01",
+  location: "port-kestrel", locations: "port-kestrel", arc: "the-long-road", arcs: "the-long-road", "controlled-by": "harbor-council"
+};
+
+function assertReferenceOptions(kind, options) {
+  for (const option of REFERENCE_OPTIONS) {
+    // A character's --arc is its free-text arc theme, not an arc id.
+    if (kind === "character" && (option === "arc" || option === "arcs")) {
+      continue;
+    }
+    for (const value of normalizeList(options[option], [])) {
+      if (!isKebabId(value)) {
+        throw new Error(`--${option} "${value}" must be a kebab-case id (such as ${REFERENCE_EXAMPLES[option] ?? "mara-quill"})`);
+      }
+    }
+  }
+  if ((kind === "chapter" || kind === "scene") && options.pov !== undefined && String(options.pov).trim() !== "" && !isKebabId(String(options.pov).trim())) {
+    throw new Error(`--pov "${options.pov}" must be a character id (such as mara-quill)`);
+  }
+}
+
 export function createEntity(root, options) {
   const project = scanProject(root);
   assertProjectParses(project, "add");
   const kind = normalizeKind(options.kind);
   requireEntityEnumOptions(kind, options);
+  assertReferenceOptions(kind, options);
   const name = String(options.name ?? "").trim();
   if (!name) {
     throw new Error(`A ${kind} name is required`);
@@ -2617,8 +2646,14 @@ function buildEntity(project, kind, name, options) {
   }
 
   if (kind === "scene") {
-    const chapter = String(options.chapter ?? project.chapters.at(-1)?.id ?? "chapter-01").trim();
+    if (options.chapter === undefined && project.chapters.length === 0) {
+      throw new Error("No chapters yet: add one with story add chapter before adding a scene");
+    }
+    const chapter = String(options.chapter ?? project.chapters.at(-1).id).trim();
     requireKebabId(chapter, "chapter id");
+    if (!project.chapters.some((entry) => entry.id === chapter)) {
+      throw new Error(`chapter ${chapter} does not exist: add it with story add chapter, or pass --chapter with an existing chapter id`);
+    }
     const scene = options.scene === undefined
       ? nextSceneNumber(project, chapter)
       : requirePositiveInteger(options.scene, "scene number");
@@ -2744,14 +2779,14 @@ function assertPortableId(id, kind) {
 
 function requireKebabId(id, label) {
   if (!isKebabId(id)) {
-    throw new Error(`${label} must be a kebab-case id`);
+    throw new Error(`${label} must be a kebab-case id, got "${id}"`);
   }
 }
 
 function requirePositiveInteger(value, label) {
   const number = Number(value);
   if (!Number.isInteger(number) || number <= 0) {
-    throw new Error(`${label} must be a positive integer`);
+    throw new Error(`${label} must be a positive integer, got ${value}`);
   }
   return number;
 }
@@ -3432,11 +3467,19 @@ const FRONTMATTER_FILES = new Set([
   path.join("continuity", "exemptions.md")
 ]);
 
+// The registries the CLI writes; an `_index.md` elsewhere (a notes site,
+// say) may be plain markdown.
+const REGISTRY_FILES = new Set([
+  ...INDEX_SCHEMAS.map(([relativePath]) => relativePath),
+  path.join(MATTER_DIR, "_index.md"),
+  path.join(RESEARCH_DIR, "_index.md")
+]);
+
 function isProjectSourceFile(root, file) {
   const relativePath = path.relative(root, file);
   return SOURCE_ROOT_FILES.has(relativePath)
     || FRONTMATTER_FILES.has(relativePath)
-    || path.basename(relativePath) === "_index.md"
+    || REGISTRY_FILES.has(relativePath)
     || ENTITY_SCAN_DIRS.includes(path.dirname(relativePath));
 }
 
@@ -4329,8 +4372,13 @@ function readMarkdown(filePath, root) {
     assertSafeProjectPath(filePath, root);
   }
   const rawMarkdown = readTextFile(filePath);
-  const parsed = parseFrontmatter(rawMarkdown, filePath);
-  return { ...parsed, rawMarkdown };
+  try {
+    return { ...parseFrontmatter(rawMarkdown, filePath), rawMarkdown };
+  } catch (error) {
+    // Callers label the file with its project-relative path, so drop the
+    // absolute one the parser puts in front.
+    throw new Error(error.message.startsWith(`${filePath} `) ? error.message.slice(filePath.length + 1) : error.message);
+  }
 }
 
 export function writeFile(filePath, contents, options = {}) {
@@ -4353,7 +4401,7 @@ export function writeFile(filePath, contents, options = {}) {
   } catch (error) {
     fs.rmSync(temporary, { force: true });
     // Name the file the user asked for, not the temporary one.
-    throw Object.assign(new Error(`Cannot replace hard-linked ${target}: ${error.code ?? error.message}`), { code: error.code });
+    throw Object.assign(new Error(`Cannot replace hard-linked ${target}: ${error.code ?? error.message}`), { code: error.code, path: target, syscall: "rename" });
   }
 }
 
@@ -4693,10 +4741,15 @@ function normalizeBuildFormat(value) {
     return format;
   }
 
-  throw new Error(`Unsupported build format: ${value}. Supported formats: ${Object.keys(BUILD_EXTENSIONS).join(", ")}`);
+  throw new Error(`Unsupported build format: ${value === "" ? "(empty)" : value}. Supported formats: ${Object.keys(BUILD_EXTENSIONS).join(", ")}`);
 }
 
 function validateStoryFrontmatter(project, errors) {
+  // An unreadable story.md is already reported; checking the stand-in data
+  // would only add a missing-field error per field.
+  if (project.story.unreadable) {
+    return;
+  }
   const data = project.story.data;
   requireFields(data, ["title", "schema-version", "genre", "status", "themes", "pov", "tense"], "story.md", errors);
   requireScalar(data, "title", "story.md", errors);
@@ -4785,7 +4838,7 @@ function validateIndexFrontmatter(project, errors) {
       errors.push(`${label} type must be ${expectedType}`);
     }
 
-    if (data.story !== undefined && data.story !== project.storyId) {
+    if (data.story !== undefined && data.story !== project.storyId && !project.story.unreadable) {
       errors.push(`${label} story must be ${project.storyId}`);
     }
 
@@ -5089,7 +5142,7 @@ function validateContinuityState(project, errors) {
   if (data.type !== undefined && data.type !== "continuity-state") {
     errors.push(`${label} type must be continuity-state`);
   }
-  if (data.story !== undefined && data.story !== project.storyId) {
+  if (data.story !== undefined && data.story !== project.storyId && !project.story.unreadable) {
     errors.push(`${label} story must be ${project.storyId}`);
   }
 }
@@ -5491,7 +5544,13 @@ function validateRelationships(data, label, errors) {
 }
 
 function validateEnum(data, field, allowed, label, errors) {
-  if (data[field] !== undefined && !allowed.has(data[field])) {
+  if (Array.isArray(data[field])) {
+    // requireScalar may already have reported the same field.
+    const message = `${label} frontmatter field ${field} must be a single value, not a list`;
+    if (!errors.includes(`${label} frontmatter field ${field} must be a scalar`)) {
+      errors.push(message);
+    }
+  } else if (data[field] !== undefined && !allowed.has(data[field])) {
     errors.push(`${label} frontmatter field ${field} has unsupported value ${data[field]}`);
   }
 }

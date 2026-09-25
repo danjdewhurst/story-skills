@@ -85,7 +85,8 @@ describe("story timeline", () => {
     const { root } = timelineProject();
     const byId = Object.fromEntries(storyTimeline(root).presence.map((entry) => [entry.id, entry]));
 
-    expect(byId["mara-quill"]).toEqual({ id: "mara-quill", chapters: 3, first: 1, last: 4, longestGap: 1, gapAfter: 1, trailing: 1 });
+    // Chapter 5 has mara-quill only as its pov, which counts as present.
+    expect(byId["mara-quill"]).toEqual({ id: "mara-quill", chapters: 4, first: 1, last: 5, longestGap: 1, gapAfter: 1, trailing: 0 });
     expect(byId["tom-reed"]).toMatchObject({ chapters: 2, first: 1, last: 2, longestGap: 0, trailing: 3 });
     expect(byId["ilya-venn"]).toMatchObject({ chapters: 0, first: null, last: null });
   });
@@ -101,7 +102,7 @@ describe("story timeline", () => {
     expect(result.out).toContain("Undated (reading order):\n- chapter-04-scene-01: Scene chapter-04 1 (POV mara-quill)\n- chapter-05: Chapter 5 (POV mara-quill)");
     expect(result.out).toContain("- mara-quill: 3 chapters, 90 words (60%)");
     expect(result.out).toContain("- tom-reed: 1 chapter, 20 words (13%)");
-    expect(result.out).toContain("- mara-quill: 3 of 5 chapters, chapters 1-4, longest absence 1 chapter after chapter 1, absent from the last 1 chapter");
+    expect(result.out).toContain("- mara-quill: 4 of 5 chapters, chapters 1-5, longest absence 1 chapter after chapter 1");
     expect(result.out).toContain("- ilya-venn: not present in any chapter");
     expect(result.err).toContain("Timeline built: 0 errors");
   });

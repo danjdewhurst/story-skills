@@ -1368,1144 +1368,6 @@ function readTextFile(filePath) {
   return fs.readFileSync(filePath, "utf8");
 }
 
-// src/options.js
-var OPTIONS = [
-  { name: "title", value: "<name>", help: ["Story title for import"] },
-  { name: "dir", value: "<path>", help: ["Target directory for init or import"] },
-  { name: "genre", value: "<name>", help: ["Story genre for init"] },
-  { name: "sub-genre", value: "<name>", help: ["Story sub-genre for init"] },
-  { name: "setting-era", value: "<name>", help: ["Setting era for init"] },
-  { name: "theme", value: "<name>", repeatable: true, help: ["Theme for init or add arc; repeatable"] },
-  { name: "themes", value: "<a,b>", repeatable: true, help: ["Comma-separated themes for init or add arc"] },
-  { name: "pov", value: "<style|id>", help: ["POV style for init; POV character id for add", "chapter/scene (also added to characters)"] },
-  { name: "tense", value: "<tense>", help: ["Narrative tense for init"] },
-  { name: "form", value: "<form>", help: ["Story form for init (novel, novella, novelette,", "short-story, flash, serial, picture-book,", "chapter-book); sets a default target-words"] },
-  { name: "synopsis", value: "<text>", help: ["Starter synopsis for init"] },
-  { name: "series", value: "<id>", help: ["Series id for init"] },
-  { name: "book-number", value: "<n>", help: ["Publication order for init"] },
-  { name: "follows", value: "<path>", repeatable: true, help: ["Init a sequel set after this story project;", "repeatable"] },
-  { name: "precedes", value: "<path>", repeatable: true, help: ["Init a prequel set before this story project;", "repeatable"] },
-  {
-    name: "force",
-    help: [
-      "Let init/import use an existing directory: add",
-      "missing starter files, never overwrite existing",
-      "ones; import also replaces every chapter-NN.md file"
-    ]
-  },
-  { name: "write", help: ["Update chapter word-count frontmatter"] },
-  { name: "log", help: ["Record today's word count in progress.md"] },
-  { name: "ref", value: "<git-ref>", help: ["Earlier draft as a git branch, tag, or commit", "for compare"] },
-  { name: "against", value: "<path>", help: ["Earlier draft as another project folder for compare"] },
-  { name: "path", value: "<path>", help: ["Project root for every command except init and", "import"] },
-  { name: "out", value: "<file>", help: ["Output path for export/build/synopsis/diagram"] },
-  { name: "format", value: "<name>", help: ["Output format for build (markdown, epub, docx,", "shunn, html, print, narration, metadata)"] },
-  { name: "trim", value: "<size>", help: ["Trim size for build --format print (5x8,", "5.25x8, 5.5x8.5, 6x9, a5; default 5.5x8.5)"] },
-  { name: "shunn", help: ["Apply Shunn manuscript formatting (with --format", "docx)"] },
-  { name: "at", value: "<chapter-id>", help: ["Chapter id for knowledge"] },
-  { name: "init", help: ["Add the default revision passes for passes"] },
-  { name: "start", value: "<pass>", help: ["Mark a revision pass in progress for passes"] },
-  { name: "done", value: "<pass>", help: ["Mark a revision pass done for passes"] },
-  { name: "pages", value: "<n>", help: ["Synopsis length for synopsis (1 or 3)"] },
-  { name: "actionable", help: ["Include next actions in report"] },
-  { name: "number", value: "<n>", help: ["Chapter number for add chapter"] },
-  { name: "chapter", value: "<id>", help: ["Chapter id for add scene"] },
-  { name: "scene", value: "<n>", help: ["Scene number for add scene"] },
-  { name: "type", value: "<name>", help: ["Entity type for add"] },
-  { name: "role", value: "<name>", help: ["Character role for add character"] },
-  { name: "status", value: "<name>", help: ["Entity status for add"] },
-  { name: "mode", value: "<name>", help: ["Mode for add chapter (e.g. discovered)"] },
-  { name: "date", value: "<date>", help: ["Story date (YYYY-MM-DD) for add chapter/scene;", "the session date for progress (default today)"] },
-  { name: "time", value: "<time>", help: ["Story time (HH:MM or dawn, morning, midday,", "afternoon, evening, night) for add chapter/scene"] },
-  { name: "travel-hours", value: "<n>", help: ["Travel hours for add scene"] },
-  { name: "dilemma", value: "<text>", help: ["Dilemma for add scene sequel unit"] },
-  { name: "sequel", help: ["Mark scene as sequel unit for add scene"] },
-  { name: "outcome", value: "<name>", help: ["Scene outcome for add scene (yes, no, yes-but,", "no-and)"] },
-  { name: "hook", value: "<name>", help: ["Chapter-ending hook for add chapter (cliffhanger,", "question, revelation, reversal, decision,", "emotional, resolution)"] },
-  { name: "location", value: "<id>", repeatable: true, help: ["Location reference for add"] },
-  { name: "locations", value: "<ids>", repeatable: true },
-  { name: "character", value: "<id>", repeatable: true, help: ["Character reference for add; repeatable"] },
-  { name: "characters", value: "<ids>", repeatable: true },
-  { name: "mention", value: "<id>", repeatable: true, help: ["Mentioned character for add chapter/scene;", "repeatable"] },
-  { name: "mentions", value: "<ids>", repeatable: true },
-  { name: "member", value: "<id>", repeatable: true, help: ["Faction member reference for add faction; repeatable"] },
-  { name: "members", value: "<ids>", repeatable: true },
-  { name: "owner", value: "<id>", help: ["Owner reference for add artifact"] },
-  { name: "arc", value: "<id>", repeatable: true, help: ["Arc reference for add (arc theme for add", "character); repeatable"] },
-  { name: "arcs", value: "<ids>", repeatable: true },
-  { name: "introduced", value: "<id>", help: ["Chapter id for add question"] },
-  { name: "resolved", value: "<id>", help: ["Chapter id for add question"] },
-  { name: "planted", value: "<id>", help: ["Chapter id for add promise/clue"] },
-  { name: "payoff", value: "<id>", help: ["Chapter id for add promise/clue"] },
-  { name: "significance-delayed", help: ["Significance is delayed for add clue"] },
-  { name: "red-herring", help: ["Mark add clue as a red herring"] },
-  { name: "category", value: "<name>", help: ["Category for add term"] },
-  { name: "alias", value: "<name>", repeatable: true, help: ["Alias for add term; repeatable"] },
-  { name: "aliases", value: "<names>", repeatable: true },
-  { name: "region", value: "<name>", help: ["Region for add location"] },
-  { name: "population", value: "<name>", help: ["Population for add location"] },
-  { name: "controlled-by", value: "<id>", help: ["Controlling faction for add location"] },
-  { name: "prevalence", value: "<name>", help: ["Prevalence for add system"] },
-  { name: "acts", value: "<a,b>", repeatable: true, help: ["Comma-separated acts for add arc; repeatable"] },
-  { name: "act", value: "<name>", repeatable: true },
-  { name: "placement", value: "<front|back>", help: ["Placement for add matter (default front)"] },
-  { name: "order", value: "<n>", help: ["Order within its placement for add matter"] },
-  { name: "heading", help: ["Print the page title for add matter; --heading", "false for a dedication or epigraph"] },
-  { name: "source", value: "<text>", repeatable: true, help: ["Source for add research; repeatable"] },
-  { name: "sources", value: "<texts>", repeatable: true },
-  { name: "used-in", value: "<chapter-id>", repeatable: true, help: ["Chapter that relies on add research; repeatable"] },
-  { name: "accuracy", value: "<level>", help: ["Accuracy for add research (must-be-accurate,", "blended, invented)"] },
-  { name: "confidence", value: "<level>", help: ["Confidence for add research (high, medium, low)"] },
-  { name: "method", value: "<name>", help: ["Research method for add research (fact, interview,", "site-visit, expert-review, reading)"] },
-  { name: "risk", value: "<name>", repeatable: true, help: ["Risk area for add research (legal, medical,", "weapons, safety, cultural, defamation,", "technical); repeatable"] }
-];
-var BOOLEAN_OPTIONS = new Set(OPTIONS.filter((option) => option.value === undefined).map((option) => option.name));
-var VALUE_OPTIONS = new Set(OPTIONS.filter((option) => option.value !== undefined).map((option) => option.name));
-var REPEATABLE_OPTIONS = new Set(OPTIONS.filter((option) => option.repeatable).map((option) => option.name));
-var OPTION_COLUMN = 28;
-function formatOptionsHelp() {
-  const rows = OPTIONS.filter((option) => option.help).map((option) => ({ flag: `--${option.name}${option.value ? ` ${option.value}` : ""}`, help: option.help })).concat([
-    { flag: "-h, --help", help: ["Show this help"] },
-    { flag: "-v, --version", help: ["Show the story CLI version"] }
-  ]);
-  const lines = [];
-  for (const row of rows) {
-    const head = `  ${row.flag}`;
-    const [first, ...rest] = row.help;
-    lines.push(head.length < OPTION_COLUMN ? `${head.padEnd(OPTION_COLUMN)}${first}` : `${head}  ${first}`);
-    for (const line of rest) {
-      lines.push(`${" ".repeat(OPTION_COLUMN)}${line}`);
-    }
-  }
-  return lines;
-}
-function isKnownOptionToken(token) {
-  if (token === "-h" || token === "-v") {
-    return true;
-  }
-  if (!token.startsWith("--")) {
-    return false;
-  }
-  const equalIndex = token.indexOf("=");
-  const key = token.slice(2, equalIndex === -1 ? undefined : equalIndex);
-  return key === "help" || key === "version" || BOOLEAN_OPTIONS.has(key) || VALUE_OPTIONS.has(key);
-}
-function addOption(options, key, value) {
-  const stored = BOOLEAN_OPTIONS.has(key) ? normalizeBooleanValue(key, value) : value;
-  if (options[key] === undefined || !REPEATABLE_OPTIONS.has(key)) {
-    options[key] = stored;
-  } else {
-    options[key] = Array.isArray(options[key]) ? options[key].concat(stored) : [options[key], stored];
-  }
-}
-function normalizeBooleanValue(key, value) {
-  if (typeof value !== "string") {
-    return Boolean(value);
-  }
-  const lower = value.trim().toLowerCase();
-  if (lower === "false" || lower === "0" || lower === "no" || lower === "off") {
-    return false;
-  }
-  if (lower === "true" || lower === "1" || lower === "yes" || lower === "on") {
-    return true;
-  }
-  throw new Error(`Unknown value "${value}" for --${key}: expected true or false`);
-}
-function isTruthy(value) {
-  const current = Array.isArray(value) ? value[value.length - 1] : value;
-  if (typeof current === "string") {
-    const lower = current.trim().toLowerCase();
-    if (lower === "false" || lower === "0" || lower === "no" || lower === "off" || lower === "") {
-      return false;
-    }
-    return true;
-  }
-  return Boolean(current);
-}
-function isBooleanLiteralToken(token) {
-  return typeof token === "string" && /^(true|false|0|1|yes|no|on|off)$/i.test(token);
-}
-function parseArgs(argv) {
-  const positionals = [];
-  const options = {};
-  for (let index = 0;index < argv.length; index += 1) {
-    const arg = argv[index];
-    if (arg === "-h" || arg === "--help") {
-      options.help = true;
-      continue;
-    }
-    if (arg === "-v" || arg === "--version") {
-      options.version = true;
-      continue;
-    }
-    if (!arg.startsWith("--")) {
-      positionals.push(arg);
-      continue;
-    }
-    const equalIndex = arg.indexOf("=");
-    const key = arg.slice(2, equalIndex === -1 ? undefined : equalIndex);
-    const inlineValue = equalIndex === -1 ? undefined : arg.slice(equalIndex + 1);
-    if (BOOLEAN_OPTIONS.has(key)) {
-      if (inlineValue !== undefined) {
-        addOption(options, key, inlineValue);
-        continue;
-      }
-      const nextToken = argv[index + 1];
-      if (isBooleanLiteralToken(nextToken)) {
-        addOption(options, key, nextToken);
-        index += 1;
-        continue;
-      }
-      addOption(options, key, true);
-      continue;
-    }
-    if (VALUE_OPTIONS.has(key)) {
-      if (inlineValue !== undefined) {
-        addOption(options, key, inlineValue);
-        continue;
-      }
-      const nextValue = argv[index + 1];
-      if (nextValue === undefined || isKnownOptionToken(nextValue) || nextValue.startsWith("--")) {
-        throw new Error(`Missing value for --${key}: expected a value`);
-      }
-      addOption(options, key, nextValue);
-      index += 1;
-      continue;
-    }
-    throw new Error(`Unknown option --${key}`);
-  }
-  return { positionals, options };
-}
-
-// src/timeline.js
-import path2 from "node:path";
-function buildTimeline(project) {
-  const chapters = [...project.chapters].sort((left, right) => left.number - right.number || left.id.localeCompare(right.id, "en"));
-  const chapterById = new Map(chapters.map((chapter) => [chapter.id, chapter]));
-  const entries = [];
-  for (const chapter of chapters) {
-    const scenes = project.scenes.filter((scene) => scene.chapter === chapter.id).sort((left, right) => left.scene - right.scene || left.id.localeCompare(right.id, "en"));
-    const units = scenes.length === 0 ? [{ ...chapter, isChapter: true }] : scenes;
-    for (const unit of units) {
-      entries.push(timelineEntry(project, unit, chapter, entries.length));
-    }
-  }
-  const dated = entries.filter((entry) => entry.days !== undefined).sort((left, right) => left.days - right.days || left.minutes - right.minutes || left.reading - right.reading);
-  let earliestLaterReading = Infinity;
-  for (let index = dated.length - 1;index >= 0; index -= 1) {
-    const entry = dated[index];
-    entry.toldLate = entry.reading > earliestLaterReading;
-    earliestLaterReading = Math.min(earliestLaterReading, entry.reading);
-  }
-  return {
-    chronology: dated,
-    undated: entries.filter((entry) => entry.days === undefined),
-    pov: povBalance(chapters),
-    presence: characterPresence(project, chapters, chapterById)
-  };
-}
-function timelineEntry(project, unit, chapter, reading) {
-  const parsedDate = parseClockDate(unit.date || "");
-  const time = unit.time;
-  const minutes = parseClockTime(time || "");
-  return {
-    id: unit.id,
-    file: path2.relative(project.root, unit.file),
-    title: unit.title,
-    chapterNumber: chapter.number,
-    pov: unit.pov || chapter.pov || "",
-    location: unit.isChapter ? chapter.locations[0] ?? "" : unit.location,
-    date: parsedDate?.text ?? "",
-    time: minutes === undefined ? "" : time.trim(),
-    days: parsedDate?.days,
-    minutes: minutes ?? 0,
-    flashbackTo: unit.isChapter ? "" : unit.flashbackTo,
-    reading
-  };
-}
-function povBalance(chapters) {
-  const totals = new Map;
-  let words = 0;
-  for (const chapter of chapters) {
-    const key = chapter.pov || "unspecified";
-    const entry = totals.get(key) ?? { pov: key, chapters: 0, words: 0 };
-    entry.chapters += 1;
-    entry.words += chapter.wordCount;
-    words += chapter.wordCount;
-    totals.set(key, entry);
-  }
-  return [...totals.values()].map((entry) => ({ ...entry, share: words === 0 ? 0 : entry.words * 100 / words })).sort((left, right) => right.words - left.words || right.chapters - left.chapters || left.pov.localeCompare(right.pov, "en"));
-}
-function characterPresence(project, chapters, chapterById) {
-  const present = new Map(project.characters.map((character) => [character.id, new Set]));
-  const mark = (characterId, chapterId) => {
-    if (present.has(characterId) && chapterById.has(chapterId)) {
-      present.get(characterId).add(chapterId);
-    }
-  };
-  for (const chapter of chapters) {
-    chapter.characters.forEach((characterId) => mark(characterId, chapter.id));
-  }
-  for (const scene of project.scenes) {
-    scene.characters.forEach((characterId) => mark(characterId, scene.chapter));
-  }
-  const positions = new Map(chapters.map((chapter, index) => [chapter.id, index]));
-  return project.characters.map((character) => {
-    const seen = [...present.get(character.id)].map((id) => positions.get(id)).sort((left, right) => left - right);
-    let longestGap = 0;
-    let gapAfter = null;
-    for (let index = 1;index < seen.length; index += 1) {
-      const gap = seen[index] - seen[index - 1] - 1;
-      if (gap > longestGap) {
-        longestGap = gap;
-        gapAfter = chapters[seen[index - 1]].number;
-      }
-    }
-    const trailing = seen.length === 0 ? 0 : chapters.length - 1 - seen[seen.length - 1];
-    return {
-      id: character.id,
-      chapters: seen.length,
-      first: seen.length === 0 ? null : chapters[seen[0]].number,
-      last: seen.length === 0 ? null : chapters[seen[seen.length - 1]].number,
-      longestGap,
-      gapAfter,
-      trailing
-    };
-  }).sort((left, right) => right.chapters - left.chapters || left.id.localeCompare(right.id, "en"));
-}
-function formatTimeline(timeline, totalChapters) {
-  const lines = [`Timeline: ${timeline.chronology.length} dated, ${timeline.undated.length} undated`];
-  lines.push("", "Chronology (story order):");
-  if (timeline.chronology.length === 0) {
-    lines.push("- None: add date (YYYY-MM-DD) and time to scenes or chapters to order them");
-  }
-  for (const entry of timeline.chronology) {
-    const when = [entry.date, entry.time].filter(Boolean).join(" ");
-    const notes = [];
-    if (entry.toldLate) {
-      notes.push(`told in chapter ${entry.chapterNumber}, after later events`);
-    }
-    if (entry.flashbackTo) {
-      notes.push(`flashback to ${entry.flashbackTo}`);
-    }
-    lines.push(`- ${when}  ${entry.id}: ${entry.title}${describe(entry)}${notes.length === 0 ? "" : ` [${notes.join("; ")}]`}`);
-  }
-  if (timeline.undated.length > 0) {
-    lines.push("", "Undated (reading order):");
-    for (const entry of timeline.undated) {
-      lines.push(`- ${entry.id}: ${entry.title}${describe(entry)}`);
-    }
-  }
-  lines.push("", "POV balance:");
-  if (timeline.pov.length === 0) {
-    lines.push("- None");
-  }
-  for (const entry of timeline.pov) {
-    lines.push(`- ${entry.pov}: ${plural(entry.chapters, "chapter")}, ${formatNumber2(entry.words)} words (${Math.round(entry.share)}%)`);
-  }
-  lines.push("", "Character presence:");
-  if (timeline.presence.length === 0) {
-    lines.push("- None");
-  }
-  for (const entry of timeline.presence) {
-    if (entry.chapters === 0) {
-      lines.push(`- ${entry.id}: not present in any chapter`);
-      continue;
-    }
-    const span = entry.first === entry.last ? `chapter ${entry.first}` : `chapters ${entry.first}-${entry.last}`;
-    const details = [`${entry.chapters} of ${totalChapters} chapters`, span];
-    if (entry.longestGap > 0) {
-      details.push(`longest absence ${plural(entry.longestGap, "chapter")} after chapter ${entry.gapAfter}`);
-    }
-    if (entry.trailing > 0) {
-      details.push(`absent from the last ${plural(entry.trailing, "chapter")}`);
-    }
-    lines.push(`- ${entry.id}: ${details.join(", ")}`);
-  }
-  return `${lines.join(`
-`)}
-`;
-}
-function describe(entry) {
-  const parts = [];
-  if (entry.pov) {
-    parts.push(`POV ${entry.pov}`);
-  }
-  if (entry.location) {
-    parts.push(`at ${entry.location}`);
-  }
-  return parts.length === 0 ? "" : ` (${parts.join(", ")})`;
-}
-function plural(count, noun) {
-  return `${count} ${noun}${count === 1 ? "" : "s"}`;
-}
-function formatNumber2(value) {
-  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-}
-
-// src/diagram.js
-var DIAGRAM_KINDS = ["relationships", "locations", "timeline", "clues", "arcs"];
-var FAMILY_TYPES = new Set([
-  "parent",
-  "child",
-  "sibling",
-  "spouse",
-  "partner",
-  "grandparent",
-  "grandchild",
-  "aunt",
-  "uncle",
-  "niece",
-  "nephew",
-  "cousin"
-]);
-var ELDER_TYPES = new Set(["parent", "grandparent", "aunt", "uncle"]);
-var YOUNGER_TYPES = new Set(["child", "grandchild", "niece", "nephew"]);
-function buildDiagram(project, kind) {
-  switch (kind) {
-    case "relationships":
-      return relationshipDiagram(project);
-    case "locations":
-      return locationDiagram(project);
-    case "timeline":
-      return timelineDiagram(project);
-    case "clues":
-      return clueDiagram(project);
-    case "arcs":
-      return arcDiagram(project);
-    default:
-      throw new Error(`Unknown diagram kind: ${kind ?? "(none)"}. Supported kinds: ${DIAGRAM_KINDS.join(", ")}`);
-  }
-}
-function relationshipDiagram(project) {
-  const characters = [...project.characters].sort(byId);
-  const known = new Set(characters.map((character) => character.id));
-  const lines = ["flowchart LR"];
-  for (const character of characters) {
-    lines.push(`  ${nodeId(character.id)}["${label(character.name)}"]`);
-  }
-  const drawn = new Set;
-  for (const character of characters) {
-    for (const relationship of character.relationships) {
-      if (!relationship || typeof relationship !== "object" || typeof relationship.character !== "string") {
-        continue;
-      }
-      const other = relationship.character;
-      const type = String(relationship.type ?? "");
-      if (!known.has(other) || YOUNGER_TYPES.has(type)) {
-        continue;
-      }
-      const pair = [character.id, other].sort().join(" ");
-      if (!ELDER_TYPES.has(type) && drawn.has(pair)) {
-        continue;
-      }
-      drawn.add(pair);
-      const from = nodeId(character.id);
-      const to = nodeId(other);
-      if (ELDER_TYPES.has(type)) {
-        lines.push(`  ${from} ==>|${label(type)}| ${to}`);
-      } else if (FAMILY_TYPES.has(type)) {
-        lines.push(`  ${from} ===|${label(type)}| ${to}`);
-      } else {
-        lines.push(`  ${from} -.-|${label(type || "related")}| ${to}`);
-      }
-    }
-  }
-  const deceased = characters.filter((character) => character.status === "deceased").map((character) => nodeId(character.id));
-  if (deceased.length > 0) {
-    lines.push("  classDef deceased stroke-dasharray: 4 4,color:#888", `  class ${deceased.join(",")} deceased`);
-  }
-  return `${lines.join(`
-`)}
-`;
-}
-function locationDiagram(project) {
-  const locations = [...project.locations].sort(byId);
-  const known = new Set(locations.map((location) => location.id));
-  const lines = ["flowchart LR"];
-  for (const location of locations) {
-    const region = location.region ? `<br/>${label(location.region)}` : "";
-    lines.push(`  ${nodeId(location.id)}["${label(location.name)}${region}"]`);
-  }
-  const routes = [];
-  for (const location of locations) {
-    for (const route of location.routes ?? []) {
-      if (route && typeof route === "object" && known.has(route.to) && route.to !== location.id && typeof route.hours === "number") {
-        routes.push({ from: location.id, to: route.to, hours: route.hours, mode: typeof route.mode === "string" ? route.mode : "" });
-      }
-    }
-  }
-  const declared = new Set(routes.map((route) => `${route.from}>${route.to}`));
-  for (const route of routes) {
-    const text = label([`${route.hours}h`, route.mode].filter(Boolean).join(" "));
-    if (declared.has(`${route.to}>${route.from}`)) {
-      lines.push(`  ${nodeId(route.from)} -->|${text}| ${nodeId(route.to)}`);
-    } else {
-      lines.push(`  ${nodeId(route.from)} ---|${text}| ${nodeId(route.to)}`);
-    }
-  }
-  return `${lines.join(`
-`)}
-`;
-}
-function timelineDiagram(project) {
-  const { chronology } = buildTimeline(project);
-  const lines = ["timeline", `  title ${timelineText(project.title ?? "Timeline")}`];
-  let section = null;
-  for (const entry of chronology) {
-    if (entry.date !== section) {
-      section = entry.date;
-      lines.push(`  section ${entry.date}`);
-    }
-    const when = entry.time || "day";
-    const note = entry.toldLate ? ` (told in chapter ${entry.chapterNumber})` : "";
-    lines.push(`    ${timelineText(when)} : ${timelineText(`${entry.title}${note}`)}`);
-  }
-  return `${lines.join(`
-`)}
-`;
-}
-function clueDiagram(project) {
-  const chapters = [...project.chapters].sort((left, right) => left.number - right.number || byId(left, right));
-  const known = new Set(chapters.map((chapter) => chapter.id));
-  const lines = ["flowchart LR"];
-  for (const chapter of chapters) {
-    lines.push(`  ${nodeId(chapter.id)}["${chapter.number}. ${label(chapter.title)}"]`);
-  }
-  for (let index = 1;index < chapters.length; index += 1) {
-    lines.push(`  ${nodeId(chapters[index - 1].id)} ~~~ ${nodeId(chapters[index].id)}`);
-  }
-  let unrevealed = false;
-  for (const clue of [...project.clues].sort(byId)) {
-    if (!known.has(clue.planted) || clue.status === "dropped" || clue.status === "abandoned") {
-      continue;
-    }
-    const arrow = clue.redHerring ? "-.->" : "-->";
-    const text = label(clue.redHerring ? `${clue.title} (red herring)` : clue.title);
-    if (known.has(clue.payoff)) {
-      lines.push(`  ${nodeId(clue.planted)} ${arrow}|${text}| ${nodeId(clue.payoff)}`);
-    } else {
-      unrevealed = true;
-      lines.push(`  ${nodeId(clue.planted)} ${arrow}|${text}| unrevealed(("not yet revealed"))`);
-    }
-  }
-  if (unrevealed) {
-    lines.push("  classDef open stroke-dasharray: 4 4", "  class unrevealed open");
-  }
-  return `${lines.join(`
-`)}
-`;
-}
-function arcDiagram(project) {
-  const chapters = [...project.chapters].sort((left, right) => left.number - right.number || byId(left, right));
-  const arcs = [...project.arcs].sort(byId);
-  const knownArcs = new Set(arcs.map((arc) => arc.id));
-  const lines = ["flowchart LR"];
-  for (const arc of arcs) {
-    lines.push(`  ${arcNodeId(arc.id)}(["${label(arc.name)}"])`);
-  }
-  for (const chapter of chapters) {
-    lines.push(`  ${nodeId(chapter.id)}["${chapter.number}. ${label(chapter.title)}"]`);
-  }
-  for (const chapter of chapters) {
-    const advanced = new Set(chapter.arcsAdvanced);
-    for (const scene of project.scenes) {
-      if (scene.chapter === chapter.id) {
-        scene.arcsAdvanced.forEach((arcId) => advanced.add(arcId));
-      }
-    }
-    for (const arcId of [...advanced].filter((id) => knownArcs.has(id)).sort()) {
-      lines.push(`  ${arcNodeId(arcId)} --> ${nodeId(chapter.id)}`);
-    }
-  }
-  return `${lines.join(`
-`)}
-`;
-}
-function byId(left, right) {
-  return left.id.localeCompare(right.id, "en");
-}
-var MERMAID_KEYWORDS = new Set(["end", "graph", "flowchart", "subgraph", "direction", "style", "class", "classdef", "click", "linkstyle", "default"]);
-function nodeId(id) {
-  const safe = String(id).replace(/[^A-Za-z0-9]/g, "_");
-  return MERMAID_KEYWORDS.has(safe.toLowerCase()) ? `${safe}_node` : safe;
-}
-function arcNodeId(id) {
-  return `arc__${String(id).replace(/[^A-Za-z0-9]/g, "_")}`;
-}
-function label(text) {
-  return String(text).replace(/&/g, "&amp;").replace(/"/g, "#quot;").replace(/\|/g, "#124;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\s+/g, " ").trim();
-}
-function timelineText(text) {
-  return String(text).replace(/:/g, "∶").replace(/\s+/g, " ").trim();
-}
-
-// src/prose.js
-var FILTER_WORDS = [
-  "felt",
-  "saw",
-  "heard",
-  "noticed",
-  "realized",
-  "realised",
-  "wondered",
-  "seemed",
-  "watched",
-  "knew",
-  "decided",
-  "thought",
-  "sensed"
-];
-var SAID_BOOKISMS = [
-  "barked",
-  "bellowed",
-  "breathed",
-  "chuckled",
-  "cooed",
-  "declared",
-  "exclaimed",
-  "gasped",
-  "grinned",
-  "groaned",
-  "growled",
-  "grunted",
-  "hissed",
-  "inquired",
-  "interjected",
-  "intoned",
-  "laughed",
-  "opined",
-  "purred",
-  "queried",
-  "quipped",
-  "retorted",
-  "shrieked",
-  "sighed",
-  "smiled",
-  "smirked",
-  "snapped",
-  "snarled",
-  "sneered",
-  "spat",
-  "stated"
-];
-var PLAIN_TAGS = ["said", "asked", "says", "asks"];
-var NOT_ADVERBS = new Set([
-  "ally",
-  "anomaly",
-  "apply",
-  "assembly",
-  "belly",
-  "bully",
-  "burly",
-  "butterfly",
-  "chilly",
-  "comply",
-  "costly",
-  "curly",
-  "daily",
-  "deadly",
-  "dolly",
-  "dragonfly",
-  "early",
-  "elderly",
-  "family",
-  "fly",
-  "folly",
-  "friendly",
-  "ghastly",
-  "ghostly",
-  "gully",
-  "holly",
-  "holy",
-  "homely",
-  "hourly",
-  "imply",
-  "italy",
-  "jelly",
-  "jolly",
-  "july",
-  "lily",
-  "likely",
-  "lively",
-  "lonely",
-  "lovely",
-  "melancholy",
-  "monopoly",
-  "monthly",
-  "multiply",
-  "oily",
-  "only",
-  "orderly",
-  "prickly",
-  "rally",
-  "rely",
-  "reply",
-  "sickly",
-  "silly",
-  "sly",
-  "smelly",
-  "stately",
-  "supply",
-  "surly",
-  "tally",
-  "ugly",
-  "unlikely",
-  "weekly",
-  "wobbly",
-  "woolly",
-  "yearly"
-]);
-var ECHO_STOPWORDS = new Set([
-  "about",
-  "above",
-  "after",
-  "again",
-  "against",
-  "along",
-  "always",
-  "among",
-  "another",
-  "around",
-  "because",
-  "before",
-  "behind",
-  "being",
-  "below",
-  "between",
-  "could",
-  "couldn't",
-  "didn't",
-  "doesn't",
-  "don't",
-  "every",
-  "first",
-  "hadn't",
-  "haven't",
-  "isn't",
-  "might",
-  "never",
-  "other",
-  "right",
-  "should",
-  "since",
-  "something",
-  "still",
-  "their",
-  "there",
-  "these",
-  "thing",
-  "things",
-  "those",
-  "though",
-  "three",
-  "through",
-  "until",
-  "wasn't",
-  "where",
-  "which",
-  "while",
-  "without",
-  "would",
-  "wouldn't",
-  "you're",
-  "they're",
-  "we're"
-]);
-var PHRASE_STOPWORDS = new Set([
-  "a",
-  "an",
-  "and",
-  "as",
-  "at",
-  "be",
-  "but",
-  "by",
-  "for",
-  "from",
-  "had",
-  "has",
-  "have",
-  "he",
-  "her",
-  "his",
-  "i",
-  "in",
-  "into",
-  "is",
-  "it",
-  "its",
-  "me",
-  "my",
-  "not",
-  "of",
-  "on",
-  "or",
-  "she",
-  "so",
-  "that",
-  "the",
-  "their",
-  "them",
-  "then",
-  "they",
-  "this",
-  "to",
-  "was",
-  "we",
-  "were",
-  "with",
-  "you"
-]);
-var DIALECT_PAIRS = [
-  ["armour", "armor"],
-  ["armoured", "armored"],
-  ["centre", "center"],
-  ["centres", "centers"],
-  ["centred", "centered"],
-  ["colour", "color"],
-  ["colours", "colors"],
-  ["coloured", "colored"],
-  ["colourful", "colorful"],
-  ["defence", "defense"],
-  ["defences", "defenses"],
-  ["favour", "favor"],
-  ["favours", "favors"],
-  ["favoured", "favored"],
-  ["favourite", "favorite"],
-  ["grey", "gray"],
-  ["greying", "graying"],
-  ["harbour", "harbor"],
-  ["harbours", "harbors"],
-  ["honour", "honor"],
-  ["honours", "honors"],
-  ["honoured", "honored"],
-  ["honourable", "honorable"],
-  ["jewellery", "jewelry"],
-  ["labour", "labor"],
-  ["mould", "mold"],
-  ["mouldy", "moldy"],
-  ["neighbour", "neighbor"],
-  ["neighbours", "neighbors"],
-  ["odour", "odor"],
-  ["offence", "offense"],
-  ["plough", "plow"],
-  ["rumour", "rumor"],
-  ["rumours", "rumors"],
-  ["sceptic", "skeptic"],
-  ["sceptical", "skeptical"],
-  ["smoulder", "smolder"],
-  ["smouldering", "smoldering"],
-  ["theatre", "theater"],
-  ["towards", "toward"],
-  ["travelled", "traveled"],
-  ["travelling", "traveling"],
-  ["traveller", "traveler"],
-  ["cancelled", "canceled"],
-  ["vapour", "vapor"],
-  ["whisky", "whiskey"]
-];
-var PROSE_THRESHOLDS = {
-  filterPerThousand: 10,
-  adverbsPerThousand: 12,
-  minRateWords: 300,
-  bookismsPerChapter: 3,
-  echoWindow: 30,
-  echoMinLength: 5,
-  uniformMinSentences: 20,
-  uniformSpread: 5,
-  phraseLength: 4,
-  phraseMinCount: 3,
-  phraseLimit: 10
-};
-function proseRules(styleData, characterNames) {
-  const data = styleData ?? {};
-  const allow = new Set(stringList(data["allow-words"]).map((word) => word.toLowerCase()));
-  const variants = [];
-  for (const entry of Array.isArray(data.preferred) ? data.preferred : []) {
-    if (entry && typeof entry.use === "string" && typeof entry.avoid === "string" && entry.use.trim() !== "" && entry.avoid.trim() !== "") {
-      variants.push({ use: entry.use.trim(), avoid: entry.avoid.trim(), source: "style sheet" });
-    }
-  }
-  const dialect = typeof data.dialect === "string" ? data.dialect : "unspecified";
-  if (dialect === "british" || dialect === "american") {
-    const claimed = new Set(variants.flatMap((variant) => [variant.use.toLowerCase(), variant.avoid.toLowerCase()]).concat([...allow]));
-    for (const [british, american] of DIALECT_PAIRS) {
-      const [use, avoid] = dialect === "british" ? [british, american] : [american, british];
-      if (!claimed.has(use) && !claimed.has(avoid)) {
-        variants.push({ use, avoid, source: `${dialect} dialect` });
-      }
-    }
-  }
-  const nameTokens = new Set;
-  for (const name of characterNames) {
-    for (const token of splitWords(name)) {
-      nameTokens.add(token.toLowerCase());
-    }
-  }
-  return {
-    allow,
-    variants: variants.map((variant) => ({ ...variant, pattern: phrasePattern(variant.avoid) })),
-    watch: stringList(data["watch-words"]).map((word) => ({ word, pattern: phrasePattern(word) })),
-    filterWords: new Set(FILTER_WORDS.filter((word) => !allow.has(word))),
-    bookisms: new Set(SAID_BOOKISMS.filter((word) => !allow.has(word))),
-    nameTokens
-  };
-}
-function analyzeChapter(prose, rules) {
-  const paragraphs = proseParagraphs2(prose);
-  const text = paragraphs.join(`
-
-`);
-  const words = splitWords(text);
-  const narration = splitWords(paragraphs.map(stripDialogue).join(`
-
-`));
-  const sentences = paragraphs.flatMap(splitSentences).map((sentence) => splitWords(sentence).length).filter((count) => count > 0);
-  const filterWords = countMatching(narration, (word) => rules.filterWords.has(word));
-  const adverbs = countMatching(narration, (word) => isAdverb(word, rules));
-  const tags = dialogueTags(paragraphs, rules);
-  return {
-    words: words.length,
-    narrationWords: narration.length,
-    sentences: sentenceStats(sentences),
-    filterWords,
-    adverbs,
-    plainTags: tags.plain,
-    bookisms: tags.bookisms,
-    echoes: echoes(words, rules),
-    watch: rules.watch.map(({ word, pattern }) => ({ word, count: countPattern(text, pattern) })).filter((entry) => entry.count > 0),
-    variants: rules.variants.map(({ use, avoid, source, pattern }) => ({ use, avoid, source, count: countPattern(text, pattern) })).filter((entry) => entry.count > 0),
-    phraseSentences: paragraphs.flatMap(splitSentences).map((sentence) => splitWords(sentence).map((word) => word.toLowerCase()))
-  };
-}
-function chapterFindings(label2, analysis, thresholds = PROSE_THRESHOLDS) {
-  const findings = [];
-  for (const variant of analysis.variants) {
-    findings.push(`${label2} uses "${variant.avoid}" ${times(variant.count)}; ${variant.source} prefers "${variant.use}"`);
-  }
-  const rated = analysis.narrationWords >= thresholds.minRateWords;
-  const filterRate = perThousand(total(analysis.filterWords), analysis.narrationWords);
-  if (rated && filterRate > thresholds.filterPerThousand) {
-    findings.push(`${label2} has ${formatRate(filterRate)} filter words per 1,000 narration words (over ${thresholds.filterPerThousand}): ${formatCounts(analysis.filterWords, 5)}`);
-  }
-  const adverbRate = perThousand(total(analysis.adverbs), analysis.narrationWords);
-  if (rated && adverbRate > thresholds.adverbsPerThousand) {
-    findings.push(`${label2} has ${formatRate(adverbRate)} -ly adverbs per 1,000 narration words (over ${thresholds.adverbsPerThousand}): ${formatCounts(analysis.adverbs, 5)}`);
-  }
-  const bookisms = total(analysis.bookisms);
-  if (bookisms >= thresholds.bookismsPerChapter) {
-    findings.push(`${label2} has ${bookisms} said-bookism dialogue tags: ${formatCounts(analysis.bookisms, 5)}`);
-  }
-  const stats = analysis.sentences;
-  if (stats.count >= thresholds.uniformMinSentences && stats.spread < thresholds.uniformSpread) {
-    findings.push(`${label2} sentence lengths are uniform (spread ${formatRate(stats.spread)} words over ${stats.count} sentences); vary the rhythm`);
-  }
-  return findings;
-}
-function repeatedPhrases(analyses, thresholds = PROSE_THRESHOLDS) {
-  const counts = new Map;
-  const size = thresholds.phraseLength;
-  for (const analysis of analyses) {
-    for (const sentence of analysis.phraseSentences) {
-      for (let index = 0;index + size <= sentence.length; index += 1) {
-        const gram = sentence.slice(index, index + size);
-        if (gram.every((word) => PHRASE_STOPWORDS.has(word))) {
-          continue;
-        }
-        const key = gram.join(" ");
-        counts.set(key, (counts.get(key) ?? 0) + 1);
-      }
-    }
-  }
-  const repeated = new Map([...counts].filter(([, count]) => count >= thresholds.phraseMinCount));
-  return sortCounts(repeated).slice(0, thresholds.phraseLimit).map((entry) => ({ phrase: entry.word, count: entry.count }));
-}
-function similarNames(characters) {
-  const firsts = characters.map((character) => ({ id: character.id, name: String(character.name), first: (splitWords(character.name)[0] ?? "").toLowerCase() })).filter((entry) => entry.first.length >= 3).sort((left, right) => left.id.localeCompare(right.id, "en"));
-  const pairs = [];
-  for (let left = 0;left < firsts.length; left += 1) {
-    for (let right = left + 1;right < firsts.length; right += 1) {
-      const a = firsts[left].first;
-      const b = firsts[right].first;
-      const limit = Math.min(a.length, b.length) >= 5 ? 2 : 1;
-      if (a === b || a.slice(0, 3) === b.slice(0, 3) || editDistance(a, b) <= limit) {
-        pairs.push([firsts[left], firsts[right]]);
-      }
-    }
-  }
-  return pairs;
-}
-function formatProseReport(report) {
-  const chapterCount = `${report.chapters.length} ${report.chapters.length === 1 ? "chapter" : "chapters"}`;
-  const lines = [`Prose report: ${chapterCount}, ${report.words} words`];
-  if (!report.styleSheet) {
-    lines.push("No style-sheet.md: spelling and watch-word checks are off");
-  }
-  for (const chapter of report.chapters) {
-    const analysis = chapter.analysis;
-    const stats = analysis.sentences;
-    lines.push("", `${chapter.file}: ${chapter.title} (${analysis.words} words)`);
-    lines.push(`  Sentences: ${stats.count}, average ${formatRate(stats.mean)} words, longest ${stats.longest}, spread ${formatRate(stats.spread)}`);
-    lines.push(`  Filter words: ${formatRate(perThousand(total(analysis.filterWords), analysis.narrationWords))} per 1k narration words${countSuffix(analysis.filterWords)}`);
-    lines.push(`  -ly adverbs: ${formatRate(perThousand(total(analysis.adverbs), analysis.narrationWords))} per 1k narration words${countSuffix(analysis.adverbs)}`);
-    lines.push(`  Dialogue tags: ${formatCounts(analysis.plainTags, 4) || "none plain"}; said-bookisms: ${formatCounts(analysis.bookisms, 5) || "none"}`);
-    lines.push(`  Echoes within ${PROSE_THRESHOLDS.echoWindow} words: ${formatCounts(analysis.echoes, 5) || "none"}`);
-    if (analysis.watch.length > 0) {
-      lines.push(`  Watch words: ${analysis.watch.map((entry) => `${entry.word} ${entry.count}`).join(", ")}`);
-    }
-    if (analysis.variants.length > 0) {
-      lines.push(`  Spelling: ${analysis.variants.map((entry) => `${entry.avoid} ${entry.count} (use ${entry.use})`).join(", ")}`);
-    }
-  }
-  lines.push("", "Manuscript:");
-  lines.push(`  Repeated ${PROSE_THRESHOLDS.phraseLength}-word phrases: ${report.phrases.map((entry) => `"${entry.phrase}" ${entry.count}`).join(", ") || "none"}`);
-  lines.push(`  Similar character names: ${report.similarNames.map(([a, b]) => `${a.name} / ${b.name}`).join(", ") || "none"}`);
-  return `${lines.join(`
-`)}
-`;
-}
-function proseParagraphs2(prose) {
-  return withoutFencedCode(scanComments(String(prose), " ").text).split(/\r?\n\s*\r?\n/).map((paragraph) => paragraph.split(/\r?\n/).filter((line) => !/^\s{0,3}#/.test(line)).join(" ")).map((paragraph) => paragraph.replace(/\s+/g, " ").trim()).filter((paragraph) => paragraph !== "" && !/^([*_-])( ?\1){2,}$/.test(paragraph));
-}
-function splitSentences(paragraph) {
-  const sentences = [];
-  let start = 0;
-  for (const space of paragraph.matchAll(/\s+/g)) {
-    const before = paragraph.slice(Math.max(0, space.index - 9), space.index);
-    const after = paragraph.slice(space.index + space[0].length, space.index + space[0].length + 9);
-    if (/[.!?…]["'”’)\]*_]{0,8}$/.test(before) && /^["'“‘(*_]{0,8}[\p{Lu}\p{N}]/u.test(after)) {
-      sentences.push(paragraph.slice(start, space.index));
-      start = space.index + space[0].length;
-    }
-  }
-  sentences.push(paragraph.slice(start));
-  return sentences;
-}
-function stripDialogue(paragraph) {
-  let text = replaceQuotes(paragraph);
-  const curly = text.indexOf("“", text.lastIndexOf("”") + 1);
-  if (curly !== -1) {
-    text = text.slice(0, curly);
-  }
-  const straight = text.indexOf('"');
-  if (straight !== -1) {
-    text = text.slice(0, straight);
-  }
-  const lastSingleClose = text.lastIndexOf("’");
-  const single = /(?<![\p{L}\p{N}])‘/u.exec(text.slice(lastSingleClose + 1));
-  if (single) {
-    text = text.slice(0, lastSingleClose + 1 + single.index);
-  }
-  return text;
-}
-function dialogueTags(paragraphs, rules) {
-  const plain = new Map;
-  const bookisms = new Map;
-  for (const paragraph of paragraphs) {
-    for (const closing of closingQuoteIndexes(paragraph)) {
-      const after = splitWords(paragraph.slice(closing + 1, closing + 200).split(/[.!?;:“"]/)[0]).slice(0, 3);
-      for (const raw of after) {
-        const word = raw.toLowerCase();
-        if (PLAIN_TAGS.includes(word)) {
-          increment(plain, word);
-          break;
-        }
-        if (rules.bookisms.has(word)) {
-          increment(bookisms, word);
-          break;
-        }
-      }
-    }
-  }
-  return { plain: sortCounts(plain), bookisms: sortCounts(bookisms) };
-}
-function closingQuoteIndexes(paragraph) {
-  return quoteMatches(paragraph).map((match) => match.end - 1);
-}
-function isAdverb(word, rules) {
-  return word.length > 4 && word.endsWith("ly") && !NOT_ADVERBS.has(word) && !rules.allow.has(word) && !rules.nameTokens.has(word);
-}
-function echoes(words, rules) {
-  const lastSeen = new Map;
-  const counts = new Map;
-  words.forEach((raw, index) => {
-    const word = raw.toLowerCase();
-    if (word.length < PROSE_THRESHOLDS.echoMinLength || ECHO_STOPWORDS.has(word) || rules.nameTokens.has(word) || rules.allow.has(word) || /^\p{N}+$/u.test(word)) {
-      return;
-    }
-    if (lastSeen.has(word) && index - lastSeen.get(word) <= PROSE_THRESHOLDS.echoWindow) {
-      increment(counts, word);
-    }
-    lastSeen.set(word, index);
-  });
-  return sortCounts(counts);
-}
-function sentenceStats(lengths) {
-  if (lengths.length === 0) {
-    return { count: 0, mean: 0, longest: 0, spread: 0 };
-  }
-  const mean = lengths.reduce((sum, value) => sum + value, 0) / lengths.length;
-  const variance = lengths.reduce((sum, value) => sum + (value - mean) ** 2, 0) / lengths.length;
-  return { count: lengths.length, mean, longest: Math.max(...lengths), spread: Math.sqrt(variance) };
-}
-function countMatching(words, predicate) {
-  const counts = new Map;
-  for (const raw of words) {
-    const word = raw.toLowerCase();
-    if (predicate(word)) {
-      increment(counts, word);
-    }
-  }
-  return sortCounts(counts);
-}
-function phrasePattern(phrase) {
-  const body = phrase.trim().split(/\s+/).map(escapeRegExp).join("\\s+");
-  return new RegExp(`(?<![\\p{L}\\p{N}])${body}(?![\\p{L}\\p{N}])`, "giu");
-}
-function countPattern(text, pattern) {
-  return (text.match(pattern) ?? []).length;
-}
-function editDistance(a, b) {
-  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
-  for (let i = 1;i <= a.length; i += 1) {
-    const current = [i];
-    for (let j = 1;j <= b.length; j += 1) {
-      current[j] = Math.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-    }
-    previous = current;
-  }
-  return previous[b.length];
-}
-function increment(counts, key) {
-  counts.set(key, (counts.get(key) ?? 0) + 1);
-}
-var COLLATOR = new Intl.Collator("en");
-function sortCounts(counts) {
-  return [...counts.entries()].map(([word, count]) => ({ word, count })).sort((left, right) => right.count - left.count || COLLATOR.compare(left.word, right.word));
-}
-function stringList(value) {
-  return Array.isArray(value) ? value.filter((item) => typeof item === "string" && item.trim() !== "").map((item) => item.trim()) : [];
-}
-function total(counts) {
-  return counts.reduce((sum, entry) => sum + entry.count, 0);
-}
-function perThousand(count, words) {
-  return words === 0 ? 0 : count * 1000 / words;
-}
-function formatRate(value) {
-  return value.toFixed(1);
-}
-function formatCounts(counts, limit) {
-  return counts.slice(0, limit).map((entry) => `${entry.word} ${entry.count}`).join(", ");
-}
-function countSuffix(counts) {
-  return counts.length === 0 ? "" : ` (${formatCounts(counts, 5)})`;
-}
-function times(count) {
-  return count === 1 ? "once" : `${count} times`;
-}
-
 // src/names.js
 var MAJOR_ROLES = new Set(["protagonist", "antagonist", "deuteragonist", "narrator"]);
 var TITLE_WORDS = new Set([
@@ -2804,16 +1666,16 @@ function buildVoices(project, chapters) {
   const warnings = [];
   for (const character of project.characters) {
     const said = lines.get(character.id);
-    for (const phrase of stringList2(character.voiceAvoid)) {
-      const pattern = phrasePattern2(phrase);
+    for (const phrase of stringList(character.voiceAvoid)) {
+      const pattern = phrasePattern(phrase);
       const chaptersUsing = [...new Set(said.filter((line) => pattern.test(line.text)).map((line) => line.chapter))];
       if (chaptersUsing.length > 0) {
         warnings.push(`${character.id} says "${phrase}", which is in their voice-avoid list (${chaptersUsing.join(", ")})`);
       }
     }
     if (said.length >= VOICE_THRESHOLDS.minLines) {
-      for (const phrase of stringList2(character.voiceWords)) {
-        const pattern = phrasePattern2(phrase);
+      for (const phrase of stringList(character.voiceWords)) {
+        const pattern = phrasePattern(phrase);
         if (!said.some((line) => pattern.test(line.text))) {
           warnings.push(`${character.id} does not say "${phrase}" from their voice-words list in ${said.length} attributed lines of dialogue`);
         }
@@ -2836,7 +1698,13 @@ function buildVoices(project, chapters) {
 }
 var PRONOUNS = "he|she|they|i|we";
 var VERB_ALTERNATION = SPEECH_VERBS.map((verb) => verb.replace(/ /g, "\\s+")).join("|");
-var PRONOUN_TAG = new RegExp(`(?<![\\p{L}\\p{N}])(?:(?:${PRONOUNS})\\s+(?:${VERB_ALTERNATION})|(?:${VERB_ALTERNATION})\\s+(?:${PRONOUNS}))(?![\\p{L}\\p{N}])`, "iu");
+var PRONOUN_TAG_SOURCE = `(?:(?:${PRONOUNS})\\s+(?:${VERB_ALTERNATION})|(?:${VERB_ALTERNATION})\\s+(?:${PRONOUNS}))(?![\\p{L}\\p{N}])`;
+var TAG_AFTER_QUOTE = new RegExp(`^[\\s,.;:!?—–-]*${PRONOUN_TAG_SOURCE}`, "iu");
+var TAG_BEFORE_QUOTE = new RegExp(`(?<![\\p{L}\\p{N}])${PRONOUN_TAG_SOURCE}[\\s,:—–-]*$`, "iu");
+var TAG_WINDOW = 40;
+function hasPronounTag(paragraph) {
+  return quoteMatches(paragraph).some((match) => TAG_AFTER_QUOTE.test(paragraph.slice(match.end, match.end + TAG_WINDOW)) || TAG_BEFORE_QUOTE.test(paragraph.slice(Math.max(0, match.start - TAG_WINDOW), match.start)));
+}
 function speakerPatterns(characters) {
   const verbs = SPEECH_VERBS.flatMap((verb) => [verb, `${verb[0].toUpperCase()}${verb.slice(1)}`]).map((verb) => verb.replace(/ /g, "\\s+")).join("|");
   return characters.filter((character) => character.status !== "cut").map((character) => {
@@ -2849,7 +1717,7 @@ function speakerPatterns(characters) {
         names.add(first);
       }
     }
-    for (const alias of stringList2(character.aliases)) {
+    for (const alias of stringList(character.aliases)) {
       names.add(alias);
     }
     const alternatives = [...names].sort((left, right) => right.length - left.length).map(escape).join("|");
@@ -2880,7 +1748,7 @@ function attribute(paragraph, allSpeakers) {
       return null;
     }
   }
-  if (PRONOUN_TAG.test(narration)) {
+  if (hasPronounTag(paragraph)) {
     return null;
   }
   const named = speakers.filter((speaker) => speaker.name.test(narration));
@@ -3007,13 +1875,13 @@ function similarVoices(left, right) {
   const limits = VOICE_THRESHOLDS;
   return Math.abs(left.sentenceLength - right.sentenceLength) < limits.sentenceLength && Math.abs(left.contractions - right.contractions) < limits.contractions && Math.abs(left.questions - right.questions) < limits.questions && Math.abs(left.exclamations - right.exclamations) < limits.exclamations;
 }
-function phrasePattern2(phrase) {
+function phrasePattern(phrase) {
   return new RegExp(`(?<![\\p{L}\\p{N}])${escape(String(phrase).trim()).replace(/['’]/g, "['’]")}(?![\\p{L}\\p{N}])`, "iu");
 }
 function escape(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
-function stringList2(value) {
+function stringList(value) {
   return (Array.isArray(value) ? value : []).filter((item) => typeof item === "string" && item.trim() !== "");
 }
 function formatVoices(report) {
@@ -3030,6 +1898,1156 @@ function formatVoices(report) {
   return `${lines.join(`
 `)}
 `;
+}
+
+// src/prose.js
+var FILTER_WORDS = [
+  "felt",
+  "saw",
+  "heard",
+  "noticed",
+  "realized",
+  "realised",
+  "wondered",
+  "seemed",
+  "watched",
+  "knew",
+  "decided",
+  "thought",
+  "sensed"
+];
+var SAID_BOOKISMS = [
+  "barked",
+  "bellowed",
+  "breathed",
+  "chuckled",
+  "cooed",
+  "declared",
+  "exclaimed",
+  "gasped",
+  "grinned",
+  "groaned",
+  "growled",
+  "grunted",
+  "hissed",
+  "inquired",
+  "interjected",
+  "intoned",
+  "laughed",
+  "opined",
+  "purred",
+  "queried",
+  "quipped",
+  "retorted",
+  "shrieked",
+  "sighed",
+  "smiled",
+  "smirked",
+  "snapped",
+  "snarled",
+  "sneered",
+  "spat",
+  "stated"
+];
+var PLAIN_TAGS = ["said", "asked", "says", "asks"];
+var NOT_ADVERBS = new Set([
+  "ally",
+  "anomaly",
+  "apply",
+  "assembly",
+  "belly",
+  "bully",
+  "burly",
+  "butterfly",
+  "chilly",
+  "comply",
+  "costly",
+  "curly",
+  "daily",
+  "deadly",
+  "dolly",
+  "dragonfly",
+  "early",
+  "elderly",
+  "family",
+  "fly",
+  "folly",
+  "friendly",
+  "ghastly",
+  "ghostly",
+  "gully",
+  "holly",
+  "holy",
+  "homely",
+  "hourly",
+  "imply",
+  "italy",
+  "jelly",
+  "jolly",
+  "july",
+  "lily",
+  "likely",
+  "lively",
+  "lonely",
+  "lovely",
+  "melancholy",
+  "monopoly",
+  "monthly",
+  "multiply",
+  "oily",
+  "only",
+  "orderly",
+  "prickly",
+  "rally",
+  "rely",
+  "reply",
+  "sickly",
+  "silly",
+  "sly",
+  "smelly",
+  "stately",
+  "supply",
+  "surly",
+  "tally",
+  "ugly",
+  "unlikely",
+  "weekly",
+  "wobbly",
+  "woolly",
+  "yearly"
+]);
+var ECHO_STOPWORDS = new Set([
+  "about",
+  "above",
+  "after",
+  "again",
+  "against",
+  "along",
+  "always",
+  "among",
+  "another",
+  "around",
+  "because",
+  "before",
+  "behind",
+  "being",
+  "below",
+  "between",
+  "could",
+  "couldn't",
+  "didn't",
+  "doesn't",
+  "don't",
+  "every",
+  "first",
+  "hadn't",
+  "haven't",
+  "isn't",
+  "might",
+  "never",
+  "other",
+  "right",
+  "should",
+  "since",
+  "something",
+  "still",
+  "their",
+  "there",
+  "these",
+  "thing",
+  "things",
+  "those",
+  "though",
+  "three",
+  "through",
+  "until",
+  "wasn't",
+  "where",
+  "which",
+  "while",
+  "without",
+  "would",
+  "wouldn't",
+  "you're",
+  "they're",
+  "we're"
+]);
+var PHRASE_STOPWORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "as",
+  "at",
+  "be",
+  "but",
+  "by",
+  "for",
+  "from",
+  "had",
+  "has",
+  "have",
+  "he",
+  "her",
+  "his",
+  "i",
+  "in",
+  "into",
+  "is",
+  "it",
+  "its",
+  "me",
+  "my",
+  "not",
+  "of",
+  "on",
+  "or",
+  "she",
+  "so",
+  "that",
+  "the",
+  "their",
+  "them",
+  "then",
+  "they",
+  "this",
+  "to",
+  "was",
+  "we",
+  "were",
+  "with",
+  "you"
+]);
+var DIALECT_PAIRS = [
+  ["armour", "armor"],
+  ["armoured", "armored"],
+  ["centre", "center"],
+  ["centres", "centers"],
+  ["centred", "centered"],
+  ["colour", "color"],
+  ["colours", "colors"],
+  ["coloured", "colored"],
+  ["colourful", "colorful"],
+  ["defence", "defense"],
+  ["defences", "defenses"],
+  ["favour", "favor"],
+  ["favours", "favors"],
+  ["favoured", "favored"],
+  ["favourite", "favorite"],
+  ["grey", "gray"],
+  ["greying", "graying"],
+  ["harbour", "harbor"],
+  ["harbours", "harbors"],
+  ["honour", "honor"],
+  ["honours", "honors"],
+  ["honoured", "honored"],
+  ["honourable", "honorable"],
+  ["jewellery", "jewelry"],
+  ["labour", "labor"],
+  ["mould", "mold"],
+  ["mouldy", "moldy"],
+  ["neighbour", "neighbor"],
+  ["neighbours", "neighbors"],
+  ["odour", "odor"],
+  ["offence", "offense"],
+  ["plough", "plow"],
+  ["rumour", "rumor"],
+  ["rumours", "rumors"],
+  ["sceptic", "skeptic"],
+  ["sceptical", "skeptical"],
+  ["smoulder", "smolder"],
+  ["smouldering", "smoldering"],
+  ["theatre", "theater"],
+  ["towards", "toward"],
+  ["travelled", "traveled"],
+  ["travelling", "traveling"],
+  ["traveller", "traveler"],
+  ["cancelled", "canceled"],
+  ["vapour", "vapor"],
+  ["whisky", "whiskey"]
+];
+var PROSE_THRESHOLDS = {
+  filterPerThousand: 10,
+  adverbsPerThousand: 12,
+  minRateWords: 300,
+  bookismsPerChapter: 3,
+  echoWindow: 30,
+  echoMinLength: 5,
+  uniformMinSentences: 20,
+  uniformSpread: 5,
+  phraseLength: 4,
+  phraseMinCount: 3,
+  phraseLimit: 10
+};
+function proseRules(styleData, characterNames) {
+  const data = styleData ?? {};
+  const allow = new Set(stringList2(data["allow-words"]).map((word) => word.toLowerCase()));
+  const variants = [];
+  for (const entry of Array.isArray(data.preferred) ? data.preferred : []) {
+    if (entry && typeof entry.use === "string" && typeof entry.avoid === "string" && entry.use.trim() !== "" && entry.avoid.trim() !== "") {
+      variants.push({ use: entry.use.trim(), avoid: entry.avoid.trim(), source: "style sheet" });
+    }
+  }
+  const dialect = typeof data.dialect === "string" ? data.dialect : "unspecified";
+  if (dialect === "british" || dialect === "american") {
+    const claimed = new Set(variants.flatMap((variant) => [variant.use.toLowerCase(), variant.avoid.toLowerCase()]).concat([...allow]));
+    for (const [british, american] of DIALECT_PAIRS) {
+      const [use, avoid] = dialect === "british" ? [british, american] : [american, british];
+      if (!claimed.has(use) && !claimed.has(avoid)) {
+        variants.push({ use, avoid, source: `${dialect} dialect` });
+      }
+    }
+  }
+  const nameTokens = new Set;
+  for (const name of characterNames) {
+    for (const token of splitWords(name)) {
+      nameTokens.add(token.toLowerCase());
+    }
+  }
+  return {
+    allow,
+    variants: variants.map((variant) => ({ ...variant, pattern: phrasePattern2(variant.avoid) })),
+    watch: stringList2(data["watch-words"]).map((word) => ({ word, pattern: phrasePattern2(word) })),
+    filterWords: new Set(FILTER_WORDS.filter((word) => !allow.has(word))),
+    bookisms: new Set(SAID_BOOKISMS.filter((word) => !allow.has(word))),
+    nameTokens
+  };
+}
+function analyzeChapter(prose, rules) {
+  const paragraphs = proseParagraphs2(prose);
+  const text = paragraphs.join(`
+
+`);
+  const words = splitWords(text);
+  const narration = splitWords(paragraphs.map(stripDialogue).join(`
+
+`));
+  const sentences = paragraphs.flatMap(splitSentences).map((sentence) => splitWords(sentence).length).filter((count) => count > 0);
+  const filterWords = countMatching(narration, (word) => rules.filterWords.has(word));
+  const adverbs = countMatching(narration, (word) => isAdverb(word, rules));
+  const tags = dialogueTags(paragraphs, rules);
+  return {
+    words: words.length,
+    narrationWords: narration.length,
+    sentences: sentenceStats(sentences),
+    filterWords,
+    adverbs,
+    plainTags: tags.plain,
+    bookisms: tags.bookisms,
+    echoes: echoes(words, rules),
+    watch: rules.watch.map(({ word, pattern }) => ({ word, count: countPattern(text, pattern) })).filter((entry) => entry.count > 0),
+    variants: rules.variants.map(({ use, avoid, source, pattern }) => ({ use, avoid, source, count: countPattern(text, pattern) })).filter((entry) => entry.count > 0),
+    phraseSentences: paragraphs.flatMap(splitSentences).map((sentence) => splitWords(sentence).map((word) => word.toLowerCase()))
+  };
+}
+function chapterFindings(label, analysis, thresholds = PROSE_THRESHOLDS) {
+  const findings = [];
+  for (const variant of analysis.variants) {
+    findings.push(`${label} uses "${variant.avoid}" ${times(variant.count)}; ${variant.source} prefers "${variant.use}"`);
+  }
+  const rated = analysis.narrationWords >= thresholds.minRateWords;
+  const filterRate = perThousand(total(analysis.filterWords), analysis.narrationWords);
+  if (rated && filterRate > thresholds.filterPerThousand) {
+    findings.push(`${label} has ${formatRate(filterRate)} filter words per 1,000 narration words (over ${thresholds.filterPerThousand}): ${formatCounts(analysis.filterWords, 5)}`);
+  }
+  const adverbRate = perThousand(total(analysis.adverbs), analysis.narrationWords);
+  if (rated && adverbRate > thresholds.adverbsPerThousand) {
+    findings.push(`${label} has ${formatRate(adverbRate)} -ly adverbs per 1,000 narration words (over ${thresholds.adverbsPerThousand}): ${formatCounts(analysis.adverbs, 5)}`);
+  }
+  const bookisms = total(analysis.bookisms);
+  if (bookisms >= thresholds.bookismsPerChapter) {
+    findings.push(`${label} has ${bookisms} said-bookism dialogue tags: ${formatCounts(analysis.bookisms, 5)}`);
+  }
+  const stats = analysis.sentences;
+  if (stats.count >= thresholds.uniformMinSentences && stats.spread < thresholds.uniformSpread) {
+    findings.push(`${label} sentence lengths are uniform (spread ${formatRate(stats.spread)} words over ${stats.count} sentences); vary the rhythm`);
+  }
+  return findings;
+}
+function repeatedPhrases(analyses, thresholds = PROSE_THRESHOLDS) {
+  const counts = new Map;
+  const size = thresholds.phraseLength;
+  for (const analysis of analyses) {
+    for (const sentence of analysis.phraseSentences) {
+      for (let index = 0;index + size <= sentence.length; index += 1) {
+        const gram = sentence.slice(index, index + size);
+        if (gram.every((word) => PHRASE_STOPWORDS.has(word))) {
+          continue;
+        }
+        const key = gram.join(" ");
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+    }
+  }
+  const repeated = new Map([...counts].filter(([, count]) => count >= thresholds.phraseMinCount));
+  return sortCounts(repeated).slice(0, thresholds.phraseLimit).map((entry) => ({ phrase: entry.word, count: entry.count }));
+}
+function similarNames(characters) {
+  const firsts = characters.map((character) => ({ id: character.id, name: String(character.name), first: (splitWords(character.name)[0] ?? "").toLowerCase() })).filter((entry) => entry.first.length >= 3).sort((left, right) => left.id.localeCompare(right.id, "en"));
+  const pairs = [];
+  for (let left = 0;left < firsts.length; left += 1) {
+    for (let right = left + 1;right < firsts.length; right += 1) {
+      const a = firsts[left].first;
+      const b = firsts[right].first;
+      const limit = Math.min(a.length, b.length) >= 5 ? 2 : 1;
+      if (a === b || a.slice(0, 3) === b.slice(0, 3) || editDistance(a, b) <= limit) {
+        pairs.push([firsts[left], firsts[right]]);
+      }
+    }
+  }
+  return pairs;
+}
+function formatProseReport(report) {
+  const chapterCount = `${report.chapters.length} ${report.chapters.length === 1 ? "chapter" : "chapters"}`;
+  const lines = [`Prose report: ${chapterCount}, ${report.words} words`];
+  if (!report.styleSheet) {
+    lines.push("No style-sheet.md: spelling and watch-word checks are off");
+  }
+  for (const chapter of report.chapters) {
+    const analysis = chapter.analysis;
+    const stats = analysis.sentences;
+    lines.push("", `${chapter.file}: ${chapter.title} (${analysis.words} words)`);
+    lines.push(`  Sentences: ${stats.count}, average ${formatRate(stats.mean)} words, longest ${stats.longest}, spread ${formatRate(stats.spread)}`);
+    lines.push(`  Filter words: ${formatRate(perThousand(total(analysis.filterWords), analysis.narrationWords))} per 1k narration words${countSuffix(analysis.filterWords)}`);
+    lines.push(`  -ly adverbs: ${formatRate(perThousand(total(analysis.adverbs), analysis.narrationWords))} per 1k narration words${countSuffix(analysis.adverbs)}`);
+    lines.push(`  Dialogue tags: ${formatCounts(analysis.plainTags, 4) || "none plain"}; said-bookisms: ${formatCounts(analysis.bookisms, 5) || "none"}`);
+    lines.push(`  Echoes within ${PROSE_THRESHOLDS.echoWindow} words: ${formatCounts(analysis.echoes, 5) || "none"}`);
+    if (analysis.watch.length > 0) {
+      lines.push(`  Watch words: ${analysis.watch.map((entry) => `${entry.word} ${entry.count}`).join(", ")}`);
+    }
+    if (analysis.variants.length > 0) {
+      lines.push(`  Spelling: ${analysis.variants.map((entry) => `${entry.avoid} ${entry.count} (use ${entry.use})`).join(", ")}`);
+    }
+  }
+  lines.push("", "Manuscript:");
+  lines.push(`  Repeated ${PROSE_THRESHOLDS.phraseLength}-word phrases: ${report.phrases.map((entry) => `"${entry.phrase}" ${entry.count}`).join(", ") || "none"}`);
+  lines.push(`  Similar character names: ${report.similarNames.map(([a, b]) => `${a.name} / ${b.name}`).join(", ") || "none"}`);
+  return `${lines.join(`
+`)}
+`;
+}
+function proseParagraphs2(prose) {
+  return withoutFencedCode(scanComments(String(prose), " ").text).split(/\r?\n\s*\r?\n/).map((paragraph) => paragraph.split(/\r?\n/).filter((line) => !/^\s{0,3}#/.test(line)).join(" ")).map((paragraph) => paragraph.replace(/\s+/g, " ").trim()).filter((paragraph) => paragraph !== "" && !/^([*_-])( ?\1){2,}$/.test(paragraph));
+}
+function splitSentences(paragraph) {
+  const sentences = [];
+  let start = 0;
+  for (const space of paragraph.matchAll(/\s+/g)) {
+    const before = paragraph.slice(Math.max(0, space.index - 9), space.index);
+    const after = paragraph.slice(space.index + space[0].length, space.index + space[0].length + 9);
+    if (/[.!?…]["'”’)\]*_]{0,8}$/.test(before) && /^["'“‘(*_]{0,8}[\p{Lu}\p{N}]/u.test(after)) {
+      sentences.push(paragraph.slice(start, space.index));
+      start = space.index + space[0].length;
+    }
+  }
+  sentences.push(paragraph.slice(start));
+  return sentences;
+}
+function stripDialogue(paragraph) {
+  let text = replaceQuotes(paragraph);
+  const curly = text.indexOf("“", text.lastIndexOf("”") + 1);
+  if (curly !== -1) {
+    text = text.slice(0, curly);
+  }
+  const straight = text.indexOf('"');
+  if (straight !== -1) {
+    text = text.slice(0, straight);
+  }
+  const lastSingleClose = text.lastIndexOf("’");
+  const single = /(?<![\p{L}\p{N}])‘/u.exec(text.slice(lastSingleClose + 1));
+  if (single) {
+    text = text.slice(0, lastSingleClose + 1 + single.index);
+  }
+  return text;
+}
+function dialogueTags(paragraphs, rules) {
+  const plain = new Map;
+  const bookisms = new Map;
+  for (const paragraph of paragraphs) {
+    for (const closing of closingQuoteIndexes(paragraph)) {
+      const after = splitWords(paragraph.slice(closing + 1, closing + 200).split(/[.!?;:“"]/)[0]).slice(0, 3);
+      for (const raw of after) {
+        const word = raw.toLowerCase();
+        if (PLAIN_TAGS.includes(word)) {
+          increment(plain, word);
+          break;
+        }
+        if (rules.bookisms.has(word)) {
+          increment(bookisms, word);
+          break;
+        }
+      }
+    }
+  }
+  return { plain: sortCounts(plain), bookisms: sortCounts(bookisms) };
+}
+function closingQuoteIndexes(paragraph) {
+  return quoteMatches(paragraph).map((match) => match.end - 1);
+}
+function isAdverb(word, rules) {
+  return word.length > 4 && word.endsWith("ly") && !NOT_ADVERBS.has(word) && !rules.allow.has(word) && !rules.nameTokens.has(word);
+}
+function echoes(words, rules) {
+  const lastSeen = new Map;
+  const counts = new Map;
+  words.forEach((raw, index) => {
+    const word = raw.toLowerCase();
+    if (word.length < PROSE_THRESHOLDS.echoMinLength || ECHO_STOPWORDS.has(word) || rules.nameTokens.has(word) || rules.allow.has(word) || /^\p{N}+$/u.test(word)) {
+      return;
+    }
+    if (lastSeen.has(word) && index - lastSeen.get(word) <= PROSE_THRESHOLDS.echoWindow) {
+      increment(counts, word);
+    }
+    lastSeen.set(word, index);
+  });
+  return sortCounts(counts);
+}
+function sentenceStats(lengths) {
+  if (lengths.length === 0) {
+    return { count: 0, mean: 0, longest: 0, spread: 0 };
+  }
+  const mean = lengths.reduce((sum, value) => sum + value, 0) / lengths.length;
+  const variance = lengths.reduce((sum, value) => sum + (value - mean) ** 2, 0) / lengths.length;
+  return { count: lengths.length, mean, longest: Math.max(...lengths), spread: Math.sqrt(variance) };
+}
+function countMatching(words, predicate) {
+  const counts = new Map;
+  for (const raw of words) {
+    const word = raw.toLowerCase();
+    if (predicate(word)) {
+      increment(counts, word);
+    }
+  }
+  return sortCounts(counts);
+}
+function phrasePattern2(phrase) {
+  const body = phrase.trim().split(/\s+/).map(escapeRegExp).join("\\s+");
+  return new RegExp(`(?<![\\p{L}\\p{N}])${body}(?![\\p{L}\\p{N}])`, "giu");
+}
+function countPattern(text, pattern) {
+  return (text.match(pattern) ?? []).length;
+}
+function editDistance(a, b) {
+  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1;i <= a.length; i += 1) {
+    const current = [i];
+    for (let j = 1;j <= b.length; j += 1) {
+      current[j] = Math.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    previous = current;
+  }
+  return previous[b.length];
+}
+function increment(counts, key) {
+  counts.set(key, (counts.get(key) ?? 0) + 1);
+}
+var COLLATOR = new Intl.Collator("en");
+function sortCounts(counts) {
+  return [...counts.entries()].map(([word, count]) => ({ word, count })).sort((left, right) => right.count - left.count || COLLATOR.compare(left.word, right.word));
+}
+function stringList2(value) {
+  return Array.isArray(value) ? value.filter((item) => typeof item === "string" && item.trim() !== "").map((item) => item.trim()) : [];
+}
+function total(counts) {
+  return counts.reduce((sum, entry) => sum + entry.count, 0);
+}
+function perThousand(count, words) {
+  return words === 0 ? 0 : count * 1000 / words;
+}
+function formatRate(value) {
+  return value.toFixed(1);
+}
+function formatCounts(counts, limit) {
+  return counts.slice(0, limit).map((entry) => `${entry.word} ${entry.count}`).join(", ");
+}
+function countSuffix(counts) {
+  return counts.length === 0 ? "" : ` (${formatCounts(counts, 5)})`;
+}
+function times(count) {
+  return count === 1 ? "once" : `${count} times`;
+}
+
+// src/options.js
+var OPTIONS = [
+  { name: "title", value: "<name>", help: ["Story title for import"] },
+  { name: "dir", value: "<path>", help: ["Target directory for init or import"] },
+  { name: "genre", value: "<name>", help: ["Story genre for init or import"] },
+  { name: "sub-genre", value: "<name>", help: ["Story sub-genre for init or import"] },
+  { name: "setting-era", value: "<name>", help: ["Setting era for init or import"] },
+  { name: "theme", value: "<name>", repeatable: true, help: ["Theme for init, import, or add arc; repeatable"] },
+  { name: "themes", value: "<a,b>", repeatable: true, help: ["Comma-separated themes for init, import, or add arc"] },
+  { name: "pov", value: "<style|id>", help: ["POV style for init or import; POV character id", "for add chapter/scene (also added to characters)"] },
+  { name: "tense", value: "<tense>", help: ["Narrative tense for init or import"] },
+  { name: "form", value: "<form>", help: ["Story form for init (novel, novella, novelette,", "short-story, flash, serial, picture-book,", "chapter-book); sets a default target-words"] },
+  { name: "synopsis", value: "<text>", help: ["Starter synopsis for init or import"] },
+  { name: "series", value: "<id>", help: ["Series id for init"] },
+  { name: "book-number", value: "<n>", help: ["Publication order for init"] },
+  { name: "follows", value: "<path>", repeatable: true, help: ["Init a sequel set after this story project;", "repeatable"] },
+  { name: "precedes", value: "<path>", repeatable: true, help: ["Init a prequel set before this story project;", "repeatable"] },
+  {
+    name: "force",
+    help: [
+      "Let init/import use an existing directory: add",
+      "missing starter files, never overwrite existing",
+      "ones; import also replaces every chapter-NN.md file"
+    ]
+  },
+  { name: "write", help: ["Update chapter word-count frontmatter"] },
+  { name: "log", help: ["Record today's word count in progress.md"] },
+  { name: "ref", value: "<git-ref>", help: ["Earlier draft as a git branch, tag, or commit", "for compare"] },
+  { name: "against", value: "<path>", help: ["Earlier draft as another project folder for compare"] },
+  { name: "path", value: "<path>", help: ["Project root for every command except init and", "import"] },
+  { name: "out", value: "<file>", help: ["Output path for export/build/synopsis/diagram"] },
+  { name: "format", value: "<name>", help: ["Output format for build (markdown, epub, docx,", "shunn, html, print, narration, metadata)"] },
+  { name: "trim", value: "<size>", help: ["Trim size for build --format print (5x8,", "5.25x8, 5.5x8.5, 6x9, a5; default 5.5x8.5)"] },
+  { name: "shunn", help: ["Apply Shunn manuscript formatting (with --format", "docx)"] },
+  { name: "at", value: "<chapter-id>", help: ["Chapter id for knowledge"] },
+  { name: "init", help: ["Add the default revision passes for passes"] },
+  { name: "start", value: "<pass>", help: ["Mark a revision pass in progress for passes"] },
+  { name: "done", value: "<pass>", help: ["Mark a revision pass done for passes"] },
+  { name: "pages", value: "<n>", help: ["Synopsis length for synopsis (1 or 3)"] },
+  { name: "actionable", help: ["Include next actions in report"] },
+  { name: "number", value: "<n>", help: ["Chapter number for add chapter"] },
+  { name: "chapter", value: "<id>", help: ["Chapter id for add scene"] },
+  { name: "scene", value: "<n>", help: ["Scene number for add scene"] },
+  { name: "type", value: "<name>", help: ["Entity type for add"] },
+  { name: "role", value: "<name>", help: ["Character role for add character"] },
+  { name: "status", value: "<name>", help: ["Entity status for add"] },
+  { name: "mode", value: "<name>", help: ["Mode for add chapter (e.g. discovered)"] },
+  { name: "date", value: "<date>", help: ["Story date (YYYY-MM-DD) for add chapter/scene;", "the session date for progress (default today)"] },
+  { name: "time", value: "<time>", help: ["Story time (HH:MM or dawn, morning, midday,", "afternoon, evening, night) for add chapter/scene"] },
+  { name: "travel-hours", value: "<n>", help: ["Travel hours for add scene"] },
+  { name: "dilemma", value: "<text>", help: ["Dilemma for add scene sequel unit"] },
+  { name: "sequel", help: ["Mark scene as sequel unit for add scene"] },
+  { name: "outcome", value: "<name>", help: ["Scene outcome for add scene (yes, no, yes-but,", "no-and)"] },
+  { name: "hook", value: "<name>", help: ["Chapter-ending hook for add chapter (cliffhanger,", "question, revelation, reversal, decision,", "emotional, resolution)"] },
+  { name: "location", value: "<id>", repeatable: true, help: ["Location reference for add"] },
+  { name: "locations", value: "<ids>", repeatable: true },
+  { name: "character", value: "<id>", repeatable: true, help: ["Character reference for add; repeatable"] },
+  { name: "characters", value: "<ids>", repeatable: true },
+  { name: "mention", value: "<id>", repeatable: true, help: ["Mentioned character for add chapter/scene;", "repeatable"] },
+  { name: "mentions", value: "<ids>", repeatable: true },
+  { name: "member", value: "<id>", repeatable: true, help: ["Faction member reference for add faction; repeatable"] },
+  { name: "members", value: "<ids>", repeatable: true },
+  { name: "owner", value: "<id>", help: ["Owner reference for add artifact"] },
+  { name: "arc", value: "<id>", repeatable: true, help: ["Arc reference for add (arc theme for add", "character); repeatable"] },
+  { name: "arcs", value: "<ids>", repeatable: true },
+  { name: "introduced", value: "<id>", help: ["Chapter id for add question"] },
+  { name: "resolved", value: "<id>", help: ["Chapter id for add question"] },
+  { name: "planted", value: "<id>", help: ["Chapter id for add promise/clue"] },
+  { name: "payoff", value: "<id>", help: ["Chapter id for add promise/clue"] },
+  { name: "significance-delayed", help: ["Significance is delayed for add clue"] },
+  { name: "red-herring", help: ["Mark add clue as a red herring"] },
+  { name: "category", value: "<name>", help: ["Category for add term"] },
+  { name: "alias", value: "<name>", repeatable: true, help: ["Alias for add term; repeatable"] },
+  { name: "aliases", value: "<names>", repeatable: true },
+  { name: "region", value: "<name>", help: ["Region for add location"] },
+  { name: "population", value: "<name>", help: ["Population for add location"] },
+  { name: "controlled-by", value: "<id>", help: ["Controlling faction for add location"] },
+  { name: "prevalence", value: "<name>", help: ["Prevalence for add system"] },
+  { name: "acts", value: "<a,b>", repeatable: true, help: ["Comma-separated acts for add arc; repeatable"] },
+  { name: "act", value: "<name>", repeatable: true },
+  { name: "placement", value: "<front|back>", help: ["Placement for add matter (default front)"] },
+  { name: "order", value: "<n>", help: ["Order within its placement for add matter"] },
+  { name: "heading", help: ["Print the page title for add matter; --heading", "false for a dedication or epigraph"] },
+  { name: "source", value: "<text>", repeatable: true, help: ["Source for add research; repeatable"] },
+  { name: "sources", value: "<texts>", repeatable: true },
+  { name: "used-in", value: "<chapter-id>", repeatable: true, help: ["Chapter that relies on add research; repeatable"] },
+  { name: "accuracy", value: "<level>", help: ["Accuracy for add research (must-be-accurate,", "blended, invented)"] },
+  { name: "confidence", value: "<level>", help: ["Confidence for add research (high, medium, low)"] },
+  { name: "method", value: "<name>", help: ["Research method for add research (fact, interview,", "site-visit, expert-review, reading)"] },
+  { name: "risk", value: "<name>", repeatable: true, help: ["Risk area for add research (legal, medical,", "weapons, safety, cultural, defamation,", "technical); repeatable"] }
+];
+var BOOLEAN_OPTIONS = new Set(OPTIONS.filter((option) => option.value === undefined).map((option) => option.name));
+var VALUE_OPTIONS = new Set(OPTIONS.filter((option) => option.value !== undefined).map((option) => option.name));
+var REPEATABLE_OPTIONS = new Set(OPTIONS.filter((option) => option.repeatable).map((option) => option.name));
+var OPTION_COLUMN = 28;
+function formatOptionsHelp(names = null) {
+  const rows = OPTIONS.filter((option) => option.help && (names === null || names.includes(option.name))).map((option) => ({ flag: `--${option.name}${option.value ? ` ${option.value}` : ""}`, help: option.help })).concat([
+    { flag: "-h, --help", help: ["Show this help"] },
+    { flag: "-v, --version", help: ["Show the story CLI version"] }
+  ]);
+  const lines = [];
+  for (const row of rows) {
+    const head = `  ${row.flag}`;
+    const [first, ...rest] = row.help;
+    lines.push(head.length < OPTION_COLUMN ? `${head.padEnd(OPTION_COLUMN)}${first}` : `${head}  ${first}`);
+    for (const line of rest) {
+      lines.push(`${" ".repeat(OPTION_COLUMN)}${line}`);
+    }
+  }
+  return lines;
+}
+function isKnownOptionToken(token) {
+  if (token === "-h" || token === "-v") {
+    return true;
+  }
+  if (!token.startsWith("--")) {
+    return false;
+  }
+  const equalIndex = token.indexOf("=");
+  const key = token.slice(2, equalIndex === -1 ? undefined : equalIndex);
+  return key === "help" || key === "version" || BOOLEAN_OPTIONS.has(key) || VALUE_OPTIONS.has(key);
+}
+function addOption(options, key, value) {
+  const stored = BOOLEAN_OPTIONS.has(key) ? normalizeBooleanValue(key, value) : value;
+  if (options[key] === undefined || !REPEATABLE_OPTIONS.has(key)) {
+    options[key] = stored;
+  } else {
+    options[key] = Array.isArray(options[key]) ? options[key].concat(stored) : [options[key], stored];
+  }
+}
+function normalizeBooleanValue(key, value) {
+  if (typeof value !== "string") {
+    return Boolean(value);
+  }
+  const lower = value.trim().toLowerCase();
+  if (lower === "false" || lower === "0" || lower === "no" || lower === "off") {
+    return false;
+  }
+  if (lower === "true" || lower === "1" || lower === "yes" || lower === "on") {
+    return true;
+  }
+  throw new Error(`Unknown value "${value}" for --${key}: expected true or false`);
+}
+function suggestion(input, candidates, prefix = "") {
+  const scored = candidates.map((candidate) => ({ candidate, distance: editDistance(input.toLowerCase(), candidate) }));
+  const best = Math.min(...scored.map((entry) => entry.distance));
+  if (best > Math.max(1, Math.floor(input.length / 3))) {
+    return "";
+  }
+  const names = scored.filter((entry) => entry.distance === best).slice(0, 3).map((entry) => `${prefix}${entry.candidate}`);
+  return `; did you mean ${names.join(" or ")}?`;
+}
+function isTruthy(value) {
+  const current = Array.isArray(value) ? value[value.length - 1] : value;
+  if (typeof current === "string") {
+    const lower = current.trim().toLowerCase();
+    if (lower === "false" || lower === "0" || lower === "no" || lower === "off" || lower === "") {
+      return false;
+    }
+    return true;
+  }
+  return Boolean(current);
+}
+function isBooleanLiteralToken(token) {
+  return typeof token === "string" && /^(true|false|0|1|yes|no|on|off)$/i.test(token);
+}
+function parseArgs(argv) {
+  const positionals = [];
+  const options = {};
+  for (let index = 0;index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === "-h" || arg === "--help") {
+      options.help = true;
+      continue;
+    }
+    if (arg === "-v" || arg === "--version") {
+      options.version = true;
+      continue;
+    }
+    if (/^-[A-Za-z]/.test(arg)) {
+      throw new Error(`Unknown option ${arg}${suggestion(arg.slice(1), OPTIONS.map((option) => option.name), "--")}`);
+    }
+    if (!arg.startsWith("--")) {
+      positionals.push(arg);
+      continue;
+    }
+    const equalIndex = arg.indexOf("=");
+    const key = arg.slice(2, equalIndex === -1 ? undefined : equalIndex);
+    const inlineValue = equalIndex === -1 ? undefined : arg.slice(equalIndex + 1);
+    if (BOOLEAN_OPTIONS.has(key)) {
+      if (inlineValue !== undefined) {
+        addOption(options, key, inlineValue);
+        continue;
+      }
+      const nextToken = argv[index + 1];
+      if (isBooleanLiteralToken(nextToken)) {
+        addOption(options, key, nextToken);
+        index += 1;
+        continue;
+      }
+      addOption(options, key, true);
+      continue;
+    }
+    if (VALUE_OPTIONS.has(key)) {
+      if (inlineValue !== undefined) {
+        addOption(options, key, inlineValue);
+        continue;
+      }
+      const nextValue = argv[index + 1];
+      if (nextValue === undefined || isKnownOptionToken(nextValue) || nextValue.startsWith("--")) {
+        throw new Error(`Missing value for --${key}: expected a value`);
+      }
+      addOption(options, key, nextValue);
+      index += 1;
+      continue;
+    }
+    throw new Error(`Unknown option --${key}${suggestion(key, OPTIONS.map((option) => option.name), "--")}`);
+  }
+  return { positionals, options };
+}
+
+// src/timeline.js
+import path2 from "node:path";
+function buildTimeline(project) {
+  const chapters = [...project.chapters].sort((left, right) => left.number - right.number || left.id.localeCompare(right.id, "en"));
+  const chapterById = new Map(chapters.map((chapter) => [chapter.id, chapter]));
+  const entries = [];
+  for (const chapter of chapters) {
+    const scenes = project.scenes.filter((scene) => scene.chapter === chapter.id).sort((left, right) => left.scene - right.scene || left.id.localeCompare(right.id, "en"));
+    const units = scenes.length === 0 ? [{ ...chapter, isChapter: true }] : scenes;
+    for (const unit of units) {
+      entries.push(timelineEntry(project, unit, chapter, entries.length));
+    }
+  }
+  const dated = entries.filter((entry) => entry.days !== undefined).sort((left, right) => left.days - right.days || left.minutes - right.minutes || left.reading - right.reading);
+  let earliestLaterReading = Infinity;
+  for (let index = dated.length - 1;index >= 0; index -= 1) {
+    const entry = dated[index];
+    entry.toldLate = entry.reading > earliestLaterReading;
+    earliestLaterReading = Math.min(earliestLaterReading, entry.reading);
+  }
+  return {
+    chronology: dated,
+    undated: entries.filter((entry) => entry.days === undefined),
+    pov: povBalance(chapters),
+    presence: characterPresence(project, chapters, chapterById)
+  };
+}
+function timelineEntry(project, unit, chapter, reading) {
+  const parsedDate = parseClockDate(unit.date || "");
+  const time = unit.time;
+  const minutes = parseClockTime(time || "");
+  return {
+    id: unit.id,
+    file: path2.relative(project.root, unit.file),
+    title: unit.title,
+    chapterNumber: chapter.number,
+    pov: unit.pov || chapter.pov || "",
+    location: unit.isChapter ? chapter.locations[0] ?? "" : unit.location,
+    date: parsedDate?.text ?? "",
+    time: minutes === undefined ? "" : time.trim(),
+    days: parsedDate?.days,
+    minutes: minutes ?? 0,
+    flashbackTo: unit.isChapter ? "" : unit.flashbackTo,
+    reading
+  };
+}
+function povBalance(chapters) {
+  const totals = new Map;
+  let words = 0;
+  for (const chapter of chapters) {
+    const key = chapter.pov || "unspecified";
+    const entry = totals.get(key) ?? { pov: key, chapters: 0, words: 0 };
+    entry.chapters += 1;
+    entry.words += chapter.wordCount;
+    words += chapter.wordCount;
+    totals.set(key, entry);
+  }
+  return [...totals.values()].map((entry) => ({ ...entry, share: words === 0 ? 0 : entry.words * 100 / words })).sort((left, right) => right.words - left.words || right.chapters - left.chapters || left.pov.localeCompare(right.pov, "en"));
+}
+function characterPresence(project, chapters, chapterById) {
+  const present = new Map(project.characters.map((character) => [character.id, new Set]));
+  const mark = (characterId, chapterId) => {
+    if (present.has(characterId) && chapterById.has(chapterId)) {
+      present.get(characterId).add(chapterId);
+    }
+  };
+  for (const chapter of chapters) {
+    [...chapter.characters, chapter.pov].forEach((characterId) => mark(characterId, chapter.id));
+  }
+  for (const scene of project.scenes) {
+    [...scene.characters, scene.pov].forEach((characterId) => mark(characterId, scene.chapter));
+  }
+  const positions = new Map(chapters.map((chapter, index) => [chapter.id, index]));
+  return project.characters.map((character) => {
+    const seen = [...present.get(character.id)].map((id) => positions.get(id)).sort((left, right) => left - right);
+    let longestGap = 0;
+    let gapAfter = null;
+    for (let index = 1;index < seen.length; index += 1) {
+      const gap = seen[index] - seen[index - 1] - 1;
+      if (gap > longestGap) {
+        longestGap = gap;
+        gapAfter = chapters[seen[index - 1]].number;
+      }
+    }
+    const trailing = seen.length === 0 ? 0 : chapters.length - 1 - seen[seen.length - 1];
+    return {
+      id: character.id,
+      chapters: seen.length,
+      first: seen.length === 0 ? null : chapters[seen[0]].number,
+      last: seen.length === 0 ? null : chapters[seen[seen.length - 1]].number,
+      longestGap,
+      gapAfter,
+      trailing
+    };
+  }).sort((left, right) => right.chapters - left.chapters || left.id.localeCompare(right.id, "en"));
+}
+function formatTimeline(timeline, totalChapters) {
+  const lines = [`Timeline: ${timeline.chronology.length} dated, ${timeline.undated.length} undated`];
+  lines.push("", "Chronology (story order):");
+  if (timeline.chronology.length === 0) {
+    lines.push("- None: add date (YYYY-MM-DD) and time to scenes or chapters to order them");
+  }
+  for (const entry of timeline.chronology) {
+    const when = [entry.date, entry.time].filter(Boolean).join(" ");
+    const notes = [];
+    if (entry.toldLate) {
+      notes.push(`told in chapter ${entry.chapterNumber}, after later events`);
+    }
+    if (entry.flashbackTo) {
+      notes.push(`flashback to ${entry.flashbackTo}`);
+    }
+    lines.push(`- ${when}  ${entry.id}: ${entry.title}${describe(entry)}${notes.length === 0 ? "" : ` [${notes.join("; ")}]`}`);
+  }
+  if (timeline.undated.length > 0) {
+    lines.push("", "Undated (reading order):");
+    for (const entry of timeline.undated) {
+      lines.push(`- ${entry.id}: ${entry.title}${describe(entry)}`);
+    }
+  }
+  lines.push("", "POV balance:");
+  if (timeline.pov.length === 0) {
+    lines.push("- None");
+  }
+  for (const entry of timeline.pov) {
+    lines.push(`- ${entry.pov}: ${plural(entry.chapters, "chapter")}, ${formatNumber2(entry.words)} words (${Math.round(entry.share)}%)`);
+  }
+  lines.push("", "Character presence:");
+  if (timeline.presence.length === 0) {
+    lines.push("- None");
+  }
+  for (const entry of timeline.presence) {
+    if (entry.chapters === 0) {
+      lines.push(`- ${entry.id}: not present in any chapter`);
+      continue;
+    }
+    const span = entry.first === entry.last ? `chapter ${entry.first}` : `chapters ${entry.first}-${entry.last}`;
+    const details = [`${entry.chapters} of ${totalChapters} chapters`, span];
+    if (entry.longestGap > 0) {
+      details.push(`longest absence ${plural(entry.longestGap, "chapter")} after chapter ${entry.gapAfter}`);
+    }
+    if (entry.trailing > 0) {
+      details.push(`absent from the last ${plural(entry.trailing, "chapter")}`);
+    }
+    lines.push(`- ${entry.id}: ${details.join(", ")}`);
+  }
+  return `${lines.join(`
+`)}
+`;
+}
+function describe(entry) {
+  const parts = [];
+  if (entry.pov) {
+    parts.push(`POV ${entry.pov}`);
+  }
+  if (entry.location) {
+    parts.push(`at ${entry.location}`);
+  }
+  return parts.length === 0 ? "" : ` (${parts.join(", ")})`;
+}
+function plural(count, noun) {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+function formatNumber2(value) {
+  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+// src/diagram.js
+var DIAGRAM_KINDS = ["relationships", "locations", "timeline", "clues", "arcs"];
+var FAMILY_TYPES = new Set([
+  "parent",
+  "child",
+  "sibling",
+  "spouse",
+  "partner",
+  "grandparent",
+  "grandchild",
+  "aunt",
+  "uncle",
+  "niece",
+  "nephew",
+  "cousin"
+]);
+var ELDER_TYPES = new Set(["parent", "grandparent", "aunt", "uncle"]);
+var YOUNGER_TYPES = new Set(["child", "grandchild", "niece", "nephew"]);
+function buildDiagram(project, kind) {
+  switch (kind) {
+    case "relationships":
+      return relationshipDiagram(project);
+    case "locations":
+      return locationDiagram(project);
+    case "timeline":
+      return timelineDiagram(project);
+    case "clues":
+      return clueDiagram(project);
+    case "arcs":
+      return arcDiagram(project);
+    default:
+      throw new Error(`Unknown diagram kind: ${kind ?? "(none)"}. Supported kinds: ${DIAGRAM_KINDS.join(", ")}`);
+  }
+}
+function relationshipDiagram(project) {
+  const characters = [...project.characters].sort(byId);
+  const known = new Set(characters.map((character) => character.id));
+  const lines = ["flowchart LR"];
+  for (const character of characters) {
+    lines.push(`  ${nodeId(character.id)}["${label(character.name)}"]`);
+  }
+  const drawn = new Set;
+  for (const character of characters) {
+    for (const relationship of character.relationships) {
+      if (!relationship || typeof relationship !== "object" || typeof relationship.character !== "string") {
+        continue;
+      }
+      const other = relationship.character;
+      const type = String(relationship.type ?? "");
+      if (!known.has(other) || YOUNGER_TYPES.has(type)) {
+        continue;
+      }
+      const pair = [character.id, other].sort().join(" ");
+      if (!ELDER_TYPES.has(type) && drawn.has(pair)) {
+        continue;
+      }
+      drawn.add(pair);
+      const from = nodeId(character.id);
+      const to = nodeId(other);
+      if (ELDER_TYPES.has(type)) {
+        lines.push(`  ${from} ==>|${label(type)}| ${to}`);
+      } else if (FAMILY_TYPES.has(type)) {
+        lines.push(`  ${from} ===|${label(type)}| ${to}`);
+      } else {
+        lines.push(`  ${from} -.-|${label(type || "related")}| ${to}`);
+      }
+    }
+  }
+  const deceased = characters.filter((character) => character.status === "deceased").map((character) => nodeId(character.id));
+  if (deceased.length > 0) {
+    lines.push("  classDef deceased stroke-dasharray: 4 4,color:#888", `  class ${deceased.join(",")} deceased`);
+  }
+  return `${lines.join(`
+`)}
+`;
+}
+function locationDiagram(project) {
+  const locations = [...project.locations].sort(byId);
+  const known = new Set(locations.map((location) => location.id));
+  const lines = ["flowchart LR"];
+  for (const location of locations) {
+    const region = location.region ? `<br/>${label(location.region)}` : "";
+    lines.push(`  ${nodeId(location.id)}["${label(location.name)}${region}"]`);
+  }
+  const routes = [];
+  for (const location of locations) {
+    for (const route of location.routes ?? []) {
+      if (route && typeof route === "object" && known.has(route.to) && route.to !== location.id && typeof route.hours === "number") {
+        routes.push({ from: location.id, to: route.to, hours: route.hours, mode: typeof route.mode === "string" ? route.mode : "" });
+      }
+    }
+  }
+  const declared = new Set(routes.map((route) => `${route.from}>${route.to}`));
+  for (const route of routes) {
+    const text = label([`${route.hours}h`, route.mode].filter(Boolean).join(" "));
+    if (declared.has(`${route.to}>${route.from}`)) {
+      lines.push(`  ${nodeId(route.from)} -->|${text}| ${nodeId(route.to)}`);
+    } else {
+      lines.push(`  ${nodeId(route.from)} ---|${text}| ${nodeId(route.to)}`);
+    }
+  }
+  return `${lines.join(`
+`)}
+`;
+}
+function timelineDiagram(project) {
+  const { chronology } = buildTimeline(project);
+  const lines = ["timeline", `  title ${timelineText(project.title ?? "Timeline")}`];
+  let section = null;
+  for (const entry of chronology) {
+    if (entry.date !== section) {
+      section = entry.date;
+      lines.push(`  section ${entry.date}`);
+    }
+    const when = entry.time || "day";
+    const note = entry.toldLate ? ` (told in chapter ${entry.chapterNumber})` : "";
+    lines.push(`    ${timelineText(when)} : ${timelineText(`${entry.title}${note}`)}`);
+  }
+  return `${lines.join(`
+`)}
+`;
+}
+function clueDiagram(project) {
+  const chapters = [...project.chapters].sort((left, right) => left.number - right.number || byId(left, right));
+  const known = new Set(chapters.map((chapter) => chapter.id));
+  const lines = ["flowchart LR"];
+  for (const chapter of chapters) {
+    lines.push(`  ${nodeId(chapter.id)}["${chapter.number}. ${label(chapter.title)}"]`);
+  }
+  for (let index = 1;index < chapters.length; index += 1) {
+    lines.push(`  ${nodeId(chapters[index - 1].id)} ~~~ ${nodeId(chapters[index].id)}`);
+  }
+  let unrevealed = false;
+  for (const clue of [...project.clues].sort(byId)) {
+    if (!known.has(clue.planted) || clue.status === "dropped" || clue.status === "abandoned") {
+      continue;
+    }
+    const arrow = clue.redHerring ? "-.->" : "-->";
+    const text = label(clue.redHerring ? `${clue.title} (red herring)` : clue.title);
+    if (known.has(clue.payoff)) {
+      lines.push(`  ${nodeId(clue.planted)} ${arrow}|${text}| ${nodeId(clue.payoff)}`);
+    } else {
+      unrevealed = true;
+      lines.push(`  ${nodeId(clue.planted)} ${arrow}|${text}| unrevealed(("not yet revealed"))`);
+    }
+  }
+  if (unrevealed) {
+    lines.push("  classDef open stroke-dasharray: 4 4", "  class unrevealed open");
+  }
+  return `${lines.join(`
+`)}
+`;
+}
+function arcDiagram(project) {
+  const chapters = [...project.chapters].sort((left, right) => left.number - right.number || byId(left, right));
+  const arcs = [...project.arcs].sort(byId);
+  const knownArcs = new Set(arcs.map((arc) => arc.id));
+  const lines = ["flowchart LR"];
+  for (const arc of arcs) {
+    lines.push(`  ${arcNodeId(arc.id)}(["${label(arc.name)}"])`);
+  }
+  for (const chapter of chapters) {
+    lines.push(`  ${nodeId(chapter.id)}["${chapter.number}. ${label(chapter.title)}"]`);
+  }
+  for (const chapter of chapters) {
+    const advanced = new Set(chapter.arcsAdvanced);
+    for (const scene of project.scenes) {
+      if (scene.chapter === chapter.id) {
+        scene.arcsAdvanced.forEach((arcId) => advanced.add(arcId));
+      }
+    }
+    for (const arcId of [...advanced].filter((id) => knownArcs.has(id)).sort()) {
+      lines.push(`  ${arcNodeId(arcId)} --> ${nodeId(chapter.id)}`);
+    }
+  }
+  return `${lines.join(`
+`)}
+`;
+}
+function byId(left, right) {
+  return left.id.localeCompare(right.id, "en");
+}
+var MERMAID_KEYWORDS = new Set(["end", "graph", "flowchart", "subgraph", "direction", "style", "class", "classdef", "click", "linkstyle", "default"]);
+function nodeId(id) {
+  const safe = String(id).replace(/[^A-Za-z0-9]/g, "_");
+  return MERMAID_KEYWORDS.has(safe.toLowerCase()) ? `${safe}_node` : safe;
+}
+function arcNodeId(id) {
+  return `arc__${String(id).replace(/[^A-Za-z0-9]/g, "_")}`;
+}
+function label(text) {
+  return String(text).replace(/&/g, "&amp;").replace(/"/g, "#quot;").replace(/\|/g, "#124;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\s+/g, " ").trim();
+}
+function timelineText(text) {
+  return String(text).replace(/:/g, "∶").replace(/\s+/g, " ").trim();
 }
 
 // src/forms.js
@@ -4492,7 +4510,7 @@ function scanProject(root) {
     story = readMarkdown(storyPath, projectRoot);
   } catch (error) {
     scanErrors.push(`story.md: ${error.message}`);
-    story = { data: { title: path4.basename(projectRoot) }, body: "", rawMarkdown: "" };
+    story = { data: { title: path4.basename(projectRoot) }, body: "", rawMarkdown: "", unreadable: true };
   }
   const storyId = deriveStoryId(story.data.title, projectRoot);
   const titleText = typeof story.data.title === "string" || typeof story.data.title === "number" ? String(story.data.title).trim() : "";
@@ -4584,7 +4602,7 @@ function scanProject(root) {
       mentions: asArray(data.mentions),
       locations: asArray(data.locations),
       arcsAdvanced: asArray(data["arcs-advanced"]),
-      declaredWordCount: Number(data["word-count"] ?? 0),
+      declaredWordCount: data["word-count"] === undefined ? 0 : Number.isInteger(data["word-count"]) ? data["word-count"] : null,
       targetWords: Number.isInteger(data["target-words"]) && data["target-words"] > 0 ? data["target-words"] : 0,
       wordCount: wordCount(chapterProse(markdown.body)),
       unclosedComment: hasUnclosedComment(chapterProse(markdown.body)),
@@ -4753,7 +4771,7 @@ function validateProjectOf(project) {
     }
   }
   for (const chapter of project.chapters) {
-    if (chapter.declaredWordCount !== chapter.wordCount) {
+    if (chapter.declaredWordCount !== null && chapter.declaredWordCount !== chapter.wordCount) {
       warnings.push(`${path4.relative(projectRoot, chapter.file)} declares ${chapter.declaredWordCount} words but contains ${chapter.wordCount}`);
     }
     if (chapter.unclosedComment) {
@@ -5985,11 +6003,41 @@ function requireEntityEnumOptions(kind, options) {
     }
   }
 }
+var REFERENCE_OPTIONS = ["chapter", "planted", "payoff", "introduced", "resolved", "used-in", "location", "locations", "character", "characters", "mention", "mentions", "member", "members", "owner", "arc", "arcs", "controlled-by"];
+var REFERENCE_EXAMPLES = {
+  chapter: "chapter-01",
+  planted: "chapter-01",
+  payoff: "chapter-01",
+  introduced: "chapter-01",
+  resolved: "chapter-01",
+  "used-in": "chapter-01",
+  location: "port-kestrel",
+  locations: "port-kestrel",
+  arc: "the-long-road",
+  arcs: "the-long-road",
+  "controlled-by": "harbor-council"
+};
+function assertReferenceOptions(kind, options) {
+  for (const option of REFERENCE_OPTIONS) {
+    if (kind === "character" && (option === "arc" || option === "arcs")) {
+      continue;
+    }
+    for (const value of normalizeList(options[option], [])) {
+      if (!isKebabId2(value)) {
+        throw new Error(`--${option} "${value}" must be a kebab-case id (such as ${REFERENCE_EXAMPLES[option] ?? "mara-quill"})`);
+      }
+    }
+  }
+  if ((kind === "chapter" || kind === "scene") && options.pov !== undefined && String(options.pov).trim() !== "" && !isKebabId2(String(options.pov).trim())) {
+    throw new Error(`--pov "${options.pov}" must be a character id (such as mara-quill)`);
+  }
+}
 function createEntity(root, options) {
   const project = scanProject(root);
   assertProjectParses(project, "add");
   const kind = normalizeKind(options.kind);
   requireEntityEnumOptions(kind, options);
+  assertReferenceOptions(kind, options);
   const name = String(options.name ?? "").trim();
   if (!name) {
     throw new Error(`A ${kind} name is required`);
@@ -6522,8 +6570,14 @@ function buildEntity(project, kind, name, options) {
     return entityResult(project, kind, id2, chapterFile(name, number, options));
   }
   if (kind === "scene") {
-    const chapter = String(options.chapter ?? project.chapters.at(-1)?.id ?? "chapter-01").trim();
+    if (options.chapter === undefined && project.chapters.length === 0) {
+      throw new Error("No chapters yet: add one with story add chapter before adding a scene");
+    }
+    const chapter = String(options.chapter ?? project.chapters.at(-1).id).trim();
     requireKebabId(chapter, "chapter id");
+    if (!project.chapters.some((entry) => entry.id === chapter)) {
+      throw new Error(`chapter ${chapter} does not exist: add it with story add chapter, or pass --chapter with an existing chapter id`);
+    }
     const scene = options.scene === undefined ? nextSceneNumber(project, chapter) : requirePositiveInteger(options.scene, "scene number");
     const id2 = `${chapter}-scene-${String(scene).padStart(2, "0")}`;
     return entityResult(project, kind, id2, sceneFile(name, chapter, scene, options));
@@ -6635,13 +6689,13 @@ function assertPortableId(id, kind) {
 }
 function requireKebabId(id, label2) {
   if (!isKebabId2(id)) {
-    throw new Error(`${label2} must be a kebab-case id`);
+    throw new Error(`${label2} must be a kebab-case id, got "${id}"`);
   }
 }
 function requirePositiveInteger(value, label2) {
   const number = Number(value);
   if (!Number.isInteger(number) || number <= 0) {
-    throw new Error(`${label2} must be a positive integer`);
+    throw new Error(`${label2} must be a positive integer, got ${value}`);
   }
   return number;
 }
@@ -7249,9 +7303,14 @@ var FRONTMATTER_FILES = new Set([
   path4.join("continuity", "state.md"),
   path4.join("continuity", "exemptions.md")
 ]);
+var REGISTRY_FILES = new Set([
+  ...INDEX_SCHEMAS.map(([relativePath]) => relativePath),
+  path4.join(MATTER_DIR, "_index.md"),
+  path4.join(RESEARCH_DIR, "_index.md")
+]);
 function isProjectSourceFile(root, file) {
   const relativePath = path4.relative(root, file);
-  return SOURCE_ROOT_FILES.has(relativePath) || FRONTMATTER_FILES.has(relativePath) || path4.basename(relativePath) === "_index.md" || ENTITY_SCAN_DIRS.includes(path4.dirname(relativePath));
+  return SOURCE_ROOT_FILES.has(relativePath) || FRONTMATTER_FILES.has(relativePath) || REGISTRY_FILES.has(relativePath) || ENTITY_SCAN_DIRS.includes(path4.dirname(relativePath));
 }
 function reconcileChapterStatuses(before, after) {
   const next = { ...after };
@@ -7973,8 +8032,11 @@ function readMarkdown(filePath, root) {
     assertSafeProjectPath(filePath, root);
   }
   const rawMarkdown = readTextFile(filePath);
-  const parsed = parseFrontmatter(rawMarkdown, filePath);
-  return { ...parsed, rawMarkdown };
+  try {
+    return { ...parseFrontmatter(rawMarkdown, filePath), rawMarkdown };
+  } catch (error) {
+    throw new Error(error.message.startsWith(`${filePath} `) ? error.message.slice(filePath.length + 1) : error.message);
+  }
 }
 function writeFile(filePath, contents, options = {}) {
   const target = prepareWriteTarget(filePath, options.root);
@@ -7991,7 +8053,7 @@ function writeFile(filePath, contents, options = {}) {
     fs3.renameSync(temporary, target);
   } catch (error) {
     fs3.rmSync(temporary, { force: true });
-    throw Object.assign(new Error(`Cannot replace hard-linked ${target}: ${error.code ?? error.message}`), { code: error.code });
+    throw Object.assign(new Error(`Cannot replace hard-linked ${target}: ${error.code ?? error.message}`), { code: error.code, path: target, syscall: "rename" });
   }
 }
 function writeChanged(filePath, contents, changed, root) {
@@ -8280,9 +8342,12 @@ function normalizeBuildFormat(value) {
   if (Object.prototype.hasOwnProperty.call(BUILD_EXTENSIONS, format)) {
     return format;
   }
-  throw new Error(`Unsupported build format: ${value}. Supported formats: ${Object.keys(BUILD_EXTENSIONS).join(", ")}`);
+  throw new Error(`Unsupported build format: ${value === "" ? "(empty)" : value}. Supported formats: ${Object.keys(BUILD_EXTENSIONS).join(", ")}`);
 }
 function validateStoryFrontmatter(project, errors) {
+  if (project.story.unreadable) {
+    return;
+  }
   const data = project.story.data;
   requireFields(data, ["title", "schema-version", "genre", "status", "themes", "pov", "tense"], "story.md", errors);
   requireScalar(data, "title", "story.md", errors);
@@ -8362,7 +8427,7 @@ function validateIndexFrontmatter(project, errors) {
     if (data.type !== undefined && data.type !== expectedType) {
       errors.push(`${label2} type must be ${expectedType}`);
     }
-    if (data.story !== undefined && data.story !== project.storyId) {
+    if (data.story !== undefined && data.story !== project.storyId && !project.story.unreadable) {
       errors.push(`${label2} story must be ${project.storyId}`);
     }
     if (relativePath === path4.join("plot", "_index.md")) {
@@ -8649,7 +8714,7 @@ function validateContinuityState(project, errors) {
   if (data.type !== undefined && data.type !== "continuity-state") {
     errors.push(`${label2} type must be continuity-state`);
   }
-  if (data.story !== undefined && data.story !== project.storyId) {
+  if (data.story !== undefined && data.story !== project.storyId && !project.story.unreadable) {
     errors.push(`${label2} story must be ${project.storyId}`);
   }
 }
@@ -9012,7 +9077,12 @@ function validateRelationships(data, label2, errors) {
   }
 }
 function validateEnum(data, field, allowed, label2, errors) {
-  if (data[field] !== undefined && !allowed.has(data[field])) {
+  if (Array.isArray(data[field])) {
+    const message = `${label2} frontmatter field ${field} must be a single value, not a list`;
+    if (!errors.includes(`${label2} frontmatter field ${field} must be a scalar`)) {
+      errors.push(message);
+    }
+  } else if (data[field] !== undefined && !allowed.has(data[field])) {
     errors.push(`${label2} frontmatter field ${field} has unsupported value ${data[field]}`);
   }
 }
@@ -9136,6 +9206,9 @@ function importManuscript(options) {
   const source = path5.resolve(cwd, rawSource);
   if (!fs4.existsSync(source)) {
     throw new Error(`Import source not found: ${source}`);
+  }
+  if (fs4.statSync(source).isDirectory() && fs4.existsSync(path5.join(source, "story.md"))) {
+    throw new Error(`${rawSource} is already a story project (it has story.md); import reads manuscript files, so point it at the draft instead`);
   }
   const chapters = splitChapters(readSourceDocuments(source));
   if (chapters.length === 0) {
@@ -10025,6 +10098,19 @@ var HELP = [
   ""
 ].join(`
 `);
+function formatCommandHelp(command) {
+  const options = [...command.options ?? [], ...command.project === "none" ? [] : ["path"]];
+  return [
+    `Usage: story ${command.usage}${options.length > 0 ? " [options]" : ""}`,
+    "",
+    command.summary.join(" "),
+    "",
+    "Options:",
+    ...formatOptionsHelp(options),
+    ""
+  ].join(`
+`);
+}
 function formatCommandsHelp() {
   const lines = [];
   for (const command of COMMANDS) {
@@ -10051,15 +10137,20 @@ function runCli(argv, io) {
 `);
       return 0;
     }
+    const helpTopic = name === "help" ? parsed.positionals[1] : parsed.options.help ? name : undefined;
+    if (helpTopic !== undefined && COMMANDS_BY_NAME.has(helpTopic)) {
+      io.stdout.write(formatCommandHelp(COMMANDS_BY_NAME.get(helpTopic)));
+      return 0;
+    }
     if (!name || name === "help" || parsed.options.help) {
       io.stdout.write(HELP);
       return 0;
     }
     const command = COMMANDS_BY_NAME.get(name);
     if (!command) {
-      io.stderr.write(`Unknown command: ${name}
-
-${HELP}`);
+      io.stderr.write(`Unknown command: ${name}${suggestion(name, [...COMMANDS_BY_NAME.keys()])}
+Run story --help to list commands.
+`);
       return 1;
     }
     if (command.project === "none" && parsed.options.path !== undefined) {
@@ -10075,10 +10166,30 @@ ${HELP}`);
     }
     return command.run({ parsed, io, cwd, root: () => resolveRoot(cwd, parsed, name) });
   } catch (error) {
-    io.stderr.write(`${error.message}
+    io.stderr.write(`${describeError(error, io.cwd ?? process.cwd())}
 `);
     return 1;
   }
+}
+var FILE_ERROR_REASONS = {
+  EACCES: "permission denied",
+  EPERM: "permission denied",
+  ENOENT: "no such file or folder",
+  EISDIR: "it is a folder, not a file",
+  ENOTDIR: "a part of the path is not a folder",
+  EROFS: "the file system is read-only",
+  ENOSPC: "no space left on the device",
+  ENAMETOOLONG: "the name is too long"
+};
+var FILE_ERROR_ACTIONS = { open: "open", scandir: "list", stat: "check", statx: "check", lstat: "check", rename: "replace", mkdir: "create the folder", unlink: "delete", rmdir: "delete", copyfile: "copy", access: "write to" };
+function describeError(error, cwd) {
+  const reason = FILE_ERROR_REASONS[error.code];
+  if (!reason || typeof error.path !== "string") {
+    return error.message;
+  }
+  const relativePath = path7.relative(cwd, error.path);
+  const shown = relativePath !== "" && !relativePath.startsWith("..") && !path7.isAbsolute(relativePath) ? relativePath : error.path;
+  return `Cannot ${FILE_ERROR_ACTIONS[error.syscall] ?? "use"} ${shown}: ${reason}`;
 }
 function commandUsageError(command, parsed) {
   const maxArgs = command.args ?? (command.project === "positional" ? 1 : 0);
