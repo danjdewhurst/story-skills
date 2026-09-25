@@ -597,13 +597,18 @@ function checkRouteTravel(project, errors) {
       const current = list[index];
       for (let back = index - 1; back >= 0; back -= 1) {
         const previous = list[back];
-        // Overlapping windows (an untimed day and a time on it) could fall in
-        // either order, so the gap is the larger of the two readings. It
-        // only grows as the search moves to earlier sightings.
-        const elapsed = Math.max(current.latest - previous.earliest, previous.latest - current.earliest) / 60;
-        if (elapsed >= longestRoute) {
+        // Sightings are sorted by earliest time, so this part of the gap only
+        // grows as the search moves back; once it passes every route, no
+        // earlier sighting can conflict. The other reading below can jump
+        // for a wide window (an untimed day, `night`), so it must not stop
+        // the search.
+        const forwardGap = (current.latest - previous.earliest) / 60;
+        if (forwardGap >= longestRoute) {
           break;
         }
+        // Overlapping windows (an untimed day and a time on it) could fall in
+        // either order, so the gap is the larger of the two readings.
+        const elapsed = Math.max(forwardGap, (previous.latest - current.earliest) / 60);
         const needed = previous.scene.location === current.scene.location ? undefined : distance(previous.scene.location, current.scene.location);
         if (needed !== undefined && elapsed < needed) {
           // Round the gap down and the route up so a near miss (10.98h

@@ -109,7 +109,7 @@ describe("story passes", () => {
       "P1 Add scene records",
       "P1 Revision pass: structure",
       "P2 Track open questions",
-      "P2 Draft chapter 2",
+      // A book under revision gets no "Draft chapter" suggestion.
       "P2 Create first character"
     ]);
   });

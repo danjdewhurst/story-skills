@@ -1,4 +1,4 @@
-import { escapeRegExp, scanComments, splitWords } from "./markdown.js";
+import { escapeRegExp, scanComments, splitWords, withoutFencedCode } from "./markdown.js";
 import { quoteMatches, replaceQuotes } from "./voices.js";
 
 // Deterministic prose checks for `story prose`. Everything here is counting:
@@ -263,7 +263,8 @@ export function formatProseReport(report) {
 
 // Prose paragraphs without headings, HTML comments, or scene-break rules.
 function proseParagraphs(prose) {
-  return scanComments(String(prose), " ").text
+  // Fenced code is dropped before paragraphs are joined, as word counts do.
+  return withoutFencedCode(scanComments(String(prose), " ").text)
     .split(/\r?\n\s*\r?\n/)
     // Drop heading lines, not the prose that follows one without a blank line.
     .map((paragraph) => paragraph.split(/\r?\n/).filter((line) => !/^\s{0,3}#/.test(line)).join(" "))

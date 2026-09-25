@@ -423,7 +423,7 @@ describe("synopsis", () => {
     const arc = path.join(root, "plot", "arcs", "main.md");
     fs.writeFileSync(arc, fs.readFileSync(arc, "utf8").replace("1. First escalation\n2. Second escalation", "1. The tide turns\n2. The bell rings"));
     const text = synopsisBook(root).text;
-    expect(text).toContain("Premise: No premise recorded.");
+    expect(text).toContain("Logline: No logline recorded.");
     expect(text).not.toContain("Initial state and inciting pressure");
     expect(text).not.toContain("Decision point");
     expect(text).toContain("The tide turns. The bell rings.");
@@ -974,3 +974,110 @@ describe("round four", () => {
     expect(error).toContain("takes 3h");
   });
 });
+
+describe("round five", () => {
+  test("a wide-window sighting in between never hides a travel conflict", () => {
+    const root = newProject();
+    createEntity(root, { kind: "character", name: "Mara" });
+    writeMarkdown(path.join(root, "worldbuilding", "locations", "x.md"), "name: X\ntype: city\nroutes:\n  - to: y\n    hours: 1.6");
+    writeMarkdown(path.join(root, "worldbuilding", "locations", "y.md"), "name: Y\ntype: city");
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    createEntity(root, { kind: "scene", name: "E", chapter: "chapter-01", character: "mara", location: "x", date: "2024-01-01", time: "19:00" });
+    createEntity(root, { kind: "scene", name: "M", chapter: "chapter-01", character: "mara", location: "y", date: "2024-01-01", time: "night" });
+    createEntity(root, { kind: "scene", name: "C", chapter: "chapter-01", character: "mara", location: "y", date: "2024-01-01", time: "20:30" });
+    expect(checkProjectContinuity(root).errors).toContain("scenes/chapter-01-scene-03.md puts mara at y 1.5h after scenes/chapter-01-scene-01.md at x, but the fastest route takes 1.6h");
+  });
+
+  test("a question may be introduced in a chapter not written yet", () => {
+    const root = newProject();
+    createEntity(root, { kind: "question", name: "Who", introduced: "chapter-02" });
+    expect(validateLinks(root).errors).toEqual([]);
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    createEntity(root, { kind: "question", name: "Why", introduced: "chapter-01", resolved: "chapter-04" });
+    expect(validateLinks(root).errors).toContain("continuity/questions/why.md references missing chapter chapter-04");
+  });
+
+  test("add scene lists its location and cast on the chapter", () => {
+    const root = newProject();
+    createEntity(root, { kind: "character", name: "Mara" });
+    createEntity(root, { kind: "character", name: "Theo" });
+    createEntity(root, { kind: "location", name: "Harbor" });
+    createEntity(root, { kind: "chapter", name: "One", number: 1, mention: "theo" });
+    createEntity(root, { kind: "scene", name: "Dock", chapter: "chapter-01", location: "harbor", character: ["mara", "theo"] });
+    const chapter = scanProject(root).chapters[0];
+    expect(chapter.locations).toEqual(["harbor"]);
+    expect(chapter.characters).toEqual(["mara"]);
+    expect(checkProjectContinuity(root).warnings.join("\n")).not.toContain("does not list");
+  });
+
+  test("next stops suggesting chapters for a finished book and sorts by priority", () => {
+    const root = newProject();
+    createEntity(root, { kind: "character", name: "Mara" });
+    createEntity(root, { kind: "arc", name: "Main", status: "resolved" });
+    const actions = projectActions(root).actions;
+    expect(actions.map((item) => item.title).join("\n")).not.toContain("Draft chapter");
+    const priorities = actions.map((item) => item.priority);
+    expect(priorities).toEqual([...priorities].sort());
+    const story = path.join(root, "story.md");
+    fs.writeFileSync(story, fs.readFileSync(story, "utf8").replace(/status: \w+/, "status: complete"));
+    fs.rmSync(path.join(root, "plot", "arcs", "main.md"));
+    expect(projectActions(root).actions.map((item) => item.title).join("\n")).not.toContain("Draft chapter");
+  });
+
+  test("synopsis labels the logline, and three pages carry more than one", () => {
+    const root = newProject();
+    createEntity(root, { kind: "arc", name: "Main" });
+    const arc = path.join(root, "plot", "arcs", "main.md");
+    const setup = Array.from({ length: 5 }, (_, index) => `Setup beat ${index + 1} happens.`).join(" ");
+    fs.writeFileSync(arc, fs.readFileSync(arc, "utf8").replace("Initial state and inciting pressure.", setup));
+    const one = synopsisBook(root, { pages: 1 }).text;
+    const three = synopsisBook(root, { pages: 3 }).text;
+    expect(one).toContain("Logline: No logline recorded.");
+    expect(one).toContain("Setup beat 2 happens.");
+    expect(one).not.toContain("Setup beat 3");
+    expect(three).toContain("Setup beat 4 happens.");
+  });
+
+  test("voices says a voice word is missing only from attributed lines", () => {
+    const root = newProject();
+    writeMarkdown(path.join(root, "characters", "mara.md"), "name: Mara\nrole: protagonist\nstatus: alive\nvoice-words:\n  - reckon");
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", Array.from({ length: 5 }, () => "\"Fine,\" Mara said.").join("\n\n"));
+    const result = invoke(path.dirname(root), ["voices", root]);
+    expect(result.err).toContain("mara does not say \"reckon\" from their voice-words list in 5 attributed lines of dialogue");
+  });
+
+  test("import converts dashes in list continuations and leaves mailto addresses", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "list.md"), "# Chapter 1: One\n\n- Item one\n\n    Continued -- still prose.\n\nWrite to mailto:someone--x@example.com today.\n");
+    const project = scanProject(importManuscript({ source: "list.md", title: "L", cwd, dir: "l" }).root);
+    const text = fs.readFileSync(project.chapters[0].file, "utf8");
+    expect(text).toContain("    Continued – still prose.");
+    expect(text).toContain("mailto:someone--x@example.com");
+  });
+
+  test("a failed hard-link replacement names the target", async () => {
+    if (process.getuid?.() === 0) {
+      return;
+    }
+    const { writeFile } = await import("../src/story.js");
+    const dir = makeTempDir();
+    const target = path.join(dir, "book.md");
+    fs.writeFileSync(target, "old");
+    fs.linkSync(target, path.join(makeTempDir(), "elsewhere.md"));
+    fs.chmodSync(dir, 0o555);
+    try {
+      expect(() => writeFile(target, "new")).toThrow(`Cannot replace hard-linked ${target}: EACCES`);
+    } finally {
+      fs.chmodSync(dir, 0o755);
+    }
+  });
+
+  test("prose and wordcount agree when a chapter has code fences", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", "Words before.\n\n```\ncode words here\n```\n\nWords after.");
+    expect(proseReport(root).chapters[0].analysis.words).toBe(computeWordCounts(root).total);
+  });
+});
+

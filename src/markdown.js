@@ -146,7 +146,7 @@ export function splitFences(text) {
   return parts;
 }
 
-function withoutFencedCode(text) {
+export function withoutFencedCode(text) {
   return splitFences(text).map((part) => (part.fenced ? " " : part.text)).join("");
 }
 

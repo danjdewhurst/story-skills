@@ -72,8 +72,8 @@ describe("story voices", () => {
     }
     writeChapter(root, 1, lines);
     expect(voicesReport(root).warnings).toEqual([
-      "mara-quill never says \"tide\" from their voice-words list in 5 lines of dialogue",
-      "mara-quill never says \"reckon\" from their voice-words list in 5 lines of dialogue",
+      "mara-quill does not say \"tide\" from their voice-words list in 5 attributed lines of dialogue",
+      "mara-quill does not say \"reckon\" from their voice-words list in 5 attributed lines of dialogue",
       "mara-quill and tom-reed may sound alike: similar sentence length, contractions, questions, and exclamations"
     ]);
   });

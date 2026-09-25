@@ -1117,10 +1117,11 @@ function checkRouteTravel(project, errors) {
       const current = list[index];
       for (let back = index - 1;back >= 0; back -= 1) {
         const previous = list[back];
-        const elapsed = Math.max(current.latest - previous.earliest, previous.latest - current.earliest) / 60;
-        if (elapsed >= longestRoute) {
+        const forwardGap = (current.latest - previous.earliest) / 60;
+        if (forwardGap >= longestRoute) {
           break;
         }
+        const elapsed = Math.max(forwardGap, (previous.latest - current.earliest) / 60);
         const needed = previous.scene.location === current.scene.location ? undefined : distance(previous.scene.location, current.scene.location);
         if (needed !== undefined && elapsed < needed) {
           const gap = previous.exact && current.exact ? formatHours(elapsed, Math.floor) : `at most ${formatHours(elapsed, Math.floor)}`;
@@ -2149,7 +2150,7 @@ function formatProseReport(report) {
 `;
 }
 function proseParagraphs2(prose) {
-  return scanComments(String(prose), " ").text.split(/\r?\n\s*\r?\n/).map((paragraph) => paragraph.split(/\r?\n/).filter((line) => !/^\s{0,3}#/.test(line)).join(" ")).map((paragraph) => paragraph.replace(/\s+/g, " ").trim()).filter((paragraph) => paragraph !== "" && !/^([*_-])( ?\1){2,}$/.test(paragraph));
+  return withoutFencedCode(scanComments(String(prose), " ").text).split(/\r?\n\s*\r?\n/).map((paragraph) => paragraph.split(/\r?\n/).filter((line) => !/^\s{0,3}#/.test(line)).join(" ")).map((paragraph) => paragraph.replace(/\s+/g, " ").trim()).filter((paragraph) => paragraph !== "" && !/^([*_-])( ?\1){2,}$/.test(paragraph));
 }
 function splitSentences(paragraph) {
   const sentences = [];
@@ -2598,7 +2599,7 @@ function buildVoices(project, chapters) {
       for (const phrase of stringList2(character.voiceWords)) {
         const pattern = phrasePattern2(phrase);
         if (!said.some((line) => pattern.test(line.text))) {
-          warnings.push(`${character.id} never says "${phrase}" from their voice-words list in ${said.length} lines of dialogue`);
+          warnings.push(`${character.id} does not say "${phrase}" from their voice-words list in ${said.length} attributed lines of dialogue`);
         }
       }
     }
@@ -4717,9 +4718,8 @@ function validateLinksOf(project) {
   }
   for (const question of project.questions) {
     const label2 = relative2(project, question.file);
-    for (const chapterId of [question.introduced, question.resolved].filter(Boolean)) {
-      checkIdReference(errors, label2, chapterId, "chapter", hasChapter);
-    }
+    checkIdReference(errors, label2, question.introduced, "chapter", question.status === "open" ? hasScheduledChapter : hasChapter);
+    checkIdReference(errors, label2, question.resolved, "chapter", hasChapter);
     for (const characterId of question.characters) {
       checkIdReference(errors, label2, characterId, "character", hasCharacter);
     }
@@ -5505,12 +5505,13 @@ function synopsisBook(root, options = {}) {
   const budget = pages === 1 ? 500 : 1500;
   const title = project.title;
   const premise = synopsisPremise(project);
-  let text = renderSynopsis(title, premise, project, 0);
+  const detail = pages === 1 ? { setup: 2, rising: 2, climax: 1, resolution: 1 } : { setup: 4, rising: 8, climax: 2, resolution: 2 };
+  let text = renderSynopsis(title, premise, project, 0, detail);
   if (wordCount(text) > budget) {
-    text = renderSynopsis(title, premise, project, 1);
+    text = renderSynopsis(title, premise, project, 1, detail);
   }
   if (wordCount(text) > budget) {
-    text = renderSynopsis(title, premise, project, 2);
+    text = renderSynopsis(title, premise, project, 2, detail);
   }
   if (wordCount(text) > budget) {
     text = truncateWords(text, budget);
@@ -5534,7 +5535,7 @@ var SCAFFOLD_SENTENCES = new Set([
 ]);
 function synopsisPremise(project) {
   const sentences = synopsisSentences(extractSection(project.story.body, "Synopsis")).filter((sentence) => !/^Imported from .+\.$/.test(sentence));
-  return sentences.length > 0 ? sentences[0] : "No premise recorded.";
+  return sentences.length > 0 ? sentences[0] : "No logline recorded.";
 }
 function synopsisSentences(section) {
   const text = String(section).split(/\r?\n/).map((line) => {
@@ -5579,23 +5580,23 @@ function splitSentences2(text) {
 function takeSentences(text, count) {
   return synopsisSentences(text).slice(0, count);
 }
-function renderSynopsis(title, premise, project, level) {
-  const lines = [`# Synopsis: ${title}`, "", `Premise: ${premise}`, ""];
+function renderSynopsis(title, premise, project, level, detail) {
+  const lines = [`# Synopsis: ${title}`, "", `Logline: ${premise}`, ""];
   for (const arc of project.arcs) {
     const markdown = readMarkdown(arc.file, project.root);
     lines.push(`## ${arc.name}`, "");
-    const setup = takeSentences(extractSection(markdown.body, "Setup"), 2);
+    const setup = takeSentences(extractSection(markdown.body, "Setup"), detail.setup);
     if (setup.length > 0) {
       lines.push(setup.join(" "), "");
     }
     if (level === 0) {
-      const rising = takeSentences(extractSection(markdown.body, "Rising Action"), 2);
+      const rising = takeSentences(extractSection(markdown.body, "Rising Action"), detail.rising);
       if (rising.length > 0) {
         lines.push(rising.join(" "), "");
       }
     }
-    const climax = takeSentences(extractSection(markdown.body, "Climax"), 1);
-    const resolution = level < 2 ? takeSentences(extractSection(markdown.body, "Resolution"), 1) : [];
+    const climax = takeSentences(extractSection(markdown.body, "Climax"), detail.climax);
+    const resolution = level < 2 ? takeSentences(extractSection(markdown.body, "Resolution"), detail.resolution) : [];
     const chain = climax.concat(resolution);
     if (chain.length > 0) {
       lines.push(`Because ${lowercaseCommonStart(chain.join(" "))}`, "");
@@ -6012,7 +6013,9 @@ function continuityState(storyId) {
 
 ## Current Story State
 
-Track facts that must carry forward between chapters.
+Track facts that must carry forward between chapters. The CLI reads the
+\`character-state\`, \`object-state\`, and \`knowledge-state\` lists in the
+frontmatter above; the tables below are optional notes it does not read.
 
 ## Character State
 
@@ -6234,13 +6237,18 @@ function buildProjectActions(project, validation, links, continuity, displayPath
     }
   }
   const nextLabel = activeArcNames.length > 0 ? `advance ${activeArcNames.join(", ")}` : "establish the next story beat";
-  actions.push(action("P2", `Draft chapter ${nextNumber}`, `Use story add chapter "Chapter ${nextNumber}" --number ${nextNumber}${where === "." ? "" : ` --path ${where}`}, then outline scenes to ${nextLabel}.`));
+  const maintenanceCount = actions.length;
+  const storyStatus = project.story.data.status;
+  const drafting = storyStatus !== "revising" && storyStatus !== "complete" && !(project.arcs.length > 0 && project.arcs.every((arc) => arc.status === "resolved"));
+  if (drafting) {
+    actions.push(action("P2", `Draft chapter ${nextNumber}`, `Use story add chapter "Chapter ${nextNumber}" --number ${nextNumber}${where === "." ? "" : ` --path ${where}`}, then outline scenes to ${nextLabel}.`));
+  }
   if (project.characters.length === 0) {
     actions.push(action("P2", "Create first character", `Use story add character "Name" --role protagonist${where === "." ? "" : ` --path ${where}`} before drafting prose.`));
   }
   actions.sort((left, right) => left.priority.localeCompare(right.priority));
-  if (actions.length === 1 && validation.ok && links.ok && continuity.ok && continuity.warnings.length === 0 && staleChapters.length === 0 && chaptersWithoutScenes.length === 0) {
-    actions.unshift(action("P3", "Project is mechanically healthy", "No deterministic maintenance issues are blocking the next writing pass."));
+  if (maintenanceCount === 0 && validation.ok && links.ok && continuity.ok && continuity.warnings.length === 0 && staleChapters.length === 0 && chaptersWithoutScenes.length === 0) {
+    actions.push(action("P3", "Project is mechanically healthy", "No deterministic maintenance issues are blocking the next writing pass."));
   }
   return actions;
 }
@@ -7060,6 +7068,19 @@ function applyEntityBacklinks(root, kind, id, data) {
       }
     }
   }
+  if (kind === "scene" && isKebabId2(data.chapter)) {
+    const chapterFile2 = path4.join("chapters", `${data.chapter}.md`);
+    if (isKebabId2(data.location)) {
+      addFrontmatterListValue(root, chapterFile2, "locations", data.location);
+    }
+    const chapterPath = path4.join(root, chapterFile2);
+    const mentions = fs3.existsSync(chapterPath) ? asArray(readMarkdown(chapterPath, root).data.mentions) : [];
+    for (const characterId of asArray(data.characters)) {
+      if (isKebabId2(characterId) && !mentions.includes(characterId)) {
+        addFrontmatterListValue(root, chapterFile2, "characters", characterId);
+      }
+    }
+  }
   if (kind === "character") {
     for (const locationId of asArray(data.locations)) {
       if (isKebabId2(locationId)) {
@@ -7717,7 +7738,7 @@ function writeFile(filePath, contents, options = {}) {
     fs3.renameSync(temporary, target);
   } catch (error) {
     fs3.rmSync(temporary, { force: true });
-    throw error;
+    throw Object.assign(new Error(`Cannot replace hard-linked ${target}: ${error.code ?? error.message}`), { code: error.code });
   }
 }
 function writeChanged(filePath, contents, changed, root) {
@@ -9027,9 +9048,22 @@ function normalizeSource(text, name) {
   if (/\.te?xt$/i.test(name)) {
     return text.replace(/^[ \t]+/gm, "");
   }
-  return splitFences(text).map((part) => part.fenced ? part.text : protectComments(part.text, (prose) => prose.split(`
-`).map((line) => /^\s*(?:-\s*){3,}$/.test(line) || /^\s*\|?[\s:|-]*-[\s:|-]*\|[\s:|-]*$/.test(line) || /^(?: {4}|\t)/.test(line) ? line : line.split(/(`[^`]*`|\]\([^)\s]*\)|<[a-z][a-z0-9+.-]*:[^>\s]*>|\b[a-z][a-z0-9+.-]*:\/\/\S+)/i).map((piece, index) => index % 2 === 1 ? piece : piece.replace(/(^|[^-])---(?!-)/g, "$1—").replace(/(^|[^-])--(?!-)/g, "$1–")).join("")).join(`
-`))).join("");
+  return splitFences(text).map((part) => part.fenced ? part.text : protectComments(part.text, (prose) => {
+    let inList = false;
+    return prose.split(`
+`).map((line) => {
+      const indented = /^(?: {4}|\t)/.test(line);
+      if (!indented && line.trim() !== "") {
+        inList = /^\s{0,3}(?:[-*+]|\d+[.)])\s/.test(line);
+      }
+      const keep = /^\s*(?:-\s*){3,}$/.test(line) || /^\s*\|?[\s:|-]*-[\s:|-]*\|[\s:|-]*$/.test(line) || indented && !inList;
+      return keep ? line : convertDashes(line);
+    }).join(`
+`);
+  })).join("");
+}
+function convertDashes(line) {
+  return line.split(/(`[^`]*`|\]\([^)\s]*\)|<[a-z][a-z0-9+.-]*:[^>\s]*>|\b(?:[a-z][a-z0-9+.-]*:\/\/|mailto:)\S+)/i).map((piece, index) => index % 2 === 1 ? piece : piece.replace(/(^|[^-])---(?!-)/g, "$1—").replace(/(^|[^-])--(?!-)/g, "$1–")).join("");
 }
 function protectComments(text, change) {
   let result = "";
