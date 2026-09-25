@@ -98,7 +98,27 @@ After the chapter is written:
 2. **Update `plot/timeline.md`** - add events from this chapter in chronological order
 3. **Update arc files** - mark advanced plot points with chapter reference
 4. **Update scene records** - make sure every scene has a corresponding `scenes/` file
-5. **Update continuity** - carry forward character state, object ownership, knowledge, open questions, and promises/payoffs. When `story.md` links other books through `follows` or `precedes`, give reveals the series depends on a stable `fact` id in `knowledge-state` (see `series-continuity`)
+5. **Update continuity** - carry forward character state, object ownership, knowledge, open questions, and promises/payoffs. The CLI reads the frontmatter of `continuity/state.md`, not its body tables (those are optional notes), so record state there:
+
+   ```yaml
+   current-chapter: 3
+   character-state:
+     - character: mara-quill
+       location: port-kestrel
+       physical: bruised ribs
+       emotional: wary
+   object-state:
+     - artifact: brass-key
+       owner: mara-quill
+       status: active
+       since: chapter-03
+   knowledge-state:
+     - character: mara-quill
+       knows: The ledger was forged
+       learned-in: chapter-03
+   ```
+
+   `story continuity` checks these entries and `story knowledge <id> --at <chapter>` reads `knowledge-state`. When `story.md` links other books through `follows` or `precedes`, give reveals the series depends on a stable `fact` id in `knowledge-state` (see `series-continuity`)
 6. **Update foreshadowing** - mark any items as `planted` or `paid-off` with chapter reference
 7. **Note character changes** - if a character's status changed (injury, revelation, relationship shift), flag for the user to update the character file
 8. **Run CLI maintenance when available:**
