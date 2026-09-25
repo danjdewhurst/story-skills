@@ -198,7 +198,7 @@ Entries with `status: abandoned` are skipped entirely. Everything else is checke
 | error | `<question> records resolved chapter <chapter> but status is still open` | Set `status: resolved` (or `answered`), or clear `resolved`. |
 | warning | `<promise or clue> records planted chapter <chapter> but status is still planned` | Set `status: planted` once the setup is on the page. The warning appears only once that chapter has prose: it is at or before the latest drafted chapter (see below). |
 
-`story links` separately checks that the chapter ids in these fields exist, with one allowance for scheduling ahead. A promise or clue may name a `chapter-NN` that has no chapter file yet in `payoff`, and in `planted` while its status is `planned`. Once the status is `planted` or `paid-off`, the `planted` chapter must exist, and once it is `paid-off`, the `payoff` chapter must exist too. Question chapters must always exist; scaffold the chapter first (`story add chapter "Title" --number 7`). Outline chapters satisfy the link check without counting as drafted.
+`story links` separately checks that the chapter ids in these fields exist, with one allowance for scheduling ahead. A promise or clue may name a `chapter-NN` that has no chapter file yet in `payoff`, and in `planted` while its status is `planned`. The number must be 1 or more and must not belong to an existing chapter under another id, so `chapter-1` beside `chapter-01`, or `chapter-00`, is reported as a missing chapter. Once the status is `planted` or `paid-off`, the `planted` chapter must exist, and once it is `paid-off`, the `payoff` chapter must exist too. Question chapters must always exist; scaffold the chapter first (`story add chapter "Title" --number 7`). Outline chapters satisfy the link check without counting as drafted.
 
 #### Unfired setups (the Chekhov warning)
 
@@ -449,14 +449,14 @@ Findings from `story continuity` that are intentional. Each entry needs a reason
 
 How matching works:
 
-- A finding is dismissed when its full text contains `pattern` as a plain, case-sensitive substring. There are no wildcards or regular expressions.
+- A finding is dismissed when its full text contains `pattern` as a plain, case-sensitive substring. There are no wildcards or regular expressions. Paths match whichever separator they were written with, so `continuity\promises\oath.md` in a pattern matches `continuity/promises/oath.md` in a finding, and the reverse, and one exemption log works on Windows, macOS, and Linux.
 - The first matching entry wins, and its `reason` is printed after the dismissed finding.
 - Both errors and warnings can be dismissed. The exit code depends only on the errors that remain.
 - A `pattern` shorter than 4 characters (after trimming whitespace) is ignored, so a pattern like `ch` cannot dismiss everything.
 
 Copy the pattern from the finding itself, and keep it specific: include the file name and the chapter, so a new finding of the same kind in another file still shows up. `story report`, `story next`, and `story doctor` count continuity findings after exemptions.
 
-`story validate` checks the file: `type` must be `exemption-log`, `exemptions` must be a list, and each entry needs a non-empty `pattern` of at least 4 characters and a non-empty `reason`. If the file is missing or does not parse, `story continuity` applies no exemptions.
+`story validate` checks the file: `type` must be `exemption-log`, `exemptions` must be a list, and each entry needs a non-empty `pattern` of at least 4 characters and a non-empty `reason`. If the file is missing or does not parse, `story continuity` applies no exemptions. If it is refused as a symlink, a device, or a file over 5 MiB, `story continuity` reports that as an error rather than silently applying none.
 
 Exemptions apply only to `story continuity`. They do not affect `validate`, `links`, `pacing`, `clues`, `prose`, `voices`, `names`, or `series`.
 

@@ -144,6 +144,18 @@ When `story add` or `story init` derives an id from a name, it:
 3. lowercases, and
 4. replaces every run of other characters with one hyphen and trims hyphens from the ends.
 
+Windows reserves the file names `con`, `prn`, `aux`, `nul`, `com1` to `com9`, and `lpt1` to `lpt9` with any extension, so a project with `characters/con.md` cannot be checked out there. `story add` and `story rename` refuse those ids:
+
+```text
+Cannot use character id con: Windows reserves the file name con.md. Choose a longer name, such as "con character"
+```
+
+`story validate` warns about an entity file that already has one:
+
+```text
+warning: characters/nul.md uses a file name Windows reserves, so the project cannot be checked out on Windows; rename the entity
+```
+
 The story id is derived the same way from the `title` in `story.md` (`The Last Ember` becomes `the-last-ember`), or from the project directory name when the title has no ASCII letters or digits. Registries and state files record it in their `story` field.
 
 Chapters and scenes use fixed filename patterns instead of names:
@@ -240,7 +252,7 @@ The chapter starter file from `story add chapter` uses the first layout:
 
 ### How words are counted
 
-A word is a run of letters or digits in any script. Straight or curly apostrophes and hyphens join a word, so `don’t` and `well-known` each count once; `U.S.A` counts as three words. Before counting, the CLI removes HTML comments (`<!-- ... -->`), fenced code blocks, inline code, and images, keeps a link's visible text, and treats the markdown characters `# > * _ ~ | :` as spaces. A comment written inside an inline code span (`` `<!-- x -->` ``) is code, not a comment. A `<!--` with no closing `-->` removes nothing, so the text after it is counted and built; `story validate` warns:
+A word is a run of letters or digits in any script. Straight or curly apostrophes and hyphens join a word, so `don’t` and `well-known` each count once; `U.S.A` counts as three words. Before counting, the CLI removes HTML comments (`<!-- ... -->`), fenced code blocks, inline code, and images, keeps a link's visible text, reads a backslash escape as the character it escapes (`didn\'t` is one word), and treats the markdown characters `# > * _ ~ | :` as spaces. A `<!--` or `-->` written inside a fenced code block or an inline code span (`` `<!-- x -->` ``) is code: it neither opens nor closes a comment. A `<!--` with no closing `-->` removes nothing, so the text after it is counted and built; `story validate` warns, ignoring any `<!--` inside code:
 
 ```text
 warning: chapters/chapter-01.md opens an HTML comment (<!--) that never closes, so the text after it shows in builds and word counts
@@ -808,7 +820,7 @@ exemptions:
 |-------|------|----------|---------|
 | `type` | string | yes | Must be `exemption-log`. |
 | `exemptions` | list of mappings | yes | One entry per dismissed finding. |
-| `exemptions[].pattern` | string, at least 4 characters | yes | Matched as a substring of the finding text. The minimum length stops a short pattern from dismissing whole classes of findings. |
+| `exemptions[].pattern` | string, at least 4 characters | yes | Matched as a substring of the finding text; a `/` or `\` in a path matches either separator. The minimum length stops a short pattern from dismissing whole classes of findings. |
 | `exemptions[].reason` | string | yes | Why the finding is intentional. |
 
 ## Glossary
@@ -970,7 +982,7 @@ warning: characters/_index.md is missing registry link ](sera-voss.md)
 
 `plot/_index.md` also requires `structure` (see [Plot registry and timeline](#plot-registry-and-timeline)). The matter and research registries are optional; `story reindex` keeps each one current once its directory exists.
 
-Reindex regenerates the headings, tables, and totals it writes, and keeps the sections in the last column where they are. It also keeps any other `## ` section you add that it does not generate, such as `## Notes`, and appends it after the generated sections; a section written above the `# ` title moves there too. Generated headings are matched without a trailing `: <number>`, so each `## Total Word Count: N` counts as the generated total and extra copies are dropped, while a second section with a generated heading, such as a hand-written second `## Registry`, is kept as your own. Text outside a `## ` section, such as a line under the `# ` title, is replaced. A registry saved with CRLF line endings keeps them. Rows are ordered by filename, except chapters (by number), scenes (by chapter id, then scene number), and matter (by `order`, then id, with front and back pages interleaved). The chapter registry's word counts come from the prose, not from `word-count` frontmatter.
+Reindex regenerates the headings, tables, and totals it writes, and keeps the sections in the last column where they are. It also keeps any other `## ` section you add that it does not generate, such as `## Notes`, and appends it after the generated sections; a section written above the `# ` title moves there too. Only a heading reindex writes with a value, `## Total Word Count: N`, is matched without its trailing `: <number>`, so each copy counts as the generated total and extra copies are dropped. Other headings match exactly: a hand-written `## Registry: 2`, or a second section with a generated heading such as a second `## Registry`, is kept as your own. Headings inside fenced code blocks neither start nor end a section. Text outside a `## ` section, such as a line under the `# ` title, is replaced. A registry saved with CRLF line endings keeps them. Rows are ordered by filename, except chapters (by number), scenes (by chapter id, then scene number), and matter (by `order`, then id, with front and back pages interleaved). The chapter registry's word counts come from the prose, not from `word-count` frontmatter.
 
 A registry looks like this:
 
@@ -1028,7 +1040,7 @@ Fields that name another entity hold its id. `story links` checks that each id i
 | `plot/timeline.md`, arc bodies | any `chapter-NN` token | Chapter |
 | `plot/timeline.md`, arc bodies | relative links to `.md` files, except `_index.md` and `*` wildcard targets (links to non-entity files such as `story.md` are reported missing) | Existing entity file, named by its kebab-case id, inside the project |
 
-A promise or clue can schedule its setup and payoff ahead of the drafted book: `payoff`, and `planted` while `status: planned`, may name a `chapter-NN` that has no file yet. Once the status is `planted` or `paid-off`, the `planted` chapter must exist, and once it is `paid-off`, so must the `payoff` chapter.
+A promise or clue can schedule its setup and payoff ahead of the drafted book: `payoff`, and `planted` while `status: planned`, may name a `chapter-NN` that has no file yet. The number must be 1 or more and must not belong to an existing chapter under another id: beside `chapter-01`, `chapter-1` is a typo and `chapter-00` is never a chapter, so both are reported as missing. Once the status is `planted` or `paid-off`, the `planted` chapter must exist, and once it is `paid-off`, so must the `payoff` chapter.
 
 `story continuity`, not `story links`, checks the ids in `continuity/state.md`: `character`, `location`, `artifact`, `owner`, `learned-in`, and `since` must name existing entities, and `fact` must be kebab-case.
 
@@ -1233,7 +1245,7 @@ So `dropped` and `abandoned` differ only in how much checking remains: a dropped
 
 The CLI refuses to read or write project files outside the project root. The exceptions are deliberate: an absolute `--out` path for `story export`, `story build`, `story synopsis`, or `story diagram`, and the linked books that `follows` and `precedes` name. It applies these limits while scanning:
 
-- A file larger than 5 MiB is refused with an error.
+- Every project text file the CLI reads, including `continuity/exemptions.md`, `plot/timeline.md`, and a linked book's `story.md`, must be a regular file of at most 5 MiB. A symlink (`Refusing to read through symlink: <path>`), a device or FIFO (`Refusing to read <path>: not a regular file`), or a larger file (`Refusing to read oversized file <path>: <size> bytes exceeds the 5242880 byte limit`) is refused with an error, so a cloned project cannot point a read at `/dev/zero` or at a file outside itself. `story continuity` reports a refused `continuity/exemptions.md` as an error; commands that only rebuild registries or assemble chapters are not blocked by it.
 - More than 5,000 entity files in one directory, or more than 5,000 markdown files found in one recursive scan, stops the command with an error.
 - Recursive scans stop with an error beyond 10 directory levels.
 - A symlinked entity directory, or any path that resolves outside the project, is refused with an error. A symlinked `.md` file inside an entity directory is not an entity: the scan skips it without a warning. The CLI never writes through a symlink, and `story init` refuses a symlinked project directory.

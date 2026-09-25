@@ -176,7 +176,8 @@ All three workflows:
 
 - run the CLI with `npx` from the GitHub tag in `STORY_REF`, using Node 24 from `actions/setup-node`;
 - read the project from `STORY_DIR`, which defaults to the repository root (`.`);
-- pin every action to a commit SHA, with the tag it corresponds to in a comment.
+- pin every action to a commit SHA, with the tag it corresponds to in a comment;
+- set `timeout-minutes` on every job (15 minutes, and 60 for the drafting job), so a run that hangs, or a project that makes the CLI slow, cannot hold a runner for GitHub's six-hour default.
 
 ## Story checks workflow
 
@@ -225,6 +226,7 @@ To try it without waiting for the schedule, open the Actions tab, pick **Draft t
 | Triggers | `schedule` (`0 6 * * 1-5`, 06:00 UTC on weekdays) and `workflow_dispatch` | Never runs on `pull_request` or `pull_request_target`, so a fork cannot trigger a run that has access to the secrets. |
 | `permissions` | `contents: write`, `pull-requests: write` | To push the draft branch and open the pull request. |
 | `concurrency` | One run per workflow, `cancel-in-progress: false` | A manual run that overlaps the schedule waits instead of drafting the same chapter twice. |
+| `timeout-minutes` | `60` | Stops a run that stalls instead of letting it hold a runner, and spend API credit, for six hours. |
 | `ANTHROPIC_API_KEY` | Repository secret you add | Passed to `anthropics/claude-code-action`. |
 | `GITHUB_TOKEN` | Provided by GitHub | Used by the skip guard and by the agent to push and open the PR. |
 
@@ -234,10 +236,10 @@ To try it without waiting for the schedule, open the Actions tab, pick **Draft t
 2. **Check out and set up Node.** Full history (`fetch-depth: 0`) and Node 24.
 3. **Draft with Claude Code.** The agent is prompted to:
    1. run `story next` and read `story.md`, `chapters/_index.md`, `continuity/state.md`, open questions, promises, and the active arcs;
-   2. if `story next` reports a P0 maintenance issue, fix it, open a maintenance PR, and stop;
+   2. if `story next` reports a P0 maintenance issue, fix it on a `draft/maintenance-<date>` branch, open a maintenance PR, and stop;
    3. otherwise draft the next chapter on a branch named `draft/chapter-<number>`, following the `chapter-writing` skill: outline first, prose under `## Chapter Text`, accurate frontmatter, matching scene records, and updates to continuity state, promises, questions, and the timeline;
    4. run `story wordcount --write`, `story reindex`, `story validate`, `story links`, and `story continuity`, and make them pass;
-   5. commit, push, and open a PR titled `Draft chapter <number>: <title>` that summarises the beats, the arcs advanced, and the promises planted or paid off.
+   5. commit, push the branch with `git push -u origin draft/chapter-<number>`, and open a PR titled `Draft chapter <number>: <title>` that summarises the beats, the arcs advanced, and the promises planted or paid off.
 4. **Check the result.** The workflow then runs `story validate`, `story links`, and `story continuity` itself, so a run whose chapter still has errors fails visibly.
 
 The PR is a draft for you to edit, not a finished chapter. [Writing workflows](writing-workflows.md) describes the chapter-writing process the agent follows, and what to look for when you revise.
@@ -247,11 +249,14 @@ The PR is a draft for you to edit, not a finished chapter. [Writing workflows](w
 The action is started with an `--allowedTools` list that limits the agent to:
 
 - the `story` CLI, run through the exact `npx --yes --package github:danjdewhurst/story-skills#<STORY_REF> story` prefix;
-- `git checkout -b`, `git add`, `git commit`, and `git push`;
+- `git checkout -b`, `git add`, and `git commit`;
+- `git push -u origin draft/`, so the agent can push only branches whose names start with `draft/`;
 - `gh pr create`;
 - reading, writing, and searching files (`Read`, `Write`, `Edit`, `Glob`, `Grep`).
 
 Claude Code matches these rules against the literal command text. That is why the prompt spells out each `story` command in full, with no quotes or shell variables. If you edit the prompt, keep each command identical to an allowed prefix, or the agent will be refused permission to run it. The Story Skills test suite checks this for the shipped template.
+
+The push rule is a prefix match on the command text, and a crafted refspec could still stretch it, so it is not a hard boundary. Protect your default branch as well: in Settings, then Rules or Branches, require pull requests before merging into `main`, so nothing the agent pushes can land there directly.
 
 ### Why the checks run twice
 
@@ -399,7 +404,7 @@ Pin `actions/upload-artifact` to a commit SHA to match the rest of the file. [Im
 
 ### Action pins
 
-The `uses:` lines are pinned to commit SHAs, so a moved or compromised tag cannot change what runs. To keep the pins current, add a Dependabot config for the `github-actions` ecosystem to your story repository:
+The `uses:` lines are pinned to commit SHAs, so a moved or compromised tag cannot change what runs. The templates ship with the same pins as this repository's own CI, and a test keeps them in step, so a fresh copy starts current. Dependabot does not update `templates/`, only the workflows in a repository's `.github/workflows/`, so once you have copied the files there, add a Dependabot config for the `github-actions` ecosystem to your story repository to keep the pins current:
 
 ```yaml
 # .github/dependabot.yml

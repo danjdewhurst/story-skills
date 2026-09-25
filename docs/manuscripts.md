@@ -133,6 +133,8 @@ A chapter heading is a markdown heading of any level (`#` to `######`) whose tex
 | `## Chapter One: Arrival` | `Arrival` |
 | `# Chapter 7. The Bridge` | `The Bridge` |
 | `## Chapter 5` | `Chapter 5` |
+| `## Chapter 6:` | `Chapter 6` |
+| `# Chapter 1: Arrival {#arrival .unnumbered}` | `Arrival` |
 | `# Chapter I Am Legend` | `I Am Legend` |
 | `# Prologue` | `Prologue` |
 | `## Epilogue` | `Epilogue` |
@@ -145,15 +147,17 @@ The rules behind the table:
 - A `Prologue`, `Epilogue`, `Interlude`, or `Afterword` heading keeps its whole text as the title.
 - Because the number is optional, a heading such as `## Chapter Notes` also starts a chapter (titled `Notes`).
 - The source number is discarded. Chapters are renumbered 1, 2, 3, and so on in the order they appear.
-- When a heading has no title after the number, the whole heading text becomes the title.
+- When a heading has no title after the number, the whole heading text becomes the title, without a trailing separator (`Chapter 6:` gives `Chapter 6`, `Prologue:` gives `Prologue`).
+- A trailing Pandoc attribute block, such as `{#arrival .unnumbered}`, is dropped from the title.
 
-Import processes each source document in five steps:
+Import processes each source document in six steps:
 
 1. Leading YAML frontmatter is removed, including frontmatter written by tools such as Pandoc or Obsidian that the CLI's own parser would reject. A leading `---` scene break is kept.
-2. If the document has chapter headings, each heading starts a chapter and everything up to the next chapter heading is its prose. Text before the first chapter heading becomes a chapter titled `Opening`, with a leading `# Title` line removed.
-3. If the document has no markdown chapter headings, as in a manuscript saved as plain text, it is split on chapter lines instead. A chapter line stands alone between blank lines, is at most 80 characters, and is either `Chapter` with a number (`Chapter 3`, `CHAPTER ONE: Arrival`) or one of `Prologue`, `Epilogue`, `Interlude`, and `Afterword`. The number, or the `Prologue`-style word, must end the line or be followed by a separator (`:`, `.`, `-`, `–`, `—`) and a title, so `Chapter 12 was the worst.`, `Chapter Nine Lives of a Cat`, and `Prologue of doom` do not split, while `Epilogue: After` does. A single short line before the first chapter line is taken as the book title and dropped; longer text there becomes an `Opening` chapter.
-4. If the document has neither, the whole document becomes one chapter. Its title is the first `# ` heading in the document, and any text before that heading is kept in the prose. With no `# ` heading, the title comes from the file name: `02-smoke.txt` becomes `02 Smoke`.
-5. Chapters whose prose is empty are dropped.
+2. The text is cleaned for its source type. In a markdown source (`.md` or `.markdown`), Pandoc's dash spellings become real dashes: `---` becomes an em dash (`—`) and `--` an en dash (`–`). Text inside inline code spans, fenced code blocks, and HTML comments is left alone, and so is a line made only of dashes and spaces, such as a `---` or `- - -` scene break. In a plain-text source (`.txt`), leading tabs and spaces are removed from every line, so an indented paragraph from Scrivener or a word processor is not read as a markdown code block.
+3. If the document has chapter headings, each heading starts a chapter and everything up to the next chapter heading is its prose. Text before the first chapter heading becomes a chapter titled `Opening`, with a leading `# Title` line removed.
+4. If the document has no markdown chapter headings, as in a manuscript saved as plain text, it is split on chapter lines instead. A chapter line stands alone between blank lines, is at most 80 characters, and is either `Chapter` with a number (`Chapter 3`, `CHAPTER ONE: Arrival`) or one of `Prologue`, `Epilogue`, `Interlude`, and `Afterword`. The number, or the `Prologue`-style word, must end the line or be followed by a separator (`:`, `.`, `-`, `–`, `—`), with or without a title after it, so `Chapter 12 was the worst.`, `Chapter Nine Lives of a Cat`, and `Prologue of doom` do not split, while `Epilogue: After`, a bare `Prologue:`, and `Chapter 3:` (titled `Chapter 3`) do. A single short line before the first chapter line is taken as the book title and dropped; longer text there becomes an `Opening` chapter.
+5. If the document has neither, the whole document becomes one chapter. Its title is the first `# ` heading in the document, and any text before that heading is kept in the prose. With no `# ` heading, the title comes from the file name: `02-smoke.txt` becomes `02 Smoke`.
+6. Chapters whose prose is empty are dropped.
 
 > [!NOTE]
 > Only `Chapter`, `Prologue`, `Epilogue`, `Interlude`, and `Afterword` headings split a document. A `## Part Two` heading inside a single manuscript file stays in the prose of the chapter around it. If your draft uses other markers, rename them to `Chapter` headings before importing, or split the draft into one file per chapter and import the folder.
@@ -276,7 +280,7 @@ Only chapter prose goes in. Scene files, outlines, notes, and the bible do not. 
 - Otherwise, if it has a `## Outline` section, the prose is everything after the first `---` line following the outline. With no `---`, it is everything after `## Outline`.
 - Otherwise, the prose is the whole body with a leading `# ` heading removed.
 
-HTML comments (`<!-- ... -->`) in the prose are left out of the word count and of every build format, so they are a safe place for notes to yourself. Close each one: `story validate` warns about a chapter whose `<!--` never closes, because the text after it then shows in builds. A comment inside an inline code span (`` `<!-- x -->` ``) is kept as literal text.
+HTML comments (`<!-- ... -->`) in the prose are left out of the word count and of every build format, so they are a safe place for notes to yourself. Close each one: `story validate` warns about a chapter whose `<!--` never closes, because the text after it then shows in builds. A `<!--` or `-->` inside a fenced code block or an inline code span (`` `<!-- x -->` ``) is literal text: it neither opens nor closes a comment, and the validate warning ignores it.
 
 `story wordcount` uses the same rule, so the manuscript contains exactly the words that were counted. Keep notes and TODOs above `## Chapter Text`, or they end up in the book. The [reconcile loop](../skills/discovery-drafting/references/reconcile-loop.md) puts its post-hoc chapter notes there for this reason.
 
@@ -449,7 +453,7 @@ At the oasis, Tobin finally told her the truth.
 Thanks to the *first readers*.
 ```
 
-The prose is copied as written, markdown included. Every heading is level 1, so the file converts cleanly with tools such as Pandoc.
+The prose is copied as written, markdown included, with LF line endings even when the chapters were checked out with CRLF. Every heading is level 1, so the file converts cleanly with tools such as Pandoc.
 
 | Option | Effect |
 |--------|--------|
@@ -766,7 +770,7 @@ What goes in:
 
 - **Pronunciation guide.** Every `pronunciation` field on a character, location, faction, artifact, or glossary term, sorted by name. Characters with `status: cut` are left out. When there are none, the section says how to add them. Use plain respelling, such as `pronunciation: "SEER-ah VOSS"`; `story validate` rejects a value that is not text.
 - **Sections.** Every front matter page except the copyright page, every chapter as `Chapter N: Title`, then every back matter page. Each opens with its estimated runtime, `[about N min]` or `[under 1 min]`.
-- **Text.** Paragraphs as written, with markdown emphasis kept so the narrator can see where the stress falls. A scene break becomes `[pause]`. Blockquote markers are kept as well, so an epigraph reads `> An ember given is a fire kept.`
+- **Text.** Paragraphs as written, with markdown emphasis kept so the narrator can see where the stress falls. A scene break, in any of the forms the [table below](#how-prose-is-converted-for-epub-docx-shunn-html-and-print) lists (including `\* \* \*` and a lone `#`), becomes `[pause]`, and a backslash at the end of a line is dropped. Blockquote markers are kept as well, so an epigraph reads `> An ember given is a fire kept.`
 - **Runtime.** Every word in those sections, matter included, at 155 words per minute, rounded to the minute. Pace varies by narrator and genre, so time a sample chapter and rescale.
 
 The [`adaptation`](../skills/adaptation/SKILL.md) skill prepares an audiobook from this script and writes it to `adaptations/audiobook/narration-script.md` with `--out`. The [`worldbuilding`](../skills/worldbuilding/SKILL.md) and [`character-management`](../skills/character-management/SKILL.md) skills add pronunciations when they create invented names.
@@ -842,13 +846,13 @@ The markdown export copies prose as written, and the narration script nearly doe
 
 | In the chapter prose | In EPUB, DOCX, Shunn, HTML, and print output |
 |----------------------|---------------------------------|
-| Blank line | Paragraph break. Line breaks inside a paragraph become spaces. |
+| Blank line | Paragraph break. Line breaks inside a paragraph become spaces, including a hard break written as a backslash at the end of a line, so the `\` never shows. |
 | `**bold**` or `__bold__` | Bold (the `.shunn.md` build keeps the markup) |
 | `*italic*` or `_italic_` | Italic (the `.shunn.md` build keeps the markup). Underscores inside a word, as in `snake_case`, stay literal. |
 | `***both***`, or emphasis nested inside emphasis (`*a **b** c*`) | Bold and italic together, following the CommonMark emphasis rules |
 | A backslash before a markdown character, as in `\*literal\*` | The character itself, without the backslash |
 | `<!-- comment -->` | Left out, as it is from word counts and every other build format |
-| Three or more `-`, `*`, or `_` on a line of their own, optionally spaced (`---`, `***`, `* * *`) | Scene break, written as `* * *` |
+| Three or more `-`, `*`, or `_` on a line of their own, optionally spaced (`---`, `***`, `* * *`) or backslash-escaped as Pandoc writes them (`\* \* \*`), or a lone `#` paragraph | Scene break, written as `* * *` |
 | `#` heading markers | Removed; the heading text becomes an ordinary paragraph |
 | `>` blockquote markers | Removed, so a quoted epigraph or letter reads as plain text |
 
@@ -894,11 +898,11 @@ The scaffold is built from:
 2. **One section per arc** in `plot/arcs/`, in file-name order, headed with the arc's `name`:
    - the first two sentences of its `## Setup` section,
    - the first two sentences of its `## Rising Action` section,
-   - a line starting `Because`, followed by the first sentence of `## Climax` and the first sentence of `## Resolution`. When the climax starts with a common opener such as `The`, `A`, `She`, `They`, `It`, or `When`, that word is lowercased (`Because she chooses...`); a name keeps its capital (`Because Sera infiltrates...`).
+   - a line starting `Because`, followed by the first sentence of `## Climax` and the first sentence of `## Resolution`. When the climax starts with a common opener such as `The`, `A`, `She`, `They`, `It`, or `When`, that word is lowercased (`Because she chooses...`); a name keeps its capital (`Because Sera infiltrates...`). Only a whole word is lowercased, so `A.J.` and `He-Man` keep theirs.
 
 Sections an arc does not have are skipped; an arc with none of them gets only its heading. The starter sentences that `story add arc` writes (`Initial state and inciting pressure.`, `First escalation.`, and so on) are skipped too, so an unfilled arc adds nothing but its heading. An arc without a `name` is headed with its file name in title case.
 
-Sentences end at `.`, `?`, `!`, or `…` followed by a space, and a full stop inside closing quotes (`"Run."`) ends one too. A period after an abbreviation (`Dr`, `Mr`, `Mrs`, `Ms`, `St`, `Mt`, `Jr`, `Sr`, `Prof`, `Capt`, `Gen`, `Col`, `Lt`, `Sgt`, `Rev`, `Fr`, `No`, `vs`, `etc`, `e.g.`, `i.e.`, `a.m.`, `p.m.`) or a single letter (an initial) does not end a sentence, and a final sentence with no closing punctuation gets a period. In a list, each item counts as one sentence, without its bullet or number, and gets a period if it has no closing punctuation.
+Sentences end at `.`, `?`, `!`, or `…` followed by a space, and a full stop inside closing quotes (`"Run."`) ends one too. A period after a title or initial (`Dr`, `Mr`, `Mrs`, `Ms`, `St`, `Mt`, `Jr`, `Sr`, `Prof`, `Capt`, `Gen`, `Col`, `Lt`, `Sgt`, `Rev`, `Fr`, `e.g.`, `i.e.`, a single letter, or a dotted initialism such as `U.S.`) never ends a sentence. After `No.`, `vs.`, `etc.`, `a.m.`, or `p.m.` the sentence ends unless the next word starts in lower case or with a digit, so `No. 5` and `9 a.m. sharp` continue while `She leaves at 9 a.m. Then the tide turns.` is two sentences, and a final sentence with no closing punctuation gets a period. In a list, each item counts as one sentence, without its bullet or number, and gets a period if it has no closing punctuation.
 
 | Option | Effect |
 |--------|--------|
@@ -937,13 +941,14 @@ The result is a draft, not submission copy. Literary agents expect present tense
 
 - An absolute path can point anywhere, such as `--out ~/Desktop/the-salt-road.epub`.
 - Missing parent folders are created. For a relative path, writing through a symlinked folder is refused. Writing onto a symlinked file is always refused.
+- The output is written to a temporary file beside the target and renamed into place, so an `--out` file that is a hard link to another file is replaced by the new output, and the file it was linked to is left unchanged.
 - An existing output file is overwritten without asking, but project source never is. `--out` naming `story.md`, `style-sheet.md`, `progress.md`, or a path under `characters/`, `chapters/`, `scenes/`, `worldbuilding/`, `plot/`, `continuity/`, `glossary/`, `matter/`, or `research/` is refused:
 
   ```text
   Refusing to write generated output to chapters/chapter-01.md: it is project source. Use a path such as dist/ instead
   ```
 
-  Folder names match in any letter case, so `Chapters/x.md` is refused too, and a path through a symlinked folder is checked against the real folder it points to: with `lnk` linked to `chapters`, `--out lnk/x.md` is refused.
+  Folder names match in any letter case, so `Chapters/x.md` is refused too, and a path through a symlinked folder is checked against the real folder it points to: with `lnk` linked to `chapters`, `--out lnk/x.md` is refused. The real path is compared in any letter case too, on every system, so on a case-insensitive disk such as the macOS default an absolute path typed in another case (`/users/me/book/chapters/x.md` for a project at `/Users/me/Book`) is refused. On a case-sensitive disk this errs on the safe side: a sibling folder that differs from the project only in case is refused as well.
 - `--out` must name a file. `--out dist` is refused with `--out dist is a directory: give a file path`, whether or not `dist/` exists yet.
 
 Treat everything in `dist/` as disposable. It is regenerated from the markdown on every build, so never edit a built file to fix the book: change the chapter or matter file and build again. `story validate` and `story links` do not read `dist/`, and `story rename` and `story remove` never rewrite references inside it. The CLI does not create a `.gitignore`, so add `dist/` to your story repository's `.gitignore` unless you want to commit a particular build.

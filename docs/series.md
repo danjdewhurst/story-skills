@@ -265,7 +265,7 @@ The knowledge error reaches back two books: Kael knows `whisper-gate-route` in t
 
 ### Traversal limits
 
-`story series` only follows links that stay inside the parent folder of the book you run it on, which is why sibling folders are the recommended layout. A link that leaves that folder, directly or through a symlink, is reported as an error (`points outside the series directory`) and not followed. A book reached through a symlink and through its real path counts as one book.
+`story series` only follows links that stay inside the parent folder of the book you run it on, which is why sibling folders are the recommended layout. A link that leaves that folder, directly or through a symlink, is reported as an error (`points outside the series directory`) and not followed. A book reached through a symlink and through its real path counts as one book. The book you pass is resolved to its real folder first, so `story series links/second`, where `links/second` links to `second-book`, checks `second-book` against its real siblings. A linked book whose `story.md` is itself a symlink is not read; the check reports `Refusing to read through symlink: <path>` against it.
 
 The traversal also stops at 100 books and at a link depth of 10 from the starting book, reporting an error when either limit is hit.
 

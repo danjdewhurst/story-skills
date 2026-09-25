@@ -251,7 +251,7 @@ It doesn't ask for publishing metadata (`isbn`, `publisher`, `description`, `key
 
 - [`character-template.md`](../skills/character-management/references/character-template.md): the full profile template, including `pronunciation`, `voice-words`, `voice-avoid`, `arc-type`, `lie`, `truth`, `ghost-wound`, and an Antagonist Design section.
 - [`relationship-types.md`](../skills/character-management/references/relationship-types.md): family, social, and story-role relationship types with their inverse pairs.
-- [`ensemble-cast.md`](../skills/character-management/references/ensemble-cast.md): running a large cast with an anchor character, A/B/C story braiding, thematic relevance per character, and merging characters. It warns that `story reindex` keeps only the Relationship Map and Family Trees sections of `characters/_index.md`, so notes under any other heading there are lost.
+- [`ensemble-cast.md`](../skills/character-management/references/ensemble-cast.md): running a large cast with an anchor character, A/B/C story braiding, thematic relevance per character, and merging characters. It notes that `story reindex` keeps the Relationship Map and Family Trees sections of `characters/_index.md`, and any other `## ` section there, after the generated ones.
 - [`supporting-characters.md`](../skills/character-management/references/supporting-characters.md): role vocabulary (mentor, foil, confidant, love interest, comic relief, threshold guardian) and what each supporting role needs.
 
 ### worldbuilding

@@ -197,9 +197,9 @@ story export --out ../outside.md
 Refusing to access path outside project root: ~/stories/outside.md
 ```
 
-An absolute `--out` path is written where you say. The CLI also refuses to write through symlinks or into symlinked project directories. Scans skip `dist/` and dot-directories, so build output never feeds back into checks.
+An absolute `--out` path is written where you say. Generated files are written to a temporary file and renamed into place, so an `--out` path that is a hard link to another file replaces the link instead of writing into the linked file. The CLI also refuses to write through symlinks or into symlinked project directories, and it never reads a project text file that is a symlink, a device or FIFO, or larger than 5 MiB (see [Scanning limits and safety](project-format.md#scanning-limits-and-safety)). Scans skip `dist/` and dot-directories, so build output never feeds back into checks.
 
-`--out` on `export`, `build`, `synopsis`, and `diagram` never overwrites project source: `story.md`, `style-sheet.md`, `progress.md`, or anything under `characters/`, `chapters/`, `scenes/`, `worldbuilding/`, `plot/`, `continuity/`, `glossary/`, `matter/`, or `research/`. Folder names match in any letter case (`Chapters/x.md` is refused), and a path through a symlink is checked against the real folder it points to, so `lnk/x.md` is refused when `lnk` links to `chapters`. It must also name a file, not a directory; `--out dist` is refused even before `dist/` exists:
+`--out` on `export`, `build`, `synopsis`, and `diagram` never overwrites project source: `story.md`, `style-sheet.md`, `progress.md`, or anything under `characters/`, `chapters/`, `scenes/`, `worldbuilding/`, `plot/`, `continuity/`, `glossary/`, `matter/`, or `research/`. Folder names match in any letter case (`Chapters/x.md` is refused), and a path through a symlink is checked against the real folder it points to, so `lnk/x.md` is refused when `lnk` links to `chapters`. The real path is compared in any letter case as well, so an absolute path typed in another case on a case-insensitive disk (the macOS default) is caught. It must also name a file, not a directory; `--out dist` is refused even before `dist/` exists:
 
 ```text
 $ story export --out chapters/chapter-01.md
@@ -323,10 +323,11 @@ story import <source> --title <name> [options]
 Creates a new project from an existing manuscript. `<source>` is a single `.md`, `.markdown`, or `.txt` file, or a directory of them. `--title` is required.
 
 - A file with `Chapter` headings (any heading level, with arabic, roman, or spelled-out numerals up to ninety-nine, or none) is split at each heading, and `Prologue`, `Epilogue`, `Interlude`, and `Afterword` headings become chapters of their own. Text before the first chapter heading becomes a chapter titled `Opening`.
-- A file without markdown chapter headings is split on plain-text chapter lines standing alone between blank lines, such as `Chapter 3`, `CHAPTER ONE: Arrival`, `Prologue`, or `Epilogue: After`. The number or word must stand alone or be followed by a separator (`:`, `.`, `-`, `–`, `—`) and a title, so `Chapter 12 was the worst.` and `Chapter Nine Lives of a Cat` do not split. A single short line before the first one is treated as the book title.
+- A file without markdown chapter headings is split on plain-text chapter lines standing alone between blank lines, such as `Chapter 3`, `CHAPTER ONE: Arrival`, `Prologue`, or `Epilogue: After`. The number or word must stand alone or be followed by a separator (`:`, `.`, `-`, `–`, `—`), with or without a title (a bare `Prologue:` splits, and `Chapter 3:` is titled `Chapter 3`), so `Chapter 12 was the worst.` and `Chapter Nine Lives of a Cat` do not split. A single short line before the first one is treated as the book title.
 - A file with neither becomes one chapter, titled by its first `#` heading or by its file name.
 - A directory is imported in natural file-name order (`chapter-2` before `chapter-10`). Files with no number in their name come after the numbered ones, except prologue, preface, foreword, introduction, and prelude files, which come first. Symlinks are never followed; a symlink to a document is refused.
-- Leading YAML frontmatter in source files is dropped.
+- Leading YAML frontmatter in source files is dropped, and a trailing Pandoc attribute block on a heading (`# Chapter 1: Arrival {#arrival .unnumbered}`) is dropped from the title.
+- In `.md` and `.markdown` sources, Pandoc's `---` becomes an em dash and `--` an en dash, except inside inline code, fenced code blocks, and HTML comments, and on lines made only of dashes (scene breaks). In `.txt` sources, leading tabs and spaces are removed from every line, so indented paragraphs do not become code blocks.
 
 Each chapter is written to `chapters/chapter-NN.md` with `status: draft` and its word count, and the registries are rebuilt. `import` then prints up to 25 capitalised names that appear three or more times, as candidates for `story add character` or `story add location`.
 
@@ -405,9 +406,10 @@ Checks that the project is structurally sound:
 - every required file exists (entity folders are optional)
 - every markdown file's YAML frontmatter parses, and required fields are present with valid values and types
 - entity ids are kebab-case and enum fields (roles, statuses, types) use allowed values
+- no entity file uses a name Windows reserves, such as `characters/nul.md` (warning: `characters/nul.md uses a file name Windows reserves, so the project cannot be checked out on Windows; rename the entity`)
 - each registry `_index.md` links every entity file (warning)
 - declared chapter `word-count` values match the prose (warning)
-- no chapter opens an HTML comment (`<!--`) without closing it, which would leave the text after it in builds and word counts (warning)
+- no chapter opens an HTML comment (`<!--`) without closing it, which would leave the text after it in builds and word counts; a `<!--` inside a fenced code block or inline code span does not count (warning)
 - each chapter has at least one scene record (warning)
 - chapter `hook`, scene `outcome`, clue `red-herring`, location `routes`, character `voice-words` and `voice-avoid`, `pronunciation` fields, and research `accuracy`, `confidence`, `method`, and `risk` use allowed values and types
 - matter pages have text; research marked `verified` lists sources; research that is still `open` or `disputed` is not relied on by a `final` or `complete` chapter; research with a `risk` and no `reviewed-by` is not relied on by a `final` or `complete` chapter; research with `accuracy: invented` is exempt from the source checks; no stray `.md` files sit at the project root or nested inside entity directories (warnings)
@@ -448,7 +450,7 @@ story reindex [path]
 
 Rebuilds every registry table from the entity files on disk: `characters/_index.md`, `worldbuilding/_index.md`, `plot/_index.md`, `chapters/_index.md`, `scenes/_index.md`, the question, promise, and clue registries under `continuity/`, and `glossary/_index.md`. It also rebuilds `matter/_index.md` and `research/_index.md` when those folders exist, and sets the `story` field in `plot/timeline.md` and `continuity/state.md` to the current story id.
 
-Hand-written sections of the registries survive a reindex: `## Relationship Map` and `## Family Trees` in the character registry, `## World Overview` in the world registry, and `## Story Structure`, `## Theme Tracking`, and the `structure` field in the plot registry. Any other `## ` section that reindex does not generate is kept too, after the generated sections, including one written above the `# ` title. Generated headings match without a trailing `: <number>`, so every `## Total Word Count: N` is the generated total and extra copies are dropped. A second section with the same heading as a generated one, such as a hand-written second `## Registry`, is kept as your own. Files whose content would not change are not rewritten, and a registry with CRLF line endings keeps them.
+Hand-written sections of the registries survive a reindex: `## Relationship Map` and `## Family Trees` in the character registry, `## World Overview` in the world registry, and `## Story Structure`, `## Theme Tracking`, and the `structure` field in the plot registry. Any other `## ` section that reindex does not generate is kept too, after the generated sections, including one written above the `# ` title. Only a heading that reindex writes with a value, `## Total Word Count: N`, matches without its trailing `: <number>`, so every copy of it is the generated total and extra copies are dropped. Every other heading must match exactly: a hand-written `## Registry: 2` is kept, and so is a second section with the same heading as a generated one, such as a second `## Registry`. Headings inside fenced code blocks neither start nor end a section. Files whose content would not change are not rewritten, and a registry with CRLF line endings keeps them.
 
 `reindex` refuses to run while an entity file, registry, or `story.md` fails to parse, because the rebuilt registry would drop that file; see [Files that fail to parse](#files-that-fail-to-parse).
 
@@ -476,7 +478,7 @@ Registries already up to date
 story wordcount [path] [--write]
 ```
 
-Counts the prose words in each chapter and prints a total. Only the chapter's prose counts: the text after `## Chapter Text`; failing that, the text after the first `---` divider below `## Outline` (or everything after `## Outline` if there is no divider); failing that, the body without its leading `#` heading. HTML comments, inline and fenced code, images, link targets, and markdown symbols are ignored (a `<!--` written inside an inline code span is code, not a comment); hyphenated words and contractions count once.
+Counts the prose words in each chapter and prints a total. Only the chapter's prose counts: the text after `## Chapter Text`; failing that, the text after the first `---` divider below `## Outline` (or everything after `## Outline` if there is no divider); failing that, the body without its leading `#` heading. HTML comments, inline and fenced code, images, link targets, and markdown symbols are ignored (a `<!--` written inside a fenced code block or an inline code span is code, not a comment); a backslash escape counts as the character it escapes, and hyphenated words and contractions count once, so `didn\'t` is one word.
 
 | Option | Effect |
 |---|---|
@@ -513,7 +515,7 @@ Checks that references between entities point at entities that exist and that tw
 - a character's `died-in` chapter
 - arc characters, faction members and locations, and artifact owners and locations
 - chapter and scene POV, `characters`, `mentions` (a character or an artifact), locations, and `arcs-advanced`, and each scene's chapter
-- the chapter, character, and arc ids in questions, promises, and clues, and the `used-in` chapters of research notes. A promise or clue `payoff`, and its `planted` while `status: planned`, may name a scheduled `chapter-NN` that has no chapter file yet
+- the chapter, character, and arc ids in questions, promises, and clues, and the `used-in` chapters of research notes. A promise or clue `payoff`, and its `planted` while `status: planned`, may name a scheduled `chapter-NN` that has no chapter file yet, unless its number is 0 or belongs to an existing chapter under another id (`chapter-1` beside `chapter-01`)
 - chapter ids and markdown links in the bodies of `plot/timeline.md` and arc files
 - the `follows` and `precedes` links in `story.md`, which must point at story projects that link back
 
@@ -1355,7 +1357,7 @@ Kinds are case-insensitive. Ids are lowercase kebab-case: accents are stripped, 
 story add <kind> <name> [options] [--path <project>]
 ```
 
-Creates an entity file with starter frontmatter and body sections, then reindexes. It refuses to overwrite an existing file. Options that belong to another kind are ignored; an option no kind reads, such as `--trim`, is an error (`--trim does not apply to story add`). A missing or unknown kind is also an error:
+Creates an entity file with starter frontmatter and body sections, then reindexes. It refuses to overwrite an existing file, and refuses an id that Windows reserves as a file name (`con`, `prn`, `aux`, `nul`, `com1` to `com9`, `lpt1` to `lpt9`): `Cannot use character id con: Windows reserves the file name con.md. Choose a longer name, such as "con character"`. Options that belong to another kind are ignored; an option no kind reads, such as `--trim`, is an error (`--trim does not apply to story add`). A missing or unknown kind is also an error:
 
 ```text
 $ story add
@@ -1499,7 +1501,7 @@ Sets the entity's name or title and, when the new name gives a different id, ren
 
 Chapter and scene ids come from their numbers, so renaming one changes only its title. `rename` also updates the entity's first heading when it shows the old name, such as `# Ilse Marrow` or `# Chapter 1: Low Tide`.
 
-Every rewrite is planned before anything is written, so a file that fails to parse leaves the project unchanged. An entity file or registry with no YAML frontmatter stops it the same way, with `<file> is missing YAML frontmatter; nothing was changed`. `rename` refuses if an entity with the new id already exists.
+Every rewrite is planned before anything is written, so a file that fails to parse leaves the project unchanged. An entity file or registry with no YAML frontmatter stops it the same way, with `<file> is missing YAML frontmatter; nothing was changed`. `rename` refuses if an entity with the new id already exists, or if the new id is one Windows reserves as a file name, as `add` does (`Cannot use character id aux: Windows reserves the file name aux.md. ...`).
 
 ```text
 $ story rename character ilse-marrow "Ilse Varrow"
@@ -1546,7 +1548,7 @@ These commands produce files for reading or submission. The source of truth stay
 story export [path] [--out <file>]
 ```
 
-Writes one markdown manuscript: the story title, front matter pages, every chapter as `# Chapter N: Title` followed by its prose, then back matter pages. Only chapter prose is included, not outlines or notes. Matter pages with no text are left out.
+Writes one markdown manuscript: the story title, front matter pages, every chapter as `# Chapter N: Title` followed by its prose, then back matter pages. Only chapter prose is included, not outlines or notes. Matter pages with no text are left out. The file uses LF line endings, even from a CRLF checkout.
 
 | Option | Effect | Default |
 |---|---|---|
@@ -1587,7 +1589,7 @@ Builds a disposable book file in `dist/`. Builds are deterministic: the same sou
 
 | Format | Default output | Contents |
 |---|---|---|
-| `markdown` | `dist/<story-id>.md` | The same manuscript as `export` |
+| `markdown` | `dist/<story-id>.md` | The same manuscript as `export`, with LF line endings |
 | `epub` | `dist/<story-id>.epub` | EPUB 3 with a navigation document, front and back matter, and accessibility metadata. Reads `author` or `authors`, `language`, `isbn`, `publisher`, `publication-date`, `description`, `subjects`, `copyright`, `cover`, and `cover-alt` from `story.md` when set |
 | `docx` | `dist/<story-id>.docx` | Word document with headings and paragraphs |
 | `docx` with `--shunn` | `dist/<story-id>.docx` | Shunn format: Courier New 12pt, double-spaced, title page |
@@ -1671,7 +1673,7 @@ Like `export`, `build` refuses to run while a project file fails to parse, and r
 story synopsis [path] [--pages 1|3] [--out <file>]
 ```
 
-Builds a mechanical synopsis from the project: a premise (the first sentence of the `## Synopsis` section in `story.md`), then for each arc up to two sentences from `## Setup`, up to two from `## Rising Action`, and a line starting `Because` that joins the first sentence of `## Climax` and of `## Resolution`, lowercasing the climax's first word when it is a common opener such as `She` or `The` but not a name. Abbreviations such as `Dr.` and `e.g.`, and initials, do not end a sentence. If the text exceeds the page budget, it drops rising action, then resolution, then truncates with an ellipsis.
+Builds a mechanical synopsis from the project: a premise (the first sentence of the `## Synopsis` section in `story.md`), then for each arc up to two sentences from `## Setup`, up to two from `## Rising Action`, and a line starting `Because` that joins the first sentence of `## Climax` and of `## Resolution`, lowercasing the climax's first word when it is a whole common opener such as `She` or `The` but not a name (`A.J.` and `He-Man` keep their capitals). Titles such as `Dr.`, `e.g.`, initials, and dotted initialisms such as `U.S.` never end a sentence; `No.`, `vs.`, `etc.`, `a.m.`, and `p.m.` end one unless the next word starts in lower case or with a digit. If the text exceeds the page budget, it drops rising action, then resolution, then truncates with an ellipsis.
 
 | Option | Effect | Default |
 |---|---|---|
