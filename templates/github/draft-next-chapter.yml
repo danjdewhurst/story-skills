@@ -113,18 +113,21 @@ jobs:
             2. If the next actions report any P0 maintenance issues, fix those
                first on a branch named draft/maintenance-<date> instead, and
                stop after opening that maintenance PR.
-            3. Otherwise draft the next chapter following the chapter-writing
+            3. If the next actions include no "Draft chapter" line (the story is
+               revising or complete, or every arc is resolved), stop without
+               drafting or opening a pull request.
+            4. Otherwise draft the next chapter following the chapter-writing
                skill: outline first, then prose under "## Chapter Text", with
                accurate frontmatter (pov, status, word-count, locations, characters, mentions, arcs-advanced).
                Add matching scene records and update continuity/state.md,
                promises, questions, and the timeline.
-            4. Run the maintenance commands and make them pass:
+            5. Run the maintenance commands and make them pass:
                npx --yes --package github:danjdewhurst/story-skills#${{ env.STORY_REF }} story wordcount ${{ env.STORY_DIR }} --write
                npx --yes --package github:danjdewhurst/story-skills#${{ env.STORY_REF }} story reindex ${{ env.STORY_DIR }}
                npx --yes --package github:danjdewhurst/story-skills#${{ env.STORY_REF }} story validate ${{ env.STORY_DIR }}
                npx --yes --package github:danjdewhurst/story-skills#${{ env.STORY_REF }} story links ${{ env.STORY_DIR }}
                npx --yes --package github:danjdewhurst/story-skills#${{ env.STORY_REF }} story continuity ${{ env.STORY_DIR }}
-            5. Commit, push the branch with `git push -u origin draft/chapter-<number>`,
+            6. Commit, push the branch with `git push -u origin draft/chapter-<number>`,
                and open a pull request titled
                "Draft chapter <number>: <title>" summarizing the beats, the arcs
                advanced, and any promises planted or paid off.
