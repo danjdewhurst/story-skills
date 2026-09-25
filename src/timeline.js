@@ -80,7 +80,7 @@ function povBalance(chapters) {
 }
 
 // Presence counts a character in a chapter when the chapter or one of its
-// scenes lists them under characters (mentions do not count). Absences are
+// scenes lists them under characters or as pov (mentions do not count). Absences are
 // measured in chapter positions, so gaps in chapter numbering do not inflate
 // them.
 function characterPresence(project, chapters, chapterById) {
@@ -91,10 +91,10 @@ function characterPresence(project, chapters, chapterById) {
     }
   };
   for (const chapter of chapters) {
-    chapter.characters.forEach((characterId) => mark(characterId, chapter.id));
+    [...chapter.characters, chapter.pov].forEach((characterId) => mark(characterId, chapter.id));
   }
   for (const scene of project.scenes) {
-    scene.characters.forEach((characterId) => mark(characterId, scene.chapter));
+    [...scene.characters, scene.pov].forEach((characterId) => mark(characterId, scene.chapter));
   }
 
   const positions = new Map(chapters.map((chapter, index) => [chapter.id, index]));

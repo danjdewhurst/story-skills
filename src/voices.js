@@ -104,7 +104,18 @@ export function buildVoices(project, chapters) {
 // "It went on raining" is narration, not a tag.
 const PRONOUNS = "he|she|they|i|we";
 const VERB_ALTERNATION = SPEECH_VERBS.map((verb) => verb.replace(/ /g, "\\s+")).join("|");
-const PRONOUN_TAG = new RegExp(`(?<![\\p{L}\\p{N}])(?:(?:${PRONOUNS})\\s+(?:${VERB_ALTERNATION})|(?:${VERB_ALTERNATION})\\s+(?:${PRONOUNS}))(?![\\p{L}\\p{N}])`, "iu");
+const PRONOUN_TAG_SOURCE = `(?:(?:${PRONOUNS})\\s+(?:${VERB_ALTERNATION})|(?:${VERB_ALTERNATION})\\s+(?:${PRONOUNS}))(?![\\p{L}\\p{N}])`;
+// A tag right after a closing quote (`"...," she said`) or right before an
+// opening one (`She said, "..."`); a pronoun and verb elsewhere in the
+// paragraph ("She said nothing more") is narration.
+const TAG_AFTER_QUOTE = new RegExp(`^[\\s,.;:!?—–-]*${PRONOUN_TAG_SOURCE}`, "iu");
+const TAG_BEFORE_QUOTE = new RegExp(`(?<![\\p{L}\\p{N}])${PRONOUN_TAG_SOURCE}[\\s,:—–-]*$`, "iu");
+const TAG_WINDOW = 40;
+
+function hasPronounTag(paragraph) {
+  return quoteMatches(paragraph).some((match) => TAG_AFTER_QUOTE.test(paragraph.slice(match.end, match.end + TAG_WINDOW))
+    || TAG_BEFORE_QUOTE.test(paragraph.slice(Math.max(0, match.start - TAG_WINDOW), match.start)));
+}
 
 // Names are proper nouns, so they match case-sensitively ("the lord's hall"
 // is not Lord Maren); speech verbs match in either case.
@@ -167,7 +178,7 @@ function attribute(paragraph, allSpeakers) {
   }
   // A pronoun tag ("she said") names nobody, so a character merely named
   // nearby in the narration is not taken to be the speaker.
-  if (PRONOUN_TAG.test(narration)) {
+  if (hasPronounTag(paragraph)) {
     return null;
   }
   const named = speakers.filter((speaker) => speaker.name.test(narration));

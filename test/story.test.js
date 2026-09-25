@@ -276,7 +276,7 @@ word-count: 0
 
     expect(() => removeEntity(created.root, { kind: "character", id: "../../victim" })).toThrow("must be a kebab-case id");
     expect(() => renameEntity(created.root, { kind: "character", id: "../../victim", name: "Moved Victim" })).toThrow("must be a kebab-case id");
-    expect(() => createEntity(created.root, { kind: "scene", name: "Escaped Scene", chapter: "../../victim" })).toThrow("chapter id must be a kebab-case id");
+    expect(() => createEntity(created.root, { kind: "scene", name: "Escaped Scene", chapter: "../../victim" })).toThrow("must be a kebab-case id");
     expect(fs.readFileSync(victim, "utf8")).toBe("victim sentinel");
     expect(fs.existsSync(path.join(cwd, "victim-scene-01.md"))).toBe(false);
   });
@@ -854,8 +854,10 @@ locations: []
     const created = createStoryProject({ cwd, title: "Bad Ids", force: false });
     expect(() => createEntity(created.root, { kind: "character", name: "???" })).toThrow("Cannot derive a kebab-case id");
     expect(() => createEntity(created.root, { kind: "chapter", name: "Two", number: "abc" })).toThrow("chapter number must be a positive integer");
-    expect(() => createEntity(created.root, { kind: "scene", name: "Beat", chapter: "chapter-01", scene: 0 })).toThrow("scene number must be a positive integer");
-    expect(fs.readdirSync(path.join(created.root, "chapters"))).toEqual(["_index.md"]);
+    createEntity(created.root, { kind: "chapter", name: "One", number: 1 });
+    expect(() => createEntity(created.root, { kind: "scene", name: "Beat", chapter: "chapter-01", scene: 0 })).toThrow("scene number must be a positive integer, got 0");
+    expect(fs.readdirSync(path.join(created.root, "chapters")).sort()).toEqual(["_index.md", "chapter-01.md"]);
+    expect(fs.readdirSync(path.join(created.root, "scenes"))).toEqual(["_index.md"]);
     expect(() => scanProject(path.join(cwd, "nowhere"))).toThrow("is not a story project: missing story.md");
   });
 

@@ -1,3 +1,5 @@
+import { editDistance } from "./prose.js";
+
 // Every CLI option, in help order. `value` names the argument shown in help
 // (boolean flags have none), `repeatable` collects every value given, and
 // `help` lists the help lines; options without help are accepted aliases
@@ -5,15 +7,15 @@
 export const OPTIONS = [
   { name: "title", value: "<name>", help: ["Story title for import"] },
   { name: "dir", value: "<path>", help: ["Target directory for init or import"] },
-  { name: "genre", value: "<name>", help: ["Story genre for init"] },
-  { name: "sub-genre", value: "<name>", help: ["Story sub-genre for init"] },
-  { name: "setting-era", value: "<name>", help: ["Setting era for init"] },
-  { name: "theme", value: "<name>", repeatable: true, help: ["Theme for init or add arc; repeatable"] },
-  { name: "themes", value: "<a,b>", repeatable: true, help: ["Comma-separated themes for init or add arc"] },
-  { name: "pov", value: "<style|id>", help: ["POV style for init; POV character id for add", "chapter/scene (also added to characters)"] },
-  { name: "tense", value: "<tense>", help: ["Narrative tense for init"] },
+  { name: "genre", value: "<name>", help: ["Story genre for init or import"] },
+  { name: "sub-genre", value: "<name>", help: ["Story sub-genre for init or import"] },
+  { name: "setting-era", value: "<name>", help: ["Setting era for init or import"] },
+  { name: "theme", value: "<name>", repeatable: true, help: ["Theme for init, import, or add arc; repeatable"] },
+  { name: "themes", value: "<a,b>", repeatable: true, help: ["Comma-separated themes for init, import, or add arc"] },
+  { name: "pov", value: "<style|id>", help: ["POV style for init or import; POV character id", "for add chapter/scene (also added to characters)"] },
+  { name: "tense", value: "<tense>", help: ["Narrative tense for init or import"] },
   { name: "form", value: "<form>", help: ["Story form for init (novel, novella, novelette,", "short-story, flash, serial, picture-book,", "chapter-book); sets a default target-words"] },
-  { name: "synopsis", value: "<text>", help: ["Starter synopsis for init"] },
+  { name: "synopsis", value: "<text>", help: ["Starter synopsis for init or import"] },
   { name: "series", value: "<id>", help: ["Series id for init"] },
   { name: "book-number", value: "<n>", help: ["Publication order for init"] },
   { name: "follows", value: "<path>", repeatable: true, help: ["Init a sequel set after this story project;", "repeatable"] },
@@ -101,9 +103,10 @@ const REPEATABLE_OPTIONS = new Set(OPTIONS.filter((option) => option.repeatable)
 
 const OPTION_COLUMN = 28;
 
-export function formatOptionsHelp() {
+// Help lines for every option, or only the named ones (per-command help).
+export function formatOptionsHelp(names = null) {
   const rows = OPTIONS
-    .filter((option) => option.help)
+    .filter((option) => option.help && (names === null || names.includes(option.name)))
     .map((option) => ({ flag: `--${option.name}${option.value ? ` ${option.value}` : ""}`, help: option.help }))
     .concat([
       { flag: "-h, --help", help: ["Show this help"] },
@@ -156,6 +159,18 @@ function normalizeBooleanValue(key, value) {
   throw new Error(`Unknown value "${value}" for --${key}: expected true or false`);
 }
 
+// "; did you mean --format?" for a near miss (every candidate tied for
+// nearest, up to three), else "".
+export function suggestion(input, candidates, prefix = "") {
+  const scored = candidates.map((candidate) => ({ candidate, distance: editDistance(input.toLowerCase(), candidate) }));
+  const best = Math.min(...scored.map((entry) => entry.distance));
+  if (best > Math.max(1, Math.floor(input.length / 3))) {
+    return "";
+  }
+  const names = scored.filter((entry) => entry.distance === best).slice(0, 3).map((entry) => `${prefix}${entry.candidate}`);
+  return `; did you mean ${names.join(" or ")}?`;
+}
+
 export function isTruthy(value) {
   const current = Array.isArray(value) ? value[value.length - 1] : value;
   if (typeof current === "string") {
@@ -185,6 +200,12 @@ export function parseArgs(argv) {
     if (arg === "-v" || arg === "--version") {
       options.version = true;
       continue;
+    }
+
+    // A single-dash word (-x) is an unknown short option, not a path; a
+    // lone "-" or a negative number stays positional.
+    if (/^-[A-Za-z]/.test(arg)) {
+      throw new Error(`Unknown option ${arg}${suggestion(arg.slice(1), OPTIONS.map((option) => option.name), "--")}`);
     }
 
     if (!arg.startsWith("--")) {
@@ -227,7 +248,7 @@ export function parseArgs(argv) {
       continue;
     }
 
-    throw new Error(`Unknown option --${key}`);
+    throw new Error(`Unknown option --${key}${suggestion(key, OPTIONS.map((option) => option.name), "--")}`);
   }
 
   return { positionals, options };

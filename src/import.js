@@ -59,6 +59,11 @@ export function importManuscript(options) {
   if (!fs.existsSync(source)) {
     throw new Error(`Import source not found: ${source}`);
   }
+  // A story project's bible is not manuscript prose; importing it would turn
+  // story.md and the style sheet into chapters.
+  if (fs.statSync(source).isDirectory() && fs.existsSync(path.join(source, "story.md"))) {
+    throw new Error(`${rawSource} is already a story project (it has story.md); import reads manuscript files, so point it at the draft instead`);
+  }
 
   const chapters = splitChapters(readSourceDocuments(source));
   if (chapters.length === 0) {

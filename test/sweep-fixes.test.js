@@ -1172,3 +1172,111 @@ describe("round six", () => {
   });
 });
 
+describe("round seven", () => {
+  test("voices only treats a pronoun as a tag next to a quote", () => {
+    const root = newProject();
+    createEntity(root, { kind: "character", name: "Mara" });
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", [
+      "\"Not yet.\" Mara shook her head. She said nothing more for a while.",
+      "\"The tide.\" Mara pointed. What she said next was lost to the wind.",
+      "\"It is nothing,\" she said, and Mara looked away."
+    ].join("\n\n"));
+    expect(invoke(path.dirname(root), ["voices", root]).out).toContain("Voices: 1 speaking characters, 1 unattributed lines");
+  });
+
+  test("a plain _index.md outside the registries does not block rename", () => {
+    const root = newProject();
+    createEntity(root, { kind: "character", name: "Mara" });
+    fs.mkdirSync(path.join(root, "notes"));
+    fs.writeFileSync(path.join(root, "notes", "_index.md"), "# Notes\n");
+    expect(renameEntity(root, { kind: "character", id: "mara", name: "Mara Quill" }).id).toBe("mara-quill");
+  });
+
+  test("parse errors name files by their project path only", () => {
+    const root = newProject();
+    fs.writeFileSync(path.join(root, "progress.md"), "no frontmatter\n");
+    const errors = validateProject(root).errors;
+    expect(errors).toContain("progress.md: is missing YAML frontmatter");
+    expect(errors.join("\n")).not.toContain(root);
+  });
+
+  test("an unreadable story.md is reported once", () => {
+    const root = newProject();
+    fs.writeFileSync(path.join(root, "story.md"), "no frontmatter\n");
+    expect(validateProject(root).errors).toEqual(["story.md: is missing YAML frontmatter"]);
+  });
+
+  test("file-system errors are described in plain words", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    const outside = makeTempDir();
+    fs.writeFileSync(path.join(outside, "afile"), "x");
+    const result = invoke(outside, ["export", root, "--out", path.join(outside, "afile", "x.md")]);
+    expect(result.code).toBe(1);
+    expect(result.err).toMatch(/^Cannot \w+( the folder)? afile(\/x\.md)?: a part of the path is not a folder\n$/);
+  });
+
+  test("add scene refuses a chapter that does not exist", () => {
+    const root = newProject();
+    expect(() => createEntity(root, { kind: "scene", name: "Dock" })).toThrow("No chapters yet");
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    expect(() => createEntity(root, { kind: "scene", name: "Dock", chapter: "chapter-99" })).toThrow("chapter chapter-99 does not exist");
+  });
+
+  test("add rejects reference ids that can never resolve", () => {
+    const root = newProject();
+    expect(() => createEntity(root, { kind: "clue", name: "C", planted: "Chapter 1" })).toThrow('--planted "Chapter 1" must be a kebab-case id (such as chapter-01)');
+    expect(() => createEntity(root, { kind: "character", name: "Mara", location: "Port Town" })).toThrow('--location "Port Town" must be a kebab-case id');
+    expect(() => createEntity(root, { kind: "chapter", name: "One", pov: "Mara Quill" })).toThrow('--pov "Mara Quill" must be a character id');
+    expect(() => createEntity(root, { kind: "chapter", name: "One", arc: "Main Arc" })).toThrow('--arc "Main Arc" must be a kebab-case id (such as the-long-road)');
+    // A character's --arc is a free-text arc theme.
+    expect(createEntity(root, { kind: "character", name: "Old Bram", arc: "Found Family" }).id).toBe("old-bram");
+  });
+
+  test("validate reports a bad word count and a list status plainly", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    const chapter = path.join(root, "chapters", "chapter-01.md");
+    fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace("word-count: 0", "word-count: many").replace("status: outline", "status:\n  - draft"));
+    let result = validateProject(root);
+    expect(result.warnings.join("\n")).not.toContain("NaN");
+    fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace("word-count: many", "word-count: many\nhook:\n  - cliffhanger"));
+    expect(validateProject(root).errors).toContain("chapters/chapter-01.md frontmatter field hook must be a single value, not a list");
+    // One error for the list, not two.
+    result = validateProject(root);
+    expect(result.errors.filter((error) => error.includes("field status"))).toEqual(["chapters/chapter-01.md frontmatter field status must be a scalar"]);
+  });
+
+  test("the CLI suggests near misses and treats -x as an option", () => {
+    const cwd = makeTempDir();
+    expect(invoke(cwd, ["valdate"]).err).toContain("Unknown command: valdate; did you mean validate?");
+    expect(invoke(cwd, ["build", "--formt", "x"]).err).toContain("Unknown option --formt; did you mean --form or --format?");
+    expect(invoke(cwd, ["validate", "-x"]).err).toContain("Unknown option -x");
+    expect(invoke(cwd, ["build", "--format="]).err).toContain("Unsupported build format: (empty)");
+  });
+
+  test("help for one command lists only its options", () => {
+    const cwd = makeTempDir();
+    const help = invoke(cwd, ["help", "wordcount"]).out;
+    expect(help).toContain("Usage: story wordcount [path] [options]");
+    expect(help).toContain("--write");
+    expect(help).not.toContain("--format");
+    expect(invoke(cwd, ["wordcount", "--help"]).out).toBe(help);
+  });
+
+  test("import refuses a folder that is already a story project", () => {
+    const root = newProject();
+    expect(() => importManuscript({ source: root, title: "Again", cwd: path.dirname(root), dir: "again" })).toThrow("is already a story project");
+  });
+
+  test("timeline counts a pov-only chapter as presence", () => {
+    const root = newProject();
+    createEntity(root, { kind: "character", name: "Mara" });
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    const chapter = path.join(root, "chapters", "chapter-01.md");
+    fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace('pov: ""', "pov: mara"));
+    expect(invoke(path.dirname(root), ["timeline", root]).out).toContain("- mara: 1 of 1 chapters");
+  });
+});
+
