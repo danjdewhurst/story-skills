@@ -151,25 +151,80 @@ function attribute(paragraph, speakers) {
   return named.length === 1 ? named[0].id : null;
 }
 
-// Curly double quotes pair explicitly and straight quotes pair in order.
-// British single quotes open after a non-letter and close before one, so an
-// apostrophe inside a word (don’t) never ends the quote.
-const SINGLE_QUOTE = "(?<![\\p{L}\\p{N}])‘((?:[^‘’]|’(?=[\\p{L}\\p{N}]))*)’(?![\\p{L}\\p{N}])";
-export const QUOTE_PATTERN = new RegExp(`“([^”]*)”|"([^"]*)"|${SINGLE_QUOTE}`, "gu");
+const LETTER = /[\p{L}\p{N}]/u;
+
+// Quoted speech in a paragraph, left to right: curly double quotes pair
+// explicitly and straight quotes pair in order. British single quotes open
+// after a non-letter and close before one, so an apostrophe inside a word
+// (don’t) never ends the quote. Returns { start, end, text } with `end`
+// just past the closing quote. Each search for a closer resumes where the
+// last one stopped, so the scan is linear however many quotes never close.
+export function quoteMatches(paragraph) {
+  const matches = [];
+  const next = { "”": -1, "\"": -1, "‘": -1, closeSingle: -1 };
+  const find = (key, from) => {
+    if (next[key] !== Infinity && next[key] < from) {
+      const found = paragraph.indexOf(key, from);
+      next[key] = found === -1 ? Infinity : found;
+    }
+    return next[key];
+  };
+  const findSingleClose = (from) => {
+    if (next.closeSingle !== Infinity && next.closeSingle < from) {
+      let index = paragraph.indexOf("’", from);
+      while (index !== -1 && LETTER.test(paragraph[index + 1] ?? "")) {
+        index = paragraph.indexOf("’", index + 1);
+      }
+      next.closeSingle = index === -1 ? Infinity : index;
+    }
+    return next.closeSingle;
+  };
+  let index = 0;
+  while (index < paragraph.length) {
+    const char = paragraph[index];
+    let close = Infinity;
+    if (char === "“") {
+      close = find("”", index + 1);
+    } else if (char === "\"") {
+      close = find("\"", index + 1);
+    } else if (char === "‘" && !LETTER.test(paragraph[index - 1] ?? "")) {
+      const candidate = findSingleClose(index + 1);
+      close = candidate < find("‘", index + 1) ? candidate : Infinity;
+    }
+    if (close === Infinity) {
+      index += 1;
+      continue;
+    }
+    matches.push({ start: index, end: close + 1, text: paragraph.slice(index + 1, close) });
+    index = close + 1;
+  }
+  return matches;
+}
+
+// The paragraph with each quote replaced by a space.
+export function replaceQuotes(paragraph) {
+  let result = "";
+  let position = 0;
+  for (const match of quoteMatches(paragraph)) {
+    result += `${paragraph.slice(position, match.start)} `;
+    position = match.end;
+  }
+  return result + paragraph.slice(position);
+}
 
 export function quotedSpans(paragraph) {
-  const spans = [];
-  for (const match of paragraph.matchAll(QUOTE_PATTERN)) {
-    const text = (match[1] ?? match[2] ?? match[3] ?? "").trim();
-    if (text !== "") {
-      spans.push(text);
-    }
-  }
-  return spans;
+  return quoteMatches(paragraph).map((match) => match.text.trim()).filter((text) => text !== "");
 }
 
 function stripQuotes(paragraph) {
-  return paragraph.replace(QUOTE_PATTERN, " ").replace(/“[^”]*$/g, " ").replace(/"[^"]*$/g, " ");
+  // Speech still open at the paragraph end runs to the end.
+  let text = replaceQuotes(paragraph);
+  const curly = text.indexOf("“", text.lastIndexOf("”") + 1);
+  if (curly !== -1) {
+    text = `${text.slice(0, curly)} `;
+  }
+  const straight = text.indexOf("\"");
+  return straight === -1 ? text : `${text.slice(0, straight)} `;
 }
 
 function profile(character, said) {

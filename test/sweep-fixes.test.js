@@ -594,3 +594,216 @@ describe("round two", () => {
     expect(validateProject(root).warnings).toContain("chapters/chapter-01.md opens an HTML comment (<!--) that never closes, so the text after it shows in builds and word counts");
   });
 });
+
+describe("round three", () => {
+  test("symlinked exemptions, timeline, and linked story files are never followed", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    const outside = path.join(makeTempDir(), "outside.md");
+    fs.writeFileSync(outside, "---\nexemptions:\n  - pattern: secret-pattern\n    reason: outside file\n---\n");
+    fs.symlinkSync(outside, path.join(root, "continuity", "exemptions.md"));
+    fs.rmSync(path.join(root, "plot", "timeline.md"));
+    fs.symlinkSync("/dev/zero", path.join(root, "plot", "timeline.md"));
+    const started = performance.now();
+    expect(computeWordCounts(root).total).toBe(0);
+    expect(validateLinks(root).ok).toBe(false);
+    expect(validateProject(root).errors.join("\n")).toContain("through symlink");
+    expect(performance.now() - started).toBeLessThan(5000);
+  });
+
+  test("a device file is refused rather than read", async () => {
+    const { readTextFile } = await import("../src/files.js");
+    expect(() => readTextFile("/dev/null")).toThrow("not a regular file");
+  });
+
+  test("links reject chapter-id typos that scheduling would hide", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    createEntity(root, { kind: "clue", name: "Locket", planted: "chapter-01", payoff: "chapter-1" });
+    createEntity(root, { kind: "clue", name: "Zero", planted: "chapter-01", payoff: "chapter-00" });
+    createEntity(root, { kind: "clue", name: "Later", planted: "chapter-01", payoff: "chapter-09" });
+    const errors = validateLinks(root).errors;
+    expect(errors).toContain("continuity/clues/locket.md references missing chapter chapter-1");
+    expect(errors).toContain("continuity/clues/zero.md references missing chapter chapter-00");
+    expect(errors.join("\n")).not.toContain("chapter-09");
+  });
+
+  test("reindex keeps hand-written sections headed like generated ones with a number", () => {
+    const root = newProject();
+    const index = path.join(root, "characters", "_index.md");
+    fs.appendFileSync(index, "\n## Registry: 2\n\nMy registry notes from March.\n\n## Notes\n\n```\n## Family Trees\n```\n\nAfter the fence.\n");
+    reindexProject(root);
+    const text = fs.readFileSync(index, "utf8");
+    expect(text).toContain("## Registry: 2\n\nMy registry notes from March.");
+    expect(text).toContain("## Notes\n\n```\n## Family Trees\n```\n\nAfter the fence.");
+    expect(reindexProject(root).changed).toEqual([]);
+  });
+
+  test("comment stripping respects code fences and stays linear", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", "```\n<!-- literal\n```\n\nKept paragraph here.\n\n```\nend -->\n```");
+    expect(computeWordCounts(root).total).toBe(3);
+    expect(validateProject(root).warnings.join("\n")).not.toContain("never closes");
+    const started = performance.now();
+    appendProse(root, "chapters/chapter-01.md", `${"[a](b ".repeat(20000)}${"<!--".repeat(20000)}`);
+    computeWordCounts(root);
+    expect(performance.now() - started).toBeLessThan(3000);
+  });
+
+  test("prose and voices stay linear on long unclosed quotes", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", `${"“".repeat(30000)} ${"\"".repeat(30000)} ${"\"a,\" said Bob. ".repeat(4000)}`);
+    const started = performance.now();
+    proseReport(root);
+    invoke(path.dirname(root), ["voices", root]);
+    expect(performance.now() - started).toBeLessThan(5000);
+  });
+
+  test("rename rewrites a long list in linear time", () => {
+    const root = newProject();
+    createEntity(root, { kind: "character", name: "Mara" });
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    const chapter = path.join(root, "chapters", "chapter-01.md");
+    const mentions = Array.from({ length: 30000 }, () => "  - mara").join("\n");
+    fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace("mentions: []", `mentions:\n${mentions}`));
+    const started = performance.now();
+    renameEntity(root, { kind: "character", id: "mara", name: "Mara Quill" });
+    expect(performance.now() - started).toBeLessThan(3000);
+    expect(scanProject(root).chapters[0].mentions.every((id) => id === "mara-quill")).toBe(true);
+  });
+
+  test("--out through a hard link replaces the link instead of the chapter", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    const chapter = path.join(root, "chapters", "chapter-01.md");
+    const before = fs.readFileSync(chapter, "utf8");
+    const link = path.join(makeTempDir(), "hard.md");
+    fs.linkSync(chapter, link);
+    exportManuscript(root, { out: link });
+    expect(fs.readFileSync(chapter, "utf8")).toBe(before);
+    expect(fs.readFileSync(link, "utf8")).toContain("Generated by story export");
+  });
+
+  test("a failed write leaves no temporary file behind", async () => {
+    const { writeFile } = await import("../src/story.js");
+    const dir = makeTempDir();
+    fs.mkdirSync(path.join(dir, "target"));
+    fs.writeFileSync(path.join(dir, "target", "keep.md"), "x");
+    expect(() => writeFile(path.join(dir, "target"), "text")).toThrow();
+    expect(fs.readdirSync(dir)).toEqual(["target"]);
+  });
+
+  test("Windows-reserved ids are refused and flagged", () => {
+    const root = newProject();
+    expect(() => createEntity(root, { kind: "character", name: "Con" })).toThrow("Windows reserves the file name con.md");
+    createEntity(root, { kind: "character", name: "Mara" });
+    expect(() => renameEntity(root, { kind: "character", id: "mara", name: "Aux" })).toThrow("Windows reserves");
+    writeMarkdown(path.join(root, "characters", "nul.md"), "name: Nul\nrole: minor\nstatus: alive");
+    expect(validateProject(root).warnings).toContain("characters/nul.md uses a file name Windows reserves, so the project cannot be checked out on Windows; rename the entity");
+  });
+
+  test("exemption patterns match paths written with either separator", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1, status: "draft" });
+    createEntity(root, { kind: "promise", name: "Oath", planted: "chapter-01", status: "planned" });
+    writeMarkdown(path.join(root, "continuity", "exemptions.md"), "type: exemption-log\nexemptions:\n  - pattern: \"continuity\\\\promises\\\\oath.md records planted\"\n    reason: written on Windows");
+    const result = checkProjectContinuity(root);
+    expect(result.dismissed.map((entry) => entry.reason)).toEqual(["written on Windows"]);
+  });
+
+  test("series follows a book reached through a symlinked path", () => {
+    const cwd = makeTempDir();
+    const first = createStoryProject({ cwd, title: "First Book" }).root;
+    createStoryProject({ cwd, title: "Second Book", follows: [first] });
+    fs.mkdirSync(path.join(cwd, "links"));
+    fs.symlinkSync(path.join(cwd, "second-book"), path.join(cwd, "links", "second"));
+    const result = invoke(cwd, ["series", "links/second"]);
+    expect(result.err).toContain("Series is consistent");
+  });
+
+  test("import cleans Pandoc and Scrivener conventions", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "pandoc.md"), "# Chapter 1: Arrival {#arrival .unnumbered}\n\nShe walked on --- faster now -- then stopped.\n\n---\n\nAfter the break `a--b`.\n");
+    const md = scanProject(importManuscript({ source: "pandoc.md", title: "P", cwd, dir: "p" }).root);
+    expect(md.chapters[0].title).toBe("Arrival");
+    const prose = fs.readFileSync(md.chapters[0].file, "utf8");
+    expect(prose).toContain("She walked on — faster now – then stopped.");
+    expect(prose).toContain("\n---\n");
+    expect(prose).toContain("`a--b`");
+    fs.writeFileSync(path.join(cwd, "scriv.txt"), "Chapter 1:\n\n\tFirst paragraph.\n\n\tSecond paragraph.\n\nPrologue:\n\nEarlier.\n");
+    const txt = scanProject(importManuscript({ source: "scriv.txt", title: "S", cwd, dir: "s" }).root);
+    expect(txt.chapters.map((chapter) => chapter.title)).toEqual(["Chapter 1", "Prologue"]);
+    expect(fs.readFileSync(txt.chapters[0].file, "utf8")).toContain("\nSecond paragraph.");
+  });
+
+  test("builds read escaped and # scene breaks, hard breaks, and escapes", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", "Mara didn\\'t look.\n\n\\* \\* \\*\n\nShe said, \"It's nothing.\"\\\nThe gate was open.\n\n#\n\nEnd.");
+    expect(computeWordCounts(root).total).toBe(12);
+    const html = fs.readFileSync(buildBook(root, { format: "html" }).outFile, "utf8");
+    expect(html.match(/class="scene-break"/g)).toHaveLength(2);
+    expect(html).toContain("nothing.&quot; The gate");
+    const narration = fs.readFileSync(buildBook(root, { format: "narration" }).outFile, "utf8");
+    expect(narration.match(/\[pause\]/g)).toHaveLength(2);
+  });
+
+  test("export of a CRLF project uses LF only", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    const chapter = path.join(root, "chapters", "chapter-01.md");
+    fs.writeFileSync(chapter, `${fs.readFileSync(chapter, "utf8")}\nOne line.\n\nTwo line.\n`.replace(/\n/g, "\r\n"));
+    expect(fs.readFileSync(exportManuscript(root).outFile, "utf8")).not.toContain("\r");
+  });
+
+  test("synopsis sentences handle dotted abbreviations and compound names", () => {
+    const root = newProject();
+    createEntity(root, { kind: "arc", name: "Main" });
+    const arc = path.join(root, "plot", "arcs", "main.md");
+    fs.writeFileSync(arc, fs.readFileSync(arc, "utf8")
+      .replace("Initial state and inciting pressure.", "Mara joins the U.S. Navy. She leaves at 9 a.m. Then the tide turns.")
+      .replace("Decision point or highest tension.", "A.J. arrives."));
+    const text = synopsisBook(root).text;
+    expect(text).toContain("Mara joins the U.S. Navy. She leaves at 9 a.m.\n");
+    expect(text).toContain("Because A.J. arrives.");
+  });
+
+  test("prose treats unclosed straight and single quotes as speech to the end", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", "He walked. \"I really felt it\n\nShe ran. ‘I truly saw it");
+    const analysis = proseReport(root).chapters[0].analysis;
+    expect(analysis.filterWords).toEqual([]);
+    expect(analysis.adverbs).toEqual([]);
+  });
+
+  test("an oversized cover is refused", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    fs.writeFileSync(path.join(root, "cover.png"), "");
+    fs.truncateSync(path.join(root, "cover.png"), 6 * 1024 * 1024);
+    fs.writeFileSync(path.join(root, "story.md"), fs.readFileSync(path.join(root, "story.md"), "utf8").replace("---\ntitle:", "---\ncover: cover.png\ntitle:"));
+    expect(() => buildBook(root, { format: "epub" })).toThrow("Refusing to read oversized file");
+  });
+
+  test("import leaves comments and fenced code alone when converting dashes", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "notes.md"), "# Chapter 1: One\n\nText <!-- a -- note --> more -- then.\n\n```\nx -- y\n```\n");
+    const project = scanProject(importManuscript({ source: "notes.md", title: "N", cwd, dir: "n" }).root);
+    const prose = fs.readFileSync(project.chapters[0].file, "utf8");
+    expect(prose).toContain("Text <!-- a -- note --> more – then.");
+    expect(prose).toContain("x -- y");
+  });
+
+  test("continuity reports a refused exemptions file instead of dropping it", () => {
+    const root = newProject();
+    const outside = path.join(makeTempDir(), "exemptions.md");
+    fs.writeFileSync(outside, "---\ntype: exemption-log\nexemptions: []\n---\n");
+    fs.symlinkSync(outside, path.join(root, "continuity", "exemptions.md"));
+    const result = checkProjectContinuity(root);
+    expect(result.ok).toBe(false);
+    expect(result.errors.join("\n")).toContain("continuity/exemptions.md: Refusing to read through symlink");
+  });
+});

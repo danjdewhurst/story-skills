@@ -97,12 +97,22 @@ function stringifyEntry(key, value, originalItems = []) {
   }
 
   const lines = [`${key}:`];
-  const unused = originalItems.slice();
+  // Original items keyed by value, each key a queue in file order, so every
+  // item keeps its original formatting in one pass over long lists.
+  const unused = new Map();
+  for (const candidate of originalItems) {
+    const itemKey = valueKey(candidate.value);
+    if (!unused.has(itemKey)) {
+      unused.set(itemKey, { items: [], next: 0 });
+    }
+    unused.get(itemKey).items.push(candidate);
+  }
   for (const item of value) {
-    const reuse = unused.findIndex((candidate) => isDeepEqual(candidate.value, item));
-    if (reuse !== -1) {
-      lines.push(...unused[reuse].lines);
-      unused.splice(reuse, 1);
+    const queue = unused.get(valueKey(item));
+    const reuse = queue?.items[queue.next];
+    if (reuse && isDeepEqual(reuse.value, item)) {
+      lines.push(...reuse.lines);
+      queue.next += 1;
     } else {
       lines.push(...stringifyItem(key, item));
     }
@@ -124,6 +134,11 @@ function stringifyItem(key, item) {
     lines.push(`    ${childKey}: ${formatScalar(childValue)}`);
   }
   return lines;
+}
+
+// A lookup key for a parsed value; isDeepEqual confirms each match.
+function valueKey(value) {
+  return JSON.stringify(value) ?? String(value);
 }
 
 function isDeepEqual(left, right) {

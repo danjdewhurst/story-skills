@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { parseFrontmatter, stringifyFrontmatter } from "./frontmatter.js";
-import { titleCaseSlug, wordCount } from "./markdown.js";
+import { splitFences, titleCaseSlug, wordCount } from "./markdown.js";
 import { createStoryProject, reindexProject, writeFile } from "./story.js";
 
 // A lone "I" before a word is the pronoun ("Chapter I Am Legend"), not a numeral.
@@ -19,7 +19,7 @@ const PLAIN_CHAPTER_PATTERN = new RegExp(`^chapter\\s+${CHAPTER_NUMBER}\\s*(?:[:
 // Sections that are chapters in their own right but carry no number.
 const SECTION_HEADING_PATTERN = /^(?:prologue|epilogue|interlude|afterword)(?![A-Za-z])/i;
 // As a plain line, the section name stands alone or before a separator.
-const PLAIN_SECTION_PATTERN = /^(?:prologue|epilogue|interlude|afterword)\s*(?:[:.\-–—]+\s*\S.*)?$/i;
+const PLAIN_SECTION_PATTERN = /^(?:prologue|epilogue|interlude|afterword)\s*(?:[:.\-–—]+.*)?$/i;
 const PLAIN_LINE_MAX_LENGTH = 80;
 const FRONTMATTER_BLOCK_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
 const YAML_LINE_PATTERN = /^(?:\s*$|\s*#|\s*-\s|\s*-$|\s+\S|[A-Za-z0-9_"'][^:]*:(?:\s|$))/;
@@ -238,7 +238,7 @@ function splitChapters(documents) {
   const chapters = [];
 
   for (const document of documents) {
-    const text = withoutLeadingFrontmatter(document.text).replace(/\r\n/g, "\n");
+    const text = normalizeSource(withoutLeadingFrontmatter(document.text).replace(/\r\n/g, "\n"), document.name);
     const sections = splitByChapterHeadings(text);
     if (sections.length > 0) {
       chapters.push(...sections);
@@ -248,6 +248,42 @@ function splitChapters(documents) {
   }
 
   return chapters.filter((chapter) => chapter.prose !== "");
+}
+
+// Markdown from Pandoc spells an em dash `---` and an en dash `--`, so a
+// markdown source gets real dashes (outside code). Plain text has no markdown
+// indentation, so leading tabs and spaces (a Scrivener paragraph indent) are
+// dropped rather than turning paragraphs into code blocks.
+function normalizeSource(text, name) {
+  if (/\.te?xt$/i.test(name)) {
+    return text.replace(/^[ \t]+/gm, "");
+  }
+  // Code, HTML comments, and lines of only dashes (scene breaks) keep their
+  // hyphens.
+  return splitFences(text).map((part) => (part.fenced ? part.text : protectComments(part.text, (prose) => prose
+    .split("\n")
+    .map((line) => (/^\s*(?:-\s*){3,}$/.test(line)
+      ? line
+      : line.split(/(`[^`]*`)/).map((piece, index) => (index % 2 === 1
+        ? piece
+        : piece.replace(/(^|[^-])---(?!-)/g, "$1—").replace(/(^|[^-])--(?!-)/g, "$1–"))).join("")))
+    .join("\n")))).join("");
+}
+
+// Applies `change` to the text outside HTML comments, scanning once.
+function protectComments(text, change) {
+  let result = "";
+  let position = 0;
+  while (position < text.length) {
+    const open = text.indexOf("<!--", position);
+    const close = open === -1 ? -1 : text.indexOf("-->", open + 4);
+    if (close === -1) {
+      return result + change(text.slice(position));
+    }
+    result += change(text.slice(position, open)) + text.slice(open, close + 3);
+    position = close + 3;
+  }
+  return result;
 }
 
 // Splits on markdown chapter headings (`## Chapter 3: Title`, `# Prologue`).
@@ -296,7 +332,8 @@ function splitByChapterHeadings(text) {
 
 function markdownChapterTitle(line) {
   const heading = /^#{1,6}\s+(.*)$/.exec(line);
-  return heading ? chapterTitle(heading[1].trim(), CHAPTER_HEADING_PATTERN) : null;
+  // Drop a Pandoc attribute block: `# Chapter 1: Arrival {#arrival .unnumbered}`.
+  return heading ? chapterTitle(heading[1].replace(/\s*\{[#.][^{}]*\}\s*$/, "").trim(), CHAPTER_HEADING_PATTERN) : null;
 }
 
 function plainChapterTitle(lines, index) {
@@ -310,10 +347,10 @@ function plainChapterTitle(lines, index) {
 
 function chapterTitle(text, pattern, sectionPattern = SECTION_HEADING_PATTERN) {
   if (sectionPattern.test(text)) {
-    return text;
+    return text.replace(/[\s:.\-–—]+$/, "");
   }
   const match = pattern.exec(text);
-  return match ? (match[1] ?? "").trim() || text : null;
+  return match ? (match[1] ?? "").trim() || text.replace(/[\s:.\-–—]+$/, "") : null;
 }
 
 function finishChapter(section) {
@@ -326,7 +363,7 @@ function singleChapter(text, fileName) {
     const before = text.slice(0, headingMatch.index).trim();
     const after = text.slice(headingMatch.index + headingMatch[0].length).trim();
     return {
-      title: headingMatch[1].trim(),
+      title: headingMatch[1].replace(/\s*\{[#.][^{}]*\}\s*$/, "").trim(),
       prose: [before, after].filter((part) => part !== "").join("\n\n")
     };
   }

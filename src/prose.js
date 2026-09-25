@@ -1,5 +1,5 @@
-import { escapeRegExp, splitWords } from "./markdown.js";
-import { QUOTE_PATTERN } from "./voices.js";
+import { escapeRegExp, scanComments, splitWords } from "./markdown.js";
+import { quoteMatches, replaceQuotes } from "./voices.js";
 
 // Deterministic prose checks for `story prose`. Everything here is counting:
 // no scoring, no rewriting. Thresholds only decide which counts are raised as
@@ -263,8 +263,7 @@ export function formatProseReport(report) {
 
 // Prose paragraphs without headings, HTML comments, or scene-break rules.
 function proseParagraphs(prose) {
-  return String(prose)
-    .replace(/<!--[\s\S]*?-->/g, " ")
+  return scanComments(String(prose)).text
     .split(/\r?\n\s*\r?\n/)
     // Drop heading lines, not the prose that follows one without a blank line.
     .map((paragraph) => paragraph.split(/\r?\n/).filter((line) => !/^\s{0,3}#/.test(line)).join(" "))
@@ -272,19 +271,45 @@ function proseParagraphs(prose) {
     .filter((paragraph) => paragraph !== "" && !/^([*_-])( ?\1){2,}$/.test(paragraph));
 }
 
+// Splits after . ! ? or … (and up to eight closing quotes, brackets, or
+// emphasis marks) before a capital or digit. The look-back is bounded, so
+// a run of quote marks stays linear.
 function splitSentences(paragraph) {
-  return paragraph.split(/(?<=[.!?…]["'”’)\]*_]*)\s+(?=["'“‘(*_]*[\p{Lu}\p{N}])/u);
+  const sentences = [];
+  let start = 0;
+  for (const space of paragraph.matchAll(/\s+/g)) {
+    const before = paragraph.slice(Math.max(0, space.index - 9), space.index);
+    const after = paragraph.slice(space.index + space[0].length, space.index + space[0].length + 9);
+    if (/[.!?…]["'”’)\]*_]{0,8}$/.test(before) && /^["'“‘(*_]{0,8}[\p{Lu}\p{N}]/u.test(after)) {
+      sentences.push(paragraph.slice(start, space.index));
+      start = space.index + space[0].length;
+    }
+  }
+  sentences.push(paragraph.slice(start));
+  return sentences;
 }
 
 // Removes quoted speech so narration checks do not count a character's own
 // words. Quotes pair as in `story voices` (curly, straight, and British
 // single quotes); speech still open at the paragraph end runs to the end.
 function stripDialogue(paragraph) {
-  return paragraph
-    .replace(QUOTE_PATTERN, " ")
-    .replace(/“[^”]*$/, " ")
-    .replace(/"[^"]*$/, " ")
-    .replace(/(?<![\p{L}\p{N}])‘[^’]*$/u, " ");
+  let text = replaceQuotes(paragraph);
+  // Cut at the first opener with no closer after it, found with index
+  // searches so a run of unclosed quotes stays linear.
+  const curly = text.indexOf("“", text.lastIndexOf("”") + 1);
+  if (curly !== -1) {
+    text = text.slice(0, curly);
+  }
+  const straight = text.indexOf("\"");
+  if (straight !== -1) {
+    text = text.slice(0, straight);
+  }
+  const lastSingleClose = text.lastIndexOf("’");
+  const single = /(?<![\p{L}\p{N}])‘/u.exec(text.slice(lastSingleClose + 1));
+  if (single) {
+    text = text.slice(0, lastSingleClose + 1 + single.index);
+  }
+  return text;
 }
 
 function dialogueTags(paragraphs, rules) {
@@ -292,7 +317,8 @@ function dialogueTags(paragraphs, rules) {
   const bookisms = new Map();
   for (const paragraph of paragraphs) {
     for (const closing of closingQuoteIndexes(paragraph)) {
-      const after = splitWords(paragraph.slice(closing + 1).split(/[.!?;:“"]/)[0]).slice(0, 3);
+      // A tag sits within a few words of the closing quote.
+      const after = splitWords(paragraph.slice(closing + 1, closing + 200).split(/[.!?;:“"]/)[0]).slice(0, 3);
       for (const raw of after) {
         const word = raw.toLowerCase();
         if (PLAIN_TAGS.includes(word)) {
@@ -310,7 +336,7 @@ function dialogueTags(paragraphs, rules) {
 }
 
 function closingQuoteIndexes(paragraph) {
-  return [...paragraph.matchAll(QUOTE_PATTERN)].map((match) => match.index + match[0].length - 1);
+  return quoteMatches(paragraph).map((match) => match.end - 1);
 }
 
 function isAdverb(word, rules) {
