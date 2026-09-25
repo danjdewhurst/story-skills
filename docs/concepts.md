@@ -82,7 +82,7 @@ The files fall into three groups:
 | Group | Files | Who writes them |
 |-------|-------|-----------------|
 | Story bible | `story.md`, `style-sheet.md`, `continuity/state.md`, `plot/timeline.md` | You or an agent, by hand. `story init` creates starter versions. |
-| Entities | One file per character, location, chapter, scene, and so on, such as `characters/sera-voss.md` | You or an agent, by hand or with `story add`. `story rename` and `story remove` keep references in step. |
+| Entities | One file per character, location, chapter, scene, and so on, such as `characters/sera-voss.md` | You or an agent, by hand or with `story add`. `story rename`, `story move`, and `story remove` keep references in step. |
 | Registries | Every `_index.md` | The CLI (`story reindex`). Some registries also have hand-written sections, described in [Registries](#registries). |
 
 `story init` creates the full layout in one step; see [Getting started](getting-started.md). `story validate` reports an error for any required path that is missing. It warns about a markdown file the model doesn't recognise, such as a stray `notes.md` at the project root or a file nested one folder too deep. Those files are ignored:
@@ -180,7 +180,7 @@ Ids are kebab-case: lowercase ASCII letters and digits separated by single hyphe
 | `Café Noir` | `cafe-noir` |
 | `Who opened the Whisper Gate?` | `who-opened-the-whisper-gate` |
 
-Chapters and scenes are the exceptions: their ids come from their numbers. Chapter 1 is `chapter-01`. Scene 1 of chapter 1 is `chapter-01-scene-01`. Their titles live in frontmatter, so `story rename` on a chapter or scene changes only the title and keeps the id.
+Chapters and scenes are the exceptions: their ids come from their numbers. Chapter 1 is `chapter-01`. Scene 1 of chapter 1 is `chapter-01-scene-01`. Their titles live in frontmatter, so `story rename` on a chapter or scene changes only the title and keeps the id. To change the number, and so the id, use `story move chapter <id> --number <n>` or `story move scene <id> --chapter <chapter-id>`, which rename the files and rewrite every reference.
 
 The id comes from the filename, not the name field. A file you write by hand can use any valid id: the example's location is named "The Ashen Citadel" but lives at `worldbuilding/locations/ashen-citadel.md`, so its id is `ashen-citadel`.
 
@@ -258,7 +258,7 @@ Updated 1 registries
 
 When nothing has changed, `story reindex` prints `Registries already up to date`.
 
-You rarely need to run `story reindex` yourself. `story add`, `story rename`, `story remove`, `story wordcount --write`, `story migrate`, and `story import` all reindex when they finish. Run it after you create, delete, or rename an entity file by hand.
+You rarely need to run `story reindex` yourself. `story add`, `story rename`, `story move`, `story remove`, `story wordcount --write`, `story migrate`, and `story import` all reindex when they finish. Run it after you create, delete, or rename an entity file by hand.
 
 ## Links and backlinks
 

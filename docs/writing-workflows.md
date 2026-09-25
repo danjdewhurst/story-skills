@@ -1043,6 +1043,15 @@ The skill reads the chapter, its neighbours, the scene files, and every entity t
 Revise chapter 3 so Nell hides the log instead of burning it. Keep continuity.
 ```
 
+Structural edits change chapter and scene numbers, and those numbers are the ids every clue, question, research note, and state entry points at. The skill makes them with `story move`, which renames the files and rewrites those references, instead of renaming files by hand:
+
+- **Insert a chapter.** Move each later chapter up one, starting from the highest (`story move chapter chapter-05 --number 6`, then `chapter-04 --number 5`), then `story add chapter "<Title>" --number 4`. `move` refuses a number that is taken, so the order matters.
+- **Move a scene.** `story move scene chapter-03-scene-02 --chapter chapter-05` gives it the next free number in chapter 5; add `--scene <n>` to place it, or use `--scene` alone to reorder within a chapter.
+- **Split a chapter.** Add the new chapter (after making room, as above), move the scenes that belong to it, then move their prose between the chapter files by hand.
+- **Merge two chapters.** Move the scenes into the chapter you keep and move the prose by hand. Before `story remove chapter` on the emptied one, check that no clue, promise, or question still pays off there: `remove` clears those references instead of pointing them at the kept chapter.
+
+`move` never edits prose, so the skill rereads for "Chapter 2" in the text and for outline beats that no longer match. See [`story move`](cli-reference.md#move).
+
 ### 5. Compare with the snapshot
 
 After the pass, the skill reports how deep it went:

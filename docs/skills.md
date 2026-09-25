@@ -133,7 +133,7 @@ The main handoffs:
 | [discovery-drafting](#discovery-drafting) | Chapters, post-hoc notes, reconciled bible files | `wordcount --write`, `reindex`, `links`, `validate`, `continuity`, `progress --log` |
 | [scene-craft](#scene-craft) | `scenes/*.md` planning fields and sections, chapter `hook` | `reindex`, `links`, `validate`, `continuity`, `pacing` |
 | [voice-style](#voice-style) | `style-sheet.md`, character `voice-words`/`voice-avoid`, chapter prose | `prose`, `voices`, `names`, `validate`, `wordcount --write`, `links`, `rename character` |
-| [revision-continuity](#revision-continuity) | Chapters and every dependent record, `story.md` `revision-passes` | `report`, `passes`, `next`, `wordcount --write`, `reindex`, `links`, `validate`, `continuity`, `doctor`, `pacing`, `clues`, `voices`, `prose`, `timeline`, `diagram`, `compare`, `series` |
+| [revision-continuity](#revision-continuity) | Chapters and every dependent record, `story.md` `revision-passes` | `report`, `passes`, `next`, `move`, `wordcount --write`, `reindex`, `links`, `validate`, `continuity`, `doctor`, `pacing`, `clues`, `voices`, `prose`, `timeline`, `diagram`, `compare`, `series` |
 | [line-editing](#line-editing) | Chapter prose, `style-sheet.md`, character voice fields | `passes`, `prose`, `voices`, `build --format narration`/`html`/`print`, `wordcount --write`, `links`, `validate` |
 | [feedback-triage](#feedback-triage) | `feedback/round-N/*.md` | `build --format html`, `reindex`, `links`, `validate`, `continuity` |
 | [editorial-review](#editorial-review) | Research `risk` and `reviewed-by`, matter permission fields, `story.md` `ai-disclosure` and `authors` | `add research`, `build --format docx`/`html`/`shunn`/`metadata`, `compare`, `reindex`, `links`, `validate`, `wordcount --write` |
@@ -413,7 +413,7 @@ It never fixes an audit finding by adding a speech or narration that explains th
 
 **Writes.** `research/*.md` and `research/_index.md` (created by the first `story add research`).
 
-**CLI.** `story add research`, then `story reindex .`, `story links .`, `story validate .`. `story rename` and `story remove` keep `used-in` current when chapters change.
+**CLI.** `story add research`, then `story reindex .`, `story links .`, `story validate .`. `story rename`, `story move`, and `story remove` keep `used-in` current when chapters change.
 
 **References.**
 
@@ -605,7 +605,7 @@ The default ladder is `structure`, `character`, `theme`, `continuity`, `pacing`,
 1. Takes a draft snapshot before any pass that touches more than one chapter. In a git project it asks before committing, then tags the snapshot (for example `draft-1`), and it never pushes or rewrites history. Without git, it offers `git init` or copies the project folder beside it, never inside it.
 2. Reads `story.md`, `chapters/_index.md`, the target chapters and their neighbours, referenced entity and arc files, matching scenes, `continuity/`, and `plot/timeline.md`.
 3. Writes a short plan: what changes, what must stay fixed, and which other files are affected.
-4. Edits the markdown directly, then updates the chapter `status` (`draft` to `revised`, and to `final` only when appropriate), timeline, scenes, continuity records, arc plot points, and entity files.
+4. Makes structural edits (inserting, reordering, splitting, or merging chapters, and moving scenes) with `story move chapter` and `story move scene`, which rename the files and rewrite every reference to the old ids, and moves prose between chapters by hand. Edits the markdown directly, then updates the chapter `status` (`draft` to `revised`, and to `final` only when appropriate), timeline, scenes, continuity records, arc plot points, and entity files.
 5. Runs the continuity checklist for what the CLI can't judge: character knowledge, carried-forward state, travel time between places with no `routes`, world rules, and chapter references. `story continuity` already errors when a character crosses a recorded route faster than its `hours` allow.
 6. For an audit, reports findings by severity with file references and concrete fixes. For a revision, summarises what changed.
 
@@ -876,7 +876,7 @@ One `story.md` holds one edition's metadata. When the ebook and print ISBNs diff
 
 **Triggers.** "Validate my story project", "reindex", "repair registries", "check links", "check continuity", "count words", "summarize the project", "import an existing manuscript", "export a manuscript", "build a review copy or print interior", "generate a diagram", "check pacing, clues, voices, or names", "track revision passes", "run the story CLI".
 
-**When each command fits.** The skill picks commands the same way the rest of the docs describe: [the maintenance loop](writing-workflows.md#the-maintenance-loop) for the five commands that follow most edits, [When to run what](continuity.md#when-to-run-what) for the analysis commands (`pacing`, `clues`, `voices`, `names`, `passes`, `diagram`, `timeline`, `prose`), and the [command summary](cli-reference.md#command-summary) for everything else, including `init --form`, `import`, `migrate`, `add`/`rename`/`remove`, `knowledge`, `export`, `build` (markdown, EPUB, DOCX, Shunn, HTML review copy, print interior, narration script, metadata sheet), and `synopsis`.
+**When each command fits.** The skill picks commands the same way the rest of the docs describe: [the maintenance loop](writing-workflows.md#the-maintenance-loop) for the five commands that follow most edits, [When to run what](continuity.md#when-to-run-what) for the analysis commands (`pacing`, `clues`, `voices`, `names`, `passes`, `diagram`, `timeline`, `prose`), and the [command summary](cli-reference.md#command-summary) for everything else, including `init --form`, `import`, `migrate`, `add`/`rename`/`move`/`remove`, `knowledge`, `export`, `build` (markdown, EPUB, DOCX, Shunn, HTML review copy, print interior, narration script, metadata sheet), and `synopsis`.
 
 **Reads.** The CLI's output, and the project files a finding names when it fixes them.
 

@@ -171,7 +171,7 @@ Chapters and scenes use fixed filename patterns instead of names:
 | Chapter | `chapter-{NN}.md` | `NN` is the chapter number. `story add chapter` pads it to two digits (`chapter-07.md`); larger numbers grow (`chapter-112.md`). Frontmatter `number` must equal the filename number. |
 | Scene | `{chapter-id}-scene-{NN}.md` | For example `chapter-03-scene-02.md`. `story add scene` pads `NN` to two digits. Frontmatter `chapter` and `scene` must equal the filename parts. |
 
-Because chapter and scene ids come from their numbers, `story rename chapter` and `story rename scene` change only the `title`; the id and filename stay the same. Renaming any other entity derives a new id from the new name and renames the file.
+Because chapter and scene ids come from their numbers, `story rename chapter` and `story rename scene` change only the `title`; the id and filename stay the same. `story move` changes a chapter's number or a scene's chapter and position, renaming the files and rewriting the references to the old id. Renaming any other entity derives a new id from the new name and renames the file.
 
 ## Frontmatter syntax
 
@@ -208,10 +208,10 @@ Fields the tools do not know are kept and ignored. The example character files c
 
 ### How the CLI rewrites frontmatter
 
-Several commands edit frontmatter in place: `story wordcount --write`, `story add` (for backlinks), `story rename`, `story remove`, `story reindex` (for the `story` field), `story migrate`, `story progress --log` (which rewrites `progress.md`), `story passes` with `--init`, `--start`, or `--done` (which rewrites `revision-passes` in `story.md`), and `story init --follows` or `--precedes` (which adds the backlink to the linked book's `story.md`). They rewrite only the entries whose values changed:
+Several commands edit frontmatter in place: `story wordcount --write`, `story add` (for backlinks), `story rename`, `story move`, `story remove`, `story reindex` (for the `story` field), `story migrate`, `story progress --log` (which rewrites `progress.md`), `story passes` with `--init`, `--start`, or `--done` (which rewrites `revision-passes` in `story.md`), and `story init --follows` or `--precedes` (which adds the backlink to the linked book's `story.md`). They rewrite only the entries whose values changed:
 
 - Comment lines, blank lines, unchanged entries (with their original quoting and number formatting), and unchanged list items keep their exact text.
-- The body is untouched, except that `story rename` updates links to a renamed file.
+- The body is untouched, except that `story rename` and `story move` update links to a renamed file, and `story move` updates a moved chapter's `# Chapter N:` heading and bare chapter and scene ids in `plot/timeline.md` and arc bodies.
 - A file whose content does not change is not written at all.
 
 When the CLI writes a new value, it double-quotes strings that would otherwise be misread: empty strings, strings that look like numbers, booleans, `null`, or `[]`, strings with leading or trailing spaces, and strings containing `:`, `#`, a quote, or a newline.
@@ -970,7 +970,7 @@ sessions:
 
 ## Registries
 
-A registry is an `_index.md` file whose table lists the entities in its directory. `story reindex` rebuilds every registry from the entity files; `story add`, `story rename`, and `story remove` reindex for you. Run `story reindex .` after you add, rename, or delete entity files by hand.
+A registry is an `_index.md` file whose table lists the entities in its directory. `story reindex` rebuilds every registry from the entity files; `story add`, `story rename`, `story move`, and `story remove` reindex for you. Run `story reindex .` after you add, rename, or delete entity files by hand.
 
 Every registry has two frontmatter fields: `type` (fixed per file) and `story` (the story id). For the required registries, `story validate` errors when either is missing or wrong; for the optional matter and research registries it checks only `type`. It warns when a registry is missing the link to an entity file:
 
@@ -1064,7 +1064,9 @@ When you add a character with `--location`, or a location with `--character`, `s
 - `story remove` clears a scalar reference, drops the id from a list, and drops a whole `relationships`, `character-state`, `knowledge-state`, `object-state`, or `routes` entry whose identifying `character`, `artifact`, or `to` was removed. It does not edit bodies, so bare `chapter-NN` tokens and links to a removed file remain. `story links` reports them only in `plot/timeline.md` and arc bodies; find leftovers elsewhere (hand-written registry sections, `style-sheet.md`, other entity bodies) by hand.
 - Neither command edits `follows` or `precedes`, which name other projects rather than entities.
 
-The CLI reference covers [`rename`](cli-reference.md#rename) and [`remove`](cli-reference.md#remove).
+When `story move` renumbers a chapter or moves a scene, it rewrites the old chapter or scene id in these fields and in `current-chapter`, rewrites markdown links to the moved files, and updates bare chapter and scene ids in `plot/timeline.md` and arc bodies.
+
+The CLI reference covers [`rename`](cli-reference.md#rename), [`move`](cli-reference.md#move), and [`remove`](cli-reference.md#remove).
 
 A failed check names the file and the broken reference, and exits with status 1:
 

@@ -164,7 +164,7 @@ These checks keep the scene records and the chapter frontmatter in step, so the 
 | warning | `<chapter> has POV <id> but its scenes are told by <ids>` | The chapter's `pov` matches none of its scenes' `pov` values. Correct whichever is wrong. Scenes with no `pov` are not counted. |
 | warning | `<scene> lists <id> but <chapter> does not list them in characters or mentions` | Add the character to the parent chapter's `characters` or `mentions`. |
 | warning | `<scene> is set in <location> but <chapter> does not list that location` | Add the location to the chapter's `locations`. |
-| warning | `Chapter numbering skips from <n> to <m>` | Add the missing chapter, or renumber. Scaffolding a far-off chapter ahead of time also triggers this. |
+| warning | `Chapter numbering skips from <n> to <m>` | Add the missing chapter, or close the gap with `story move chapter <id> --number <n>`. Scaffolding a far-off chapter ahead of time also triggers this. |
 
 ### Promises, questions, and clues
 
@@ -1274,6 +1274,7 @@ Work down from P0. P0 and P1 items are mechanical and have a command to run. P2 
 | After drafting or revising a chapter | `story wordcount . --write`, `story reindex .`, `story links .`, `story validate .`, `story continuity .`, `story pacing .` |
 | Before writing a scene that turns on a secret | `story knowledge <id> --at <chapter-id>` |
 | Planning structure or pacing | `story timeline .`, `story pacing .`, `story diagram arcs` |
+| Inserting, reordering, splitting, or merging chapters and scenes | `story move chapter <id> --number <n>` (highest chapter first), `story move scene <id> --chapter <chapter-id>`, then `story wordcount . --write`, `story validate .`, `story links .`, `story continuity .` |
 | Planting or revealing a mystery clue | `story clues .`, `story diagram clues` |
 | Adding places and journeys | `story diagram locations`, then `story continuity .` for route travel |
 | After dialogue changes | `story voices .` |

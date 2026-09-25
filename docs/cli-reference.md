@@ -13,7 +13,7 @@ The CLI never writes story content for you. It scaffolds files, rebuilds registr
 - [Maintenance commands](#maintenance-commands): `validate`, `reindex`, `wordcount`, `links`
 - [Analysis commands](#analysis-commands): `continuity`, `knowledge`, `compare`, `progress`, `timeline`, `prose`, `series`, `report`, `next`, `doctor`
 - [Craft and revision commands](#craft-and-revision-commands): `pacing`, `clues`, `voices`, `names`, `diagram`, `passes`
-- [Entity commands](#entity-commands): `add`, `rename`, `remove`
+- [Entity commands](#entity-commands): `add`, `rename`, `move`, `remove`
 - [Output commands](#output-commands): `export`, `build`, `synopsis`
 - [Option index](#option-index)
 - [The bundled fallback](#the-bundled-fallback)
@@ -67,6 +67,7 @@ Absolute paths in output are shortened to `~/stories/...`.
 | | [`passes [path]`](#passes) | Show and update the named revision passes in `story.md` | With `--init`, `--start`, or `--done` |
 | Entities | [`add <kind> <name>`](#add) | Create an entity file and reindex | Yes |
 | | [`rename <kind> <id> <name>`](#rename) | Rename an entity and update references | Yes |
+| | [`move <kind> <id>`](#move) | Renumber a chapter or move a scene and update references | Yes |
 | | [`remove <kind> <id>`](#remove) | Delete an entity and scrub references | Yes |
 | Output | [`export [path]`](#export) | Write a combined manuscript markdown file | Yes |
 | | [`build [path]`](#build) | Build markdown, EPUB, DOCX, Shunn, HTML, print, narration, or metadata output in `dist/` | Yes |
@@ -123,7 +124,7 @@ Every command except `init` and `import` works on one story project: a directory
 | Commands | How to give the project | Default |
 |---|---|---|
 | `validate`, `reindex`, `wordcount`, `links`, `continuity`, `compare`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `series`, `passes`, `report`, `next`, `doctor`, `migrate`, `export`, `build`, `synopsis` | A positional `[path]` **or** `--path <path>` | Current directory |
-| `knowledge`, `names`, `diagram`, `add`, `rename`, `remove` | `--path <path>` only, because their positionals are ids, names, or a diagram kind | Current directory |
+| `knowledge`, `names`, `diagram`, `add`, `rename`, `move`, `remove` | `--path <path>` only, because their positionals are ids, names, or a diagram kind | Current directory |
 | `init`, `import` | Neither. They create a new project; use `--dir` to choose where | A directory named after the story id |
 
 Relative paths resolve against the current working directory. These are equivalent:
@@ -248,7 +249,7 @@ $ story build --out dist
 
 ### Files that fail to parse
 
-Commands that rewrite registries or assemble chapters stop when an entity file, a registry, or `story.md` fails to parse, because carrying on would silently drop that file. `reindex`, `wordcount`, `export`, `build`, `synopsis`, `add`, `migrate`, `rename`, `remove`, and `progress --log` name the files and change nothing:
+Commands that rewrite registries or assemble chapters stop when an entity file, a registry, or `story.md` fails to parse, because carrying on would silently drop that file. `reindex`, `wordcount`, `export`, `build`, `synopsis`, `add`, `migrate`, `rename`, `move`, `remove`, and `progress --log` name the files and change nothing:
 
 ```text
 $ story reindex
@@ -256,7 +257,7 @@ Cannot reindex: fix this file first (story validate reports it):
 - characters/old-bram.md: Duplicate frontmatter key: name
 ```
 
-The other commands name themselves: `Cannot count words`, `Cannot export`, `Cannot build`, `Cannot build a synopsis`, `Cannot add`, `Cannot migrate`, `Cannot rename`, `Cannot remove`, and `Cannot log progress`. With several files the line reads `fix these files first (story validate reports them)`. `rename` and `remove` also read every other markdown file before writing, and stop with `<file>: <error>; nothing was changed` when one of those fails to parse. A `style-sheet.md` or `progress.md` that fails to parse does not block them; `story validate` reports it.
+The other commands name themselves: `Cannot count words`, `Cannot export`, `Cannot build`, `Cannot build a synopsis`, `Cannot add`, `Cannot migrate`, `Cannot rename`, `Cannot move`, `Cannot remove`, and `Cannot log progress`. With several files the line reads `fix these files first (story validate reports them)`. `rename`, `move`, and `remove` also read every other markdown file before writing, and stop with `<file>: <error>; nothing was changed` when one of those fails to parse. A `style-sheet.md` or `progress.md` that fails to parse does not block them; `story validate` reports it.
 
 A parse error names the file by its path inside the project, never an absolute path, for every file including `story.md`, the registries, `progress.md`, and `style-sheet.md`: `story.md: is missing YAML frontmatter`. When `story.md` cannot be read, `validate` reports that once rather than also listing each required field as missing.
 
@@ -503,7 +504,7 @@ Hand-written sections of the registries survive a reindex: `## Relationship Map`
 
 `reindex` refuses to run while an entity file, registry, or `story.md` fails to parse, because the rebuilt registry would drop that file; see [Files that fail to parse](#files-that-fail-to-parse).
 
-Run it after you create, rename, or delete an entity file by hand. `add`, `rename`, `remove`, `migrate`, and `wordcount --write` reindex for you.
+Run it after you create, rename, or delete an entity file by hand. `add`, `rename`, `move`, `remove`, `migrate`, and `wordcount --write` reindex for you.
 
 ```shell
 story reindex
@@ -1376,7 +1377,7 @@ See [Writing workflows](writing-workflows.md) for where passes fit in a revision
 
 ## Entity commands
 
-`add`, `rename`, and `remove` take the project from `--path` (default: the current directory), because their positional arguments are the entity kind, id, and name. Each one reindexes the registries when it finishes.
+`add`, `rename`, `move`, and `remove` take the project from `--path` (default: the current directory), because their positional arguments are the entity kind, id, and name. Each one reindexes the registries when it finishes.
 
 ### Entity kinds
 
@@ -1574,7 +1575,7 @@ story rename <kind> <id> <new name> [--path <project>]
 
 Sets the entity's name or title and, when the new name gives a different id, renames the file and rewrites every reference to the old id. References are the id-valued frontmatter fields (such as `characters`, `pov`, `locations`, `owner`, `planted`, `learned-in`, a location route's `to`, and the entries in `continuity/state.md`) and markdown links that resolve to the entity's file. It looks for them in every markdown file in the project except under `dist/`, `node_modules/`, dot-folders, and folders nested more than 10 levels deep, which are skipped silently. Prose is never changed, so update names in the chapter text yourself.
 
-Chapter and scene ids come from their numbers, so renaming one changes only its title. `rename` also updates the entity's first heading when it shows the old name, such as `# Ilse Marrow` or `# Chapter 1: Low Tide`.
+Chapter and scene ids come from their numbers, so renaming one changes only its title; to change the number, use [`move`](#move). `rename` also updates the entity's first heading when it shows the old name, such as `# Ilse Marrow` or `# Chapter 1: Low Tide`.
 
 Every rewrite is planned before anything is written, so a file that fails to parse leaves the project unchanged. An entity file (a file directly in an entity folder), one of the registries the CLI writes (the `_index.md` in `characters/`, `worldbuilding/`, `plot/`, `chapters/`, `scenes/`, `continuity/questions/`, `continuity/promises/`, `continuity/clues/`, `glossary/`, `matter/`, and `research/`), or one of `story.md`, `style-sheet.md`, `progress.md`, `plot/timeline.md`, `continuity/state.md`, and `continuity/exemptions.md` with no YAML frontmatter stops it the same way, with `<file> is missing YAML frontmatter; nothing was changed`. Other markdown, such as `continuity/motifs.md`, `continuity/theme-audit.md`, a README, or an `_index.md` in a folder of your own such as `notes/`, may be plain. `rename` refuses if an entity with the new id already exists, or if the new id is one Windows reserves as a file name, as `add` does (`Cannot use character id aux: Windows reserves the file name aux.md. ...`).
 
@@ -1587,6 +1588,71 @@ Renamed chapter chapter-01 to chapter-01: ~/stories/the-salt-road/chapters/chapt
 ```
 
 References are rewritten before the entity file is moved, so if the command is interrupted, run it again to finish. A rerun after the file has already moved (the old id is gone and the new file carries the new name) rewrites any references still using the old id and prints `Finished an interrupted rename of <kind> <old-id> to <new-id>: <file>`.
+
+### move
+
+```text
+story move chapter <id> --number <n> [--path <project>]
+story move scene <id> [--chapter <chapter-id>] [--scene <n>] [--path <project>]
+```
+
+Chapter and scene ids come from their numbers, so reordering the book changes ids. `move` renames the files and rewrites every reference to the old id, so you never renumber by hand. It works only on chapters and scenes; use [`rename`](#rename) to change any other id.
+
+**`move chapter`** gives a chapter a new number. It renames `chapters/<id>.md` to `chapter-NN.md` and each of its scene files from `<id>-scene-MM.md` to `chapter-NN-scene-MM.md`, and sets the chapter's `number` and the number in its `# Chapter N:` (or bare `# Chapter N`) heading. It then rewrites every reference to the old chapter id:
+
+- `chapter` on each of the chapter's scenes
+- `planted` and `payoff` on promises and clues, and `introduced` and `resolved` on questions
+- `used-in` on research notes and `died-in` on characters
+- `since` and `learned-in` in `continuity/state.md`, and `current-chapter` when it held the moved chapter's number
+- markdown links to the moved chapter and scene files, anywhere in the project
+- bare chapter and scene ids in the bodies of `plot/timeline.md` and `plot/arcs/*.md`, the ones `story links` checks
+
+`--number` is required, and the new number must be free. `move` never shifts other chapters to make room, so to insert a chapter, renumber the later chapters from the highest down, then `add` the new one. On a separate copy of The Salt Road with three chapters, a scene in chapter 2, and a clue planted in chapter 2 and paid off in chapter 3:
+
+```text
+$ story move chapter chapter-02 --number 3
+chapter-03 already exists: move it first. To make room, renumber from the highest chapter down
+
+$ story move chapter chapter-03 --number 4
+Moved chapter chapter-03 to chapter-04: ~/stories/the-salt-road/chapters/chapter-04.md
+
+$ story move chapter chapter-02 --number 3
+Moved chapter chapter-02 to chapter-03: ~/stories/the-salt-road/chapters/chapter-03.md (with 1 scene)
+
+$ story add chapter "Dead Calm" --number 2 --pov ilse-marrow
+Created chapter chapter-02: ~/stories/the-salt-road/chapters/chapter-02.md
+```
+
+The clue now reads `planted: chapter-03` and `payoff: chapter-04`, the old chapter 2 is `chapters/chapter-03.md` with the heading `# Chapter 3: The Crossing`, and its scene is `scenes/chapter-03-scene-01.md` with `chapter: chapter-03`.
+
+**`move scene`** moves a scene to another chapter, another position, or both. `--chapter` names the destination chapter, which must exist; without `--scene` the scene takes that chapter's next free number. `--scene` alone renumbers the scene within its own chapter. Give at least one of them. `move scene` sets the scene's `chapter` and `scene` fields, rewrites markdown links to the scene file and bare scene ids in the timeline and arc bodies, and adds the scene's `location` and `characters` to the destination chapter's `locations` and `characters` when those entities exist. The chapter it left keeps its lists; trim them by hand if the scene was the only reason for an entry. Continuing the example:
+
+```text
+$ story move scene chapter-03-scene-01 --chapter chapter-02
+Moved scene chapter-03-scene-01 to chapter-02-scene-01: ~/stories/the-salt-road/scenes/chapter-02-scene-01.md
+
+$ story move scene chapter-02-scene-01 --scene 2
+Moved scene chapter-02-scene-01 to chapter-02-scene-02: ~/stories/the-salt-road/scenes/chapter-02-scene-02.md
+```
+
+`move` changes ids, numbers, and links, never prose. A "Chapter 2" or "as we saw earlier" in chapter text, and the numbered beats in a chapter's `## Outline`, stay as they were, so reread them after a move.
+
+`move` refuses, and changes nothing, when:
+
+| Situation | Message |
+|---|---|
+| The kind is not `chapter` or `scene` | `story move works on chapters and scenes, not locations; use story rename to change other ids` |
+| No id | `move requires a chapter or scene id` |
+| The chapter or scene does not exist | `chapter chapter-09 does not exist`, `scene chapter-09-scene-01 does not exist` |
+| `move chapter` without `--number` | `move chapter requires --number <n>` |
+| `move scene` without `--chapter` or `--scene` | `move scene requires --chapter <id>, --scene <n>, or both` |
+| The chapter already has that number | `chapter-02 is already chapter 2` |
+| The scene is already there | `chapter-02-scene-02 is already scene 2 of chapter-02` |
+| The new chapter number is taken | `chapter-03 already exists: move it first. To make room, renumber from the highest chapter down` |
+| The new scene id is taken | `chapter-02-scene-01 already exists: move it first` |
+| A scene file of the moved chapter would overwrite another file | `scenes/chapter-04-scene-01.md already exists; nothing was changed` |
+
+As with `rename`, every file is parsed before anything is written, so a file that fails to parse leaves the project unchanged (`Cannot move: fix this file first ...`). References are written first and the moved files last, so if a move is interrupted, run the same command again to finish it.
 
 ### remove
 
@@ -1613,7 +1679,7 @@ $ story remove artifact brass-sounding-line
 artifact brass-sounding-line does not exist
 ```
 
-Run `story links` and `story validate` after `rename` or `remove` to confirm nothing else needs attention.
+Run `story links` and `story validate` after `rename`, `move`, or `remove` to confirm nothing else needs attention.
 
 ## Output commands
 
@@ -1824,9 +1890,9 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--done` | `<pass>` | `passes` | Kebab-case pass name; marks it `done` |
 | `--pages` | `<n>` | `synopsis` | `1` or `3` |
 | `--actionable` | | `report` | Boolean |
-| `--number` | `<n>` | `add chapter` | |
-| `--chapter` | `<id>` | `add scene` | |
-| `--scene` | `<n>` | `add scene` | |
+| `--number` | `<n>` | `add chapter`, `move chapter` | Required for `move chapter` |
+| `--chapter` | `<id>` | `add scene`, `move scene` | |
+| `--scene` | `<n>` | `add scene`, `move scene` | |
 | `--type` | `<name>` | `add location`, `system`, `faction`, `artifact`, `arc` | |
 | `--role` | `<name>` | `add character` | |
 | `--status` | `<name>` | `add` (most kinds) | |
