@@ -85,7 +85,7 @@ story --version
 ```
 
 ```text
-0.8.2
+0.9.0
 ```
 
 An unknown command prints `Unknown command: <name>` followed by the usage summary to stderr, and exits 1.
@@ -1740,7 +1740,7 @@ node skills/story-maintenance/scripts/story.js --version
 ```
 
 ```text
-0.8.2
+0.9.0
 ```
 
 It accepts the same commands and options, and produces the same output, as the package binary. Run it in place; do not copy it into a story project.
