@@ -52,8 +52,8 @@ start — arcs get built during reconciliation.
    - Reverse-outline the chapter into the chapter file and `scenes/` records
    - Diff against the bible (new / contradiction / enrichment / dangling)
    - Reconcile: update the bible **or** revise the chapter — never neither
-   - Append post-hoc chapter notes; set chapter frontmatter
-     `mode: discovered`
+   - Add post-hoc chapter notes above `## Chapter Text` (below it they
+     count and ship as prose); set chapter frontmatter `mode: discovered`
 4. **Batch review every 3–5 chapters.** Re-read post-hoc notes, sweep the
    promise/question ledgers for dangling setups, and cut dead ends per
    `references/dead-ends.md` (abandoned ledger entries keep a recorded
@@ -72,7 +72,8 @@ start — arcs get built during reconciliation.
 
 - `story.md` frontmatter `draft-mode: discovered` marks a discovery project;
   per-chapter `mode: discovered` / `mode: outlined` tracks mixed projects.
-- Chapters carry a `## Chapter Notes (post-hoc)` section recording what was
+- Chapters carry a `## Chapter Notes (post-hoc)` section, above
+  `## Chapter Text`, recording what was
   discovered, what was cut, and open questions — the project's memory of
   why the bible looks the way it does.
 - Entity candidates extracted from prose are presented for user approval
