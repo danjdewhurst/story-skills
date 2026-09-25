@@ -9508,7 +9508,7 @@ function reportResult(io, result, successMessage, failureMessage) {
 }
 
 // src/version.js
-var VERSION = "0.9.2";
+var VERSION = "0.10.0";
 
 // src/cli.js
 var COMMANDS_BY_NAME = new Map(COMMANDS.map((command) => [command.name, command]));
