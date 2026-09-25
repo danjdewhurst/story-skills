@@ -153,7 +153,7 @@ The rules behind the table:
 Import processes each source document in six steps:
 
 1. Leading YAML frontmatter is removed, including frontmatter written by tools such as Pandoc or Obsidian that the CLI's own parser would reject. A leading `---` scene break is kept.
-2. The text is cleaned for its source type. In a markdown source (`.md` or `.markdown`), Pandoc's dash spellings become real dashes: `---` becomes an em dash (`—`) and `--` an en dash (`–`). Text inside inline code spans, fenced code blocks, and HTML comments is left alone, and so is a line made only of dashes and spaces, such as a `---` or `- - -` scene break. In a plain-text source (`.txt`), leading tabs and spaces are removed from every line, so an indented paragraph from Scrivener or a word processor is not read as a markdown code block.
+2. The text is cleaned for its source type. In a markdown source (`.md` or `.markdown`), Pandoc's dash spellings become real dashes: `---` becomes an em dash (`—`) and `--` an en dash (`–`). Text inside inline code spans, closed `` ``` `` code fences, and HTML comments is left alone, and so is everything after a `<!--` that never closes. Link targets (`](...)`), autolinks (`<https://...>`), and bare URLs such as `https://example.com/a--b` keep their hyphens, and so do a line made only of dashes and spaces (a `---` or `- - -` scene break), a table separator row such as `|---|---|`, and an indented code line (four spaces or a tab). In a plain-text source (`.txt`), leading tabs and spaces are removed from every line, so an indented paragraph from Scrivener or a word processor is not read as a markdown code block.
 3. If the document has chapter headings, each heading starts a chapter and everything up to the next chapter heading is its prose. Text before the first chapter heading becomes a chapter titled `Opening`, with a leading `# Title` line removed.
 4. If the document has no markdown chapter headings, as in a manuscript saved as plain text, it is split on chapter lines instead. A chapter line stands alone between blank lines, is at most 80 characters, and is either `Chapter` with a number (`Chapter 3`, `CHAPTER ONE: Arrival`) or one of `Prologue`, `Epilogue`, `Interlude`, and `Afterword`. The number, or the `Prologue`-style word, must end the line or be followed by a separator (`:`, `.`, `-`, `–`, `—`), with or without a title after it, so `Chapter 12 was the worst.`, `Chapter Nine Lives of a Cat`, and `Prologue of doom` do not split, while `Epilogue: After`, a bare `Prologue:`, and `Chapter 3:` (titled `Chapter 3`) do. A single short line before the first chapter line is taken as the book title and dropped; longer text there becomes an `Opening` chapter.
 5. If the document has neither, the whole document becomes one chapter. Its title is the first `# ` heading in the document, and any text before that heading is kept in the prose. With no `# ` heading, the title comes from the file name: `02-smoke.txt` becomes `02 Smoke`.
@@ -280,7 +280,7 @@ Only chapter prose goes in. Scene files, outlines, notes, and the bible do not. 
 - Otherwise, if it has a `## Outline` section, the prose is everything after the first `---` line following the outline. With no `---`, it is everything after `## Outline`.
 - Otherwise, the prose is the whole body with a leading `# ` heading removed.
 
-HTML comments (`<!-- ... -->`) in the prose are left out of the word count and of every build format, so they are a safe place for notes to yourself. Close each one: `story validate` warns about a chapter whose `<!--` never closes, because the text after it then shows in builds. A `<!--` or `-->` inside a fenced code block or an inline code span (`` `<!-- x -->` ``) is literal text: it neither opens nor closes a comment, and the validate warning ignores it.
+HTML comments (`<!-- ... -->`) in the prose are left out of the word count and of every build format, so they are a safe place for notes to yourself. Close each one: `story validate` warns about a chapter whose `<!--` never closes, because the text after it then shows in builds. A `<!--` or `-->` inside a closed `` ``` `` code fence or an inline code span (`` `<!-- x -->` ``) is literal text: it neither opens nor closes a comment, and the validate warning ignores it.
 
 `story wordcount` uses the same rule, so the manuscript contains exactly the words that were counted. Keep notes and TODOs above `## Chapter Text`, or they end up in the book. The [reconcile loop](../skills/discovery-drafting/references/reconcile-loop.md) puts its post-hoc chapter notes there for this reason.
 
@@ -364,7 +364,7 @@ Write matter text yourself. The `story-maintenance` skill will not invent acknow
 | Field | Type | Used by |
 |-------|------|---------|
 | `author` | Text | The author in the EPUB (`dc:creator`), HTML, print, narration, and metadata builds, and the byline in both Shunn builds. The plain DOCX build does not use it. |
-| `authors` | List of text | Replaces `author` for co-authored books in every build except Shunn, which reads only `author`. `validate` warns when both are set. |
+| `authors` | List of text | Replaces `author` for co-authored books in every build, including the Shunn byline. `validate` warns when both are set. |
 | `language` | BCP 47 tag, such as `en`, `en-GB`, or `fr` | EPUB `dc:language` and the `lang` attribute of every EPUB document; the `lang` attribute of the HTML and print builds; the metadata sheet. Defaults to `en`. |
 | `isbn` | ISBN-13 or ISBN-10, hyphens and spaces allowed | The EPUB identifier (`urn:isbn:...`) in place of the story id; the generated copyright page; the metadata sheet. `validate` checks the checksum. Quote it, so a leading zero survives. |
 | `publisher` | Text | EPUB `dc:publisher`, the generated copyright page, the metadata sheet. |
@@ -604,11 +604,11 @@ story build . --format docx --shunn   # Word document
 story build . --format shunn          # plain text in a .shunn.md file
 ```
 
-Both read two `story.md` fields for the title page:
+Both read these `story.md` fields for the title page:
 
 | Field | Type | Used for |
 |-------|------|----------|
-| `author` | Text | The byline under `by`. Left out when missing. The Shunn builds do not read `authors`, so set `author` for a co-authored book too. |
+| `author` or `authors` | Text, or a list of text | The byline under `by`. As in every build, `authors` wins when both are set, and its names are joined with "and". Left out when neither is set. |
 | `contact` | List of text lines (a single string also works) | Your name, address, email, and so on, one line each. |
 
 ```yaml
@@ -852,7 +852,7 @@ The markdown export copies prose as written, and the narration script nearly doe
 | `***both***`, or emphasis nested inside emphasis (`*a **b** c*`) | Bold and italic together, following the CommonMark emphasis rules |
 | A backslash before a markdown character, as in `\*literal\*` | The character itself, without the backslash |
 | `<!-- comment -->` | Left out, as it is from word counts and every other build format |
-| Three or more `-`, `*`, or `_` on a line of their own, optionally spaced (`---`, `***`, `* * *`) or backslash-escaped as Pandoc writes them (`\* \* \*`), or a lone `#` paragraph | Scene break, written as `* * *` |
+| Three or more `-`, `*`, `_`, or `~` on a line of their own, optionally spaced (`---`, `***`, `* * *`, `~~~`) or backslash-escaped as Pandoc writes them (`\* \* \*`), or a lone `#` paragraph | Scene break, written as `* * *` |
 | `#` heading markers | Removed; the heading text becomes an ordinary paragraph |
 | `>` blockquote markers | Removed, so a quoted epigraph or letter reads as plain text |
 
@@ -941,7 +941,7 @@ The result is a draft, not submission copy. Literary agents expect present tense
 
 - An absolute path can point anywhere, such as `--out ~/Desktop/the-salt-road.epub`.
 - Missing parent folders are created. For a relative path, writing through a symlinked folder is refused. Writing onto a symlinked file is always refused.
-- The output is written to a temporary file beside the target and renamed into place, so an `--out` file that is a hard link to another file is replaced by the new output, and the file it was linked to is left unchanged.
+- The output is written in place, so an existing file keeps its permissions and a read-only one is refused (`EACCES: permission denied`). An `--out` file that is a hard link to another file is instead replaced by a new file with the same permissions, and the file it was linked to is left unchanged.
 - An existing output file is overwritten without asking, but project source never is. `--out` naming `story.md`, `style-sheet.md`, `progress.md`, or a path under `characters/`, `chapters/`, `scenes/`, `worldbuilding/`, `plot/`, `continuity/`, `glossary/`, `matter/`, or `research/` is refused:
 
   ```text

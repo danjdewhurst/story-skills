@@ -894,7 +894,7 @@ npx skills add forjd/better-writing
 
 ## Testing skill changes
 
-The [`evals/`](../evals/) directory holds regression fixtures for the fiction-writing skills (`canon-keeping`, `no-invention`, `promise-payoff`, `question-stays-open`, `voice-preservation`, `anti-slop`, `genre-craft-mystery`, `revision-continuity`, `series-continuity`). Each fixture is a drafting brief seeded with canon that must survive and traps a lazy draft would spring. Agents using the skills never load it. See the [Development guide](development.md#evals) and [`evals/README.md`](../evals/README.md) before changing a skill's instructions.
+The [`evals/`](../evals/) directory holds regression fixtures for the fiction-writing skills (`canon-keeping`, `no-invention`, `promise-payoff`, `question-stays-open`, `voice-preservation`, `anti-slop`, `genre-craft-mystery`, `revision-continuity`, `series-continuity`). Each fixture is a drafting or editing brief seeded with canon that must survive and traps a lazy draft would spring. Agents using the skills never load it. See the [Development guide](development.md#evals) and [`evals/README.md`](../evals/README.md) before changing a skill's instructions.
 
 ## See also
 

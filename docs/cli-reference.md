@@ -197,7 +197,7 @@ story export --out ../outside.md
 Refusing to access path outside project root: ~/stories/outside.md
 ```
 
-An absolute `--out` path is written where you say. Generated files are written to a temporary file and renamed into place, so an `--out` path that is a hard link to another file replaces the link instead of writing into the linked file. The CLI also refuses to write through symlinks or into symlinked project directories, and it never reads a project text file that is a symlink, a device or FIFO, or larger than 5 MiB (see [Scanning limits and safety](project-format.md#scanning-limits-and-safety)). Scans skip `dist/` and dot-directories, so build output never feeds back into checks.
+An absolute `--out` path is written where you say. Generated and rewritten files are written in place and keep their permissions, so a read-only file is refused (`EACCES: permission denied`). The exception is a target that is a hard link, such as an `--out` path linked to a chapter: it is replaced by a new file with the old file's permissions, so the linked file is left unchanged. The CLI also refuses to write through symlinks or into symlinked project directories, and it never reads a project text file that is a symlink, a device or FIFO, or larger than 5 MiB (see [Scanning limits and safety](project-format.md#scanning-limits-and-safety)). Scans skip `dist/`, `node_modules/`, and dot-directories, so build output never feeds back into checks.
 
 `--out` on `export`, `build`, `synopsis`, and `diagram` never overwrites project source: `story.md`, `style-sheet.md`, `progress.md`, or anything under `characters/`, `chapters/`, `scenes/`, `worldbuilding/`, `plot/`, `continuity/`, `glossary/`, `matter/`, or `research/`. Folder names match in any letter case (`Chapters/x.md` is refused), and a path through a symlink is checked against the real folder it points to, so `lnk/x.md` is refused when `lnk` links to `chapters`. The real path is compared in any letter case as well, so an absolute path typed in another case on a case-insensitive disk (the macOS default) is caught. It must also name a file, not a directory; `--out dist` is refused even before `dist/` exists:
 
@@ -257,6 +257,16 @@ story init "The Salt Road"
 
 ```text
 ~/stories/the-salt-road already exists. Use --force to add missing starter files; existing files are never overwritten.
+```
+
+It also refuses a story id or target folder name that Windows reserves (`con`, `prn`, `aux`, `nul`, `com1` to `com9`, `lpt1` to `lpt9`), because the project could not be checked out there:
+
+```shell
+story init con
+```
+
+```text
+Cannot use story id con: Windows reserves the file name con. Choose a longer name, such as "con story"
 ```
 
 Example:
@@ -327,7 +337,7 @@ Creates a new project from an existing manuscript. `<source>` is a single `.md`,
 - A file with neither becomes one chapter, titled by its first `#` heading or by its file name.
 - A directory is imported in natural file-name order (`chapter-2` before `chapter-10`). Files with no number in their name come after the numbered ones, except prologue, preface, foreword, introduction, and prelude files, which come first. Symlinks are never followed; a symlink to a document is refused.
 - Leading YAML frontmatter in source files is dropped, and a trailing Pandoc attribute block on a heading (`# Chapter 1: Arrival {#arrival .unnumbered}`) is dropped from the title.
-- In `.md` and `.markdown` sources, Pandoc's `---` becomes an em dash and `--` an en dash, except inside inline code, fenced code blocks, and HTML comments, and on lines made only of dashes (scene breaks). In `.txt` sources, leading tabs and spaces are removed from every line, so indented paragraphs do not become code blocks.
+- In `.md` and `.markdown` sources, Pandoc's `---` becomes an em dash and `--` an en dash, except inside inline code, closed `` ``` `` code fences, HTML comments (everything after a `<!--` that never closes), link targets (`](...)`), autolinks (`<https://...>`), and bare URLs, and on lines made only of dashes (scene breaks), table separator rows (`|---|---|`), and indented code lines (four spaces or a tab). In `.txt` sources, leading tabs and spaces are removed from every line, so indented paragraphs do not become code blocks.
 
 Each chapter is written to `chapters/chapter-NN.md` with `status: draft` and its word count, and the registries are rebuilt. `import` then prints up to 25 capitalised names that appear three or more times, as candidates for `story add character` or `story add location`.
 
@@ -409,7 +419,7 @@ Checks that the project is structurally sound:
 - no entity file uses a name Windows reserves, such as `characters/nul.md` (warning: `characters/nul.md uses a file name Windows reserves, so the project cannot be checked out on Windows; rename the entity`)
 - each registry `_index.md` links every entity file (warning)
 - declared chapter `word-count` values match the prose (warning)
-- no chapter opens an HTML comment (`<!--`) without closing it, which would leave the text after it in builds and word counts; a `<!--` inside a fenced code block or inline code span does not count (warning)
+- no chapter opens an HTML comment (`<!--`) without closing it, which would leave the text after it in builds and word counts; a `<!--` inside a closed `` ``` `` code fence or an inline code span does not count (warning)
 - each chapter has at least one scene record (warning)
 - chapter `hook`, scene `outcome`, clue `red-herring`, location `routes`, character `voice-words` and `voice-avoid`, `pronunciation` fields, and research `accuracy`, `confidence`, `method`, and `risk` use allowed values and types
 - matter pages have text; research marked `verified` lists sources; research that is still `open` or `disputed` is not relied on by a `final` or `complete` chapter; research with a `risk` and no `reviewed-by` is not relied on by a `final` or `complete` chapter; research with `accuracy: invented` is exempt from the source checks; no stray `.md` files sit at the project root or nested inside entity directories (warnings)
@@ -450,7 +460,7 @@ story reindex [path]
 
 Rebuilds every registry table from the entity files on disk: `characters/_index.md`, `worldbuilding/_index.md`, `plot/_index.md`, `chapters/_index.md`, `scenes/_index.md`, the question, promise, and clue registries under `continuity/`, and `glossary/_index.md`. It also rebuilds `matter/_index.md` and `research/_index.md` when those folders exist, and sets the `story` field in `plot/timeline.md` and `continuity/state.md` to the current story id.
 
-Hand-written sections of the registries survive a reindex: `## Relationship Map` and `## Family Trees` in the character registry, `## World Overview` in the world registry, and `## Story Structure`, `## Theme Tracking`, and the `structure` field in the plot registry. Any other `## ` section that reindex does not generate is kept too, after the generated sections, including one written above the `# ` title. Only a heading that reindex writes with a value, `## Total Word Count: N`, matches without its trailing `: <number>`, so every copy of it is the generated total and extra copies are dropped. Every other heading must match exactly: a hand-written `## Registry: 2` is kept, and so is a second section with the same heading as a generated one, such as a second `## Registry`. Headings inside fenced code blocks neither start nor end a section. Files whose content would not change are not rewritten, and a registry with CRLF line endings keeps them.
+Hand-written sections of the registries survive a reindex: `## Relationship Map` and `## Family Trees` in the character registry, `## World Overview` in the world registry, and `## Story Structure`, `## Theme Tracking`, and the `structure` field in the plot registry. Any other `## ` section that reindex does not generate is kept too, after the generated sections, including one written above the `# ` title. Only a heading that reindex writes with a value, `## Total Word Count: N`, matches without its trailing `: <number>`, so every copy of it is the generated total and extra copies are dropped. Every other heading must match exactly: a hand-written `## Registry: 2` is kept, and so is a second section with the same heading as a generated one, such as a second `## Registry`. Headings inside a closed `` ``` `` code fence neither start nor end a section. Files whose content would not change are not rewritten, and a registry with CRLF line endings keeps them.
 
 `reindex` refuses to run while an entity file, registry, or `story.md` fails to parse, because the rebuilt registry would drop that file; see [Files that fail to parse](#files-that-fail-to-parse).
 
@@ -478,7 +488,7 @@ Registries already up to date
 story wordcount [path] [--write]
 ```
 
-Counts the prose words in each chapter and prints a total. Only the chapter's prose counts: the text after `## Chapter Text`; failing that, the text after the first `---` divider below `## Outline` (or everything after `## Outline` if there is no divider); failing that, the body without its leading `#` heading. HTML comments, inline and fenced code, images, link targets, and markdown symbols are ignored (a `<!--` written inside a fenced code block or an inline code span is code, not a comment); a backslash escape counts as the character it escapes, and hyphenated words and contractions count once, so `didn\'t` is one word.
+Counts the prose words in each chapter and prints a total. Only the chapter's prose counts: the text after `## Chapter Text`; failing that, the text after the first `---` divider below `## Outline` (or everything after `## Outline` if there is no divider); failing that, the body without its leading `#` heading. HTML comments, inline code, code between `` ``` `` fences, images, link targets, and markdown symbols are ignored (a `<!--` written inside a code block or an inline code span is code, not a comment). Only a `` ``` `` fence that closes hides its contents; a `~~~` line is a scene break, not a fence. A backslash escape counts as the character it escapes, and hyphenated words and contractions count once, so `didn\'t` is one word.
 
 | Option | Effect |
 |---|---|
@@ -1497,7 +1507,7 @@ Fill in the body sections by hand, or ask an agent to, after `add`. For what eac
 story rename <kind> <id> <new name> [--path <project>]
 ```
 
-Sets the entity's name or title and, when the new name gives a different id, renames the file and rewrites every reference to the old id. References are the id-valued frontmatter fields (such as `characters`, `pov`, `locations`, `owner`, `planted`, `learned-in`, a location route's `to`, and the entries in `continuity/state.md`) and markdown links that resolve to the entity's file. Prose is never changed, so update names in the chapter text yourself.
+Sets the entity's name or title and, when the new name gives a different id, renames the file and rewrites every reference to the old id. References are the id-valued frontmatter fields (such as `characters`, `pov`, `locations`, `owner`, `planted`, `learned-in`, a location route's `to`, and the entries in `continuity/state.md`) and markdown links that resolve to the entity's file. It looks for them in every markdown file in the project except under `dist/`, `node_modules/`, dot-folders, and folders nested more than 10 levels deep, which are skipped silently. Prose is never changed, so update names in the chapter text yourself.
 
 Chapter and scene ids come from their numbers, so renaming one changes only its title. `rename` also updates the entity's first heading when it shows the old name, such as `# Ilse Marrow` or `# Chapter 1: Low Tide`.
 
@@ -1517,7 +1527,7 @@ Renamed chapter chapter-01 to chapter-01: ~/stories/the-salt-road/chapters/chapt
 story remove <kind> <id> [--path <project>]
 ```
 
-Deletes the entity file and scrubs its id from every reference field. List entries are removed, single-value fields are cleared, and whole entries in `relationships`, `character-state`, `knowledge-state`, `object-state`, and location `routes` are dropped when they are about the removed entity. Prose and markdown links in file bodies are never changed. `story links` reports leftover body links and chapter ids only in `plot/timeline.md` and arc files; find any others by hand, for example with `grep -rn brass-sounding-line .`. As with `rename`, every file is parsed before anything is deleted, so a file that fails to parse or has no frontmatter leaves the project unchanged.
+Deletes the entity file and scrubs its id from every reference field, searching the same markdown files as `rename`. List entries are removed, single-value fields are cleared, and whole entries in `relationships`, `character-state`, `knowledge-state`, `object-state`, and location `routes` are dropped when they are about the removed entity. Prose and markdown links in file bodies are never changed. `story links` reports leftover body links and chapter ids only in `plot/timeline.md` and arc files; find any others by hand, for example with `grep -rn brass-sounding-line .`. As with `rename`, every file is parsed before anything is deleted, so a file that fails to parse or has no frontmatter leaves the project unchanged.
 
 `remove chapter` refuses while scenes still point at the chapter, so remove those first:
 
