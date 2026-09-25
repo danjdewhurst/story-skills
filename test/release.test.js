@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
+import { bumpDocVersions, staleDocVersions } from "../scripts/doc-versions.js";
 import { bumpVersion, isAbsentGitHubRelease, isAbsentNpmVersion, releasePushArgs, replaceVersion, updateVersionFiles } from "../scripts/release.js";
 
 describe("release script", () => {
@@ -48,6 +49,9 @@ describe("release script", () => {
     }
     fs.mkdirSync(path.join(dir, "src"));
     fs.writeFileSync(path.join(dir, "src", "version.js"), '// note\nexport const VERSION = "0.5.0";\n', "utf8");
+    fs.mkdirSync(path.join(dir, "docs"));
+    fs.writeFileSync(path.join(dir, "docs", "install.md"), "npm install -g story-skills@0.5.0\n", "utf8");
+    fs.writeFileSync(path.join(dir, "docs", "history.md"), "Added in 0.4.0.\n", "utf8");
     expect(updateVersionFiles(dir, "0.6.0")).toEqual([
       "package.json",
       ".codex-plugin/plugin.json",
@@ -55,8 +59,11 @@ describe("release script", () => {
       "src/version.js",
       "templates/github/story-checks.yml",
       "templates/github/draft-next-chapter.yml",
-      "templates/github/review-copy.yml"
+      "templates/github/review-copy.yml",
+      "docs/install.md"
     ]);
+    expect(fs.readFileSync(path.join(dir, "docs", "install.md"), "utf8")).toBe("npm install -g story-skills@0.6.0\n");
+    expect(fs.readFileSync(path.join(dir, "docs", "history.md"), "utf8")).toBe("Added in 0.4.0.\n");
     expect(JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf8")).version).toBe("0.6.0");
     expect(fs.readFileSync(path.join(dir, "src", "version.js"), "utf8")).toBe('// note\nexport const VERSION = "0.6.0";\n');
     for (const name of ["story-checks.yml", "draft-next-chapter.yml", "review-copy.yml"]) {
@@ -116,5 +123,47 @@ describe("release script", () => {
     const push = spawnSync("git", releasePushArgs("v1.2.3"), { cwd: releaser, encoding: "utf8" });
     expect(push.status).not.toBe(0);
     expect(git(remote, "tag", "--list")).toBe("");
+  });
+
+  test("bumpDocVersions rewrites only examples that name the current release", () => {
+    const before = [
+      "```text",
+      "0.5.0",
+      "```",
+      "npx --yes --package story-skills@0.5.0 story --version",
+      "npx --package github:danjdewhurst/story-skills#v0.5.0 story",
+      '  STORY_REF: "v0.5.0"',
+      "run `git checkout v0.5.0` in the clone",
+      "Releasing 0.5.0 -> 0.5.1 (v0.5.1)",
+      "The html format is newer than Story Skills 0.5.0.",
+      "story compare --ref v0.5.0",
+      "npm install -g story-skills@0.4.0",
+      ""
+    ].join("\n");
+    expect(bumpDocVersions(before, "0.5.0", "0.6.0")).toBe(
+      [
+        "```text",
+        "0.6.0",
+        "```",
+        "npx --yes --package story-skills@0.6.0 story --version",
+        "npx --package github:danjdewhurst/story-skills#v0.6.0 story",
+        '  STORY_REF: "v0.6.0"',
+        "run `git checkout v0.6.0` in the clone",
+        "Releasing 0.6.0 -> 0.6.1 (v0.6.1)",
+        "The html format is newer than Story Skills 0.5.0.",
+        "story compare --ref v0.5.0",
+        "npm install -g story-skills@0.4.0",
+        ""
+      ].join("\n")
+    );
+  });
+
+  test("staleDocVersions reports each example that names another version, by line", () => {
+    const text = "0.6.0\nnpm install -g story-skills@0.5.0\nReleasing 0.5.0 -> 0.5.1 (v0.5.1)\nNewer than 0.5.0.\n";
+    expect(staleDocVersions(text, "0.6.0")).toEqual([
+      { line: 2, found: "0.5.0" },
+      { line: 3, found: "0.5.0" }
+    ]);
+    expect(staleDocVersions(text.replace(/0\.5\.0/g, "0.6.0").replace("0.5.1 (v0.5.1)", "0.6.1 (v0.6.1)"), "0.6.0")).toEqual([]);
   });
 });

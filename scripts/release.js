@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { bumpDocVersions, docVersionFiles } from "./doc-versions.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const VERSION_FILES = ["package.json", ".codex-plugin/plugin.json", ".claude-plugin/plugin.json"];
@@ -147,6 +148,7 @@ function preflight(nextVersion, tag, name) {
 
 export function updateVersionFiles(root, nextVersion) {
   const updated = [];
+  const currentVersion = JSON.parse(fs.readFileSync(path.join(root, VERSION_FILES[0]), "utf8")).version;
   for (const relativePath of VERSION_FILES) {
     const filePath = path.join(root, relativePath);
     fs.writeFileSync(filePath, replaceVersion(fs.readFileSync(filePath, "utf8"), nextVersion));
@@ -170,16 +172,28 @@ export function updateVersionFiles(root, nextVersion) {
     fs.writeFileSync(filePath, text.replace(pattern, `$1v${nextVersion}$2`));
     updated.push(relativePath);
   }
+  // Doc examples name the current release, so bump the ones that still do.
+  for (const relativePath of docVersionFiles(root)) {
+    const filePath = path.join(root, relativePath);
+    const text = fs.readFileSync(filePath, "utf8");
+    const bumped = bumpDocVersions(text, currentVersion, nextVersion);
+    if (bumped !== text) {
+      fs.writeFileSync(filePath, bumped);
+      updated.push(relativePath);
+    }
+  }
   return updated;
 }
 
 function writeVersions(nextVersion) {
-  for (const relativePath of updateVersionFiles(repoRoot, nextVersion)) {
+  const updated = updateVersionFiles(repoRoot, nextVersion);
+  for (const relativePath of updated) {
     console.log(`Bumped ${relativePath} to ${nextVersion}`);
   }
   // The bundled fallback inlines src/version.js, so rebuild it with the bump.
   run("bun", ["run", "build:fallback"], { inherit: true });
   run("bun", ["run", "check:metadata"], { inherit: true });
+  return updated;
 }
 
 function main(argv) {
@@ -197,12 +211,12 @@ function main(argv) {
 
   preflight(nextVersion, tag, packageJson.name);
   if (dryRun) {
-    console.log(`Dry run: would bump ${[...VERSION_FILES, VERSION_MODULE].join(", ")}, rebuild the fallback, commit, tag ${tag}, push, and create the GitHub release. The tag push publishes ${packageJson.name}@${nextVersion} to npm from GitHub Actions.`);
+    console.log(`Dry run: would bump ${[...VERSION_FILES, VERSION_MODULE].join(", ")}, the STORY_REF templates, and the version examples in README.md and docs/, rebuild the fallback, commit, tag ${tag}, push, and create the GitHub release. The tag push publishes ${packageJson.name}@${nextVersion} to npm from GitHub Actions.`);
     return;
   }
 
-  writeVersions(nextVersion);
-  git("add", ...VERSION_FILES, VERSION_MODULE, FALLBACK_FILE, ...STORY_REF_FILES);
+  const updated = writeVersions(nextVersion);
+  git("add", ...updated, FALLBACK_FILE);
   git("commit", "-m", `chore: release ${nextVersion}`);
   git("tag", "-a", tag, "-m", tag);
   git(...releasePushArgs(tag));

@@ -324,7 +324,7 @@ bun run check:metadata
 ```
 
 ```text
-Metadata is aligned for story-skills@0.9.0.
+Metadata is aligned for story-skills@0.9.1.
 ```
 
 `scripts/check-metadata.js` fails if any of these drift:
@@ -334,6 +334,7 @@ Metadata is aligned for story-skills@0.9.0.
 - `.codex-plugin/plugin.json` `skills` must be `./skills/`.
 - Every directory in `skills/` must contain a `SKILL.md` whose frontmatter `name` equals the directory name and whose `description` is non-empty.
 - `STORY_REF` in `templates/github/story-checks.yml`, `templates/github/draft-next-chapter.yml`, and `templates/github/review-copy.yml` must equal `v<package version>`.
+- Version examples in `README.md` and `docs/*.md` must name the package version. `scripts/doc-versions.js` defines them: a line holding only a version (`--version` output), `story-skills@X.Y.Z`, `story-skills#vX.Y.Z`, `STORY_REF: "vX.Y.Z"`, `git checkout vX.Y.Z`, and the `Releasing X.Y.Z -> ...` transcript. Other version mentions, such as "newer than 0.8.2" or a `--ref v0.8.0` example, are not checked. The failure names the file and line.
 - `.claude-plugin/marketplace.json` and `.agents/plugins/marketplace.json` must name the package, list a plugin with the package name, and carry no version that differs from the package. The Codex entry must point at `./plugins/story-skills`, and that path must exist.
 
 Marketplace entries are deliberately unversioned, so there is only one place per manifest for a version to live.
@@ -492,7 +493,7 @@ Usage: bun run release <patch|minor|major|MAJOR.MINOR.PATCH> [--dry-run]
 [`scripts/release.js`](../scripts/release.js) does the following.
 
 1. **Preflight.** Aborts unless the current branch is `main`, the working tree is clean, local `main` matches `origin/main` after fetching `main` and tags, the tag does not already exist, `gh` is installed and logged in, no GitHub release exists for the tag, and `npm view story-skills@<version>` shows the version is unpublished. It then runs `check:metadata`, `check:evals`, `eval:selftest`, `test:coverage`, `test:examples`, and `check:node-help`. With `--dry-run` it stops here and prints the plan.
-2. **Bump.** Writes the new version into `package.json`, `.codex-plugin/plugin.json`, `.claude-plugin/plugin.json`, and `src/version.js`, and sets `STORY_REF` to `v<version>` in the three workflow templates in `templates/github/`. It then runs `build:fallback` (the fallback inlines the version) and `check:metadata`.
+2. **Bump.** Writes the new version into `package.json`, `.codex-plugin/plugin.json`, `.claude-plugin/plugin.json`, and `src/version.js`, and sets `STORY_REF` to `v<version>` in the three workflow templates in `templates/github/`, and bumps the version examples in `README.md` and `docs/` that name the old version. It then runs `build:fallback` (the fallback inlines the version) and `check:metadata`.
 3. **Commit and tag.** Commits those files and the fallback as `chore: release X.Y.Z` and creates an annotated tag `vX.Y.Z`.
 4. **Push.** Runs `git push --atomic origin main vX.Y.Z`, so the remote accepts both refs or neither. A published tag can never point at a commit that is not on `main`.
 5. **GitHub release.** Runs `gh release create vX.Y.Z --title vX.Y.Z --generate-notes --verify-tag`, then prints the release URL and a link to the Publish workflow.
@@ -500,7 +501,7 @@ Usage: bun run release <patch|minor|major|MAJOR.MINOR.PATCH> [--dry-run]
 Run from a branch other than `main`, it stops straight away:
 
 ```text
-Releasing 0.9.0 -> 0.9.1 (v0.9.1)
+Releasing 0.9.1 -> 0.9.2 (v0.9.2)
 Release aborted: releases are cut from main.
 ```
 
