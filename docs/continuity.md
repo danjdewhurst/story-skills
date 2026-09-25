@@ -198,7 +198,7 @@ Entries with `status: abandoned` are skipped entirely. Everything else is checke
 | error | `<question> records resolved chapter <chapter> but status is still open` | Set `status: resolved` (or `answered`), or clear `resolved`. |
 | warning | `<promise or clue> records planted chapter <chapter> but status is still planned` | Set `status: planted` once the setup is on the page. The warning appears only once that chapter has prose: it is at or before the latest drafted chapter (see below). |
 
-`story links` separately checks that the chapter ids in these fields exist, with one allowance for scheduling ahead. A promise or clue may name a `chapter-NN` beyond the last chapter file in `payoff`, and in `planted` while its status is `planned`. Once the status is `planted` or `paid-off`, the `planted` chapter must exist, and once it is `paid-off`, the `payoff` chapter must exist too. Question chapters must always exist; scaffold the chapter first (`story add chapter "Title" --number 7`). Outline chapters satisfy the link check without counting as drafted.
+`story links` separately checks that the chapter ids in these fields exist, with one allowance for scheduling ahead. A promise or clue may name a `chapter-NN` that has no chapter file yet in `payoff`, and in `planted` while its status is `planned`. Once the status is `planted` or `paid-off`, the `planted` chapter must exist, and once it is `paid-off`, the `payoff` chapter must exist too. Question chapters must always exist; scaffold the chapter first (`story add chapter "Title" --number 7`). Outline chapters satisfy the link check without counting as drafted.
 
 #### Unfired setups (the Chekhov warning)
 
@@ -487,7 +487,7 @@ $ story knowledge jonas-reed --at chapter-04
 - which ledger page names the firestarter (learned in chapter-04)
 ```
 
-The command exits 1 with `Unknown character <id>` or `Unknown chapter <id>` if either id does not exist, and prints the usage line if you leave out the character or `--at`. Entries whose `learned-in` chapter does not exist are skipped here; `story continuity` reports them as errors.
+The command exits 1 with `Unknown character <id>` or `Unknown chapter <id>` if either id does not exist, prints the parse error instead (such as `characters/mara.md: is missing YAML frontmatter`) when the character's file fails to parse, and prints the usage line if you leave out the character or `--at`. Entries whose `learned-in` chapter does not exist are skipped here; `story continuity` reports them as errors.
 
 The answer is only as good as the state file. After drafting a chapter in which someone learns something that matters later, add a `knowledge-state` entry with `learned-in`. Before revising a scene in which a character acts on a secret, run `story knowledge` for that chapter.
 

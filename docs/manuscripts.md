@@ -151,7 +151,7 @@ Import processes each source document in five steps:
 
 1. Leading YAML frontmatter is removed, including frontmatter written by tools such as Pandoc or Obsidian that the CLI's own parser would reject. A leading `---` scene break is kept.
 2. If the document has chapter headings, each heading starts a chapter and everything up to the next chapter heading is its prose. Text before the first chapter heading becomes a chapter titled `Opening`, with a leading `# Title` line removed.
-3. If the document has no markdown chapter headings, as in a manuscript saved as plain text, it is split on chapter lines instead. A chapter line stands alone between blank lines, is at most 80 characters, and is either `Chapter` with a number (`Chapter 3`, `CHAPTER ONE: Arrival`) or one of `Prologue`, `Epilogue`, `Interlude`, and `Afterword`. A sentence that merely starts with `Chapter` does not split. A single short line before the first chapter line is taken as the book title and dropped; longer text there becomes an `Opening` chapter.
+3. If the document has no markdown chapter headings, as in a manuscript saved as plain text, it is split on chapter lines instead. A chapter line stands alone between blank lines, is at most 80 characters, and is either `Chapter` with a number (`Chapter 3`, `CHAPTER ONE: Arrival`) or one of `Prologue`, `Epilogue`, `Interlude`, and `Afterword`. The number, or the `Prologue`-style word, must end the line or be followed by a separator (`:`, `.`, `-`, `–`, `—`) and a title, so `Chapter 12 was the worst.`, `Chapter Nine Lives of a Cat`, and `Prologue of doom` do not split, while `Epilogue: After` does. A single short line before the first chapter line is taken as the book title and dropped; longer text there becomes an `Opening` chapter.
 4. If the document has neither, the whole document becomes one chapter. Its title is the first `# ` heading in the document, and any text before that heading is kept in the prose. With no `# ` heading, the title comes from the file name: `02-smoke.txt` becomes `02 Smoke`.
 5. Chapters whose prose is empty are dropped.
 
@@ -276,7 +276,7 @@ Only chapter prose goes in. Scene files, outlines, notes, and the bible do not. 
 - Otherwise, if it has a `## Outline` section, the prose is everything after the first `---` line following the outline. With no `---`, it is everything after `## Outline`.
 - Otherwise, the prose is the whole body with a leading `# ` heading removed.
 
-HTML comments (`<!-- ... -->`) in the prose are left out of the word count and of every build format, so they are a safe place for notes to yourself.
+HTML comments (`<!-- ... -->`) in the prose are left out of the word count and of every build format, so they are a safe place for notes to yourself. Close each one: `story validate` warns about a chapter whose `<!--` never closes, because the text after it then shows in builds. A comment inside an inline code span (`` `<!-- x -->` ``) is kept as literal text.
 
 `story wordcount` uses the same rule, so the manuscript contains exactly the words that were counted. Keep notes and TODOs above `## Chapter Text`, or they end up in the book. The [reconcile loop](../skills/discovery-drafting/references/reconcile-loop.md) puts its post-hoc chapter notes there for this reason.
 
@@ -894,11 +894,11 @@ The scaffold is built from:
 2. **One section per arc** in `plot/arcs/`, in file-name order, headed with the arc's `name`:
    - the first two sentences of its `## Setup` section,
    - the first two sentences of its `## Rising Action` section,
-   - a line starting `Because`, followed by the first sentence of `## Climax` and the first sentence of `## Resolution`.
+   - a line starting `Because`, followed by the first sentence of `## Climax` and the first sentence of `## Resolution`. When the climax starts with a common opener such as `The`, `A`, `She`, `They`, `It`, or `When`, that word is lowercased (`Because she chooses...`); a name keeps its capital (`Because Sera infiltrates...`).
 
 Sections an arc does not have are skipped; an arc with none of them gets only its heading. The starter sentences that `story add arc` writes (`Initial state and inciting pressure.`, `First escalation.`, and so on) are skipped too, so an unfilled arc adds nothing but its heading. An arc without a `name` is headed with its file name in title case.
 
-Sentences end at `.`, `?`, or `!` followed by a space. A period after `Dr`, `Mr`, `Mrs`, `Ms`, `St`, or a single capital letter (an initial) does not end a sentence, and a final sentence with no closing punctuation gets a period. In a list, each item counts as one sentence, without its bullet or number, and gets a period if it has no closing punctuation.
+Sentences end at `.`, `?`, `!`, or `…` followed by a space, and a full stop inside closing quotes (`"Run."`) ends one too. A period after an abbreviation (`Dr`, `Mr`, `Mrs`, `Ms`, `St`, `Mt`, `Jr`, `Sr`, `Prof`, `Capt`, `Gen`, `Col`, `Lt`, `Sgt`, `Rev`, `Fr`, `No`, `vs`, `etc`, `e.g.`, `i.e.`, `a.m.`, `p.m.`) or a single letter (an initial) does not end a sentence, and a final sentence with no closing punctuation gets a period. In a list, each item counts as one sentence, without its bullet or number, and gets a period if it has no closing punctuation.
 
 | Option | Effect |
 |--------|--------|
@@ -943,7 +943,8 @@ The result is a draft, not submission copy. Literary agents expect present tense
   Refusing to write generated output to chapters/chapter-01.md: it is project source. Use a path such as dist/ instead
   ```
 
-- `--out` must name a file. An existing directory is refused with `--out dist is a directory: give a file path`.
+  Folder names match in any letter case, so `Chapters/x.md` is refused too, and a path through a symlinked folder is checked against the real folder it points to: with `lnk` linked to `chapters`, `--out lnk/x.md` is refused.
+- `--out` must name a file. `--out dist` is refused with `--out dist is a directory: give a file path`, whether or not `dist/` exists yet.
 
 Treat everything in `dist/` as disposable. It is regenerated from the markdown on every build, so never edit a built file to fix the book: change the chapter or matter file and build again. `story validate` and `story links` do not read `dist/`, and `story rename` and `story remove` never rewrite references inside it. The CLI does not create a `.gitignore`, so add `dist/` to your story repository's `.gitignore` unless you want to commit a particular build.
 
@@ -972,7 +973,7 @@ Treat everything in `dist/` as disposable. It is regenerated from the markdown o
 | `Refusing to access path outside project root: <path>` | A relative `--out` that leaves the project | Use a path inside the project, or an absolute path. |
 | `Refusing to write through symlink: <path>` | The `--out` file is a symlink | Delete the symlink or choose another file. |
 | `Refusing to write generated output to <path>: it is project source. ...` | `--out` names a project file or a path inside an entity folder | Write to `dist/` or another folder outside the project source. |
-| `--out <path> is a directory: give a file path` | `--out` names an existing directory | Add a file name, such as `dist/book.epub`. |
+| `--out <path> is a directory: give a file path` | `--out` names a directory, such as `dist` | Add a file name, such as `dist/book.epub`. |
 | `Cannot export: fix this file first ...`, `Cannot build: ...`, or `Cannot build a synopsis: ...` | An entity file, registry, or `story.md` fails to parse | Fix the listed files; `story validate` reports them too. |
 | `<file>: chapter number must be a positive integer to build` | A chapter's `number` is set but is not a positive integer, such as `three` or `0` | Set `number` to the chapter's number. |
 
