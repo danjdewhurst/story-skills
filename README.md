@@ -1,14 +1,6 @@
 <div align="center">
 
-```text
- ___ _                  ___ _   _ _ _    
-/ __| |_ ___ _ _ _  _  / __| |_(_) | |___
-\__ \  _/ _ \ '_| || | \__ \ / / | | (_-<
-|___/\__\___/_|  \_, | |___/_\_\_|_|_/__/
-                 |__/                    
-```
-
-# Story Skills
+<h1><img src="assets/banner.svg" alt="Story Skills" width="508"></h1>
 
 **Agent Skills for planning, tracking, and drafting fiction in markdown.**
 
