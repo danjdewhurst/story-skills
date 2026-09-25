@@ -44,17 +44,33 @@ import {
   voicesReport
 } from "./story.js";
 
+// Options accepted by `story add`; each entity kind reads the ones it needs.
+const ADD_OPTIONS = [
+  "number", "chapter", "scene", "type", "role", "status", "mode", "date", "time", "travel-hours", "dilemma",
+  "sequel", "outcome", "hook", "location", "locations", "character", "characters", "mention", "mentions",
+  "member", "members", "owner", "arc", "arcs", "introduced", "resolved", "planted", "payoff",
+  "significance-delayed", "red-herring", "category", "alias", "aliases", "region", "population",
+  "controlled-by", "prevalence", "acts", "act", "placement", "order", "source", "sources", "used-in",
+  "accuracy", "confidence", "method", "risk", "theme", "themes", "pov"
+];
+
 // Every CLI command, in help order. `project` says how the command finds its
 // story project: "positional" takes an optional path as its first argument
 // (or --path), "flag" takes only --path, and "none" means the command makes a
-// new project and refuses --path. `run` receives { parsed, io, cwd, root },
-// where root() resolves the project path, and returns the exit code.
+// new project and refuses --path. `args` caps the positional arguments after
+// the command name (default: 1 for "positional", 0 otherwise) and `options`
+// lists the flags the command reads besides --path, so a stray argument or
+// flag is an error rather than silently ignored. `run` receives
+// { parsed, io, cwd, root }, where root() resolves the project path, and
+// returns the exit code.
 export const COMMANDS = [
   {
     name: "init",
     usage: "init <title>",
     summary: ["Scaffold a story project"],
     project: "none",
+    args: Infinity,
+    options: ["dir", "genre", "sub-genre", "setting-era", "theme", "themes", "pov", "tense", "form", "synopsis", "series", "book-number", "follows", "precedes", "force"],
     run({ parsed, io, cwd }) {
       const result = createStoryProject({
         title: parsed.positionals.slice(1).join(" "),
@@ -86,6 +102,8 @@ export const COMMANDS = [
     usage: "import <source>",
     summary: ["Split an existing manuscript into a new story project"],
     project: "none",
+    args: 1,
+    options: ["title", "dir", "genre", "sub-genre", "setting-era", "theme", "themes", "pov", "tense", "synopsis", "force"],
     run({ parsed, io, cwd }) {
       const result = importManuscript({
         source: parsed.positionals[1],
@@ -136,6 +154,7 @@ export const COMMANDS = [
     usage: "wordcount [path]",
     summary: ["Count chapter prose words"],
     project: "positional",
+    options: ["write"],
     run({ parsed, io, root }) {
       const result = computeWordCounts(root(), { write: isTruthy(parsed.options.write) });
       for (const chapter of result.chapters) {
@@ -169,6 +188,8 @@ export const COMMANDS = [
     usage: "knowledge <id>",
     summary: ["List what a character knew at a chapter; requires --at"],
     project: "flag",
+    args: 1,
+    options: ["at"],
     run({ parsed, io, root }) {
       const characterId = parsed.positionals[1];
       const atChapterId = parsed.options.at;
@@ -197,6 +218,7 @@ export const COMMANDS = [
       "requires --ref or --against"
     ],
     project: "positional",
+    options: ["ref", "against"],
     run({ parsed, io, cwd, root }) {
       const comparison = compareProject(root(), { ref: parsed.options.ref, against: parsed.options.against, cwd });
       io.stdout.write(formatComparison(comparison, comparison.label));
@@ -211,6 +233,7 @@ export const COMMANDS = [
       "targets, and logged sessions; --log records today"
     ],
     project: "positional",
+    options: ["log", "date"],
     run({ parsed, io, root }) {
       const progress = projectProgress(root(), { log: isTruthy(parsed.options.log), date: parsed.options.date });
       if (progress.logged) {
@@ -258,6 +281,8 @@ export const COMMANDS = [
       "arcs; --out writes it to a file"
     ],
     project: "flag",
+    args: 1,
+    options: ["out"],
     run({ parsed, io, root }) {
       const result = diagramProject(root(), { kind: parsed.positionals[1], out: parsed.options.out });
       if (result.ok) {
@@ -276,6 +301,7 @@ export const COMMANDS = [
       "clashes are errors, look-alikes are warnings"
     ],
     project: "flag",
+    args: Infinity,
     run({ parsed, io, root }) {
       const report = namesReport(root(), parsed.positionals.slice(1));
       io.stdout.write(formatNames(report));
@@ -347,12 +373,16 @@ export const COMMANDS = [
       "mark a pass"
     ],
     project: "positional",
+    options: ["init", "start", "done"],
     run({ parsed, io, root }) {
       const result = projectPasses(root(), {
         init: isTruthy(parsed.options.init),
         start: parsed.options.start,
         done: parsed.options.done
       });
+      for (const note of result.notes ?? []) {
+        io.stderr.write(`note: ${note}\n`);
+      }
       if (result.changed) {
         io.stdout.write("Updated revision-passes in story.md\n");
       }
@@ -365,8 +395,9 @@ export const COMMANDS = [
     usage: "report [path]",
     summary: ["Summarize project inventory, progress, and checks"],
     project: "positional",
+    options: ["actionable"],
     run({ parsed, io, root }) {
-      io.stdout.write(formatProjectReport(projectReport(root()), { actionable: isTruthy(parsed.options.actionable) }));
+      io.stdout.write(formatProjectReport(projectReport(root(), { displayPath: displayPath(parsed) }), { actionable: isTruthy(parsed.options.actionable) }));
       return 0;
     }
   },
@@ -375,8 +406,8 @@ export const COMMANDS = [
     usage: "next [path]",
     summary: ["Recommend the next writing and maintenance actions"],
     project: "positional",
-    run({ io, root }) {
-      io.stdout.write(formatActionReport(projectActions(root())));
+    run({ parsed, io, root }) {
+      io.stdout.write(formatActionReport(projectActions(root(), { displayPath: displayPath(parsed) })));
       return 0;
     }
   },
@@ -385,8 +416,8 @@ export const COMMANDS = [
     usage: "doctor [path]",
     summary: ["Show health checks plus actionable repair steps"],
     project: "positional",
-    run({ io, root }) {
-      io.stdout.write(formatDoctorReport(projectActions(root())));
+    run({ parsed, io, root }) {
+      io.stdout.write(formatDoctorReport(projectActions(root(), { displayPath: displayPath(parsed) })));
       return 0;
     }
   },
@@ -408,6 +439,8 @@ export const COMMANDS = [
     usage: "add <kind> <name>",
     summary: ["Create an entity file and reindex registries"],
     project: "flag",
+    args: Infinity,
+    options: ADD_OPTIONS,
     run({ parsed, io, root }) {
       const result = createEntity(root(), {
         ...parsed.options,
@@ -423,6 +456,7 @@ export const COMMANDS = [
     usage: "rename <kind> <id> <name>",
     summary: ["Rename an entity and update id references"],
     project: "flag",
+    args: Infinity,
     run({ parsed, io, root }) {
       const result = renameEntity(root(), {
         ...parsed.options,
@@ -439,6 +473,7 @@ export const COMMANDS = [
     usage: "remove <kind> <id>",
     summary: ["Remove an entity and scrub id references"],
     project: "flag",
+    args: 2,
     run({ parsed, io, root }) {
       const result = removeEntity(root(), {
         ...parsed.options,
@@ -454,6 +489,7 @@ export const COMMANDS = [
     usage: "export [path]",
     summary: ["Combine front matter, chapters, and back matter into a", "manuscript markdown file"],
     project: "positional",
+    options: ["out"],
     run({ parsed, io, root }) {
       const result = exportManuscript(root(), { out: parsed.options.out });
       io.stdout.write(`Exported ${result.chapters} chapters to ${result.outFile}\n`);
@@ -471,6 +507,7 @@ export const COMMANDS = [
       "(retailer sheet)"
     ],
     project: "positional",
+    options: ["out", "format", "shunn", "trim"],
     run({ parsed, io, root }) {
       const result = buildBook(root(), {
         out: parsed.options.out,
@@ -487,6 +524,7 @@ export const COMMANDS = [
     usage: "synopsis [path]",
     summary: ["Build a deterministic 1- or 3-page synopsis from arcs"],
     project: "positional",
+    options: ["pages", "out"],
     run({ parsed, io, root }) {
       const result = synopsisBook(root(), { pages: parsed.options.pages, out: parsed.options.out });
       if (result.outFile === undefined) {
@@ -498,6 +536,12 @@ export const COMMANDS = [
     }
   }
 ];
+
+// The project path as typed, for commands the reports suggest.
+function displayPath(parsed) {
+  const flag = parsed.options.path;
+  return parsed.positionals[1] ?? (Array.isArray(flag) ? flag[flag.length - 1] : flag) ?? ".";
+}
 
 function collectThemes(options) {
   return []

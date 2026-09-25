@@ -428,7 +428,7 @@ function knowledgeFacts(book) {
         file,
         character: entry.character,
         fact,
-        key: `${entry.character} ${fact}`,
+        key: `${entry.character}\u0000${fact}`,
         learnedIn: entry["learned-in"] ? String(entry["learned-in"]) : ""
       });
     }

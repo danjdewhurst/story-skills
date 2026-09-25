@@ -1,4 +1,5 @@
 import { escapeRegExp, splitWords } from "./markdown.js";
+import { QUOTE_PATTERN } from "./voices.js";
 
 // Deterministic prose checks for `story prose`. Everything here is counting:
 // no scoring, no rewriting. Thresholds only decide which counts are raised as
@@ -203,8 +204,10 @@ export function repeatedPhrases(analyses, thresholds = PROSE_THRESHOLDS) {
       }
     }
   }
-  return sortCounts(counts)
-    .filter((entry) => entry.count >= thresholds.phraseMinCount)
+  // Filter before sorting: a long manuscript has hundreds of thousands of
+  // distinct phrases, almost all seen once.
+  const repeated = new Map([...counts].filter(([, count]) => count >= thresholds.phraseMinCount));
+  return sortCounts(repeated)
     .slice(0, thresholds.phraseLimit)
     .map((entry) => ({ phrase: entry.word, count: entry.count }));
 }
@@ -263,8 +266,10 @@ function proseParagraphs(prose) {
   return String(prose)
     .replace(/<!--[\s\S]*?-->/g, " ")
     .split(/\r?\n\s*\r?\n/)
+    // Drop heading lines, not the prose that follows one without a blank line.
+    .map((paragraph) => paragraph.split(/\r?\n/).filter((line) => !/^\s{0,3}#/.test(line)).join(" "))
     .map((paragraph) => paragraph.replace(/\s+/g, " ").trim())
-    .filter((paragraph) => paragraph !== "" && !paragraph.startsWith("#") && !/^([*_-])( ?\1){2,}$/.test(paragraph));
+    .filter((paragraph) => paragraph !== "" && !/^([*_-])( ?\1){2,}$/.test(paragraph));
 }
 
 function splitSentences(paragraph) {
@@ -272,9 +277,14 @@ function splitSentences(paragraph) {
 }
 
 // Removes quoted speech so narration checks do not count a character's own
-// words. Curly quotes pair explicitly; straight quotes pair in order.
+// words. Quotes pair as in `story voices` (curly, straight, and British
+// single quotes); speech still open at the paragraph end runs to the end.
 function stripDialogue(paragraph) {
-  return paragraph.replace(/“[^”]*(”|$)/g, " ").replace(/"[^"]*("|$)/g, " ");
+  return paragraph
+    .replace(QUOTE_PATTERN, " ")
+    .replace(/“[^”]*$/, " ")
+    .replace(/"[^"]*$/, " ")
+    .replace(/(?<![\p{L}\p{N}])‘[^’]*$/u, " ");
 }
 
 function dialogueTags(paragraphs, rules) {
@@ -300,20 +310,7 @@ function dialogueTags(paragraphs, rules) {
 }
 
 function closingQuoteIndexes(paragraph) {
-  const indexes = [];
-  let straight = 0;
-  for (let index = 0; index < paragraph.length; index += 1) {
-    const char = paragraph[index];
-    if (char === "”") {
-      indexes.push(index);
-    } else if (char === "\"") {
-      straight += 1;
-      if (straight % 2 === 0) {
-        indexes.push(index);
-      }
-    }
-  }
-  return indexes;
+  return [...paragraph.matchAll(QUOTE_PATTERN)].map((match) => match.index + match[0].length - 1);
 }
 
 function isAdverb(word, rules) {
@@ -383,11 +380,13 @@ function increment(counts, key) {
   counts.set(key, (counts.get(key) ?? 0) + 1);
 }
 
+const COLLATOR = new Intl.Collator("en");
+
 // Highest count first, then alphabetical, so output is stable across runs.
 function sortCounts(counts) {
   return [...counts.entries()]
     .map(([word, count]) => ({ word, count }))
-    .sort((left, right) => right.count - left.count || left.word.localeCompare(right.word, "en"));
+    .sort((left, right) => right.count - left.count || COLLATOR.compare(left.word, right.word));
 }
 
 function stringList(value) {

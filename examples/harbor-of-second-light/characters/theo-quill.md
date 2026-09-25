@@ -9,7 +9,7 @@ relationships:
   - character: mara-quill
     type: sibling
   - character: ilya-venn
-    type: former-supervisor
+    type: former-subordinate
 locations:
   - port-kestrel
   - bellwether-reef

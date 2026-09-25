@@ -285,7 +285,8 @@ characters:
     const result = validateLinks(root);
     expect(result.ok).toBe(false);
     expect(result.errors).toContain("continuity/clues/dangling-clue.md references missing chapter chapter-09");
-    expect(result.errors).toContain("continuity/clues/dangling-clue.md references missing chapter chapter-10");
+    // A payoff past the last chapter is scheduled, not missing.
+    expect(result.errors).not.toContain("continuity/clues/dangling-clue.md references missing chapter chapter-10");
     expect(result.errors).toContain("continuity/clues/dangling-clue.md references missing arc missing-arc");
     expect(result.errors).toContain("continuity/clues/dangling-clue.md references missing character missing-character");
   });

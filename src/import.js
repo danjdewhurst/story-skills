@@ -6,7 +6,18 @@ import { createStoryProject, reindexProject, writeFile } from "./story.js";
 
 // A lone "I" before a word is the pronoun ("Chapter I Am Legend"), not a numeral.
 const ROMAN_NUMERAL = "(?!i\\s+\\S)(?=[ivxlc])c{0,3}(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})";
-const CHAPTER_HEADING_PATTERN = new RegExp(`^chapter(?![A-Za-z])\\s*(?:(?:\\d+|${ROMAN_NUMERAL})(?=[\\s:.\\-–—]|$))?\\s*[:.\\-–—]*\\s*(.*)$`, "i");
+const UNIT_WORDS = "one|two|three|four|five|six|seven|eight|nine";
+const TENS_WORDS = "twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety";
+// Spelled-out chapter numbers up to ninety-nine ("Chapter Twenty-One").
+const WORD_NUMERAL = `(?:(?:${TENS_WORDS})(?:[-\\s](?:${UNIT_WORDS}))?|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|${UNIT_WORDS})`;
+const CHAPTER_NUMBER = `(?:\\d+|${WORD_NUMERAL}|${ROMAN_NUMERAL})(?=[\\s:.\\-–—]|$)`;
+const CHAPTER_HEADING_PATTERN = new RegExp(`^chapter(?![A-Za-z])\\s*(?:${CHAPTER_NUMBER})?\\s*[:.\\-–—]*\\s*(.*)$`, "i");
+// A plain-text chapter line ("Chapter 3", "CHAPTER ONE: Arrival") must carry
+// a number, so ordinary sentences that start with "Chapter" never split.
+const PLAIN_CHAPTER_PATTERN = new RegExp(`^chapter\\s+${CHAPTER_NUMBER}\\s*[:.\\-–—]*\\s*(.*)$`, "i");
+// Sections that are chapters in their own right but carry no number.
+const SECTION_HEADING_PATTERN = /^(?:prologue|epilogue|interlude|afterword)(?![A-Za-z])/i;
+const PLAIN_LINE_MAX_LENGTH = 80;
 const FRONTMATTER_BLOCK_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
 const YAML_LINE_PATTERN = /^(?:\s*$|\s*#|\s*-\s|\s*-$|\s+\S|[A-Za-z0-9_"'][^:]*:(?:\s|$))/;
 const FRONT_MATTER_NAMES = /^(?:prologue|preface|foreword|introduction|prelude)\b/i;
@@ -236,20 +247,27 @@ function splitChapters(documents) {
   return chapters.filter((chapter) => chapter.prose !== "");
 }
 
+// Splits on markdown chapter headings (`## Chapter 3: Title`, `# Prologue`).
+// A document with none is split on plain-text chapter lines instead: a
+// numbered "Chapter" line, or a prologue or epilogue line, standing alone
+// between blank lines, as in a manuscript saved as text.
 function splitByChapterHeadings(text) {
   const lines = text.split("\n");
+  const markdownTitles = lines.map((line) => markdownChapterTitle(line));
+  const titles = markdownTitles.some((title) => title !== null)
+    ? markdownTitles
+    : lines.map((line, index) => plainChapterTitle(lines, index));
   const sections = [];
   let current = null;
   const preamble = [];
 
-  for (const line of lines) {
-    const heading = /^#{1,6}\s+(.*)$/.exec(line);
-    const chapterMatch = heading ? CHAPTER_HEADING_PATTERN.exec(heading[1].trim()) : null;
-    if (chapterMatch) {
+  for (const [index, line] of lines.entries()) {
+    const title = titles[index];
+    if (title !== null) {
       if (current) {
         sections.push(finishChapter(current));
       }
-      current = { title: chapterMatch[1].trim() || heading[1].trim(), lines: [] };
+      current = { title, lines: [] };
     } else if (current) {
       current.lines.push(line);
     } else {
@@ -263,11 +281,36 @@ function splitByChapterHeadings(text) {
 
   sections.push(finishChapter(current));
   const opening = stripTitleHeading(preamble.join("\n")).trim();
-  if (opening !== "") {
+  // In a plain-text manuscript a lone short line before the first chapter is
+  // the book title, the counterpart of a markdown `# Title`.
+  const plainTitleOnly = titles === markdownTitles ? false : !opening.includes("\n") && opening.length <= PLAIN_LINE_MAX_LENGTH;
+  if (opening !== "" && !plainTitleOnly) {
     sections.unshift({ title: "Opening", prose: opening });
   }
 
   return sections;
+}
+
+function markdownChapterTitle(line) {
+  const heading = /^#{1,6}\s+(.*)$/.exec(line);
+  return heading ? chapterTitle(heading[1].trim(), CHAPTER_HEADING_PATTERN) : null;
+}
+
+function plainChapterTitle(lines, index) {
+  const text = lines[index].trim();
+  const alone = (lines[index - 1] ?? "").trim() === "" && (lines[index + 1] ?? "").trim() === "";
+  if (!alone || text === "" || text.length > PLAIN_LINE_MAX_LENGTH) {
+    return null;
+  }
+  return chapterTitle(text, PLAIN_CHAPTER_PATTERN);
+}
+
+function chapterTitle(text, pattern) {
+  if (SECTION_HEADING_PATTERN.test(text)) {
+    return text;
+  }
+  const match = pattern.exec(text);
+  return match ? match[1].trim() || text : null;
 }
 
 function finishChapter(section) {

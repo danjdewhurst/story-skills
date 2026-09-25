@@ -103,7 +103,7 @@ function locationDiagram(project) {
 
 function timelineDiagram(project) {
   const { chronology } = buildTimeline(project);
-  const lines = ["timeline", `  title ${timelineText(project.story.data.title ?? "Timeline")}`];
+  const lines = ["timeline", `  title ${timelineText(project.title ?? "Timeline")}`];
   let section = null;
   for (const entry of chronology) {
     if (entry.date !== section) {
@@ -176,16 +176,22 @@ function byId(left, right) {
   return left.id.localeCompare(right.id, "en");
 }
 
+// Words Mermaid reads as syntax when they stand alone as a node id; a
+// character with the id `end` would otherwise close the graph.
+const MERMAID_KEYWORDS = new Set(["end", "graph", "flowchart", "subgraph", "direction", "style", "class", "classdef", "click", "linkstyle", "default"]);
+
 // Mermaid ids cannot safely contain hyphens next to arrows, so ids use
 // underscores; labels carry the readable names.
 function nodeId(id) {
-  return String(id).replace(/[^A-Za-z0-9]/g, "_");
+  const safe = String(id).replace(/[^A-Za-z0-9]/g, "_");
+  return MERMAID_KEYWORDS.has(safe.toLowerCase()) ? `${safe}_node` : safe;
 }
 
 // Kebab-case ids never contain "--", so the double underscore keeps arc
 // nodes apart from chapter nodes whatever their ids.
 function arcNodeId(id) {
-  return `arc__${nodeId(id)}`;
+  // The prefix already keeps an arc id clear of Mermaid keywords.
+  return `arc__${String(id).replace(/[^A-Za-z0-9]/g, "_")}`;
 }
 
 function label(text) {

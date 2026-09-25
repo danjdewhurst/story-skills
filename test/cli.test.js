@@ -259,7 +259,7 @@ describe("cli", () => {
   test("help documents builder options consumed by add", () => {
     const cwd = makeTempDir();
     const help = invoke(cwd, ["--help"]).out;
-    expect(help).toContain("--pov <style>");
+    expect(help).toContain("--pov <style|id>");
     expect(help).toContain("add chapter/scene");
     expect(help).toContain("--theme <name>");
     expect(help).toContain("add arc");
@@ -365,7 +365,7 @@ describe("cli", () => {
 
     const validate = invoke(cwd, ["validate"]);
     expect(validate.code).toBe(1);
-    expect(validate.err).toContain("Missing required path");
+    expect(validate.err).toContain("is not a story project: missing story.md");
 
     const created = invoke(cwd, ["init", "Broken"]);
     expect(created.code).toBe(0);
@@ -534,7 +534,7 @@ word-count: 9
 
       const missing = runBundle(["validate", path.join(scratch, "does-not-exist")]);
       expect(missing.status).toBe(1);
-      expect(`${missing.stdout}${missing.stderr}`).toContain("Project validation failed");
+      expect(`${missing.stdout}${missing.stderr}`).toContain("is not a story project: missing story.md");
     } finally {
       fs.rmSync(scratch, { recursive: true, force: true });
     }

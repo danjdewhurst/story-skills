@@ -1,3 +1,5 @@
+import { editDistance } from "./prose.js";
+
 // Named revision passes kept in story.md `revision-passes`. A revision works
 // best as separate passes, each looking for one kind of problem, from the
 // largest (structure) to the smallest (proof). The ladder is a default; any
@@ -84,6 +86,18 @@ export function updatePasses(passes, change) {
     }
   }
   return next;
+}
+
+// Notes for passes that --start or --done created: a name outside the
+// default ladder may be a typo, so name the closest default pass.
+export function addedPassNotes(before, after) {
+  const known = new Set(before.map((entry) => entry.pass));
+  return after
+    .filter((entry) => !known.has(entry.pass) && !DEFAULTS.has(entry.pass))
+    .map((entry) => {
+      const closest = DEFAULT_PASSES.find((candidate) => editDistance(candidate.pass, entry.pass) <= 2);
+      return `Added custom pass ${entry.pass}, which is not in the default ladder${closest ? `; did you mean ${closest.pass}?` : ""}`;
+    });
 }
 
 export function nextPass(passes) {

@@ -10,7 +10,7 @@ export const OPTIONS = [
   { name: "setting-era", value: "<name>", help: ["Setting era for init"] },
   { name: "theme", value: "<name>", repeatable: true, help: ["Theme for init or add arc; repeatable"] },
   { name: "themes", value: "<a,b>", repeatable: true, help: ["Comma-separated themes for init or add arc"] },
-  { name: "pov", value: "<style>", help: ["POV style for init or add chapter/scene"] },
+  { name: "pov", value: "<style|id>", help: ["POV style for init; POV character id for add", "chapter/scene (also added to characters)"] },
   { name: "tense", value: "<tense>", help: ["Narrative tense for init"] },
   { name: "form", value: "<form>", help: ["Story form for init (novel, novella, novelette,", "short-story, flash, serial, picture-book,", "chapter-book); sets a default target-words"] },
   { name: "synopsis", value: "<text>", help: ["Starter synopsis for init"] },
