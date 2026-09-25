@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { formatPasses, nextPass, readPasses, updatePasses } from "../src/passes.js";
-import { createStoryProject, formatActionReport, projectActions, projectPasses, validateProject } from "../src/story.js";
+import { createEntity, createStoryProject, formatActionReport, projectActions, projectPasses, validateProject } from "../src/story.js";
 import { makeTempDir, memoryIo } from "./helpers.js";
 
 function invoke(cwd, argv) {
@@ -94,6 +94,24 @@ describe("story passes", () => {
 
     projectPasses(root, { start: "house-style" });
     expect(formatActionReport(projectActions(root))).toContain("Work through this pass. Mark it with story passes --done house-style.");
+  });
+
+  test("story next lists actions by priority and keeps ties in insertion order", () => {
+    const { root } = project();
+    const storyPath = path.join(root, "story.md");
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace(/status: \w+/, "status: revising"), "utf8");
+    createEntity(root, { kind: "question", name: "Who lit the fire" });
+    createEntity(root, { kind: "chapter", name: "Chapter 1", number: 1 });
+    projectPasses(root, { init: true });
+
+    const actions = projectActions(root).actions.map((item) => `${item.priority} ${item.title}`);
+    expect(actions).toEqual([
+      "P1 Add scene records",
+      "P1 Revision pass: structure",
+      "P2 Track open questions",
+      "P2 Draft chapter 2",
+      "P2 Create first character"
+    ]);
   });
 
   test("CLI prints the checklist and reports updates", () => {

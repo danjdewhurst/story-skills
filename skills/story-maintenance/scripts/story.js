@@ -5802,6 +5802,7 @@ function buildProjectActions(project, validation, links, continuity) {
   if (project.characters.length === 0) {
     actions.push(action("P2", "Create first character", 'Use story add character "Name" --role protagonist before drafting prose.'));
   }
+  actions.sort((left, right) => left.priority.localeCompare(right.priority));
   if (actions.length === 1 && validation.ok && links.ok && continuity.ok && continuity.warnings.length === 0 && staleChapters.length === 0 && chaptersWithoutScenes.length === 0) {
     actions.unshift(action("P3", "Project is mechanically healthy", "No deterministic maintenance issues are blocking the next writing pass."));
   }
