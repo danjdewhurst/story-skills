@@ -40,7 +40,7 @@ Every skill that runs maintenance looks for the CLI in the same order:
 
 ```shell
 $ node skills/story-maintenance/scripts/story.js --version
-0.10.2
+0.10.3
 ```
 
 If none of the three is available, skills fall back to doing the registry, backlink, and word-count checks by hand. Agents run the CLI where it is installed and never copy `story.js` into your story project.
