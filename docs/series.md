@@ -107,7 +107,7 @@ For each `--follows` or `--precedes` path, `init`:
 2. Writes the link into the new book's `story.md`, relative to the new book's root.
 3. Adds the backlink to the linked book's `story.md` (`precedes` for a `--follows` link, `follows` for a `--precedes` link) and prints `Linked series backlink in <path>/story.md`. If the linked book already lists the new book, nothing is written and no line is printed. Only frontmatter changes; the linked book's comments and body text are left as they were. A link written as a single string by hand is kept and converted to a list.
 4. Inherits `series` from the first linked book that has one, unless you pass `--series`.
-5. Inherits `genre`, `sub-genre`, `pov`, and `tense` from the first linked book, unless you pass `--genre`, `--sub-genre`, `--pov`, or `--tense`. `setting-era` and `themes` are not inherited.
+5. Inherits `genre`, `sub-genre`, `pov`, and `tense` from the first linked book, unless you pass `--genre`, `--sub-genre`, `--pov`, or `--tense`. `setting-era`, `themes`, and `form` are not inherited; pass `--form` if the new book has one.
 6. Sets `book-number` to one more than the highest `book-number` anywhere in the linked series, not just the directly linked books, so publication numbers never collide.
 
 If no book in the series has a `book-number`, the new book is left unnumbered. A book created by a plain `story init` has no `book-number`, so when you link your first sequel to it, pass `--book-number 2` and add `book-number: 1` to the first book by hand. If the first book has no `series` yet, pass `--series <id>` and add the same `series` to the first book as well.
@@ -312,9 +312,10 @@ See the [CLI reference](cli-reference.md) for every command.
 
 - **Keep the filename id identical.** `story series` matches entities by id. A renamed file is a new entity to the checker.
 - **Keep `name` identical.** Put new titles and epithets in `aliases`. In the example, the prequel's `lord-maren.md` keeps `name: "Lord Maren"` and lists `General Maren` as an alias.
+- **Keep the voice and sound fields.** `voice-words`, `voice-avoid`, and `pronunciation` travel with the file, so `story voices` checks the character against the same voice in every book, and an audiobook narrator says the name the same way.
 - **Set state for this book's starting point.** For a sequel, start from the earlier book's final `status`, relationships, ownership, and knowledge. For a prequel, start from the earlier situation and record the later book's facts as fixed endpoints in a `## Series Canon` section of the entity file.
 - **Remove book-local references.** `died-in` and every other chapter id points at chapters in the source book. For a character who died before this book begins, keep `status: deceased` and remove `died-in`.
-- **Carry or prune every link.** Relationships, `locations`, `notable-characters`, faction `members`, and artifact `owner` and `location` must point at entities that exist in this book, with backlinks. Carry the linked entity too, or remove the reference. `story links` reports what you missed, for example `characters/lord-maren.md references missing location ashen-citadel`.
+- **Carry or prune every link.** Relationships, `locations`, `notable-characters`, location `routes`, faction `members`, and artifact `owner` and `location` must point at entities that exist in this book, with backlinks where the field needs one. Carry the linked entity too, or remove the reference. `story links` reports what you missed, for example `characters/lord-maren.md references missing location ashen-citadel`.
 - **Do not copy** chapters, scenes, arcs, questions, promises, clues, or `continuity/state.md`. Rebuild them:
   - Open questions or promises the new book continues become new files in its `continuity/` folders.
   - Events from the other book become rows in the `## Backstory Events` table of `plot/timeline.md` (sequel), or `## Series Canon` notes (prequel). The Last Ember's timeline records the coup from the prequel this way.
@@ -352,6 +353,9 @@ knowledge-state:
 - **Sequels.** Before drafting, reread the earlier book's final chapters, `continuity/state.md`, and every open question and promise. Decide which threads the new book picks up.
 - **Prequels.** The later book is canon. Every fixed endpoint must still be reachable by the end of the prequel. Do not mark a character `deceased` who is alive in a later book, and do not give a character knowledge that a later book shows them learning for the first time. Before drafting, list the later book's `fact` ids that have `learned-in`, and keep those facts out of the prequel.
 - **Revising an earlier book** after later books exist: run `story series .` before and after the revision. When canon changes, update the later books' `Series Notes` and carried entity files.
+- **New names.** [`story names`](continuity.md#story-names) checks candidates against the current book only. Before settling a name in a later book, run it against each earlier book too (`story names "Ilse" --path ../the-last-ember`), so a new minor character does not echo a major one from book one.
+
+A translated or adapted edition is not a new book in the series. It is a copy of the same book, so the [`adaptation`](../skills/adaptation/SKILL.md) skill removes `series`, `book-number`, `follows`, and `precedes` from the edition's `story.md`; copied values would point at the source series and break `story links` and `story series`. A translated series links its own translated books to each other in the same way the source series does.
 
 Serial and episodic installments inside a single book are a different layer; see the `genre-craft` skill's [serial and episodic reference](../skills/genre-craft/references/serial-episodic.md).
 

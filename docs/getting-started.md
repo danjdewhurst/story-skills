@@ -22,7 +22,7 @@ The skills do the creative work: asking questions, outlining, and drafting. The 
 
 ## Install the skills
 
-Pick the method for your agent. Each method installs the 16 skills in [`skills/`](../skills/); the Gemini CLI and Agent Skills CLI installers can also install a single skill.
+Pick the method for your agent. Each method installs the 21 skills in [`skills/`](../skills/); the Gemini CLI and Agent Skills CLI installers can also install a single skill.
 
 ### Claude Code
 
@@ -188,6 +188,7 @@ This walkthrough builds a small mystery, *The Sunken Ledger*. Each step shows wh
 
 ```mermaid
 flowchart LR
+  P[premise-workshop<br/>optional] -.-> A
   A[story-init<br/>story init] --> B[character-management<br/>worldbuilding<br/>story add]
   B --> C[chapter-writing<br/>outline, then prose]
   C --> D[story wordcount --write<br/>story reindex<br/>story links<br/>story validate]
@@ -196,17 +197,20 @@ flowchart LR
 
 ### 1. Start the project
 
-Ask your agent:
+If all you have is a spark (an image, a character, a what-if) or several ideas you can't choose between, start one step earlier. Ask your agent "I have an idea for a story" and the [`premise-workshop`](../skills/premise-workshop/SKILL.md) skill turns it into a tested logline and premise, recommends a form (novel, novella, short story, and so on), brainstorms titles, and hands the result to `story-init` so you aren't asked twice. [Writing workflows](writing-workflows.md#premise-workshop) walks through a session.
+
+When you know what you are writing, ask your agent:
 
 ```text
 Start a new story.
 ```
 
-The [`story-init`](../skills/story-init/SKILL.md) skill asks for the title, genre and sub-genre, a two- or three-sentence synopsis, the setting era, two to four themes, the POV style, and the tense. It then scaffolds the project with `story init`:
+The [`story-init`](../skills/story-init/SKILL.md) skill asks for the title, the form, genre and sub-genre, a two- or three-sentence synopsis, the setting era, two to four themes, the POV style, and the tense. It then scaffolds the project with `story init`:
 
 ```shell
 cd ~/stories
 story init "The Sunken Ledger" \
+  --form novel \
   --genre mystery \
   --sub-genre coastal \
   --setting-era near-future \
@@ -222,6 +226,8 @@ Created story project: ~/stories/the-sunken-ledger
 ```
 
 The directory name and the story id (`the-sunken-ledger`) come from the title, so the title needs at least one ASCII letter or digit. Use `--dir` to choose a different directory. `init` refuses a directory that already exists unless you pass `--force`, and even then it only adds missing starter files.
+
+`--form` records the form and sets a default word target for it: 80,000 for a `novel`, 30,000 for a `novella`, 12,000 for a `novelette`, 5,000 for a `short-story`, 1,000 for `flash`, 10,000 for a `chapter-book`, and 500 for a `picture-book`. A `serial` gets no book-level target. Without `--form`, `init` writes neither field, so the skill passes `--form novel` if you don't choose.
 
 The new project looks like this:
 
@@ -270,6 +276,8 @@ themes:
   - memory
 pov: third-person-limited
 tense: past
+form: novel
+target-words: 80000
 ---
 
 # The Sunken Ledger
@@ -292,7 +300,7 @@ premise: "The truth surfaces because someone refuses to stop looking."
 counter-premise: "Some doors stay shut because opening them costs too much."
 ```
 
-Treat them as guesses that you will check during revision; the [`theme-craft`](../skills/theme-craft/SKILL.md) skill works on them in depth. Each `_index.md` file is a registry: a table the CLI rebuilds from the entity files next to it. [Project format reference](project-format.md) describes every file and field.
+Treat them as guesses that you will check during revision; the [`theme-craft`](../skills/theme-craft/SKILL.md) skill works on them in depth. (If you came from the premise workshop, these are the ones you tested there.) Publishing fields such as `isbn` and `description` wait until the book is finished; the [`publishing`](../skills/publishing/SKILL.md) skill fills them in. Each `_index.md` file is a registry: a table the CLI rebuilds from the entity files next to it. [Project format reference](project-format.md) describes every file and field.
 
 Run the checks from inside the project. A new project passes, and `story next` suggests what to do first:
 
@@ -380,9 +388,9 @@ The [`chapter-writing`](../skills/chapter-writing/SKILL.md) skill works outline-
 
 1. **Gather context.** It reads `story.md`, `style-sheet.md`, the chapter and scene registries, `plot/_index.md`, `plot/timeline.md`, `continuity/state.md`, and the open questions and promises.
 2. **Agree the scope.** It asks what the chapter covers, whose POV it uses, and where it is set.
-3. **Outline.** It proposes a beat-by-beat outline and revises it until you approve it.
+3. **Outline.** It proposes a beat-by-beat outline, including what each scene's outcome should be and how the chapter ends, and revises it until you approve it.
 4. **Draft.** It writes the prose in the POV and tense from `story.md`, using the character's voice notes and the location details.
-5. **Update the records.** It adds a scene file for each scene, then updates the timeline, arcs, continuity state, and promises.
+5. **Update the records.** It adds a scene file for each scene, then updates the timeline, arcs, continuity state, and promises, and records how each scene and the chapter actually turned out.
 
 The chapter and scene files come from `story add`:
 
@@ -423,6 +431,7 @@ status: draft
 mode: ""
 date: ""
 time: ""
+hook: question
 word-count: 84
 ---
 
@@ -449,9 +458,11 @@ It was steel, rimmed with rust, and it was locked from the inside.
 
 Word counts start at `## Chapter Text`, so the outline above it never counts towards `word-count`. Characters who are present in the chapter go in `characters`. Characters who are only mentioned, remembered, or seen in flashback go in `mentions`. The continuity checks rely on that split.
 
-The scene file, `scenes/chapter-01-scene-01.md`, holds the scene's machine-readable record: POV, location, cast, `state-changes`, and continuity notes. Later sessions and the continuity checks read these records to learn where the story stands.
+The skill also added `hook: question`, because the chapter ends on a question (who locked the door from the inside?). `hook` records how a chapter ends: `cliffhanger`, `question`, `revelation`, `reversal`, `decision`, `emotional`, or `resolution`. `story add` doesn't set it unless you pass `--hook`.
 
-If you would rather write without an outline, ask for discovery drafting instead. The [`discovery-drafting`](../skills/discovery-drafting/SKILL.md) skill drafts first and reconciles the bible afterwards. For better prose, pair `chapter-writing` with the separate [better-writing](https://github.com/forjd/better-writing) skill. [Writing workflows](writing-workflows.md) covers both approaches.
+The scene file, `scenes/chapter-01-scene-01.md`, holds the scene's machine-readable record: POV, location, cast, `state-changes`, and continuity notes. The skill set its `outcome` to `yes-but`: Ines finds what she dived for, but it is locked. Later sessions and the continuity and pacing checks read these records to learn where the story stands.
+
+If you would rather write without an outline, ask for discovery drafting instead. The [`discovery-drafting`](../skills/discovery-drafting/SKILL.md) skill drafts first and reconciles the bible afterwards. Once a chapter's structure is settled, the [`line-editing`](../skills/line-editing/SKILL.md) skill polishes its sentences; the separate [better-writing](https://github.com/forjd/better-writing) skill is an optional extra. [Writing workflows](writing-workflows.md) covers all of these.
 
 ### 4. Run the maintenance loop
 
@@ -501,6 +512,24 @@ Actions:
 ```
 
 `story continuity` checks the story rather than the files: characters who appear after they die, payoffs that land before their setup, questions answered before they are asked, and stale continuity state. [Continuity and analysis](continuity.md) explains each check.
+
+The skill also runs `story pacing .`, which lines each chapter's length, scene outcomes, and hook up against the rest of the book. With one chapter there is little to compare, but it confirms the fields were recorded:
+
+```shell
+story pacing .
+```
+
+```text
+Pacing: 1 scenes, 0 sequels, 1 of 1 chapters with hooks
+Outcomes: 100% of recorded outcomes are setbacks or complications
+Median chapter: 84 words
+
+Ch  Words  Scenes  Sequels  Outcomes (yes/no/yes-but/no-and)  Hook
+ 1     84       1        0  0/0/1/0                           question
+Pacing check complete: 0 errors, 0 warnings, 0 dismissed
+```
+
+As the book grows it warns about runs of easy wins, long stretches with no reaction scene, chapters far longer or shorter than the rest, and runs of chapters that end with everything resolved.
 
 ### 5. When a check fails
 
@@ -577,8 +606,11 @@ Once chapter 1 exists, these are the usual next steps:
 - **Plan the plot.** Ask "Create a plot arc." The `plot-structure` skill writes arcs under `plot/arcs/`. Chapters record the arcs they move forward in `arcs-advanced`.
 - **Track setups and payoffs.** Use `story add question`, `story add promise`, and `story add clue` so that `story continuity` can check that every setup pays off, and in the right order. See [Continuity and analysis](continuity.md).
 - **Track progress.** Add `target-words` and `deadline` to `story.md`, then run `story progress . --log` after each session. See [Continuity and analysis](continuity.md#story-progress).
-- **Snapshot drafts.** Commit, run `git tag draft-1` before a revision pass, then run `story compare . --ref draft-1` to see what the pass changed. See [Writing workflows](writing-workflows.md#revision-passes).
-- **Build the book.** `story build .` writes a single markdown manuscript to `dist/`, and `story build . --format epub` (or `docx`, `shunn`) writes other formats there. Treat `dist/` as disposable. If you use `story export` instead, keep its output in `dist/` too, for example `story export . --out dist/manuscript.md`. Written to the project root, `manuscript.md` makes `story validate` warn that the file is not part of the story project model. See [Import, export, and builds](manuscripts.md).
+- **Check names and voices.** Ask "Name a character" and the agent runs `story names` to catch clashes and look-alikes before a name sticks. Once there is dialogue, `story voices .` checks that each character sounds like themselves. See [Writing workflows](writing-workflows.md#voice-and-house-style).
+- **Revise in named passes.** When the draft is done, ask "Set up the revision passes". `story passes . --init` writes a ladder from structure down to proof, and `story next .` tells you which pass comes next. Commit and run `git tag draft-1` before a pass, then `story compare . --ref draft-1` shows what it changed. See [Writing workflows](writing-workflows.md#revision-passes).
+- **Polish the prose.** Ask "Line edit chapter 1". The `line-editing` skill proposes each change with a before, an after, and a reason, and applies only the ones you accept. See [Writing workflows](writing-workflows.md#line-editing).
+- **Share a review copy.** `story build . --format html` writes one HTML file that beta readers open in a browser, with a label on every paragraph for them to cite. See [Writing workflows](writing-workflows.md#feedback-triage).
+- **Build the book.** `story build .` writes a single markdown manuscript to `dist/`, and `story build . --format epub` (or `docx`, `shunn`, `html`, `print`, `narration`, `metadata`) writes other formats there. The [`publishing`](../skills/publishing/SKILL.md) skill takes a finished book through metadata, the print interior, and launch, and [`adaptation`](../skills/adaptation/SKILL.md) turns it into an audiobook script, screenplay, or translation. Treat `dist/` as disposable. If you use `story export` instead, keep its output in `dist/` too, for example `story export . --out dist/manuscript.md`. Written to the project root, `manuscript.md` makes `story validate` warn that the file is not part of the story project model. See [Import, export, and builds](manuscripts.md).
 - **Bring in an existing draft.** `story import draft.md --title "Your Title"` splits a manuscript into a project. See [Import, export, and builds](manuscripts.md).
 - **Write a sequel or prequel.** See [Series](series.md).
 - **Automate it.** The GitHub Actions templates run the checks on every pull request and can draft a chapter on a schedule. See [Automation and CI](automation.md).

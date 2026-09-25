@@ -23,6 +23,7 @@ For the ideas behind the format, read [Core concepts](concepts.md). For command 
 - [Registries](#registries)
 - [References and backlinks](#references-and-backlinks)
 - [Dates and times](#dates-and-times)
+- [Analysis views](#analysis-views)
 - [Allowed values](#allowed-values)
 - [Scanning limits and safety](#scanning-limits-and-safety)
 - [JSON schema](#json-schema)
@@ -84,11 +85,15 @@ research/                         optional: research notes
   _index.md
   <research-id>.md
 feedback/round-<N>/*.md           optional: skill-owned, not read by the CLI
+feedback/briefs/*.md              optional: skill-owned, not read by the CLI
 submission/*.md                   optional: skill-owned, not read by the CLI
+publishing/*.md                   optional: skill-owned, not read by the CLI
+adaptations/                      optional: skill-owned, not read by the CLI
 dist/                             optional: disposable output of story build
+.github/                          optional: copied GitHub templates, not read by the CLI
 ```
 
-`story init` creates every directory and registry above except `matter/`, `research/`, `feedback/`, and `submission/`, plus `story.md`, `style-sheet.md`, `plot/timeline.md`, and `continuity/state.md`. It creates no entity files, and none of `progress.md`, `continuity/exemptions.md`, `continuity/motifs.md`, `continuity/theme-audit.md`, or `dist/`.
+`story init` creates every directory and registry above except `matter/`, `research/`, `feedback/`, `submission/`, `publishing/`, `adaptations/`, and `.github/`, plus `story.md`, `style-sheet.md`, `plot/timeline.md`, and `continuity/state.md`. It creates no entity files, and none of `progress.md`, `continuity/exemptions.md`, `continuity/motifs.md`, `continuity/theme-audit.md`, or `dist/`.
 
 `story export` writes `manuscript.md` at the project root by default. That file is export output, not part of the project: `story validate` warns about it (see [Files the tools ignore](#files-the-tools-ignore)).
 
@@ -127,10 +132,12 @@ warning: characters/minor/old-nell.md is nested inside an entity directory and i
 Some skills keep their own working files in the project. The CLI ignores these without a warning:
 
 - `continuity/motifs.md` and `continuity/theme-audit.md`, written by the [theme-craft skill](../skills/theme-craft/SKILL.md)
-- `feedback/round-<N>/`, written by the [feedback-triage skill](../skills/feedback-triage/SKILL.md)
+- `feedback/round-<N>/`, written by the [feedback-triage skill](../skills/feedback-triage/SKILL.md), and `feedback/briefs/`, where the [editorial-review skill](../skills/editorial-review/SKILL.md) saves sensitivity-reader briefs
 - `submission/`, written by the [submission skill](../skills/submission/SKILL.md)
+- `publishing/`, where the [publishing skill](../skills/publishing/SKILL.md) keeps `launch-plan.md`, `retailer-copy.md`, `rights.md`, and `one-sheet-<right>.md`
+- `adaptations/`, where the [adaptation skill](../skills/adaptation/SKILL.md) keeps audiobook, screenplay, picture-book, comics, and interactive-fiction working files (`adaptations/audiobook/`, `adaptations/screenplay/`, and so on). Screenplay and interactive sources use their own extensions (`.fountain`, `.ink`, `.twee`).
 
-Any other directory that is not an entity directory (for example `notes/` or `images/`) is ignored without a warning too.
+Any other directory that is not an entity directory (for example `notes/` or `images/`) is ignored without a warning too. So is `.github/`, where you copy the workflows and the `ISSUE_TEMPLATE/manuscript-note.yml` issue form from [`templates/github/`](../templates/github/); recursive scans skip every directory whose name starts with `.`. [Automation](automation.md) covers those templates.
 
 ## Identifiers and filenames
 
@@ -189,7 +196,7 @@ Fields the tools do not know are kept and ignored. The example character files c
 
 ### How the CLI rewrites frontmatter
 
-Several commands edit frontmatter in place: `story wordcount --write`, `story add` (for backlinks), `story rename`, `story remove`, `story reindex` (for the `story` field), `story migrate`, `story progress --log` (which rewrites `progress.md`), and `story init --follows` or `--precedes` (which adds the backlink to the linked book's `story.md`). They rewrite only the entries whose values changed:
+Several commands edit frontmatter in place: `story wordcount --write`, `story add` (for backlinks), `story rename`, `story remove`, `story reindex` (for the `story` field), `story migrate`, `story progress --log` (which rewrites `progress.md`), `story passes` with `--init`, `--start`, or `--done` (which rewrites `revision-passes` in `story.md`), and `story init --follows` or `--precedes` (which adds the backlink to the linked book's `story.md`). They rewrite only the entries whose values changed:
 
 - Comment lines, blank lines, unchanged entries (with their original quoting and number formatting), and unchanged list items keep their exact text.
 - The body is untouched, except that `story rename` updates links to a renamed file.
@@ -286,12 +293,105 @@ tense: past
 | `author` | string | no | Author name, used on the Shunn title page and as the EPUB creator. |
 | `contact` | list of strings | no | Contact block lines for the Shunn title page. |
 | `season-goal` | string | no | One-sentence goal for a season or volume of serial fiction. |
+| `form` | enum | no | The story's form: `flash`, `short-story`, `novelette`, `novella`, `novel`, `serial`, `picture-book`, or `chapter-book`. `story init --form` sets it with a default `target-words`. See [Story form](#story-form). `story report` shows it. |
 | `target-words` | integer ≥ 1 | no | Word-count target for the book, used by `story progress` and `story report`. |
 | `deadline` | `YYYY-MM-DD` | no | Due date; `story progress` reports days left and words a day needed. Must be a real calendar day. |
 | `draft-mode` | string | no | `discovered` marks a discovery-drafted project. |
+| `revision-passes` | list of mappings | no | Named revision passes and their progress. See [Revision passes](#revision-passes). |
 | `cover` | path | no | Cover image inside the project: `.jpg`, `.jpeg`, `.png`, `.gif`, or `.webp`. `story build --format epub` embeds it. |
+| `authors`, `language`, `isbn`, `publisher`, `publication-date`, `description`, `keywords`, `subjects`, `copyright`, `cover-alt`, `ai-disclosure` | various | no | Publishing metadata read by `story build`. See [Publishing metadata](#publishing-metadata). |
 
 `story validate` errors when `cover` names a missing file, a file outside the project, or an unsupported extension. The craft fields `premise`, `counter-premise`, and `season-goal` have no CLI flags: edit `story.md` directly. See the [theme-craft](../skills/theme-craft/SKILL.md), [genre-craft](../skills/genre-craft/SKILL.md), and [discovery-drafting](../skills/discovery-drafting/SKILL.md) skills for how they are used.
+
+### Story form
+
+`form` names the kind of book, and each form has a usual word-count range. `story init --form <form>` writes `form` and a default `target-words`; a form with no range writes no target. Any other `--form` value is refused, and `story validate` reports an unsupported `form` as an error.
+
+| `form` | Usual range (words) | Default `target-words` |
+|--------|---------------------|------------------------|
+| `flash` | up to 1,500 | 1,000 |
+| `short-story` | 1,000 to 7,500 | 5,000 |
+| `novelette` | 7,500 to 17,500 | 12,000 |
+| `novella` | 17,500 to 40,000 | 30,000 |
+| `novel` | 40,000 to 200,000 | 80,000 |
+| `serial` | no range | none |
+| `picture-book` | up to 1,000 | 500 |
+| `chapter-book` | 4,000 to 15,000 | 10,000 |
+
+The ranges are advisory. `story validate` warns when `target-words` falls outside the form's range, and, when the story `status` is `complete`, when the manuscript's prose does:
+
+```text
+warning: story.md target-words 30000 is outside the usual novel range of 40000-200000 words
+```
+
+The [premise-workshop skill](../skills/premise-workshop/SKILL.md) helps choose a form.
+
+### Revision passes
+
+`revision-passes` records a revision as separate named passes, each looking for one kind of problem. It is a list of mappings:
+
+```yaml
+revision-passes:
+  - pass: structure
+    status: done
+  - pass: character
+    status: in-progress
+  - pass: sensitivity-read
+    status: pending
+```
+
+| Field | Type | Required | Meaning |
+|-------|------|----------|---------|
+| `revision-passes[].pass` | kebab-case name | yes | The pass name, unique in the list. Any kebab-case name is allowed. |
+| `revision-passes[].status` | enum | no | `pending`, `in-progress`, or `done`. A missing status reads as `pending`. |
+
+`story validate` errors when the field is not a list of mappings, when a pass name is not kebab-case or appears twice, and when a status is not one of the three values.
+
+`story passes` reads and writes the field. Plain `story passes` prints the checklist, with each default pass's focus and the commands it runs. `--init` appends the default passes that are not already listed, after any passes you have; `--start <pass>` marks a pass `in-progress` and `--done <pass>` marks it `done`, adding the pass when it is new. Only the `revision-passes` entry of `story.md` is rewritten. The default ladder runs from the largest problems to the smallest:
+
+| Pass | Focus | Commands |
+|------|-------|----------|
+| `structure` | Order of events, act turns, scenes that do not change anything | `story timeline`, `story pacing`, `story diagram arcs` |
+| `character` | Wants, arcs, motivation, and who knows what when | `story voices`, `story knowledge`, `story diagram relationships` |
+| `theme` | Premise, counter-premise, motifs, and the lie/truth arc | `story report` |
+| `continuity` | Deaths, props, travel, promises, clues, and backlinks | `story continuity`, `story clues`, `story links` |
+| `pacing` | Scene outcomes, sequels, chapter hooks, and chapter lengths | `story pacing` |
+| `line` | Sentence-level clarity, rhythm, and distinct voices | `story prose`, `story voices` |
+| `copyedit` | Spelling, usage, and consistency against the style sheet | `story prose` |
+| `proof` | Typos and layout in the built book | `story build --format print`, `story build --format html` |
+
+While the story `status` is `revising`, `story next` recommends the pass that is `in-progress`, or else the first pass that is not `done`, or `story passes --init` when no passes are recorded. The [revision-continuity skill](../skills/revision-continuity/SKILL.md) works through the passes.
+
+### Publishing metadata
+
+These optional fields describe the published edition. Edit them in `story.md` by hand (there are no flags); the [publishing skill](../skills/publishing/SKILL.md) covers what each one is for. `story build` reads them.
+
+| Field | Type | Meaning and checks |
+|-------|------|--------------------|
+| `author` | string | A single author name (see the table above). |
+| `authors` | list of strings | Author names for a co-written book. Builds use it in place of `author`; `story validate` warns when both are set. |
+| `language` | string | BCP 47 language tag such as `en`, `en-GB`, or `fr-CA`. Default `en`. `story validate` errors on a value that is not a tag. The EPUB package and every EPUB document declare it. |
+| `isbn` | string | ISBN-13 or ISBN-10 of the edition being built; hyphens and spaces are allowed. `story validate` checks the checksum. Quote an ISBN-10 that starts with `0`: unquoted, YAML reads it as a number and drops the zero, and validation then fails. The EPUB identifier becomes `urn:isbn:<digits>`. |
+| `publisher` | string | Publisher name, written to the EPUB package and the copyright page. |
+| `publication-date` | `YYYY-MM-DD` | Must be a real calendar day. Written to the EPUB package. |
+| `description` | string | The retailer description, written to the EPUB package. The metadata sheet measures it against a 4,000-character limit. |
+| `keywords` | list of strings | Retailer search keywords. `story validate` warns over 7. |
+| `subjects` | list of strings | BISAC subject codes such as `FIC022000`. `story validate` errors on any other shape. Written as EPUB subjects. |
+| `copyright` | string | The copyright line, such as `© 2026 Jane Doe`. See below. |
+| `cover-alt` | string | Alt text for the EPUB cover image. Default `Cover of <title>`. |
+| `ai-disclosure` | string | A short statement of how AI tools were used, for retailer and agent disclosure forms. |
+
+The scalar fields must be text (an unquoted ISBN-13 is also accepted), and `authors`, `keywords`, and `subjects` must be lists of text; `story validate` errors otherwise:
+
+```text
+error: story.md language english must be a BCP 47 tag such as en, en-GB, or fr
+error: story.md subject fiction must be a BISAC code such as FIC022000
+warning: story.md lists 8 keywords; most retailers accept 7
+```
+
+When `copyright` is set and no matter page is a copyright page (one with id `copyright` or a title containing "Copyright"), every build format except Shunn adds a copyright page as the first front matter page. It holds the copyright line, "All rights reserved.", and the publisher, ISBN, and `ai-disclosure` when they are set.
+
+EPUB builds also write EPUB Accessibility discovery metadata (access modes, features such as `tableOfContents` and `readingOrder`, no hazards, and a summary), mark each document with `epub:type` (`bodymatter chapter`, `frontmatter`, `backmatter`, or `copyright-page`), and add a landmarks navigation list. `story build --format metadata` writes a retailer metadata sheet from these fields, with `(missing)` for each field not set. [Import, export, and builds](manuscripts.md) describes every build format.
 
 Series links need a backlink: a book that lists another in `follows` must appear in that book's `precedes`, and the reverse. `story links` checks that each path is a story project, carries the backlink, and uses the same `series` id. `story init --follows <path>` or `--precedes <path>` writes both sides for you and inherits the linked book's `series` id. [Series](series.md) covers linked books and the canon checks of `story series`.
 
@@ -334,6 +434,9 @@ arc: redemption
 | `lie` | string | no | The false belief that drives the character. |
 | `truth` | string | no | The belief that resolves the lie. |
 | `ghost-wound` | string | no | The formative wound behind the lie. |
+| `voice-words` | list of strings | no | Words and phrases the character reaches for in dialogue. |
+| `voice-avoid` | list of strings | no | Words the character would never say. |
+| `pronunciation` | string | no | A respelling such as `SHUR-sha`, for the narration build's pronunciation guide. |
 
 Status notes:
 
@@ -341,6 +444,10 @@ Status notes:
 - `status: cut` keeps the file for a character removed during discovery drafting, out of canon but on record.
 
 The arc-craft fields `arc-type`, `lie`, `truth`, and `ghost-wound` have no CLI flags and are not checked by the CLI. See the [character-management](../skills/character-management/SKILL.md) and [theme-craft](../skills/theme-craft/SKILL.md) skills.
+
+`voice-words` and `voice-avoid` have no flags either. `story validate` errors when either is not a list of strings, and [`story voices`](#dialogue-voices) reads both. The [line-editing](../skills/line-editing/SKILL.md) and [voice-style](../skills/voice-style/SKILL.md) skills propose them.
+
+`pronunciation` is also accepted on locations, factions, artifacts, and glossary terms. `story validate` errors when it is not text. `story build --format narration` gathers every `pronunciation` into the script's pronunciation guide, leaving out cut characters. See the [adaptation skill](../skills/adaptation/SKILL.md).
 
 ### Relationship types
 
@@ -374,6 +481,27 @@ Files: `worldbuilding/locations/<location-id>.md`. Created with `story add locat
 | `notable-characters` | list of character ids | no | Characters tied to the place. Each character must list the location in `locations`. |
 | `tags` | list of strings | no | Free labels. |
 | `status` | string | no | Free text (default `unknown`). |
+| `routes` | list of mappings | no | Journeys to other locations, with travel times. See below. |
+| `pronunciation` | string | no | Respelling for the narration build (see [Characters](#characters)). |
+
+#### Routes
+
+`routes` records how long it takes to get from this location to others, so `story continuity` can check travel:
+
+```yaml
+routes:
+  - to: bellwether-reef
+    hours: 0.5
+    mode: dive skiff
+```
+
+| Field | Type | Required | Meaning |
+|-------|------|----------|---------|
+| `routes[].to` | location id | yes | The destination. |
+| `routes[].hours` | number > 0 | yes | The fastest the journey can be made, in hours. |
+| `routes[].mode` | string | no | Free text, such as `cart`, `ferry`, or `on foot`. |
+
+A route is two-way unless the destination declares its own route back, which then sets the return time. `story validate` errors when an entry has no `to`, when `hours` is not a positive number, and when `mode` is not text. `story links` errors when `to` names a missing location or the location itself. `story rename location` rewrites `to`, and `story remove location` drops the routes that lead to the removed location. [Route travel](#route-travel) describes the continuity check, and `story diagram locations` draws the network. The [worldbuilding skill](../skills/worldbuilding/SKILL.md) and its [maps and routes reference](../skills/worldbuilding/references/maps-and-routes.md) cover how to set travel times.
 
 ### Systems
 
@@ -397,6 +525,7 @@ Files: `worldbuilding/factions/<faction-id>.md`. Created with `story add faction
 | `members` | list of character ids | no | Members. |
 | `locations` | list of location ids | no | Where the faction operates. |
 | `tags` | list of strings | no | Free labels. |
+| `pronunciation` | string | no | Respelling for the narration build. |
 
 ### Artifacts
 
@@ -410,6 +539,7 @@ Files: `worldbuilding/artifacts/<artifact-id>.md`, for objects that matter to th
 | `owner` | string | no | Character or faction id. |
 | `location` | string | no | Location id. |
 | `tags` | list of strings | no | Free labels. |
+| `pronunciation` | string | no | Respelling for the narration build. |
 
 The [worldbuilding skill](../skills/worldbuilding/SKILL.md) has body templates for each kind.
 
@@ -463,6 +593,7 @@ mentions:
 arcs-advanced:
   - the-drowned-witness
 status: draft
+hook: revelation
 word-count: 1489
 ---
 ```
@@ -484,6 +615,7 @@ word-count: 1489
 | `time` | string | no | Story time of day (see [Dates and times](#dates-and-times)). |
 | `episode-question` | string | no | The installment's dramatic question, for serial fiction. |
 | `time-skip` | string | no | Free-form `from → to` note of a skipped interval. Not checked. |
+| `hook` | enum | no | How the chapter ending pulls the reader on: `cliffhanger`, `question`, `revelation`, `reversal`, `decision`, `emotional`, or `resolution`. Set it with `story add chapter --hook <name>`. Read by [`story pacing`](#pacing). |
 
 `story continuity` treats `pov` and `characters` as the cast, so a deceased character who appears in a flashback or memory belongs in `mentions`, not `characters`. It also warns when the `pov` character is not listed in `characters`, and when chapter numbers skip. `story validate` warns when a chapter has no scene records in `scenes/`.
 
@@ -528,6 +660,7 @@ state-changes:
 | `state-changes` | list of mappings | no | What the scene changes that must carry forward. See below. |
 | `sequel` | boolean | no | `true` for a sequel unit (reaction, dilemma, decision) rather than a scene unit (goal, conflict, outcome). |
 | `dilemma` | string | no | The choice the POV character faces in a sequel unit. |
+| `outcome` | enum | no | How a scene unit ends for the POV character's goal: `yes`, `no`, `yes-but` (they get it, at a cost), or `no-and` (they fail, and things get worse). Set it with `story add scene --outcome <name>`. Read by [`story pacing`](#pacing), which ignores it on sequel units. |
 | `date` | `YYYY-MM-DD` | no | Story date. A scene never inherits its chapter's date. |
 | `time` | string | no | Story time (see [Dates and times](#dates-and-times)). |
 | `travel-hours` | number | no | Minimum travel time into this scene; `story continuity` errors when the timestamps allow less. |
@@ -649,10 +782,11 @@ Files: `continuity/clues/<clue-id>.md`, a clue ledger for mysteries and fair-pla
 | `planted` | chapter id | no | Chapter where the clue appears. |
 | `payoff` | chapter id | no | Chapter where its meaning lands. |
 | `significance-delayed` | boolean | no | `true` when the clue's meaning only lands later. |
+| `red-herring` | boolean | no | `true` for a clue planted to mislead. Its `payoff` is the chapter that debunks it. |
 | `arcs` | list of arc ids | no | Arcs the clue belongs to. |
-| `characters` | list of character ids | no | Characters involved. |
+| `characters` | list of character ids | no | Characters involved; for [`story clues`](#clue-grid), the characters who could notice it. |
 
-`story add promise` and `story add clue` set `status: planted` when you pass `--planted`, and `status: planned` otherwise; `--status` overrides both. `story add clue --significance-delayed` sets that flag.
+`story add promise` and `story add clue` set `status: planted` when you pass `--planted`, and `status: planned` otherwise; `--status` overrides both. `story add clue --significance-delayed` and `--red-herring` set those flags. `story validate` errors when either flag is not `true` or `false`.
 
 For promises and clues, `story continuity` errors when `payoff` comes before `planted`, when a `paid-off` entry has no `payoff` chapter, and when a `planted` entry has no `planted` chapter. It warns when a `planted` entry was planted at least three chapters before the latest chapter past `outline` and its `payoff` is unset or already behind that chapter, and when a promise records a `planted` chapter but is still `planned`. When `story.md` has `status: complete`, any `open` question or `planned` or `planted` promise or clue is an error.
 
@@ -687,6 +821,7 @@ Files: `glossary/terms/<term-id>.md`, for invented words, names, and concepts th
 | `term` | string | yes | The term as it should appear. |
 | `category` | enum | yes | `person`, `place`, `faction`, `artifact`, `concept`, `term`, or `other`. Default `term`. |
 | `aliases` | list of strings | no | Accepted variants. |
+| `pronunciation` | string | no | Respelling for the narration build. |
 
 ## Optional files
 
@@ -737,8 +872,15 @@ heading: false
 | `placement` | enum | yes | `front` or `back`. |
 | `order` | integer ≥ 0 | no | Sort position within the placement (missing counts as `0`); ties sort by id. `story add matter` numbers new pages after the last one in their placement unless you pass `--order`. |
 | `heading` | boolean | no | Defaults to `true`. Set `false` for pages that print no title, such as a dedication. |
+| `permission` | enum | no | Rights status of quoted material on the page (an epigraph, song lyrics, a poem): `not-needed`, `pending`, `granted`, or `public-domain`. |
+| `rights-holder` | string | no | Who granted the permission. |
+| `credit` | string | no | The credit line the grant requires. |
 
 The body is the page text; a leading `# Heading` line is dropped, as for a chapter. Matter ids become EPUB file names, so builds refuse ids that are not kebab-case. A matter file with no text is left out of export and build, and `story validate` warns about it. [Import, export, and builds](manuscripts.md) explains where each format places matter.
+
+`story validate` errors on an unsupported `permission` and when `rights-holder` or `credit` is not text. It warns when `permission` is `pending` and the story `status` is `complete`, and when `permission` is `granted` with no `rights-holder`. The [editorial-review skill](../skills/editorial-review/SKILL.md) covers permissions.
+
+A matter page whose id is `copyright` or whose title contains "Copyright" is the book's copyright page. Builds use it in place of the page generated from the `story.md` `copyright` field (see [Publishing metadata](#publishing-metadata)); EPUB marks it `copyright-page`, and the narration build skips it when it is front matter.
 
 ### Research notes
 
@@ -761,8 +903,25 @@ used-in:
 | `status` | enum | yes | `open`, `verified`, or `disputed`. Default `open`. |
 | `sources` | list of strings | no | Citations or URLs, each kept whole (commas allowed). `--source` is repeatable. |
 | `used-in` | list of chapter ids | no | Chapters that rely on the note. |
+| `accuracy` | enum | no | `must-be-accurate` (a knowledgeable reader will check it), `blended` (real facts bent on purpose, with the departure recorded under `## Story Use`), or `invented` (made up for the story). |
+| `confidence` | enum | no | `high`, `medium`, or `low`. |
+| `method` | enum | no | How the knowledge was gathered: `fact` (desk research), `interview`, `site-visit`, `expert-review`, or `reading`. |
+| `risk` | list of enums | no | Areas where getting it wrong could hurt a reader or the author: `legal`, `medical`, `weapons`, `safety`, `cultural`, `defamation`, `technical`. |
+| `reviewed-by` | list of strings | no | The qualified people, by name or role, who checked the note. |
 
-`story validate` warns when a `verified` note lists no sources, and when a chapter with status `final` or `complete` relies on an `open` or `disputed` note. See the [research skill](../skills/research/SKILL.md).
+`story add research` accepts `--accuracy`, `--confidence`, `--method`, and a repeatable `--risk`, and refuses values outside these lists. `reviewed-by` has no flag.
+
+`story validate` errors on unsupported values. It warns when:
+
+- a `verified` note lists no sources,
+- a chapter with status `final` or `complete` relies on an `open` or `disputed` note, and
+- a note with any `risk` has no `reviewed-by` while a `final` or `complete` chapter relies on it.
+
+Notes with `accuracy: invented` need no sources and never raise the open-research warning. See the [research skill](../skills/research/SKILL.md).
+
+```text
+warning: research/tides.md carries legal, medical risk but has no reviewed-by, and chapter-07 relies on it
+```
 
 ### Progress log
 
@@ -850,6 +1009,7 @@ Fields that name another entity hold its id. `story links` checks that each id i
 | Character | `locations` | Location that lists the character in `notable-characters` |
 | Character | `died-in` | Chapter |
 | Location | `notable-characters` | Character that lists the location in `locations` |
+| Location | `routes[].to` | Another location (not the location itself) |
 | Faction | `members` | Character |
 | Faction | `locations` | Location |
 | Artifact | `owner` | Character or faction |
@@ -873,10 +1033,10 @@ Fields that name another entity hold its id. `story links` checks that each id i
 
 When you add a character with `--location`, or a location with `--character`, `story add` writes the backlink into the other file.
 
-`story rename` and `story remove` keep ids consistent across every file's frontmatter (except `story.md`). They rewrite the entity-reference fields in the table above, plus `controlled-by`, the state-file fields (`character`, `location`, `artifact`, `owner`, `learned-in`, `since`), and any `character` key inside a scene's `state-changes`. A field that can name more than one kind (`owner`, `controlled-by`, `mentions`) is left alone when another kind has an entity with the same id. Beyond that:
+`story rename` and `story remove` keep ids consistent across every file's frontmatter (except `story.md`). They rewrite the entity-reference fields in the table above (including a location's `routes[].to`), plus `controlled-by`, the state-file fields (`character`, `location`, `artifact`, `owner`, `learned-in`, `since`), and any `character` key inside a scene's `state-changes`. A field that can name more than one kind (`owner`, `controlled-by`, `mentions`) is left alone when another kind has an entity with the same id. Beyond that:
 
 - `story rename` also rewrites markdown links, in any project file, that point at the renamed file.
-- `story remove` clears a scalar reference, drops the id from a list, and drops a whole `relationships`, `character-state`, `knowledge-state`, or `object-state` entry whose identifying `character` or `artifact` was removed. It does not edit bodies, so bare `chapter-NN` tokens and links to a removed file remain. `story links` reports them only in `plot/timeline.md` and arc bodies; find leftovers elsewhere (hand-written registry sections, `style-sheet.md`, other entity bodies) by hand.
+- `story remove` clears a scalar reference, drops the id from a list, and drops a whole `relationships`, `character-state`, `knowledge-state`, `object-state`, or `routes` entry whose identifying `character`, `artifact`, or `to` was removed. It does not edit bodies, so bare `chapter-NN` tokens and links to a removed file remain. `story links` reports them only in `plot/timeline.md` and arc bodies; find leftovers elsewhere (hand-written registry sections, `style-sheet.md`, other entity bodies) by hand.
 - Neither command edits `follows` or `precedes`, which name other projects rather than entities.
 
 The CLI reference covers [`rename`](cli-reference.md#rename) and [`remove`](cli-reference.md#remove).
@@ -899,16 +1059,98 @@ Chapters and scenes can carry a story `date` and `time`; `story continuity` and 
 | `time` | `HH:MM` on a 24-hour clock, or one of `dawn`, `morning`, `midday`, `afternoon`, `evening`, `night`. |
 | `travel-hours` | A number of hours, zero or more. Scenes only. |
 
-For ordering, named times count as 05:00 (`dawn`), 07:00 (`morning`), 12:00 (`midday`), 15:00 (`afternoon`), 19:00 (`evening`), and 23:00 (`night`). `story add chapter` and `story add scene` reject a malformed `--date` or `--time`. In hand-edited files, `story continuity` reports malformed values as warnings. The same date format applies to `deadline` in `story.md` and to `sessions[].date` in `progress.md`.
+For ordering, named times count as 05:00 (`dawn`), 07:00 (`morning`), 12:00 (`midday`), 15:00 (`afternoon`), 19:00 (`evening`), and 23:00 (`night`). `story add chapter` and `story add scene` reject a malformed `--date` or `--time`. In hand-edited files, `story continuity` reports malformed values as warnings. The same date format applies to `deadline` and `publication-date` in `story.md` and to `sessions[].date` in `progress.md`.
+
+### Route travel
+
+When locations declare [`routes`](#routes), `story continuity` follows each character through the dated scenes they are in (the scene's `characters` plus its `pov`), in story-time order rather than reading order. When two sightings are at different locations joined by routes, the story time between them must be at least the fastest route, which may pass through other locations. Otherwise it is an error:
+
+```text
+error: scenes/chapter-01-scene-02.md puts mara-quill at town-b 2h after scenes/chapter-01-scene-01.md at port-a, but the fastest route takes 6h
+```
+
+Only scene `date`, `time`, and `location` count; chapter dates and undated scenes are not used. The gap is always read as generously as the times allow, so only journeys impossible on any reading are reported. An exact `HH:MM` is a single moment. A named time covers a span: `dawn` 04:00 to 06:59, `morning` 05:00 to 11:59, `midday` 11:00 to 13:59, `afternoon` 12:00 to 17:59, `evening` 17:00 to 21:59, and `night` 20:00 to 23:59. A scene with no time covers the whole day.
+
+## Analysis views
+
+Several read-only commands turn the fields above into views and advisory findings. They never write project files (except `story diagram --out`), and apart from `story names` they exit 0 on a readable project. This section records which fields each one reads and the rules it applies; [Continuity and analysis](continuity.md) shows them in use.
+
+### Pacing
+
+`story pacing` reads chapter `hook`, `status`, and prose word counts, and each scene record's `sequel` and `outcome`. Per chapter it shows prose words, scene units, sequel units, the count of each `outcome`, and the `hook`; overall it shows the median chapter length and the share of recorded outcomes that are setbacks (`no`, `yes-but`, `no-and`). It warns when:
+
+- a chapter at `draft` or later has no `hook`,
+- three or more scene units in a row, in reading order and skipping sequels, end in `yes`,
+- four or more scene units in a row have no sequel between them,
+- three or more chapters in a row end on `resolution`, and
+- once three chapters have prose, a chapter is over twice or under half the median length.
+
+The [scene-craft](../skills/scene-craft/SKILL.md) and [chapter-writing](../skills/chapter-writing/SKILL.md) skills set `outcome` and `hook`.
+
+### Clue grid
+
+`story clues` is the fair-play view of the clue registry: a grid of clues by chapter (`P` planted, `R` revealed, `x` both), with `~` after the name of a red herring, sorted by planting chapter. For clues that are `planned`, `planted`, or `paid-off`, it warns when a clue:
+
+- is revealed but never planted,
+- is planted in the same chapter as its reveal or the chapter before it,
+- lists no `characters` who could notice it, or
+- is a red herring with no `payoff`.
+
+It also warns when three or more genuine (non-red-herring) clues include none that is `significance-delayed`. `story continuity` still owns the hard ordering errors described under [Clues](#clues).
+
+### Dialogue voices
+
+`story voices` fingerprints each character's dialogue from the chapter prose. A quoted line (straight `"..."`, curly `“...”`, or British `‘...’`) is attributed when the paragraph's narration names the speaker next to a speech verb (`"...," Mara said`, `said Mara`, `Mara asked`) by full name, given name, or alias. A name-before-verb tag wins over verb-before-name, so `Sera told Kael` gives the line to Sera. Otherwise, when the narration names exactly one character (an action beat), the line is theirs. Names match case-sensitively as proper nouns, and titles are skipped for the given name (`Lord Maren` also matches `Maren`). Pronoun tags (`she said`) are never attributed, so in close third person the POV character is often under-counted. Any other quoted line is counted as unattributed and never guessed. Cut characters are skipped.
+
+For each speaking character it reports lines, words, mean sentence length, contractions per 100 words, the share of sentences that are questions and exclamations, and up to five signature words: words of four or more letters, used at least twice, and used more than twice as often per word spoken as in everyone else's dialogue. It warns when:
+
+- a character says a `voice-avoid` word,
+- a character with five or more lines never says one of their `voice-words`, and
+- two characters with five or more lines each have sentence lengths within 1.5 words, contraction rates within 1.5 per 100 words, and question and exclamation shares within 10 points.
+
+### Name checks
+
+`story names <name...>` checks candidate names before you use them, one name per argument (quote multi-word names). The existing names are character names, given names, and aliases (cut characters excepted); location, faction, artifact, and system names; and glossary terms and aliases. Names are compared ignoring case, accents, and punctuation.
+
+A character's given name is the first word of the name that is not a title or article (`the`, `a`, `lord`, `lady`, `sir`, `captain`, `king`, `queen`, `dr`, and similar), so `Lord Maren Vell` is known as Maren. The candidate's given name is found the same way and compared with each character's given name; everything else is compared as a whole name.
+
+- A candidate equal to a whole name, or whose given name equals a character's given name, is a clash: an error, and the command exits 1.
+- Warnings flag look-alikes: words sharing their first four letters, or sharing an initial within an edit distance of 1 (2 when both words have five letters or more), and a given name sharing an initial with a protagonist, antagonist, deuteragonist, or narrator.
+- Multi-word whole names are only checked for exact clashes, so pass the distinctive word of a multi-word name as well (`story names "Ashen Reach" Ashen`) to check it for look-alikes.
+
+Each name prints as `clear`, `check`, or `taken`:
+
+```text
+Sera Blythe: taken
+Kaela: check
+Orrin: clear
+Name check failed: 1 errors, 1 warnings, 0 dismissed
+error: "Sera Blythe" clashes with character sera-voss (Sera)
+warning: "Kaela" looks like character kael-voss (Kael Voss)
+```
+
+### Diagrams
+
+`story diagram <kind>` prints [Mermaid](https://mermaid.js.org) source built from frontmatter, or writes it with `--out` (for example `--out dist/family.mmd`). GitHub, most markdown editors, and mermaid.live render it. It reads the same fields the checks trust, so rebuild the diagram after editing rather than hand-editing the output. Nothing is written while a project file fails to parse.
+
+| Kind | Reads | Draws |
+|------|-------|-------|
+| `relationships` | character `relationships` and `status` | Every character, with one edge per related pair. Parent, grandparent, aunt, and uncle links are heavy arrows from the elder side; other family links (sibling, spouse, partner, cousin) are heavy lines; everything else is dotted. Deceased characters are dashed. This is the family tree. |
+| `locations` | location `region` and `routes` | Every location with its region, joined by routes labelled with hours and mode. A two-way route is a line; a pair that declares a route each way is two arrows. |
+| `timeline` | chapter and scene `date` and `time` | Dated scenes and chapters in story-time order, grouped by day, noting entries told out of order (the same data as `story timeline`). |
+| `clues` | clue `planted`, `payoff`, `red-herring`, and `status` | Chapters in reading order, with an arrow from each clue's planting chapter to its reveal. Red herrings are dotted, and unrevealed clues point at a "not yet revealed" node. Dropped and abandoned clues are left out. |
+| `arcs` | chapter and scene `arcs-advanced` | Each arc joined to the chapters whose chapter or scene records advance it. |
 
 ## Allowed values
 
-These enumerations are shared by `story validate` and by the `--role`, `--type`, `--status`, `--category`, and `--placement` flags of `story add`, which reject any other value before writing a file. `story init --tense` is checked against the story tense values.
+These enumerations are shared by `story validate` and by the flags that set them: `--role`, `--type`, `--status`, `--category`, `--placement`, `--hook`, `--outcome`, `--accuracy`, `--confidence`, `--method`, and `--risk` on `story add`, and `--tense` and `--form` on `story init`. A flag refuses any other value, with the accepted list, before writing a file.
 
 | Field | Values |
 |-------|--------|
 | Story `status` | `planning`, `drafting`, `in-progress`, `revising`, `complete`, `abandoned` |
 | Story `tense` | `past`, `present`, `future`, `mixed` |
+| Story `form` | `flash`, `short-story`, `novelette`, `novella`, `novel`, `serial`, `picture-book`, `chapter-book` |
+| Revision pass `status` | `pending`, `in-progress`, `done` |
 | Character `role` | `protagonist`, `antagonist`, `supporting`, `minor`, `narrator`, `deuteragonist` |
 | Character `status` | `alive`, `deceased`, `unknown`, `missing`, `cut` |
 | Faction `type` | `family`, `guild`, `government`, `military`, `religion`, `company`, `community`, `criminal`, `other` |
@@ -918,14 +1160,21 @@ These enumerations are shared by `story validate` and by the `--role`, `--type`,
 | Arc `type` | `main`, `subplot`, `character`, `thematic` |
 | Arc `status` | `planned`, `in-progress`, `resolved` |
 | Chapter and scene `status` | `outline`, `draft`, `revised`, `final`, `complete` |
+| Chapter `hook` | `cliffhanger`, `question`, `revelation`, `reversal`, `decision`, `emotional`, `resolution` |
+| Scene `outcome` | `yes`, `no`, `yes-but`, `no-and` |
 | Question `status` | `open`, `answered`, `resolved`, `dropped`, `abandoned` |
 | Promise and clue `status` | `planned`, `planted`, `paid-off`, `dropped`, `abandoned` |
 | Glossary `category` | `person`, `place`, `faction`, `artifact`, `concept`, `term`, `other` |
 | Matter `placement` | `front`, `back` |
+| Matter `permission` | `not-needed`, `pending`, `granted`, `public-domain` |
 | Research `status` | `open`, `verified`, `disputed` |
+| Research `accuracy` | `must-be-accurate`, `blended`, `invented` |
+| Research `confidence` | `high`, `medium`, `low` |
+| Research `method` | `fact`, `interview`, `site-visit`, `expert-review`, `reading` |
+| Research `risk` (list) | `legal`, `medical`, `weapons`, `safety`, `cultural`, `defamation`, `technical` |
 | Style sheet `dialect` | `british`, `american`, `unspecified` |
 
-Location and system `type` are free text. An unsupported value fails validation with the file and field:
+Location and system `type` are free text. `language` in `story.md` has no fixed list, but must be a BCP 47 tag, and `subjects` must be BISAC codes (see [Publishing metadata](#publishing-metadata)). The print build's `--trim` takes `5x8`, `5.25x8`, `5.5x8.5` (the default), `6x9`, or `a5`. An unsupported value fails validation with the file and field:
 
 ```text
 Project validation failed: 1 errors, 0 warnings, 0 dismissed
@@ -942,8 +1191,8 @@ Most status values are labels for you and the skills; the CLI only checks that t
 |-------|---------|---------------|
 | `planning` | Building the bible, cast, and outline; little or no prose yet. | `story init` default. |
 | `drafting`, `in-progress` | The first draft is being written. | None; the CLI treats the two the same. |
-| `revising` | The draft is finished and under revision. | None. The [submission skill](../skills/submission/SKILL.md) accepts `revising` or `complete`. |
-| `complete` | The book is finished. | `story continuity` errors on any `open` question and any `planned` or `planted` promise or clue. |
+| `revising` | The draft is finished and under revision. | `story next` recommends the current [revision pass](#revision-passes), or `story passes --init` when none are recorded. The [submission skill](../skills/submission/SKILL.md) accepts `revising` or `complete`. |
+| `complete` | The book is finished. | `story continuity` errors on any `open` question and any `planned` or `planted` promise or clue. `story validate` warns when the manuscript length is outside the `form` range and when a matter page's `permission` is still `pending`. |
 | `abandoned` | The project is shelved. | None. |
 
 **Chapter and scene status:**
@@ -951,9 +1200,9 @@ Most status values are labels for you and the skills; the CLI only checks that t
 | Value | Meaning | CLI behaviour |
 |-------|---------|---------------|
 | `outline` | Planned, with no prose yet. | `story add` default. `story continuity` measures promise and clue gaps and the staleness of `continuity/state.md` against the latest chapter past `outline`, so outline-only chapters do not count as drafted. |
-| `draft` | Prose exists but has not been revised. | `story import` gives imported chapters this status. |
+| `draft` | Prose exists but has not been revised. | `story import` gives imported chapters this status. From `draft` on, `story pacing` warns about a chapter with no `hook`. |
 | `revised` | Revised at least once. | None. |
-| `final`, `complete` | The prose is settled. | For chapters, `story validate` warns when the chapter relies on an `open` or `disputed` research note. The CLI treats the two the same. |
+| `final`, `complete` | The prose is settled. | For chapters, `story validate` warns when the chapter relies on an `open` or `disputed` research note, or on a note with a `risk` and no `reviewed-by`. The CLI treats the two the same. |
 
 Scene status is not read by any check beyond validation; chapter status drives the behaviour above.
 
@@ -999,7 +1248,7 @@ A file that fails to parse is reported as an error against its path. The rest of
 - `continuity` also holds the `continuity/state.md` fields and the `exemptions` list.
 - `styleSheet` and `progressLog` hold the optional root files.
 
-The schema also lists values the CLI does not enforce, such as character `arc-type`. In this repository, `bun run test:examples` builds that document for every project in [`examples/`](../examples/) and checks it against the schema with the dependency-free validator in [`scripts/check-schema.js`](../scripts/check-schema.js), so change the schema, the CLI, and the examples together. The [Development guide](development.md#schema) covers the checks.
+The schema also lists values the CLI does not enforce, such as character `arc-type`. It is looser than the CLI elsewhere: it checks the shape of `isbn`, `publication-date`, and `language`, but not ISBN checksums, real calendar days, or whether a referenced id exists. In this repository, `bun run test:examples` builds that document for every project in [`examples/`](../examples/) and checks it against the schema with the dependency-free validator in [`scripts/check-schema.js`](../scripts/check-schema.js), so change the schema, the CLI, and the examples together. The [Development guide](development.md#schema) covers the checks.
 
 ## Migrating older projects
 
