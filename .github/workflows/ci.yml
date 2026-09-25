@@ -77,3 +77,14 @@ jobs:
         run: |
           node skills/story-maintenance/scripts/story.js --version
           node skills/story-maintenance/scripts/story.js validate examples/the-last-ember
+
+      # A copied skill runs outside this repo's package.json, so run a copy
+      # under a CommonJS package.json the way a copied install would.
+      - name: Run a copied fallback outside the repo
+        run: |
+          install="$RUNNER_TEMP/copied-skill"
+          mkdir -p "$install"
+          echo '{ "type": "commonjs" }' > "$RUNNER_TEMP/package.json"
+          cp -r skills/story-maintenance "$install/"
+          node "$install/story-maintenance/scripts/story.js" --version
+          node "$install/story-maintenance/scripts/story.js" validate examples/the-last-ember

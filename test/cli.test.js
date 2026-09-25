@@ -532,6 +532,15 @@ word-count: 9
       expect(reindex.status).toBe(0);
       expect(reindex.stdout).toContain("Registries already up to date");
 
+      // A copied skill must run wherever it lands, even under a package.json
+      // that declares CommonJS, so the fallback carries its own package.json.
+      const install = path.join(scratch, "install");
+      fs.writeFileSync(path.join(scratch, "package.json"), '{ "type": "commonjs" }\n');
+      fs.cpSync(path.join(repoRoot, "skills", "story-maintenance"), path.join(install, "story-maintenance"), { recursive: true });
+      const copied = spawnSync("node", [path.join(install, "story-maintenance", "scripts", "story.js"), "validate", fixture], { encoding: "utf8" });
+      expect(copied.stderr).toContain("Project is valid");
+      expect(copied.status).toBe(0);
+
       const missing = runBundle(["validate", path.join(scratch, "does-not-exist")]);
       expect(missing.status).toBe(1);
       expect(`${missing.stdout}${missing.stderr}`).toContain("is not a story project: missing story.md");
