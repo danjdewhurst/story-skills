@@ -103,7 +103,7 @@ story --version
 ```
 
 ```text
-0.10.6
+0.10.7
 ```
 
 An unknown command prints `Unknown command: <name>`, with a suggestion when the name is close to a real command, and a pointer to the help, to stderr, and exits 1:
@@ -1880,7 +1880,7 @@ node skills/story-maintenance/scripts/story.js --version
 ```
 
 ```text
-0.10.6
+0.10.7
 ```
 
 It accepts the same commands and options, and produces the same output, as the package binary. Run it in place; do not copy it into a story project. The `package.json` next to it (`{"type":"module"}`) lets Node load it as an ES module under any parent `package.json`, so keep the two together: copy the whole `story-maintenance` folder.
