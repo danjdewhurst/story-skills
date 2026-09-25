@@ -116,6 +116,11 @@ function checkChapterCasts(project, warnings) {
     if (chapter.pov && !chapter.characters.includes(chapter.pov)) {
       warnings.push(`${relative(project, chapter.file)} POV character ${chapter.pov} is not listed in characters`);
     }
+    // A chapter's POV should be the POV of at least one of its scenes.
+    const scenePovs = [...new Set(project.scenes.filter((scene) => scene.chapter === chapter.id && scene.pov).map((scene) => scene.pov))];
+    if (chapter.pov && scenePovs.length > 0 && !scenePovs.includes(chapter.pov)) {
+      warnings.push(`${relative(project, chapter.file)} has POV ${chapter.pov} but its scenes are told by ${scenePovs.join(", ")}`);
+    }
   }
 }
 
@@ -292,14 +297,19 @@ function referencedChapterNumber(chapterNumbers, id) {
 }
 
 function chekhovWarning(label, planted, plantedNumber, payoff, payoffNumber, latestChapter) {
-  if (plantedNumber === undefined || latestChapter - plantedNumber < CHEKHOV_CHAPTER_GAP) {
+  if (plantedNumber === undefined) {
+    return "";
+  }
+  // A recorded payoff chapter that has been drafted should have paid off,
+  // however soon after the plant it came.
+  if (payoff && payoffNumber !== undefined && payoffNumber <= latestChapter) {
+    return `${label} payoff chapter ${payoff} has passed and status is still planted`;
+  }
+  if (latestChapter - plantedNumber < CHEKHOV_CHAPTER_GAP) {
     return "";
   }
   if (payoff && payoffNumber !== undefined && payoffNumber > latestChapter) {
     return "";
-  }
-  if (payoff && payoffNumber !== undefined && payoffNumber <= latestChapter) {
-    return `${label} payoff chapter ${payoff} has passed and status is still planted`;
   }
   return `${label} was planted in ${planted}, ${latestChapter - plantedNumber} chapters ago, and has no payoff yet`;
 }

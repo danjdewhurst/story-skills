@@ -55,7 +55,8 @@ function formatCommandsHelp() {
 
 export function runCli(argv, io) {
   try {
-    const parsed = parseArgs(argv);
+    const named = COMMANDS_BY_NAME.get(argv[0]);
+    const parsed = parseArgs(argv, named ? [...(named.options ?? []), ...(named.project === "none" ? [] : ["path"])] : undefined);
     const cwd = io.cwd ?? process.cwd();
     const name = parsed.positionals[0];
 
@@ -70,6 +71,10 @@ export function runCli(argv, io) {
     if (helpTopic !== undefined && COMMANDS_BY_NAME.has(helpTopic)) {
       io.stdout.write(formatCommandHelp(COMMANDS_BY_NAME.get(helpTopic)));
       return 0;
+    }
+    if (name === "help" && helpTopic !== undefined) {
+      io.stderr.write(`Unknown command: ${helpTopic}${suggestion(helpTopic, [...COMMANDS_BY_NAME.keys()])}\nRun story --help to list commands.\n`);
+      return 1;
     }
     if (!name || name === "help" || parsed.options.help) {
       io.stdout.write(HELP);

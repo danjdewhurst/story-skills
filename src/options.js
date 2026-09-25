@@ -187,7 +187,8 @@ function isBooleanLiteralToken(token) {
   return typeof token === "string" && /^(true|false|0|1|yes|no|on|off)$/i.test(token);
 }
 
-export function parseArgs(argv) {
+// `suggestFrom` limits "did you mean" to the options the command accepts.
+export function parseArgs(argv, suggestFrom = OPTIONS.map((option) => option.name)) {
   const positionals = [];
   const options = {};
 
@@ -202,12 +203,16 @@ export function parseArgs(argv) {
       continue;
     }
 
-    // A single-dash word (-x) is an unknown short option, not a path; a
-    // lone "-" or a negative number stays positional.
-    if (/^-[A-Za-z]/.test(arg)) {
-      throw new Error(`Unknown option ${arg}${suggestion(arg.slice(1), OPTIONS.map((option) => option.name), "--")}`);
+    // `--` ends the options: everything after it is positional, so a title
+    // or name may start with a dash (`story init -- -Untitled`).
+    if (arg === "--") {
+      positionals.push(...argv.slice(index + 1));
+      break;
     }
 
+    // A single-dash word such as "-ism" is a positional (a name can start
+    // with a dash); the project-path error hints when it was meant as an
+    // option.
     if (!arg.startsWith("--")) {
       positionals.push(arg);
       continue;
@@ -248,7 +253,7 @@ export function parseArgs(argv) {
       continue;
     }
 
-    throw new Error(`Unknown option --${key}${suggestion(key, OPTIONS.map((option) => option.name), "--")}`);
+    throw new Error(`Unknown option --${key}${suggestion(key, suggestFrom, "--")}`);
   }
 
   return { positionals, options };

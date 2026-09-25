@@ -100,8 +100,12 @@ describe("research notes", () => {
 
   test("links accepts scheduled used-in chapters and reports typos", () => {
     const { root } = researchProject();
-    createEntity(root, { kind: "research", name: "Lamp Oil", "used-in": ["chapter-01", "chapter-09", "chapter-1"] });
-    // chapter-09 is not written yet; chapter-1 is a typo of chapter-01.
+    // add refuses a typo of an existing chapter up front...
+    expect(() => createEntity(root, { kind: "research", name: "Lamp Oil", "used-in": ["chapter-01", "chapter-1"] })).toThrow("--used-in chapter-1: did you mean chapter-01?");
+    createEntity(root, { kind: "research", name: "Lamp Oil", "used-in": ["chapter-01", "chapter-09"] });
+    // ...and links catches one written by hand; chapter-09 is not written yet.
+    const note = path.join(root, "research", "lamp-oil.md");
+    fs.writeFileSync(note, fs.readFileSync(note, "utf8").replace("  - chapter-09", "  - chapter-09\n  - chapter-1"));
     expect(validateLinks(root).errors).toEqual(["research/lamp-oil.md references missing chapter chapter-1"]);
   });
 

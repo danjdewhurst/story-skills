@@ -722,6 +722,10 @@ function checkChapterCasts(project, warnings) {
     if (chapter.pov && !chapter.characters.includes(chapter.pov)) {
       warnings.push(`${relative(project, chapter.file)} POV character ${chapter.pov} is not listed in characters`);
     }
+    const scenePovs = [...new Set(project.scenes.filter((scene) => scene.chapter === chapter.id && scene.pov).map((scene) => scene.pov))];
+    if (chapter.pov && scenePovs.length > 0 && !scenePovs.includes(chapter.pov)) {
+      warnings.push(`${relative(project, chapter.file)} has POV ${chapter.pov} but its scenes are told by ${scenePovs.join(", ")}`);
+    }
   }
 }
 function checkSceneCasts(project, warnings) {
@@ -863,14 +867,17 @@ function referencedChapterNumber(chapterNumbers, id) {
   return match ? Number.parseInt(match[1], 10) : undefined;
 }
 function chekhovWarning(label, planted, plantedNumber, payoff, payoffNumber, latestChapter) {
-  if (plantedNumber === undefined || latestChapter - plantedNumber < CHEKHOV_CHAPTER_GAP) {
-    return "";
-  }
-  if (payoff && payoffNumber !== undefined && payoffNumber > latestChapter) {
+  if (plantedNumber === undefined) {
     return "";
   }
   if (payoff && payoffNumber !== undefined && payoffNumber <= latestChapter) {
     return `${label} payoff chapter ${payoff} has passed and status is still planted`;
+  }
+  if (latestChapter - plantedNumber < CHEKHOV_CHAPTER_GAP) {
+    return "";
+  }
+  if (payoff && payoffNumber !== undefined && payoffNumber > latestChapter) {
+    return "";
   }
   return `${label} was planted in ${planted}, ${latestChapter - plantedNumber} chapters ago, and has no payoff yet`;
 }
@@ -1704,8 +1711,8 @@ function buildVoices(project, chapters) {
 var PRONOUNS = "he|she|they|i|we";
 var VERB_ALTERNATION = SPEECH_VERBS.map((verb) => verb.replace(/ /g, "\\s+")).join("|");
 var PRONOUN_TAG_SOURCE = `(?:(?:${PRONOUNS})\\s+(?:${VERB_ALTERNATION})|(?:${VERB_ALTERNATION})\\s+(?:${PRONOUNS}))(?![\\p{L}\\p{N}])`;
-var TAG_AFTER_QUOTE = new RegExp(`^[\\s,.;:!?—–-]*${PRONOUN_TAG_SOURCE}`, "iu");
-var TAG_BEFORE_QUOTE = new RegExp(`(?<![\\p{L}\\p{N}])${PRONOUN_TAG_SOURCE}[\\s,:—–-]*$`, "iu");
+var TAG_AFTER_QUOTE = new RegExp(`^[\\s,.;:!?…()—–-]*${PRONOUN_TAG_SOURCE}`, "iu");
+var TAG_BEFORE_QUOTE = new RegExp(`(?<![\\p{L}\\p{N}])${PRONOUN_TAG_SOURCE}[\\s,:…()—–-]*$`, "iu");
 var TAG_WINDOW = 40;
 function hasPronounTag(paragraph) {
   return quoteMatches(paragraph).some((match) => TAG_AFTER_QUOTE.test(paragraph.slice(match.end, match.end + TAG_WINDOW)) || TAG_BEFORE_QUOTE.test(paragraph.slice(Math.max(0, match.start - TAG_WINDOW), match.start)));
@@ -2637,7 +2644,7 @@ function isTruthy(value) {
 function isBooleanLiteralToken(token) {
   return typeof token === "string" && /^(true|false|0|1|yes|no|on|off)$/i.test(token);
 }
-function parseArgs(argv) {
+function parseArgs(argv, suggestFrom = OPTIONS.map((option) => option.name)) {
   const positionals = [];
   const options = {};
   for (let index = 0;index < argv.length; index += 1) {
@@ -2650,8 +2657,9 @@ function parseArgs(argv) {
       options.version = true;
       continue;
     }
-    if (/^-[A-Za-z]/.test(arg)) {
-      throw new Error(`Unknown option ${arg}${suggestion(arg.slice(1), OPTIONS.map((option) => option.name), "--")}`);
+    if (arg === "--") {
+      positionals.push(...argv.slice(index + 1));
+      break;
     }
     if (!arg.startsWith("--")) {
       positionals.push(arg);
@@ -2687,7 +2695,7 @@ function parseArgs(argv) {
       index += 1;
       continue;
     }
-    throw new Error(`Unknown option --${key}${suggestion(key, OPTIONS.map((option) => option.name), "--")}`);
+    throw new Error(`Unknown option --${key}${suggestion(key, suggestFrom, "--")}`);
   }
   return { positionals, options };
 }
@@ -5550,6 +5558,7 @@ function projectProgress(root, options = {}) {
   const words = project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
   let logged = null;
   if (options.log) {
+    assertProjectParses(project, "log progress");
     if (project.fileErrors.some((error) => error.startsWith(`${PROGRESS_FILE}:`))) {
       throw new Error(`Cannot log progress: ${PROGRESS_FILE} does not parse`);
     }
@@ -6020,7 +6029,8 @@ var REFERENCE_EXAMPLES = {
   locations: "port-kestrel",
   arc: "the-long-road",
   arcs: "the-long-road",
-  "controlled-by": "harbor-council"
+  "controlled-by": "harbor-council",
+  owner: "mara-quill or harbor-council"
 };
 function assertReferenceOptions(kind, options) {
   for (const option of REFERENCE_OPTIONS) {
@@ -6037,12 +6047,35 @@ function assertReferenceOptions(kind, options) {
     throw new Error(`--pov "${options.pov}" must be a character id (such as mara-quill)`);
   }
 }
+var CHAPTER_REFERENCE_OPTIONS = ["chapter", "planted", "payoff", "introduced", "resolved", "used-in"];
+function assertChapterReferences(project, options) {
+  const byNumber = new Map(project.chapters.map((chapter) => [chapter.number, chapter.id]));
+  for (const option of CHAPTER_REFERENCE_OPTIONS) {
+    for (const value of normalizeList(options[option], [])) {
+      const match = /^chapter-(\d+)$/.exec(value);
+      if (!match || project.chapters.some((chapter) => chapter.id === value)) {
+        continue;
+      }
+      const number = Number.parseInt(match[1], 10);
+      if (number === 0) {
+        throw new Error(`--${option} ${value}: chapter numbers start at 1`);
+      }
+      if (byNumber.has(number)) {
+        throw new Error(`--${option} ${value}: did you mean ${byNumber.get(number)}?`);
+      }
+    }
+  }
+}
 function createEntity(root, options) {
   const project = scanProject(root);
   assertProjectParses(project, "add");
   const kind = normalizeKind(options.kind);
   requireEntityEnumOptions(kind, options);
   assertReferenceOptions(kind, options);
+  assertChapterReferences(project, options);
+  if ((kind === "promise" || kind === "clue") && options.status === undefined && options.planted !== undefined && !project.chapters.some((chapter) => chapter.id === String(options.planted).trim())) {
+    options = { ...options, status: "planned" };
+  }
   const name = String(options.name ?? "").trim();
   if (!name) {
     throw new Error(`A ${kind} name is required`);
@@ -6070,10 +6103,6 @@ function renameEntity(root, options) {
   const oldFile = path4.join(project.root, config.dir, `${oldId}.md`);
   requireKebabId(oldId, `${kind} id`);
   assertSafeProjectPath(oldFile, project.root);
-  if (!fs3.existsSync(oldFile)) {
-    throw new Error(`${kind} ${oldId} does not exist`);
-  }
-  const markdown = readMarkdown(oldFile, project.root);
   const newId = kind === "chapter" || kind === "scene" ? oldId : kebabCase(name);
   if (!isKebabId2(newId)) {
     throw new Error(`Cannot derive a kebab-case id from ${kind} name "${name}"`);
@@ -6081,9 +6110,18 @@ function renameEntity(root, options) {
   assertPortableId(newId, kind);
   const newFile = path4.join(project.root, config.dir, `${newId}.md`);
   assertSafeProjectPath(newFile, project.root);
+  if (!fs3.existsSync(oldFile)) {
+    if (newFile !== oldFile && fs3.existsSync(newFile) && readMarkdown(newFile, project.root).data[config.titleField] === name) {
+      writeReferencePlan(project.root, replaceEntityReferences(project.root, kind, oldId, newId, new Map));
+      const reindexed2 = reindexProject(project.root);
+      return { kind, oldId, id: newId, file: newFile, changed: [newFile].concat(reindexed2.changed), resumed: true };
+    }
+    throw new Error(`${kind} ${oldId} does not exist`);
+  }
   if (newFile !== oldFile && fs3.existsSync(newFile)) {
     throw new Error(`${kind} ${newId} already exists`);
   }
+  const markdown = readMarkdown(oldFile, project.root);
   const data = { ...markdown.data, [config.titleField]: name };
   const retitled = retitleHeading(replaceFrontmatter(markdown.rawMarkdown, data), markdown.data[config.titleField], name);
   if (newFile === oldFile) {
@@ -6092,9 +6130,9 @@ function renameEntity(root, options) {
     const plan = replaceEntityReferences(project.root, kind, oldId, newId, new Map([[oldFile, retitled]]));
     const renamedContents = plan.get(oldFile);
     plan.delete(oldFile);
+    writeReferencePlan(project.root, plan);
     writeFile(newFile, renamedContents, { root: project.root });
     fs3.rmSync(oldFile);
-    writeReferencePlan(project.root, plan);
   }
   const reindexed = reindexProject(project.root);
   return { kind, oldId, id: newId, file: newFile, changed: [newFile].concat(reindexed.changed) };
@@ -6129,8 +6167,8 @@ function removeEntity(root, options) {
     }
   }
   const plan = removeEntityReferences(project.root, kind, id, new Map([[file, null]]));
-  fs3.rmSync(file);
   writeReferencePlan(project.root, plan);
+  fs3.rmSync(file);
   const reindexed = reindexProject(project.root);
   return { kind, id, file, changed: [file].concat(reindexed.changed) };
 }
@@ -7433,7 +7471,7 @@ function markdownFiles(root, depth = 0, collected = null) {
     } else if (entry.isFile() && entry.name.endsWith(".md")) {
       files.push(fullPath);
       if (files.length > MAX_SCAN_FILES) {
-        throw new Error("Too many markdown files under " + root + ": exceeds the " + MAX_SCAN_FILES + " file limit");
+        throw new Error(`Too many markdown files in the project: the scan exceeds the ${MAX_SCAN_FILES} file limit`);
       }
     }
   }
@@ -7971,7 +8009,8 @@ function readEntityFiles(root, relativeDir, mapEntity, scanErrors) {
 function requireStoryFile(projectRoot) {
   const storyPath = path4.join(projectRoot, "story.md");
   if (!fs3.existsSync(storyPath)) {
-    throw new Error(`${projectRoot} is not a story project: missing story.md`);
+    const hint = path4.basename(projectRoot).startsWith("-") ? `; ${path4.basename(projectRoot)} is not an option (run story help)` : "";
+    throw new Error(`${projectRoot} is not a story project: missing story.md${hint}`);
   }
   return storyPath;
 }
@@ -8349,6 +8388,9 @@ function normalizeBuildFormat(value) {
   }
   throw new Error(`Unsupported build format: ${value === "" ? "(empty)" : value}. Supported formats: ${Object.keys(BUILD_EXTENSIONS).join(", ")}`);
 }
+function storyIdIsFallback(project) {
+  return Boolean(project.story.unreadable) || kebabCase(String(project.story.data.title ?? "")) === "";
+}
 function validateStoryFrontmatter(project, errors) {
   if (project.story.unreadable) {
     return;
@@ -8432,7 +8474,7 @@ function validateIndexFrontmatter(project, errors) {
     if (data.type !== undefined && data.type !== expectedType) {
       errors.push(`${label2} type must be ${expectedType}`);
     }
-    if (data.story !== undefined && data.story !== project.storyId && !project.story.unreadable) {
+    if (data.story !== undefined && data.story !== project.storyId && !storyIdIsFallback(project)) {
       errors.push(`${label2} story must be ${project.storyId}`);
     }
     if (relativePath === path4.join("plot", "_index.md")) {
@@ -8719,7 +8761,7 @@ function validateContinuityState(project, errors) {
   if (data.type !== undefined && data.type !== "continuity-state") {
     errors.push(`${label2} type must be continuity-state`);
   }
-  if (data.story !== undefined && data.story !== project.storyId && !project.story.unreadable) {
+  if (data.story !== undefined && data.story !== project.storyId && !storyIdIsFallback(project)) {
     errors.push(`${label2} story must be ${project.storyId}`);
   }
 }
@@ -9982,7 +10024,7 @@ var COMMANDS = [
         id: parsed.positionals[2],
         name: parsed.positionals.slice(3).join(" ")
       });
-      io.stdout.write(`Renamed ${result.kind} ${result.oldId} to ${result.id}: ${result.file}
+      io.stdout.write(`${result.resumed ? "Finished an interrupted rename of" : "Renamed"} ${result.kind} ${result.oldId} to ${result.id}: ${result.file}
 `);
       return 0;
     }
@@ -10135,7 +10177,8 @@ function formatCommandsHelp() {
 }
 function runCli(argv, io) {
   try {
-    const parsed = parseArgs(argv);
+    const named = COMMANDS_BY_NAME.get(argv[0]);
+    const parsed = parseArgs(argv, named ? [...named.options ?? [], ...named.project === "none" ? [] : ["path"]] : undefined);
     const cwd = io.cwd ?? process.cwd();
     const name = parsed.positionals[0];
     if (parsed.options.version) {
@@ -10147,6 +10190,12 @@ function runCli(argv, io) {
     if (helpTopic !== undefined && COMMANDS_BY_NAME.has(helpTopic)) {
       io.stdout.write(formatCommandHelp(COMMANDS_BY_NAME.get(helpTopic)));
       return 0;
+    }
+    if (name === "help" && helpTopic !== undefined) {
+      io.stderr.write(`Unknown command: ${helpTopic}${suggestion(helpTopic, [...COMMANDS_BY_NAME.keys()])}
+Run story --help to list commands.
+`);
+      return 1;
     }
     if (!name || name === "help" || parsed.options.help) {
       io.stdout.write(HELP);

@@ -2,7 +2,7 @@
 title: "The Dry Side of Mill Row"
 chapter: chapter-03
 scene: 1
-pov: jonas-reed
+pov: ""
 location: the-mill-row
 characters:
   - jonas-reed

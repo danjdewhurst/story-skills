@@ -1505,6 +1505,8 @@ export function projectProgress(root, options = {}) {
   const words = project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
   let logged = null;
   if (options.log) {
+    // A chapter that fails to parse would be left out of the logged total.
+    assertProjectParses(project, "log progress");
     if (project.fileErrors.some((error) => error.startsWith(`${PROGRESS_FILE}:`))) {
       throw new Error(`Cannot log progress: ${PROGRESS_FILE} does not parse`);
     }
@@ -2009,7 +2011,8 @@ const REFERENCE_OPTIONS = ["chapter", "planted", "payoff", "introduced", "resolv
 
 const REFERENCE_EXAMPLES = {
   chapter: "chapter-01", planted: "chapter-01", payoff: "chapter-01", introduced: "chapter-01", resolved: "chapter-01", "used-in": "chapter-01",
-  location: "port-kestrel", locations: "port-kestrel", arc: "the-long-road", arcs: "the-long-road", "controlled-by": "harbor-council"
+  location: "port-kestrel", locations: "port-kestrel", arc: "the-long-road", arcs: "the-long-road", "controlled-by": "harbor-council",
+  owner: "mara-quill or harbor-council"
 };
 
 function assertReferenceOptions(kind, options) {
@@ -2029,12 +2032,41 @@ function assertReferenceOptions(kind, options) {
   }
 }
 
+const CHAPTER_REFERENCE_OPTIONS = ["chapter", "planted", "payoff", "introduced", "resolved", "used-in"];
+
+// The same rule links applies to scheduled chapters: chapter-00 never
+// exists, and chapter-1 beside chapter-01 is a typo.
+function assertChapterReferences(project, options) {
+  const byNumber = new Map(project.chapters.map((chapter) => [chapter.number, chapter.id]));
+  for (const option of CHAPTER_REFERENCE_OPTIONS) {
+    for (const value of normalizeList(options[option], [])) {
+      const match = /^chapter-(\d+)$/.exec(value);
+      if (!match || project.chapters.some((chapter) => chapter.id === value)) {
+        continue;
+      }
+      const number = Number.parseInt(match[1], 10);
+      if (number === 0) {
+        throw new Error(`--${option} ${value}: chapter numbers start at 1`);
+      }
+      if (byNumber.has(number)) {
+        throw new Error(`--${option} ${value}: did you mean ${byNumber.get(number)}?`);
+      }
+    }
+  }
+}
+
 export function createEntity(root, options) {
   const project = scanProject(root);
   assertProjectParses(project, "add");
   const kind = normalizeKind(options.kind);
   requireEntityEnumOptions(kind, options);
   assertReferenceOptions(kind, options);
+  assertChapterReferences(project, options);
+  // A promise or clue planted in a chapter not written yet is still a plan.
+  if ((kind === "promise" || kind === "clue") && options.status === undefined && options.planted !== undefined
+    && !project.chapters.some((chapter) => chapter.id === String(options.planted).trim())) {
+    options = { ...options, status: "planned" };
+  }
   const name = String(options.name ?? "").trim();
   if (!name) {
     throw new Error(`A ${kind} name is required`);
@@ -2066,11 +2098,6 @@ export function renameEntity(root, options) {
   const oldFile = path.join(project.root, config.dir, `${oldId}.md`);
   requireKebabId(oldId, `${kind} id`);
   assertSafeProjectPath(oldFile, project.root);
-  if (!fs.existsSync(oldFile)) {
-    throw new Error(`${kind} ${oldId} does not exist`);
-  }
-
-  const markdown = readMarkdown(oldFile, project.root);
   // Chapter and scene ids derive from their numbers ({chapter}-scene-NN), so
   // renaming them changes only the title.
   const newId = kind === "chapter" || kind === "scene" ? oldId : kebabCase(name);
@@ -2080,9 +2107,22 @@ export function renameEntity(root, options) {
   assertPortableId(newId, kind);
   const newFile = path.join(project.root, config.dir, `${newId}.md`);
   assertSafeProjectPath(newFile, project.root);
+  if (!fs.existsSync(oldFile)) {
+    // An interrupted rename already moved the entity file: finish rewriting
+    // the references that still use the old id. (The target's own name must
+    // match, so an unrelated entity is never treated as the moved one.)
+    if (newFile !== oldFile && fs.existsSync(newFile) && readMarkdown(newFile, project.root).data[config.titleField] === name) {
+      writeReferencePlan(project.root, replaceEntityReferences(project.root, kind, oldId, newId, new Map()));
+      const reindexed = reindexProject(project.root);
+      return { kind, oldId, id: newId, file: newFile, changed: [newFile].concat(reindexed.changed), resumed: true };
+    }
+    throw new Error(`${kind} ${oldId} does not exist`);
+  }
   if (newFile !== oldFile && fs.existsSync(newFile)) {
     throw new Error(`${kind} ${newId} already exists`);
   }
+
+  const markdown = readMarkdown(oldFile, project.root);
 
   const data = { ...markdown.data, [config.titleField]: name };
   const retitled = retitleHeading(replaceFrontmatter(markdown.rawMarkdown, data), markdown.data[config.titleField], name);
@@ -2094,9 +2134,12 @@ export function renameEntity(root, options) {
     const plan = replaceEntityReferences(project.root, kind, oldId, newId, new Map([[oldFile, retitled]]));
     const renamedContents = plan.get(oldFile);
     plan.delete(oldFile);
+
+    // References first, the entity file last: if the command is killed
+    // partway, the old file still exists and a rerun finishes the job.
+    writeReferencePlan(project.root, plan);
     writeFile(newFile, renamedContents, { root: project.root });
     fs.rmSync(oldFile);
-    writeReferencePlan(project.root, plan);
   }
 
   const reindexed = reindexProject(project.root);
@@ -2141,8 +2184,9 @@ export function removeEntity(root, options) {
   }
 
   const plan = removeEntityReferences(project.root, kind, id, new Map([[file, null]]));
-  fs.rmSync(file);
+  // References first, the file last, so an interrupted remove can be rerun.
   writeReferencePlan(project.root, plan);
+  fs.rmSync(file);
   const reindexed = reindexProject(project.root);
   return { kind, id, file, changed: [file].concat(reindexed.changed) };
 }
@@ -3624,7 +3668,7 @@ function markdownFiles(root, depth = 0, collected = null) {
     } else if (entry.isFile() && entry.name.endsWith('.md')) {
       files.push(fullPath);
       if (files.length > MAX_SCAN_FILES) {
-        throw new Error('Too many markdown files under ' + root + ': exceeds the ' + MAX_SCAN_FILES + ' file limit');
+        throw new Error(`Too many markdown files in the project: the scan exceeds the ${MAX_SCAN_FILES} file limit`);
       }
     }
   }
@@ -4286,7 +4330,8 @@ function readEntityFiles(root, relativeDir, mapEntity, scanErrors) {
 function requireStoryFile(projectRoot) {
   const storyPath = path.join(projectRoot, "story.md");
   if (!fs.existsSync(storyPath)) {
-    throw new Error(`${projectRoot} is not a story project: missing story.md`);
+    const hint = path.basename(projectRoot).startsWith("-") ? `; ${path.basename(projectRoot)} is not an option (run story help)` : "";
+    throw new Error(`${projectRoot} is not a story project: missing story.md${hint}`);
   }
   return storyPath;
 }
@@ -4744,6 +4789,12 @@ function normalizeBuildFormat(value) {
   throw new Error(`Unsupported build format: ${value === "" ? "(empty)" : value}. Supported formats: ${Object.keys(BUILD_EXTENSIONS).join(", ")}`);
 }
 
+// With story.md unreadable or untitled, the story id is only the folder name,
+// so comparing every registry's `story` with it would repeat one problem.
+function storyIdIsFallback(project) {
+  return Boolean(project.story.unreadable) || kebabCase(String(project.story.data.title ?? "")) === "";
+}
+
 function validateStoryFrontmatter(project, errors) {
   // An unreadable story.md is already reported; checking the stand-in data
   // would only add a missing-field error per field.
@@ -4838,7 +4889,7 @@ function validateIndexFrontmatter(project, errors) {
       errors.push(`${label} type must be ${expectedType}`);
     }
 
-    if (data.story !== undefined && data.story !== project.storyId && !project.story.unreadable) {
+    if (data.story !== undefined && data.story !== project.storyId && !storyIdIsFallback(project)) {
       errors.push(`${label} story must be ${project.storyId}`);
     }
 
@@ -5142,7 +5193,7 @@ function validateContinuityState(project, errors) {
   if (data.type !== undefined && data.type !== "continuity-state") {
     errors.push(`${label} type must be continuity-state`);
   }
-  if (data.story !== undefined && data.story !== project.storyId && !project.story.unreadable) {
+  if (data.story !== undefined && data.story !== project.storyId && !storyIdIsFallback(project)) {
     errors.push(`${label} story must be ${project.storyId}`);
   }
 }
