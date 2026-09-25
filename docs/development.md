@@ -59,7 +59,7 @@ story-skills/
 ├── skills/story-maintenance/scripts/story.js   # generated Node fallback CLI
 ├── schemas/story.schema.json     # JSON schema for project frontmatter
 ├── examples/                     # four sample story projects
-├── test/                         # Bun tests (*.test.js) and helpers.js
+├── test/                         # Bun tests (*.test.js), helpers.js, setup.js
 ├── scripts/                      # check scripts and the release script
 ├── evals/                        # skill regression harness (repo tooling only)
 ├── templates/github/             # workflows and an issue form users copy into story repositories
@@ -249,7 +249,7 @@ bun test ./test/cli.test.js -t "repeated" # tests whose names match a pattern
 
 `test/helpers.js` provides the shared fixtures:
 
-- `makeTempDir()` creates a fresh directory under the OS temp directory (`story-skills-*`).
+- `makeTempDir(prefix)` creates a fresh directory under the OS temp directory (`story-skills-*` by default). `test/setup.js`, preloaded through `bunfig.toml`, removes every one after the run, so create test directories with it rather than `fs.mkdtempSync`.
 - `memoryIo(cwd)` is an in-memory `io` object for `runCli`, with `output()` and `error()` accessors.
 - `writeMarkdown(filePath, frontmatter, body)` writes a markdown file with frontmatter, creating parent directories.
 

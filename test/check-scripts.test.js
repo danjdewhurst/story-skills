@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
+import { makeTempDir } from "./helpers.js";
 import { checkCoverage, parseLcov } from "../scripts/check-coverage.js";
 import { collectResult, compareFindings } from "../scripts/check-examples.js";
 import { docVersionFiles } from "../scripts/doc-versions.js";
@@ -127,7 +127,7 @@ describe("check-coverage", () => {
 
 describe("checkSkillFrontmatter", () => {
   function skillDir() {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "story-skills-frontmatter-"));
+    const dir = makeTempDir("story-skills-frontmatter-");
     const write = (name, frontmatter) => {
       fs.mkdirSync(path.join(dir, name), { recursive: true });
       fs.writeFileSync(path.join(dir, name, "SKILL.md"), `---\n${frontmatter}\n---\n\n# Skill\n`, "utf8");
@@ -421,14 +421,14 @@ describe("eval scripts", () => {
   });
 
   test("run-skill rejects an unknown fixture name before calling a model", () => {
-    const res = nodeScript("run-skill.js", ["--no-judge", "--out", fs.mkdtempSync(path.join(os.tmpdir(), "story-eval-")), "no-such-fixture"]);
+    const res = nodeScript("run-skill.js", ["--no-judge", "--out", makeTempDir("story-eval-"), "no-such-fixture"]);
     expect(res.status).toBe(2);
     expect(res.stdout).toContain("unknown fixture(s): no-such-fixture");
   });
 
   test("compare-outputs reads dir-a and dir-b from the right arguments", () => {
-    const dirA = fs.mkdtempSync(path.join(os.tmpdir(), "story-cmp-a-"));
-    const dirB = fs.mkdtempSync(path.join(os.tmpdir(), "story-cmp-b-"));
+    const dirA = makeTempDir("story-cmp-a-");
+    const dirB = makeTempDir("story-cmp-b-");
     const res = nodeScript("compare-outputs.js", [dirA, dirB]);
     // Every fixture lacks drafts, so each is reported missing and the run fails.
     expect(res.status).toBe(1);
@@ -436,22 +436,22 @@ describe("eval scripts", () => {
   });
 
   test("compare-outputs fails when the judge gives no verdict", () => {
-    const dirA = fs.mkdtempSync(path.join(os.tmpdir(), "story-cmp-a-"));
-    const dirB = fs.mkdtempSync(path.join(os.tmpdir(), "story-cmp-b-"));
+    const dirA = makeTempDir("story-cmp-a-");
+    const dirB = makeTempDir("story-cmp-b-");
     fs.writeFileSync(path.join(dirA, "canon-keeping.md"), "Draft A.", "utf8");
     fs.writeFileSync(path.join(dirB, "canon-keeping.md"), "Draft B.", "utf8");
     // No `claude` on PATH, so every judge call returns no verdict.
     const res = spawnSync(process.execPath, [path.join(repoRoot, "evals", "compare-outputs.js"), dirA, dirB, "canon-keeping"], {
       cwd: repoRoot,
       encoding: "utf8",
-      env: { ...process.env, PATH: fs.mkdtempSync(path.join(os.tmpdir(), "story-empty-path-")) }
+      env: { ...process.env, PATH: makeTempDir("story-empty-path-") }
     });
     expect(res.stdout).toContain("canon-keeping: FAIL (judge gave no verdict)");
     expect(res.status).toBe(1);
   });
 
   test("compare-outputs fails when there is nothing to compare", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "story-cmp-"));
+    const dir = makeTempDir("story-cmp-");
     const unknown = nodeScript("compare-outputs.js", [dir, dir, "no-such-fixture"]);
     expect(unknown.status).toBe(2);
     expect(unknown.stdout).toContain("unknown fixture(s): no-such-fixture");

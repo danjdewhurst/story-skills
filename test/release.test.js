@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
+import { makeTempDir } from "./helpers.js";
 import { execFileSync, spawnSync } from "node:child_process";
 import { bumpDocVersions, staleDocVersions } from "../scripts/doc-versions.js";
 import { bumpVersion, isAbsentGitHubRelease, isAbsentNpmVersion, releasePushArgs, replaceVersion, updateVersionFiles } from "../scripts/release.js";
@@ -38,7 +38,7 @@ describe("release script", () => {
   });
 
   test("updateVersionFiles bumps versions and template refs together", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "story-release-"));
+    const dir = makeTempDir("story-release-");
     fs.mkdirSync(path.join(dir, "templates", "github"), { recursive: true });
     for (const relativePath of ["package.json", ".codex-plugin/plugin.json", ".claude-plugin/plugin.json"]) {
       fs.mkdirSync(path.join(dir, path.dirname(relativePath)), { recursive: true });
@@ -99,7 +99,7 @@ describe("release script", () => {
   });
 
   test("a rejected main push leaves no tag on the remote", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "story-release-push-"));
+    const dir = makeTempDir("story-release-push-");
     const git = (cwd, ...args) =>
       execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "init.defaultBranch=main", ...args], {
         cwd,
