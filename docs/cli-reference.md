@@ -728,7 +728,7 @@ Shows three read-only views:
 
 `timeline` reports no findings of its own; clock errors belong to `continuity`.
 
-In the Salt Road project (see [Example projects used on this page](#example-projects-used-on-this-page)), after adding a second chapter with a flashback scene dated twelve years earlier:
+On a separate copy of the Salt Road project (see [Example projects used on this page](#example-projects-used-on-this-page)), after adding a second chapter with a flashback scene dated twelve years earlier. Later examples on this page use the one-chapter project:
 
 ```shell
 story timeline
@@ -928,7 +928,7 @@ Actions:
 - [P2] Draft chapter 5: Use story add chapter "Chapter 5" --number 5, then outline scenes to advance The Ledger Trail.
 ```
 
-On a book with `status: revising`, `next` points at the revision pass in progress, or the first one not done, with the commands that help with it. With no passes recorded it suggests `story passes --init` instead. In The Salt Road, with the structure pass done (see [passes](#passes)):
+On a book with `status: revising`, `next` points at the revision pass in progress, or the first one not done, with the commands that help with it. With no passes recorded it suggests `story passes --init` instead. In The Salt Road, after fixing the journey error from [continuity](#continuity) and with the structure pass done (see [passes](#passes)):
 
 ```text
 # Next Writing Actions: The Salt Road
@@ -1076,7 +1076,7 @@ It warns when:
 
 `voices` exits 1 only when a file fails to parse.
 
-On a copy of [`examples/the-last-ember`](../examples/the-last-ember/), after adding `voice-words: [reckon]` and `voice-avoid: [soldiers]` to `characters/kael-voss.md`:
+On a copy of [`examples/the-last-ember`](../examples/the-last-ember/), after adding `reckon` to `voice-words` and `soldiers` to `voice-avoid` in `characters/kael-voss.md` (as block lists; the parser does not read `[a, b]`):
 
 ```shell
 story voices
@@ -1163,7 +1163,7 @@ Prints [Mermaid](https://mermaid.js.org/) diagram source generated from frontmat
 | `--out <file>` | Write the source to this path, relative to the project root, instead of stdout | Print to stdout |
 | `--path <path>` | Project root | Current directory |
 
-`diagram` refuses to write `--out` while any project file fails to parse, because the diagram would silently drop entities. An unknown or missing kind exits 1:
+`diagram` prints and writes nothing while any project file fails to parse, because the diagram would silently drop entities; it reports the parse errors on stderr and exits 1. An unknown or missing kind exits 1:
 
 ```text
 $ story diagram maps
@@ -1532,13 +1532,13 @@ Builds a disposable book file in `dist/`. Builds are deterministic: the same sou
 | `epub` | `dist/<story-id>.epub` | EPUB 3 with a navigation document, front and back matter, and accessibility metadata. Reads `author` or `authors`, `language`, `isbn`, `publisher`, `publication-date`, `description`, `subjects`, `copyright`, `cover`, and `cover-alt` from `story.md` when set |
 | `docx` | `dist/<story-id>.docx` | Word document with headings and paragraphs |
 | `docx` with `--shunn` | `dist/<story-id>.docx` | Shunn format: Courier New 12pt, double-spaced, title page |
-| `shunn` | `dist/<story-id>.shunn.md` | Shunn manuscript markdown: title, byline, approximate word count, `contact` lines, page breaks between chapters |
+| `shunn` | `dist/<story-id>.shunn.md` | Shunn manuscript markdown: title, byline, approximate word count, `contact` lines, page breaks between chapters; no matter pages |
 | `html` | `dist/<story-id>.html` | A single-file review copy for readers: contents list, and a stable label on every paragraph (`ch03-p12` is chapter 3, paragraph 12) that readers quote with their notes |
 | `print` | `dist/<story-id>.print.html` | A print interior as HTML with CSS paged media, sized to `--trim`, with a title page, contents, and page numbers. Render it to PDF with a paged-media engine such as Paged.js, WeasyPrint, or Prince |
 | `narration` | `dist/<story-id>.narration.md` | An audiobook script: estimated runtime at 155 words a minute, a pronunciation guide from `pronunciation` fields in the bible, opening and closing credits, and each section with its estimated minutes |
 | `metadata` | `dist/<story-id>.metadata.md` | A retailer metadata sheet from `story.md`: title, authors, ISBN, language, word count, estimated print pages, description, keywords, BISAC subjects, and a readiness checklist of what is missing |
 
-When `story.md` sets `copyright` and no matter page already covers it, the formats built from chapters and matter (all except `markdown` and `metadata`) add a generated copyright page to the front matter; `narration` leaves it out.
+When `story.md` sets `copyright` and no matter page already covers it, `export` and the `markdown`, `epub`, `docx`, `html`, and `print` builds add a generated copyright page to the front matter. `narration` leaves it out, and Shunn output (`--format shunn` and `docx --shunn`) has no front or back matter at all.
 
 ```text
 $ story build

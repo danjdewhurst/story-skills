@@ -65,7 +65,7 @@ Sequels and prequels add `series-continuity` on top of any of these; see [Series
 
 ### How skills get picked up
 
-You do not call a skill by name. Each skill's `description` lists the phrases that trigger it, so the agent loads the right one when you ask in plain language: "I have an idea for a story" loads `premise-workshop`, "start a new story" loads `story-init`, "write the next chapter" loads `chapter-writing`, "line edit chapter 3" loads `line-editing`, "process beta reader feedback" loads `feedback-triage`. Each phrase has one owner, so similar requests can land on different skills: "premise" on its own goes to `premise-workshop`, while "controlling idea" goes to `theme-craft`. You can also name the skill directly ("use the scene-craft skill to check this scene") when a request could match more than one.
+You do not call a skill by name. Each skill's `description` lists the phrases that trigger it, so the agent loads the right one when you ask in plain language: "I have an idea for a story" loads `premise-workshop`, "start a new story" loads `story-init`, "write the next chapter" loads `chapter-writing`, "line edit chapter 3" loads `line-editing`, "process beta reader feedback" loads `feedback-triage`. Nearly every phrase has one owner, so similar requests can land on different skills: "premise" on its own goes to `premise-workshop`, while "controlling idea" goes to `theme-craft`. You can also name the skill directly ("use the scene-craft skill to check this scene") when a request could match more than one.
 
 The prompts on this page are examples. Rephrase them freely; the skill asks for anything it needs that is not in the project files.
 
@@ -156,7 +156,7 @@ error: "Nell" clashes with character nell-carrow (Nell)
 error: "Silas Carrow" clashes with character silas-carrow (Silas Carrow)
 ```
 
-Multi-word names are only checked for exact clashes, which is why `Gannet` is clear even though the book has a location called Gannet Point Light. Pass a multi-word title's distinctive word on its own when you want it checked for look-alikes.
+Look-alike checks compare single words only: a one-word candidate against one-word names and character given names. Multi-word names are only checked for exact clashes, and a word inside an existing multi-word name is never matched, which is why `Gannet` is clear even though the book has a location called Gannet Point Light.
 
 ### Checks
 
@@ -1292,10 +1292,10 @@ feedback/
 Nell's mother was Deaf. Do I need a sensitivity reader?
 ```
 
-The skill finds the characters, settings, and research notes that touch lived experience you don't share, marks the notes that ground them with `risk: [cultural]` (adding `medical`, `legal`, or others as they apply), or opens one:
+The skill finds the characters, settings, and research notes that touch lived experience you don't share, adds `cultural` to the `risk` list of the notes that ground them (adding `medical`, `legal`, or others as they apply), or opens one:
 
 ```shell
-story add research "Deaf community in 1930s Cornwall" --accuracy must-be-accurate \
+story add research "Deaf community in 1950s Cornwall" --accuracy must-be-accurate \
   --method expert-review --risk cultural --used-in chapter-04
 ```
 
@@ -1309,7 +1309,7 @@ The returned notes become a feedback round and go through [Feedback triage](#fee
 The harbourmaster is based on a real man. Is that a problem?
 ```
 
-Following [real people and permissions](../skills/editorial-review/references/real-people-and-permissions.md), the skill lists every real or recognisable person and organisation, classifies each portrayal, and flags risky ones in a research note with `risk: [defamation]` or `legal`. It says plainly that this is a flagging exercise, not legal advice, and recommends a publishing lawyer's review before publication whenever a living person or a real organisation is shown doing something discreditable.
+Following [real people and permissions](../skills/editorial-review/references/real-people-and-permissions.md), the skill lists every real or recognisable person and organisation, classifies each portrayal, and flags risky ones in a research note whose `risk` list includes `defamation` or `legal`. It says plainly that this is a flagging exercise, not legal advice, and recommends a publishing lawyer's review before publication whenever a living person or a real organisation is shown doing something discreditable.
 
 ### Permissions for quoted material
 
@@ -1709,7 +1709,7 @@ For a screenplay, the skill builds a scene list from the scene records (reading 
 Plan this as a picture book.
 ```
 
-A picture book is its own project: `story init "Title" --form picture-book` sets a 500-word target. The skill plans 32 pages and 14 story spreads, with a page-turn beat on each, in `adaptations/picture-book/pagination.md`. The text stays in chapters, one per spread, and illustration briefs and art notes stay in the plan, not the prose ([picture book reference](../skills/adaptation/references/picture-book.md)).
+For a picture book, set `form: picture-book` in `story.md`, or start a new project with `story init "Title" --form picture-book`, which sets a 500-word target. The skill plans 32 pages and 14 story spreads, with a page-turn beat on each, in `adaptations/picture-book/pagination.md`. The text stays in chapters, one per spread, and illustration briefs and art notes stay in the plan, not the prose ([picture book reference](../skills/adaptation/references/picture-book.md)).
 
 ### Translation
 
@@ -1762,10 +1762,10 @@ Which commands each skill runs when it finishes. All take the project path, `.` 
 | Revision (`revision-continuity`) | ✓ | ✓ | ✓ | ✓ | ✓ | `passes`, `next`, `doctor`, `pacing`, `clues`, `voices`, `compare`, `series` if linked |
 | Line editing (`line-editing`) | ✓ | | ✓ | ✓ | | `passes`, `prose`, `voices`, `build --format narration`/`html`/`print` |
 | Feedback (`feedback-triage`) | | ✓ | ✓ | ✓ | ✓ | `build --format html` |
-| Editorial review (`editorial-review`) | ✓ | ✓ | ✓ | ✓ | | `add research`, `build --format docx`/`html`/`metadata`, `compare --ref` |
+| Editorial review (`editorial-review`) | ✓ | ✓ | ✓ | ✓ | | `add research`, `build --format docx`/`shunn`/`html`/`metadata`, `compare --ref` |
 | Submission (`submission`) | ✓ | | ✓ | ✓ | ✓ | `prose`, `report`, `synopsis`, `build`, `build --format metadata` |
 | Publishing (`publishing`) | ✓ | ✓ | ✓ | ✓ | ✓ | `prose`, `passes`, `add matter`, `build --format metadata`/`epub`/`print` |
-| Adaptation (`adaptation`) | ✓ | ✓ | ✓ | ✓ | | `build --format narration`, `timeline`, `names`, `compare --against` |
+| Adaptation (`adaptation`) | ✓ | ✓ | ✓ | ✓ | ✓ | `build --format narration`, `timeline`, `names`, `compare --against` |
 
 When in doubt, `story doctor .` runs the health checks and prints a repair step for each finding. For automating these checks on every push, see [Automation and CI](automation.md).
 
