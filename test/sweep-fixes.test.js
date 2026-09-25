@@ -13,6 +13,7 @@ import {
   diagramProject,
   exportManuscript,
   migrateProject,
+  moveEntity,
   pacingReport,
   projectActions,
   projectPasses,
@@ -1442,3 +1443,106 @@ describe("round eight", () => {
   });
 });
 
+
+describe("move", () => {
+  function book() {
+    const root = newProject();
+    createEntity(root, { kind: "character", name: "Mara" });
+    createEntity(root, { kind: "chapter", name: "One", number: 1, character: "mara" });
+    createEntity(root, { kind: "chapter", name: "Two", number: 2, character: "mara" });
+    createEntity(root, { kind: "scene", name: "Dock", chapter: "chapter-02", character: "mara" });
+    createEntity(root, { kind: "clue", name: "Ring", planted: "chapter-01", payoff: "chapter-02" });
+    createEntity(root, { kind: "question", name: "Who", introduced: "chapter-01", resolved: "chapter-02" });
+    const character = path.join(root, "characters", "mara.md");
+    fs.writeFileSync(character, fs.readFileSync(character, "utf8").replace("status: alive", "status: deceased\ndied-in: chapter-02"));
+    const state = path.join(root, "continuity", "state.md");
+    fs.writeFileSync(state, fs.readFileSync(state, "utf8").replace("current-chapter: 0", "current-chapter: 2").replace("knowledge-state: []", "knowledge-state:\n  - character: mara\n    knows: The ring is fake\n    learned-in: chapter-02"));
+    fs.writeFileSync(path.join(root, "plot", "timeline.md"), `${fs.readFileSync(path.join(root, "plot", "timeline.md"), "utf8")}\n- chapter-02: the dock (chapter-02-scene-01)\n`);
+    return root;
+  }
+
+  test("move chapter renumbers files and every reference", () => {
+    const root = book();
+    const result = invoke(path.dirname(root), ["move", "chapter", "chapter-02", "--number", "3", "--path", root]);
+    expect(result.out).toContain("Moved chapter chapter-02 to chapter-03");
+    expect(result.out).toContain("(with 1 scene)");
+    const project = scanProject(root);
+    expect(project.chapters.map((chapter) => [chapter.id, chapter.number])).toEqual([["chapter-01", 1], ["chapter-03", 3]]);
+    expect(project.scenes.map((scene) => [scene.id, scene.chapter])).toEqual([["chapter-03-scene-01", "chapter-03"]]);
+    expect(project.clues[0].payoff).toBe("chapter-03");
+    expect(project.questions[0].resolved).toBe("chapter-03");
+    expect(project.characters[0].diedIn).toBe("chapter-03");
+    const stateData = project.continuity.data;
+    expect(stateData["current-chapter"]).toBe(3);
+    expect(stateData["knowledge-state"][0]["learned-in"]).toBe("chapter-03");
+    expect(fs.readFileSync(path.join(root, "plot", "timeline.md"), "utf8")).toContain("- chapter-03: the dock (chapter-03-scene-01)");
+    expect(fs.readFileSync(project.chapters[1].file, "utf8")).toContain("# Chapter 3: Two");
+    expect(validateProject(root).errors).toEqual([]);
+    expect(validateLinks(root).errors).toEqual([]);
+  });
+
+  test("move chapter refuses a taken number and names the fix", () => {
+    const root = book();
+    expect(() => moveEntity(root, { kind: "chapter", id: "chapter-01", number: 2 })).toThrow("chapter-02 already exists: move it first. To make room, renumber from the highest chapter down");
+    expect(() => moveEntity(root, { kind: "chapter", id: "chapter-01" })).toThrow("move chapter requires --number <n>");
+    expect(() => moveEntity(root, { kind: "chapter", id: "chapter-09", number: 4 })).toThrow("chapter chapter-09 does not exist");
+    expect(() => moveEntity(root, { kind: "chapter", id: "chapter-01", number: 1 })).toThrow("chapter-01 is already chapter 1");
+    expect(() => moveEntity(root, { kind: "character", id: "mara", number: 1 })).toThrow("story move works on chapters and scenes");
+  });
+
+  test("move scene changes chapter and number and updates the chapter cast", () => {
+    const root = book();
+    moveEntity(root, { kind: "scene", id: "chapter-02-scene-01", chapter: "chapter-01" });
+    let project = scanProject(root);
+    expect(project.scenes.map((scene) => [scene.id, scene.chapter, scene.scene])).toEqual([["chapter-01-scene-01", "chapter-01", 1]]);
+    expect(fs.readFileSync(path.join(root, "plot", "timeline.md"), "utf8")).toContain("(chapter-01-scene-01)");
+    moveEntity(root, { kind: "scene", id: "chapter-01-scene-01", scene: 4 });
+    project = scanProject(root);
+    expect(project.scenes[0].id).toBe("chapter-01-scene-04");
+    expect(validateLinks(root).errors).toEqual([]);
+    expect(() => moveEntity(root, { kind: "scene", id: "chapter-01-scene-04" })).toThrow("move scene requires --chapter <id>, --scene <n>, or both");
+    expect(() => moveEntity(root, { kind: "scene", id: "chapter-01-scene-04", chapter: "chapter-07" })).toThrow("chapter chapter-07 does not exist");
+    expect(() => moveEntity(root, { kind: "scene", id: "chapter-01-scene-04", scene: 4 })).toThrow("is already scene 4");
+    expect(() => moveEntity(root, { kind: "scene", id: "nope-scene-01", scene: 1 })).toThrow("scene nope-scene-01 does not exist");
+    createEntity(root, { kind: "scene", name: "Other", chapter: "chapter-01", scene: 5 });
+    expect(() => moveEntity(root, { kind: "scene", id: "chapter-01-scene-04", scene: 5 })).toThrow("chapter-01-scene-05 already exists");
+  });
+
+  test("move chapter refuses when a scene file is in the way", () => {
+    const root = book();
+    writeMarkdown(path.join(root, "scenes", "chapter-05-scene-01.md"), "title: Stray\nchapter: chapter-05\nscene: 1\nstatus: draft");
+    expect(() => moveEntity(root, { kind: "chapter", id: "chapter-02", number: 5 })).toThrow("scenes/chapter-05-scene-01.md already exists; nothing was changed");
+    expect(fs.existsSync(path.join(root, "chapters", "chapter-02.md"))).toBe(true);
+  });
+
+  test("move chapter follows links to its scene files and a colonless heading", () => {
+    const root = book();
+    const character = path.join(root, "characters", "mara.md");
+    fs.appendFileSync(character, "\nSee [the dock](../scenes/chapter-02-scene-01.md).\n");
+    const chapter = path.join(root, "chapters", "chapter-02.md");
+    fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace("# Chapter 2: Two", "# Chapter 2"));
+    moveEntity(root, { kind: "chapter", id: "chapter-02", number: 3 });
+    expect(fs.readFileSync(character, "utf8")).toContain("(../scenes/chapter-03-scene-01.md)");
+    expect(fs.readFileSync(path.join(root, "chapters", "chapter-03.md"), "utf8")).toContain("\n# Chapter 3\n");
+  });
+
+  test("an interrupted move can be rerun to finish", () => {
+    const root = book();
+    moveEntity(root, { kind: "chapter", id: "chapter-02", number: 3 });
+    // Recreate the state of a run killed after writing the new files but
+    // before deleting the old ones.
+    const project = scanProject(root);
+    const snapshot = new Map([...project.chapters, ...project.scenes].map((entry) => [entry.file, fs.readFileSync(entry.file, "utf8")]));
+    moveEntity(root, { kind: "chapter", id: "chapter-03", number: 2 });
+    for (const [file, text] of snapshot) {
+      fs.writeFileSync(file, text);
+    }
+    expect(moveEntity(root, { kind: "chapter", id: "chapter-03", number: 2 }).id).toBe("chapter-02");
+    expect(scanProject(root).chapters.map((entry) => entry.id)).toEqual(["chapter-01", "chapter-02"]);
+  });
+
+  test("move requires an id", () => {
+    const root = book();
+    expect(() => moveEntity(root, { kind: "chapter", id: "" })).toThrow("move requires a chapter or scene id");
+  });
+});
