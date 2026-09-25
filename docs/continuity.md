@@ -785,7 +785,7 @@ kael-voss: 9 lines, 76 words
 Voice check complete: 0 errors, 0 warnings, 0 dismissed
 ```
 
-Sera speaks most of the chapter's dialogue, but always with `she said`, so none of it is attributed. Each profile, largest first, shows:
+Sera speaks most of the chapter's dialogue, but her lines are tagged only with pronouns (`she said`, `she murmured`) or not at all, so none of it is attributed. Each profile, largest first, shows:
 
 - **Lines and words** of attributed dialogue.
 - **Sentence length**: mean words per spoken sentence.
@@ -808,7 +808,7 @@ voice-avoid:
 
 ### Voice findings
 
-In a copy of the last ember with those fields on Kael, and six of Sera's `she said` tags changed to `Sera said` or `Sera murmured`:
+In a copy of the last ember with those fields on Kael, and Sera's four pronoun tags (three `she said`, one `she murmured`) changed to `Sera said` or `Sera murmured`, which gives her six attributed lines:
 
 ```text
 $ story voices .

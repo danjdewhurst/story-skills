@@ -389,7 +389,7 @@ error: story.md subject fiction must be a BISAC code such as FIC022000
 warning: story.md lists 8 keywords; most retailers accept 7
 ```
 
-When `copyright` is set and no matter page is a copyright page (one with id `copyright` or a title containing "Copyright"), every build format except Shunn adds a copyright page as the first front matter page. It holds the copyright line, "All rights reserved.", and the publisher, ISBN, and `ai-disclosure` when they are set.
+When `copyright` is set and no matter page is a copyright page (one with id `copyright` or a title containing "Copyright"), the markdown export and the DOCX, EPUB, HTML, and print builds add a copyright page as the first front matter page. The Shunn builds and the narration script leave it out, and the metadata sheet only notes whether one exists. It holds the copyright line, "All rights reserved.", and the publisher, ISBN, and `ai-disclosure` when they are set.
 
 EPUB builds also write EPUB Accessibility discovery metadata (access modes, features such as `tableOfContents` and `readingOrder`, no hazards, and a summary), mark each document with `epub:type` (`bodymatter chapter`, `frontmatter`, `backmatter`, or `copyright-page`), and add a landmarks navigation list. `story build --format metadata` writes a retailer metadata sheet from these fields, with `(missing)` for each field not set. [Import, export, and builds](manuscripts.md) describes every build format.
 
@@ -501,7 +501,7 @@ routes:
 | `routes[].hours` | number > 0 | yes | The fastest the journey can be made, in hours. |
 | `routes[].mode` | string | no | Free text, such as `cart`, `ferry`, or `on foot`. |
 
-A route is two-way unless the destination declares its own route back, which then sets the return time. `story validate` errors when an entry has no `to`, when `hours` is not a positive number, and when `mode` is not text. `story links` errors when `to` names a missing location or the location itself. `story rename location` rewrites `to`, and `story remove location` drops the routes that lead to the removed location. [Route travel](#route-travel) describes the continuity check, and `story diagram locations` draws the network. The [worldbuilding skill](../skills/worldbuilding/SKILL.md) and its [maps and routes reference](../skills/worldbuilding/references/maps-and-routes.md) cover how to set travel times.
+A route is two-way unless the destination declares its own route back, which then sets the return time. `story validate` errors when an entry has no `to`, when `hours` is not a positive number, and when `mode` is a list or mapping rather than a single value. `story links` errors when `to` names a missing location or the location itself. `story rename location` rewrites `to`, and `story remove location` drops the routes that lead to the removed location. [Route travel](#route-travel) describes the continuity check, and `story diagram locations` draws the network. The [worldbuilding skill](../skills/worldbuilding/SKILL.md) and its [maps and routes reference](../skills/worldbuilding/references/maps-and-routes.md) cover how to set travel times.
 
 ### Systems
 
@@ -878,7 +878,7 @@ heading: false
 
 The body is the page text; a leading `# Heading` line is dropped, as for a chapter. Matter ids become EPUB file names, so builds refuse ids that are not kebab-case. A matter file with no text is left out of export and build, and `story validate` warns about it. [Import, export, and builds](manuscripts.md) explains where each format places matter.
 
-`story validate` errors on an unsupported `permission` and when `rights-holder` or `credit` is not text. It warns when `permission` is `pending` and the story `status` is `complete`, and when `permission` is `granted` with no `rights-holder`. The [editorial-review skill](../skills/editorial-review/SKILL.md) covers permissions.
+`story validate` errors on an unsupported `permission` and when `rights-holder` or `credit` is a list or mapping rather than a single value. It warns when `permission` is `pending` and the story `status` is `complete`, and when `permission` is `granted` with no `rights-holder`. The [editorial-review skill](../skills/editorial-review/SKILL.md) covers permissions.
 
 A matter page whose id is `copyright` or whose title contains "Copyright" is the book's copyright page. Builds use it in place of the page generated from the `story.md` `copyright` field (see [Publishing metadata](#publishing-metadata)); EPUB marks it `copyright-page`, and the narration build skips it when it is front matter.
 
