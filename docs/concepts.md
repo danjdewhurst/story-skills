@@ -233,7 +233,7 @@ A registry only restates what the entity files already say, so the CLI generates
 - **Diffs stay clean.** Rows are in a fixed order: by file id for most registries, by number for chapters, by chapter then scene number for scenes, and by `order` for matter pages. The same files always produce the same registry, byte for byte, so a registry changes in version control only when an entity changes.
 - **Registries are what agents read first.** A skill can load `characters/_index.md` to see the whole cast without opening every file, and it can rely on the registry being current.
 
-The registries for `characters/`, `worldbuilding/`, and `plot/` also have sections you write yourself, and `story reindex` keeps them: `## Relationship Map` and `## Family Trees` in the character registry, `## World Overview` in the world registry, and `## Story Structure`, `## Theme Tracking`, and the `structure` frontmatter field in the plot registry. Any other `## ` section you add to a registry, such as `## Notes`, is kept after the generated sections. Everything else in a registry is regenerated.
+The registries for `characters/`, `worldbuilding/`, and `plot/` also have sections you write yourself, and `story reindex` keeps them: `## Relationship Map` and `## Family Trees` in the character registry, `## World Overview` in the world registry, and `## Story Structure`, `## Theme Tracking`, and the `structure` frontmatter field in the plot registry. Any other `## ` section you add to a registry, such as `## Notes`, is kept after the generated sections, even one written above the `# ` title. Everything else in a registry is regenerated.
 
 `story reindex` also sets the `story` field in `plot/timeline.md` and `continuity/state.md` when the title changes.
 
@@ -296,7 +296,7 @@ The count covers chapter prose only:
 - Otherwise, if the body has a `## Outline` heading, only the text after the first `---` line below the outline counts. If there is no `---` line, everything after the heading counts.
 - Otherwise the whole body counts, minus a leading `# Heading` line.
 
-A word is a run of letters or digits in any script. Straight or curly apostrophes and hyphens join a word, so `don’t` and `well-known` each count once. HTML comments, code blocks, inline code, images, and link targets are skipped; a link's visible text still counts. [How words are counted](project-format.md#how-words-are-counted) has the exact rules.
+A word is a run of letters or digits in any script. Straight or curly apostrophes and hyphens join a word, so `don’t` and `well-known` each count once. HTML comments, code blocks, inline code, images, and link targets are skipped; a link's visible text still counts. A comment that never closes hides nothing, and `story validate` warns about it. [How words are counted](project-format.md#how-words-are-counted) has the exact rules.
 
 After adding a 12-word sentence to the example chapter:
 
@@ -362,7 +362,7 @@ The CLI is optional. Without it, the skills tell the agent to make the registry,
 
 ## The bundled fallback CLI
 
-The skills are often installed by copying the `skills/` folders into an agent's skills directory, with no npm package present. For that case, the `story-maintenance` skill ships the whole CLI as a single file: [`skills/story-maintenance/scripts/story.js`](../skills/story-maintenance/scripts/story.js). It is a bundle of `bin/story.js` and `src/`, with the version inlined, so it behaves the same as the package and needs only Node 18 or newer:
+The skills are often installed by copying the `skills/` folders into an agent's skills directory, with no npm package present. For that case, the `story-maintenance` skill ships the whole CLI as a single file: [`skills/story-maintenance/scripts/story.js`](../skills/story-maintenance/scripts/story.js). It is a bundle of `bin/story.js` and `src/`, with the version inlined, so it behaves the same as the package and needs only Node 18 or newer. The `package.json` beside it marks the file as an ES module, so it runs under any `package.json` above the skills directory; copy the whole `scripts/` folder, not `story.js` alone:
 
 ```shell
 node skills/story-maintenance/scripts/story.js --version

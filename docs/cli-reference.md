@@ -199,7 +199,7 @@ Refusing to access path outside project root: ~/stories/outside.md
 
 An absolute `--out` path is written where you say. The CLI also refuses to write through symlinks or into symlinked project directories. Scans skip `dist/` and dot-directories, so build output never feeds back into checks.
 
-`--out` on `export`, `build`, `synopsis`, and `diagram` never overwrites project source: `story.md`, `style-sheet.md`, `progress.md`, or anything under `characters/`, `chapters/`, `scenes/`, `worldbuilding/`, `plot/`, `continuity/`, `glossary/`, `matter/`, or `research/`. It must also name a file, not an existing directory:
+`--out` on `export`, `build`, `synopsis`, and `diagram` never overwrites project source: `story.md`, `style-sheet.md`, `progress.md`, or anything under `characters/`, `chapters/`, `scenes/`, `worldbuilding/`, `plot/`, `continuity/`, `glossary/`, `matter/`, or `research/`. Folder names match in any letter case (`Chapters/x.md` is refused), and a path through a symlink is checked against the real folder it points to, so `lnk/x.md` is refused when `lnk` links to `chapters`. It must also name a file, not a directory; `--out dist` is refused even before `dist/` exists:
 
 ```text
 $ story export --out chapters/chapter-01.md
@@ -323,7 +323,7 @@ story import <source> --title <name> [options]
 Creates a new project from an existing manuscript. `<source>` is a single `.md`, `.markdown`, or `.txt` file, or a directory of them. `--title` is required.
 
 - A file with `Chapter` headings (any heading level, with arabic, roman, or spelled-out numerals up to ninety-nine, or none) is split at each heading, and `Prologue`, `Epilogue`, `Interlude`, and `Afterword` headings become chapters of their own. Text before the first chapter heading becomes a chapter titled `Opening`.
-- A file without markdown chapter headings is split on plain-text chapter lines standing alone between blank lines, such as `Chapter 3`, `CHAPTER ONE: Arrival`, `Prologue`, or `Epilogue`. A single short line before the first one is treated as the book title.
+- A file without markdown chapter headings is split on plain-text chapter lines standing alone between blank lines, such as `Chapter 3`, `CHAPTER ONE: Arrival`, `Prologue`, or `Epilogue: After`. The number or word must stand alone or be followed by a separator (`:`, `.`, `-`, `–`, `—`) and a title, so `Chapter 12 was the worst.` and `Chapter Nine Lives of a Cat` do not split. A single short line before the first one is treated as the book title.
 - A file with neither becomes one chapter, titled by its first `#` heading or by its file name.
 - A directory is imported in natural file-name order (`chapter-2` before `chapter-10`). Files with no number in their name come after the numbered ones, except prologue, preface, foreword, introduction, and prelude files, which come first. Symlinks are never followed; a symlink to a document is refused.
 - Leading YAML frontmatter in source files is dropped.
@@ -407,6 +407,7 @@ Checks that the project is structurally sound:
 - entity ids are kebab-case and enum fields (roles, statuses, types) use allowed values
 - each registry `_index.md` links every entity file (warning)
 - declared chapter `word-count` values match the prose (warning)
+- no chapter opens an HTML comment (`<!--`) without closing it, which would leave the text after it in builds and word counts (warning)
 - each chapter has at least one scene record (warning)
 - chapter `hook`, scene `outcome`, clue `red-herring`, location `routes`, character `voice-words` and `voice-avoid`, `pronunciation` fields, and research `accuracy`, `confidence`, `method`, and `risk` use allowed values and types
 - matter pages have text; research marked `verified` lists sources; research that is still `open` or `disputed` is not relied on by a `final` or `complete` chapter; research with a `risk` and no `reviewed-by` is not relied on by a `final` or `complete` chapter; research with `accuracy: invented` is exempt from the source checks; no stray `.md` files sit at the project root or nested inside entity directories (warnings)
@@ -447,7 +448,7 @@ story reindex [path]
 
 Rebuilds every registry table from the entity files on disk: `characters/_index.md`, `worldbuilding/_index.md`, `plot/_index.md`, `chapters/_index.md`, `scenes/_index.md`, the question, promise, and clue registries under `continuity/`, and `glossary/_index.md`. It also rebuilds `matter/_index.md` and `research/_index.md` when those folders exist, and sets the `story` field in `plot/timeline.md` and `continuity/state.md` to the current story id.
 
-Hand-written sections of the registries survive a reindex: `## Relationship Map` and `## Family Trees` in the character registry, `## World Overview` in the world registry, and `## Story Structure`, `## Theme Tracking`, and the `structure` field in the plot registry. Any other `## ` section that reindex does not generate is kept too, after the generated sections. Files whose content would not change are not rewritten, and a registry with CRLF line endings keeps them.
+Hand-written sections of the registries survive a reindex: `## Relationship Map` and `## Family Trees` in the character registry, `## World Overview` in the world registry, and `## Story Structure`, `## Theme Tracking`, and the `structure` field in the plot registry. Any other `## ` section that reindex does not generate is kept too, after the generated sections, including one written above the `# ` title. Generated headings match without a trailing `: <number>`, so every `## Total Word Count: N` is the generated total and extra copies are dropped. A second section with the same heading as a generated one, such as a hand-written second `## Registry`, is kept as your own. Files whose content would not change are not rewritten, and a registry with CRLF line endings keeps them.
 
 `reindex` refuses to run while an entity file, registry, or `story.md` fails to parse, because the rebuilt registry would drop that file; see [Files that fail to parse](#files-that-fail-to-parse).
 
@@ -475,7 +476,7 @@ Registries already up to date
 story wordcount [path] [--write]
 ```
 
-Counts the prose words in each chapter and prints a total. Only the chapter's prose counts: the text after `## Chapter Text`; failing that, the text after the first `---` divider below `## Outline` (or everything after `## Outline` if there is no divider); failing that, the body without its leading `#` heading. HTML comments, inline and fenced code, images, link targets, and markdown symbols are ignored; hyphenated words and contractions count once.
+Counts the prose words in each chapter and prints a total. Only the chapter's prose counts: the text after `## Chapter Text`; failing that, the text after the first `---` divider below `## Outline` (or everything after `## Outline` if there is no divider); failing that, the body without its leading `#` heading. HTML comments, inline and fenced code, images, link targets, and markdown symbols are ignored (a `<!--` written inside an inline code span is code, not a comment); hyphenated words and contractions count once.
 
 | Option | Effect |
 |---|---|
@@ -512,7 +513,7 @@ Checks that references between entities point at entities that exist and that tw
 - a character's `died-in` chapter
 - arc characters, faction members and locations, and artifact owners and locations
 - chapter and scene POV, `characters`, `mentions` (a character or an artifact), locations, and `arcs-advanced`, and each scene's chapter
-- the chapter, character, and arc ids in questions, promises, and clues, and the `used-in` chapters of research notes. A promise or clue `payoff`, and its `planted` while `status: planned`, may name a scheduled `chapter-NN` beyond the last chapter file
+- the chapter, character, and arc ids in questions, promises, and clues, and the `used-in` chapters of research notes. A promise or clue `payoff`, and its `planted` while `status: planned`, may name a scheduled `chapter-NN` that has no chapter file yet
 - chapter ids and markdown links in the bodies of `plot/timeline.md` and arc files
 - the `follows` and `precedes` links in `story.md`, which must point at story projects that link back
 
@@ -628,7 +629,7 @@ story knowledge kael-voss --at chapter-01
 - The tunnels from the Vale side reach the Whisper Gate into the High Keep (pre-existing knowledge)
 ```
 
-With nothing recorded, it prints `No recorded knowledge for <id> at <chapter-id>` and exits 0. A missing argument, or an unknown character or chapter, exits 1:
+With nothing recorded, it prints `No recorded knowledge for <id> at <chapter-id>` and exits 0. A missing argument, an unknown character or chapter, or a character file that fails to parse exits 1. A broken character file prints its parse error, such as `characters/mara.md: is missing YAML frontmatter`, rather than `Unknown character`:
 
 ```text
 $ story knowledge kael-voss
@@ -1279,7 +1280,7 @@ Updated revision-passes in story.md
 
 When a change is made, `passes` prints `Updated revision-passes in story.md` before the list. It rewrites only the `revision-passes` entry and refuses to change a `story.md` that fails to parse or has malformed passes. Without options it only reads. The next pass is the one in progress, or else the first one not done; `story next` suggests it when `story.md` has `status: revising` (see [next](#next)).
 
-With no passes recorded, `passes` lists the default ladder and suggests `--init`. In The Salt Road, after `story passes --init` and `story passes --done structure`:
+With no passes recorded, `passes` lists the default ladder and suggests `--init`. The suggested commands repeat the path you typed, so `story passes drafts/salt-road` suggests `story passes drafts/salt-road --init` and `mark it with story passes drafts/salt-road --done <pass>`; with no path, or `.`, they read `story passes`. In The Salt Road, after `story passes --init` and `story passes --done structure`:
 
 ```shell
 story passes --start character
@@ -1670,7 +1671,7 @@ Like `export`, `build` refuses to run while a project file fails to parse, and r
 story synopsis [path] [--pages 1|3] [--out <file>]
 ```
 
-Builds a mechanical synopsis from the project: a premise (the first sentence of the `## Synopsis` section in `story.md`), then for each arc up to two sentences from `## Setup`, up to two from `## Rising Action`, and a line starting `Because` that joins the first sentence of `## Climax` and of `## Resolution`. If the text exceeds the page budget, it drops rising action, then resolution, then truncates with an ellipsis.
+Builds a mechanical synopsis from the project: a premise (the first sentence of the `## Synopsis` section in `story.md`), then for each arc up to two sentences from `## Setup`, up to two from `## Rising Action`, and a line starting `Because` that joins the first sentence of `## Climax` and of `## Resolution`, lowercasing the climax's first word when it is a common opener such as `She` or `The` but not a name. Abbreviations such as `Dr.` and `e.g.`, and initials, do not end a sentence. If the text exceeds the page budget, it drops rising action, then resolution, then truncates with an ellipsis.
 
 | Option | Effect | Default |
 |---|---|---|
@@ -1800,7 +1801,7 @@ node skills/story-maintenance/scripts/story.js --version
 0.10.0
 ```
 
-It accepts the same commands and options, and produces the same output, as the package binary. Run it in place; do not copy it into a story project.
+It accepts the same commands and options, and produces the same output, as the package binary. Run it in place; do not copy it into a story project. The `package.json` next to it (`{"type":"module"}`) lets Node load it as an ES module under any parent `package.json`, so keep the two together: copy the whole `story-maintenance` folder.
 
 The file is generated from `src/` with `bun run build:fallback`, and CI fails if it is out of date (`bun run check:fallback`). See the [Development guide](development.md#the-bundled-fallback) if you change the CLI.
 

@@ -240,7 +240,11 @@ The chapter starter file from `story add chapter` uses the first layout:
 
 ### How words are counted
 
-A word is a run of letters or digits in any script. Straight or curly apostrophes and hyphens join a word, so `don’t` and `well-known` each count once; `U.S.A` counts as three words. Before counting, the CLI removes HTML comments (`<!-- ... -->`), fenced code blocks, inline code, and images, keeps a link's visible text, and treats the markdown characters `# > * _ ~ | :` as spaces.
+A word is a run of letters or digits in any script. Straight or curly apostrophes and hyphens join a word, so `don’t` and `well-known` each count once; `U.S.A` counts as three words. Before counting, the CLI removes HTML comments (`<!-- ... -->`), fenced code blocks, inline code, and images, keeps a link's visible text, and treats the markdown characters `# > * _ ~ | :` as spaces. A comment written inside an inline code span (`` `<!-- x -->` ``) is code, not a comment. A `<!--` with no closing `-->` removes nothing, so the text after it is counted and built; `story validate` warns:
+
+```text
+warning: chapters/chapter-01.md opens an HTML comment (<!--) that never closes, so the text after it shows in builds and word counts
+```
 
 `story wordcount . --write` stores the result in each chapter's `word-count`. `story validate` warns when the stored value differs from the prose:
 
@@ -966,7 +970,7 @@ warning: characters/_index.md is missing registry link ](sera-voss.md)
 
 `plot/_index.md` also requires `structure` (see [Plot registry and timeline](#plot-registry-and-timeline)). The matter and research registries are optional; `story reindex` keeps each one current once its directory exists.
 
-Reindex regenerates the headings, tables, and totals it writes, and keeps the sections in the last column where they are. It also keeps any other `## ` section you add that it does not generate, such as `## Notes`, and appends it after the generated sections. Text outside a `## ` section, such as a line under the `# ` title, is replaced. A registry saved with CRLF line endings keeps them. Rows are ordered by filename, except chapters (by number), scenes (by chapter id, then scene number), and matter (by `order`, then id, with front and back pages interleaved). The chapter registry's word counts come from the prose, not from `word-count` frontmatter.
+Reindex regenerates the headings, tables, and totals it writes, and keeps the sections in the last column where they are. It also keeps any other `## ` section you add that it does not generate, such as `## Notes`, and appends it after the generated sections; a section written above the `# ` title moves there too. Generated headings are matched without a trailing `: <number>`, so each `## Total Word Count: N` counts as the generated total and extra copies are dropped, while a second section with a generated heading, such as a hand-written second `## Registry`, is kept as your own. Text outside a `## ` section, such as a line under the `# ` title, is replaced. A registry saved with CRLF line endings keeps them. Rows are ordered by filename, except chapters (by number), scenes (by chapter id, then scene number), and matter (by `order`, then id, with front and back pages interleaved). The chapter registry's word counts come from the prose, not from `word-count` frontmatter.
 
 A registry looks like this:
 
@@ -1017,7 +1021,7 @@ Fields that name another entity hold its id. `story links` checks that each id i
 | Scene | `location` | Location |
 | Chapter, scene | `arcs-advanced` | Arc |
 | Question | `introduced`, `resolved` | Chapter |
-| Promise, clue | `planted`, `payoff` | Chapter; may be a scheduled `chapter-NN` beyond the last chapter file (see below) |
+| Promise, clue | `planted`, `payoff` | Chapter; may be a scheduled `chapter-NN` with no chapter file yet (see below) |
 | Question, promise, clue | `characters` | Character |
 | Promise, clue | `arcs` | Arc |
 | Research note | `used-in` | Chapter |

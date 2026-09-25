@@ -100,7 +100,7 @@ cp -r story-skills/skills/* <skills-directory>/
 
 For Gemini CLI, link the cloned folder instead of copying it: `gemini skills link story-skills/skills`.
 
-Copy whole folders, not just `SKILL.md`. Each skill's `references/` files, and the bundled CLI at `story-maintenance/scripts/story.js`, have to stay next to it.
+Copy whole folders, not just `SKILL.md`. Each skill's `references/` files, and the bundled CLI at `story-maintenance/scripts/story.js` with the `package.json` beside it, have to stay next to it.
 
 Outside coding agents, you can add a skill's `SKILL.md` and reference files to a Claude.ai or ChatGPT project as knowledge, or put them in a system prompt.
 
