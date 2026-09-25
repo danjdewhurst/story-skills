@@ -124,21 +124,16 @@ story compare . --against ../the-tide-room-draft-1
 
 ## Structural Edits
 
-Moving a scene, or splitting, merging, or renumbering chapters, is done by hand; no command does it. Chapter ids come from `number` (`chapter-07`), and scene ids embed the chapter id (`chapter-07-scene-02`), so every move changes ids. Checklist:
+Chapter ids come from `number` (`chapter-07`), and scene ids embed the chapter id (`chapter-07-scene-02`), so moving a scene or renumbering a chapter changes ids. Use `story move`, never a hand rename: it renames the chapter and its scene files, updates `number`, the `# Chapter N:` heading, and scene `chapter`/`scene` fields, and rewrites every reference to the old id (clue and promise `planted`/`payoff`, question `introduced`/`resolved`, research `used-in`, `died-in`, `continuity/state.md` including `current-chapter`, links, and bare ids in `plot/timeline.md` and arc files).
 
 1. Snapshot the draft first (see Draft Snapshots above)
-2. Renumber highest-first, so a new id never collides with a file that has not moved yet: `chapter-09` becomes `chapter-10` before `chapter-08` becomes `chapter-09`
-3. For each moved chapter, rename `chapters/chapter-NN.md` and update its `number` and heading
-4. For each moved scene, rename `scenes/chapter-NN-scene-NN.md` and update its `chapter` and `scene` fields
-5. Rewrite every chapter reference to a moved chapter:
-   - `planted` and `payoff` in `continuity/clues/` and `continuity/promises/`
-   - `introduced` and `resolved` in `continuity/questions/`
-   - `used-in` in `research/`
-   - `since`, `learned-in`, and `current-chapter` in `continuity/state.md`
-   - `died-in` in `characters/`
-   - chapter rows and links in `plot/timeline.md`
-6. For a merge, move the prose and scenes into the surviving chapter and delete the emptied chapter file by hand. Do not use `story remove chapter` for this: it clears every `payoff` and other reference to the chapter and walks statuses back, instead of pointing them at the surviving chapter
-7. Run maintenance, then fix what it reports:
+2. Make the change:
+   - **Insert a chapter:** move each later chapter up one, highest first, because `move` refuses a number that is taken: `story move chapter chapter-09 --number 10 --path .`, then `story move chapter chapter-08 --number 9 --path .`, and so on down to the gap. Then `story add chapter "<Title>" --number 8 --path .`
+   - **Move a scene:** `story move scene chapter-03-scene-02 --chapter chapter-05 --path .` puts it at the next free number in chapter 5. Add `--scene <n>` to choose the position, or use `--scene` alone to reorder within its chapter. It adds the scene's location and characters to the new chapter; trim the old chapter's `locations` and `characters` by hand if the scene was the only reason for an entry
+   - **Split a chapter:** add the new chapter (making room first as above), move the scenes that belong to it with `story move scene`, then move their prose between the chapter files by hand
+   - **Merge chapters:** move the scenes into the chapter you keep with `story move scene`, then move the prose by hand. Remove the emptied chapter with `story remove chapter <id> --path .` only after checking that no clue, promise, or question still points at it (`grep -rn "chapter-NN" continuity/`): `remove` clears those references and walks statuses back instead of pointing them at the kept chapter, so repoint them to the kept chapter first. Close any numbering gap left behind with `story move chapter`, lowest first
+3. `move` never edits prose. Reread for chapter numbers mentioned in the text ("back in Chapter 2") and for outline beats in the chapter bodies that no longer match
+4. Run maintenance, then fix what it reports:
 
 ```shell
 story reindex .
@@ -148,7 +143,7 @@ story links .
 story continuity .
 ```
 
-`grep -rn "chapter-NN" .` finds references to an old id that the checks do not cover, such as links in arc files and prose notes.
+`grep -rn "chapter-NN" .` finds references to an old id that the checks do not cover, such as ids in prose notes.
 
 ## Continuity Audit Checklist
 
