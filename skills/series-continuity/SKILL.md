@@ -14,11 +14,11 @@ Plan and maintain sequels, prequels, and companion books as linked Story Skills 
 - `follows` - paths to books set **earlier** in the story's chronology
 - `precedes` - paths to books set **later** in the story's chronology
 
-Chronology and publication order are separate. A prequel written after the first book has `book-number: 2` and `precedes: [../book-one]`.
+Chronology and publication order are separate. A prequel written after the first book has `book-number: 2` and lists `../book-one` under `precedes`.
 
 This skill owns the book-level layer: linked books and the canon they share. The within-serial installment layer — how serial or episodic installments are structured — is covered by the `genre-craft` skill's serial/episodic structure reference.
 
-Links are relative paths from the book root, and every link needs a matching backlink: if book two `follows: [../book-one]`, book one must list `precedes: [../book-two]`. Keep sibling books in the same parent folder so the paths stay short and portable.
+Links are relative paths from the book root, and every link needs a matching backlink: if book two lists `../book-one` under `follows`, book one must list `../book-two` under `precedes`. Keep sibling books in the same parent folder so the paths stay short and portable.
 
 ## When to Use
 

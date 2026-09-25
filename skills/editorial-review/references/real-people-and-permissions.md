@@ -41,8 +41,8 @@ story add research "Portrayal of the Harbour Board" --accuracy blended --risk de
 
 Record in the note who is portrayed, what the prose asserts, what is
 documented (with sources) versus invented, and the decision taken. After
-a legal read, add `reviewed-by: [publishing lawyer]` (or the lawyer's
-name with consent). `story validate .` warns while a note with a `risk`
+a legal read, add `publishing lawyer` to the note's `reviewed-by` list
+(or the lawyer's name with consent). `story validate .` warns while a note with a `risk`
 is used in a final chapter without `reviewed-by`.
 
 ## Permissions for quoted material

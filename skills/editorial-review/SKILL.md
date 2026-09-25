@@ -42,8 +42,8 @@ workflow; offer `git init` if the project has none.
 
 1. Find what needs a read: characters, settings, and research notes that
    touch lived experience the author lacks. Mark the research notes that
-   ground them with `risk: [cultural]` (add `medical`, `legal`, or others
-   as they apply), or open one:
+   ground them by adding `cultural` to the note's `risk` list (add
+   `medical`, `legal`, or others as they apply), or open one:
 
    ```shell
    story add research "Deaf community in 1980s Glasgow" --accuracy must-be-accurate --method expert-review --risk cultural --used-in chapter-04
@@ -69,7 +69,8 @@ workflow; offer `git init` if the project has none.
 For fiction that uses real people, real organisations, or recognisable
 portraits, follow `references/real-people-and-permissions.md`: list every
 real or recognisable person, classify each portrayal, and flag the risky
-ones in a research note with `risk: [defamation]` (or `legal`). Say
+ones in a research note by adding `defamation` (or `legal`) to its
+`risk` list. Say
 plainly that this is a flagging exercise, not legal advice, and recommend
 a publishing lawyer's review before publication whenever a living person
 or a real organisation is shown doing something discreditable.
