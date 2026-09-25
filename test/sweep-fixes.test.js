@@ -379,7 +379,7 @@ describe("builds", () => {
   });
 
   test("emphasis follows CommonMark", () => {
-    const root = bookProject("***both*** and *a **b** c* and \\*literal\\* and snake_case_word and ** spaced ** and *foo**bar*");
+    const root = bookProject("***both*** and *a **b** c* and \\*literal\\* and snake_case_word and ** spaced ** and *foo**bar* and *a _b* c_");
     const html = fs.readFileSync(buildBook(root, { format: "html" }).outFile, "utf8");
     expect(html).toContain("<strong><em>both</em></strong>");
     expect(html).toContain("<em>a </em><strong><em>b</em></strong><em> c</em>");
@@ -388,6 +388,7 @@ describe("builds", () => {
     expect(html).toContain("** spaced **");
     // The rule of three: ** cannot close a single *.
     expect(html).toContain("<em>foo**bar</em>");
+    expect(html).toContain("<em>a _b</em> c_");
   });
 
   test("XML-invalid characters are dropped from EPUB and DOCX", () => {
@@ -461,5 +462,135 @@ describe("import", () => {
   test("prologue and epilogue headings are chapters and spelled-out numbers leave titles", () => {
     const { project } = importText("# Book\n\n## Prologue\n\nBefore.\n\n## Chapter One: Arrival\n\nA.\n\n## Chapter Twenty-One\n\nB.\n\n## Epilogue\n\nAfter.\n", "draft.md");
     expect(project.chapters.map((chapter) => chapter.title)).toEqual(["Prologue", "Arrival", "Chapter Twenty-One", "Epilogue"]);
+  });
+});
+
+describe("round two", () => {
+  test("the chapter total heading never piles up across word-count changes", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    const index = path.join(root, "chapters", "_index.md");
+    for (const words of ["one two three", "four", "five six"]) {
+      appendProse(root, "chapters/chapter-01.md", words);
+      computeWordCounts(root, { write: true });
+    }
+    const text = fs.readFileSync(index, "utf8");
+    expect(text.match(/## Total Word Count/g)).toHaveLength(1);
+    expect(text).toContain("## Total Word Count: 6");
+  });
+
+  test("reindex repairs stale total headings left by 0.10.0", () => {
+    const root = newProject();
+    const index = path.join(root, "chapters", "_index.md");
+    fs.appendFileSync(index, "\n## Total Word Count: 4\n\n## Total Word Count: 3\n\n## Notes\n\nKeep.\n");
+    reindexProject(root);
+    const text = fs.readFileSync(index, "utf8");
+    expect(text.match(/## Total Word Count/g)).toHaveLength(1);
+    expect(text).toContain("## Notes\n\nKeep.");
+  });
+
+  test("a custom section above the title does not duplicate the title", () => {
+    const root = newProject();
+    const index = path.join(root, "characters", "_index.md");
+    fs.writeFileSync(index, fs.readFileSync(index, "utf8").replace("# Characters", "## Preface\n\npre text\n\n# Characters"));
+    reindexProject(root);
+    const text = fs.readFileSync(index, "utf8");
+    expect(text.match(/^# Characters$/gm)).toHaveLength(1);
+    expect(text).toContain("## Preface\n\npre text");
+  });
+
+  test("a second section named like a generated one is kept", () => {
+    const root = newProject();
+    const index = path.join(root, "characters", "_index.md");
+    fs.appendFileSync(index, "\n## Registry\n\nMy own registry notes.\n");
+    reindexProject(root);
+    expect(fs.readFileSync(index, "utf8")).toContain("My own registry notes.");
+    expect(reindexProject(root).changed).toEqual([]);
+  });
+
+  test("--out through a symlinked folder or a case variant cannot reach source", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    const chapter = path.join(root, "chapters", "chapter-01.md");
+    const before = fs.readFileSync(chapter, "utf8");
+    fs.symlinkSync(path.join(root, "chapters"), path.join(root, "lnk"));
+    expect(() => exportManuscript(root, { out: "lnk/chapter-01.md" })).toThrow("it is project source");
+    const outside = makeTempDir();
+    fs.symlinkSync(path.join(root, "chapters"), path.join(outside, "x"));
+    expect(() => exportManuscript(root, { out: path.join(outside, "x", "chapter-01.md") })).toThrow("it is project source");
+    expect(() => exportManuscript(root, { out: "Chapters/chapter-01.md" })).toThrow("it is project source");
+    expect(fs.readFileSync(chapter, "utf8")).toBe(before);
+  });
+
+  test("--out dist is refused before the dist folder exists", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    expect(() => buildBook(root, { format: "epub", out: "dist" })).toThrow("--out dist is a directory");
+    expect(fs.existsSync(path.join(root, "dist"))).toBe(false);
+  });
+
+  test("links accept scheduled chapters below a later outline chapter", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    createEntity(root, { kind: "clue", name: "Locket", planted: "chapter-01", payoff: "chapter-09" });
+    createEntity(root, { kind: "promise", name: "Duel", planted: "chapter-07", status: "planned", payoff: "chapter-12" });
+    createEntity(root, { kind: "chapter", name: "Finale", number: 20 });
+    expect(validateLinks(root).errors).toEqual([]);
+  });
+
+  test("plain-text import leaves sentences that start like headings alone", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "draft.txt"), "Chapter 1\n\nIt began.\n\nChapter 12 was the worst.\n\nEpilogue of his life, he thought, was near.\n\nChapter Nine Lives of a Cat\n\nCHAPTER TWO: Arrival\n\nNext.\n\nEpilogue\n\nEnd.\n");
+    const result = importManuscript({ source: "draft.txt", title: "Imported", cwd, dir: "out" });
+    const project = scanProject(result.root);
+    expect(project.chapters.map((chapter) => chapter.title)).toEqual(["Chapter 1", "Arrival", "Epilogue"]);
+    expect(fs.readFileSync(project.chapters[0].file, "utf8")).toContain("Chapter 12 was the worst.");
+  });
+
+  test("knowledge names the parse error for a broken character file", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    fs.writeFileSync(path.join(root, "characters", "mara.md"), "# No frontmatter\n");
+    const result = invoke(path.dirname(root), ["knowledge", "mara", "--at", "chapter-01", "--path", root]);
+    expect(result.code).toBe(1);
+    expect(result.err).toContain("characters/mara.md: is missing YAML frontmatter");
+  });
+
+  test("passes hints use the path the user typed", () => {
+    const root = newProject();
+    const typed = path.basename(root);
+    expect(invoke(path.dirname(root), ["passes", typed]).out).toContain(`Run story passes ${typed} --init`);
+    expect(invoke(path.dirname(root), ["passes", typed, "--start", "structure"]).out).toContain(`mark it with story passes ${typed} --done structure`);
+  });
+
+  test("emphasis stays fast on pathological paragraphs", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", `${"rate 5* and 4* and ".repeat(25000)}\n\n${"*a ".repeat(10000)}b${" c*".repeat(10000)}`);
+    const started = performance.now();
+    buildBook(root, { format: "html" });
+    expect(performance.now() - started).toBeLessThan(3000);
+  });
+
+  test("synopsis sentences respect abbreviations, closing quotes, and names", () => {
+    const root = newProject();
+    createEntity(root, { kind: "arc", name: "Main" });
+    const arc = path.join(root, "plot", "arcs", "main.md");
+    fs.writeFileSync(arc, fs.readFileSync(arc, "utf8")
+      .replace("Initial state and inciting pressure.", "Mara, e.g. the heir, stays. She says \"Run.\" Then everyone runs.")
+      .replace("Decision point or highest tension.", "She chooses the reef!")
+      .replace("What changes because of this arc.", "Mara keeps the light."));
+    const text = synopsisBook(root).text;
+    expect(text).toContain("Mara, e.g. the heir, stays. She says \"Run.\"\n");
+    expect(text).toContain("Because she chooses the reef! Mara keeps the light.");
+  });
+
+  test("comments in code spans stay, and an unclosed comment is flagged", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", "Type `<!-- x -->` here.\n\nZeta <!-- unterminated");
+    const html = fs.readFileSync(buildBook(root, { format: "html" }).outFile, "utf8");
+    expect(html).toContain("`&lt;!-- x --&gt;`");
+    expect(validateProject(root).warnings).toContain("chapters/chapter-01.md opens an HTML comment (<!--) that never closes, so the text after it shows in builds and word counts");
   });
 });

@@ -13,10 +13,13 @@ const WORD_NUMERAL = `(?:(?:${TENS_WORDS})(?:[-\\s](?:${UNIT_WORDS}))?|ten|eleve
 const CHAPTER_NUMBER = `(?:\\d+|${WORD_NUMERAL}|${ROMAN_NUMERAL})(?=[\\s:.\\-–—]|$)`;
 const CHAPTER_HEADING_PATTERN = new RegExp(`^chapter(?![A-Za-z])\\s*(?:${CHAPTER_NUMBER})?\\s*[:.\\-–—]*\\s*(.*)$`, "i");
 // A plain-text chapter line ("Chapter 3", "CHAPTER ONE: Arrival") must carry
-// a number, so ordinary sentences that start with "Chapter" never split.
-const PLAIN_CHAPTER_PATTERN = new RegExp(`^chapter\\s+${CHAPTER_NUMBER}\\s*[:.\\-–—]*\\s*(.*)$`, "i");
+// a number and nothing else, or a separator before its title, so a sentence
+// such as "Chapter 12 was the worst." never splits.
+const PLAIN_CHAPTER_PATTERN = new RegExp(`^chapter\\s+${CHAPTER_NUMBER}\\s*(?:[:.\\-–—]+\\s*(.*))?$`, "i");
 // Sections that are chapters in their own right but carry no number.
 const SECTION_HEADING_PATTERN = /^(?:prologue|epilogue|interlude|afterword)(?![A-Za-z])/i;
+// As a plain line, the section name stands alone or before a separator.
+const PLAIN_SECTION_PATTERN = /^(?:prologue|epilogue|interlude|afterword)\s*(?:[:.\-–—]+\s*\S.*)?$/i;
 const PLAIN_LINE_MAX_LENGTH = 80;
 const FRONTMATTER_BLOCK_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
 const YAML_LINE_PATTERN = /^(?:\s*$|\s*#|\s*-\s|\s*-$|\s+\S|[A-Za-z0-9_"'][^:]*:(?:\s|$))/;
@@ -302,15 +305,15 @@ function plainChapterTitle(lines, index) {
   if (!alone || text === "" || text.length > PLAIN_LINE_MAX_LENGTH) {
     return null;
   }
-  return chapterTitle(text, PLAIN_CHAPTER_PATTERN);
+  return chapterTitle(text, PLAIN_CHAPTER_PATTERN, PLAIN_SECTION_PATTERN);
 }
 
-function chapterTitle(text, pattern) {
-  if (SECTION_HEADING_PATTERN.test(text)) {
+function chapterTitle(text, pattern, sectionPattern = SECTION_HEADING_PATTERN) {
+  if (sectionPattern.test(text)) {
     return text;
   }
   const match = pattern.exec(text);
-  return match ? match[1].trim() || text : null;
+  return match ? (match[1] ?? "").trim() || text : null;
 }
 
 function finishChapter(section) {

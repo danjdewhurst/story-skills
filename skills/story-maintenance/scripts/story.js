@@ -490,7 +490,10 @@ function wordCount(markdown) {
   return splitWords(markdown).length;
 }
 function chapterProse(markdownBody) {
-  return proseSection(markdownBody).replace(/<!--[\s\S]*?-->/g, "");
+  return proseSection(markdownBody).replace(/`[^`\n]*`|<!--[\s\S]*?-->/g, (match) => match.startsWith("`") ? match : "");
+}
+function hasUnclosedComment(prose) {
+  return String(prose).replace(/`[^`\n]*`/g, "").includes("<!--");
 }
 function proseSection(markdownBody) {
   const chapterTextMatch = /^## Chapter Text\s*$/im.exec(markdownBody);
@@ -3103,10 +3106,10 @@ function addedPassNotes(before, after) {
 function nextPass(passes) {
   return passes.find((entry) => entry.status === "in-progress") ?? passes.find((entry) => entry.status !== "done") ?? null;
 }
-function formatPasses(passes) {
+function formatPasses(passes, command = "story passes") {
   const lines = [];
   if (passes.length === 0) {
-    lines.push("Revision passes: none recorded. Run story passes --init to add the default ladder:", "");
+    lines.push(`Revision passes: none recorded. Run ${command} --init to add the default ladder:`, "");
     for (const entry of DEFAULT_PASSES) {
       lines.push(`- ${entry.pass}: ${entry.focus} (${entry.checks.join(", ")})`);
     }
@@ -3123,7 +3126,7 @@ function formatPasses(passes) {
     lines.push(`${mark} ${entry.pass}${detail}`);
   }
   const upcoming = nextPass(passes);
-  lines.push("", upcoming === null ? "All passes done." : `Next: ${upcoming.pass}${upcoming.status === "in-progress" ? " (in progress)" : ""}; mark it with story passes --done ${upcoming.pass}`);
+  lines.push("", upcoming === null ? "All passes done." : `Next: ${upcoming.pass}${upcoming.status === "in-progress" ? " (in progress)" : ""}; mark it with ${command} --done ${upcoming.pass}`);
   return `${lines.join(`
 `)}
 `;
@@ -4121,6 +4124,7 @@ function scanProject(root) {
       declaredWordCount: Number(data["word-count"] ?? 0),
       targetWords: Number.isInteger(data["target-words"]) && data["target-words"] > 0 ? data["target-words"] : 0,
       wordCount: wordCount(chapterProse(markdown.body)),
+      unclosedComment: hasUnclosedComment(chapterProse(markdown.body)),
       date: String(data.date ?? ""),
       time: String(data.time ?? ""),
       mode: String(data.mode ?? ""),
@@ -4282,6 +4286,9 @@ function validateProjectOf(project) {
     if (chapter.declaredWordCount !== chapter.wordCount) {
       warnings.push(`${path4.relative(projectRoot, chapter.file)} declares ${chapter.declaredWordCount} words but contains ${chapter.wordCount}`);
     }
+    if (chapter.unclosedComment) {
+      warnings.push(`${path4.relative(projectRoot, chapter.file)} opens an HTML comment (<!--) that never closes, so the text after it shows in builds and word counts`);
+    }
     if (!project.scenes.some((scene) => scene.chapter === chapter.id)) {
       warnings.push(`${path4.relative(projectRoot, chapter.file)} has no machine-readable scene records`);
     }
@@ -4305,11 +4312,7 @@ function validateLinksOf(project) {
   const hasCharacter = (id) => characters.has(id);
   const hasLocation = (id) => locations.has(id);
   const hasChapter = (id) => chapters.has(id);
-  const highestChapter = project.chapters.reduce((max, chapter) => Math.max(max, Number.isFinite(chapter.number) ? chapter.number : 0), 0);
-  const hasScheduledChapter = (id) => {
-    const match = /^chapter-(\d+)$/.exec(id);
-    return chapters.has(id) || match !== null && Number.parseInt(match[1], 10) > highestChapter;
-  };
+  const hasScheduledChapter = (id) => chapters.has(id) || /^chapter-\d+$/.test(id);
   const hasArc = (id) => arcs.has(id);
   const artifactIds = new Set(project.artifacts.map((item) => item.id));
   const hasMention = (id) => characters.has(id) || artifactIds.has(id);
@@ -4613,7 +4616,8 @@ function knowledgeAtChapter(root, characterId, atChapterId) {
   const project = scanProject(root);
   const characters = new Map(project.characters.map((character) => [character.id, character]));
   if (!characters.has(characterId)) {
-    throw new Error(`Unknown character ${characterId}`);
+    const parseError = project.fileErrors.find((error) => error.startsWith(`${path4.join("characters", `${characterId}.md`)}:`));
+    throw new Error(parseError ?? `Unknown character ${characterId}`);
   }
   const chapterNumbers = new Map(project.chapters.map((chapter) => [chapter.id, chapter.number]));
   const atNumber = chapterNumbers.get(atChapterId);
@@ -4866,17 +4870,29 @@ ${custom.join(`
 `) : contents, changed, root);
 }
 function customSections(existing, generated) {
-  const headingPattern = /^## +(.+?)[ \t]*$/gm;
-  const generatedHeadings = new Set([...generated.matchAll(headingPattern)].map((match) => match[1]));
+  const headingKey = (text) => text.replace(/:\s*\d[\d,]*$/, "");
+  const unclaimed = new Map;
+  for (const match of generated.matchAll(/^## +(.+?)[ \t]*$/gm)) {
+    const key = headingKey(match[1]);
+    unclaimed.set(key, (unclaimed.get(key) ?? 0) + 1);
+  }
   const body = existing.replace(/^---\n[\s\S]*?\n---\n/, "");
+  const headings = [...body.matchAll(/^(#{1,2}) +(.+?)[ \t]*$/gm)];
   const sections = [];
-  const matches = [...body.matchAll(headingPattern)];
-  for (const [index, match] of matches.entries()) {
-    if (generatedHeadings.has(match[1])) {
+  for (const [index, match] of headings.entries()) {
+    if (match[1] !== "##") {
       continue;
     }
-    const end = index + 1 < matches.length ? matches[index + 1].index : body.length;
-    sections.push(body.slice(match.index, end).trim());
+    const key = headingKey(match[2]);
+    const claimed = (unclaimed.get(key) ?? 0) > 0;
+    if (claimed) {
+      unclaimed.set(key, unclaimed.get(key) - 1);
+    }
+    const stale = key !== match[2] && unclaimed.has(key);
+    if (!claimed && !stale) {
+      const end = index + 1 < headings.length ? headings[index + 1].index : body.length;
+      sections.push(body.slice(match.index, end).trim());
+    }
   }
   return sections;
 }
@@ -5272,6 +5288,8 @@ function synopsisSentences(section) {
 `);
   return splitSentences2(text).filter((sentence) => !SCAFFOLD_SENTENCES.has(sentence));
 }
+var ABBREVIATIONS = /(?:^|[\s(“"‘'])(?:Dr|Mr|Mrs|Ms|St|Mt|Jr|Sr|Prof|Capt|Gen|Col|Lt|Sgt|Rev|Fr|No|vs|etc|e\.g|i\.e|a\.m|p\.m|[A-Za-z])$/;
+var SENTENCE_END = /[.!?…]["”’')\]]*(?= |$)/g;
 function splitSentences2(text) {
   const normalized = String(text).replace(/\s+/g, " ").trim();
   if (normalized === "") {
@@ -5279,23 +5297,20 @@ function splitSentences2(text) {
   }
   const sentences = [];
   let start = 0;
-  for (let index = 0;index < normalized.length; index += 1) {
-    const char = normalized[index];
-    const next = normalized[index + 1];
-    const boundary = (char === "." || char === "?" || char === "!") && (next === undefined || next === " ");
-    const token = char === "." ? /([A-Za-z]+)$/.exec(normalized.slice(0, index)) : null;
-    const abbreviation = token !== null && (/^(Dr|Mr|Mrs|Ms|St)$/.test(token[1]) || /^[A-Z]$/.test(token[1]));
-    if (!boundary || abbreviation) {
+  for (const match of normalized.matchAll(SENTENCE_END)) {
+    const before = normalized.slice(start, match.index);
+    if (match[0].startsWith(".") && ABBREVIATIONS.test(before)) {
       continue;
     }
-    sentences.push(normalized.slice(start, index + 1).trim());
-    start = index + 1;
+    const end = match.index + match[0].length;
+    sentences.push(normalized.slice(start, end).trim());
+    start = end;
   }
   const tail = normalized.slice(start).trim();
   if (tail !== "") {
-    sentences.push(/[.!?]$/.test(tail) ? tail : `${tail}.`);
+    sentences.push(/[.!?…]["”’')\]]*$/.test(tail) ? tail : `${tail}.`);
   }
-  return sentences;
+  return sentences.filter((sentence) => sentence !== "");
 }
 function takeSentences(text, count) {
   return synopsisSentences(text).slice(0, count);
@@ -5319,12 +5334,62 @@ function renderSynopsis(title, premise, project, level) {
     const resolution = level < 2 ? takeSentences(extractSection(markdown.body, "Resolution"), 1) : [];
     const chain = climax.concat(resolution);
     if (chain.length > 0) {
-      lines.push(`Because ${chain.join(" ")}`, "");
+      lines.push(`Because ${lowercaseCommonStart(chain.join(" "))}`, "");
     }
   }
   return `${lines.join(`
 `).trimEnd()}
 `;
+}
+var COMMON_OPENERS = new Set([
+  "a",
+  "an",
+  "the",
+  "he",
+  "she",
+  "they",
+  "it",
+  "we",
+  "you",
+  "his",
+  "her",
+  "their",
+  "its",
+  "our",
+  "my",
+  "your",
+  "this",
+  "that",
+  "these",
+  "those",
+  "when",
+  "after",
+  "before",
+  "once",
+  "in",
+  "at",
+  "on",
+  "with",
+  "without",
+  "by",
+  "as",
+  "if",
+  "even",
+  "every",
+  "all",
+  "both",
+  "no",
+  "none",
+  "only",
+  "then",
+  "there",
+  "here",
+  "one",
+  "each"
+]);
+function lowercaseCommonStart(text) {
+  const first = /^[A-Za-z]+/.exec(text)?.[0] ?? "";
+  return COMMON_OPENERS.has(first.toLowerCase()) ? `${text[0].toLowerCase()}${text.slice(1)}` : text;
 }
 function truncateWords(text, budget) {
   const kept = [];
@@ -7092,28 +7157,50 @@ function inlineRuns(text) {
   if (buffer !== "") {
     nodes.push({ text: buffer });
   }
-  for (let closeIndex = 0;closeIndex < nodes.length; closeIndex += 1) {
-    const closer = nodes[closeIndex];
-    while (closer.delimiter && closer.close && closer.count > 0) {
-      let openIndex = closeIndex - 1;
-      while (openIndex >= 0 && !canPairEmphasis(nodes[openIndex], closer)) {
-        openIndex -= 1;
+  const stack = [];
+  const bottom = new Map;
+  const depth = { strong: new Array(nodes.length + 1).fill(0), em: new Array(nodes.length + 1).fill(0) };
+  for (const [closeIndex, closer] of nodes.entries()) {
+    if (!closer.delimiter) {
+      continue;
+    }
+    const key = `${closer.delimiter}${closer.open ? 1 : 0}${closer.original % 3}`;
+    while (closer.close && closer.count > 0) {
+      const floor = bottom.get(key) ?? 0;
+      let position = stack.length - 1;
+      while (position >= floor && !canPairEmphasis(nodes[stack[position]], closer)) {
+        position -= 1;
       }
-      if (openIndex < 0) {
+      if (position < floor) {
+        bottom.set(key, stack.length);
         break;
       }
+      const openIndex = stack[position];
       const opener = nodes[openIndex];
       const used = opener.count >= 2 && closer.count >= 2 ? 2 : 1;
       opener.count -= used;
       closer.count -= used;
-      for (let inner = openIndex + 1;inner < closeIndex; inner += 1) {
-        nodes[inner][used === 2 ? "strong" : "em"] = (nodes[inner][used === 2 ? "strong" : "em"] ?? 0) + 1;
-        if (nodes[inner].delimiter) {
-          nodes[inner].open = false;
-          nodes[inner].close = false;
+      const marks = depth[used === 2 ? "strong" : "em"];
+      marks[openIndex + 1] += 1;
+      marks[closeIndex] -= 1;
+      stack.length = opener.count > 0 ? position + 1 : position;
+      for (const [other, value] of bottom) {
+        if (value > stack.length) {
+          bottom.set(other, stack.length);
         }
       }
     }
+    if (closer.open && closer.count > 0) {
+      stack.push(closeIndex);
+    }
+  }
+  let strongDepth = 0;
+  let emDepth = 0;
+  for (const [index, node] of nodes.entries()) {
+    strongDepth += depth.strong[index];
+    emDepth += depth.em[index];
+    node.strong = strongDepth;
+    node.em = emDepth;
   }
   const runs = [];
   for (const node of nodes) {
@@ -7133,11 +7220,9 @@ function inlineRuns(text) {
   return runs;
 }
 function canPairEmphasis(opener, closer) {
-  if (opener.delimiter !== closer.delimiter || !opener.open || opener.count === 0) {
-    return false;
-  }
   const both = opener.close || closer.open;
-  return !(both && (opener.original + closer.original) % 3 === 0 && !(opener.original % 3 === 0 && closer.original % 3 === 0));
+  const ruleOfThree = both && (opener.original + closer.original) % 3 === 0 && !(opener.original % 3 === 0 && closer.original % 3 === 0);
+  return opener.delimiter === closer.delimiter && !ruleOfThree;
 }
 function runMarkup(run, escape2) {
   let markup = escape2(run.text);
@@ -7467,21 +7552,33 @@ function fileStem(storyId) {
 var SOURCE_ROOT_FILES = new Set(["story.md", STYLE_SHEET_FILE, PROGRESS_FILE]);
 var SOURCE_DIRECTORIES = ["characters", "chapters", "scenes", "worldbuilding", "plot", "continuity", "glossary", MATTER_DIR, RESEARCH_DIR];
 function assertNotProjectSource(project, outFile) {
-  const relativePath = path4.relative(project.root, outFile);
-  if (relativePath === "" || relativePath.startsWith("..") || path4.isAbsolute(relativePath)) {
-    return;
+  for (const [root, target] of [[project.root, outFile], [fs2.realpathSync(project.root), realPathThroughAncestors(outFile)]]) {
+    const relativePath = path4.relative(root, target);
+    if (relativePath === "" || relativePath.startsWith("..") || path4.isAbsolute(relativePath)) {
+      continue;
+    }
+    const lower = relativePath.toLowerCase();
+    const [first] = lower.split(path4.sep);
+    if (SOURCE_ROOT_FILES.has(lower) || SOURCE_DIRECTORIES.includes(first)) {
+      throw new Error(`Refusing to write generated output to ${path4.relative(project.root, outFile)}: it is project source. Use a path such as dist/ instead`);
+    }
   }
-  const [first] = relativePath.split(path4.sep);
-  if (SOURCE_ROOT_FILES.has(relativePath) || SOURCE_DIRECTORIES.includes(first)) {
-    throw new Error(`Refusing to write generated output to ${relativePath}: it is project source. Use a path such as dist/ instead`);
+}
+function realPathThroughAncestors(target) {
+  const missing = [];
+  let current = target;
+  while (!fs2.existsSync(current)) {
+    missing.unshift(path4.basename(current));
+    current = path4.dirname(current);
   }
+  return path4.join(fs2.realpathSync(current), ...missing);
 }
 function resolveOutputPath(project, out, defaultRelativePath, enforceRoot) {
   const rawOut = out ?? defaultRelativePath;
   const outFile = path4.resolve(project.root, rawOut);
   const shouldEnforceRoot = enforceRoot ?? !path4.isAbsolute(String(rawOut));
   assertNotProjectSource(project, outFile);
-  if (lstatIfExists(outFile)?.isDirectory()) {
+  if (lstatIfExists(outFile)?.isDirectory() || outFile === path4.join(project.root, "dist")) {
     throw new Error(`--out ${rawOut} is a directory: give a file path`);
   }
   return {
@@ -8399,8 +8496,9 @@ var TENS_WORDS = "twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety";
 var WORD_NUMERAL = `(?:(?:${TENS_WORDS})(?:[-\\s](?:${UNIT_WORDS}))?|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|${UNIT_WORDS})`;
 var CHAPTER_NUMBER = `(?:\\d+|${WORD_NUMERAL}|${ROMAN_NUMERAL})(?=[\\s:.\\-–—]|$)`;
 var CHAPTER_HEADING_PATTERN = new RegExp(`^chapter(?![A-Za-z])\\s*(?:${CHAPTER_NUMBER})?\\s*[:.\\-–—]*\\s*(.*)$`, "i");
-var PLAIN_CHAPTER_PATTERN = new RegExp(`^chapter\\s+${CHAPTER_NUMBER}\\s*[:.\\-–—]*\\s*(.*)$`, "i");
+var PLAIN_CHAPTER_PATTERN = new RegExp(`^chapter\\s+${CHAPTER_NUMBER}\\s*(?:[:.\\-–—]+\\s*(.*))?$`, "i");
 var SECTION_HEADING_PATTERN = /^(?:prologue|epilogue|interlude|afterword)(?![A-Za-z])/i;
+var PLAIN_SECTION_PATTERN = /^(?:prologue|epilogue|interlude|afterword)\s*(?:[:.\-–—]+\s*\S.*)?$/i;
 var PLAIN_LINE_MAX_LENGTH = 80;
 var FRONTMATTER_BLOCK_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
 var YAML_LINE_PATTERN = /^(?:\s*$|\s*#|\s*-\s|\s*-$|\s+\S|[A-Za-z0-9_"'][^:]*:(?:\s|$))/;
@@ -8674,14 +8772,14 @@ function plainChapterTitle(lines, index) {
   if (!alone || text === "" || text.length > PLAIN_LINE_MAX_LENGTH) {
     return null;
   }
-  return chapterTitle(text, PLAIN_CHAPTER_PATTERN);
+  return chapterTitle(text, PLAIN_CHAPTER_PATTERN, PLAIN_SECTION_PATTERN);
 }
-function chapterTitle(text, pattern) {
-  if (SECTION_HEADING_PATTERN.test(text)) {
+function chapterTitle(text, pattern, sectionPattern = SECTION_HEADING_PATTERN) {
+  if (sectionPattern.test(text)) {
     return text;
   }
   const match = pattern.exec(text);
-  return match ? match[1].trim() || text : null;
+  return match ? (match[1] ?? "").trim() || text : null;
 }
 function finishChapter(section) {
   return { title: section.title, prose: section.lines.join(`
@@ -9325,7 +9423,8 @@ var COMMANDS = [
         io.stdout.write(`Updated revision-passes in story.md
 `);
       }
-      io.stdout.write(formatPasses(result.passes));
+      const where = shellWord(displayPath(parsed));
+      io.stdout.write(formatPasses(result.passes, where === "." ? "story passes" : `story passes ${where}`));
       return 0;
     }
   },
