@@ -184,7 +184,7 @@ characters:
 arcs: []
 ```
 
-`story add promise` and `story add clue` default to `status: planted` when you pass `--planted`, and to `planned` otherwise. Clues accept two more flags: `significance-delayed: true` (`--significance-delayed`) for evidence whose meaning the reader should only see later, and `red-herring: true` (`--red-herring`) for evidence that points the wrong way. `story continuity` checks clues exactly like promises and ignores both flags; [`story clues`](#story-clues) uses them for its fair-play checks.
+`story add promise` and `story add clue` default to `status: planted` when you pass `--planted`, and to `planned` otherwise. `story add question` defaults to `open`, or to `answered` when you pass `--resolved`; `--status open` with `--resolved` is an error. Clues accept two more flags: `significance-delayed: true` (`--significance-delayed`) for evidence whose meaning the reader should only see later, and `red-herring: true` (`--red-herring`) for evidence that points the wrong way. `story continuity` checks clues exactly like promises and ignores both flags; [`story clues`](#story-clues) uses them for its fair-play checks.
 
 Entries with `status: abandoned` are skipped entirely. Everything else is checked:
 
@@ -196,9 +196,9 @@ Entries with `status: abandoned` are skipped entirely. Everything else is checke
 | error | `<promise> is planted but has no planted chapter` (clues: `is planted but no plant chapter recorded`) | Record `planted`, or set the status back to `planned`. |
 | error | `<question> is answered` or `is resolved` `but has no resolved chapter` | Record `resolved`. |
 | error | `<question> records resolved chapter <chapter> but status is still open` | Set `status: resolved` (or `answered`), or clear `resolved`. |
-| warning | `<promise> records planted chapter <chapter> but status is still planned` | Set `status: planted` once the setup is on the page. |
+| warning | `<promise or clue> records planted chapter <chapter> but status is still planned` | Set `status: planted` once the setup is on the page. The warning appears only once that chapter has prose: it is at or before the latest drafted chapter (see below). |
 
-`story links` separately checks that every chapter id in these fields exists, so a payoff you plan for a chapter you have not created yet is a link error. Scaffold the chapter first (`story add chapter "Title" --number 7`); outline chapters satisfy the link check without counting as drafted.
+`story links` separately checks that the chapter ids in these fields exist, with one allowance for scheduling ahead. A promise or clue may name a `chapter-NN` beyond the last chapter file in `payoff`, and in `planted` while its status is `planned`. Once the status is `planted` or `paid-off`, the `planted` chapter must exist, and once it is `paid-off`, the `payoff` chapter must exist too. Question chapters must always exist; scaffold the chapter first (`story add chapter "Title" --number 7`). Outline chapters satisfy the link check without counting as drafted.
 
 #### Unfired setups (the Chekhov warning)
 
@@ -396,6 +396,8 @@ $ story continuity .
 Continuity check failed: 1 errors, 0 warnings, 0 dismissed
 error: scenes/chapter-01-scene-02.md puts mara-quill at port-kestrel 0.3h after scenes/chapter-01-scene-01.md at bellwether-reef, but the fastest route takes 0.5h
 ```
+
+Hours are shown to 0.1h, with the gap rounded down and the route time rounded up, so a near miss (10.98h against 11h) never reads as two equal numbers.
 
 | Severity | Message | Fix |
 |----------|---------|-----|
@@ -667,7 +669,7 @@ To see the same plant-to-reveal flow as a picture, run [`story diagram clues`](#
 story prose .
 ```
 
-`story prose` is an advisory prose lint. It counts; it never scores or rewrites. It reads only chapter prose: the text after `## Chapter Text` (or, failing that, after the outline and its `---` divider), without headings, HTML comments, or scene-break rules. Quoted dialogue is removed before the filter-word and adverb counts, so a character's own words are not held against the narration.
+`story prose` is an advisory prose lint. It counts; it never scores or rewrites. It reads only chapter prose: the text after `## Chapter Text` (or, failing that, after the outline and its `---` divider), without headings, HTML comments, or scene-break rules. Quoted dialogue (straight `"..."`, curly `“...”`, or British `‘...’`, paired the same way as in [`story voices`](#story-voices)) is removed before the filter-word and adverb counts, so a character's own words are not held against the narration. A heading line is dropped on its own, so prose that follows a heading without a blank line still counts.
 
 From [`examples/the-last-ember`](../examples/the-last-ember/), which has a style sheet:
 
@@ -710,7 +712,7 @@ warning: characters sera-voss and seren-hale have similar first names (Sera Voss
 | Sentences | Sentence count, mean length, longest, and spread (standard deviation of sentence length, in words) | 20 or more sentences with a spread under 5: `sentence lengths are uniform ...; vary the rhythm` |
 | Filter words | `felt`, `saw`, `heard`, `noticed`, `realized`, `realised`, `wondered`, `seemed`, `watched`, `knew`, `decided`, `thought`, `sensed` in narration, per 1,000 narration words | Over 10 per 1,000, once the chapter has at least 300 narration words |
 | -ly adverbs | Words over four letters ending in `-ly`, minus a built-in list of non-adverbs (`family`, `early`, `only`, ...) and character name parts, per 1,000 narration words | Over 12 per 1,000, once the chapter has at least 300 narration words |
-| Dialogue tags | The first of `said`, `asked`, `says`, `asks`, or a said-bookism within three words after a closing quote | 3 or more said-bookisms in a chapter |
+| Dialogue tags | The first of `said`, `asked`, `says`, `asks`, or a said-bookism within three words after a closing quote, including a British `’` that closes a single-quoted line | 3 or more said-bookisms in a chapter |
 | Echoes | Words of five or more letters repeated within 30 words, excluding common words, character names, and numbers | Never; the counts are for rereading |
 | Watch words | Each `watch-words` entry from the style sheet | Never; the counts are for rereading |
 | Spelling | Uses of each `avoid` spelling from the style sheet or the chosen dialect | Always, one warning per spelling per chapter |
@@ -924,7 +926,7 @@ flowchart LR
   class unrevealed open
 ```
 
-Node ids replace hyphens with underscores, because Mermaid cannot always parse hyphens next to arrows; the labels carry the readable names. In the timeline, colons in times and titles become `∶`, because Mermaid's timeline syntax splits on colons.
+Node ids replace hyphens with underscores, because Mermaid cannot always parse hyphens next to arrows; the labels carry the readable names. An id that is a Mermaid keyword, such as `end`, `graph`, `subgraph`, `style`, `class`, or `click`, gets `_node` appended, so a location called `end` becomes `end_node`. In the timeline, colons in times and titles become `∶`, because Mermaid's timeline syntax splits on colons.
 
 To paste a diagram into a markdown file, wrap it in a fenced block with the language `mermaid`. To save it instead, pass `--out`:
 
@@ -1078,7 +1080,7 @@ Revision passes: none recorded. Run story passes --init to add the default ladde
 | `--start <pass>` | Sets the pass to `in-progress`, adding it to the end of the list if it is new |
 | `--done <pass>` | Sets the pass to `done`, adding it if it is new |
 
-Any kebab-case name works as a pass, so you can add your own (`--start sensitivity-read`). A custom pass has no focus or checks listed. When the list changes, the command prints `Updated revision-passes in story.md` and rewrites only that frontmatter entry; the rest of `story.md` is kept. It then prints the checklist. From a copy of the unraveled thread after `--init`, `--done structure`, and `--start character`:
+Any kebab-case name works as a pass, so you can add your own (`--start sensitivity-read`). A custom pass has no focus or checks listed. Adding one prints `note: Added custom pass <name>, which is not in the default ladder` to stderr, ending `; did you mean <pass>?` when the name is within two edits of a default pass, such as `charcter`. When the list changes, the command prints `Updated revision-passes in story.md` and rewrites only that frontmatter entry; the rest of `story.md` is kept. It then prints the checklist. From a copy of the unraveled thread after `--init`, `--done structure`, and `--start character`:
 
 ```text
 $ story passes . --start character
@@ -1164,11 +1166,11 @@ Checks:
 - Continuity: failed (4 errors, 3 warnings)
 
 Next Actions:
-- [P0] Fix continuity contradictions: Run story continuity . and repair 4 deterministic continuity errors.
-- [P1] Review continuity warnings: Run story continuity . and review 3 continuity warnings.
+- [P0] Fix continuity contradictions: Run story continuity examples/the-unraveled-thread and repair 4 deterministic continuity errors.
+- [P1] Review continuity warnings: Run story continuity examples/the-unraveled-thread and review 3 continuity warnings.
 - [P2] Review promises and payoffs: 1 setup/payoff promises need planting or payoff decisions.
 - [P2] Review open clues: 1 clues are still planned or planted.
-- [P2] Draft chapter 5: Use story add chapter "Chapter 5" --number 5, then outline scenes to advance The Ledger Trail.
+- [P2] Draft chapter 5: Use story add chapter "Chapter 5" --number 5 --path examples/the-unraveled-thread, then outline scenes to advance The Ledger Trail.
 ```
 
 The report also shows `Series` when `story.md` sets one, `Form` when it sets a `form`, `Research notes` when there are any, and `Target words` with a percentage when `target-words` is set. The `Checks` lines cover `validate`, `links`, and `continuity` only; the advisory commands (`pacing`, `clues`, `prose`, `voices`) are not run, so run them yourself.
@@ -1185,7 +1187,7 @@ Checks: validate ok (0 errors, 0 warnings), links ok (0 errors, 0 warnings), con
 
 Actions:
 - [P3] Project is mechanically healthy: No deterministic maintenance issues are blocking the next writing pass.
-- [P2] Draft chapter 2: Use story add chapter "Chapter 2" --number 2, then outline scenes to advance Sera's Reclamation.
+- [P2] Draft chapter 2: Use story add chapter "Chapter 2" --number 2 --path examples/the-last-ember, then outline scenes to advance Sera's Reclamation.
 ```
 
 The last ember follows another book, so run this with its sibling [`the-fall-of-the-citadel`](../examples/the-fall-of-the-citadel/) beside it; a copy on its own reports a broken series link.
@@ -1225,11 +1227,11 @@ Checks:
 - Continuity: failed (4 errors, 3 warnings)
 
 Actions:
-- [P0] Fix continuity contradictions: Run story continuity . and repair 4 deterministic continuity errors.
-- [P1] Review continuity warnings: Run story continuity . and review 3 continuity warnings.
+- [P0] Fix continuity contradictions: Run story continuity examples/the-unraveled-thread and repair 4 deterministic continuity errors.
+- [P1] Review continuity warnings: Run story continuity examples/the-unraveled-thread and review 3 continuity warnings.
 - [P2] Review promises and payoffs: 1 setup/payoff promises need planting or payoff decisions.
 - [P2] Review open clues: 1 clues are still planned or planted.
-- [P2] Draft chapter 5: Use story add chapter "Chapter 5" --number 5, then outline scenes to advance The Ledger Trail.
+- [P2] Draft chapter 5: Use story add chapter "Chapter 5" --number 5 --path examples/the-unraveled-thread, then outline scenes to advance The Ledger Trail.
 ```
 
 ### Actions and priorities
