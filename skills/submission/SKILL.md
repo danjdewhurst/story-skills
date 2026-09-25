@@ -1,6 +1,6 @@
 ---
 name: submission
-description: This skill should be used when the user asks to "write a query letter", "query", "querying", "pitch", "blurb", "back cover copy", "jacket copy", "comp titles", "comparable titles", "synopsis for agents", "submit to agents", "submission tracker", "self-publishing description", "retailer description", or wants to prepare and track a finished manuscript's submission to agents, publishers, or retailers.
+description: This skill should be used when the user asks to "write a query letter", "query", "querying", "pitch", "blurb", "back cover copy", "jacket copy", "comp titles", "comparable titles", "synopsis for agents", "submit to agents", "submission tracker", "self-publishing description", "retailer description", "ready to query", "submission readiness check", or wants to prepare and track a finished manuscript's submission to agents, publishers, or retailers.
 ---
 
 # Submission
@@ -18,7 +18,7 @@ skill prepares materials and records outcomes.
 
 A story project with a complete or near-complete draft. Verify `story.md`
 exists in the project root and read its `status`, `genre`, `sub-genre`,
-`premise`, `author`, and `contact` fields. If `status` is not `complete` or
+`premise`, `author` (or `authors` for a co-written book), and `contact` fields. If `status` is not `complete` or
 `revising`, tell the user the package can be drafted now but the readiness
 check will fail until the draft is finished.
 
@@ -146,8 +146,8 @@ story build . --format docx --shunn
 story build . --format shunn
 ```
 
-Confirm `story.md` has `author` and `contact` first; the title page uses
-them. Shunn builds leave out `matter/` pages, as submissions expect. For
+Confirm `story.md` has `author` (or `authors`) and `contact` first; the
+title page uses them, joining co-authors with "and". Shunn builds leave out `matter/` pages, as submissions expect. For
 self-publishing, hand off to the `publishing` skill, which covers EPUB and
 print builds (`story build . --format epub`, `--format print --trim 6x9`),
 retailer metadata, and launch.

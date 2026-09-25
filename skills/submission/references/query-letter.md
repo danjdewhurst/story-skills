@@ -42,7 +42,7 @@ experience. Omit rather than invent.}
 
 Thank you for your time and consideration.
 
-{Author name and contact, from story.md `author` and `contact`}
+{Author name and contact, from story.md `author` (or every name in `authors`) and `contact`}
 ```
 
 ## Structure
