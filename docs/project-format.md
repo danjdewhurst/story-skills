@@ -701,7 +701,7 @@ The `continuity/` directory holds durable state and the three trackers for setup
 
 ### State file
 
-`continuity/state.md` records what is true at the current point in the story.
+`continuity/state.md` records what is true at the current point in the story. The file `story init` writes also has optional note tables in its body; the CLI reads only the frontmatter lists.
 
 ```yaml
 ---
@@ -1038,7 +1038,7 @@ Fields that name another entity hold its id. `story links` checks that each id i
 | Scene | `chapter` | Chapter |
 | Scene | `location` | Location |
 | Chapter, scene | `arcs-advanced` | Arc |
-| Question | `introduced`, `resolved` | Chapter |
+| Question | `introduced`, `resolved` | Chapter; `introduced` may be a scheduled `chapter-NN` while `status: open` (see below) |
 | Promise, clue | `planted`, `payoff` | Chapter; may be a scheduled `chapter-NN` with no chapter file yet (see below) |
 | Question, promise, clue | `characters` | Character |
 | Promise, clue | `arcs` | Arc |
@@ -1046,7 +1046,7 @@ Fields that name another entity hold its id. `story links` checks that each id i
 | `plot/timeline.md`, arc bodies | any `chapter-NN` token | Chapter |
 | `plot/timeline.md`, arc bodies | relative links to `.md` files, except `_index.md` and `*` wildcard targets (links to non-entity files such as `story.md` are reported missing) | Existing entity file, named by its kebab-case id, inside the project |
 
-A promise or clue can schedule its setup and payoff ahead of the drafted book: `payoff`, and `planted` while `status: planned`, may name a `chapter-NN` that has no file yet. The number must be 1 or more and must not belong to an existing chapter under another id: beside `chapter-01`, `chapter-1` is a typo and `chapter-00` is never a chapter, so both are reported as missing. Once the status is `planted` or `paid-off`, the `planted` chapter must exist, and once it is `paid-off`, so must the `payoff` chapter.
+A promise or clue can schedule its setup and payoff ahead of the drafted book: `payoff`, and `planted` while `status: planned`, may name a `chapter-NN` that has no file yet. So may an `open` question's `introduced`. The number must be 1 or more and must not belong to an existing chapter under another id: beside `chapter-01`, `chapter-1` is a typo and `chapter-00` is never a chapter, so both are reported as missing. Once the status is `planted` or `paid-off`, the `planted` chapter must exist, and once it is `paid-off`, so must the `payoff` chapter. A question's `resolved` chapter must always exist, as must its `introduced` chapter once it is no longer `open`.
 
 `story continuity`, not `story links`, checks the ids in `continuity/state.md`: `character`, `location`, `artifact`, `owner`, `learned-in`, and `since` must name existing entities, and `fact` must be kebab-case.
 
@@ -1125,7 +1125,7 @@ It also warns when three or more genuine (non-red-herring) clues include none th
 For each speaking character it reports lines, words, mean sentence length, contractions per 100 words, the share of sentences that are questions and exclamations, and up to five signature words: words of four or more letters, used at least twice, and used more than twice as often per word spoken as in everyone else's dialogue. It warns when:
 
 - a character says a `voice-avoid` word,
-- a character with five or more lines never says one of their `voice-words`, and
+- a character with five or more attributed lines never says one of their `voice-words`, and
 - two characters with five or more lines each have sentence lengths within 1.5 words, contraction rates within 1.5 per 100 words, and question and exclamation shares within 10 points.
 
 ### Name checks

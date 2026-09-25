@@ -214,6 +214,7 @@ Checks: validate ok (0 errors, 0 warnings), links ok (0 errors, 0 warnings), con
 Actions:
 - [P2] Draft chapter 1: Use story add chapter "Chapter 1" --number 1, then outline scenes to establish the next story beat.
 - [P2] Create first character: Use story add character "Name" --role protagonist before drafting prose.
+- [P3] Project is mechanically healthy: No deterministic maintenance issues are blocking the next writing pass.
 ```
 
 If you already have a manuscript, skip this step and use `story import` instead; see [Import, export, and builds](manuscripts.md#import-an-existing-manuscript).
@@ -836,7 +837,7 @@ edwin-marsh: 3 lines, 10 words
   Sentence length 2.5, contractions 10.0 per 100 words, questions 0%, exclamations 0%
   Signature words: terrible
 Voice check complete: 0 errors, 1 warnings, 0 dismissed
-warning: nell-carrow never says "reckon" from their voice-words list in 13 lines of dialogue
+warning: nell-carrow does not say "reckon" from their voice-words list in 13 attributed lines of dialogue
 ```
 
 It also warns when a character says one of their `voice-avoid` words, and when two characters with five or more lines each have near-identical fingerprints ("X and Y may sound alike"). A line counts only when the narration names the speaker beside a speech verb (`"...," Nell said`, `said Silas`), or when the paragraph's narration names exactly one character. Pronoun tags (`she said`) are never attributed, so in close third person the POV character is often under-counted.
@@ -1000,7 +1001,6 @@ Checks: validate ok (0 errors, 0 warnings), links ok (0 errors, 0 warnings), con
 Actions:
 - [P1] Revision pass: character: Wants, arcs, motivation, and who knows what when. Run story voices, story knowledge <id> --at <chapter>, story diagram relationships. Mark it with story passes --done character.
 - [P2] Review open clues: 3 clues are still planned or planted.
-- [P2] Draft chapter 4: Use story add chapter "Chapter 4" --number 4, then outline scenes to advance The Drowned Stranger.
 ```
 
 That was after `structure` was marked done. A pass marked `in-progress` comes ahead of the first pending one.

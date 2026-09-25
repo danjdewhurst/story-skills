@@ -153,7 +153,7 @@ The rules behind the table:
 Import processes each source document in six steps:
 
 1. Leading YAML frontmatter is removed, including frontmatter written by tools such as Pandoc or Obsidian that the CLI's own parser would reject. A leading `---` scene break is kept.
-2. The text is cleaned for its source type. In a markdown source (`.md` or `.markdown`), Pandoc's dash spellings become real dashes: `---` becomes an em dash (`—`) and `--` an en dash (`–`). Text inside inline code spans, closed `` ``` `` code fences, and HTML comments is left alone, and so is everything after a `<!--` that never closes. Link targets (`](...)`), autolinks (`<https://...>`), and bare URLs such as `https://example.com/a--b` keep their hyphens, and so do a line made only of dashes and spaces (a `---` or `- - -` scene break), a table separator row such as `|---|---|`, and an indented code line (four spaces or a tab). In a plain-text source (`.txt`), leading tabs and spaces are removed from every line, so an indented paragraph from Scrivener or a word processor is not read as a markdown code block.
+2. The text is cleaned for its source type. In a markdown source (`.md` or `.markdown`), Pandoc's dash spellings become real dashes: `---` becomes an em dash (`—`) and `--` an en dash (`–`). Text inside inline code spans, closed `` ``` `` code fences, and HTML comments is left alone, and so is everything after a `<!--` that never closes. Link targets (`](...)`), autolinks (`<https://...>`), bare URLs such as `https://example.com/a--b`, and `mailto:` addresses keep their hyphens, and so do a line made only of dashes and spaces (a `---` or `- - -` scene break), a table separator row such as `|---|---|`, and an indented code line (four spaces or a tab). An indented line that continues a list item is prose, so its dashes are converted. In a plain-text source (`.txt`), leading tabs and spaces are removed from every line, so an indented paragraph from Scrivener or a word processor is not read as a markdown code block.
 3. If the document has chapter headings, each heading starts a chapter and everything up to the next chapter heading is its prose. Text before the first chapter heading becomes a chapter titled `Opening`, with a leading `# Title` line removed.
 4. If the document has no markdown chapter headings, as in a manuscript saved as plain text, it is split on chapter lines instead. A chapter line stands alone between blank lines, is at most 80 characters, and is either `Chapter` with a number (`Chapter 3`, `CHAPTER ONE: Arrival`) or one of `Prologue`, `Epilogue`, `Interlude`, and `Afterword`. The number, or the `Prologue`-style word, must end the line or be followed by a separator (`:`, `.`, `-`, `–`, `—`), with or without a title after it, so `Chapter 12 was the worst.`, `Chapter Nine Lives of a Cat`, and `Prologue of doom` do not split, while `Epilogue: After`, a bare `Prologue:`, and `Chapter 3:` (titled `Chapter 3`) do. A single short line before the first chapter line is taken as the book title and dropped; longer text there becomes an `Opening` chapter.
 5. If the document has neither, the whole document becomes one chapter. Its title is the first `# ` heading in the document, and any text before that heading is kept in the prose. With no `# ` heading, the title comes from the file name: `02-smoke.txt` becomes `02 Smoke`.
@@ -881,7 +881,7 @@ On *The Last Ember*:
 ```markdown
 # Synopsis: The Last Ember
 
-Premise: In a world where magic flows from living embers — fragments of a dying god's heart — Sera Voss returns to the Ashen Citadel to reclaim her birthright from Lord Maren, the usurper who murdered her parents and seized control of the Northern Reach.
+Logline: In a world where magic flows from living embers — fragments of a dying god's heart — Sera Voss returns to the Ashen Citadel to reclaim her birthright from Lord Maren, the usurper who murdered her parents and seized control of the Northern Reach.
 
 ## Sera's Reclamation
 
@@ -894,13 +894,15 @@ Because Sera infiltrates the citadel through the Whisper Gate. Sera chooses to u
 
 The scaffold is built from:
 
-1. **Premise**: the first sentence of the `## Synopsis` section in `story.md`, or `No premise recorded.` when that section is empty or holds only the starter text that `init` or `import` wrote.
-2. **One section per arc** in `plot/arcs/`, in file-name order, headed with the arc's `name`:
+1. **Logline**: the first sentence of the `## Synopsis` section in `story.md`, or `No logline recorded.` when that section is empty or holds only the starter text that `init` or `import` wrote.
+2. **One section per arc** in `plot/arcs/`, in file-name order, headed with the arc's `name`. With `--pages 1` it takes:
    - the first two sentences of its `## Setup` section,
    - the first two sentences of its `## Rising Action` section,
    - a line starting `Because`, followed by the first sentence of `## Climax` and the first sentence of `## Resolution`. When the climax starts with a common opener such as `The`, `A`, `She`, `They`, `It`, or `When`, that word is lowercased (`Because she chooses...`); a name keeps its capital (`Because Sera infiltrates...`). Only a whole word is lowercased, so `A.J.` and `He-Man` keep theirs.
 
 Sections an arc does not have are skipped; an arc with none of them gets only its heading. The starter sentences that `story add arc` writes (`Initial state and inciting pressure.`, `First escalation.`, and so on) are skipped too, so an unfilled arc adds nothing but its heading. An arc without a `name` is headed with its file name in title case.
+
+With `--pages 3` each arc takes up to four Setup sentences, eight Rising Action sentences, and two sentences each from Climax and Resolution. On *The Last Ember* that adds two more Setup sentences, four more Rising Action sentences, and a second sentence of climax and of resolution to the `Because` line.
 
 Sentences end at `.`, `?`, `!`, or `…` followed by a space, and a full stop inside closing quotes (`"Run."`) ends one too. A period after a title or initial (`Dr`, `Mr`, `Mrs`, `Ms`, `St`, `Mt`, `Jr`, `Sr`, `Prof`, `Capt`, `Gen`, `Col`, `Lt`, `Sgt`, `Rev`, `Fr`, `e.g.`, `i.e.`, a single letter, or a dotted initialism such as `U.S.`) never ends a sentence. After `No.`, `vs.`, `etc.`, `a.m.`, or `p.m.` the sentence ends unless the next word starts in lower case or with a digit, so `No. 5` and `9 a.m. sharp` continue while `She leaves at 9 a.m. Then the tide turns.` is two sentences, and a final sentence with no closing punctuation gets a period. In a list, each item counts as one sentence, without its bullet or number, and gets a period if it has no closing punctuation.
 
@@ -916,7 +918,7 @@ When the scaffold runs over budget, it is cut back in steps until it fits:
 2. Every arc's resolution is dropped.
 3. The text is truncated at the word limit and ends with `…`. Headings and paragraph breaks before the cut are kept, and a heading left with nothing under it is dropped.
 
-A 3-page synopsis therefore keeps detail that a 1-page synopsis drops.
+A 3-page synopsis therefore takes more from each arc and keeps detail that a 1-page synopsis drops.
 
 ```shell
 story synopsis . --pages 3 --out submission/synopsis-3-page.md
@@ -941,7 +943,7 @@ The result is a draft, not submission copy. Literary agents expect present tense
 
 - An absolute path can point anywhere, such as `--out ~/Desktop/the-salt-road.epub`.
 - Missing parent folders are created. For a relative path, writing through a symlinked folder is refused. Writing onto a symlinked file is always refused.
-- The output is written in place, so an existing file keeps its permissions and a read-only one is refused (`EACCES: permission denied`). An `--out` file that is a hard link to another file is instead replaced by a new file with the same permissions, and the file it was linked to is left unchanged.
+- The output is written in place, so an existing file keeps its permissions and a read-only one is refused (`EACCES: permission denied`). An `--out` file that is a hard link to another file is instead replaced by a new file with the same permissions, and the file it was linked to is left unchanged. When that replacement fails, the error reads `Cannot replace hard-linked <path>: <code>`.
 - An existing output file is overwritten without asking, but project source never is. `--out` naming `story.md`, `style-sheet.md`, `progress.md`, or a path under `characters/`, `chapters/`, `scenes/`, `worldbuilding/`, `plot/`, `continuity/`, `glossary/`, `matter/`, or `research/` is refused:
 
   ```text

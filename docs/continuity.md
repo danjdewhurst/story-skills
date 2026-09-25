@@ -198,7 +198,7 @@ Entries with `status: abandoned` are skipped entirely. Everything else is checke
 | error | `<question> records resolved chapter <chapter> but status is still open` | Set `status: resolved` (or `answered`), or clear `resolved`. |
 | warning | `<promise or clue> records planted chapter <chapter> but status is still planned` | Set `status: planted` once the setup is on the page. The warning appears only once that chapter has prose: it is at or before the latest drafted chapter (see below). |
 
-`story links` separately checks that the chapter ids in these fields exist, with one allowance for scheduling ahead. A promise or clue may name a `chapter-NN` that has no chapter file yet in `payoff`, and in `planted` while its status is `planned`. The number must be 1 or more and must not belong to an existing chapter under another id, so `chapter-1` beside `chapter-01`, or `chapter-00`, is reported as a missing chapter. Once the status is `planted` or `paid-off`, the `planted` chapter must exist, and once it is `paid-off`, the `payoff` chapter must exist too. Question chapters must always exist; scaffold the chapter first (`story add chapter "Title" --number 7`). Outline chapters satisfy the link check without counting as drafted.
+`story links` separately checks that the chapter ids in these fields exist, with one allowance for scheduling ahead. A promise or clue may name a `chapter-NN` that has no chapter file yet in `payoff`, and in `planted` while its status is `planned`; a question may name one in `introduced` while its status is `open`. The number must be 1 or more and must not belong to an existing chapter under another id, so `chapter-1` beside `chapter-01`, or `chapter-00`, is reported as a missing chapter. Once the status is `planted` or `paid-off`, the `planted` chapter must exist, and once it is `paid-off`, the `payoff` chapter must exist too. A question's `introduced` chapter must exist once it is no longer `open`, and its `resolved` chapter must always exist; scaffold the chapter first (`story add chapter "Title" --number 7`). Outline chapters satisfy the link check without counting as drafted.
 
 #### Unfired setups (the Chekhov warning)
 
@@ -669,7 +669,7 @@ To see the same plant-to-reveal flow as a picture, run [`story diagram clues`](#
 story prose .
 ```
 
-`story prose` is an advisory prose lint. It counts; it never scores or rewrites. It reads only chapter prose: the text after `## Chapter Text` (or, failing that, after the outline and its `---` divider), without headings, HTML comments, or scene-break rules. Quoted dialogue (straight `"..."`, curly `“...”`, or British `‘...’`, paired the same way as in [`story voices`](#story-voices)) is removed before the filter-word and adverb counts, so a character's own words are not held against the narration. A heading line is dropped on its own, so prose that follows a heading without a blank line still counts.
+`story prose` is an advisory prose lint. It counts; it never scores or rewrites. It reads only chapter prose: the text after `## Chapter Text` (or, failing that, after the outline and its `---` divider), without headings, HTML comments, code between closed `` ``` `` fences (as in word counts), or scene-break rules. Quoted dialogue (straight `"..."`, curly `“...”`, or British `‘...’`, paired the same way as in [`story voices`](#story-voices)) is removed before the filter-word and adverb counts, so a character's own words are not held against the narration. A heading line is dropped on its own, so prose that follows a heading without a blank line still counts.
 
 From [`examples/the-last-ember`](../examples/the-last-ember/), which has a style sheet:
 
@@ -825,13 +825,13 @@ sera-voss: 6 lines, 28 words
   Signature words: none yet
 Voice check complete: 0 errors, 2 warnings, 0 dismissed
 warning: kael-voss says "good", which is in their voice-avoid list (chapter-01)
-warning: kael-voss never says "aye" from their voice-words list in 9 lines of dialogue
+warning: kael-voss does not say "aye" from their voice-words list in 9 attributed lines of dialogue
 ```
 
 | Message | Appears when | Fix |
 |---------|--------------|-----|
 | `<id> says "<phrase>", which is in their voice-avoid list (<chapters>)` | Any attributed line contains the phrase. The chapters that use it are listed. | Rewrite the line, or remove the phrase from `voice-avoid` if the character has changed. |
-| `<id> never says "<phrase>" from their voice-words list in <n> lines of dialogue` | The character has five or more attributed lines and none uses the phrase. | Work the phrase in where it fits, or drop it from `voice-words`. |
+| `<id> does not say "<phrase>" from their voice-words list in <n> attributed lines of dialogue` | The character has five or more attributed lines and none uses the phrase. | Work the phrase in where it fits, or drop it from `voice-words`. |
 | `<a> and <b> may sound alike: similar sentence length, contractions, questions, and exclamations` | Both have five or more lines, and all four measures are close: sentence length within 1.5 words, contractions within 1.5 per 100 words, and question and exclamation shares each within 10 points. | Separate them on more than one axis: sentence length, contractions, vocabulary, what they ask about. Here Kael and Sera are not flagged, because their contraction rates differ by 2.6. |
 
 A low line count may mean few named tags rather than few lines. When a result matters, name the tags in a sample chapter and rerun.
@@ -1186,8 +1186,8 @@ $ story next examples/the-last-ember
 Checks: validate ok (0 errors, 0 warnings), links ok (0 errors, 0 warnings), continuity ok (0 errors, 0 warnings)
 
 Actions:
-- [P3] Project is mechanically healthy: No deterministic maintenance issues are blocking the next writing pass.
 - [P2] Draft chapter 2: Use story add chapter "Chapter 2" --number 2 --path examples/the-last-ember, then outline scenes to advance Sera's Reclamation.
+- [P3] Project is mechanically healthy: No deterministic maintenance issues are blocking the next writing pass.
 ```
 
 The last ember follows another book, so run this with its sibling [`the-fall-of-the-citadel`](../examples/the-fall-of-the-citadel/) beside it; a copy on its own reports a broken series link.
@@ -1206,10 +1206,9 @@ Actions:
 - [P1] Revision pass: character: Wants, arcs, motivation, and who knows what when. Run story voices, story knowledge <id> --at <chapter>, story diagram relationships. Mark it with story passes --done character.
 - [P2] Review promises and payoffs: 1 setup/payoff promises need planting or payoff decisions.
 - [P2] Review open clues: 1 clues are still planned or planted.
-- [P2] Draft chapter 5: Use story add chapter "Chapter 5" --number 5, then outline scenes to advance The Ledger Trail.
 ```
 
-Before any passes are recorded, the same line reads `[P1] Plan revision passes: Run story passes --init to record the structure-to-proof pass ladder, then work one pass at a time.` A custom pass reads `Work through this pass.` with no checks. Once every pass is done, the line disappears.
+A revising book gets no "Draft chapter" action. Before any passes are recorded, the same line reads `[P1] Plan revision passes: Run story passes --init to record the structure-to-proof pass ladder, then work one pass at a time.` A custom pass reads `Work through this pass.` with no checks. Once every pass is done, the line disappears.
 
 ### story doctor
 
@@ -1236,7 +1235,7 @@ Actions:
 
 ### Actions and priorities
 
-All three commands build the same action list. It is sorted by priority, P0 first, and actions with the same priority appear in the order below. The P3 "Project is mechanically healthy" line is the exception: it comes first when it appears.
+All three commands build the same action list. It is sorted by priority, P0 first, and actions with the same priority appear in the order below.
 
 | Priority | Action | Appears when |
 |----------|--------|--------------|
@@ -1251,9 +1250,9 @@ All three commands build the same action list. It is sorted by priority, P0 firs
 | P2 | Track open questions | A question has `status: open` |
 | P2 | Review promises and payoffs | A promise is `planned` or `planted` |
 | P2 | Review open clues | A clue is `planned` or `planted` |
-| P2 | Draft chapter N | Always: the chapter after the highest number, naming up to three unresolved arcs |
+| P2 | Draft chapter N | The chapter after the highest number, naming up to three unresolved arcs. Left out when `story.md` has `status: revising` or `status: complete`, or when every arc is `resolved` |
 | P2 | Create first character | The project has no characters |
-| P3 | Project is mechanically healthy | Nothing else applies except drafting the next chapter; listed first |
+| P3 | Project is mechanically healthy | All three checks pass with no warnings, and no action above applies except drafting the next chapter or creating a first character |
 
 Work down from P0. P0 and P1 items are mechanical and have a command to run. P2 items are writing decisions.
 

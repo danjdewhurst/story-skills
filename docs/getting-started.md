@@ -322,6 +322,7 @@ Checks: validate ok (0 errors, 0 warnings), links ok (0 errors, 0 warnings), con
 Actions:
 - [P2] Draft chapter 1: Use story add chapter "Chapter 1" --number 1, then outline scenes to establish the next story beat.
 - [P2] Create first character: Use story add character "Name" --role protagonist before drafting prose.
+- [P3] Project is mechanically healthy: No deterministic maintenance issues are blocking the next writing pass.
 ```
 
 ### 2. Add a character and a location
@@ -507,8 +508,8 @@ Continuity is consistent: 0 errors, 0 warnings, 0 dismissed
 Checks: validate ok (0 errors, 0 warnings), links ok (0 errors, 0 warnings), continuity ok (0 errors, 0 warnings)
 
 Actions:
-- [P3] Project is mechanically healthy: No deterministic maintenance issues are blocking the next writing pass.
 - [P2] Draft chapter 2: Use story add chapter "Chapter 2" --number 2, then outline scenes to establish the next story beat.
+- [P3] Project is mechanically healthy: No deterministic maintenance issues are blocking the next writing pass.
 ```
 
 `story continuity` checks the story rather than the files: characters who appear after they die, payoffs that land before their setup, questions answered before they are asked, and stale continuity state. [Continuity and analysis](continuity.md) explains each check.
