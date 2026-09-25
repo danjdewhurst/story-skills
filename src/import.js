@@ -260,14 +260,26 @@ function normalizeSource(text, name) {
   }
   // Code, HTML comments, link targets and URLs, table separator rows,
   // indented code, and lines of only dashes (scene breaks) keep their hyphens.
-  return splitFences(text).map((part) => (part.fenced ? part.text : protectComments(part.text, (prose) => prose
-    .split("\n")
-    .map((line) => (/^\s*(?:-\s*){3,}$/.test(line) || /^\s*\|?[\s:|-]*-[\s:|-]*\|[\s:|-]*$/.test(line) || /^(?: {4}|\t)/.test(line)
-      ? line
-      : line.split(/(`[^`]*`|\]\([^)\s]*\)|<[a-z][a-z0-9+.-]*:[^>\s]*>|\b[a-z][a-z0-9+.-]*:\/\/\S+)/i).map((piece, index) => (index % 2 === 1
-        ? piece
-        : piece.replace(/(^|[^-])---(?!-)/g, "$1—").replace(/(^|[^-])--(?!-)/g, "$1–"))).join("")))
-    .join("\n")))).join("");
+  return splitFences(text).map((part) => (part.fenced ? part.text : protectComments(part.text, (prose) => {
+    // An indented line is code, unless it continues a list item.
+    let inList = false;
+    return prose.split("\n").map((line) => {
+      const indented = /^(?: {4}|\t)/.test(line);
+      if (!indented && line.trim() !== "") {
+        inList = /^\s{0,3}(?:[-*+]|\d+[.)])\s/.test(line);
+      }
+      const keep = /^\s*(?:-\s*){3,}$/.test(line) || /^\s*\|?[\s:|-]*-[\s:|-]*\|[\s:|-]*$/.test(line) || (indented && !inList);
+      return keep ? line : convertDashes(line);
+    }).join("\n");
+  }))).join("");
+}
+
+// Dashes outside inline code, link targets, autolinks, and URLs (including
+// mailto: addresses).
+function convertDashes(line) {
+  return line.split(/(`[^`]*`|\]\([^)\s]*\)|<[a-z][a-z0-9+.-]*:[^>\s]*>|\b(?:[a-z][a-z0-9+.-]*:\/\/|mailto:)\S+)/i).map((piece, index) => (index % 2 === 1
+    ? piece
+    : piece.replace(/(^|[^-])---(?!-)/g, "$1—").replace(/(^|[^-])--(?!-)/g, "$1–"))).join("");
 }
 
 // Applies `change` to the text outside HTML comments, scanning once.

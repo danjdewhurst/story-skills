@@ -829,9 +829,10 @@ export function validateLinksOf(project) {
 
   for (const question of project.questions) {
     const label = relative(project, question.file);
-    for (const chapterId of [question.introduced, question.resolved].filter(Boolean)) {
-      checkIdReference(errors, label, chapterId, "chapter", hasChapter);
-    }
+    // A question can be planned for a chapter not written yet; its answer
+    // must be on the page before `resolved` names a chapter.
+    checkIdReference(errors, label, question.introduced, "chapter", question.status === "open" ? hasScheduledChapter : hasChapter);
+    checkIdReference(errors, label, question.resolved, "chapter", hasChapter);
     for (const characterId of question.characters) {
       checkIdReference(errors, label, characterId, "character", hasCharacter);
     }
@@ -1745,13 +1746,16 @@ export function synopsisBook(root, options = {}) {
   const budget = pages === 1 ? 500 : 1500;
   const title = project.title;
   const premise = synopsisPremise(project);
+  // Three pages carry more of each arc than one, so the longer scaffold has
+  // more to work from.
+  const detail = pages === 1 ? { setup: 2, rising: 2, climax: 1, resolution: 1 } : { setup: 4, rising: 8, climax: 2, resolution: 2 };
 
-  let text = renderSynopsis(title, premise, project, 0);
+  let text = renderSynopsis(title, premise, project, 0, detail);
   if (wordCount(text) > budget) {
-    text = renderSynopsis(title, premise, project, 1);
+    text = renderSynopsis(title, premise, project, 1, detail);
   }
   if (wordCount(text) > budget) {
-    text = renderSynopsis(title, premise, project, 2);
+    text = renderSynopsis(title, premise, project, 2, detail);
   }
   if (wordCount(text) > budget) {
     text = truncateWords(text, budget);
@@ -1781,7 +1785,7 @@ const SCAFFOLD_SENTENCES = new Set([
 function synopsisPremise(project) {
   const sentences = synopsisSentences(extractSection(project.story.body, "Synopsis"))
     .filter((sentence) => !/^Imported from .+\.$/.test(sentence));
-  return sentences.length > 0 ? sentences[0] : "No premise recorded.";
+  return sentences.length > 0 ? sentences[0] : "No logline recorded.";
 }
 
 // Sentences of a synopsis section: list markers are dropped and each list
@@ -1841,23 +1845,26 @@ function takeSentences(text, count) {
   return synopsisSentences(text).slice(0, count);
 }
 
-function renderSynopsis(title, premise, project, level) {
-  const lines = [`# Synopsis: ${title}`, "", `Premise: ${premise}`, ""];
+// The logline is the first sentence of story.md's ## Synopsis; the skills
+// keep the controlling idea in the `premise` field, so the line is labelled
+// as the logline.
+function renderSynopsis(title, premise, project, level, detail) {
+  const lines = [`# Synopsis: ${title}`, "", `Logline: ${premise}`, ""];
   for (const arc of project.arcs) {
     const markdown = readMarkdown(arc.file, project.root);
     lines.push(`## ${arc.name}`, "");
-    const setup = takeSentences(extractSection(markdown.body, "Setup"), 2);
+    const setup = takeSentences(extractSection(markdown.body, "Setup"), detail.setup);
     if (setup.length > 0) {
       lines.push(setup.join(" "), "");
     }
     if (level === 0) {
-      const rising = takeSentences(extractSection(markdown.body, "Rising Action"), 2);
+      const rising = takeSentences(extractSection(markdown.body, "Rising Action"), detail.rising);
       if (rising.length > 0) {
         lines.push(rising.join(" "), "");
       }
     }
-    const climax = takeSentences(extractSection(markdown.body, "Climax"), 1);
-    const resolution = level < 2 ? takeSentences(extractSection(markdown.body, "Resolution"), 1) : [];
+    const climax = takeSentences(extractSection(markdown.body, "Climax"), detail.climax);
+    const resolution = level < 2 ? takeSentences(extractSection(markdown.body, "Resolution"), detail.resolution) : [];
     const chain = climax.concat(resolution);
     if (chain.length > 0) {
       lines.push(`Because ${lowercaseCommonStart(chain.join(" "))}`, "");
@@ -2289,7 +2296,9 @@ function continuityState(storyId) {
 
 ## Current Story State
 
-Track facts that must carry forward between chapters.
+Track facts that must carry forward between chapters. The CLI reads the
+\`character-state\`, \`object-state\`, and \`knowledge-state\` lists in the
+frontmatter above; the tables below are optional notes it does not read.
 
 ## Character State
 
@@ -2535,14 +2544,22 @@ function buildProjectActions(project, validation, links, continuity, displayPath
   const nextLabel = activeArcNames.length > 0
     ? `advance ${activeArcNames.join(", ")}`
     : "establish the next story beat";
-  actions.push(action("P2", `Draft chapter ${nextNumber}`, `Use story add chapter "Chapter ${nextNumber}" --number ${nextNumber}${where === "." ? "" : ` --path ${where}`}, then outline scenes to ${nextLabel}.`));
+  const maintenanceCount = actions.length;
+  // A book under revision or finished, or whose arcs are all resolved, needs
+  // no new chapter.
+  const storyStatus = project.story.data.status;
+  const drafting = storyStatus !== "revising" && storyStatus !== "complete"
+    && !(project.arcs.length > 0 && project.arcs.every((arc) => arc.status === "resolved"));
+  if (drafting) {
+    actions.push(action("P2", `Draft chapter ${nextNumber}`, `Use story add chapter "Chapter ${nextNumber}" --number ${nextNumber}${where === "." ? "" : ` --path ${where}`}, then outline scenes to ${nextLabel}.`));
+  }
   if (project.characters.length === 0) {
     actions.push(action("P2", "Create first character", `Use story add character "Name" --role protagonist${where === "." ? "" : ` --path ${where}`} before drafting prose.`));
   }
   // Array#sort is stable (ES2019+), so actions sharing a priority keep their insertion order.
   actions.sort((left, right) => left.priority.localeCompare(right.priority));
-  if (actions.length === 1 && validation.ok && links.ok && continuity.ok && continuity.warnings.length === 0 && staleChapters.length === 0 && chaptersWithoutScenes.length === 0) {
-    actions.unshift(action("P3", "Project is mechanically healthy", "No deterministic maintenance issues are blocking the next writing pass."));
+  if (maintenanceCount === 0 && validation.ok && links.ok && continuity.ok && continuity.warnings.length === 0 && staleChapters.length === 0 && chaptersWithoutScenes.length === 0) {
+    actions.push(action("P3", "Project is mechanically healthy", "No deterministic maintenance issues are blocking the next writing pass."));
   }
   return actions;
 }
@@ -3466,6 +3483,22 @@ function applyEntityBacklinks(root, kind, id, data) {
     }
   }
 
+  if (kind === "scene" && isKebabId(data.chapter)) {
+    // The chapter lists everyone and everywhere its scenes use; continuity
+    // warns when it does not.
+    const chapterFile = path.join("chapters", `${data.chapter}.md`);
+    if (isKebabId(data.location)) {
+      addFrontmatterListValue(root, chapterFile, "locations", data.location);
+    }
+    const chapterPath = path.join(root, chapterFile);
+    const mentions = fs.existsSync(chapterPath) ? asArray(readMarkdown(chapterPath, root).data.mentions) : [];
+    for (const characterId of asArray(data.characters)) {
+      if (isKebabId(characterId) && !mentions.includes(characterId)) {
+        addFrontmatterListValue(root, chapterFile, "characters", characterId);
+      }
+    }
+  }
+
   if (kind === "character") {
     for (const locationId of asArray(data.locations)) {
       if (isKebabId(locationId)) {
@@ -4281,7 +4314,8 @@ export function writeFile(filePath, contents, options = {}) {
     fs.renameSync(temporary, target);
   } catch (error) {
     fs.rmSync(temporary, { force: true });
-    throw error;
+    // Name the file the user asked for, not the temporary one.
+    throw Object.assign(new Error(`Cannot replace hard-linked ${target}: ${error.code ?? error.message}`), { code: error.code });
   }
 }
 

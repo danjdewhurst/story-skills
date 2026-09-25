@@ -76,7 +76,9 @@ export function buildVoices(project, chapters) {
       for (const phrase of stringList(character.voiceWords)) {
         const pattern = phrasePattern(phrase);
         if (!said.some((line) => pattern.test(line.text))) {
-          warnings.push(`${character.id} never says "${phrase}" from their voice-words list in ${said.length} lines of dialogue`);
+          // Only attributed lines count, so say so: the phrase may sit in dialogue
+          // tagged with a pronoun.
+          warnings.push(`${character.id} does not say "${phrase}" from their voice-words list in ${said.length} attributed lines of dialogue`);
         }
       }
     }

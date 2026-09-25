@@ -61,7 +61,7 @@ describe("synopsis builder", () => {
     writeArc(root, "test-arc", STANDARD_ARC);
 
     const { text } = synopsisBook(root);
-    expect(text).toContain("Premise: A ledger burns in the valley.");
+    expect(text).toContain("Logline: A ledger burns in the valley.");
     expect(text).not.toContain("Mara must find who lit the match.");
   });
 
@@ -71,7 +71,7 @@ describe("synopsis builder", () => {
     const raw = fs.readFileSync(storyPath, "utf8");
     fs.writeFileSync(storyPath, raw.replace("A ledger burns in the valley.", "Dr. Mara left the mill."), "utf8");
 
-    expect(synopsisBook(root).text).toContain("Premise: Dr. Mara left the mill.");
+    expect(synopsisBook(root).text).toContain("Logline: Dr. Mara left the mill.");
   });
 
   test("is deterministic across runs", () => {
@@ -92,8 +92,8 @@ describe("synopsis builder", () => {
     );
 
     const { text } = synopsisBook(root);
-    expect(text).toContain("Premise: Who lit the fire?");
-    expect(text).not.toContain("Premise: Who lit the fire? Mara investigates.");
+    expect(text).toContain("Logline: Who lit the fire?");
+    expect(text).not.toContain("Logline: Who lit the fire? Mara investigates.");
   });
 
   test("honors exclamation-mark boundaries in the causal chain", () => {
@@ -118,7 +118,7 @@ describe("synopsis builder", () => {
     );
 
     const { text } = synopsisBook(root);
-    expect(text).toContain("Premise: A ledger burns in the valley.");
+    expect(text).toContain("Logline: A ledger burns in the valley.");
   });
 
   test("renders arc beats in sequence with a Because-joined causal chain", () => {
@@ -251,7 +251,7 @@ The valley keeps its secret.`;
     const result = invoke(cwd, ["synopsis", root]);
     expect(result.code).toBe(0);
     expect(result.out).toContain("# Synopsis: The Long Valley");
-    expect(result.out).toContain("Premise: A ledger burns in the valley.");
+    expect(result.out).toContain("Logline: A ledger burns in the valley.");
   });
 
   test("cli writes a 3-page synopsis file", () => {
