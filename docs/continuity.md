@@ -62,13 +62,13 @@ Every finding starts with a severity and, usually, a file path. Match the rest o
 
 | The finding contains | Command | Explained in |
 |----------------------|---------|--------------|
-| `lists <id>, who died in`, `has died-in`, `died-in references missing chapter` | `continuity` | [Deaths and posthumous appearances](#deaths-and-posthumous-appearances) |
+| `lists <id>, who died in`, `who died before the story`, `has died-in`, `died-in references missing chapter` | `continuity` | [Deaths and posthumous appearances](#deaths-and-posthumous-appearances) |
 | `POV character <id> is not listed in characters`, `does not list them in characters or mentions`, `does not list that location`, `Chapter numbering skips` | `continuity` | [Casts and locations](#casts-and-locations) |
 | `pays off in … before it is planted`, `resolves in … before it is introduced`, `no payoff chapter`, `no planted chapter`, `no plant chapter`, `has no resolved chapter`, `status is still open`, `status is still planned` | `continuity` | [Promises, questions, and clues](#promises-questions-and-clues) |
 | `has no payoff yet`, `payoff chapter … has passed` | `continuity` | [Unfired setups](#unfired-setups-the-chekhov-warning) |
 | `story.md is complete but` | `continuity` | [Finishing the book](#finishing-the-book) |
 | `current-chapter … is behind`, `current-chapter … is ahead`, `state.md … references missing`, `is missing knows`, `repeats fact`, `must be a kebab-case id`, `conflicts with`, `must be a mapping` | `continuity` | [Continuity state](#continuity-state) |
-| `uses <artifact>, destroyed/lost since`, `mentions <artifact>, destroyed/lost since`, `destroyed/lost with no since chapter`, `references missing since chapter` | `continuity` | [Prop custody](#prop-custody) |
+| `uses <artifact>, destroyed/lost since`, `mentions <artifact>, destroyed/lost since`, `destroyed/lost before the story`, `references missing since chapter` | `continuity` | [Prop custody](#prop-custody) |
 | `timestamp runs backward`, `allows only …h for travel`, `is earlier than Chapter`, `malformed date`, `malformed time`, `negative travel-hours` | `continuity` | [Clock and travel time](#clock-and-travel-time) |
 | `puts <character> at <location> …, but the fastest route takes` | `continuity` | [Route travel](#route-travel) |
 | `dismissed:` | `continuity` | [Exemptions](#exemptions) |
@@ -138,6 +138,8 @@ A file that fails to parse is reported as an error, and the rest of the project 
 
 A character with `died-in: chapter-NN` must have `status: deceased`, and must not appear in the cast of any later chapter or scene. A character counts as appearing when they are the `pov` or are listed in `characters`. Flashbacks, memories, letters, recordings, and ghosts belong in `mentions`, which the death check ignores.
 
+A character with `status: deceased` and no `died-in` died before the story starts, so any appearance in a chapter or scene cast is a warning.
+
 ```yaml
 # characters/edran-vale.md
 name: Edran Vale
@@ -150,6 +152,7 @@ died-in: chapter-02
 | error | `<character> has died-in <chapter> but status <status>; set status: deceased` | Set `status: deceased`, or remove `died-in` if the character survives. |
 | error | `<character> died-in references missing chapter <chapter>` | Point `died-in` at a chapter that exists. |
 | error | `<chapter or scene> lists <id>, who died in <chapter>; move posthumous appearances to mentions` | Move the id from `characters` (or `pov`) to `mentions`. If they really are alive, fix `died-in`. |
+| warning | `<chapter or scene> lists <id>, who died before the story (deceased with no died-in); move appearances to mentions` | Move the id from `characters` (or `pov`) to `mentions`. If they die during the story, set `died-in`. |
 
 ### Casts and locations
 
@@ -198,7 +201,7 @@ Entries with `status: abandoned` are skipped entirely. Everything else is checke
 | error | `<question> records resolved chapter <chapter> but status is still open` | Set `status: resolved` (or `answered`), or clear `resolved`. |
 | warning | `<promise or clue> records planted chapter <chapter> but status is still planned` | Set `status: planted` once the setup is on the page. The warning appears only once that chapter has prose: it is at or before the latest drafted chapter (see below). |
 
-`story links` separately checks that the chapter ids in these fields exist, with one allowance for scheduling ahead. A promise or clue may name a `chapter-NN` that has no chapter file yet in `payoff`, and in `planted` while its status is `planned`; a question may name one in `introduced` while its status is `open`. The number must be 1 or more and must not belong to an existing chapter under another id, so `chapter-1` beside `chapter-01`, or `chapter-00`, is reported as a missing chapter. Once the status is `planted` or `paid-off`, the `planted` chapter must exist, and once it is `paid-off`, the `payoff` chapter must exist too. A question's `introduced` chapter must exist once it is no longer `open`, and its `resolved` chapter must always exist; scaffold the chapter first (`story add chapter "Title" --number 7`). Outline chapters satisfy the link check without counting as drafted.
+`story links` separately checks that the chapter ids in these fields exist, with one allowance for scheduling ahead. A promise or clue may name a `chapter-NN` that has no chapter file yet in `payoff`, and in `planted` while its status is `planned`; a question may name one in `introduced` while its status is `open`; and a research note may name one in `used-in`. The number must be 1 or more and must not belong to an existing chapter under another id, so `chapter-1` beside `chapter-01`, or `chapter-00`, is reported as a missing chapter. Once the status is `planted` or `paid-off`, the `planted` chapter must exist, and once it is `paid-off`, the `payoff` chapter must exist too. A question's `introduced` chapter must exist once it is no longer `open`, and its `resolved` chapter must always exist; scaffold the chapter first (`story add chapter "Title" --number 7`). Outline chapters satisfy the link check without counting as drafted.
 
 #### Unfired setups (the Chekhov warning)
 
@@ -299,10 +302,12 @@ state-changes:
 |----------|---------|-----|
 | error | `<scene> uses <artifact>, destroyed/lost since <chapter>` | Remove or retarget the state change, or move `since` if the artifact survives longer. |
 | error | `<chapter or scene> mentions <artifact>, destroyed/lost since <chapter>` | Drop the mention, or exempt it if the chapter only remembers the object. |
-| warning | `continuity/state.md object-state[<i>] is destroyed/lost with no since chapter; custody cannot be checked` | Add `since`. |
+| error | `<scene> uses <artifact>, destroyed/lost before the story` | The entry has no `since`, so the artifact was gone before chapter 1. Remove or retarget the state change, or add `since` if it is destroyed or lost during this book. |
 | error | `continuity/state.md object-state[<i>] references missing since chapter <chapter>` | Point `since` at an existing chapter. |
 
 Only `object-state` entries with `status: destroyed` or `status: lost` are custody-checked. References in or before the `since` chapter are allowed.
+
+An entry with no `since` means the artifact was destroyed or lost before this story, for example in an earlier book of a series. Every scene whose `state-changes` target it is then an error, while `mentions` stay allowed, since characters can still remember it.
 
 ### Clock and travel time
 
@@ -771,7 +776,7 @@ It never guesses who is speaking. A paragraph's quoted lines (straight `"..."`, 
 1. A speech tag: the character's name next to a speech verb such as `said`, `asked`, `replied`, `whispered`, `muttered`, `called`, `snapped`, or `went on`. A name before the verb wins over one after it, so in `"...," Sera told Kael` the line is Sera's, and `said Kael` gives it to Kael.
 2. Failing that, an action beat: narration that names exactly one character (`Kael shouldered his pack. "For the record..."`).
 
-Anything else is counted as unattributed. A character is matched by their full `name`, their given name (the first word that is not a title, so `Lord Maren` also matches `Maren`), and their `aliases`, case-sensitively. Pronoun tags (`she said`) are never attributed, so in close third person the POV character is often under-counted. Characters with `status: cut` are ignored.
+Anything else is counted as unattributed. A character is matched by their full `name`, their given name (the first word that is not a title, so `Lord Maren` also matches `Maren`), and their `aliases`, case-sensitively. Pronoun tags (`she said`, `said he`) are never attributed, and a paragraph whose narration has one is left unattributed rather than credited to a character it merely names (`'It's nothing,' she said, holding it the way Tam used to`), so in close third person the POV character is often under-counted. Characters with `status: cut` are ignored.
 
 ### What it prints
 
@@ -1245,12 +1250,13 @@ All three commands build the same action list. It is sorted by priority, P0 firs
 | P1 | Review continuity warnings | `story continuity` has warnings after exemptions |
 | P1 | Refresh word counts | A chapter's `word-count` differs from its prose |
 | P1 | Add scene records | A chapter has no scene files in `scenes/` |
+| P1 | Reconcile discovered chapters | A chapter has `mode: discovered` and no `## Chapter Notes (post-hoc)` heading. The detail reads `Run the discovery-drafting reconcile loop and add ## Chapter Notes (post-hoc) for <ids>.` |
 | P1 | Plan revision passes | `story.md` has `status: revising` and no `revision-passes` |
 | P1 | Revision pass: `<name>` | `story.md` has `status: revising` and a pass that is not done |
 | P2 | Track open questions | A question has `status: open` |
 | P2 | Review promises and payoffs | A promise is `planned` or `planted` |
 | P2 | Review open clues | A clue is `planned` or `planted` |
-| P2 | Draft chapter N | The chapter after the highest number, naming up to three unresolved arcs. Left out when `story.md` has `status: revising` or `status: complete`, or when every arc is `resolved` |
+| P2 | Draft chapter N | The chapter after the highest number, naming up to three unresolved arcs. Left out when `story.md` has `status: revising`, `status: complete`, or `status: abandoned`, or when every arc is `resolved` |
 | P2 | Create first character | The project has no characters |
 | P3 | Project is mechanically healthy | All three checks pass with no warnings, and no action above applies except drafting the next chapter or creating a first character |
 

@@ -66,7 +66,9 @@ story wordcount . --write
 story build . --format metadata
 ```
 
-The metadata sheet lists every missing field in its readiness checklist.
+The metadata sheet lists every missing field in its readiness checklist,
+including a `Permissions cleared for quoted matter` row that names each
+matter page still at `permission: pending`, whatever the story status.
 Report it with the validate findings. `validate` warns about
 `permission: pending` only once the story `status` is `complete`, and
 about a research note with a `risk` but no `reviewed-by` only when a final
@@ -106,12 +108,13 @@ story build . --format metadata
    `references/copyright-page.md`:
 
    ```shell
-   story add matter "Copyright" --order 0
+   story add matter "Copyright" --order 0 --heading false
    ```
 
    Use an `order` lower than every other front page so it sits first
    (behind the title page); `story add matter` otherwise takes the next
-   free number. Set `heading: false`. Without this page, every build
+   free number. `--heading false` writes `heading: false` (on an existing
+   page, edit its `heading:` key rather than adding a second one). Without this page, every build
    except Shunn generates a minimal one from `copyright`; write it by hand when the book needs credits, permissions,
    or a Library of Congress line.
 3. For each epigraph, lyric, or quoted page in `matter/`, set `permission`

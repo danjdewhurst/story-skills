@@ -1554,10 +1554,11 @@ The sheet ends in a readiness checklist of every missing field. For *The Gannet 
 - [ ] Cover image (`cover`)
 - [ ] Cover alt text (`cover-alt`)
 - [ ] AI-use statement decided (`ai-disclosure`)
+- [ ] Permissions cleared for quoted matter (`permission`; pending: epigraph)
 - [ ] Story status is complete
 ```
 
-`story validate` only warns about a pending permission once the story is `complete`, and about unreviewed risky research only when a final chapter uses it, so the skill also searches directly and reports everything outstanding, whatever the chapter status:
+The checklist names the epigraph whose `permission` is still `pending`. `story validate` only warns about a pending permission once the story is `complete`, and about unreviewed risky research only when a final chapter uses it, so the skill also searches directly and reports everything outstanding, whatever the chapter status:
 
 ```shell
 grep -l "permission: pending" matter/*.md
@@ -1577,7 +1578,7 @@ Using the [metadata checklist](../skills/publishing/references/metadata-checklis
 The copyright page is a matter page ordered first, filled from the [copyright page template](../skills/publishing/references/copyright-page.md) with `heading: false`:
 
 ```shell
-story add matter "Copyright" --order 0
+story add matter "Copyright" --order 0 --heading false
 ```
 
 Without it, every build except Shunn generates a minimal copyright page from `copyright`. Quoted pages get their permission fields, as in [Editorial review](#editorial-review). The skill rebuilds the metadata sheet until the checklist is clean.

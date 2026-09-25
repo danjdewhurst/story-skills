@@ -67,3 +67,13 @@ Inverse pairs:
 
 Symmetric types (same both ways):
 - sibling, spouse, partner, in-law, friend, ally, rival, enemy, adversary, cousin, colleague, foil, confidant, love-interest
+
+## Upgrading from before 0.10.0
+
+This reference used to allow `former-supervisor` on both sides of a pair and `antagonist` as the backlink for `adversary`. `story links` warns on those pairings rather than failing, naming the fix:
+
+```text
+warning: characters/ilya.md relationship adversary to mara has backlink antagonist, a pairing from before story-skills 0.10.0; change the backlink to adversary
+```
+
+Change the backlink on the named character to the expected type (`former-subordinate` for a former supervisor, `adversary` for an adversary), then rerun `story links`.

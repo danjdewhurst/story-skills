@@ -118,7 +118,10 @@ those, and sensitivity or authenticity reads, through the
 
 ### 5. Connect it to the story
 
-1. List every chapter that relies on the note in `used-in`.
+1. List every chapter that relies on the note in `used-in`. A chapter not
+   written yet is fine (`chapter-09` before it exists), but `story links`
+   still reports a typo of an existing chapter (`chapter-1` beside
+   `chapter-01`) or `chapter-00` as missing.
 2. Under `## Story Use`, record how the prose uses the facts and any
    deliberate departure from them (compressed timelines, invented
    institutions). A recorded departure is a choice, not an error.
