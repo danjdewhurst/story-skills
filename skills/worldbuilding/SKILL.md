@@ -27,9 +27,9 @@ A story project must already exist (created via the story-init skill). Verify by
    - Routes to other locations: travel time in hours and mode (see `references/maps-and-routes.md`)
    - Pronunciation, if the name is invented or easily misread (`pronunciation: "KEL-ah-mar"`)
 5. Before settling an invented name, run `story names "{Candidate}"` to catch clashes and look-alikes (see `references/naming-languages.md`)
-6. Write the file using `references/location-template.md`
-7. Save to `worldbuilding/locations/{name-kebab}.md`
-8. Update `worldbuilding/_index.md` locations table
+6. Create it with `story add location "{Location Name}" --type "{type}"` when the CLI is available (add `--region`, `--population`, `--controlled-by`, and `--character` as known); it writes `worldbuilding/locations/{name-kebab}.md` and updates `worldbuilding/_index.md`. Then fill the body from `references/location-template.md`
+7. Without the CLI, write the file from `references/location-template.md` to `worldbuilding/locations/{name-kebab}.md`
+8. Without the CLI, update the `worldbuilding/_index.md` locations table
 9. If notable characters are listed, verify those character files exist and add this location's kebab-case identifier to each character file's `locations` frontmatter list
 10. When CLI access is available, run `story reindex .`, `story links .`, and `story validate .`
 
