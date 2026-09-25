@@ -67,17 +67,17 @@ story add clue "The silver locket" --planted chapter-02 --payoff chapter-05
 ```
 
 Omit `--payoff` when the payoff is not yet known. `--planted` records the
-chapter and leaves `status: planned`. Set `status: planted` when the clue
-is on the page. The generated frontmatter, before that status change:
+chapter and sets `status: planted`; without it the status is `planned`.
+Pass `--status planned` if the clue is not on the page yet. The generated
+frontmatter:
 
 ```yaml
 ---
 title: The silver locket
-status: planned
+status: planted
 planted: chapter-02
 payoff: chapter-05
 significance-delayed: false
-red-herring: false
 characters: []
 arcs: []
 ---
