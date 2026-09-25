@@ -6,7 +6,7 @@ import { checkContinuity, storyDateError, storyTimeError } from "./continuity.js
 import { FRONTMATTER_PATTERN, parseFrontmatter, replaceFrontmatter, stringifyFrontmatter } from "./frontmatter.js";
 import { readTextFile } from "./files.js";
 import { isTruthy } from "./options.js";
-import { chapterProse, escapeRegExp, extractSection, fencedLineIndexes, hasUnclosedComment, isSceneBreak, kebabCase, titleCaseSlug, wordCount } from "./markdown.js";
+import { chapterHeading, chapterProse, escapeRegExp, extractSection, fencedLineIndexes, hasUnclosedComment, isSceneBreak, kebabCase, titleCaseSlug, wordCount } from "./markdown.js";
 import { buildTimeline } from "./timeline.js";
 import { buildClueMatrix } from "./clues.js";
 import { buildDiagram } from "./diagram.js";
@@ -1689,7 +1689,7 @@ export function exportManuscript(root, options = {}) {
 
   manuscript.front.forEach(pushMatter);
   for (const chapter of manuscript.chapters) {
-    lines.push(`# Chapter ${chapter.number}: ${chapter.title}`, "", chapter.body, "");
+    lines.push(`# ${chapterHeading(chapter.number, chapter.title)}`, "", chapter.body, "");
   }
   manuscript.back.forEach(pushMatter);
 
@@ -3026,7 +3026,7 @@ function chapterFile(title, number, options) {
     time: options.time ?? "",
     ...(options.hook === undefined ? {} : { hook: options.hook }),
     "word-count": 0
-  })}# Chapter ${number}: ${title}
+  })}# ${chapterHeading(number, title)}
 
 ## Outline
 
@@ -3741,7 +3741,7 @@ function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
   for (const chapter of manuscript.chapters) {
     documents.push({
       id: `chapter-${String(chapter.number).padStart(2, "0")}`,
-      label: `Chapter ${chapter.number}: ${chapter.title}`,
+      label: chapterHeading(chapter.number, chapter.title),
       content: chapterXhtml(chapter, lang),
       bodymatter: true
     });
@@ -3827,7 +3827,7 @@ function xhtmlDocument(title, lang, bodyType, content) {
 }
 
 function chapterXhtml(chapter, lang = "en") {
-  return xhtmlDocument(chapter.title, lang, "bodymatter chapter", `<h1>Chapter ${chapter.number}: ${xmlEscape(chapter.title)}</h1>${xhtmlParagraphs(chapter.body)}`);
+  return xhtmlDocument(chapter.title, lang, "bodymatter chapter", `<h1>${xmlEscape(chapterHeading(chapter.number, chapter.title))}</h1>${xhtmlParagraphs(chapter.body)}`);
 }
 
 function matterXhtml(entry, placement = "front", lang = "en") {
@@ -3858,7 +3858,7 @@ function htmlBook(manuscript) {
       key: `ch${String(chapter.number).padStart(2, "0")}`,
       kind: "chapter",
       placement: "body",
-      title: `Chapter ${chapter.number}: ${chapter.title}`,
+      title: chapterHeading(chapter.number, chapter.title),
       heading: true,
       paragraphs: paragraphs(chapter.body)
     })),
@@ -3886,7 +3886,7 @@ function writeDocx(outFile, manuscript, writeOptions = {}) {
   const pushMatter = (entry) => pushSection(entry.heading ? entry.title : null, entry.body);
   manuscript.front.forEach(pushMatter);
   for (const chapter of manuscript.chapters) {
-    pushSection(`Chapter ${chapter.number}: ${chapter.title}`, chapter.body);
+    pushSection(chapterHeading(chapter.number, chapter.title), chapter.body);
   }
   manuscript.back.forEach(pushMatter);
 
@@ -3943,7 +3943,7 @@ function shunnTitlePageXml(meta) {
 function writeShunnDocx(outFile, manuscript, meta, writeOptions = {}) {
   const paragraphs = [...shunnTitlePageXml(meta)];
   for (const chapter of manuscript.chapters) {
-    paragraphs.push(shunnChapterHeadingXml(`Chapter ${chapter.number}: ${chapter.title}`));
+    paragraphs.push(shunnChapterHeadingXml(chapterHeading(chapter.number, chapter.title)));
     for (const paragraph of markdownParagraphs(chapter.body)) {
       paragraphs.push(shunnParagraphXml(inlineRuns(paragraph).map(shunnTextRunXml).join(""), false));
     }
@@ -3962,7 +3962,7 @@ function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {}) {
     lines.push(String(contactLine));
   }
   for (const chapter of manuscript.chapters) {
-    lines.push("\f", `# Chapter ${chapter.number}: ${chapter.title}`, "");
+    lines.push("\f", `# ${chapterHeading(chapter.number, chapter.title)}`, "");
     for (const paragraph of markdownParagraphs(chapter.body)) {
       lines.push(paragraph, "");
     }

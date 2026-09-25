@@ -1,11 +1,19 @@
 import { describe, expect, test } from "bun:test";
-import { chapterProse, extractSection, kebabCase, titleCaseSlug, wordCount } from "../src/markdown.js";
+import { chapterHeading, chapterProse, extractSection, kebabCase, titleCaseSlug, wordCount } from "../src/markdown.js";
 
 describe("markdown utilities", () => {
   test("normalizes labels and counts prose words", () => {
     expect(kebabCase(" Sera's Last Ember! ")).toBe("seras-last-ember");
     expect(titleCaseSlug("seras-last-ember")).toBe("Seras Last Ember");
     expect(wordCount("# Title\n\nSera's [lost heir](x.md) `code` **returns**.")).toBe(5);
+  });
+
+  test("omits a chapter title that is blank or only repeats the number", () => {
+    expect(chapterHeading(3, "Arrival")).toBe("Chapter 3: Arrival");
+    expect(chapterHeading(3, "Chapter 3")).toBe("Chapter 3");
+    expect(chapterHeading(3, "chapter 3")).toBe("Chapter 3");
+    expect(chapterHeading(3, "")).toBe("Chapter 3");
+    expect(chapterHeading(3, "Chapter 30")).toBe("Chapter 3: Chapter 30");
   });
 
   test("counts the visible text of links but not their targets or images", () => {

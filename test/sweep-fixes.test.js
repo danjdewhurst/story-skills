@@ -461,7 +461,7 @@ describe("import", () => {
 
   test("prologue and epilogue headings are chapters and spelled-out numbers leave titles", () => {
     const { project } = importText("# Book\n\n## Prologue\n\nBefore.\n\n## Chapter One: Arrival\n\nA.\n\n## Chapter Twenty-One\n\nB.\n\n## Epilogue\n\nAfter.\n", "draft.md");
-    expect(project.chapters.map((chapter) => chapter.title)).toEqual(["Prologue", "Arrival", "Chapter Twenty-One", "Epilogue"]);
+    expect(project.chapters.map((chapter) => chapter.title)).toEqual(["Prologue", "Arrival", "Chapter 3", "Epilogue"]);
   });
 });
 

@@ -132,8 +132,8 @@ A chapter heading is a markdown heading of any level (`#` to `######`) whose tex
 | `### Chapter IV: Storm` | `Storm` |
 | `## Chapter One: Arrival` | `Arrival` |
 | `# Chapter 7. The Bridge` | `The Bridge` |
-| `## Chapter 5` | `Chapter 5` |
-| `## Chapter 6:` | `Chapter 6` |
+| `## Chapter 5` | `Chapter N`, its new number |
+| `## Chapter 6:` | `Chapter N`, its new number |
 | `# Chapter 1: Arrival {#arrival .unnumbered}` | `Arrival` |
 | `# Chapter I Am Legend` | `I Am Legend` |
 | `# Prologue` | `Prologue` |
@@ -147,7 +147,7 @@ The rules behind the table:
 - A `Prologue`, `Epilogue`, `Interlude`, or `Afterword` heading keeps its whole text as the title.
 - Because the number is optional, a heading such as `## Chapter Notes` also starts a chapter (titled `Notes`).
 - The source number is discarded. Chapters are renumbered 1, 2, 3, and so on in the order they appear.
-- When a heading has no title after the number, the whole heading text becomes the title, without a trailing separator (`Chapter 6:` gives `Chapter 6`, `Prologue:` gives `Prologue`).
+- When a `Chapter` heading has no title after the number (`Chapter 6`, `Chapter Six:`), the chapter is titled `Chapter N` with its new number, and its heading is a plain `# Chapter N` rather than `# Chapter N: Chapter N`. Export and build print such a chapter the same way. A bare `Prologue:` is titled `Prologue`.
 - A trailing Pandoc attribute block, such as `{#arrival .unnumbered}`, is dropped from the title.
 
 Import processes each source document in six steps:
@@ -155,7 +155,7 @@ Import processes each source document in six steps:
 1. Leading YAML frontmatter is removed, including frontmatter written by tools such as Pandoc or Obsidian that the CLI's own parser would reject. A leading `---` scene break is kept.
 2. The text is cleaned for its source type. In a markdown source (`.md` or `.markdown`), Pandoc's dash spellings become real dashes: `---` becomes an em dash (`—`) and `--` an en dash (`–`). Text inside inline code spans, closed `` ``` `` code fences, and HTML comments is left alone, and so is everything after a `<!--` that never closes. Link targets (`](...)`), autolinks (`<https://...>`), bare URLs such as `https://example.com/a--b`, and `mailto:` addresses keep their hyphens, and so do a line made only of dashes and spaces (a `---` or `- - -` scene break), a table separator row such as `|---|---|`, and an indented code line (four spaces or a tab). An indented line that continues a list item is prose, so its dashes are converted. In a plain-text source (`.txt`), leading tabs and spaces are removed from every line, so an indented paragraph from Scrivener or a word processor is not read as a markdown code block.
 3. If the document has chapter headings, each heading starts a chapter and everything up to the next chapter heading is its prose. Text before the first chapter heading becomes a chapter titled `Opening`, with a leading `# Title` line removed.
-4. If the document has no markdown chapter headings, as in a manuscript saved as plain text, it is split on chapter lines instead. A chapter line stands alone between blank lines, is at most 80 characters, and is either `Chapter` with a number (`Chapter 3`, `CHAPTER ONE: Arrival`) or one of `Prologue`, `Epilogue`, `Interlude`, and `Afterword`. The number, or the `Prologue`-style word, must end the line or be followed by a separator (`:`, `.`, `-`, `–`, `—`), with or without a title after it, so `Chapter 12 was the worst.`, `Chapter Nine Lives of a Cat`, and `Prologue of doom` do not split, while `Epilogue: After`, a bare `Prologue:`, and `Chapter 3:` (titled `Chapter 3`) do. A single short line before the first chapter line is taken as the book title and dropped; longer text there becomes an `Opening` chapter.
+4. If the document has no markdown chapter headings, as in a manuscript saved as plain text, it is split on chapter lines instead. A chapter line stands alone between blank lines, is at most 80 characters, and is either `Chapter` with a number (`Chapter 3`, `CHAPTER ONE: Arrival`) or one of `Prologue`, `Epilogue`, `Interlude`, and `Afterword`. The number, or the `Prologue`-style word, must end the line or be followed by a separator (`:`, `.`, `-`, `–`, `—`), with or without a title after it, so `Chapter 12 was the worst.`, `Chapter Nine Lives of a Cat`, and `Prologue of doom` do not split, while `Epilogue: After`, a bare `Prologue:`, and `Chapter 3:` (titled `Chapter N` with its new number) do. A single short line before the first chapter line is taken as the book title and dropped; longer text there becomes an `Opening` chapter.
 5. If the document has neither, the whole document becomes one chapter. Its title is the first `# ` heading in the document, and any text before that heading is kept in the prose. With no `# ` heading, the title comes from the file name: `02-smoke.txt` becomes `02 Smoke`.
 6. Chapters whose prose is empty are dropped.
 

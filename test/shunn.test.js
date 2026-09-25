@@ -62,8 +62,8 @@ describe("shunn manuscript format", () => {
     const { outFile } = buildBook(root, { format: "shunn" });
     const text = fs.readFileSync(outFile, "utf8");
 
-    expect(text).toContain("\f\n# Chapter 1: Chapter 1");
-    expect(text).toContain("\f\n# Chapter 2: Chapter 2");
+    expect(text).toContain("\f\n# Chapter 1\n");
+    expect(text).toContain("\f\n# Chapter 2\n");
   });
 
   test("separates prose paragraphs with blank lines", () => {

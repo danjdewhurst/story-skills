@@ -16,6 +16,14 @@ export function titleCaseSlug(slug) {
     .join(" ");
 }
 
+// "Chapter 3: Arrival", or plain "Chapter 3" when the title is blank or only
+// repeats the number, so an untitled chapter never reads "Chapter 3: Chapter 3".
+export function chapterHeading(number, title) {
+  const text = String(title ?? "").trim();
+  const label = `Chapter ${number}`;
+  return text === "" || text.toLowerCase() === label.toLowerCase() ? label : `${label}: ${text}`;
+}
+
 const WORD_PATTERN = /[\p{L}\p{N}]+(?:['\u2019-][\p{L}\p{N}]+)*/gu;
 
 export function splitWords(markdown) {
