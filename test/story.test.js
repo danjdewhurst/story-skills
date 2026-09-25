@@ -234,7 +234,7 @@ word-count: 0
     fs.rmSync(chapterIndex);
     fs.symlinkSync(outside, chapterIndex);
 
-    expect(() => reindexProject(created.root)).toThrow("Refusing to write through symlink");
+    expect(() => reindexProject(created.root)).toThrow("Refusing to read through symlink");
     expect(fs.readFileSync(outside, "utf8")).toBe("outside sentinel");
   });
 

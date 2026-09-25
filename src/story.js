@@ -4,7 +4,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { checkContinuity, storyDateError, storyTimeError } from "./continuity.js";
 import { FRONTMATTER_PATTERN, parseFrontmatter, replaceFrontmatter, stringifyFrontmatter } from "./frontmatter.js";
-import { chapterProse, escapeRegExp, extractSection, hasUnclosedComment, kebabCase, titleCaseSlug, wordCount } from "./markdown.js";
+import { readTextFile } from "./files.js";
+import { chapterProse, escapeRegExp, extractSection, hasUnclosedComment, isSceneBreak, kebabCase, titleCaseSlug, wordCount } from "./markdown.js";
 import { buildTimeline } from "./timeline.js";
 import { buildClueMatrix } from "./clues.js";
 import { buildDiagram } from "./diagram.js";
@@ -502,7 +503,7 @@ export function scanProject(root) {
       heading: data.heading !== false,
       empty: chapterProse(markdown.body).trim() === ""
     }), scanErrors).sort((left, right) => left.order - right.order || left.id.localeCompare(right.id, "en")),
-    exemptions: readExemptions(projectRoot),
+    exemptions: readExemptions(projectRoot, scanErrors),
     styleSheet: readStyleSheet(projectRoot, scanErrors),
     progressLog: readOptionalRootFile(projectRoot, PROGRESS_FILE, scanErrors),
     continuity
@@ -549,6 +550,11 @@ export function validateProjectOf(project) {
   validatePublishing(project.story.data, errors, warnings);
   validatePronunciations(project, errors);
   collectStrayFileWarnings(project, warnings);
+  for (const file of ENTITY_SCAN_DIRS.flatMap((dir) => entityFileNames(projectRoot, dir))) {
+    if (WINDOWS_RESERVED_ID.test(path.basename(file, ".md").toLowerCase())) {
+      warnings.push(`${file} uses a file name Windows reserves, so the project cannot be checked out on Windows; rename the entity`);
+    }
+  }
 
   const indexChecks = [
     [path.join("characters", "_index.md"), project.characters.map((item) => `](${item.id}.md)`)],
@@ -627,7 +633,17 @@ export function validateLinksOf(project) {
   // `chapter-NN` with no file yet is a plan, not a broken link, until the
   // status says the setup or payoff is already on the page. `continuity`
   // reads the same ids by their number.
-  const hasScheduledChapter = (id) => chapters.has(id) || /^chapter-\d+$/.test(id);
+  // An id whose number belongs to an existing chapter (`chapter-1` beside
+  // `chapter-01`) is a typo, and chapter numbers start at 1.
+  const existingNumbers = new Set(project.chapters.map((chapter) => chapter.number));
+  const hasScheduledChapter = (id) => {
+    if (chapters.has(id)) {
+      return true;
+    }
+    const match = /^chapter-(\d+)$/.exec(id);
+    const number = match ? Number.parseInt(match[1], 10) : 0;
+    return number > 0 && !existingNumbers.has(number);
+  };
   const hasArc = (id) => arcs.has(id);
   // `mentions` may name characters or artifacts; prop custody checks read
   // artifact ids there.
@@ -851,8 +867,7 @@ function validateTimelineAndArcBodyRefs(project, chapters, errors) {
   const timelinePath = path.join(project.root, "plot", "timeline.md");
   if (fs.existsSync(timelinePath)) {
     try {
-      assertFileSizeWithinLimit(timelinePath);
-      const raw = fs.readFileSync(timelinePath, "utf8");
+      const raw = readTextFile(timelinePath);
       const body = parseFrontmatter(raw, timelinePath).body ?? raw;
       for (const token of extractChapterIdTokens(body)) {
         if (!chapterIds.has(token)) {
@@ -1005,7 +1020,9 @@ export function knowledgeAtChapter(root, characterId, atChapterId) {
 export function seriesReport(root) {
   const projectRoot = path.resolve(root);
   requireStoryFile(projectRoot);
-  return buildSeries(projectRoot, scanProject);
+  // Linked books resolve relative to the real folder, so a book reached
+  // through a symlinked path finds its siblings.
+  return buildSeries(fs.realpathSync(projectRoot), scanProject);
 }
 
 export function projectReport(root, options = {}) {
@@ -1228,9 +1245,10 @@ export function reindexProject(root) {
 // Commands that rewrite registries or aggregate chapters would silently drop
 // a file that fails to parse, so they stop and name it instead.
 function assertProjectParses(project, action) {
-  // The style sheet and progress log never feed registries or chapters.
-  const errors = (project.fileErrors ?? [])
-    .filter((error) => !error.startsWith(`${STYLE_SHEET_FILE}:`) && !error.startsWith(`${PROGRESS_FILE}:`));
+  // The style sheet, progress log, and exemptions never feed registries or
+  // chapters.
+  const ignored = [STYLE_SHEET_FILE, PROGRESS_FILE, path.join("continuity", "exemptions.md")];
+  const errors = (project.fileErrors ?? []).filter((error) => !ignored.some((file) => error.startsWith(`${file}:`)));
   if (errors.length > 0) {
     throw new Error(`Cannot ${action}: fix ${errors.length === 1 ? "this file first (story validate reports it)" : "these files first (story validate reports them)"}:\n${errors.map((error) => `- ${error}`).join("\n")}`);
   }
@@ -1254,39 +1272,63 @@ function writeRegistry(filePath, build, changed, root) {
 }
 
 function customSections(existing, generated) {
-  // A generated heading may carry a value (`## Total Word Count: 993`), so
-  // headings compare without a trailing `: <number>`. Each generated heading
-  // claims one existing section; a second section with the same heading is
-  // hand-written and kept.
-  const headingKey = (text) => text.replace(/:\s*\d[\d,]*$/, "");
+  // Only a generated heading that carries a value (`## Total Word Count: 993`)
+  // is matched without it; every other heading must match exactly, so a
+  // hand-written `## Registry: 2` stays custom. Each generated heading claims
+  // one existing section, and stale copies of a value heading (left by
+  // 0.10.0) are dropped.
+  const valuePattern = /:\s*\d[\d,]*$/;
+  const valueHeadings = new Set();
   const unclaimed = new Map();
-  for (const match of generated.matchAll(/^## +(.+?)[ \t]*$/gm)) {
-    const key = headingKey(match[1]);
+  for (const heading of markdownHeadings(generated).filter((entry) => entry.level === 2)) {
+    const hasValue = valuePattern.test(heading.text);
+    const key = hasValue ? heading.text.replace(valuePattern, "") : heading.text;
+    if (hasValue) {
+      valueHeadings.add(key);
+    }
     unclaimed.set(key, (unclaimed.get(key) ?? 0) + 1);
   }
   const body = existing.replace(/^---\n[\s\S]*?\n---\n/, "");
-  // A section runs to the next heading of level 1 or 2, so a section above
-  // the title never swallows the `# Title` line.
-  const headings = [...body.matchAll(/^(#{1,2}) +(.+?)[ \t]*$/gm)];
+  const lines = body.split("\n");
+  // A section runs to the next heading of level 1 or 2 outside a code
+  // fence, so a section above the title never swallows the `# Title` line.
+  const headings = markdownHeadings(body);
   const sections = [];
-  for (const [index, match] of headings.entries()) {
-    if (match[1] !== "##") {
+  for (const [index, heading] of headings.entries()) {
+    if (heading.level !== 2) {
       continue;
     }
-    const key = headingKey(match[2]);
+    const stripped = heading.text.replace(valuePattern, "");
+    const key = valueHeadings.has(stripped) ? stripped : heading.text;
     const claimed = (unclaimed.get(key) ?? 0) > 0;
     if (claimed) {
       unclaimed.set(key, unclaimed.get(key) - 1);
     }
-    // A stale copy of a generated value heading (left by 0.10.0, which kept
-    // each old `## Total Word Count: N`) is dropped, not kept as custom.
-    const stale = key !== match[2] && unclaimed.has(key);
+    const stale = key !== heading.text;
     if (!claimed && !stale) {
-      const end = index + 1 < headings.length ? headings[index + 1].index : body.length;
-      sections.push(body.slice(match.index, end).trim());
+      const end = index + 1 < headings.length ? headings[index + 1].line : lines.length;
+      sections.push(lines.slice(heading.line, end).join("\n").trim());
     }
   }
   return sections;
+}
+
+// Level 1 and 2 ATX headings with their line numbers, skipping fenced code.
+function markdownHeadings(markdown) {
+  const headings = [];
+  let fence = null;
+  for (const [line, text] of markdown.split("\n").entries()) {
+    const fenceMatch = /^ {0,3}(`{3,}|~{3,})/.exec(text);
+    if (fenceMatch && (fence === null || fenceMatch[1][0] === fence[0] && fenceMatch[1].length >= fence.length)) {
+      fence = fence === null ? fenceMatch[1] : null;
+    } else if (fence === null) {
+      const heading = /^(#{1,2}) +(.+?)[ \t]*$/.exec(text);
+      if (heading) {
+        headings.push({ level: heading[1].length, text: heading[2], line });
+      }
+    }
+  }
+  return headings;
 }
 
 function refreshStoryField(filePath, storyId, changed, root) {
@@ -1295,7 +1337,7 @@ function refreshStoryField(filePath, storyId, changed, root) {
   }
   let raw;
   try {
-    raw = fs.readFileSync(filePath, "utf8");
+    raw = readTextFile(filePath);
   } catch {
     return;
   }
@@ -1757,8 +1799,12 @@ function synopsisSentences(section) {
   return splitSentences(text).filter((sentence) => !SCAFFOLD_SENTENCES.has(sentence));
 }
 
-// Words that end in a full stop without ending the sentence.
-const ABBREVIATIONS = /(?:^|[\s(“"‘'])(?:Dr|Mr|Mrs|Ms|St|Mt|Jr|Sr|Prof|Capt|Gen|Col|Lt|Sgt|Rev|Fr|No|vs|etc|e\.g|i\.e|a\.m|p\.m|[A-Za-z])$/;
+// Words that end in a full stop without ending the sentence: titles and
+// initials (Dr. Hale, J. Smith, the U.S. Navy) never end one. Words that
+// often close a sentence too (etc., No., a.m.) end it unless the next word
+// starts in lower case or with a digit (No. 5, 9 a.m. sharp).
+const TITLE_ABBREVIATIONS = /(?:^|[\s(“"‘'])(?:Dr|Mr|Mrs|Ms|St|Mt|Jr|Sr|Prof|Capt|Gen|Col|Lt|Sgt|Rev|Fr|e\.g|i\.e|(?:[A-Za-z]\.)*[A-Za-z])$/;
+const CONTEXT_ABBREVIATIONS = /(?:^|[\s(“"‘'])(?:No|vs|etc|a\.m|p\.m)$/;
 // A sentence ends at . ! ? or … plus any closing quotes or brackets, before
 // a space or the end of the text.
 const SENTENCE_END = /[.!?…]["”’')\]]*(?= |$)/g;
@@ -1772,10 +1818,13 @@ function splitSentences(text) {
   let start = 0;
   for (const match of normalized.matchAll(SENTENCE_END)) {
     const before = normalized.slice(start, match.index);
-    if (match[0].startsWith(".") && ABBREVIATIONS.test(before)) {
+    const end = match.index + match[0].length;
+    const nextWord = normalized.slice(end + 1, end + 2);
+    const continues = /^[\p{Ll}\p{N}]/u.test(nextWord);
+    const abbreviation = CONTEXT_ABBREVIATIONS.test(before) ? continues : TITLE_ABBREVIATIONS.test(before);
+    if (match[0] === "." && abbreviation) {
       continue;
     }
-    const end = match.index + match[0].length;
     sentences.push(normalized.slice(start, end).trim());
     start = end;
   }
@@ -1824,7 +1873,8 @@ const COMMON_OPENERS = new Set([
 ]);
 
 function lowercaseCommonStart(text) {
-  const first = /^[A-Za-z]+/.exec(text)?.[0] ?? "";
+  // A whole word only, so "A.J." and "He-Man" keep their capitals.
+  const first = /^[A-Za-z]+(?=\s)/.exec(text)?.[0] ?? "";
   return COMMON_OPENERS.has(first.toLowerCase()) ? `${text[0].toLowerCase()}${text.slice(1)}` : text;
 }
 
@@ -1934,6 +1984,7 @@ export function createEntity(root, options) {
   }
 
   const entity = buildEntity(project, kind, name, options);
+  assertPortableId(entity.id, kind);
   if (fs.existsSync(entity.file)) {
     throw new Error(`${relative(project, entity.file)} already exists`);
   }
@@ -1969,6 +2020,7 @@ export function renameEntity(root, options) {
   if (!isKebabId(newId)) {
     throw new Error(`Cannot derive a kebab-case id from ${kind} name "${name}"`);
   }
+  assertPortableId(newId, kind);
   const newFile = path.join(project.root, config.dir, `${newId}.md`);
   assertSafeProjectPath(newFile, project.root);
   if (newFile !== oldFile && fs.existsSync(newFile)) {
@@ -2635,6 +2687,16 @@ function normalizeKind(kind) {
   return KIND_ALIASES[normalized];
 }
 
+// Windows reserves these file names with any extension, so `con.md` cannot
+// be checked out there.
+const WINDOWS_RESERVED_ID = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/;
+
+function assertPortableId(id, kind) {
+  if (WINDOWS_RESERVED_ID.test(id)) {
+    throw new Error(`Cannot use ${kind} id ${id}: Windows reserves the file name ${id}.md. Choose a longer name, such as "${id} ${kind}"`);
+  }
+}
+
 function requireKebabId(id, label) {
   if (!isKebabId(id)) {
     throw new Error(`${label} must be a kebab-case id`);
@@ -3275,8 +3337,7 @@ function planReferenceRewrites(root, context, overrides, transform, transformBod
     let text = override;
     if (text === undefined) {
       assertSafeProjectPath(file, root);
-      assertFileSizeWithinLimit(file);
-      text = fs.readFileSync(file, "utf8");
+      text = readTextFile(file);
     }
     const match = FRONTMATTER_PATTERN.exec(text);
     if (!match && isProjectSourceFile(root, file)) {
@@ -3474,7 +3535,8 @@ function manuscriptParts(project, action = "build") {
     chapters.push({
       number: chapter.number,
       title: chapter.title,
-      body: chapterProse(markdown.body).trim()
+      // LF only, so a CRLF checkout builds the same bytes as an LF one.
+      body: chapterProse(markdown.body).replace(/\r\n?/g, "\n").trim()
     });
   }
 
@@ -3492,7 +3554,7 @@ function manuscriptParts(project, action = "build") {
       title: entry.title,
       heading: entry.heading,
       copyright: isCopyrightMatter(entry),
-      body: chapterProse(readMarkdown(entry.file, project.root).body).trim()
+      body: chapterProse(readMarkdown(entry.file, project.root).body).replace(/\r\n?/g, "\n").trim()
     }));
 
   const meta = publishingMeta(project.story.data);
@@ -3935,14 +3997,14 @@ function runMarkup(run, escape) {
 }
 
 // A thematic break: three or more of the same marker, optionally spaced.
-const SCENE_BREAK_PATTERN = /^([*_-])( ?\1){2,}$/;
-
 function markdownParagraphs(markdown) {
   const paragraphs = [];
   // Normalize CRLF and treat whitespace-only lines as blank, matching
   // CommonMark paragraph breaks.
   for (const paragraph of markdown
     .replace(/\r\n?/g, "\n")
+    // A backslash at a line end is a hard line break; the lines join.
+    .replace(/\\\n/g, "\n")
     .replace(/^#+[ \t]+/gm, "")
     // Blockquote markers flatten like headings, so a quoted epigraph or
     // letter reads as text rather than a literal ">".
@@ -3950,7 +4012,7 @@ function markdownParagraphs(markdown) {
     .split(/\n[ \t]*\n\s*/)) {
     const trimmed = paragraph.replace(/\s+/g, " ").trim();
     if (trimmed) {
-      paragraphs.push(SCENE_BREAK_PATTERN.test(trimmed) ? "* * *" : trimmed);
+      paragraphs.push(isSceneBreak(trimmed) ? "* * *" : trimmed);
     }
   }
   return paragraphs;
@@ -4056,13 +4118,9 @@ const MAX_SCAN_FILE_BYTES = 5 * 1024 * 1024;
 const MAX_SCAN_FILES = 5000;
 const MAX_SCAN_DEPTH = 10;
 
+// For binary files such as the cover; text files go through readTextFile.
 function assertFileSizeWithinLimit(filePath) {
-  let size = 0;
-  try {
-    size = fs.statSync(filePath).size;
-  } catch {
-    return;
-  }
+  const size = fs.statSync(filePath).size;
   if (size > MAX_SCAN_FILE_BYTES) {
     throw new Error('Refusing to read oversized file ' + filePath + ': ' + size + ' bytes exceeds the ' + MAX_SCAN_FILE_BYTES + ' byte limit');
   }
@@ -4110,12 +4168,18 @@ function requireStoryFile(projectRoot) {
 
 // Reads continuity/exemptions.md when present. A missing or unparsable file
 // means no exemptions; strict shape validation lives in validateExemptions.
-function readExemptions(root) {
+function readExemptions(root, scanErrors) {
   const exemptionsPath = path.join(root, "continuity", "exemptions.md");
+  if (!lstatIfExists(exemptionsPath)) {
+    return [];
+  }
   let raw;
   try {
-    raw = fs.readFileSync(exemptionsPath, "utf8");
-  } catch {
+    raw = readTextFile(exemptionsPath);
+  } catch (error) {
+    // A refused file (a symlink, say) must not silently drop every
+    // exemption, so continuity reports it like a parse error.
+    scanErrors.push(`${path.join("continuity", "exemptions.md")}: ${error.message}`);
     return [];
   }
 
@@ -4182,15 +4246,23 @@ function readMarkdown(filePath, root) {
   if (root) {
     assertSafeProjectPath(filePath, root);
   }
-  assertFileSizeWithinLimit(filePath);
-  const rawMarkdown = fs.readFileSync(filePath, "utf8");
+  const rawMarkdown = readTextFile(filePath);
   const parsed = parseFrontmatter(rawMarkdown, filePath);
   return { ...parsed, rawMarkdown };
 }
 
 export function writeFile(filePath, contents, options = {}) {
   const target = prepareWriteTarget(filePath, options.root);
-  fs.writeFileSync(target, contents, "utf8");
+  // Write a sibling file and rename it into place, so a hard link at the
+  // target (to a chapter, say) is replaced rather than written through.
+  const temporary = path.join(path.dirname(target), `.${path.basename(target)}.${process.pid}.tmp`);
+  try {
+    fs.writeFileSync(temporary, contents, "utf8");
+    fs.renameSync(temporary, target);
+  } catch (error) {
+    fs.rmSync(temporary, { force: true });
+    throw error;
+  }
 }
 
 function writeChanged(filePath, contents, changed, root) {
@@ -4208,8 +4280,7 @@ function safeRead(filePath, root) {
   if (root) {
     assertSafeProjectPath(filePath, root);
   }
-  assertFileSizeWithinLimit(filePath);
-  return fs.readFileSync(filePath, "utf8");
+  return readTextFile(filePath);
 }
 
 function readValidationData(file, root, label, errors) {
@@ -4240,6 +4311,14 @@ const ENTITY_SCAN_DIRS = [
   MATTER_DIR,
   RESEARCH_DIR
 ];
+
+function entityFileNames(root, relativeDir) {
+  const directory = path.join(root, relativeDir);
+  if (!fs.existsSync(directory)) {
+    return [];
+  }
+  return fs.readdirSync(directory).filter((name) => name.endsWith(".md") && name !== "_index.md").sort().map((name) => path.join(relativeDir, name));
+}
 
 function collectStrayFileWarnings(project, warnings) {
   const root = project.root;
@@ -4329,8 +4408,12 @@ const SOURCE_DIRECTORIES = ["characters", "chapters", "scenes", "worldbuilding",
 
 function assertNotProjectSource(project, outFile) {
   // Check the path as typed and the real path behind any symlinked folder
-  // (`lnk -> chapters`), case-insensitively for case-insensitive disks.
-  for (const [root, target] of [[project.root, outFile], [fs.realpathSync(project.root), realPathThroughAncestors(outFile)]]) {
+  // (`lnk -> chapters`), case-insensitively for case-insensitive disks,
+  // where `/users/me/book` can name the project at `/Users/me/Book`.
+  const realRoot = fs.realpathSync.native(project.root);
+  const realTarget = realPathThroughAncestors(outFile);
+  const candidates = [[project.root, outFile], [realRoot, realTarget], [realRoot.toLowerCase(), realTarget.toLowerCase()]];
+  for (const [root, target] of candidates) {
     const relativePath = path.relative(root, target);
     if (relativePath === "" || relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
       continue;
@@ -4353,7 +4436,7 @@ function realPathThroughAncestors(target) {
     missing.unshift(path.basename(current));
     current = path.dirname(current);
   }
-  return path.join(fs.realpathSync(current), ...missing);
+  return path.join(fs.realpathSync.native(current), ...missing);
 }
 
 function resolveOutputPath(project, out, defaultRelativePath, enforceRoot) {
@@ -4384,7 +4467,7 @@ function prepareWriteTarget(filePath, root) {
     assertSafeProjectParent(target, root);
   }
 
-  rejectSymlinkTarget(target);
+  rejectSymlinkTarget(target, "write");
   return target;
 }
 
@@ -4392,7 +4475,7 @@ function assertSafeProjectPath(filePath, root) {
   const target = path.resolve(filePath);
   assertLexicallyInsideRoot(target, root);
   assertSafeProjectParent(target, root);
-  rejectSymlinkTarget(target);
+  rejectSymlinkTarget(target, "read");
 }
 
 function assertSafeProjectDirectory(directory, root) {
@@ -4458,9 +4541,9 @@ function assertLexicallyInsideRoot(filePath, root) {
   }
 }
 
-function rejectSymlinkTarget(filePath) {
+function rejectSymlinkTarget(filePath, action) {
   if (lstatIfExists(filePath)?.isSymbolicLink()) {
-    throw new Error(`Refusing to write through symlink: ${filePath}`);
+    throw new Error(`Refusing to ${action} through symlink: ${filePath}`);
   }
 }
 

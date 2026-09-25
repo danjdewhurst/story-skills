@@ -1,4 +1,4 @@
-import { wordCount } from "./markdown.js";
+import { isSceneBreak, wordCount } from "./markdown.js";
 
 // Audiobook narration script: a pronunciation guide from the bible, opening
 // and closing credits, and each section with its estimated finished runtime.
@@ -57,10 +57,11 @@ export function pronunciationGuide(project) {
 function narrationBody(body) {
   return String(body)
     .replace(/\r\n?/g, "\n")
+    .replace(/\\\n/g, "\n")
     .split(/\n[ \t]*\n\s*/)
     .map((paragraph) => paragraph.trim())
     .filter(Boolean)
-    .map((paragraph) => (/^([*_-])( ?\1){2,}$/.test(paragraph) ? "[pause]" : paragraph))
+    .map((paragraph) => (isSceneBreak(paragraph) ? "[pause]" : paragraph))
     .join("\n\n");
 }
 

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { parseFrontmatter, replaceFrontmatter } from "./frontmatter.js";
+import { readTextFile } from "./files.js";
 
 // Each pair is a series link field and the field the linked book must use to
 // point back. `follows` names books set earlier in the story's chronology;
@@ -39,7 +40,7 @@ export function readBookFrontmatter(root) {
   if (!fs.existsSync(storyPath)) {
     return null;
   }
-  return parseFrontmatter(fs.readFileSync(storyPath, "utf8"), storyPath).data;
+  return parseFrontmatter(readTextFile(storyPath), storyPath).data;
 }
 
 export function validateSeriesLinks(root, data, errors) {
@@ -77,7 +78,7 @@ export function validateSeriesLinks(root, data, errors) {
 // when the link is already present.
 export function withSeriesBacklink(targetRoot, field, linkedRoot) {
   const storyPath = path.join(targetRoot, "story.md");
-  const markdown = fs.readFileSync(storyPath, "utf8");
+  const markdown = readTextFile(storyPath);
   const { data } = parseFrontmatter(markdown, storyPath);
   // A hand-written scalar link is kept and converted to a list rather than
   // dropped when the new link is added.

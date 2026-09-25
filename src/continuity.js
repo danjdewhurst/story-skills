@@ -58,8 +58,11 @@ function withExemptions(project, result) {
   return { ok: keptErrors.length === 0, errors: keptErrors, warnings: keptWarnings, dismissed };
 }
 
+// Paths in findings use the platform separator, so a pattern written on
+// one system (`continuity/promises/x.md`) matches on another.
 function dismissFinding(finding, exemptions, kept, dismissed) {
-  const match = exemptions.find((exemption) => finding.includes(exemption.pattern));
+  const portable = (text) => text.replace(/\\/g, "/");
+  const match = exemptions.find((exemption) => portable(finding).includes(portable(exemption.pattern)));
   if (match) {
     dismissed.push({ finding, reason: match.reason });
   } else {
