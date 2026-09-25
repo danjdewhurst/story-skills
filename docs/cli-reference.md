@@ -907,7 +907,7 @@ Runs `validate`, `links`, and `continuity`, then lists prioritised actions:
 | `P2` | Track open questions, review pending promises and open clues, draft the next chapter, create a first character |
 | `P3` | Nothing is blocking the next writing pass |
 
-Actions are listed in the order the checks produce them, not sorted by priority, so read the tags rather than the position.
+Actions are sorted by priority, P0 first; actions with the same priority keep the order the checks produce them. The one exception is the P3 "Project is mechanically healthy" line, which comes first when it appears.
 
 Always exits 0 on a readable project.
 
@@ -936,8 +936,8 @@ On a book with `status: revising`, `next` points at the revision pass in progres
 Checks: validate ok (0 errors, 1 warnings), links ok (0 errors, 0 warnings), continuity ok (0 errors, 0 warnings)
 
 Actions:
-- [P2] Review open clues: 2 clues are still planned or planted.
 - [P1] Revision pass: character: Wants, arcs, motivation, and who knows what when. Run story voices, story knowledge <id> --at <chapter>, story diagram relationships. Mark it with story passes --done character.
+- [P2] Review open clues: 2 clues are still planned or planted.
 - [P2] Draft chapter 2: Use story add chapter "Chapter 2" --number 2, then outline scenes to advance The Long Crossing.
 ```
 

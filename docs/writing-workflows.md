@@ -1000,8 +1000,8 @@ What pass is next?
 Checks: validate ok (0 errors, 0 warnings), links ok (0 errors, 0 warnings), continuity ok (0 errors, 0 warnings)
 
 Actions:
-- [P2] Review open clues: 3 clues are still planned or planted.
 - [P1] Revision pass: character: Wants, arcs, motivation, and who knows what when. Run story voices, story knowledge <id> --at <chapter>, story diagram relationships. Mark it with story passes --done character.
+- [P2] Review open clues: 3 clues are still planned or planted.
 - [P2] Draft chapter 4: Use story add chapter "Chapter 4" --number 4, then outline scenes to advance The Drowned Stranger.
 ```
 
