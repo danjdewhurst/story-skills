@@ -31,7 +31,7 @@ ghost-wound: "{The past wound that made the lie feel true}"
 ---
 ```
 
-`pronunciation`, `voice-words`, and `voice-avoid` are optional. `pronunciation` feeds the narrator's guide in `story build --format narration`; the voice lists are checked by `story voices`. `died-in` is optional. Set it (with `status: deceased`) when a character dies on the page so `story continuity` can flag appearances in later chapters; leave it out for characters who died before the story begins. Posthumous appearances in flashbacks, memories, or recordings belong in chapter/scene `mentions`, not `characters`. `status: cut` keeps a removed character's file. `story reindex` still lists that file.
+`pronunciation`, `voice-words`, and `voice-avoid` are optional. `pronunciation` feeds the narrator's guide in `story build --format narration`; the voice lists are checked by `story voices`. `died-in` is optional. Set it (with `status: deceased`) when a character dies on the page so `story continuity` can flag appearances in later chapters; leave it out for characters who died before the story begins, and keep them in `mentions` only, since `story continuity` warns when one is listed in a chapter or scene cast. Posthumous appearances in flashbacks, memories, or recordings belong in chapter/scene `mentions`, not `characters`. `status: cut` keeps a removed character's file. `story reindex` still lists that file.
 
 ## Appearance
 

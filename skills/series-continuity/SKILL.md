@@ -45,9 +45,9 @@ story init "{Title}" --follows {existing-book-dir} --synopsis "{synopsis}"
 story init "{Title}" --precedes {existing-book-dir} --synopsis "{synopsis}"
 ```
 
-`init` checks that the linked path is a story project, writes the relative link, adds the backlink to the existing book's `story.md`, and inherits `series`, `genre`, `sub-genre`, `pov`, and `tense`. When any book in the linked series has an integer `book-number`, it sets `book-number` to one more than the highest number used anywhere in the series, so publication numbers never collide. A normal `story init` book has none, so a series with no numbered books leaves the new book unnumbered. Pass `--book-number` (or write the field on both `story.md` files) in that case. Pass `--series`, `--genre`, `--pov`, or `--tense` to override the inherited values.
+`init` checks that the linked path is a story project, writes the relative link, adds the backlink (and the new book's `series`, when the existing book has none) to the existing book's `story.md`, and inherits `series`, `genre`, `sub-genre`, `pov`, and `tense`. When any book in the linked series has an integer `book-number`, it sets `book-number` to one more than the highest number used anywhere in the series, so publication numbers never collide. A normal `story init` book has none, so a series with no numbered books leaves the new book unnumbered. Pass `--book-number` (or write the field on both `story.md` files) in that case. Pass `--series`, `--genre`, `--pov`, or `--tense` to override the inherited values.
 
-If the existing book has no `series` yet, pass `--series {series-id}` and add the same `series` plus `book-number` values to both `story.md` files.
+If the existing book has no `series` yet, pass `--series {series-id}`: `init` also writes that `series` into the existing book's `story.md`. Add matching `book-number` values to both `story.md` files yourself.
 
 If the CLI is not available, add the fields to both `story.md` files by hand.
 
@@ -62,12 +62,13 @@ Only carry entities the new book actually uses. For each one, copy the file from
 - **Set state for this book's starting point, not the source book's ending.**
   - Sequel: start from the earlier book's final `status`, relationships, ownership, and knowledge.
   - Prequel: start from the earlier situation, and write the later book's facts as fixed endpoints in a `## Series Canon` section.
-- **Remove book-local references.** `died-in` and every other chapter id points at chapters in the source book. For a character who died before this book begins, keep `status: deceased` and remove `died-in`.
+- **Remove book-local references.** `died-in` and every other chapter id points at chapters in the source book. For a character who died before this book begins, keep `status: deceased` and remove `died-in`, and list them only in `mentions`: `story continuity` warns when one appears in a chapter or scene cast.
 - **Prune or carry every link.** Relationships, `locations`, `notable-characters`, faction `members`, and artifact `owner`/`location` must point at entities that exist in this book, with backlinks. Either carry the linked entity too, or remove the reference.
 - **Do not copy** chapters, scenes, arcs, questions, promises, or `continuity/state.md`. Rebuild them for the new book:
   - Unresolved questions or promises the new book continues become new files in its `continuity/` folders.
   - Events from the other book become `Backstory Events` rows in `plot/timeline.md` (sequel) or `Series Canon` notes (prequel).
   - `continuity/state.md` starts at `current-chapter: 0` with the carried character and object state. Carried knowledge goes in `knowledge-state` without `learned-in`, because the character already knew it when the book began.
+  - An artifact destroyed or lost in an earlier book keeps its `object-state` entry with `status: destroyed` (or `lost`) and no `since`: that marks it gone before this story, so `story continuity` errors on any scene whose `state-changes` use it while still allowing `mentions`.
 
 ## Fact Ids
 
@@ -110,6 +111,7 @@ story series .
 - **Warnings**
   - A shared entity whose `name` (or glossary `term`) differs from the most recent earlier book
   - An artifact that is `destroyed` in an earlier book but has a different status in a later one
+  - Linked books that set no `series` id while the others share one (`Linked books <titles> set no series id; add series: <id>`); add the id to each named book
 
 `story links .` also checks the book's own series links: each path exists, has a matching backlink, and uses the same `series` id.
 

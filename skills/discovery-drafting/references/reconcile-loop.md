@@ -79,9 +79,12 @@ mode: discovered
 
 The flag tells the CLI and later audits that the reconcile loop is a
 **required step** for this chapter: a discovered chapter without post-hoc
-notes and a completed diff is unfinished work, not a stylistic choice. When
-`story.md` uses `draft-mode: discovered`, treat missing post-hoc notes on any
-chapter as a maintenance finding. Chapters written outline-first in a mixed
+notes and a completed diff is unfinished work, not a stylistic choice.
+`story next` and `story doctor` flag any `mode: discovered` chapter with no
+`## Chapter Notes (post-hoc)` heading as `[P1] Reconcile discovered
+chapters: ... for <ids>`; the action clears once the heading is present.
+When `story.md` uses `draft-mode: discovered`, treat missing post-hoc notes on
+any chapter as a maintenance finding. Chapters written outline-first in a mixed
 project use `mode: outlined` (or omit the field).
 
 ## Reconcile checklist (per chapter)

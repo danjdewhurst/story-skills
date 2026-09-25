@@ -336,7 +336,7 @@ heading: true
 | `title` | Yes | Text | The page title, used as its heading and in the EPUB table of contents. |
 | `placement` | Yes | `front` or `back` | Before or after the chapters. `story add matter` defaults to `front`; `--placement` sets it. |
 | `order` | No | Integer, 0 or more | Position within its placement. `story add matter` uses one more than the highest `order` already in that placement; `--order` sets it. Ties sort by file name. |
-| `heading` | No | `true` or `false` | Whether the page shows its title as a heading. Defaults to `true`. Set `false` for a dedication or epigraph. |
+| `heading` | No | `true` or `false` | Whether the page shows its title as a heading. Defaults to `true`. Set `false` for a dedication or epigraph, with `story add matter "Dedication" --heading false` or by editing the scaffolded `heading:` line. |
 | `permission` | No | `not-needed`, `pending`, `granted`, or `public-domain` | Whether quoted material on the page, such as an epigraph, lyrics, or a poem, is cleared for publication. |
 | `rights-holder` | No | Text | Who granted permission for quoted material. |
 | `credit` | No | Text | The credit line the rights holder asked for. |
@@ -409,7 +409,7 @@ ISBN 9780306406157
 > An ember given is a fire kept. An ember taken is a debt the mountain remembers.
 ```
 
-The page holds the `copyright` line, `All rights reserved.`, then `Published by` the `publisher`, the `isbn`, and the `ai-disclosure` text when each is set. The ISBN is printed as bare digits. For different wording, such as a Creative Commons licence or a disclaimer, write your own page with `story add matter "Copyright" --order 0` and set `heading: false`; the generated page is then left out. The [`publishing`](../skills/publishing/SKILL.md) skill has a template for it.
+The page holds the `copyright` line, `All rights reserved.`, then `Published by` the `publisher`, the `isbn`, and the `ai-disclosure` text when each is set. The ISBN is printed as bare digits. For different wording, such as a Creative Commons licence or a disclaimer, write your own page with `story add matter "Copyright" --order 0 --heading false`; the generated page is then left out. The [`publishing`](../skills/publishing/SKILL.md) skill has a template for it.
 
 ## Export a markdown manuscript
 
@@ -826,6 +826,7 @@ When a storm exposes an illegal memory archive beneath a floating harbor, salvag
 - [ ] Cover image (`cover`)
 - [ ] Cover alt text (`cover-alt`)
 - [ ] AI-use statement decided (`ai-disclosure`)
+- [x] Permissions cleared for quoted matter (`permission`)
 - [ ] Story status is complete
 ```
 
@@ -837,6 +838,7 @@ Notes on the fields:
 - **Description** shows its length against a 4,000-character limit; the full text follows under `## Description`.
 - **Cover** is the `cover` path as written. The sheet does not check that the file exists; `story validate` does.
 - The copyright item is ticked by either a `copyright` line or a copyright matter page.
+- The permissions item is ticked unless a matter page has `permission: pending`; it then reads ``Permissions cleared for quoted matter (`permission`; pending: <ids>)``, naming each pending page.
 
 The limits are common defaults, not any one retailer's rules. The [`publishing`](../skills/publishing/SKILL.md) skill fills the missing fields with you, rebuilds the sheet until the checklist is clean, and checks each field against the retailer's current requirements.
 

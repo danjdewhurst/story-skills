@@ -105,12 +105,12 @@ For each `--follows` or `--precedes` path, `init`:
 
 1. Checks that the path contains a `story.md`. If it does not, `init` stops before creating any files.
 2. Writes the link into the new book's `story.md`, relative to the new book's root.
-3. Adds the backlink to the linked book's `story.md` (`precedes` for a `--follows` link, `follows` for a `--precedes` link) and prints `Linked series backlink in <path>/story.md`. If the linked book already lists the new book, nothing is written and no line is printed. Only frontmatter changes; the linked book's comments and body text are left as they were. A link written as a single string by hand is kept and converted to a list.
+3. Adds the backlink to the linked book's `story.md` (`precedes` for a `--follows` link, `follows` for a `--precedes` link) and prints `Updated series links in <path>/story.md`. If the linked book already lists the new book and has the series id, nothing is written and no line is printed. Only frontmatter changes; the linked book's comments and body text are left as they were. A link written as a single string by hand is kept and converted to a list. When the new book has a `series` id and the linked book has none, `init` writes that id into the linked book's `story.md` as well, even if the backlink was already there.
 4. Inherits `series` from the first linked book that has one, unless you pass `--series`.
 5. Inherits `genre`, `sub-genre`, `pov`, and `tense` from the first linked book, unless you pass `--genre`, `--sub-genre`, `--pov`, or `--tense`. `setting-era`, `themes`, and `form` are not inherited; pass `--form` if the new book has one.
 6. Sets `book-number` to one more than the highest `book-number` anywhere in the linked series, not just the directly linked books, so publication numbers never collide.
 
-If no book in the series has a `book-number`, the new book is left unnumbered. A book created by a plain `story init` has no `book-number`, so when you link your first sequel to it, pass `--book-number 2` and add `book-number: 1` to the first book by hand. If the first book has no `series` yet, pass `--series <id>` and add the same `series` to the first book as well.
+If no book in the series has a `book-number`, the new book is left unnumbered. A book created by a plain `story init` has no `book-number`, so when you link your first sequel to it, pass `--book-number 2` and add `book-number: 1` to the first book by hand. If the first book has no `series` yet, pass `--series <id>`: `init` adds the same `series` to the first book.
 
 `init --force` on an existing folder keeps the existing `story.md`. It only adds backlinks when the run actually wrote the new `story.md`, so a rerun never adds a backlink the new book does not mirror.
 
@@ -120,7 +120,7 @@ Running the sequel command from [Starting a linked book](#starting-a-linked-book
 
 ```text
 Created story project: /path/to/series/embers-of-the-vale
-Linked series backlink in /path/to/series/the-last-ember/story.md
+Updated series links in /path/to/series/the-last-ember/story.md
 ```
 
 The new book inherits the series id and craft settings, and numbers itself after The Fall of the Citadel (book 2), even though it links only to The Last Ember (book 1):
@@ -225,6 +225,7 @@ Each book is compared with every book set earlier in the chronology: every book 
 | error | A linked path is not a story project (`missing story.md`), or a linked book fails to parse. | Correct the path, or fix the linked book's frontmatter. |
 | error | Linked books declare different `series` ids. | Use one id in every book. |
 | error | Two books share a `book-number`. | Give each book a unique publication number. |
+| warning | Some linked books set no `series` id while the others share one: `Linked books <titles> set no series id; add series: <id>`. | Add the named `series` to each listed book's `story.md`. |
 | error | The chronology has a cycle. | Check `follows` and `precedes` in the named books. |
 | error | A character is `deceased` in an earlier book but has another status (or none) in a later one. | Set `status: deceased` in the later book's character file. |
 | error | A later book's chapter or scene lists a character who died in an earlier book as `pov` or under `characters`. | Move flashbacks, memories, and ghosts to `mentions`. |
@@ -314,12 +315,12 @@ See the [CLI reference](cli-reference.md) for every command.
 - **Keep `name` identical.** Put new titles and epithets in `aliases`. In the example, the prequel's `lord-maren.md` keeps `name: "Lord Maren"` and lists `General Maren` as an alias.
 - **Keep the voice and sound fields.** `voice-words`, `voice-avoid`, and `pronunciation` travel with the file, so `story voices` checks the character against the same voice in every book, and an audiobook narrator says the name the same way.
 - **Set state for this book's starting point.** For a sequel, start from the earlier book's final `status`, relationships, ownership, and knowledge. For a prequel, start from the earlier situation and record the later book's facts as fixed endpoints in a `## Series Canon` section of the entity file.
-- **Remove book-local references.** `died-in` and every other chapter id points at chapters in the source book. For a character who died before this book begins, keep `status: deceased` and remove `died-in`.
+- **Remove book-local references.** `died-in` and every other chapter id points at chapters in the source book. For a character who died before this book begins, keep `status: deceased` and remove `died-in`, and list them only in `mentions`: `story continuity` warns when one appears in a chapter or scene cast.
 - **Carry or prune every link.** Relationships, `locations`, `notable-characters`, location `routes`, faction `members`, and artifact `owner` and `location` must point at entities that exist in this book, with backlinks where the field needs one. Carry the linked entity too, or remove the reference. `story links` reports what you missed, for example `characters/lord-maren.md references missing location ashen-citadel`.
 - **Do not copy** chapters, scenes, arcs, questions, promises, clues, or `continuity/state.md`. Rebuild them:
   - Open questions or promises the new book continues become new files in its `continuity/` folders.
   - Events from the other book become rows in the `## Backstory Events` table of `plot/timeline.md` (sequel), or `## Series Canon` notes (prequel). The Last Ember's timeline records the coup from the prequel this way.
-  - `continuity/state.md` starts at `current-chapter: 0` with the carried character and object state.
+  - `continuity/state.md` starts at `current-chapter: 0` with the carried character and object state. An artifact destroyed or lost in an earlier book keeps `status: destroyed` (or `lost`) with no `since`, which marks it gone before this story: `story continuity` errors on any scene whose `state-changes` use it, and still allows `mentions`.
 
 Record the book's place in the series in a `## Series Notes` section of its `story.md` body: where it sits in the chronology, the time gap to the linked books, and the canon it must not contradict. The prequel example's notes:
 

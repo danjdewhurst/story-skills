@@ -146,7 +146,7 @@ Every command, including `validate`, `next`, and `doctor`, reports that same lin
 
 - Options can appear anywhere after the command: `story build --format epub .` and `story build . --format epub` are the same.
 - Value options take the next argument (`--out book.md`) or an inline value (`--out=book.md`). Use the inline form when the value itself starts with `--` or is `-h` or `-v`, which would otherwise be read as an option.
-- Boolean flags (`--force`, `--write`, `--log`, `--shunn`, `--init`, `--actionable`, `--sequel`, `--significance-delayed`, `--red-herring`) are true when present. They also accept an explicit value, inline or as the next argument: `true`, `false`, `yes`, `no`, `on`, `off`, `1`, or `0`. So `--write false` turns writing off, while `--write=maybe` is an error.
+- Boolean flags (`--force`, `--write`, `--log`, `--shunn`, `--init`, `--actionable`, `--sequel`, `--significance-delayed`, `--red-herring`, `--heading`) are true when present. They also accept an explicit value, inline or as the next argument: `true`, `false`, `yes`, `no`, `on`, `off`, `1`, or `0`. So `--write false` turns writing off, while `--write=maybe` is an error.
 - Repeatable options collect every value, and list options also split on commas, so `--character ilse-marrow --character tobin-reyes` and `--characters ilse-marrow,tobin-reyes` produce the same list. `--source`, `--follows`, and `--precedes` keep each value whole.
 - Do not mix a singular flag with its plural alias in one `add` command: when both are given, the plural form wins and the singular values are dropped (except `add character --arc`, which is single-valued and has no plural alias). `init` and `import` are the exception: they combine `--theme` and `--themes`.
 - For options that are not repeatable, the last value wins: `--out a.md --out b.md` writes `b.md`.
@@ -288,7 +288,7 @@ story init "Embers Rekindled" --follows the-last-ember
 
 ```text
 Created story project: ~/stories/embers-rekindled
-Linked series backlink in ~/stories/the-last-ember/story.md
+Updated series links in ~/stories/the-last-ember/story.md
 ```
 
 `--form` records the kind of book and sets `target-words` to a typical length for it. `story validate` warns when `target-words`, or the manuscript of a book with `status: complete`, falls outside the form's usual range. The form is not inherited from a linked book.
@@ -374,8 +374,8 @@ On a copy of a project with `schema-version: 1` and no clue ledger or glossary:
 ```text
 $ story validate
 Project validation failed: 3 errors, 0 warnings, 0 dismissed
-error: Missing required path: continuity/clues/_index.md
-error: Missing required path: glossary/_index.md
+error: Missing required path: continuity/clues/_index.md (story migrate adds missing registries)
+error: Missing required path: glossary/_index.md (story migrate adds missing registries)
 error: story.md schema-version must be 2
 
 $ story migrate
@@ -519,13 +519,13 @@ story links [path]
 
 Checks that references between entities point at entities that exist and that two-way links are mirrored. It covers:
 
-- character relationships, which need a backlink of the matching inverse type (`mentor` and `student`, `sibling` and `sibling`)
+- character relationships, which need a backlink of the matching inverse type (`mentor` and `student`, `sibling` and `sibling`). The pairings allowed before 0.10.0, `former-supervisor` on both sides and `adversary` answered by `antagonist`, warn instead: `<file> relationship <type> to <target> has backlink <types>, a pairing from before story-skills 0.10.0; change the backlink to <expected>`
 - character `locations` and location `notable-characters`, which must list each other
 - location `routes`, whose `to` must name another existing location
 - a character's `died-in` chapter
 - arc characters, faction members and locations, and artifact owners and locations
 - chapter and scene POV, `characters`, `mentions` (a character or an artifact), locations, and `arcs-advanced`, and each scene's chapter
-- the chapter, character, and arc ids in questions, promises, and clues, and the `used-in` chapters of research notes. A promise or clue `payoff`, its `planted` while `status: planned`, and an `open` question's `introduced` may name a scheduled `chapter-NN` that has no chapter file yet, unless its number is 0 or belongs to an existing chapter under another id (`chapter-1` beside `chapter-01`)
+- the chapter, character, and arc ids in questions, promises, and clues, and the `used-in` chapters of research notes. A promise or clue `payoff`, its `planted` while `status: planned`, an `open` question's `introduced`, and a research note's `used-in` may name a scheduled `chapter-NN` that has no chapter file yet, unless its number is 0 or belongs to an existing chapter under another id (`chapter-1` beside `chapter-01`)
 - chapter ids and markdown links in the bodies of `plot/timeline.md` and arc files
 - the `follows` and `precedes` links in `story.md`, which must point at story projects that link back
 
@@ -946,11 +946,11 @@ Runs `validate`, `links`, and `continuity`, then lists prioritised actions:
 | Priority | Actions |
 |---|---|
 | `P0` | Fix validation errors, broken references, or continuity contradictions |
-| `P1` | Review continuity warnings, refresh stale word counts, add scene records for chapters without them; when `story.md` has `status: revising`, plan revision passes or work the next one |
+| `P1` | Review continuity warnings, refresh stale word counts, add scene records for chapters without them, reconcile `mode: discovered` chapters that have no `## Chapter Notes (post-hoc)` heading; when `story.md` has `status: revising`, plan revision passes or work the next one |
 | `P2` | Track open questions, review pending promises and open clues, draft the next chapter, create a first character |
 | `P3` | Nothing is blocking the next writing pass |
 
-Actions are sorted by priority, P0 first; actions with the same priority keep the order the checks produce them. The draft-next-chapter action is left out when `story.md` has `status: revising` or `status: complete`, or when every arc is `resolved`.
+Actions are sorted by priority, P0 first; actions with the same priority keep the order the checks produce them. The draft-next-chapter action is left out when `story.md` has `status: revising`, `status: complete`, or `status: abandoned`, or when every arc is `resolved`. A discovered chapter without post-hoc notes gets `[P1] Reconcile discovered chapters: Run the discovery-drafting reconcile loop and add ## Chapter Notes (post-hoc) for <ids>.`
 
 Suggested commands use the project path as you typed it, or `.` when you gave none: `story next drafts/salt-road` suggests `Run story continuity drafts/salt-road and ...` and `story passes drafts/salt-road --init`.
 
@@ -1110,7 +1110,7 @@ With no clues it prints `- None: add clues with story add clue "Name" --planted 
 story voices [path]
 ```
 
-Builds a dialogue fingerprint for each character who speaks: lines and words of dialogue, average sentence length, contractions per 100 words, the share of questions and exclamations, and up to five signature words (words the character uses at least twice, at more than twice the rate of the other speakers; common words are ignored). A line is attributed only when its paragraph names the speaker next to a speech verb (`"...," Mara said` or `said Mara`) or, failing that, when the narration names exactly one character. Other quoted lines are counted as unattributed, never guessed. Names match a character's full name, given name, and `aliases`.
+Builds a dialogue fingerprint for each character who speaks: lines and words of dialogue, average sentence length, contractions per 100 words, the share of questions and exclamations, and up to five signature words (words the character uses at least twice, at more than twice the rate of the other speakers; common words are ignored). A line is attributed only when its paragraph names the speaker next to a speech verb (`"...," Mara said` or `said Mara`) or, failing that, when the narration names exactly one character and has no pronoun tag (`she said`, `said he`). Other quoted lines are counted as unattributed, never guessed. Names match a character's full name, given name, and `aliases`.
 
 It warns when:
 
@@ -1395,7 +1395,7 @@ Options by kind:
 | `clue` | `--status`, `--planted`, `--payoff`, `--significance-delayed`, `--red-herring`, `--character` (`characters`), `--arc` (`arcs`) | `planted` with `--planted`, otherwise `planned`; `red-herring` written only when set |
 | `term` | `--category`, `--alias` (`aliases`) | `term` |
 | `research` | `--status`, `--source` (`sources`), `--used-in` (`used-in`), `--accuracy`, `--confidence`, `--method`, `--risk` (`risk`) | `open`; the other four fields written only when given |
-| `matter` | `--placement`, `--order` | `front`, one more than the highest order in that placement |
+| `matter` | `--placement`, `--order`, `--heading` | `front`, one more than the highest order in that placement, `heading: true`; `--heading false` writes `heading: false` for a dedication or epigraph |
 
 `add` checks enum values before writing anything:
 
@@ -1424,7 +1424,7 @@ Options by kind:
 
 On `add chapter` and `add scene`, `--pov` names the POV character, and `add` also puts that id first in `characters` when it is not already listed.
 
-`add scene` also adds its `location` to the chapter's `locations` and each of its `characters` to the chapter's `characters`, unless the chapter already lists that character in `mentions`.
+`add scene` also adds its `location` to the chapter's `locations` and each of its `characters` to the chapter's `characters`, unless the chapter already lists that character in `mentions`. Only ids that have an entity file are copied; an unknown id stays on the scene, where `story links` reports it.
 
 Location and system `--type`, location `--status`, and system `--prevalence` are free text. `--date` must be a real `YYYY-MM-DD` day; `--time` is `HH:MM` or one of `dawn`, `morning`, `midday`, `afternoon`, `evening`, `night`; `--travel-hours` is a number zero or above; `--number` and `--scene` are positive integers; `--order` is a non-negative integer. Repeating `--location` on `add artifact` or `add scene`, or `--arc` on `add character`, writes a list that `story validate` rejects, because those flags are repeatable elsewhere. Other single-value flags keep the last value given.
 
@@ -1512,7 +1512,7 @@ Sets the entity's name or title and, when the new name gives a different id, ren
 
 Chapter and scene ids come from their numbers, so renaming one changes only its title. `rename` also updates the entity's first heading when it shows the old name, such as `# Ilse Marrow` or `# Chapter 1: Low Tide`.
 
-Every rewrite is planned before anything is written, so a file that fails to parse leaves the project unchanged. An entity file or registry with no YAML frontmatter stops it the same way, with `<file> is missing YAML frontmatter; nothing was changed`. `rename` refuses if an entity with the new id already exists, or if the new id is one Windows reserves as a file name, as `add` does (`Cannot use character id aux: Windows reserves the file name aux.md. ...`).
+Every rewrite is planned before anything is written, so a file that fails to parse leaves the project unchanged. An entity file (a file directly in an entity folder), an `_index.md` registry, or one of `story.md`, `style-sheet.md`, `progress.md`, `plot/timeline.md`, `continuity/state.md`, and `continuity/exemptions.md` with no YAML frontmatter stops it the same way, with `<file> is missing YAML frontmatter; nothing was changed`. Other markdown, such as `continuity/motifs.md`, `continuity/theme-audit.md`, or a README, may be plain. `rename` refuses if an entity with the new id already exists, or if the new id is one Windows reserves as a file name, as `add` does (`Cannot use character id aux: Windows reserves the file name aux.md. ...`).
 
 ```text
 $ story rename character ilse-marrow "Ilse Varrow"
@@ -1528,7 +1528,7 @@ Renamed chapter chapter-01 to chapter-01: ~/stories/the-salt-road/chapters/chapt
 story remove <kind> <id> [--path <project>]
 ```
 
-Deletes the entity file and scrubs its id from every reference field, searching the same markdown files as `rename`. List entries are removed, single-value fields are cleared, and whole entries in `relationships`, `character-state`, `knowledge-state`, `object-state`, and location `routes` are dropped when they are about the removed entity. Prose and markdown links in file bodies are never changed. `story links` reports leftover body links and chapter ids only in `plot/timeline.md` and arc files; find any others by hand, for example with `grep -rn brass-sounding-line .`. As with `rename`, every file is parsed before anything is deleted, so a file that fails to parse or has no frontmatter leaves the project unchanged.
+Deletes the entity file and scrubs its id from every reference field, searching the same markdown files as `rename`. List entries are removed, single-value fields are cleared, and whole entries in `relationships`, `character-state`, `knowledge-state`, `object-state`, and location `routes` are dropped when they are about the removed entity. Prose and markdown links in file bodies are never changed. `story links` reports leftover body links and chapter ids only in `plot/timeline.md` and arc files; find any others by hand, for example with `grep -rn brass-sounding-line .`. As with `rename`, every file is parsed before anything is deleted, so a file that fails to parse, or an entity file, registry, or fixed project file with no frontmatter, leaves the project unchanged.
 
 `remove chapter` refuses while scenes still point at the chapter, so remove those first:
 
@@ -1791,6 +1791,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--acts` | `<a,b>` | `add arc` | Repeatable; alias `--act` |
 | `--placement` | `<front\|back>` | `add matter` | |
 | `--order` | `<n>` | `add matter` | |
+| `--heading` | | `add matter` | Boolean, default true; `--heading false` for a dedication or epigraph |
 | `--source` | `<text>` | `add research` | Repeatable, kept whole; alias `--sources` |
 | `--used-in` | `<chapter-id>` | `add research` | Repeatable |
 | `--accuracy` | `<level>` | `add research` | `must-be-accurate`, `blended`, `invented` |

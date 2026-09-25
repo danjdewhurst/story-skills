@@ -175,7 +175,7 @@ Because chapter and scene ids come from their numbers, `story rename chapter` an
 
 ## Frontmatter syntax
 
-Every entity file, registry, and state file starts with a frontmatter block between two `---` lines. A file without one fails with `is missing YAML frontmatter`. A UTF-8 byte order mark and Windows line endings are accepted.
+Every entity file, registry, and state file starts with a frontmatter block between two `---` lines. A file without one fails with `is missing YAML frontmatter`. Skill notes kept beside them, such as `continuity/motifs.md` and `continuity/theme-audit.md`, may be plain markdown. A UTF-8 byte order mark and Windows line endings are accepted.
 
 The CLI uses its own YAML parser, which supports a deliberate subset of YAML:
 
@@ -456,7 +456,7 @@ arc: redemption
 
 Status notes:
 
-- `status: deceased` with `died-in` lets `story continuity` report the character in the cast of any later chapter or scene. `died-in` with any other status is an error. Characters who died before chapter 1 use `status: deceased` without `died-in`.
+- `status: deceased` with `died-in` lets `story continuity` report the character in the cast of any later chapter or scene. `died-in` with any other status is an error. Characters who died before chapter 1 use `status: deceased` without `died-in`; `story continuity` warns when one is in a chapter or scene cast, since they can appear only in `mentions`.
 - `status: cut` keeps the file for a character removed during discovery drafting, out of canon but on record.
 
 The arc-craft fields `arc-type`, `lie`, `truth`, and `ghost-wound` have no CLI flags and are not checked by the CLI. See the [character-management](../skills/character-management/SKILL.md) and [theme-craft](../skills/theme-craft/SKILL.md) skills.
@@ -481,6 +481,8 @@ Every relationship needs a backlink: if Sera lists Kael, Kael must list Sera. Fo
 | `sibling`, `spouse`, `partner`, `in-law`, `friend`, `ally`, `rival`, `enemy`, `adversary`, `cousin`, `colleague`, `foil`, `confidant`, `love-interest` | the same type |
 
 Any other type (such as `antagonist`) is allowed, and the backlink may use any type.
+
+Two pairings the relationship reference allowed before 0.10.0, `former-supervisor` on both sides and `adversary` answered by `antagonist`, are warnings rather than errors, so an upgraded project still passes: `<file> relationship <type> to <target> has backlink <types>, a pairing from before story-skills 0.10.0; change the backlink to <expected>`.
 
 ## Worldbuilding
 
@@ -751,7 +753,7 @@ Entry fields:
 | | `owner` | Character or faction id. |
 | | `location` | Location id. |
 | | `status` | Artifact status. A value that differs from the artifact file's `status` is a warning. |
-| | `since` | Chapter id in which the artifact was destroyed or lost. Needed for prop custody checks; without it, a `destroyed` or `lost` entry is a warning. |
+| | `since` | Chapter id in which the artifact was destroyed or lost. Leave it out when the artifact was destroyed or lost before this story (for example, in an earlier book); `story continuity` then errors on any scene whose `state-changes` use it, and still allows `mentions`. |
 | `knowledge-state` | `character` | Required. Character id. |
 | | `knows` | Required. The fact, as prose. |
 | | `learned-in` | Chapter id. Leave it out when the character knew the fact before the book began. |
@@ -919,7 +921,7 @@ used-in:
 | `title` | string | yes | What the note covers. |
 | `status` | enum | yes | `open`, `verified`, or `disputed`. Default `open`. |
 | `sources` | list of strings | no | Citations or URLs, each kept whole (commas allowed). `--source` is repeatable. |
-| `used-in` | list of chapter ids | no | Chapters that rely on the note. |
+| `used-in` | list of chapter ids | no | Chapters that rely on the note. May name a chapter not written yet, under the same rules as a scheduled promise payoff. |
 | `accuracy` | enum | no | `must-be-accurate` (a knowledgeable reader will check it), `blended` (real facts bent on purpose, with the departure recorded under `## Story Use`), or `invented` (made up for the story). |
 | `confidence` | enum | no | `high`, `medium`, or `low`. |
 | `method` | enum | no | How the knowledge was gathered: `fact` (desk research), `interview`, `site-visit`, `expert-review`, or `reading`. |
@@ -1042,11 +1044,11 @@ Fields that name another entity hold its id. `story links` checks that each id i
 | Promise, clue | `planted`, `payoff` | Chapter; may be a scheduled `chapter-NN` with no chapter file yet (see below) |
 | Question, promise, clue | `characters` | Character |
 | Promise, clue | `arcs` | Arc |
-| Research note | `used-in` | Chapter |
+| Research note | `used-in` | Chapter; may be a scheduled `chapter-NN` with no chapter file yet (see below) |
 | `plot/timeline.md`, arc bodies | any `chapter-NN` token | Chapter |
 | `plot/timeline.md`, arc bodies | relative links to `.md` files, except `_index.md` and `*` wildcard targets (links to non-entity files such as `story.md` are reported missing) | Existing entity file, named by its kebab-case id, inside the project |
 
-A promise or clue can schedule its setup and payoff ahead of the drafted book: `payoff`, and `planted` while `status: planned`, may name a `chapter-NN` that has no file yet. So may an `open` question's `introduced`. The number must be 1 or more and must not belong to an existing chapter under another id: beside `chapter-01`, `chapter-1` is a typo and `chapter-00` is never a chapter, so both are reported as missing. Once the status is `planted` or `paid-off`, the `planted` chapter must exist, and once it is `paid-off`, so must the `payoff` chapter. A question's `resolved` chapter must always exist, as must its `introduced` chapter once it is no longer `open`.
+A promise or clue can schedule its setup and payoff ahead of the drafted book: `payoff`, and `planted` while `status: planned`, may name a `chapter-NN` that has no file yet. So may an `open` question's `introduced` and a research note's `used-in`, since research often comes before the chapter that needs it. The number must be 1 or more and must not belong to an existing chapter under another id: beside `chapter-01`, `chapter-1` is a typo and `chapter-00` is never a chapter, so both are reported as missing. Once the status is `planted` or `paid-off`, the `planted` chapter must exist, and once it is `paid-off`, so must the `payoff` chapter. A question's `resolved` chapter must always exist, as must its `introduced` chapter once it is no longer `open`.
 
 `story continuity`, not `story links`, checks the ids in `continuity/state.md`: `character`, `location`, `artifact`, `owner`, `learned-in`, and `since` must name existing entities, and `fact` must be kebab-case.
 

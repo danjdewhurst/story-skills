@@ -65,7 +65,8 @@ start — arcs get built during reconciliation.
    continuing.
 6. **Close the loop on mode.** When the draft is complete, every
    `mode: discovered` chapter must have post-hoc notes and a completed
-   diff — flag any that don't as unfinished maintenance, then hand the
+   diff — `story next` lists any without post-hoc notes under `Reconcile
+   discovered chapters`; finish those, then hand the
    manuscript to `revision-continuity` for revision passes.
 
 ## Conventions
