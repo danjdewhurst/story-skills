@@ -120,7 +120,35 @@ story compare . --ref draft-1
 story compare . --against ../the-tide-room-draft-1
 ```
 
-`story compare` lists each chapter's word change, added and removed chapters, and the share of paragraphs left unchanged, so the user can see how deep the pass went. Chapters are matched by id, so a renumbered chapter shows as removed and added. It only reads git; it never commits or tags.
+`story compare` lists each chapter's word change, added and removed chapters, and the share of paragraphs left unchanged, so the user can see how deep the pass went. Chapters are matched by id, so after a renumber the same id holds different prose, and a chapter whose prose did not change can read as rewritten. In that case, compare the moved chapters by content (read the old and new text side by side) rather than trusting the per-chapter figures. It only reads git; it never commits or tags.
+
+## Structural Edits
+
+Moving a scene, or splitting, merging, or renumbering chapters, is done by hand; no command does it. Chapter ids come from `number` (`chapter-07`), and scene ids embed the chapter id (`chapter-07-scene-02`), so every move changes ids. Checklist:
+
+1. Snapshot the draft first (see Draft Snapshots above)
+2. Renumber highest-first, so a new id never collides with a file that has not moved yet: `chapter-09` becomes `chapter-10` before `chapter-08` becomes `chapter-09`
+3. For each moved chapter, rename `chapters/chapter-NN.md` and update its `number` and heading
+4. For each moved scene, rename `scenes/chapter-NN-scene-NN.md` and update its `chapter` and `scene` fields
+5. Rewrite every chapter reference to a moved chapter:
+   - `planted` and `payoff` in `continuity/clues/` and `continuity/promises/`
+   - `introduced` and `resolved` in `continuity/questions/`
+   - `used-in` in `research/`
+   - `since`, `learned-in`, and `current-chapter` in `continuity/state.md`
+   - `died-in` in `characters/`
+   - chapter rows and links in `plot/timeline.md`
+6. For a merge, move the prose and scenes into the surviving chapter and delete the emptied chapter file by hand. Do not use `story remove chapter` for this: it clears every `payoff` and other reference to the chapter and walks statuses back, instead of pointing them at the surviving chapter
+7. Run maintenance, then fix what it reports:
+
+```shell
+story reindex .
+story wordcount . --write
+story validate .
+story links .
+story continuity .
+```
+
+`grep -rn "chapter-NN" .` finds references to an old id that the checks do not cover, such as links in arc files and prose notes.
 
 ## Continuity Audit Checklist
 

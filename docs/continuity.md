@@ -63,7 +63,7 @@ Every finding starts with a severity and, usually, a file path. Match the rest o
 | The finding contains | Command | Explained in |
 |----------------------|---------|--------------|
 | `lists <id>, who died in`, `who died before the story`, `has died-in`, `died-in references missing chapter` | `continuity` | [Deaths and posthumous appearances](#deaths-and-posthumous-appearances) |
-| `POV character <id> is not listed in characters`, `does not list them in characters or mentions`, `does not list that location`, `Chapter numbering skips` | `continuity` | [Casts and locations](#casts-and-locations) |
+| `POV character <id> is not listed in characters`, `but its scenes are told by`, `does not list them in characters or mentions`, `does not list that location`, `Chapter numbering skips` | `continuity` | [Casts and locations](#casts-and-locations) |
 | `pays off in … before it is planted`, `resolves in … before it is introduced`, `no payoff chapter`, `no planted chapter`, `no plant chapter`, `has no resolved chapter`, `status is still open`, `status is still planned` | `continuity` | [Promises, questions, and clues](#promises-questions-and-clues) |
 | `has no payoff yet`, `payoff chapter … has passed` | `continuity` | [Unfired setups](#unfired-setups-the-chekhov-warning) |
 | `story.md is complete but` | `continuity` | [Finishing the book](#finishing-the-book) |
@@ -161,6 +161,7 @@ These checks keep the scene records and the chapter frontmatter in step, so the 
 | Severity | Message | Fix |
 |----------|---------|-----|
 | warning | `<chapter or scene> POV character <id> is not listed in characters` | Add the POV character to `characters`. |
+| warning | `<chapter> has POV <id> but its scenes are told by <ids>` | The chapter's `pov` matches none of its scenes' `pov` values. Correct whichever is wrong. Scenes with no `pov` are not counted. |
 | warning | `<scene> lists <id> but <chapter> does not list them in characters or mentions` | Add the character to the parent chapter's `characters` or `mentions`. |
 | warning | `<scene> is set in <location> but <chapter> does not list that location` | Add the location to the chapter's `locations`. |
 | warning | `Chapter numbering skips from <n> to <m>` | Add the missing chapter, or renumber. Scaffolding a far-off chapter ahead of time also triggers this. |
@@ -187,7 +188,7 @@ characters:
 arcs: []
 ```
 
-`story add promise` and `story add clue` default to `status: planted` when you pass `--planted`, and to `planned` otherwise. `story add question` defaults to `open`, or to `answered` when you pass `--resolved`; `--status open` with `--resolved` is an error. Clues accept two more flags: `significance-delayed: true` (`--significance-delayed`) for evidence whose meaning the reader should only see later, and `red-herring: true` (`--red-herring`) for evidence that points the wrong way. `story continuity` checks clues exactly like promises and ignores both flags; [`story clues`](#story-clues) uses them for its fair-play checks.
+`story add promise` and `story add clue` default to `status: planted` when `--planted` names an existing chapter, and to `planned` otherwise, including when `--planted` names a chapter not written yet. `story add question` defaults to `open`, or to `answered` when you pass `--resolved`; `--status open` with `--resolved` is an error. Clues accept two more flags: `significance-delayed: true` (`--significance-delayed`) for evidence whose meaning the reader should only see later, and `red-herring: true` (`--red-herring`) for evidence that points the wrong way. `story continuity` checks clues exactly like promises and ignores both flags; [`story clues`](#story-clues) uses them for its fair-play checks.
 
 Entries with `status: abandoned` are skipped entirely. Everything else is checked:
 
@@ -205,14 +206,14 @@ Entries with `status: abandoned` are skipped entirely. Everything else is checke
 
 #### Unfired setups (the Chekhov warning)
 
-A promise or clue with `status: planted` gets a warning once its `planted` chapter is three or more chapters behind the latest drafted chapter. The latest drafted chapter is the highest-numbered chapter whose `status` is not `outline`, so scaffolding outline chapters ahead of time does not trigger the warning.
+A promise or clue with `status: planted` gets a warning as soon as its recorded `payoff` chapter has been drafted, however soon after the plant that is. With no `payoff` recorded, it gets one once its `planted` chapter is three or more chapters behind the latest drafted chapter. The latest drafted chapter is the highest-numbered chapter whose `status` is not `outline`, so scaffolding outline chapters ahead of time does not trigger the warning.
 
 | Situation | Result |
 |-----------|--------|
-| Planted fewer than 3 chapters ago | No warning |
 | `payoff` recorded for a chapter still ahead of the latest drafted chapter | No warning: the payoff is scheduled |
 | `payoff` recorded for a chapter already drafted | warning: `<file> payoff chapter <chapter> has passed and status is still planted` |
-| No `payoff` recorded | warning: `<file> was planted in <chapter>, <n> chapters ago, and has no payoff yet` |
+| No `payoff` recorded, planted fewer than 3 chapters ago | No warning |
+| No `payoff` recorded, planted 3 or more chapters ago | warning: `<file> was planted in <chapter>, <n> chapters ago, and has no payoff yet` |
 
 Fix it by paying the setup off and setting `status: paid-off`, by recording a future `payoff` chapter, by setting `status: dropped` or `abandoned` if you cut the thread, or with an [exemption](#exemptions) if the gap is deliberate (for example, the payoff is in the next book). Questions have no gap warning.
 
@@ -520,7 +521,7 @@ Timeline: 4 dated, 0 undated
 
 Chronology (story order):
 - 1924-10-14 night  chapter-01-scene-01: The Ash and the Ledger (POV jonas-reed, at the-mill-row)
-- 1924-10-20 22:00  chapter-03-scene-01: The Dry Side of Mill Row (POV jonas-reed, at the-mill-row) [told in chapter 3, after later events; flashback to the night of the fire]
+- 1924-10-20 22:00  chapter-03-scene-01: The Dry Side of Mill Row (POV nessa-thorn, at the-mill-row) [told in chapter 3, after later events; flashback to the night of the fire]
 - 1924-10-21 morning  chapter-02-scene-01: The Millpond (POV jonas-reed, at the-mill-row)
 - 1924-10-21 23:30  chapter-04-scene-01: The Lock Gate (POV jonas-reed, at the-mill-row)
 

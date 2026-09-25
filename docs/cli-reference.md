@@ -94,7 +94,7 @@ Options:
   -v, --version             Show the story CLI version
 ```
 
-`story help` with a name that is not a command prints the full summary.
+`story help` with a name that is not a command fails like an unknown command (below): `story help frob` prints `Unknown command: frob` and exits 1.
 
 `story --version` (or `-v`) prints the version and exits 0. It wins over everything else on the line, including `--help`:
 
@@ -170,23 +170,24 @@ Every command, including `validate`, `next`, and `doctor`, reports that same lin
 
 - Options can appear anywhere after the command: `story build --format epub .` and `story build . --format epub` are the same.
 - Value options take the next argument (`--out book.md`) or an inline value (`--out=book.md`). Use the inline form when the value itself starts with `--` or is `-h` or `-v`, which would otherwise be read as an option.
+- Positional arguments may start with a single dash, so `story add term "-ism"` works. A lone `--` ends the options: everything after it is positional, so `story init -- --Untitled` creates a story titled `--Untitled`. Put any options before the `--`.
 - Boolean flags (`--force`, `--write`, `--log`, `--shunn`, `--init`, `--actionable`, `--sequel`, `--significance-delayed`, `--red-herring`, `--heading`) are true when present. They also accept an explicit value, inline or as the next argument: `true`, `false`, `yes`, `no`, `on`, `off`, `1`, or `0`. So `--write false` turns writing off, while `--write=maybe` is an error.
 - Repeatable options collect every value, and list options also split on commas, so `--character ilse-marrow --character tobin-reyes` and `--characters ilse-marrow,tobin-reyes` produce the same list. `--source`, `--follows`, and `--precedes` keep each value whole.
 - Do not mix a singular flag with its plural alias in one `add` command: when both are given, the plural form wins and the singular values are dropped (except `add character --arc`, which is single-valued and has no plural alias). `init` and `import` are the exception: they combine `--theme` and `--themes`.
 - For options that are not repeatable, the last value wins: `--out a.md --out b.md` writes `b.md`.
 - Unknown options, missing values, extra positional arguments, and options the command does not read are errors. Each command accepts only its own options plus `--path`:
 
-An unknown option close to a real one gets the same kind of suggestion, naming every equally close option (up to three). A single-dash word such as `-x` is an unknown option, not a path; a lone `-` or a negative number stays a positional argument.
+An unknown option close to one the command accepts gets the same kind of suggestion, naming every equally close option (up to three). A single-dash word such as `-x` is a positional argument, so on a command that takes a `[path]` it is read as the project path; when no such project exists, the error says it is not an option.
 
 ```text
 $ story validate --verbose
 Unknown option --verbose
 
 $ story build --formt epub
-Unknown option --formt; did you mean --form or --format?
+Unknown option --formt; did you mean --format?
 
 $ story validate -x
-Unknown option -x
+~/stories/the-salt-road/-x is not a story project: missing story.md; -x is not an option (run story help)
 
 $ story export --out
 Missing value for --out: expected a value
@@ -231,6 +232,8 @@ Refusing to access path outside project root: ~/stories/outside.md
 
 An absolute `--out` path is written where you say. Generated and rewritten files are written in place and keep their permissions, so a read-only file is refused (`Cannot open dist/manuscript.md: permission denied`). The exception is a target that is a hard link, such as an `--out` path linked to a chapter: it is replaced by a new file with the old file's permissions, so the linked file is left unchanged. If the new file cannot be written, for example in a read-only directory, the command fails with `Cannot replace <path>: permission denied`, naming the target rather than the temporary file. The CLI also refuses to write through symlinks or into symlinked project directories, and it never reads a project text file that is a symlink, a device or FIFO, or larger than 5 MiB (see [Scanning limits and safety](project-format.md#scanning-limits-and-safety)). Scans skip `dist/`, `node_modules/`, and dot-directories, so build output never feeds back into checks.
 
+Run write commands on a project one at a time. Two at once, such as two `story add` commands started together by a script or by parallel agents, can each rebuild a registry from what it read, so one can drop the other's row. If that may have happened, run `story reindex` afterwards.
+
 A file-system failure reads `Cannot <action> <path>: <reason>`, with the path relative to the current directory when it is inside it. The action is `open`, `list`, `check`, `replace`, `create the folder`, `delete`, `copy`, or `write to`, and the reason is `permission denied`, `no such file or folder`, `it is a folder, not a file`, `a part of the path is not a folder`, `the file system is read-only`, `no space left on the device`, or `the name is too long`.
 
 `--out` on `export`, `build`, `synopsis`, and `diagram` never overwrites project source: `story.md`, `style-sheet.md`, `progress.md`, or anything under `characters/`, `chapters/`, `scenes/`, `worldbuilding/`, `plot/`, `continuity/`, `glossary/`, `matter/`, or `research/`. Folder names match in any letter case (`Chapters/x.md` is refused), and a path through a symlink is checked against the real folder it points to, so `lnk/x.md` is refused when `lnk` links to `chapters`. The real path is compared in any letter case as well, so an absolute path typed in another case on a case-insensitive disk (the macOS default) is caught. It must also name a file, not a directory; `--out dist` is refused even before `dist/` exists:
@@ -245,7 +248,7 @@ $ story build --out dist
 
 ### Files that fail to parse
 
-Commands that rewrite registries or assemble chapters stop when an entity file, a registry, or `story.md` fails to parse, because carrying on would silently drop that file. `reindex`, `wordcount`, `export`, `build`, `synopsis`, `add`, `migrate`, `rename`, and `remove` name the files and change nothing:
+Commands that rewrite registries or assemble chapters stop when an entity file, a registry, or `story.md` fails to parse, because carrying on would silently drop that file. `reindex`, `wordcount`, `export`, `build`, `synopsis`, `add`, `migrate`, `rename`, `remove`, and `progress --log` name the files and change nothing:
 
 ```text
 $ story reindex
@@ -253,7 +256,7 @@ Cannot reindex: fix this file first (story validate reports it):
 - characters/old-bram.md: Duplicate frontmatter key: name
 ```
 
-The other commands name themselves: `Cannot count words`, `Cannot export`, `Cannot build`, `Cannot build a synopsis`, `Cannot add`, `Cannot migrate`, `Cannot rename`, and `Cannot remove`. With several files the line reads `fix these files first (story validate reports them)`. `rename` and `remove` also read every other markdown file before writing, and stop with `<file>: <error>; nothing was changed` when one of those fails to parse. A `style-sheet.md` or `progress.md` that fails to parse does not block them; `story validate` reports it.
+The other commands name themselves: `Cannot count words`, `Cannot export`, `Cannot build`, `Cannot build a synopsis`, `Cannot add`, `Cannot migrate`, `Cannot rename`, `Cannot remove`, and `Cannot log progress`. With several files the line reads `fix these files first (story validate reports them)`. `rename` and `remove` also read every other markdown file before writing, and stop with `<file>: <error>; nothing was changed` when one of those fails to parse. A `style-sheet.md` or `progress.md` that fails to parse does not block them; `story validate` reports it.
 
 A parse error names the file by its path inside the project, never an absolute path, for every file including `story.md`, the registries, `progress.md`, and `style-sheet.md`: `story.md: is missing YAML frontmatter`. When `story.md` cannot be read, `validate` reports that once rather than also listing each required field as missing.
 
@@ -603,7 +606,7 @@ These commands read the project and never change story files. The one exception 
 story continuity [path]
 ```
 
-Runs the deterministic continuity engine over frontmatter: characters appearing after they die, promises and clues paid off before they are planted, questions resolved before they are introduced, planted setups with no payoff, POV characters missing from a chapter's cast, destroyed or lost artifacts used later, impossible clock and travel times (including journeys faster than the shortest path through location `routes`), and references in `continuity/state.md`. Findings matching an entry in `continuity/exemptions.md` are reported as `dismissed` and do not fail the run.
+Runs the deterministic continuity engine over frontmatter: characters appearing after they die, promises and clues paid off before they are planted, questions resolved before they are introduced, planted setups with no payoff, POV characters missing from a chapter's cast or from all of its scenes, destroyed or lost artifacts used later, impossible clock and travel times (including journeys faster than the shortest path through location `routes`), and references in `continuity/state.md`. Findings matching an entry in `continuity/exemptions.md` are reported as `dismissed` and do not fail the run.
 
 Using a copy of [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/), which is broken on purpose:
 
@@ -1427,8 +1430,8 @@ Options by kind:
 | `chapter` | `--number`, `--pov`, `--location` (`locations`), `--character` (`characters`), `--mention` (`mentions`), `--arc` (`arcs-advanced`), `--status`, `--mode`, `--date`, `--time`, `--hook` | One more than the highest chapter number, `outline`; no `hook` |
 | `scene` | `--chapter`, `--scene`, `--pov`, `--location` (`location`, a single id; give it once), `--character` (`characters`), `--mention` (`mentions`), `--arc` (`arcs-advanced`), `--status`, `--date`, `--time`, `--travel-hours`, `--sequel`, `--outcome`, `--dilemma` | Latest chapter, one more than that chapter's highest scene number, `outline`; no `outcome` |
 | `question` | `--status`, `--introduced`, `--resolved`, `--character` (`characters`) | `answered` with `--resolved`, otherwise `open`; `--status open` with `--resolved` is an error |
-| `promise` | `--status`, `--planted`, `--payoff`, `--arc` (`arcs`), `--character` (`characters`) | `planted` with `--planted`, otherwise `planned` |
-| `clue` | `--status`, `--planted`, `--payoff`, `--significance-delayed`, `--red-herring`, `--character` (`characters`), `--arc` (`arcs`) | `planted` with `--planted`, otherwise `planned`; `red-herring` written only when set |
+| `promise` | `--status`, `--planted`, `--payoff`, `--arc` (`arcs`), `--character` (`characters`) | `planted` when `--planted` names an existing chapter, otherwise `planned` |
+| `clue` | `--status`, `--planted`, `--payoff`, `--significance-delayed`, `--red-herring`, `--character` (`characters`), `--arc` (`arcs`) | `planted` when `--planted` names an existing chapter, otherwise `planned`; `red-herring` written only when set |
 | `term` | `--category`, `--alias` (`aliases`) | `term` |
 | `research` | `--status`, `--source` (`sources`), `--used-in` (`used-in`), `--accuracy`, `--confidence`, `--method`, `--risk` (`risk`) | `open`; the other four fields written only when given |
 | `matter` | `--placement`, `--order`, `--heading` | `front`, one more than the highest order in that placement, `heading: true`; `--heading false` writes `heading: false` for a dedication or epigraph |
@@ -1460,7 +1463,7 @@ Options by kind:
 
 On `add chapter` and `add scene`, `--pov` names the POV character, and `add` also puts that id first in `characters` when it is not already listed.
 
-Options that name other entities or chapters (`--chapter`, `--planted`, `--payoff`, `--introduced`, `--resolved`, `--used-in`, `--location`, `--character`, `--mention`, `--member`, `--owner`, `--arc`, `--controlled-by`, and their plural forms) must be kebab-case ids, and so must `--pov` on `add chapter` and `add scene`. A character's `--arc` is exempt: it is a free-text arc theme. A name is refused before anything is written, since it could never resolve, and the example in the message matches the option (`port-kestrel` for a location, `the-long-road` for an arc):
+Options that name other entities or chapters (`--chapter`, `--planted`, `--payoff`, `--introduced`, `--resolved`, `--used-in`, `--location`, `--character`, `--mention`, `--member`, `--owner`, `--arc`, `--controlled-by`, and their plural forms) must be kebab-case ids, and so must `--pov` on `add chapter` and `add scene`. A character's `--arc` is exempt: it is a free-text arc theme. A name is refused before anything is written, since it could never resolve, and the example in the message matches the option (`port-kestrel` for a location, `the-long-road` for an arc, `mara-quill or harbor-council` for an owner):
 
 ```text
 $ story add promise "The Ledger" --planted "Chapter 1"
@@ -1471,6 +1474,16 @@ $ story add chapter "Two" --pov "Mara Quill"
 
 $ story add chapter "Two" --number 0
 chapter number must be a positive integer, got 0
+```
+
+A chapter id in `--chapter`, `--planted`, `--payoff`, `--introduced`, `--resolved`, or `--used-in` may name a chapter not written yet, but not `chapter-00` or a different spelling of an existing chapter's number:
+
+```text
+$ story add promise "The Ledger" --payoff chapter-00
+--payoff chapter-00: chapter numbers start at 1
+
+$ story add promise "The Ledger" --payoff chapter-1
+--payoff chapter-1: did you mean chapter-01?
 ```
 
 `add scene` needs an existing chapter. With no chapters it fails with `No chapters yet: add one with story add chapter before adding a scene`, and a `--chapter` id with no chapter file fails with `chapter chapter-99 does not exist: add it with story add chapter, or pass --chapter with an existing chapter id`.
@@ -1573,13 +1586,15 @@ $ story rename chapter chapter-01 "Slack Water"
 Renamed chapter chapter-01 to chapter-01: ~/stories/the-salt-road/chapters/chapter-01.md
 ```
 
+References are rewritten before the entity file is moved, so if the command is interrupted, run it again to finish. A rerun after the file has already moved (the old id is gone and the new file carries the new name) rewrites any references still using the old id and prints `Finished an interrupted rename of <kind> <old-id> to <new-id>: <file>`.
+
 ### remove
 
 ```text
 story remove <kind> <id> [--path <project>]
 ```
 
-Deletes the entity file and scrubs its id from every reference field, searching the same markdown files as `rename`. List entries are removed, single-value fields are cleared, and whole entries in `relationships`, `character-state`, `knowledge-state`, `object-state`, and location `routes` are dropped when they are about the removed entity. Prose and markdown links in file bodies are never changed. `story links` reports leftover body links and chapter ids only in `plot/timeline.md` and arc files; find any others by hand, for example with `grep -rn brass-sounding-line .`. As with `rename`, every file is parsed before anything is deleted, so a file that fails to parse, or an entity file, registry, or fixed project file with no frontmatter, leaves the project unchanged.
+Deletes the entity file and scrubs its id from every reference field, searching the same markdown files as `rename`. List entries are removed, single-value fields are cleared, and whole entries in `relationships`, `character-state`, `knowledge-state`, `object-state`, and location `routes` are dropped when they are about the removed entity. Prose and markdown links in file bodies are never changed. `story links` reports leftover body links and chapter ids only in `plot/timeline.md` and arc files; find any others by hand, for example with `grep -rn brass-sounding-line .`. As with `rename`, every file is parsed before anything is deleted, so a file that fails to parse, or an entity file, registry, or fixed project file with no frontmatter, leaves the project unchanged. References are scrubbed before the entity file is deleted, so an interrupted `remove` can simply be run again.
 
 `remove chapter` refuses while scenes still point at the chapter, so remove those first:
 
