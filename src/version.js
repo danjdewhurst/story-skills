@@ -1,2 +1,2 @@
 // Bumped by scripts/release.js alongside package.json; checked by check:metadata.
-export const VERSION = "0.10.7";
+export const VERSION = "0.11.0";
