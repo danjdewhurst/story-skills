@@ -140,6 +140,7 @@ export function metadataSheet(input) {
     ["Cover image (`cover`)", typeof data.cover === "string" && data.cover !== ""],
     ["Cover alt text (`cover-alt`)", meta.coverAlt !== ""],
     ["AI-use statement decided (`ai-disclosure`)", meta.aiDisclosure !== ""],
+    [`Permissions cleared for quoted matter (\`permission\`${(input.pendingPermissions ?? []).length > 0 ? `; pending: ${input.pendingPermissions.join(", ")}` : ""})`, (input.pendingPermissions ?? []).length === 0],
     ["Story status is complete", data.status === "complete"]
   ];
   return [

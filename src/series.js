@@ -76,7 +76,9 @@ export function validateSeriesLinks(root, data, errors) {
 
 // Returns an existing book's story.md with a reciprocal link added, or null
 // when the link is already present.
-export function withSeriesBacklink(targetRoot, field, linkedRoot) {
+// Also gives the existing book the new book's series id when it has none,
+// so both sides of the link agree.
+export function withSeriesBacklink(targetRoot, field, linkedRoot, seriesId) {
   const storyPath = path.join(targetRoot, "story.md");
   const markdown = readTextFile(storyPath);
   const { data } = parseFrontmatter(markdown, storyPath);
@@ -84,10 +86,16 @@ export function withSeriesBacklink(targetRoot, field, linkedRoot) {
   // dropped when the new link is added.
   const current = data[field];
   const existing = Array.isArray(current) ? current : typeof current === "string" && current.trim() !== "" ? [current] : [];
-  if (seriesLinks(targetRoot, { [field]: existing }, field).includes(linkedRoot)) {
+  const linked = seriesLinks(targetRoot, { [field]: existing }, field).includes(linkedRoot);
+  const addSeries = data.series === undefined && seriesId !== undefined;
+  if (linked && !addSeries) {
     return null;
   }
-  return replaceFrontmatter(markdown, { ...data, [field]: existing.concat(seriesLinkPath(targetRoot, linkedRoot)) });
+  return replaceFrontmatter(markdown, {
+    ...data,
+    ...(addSeries ? { series: seriesId } : {}),
+    ...(linked ? {} : { [field]: existing.concat(seriesLinkPath(targetRoot, linkedRoot)) })
+  });
 }
 
 export function buildSeries(startRoot, scan) {
@@ -110,6 +118,10 @@ export function buildSeries(startRoot, scan) {
   const seriesIds = [...new Set(books.map((book) => book.series).filter((series) => series !== undefined))].sort();
   if (seriesIds.length > 1) {
     errors.push(`Linked books belong to different series: ${seriesIds.join(", ")}`);
+  }
+  const unnamed = books.filter((book) => book.series === undefined);
+  if (seriesIds.length === 1 && unnamed.length > 0) {
+    warnings.push(`Linked books ${unnamed.map((book) => book.title).join(", ")} set no series id; add series: ${seriesIds[0]}`);
   }
   checkDuplicateBookNumbers(books, errors);
 

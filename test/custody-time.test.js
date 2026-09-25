@@ -133,19 +133,21 @@ state-changes:
     expect(result.errors).toEqual([]);
   });
 
-  test("warns when a destroyed artifact has no since chapter", () => {
+  test("an artifact destroyed with no since chapter was lost before the story", () => {
     const root = baseProject(2);
     setObjectState(root, `  - artifact: moon-blade\n    status: destroyed\n`);
+    // Remembering it is fine; using it is not.
     writeScene(root, 2, 1, `
 mentions:
   - moon-blade
+state-changes:
+  - target: moon-blade
+    change: drawn
 `);
 
     const result = checkContinuity(scanProject(root));
-    expect(result.warnings).toContain(
-      "continuity/state.md object-state[0] is destroyed/lost with no since chapter; custody cannot be checked"
-    );
-    expect(result.errors).toEqual([]);
+    expect(result.warnings.join("\n")).not.toContain("no since chapter");
+    expect(result.errors).toEqual(["scenes/chapter-02-scene-01.md uses moon-blade, destroyed/lost before the story"]);
   });
 
   test("errors when the since chapter does not exist", () => {

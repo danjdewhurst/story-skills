@@ -1729,7 +1729,7 @@ status: draft
     fs.rmSync(path.join(created.root, "continuity", "state.md"));
     const result = validateProject(created.root);
     expect(result.ok).toBe(false);
-    expect(result.errors).toContain("Missing required path: continuity/state.md");
+    expect(result.errors).toContain("Missing required path: continuity/state.md (story migrate adds missing registries)");
   });
 
   test("falls back to the filename chapter for chapterless scenes", () => {

@@ -107,7 +107,7 @@ describe("series init", () => {
 
     const result = invoke(cwd, ["init", "Book Two", "--follows", "book-one"]);
     expect(result.code, result.err).toBe(0);
-    expect(result.out).toContain(`Linked series backlink in ${path.join(cwd, "book-one", "story.md")}`);
+    expect(result.out).toContain(`Updated series links in ${path.join(cwd, "book-one", "story.md")}`);
 
     const two = parseFrontmatter(fs.readFileSync(path.join(cwd, "book-two", "story.md"), "utf8")).data;
     expect(two).toMatchObject({
@@ -126,7 +126,7 @@ describe("series init", () => {
 
     const rerun = invoke(cwd, ["init", "Book Two", "--follows", "book-one", "--force"]);
     expect(rerun.code).toBe(0);
-    expect(rerun.out).not.toContain("Linked series backlink");
+    expect(rerun.out).not.toContain("Updated series links");
   });
 
   test("links a prequel with explicit options and no inherited numbers", () => {
@@ -147,7 +147,9 @@ describe("series init", () => {
     const sideStory = book(cwd, "Side Story", { follows: "book-one" });
     const sideData = parseFrontmatter(fs.readFileSync(path.join(sideStory, "story.md"), "utf8")).data;
     expect(sideData["book-number"]).toBe(5);
-    expect(sideData.series).toBeUndefined();
+    // Origins gave Book One its series id, so the side story inherits it.
+    expect(sideData.series).toBe("saga");
+    expect(parseFrontmatter(fs.readFileSync(path.join(cwd, "book-one", "story.md"), "utf8")).data.series).toBe("saga");
 
     book(cwd, "Loose One");
     const unnumbered = book(cwd, "Loose Two", { follows: "loose-one" });
@@ -243,6 +245,7 @@ describe("series validation and reporting", () => {
       "scenes/chapter-01-scene-01.md lists ghost, who died in earlier book East; move appearances to mentions"
     ]);
     expect(report.warnings).toEqual([
+      "Linked books Finale, East set no series id; add series: saga",
       "characters/old-king.md name \"The Old King\" differs from \"Old King\" in ../east/characters/old-king.md",
       "worldbuilding/artifacts/crown.md has status unset, but crown was destroyed in earlier book origins"
     ]);
@@ -258,7 +261,7 @@ describe("series validation and reporting", () => {
     const cli = invoke(cwd, ["series", finale]);
     expect(cli.code).toBe(1);
     expect(cli.out).toContain("# Series: saga");
-    expect(cli.err).toContain("Series check failed: 5 errors, 2 warnings");
+    expect(cli.err).toContain("Series check failed: 5 errors, 3 warnings");
   });
 
   test("flags facts a later book learns that an earlier book already knows", () => {
