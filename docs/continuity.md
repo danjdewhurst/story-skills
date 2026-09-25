@@ -1201,9 +1201,9 @@ Checks: validate ok (0 errors, 0 warnings), links ok (0 errors, 0 warnings), con
 Actions:
 - [P0] Fix continuity contradictions: Run story continuity . and repair 4 deterministic continuity errors.
 - [P1] Review continuity warnings: Run story continuity . and review 3 continuity warnings.
+- [P1] Revision pass: character: Wants, arcs, motivation, and who knows what when. Run story voices, story knowledge <id> --at <chapter>, story diagram relationships. Mark it with story passes --done character.
 - [P2] Review promises and payoffs: 1 setup/payoff promises need planting or payoff decisions.
 - [P2] Review open clues: 1 clues are still planned or planted.
-- [P1] Revision pass: character: Wants, arcs, motivation, and who knows what when. Run story voices, story knowledge <id> --at <chapter>, story diagram relationships. Mark it with story passes --done character.
 - [P2] Draft chapter 5: Use story add chapter "Chapter 5" --number 5, then outline scenes to advance The Ledger Trail.
 ```
 
@@ -1234,7 +1234,7 @@ Actions:
 
 ### Actions and priorities
 
-All three commands build the same action list, in this order. The list is not re-sorted by priority, so the revision-pass line sits among the P2 lines:
+All three commands build the same action list. It is sorted by priority, P0 first, and actions with the same priority appear in the order below. The P3 "Project is mechanically healthy" line is the exception: it comes first when it appears.
 
 | Priority | Action | Appears when |
 |----------|--------|--------------|
@@ -1244,11 +1244,11 @@ All three commands build the same action list, in this order. The list is not re
 | P1 | Review continuity warnings | `story continuity` has warnings after exemptions |
 | P1 | Refresh word counts | A chapter's `word-count` differs from its prose |
 | P1 | Add scene records | A chapter has no scene files in `scenes/` |
+| P1 | Plan revision passes | `story.md` has `status: revising` and no `revision-passes` |
+| P1 | Revision pass: `<name>` | `story.md` has `status: revising` and a pass that is not done |
 | P2 | Track open questions | A question has `status: open` |
 | P2 | Review promises and payoffs | A promise is `planned` or `planted` |
 | P2 | Review open clues | A clue is `planned` or `planted` |
-| P1 | Plan revision passes | `story.md` has `status: revising` and no `revision-passes` |
-| P1 | Revision pass: `<name>` | `story.md` has `status: revising` and a pass that is not done |
 | P2 | Draft chapter N | Always: the chapter after the highest number, naming up to three unresolved arcs |
 | P2 | Create first character | The project has no characters |
 | P3 | Project is mechanically healthy | Nothing else applies except drafting the next chapter; listed first |
