@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { parseFrontmatter, stringifyFrontmatter } from "./frontmatter.js";
-import { splitFences, titleCaseSlug, wordCount } from "./markdown.js";
+import { chapterHeading, splitFences, titleCaseSlug, wordCount } from "./markdown.js";
 import { createStoryProject, reindexProject, writeFile } from "./story.js";
 
 // A lone "I" before a word is the pronoun ("Chapter I Am Legend"), not a numeral.
@@ -98,7 +98,9 @@ export function importManuscript(options) {
     const words = wordCount(chapter.prose);
     totalWords += words;
     const file = path.join(chaptersDir, `chapter-${String(number).padStart(2, "0")}.md`);
-    writeFile(file, chapterMarkdown(chapter.title, number, words, chapter.prose), { root: created.root });
+    // An untitled numbered heading ("# Chapter 1") takes its new number.
+    const title = chapter.title || `Chapter ${number}`;
+    writeFile(file, chapterMarkdown(title, number, words, chapter.prose), { root: created.root });
   });
 
   reindexProject(created.root);
@@ -366,12 +368,14 @@ function plainChapterTitle(lines, index) {
   return chapterTitle(text, PLAIN_CHAPTER_PATTERN, PLAIN_SECTION_PATTERN);
 }
 
+// A chapter heading's title, "" for a bare numbered heading ("Chapter 1"),
+// or null when the text is not a chapter heading.
 function chapterTitle(text, pattern, sectionPattern = SECTION_HEADING_PATTERN) {
   if (sectionPattern.test(text)) {
     return text.replace(/[\s:.\-–—]+$/, "");
   }
   const match = pattern.exec(text);
-  return match ? (match[1] ?? "").trim() || text.replace(/[\s:.\-–—]+$/, "") : null;
+  return match ? (match[1] ?? "").trim() : null;
 }
 
 function finishChapter(section) {
@@ -409,7 +413,7 @@ function chapterMarkdown(title, number, words, prose) {
     "arcs-advanced": [],
     status: "draft",
     "word-count": words
-  })}# Chapter ${number}: ${title}
+  })}# ${chapterHeading(number, title)}
 
 ## Chapter Text
 

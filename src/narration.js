@@ -1,4 +1,4 @@
-import { isSceneBreak, wordCount } from "./markdown.js";
+import { chapterHeading, isSceneBreak, wordCount } from "./markdown.js";
 
 // Audiobook narration script: a pronunciation guide from the bible, opening
 // and closing credits, and each section with its estimated finished runtime.
@@ -10,7 +10,7 @@ export function narrationScript(manuscript, guide) {
   const authors = manuscript.meta.authors.join(" and ");
   const sections = [
     ...manuscript.front.filter((entry) => !entry.copyright).map((entry) => ({ title: entry.title, body: entry.body })),
-    ...manuscript.chapters.map((chapter) => ({ title: `Chapter ${chapter.number}: ${chapter.title}`, body: chapter.body })),
+    ...manuscript.chapters.map((chapter) => ({ title: chapterHeading(chapter.number, chapter.title), body: chapter.body })),
     ...manuscript.back.map((entry) => ({ title: entry.title, body: entry.body }))
   ].map((section) => ({ ...section, words: wordCount(section.body) }));
   const totalWords = sections.reduce((sum, section) => sum + section.words, 0);

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { compareImportNames, extractNameCandidates, importManuscript } from "../src/import.js";
-import { scanProject, validateProject } from "../src/story.js";
+import { exportManuscript, scanProject, validateProject } from "../src/story.js";
 import { makeTempDir } from "./helpers.js";
 
 const PROSE = [
@@ -235,7 +235,7 @@ describe("manuscript import", () => {
 
     const result = importManuscript({ source: "book.md", title: "Romans", cwd });
 
-    expect(scanProject(result.root).chapters.map((chapter) => chapter.title)).toEqual(["Chapter IV", "The Storm", "Civil War"]);
+    expect(scanProject(result.root).chapters.map((chapter) => chapter.title)).toEqual(["Chapter 1", "The Storm", "Civil War"]);
   });
 
   test("strips frontmatter the strict parser rejects but keeps a leading scene break", () => {
@@ -275,6 +275,41 @@ describe("manuscript import", () => {
     expect(compareImportNames("b-1.md", "a-1.md")).toBe(1);
     expect(compareImportNames("a-1.md", "a-1.md")).toBe(0);
     expect(compareImportNames("chapter-2.md", "chapter-10.md")).toBeLessThan(0);
+  });
+
+  test("gives a bare numbered heading a plain Chapter N title and heading", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "one.md"), "# Chapter 1\n\nOne.\n\n# Chapter 2: The Road\n\nTwo.\n", "utf8");
+
+    const result = importManuscript({ source: "one.md", title: "S1", cwd, dir: "s1" });
+
+    const first = fs.readFileSync(path.join(result.root, "chapters", "chapter-01.md"), "utf8");
+    const second = fs.readFileSync(path.join(result.root, "chapters", "chapter-02.md"), "utf8");
+    expect(first).toContain("title: Chapter 1\n");
+    expect(first).toContain("\n# Chapter 1\n");
+    expect(first).not.toContain("Chapter 1: Chapter 1");
+    expect(second).toContain("\n# Chapter 2: The Road\n");
+    expect(validateProject(result.root).errors).toEqual([]);
+
+    const { outFile } = exportManuscript(result.root);
+    const manuscript = fs.readFileSync(outFile, "utf8");
+    expect(manuscript).toContain("\n# Chapter 1\n");
+    expect(manuscript).toContain("\n# Chapter 2: The Road\n");
+  });
+
+  test("gives a bare numbered heading in a one-chapter file a plain Chapter N title", () => {
+    const cwd = makeTempDir();
+    const source = path.join(cwd, "manuscript");
+    fs.mkdirSync(source);
+    fs.writeFileSync(path.join(source, "01-opening.md"), "# Chapter 1\n\nOne.\n", "utf8");
+    fs.writeFileSync(path.join(source, "02-onward.md"), "# Chapter Two: Onward\n\nTwo.\n", "utf8");
+
+    const result = importManuscript({ source: "manuscript", title: "S2", cwd, dir: "s2" });
+
+    const first = fs.readFileSync(path.join(result.root, "chapters", "chapter-01.md"), "utf8");
+    expect(first).toContain("title: Chapter 1\n");
+    expect(first).toContain("\n# Chapter 1\n");
+    expect(scanProject(result.root).chapters.map((chapter) => chapter.title)).toEqual(["Chapter 1", "Onward"]);
   });
 });
 

@@ -492,6 +492,11 @@ function kebabCase(value) {
 function titleCaseSlug(slug) {
   return String(slug).split("-").filter(Boolean).map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`).join(" ");
 }
+function chapterHeading(number, title) {
+  const text = String(title ?? "").trim();
+  const label = `Chapter ${number}`;
+  return text === "" || text.toLowerCase() === label.toLowerCase() ? label : `${label}: ${text}`;
+}
 var WORD_PATTERN = /[\p{L}\p{N}]+(?:['\u2019-][\p{L}\p{N}]+)*/gu;
 function splitWords(markdown) {
   const normalized = withoutFencedCode(String(markdown)).replace(/`[^`]*`/g, " ").replace(/!\[[^\]]{0,1000}\]\([^)]{0,1000}\)/g, " ").replace(/\[([^\]]{0,1000})\]\([^)]{0,1000}\)/g, " $1 ").replace(/\\([!-/:-@[-`{-~])/g, "$1").replace(/[#>*_~|:]/g, " ");
@@ -3425,7 +3430,7 @@ function narrationScript(manuscript, guide) {
   const authors = manuscript.meta.authors.join(" and ");
   const sections = [
     ...manuscript.front.filter((entry) => !entry.copyright).map((entry) => ({ title: entry.title, body: entry.body })),
-    ...manuscript.chapters.map((chapter) => ({ title: `Chapter ${chapter.number}: ${chapter.title}`, body: chapter.body })),
+    ...manuscript.chapters.map((chapter) => ({ title: chapterHeading(chapter.number, chapter.title), body: chapter.body })),
     ...manuscript.back.map((entry) => ({ title: entry.title, body: entry.body }))
   ].map((section) => ({ ...section, words: wordCount(section.body) }));
   const totalWords = sections.reduce((sum, section) => sum + section.words, 0);
@@ -5699,7 +5704,7 @@ function exportManuscript(root, options = {}) {
   };
   manuscript.front.forEach(pushMatter);
   for (const chapter of manuscript.chapters) {
-    lines.push(`# Chapter ${chapter.number}: ${chapter.title}`, "", chapter.body, "");
+    lines.push(`# ${chapterHeading(chapter.number, chapter.title)}`, "", chapter.body, "");
   }
   manuscript.back.forEach(pushMatter);
   writeFile(output.outFile, `${lines.join(`
@@ -6927,7 +6932,7 @@ function chapterFile(title, number, options) {
     time: options.time ?? "",
     ...options.hook === undefined ? {} : { hook: options.hook },
     "word-count": 0
-  })}# Chapter ${number}: ${title}
+  })}# ${chapterHeading(number, title)}
 
 ## Outline
 
@@ -7519,7 +7524,7 @@ function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
   for (const chapter of manuscript.chapters) {
     documents.push({
       id: `chapter-${String(chapter.number).padStart(2, "0")}`,
-      label: `Chapter ${chapter.number}: ${chapter.title}`,
+      label: chapterHeading(chapter.number, chapter.title),
       content: chapterXhtml(chapter, lang),
       bodymatter: true
     });
@@ -7589,7 +7594,7 @@ function xhtmlDocument(title, lang, bodyType, content) {
   return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="${lang}" lang="${lang}"><head><title>${xmlEscape(title)}</title></head><body epub:type="${bodyType}">${content}</body></html>`;
 }
 function chapterXhtml(chapter, lang = "en") {
-  return xhtmlDocument(chapter.title, lang, "bodymatter chapter", `<h1>Chapter ${chapter.number}: ${xmlEscape(chapter.title)}</h1>${xhtmlParagraphs(chapter.body)}`);
+  return xhtmlDocument(chapter.title, lang, "bodymatter chapter", `<h1>${xmlEscape(chapterHeading(chapter.number, chapter.title))}</h1>${xhtmlParagraphs(chapter.body)}`);
 }
 function matterXhtml(entry, placement = "front", lang = "en") {
   const heading = entry.heading ? `<h1>${xmlEscape(entry.title)}</h1>` : "";
@@ -7613,7 +7618,7 @@ function htmlBook(manuscript) {
       key: `ch${String(chapter.number).padStart(2, "0")}`,
       kind: "chapter",
       placement: "body",
-      title: `Chapter ${chapter.number}: ${chapter.title}`,
+      title: chapterHeading(chapter.number, chapter.title),
       heading: true,
       paragraphs: paragraphs(chapter.body)
     })),
@@ -7640,7 +7645,7 @@ function writeDocx(outFile, manuscript, writeOptions = {}) {
   const pushMatter = (entry) => pushSection(entry.heading ? entry.title : null, entry.body);
   manuscript.front.forEach(pushMatter);
   for (const chapter of manuscript.chapters) {
-    pushSection(`Chapter ${chapter.number}: ${chapter.title}`, chapter.body);
+    pushSection(chapterHeading(chapter.number, chapter.title), chapter.body);
   }
   manuscript.back.forEach(pushMatter);
   writeZip(outFile, docxPackageEntries(bodyParts.join("")), writeOptions);
@@ -7686,7 +7691,7 @@ function shunnTitlePageXml(meta) {
 function writeShunnDocx(outFile, manuscript, meta, writeOptions = {}) {
   const paragraphs = [...shunnTitlePageXml(meta)];
   for (const chapter of manuscript.chapters) {
-    paragraphs.push(shunnChapterHeadingXml(`Chapter ${chapter.number}: ${chapter.title}`));
+    paragraphs.push(shunnChapterHeadingXml(chapterHeading(chapter.number, chapter.title)));
     for (const paragraph of markdownParagraphs(chapter.body)) {
       paragraphs.push(shunnParagraphXml(inlineRuns(paragraph).map(shunnTextRunXml).join(""), false));
     }
@@ -7703,7 +7708,7 @@ function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {}) {
     lines.push(String(contactLine));
   }
   for (const chapter of manuscript.chapters) {
-    lines.push("\f", `# Chapter ${chapter.number}: ${chapter.title}`, "");
+    lines.push("\f", `# ${chapterHeading(chapter.number, chapter.title)}`, "");
     for (const paragraph of markdownParagraphs(chapter.body)) {
       lines.push(paragraph, "");
     }
@@ -9240,7 +9245,8 @@ function importManuscript(options) {
     const words = wordCount(chapter.prose);
     totalWords += words;
     const file = path5.join(chaptersDir, `chapter-${String(number).padStart(2, "0")}.md`);
-    writeFile(file, chapterMarkdown(chapter.title, number, words, chapter.prose), { root: created.root });
+    const title = chapter.title || `Chapter ${number}`;
+    writeFile(file, chapterMarkdown(title, number, words, chapter.prose), { root: created.root });
   });
   reindexProject(created.root);
   return {
@@ -9459,7 +9465,7 @@ function chapterTitle(text, pattern, sectionPattern = SECTION_HEADING_PATTERN) {
     return text.replace(/[\s:.\-–—]+$/, "");
   }
   const match = pattern.exec(text);
-  return match ? (match[1] ?? "").trim() || text.replace(/[\s:.\-–—]+$/, "") : null;
+  return match ? (match[1] ?? "").trim() : null;
 }
 function finishChapter(section) {
   return { title: section.title, prose: section.lines.join(`
@@ -9495,7 +9501,7 @@ function chapterMarkdown(title, number, words, prose) {
     "arcs-advanced": [],
     status: "draft",
     "word-count": words
-  })}# Chapter ${number}: ${title}
+  })}# ${chapterHeading(number, title)}
 
 ## Chapter Text
 
