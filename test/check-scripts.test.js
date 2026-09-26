@@ -58,6 +58,96 @@ function lcovRecord(file, { lines = [10, 10], functions = [2, 2], branches = nul
   return `${text}LF:${lines[0]}\nLH:${lines[1]}\nend_of_record\n`;
 }
 
+// A bare `localeCompare` resolves against the host default locale, so registry,
+// backlink, and report order can differ between machines and differ again on a
+// `small-icu` Node build. Every runtime call site pins `"en"`; the scan below is
+// a dependency-free source check that keeps a new one from drifting back.
+const LOCALE_ARGUMENT = /^(["'])[a-z]{2}(-[A-Za-z0-9]+)*\1$/;
+
+// Each entry pairs a call shape with the argument index that must hold a locale.
+const LOCALE_CALLS = [
+  { pattern: /\.localeCompare\s*\(/g, localeIndex: 1 },
+  { pattern: /\.toLocale(?:Upper|Lower)Case\s*\(/g, localeIndex: 0 },
+  { pattern: /\.toLocale(?:String|DateString|TimeString)\s*\(/g, localeIndex: 0 },
+  { pattern: /\bnew Intl\.[A-Za-z]+\s*\(/g, localeIndex: 0 }
+];
+
+function runtimeSources() {
+  const files = [];
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (entry.name.endsWith(".js")) {
+        files.push(full);
+      }
+    }
+  };
+  for (const dir of ["src", "scripts", "bin"]) {
+    walk(path.join(repoRoot, dir));
+  }
+  return files;
+}
+
+// Splits the argument list opening at `open` (the index of its `(`), keeping
+// nested calls, literals, and strings intact so a comma inside one is not read
+// as an argument separator. Returns null for an unbalanced call.
+function callArguments(text, open) {
+  const args = [];
+  let depth = 0;
+  let start = open + 1;
+  let quote = null;
+  for (let index = open; index < text.length; index += 1) {
+    const char = text[index];
+    if (quote) {
+      if (char === "\\") {
+        index += 1;
+      } else if (char === quote) {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === "\"" || char === "'" || char === "`") {
+      quote = char;
+    } else if (char === "(" || char === "[" || char === "{") {
+      depth += 1;
+    } else if (char === ")" || char === "]" || char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        const last = text.slice(start, index).trim();
+        if (last !== "" || args.length > 0) {
+          args.push(last);
+        }
+        return args;
+      }
+    } else if (char === "," && depth === 1) {
+      args.push(text.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+  return null;
+}
+
+function localeCallSites(text) {
+  const sites = [];
+  for (const { pattern, localeIndex } of LOCALE_CALLS) {
+    pattern.lastIndex = 0;
+    let match = pattern.exec(text);
+    while (match) {
+      const args = callArguments(text, pattern.lastIndex - 1);
+      const locale = args === null ? undefined : args[localeIndex];
+      sites.push({
+        call: match[0],
+        line: text.slice(0, match.index).split("\n").length,
+        pinned: locale !== undefined && LOCALE_ARGUMENT.test(locale)
+      });
+      match = pattern.exec(text);
+    }
+  }
+  return sites;
+}
+
 describe("release preflight", () => {
   test("gates on test:coverage", () => {
     expect(PREFLIGHT).toContain("test:coverage");
@@ -479,5 +569,38 @@ describe("eval scripts", () => {
     expect(unknown.status).toBe(2);
     expect(unknown.stdout).toContain("unknown fixture(s): no-such-fixture");
     expect(nodeScript("compare-outputs.js", [dir]).status).toBe(2);
+  });
+});
+
+describe("locale-sensitive comparisons", () => {
+  test("every runtime call site pins a locale", () => {
+    const unpinned = [];
+    let total = 0;
+    for (const file of runtimeSources()) {
+      const relative = path.relative(repoRoot, file);
+      for (const site of localeCallSites(fs.readFileSync(file, "utf8"))) {
+        total += 1;
+        if (!site.pinned) {
+          unpinned.push(`${relative}:${site.line} ${site.call}`);
+        }
+      }
+    }
+    expect(unpinned).toEqual([]);
+    // Keeps the assertion above from passing because the scan matched nothing.
+    expect(total).toBeGreaterThan(20);
+  });
+
+  test("the scan flags a call that omits the locale", () => {
+    const pinning = (source) => localeCallSites(source).map((site) => site.pinned);
+    expect(pinning("left.title.localeCompare(right.title, \"en\")")).toEqual([true]);
+    expect(pinning("left.title.localeCompare(right.title)")).toEqual([false]);
+    expect(pinning("left.localeCompare(right, \"en\", { numeric: true })")).toEqual([true]);
+    // A comma inside the compared expression must not be read as the locale.
+    expect(pinning("left.localeCompare(pick(right, fallback))")).toEqual([false]);
+    expect(pinning("new Intl.Collator(\"en\")")).toEqual([true]);
+    expect(pinning("new Intl.Collator()")).toEqual([false]);
+    expect(pinning("value.toLocaleUpperCase(\"en\")")).toEqual([true]);
+    expect(pinning("value.toLocaleUpperCase()")).toEqual([false]);
+    expect(localeCallSites("const label = \"no comparison here\";")).toEqual([]);
   });
 });
