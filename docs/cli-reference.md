@@ -1383,22 +1383,32 @@ See [Writing workflows](writing-workflows.md) for where passes fit in a revision
 
 | Kind | Accepted spellings | Directory | Id comes from |
 |---|---|---|---|
-| `character` | `character`, `characters` | `characters/` | The name, in kebab-case |
-| `location` | `location`, `locations` | `worldbuilding/locations/` | The name |
-| `system` | `system`, `systems` | `worldbuilding/systems/` | The name |
-| `faction` | `faction`, `factions` | `worldbuilding/factions/` | The name |
-| `artifact` | `artifact`, `artifacts` | `worldbuilding/artifacts/` | The name |
-| `arc` | `arc`, `arcs` | `plot/arcs/` | The name |
+| `character` | `character`, `characters` | `characters/` | The name, in kebab-case, or `--id` |
+| `location` | `location`, `locations` | `worldbuilding/locations/` | The name, or `--id` |
+| `system` | `system`, `systems` | `worldbuilding/systems/` | The name, or `--id` |
+| `faction` | `faction`, `factions` | `worldbuilding/factions/` | The name, or `--id` |
+| `artifact` | `artifact`, `artifacts` | `worldbuilding/artifacts/` | The name, or `--id` |
+| `arc` | `arc`, `arcs` | `plot/arcs/` | The name, or `--id` |
 | `chapter` | `chapter`, `chapters` | `chapters/` | The number: `chapter-NN` |
 | `scene` | `scene`, `scenes` | `scenes/` | Chapter and number: `chapter-NN-scene-NN` |
-| `question` | `question`, `questions` | `continuity/questions/` | The title |
-| `promise` | `promise`, `promises` | `continuity/promises/` | The title |
-| `clue` | `clue`, `clues` | `continuity/clues/` | The title |
-| `term` | `term`, `terms`, `glossary`, `glossary-term`, `glossary-terms` | `glossary/terms/` | The term |
-| `matter` | `matter` | `matter/` | The title |
-| `research` | `research`, `research-note`, `research-notes` | `research/` | The title |
+| `question` | `question`, `questions` | `continuity/questions/` | The title, or `--id` |
+| `promise` | `promise`, `promises` | `continuity/promises/` | The title, or `--id` |
+| `clue` | `clue`, `clues` | `continuity/clues/` | The title, or `--id` |
+| `term` | `term`, `terms`, `glossary`, `glossary-term`, `glossary-terms` | `glossary/terms/` | The term, or `--id` |
+| `matter` | `matter` | `matter/` | The title, or `--id` |
+| `research` | `research`, `research-note`, `research-notes` | `research/` | The title, or `--id` |
 
 Kinds are case-insensitive. Ids are lowercase kebab-case: accents are stripped, apostrophes dropped, and every other run of non-alphanumeric characters becomes a hyphen, so `Sera's Reclamation` becomes `seras-reclamation`.
+
+Names may be written in any script; ids stay ASCII, so that entity filenames are portable across file systems and archive formats. A name with no ASCII letters or digits at all (`Пётр`, `李明`, `Ολυμπία`) leaves nothing to slug, so [`add`](#add) and [`rename`](#rename) take the id from `--id` instead and keep the name as written:
+
+```text
+$ story add character "Пётр"
+Cannot derive a kebab-case id from character name "Пётр": pass --id with a kebab-case id, or use a name containing ASCII letters or digits
+
+$ story add character "Пётр" --id petr
+Created character petr: ~/stories/the-salt-road/characters/petr.md
+```
 
 ### add
 
@@ -1415,6 +1425,18 @@ An entity kind is required: expected one of character, location, system, faction
 $ story add villain "Lord Maren"
 Unsupported entity kind: villain: expected one of character, location, system, faction, artifact, arc, chapter, scene, question, promise, clue, term, matter, research
 ```
+
+`--id` sets the id instead of deriving it from the name, which is how a name in a script with no ASCII letters or digits gets a file (see [Entity kinds](#entity-kinds)). The value must already be kebab-case, so `add` never quietly rewrites it, and it is refused for chapters and scenes, whose ids come from their numbers:
+
+```text
+$ story add character "Пётр" --id Petr
+character id must be a kebab-case id, got "Petr"
+
+$ story add chapter "Low Tide" --id opening
+--id does not apply to a chapter: a chapter id comes from its number. Use --number for a chapter, or --chapter and --scene for a scene
+```
+
+An `--id` that names an existing entity is refused the same way a derived one is (`characters/petr.md already exists`).
 
 For characters and locations, `add` also writes the backlink on the other side: adding a character with `--location gull-harbour` appends the character to that location's `notable-characters`, and adding a location with `--character` appends the location to each character's `locations`.
 
@@ -1570,12 +1592,22 @@ Fill in the body sections by hand, or ask an agent to, after `add`. For what eac
 ### rename
 
 ```text
-story rename <kind> <id> <new name> [--path <project>]
+story rename <kind> <id> <new name> [--id <kebab-id>] [--path <project>]
 ```
 
 Sets the entity's name or title and, when the new name gives a different id, renames the file and rewrites every reference to the old id. References are the id-valued frontmatter fields (such as `characters`, `pov`, `locations`, `owner`, `planted`, `learned-in`, a location route's `to`, and the entries in `continuity/state.md`) and markdown links that resolve to the entity's file. It looks for them in every markdown file in the project except under `dist/`, `node_modules/`, dot-folders, and folders nested more than 10 levels deep, which are skipped silently. Prose is never changed, so update names in the chapter text yourself.
 
 Chapter and scene ids come from their numbers, so renaming one changes only its title; to change the number, use [`move`](#move). `rename` also updates the entity's first heading when it shows the old name, such as `# Ilse Marrow` or `# Chapter 1: Low Tide`.
+
+The positional id names the entity being renamed; `--id` gives the id it moves to, instead of one derived from the new name. It is required when the new name has no ASCII letters or digits, must already be kebab-case, and is refused for chapters and scenes:
+
+```text
+$ story rename character petr "Пётр Иванов"
+Cannot derive a kebab-case id from character name "Пётр Иванов": pass --id with a kebab-case id, or use a name containing ASCII letters or digits
+
+$ story rename character petr "Пётр Иванов" --id petr-ivanov
+Renamed character petr to petr-ivanov: ~/stories/the-salt-road/characters/petr-ivanov.md
+```
 
 Every rewrite is planned before anything is written, so a file that fails to parse leaves the project unchanged. An entity file (a file directly in an entity folder), one of the registries the CLI writes (the `_index.md` in `characters/`, `worldbuilding/`, `plot/`, `chapters/`, `scenes/`, `continuity/questions/`, `continuity/promises/`, `continuity/clues/`, `glossary/`, `matter/`, and `research/`), or one of `story.md`, `style-sheet.md`, `progress.md`, `plot/timeline.md`, `continuity/state.md`, and `continuity/exemptions.md` with no YAML frontmatter stops it the same way, with `<file> is missing YAML frontmatter; nothing was changed`. Other markdown, such as `continuity/motifs.md`, `continuity/theme-audit.md`, a README, or an `_index.md` in a folder of your own such as `notes/`, may be plain. `rename` refuses if an entity with the new id already exists, or if the new id is one Windows reserves as a file name, as `add` does (`Cannot use character id aux: Windows reserves the file name aux.md. ...`).
 
@@ -1890,6 +1922,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--done` | `<pass>` | `passes` | Kebab-case pass name; marks it `done` |
 | `--pages` | `<n>` | `synopsis` | `1` or `3` |
 | `--actionable` | | `report` | Boolean |
+| `--id` | `<kebab-id>` | `add` (every kind except `chapter` and `scene`), `rename` | The entity id, instead of one derived from the name; required when the name has no ASCII letters or digits. Refused for `chapter` and `scene`, whose ids come from their numbers |
 | `--number` | `<n>` | `add chapter`, `move chapter` | Required for `move chapter` |
 | `--chapter` | `<id>` | `add scene`, `move scene` | |
 | `--scene` | `<n>` | `add scene`, `move scene` | |

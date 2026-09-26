@@ -144,6 +144,7 @@ The CLI is for maintenance only. Agents write story content directly to markdown
 | `story import draft.md --title "The Lost Coast"` | Split an existing manuscript into a new story project and suggest entity candidates |
 | `story add character "Sera Voss"` | Create entity files for characters, locations, systems, factions, artifacts, arcs, chapters, scenes, questions, promises, clues, terms, research notes, and matter pages |
 | `story add matter "Dedication"` | Add a front (default) or `--placement back` matter page such as a dedication, epigraph, or acknowledgments |
+| `story add character "Пётр" --id petr` | Give the id by hand for a name the CLI cannot slug, so the name keeps its own script |
 | `story names "Seren" "Kestrel Row"` | Check candidate names against every name, alias, and glossary term before using them: clashes fail, look-alikes warn |
 | `story rename character sera-voss "Sera Vale"` | Rename an entity and update kebab-case references |
 | `story move chapter chapter-03 --number 4` | Renumber a chapter, or move a scene with `story move scene <id> --chapter <id>`, renaming the files and rewriting every reference to the old id |
@@ -274,7 +275,7 @@ Some files appear only once you need them: `matter/` for front and back matter, 
 Every story element is a markdown file with YAML frontmatter, and the skills cross-reference those files to keep the project consistent:
 
 - **`story.md`** is the top-level bible that every skill reads. Its **`schema-version: 2`** field lets the CLI detect incompatible project formats.
-- Every entity file is named by a **kebab-case identifier**, such as `sera-voss` or `chapter-01`.
+- Every entity file is named by a **kebab-case identifier**, such as `sera-voss` or `chapter-01`. It comes from the entity's name, or from `story add --id` when the name has no ASCII letters or digits; names themselves may be written in any script.
 - **`_index.md`** files are the registries for each domain.
 - Relationships and references are kept **bidirectional**.
 - Scene records and continuity state keep character knowledge, object ownership, and setups and payoffs in files, so they carry over between sessions.

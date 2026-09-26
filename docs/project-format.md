@@ -144,6 +144,8 @@ When `story add` or `story init` derives an id from a name, it:
 3. lowercases, and
 4. replaces every run of other characters with one hyphen and trims hyphens from the ends.
 
+Names themselves are free text in any script, and ids stay ASCII so that filenames are portable. A name with no ASCII letters or digits at all (`Пётр`, `李明`) leaves nothing to slug, so `story add --id` and `story rename --id` give the id by hand: `story add character "Пётр" --id petr` writes `characters/petr.md` with `name: Пётр`. `story init --dir` does the same job for a story title. Chapter and scene ids come from their numbers, so they take `--number` or `--chapter`/`--scene` rather than `--id`.
+
 Windows reserves the file names `con`, `prn`, `aux`, `nul`, `com1` to `com9`, and `lpt1` to `lpt9` with any extension, so a project with `characters/con.md` cannot be checked out there. `story add` and `story rename` refuse those ids:
 
 ```text
