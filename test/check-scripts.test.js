@@ -6,7 +6,7 @@ import { checkCoverage, parseLcov } from "../scripts/check-coverage.js";
 import { collectResult, compareFindings } from "../scripts/check-examples.js";
 import { docVersionFiles } from "../scripts/doc-versions.js";
 import { checkDocVersions, checkMarketplaces, checkSkillFrontmatter, checkTemplateStoryRef, checkVersionModule, expectEqual } from "../scripts/check-metadata.js";
-import { checkFixtureSkill } from "../scripts/check-evals.js";
+import { checkFixtureOverlaps, checkFixtureSkill } from "../scripts/check-evals.js";
 import { PREFLIGHT } from "../scripts/release.js";
 import { spawnSync } from "node:child_process";
 import { fillTemplate } from "../evals/run-evals.js";
@@ -374,6 +374,65 @@ describe("github workflows", () => {
     expect(checkFixtureSkill([], skillsDir, "chapter-writting", "canon-keeping", exists)).toEqual([
       'canon-keeping/checks.json: skill "chapter-writting" does not match a skill in skills/'
     ]);
+  });
+
+  test("checkFixtureOverlaps stays quiet on acknowledged collisions", () => {
+    const checks = {
+      required: ["Petra", "Thursday"],
+      banned: ["it was Petra", "delve"],
+      expected_overlaps: {
+        in_input: [["delve"]],
+        with_required: [["it was Petra", "Petra"]]
+      }
+    };
+    const warnings = [];
+    expect(checkFixtureOverlaps([], warnings, "demo", checks, "Petra called on Thursday. Do not delve.")).toEqual([]);
+    expect(warnings).toEqual([]);
+  });
+
+  test("checkFixtureOverlaps warns on a new collision", () => {
+    const checks = {
+      required: ["Petra", "Thursday"],
+      banned: ["it was Petra", "the Thursday boat"],
+      expected_overlaps: { with_required: [["it was Petra", "Petra"]] }
+    };
+    const warnings = [];
+    expect(checkFixtureOverlaps([], warnings, "demo", checks, "Petra called.")).toEqual([]);
+    expect(warnings).toEqual([
+      'demo: banned "the Thursday boat" overlaps required "Thursday" — keeping the canon may trip the trap ' +
+        "(acknowledge it in expected_overlaps.with_required if it is deliberate)"
+    ]);
+  });
+
+  test("checkFixtureOverlaps fails on an acknowledgement that no longer collides", () => {
+    const checks = {
+      required: ["Petra"],
+      banned: ["it was Ana"],
+      expected_overlaps: {
+        in_input: [["delve"]],
+        with_required: [["it was Petra", "Petra"]]
+      }
+    };
+    const warnings = [];
+    expect(checkFixtureOverlaps([], warnings, "demo", checks, "Petra called.")).toEqual([
+      'demo/checks.json: expected_overlaps.in_input entry ["delve"] no longer collides — remove it',
+      'demo/checks.json: expected_overlaps.with_required entry ["it was Petra","Petra"] no longer collides — remove it'
+    ]);
+    expect(warnings).toEqual([]);
+  });
+
+  test("checkFixtureOverlaps rejects a malformed acknowledgement and still warns", () => {
+    const checks = {
+      required: ["Petra"],
+      banned: ["it was Petra"],
+      expected_overlaps: { with_required: ["it was Petra"], typo: [] }
+    };
+    const warnings = [];
+    expect(checkFixtureOverlaps([], warnings, "demo", checks, "Petra called.")).toEqual([
+      'demo/checks.json: expected_overlaps has unknown key "typo" (known: in_input, with_required)',
+      "demo/checks.json: expected_overlaps.with_required must be a list of 2-string entries"
+    ]);
+    expect(warnings).toHaveLength(1);
   });
 
   test("draft template skips while a draft PR is open and never runs concurrently", () => {

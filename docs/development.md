@@ -343,7 +343,9 @@ Marketplace entries are deliberately unversioned, so there is only one place per
 
 The `evals/` directory regression-tests the writing skills. It is described in full in [`evals/README.md`](../evals/README.md); this section covers what a contributor needs day to day.
 
-Each fixture in `evals/fixtures/<name>/` has an `input.md` (the context passage) and a `checks.json` naming the skill under test, the drafting `brief`, the canon phrases that must survive (`required`), the traps a lazy draft would spring (`banned`, `banned_regex`), and optional length, structure, and voice-drift bounds. Each fixture also has a known-good draft in `evals/examples/<name>.md`.
+Each fixture in `evals/fixtures/<name>/` has an `input.md` (the context passage) and a `checks.json` naming the skill under test, the drafting `brief`, the canon phrases that must survive (`required`), the traps a lazy draft would spring (`banned`, `banned_regex`), optional length, structure, and voice-drift bounds, and the phrase collisions the fixture means (`expected_overlaps`). Each fixture also has a known-good draft in `evals/examples/<name>.md`.
+
+Twelve fixtures cover eight of the 21 skills. The rest have no behavioural regression net; a fixture is worth adding for a skill whose output a substring checker can actually judge.
 
 The harness has two halves: deterministic checks that run in CI, and model-backed runs you start by hand.
 
@@ -354,27 +356,34 @@ bun run check:evals     # validate fixture structure
 bun run eval:selftest   # run the checker against the known-good drafts
 ```
 
-`scripts/check-evals.js` checks that every fixture has `input.md`, a valid `checks.json` with a non-empty `brief`, a `skill` that matches a directory in `skills/`, at least one real check, well-typed fields, and compiling regexes, plus a matching known-good draft (and no orphan drafts). It warns, without failing, when a banned phrase appears in `input.md` or overlaps a required phrase. The current fixtures produce 21 such warnings, all expected: the `anti-slop` input is deliberately seeded with the tells its brief asks the model to remove, and several traps contain a required name. The end of the output looks like this:
+`scripts/check-evals.js` checks that every fixture has `input.md`, a valid `checks.json` with a non-empty `brief`, a `skill` that matches a directory in `skills/`, at least one real check, well-typed fields, and compiling regexes, plus a matching known-good draft (and no orphan drafts). A clean tree is silent:
 
 ```text
-WARN canon-keeping: banned "Petra who left it" overlaps required "Petra" — keeping the canon may trip the trap
-WARN revision-continuity: banned "opened the sea-chest" overlaps required "sea-chest" — keeping the canon may trip the trap
-WARN series-continuity: banned "opened the sea-chest" overlaps required "sea-chest" — keeping the canon may trip the trap
-WARN series-continuity: banned "it was Ana" overlaps required "Ana" — keeping the canon may trip the trap
-WARN series-continuity: banned "it was Ana who" overlaps required "Ana" — keeping the canon may trip the trap
 all eval fixture checks passed
 ```
+
+It warns when a banned phrase appears in the fixture's `input.md` or overlaps a required phrase, and a fixture acknowledges the collisions it means in `expected_overlaps` (see the check format in [`evals/README.md`](../evals/README.md)). The `anti-slop` input is deliberately seeded with the tells its brief asks the model to remove, and several traps have to contain a required name; those are recorded, so only a **new** collision warns:
+
+```text
+WARN canon-keeping: banned "the Thursday boat" overlaps required "Thursday" — keeping the canon may trip the trap (acknowledge it in expected_overlaps.with_required if it is deliberate)
+all eval fixture checks passed
+```
+
+An acknowledgement that no longer matches a real collision fails the check, so a stale entry cannot sit in a fixture muting nothing.
 
 `eval:selftest` runs `evals/run-evals.js --all evals/examples`, the dependency-free checker, over the known-good drafts:
 
 ```text
 anti-slop: 36/36 checks passed
 canon-keeping: 35/35 checks passed
+deep-pov: 31/31 checks passed
 genre-craft-mystery: 26/26 checks passed
+motif-restraint: 32/32 checks passed
 no-invention: 36/36 checks passed
 promise-payoff: 41/41 checks passed
 question-stays-open: 34/34 checks passed
 revision-continuity: 30/30 checks passed
+screenplay-fountain: 36/36 checks passed
 series-continuity: 31/31 checks passed
 voice-preservation: 28/28 checks passed
 ```
