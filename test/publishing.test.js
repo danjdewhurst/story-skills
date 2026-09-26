@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { copyrightPage, normalizeIsbn, publishingMeta } from "../src/publishing.js";
 import { buildBook, createEntity, createStoryProject, validateProject } from "../src/story.js";
-import { makeTempDir, writeMarkdown } from "./helpers.js";
+import { makeTempDir, readArchiveText, writeMarkdown } from "./helpers.js";
 
 const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
@@ -90,7 +90,7 @@ author: Solo`);
   test("epub carries the metadata, accessibility, language, landmarks, and a generated copyright page", () => {
     const root = project(`${FULL_METADATA}\ncover: cover.png`);
     fs.writeFileSync(path.join(root, "cover.png"), PNG_BYTES);
-    const text = fs.readFileSync(buildBook(root, { format: "epub" }).outFile).toString("utf8");
+    const text = readArchiveText(buildBook(root, { format: "epub" }).outFile);
 
     expect(text).toContain('<dc:identifier id="book-id">urn:isbn:9780306406157</dc:identifier>');
     expect(text).toContain("<dc:creator>Ada Writer</dc:creator><dc:creator>Ben Other</dc:creator>");
@@ -115,7 +115,7 @@ author: Solo`);
     expect(markdown).toContain("Hand-written copyright page.");
     expect(markdown).not.toContain("All rights reserved.");
 
-    const plain = fs.readFileSync(buildBook(project(), { format: "epub" }).outFile).toString("utf8");
+    const plain = readArchiveText(buildBook(project(), { format: "epub" }).outFile);
     expect(plain).toContain('<dc:identifier id="book-id">harbor-lights</dc:identifier>');
     expect(plain).toContain("<dc:language>en</dc:language>");
     expect(plain).not.toContain("alternativeText");

@@ -23,7 +23,7 @@ import {
   validateProject,
   validateProjectOf
 } from "../src/story.js";
-import { makeTempDir, writeMarkdown } from "./helpers.js";
+import { makeTempDir, readArchiveText, writeMarkdown } from "./helpers.js";
 
 function addStoryEntities(root) {
   writeMarkdown(path.join(root, "characters", "sera-voss.md"), `
@@ -889,12 +889,12 @@ status: draft
 word-count: 0
 `, "## Chapter Text\n\nShe *whispered* the **name** and _left_.\n\n* * *\n\nsnake_case_word stays.");
 
-    const epub = fs.readFileSync(buildBook(created.root, { format: "epub" }).outFile).toString("utf8");
+    const epub = readArchiveText(buildBook(created.root, { format: "epub" }).outFile);
     expect(epub).toContain("<p>She <em>whispered</em> the <strong>name</strong> and <em>left</em>.</p>");
     expect(epub).toContain("<p>* * *</p>");
     expect(epub).toContain("<p>snake_case_word stays.</p>");
 
-    const docx = fs.readFileSync(buildBook(created.root, { format: "docx" }).outFile).toString("utf8");
+    const docx = readArchiveText(buildBook(created.root, { format: "docx" }).outFile);
     expect(docx).toContain('<w:r><w:t xml:space="preserve">She </w:t></w:r><w:r><w:rPr><w:i/></w:rPr><w:t xml:space="preserve">whispered</w:t></w:r>');
     expect(docx).toContain('<w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">name</w:t></w:r>');
   });
@@ -1271,11 +1271,13 @@ word-count: 0
       format: "docx"
     });
     expect(fs.readFileSync(epub.outFile).readUInt32LE(0)).toBe(0x04034b50);
-    expect(fs.readFileSync(epub.outFile).toString("utf8")).toContain("dcterms:modified");
-    expect(fs.readFileSync(epub.outFile).toString("utf8")).toContain("<p>* * *</p>");
-    expect(fs.readFileSync(docx.outFile).toString("utf8")).toContain("word/document.xml");
-    expect(fs.readFileSync(docx.outFile).toString("utf8")).toContain("word/styles.xml");
-    expect(fs.readFileSync(docx.outFile).toString("utf8")).toContain('<w:t xml:space="preserve">* * *</w:t>');
+    const epubText = readArchiveText(epub.outFile);
+    expect(epubText).toContain("dcterms:modified");
+    expect(epubText).toContain("<p>* * *</p>");
+    const docxText = readArchiveText(docx.outFile);
+    expect(docxText).toContain("word/document.xml");
+    expect(docxText).toContain("word/styles.xml");
+    expect(docxText).toContain('<w:t xml:space="preserve">* * *</w:t>');
     expect(() => buildBook(created.root, { format: "pdf" })).toThrow("Unsupported build format: pdf");
   });
 
@@ -1497,11 +1499,11 @@ word-count: 0
     const first = buildBook(created.root, { format: "epub", out: "dist/first.epub" });
     const second = buildBook(created.root, { format: "epub", out: "dist/second.epub" });
     expect(fs.readFileSync(first.outFile).equals(fs.readFileSync(second.outFile))).toBe(true);
-    expect(fs.readFileSync(first.outFile).toString("utf8")).toContain("2000-01-01T00:00:00Z");
+    expect(readArchiveText(first.outFile)).toContain("2000-01-01T00:00:00Z");
     process.env.SOURCE_DATE_EPOCH = "1234567890";
     try {
       const dated = buildBook(created.root, { format: "epub", out: "dist/dated.epub" });
-      expect(fs.readFileSync(dated.outFile).toString("utf8")).toContain("2009-02-13T23:31:30Z");
+      expect(readArchiveText(dated.outFile)).toContain("2009-02-13T23:31:30Z");
     } finally {
       delete process.env.SOURCE_DATE_EPOCH;
     }
