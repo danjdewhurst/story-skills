@@ -135,7 +135,7 @@ export function extractNameCandidates(prose) {
 
   return [...counts.entries()]
     .filter(([, count]) => count >= CANDIDATE_THRESHOLD)
-    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0], "en"))
     .slice(0, CANDIDATE_LIMIT)
     .map(([name, count]) => ({ name, count }));
 }

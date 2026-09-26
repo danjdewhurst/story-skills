@@ -4130,7 +4130,7 @@ function checkDuplicateBookNumbers(books, errors) {
   }
 }
 function compareBooks(left, right) {
-  return (left.bookNumber ?? Infinity) - (right.bookNumber ?? Infinity) || left.title.localeCompare(right.title);
+  return (left.bookNumber ?? Infinity) - (right.bookNumber ?? Infinity) || left.title.localeCompare(right.title, "en");
 }
 function checkSharedCanon({ order, later }, errors, warnings) {
   const reachable = new Map(order.map((book) => [book.key, collectLater(book.key, later, new Set)]));
@@ -6700,7 +6700,7 @@ function buildProjectActions(project, validation, links, continuity, displayPath
   if (project.characters.length === 0) {
     actions.push(action("P2", "Create first character", `Use story add character "Name" --role protagonist${where === "." ? "" : ` --path ${where}`} before drafting prose.`));
   }
-  actions.sort((left, right) => left.priority.localeCompare(right.priority));
+  actions.sort((left, right) => left.priority.localeCompare(right.priority, "en"));
   if (maintenanceCount === 0 && validation.ok && links.ok && continuity.ok && continuity.warnings.length === 0 && staleChapters.length === 0 && chaptersWithoutScenes.length === 0) {
     actions.push(action("P3", "Project is mechanically healthy", "No deterministic maintenance issues are blocking the next writing pass."));
   }
@@ -9433,7 +9433,7 @@ function extractNameCandidates(prose) {
       addCandidate(counts, match[0]);
     }
   }
-  return [...counts.entries()].filter(([, count]) => count >= CANDIDATE_THRESHOLD).sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0])).slice(0, CANDIDATE_LIMIT).map(([name, count]) => ({ name, count }));
+  return [...counts.entries()].filter(([, count]) => count >= CANDIDATE_THRESHOLD).sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0], "en")).slice(0, CANDIDATE_LIMIT).map(([name, count]) => ({ name, count }));
 }
 function addCandidate(counts, name) {
   counts.set(name, (counts.get(name) ?? 0) + 1);
