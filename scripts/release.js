@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { bumpDocVersions, docVersionFiles } from "./doc-versions.js";
+import { missingBunMessage } from "./bun-missing.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const VERSION_FILES = ["package.json", ".codex-plugin/plugin.json", ".claude-plugin/plugin.json"];
@@ -94,6 +95,20 @@ function fail(message) {
   process.exit(1);
 }
 
+// Releases are cut with Bun, so a missing binary should read as a setup problem
+// rather than a `spawnSync bun ENOENT` stack trace.
+function runBun(args, options = {}) {
+  try {
+    return run("bun", args, options);
+  } catch (error) {
+    const missing = missingBunMessage(error);
+    if (!missing) {
+      throw error;
+    }
+    return fail(missing);
+  }
+}
+
 // The tag push triggers .github/workflows/publish.yml, which publishes to npm
 // through trusted publishing. Check here that the version is still free.
 function checkNpm(name, nextVersion) {
@@ -141,7 +156,7 @@ function preflight(nextVersion, tag, name) {
 
   for (const script of PREFLIGHT) {
     console.log(`\n> bun run ${script}`);
-    run("bun", ["run", script], { inherit: true });
+    runBun(["run", script], { inherit: true });
   }
   console.log(`\nPreflight passed for ${nextVersion}.`);
 }
@@ -191,8 +206,8 @@ function writeVersions(nextVersion) {
     console.log(`Bumped ${relativePath} to ${nextVersion}`);
   }
   // The bundled fallback inlines src/version.js, so rebuild it with the bump.
-  run("bun", ["run", "build:fallback"], { inherit: true });
-  run("bun", ["run", "check:metadata"], { inherit: true });
+  runBun(["run", "build:fallback"], { inherit: true });
+  runBun(["run", "check:metadata"], { inherit: true });
   return updated;
 }
 
