@@ -2097,6 +2097,7 @@ export function renameEntity(root, options) {
   if (!oldId || !name) {
     throw new Error("rename requires an entity id and a new name");
   }
+  const requestedId = requestedEntityId(kind, options.newId);
 
   const config = entityConfig(kind);
   const oldFile = path.join(project.root, config.dir, `${oldId}.md`);
@@ -2104,9 +2105,9 @@ export function renameEntity(root, options) {
   assertSafeProjectPath(oldFile, project.root);
   // Chapter and scene ids derive from their numbers ({chapter}-scene-NN), so
   // renaming them changes only the title.
-  const newId = kind === "chapter" || kind === "scene" ? oldId : kebabCase(name);
+  const newId = kind === "chapter" || kind === "scene" ? oldId : (requestedId ?? kebabCase(name));
   if (!isKebabId(newId)) {
-    throw new Error(`Cannot derive a kebab-case id from ${kind} name "${name}"`);
+    throw new Error(undeducibleIdMessage(kind, name));
   }
   assertPortableId(newId, kind);
   const newFile = path.join(project.root, config.dir, `${newId}.md`);
@@ -2837,6 +2838,8 @@ function appendActionLines(lines, actions) {
 }
 
 function buildEntity(project, kind, name, options) {
+  const requestedId = requestedEntityId(kind, options.id);
+
   if (kind === "chapter") {
     const number = options.number === undefined
       ? project.chapters.reduce((max, chapter) => Math.max(max, chapter.number), 0) + 1
@@ -2861,9 +2864,9 @@ function buildEntity(project, kind, name, options) {
     return entityResult(project, kind, id, sceneFile(name, chapter, scene, options));
   }
 
-  const id = kebabCase(name);
+  const id = requestedId ?? kebabCase(name);
   if (!id) {
-    throw new Error(`Cannot derive a kebab-case id from ${kind} name "${name}"`);
+    throw new Error(undeducibleIdMessage(kind, name));
   }
 
   switch (kind) {
@@ -2981,6 +2984,28 @@ function requireKebabId(id, label) {
   if (!isKebabId(id)) {
     throw new Error(`${label} must be a kebab-case id, got "${id}"`);
   }
+}
+
+// `--id` for add and rename. Ids stay ASCII kebab-case, so a name written in a
+// script with no ASCII letters or digits (Cyrillic, CJK, Greek, Arabic,
+// Hebrew, Devanagari) needs one given by hand; the name itself is kept as
+// written. Returns undefined when the id should come from the name instead.
+function requestedEntityId(kind, value) {
+  const id = String(value ?? "").trim();
+  if (id === "") {
+    return undefined;
+  }
+  // Chapter and scene ids encode their numbers, so an id given by hand would
+  // contradict the file's own frontmatter.
+  if (kind === "chapter" || kind === "scene") {
+    throw new Error(`--id does not apply to a ${kind}: a ${kind} id comes from its number. Use --number for a chapter, or --chapter and --scene for a scene`);
+  }
+  requireKebabId(id, `${kind} id`);
+  return id;
+}
+
+function undeducibleIdMessage(kind, name) {
+  return `Cannot derive a kebab-case id from ${kind} name "${name}": pass --id with a kebab-case id, or use a name containing ASCII letters or digits`;
 }
 
 function requirePositiveInteger(value, label) {

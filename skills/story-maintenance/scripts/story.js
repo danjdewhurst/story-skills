@@ -2620,6 +2620,7 @@ var OPTIONS = [
   { name: "done", value: "<pass>", help: ["Mark a revision pass done for passes"] },
   { name: "pages", value: "<n>", help: ["Synopsis length for synopsis (1 or 3)"] },
   { name: "actionable", help: ["Include next actions in report"] },
+  { name: "id", value: "<kebab-id>", help: ["Explicit id for add or rename, for a name with", "no ASCII letters or digits"] },
   { name: "number", value: "<n>", help: ["Chapter number for add chapter or move chapter"] },
   { name: "chapter", value: "<id>", help: ["Chapter id for add scene or move scene"] },
   { name: "scene", value: "<n>", help: ["Scene number for add scene or move scene"] },
@@ -6648,13 +6649,14 @@ function renameEntity(root, options) {
   if (!oldId || !name) {
     throw new Error("rename requires an entity id and a new name");
   }
+  const requestedId = requestedEntityId(kind, options.newId);
   const config = entityConfig(kind);
   const oldFile = path5.join(project.root, config.dir, `${oldId}.md`);
   requireKebabId(oldId, `${kind} id`);
   assertSafeProjectPath(oldFile, project.root);
-  const newId = kind === "chapter" || kind === "scene" ? oldId : kebabCase(name);
+  const newId = kind === "chapter" || kind === "scene" ? oldId : requestedId ?? kebabCase(name);
   if (!isKebabId2(newId)) {
-    throw new Error(`Cannot derive a kebab-case id from ${kind} name "${name}"`);
+    throw new Error(undeducibleIdMessage(kind, name));
   }
   assertPortableId(newId, kind);
   const newFile = path5.join(project.root, config.dir, `${newId}.md`);
@@ -7272,6 +7274,7 @@ function appendActionLines(lines, actions) {
   }
 }
 function buildEntity(project, kind, name, options) {
+  const requestedId = requestedEntityId(kind, options.id);
   if (kind === "chapter") {
     const number = options.number === undefined ? project.chapters.reduce((max, chapter) => Math.max(max, chapter.number), 0) + 1 : requirePositiveInteger(options.number, "chapter number");
     const id = `chapter-${String(number).padStart(2, "0")}`;
@@ -7290,9 +7293,9 @@ function buildEntity(project, kind, name, options) {
     const id = `${chapter}-scene-${String(scene).padStart(2, "0")}`;
     return entityResult(project, kind, id, sceneFile(name, chapter, scene, options));
   }
-  const id = kebabCase(name);
+  const id = requestedId ?? kebabCase(name);
   if (!id) {
-    throw new Error(`Cannot derive a kebab-case id from ${kind} name "${name}"`);
+    throw new Error(undeducibleIdMessage(kind, name));
   }
   switch (kind) {
     case "character":
@@ -7399,6 +7402,20 @@ function requireKebabId(id, label) {
   if (!isKebabId2(id)) {
     throw new Error(`${label} must be a kebab-case id, got "${id}"`);
   }
+}
+function requestedEntityId(kind, value) {
+  const id = String(value ?? "").trim();
+  if (id === "") {
+    return;
+  }
+  if (kind === "chapter" || kind === "scene") {
+    throw new Error(`--id does not apply to a ${kind}: a ${kind} id comes from its number. Use --number for a chapter, or --chapter and --scene for a scene`);
+  }
+  requireKebabId(id, `${kind} id`);
+  return id;
+}
+function undeducibleIdMessage(kind, name) {
+  return `Cannot derive a kebab-case id from ${kind} name "${name}": pass --id with a kebab-case id, or use a name containing ASCII letters or digits`;
 }
 function requirePositiveInteger(value, label) {
   const number = Number(value);
@@ -9682,6 +9699,7 @@ ${prose}
 
 // src/commands.js
 var ADD_OPTIONS = [
+  "id",
   "number",
   "chapter",
   "scene",
@@ -10146,11 +10164,13 @@ var COMMANDS = [
     summary: ["Rename an entity and update id references"],
     project: "flag",
     args: Infinity,
+    options: ["id"],
     run({ parsed, io, root }) {
       const result = renameEntity(root(), {
         ...parsed.options,
         kind: parsed.positionals[1],
         id: parsed.positionals[2],
+        newId: parsed.options.id,
         name: parsed.positionals.slice(3).join(" ")
       });
       io.stdout.write(`${result.resumed ? "Finished an interrupted rename of" : "Renamed"} ${result.kind} ${result.oldId} to ${result.id}: ${result.file}

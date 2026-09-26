@@ -48,7 +48,7 @@ import {
 
 // Options accepted by `story add`; each entity kind reads the ones it needs.
 const ADD_OPTIONS = [
-  "number", "chapter", "scene", "type", "role", "status", "mode", "date", "time", "travel-hours", "dilemma",
+  "id", "number", "chapter", "scene", "type", "role", "status", "mode", "date", "time", "travel-hours", "dilemma",
   "sequel", "outcome", "hook", "location", "locations", "character", "characters", "mention", "mentions",
   "member", "members", "owner", "arc", "arcs", "introduced", "resolved", "planted", "payoff",
   "significance-delayed", "red-herring", "category", "alias", "aliases", "region", "population",
@@ -460,11 +460,15 @@ export const COMMANDS = [
     summary: ["Rename an entity and update id references"],
     project: "flag",
     args: Infinity,
+    options: ["id"],
     run({ parsed, io, root }) {
       const result = renameEntity(root(), {
         ...parsed.options,
         kind: parsed.positionals[1],
+        // The positional names the entity being renamed; --id, when given, is
+        // the id it moves to instead of one derived from the new name.
         id: parsed.positionals[2],
+        newId: parsed.options.id,
         name: parsed.positionals.slice(3).join(" ")
       });
       io.stdout.write(`${result.resumed ? "Finished an interrupted rename of" : "Renamed"} ${result.kind} ${result.oldId} to ${result.id}: ${result.file}\n`);
