@@ -58,4 +58,6 @@ function main() {
   }
 }
 
-process.exit(main());
+// Setting exitCode rather than calling process.exit lets the event loop drain
+// stderr first; process.exit truncates a piped build failure at the pipe buffer.
+process.exitCode = main();
