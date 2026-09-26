@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
 // src/cli.js
-import path7 from "node:path";
+import path8 from "node:path";
 
 // src/commands.js
-import path6 from "node:path";
+import path7 from "node:path";
 
 // src/clues.js
 var LIVE_STATUSES = new Set(["planned", "planted", "paid-off"]);
@@ -193,8 +193,8 @@ function formatNumber(value) {
 }
 
 // src/import.js
-import fs4 from "node:fs";
-import path5 from "node:path";
+import fs5 from "node:fs";
+import path6 from "node:path";
 
 // src/frontmatter.js
 var FRONTMATTER_PATTERN = /^(?:\uFEFF)?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?/;
@@ -625,10 +625,9 @@ function stripLeadingH1(markdownBody) {
 }
 
 // src/story.js
-import { Buffer } from "node:buffer";
 import { execFileSync } from "node:child_process";
-import fs3 from "node:fs";
-import path4 from "node:path";
+import fs4 from "node:fs";
+import path5 from "node:path";
 
 // src/continuity.js
 import path from "node:path";
@@ -1365,6 +1364,7 @@ function checkChapterDates(project, warnings) {
 
 // src/files.js
 import fs from "node:fs";
+import path2 from "node:path";
 var MAX_READ_BYTES = 5 * 1024 * 1024;
 function readTextFile(filePath) {
   const stats = fs.lstatSync(filePath);
@@ -1378,6 +1378,108 @@ function readTextFile(filePath) {
     throw new Error(`Refusing to read oversized file ${filePath}: ${stats.size} bytes exceeds the ${MAX_READ_BYTES} byte limit`);
   }
   return fs.readFileSync(filePath, "utf8");
+}
+function writeFile(filePath, contents, options = {}) {
+  const target = prepareWriteTarget(filePath, options.root);
+  const existing = lstatIfExists(target);
+  if (!existing || existing.nlink <= 1) {
+    fs.writeFileSync(target, contents, "utf8");
+    return;
+  }
+  fs.accessSync(target, fs.constants.W_OK);
+  const temporary = path2.join(path2.dirname(target), `.story-${process.pid}.tmp`);
+  try {
+    fs.writeFileSync(temporary, contents, { encoding: "utf8", mode: existing.mode & 511 });
+    fs.chmodSync(temporary, existing.mode & 511);
+    fs.renameSync(temporary, target);
+  } catch (error) {
+    fs.rmSync(temporary, { force: true });
+    throw Object.assign(new Error(`Cannot replace hard-linked ${target}: ${error.code ?? error.message}`), { code: error.code, path: target, syscall: "rename" });
+  }
+}
+function prepareWriteTarget(filePath, root) {
+  const target = path2.resolve(filePath);
+  if (root) {
+    assertLexicallyInsideRoot(target, root);
+    assertExistingAncestorInsideRoot(path2.dirname(target), root);
+  }
+  fs.mkdirSync(path2.dirname(target), { recursive: true });
+  if (root) {
+    assertSafeProjectParent(target, root);
+  }
+  rejectSymlinkTarget(target, "write");
+  return target;
+}
+function assertSafeProjectPath(filePath, root) {
+  const target = path2.resolve(filePath);
+  assertLexicallyInsideRoot(target, root);
+  assertSafeProjectParent(target, root);
+  rejectSymlinkTarget(target, "read");
+}
+function assertSafeProjectDirectory(directory, root) {
+  const target = path2.resolve(directory);
+  assertLexicallyInsideRoot(target, root);
+  const stats = lstatIfExists(target);
+  if (stats) {
+    if (stats.isSymbolicLink()) {
+      throw new Error(`Refusing to use symlinked project directory: ${target}`);
+    }
+    if (!stats.isDirectory()) {
+      throw new Error(`Project path is not a directory: ${target}`);
+    }
+  }
+  const rootReal = fs.realpathSync(path2.resolve(root));
+  const directoryReal = fs.realpathSync(target);
+  if (!isPathInside(rootReal, directoryReal)) {
+    throw new Error(`Refusing to use project directory outside root: ${target}`);
+  }
+}
+function assertSafeProjectParent(filePath, root) {
+  const rootReal = fs.realpathSync(path2.resolve(root));
+  const parentReal = fs.realpathSync(path2.dirname(path2.resolve(filePath)));
+  if (!isPathInside(rootReal, parentReal)) {
+    throw new Error(`Refusing to access project path outside root: ${filePath}`);
+  }
+}
+function assertExistingAncestorInsideRoot(target, root) {
+  let current = path2.resolve(target);
+  while (!lstatIfExists(current)) {
+    const parent = path2.dirname(current);
+    if (parent === current) {
+      break;
+    }
+    current = parent;
+  }
+  let rootReal;
+  let currentReal;
+  try {
+    rootReal = fs.realpathSync(path2.resolve(root));
+    currentReal = fs.realpathSync(current);
+  } catch {
+    throw new Error(`Refusing to access project path outside root: ${target}`);
+  }
+  if (!isPathInside(rootReal, currentReal)) {
+    throw new Error(`Refusing to access project path outside root: ${target}`);
+  }
+}
+function assertLexicallyInsideRoot(filePath, root) {
+  const rootPath = path2.resolve(root);
+  const target = path2.resolve(filePath);
+  if (!isPathInside(rootPath, target)) {
+    throw new Error(`Refusing to access path outside project root: ${target}`);
+  }
+}
+function rejectSymlinkTarget(filePath, action) {
+  if (lstatIfExists(filePath)?.isSymbolicLink()) {
+    throw new Error(`Refusing to ${action} through symlink: ${filePath}`);
+  }
+}
+function lstatIfExists(filePath) {
+  return fs.lstatSync(filePath, { throwIfNoEntry: false }) ?? null;
+}
+function isPathInside(root, target) {
+  const relativePath = path2.relative(root, target);
+  return !path2.isAbsolute(relativePath) && (relativePath === "" || !relativePath.split(path2.sep).includes(".."));
 }
 
 // src/names.js
@@ -2701,7 +2803,7 @@ function parseArgs(argv, suggestFrom = OPTIONS.map((option) => option.name)) {
 }
 
 // src/timeline.js
-import path2 from "node:path";
+import path3 from "node:path";
 function buildTimeline(project) {
   const chapters = [...project.chapters].sort((left, right) => left.number - right.number || left.id.localeCompare(right.id, "en"));
   const chapterById = new Map(chapters.map((chapter) => [chapter.id, chapter]));
@@ -2733,7 +2835,7 @@ function timelineEntry(project, unit, chapter, reading) {
   const minutes = parseClockTime(time || "");
   return {
     id: unit.id,
-    file: path2.relative(project.root, unit.file),
+    file: path3.relative(project.root, unit.file),
     title: unit.title,
     chapterNumber: chapter.number,
     pov: unit.pov || chapter.pov || "",
@@ -3499,6 +3601,444 @@ function cell2(value) {
   return String(value).replace(/\s+/g, " ").trim().replace(/\|/g, "\\|");
 }
 
+// src/packaging.js
+import { Buffer } from "node:buffer";
+import fs2 from "node:fs";
+function epubModifiedTimestamp() {
+  const raw = process.env.SOURCE_DATE_EPOCH;
+  if (raw !== undefined && raw !== "") {
+    const date = /^\d+$/.test(raw.trim()) ? new Date(Number(raw.trim()) * 1000) : null;
+    if (date !== null && !Number.isNaN(date.getTime()) && date.getUTCFullYear() <= 9999) {
+      return date.toISOString().replace(/\.\d{3}Z$/, "Z");
+    }
+  }
+  return "2000-01-01T00:00:00Z";
+}
+function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
+  const meta = manuscript.meta ?? publishingMeta({});
+  const lang = xmlEscape(meta.language);
+  const documents = [];
+  const pushMatter = (placement) => (entry) => documents.push({
+    id: `${placement}-${entry.id}`,
+    label: entry.title,
+    content: matterXhtml(entry, placement, lang)
+  });
+  manuscript.front.forEach(pushMatter("front"));
+  for (const chapter of manuscript.chapters) {
+    documents.push({
+      id: `chapter-${String(chapter.number).padStart(2, "0")}`,
+      label: chapterHeading(chapter.number, chapter.title),
+      content: chapterXhtml(chapter, lang),
+      bodymatter: true
+    });
+  }
+  manuscript.back.forEach(pushMatter("back"));
+  const coverEntries = [];
+  const coverItems = [];
+  const coverMeta = [];
+  const coverSpine = [];
+  if (manuscript.cover) {
+    const href = `images/cover.${manuscript.cover.extension}`;
+    const alt = meta.coverAlt === "" ? `Cover of ${manuscript.title}` : meta.coverAlt;
+    coverEntries.push({ name: `OEBPS/${href}`, content: fs2.readFileSync(manuscript.cover.filePath) }, { name: "OEBPS/cover.xhtml", content: `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="${lang}" lang="${lang}"><head><title>${xmlEscape(manuscript.title)}</title></head><body epub:type="cover"><img src="${href}" alt="${xmlEscape(alt)}"/></body></html>` });
+    coverItems.push(`<item id="cover-image" href="${href}" media-type="${manuscript.cover.mediaType}" properties="cover-image"/>`, `<item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>`);
+    coverMeta.push(`<meta name="cover" content="cover-image"/>`);
+    coverSpine.push(`<itemref idref="cover"/>`);
+  }
+  const creator = meta.authors.map((name) => `<dc:creator>${xmlEscape(name)}</dc:creator>`).join("");
+  const identifier = meta.isbn === "" ? xmlEscape(storyId) : `urn:isbn:${meta.isbn}`;
+  const optional = [
+    meta.publisher === "" ? "" : `<dc:publisher>${xmlEscape(meta.publisher)}</dc:publisher>`,
+    meta.publicationDate === "" ? "" : `<dc:date>${xmlEscape(meta.publicationDate)}</dc:date>`,
+    meta.description === "" ? "" : `<dc:description>${xmlEscape(meta.description)}</dc:description>`,
+    ...meta.subjects.map((subject) => `<dc:subject>${xmlEscape(subject)}</dc:subject>`),
+    meta.copyright === "" ? "" : `<dc:rights>${xmlEscape(meta.copyright)}</dc:rights>`
+  ].join("");
+  const accessibility = epubAccessibilityMeta(Boolean(manuscript.cover));
+  const items = documents.map((doc) => `<item id="${doc.id}" href="${doc.id}.xhtml" media-type="application/xhtml+xml"/>`);
+  const spine = documents.map((doc) => `<itemref idref="${doc.id}"/>`);
+  const modified = epubModifiedTimestamp();
+  writeZip(outFile, [
+    { name: "mimetype", content: "application/epub+zip" },
+    { name: "META-INF/container.xml", content: `<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>` },
+    { name: "OEBPS/content.opf", content: `<?xml version="1.0" encoding="UTF-8"?><package version="3.0" unique-identifier="book-id" xmlns="http://www.idpf.org/2007/opf"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book-id">${identifier}</dc:identifier><dc:title>${xmlEscape(manuscript.title)}</dc:title>${creator}<dc:language>${lang}</dc:language>${optional}<meta property="dcterms:modified">${modified}</meta>${accessibility}${coverMeta.join("")}</metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>${coverItems.join("")}${items.join("")}</manifest><spine>${coverSpine.join("")}${spine.join("")}</spine></package>` },
+    { name: "OEBPS/nav.xhtml", content: navXhtml(manuscript.title, documents, lang) },
+    ...coverEntries,
+    ...documents.map((doc) => ({ name: `OEBPS/${doc.id}.xhtml`, content: doc.content }))
+  ], writeOptions);
+}
+function navXhtml(title, documents, lang = "en") {
+  const links = documents.map((doc) => `<li><a href="${doc.id}.xhtml">${xmlEscape(doc.label)}</a></li>`);
+  const start = documents.find((doc) => doc.bodymatter);
+  const landmarks = start ? `<nav epub:type="landmarks" hidden="hidden"><ol><li><a epub:type="bodymatter" href="${start.id}.xhtml">Start of Content</a></li></ol></nav>` : "";
+  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="${lang}" lang="${lang}"><head><title>${xmlEscape(title)}</title></head><body><nav epub:type="toc" id="toc"><h1>Contents</h1><ol>${links.join("")}</ol></nav>${landmarks}</body></html>`;
+}
+function epubAccessibilityMeta(hasCover) {
+  const features = ["tableOfContents", "readingOrder", "structuralNavigation", ...hasCover ? ["alternativeText"] : []];
+  const summary = hasCover ? "Text book with a described cover image, a navigable table of contents, headings for each chapter, and a single logical reading order." : "Text-only book with a navigable table of contents, headings for each chapter, and a single logical reading order.";
+  return [
+    `<meta property="schema:accessMode">textual</meta>`,
+    ...hasCover ? [`<meta property="schema:accessMode">visual</meta>`] : [],
+    `<meta property="schema:accessModeSufficient">textual</meta>`,
+    ...features.map((feature) => `<meta property="schema:accessibilityFeature">${feature}</meta>`),
+    `<meta property="schema:accessibilityHazard">none</meta>`,
+    `<meta property="schema:accessibilitySummary">${summary}</meta>`
+  ].join("");
+}
+function xhtmlParagraphs(body) {
+  const paragraphs = [];
+  for (const paragraph of markdownParagraphs(body)) {
+    const runs = inlineRuns(paragraph).map((run) => runMarkup(run, xmlEscape));
+    paragraphs.push(`<p>${runs.join("")}</p>`);
+  }
+  return paragraphs.join("");
+}
+function xhtmlDocument(title, lang, bodyType, content) {
+  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="${lang}" lang="${lang}"><head><title>${xmlEscape(title)}</title></head><body epub:type="${bodyType}">${content}</body></html>`;
+}
+function chapterXhtml(chapter, lang = "en") {
+  return xhtmlDocument(chapter.title, lang, "bodymatter chapter", `<h1>${xmlEscape(chapterHeading(chapter.number, chapter.title))}</h1>${xhtmlParagraphs(chapter.body)}`);
+}
+function matterXhtml(entry, placement = "front", lang = "en") {
+  const heading = entry.heading ? `<h1>${xmlEscape(entry.title)}</h1>` : "";
+  const bodyType = entry.copyright ? `${placement}matter copyright-page` : `${placement}matter`;
+  return xhtmlDocument(entry.title, lang, bodyType, `${heading}${xhtmlParagraphs(entry.body)}`);
+}
+function htmlBook(manuscript) {
+  const paragraphs = (body) => markdownParagraphs(body).map((paragraph) => paragraph === "* * *" ? null : inlineRuns(paragraph).map((run) => runMarkup(run, escapeHtml)).join(""));
+  const matter = (placement) => (entry) => ({
+    key: `${placement}-${entry.id}`,
+    kind: entry.copyright ? `${placement} copyright-page` : placement,
+    copyright: Boolean(entry.copyright),
+    placement,
+    title: entry.title,
+    heading: entry.heading,
+    paragraphs: paragraphs(entry.body)
+  });
+  const parts = [
+    ...manuscript.front.map(matter("front")),
+    ...manuscript.chapters.map((chapter) => ({
+      key: `ch${String(chapter.number).padStart(2, "0")}`,
+      kind: "chapter",
+      placement: "body",
+      title: chapterHeading(chapter.number, chapter.title),
+      heading: true,
+      paragraphs: paragraphs(chapter.body)
+    })),
+    ...manuscript.back.map(matter("back"))
+  ];
+  return {
+    title: manuscript.title,
+    authors: manuscript.meta.authors,
+    language: manuscript.meta.language,
+    words: manuscript.chapters.reduce((sum, chapter) => sum + wordCount(chapter.body), 0),
+    parts
+  };
+}
+function writeDocx(outFile, manuscript, writeOptions = {}) {
+  const bodyParts = [paragraphXml(manuscript.title, "Title")];
+  const pushSection = (heading, body) => {
+    if (heading !== null) {
+      bodyParts.push(paragraphXml(heading, "Heading1"));
+    }
+    for (const paragraph of markdownParagraphs(body)) {
+      bodyParts.push(paragraphXml(paragraph, "", inlineRuns(paragraph)));
+    }
+  };
+  const pushMatter = (entry) => pushSection(entry.heading ? entry.title : null, entry.body);
+  manuscript.front.forEach(pushMatter);
+  for (const chapter of manuscript.chapters) {
+    pushSection(chapterHeading(chapter.number, chapter.title), chapter.body);
+  }
+  manuscript.back.forEach(pushMatter);
+  writeZip(outFile, docxPackageEntries(bodyParts.join("")), writeOptions);
+}
+function docxPackageEntries(body) {
+  return [
+    { name: "[Content_Types].xml", content: `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>` },
+    { name: "_rels/.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>` },
+    { name: "word/_rels/document.xml.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
+    { name: "word/styles.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:pPr><w:spacing w:after="240"/><w:jc w:val="center"/></w:pPr><w:rPr><w:b/><w:sz w:val="56"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:pPr><w:spacing w:before="480" w:after="240"/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style></w:styles>` },
+    { name: "word/document.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr/></w:body></w:document>` }
+  ];
+}
+var SHUNN_RUN_FONTS = `<w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/><w:sz w:val="24"/>`;
+var SHUNN_PARAGRAPH_SPACING = `<w:spacing w:line="480" w:lineRule="auto"/>`;
+function shunnRunXml(text, decoration) {
+  return `<w:r><w:rPr>${SHUNN_RUN_FONTS}${decoration}</w:rPr><w:t xml:space="preserve">${xmlEscape(text)}</w:t></w:r>`;
+}
+function shunnTextRunXml(run) {
+  return shunnRunXml(run.text, `${run.strong ? "<w:b/>" : ""}${run.em ? "<w:i/>" : ""}`);
+}
+function shunnParagraphXml(runXml, centered) {
+  const alignment = centered ? `<w:jc w:val="center"/>` : "";
+  return `<w:p><w:pPr>${SHUNN_PARAGRAPH_SPACING}${alignment}</w:pPr>${runXml}</w:p>`;
+}
+function shunnChapterHeadingXml(text) {
+  return `<w:p><w:pPr>${SHUNN_PARAGRAPH_SPACING}</w:pPr><w:r><w:br w:type="page"/></w:r>${shunnRunXml(text, "<w:b/>")}</w:p>`;
+}
+function shunnTitlePageXml(meta) {
+  const lines = [
+    shunnParagraphXml(shunnRunXml(meta.title, "<w:b/>"), true),
+    shunnParagraphXml(shunnRunXml("by", ""), true)
+  ];
+  if (meta.author) {
+    lines.push(shunnParagraphXml(shunnRunXml(meta.author, ""), true));
+  }
+  lines.push(shunnParagraphXml(shunnRunXml(`Approximately ${meta.words} words`, ""), true));
+  for (const contactLine of meta.contact) {
+    lines.push(shunnParagraphXml(shunnRunXml(String(contactLine), ""), true));
+  }
+  return lines;
+}
+function writeShunnDocx(outFile, manuscript, meta, writeOptions = {}) {
+  const paragraphs = [...shunnTitlePageXml(meta)];
+  for (const chapter of manuscript.chapters) {
+    paragraphs.push(shunnChapterHeadingXml(chapterHeading(chapter.number, chapter.title)));
+    for (const paragraph of markdownParagraphs(chapter.body)) {
+      paragraphs.push(shunnParagraphXml(inlineRuns(paragraph).map(shunnTextRunXml).join(""), false));
+    }
+  }
+  writeZip(outFile, docxPackageEntries(paragraphs.join("")), writeOptions);
+}
+function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {}) {
+  const lines = [meta.title, "by"];
+  if (meta.author) {
+    lines.push(meta.author);
+  }
+  lines.push("", `Approximately ${meta.words} words`, "");
+  for (const contactLine of meta.contact) {
+    lines.push(String(contactLine));
+  }
+  for (const chapter of manuscript.chapters) {
+    lines.push("\f", `# ${chapterHeading(chapter.number, chapter.title)}`, "");
+    for (const paragraph of markdownParagraphs(chapter.body)) {
+      lines.push(paragraph, "");
+    }
+  }
+  writeFile(outFile, `${lines.join(`
+`).trimEnd()}
+`, writeOptions);
+}
+function paragraphXml(text, style = "", runs = [{ text }]) {
+  const styleXml = style ? `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>` : "";
+  const runXml = runs.map((run) => {
+    const decoration = `${run.strong ? "<w:b/>" : ""}${run.em ? "<w:i/>" : ""}`;
+    const runStyle = decoration === "" ? "" : `<w:rPr>${decoration}</w:rPr>`;
+    return `<w:r>${runStyle}<w:t xml:space="preserve">${xmlEscape(run.text)}</w:t></w:r>`;
+  });
+  return `<w:p>${styleXml}${runXml.join("")}</w:p>`;
+}
+function inlineRuns(text) {
+  const nodes = [];
+  let buffer = "";
+  const isSpace = (char) => char === undefined || /\s/u.test(char);
+  const isPunct = (char) => char !== undefined && /[\p{P}\p{S}]/u.test(char);
+  for (let index = 0;index < text.length; ) {
+    const char = text[index];
+    if (char === "\\" && /[!-/:-@[-`{-~]/.test(text[index + 1] ?? "")) {
+      buffer += text[index + 1];
+      index += 2;
+      continue;
+    }
+    if (char !== "*" && char !== "_") {
+      buffer += char;
+      index += 1;
+      continue;
+    }
+    let end = index;
+    while (text[end] === char) {
+      end += 1;
+    }
+    if (buffer !== "") {
+      nodes.push({ text: buffer });
+      buffer = "";
+    }
+    const before = text[index - 1];
+    const after = text[end];
+    const left = !isSpace(after) && (!isPunct(after) || isSpace(before) || isPunct(before));
+    const right = !isSpace(before) && (!isPunct(before) || isSpace(after) || isPunct(after));
+    nodes.push({
+      delimiter: char,
+      count: end - index,
+      original: end - index,
+      open: char === "*" ? left : left && (!right || isPunct(before)),
+      close: char === "*" ? right : right && (!left || isPunct(after)),
+      strong: 0,
+      em: 0
+    });
+    index = end;
+  }
+  if (buffer !== "") {
+    nodes.push({ text: buffer });
+  }
+  const stack = [];
+  const bottom = new Map;
+  const depth = { strong: new Array(nodes.length + 1).fill(0), em: new Array(nodes.length + 1).fill(0) };
+  for (const [closeIndex, closer] of nodes.entries()) {
+    if (!closer.delimiter) {
+      continue;
+    }
+    const key = `${closer.delimiter}${closer.open ? 1 : 0}${closer.original % 3}`;
+    while (closer.close && closer.count > 0) {
+      const floor = bottom.get(key) ?? 0;
+      let position = stack.length - 1;
+      while (position >= floor && !canPairEmphasis(nodes[stack[position]], closer)) {
+        position -= 1;
+      }
+      if (position < floor) {
+        bottom.set(key, stack.length);
+        break;
+      }
+      const openIndex = stack[position];
+      const opener = nodes[openIndex];
+      const used = opener.count >= 2 && closer.count >= 2 ? 2 : 1;
+      opener.count -= used;
+      closer.count -= used;
+      const marks = depth[used === 2 ? "strong" : "em"];
+      marks[openIndex + 1] += 1;
+      marks[closeIndex] -= 1;
+      stack.length = opener.count > 0 ? position + 1 : position;
+      for (const [other, value] of bottom) {
+        if (value > stack.length) {
+          bottom.set(other, stack.length);
+        }
+      }
+    }
+    if (closer.open && closer.count > 0) {
+      stack.push(closeIndex);
+    }
+  }
+  let strongDepth = 0;
+  let emDepth = 0;
+  for (const [index, node] of nodes.entries()) {
+    strongDepth += depth.strong[index];
+    emDepth += depth.em[index];
+    node.strong = strongDepth;
+    node.em = emDepth;
+  }
+  const runs = [];
+  for (const node of nodes) {
+    const value = node.delimiter ? node.delimiter.repeat(node.count) : node.text;
+    if (value === "") {
+      continue;
+    }
+    const strong = (node.strong ?? 0) > 0;
+    const em = (node.em ?? 0) > 0;
+    const previous = runs[runs.length - 1];
+    if (previous && previous.strong === strong && previous.em === em) {
+      previous.text += value;
+    } else {
+      runs.push({ text: value, strong, em });
+    }
+  }
+  return runs;
+}
+function canPairEmphasis(opener, closer) {
+  const both = opener.close || closer.open;
+  const ruleOfThree = both && (opener.original + closer.original) % 3 === 0 && !(opener.original % 3 === 0 && closer.original % 3 === 0);
+  return opener.delimiter === closer.delimiter && !ruleOfThree;
+}
+function runMarkup(run, escape2) {
+  let markup = escape2(run.text);
+  if (run.em) {
+    markup = `<em>${markup}</em>`;
+  }
+  if (run.strong) {
+    markup = `<strong>${markup}</strong>`;
+  }
+  return markup;
+}
+function markdownParagraphs(markdown) {
+  const paragraphs = [];
+  for (const paragraph of markdown.replace(/\r\n?/g, `
+`).replace(/\\\n/g, `
+`).replace(/^#+[ \t]+/gm, "").replace(/^[ \t]*>[ \t]?/gm, "").split(/\n[ \t]*\n\s*/)) {
+    const trimmed = paragraph.replace(/\s+/g, " ").trim();
+    if (trimmed) {
+      paragraphs.push(isSceneBreak(trimmed) ? "* * *" : trimmed);
+    }
+  }
+  return paragraphs;
+}
+var ZIP_DOS_DATE = 0 << 9 | 1 << 5 | 1;
+function writeZip(outFile, entries, writeOptions = {}) {
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+  for (const entry of entries) {
+    const name = Buffer.from(entry.name, "utf8");
+    const content = Buffer.isBuffer(entry.content) ? entry.content : Buffer.from(entry.content, "utf8");
+    const crc = crc32(content);
+    const localHeader = Buffer.alloc(30);
+    localHeader.writeUInt32LE(67324752, 0);
+    localHeader.writeUInt16LE(20, 4);
+    localHeader.writeUInt16LE(0, 6);
+    localHeader.writeUInt16LE(0, 8);
+    localHeader.writeUInt16LE(0, 10);
+    localHeader.writeUInt16LE(ZIP_DOS_DATE, 12);
+    localHeader.writeUInt32LE(crc, 14);
+    localHeader.writeUInt32LE(content.length, 18);
+    localHeader.writeUInt32LE(content.length, 22);
+    localHeader.writeUInt16LE(name.length, 26);
+    localHeader.writeUInt16LE(0, 28);
+    localParts.push(localHeader, name, content);
+    const centralHeader = Buffer.alloc(46);
+    centralHeader.writeUInt32LE(33639248, 0);
+    centralHeader.writeUInt16LE(20, 4);
+    centralHeader.writeUInt16LE(20, 6);
+    centralHeader.writeUInt16LE(0, 8);
+    centralHeader.writeUInt16LE(0, 10);
+    centralHeader.writeUInt16LE(0, 12);
+    centralHeader.writeUInt16LE(ZIP_DOS_DATE, 14);
+    centralHeader.writeUInt32LE(crc, 16);
+    centralHeader.writeUInt32LE(content.length, 20);
+    centralHeader.writeUInt32LE(content.length, 24);
+    centralHeader.writeUInt16LE(name.length, 28);
+    centralHeader.writeUInt16LE(0, 30);
+    centralHeader.writeUInt16LE(0, 32);
+    centralHeader.writeUInt16LE(0, 34);
+    centralHeader.writeUInt16LE(0, 36);
+    centralHeader.writeUInt32LE(0, 38);
+    centralHeader.writeUInt32LE(offset, 42);
+    centralParts.push(centralHeader, name);
+    offset += localHeader.length + name.length + content.length;
+  }
+  let centralSize = 0;
+  for (const part of centralParts) {
+    centralSize += part.length;
+  }
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(101010256, 0);
+  end.writeUInt16LE(0, 4);
+  end.writeUInt16LE(0, 6);
+  end.writeUInt16LE(entries.length, 8);
+  end.writeUInt16LE(entries.length, 10);
+  end.writeUInt32LE(centralSize, 12);
+  end.writeUInt32LE(offset, 16);
+  end.writeUInt16LE(0, 20);
+  writeFile(outFile, Buffer.concat(localParts.concat(centralParts, end)), writeOptions);
+}
+function crc32(buffer) {
+  let crc = 4294967295;
+  for (const byte of buffer) {
+    crc = CRC_TABLE[(crc ^ byte) & 255] ^ crc >>> 8;
+  }
+  return (crc ^ 4294967295) >>> 0;
+}
+var CRC_TABLE = [];
+for (let index = 0;index < 256; index += 1) {
+  let value = index;
+  for (let bit = 0;bit < 8; bit += 1) {
+    value = value & 1 ? 3988292384 ^ value >>> 1 : value >>> 1;
+  }
+  CRC_TABLE.push(value >>> 0);
+}
+var XML_INVALID_CHARACTERS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+function xmlEscape(value) {
+  return String(value).replace(XML_INVALID_CHARACTERS, "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
 // src/passes.js
 var PASS_STATUSES = new Set(["pending", "in-progress", "done"]);
 var DEFAULT_PASSES = [
@@ -3848,8 +4388,8 @@ function formatNumber3(value) {
 }
 
 // src/series.js
-import fs2 from "node:fs";
-import path3 from "node:path";
+import fs3 from "node:fs";
+import path4 from "node:path";
 var SERIES_LINK_INVERSES = [["follows", "precedes"], ["precedes", "follows"]];
 var MAX_SERIES_BOOKS = 100;
 var MAX_SERIES_DEPTH = 10;
@@ -3862,16 +4402,16 @@ var SHARED_CANON = [
   ["glossaryTerms", "Glossary terms", "term"]
 ];
 function seriesLinkPath(fromRoot, toRoot) {
-  return path3.relative(fromRoot, toRoot).split(path3.sep).join("/");
+  return path4.relative(fromRoot, toRoot).split(path4.sep).join("/");
 }
 function seriesLinks(root, data, field) {
   const raw = data[field];
   const values = Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : [];
-  return values.filter((value) => typeof value === "string" && value.trim() !== "").map((value) => path3.resolve(root, value));
+  return values.filter((value) => typeof value === "string" && value.trim() !== "").map((value) => path4.resolve(root, value));
 }
 function readBookFrontmatter(root) {
-  const storyPath = path3.join(root, "story.md");
-  if (!fs2.existsSync(storyPath)) {
+  const storyPath = path4.join(root, "story.md");
+  if (!fs3.existsSync(storyPath)) {
     return null;
   }
   return parseFrontmatter(readTextFile(storyPath), storyPath).data;
@@ -3905,7 +4445,7 @@ function validateSeriesLinks(root, data, errors) {
   }
 }
 function withSeriesBacklink(targetRoot, field, linkedRoot, seriesId) {
-  const storyPath = path3.join(targetRoot, "story.md");
+  const storyPath = path4.join(targetRoot, "story.md");
   const markdown = readTextFile(storyPath);
   const { data } = parseFrontmatter(markdown, storyPath);
   const current = data[field];
@@ -3989,33 +4529,33 @@ function formatSeriesReport(report) {
 `;
 }
 function canonicalPath(target) {
-  const resolved = path3.resolve(target);
+  const resolved = path4.resolve(target);
   const tail = [];
   let current = resolved;
-  while (current !== path3.dirname(current)) {
+  while (current !== path4.dirname(current)) {
     try {
-      const real = fs2.realpathSync(current);
-      return tail.length === 0 ? real : path3.join(real, ...tail.reverse());
+      const real = fs3.realpathSync(current);
+      return tail.length === 0 ? real : path4.join(real, ...tail.reverse());
     } catch {
-      tail.push(path3.basename(current));
-      current = path3.dirname(current);
+      tail.push(path4.basename(current));
+      current = path4.dirname(current);
     }
   }
   try {
-    return path3.join(fs2.realpathSync(current), ...tail.reverse());
+    return path4.join(fs3.realpathSync(current), ...tail.reverse());
   } catch {
-    return path3.join(current, ...tail.reverse());
+    return path4.join(current, ...tail.reverse());
   }
 }
 function discoverBooks(startRoot, scan, errors) {
-  const startResolved = path3.resolve(startRoot);
-  const scopeRoot = path3.dirname(startResolved);
+  const startResolved = path4.resolve(startRoot);
+  const scopeRoot = path4.dirname(startResolved);
   const scopeReal = canonicalPath(scopeRoot);
   const visited = new Map;
   const queue = [{ root: startResolved, depth: 0 }];
   while (queue.length > 0) {
     const { root, depth } = queue.shift();
-    const resolved = path3.resolve(root);
+    const resolved = path4.resolve(root);
     const effective = canonicalPath(resolved);
     if (visited.has(effective)) {
       continue;
@@ -4025,7 +4565,7 @@ function discoverBooks(startRoot, scan, errors) {
       break;
     }
     const label2 = seriesLinkPath(startRoot, root) || ".";
-    if (!isPathInside(scopeRoot, resolved) || !isPathInside(scopeReal, effective)) {
+    if (!isPathInside2(scopeRoot, resolved) || !isPathInside2(scopeReal, effective)) {
       errors.push(label2 + " points outside the series directory " + scopeRoot + "; refusing to follow");
       visited.set(effective, null);
       continue;
@@ -4035,7 +4575,7 @@ function discoverBooks(startRoot, scan, errors) {
       visited.set(effective, null);
       continue;
     }
-    if (!fs2.existsSync(path3.join(root, "story.md"))) {
+    if (!fs3.existsSync(path4.join(root, "story.md"))) {
       errors.push(`${label2} is not a story project: missing story.md`);
       visited.set(effective, null);
       continue;
@@ -4057,7 +4597,7 @@ function discoverBooks(startRoot, scan, errors) {
       key: effective,
       label: label2,
       project,
-      title: String(data.title ?? path3.basename(root)),
+      title: String(data.title ?? path4.basename(root)),
       series: data.series,
       status: data.status,
       bookNumber: Number.isInteger(data["book-number"]) ? data["book-number"] : null,
@@ -4071,9 +4611,9 @@ function discoverBooks(startRoot, scan, errors) {
   }
   return [...visited.values()].filter(Boolean);
 }
-function isPathInside(root, target) {
-  const relativePath = path3.relative(root, target);
-  return !path3.isAbsolute(relativePath) && (relativePath === "" || !relativePath.split(path3.sep).includes(".."));
+function isPathInside2(root, target) {
+  const relativePath = path4.relative(root, target);
+  return !path4.isAbsolute(relativePath) && (relativePath === "" || !relativePath.split(path4.sep).includes(".."));
 }
 function chronologicalOrder(books, errors) {
   const byKey = new Map(books.map((book) => [book.key, book]));
@@ -4214,7 +4754,7 @@ function checkKnownFacts(book, earlierBooks, errors) {
 function knowledgeFacts(book) {
   const continuity = book.project.continuity;
   const entries = continuity && Array.isArray(continuity.data["knowledge-state"]) ? continuity.data["knowledge-state"] : [];
-  const file = path3.join(book.root, "continuity", "state.md");
+  const file = path4.join(book.root, "continuity", "state.md");
   const facts = [];
   entries.forEach((entry, index) => {
     const fact = entry && typeof entry === "object" ? String(entry.fact ?? "") : "";
@@ -4269,7 +4809,7 @@ function sharedCanon(books) {
   return shared;
 }
 function bookFile(book, file) {
-  return path3.join(book.label, path3.relative(book.root, file));
+  return path4.join(book.label, path4.relative(book.root, file));
 }
 
 // src/story.js
@@ -4290,29 +4830,29 @@ var REQUIRED_PATHS = [
 ];
 var PROJECT_DIRECTORIES = [
   "characters",
-  path4.join("worldbuilding", "locations"),
-  path4.join("worldbuilding", "systems"),
-  path4.join("worldbuilding", "factions"),
-  path4.join("worldbuilding", "artifacts"),
-  path4.join("plot", "arcs"),
+  path5.join("worldbuilding", "locations"),
+  path5.join("worldbuilding", "systems"),
+  path5.join("worldbuilding", "factions"),
+  path5.join("worldbuilding", "artifacts"),
+  path5.join("plot", "arcs"),
   "chapters",
   "scenes",
-  path4.join("continuity", "questions"),
-  path4.join("continuity", "promises"),
-  path4.join("continuity", "clues"),
-  path4.join("glossary", "terms")
+  path5.join("continuity", "questions"),
+  path5.join("continuity", "promises"),
+  path5.join("continuity", "clues"),
+  path5.join("glossary", "terms")
 ];
 var INDEX_SCHEMAS = [
-  [path4.join("characters", "_index.md"), "character-registry"],
-  [path4.join("worldbuilding", "_index.md"), "world-registry"],
-  [path4.join("plot", "_index.md"), "plot-registry"],
-  [path4.join("plot", "timeline.md"), "timeline"],
-  [path4.join("chapters", "_index.md"), "chapter-registry"],
-  [path4.join("scenes", "_index.md"), "scene-registry"],
-  [path4.join("continuity", "questions", "_index.md"), "question-registry"],
-  [path4.join("continuity", "promises", "_index.md"), "promise-registry"],
-  [path4.join("continuity", "clues", "_index.md"), "clue-registry"],
-  [path4.join("glossary", "_index.md"), "glossary-registry"]
+  [path5.join("characters", "_index.md"), "character-registry"],
+  [path5.join("worldbuilding", "_index.md"), "world-registry"],
+  [path5.join("plot", "_index.md"), "plot-registry"],
+  [path5.join("plot", "timeline.md"), "timeline"],
+  [path5.join("chapters", "_index.md"), "chapter-registry"],
+  [path5.join("scenes", "_index.md"), "scene-registry"],
+  [path5.join("continuity", "questions", "_index.md"), "question-registry"],
+  [path5.join("continuity", "promises", "_index.md"), "promise-registry"],
+  [path5.join("continuity", "clues", "_index.md"), "clue-registry"],
+  [path5.join("glossary", "_index.md"), "glossary-registry"]
 ];
 var STORY_STATUSES = new Set(["planning", "drafting", "in-progress", "revising", "complete", "abandoned"]);
 var STORY_TENSES = new Set(["past", "present", "future", "mixed"]);
@@ -4395,19 +4935,19 @@ function createStoryProject(options) {
   if (!titleId && options.dir === undefined) {
     throw new Error('Cannot derive a story id from title "' + title + '": pass --dir with an ASCII folder name, or use a title containing ASCII letters or digits');
   }
-  const root = path4.resolve(cwd, options.dir ?? titleId);
+  const root = path5.resolve(cwd, options.dir ?? titleId);
   const storyId = deriveStoryId(title, root);
   assertPortableId(storyId, "story");
-  if (WINDOWS_RESERVED_ID.test(path4.basename(root).toLowerCase())) {
-    throw new Error(`Cannot use folder ${path4.basename(root)}: Windows reserves that name. Choose another --dir`);
+  if (WINDOWS_RESERVED_ID.test(path5.basename(root).toLowerCase())) {
+    throw new Error(`Cannot use folder ${path5.basename(root)}: Windows reserves that name. Choose another --dir`);
   }
   if (!storyId) {
-    throw new Error('Cannot derive a story id from title "' + title + '" or folder "' + path4.basename(root) + '": use an ASCII folder name with --dir');
+    throw new Error('Cannot derive a story id from title "' + title + '" or folder "' + path5.basename(root) + '": use an ASCII folder name with --dir');
   }
   if (lstatIfExists(root)?.isSymbolicLink()) {
     throw new Error(`Refusing to use symlinked project directory: ${root}`);
   }
-  if (fs3.existsSync(root) && !options.force) {
+  if (fs4.existsSync(root) && !options.force) {
     throw new Error(`${root} already exists. Use --force to add missing starter files; existing files are never overwritten.`);
   }
   if (options.tense !== undefined && options.tense !== "" && !STORY_TENSES.has(options.tense)) {
@@ -4420,9 +4960,9 @@ function createStoryProject(options) {
   const inherited = series.linked[0]?.data ?? {};
   const themes = normalizeList(options.themes, ["change"]);
   for (const directory of PROJECT_DIRECTORIES) {
-    fs3.mkdirSync(path4.join(root, directory), { recursive: true });
+    fs4.mkdirSync(path5.join(root, directory), { recursive: true });
   }
-  const storyWritten = writeStarterFile(path4.join(root, "story.md"), storyBible({
+  const storyWritten = writeStarterFile(path5.join(root, "story.md"), storyBible({
     title,
     storyId,
     series: series.series,
@@ -4438,23 +4978,23 @@ function createStoryProject(options) {
     form: options.form,
     synopsis: options.synopsis ?? "Add a 2-3 sentence synopsis here."
   }), { root });
-  writeStarterFile(path4.join(root, "characters", "_index.md"), characterIndex(storyId, [], "", ""), { root });
-  writeStarterFile(path4.join(root, "worldbuilding", "_index.md"), worldIndex(storyId, [], [], [], [], ""), { root });
-  writeStarterFile(path4.join(root, "plot", "_index.md"), plotIndex(storyId, "three-act", [], "", ""), { root });
-  writeStarterFile(path4.join(root, "plot", "timeline.md"), timeline(storyId), { root });
-  writeStarterFile(path4.join(root, "chapters", "_index.md"), chapterIndex(storyId, []), { root });
-  writeStarterFile(path4.join(root, "scenes", "_index.md"), sceneIndex(storyId, []), { root });
-  writeStarterFile(path4.join(root, "continuity", "state.md"), continuityState(storyId), { root });
-  writeStarterFile(path4.join(root, "continuity", "questions", "_index.md"), questionIndex(storyId, []), { root });
-  writeStarterFile(path4.join(root, "continuity", "promises", "_index.md"), promiseIndex(storyId, []), { root });
-  writeStarterFile(path4.join(root, "continuity", "clues", "_index.md"), clueIndex(storyId, []), { root });
-  writeStarterFile(path4.join(root, "glossary", "_index.md"), glossaryIndex(storyId, []), { root });
-  writeStarterFile(path4.join(root, STYLE_SHEET_FILE), styleSheet(), { root });
+  writeStarterFile(path5.join(root, "characters", "_index.md"), characterIndex(storyId, [], "", ""), { root });
+  writeStarterFile(path5.join(root, "worldbuilding", "_index.md"), worldIndex(storyId, [], [], [], [], ""), { root });
+  writeStarterFile(path5.join(root, "plot", "_index.md"), plotIndex(storyId, "three-act", [], "", ""), { root });
+  writeStarterFile(path5.join(root, "plot", "timeline.md"), timeline(storyId), { root });
+  writeStarterFile(path5.join(root, "chapters", "_index.md"), chapterIndex(storyId, []), { root });
+  writeStarterFile(path5.join(root, "scenes", "_index.md"), sceneIndex(storyId, []), { root });
+  writeStarterFile(path5.join(root, "continuity", "state.md"), continuityState(storyId), { root });
+  writeStarterFile(path5.join(root, "continuity", "questions", "_index.md"), questionIndex(storyId, []), { root });
+  writeStarterFile(path5.join(root, "continuity", "promises", "_index.md"), promiseIndex(storyId, []), { root });
+  writeStarterFile(path5.join(root, "continuity", "clues", "_index.md"), clueIndex(storyId, []), { root });
+  writeStarterFile(path5.join(root, "glossary", "_index.md"), glossaryIndex(storyId, []), { root });
+  writeStarterFile(path5.join(root, STYLE_SHEET_FILE), styleSheet(), { root });
   const linkedBooks = [];
   for (const book of storyWritten ? series.linked : []) {
     const updated = withSeriesBacklink(book.root, book.inverse, root, series.series);
     if (updated !== null) {
-      writeFile(path4.join(book.root, "story.md"), updated, { root: book.root });
+      writeFile(path5.join(book.root, "story.md"), updated, { root: book.root });
       linkedBooks.push(book.root);
     }
   }
@@ -4472,7 +5012,7 @@ function resolveSeriesOptions(root, cwd, options) {
   const linked = [];
   for (const [field, inverse] of [["follows", "precedes"], ["precedes", "follows"]]) {
     for (const value of asArray(options[field]).filter((item) => typeof item === "string" && item.trim() !== "")) {
-      const bookRoot = path4.resolve(cwd, value);
+      const bookRoot = path5.resolve(cwd, value);
       if (bookRoot === root) {
         throw new Error(`--${field} ${value} points at the new story itself`);
       }
@@ -4512,10 +5052,10 @@ function seriesBookNumbers(linked) {
   return numbers;
 }
 function deriveStoryId(title, root) {
-  return kebabCase(String(title ?? "")) || kebabCase(path4.basename(root));
+  return kebabCase(String(title ?? "")) || kebabCase(path5.basename(root));
 }
 function scanProject(root) {
-  const projectRoot = path4.resolve(root);
+  const projectRoot = path5.resolve(root);
   const scanErrors = [];
   const storyPath = requireStoryFile(projectRoot);
   let story;
@@ -4523,17 +5063,17 @@ function scanProject(root) {
     story = readMarkdown(storyPath, projectRoot);
   } catch (error) {
     scanErrors.push(`story.md: ${error.message}`);
-    story = { data: { title: path4.basename(projectRoot) }, body: "", rawMarkdown: "", unreadable: true };
+    story = { data: { title: path5.basename(projectRoot) }, body: "", rawMarkdown: "", unreadable: true };
   }
   const storyId = deriveStoryId(story.data.title, projectRoot);
   const titleText = typeof story.data.title === "string" || typeof story.data.title === "number" ? String(story.data.title).trim() : "";
   let continuity = null;
-  const continuityPath = path4.join(projectRoot, "continuity", "state.md");
-  if (fs3.existsSync(continuityPath)) {
+  const continuityPath = path5.join(projectRoot, "continuity", "state.md");
+  if (fs4.existsSync(continuityPath)) {
     try {
       continuity = readMarkdown(continuityPath, projectRoot);
     } catch (error) {
-      scanErrors.push(`${path4.join("continuity", "state.md")}: ${error.message}`);
+      scanErrors.push(`${path5.join("continuity", "state.md")}: ${error.message}`);
       continuity = null;
     }
   }
@@ -4541,7 +5081,7 @@ function scanProject(root) {
     root: projectRoot,
     story,
     storyId,
-    title: titleText || path4.basename(projectRoot),
+    title: titleText || path5.basename(projectRoot),
     fileErrors: scanErrors,
     characters: readEntityFiles(projectRoot, "characters", (id, file, data) => ({
       id,
@@ -4558,7 +5098,7 @@ function scanProject(root) {
       voiceAvoid: asArray(data["voice-avoid"]),
       pronunciation: data.pronunciation
     }), scanErrors),
-    locations: readEntityFiles(projectRoot, path4.join("worldbuilding", "locations"), (id, file, data) => ({
+    locations: readEntityFiles(projectRoot, path5.join("worldbuilding", "locations"), (id, file, data) => ({
       id,
       file,
       name: data.name ?? titleCaseSlug(id),
@@ -4568,13 +5108,13 @@ function scanProject(root) {
       routes: asArray(data.routes),
       pronunciation: data.pronunciation
     }), scanErrors),
-    systems: readEntityFiles(projectRoot, path4.join("worldbuilding", "systems"), (id, file, data) => ({
+    systems: readEntityFiles(projectRoot, path5.join("worldbuilding", "systems"), (id, file, data) => ({
       id,
       file,
       name: data.name ?? titleCaseSlug(id),
       type: data.type ?? ""
     }), scanErrors),
-    factions: readEntityFiles(projectRoot, path4.join("worldbuilding", "factions"), (id, file, data) => ({
+    factions: readEntityFiles(projectRoot, path5.join("worldbuilding", "factions"), (id, file, data) => ({
       id,
       file,
       name: data.name ?? titleCaseSlug(id),
@@ -4584,7 +5124,7 @@ function scanProject(root) {
       locations: asArray(data.locations),
       pronunciation: data.pronunciation
     }), scanErrors),
-    artifacts: readEntityFiles(projectRoot, path4.join("worldbuilding", "artifacts"), (id, file, data) => ({
+    artifacts: readEntityFiles(projectRoot, path5.join("worldbuilding", "artifacts"), (id, file, data) => ({
       id,
       file,
       name: data.name ?? titleCaseSlug(id),
@@ -4594,7 +5134,7 @@ function scanProject(root) {
       location: data.location ?? "",
       pronunciation: data.pronunciation
     }), scanErrors),
-    arcs: readEntityFiles(projectRoot, path4.join("plot", "arcs"), (id, file, data) => ({
+    arcs: readEntityFiles(projectRoot, path5.join("plot", "arcs"), (id, file, data) => ({
       id,
       file,
       name: data.name ?? titleCaseSlug(id),
@@ -4646,7 +5186,7 @@ function scanProject(root) {
       dilemma: String(data.dilemma ?? ""),
       flashbackTo: String(data["flashback-to"] ?? "")
     }), scanErrors).sort((left, right) => left.chapter.localeCompare(right.chapter, "en") || left.scene - right.scene || left.file.localeCompare(right.file, "en")),
-    questions: readEntityFiles(projectRoot, path4.join("continuity", "questions"), (id, file, data) => ({
+    questions: readEntityFiles(projectRoot, path5.join("continuity", "questions"), (id, file, data) => ({
       id,
       file,
       title: data.title ?? titleCaseSlug(id),
@@ -4655,7 +5195,7 @@ function scanProject(root) {
       resolved: String(data.resolved ?? ""),
       characters: asArray(data.characters)
     }), scanErrors),
-    promises: readEntityFiles(projectRoot, path4.join("continuity", "promises"), (id, file, data) => ({
+    promises: readEntityFiles(projectRoot, path5.join("continuity", "promises"), (id, file, data) => ({
       id,
       file,
       title: data.title ?? titleCaseSlug(id),
@@ -4665,7 +5205,7 @@ function scanProject(root) {
       arcs: asArray(data.arcs),
       characters: asArray(data.characters)
     }), scanErrors),
-    clues: readEntityFiles(projectRoot, path4.join("continuity", "clues"), (id, file, data) => ({
+    clues: readEntityFiles(projectRoot, path5.join("continuity", "clues"), (id, file, data) => ({
       id,
       file,
       title: data.title ?? titleCaseSlug(id),
@@ -4677,7 +5217,7 @@ function scanProject(root) {
       characters: asArray(data.characters),
       arcs: asArray(data.arcs)
     }), scanErrors),
-    glossaryTerms: readEntityFiles(projectRoot, path4.join("glossary", "terms"), (id, file, data) => ({
+    glossaryTerms: readEntityFiles(projectRoot, path5.join("glossary", "terms"), (id, file, data) => ({
       id,
       file,
       term: data.term ?? titleCaseSlug(id),
@@ -4720,7 +5260,7 @@ function validateProjectOf(project) {
   const warnings = [];
   const projectRoot = project.root;
   for (const requiredPath of REQUIRED_PATHS) {
-    if (!fs3.existsSync(path4.join(projectRoot, requiredPath))) {
+    if (!fs4.existsSync(path5.join(projectRoot, requiredPath))) {
       errors.push(`Missing required path: ${requiredPath} (story migrate adds missing registries)`);
     }
   }
@@ -4752,27 +5292,27 @@ function validateProjectOf(project) {
   validatePronunciations(project, errors);
   collectStrayFileWarnings(project, warnings);
   for (const file of ENTITY_SCAN_DIRS.flatMap((dir) => entityFileNames(projectRoot, dir))) {
-    if (WINDOWS_RESERVED_ID.test(path4.basename(file, ".md").toLowerCase())) {
+    if (WINDOWS_RESERVED_ID.test(path5.basename(file, ".md").toLowerCase())) {
       warnings.push(`${file} uses a file name Windows reserves, so the project cannot be checked out on Windows; rename the entity`);
     }
   }
   const indexChecks = [
-    [path4.join("characters", "_index.md"), project.characters.map((item) => `](${item.id}.md)`)],
-    [path4.join("worldbuilding", "_index.md"), project.locations.map((item) => `](locations/${item.id}.md)`).concat(project.systems.map((item) => `](systems/${item.id}.md)`)).concat(project.factions.map((item) => `](factions/${item.id}.md)`)).concat(project.artifacts.map((item) => `](artifacts/${item.id}.md)`))],
-    [path4.join("plot", "_index.md"), project.arcs.map((item) => `](arcs/${item.id}.md)`)],
-    [path4.join("chapters", "_index.md"), project.chapters.map((item) => `](${path4.basename(item.file)})`)],
-    [path4.join("scenes", "_index.md"), project.scenes.map((item) => `](${item.id}.md)`)],
-    [path4.join("continuity", "questions", "_index.md"), project.questions.map((item) => `](${item.id}.md)`)],
-    [path4.join("continuity", "promises", "_index.md"), project.promises.map((item) => `](${item.id}.md)`)],
-    [path4.join("continuity", "clues", "_index.md"), project.clues.map((item) => `](${item.id}.md)`)],
-    [path4.join("glossary", "_index.md"), project.glossaryTerms.map((item) => `](terms/${item.id}.md)`)],
-    ...fs3.existsSync(path4.join(projectRoot, MATTER_DIR, "_index.md")) ? [[path4.join(MATTER_DIR, "_index.md"), project.matter.map((item) => `](${item.id}.md)`)]] : [],
-    ...fs3.existsSync(path4.join(projectRoot, RESEARCH_DIR, "_index.md")) ? [[path4.join(RESEARCH_DIR, "_index.md"), project.research.map((item) => `](${item.id}.md)`)]] : []
+    [path5.join("characters", "_index.md"), project.characters.map((item) => `](${item.id}.md)`)],
+    [path5.join("worldbuilding", "_index.md"), project.locations.map((item) => `](locations/${item.id}.md)`).concat(project.systems.map((item) => `](systems/${item.id}.md)`)).concat(project.factions.map((item) => `](factions/${item.id}.md)`)).concat(project.artifacts.map((item) => `](artifacts/${item.id}.md)`))],
+    [path5.join("plot", "_index.md"), project.arcs.map((item) => `](arcs/${item.id}.md)`)],
+    [path5.join("chapters", "_index.md"), project.chapters.map((item) => `](${path5.basename(item.file)})`)],
+    [path5.join("scenes", "_index.md"), project.scenes.map((item) => `](${item.id}.md)`)],
+    [path5.join("continuity", "questions", "_index.md"), project.questions.map((item) => `](${item.id}.md)`)],
+    [path5.join("continuity", "promises", "_index.md"), project.promises.map((item) => `](${item.id}.md)`)],
+    [path5.join("continuity", "clues", "_index.md"), project.clues.map((item) => `](${item.id}.md)`)],
+    [path5.join("glossary", "_index.md"), project.glossaryTerms.map((item) => `](terms/${item.id}.md)`)],
+    ...fs4.existsSync(path5.join(projectRoot, MATTER_DIR, "_index.md")) ? [[path5.join(MATTER_DIR, "_index.md"), project.matter.map((item) => `](${item.id}.md)`)]] : [],
+    ...fs4.existsSync(path5.join(projectRoot, RESEARCH_DIR, "_index.md")) ? [[path5.join(RESEARCH_DIR, "_index.md"), project.research.map((item) => `](${item.id}.md)`)]] : []
   ];
   for (const [indexPath, links] of indexChecks) {
     let markdown;
     try {
-      markdown = safeRead(path4.join(projectRoot, indexPath), projectRoot);
+      markdown = safeRead(path5.join(projectRoot, indexPath), projectRoot);
     } catch (error) {
       errors.push(`${indexPath}: ${error.message}`);
       continue;
@@ -4785,13 +5325,13 @@ function validateProjectOf(project) {
   }
   for (const chapter of project.chapters) {
     if (chapter.declaredWordCount !== null && chapter.declaredWordCount !== chapter.wordCount) {
-      warnings.push(`${path4.relative(projectRoot, chapter.file)} declares ${chapter.declaredWordCount} words but contains ${chapter.wordCount}`);
+      warnings.push(`${path5.relative(projectRoot, chapter.file)} declares ${chapter.declaredWordCount} words but contains ${chapter.wordCount}`);
     }
     if (chapter.unclosedComment) {
-      warnings.push(`${path4.relative(projectRoot, chapter.file)} opens an HTML comment (<!--) that never closes, so the text after it shows in builds and word counts`);
+      warnings.push(`${path5.relative(projectRoot, chapter.file)} opens an HTML comment (<!--) that never closes, so the text after it shows in builds and word counts`);
     }
     if (!project.scenes.some((scene) => scene.chapter === chapter.id)) {
-      warnings.push(`${path4.relative(projectRoot, chapter.file)} has no machine-readable scene records`);
+      warnings.push(`${path5.relative(projectRoot, chapter.file)} has no machine-readable scene records`);
     }
   }
   return { ok: errors.length === 0, errors, warnings };
@@ -5025,21 +5565,21 @@ function validateLinksOf(project) {
 }
 function validateTimelineAndArcBodyRefs(project, chapters, errors) {
   const chapterIds = new Set(chapters.keys());
-  const timelinePath = path4.join(project.root, "plot", "timeline.md");
-  if (fs3.existsSync(timelinePath)) {
+  const timelinePath = path5.join(project.root, "plot", "timeline.md");
+  if (fs4.existsSync(timelinePath)) {
     try {
       const raw = readTextFile(timelinePath);
       const body = parseFrontmatter(raw, timelinePath).body ?? raw;
       for (const token of extractChapterIdTokens(body)) {
         if (!chapterIds.has(token)) {
-          errors.push(`${path4.join("plot", "timeline.md")} references missing chapter ${token}`);
+          errors.push(`${path5.join("plot", "timeline.md")} references missing chapter ${token}`);
         }
       }
       for (const target of extractMarkdownLinkTargets(body)) {
-        checkBodyLinkTarget(project, path4.join("plot", "timeline.md"), target, errors);
+        checkBodyLinkTarget(project, path5.join("plot", "timeline.md"), target, errors);
       }
     } catch (error) {
-      const message = `${path4.join("plot", "timeline.md")}: ${error.message}`;
+      const message = `${path5.join("plot", "timeline.md")}: ${error.message}`;
       if (!errors.includes(message)) {
         errors.push(message);
       }
@@ -5073,7 +5613,7 @@ function checkBodyLinkTarget(project, label2, target, errors) {
     return;
   }
   const pathOnly = cleaned.split("#")[0].split("?")[0];
-  const base = path4.basename(pathOnly);
+  const base = path5.basename(pathOnly);
   if (!base.endsWith(".md")) {
     return;
   }
@@ -5085,12 +5625,12 @@ function checkBodyLinkTarget(project, label2, target, errors) {
     errors.push(`${label2} links to ${cleaned} which must be kebab-case`);
     return;
   }
-  const resolved = path4.resolve(path4.dirname(path4.join(project.root, label2)), pathOnly);
-  if (!isPathInside2(path4.resolve(project.root), resolved) || !fs3.existsSync(resolved) || !fs3.statSync(resolved).isFile()) {
+  const resolved = path5.resolve(path5.dirname(path5.join(project.root, label2)), pathOnly);
+  if (!isPathInside(path5.resolve(project.root), resolved) || !fs4.existsSync(resolved) || !fs4.statSync(resolved).isFile()) {
     errors.push(`${label2} links to missing file ${cleaned}`);
     return;
   }
-  if (!isPathInside2(fs3.realpathSync(project.root), fs3.realpathSync(resolved))) {
+  if (!isPathInside(fs4.realpathSync(project.root), fs4.realpathSync(resolved))) {
     errors.push(`${label2} links to ${cleaned} which resolves outside the project`);
     return;
   }
@@ -5126,7 +5666,7 @@ function knowledgeAtChapter(root, characterId, atChapterId) {
   const project = scanProject(root);
   const characters = new Map(project.characters.map((character) => [character.id, character]));
   if (!characters.has(characterId)) {
-    const parseError = project.fileErrors.find((error) => error.startsWith(`${path4.join("characters", `${characterId}.md`)}:`));
+    const parseError = project.fileErrors.find((error) => error.startsWith(`${path5.join("characters", `${characterId}.md`)}:`));
     throw new Error(parseError ?? `Unknown character ${characterId}`);
   }
   const chapterNumbers = new Map(project.chapters.map((chapter) => [chapter.id, chapter.number]));
@@ -5136,7 +5676,7 @@ function knowledgeAtChapter(root, characterId, atChapterId) {
   }
   let stateError = "";
   for (const error of project.fileErrors ?? []) {
-    if (!stateError && String(error).startsWith(`${path4.join("continuity", "state.md")}:`)) {
+    if (!stateError && String(error).startsWith(`${path5.join("continuity", "state.md")}:`)) {
       stateError = error;
     }
   }
@@ -5162,9 +5702,9 @@ function knowledgeAtChapter(root, characterId, atChapterId) {
   return entries;
 }
 function seriesReport(root) {
-  const projectRoot = path4.resolve(root);
+  const projectRoot = path5.resolve(root);
   requireStoryFile(projectRoot);
-  return buildSeries(fs3.realpathSync(projectRoot), scanProject);
+  return buildSeries(fs4.realpathSync(projectRoot), scanProject);
 }
 function projectReport(root, options = {}) {
   const project = scanProject(root);
@@ -5326,10 +5866,10 @@ function reindexProject(root) {
   const project = scanProject(root);
   assertProjectParses(project, "reindex");
   const changed = [];
-  const at = (...parts) => path4.join(project.root, ...parts);
+  const at = (...parts) => path5.join(project.root, ...parts);
   const existingPlot = readRegistrySource(at("plot", "_index.md"), project.root);
   let plotStructure = "three-act";
-  if (fs3.existsSync(at("plot", "_index.md"))) {
+  if (fs4.existsSync(at("plot", "_index.md"))) {
     plotStructure = parseFrontmatter(existingPlot, "plot/_index.md").data.structure ?? "three-act";
   }
   writeRegistry(at("characters", "_index.md"), (existing) => characterIndex(project.storyId, project.characters, extractSection(existing, "Relationship Map"), extractSection(existing, "Family Trees")), changed, project.root);
@@ -5341,10 +5881,10 @@ function reindexProject(root) {
   writeRegistry(at("continuity", "promises", "_index.md"), () => promiseIndex(project.storyId, project.promises), changed, project.root);
   writeRegistry(at("continuity", "clues", "_index.md"), () => clueIndex(project.storyId, project.clues), changed, project.root);
   writeRegistry(at("glossary", "_index.md"), () => glossaryIndex(project.storyId, project.glossaryTerms), changed, project.root);
-  if (fs3.existsSync(at(MATTER_DIR))) {
+  if (fs4.existsSync(at(MATTER_DIR))) {
     writeRegistry(at(MATTER_DIR, "_index.md"), () => matterIndex(project.storyId, project.matter), changed, project.root);
   }
-  if (fs3.existsSync(at(RESEARCH_DIR))) {
+  if (fs4.existsSync(at(RESEARCH_DIR))) {
     writeRegistry(at(RESEARCH_DIR, "_index.md"), () => researchIndex(project.storyId, project.research), changed, project.root);
   }
   refreshStoryField(at("plot", "timeline.md"), project.storyId, changed, project.root);
@@ -5352,7 +5892,7 @@ function reindexProject(root) {
   return { changed };
 }
 function assertProjectParses(project, action) {
-  const ignored = [STYLE_SHEET_FILE, PROGRESS_FILE, path4.join("continuity", "exemptions.md")];
+  const ignored = [STYLE_SHEET_FILE, PROGRESS_FILE, path5.join("continuity", "exemptions.md")];
   const errors = (project.fileErrors ?? []).filter((error) => !ignored.some((file) => error.startsWith(`${file}:`)));
   if (errors.length > 0) {
     throw new Error(`Cannot ${action}: fix ${errors.length === 1 ? "this file first (story validate reports it)" : "these files first (story validate reports them)"}:
@@ -5430,7 +5970,7 @@ function markdownHeadings(markdown) {
   return headings;
 }
 function refreshStoryField(filePath, storyId, changed, root) {
-  if (!fs3.existsSync(filePath)) {
+  if (!fs4.existsSync(filePath)) {
     return;
   }
   let raw;
@@ -5461,7 +6001,7 @@ function computeWordCounts(root, options = {}) {
     chapters.push({
       number: chapter.number,
       title: chapter.title,
-      file: path4.relative(project.root, chapter.file),
+      file: path5.relative(project.root, chapter.file),
       wordCount: chapter.wordCount
     });
     if (options.write && chapter.declaredWordCount !== chapter.wordCount) {
@@ -5494,7 +6034,7 @@ function compareProject(root, options = {}) {
     previous = chaptersAtGitRef(project.root, options.ref);
     label2 = `git ref ${options.ref}`;
   } else {
-    const otherRoot = path4.resolve(options.cwd ?? process.cwd(), options.against);
+    const otherRoot = path5.resolve(options.cwd ?? process.cwd(), options.against);
     const other = scanProject(otherRoot);
     if (other.fileErrors.length > 0) {
       throw new Error(`Cannot read ${otherRoot}: ${other.fileErrors[0]}`);
@@ -5537,9 +6077,9 @@ function chaptersAtGitRef(root, ref) {
     throw new Error(`Unknown git ref: ${ref}`);
   }
   const names = git(["ls-tree", "--name-only", ref, "--", "chapters/"]).split(`
-`).map((name) => path4.posix.basename(name.trim())).filter((name) => CHAPTER_FILENAME_PATTERN.test(name)).sort();
+`).map((name) => path5.posix.basename(name.trim())).filter((name) => CHAPTER_FILENAME_PATTERN.test(name)).sort();
   return names.map((name) => {
-    const id = path4.basename(name, ".md");
+    const id = path5.basename(name, ".md");
     const raw = git(["show", `${ref}:${prefix}chapters/${name}`]);
     try {
       return comparableChapter(id, parseFrontmatter(raw, name));
@@ -5567,7 +6107,7 @@ function projectProgress(root, options = {}) {
     if (logErrors.length > 0) {
       throw new Error(`Cannot log progress until ${PROGRESS_FILE} is fixed: ${logErrors.join("; ")}`);
     }
-    const filePath = path4.join(project.root, PROGRESS_FILE);
+    const filePath = path5.join(project.root, PROGRESS_FILE);
     const existing = project.progressLog;
     const sessions = withSession(cleanSessions(existing?.data.sessions), today, words);
     const contents = existing === null ? progressLogFile(sessions) : replaceFrontmatter(existing.rawMarkdown, { ...existing.data, sessions });
@@ -5625,7 +6165,7 @@ function diagramProject(root, options = {}) {
 }
 function projectPasses(root, change = {}) {
   const project = scanProject(root);
-  const storyPath = path4.join(project.root, "story.md");
+  const storyPath = path5.join(project.root, "story.md");
   const passes = readPasses(project.story.data);
   const wantsChange = Boolean(change.init) || change.start !== undefined || change.done !== undefined;
   if (!wantsChange) {
@@ -5702,7 +6242,7 @@ function proseReport(root) {
 function exportManuscript(root, options = {}) {
   const project = scanProject(root);
   const manuscript = manuscriptParts(project, options.generatedBy === undefined ? "export" : "build");
-  const output = resolveOutputPath(project, options.out, path4.join("dist", "manuscript.md"), options.enforceRoot);
+  const output = resolveOutputPath(project, options.out, path5.join("dist", "manuscript.md"), options.enforceRoot);
   const generatedBy = options.generatedBy ?? "story export";
   const lines = [`# ${manuscript.title}`, "", `<!-- Generated by ${generatedBy}. -->`, ""];
   const pushMatter = (entry) => {
@@ -5731,7 +6271,7 @@ function buildBook(root, options = {}) {
   }
   const project = scanProject(root);
   const extension = BUILD_EXTENSIONS[format];
-  const output = resolveOutputPath(project, options.out, path4.join("dist", `${fileStem(project.storyId)}.${extension}`));
+  const output = resolveOutputPath(project, options.out, path5.join("dist", `${fileStem(project.storyId)}.${extension}`));
   if (format === "markdown") {
     const result = exportManuscript(project.root, {
       out: output.outFile,
@@ -5794,7 +6334,7 @@ function synopsisBook(root, options = {}) {
   if (options.out === undefined) {
     return { text };
   }
-  const output = resolveOutputPath(project, options.out, path4.join("dist", `${fileStem(project.storyId)}.synopsis.md`));
+  const output = resolveOutputPath(project, options.out, path5.join("dist", `${fileStem(project.storyId)}.synopsis.md`));
   writeFile(output.outFile, text, output.writeOptions);
   return { text, outFile: output.outFile };
 }
@@ -5970,21 +6510,21 @@ function shunnMeta(project) {
   };
 }
 function migrateProject(root) {
-  const projectRoot = path4.resolve(root);
+  const projectRoot = path5.resolve(root);
   const storyPath = requireStoryFile(projectRoot);
   const story = readMarkdown(storyPath, projectRoot);
   assertProjectParses(scanProject(projectRoot), "migrate");
   const storyId = deriveStoryId(story.data.title, projectRoot);
   const changed = [];
   for (const directory of PROJECT_DIRECTORIES) {
-    ensureDirectory(path4.join(projectRoot, directory), changed, projectRoot);
+    ensureDirectory(path5.join(projectRoot, directory), changed, projectRoot);
   }
-  ensureFile(path4.join(projectRoot, "scenes", "_index.md"), sceneIndex(storyId, []), changed, projectRoot);
-  ensureFile(path4.join(projectRoot, "continuity", "state.md"), continuityState(storyId), changed, projectRoot);
-  ensureFile(path4.join(projectRoot, "continuity", "questions", "_index.md"), questionIndex(storyId, []), changed, projectRoot);
-  ensureFile(path4.join(projectRoot, "continuity", "promises", "_index.md"), promiseIndex(storyId, []), changed, projectRoot);
-  ensureFile(path4.join(projectRoot, "continuity", "clues", "_index.md"), clueIndex(storyId, []), changed, projectRoot);
-  ensureFile(path4.join(projectRoot, "glossary", "_index.md"), glossaryIndex(storyId, []), changed, projectRoot);
+  ensureFile(path5.join(projectRoot, "scenes", "_index.md"), sceneIndex(storyId, []), changed, projectRoot);
+  ensureFile(path5.join(projectRoot, "continuity", "state.md"), continuityState(storyId), changed, projectRoot);
+  ensureFile(path5.join(projectRoot, "continuity", "questions", "_index.md"), questionIndex(storyId, []), changed, projectRoot);
+  ensureFile(path5.join(projectRoot, "continuity", "promises", "_index.md"), promiseIndex(storyId, []), changed, projectRoot);
+  ensureFile(path5.join(projectRoot, "continuity", "clues", "_index.md"), clueIndex(storyId, []), changed, projectRoot);
+  ensureFile(path5.join(projectRoot, "glossary", "_index.md"), glossaryIndex(storyId, []), changed, projectRoot);
   if (story.data["schema-version"] !== STORY_SCHEMA_VERSION) {
     writeFile(storyPath, replaceFrontmatter(story.rawMarkdown, {
       ...story.data,
@@ -6082,7 +6622,7 @@ function createEntity(root, options) {
   }
   const entity = buildEntity(project, kind, name, options);
   assertPortableId(entity.id, kind);
-  if (fs3.existsSync(entity.file)) {
+  if (fs4.existsSync(entity.file)) {
     throw new Error(`${relative2(project, entity.file)} already exists`);
   }
   writeFile(entity.file, entity.markdown, { root: project.root });
@@ -6100,7 +6640,7 @@ function renameEntity(root, options) {
     throw new Error("rename requires an entity id and a new name");
   }
   const config = entityConfig(kind);
-  const oldFile = path4.join(project.root, config.dir, `${oldId}.md`);
+  const oldFile = path5.join(project.root, config.dir, `${oldId}.md`);
   requireKebabId(oldId, `${kind} id`);
   assertSafeProjectPath(oldFile, project.root);
   const newId = kind === "chapter" || kind === "scene" ? oldId : kebabCase(name);
@@ -6108,17 +6648,17 @@ function renameEntity(root, options) {
     throw new Error(`Cannot derive a kebab-case id from ${kind} name "${name}"`);
   }
   assertPortableId(newId, kind);
-  const newFile = path4.join(project.root, config.dir, `${newId}.md`);
+  const newFile = path5.join(project.root, config.dir, `${newId}.md`);
   assertSafeProjectPath(newFile, project.root);
-  if (!fs3.existsSync(oldFile)) {
-    if (newFile !== oldFile && fs3.existsSync(newFile) && readMarkdown(newFile, project.root).data[config.titleField] === name) {
+  if (!fs4.existsSync(oldFile)) {
+    if (newFile !== oldFile && fs4.existsSync(newFile) && readMarkdown(newFile, project.root).data[config.titleField] === name) {
       writeReferencePlan(project.root, replaceEntityReferences(project.root, kind, oldId, newId, new Map));
       const reindexed2 = reindexProject(project.root);
       return { kind, oldId, id: newId, file: newFile, changed: [newFile].concat(reindexed2.changed), resumed: true };
     }
     throw new Error(`${kind} ${oldId} does not exist`);
   }
-  if (newFile !== oldFile && fs3.existsSync(newFile)) {
+  if (newFile !== oldFile && fs4.existsSync(newFile)) {
     throw new Error(`${kind} ${newId} already exists`);
   }
   const markdown = readMarkdown(oldFile, project.root);
@@ -6132,7 +6672,7 @@ function renameEntity(root, options) {
     plan.delete(oldFile);
     writeReferencePlan(project.root, plan);
     writeFile(newFile, renamedContents, { root: project.root });
-    fs3.rmSync(oldFile);
+    fs4.rmSync(oldFile);
   }
   const reindexed = reindexProject(project.root);
   return { kind, oldId, id: newId, file: newFile, changed: [newFile].concat(reindexed.changed) };
@@ -6154,10 +6694,10 @@ function removeEntity(root, options) {
     throw new Error("remove requires an entity id");
   }
   const config = entityConfig(kind);
-  const file = path4.join(project.root, config.dir, `${id}.md`);
+  const file = path5.join(project.root, config.dir, `${id}.md`);
   requireKebabId(id, `${kind} id`);
   assertSafeProjectPath(file, project.root);
-  if (!fs3.existsSync(file)) {
+  if (!fs4.existsSync(file)) {
     throw new Error(`${kind} ${id} does not exist`);
   }
   if (kind === "chapter") {
@@ -6168,7 +6708,7 @@ function removeEntity(root, options) {
   }
   const plan = removeEntityReferences(project.root, kind, id, new Map([[file, null]]));
   writeReferencePlan(project.root, plan);
-  fs3.rmSync(file);
+  fs4.rmSync(file);
   const reindexed = reindexProject(project.root);
   return { kind, id, file, changed: [file].concat(reindexed.changed) };
 }
@@ -6199,7 +6739,7 @@ function moveChapter(project, oldId, options) {
   }
   const number = requirePositiveInteger(options.number, "chapter number");
   const newId = `chapter-${String(number).padStart(2, "0")}`;
-  const newFile = path4.join(project.root, "chapters", `${newId}.md`);
+  const newFile = path5.join(project.root, "chapters", `${newId}.md`);
   if (newId === oldId) {
     throw new Error(`${oldId} is already chapter ${number}`);
   }
@@ -6209,13 +6749,13 @@ function moveChapter(project, oldId, options) {
   const scenes = project.scenes.filter((scene) => scene.chapter === oldId);
   const sceneMoves = scenes.map((scene) => ({
     oldFile: scene.file,
-    newFile: path4.join(project.root, "scenes", `${newId}-scene-${String(scene.scene).padStart(2, "0")}.md`)
+    newFile: path5.join(project.root, "scenes", `${newId}-scene-${String(scene.scene).padStart(2, "0")}.md`)
   }));
   const context = entityReferenceContext(project.root, "chapter", oldId);
   const sceneContexts = scenes.map((scene) => ({ context: entityReferenceContext(project.root, "scene", scene.id), newId: `${newId}-scene-${String(scene.scene).padStart(2, "0")}` }));
   const plan = planReferenceRewrites(project.root, context, new Map([[chapter.file, renumbered]]), idRenamer(oldId, newId), (body, file) => renameIdTokens(project.root, file, sceneContexts.reduce((text, entry) => renameLinkTargets(project.root, file, text, entry.context, entry.newId), renameLinkTargets(project.root, file, body, context, newId)), oldId, newId));
-  const statePath = path4.join(project.root, "continuity", "state.md");
-  if (fs3.existsSync(statePath)) {
+  const statePath = path5.join(project.root, "continuity", "state.md");
+  if (fs4.existsSync(statePath)) {
     const stateText = plan.get(statePath) ?? readTextFile(statePath);
     const stateData = parseFrontmatter(stateText, statePath).data;
     if (stateData["current-chapter"] === chapter.number) {
@@ -6245,7 +6785,7 @@ function moveScene(project, oldId, options) {
   }
   const number = options.scene === undefined ? nextSceneNumber(project, chapterId) : requirePositiveInteger(options.scene, "scene number");
   const newId = `${chapterId}-scene-${String(number).padStart(2, "0")}`;
-  const newFile = path4.join(project.root, "scenes", `${newId}.md`);
+  const newFile = path5.join(project.root, "scenes", `${newId}.md`);
   if (newId === oldId) {
     throw new Error(`${oldId} is already scene ${number} of ${chapterId}`);
   }
@@ -6266,8 +6806,8 @@ function idRenamer(oldId, newId) {
   return (value) => value === oldId ? newId : value;
 }
 function renameIdTokens(root, file, body, oldId, newId) {
-  const relativePath = path4.relative(root, file);
-  if (relativePath !== path4.join("plot", "timeline.md") && path4.dirname(relativePath) !== path4.join("plot", "arcs")) {
+  const relativePath = path5.relative(root, file);
+  if (relativePath !== path5.join("plot", "timeline.md") && path5.dirname(relativePath) !== path5.join("plot", "arcs")) {
     return body;
   }
   return body.replace(new RegExp(`(?<![\\w-])${escapeRegExp(oldId)}-scene-(\\d+)(?![\\w-])`, "g"), `${newId}-scene-$1`).replace(new RegExp(`(?<![\\w-])${escapeRegExp(oldId)}(?![\\w-])`, "g"), newId);
@@ -6275,8 +6815,8 @@ function renameIdTokens(root, file, body, oldId, newId) {
 function commitMoves(root, plan, moves) {
   const contents = moves.map((move) => plan.get(move.oldFile) ?? readTextFile(move.oldFile));
   moves.forEach((move, index) => {
-    if (fs3.existsSync(move.newFile) && readTextFile(move.newFile) !== contents[index]) {
-      throw new Error(`${path4.relative(root, move.newFile)} already exists; nothing was changed`);
+    if (fs4.existsSync(move.newFile) && readTextFile(move.newFile) !== contents[index]) {
+      throw new Error(`${path5.relative(root, move.newFile)} already exists; nothing was changed`);
     }
   });
   for (const move of moves) {
@@ -6285,7 +6825,7 @@ function commitMoves(root, plan, moves) {
   writeReferencePlan(root, plan);
   moves.forEach((move, index) => writeFile(move.newFile, contents[index], { root }));
   for (const move of moves) {
-    fs3.rmSync(move.oldFile);
+    fs4.rmSync(move.oldFile);
   }
 }
 function storyBible(options) {
@@ -6417,7 +6957,7 @@ ${themeTracking || `| Theme | Arcs | Chapters |
 `;
 }
 function chapterIndex(storyId, chapters) {
-  const rows = chapters.length === 0 ? ["| *No chapters yet* | | | | | |"] : chapters.map((chapter) => `| ${chapter.number} | ${chapter.title} | ${chapter.pov} | ${chapter.status} | ${chapter.wordCount} | [${chapter.id}](${path4.basename(chapter.file)}) |`);
+  const rows = chapters.length === 0 ? ["| *No chapters yet* | | | | | |"] : chapters.map((chapter) => `| ${chapter.number} | ${chapter.title} | ${chapter.pov} | ${chapter.status} | ${chapter.wordCount} | [${chapter.id}](${path5.basename(chapter.file)}) |`);
   const total2 = chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
   return `${stringifyFrontmatter({ type: "chapter-registry", story: storyId })}# Chapters
 
@@ -6774,22 +7314,22 @@ function buildEntity(project, kind, name, options) {
 }
 function entityResult(project, kind, id, markdown) {
   const config = entityConfig(kind);
-  return { id, markdown, file: path4.join(project.root, config.dir, `${id}.md`) };
+  return { id, markdown, file: path5.join(project.root, config.dir, `${id}.md`) };
 }
 function entityConfig(kind) {
   const configs = {
     character: { dir: "characters", titleField: "name" },
-    location: { dir: path4.join("worldbuilding", "locations"), titleField: "name" },
-    system: { dir: path4.join("worldbuilding", "systems"), titleField: "name" },
-    faction: { dir: path4.join("worldbuilding", "factions"), titleField: "name" },
-    artifact: { dir: path4.join("worldbuilding", "artifacts"), titleField: "name" },
-    arc: { dir: path4.join("plot", "arcs"), titleField: "name" },
+    location: { dir: path5.join("worldbuilding", "locations"), titleField: "name" },
+    system: { dir: path5.join("worldbuilding", "systems"), titleField: "name" },
+    faction: { dir: path5.join("worldbuilding", "factions"), titleField: "name" },
+    artifact: { dir: path5.join("worldbuilding", "artifacts"), titleField: "name" },
+    arc: { dir: path5.join("plot", "arcs"), titleField: "name" },
     chapter: { dir: "chapters", titleField: "title" },
     scene: { dir: "scenes", titleField: "title" },
-    question: { dir: path4.join("continuity", "questions"), titleField: "title" },
-    promise: { dir: path4.join("continuity", "promises"), titleField: "title" },
-    clue: { dir: path4.join("continuity", "clues"), titleField: "title" },
-    term: { dir: path4.join("glossary", "terms"), titleField: "term" },
+    question: { dir: path5.join("continuity", "questions"), titleField: "title" },
+    promise: { dir: path5.join("continuity", "promises"), titleField: "title" },
+    clue: { dir: path5.join("continuity", "clues"), titleField: "title" },
+    term: { dir: path5.join("glossary", "terms"), titleField: "term" },
     matter: { dir: MATTER_DIR, titleField: "title" },
     research: { dir: RESEARCH_DIR, titleField: "title" }
   };
@@ -7313,10 +7853,10 @@ function nextSceneNumber(project, chapter) {
   return project.scenes.filter((scene) => scene.chapter === chapter).reduce((max, scene) => Math.max(max, scene.scene), 0) + 1;
 }
 function ensureDirectory(directory, changed, root) {
-  if (!fs3.existsSync(directory)) {
+  if (!fs4.existsSync(directory)) {
     assertLexicallyInsideRoot(directory, root);
     assertExistingAncestorInsideRoot(directory, root);
-    fs3.mkdirSync(directory, { recursive: true });
+    fs4.mkdirSync(directory, { recursive: true });
     assertSafeProjectDirectory(directory, root);
     changed.push(directory);
     return;
@@ -7324,7 +7864,7 @@ function ensureDirectory(directory, changed, root) {
   assertSafeProjectDirectory(directory, root);
 }
 function ensureFile(filePath, contents, changed, root) {
-  if (!fs3.existsSync(filePath)) {
+  if (!fs4.existsSync(filePath)) {
     writeFile(filePath, contents, { root });
     changed.push(filePath);
     return;
@@ -7367,14 +7907,14 @@ function entityReferenceContext(root, kind, id) {
   const otherExists = new Map;
   const existsAs = (other) => {
     if (!otherExists.has(other)) {
-      otherExists.set(other, fs3.existsSync(path4.join(root, entityConfig(other).dir, `${id}.md`)));
+      otherExists.set(other, fs4.existsSync(path5.join(root, entityConfig(other).dir, `${id}.md`)));
     }
     return otherExists.get(other);
   };
   return {
     id,
     kind,
-    entityFile: path4.resolve(root, entityConfig(kind).dir, `${id}.md`),
+    entityFile: path5.resolve(root, entityConfig(kind).dir, `${id}.md`),
     isReferenceKey: (key) => {
       const kinds = Object.hasOwn(REFERENCE_FIELD_KINDS, key) ? REFERENCE_FIELD_KINDS[key] : [];
       return kinds.includes(kind) && !kinds.some((other) => other !== kind && existsAs(other));
@@ -7392,7 +7932,7 @@ function resolveLinkTarget(root, file, target) {
   } catch {
     decoded = cleaned;
   }
-  return decoded.startsWith("/") ? path4.resolve(root, `.${decoded}`) : path4.resolve(path4.dirname(file), decoded);
+  return decoded.startsWith("/") ? path5.resolve(root, `.${decoded}`) : path5.resolve(path5.dirname(file), decoded);
 }
 function renameLinkTargets(root, file, body, context, newId) {
   return body.replace(/\[([^\]\n]*)\]\(([^)\n]*)\)/g, (match, text, target) => {
@@ -7414,7 +7954,7 @@ function removeEntityReferences(root, kind, id, overrides) {
 }
 function planReferenceRewrites(root, context, overrides, transform, transformBody) {
   const plan = new Map;
-  const storyFile = path4.join(root, "story.md");
+  const storyFile = path5.join(root, "story.md");
   for (const file of markdownFiles(root)) {
     const override = overrides?.has(file) ? overrides.get(file) : undefined;
     if (override === null) {
@@ -7427,7 +7967,7 @@ function planReferenceRewrites(root, context, overrides, transform, transformBod
     }
     const match = FRONTMATTER_PATTERN.exec(text);
     if (!match && isProjectSourceFile(root, file)) {
-      throw new Error(`${path4.relative(root, file)} is missing YAML frontmatter; nothing was changed`);
+      throw new Error(`${path5.relative(root, file)} is missing YAML frontmatter; nothing was changed`);
     }
     let header = "";
     let body = text;
@@ -7439,7 +7979,7 @@ function planReferenceRewrites(root, context, overrides, transform, transformBod
         try {
           data = parseFrontmatter(text, file).data;
         } catch (error) {
-          throw new Error(`${path4.relative(root, file)}: ${error.message}; nothing was changed`);
+          throw new Error(`${path5.relative(root, file)}: ${error.message}; nothing was changed`);
         }
         let nextData = transformReferences(data, transform, context);
         if (context.kind === "chapter") {
@@ -7458,18 +7998,18 @@ function planReferenceRewrites(root, context, overrides, transform, transformBod
   return plan;
 }
 var FRONTMATTER_FILES = new Set([
-  path4.join("plot", "timeline.md"),
-  path4.join("continuity", "state.md"),
-  path4.join("continuity", "exemptions.md")
+  path5.join("plot", "timeline.md"),
+  path5.join("continuity", "state.md"),
+  path5.join("continuity", "exemptions.md")
 ]);
 var REGISTRY_FILES = new Set([
   ...INDEX_SCHEMAS.map(([relativePath]) => relativePath),
-  path4.join(MATTER_DIR, "_index.md"),
-  path4.join(RESEARCH_DIR, "_index.md")
+  path5.join(MATTER_DIR, "_index.md"),
+  path5.join(RESEARCH_DIR, "_index.md")
 ]);
 function isProjectSourceFile(root, file) {
-  const relativePath = path4.relative(root, file);
-  return SOURCE_ROOT_FILES.has(relativePath) || FRONTMATTER_FILES.has(relativePath) || REGISTRY_FILES.has(relativePath) || ENTITY_SCAN_DIRS.includes(path4.dirname(relativePath));
+  const relativePath = path5.relative(root, file);
+  return SOURCE_ROOT_FILES.has(relativePath) || FRONTMATTER_FILES.has(relativePath) || REGISTRY_FILES.has(relativePath) || ENTITY_SCAN_DIRS.includes(path5.dirname(relativePath));
 }
 function reconcileChapterStatuses(before, after) {
   const next = { ...after };
@@ -7534,18 +8074,18 @@ function applyEntityBacklinks(root, kind, id, data) {
   if (kind === "location") {
     for (const characterId of asArray(data["notable-characters"])) {
       if (isKebabId2(characterId)) {
-        addFrontmatterListValue(root, path4.join("characters", `${characterId}.md`), "locations", id);
+        addFrontmatterListValue(root, path5.join("characters", `${characterId}.md`), "locations", id);
       }
     }
   }
   if (kind === "scene" && isKebabId2(data.chapter)) {
-    const chapterFile2 = path4.join("chapters", `${data.chapter}.md`);
-    const exists = (dir, id2) => fs3.existsSync(path4.join(root, dir, `${id2}.md`));
-    if (isKebabId2(data.location) && exists(path4.join("worldbuilding", "locations"), data.location)) {
+    const chapterFile2 = path5.join("chapters", `${data.chapter}.md`);
+    const exists = (dir, id2) => fs4.existsSync(path5.join(root, dir, `${id2}.md`));
+    if (isKebabId2(data.location) && exists(path5.join("worldbuilding", "locations"), data.location)) {
       addFrontmatterListValue(root, chapterFile2, "locations", data.location);
     }
-    const chapterPath = path4.join(root, chapterFile2);
-    const mentions = fs3.existsSync(chapterPath) ? asArray(readMarkdown(chapterPath, root).data.mentions) : [];
+    const chapterPath = path5.join(root, chapterFile2);
+    const mentions = fs4.existsSync(chapterPath) ? asArray(readMarkdown(chapterPath, root).data.mentions) : [];
     for (const characterId of asArray(data.characters)) {
       if (isKebabId2(characterId) && exists("characters", characterId) && !mentions.includes(characterId)) {
         addFrontmatterListValue(root, chapterFile2, "characters", characterId);
@@ -7555,14 +8095,14 @@ function applyEntityBacklinks(root, kind, id, data) {
   if (kind === "character") {
     for (const locationId of asArray(data.locations)) {
       if (isKebabId2(locationId)) {
-        addFrontmatterListValue(root, path4.join("worldbuilding", "locations", `${locationId}.md`), "notable-characters", id);
+        addFrontmatterListValue(root, path5.join("worldbuilding", "locations", `${locationId}.md`), "notable-characters", id);
       }
     }
   }
 }
 function addFrontmatterListValue(root, relativePath, field, value) {
-  const filePath = path4.join(root, relativePath);
-  if (!fs3.existsSync(filePath) || !value) {
+  const filePath = path5.join(root, relativePath);
+  if (!fs4.existsSync(filePath) || !value) {
     return;
   }
   assertSafeProjectPath(filePath, root);
@@ -7578,8 +8118,8 @@ function addFrontmatterListValue(root, relativePath, field, value) {
 var SKIPPED_SCAN_DIRECTORIES = new Set(["dist", "node_modules"]);
 function markdownFiles(root, depth = 0, collected = null) {
   const files = collected ?? [];
-  for (const entry of fs3.readdirSync(root, { withFileTypes: true })) {
-    const fullPath = path4.join(root, entry.name);
+  for (const entry of fs4.readdirSync(root, { withFileTypes: true })) {
+    const fullPath = path5.join(root, entry.name);
     if (entry.isDirectory() && !SKIPPED_SCAN_DIRECTORIES.has(entry.name) && !entry.name.startsWith(".")) {
       if (depth < MAX_SCAN_DEPTH) {
         markdownFiles(fullPath, depth + 1, files);
@@ -7655,466 +8195,32 @@ function manuscriptParts(project, action2 = "build") {
 function isCopyrightMatter(entry) {
   return entry.id === "copyright" || /copyright/i.test(entry.title);
 }
-function epubModifiedTimestamp() {
-  const raw = process.env.SOURCE_DATE_EPOCH;
-  if (raw !== undefined && raw !== "") {
-    const date = /^\d+$/.test(raw.trim()) ? new Date(Number(raw.trim()) * 1000) : null;
-    if (date !== null && !Number.isNaN(date.getTime()) && date.getUTCFullYear() <= 9999) {
-      return date.toISOString().replace(/\.\d{3}Z$/, "Z");
-    }
-  }
-  return "2000-01-01T00:00:00Z";
-}
-function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
-  const meta = manuscript.meta ?? publishingMeta({});
-  const lang = xmlEscape(meta.language);
-  const documents = [];
-  const pushMatter = (placement) => (entry) => documents.push({
-    id: `${placement}-${entry.id}`,
-    label: entry.title,
-    content: matterXhtml(entry, placement, lang)
-  });
-  manuscript.front.forEach(pushMatter("front"));
-  for (const chapter of manuscript.chapters) {
-    documents.push({
-      id: `chapter-${String(chapter.number).padStart(2, "0")}`,
-      label: chapterHeading(chapter.number, chapter.title),
-      content: chapterXhtml(chapter, lang),
-      bodymatter: true
-    });
-  }
-  manuscript.back.forEach(pushMatter("back"));
-  const coverEntries = [];
-  const coverItems = [];
-  const coverMeta = [];
-  const coverSpine = [];
-  if (manuscript.cover) {
-    const href = `images/cover.${manuscript.cover.extension}`;
-    const alt = meta.coverAlt === "" ? `Cover of ${manuscript.title}` : meta.coverAlt;
-    coverEntries.push({ name: `OEBPS/${href}`, content: fs3.readFileSync(manuscript.cover.filePath) }, { name: "OEBPS/cover.xhtml", content: `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="${lang}" lang="${lang}"><head><title>${xmlEscape(manuscript.title)}</title></head><body epub:type="cover"><img src="${href}" alt="${xmlEscape(alt)}"/></body></html>` });
-    coverItems.push(`<item id="cover-image" href="${href}" media-type="${manuscript.cover.mediaType}" properties="cover-image"/>`, `<item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>`);
-    coverMeta.push(`<meta name="cover" content="cover-image"/>`);
-    coverSpine.push(`<itemref idref="cover"/>`);
-  }
-  const creator = meta.authors.map((name) => `<dc:creator>${xmlEscape(name)}</dc:creator>`).join("");
-  const identifier = meta.isbn === "" ? xmlEscape(storyId) : `urn:isbn:${meta.isbn}`;
-  const optional = [
-    meta.publisher === "" ? "" : `<dc:publisher>${xmlEscape(meta.publisher)}</dc:publisher>`,
-    meta.publicationDate === "" ? "" : `<dc:date>${xmlEscape(meta.publicationDate)}</dc:date>`,
-    meta.description === "" ? "" : `<dc:description>${xmlEscape(meta.description)}</dc:description>`,
-    ...meta.subjects.map((subject) => `<dc:subject>${xmlEscape(subject)}</dc:subject>`),
-    meta.copyright === "" ? "" : `<dc:rights>${xmlEscape(meta.copyright)}</dc:rights>`
-  ].join("");
-  const accessibility = epubAccessibilityMeta(Boolean(manuscript.cover));
-  const items = documents.map((doc) => `<item id="${doc.id}" href="${doc.id}.xhtml" media-type="application/xhtml+xml"/>`);
-  const spine = documents.map((doc) => `<itemref idref="${doc.id}"/>`);
-  const modified = epubModifiedTimestamp();
-  writeZip(outFile, [
-    { name: "mimetype", content: "application/epub+zip" },
-    { name: "META-INF/container.xml", content: `<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>` },
-    { name: "OEBPS/content.opf", content: `<?xml version="1.0" encoding="UTF-8"?><package version="3.0" unique-identifier="book-id" xmlns="http://www.idpf.org/2007/opf"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book-id">${identifier}</dc:identifier><dc:title>${xmlEscape(manuscript.title)}</dc:title>${creator}<dc:language>${lang}</dc:language>${optional}<meta property="dcterms:modified">${modified}</meta>${accessibility}${coverMeta.join("")}</metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>${coverItems.join("")}${items.join("")}</manifest><spine>${coverSpine.join("")}${spine.join("")}</spine></package>` },
-    { name: "OEBPS/nav.xhtml", content: navXhtml(manuscript.title, documents, lang) },
-    ...coverEntries,
-    ...documents.map((doc) => ({ name: `OEBPS/${doc.id}.xhtml`, content: doc.content }))
-  ], writeOptions);
-}
-function navXhtml(title, documents, lang = "en") {
-  const links = documents.map((doc) => `<li><a href="${doc.id}.xhtml">${xmlEscape(doc.label)}</a></li>`);
-  const start = documents.find((doc) => doc.bodymatter);
-  const landmarks = start ? `<nav epub:type="landmarks" hidden="hidden"><ol><li><a epub:type="bodymatter" href="${start.id}.xhtml">Start of Content</a></li></ol></nav>` : "";
-  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="${lang}" lang="${lang}"><head><title>${xmlEscape(title)}</title></head><body><nav epub:type="toc" id="toc"><h1>Contents</h1><ol>${links.join("")}</ol></nav>${landmarks}</body></html>`;
-}
-function epubAccessibilityMeta(hasCover) {
-  const features = ["tableOfContents", "readingOrder", "structuralNavigation", ...hasCover ? ["alternativeText"] : []];
-  const summary = hasCover ? "Text book with a described cover image, a navigable table of contents, headings for each chapter, and a single logical reading order." : "Text-only book with a navigable table of contents, headings for each chapter, and a single logical reading order.";
-  return [
-    `<meta property="schema:accessMode">textual</meta>`,
-    ...hasCover ? [`<meta property="schema:accessMode">visual</meta>`] : [],
-    `<meta property="schema:accessModeSufficient">textual</meta>`,
-    ...features.map((feature) => `<meta property="schema:accessibilityFeature">${feature}</meta>`),
-    `<meta property="schema:accessibilityHazard">none</meta>`,
-    `<meta property="schema:accessibilitySummary">${summary}</meta>`
-  ].join("");
-}
-function xhtmlParagraphs(body) {
-  const paragraphs = [];
-  for (const paragraph of markdownParagraphs(body)) {
-    const runs = inlineRuns(paragraph).map((run) => runMarkup(run, xmlEscape));
-    paragraphs.push(`<p>${runs.join("")}</p>`);
-  }
-  return paragraphs.join("");
-}
-function xhtmlDocument(title, lang, bodyType, content) {
-  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="${lang}" lang="${lang}"><head><title>${xmlEscape(title)}</title></head><body epub:type="${bodyType}">${content}</body></html>`;
-}
-function chapterXhtml(chapter, lang = "en") {
-  return xhtmlDocument(chapter.title, lang, "bodymatter chapter", `<h1>${xmlEscape(chapterHeading(chapter.number, chapter.title))}</h1>${xhtmlParagraphs(chapter.body)}`);
-}
-function matterXhtml(entry, placement = "front", lang = "en") {
-  const heading = entry.heading ? `<h1>${xmlEscape(entry.title)}</h1>` : "";
-  const bodyType = entry.copyright ? `${placement}matter copyright-page` : `${placement}matter`;
-  return xhtmlDocument(entry.title, lang, bodyType, `${heading}${xhtmlParagraphs(entry.body)}`);
-}
-function htmlBook(manuscript) {
-  const paragraphs = (body) => markdownParagraphs(body).map((paragraph) => paragraph === "* * *" ? null : inlineRuns(paragraph).map((run) => runMarkup(run, escapeHtml)).join(""));
-  const matter = (placement) => (entry) => ({
-    key: `${placement}-${entry.id}`,
-    kind: entry.copyright ? `${placement} copyright-page` : placement,
-    copyright: Boolean(entry.copyright),
-    placement,
-    title: entry.title,
-    heading: entry.heading,
-    paragraphs: paragraphs(entry.body)
-  });
-  const parts = [
-    ...manuscript.front.map(matter("front")),
-    ...manuscript.chapters.map((chapter) => ({
-      key: `ch${String(chapter.number).padStart(2, "0")}`,
-      kind: "chapter",
-      placement: "body",
-      title: chapterHeading(chapter.number, chapter.title),
-      heading: true,
-      paragraphs: paragraphs(chapter.body)
-    })),
-    ...manuscript.back.map(matter("back"))
-  ];
-  return {
-    title: manuscript.title,
-    authors: manuscript.meta.authors,
-    language: manuscript.meta.language,
-    words: manuscript.chapters.reduce((sum, chapter) => sum + wordCount(chapter.body), 0),
-    parts
-  };
-}
-function writeDocx(outFile, manuscript, writeOptions = {}) {
-  const bodyParts = [paragraphXml(manuscript.title, "Title")];
-  const pushSection = (heading, body) => {
-    if (heading !== null) {
-      bodyParts.push(paragraphXml(heading, "Heading1"));
-    }
-    for (const paragraph of markdownParagraphs(body)) {
-      bodyParts.push(paragraphXml(paragraph, "", inlineRuns(paragraph)));
-    }
-  };
-  const pushMatter = (entry) => pushSection(entry.heading ? entry.title : null, entry.body);
-  manuscript.front.forEach(pushMatter);
-  for (const chapter of manuscript.chapters) {
-    pushSection(chapterHeading(chapter.number, chapter.title), chapter.body);
-  }
-  manuscript.back.forEach(pushMatter);
-  writeZip(outFile, docxPackageEntries(bodyParts.join("")), writeOptions);
-}
-function docxPackageEntries(body) {
-  return [
-    { name: "[Content_Types].xml", content: `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>` },
-    { name: "_rels/.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>` },
-    { name: "word/_rels/document.xml.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
-    { name: "word/styles.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:pPr><w:spacing w:after="240"/><w:jc w:val="center"/></w:pPr><w:rPr><w:b/><w:sz w:val="56"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:pPr><w:spacing w:before="480" w:after="240"/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style></w:styles>` },
-    { name: "word/document.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr/></w:body></w:document>` }
-  ];
-}
-var SHUNN_RUN_FONTS = `<w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/><w:sz w:val="24"/>`;
-var SHUNN_PARAGRAPH_SPACING = `<w:spacing w:line="480" w:lineRule="auto"/>`;
-function shunnRunXml(text, decoration) {
-  return `<w:r><w:rPr>${SHUNN_RUN_FONTS}${decoration}</w:rPr><w:t xml:space="preserve">${xmlEscape(text)}</w:t></w:r>`;
-}
-function shunnTextRunXml(run) {
-  return shunnRunXml(run.text, `${run.strong ? "<w:b/>" : ""}${run.em ? "<w:i/>" : ""}`);
-}
-function shunnParagraphXml(runXml, centered) {
-  const alignment = centered ? `<w:jc w:val="center"/>` : "";
-  return `<w:p><w:pPr>${SHUNN_PARAGRAPH_SPACING}${alignment}</w:pPr>${runXml}</w:p>`;
-}
-function shunnChapterHeadingXml(text) {
-  return `<w:p><w:pPr>${SHUNN_PARAGRAPH_SPACING}</w:pPr><w:r><w:br w:type="page"/></w:r>${shunnRunXml(text, "<w:b/>")}</w:p>`;
-}
-function shunnTitlePageXml(meta) {
-  const lines = [
-    shunnParagraphXml(shunnRunXml(meta.title, "<w:b/>"), true),
-    shunnParagraphXml(shunnRunXml("by", ""), true)
-  ];
-  if (meta.author) {
-    lines.push(shunnParagraphXml(shunnRunXml(meta.author, ""), true));
-  }
-  lines.push(shunnParagraphXml(shunnRunXml(`Approximately ${meta.words} words`, ""), true));
-  for (const contactLine of meta.contact) {
-    lines.push(shunnParagraphXml(shunnRunXml(String(contactLine), ""), true));
-  }
-  return lines;
-}
-function writeShunnDocx(outFile, manuscript, meta, writeOptions = {}) {
-  const paragraphs = [...shunnTitlePageXml(meta)];
-  for (const chapter of manuscript.chapters) {
-    paragraphs.push(shunnChapterHeadingXml(chapterHeading(chapter.number, chapter.title)));
-    for (const paragraph of markdownParagraphs(chapter.body)) {
-      paragraphs.push(shunnParagraphXml(inlineRuns(paragraph).map(shunnTextRunXml).join(""), false));
-    }
-  }
-  writeZip(outFile, docxPackageEntries(paragraphs.join("")), writeOptions);
-}
-function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {}) {
-  const lines = [meta.title, "by"];
-  if (meta.author) {
-    lines.push(meta.author);
-  }
-  lines.push("", `Approximately ${meta.words} words`, "");
-  for (const contactLine of meta.contact) {
-    lines.push(String(contactLine));
-  }
-  for (const chapter of manuscript.chapters) {
-    lines.push("\f", `# ${chapterHeading(chapter.number, chapter.title)}`, "");
-    for (const paragraph of markdownParagraphs(chapter.body)) {
-      lines.push(paragraph, "");
-    }
-  }
-  writeFile(outFile, `${lines.join(`
-`).trimEnd()}
-`, writeOptions);
-}
-function paragraphXml(text, style = "", runs = [{ text }]) {
-  const styleXml = style ? `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>` : "";
-  const runXml = runs.map((run) => {
-    const decoration = `${run.strong ? "<w:b/>" : ""}${run.em ? "<w:i/>" : ""}`;
-    const runStyle = decoration === "" ? "" : `<w:rPr>${decoration}</w:rPr>`;
-    return `<w:r>${runStyle}<w:t xml:space="preserve">${xmlEscape(run.text)}</w:t></w:r>`;
-  });
-  return `<w:p>${styleXml}${runXml.join("")}</w:p>`;
-}
-function inlineRuns(text) {
-  const nodes = [];
-  let buffer = "";
-  const isSpace = (char) => char === undefined || /\s/u.test(char);
-  const isPunct = (char) => char !== undefined && /[\p{P}\p{S}]/u.test(char);
-  for (let index = 0;index < text.length; ) {
-    const char = text[index];
-    if (char === "\\" && /[!-/:-@[-`{-~]/.test(text[index + 1] ?? "")) {
-      buffer += text[index + 1];
-      index += 2;
-      continue;
-    }
-    if (char !== "*" && char !== "_") {
-      buffer += char;
-      index += 1;
-      continue;
-    }
-    let end = index;
-    while (text[end] === char) {
-      end += 1;
-    }
-    if (buffer !== "") {
-      nodes.push({ text: buffer });
-      buffer = "";
-    }
-    const before = text[index - 1];
-    const after = text[end];
-    const left = !isSpace(after) && (!isPunct(after) || isSpace(before) || isPunct(before));
-    const right = !isSpace(before) && (!isPunct(before) || isSpace(after) || isPunct(after));
-    nodes.push({
-      delimiter: char,
-      count: end - index,
-      original: end - index,
-      open: char === "*" ? left : left && (!right || isPunct(before)),
-      close: char === "*" ? right : right && (!left || isPunct(after)),
-      strong: 0,
-      em: 0
-    });
-    index = end;
-  }
-  if (buffer !== "") {
-    nodes.push({ text: buffer });
-  }
-  const stack = [];
-  const bottom = new Map;
-  const depth = { strong: new Array(nodes.length + 1).fill(0), em: new Array(nodes.length + 1).fill(0) };
-  for (const [closeIndex, closer] of nodes.entries()) {
-    if (!closer.delimiter) {
-      continue;
-    }
-    const key = `${closer.delimiter}${closer.open ? 1 : 0}${closer.original % 3}`;
-    while (closer.close && closer.count > 0) {
-      const floor = bottom.get(key) ?? 0;
-      let position = stack.length - 1;
-      while (position >= floor && !canPairEmphasis(nodes[stack[position]], closer)) {
-        position -= 1;
-      }
-      if (position < floor) {
-        bottom.set(key, stack.length);
-        break;
-      }
-      const openIndex = stack[position];
-      const opener = nodes[openIndex];
-      const used = opener.count >= 2 && closer.count >= 2 ? 2 : 1;
-      opener.count -= used;
-      closer.count -= used;
-      const marks = depth[used === 2 ? "strong" : "em"];
-      marks[openIndex + 1] += 1;
-      marks[closeIndex] -= 1;
-      stack.length = opener.count > 0 ? position + 1 : position;
-      for (const [other, value] of bottom) {
-        if (value > stack.length) {
-          bottom.set(other, stack.length);
-        }
-      }
-    }
-    if (closer.open && closer.count > 0) {
-      stack.push(closeIndex);
-    }
-  }
-  let strongDepth = 0;
-  let emDepth = 0;
-  for (const [index, node] of nodes.entries()) {
-    strongDepth += depth.strong[index];
-    emDepth += depth.em[index];
-    node.strong = strongDepth;
-    node.em = emDepth;
-  }
-  const runs = [];
-  for (const node of nodes) {
-    const value = node.delimiter ? node.delimiter.repeat(node.count) : node.text;
-    if (value === "") {
-      continue;
-    }
-    const strong = (node.strong ?? 0) > 0;
-    const em = (node.em ?? 0) > 0;
-    const previous = runs[runs.length - 1];
-    if (previous && previous.strong === strong && previous.em === em) {
-      previous.text += value;
-    } else {
-      runs.push({ text: value, strong, em });
-    }
-  }
-  return runs;
-}
-function canPairEmphasis(opener, closer) {
-  const both = opener.close || closer.open;
-  const ruleOfThree = both && (opener.original + closer.original) % 3 === 0 && !(opener.original % 3 === 0 && closer.original % 3 === 0);
-  return opener.delimiter === closer.delimiter && !ruleOfThree;
-}
-function runMarkup(run, escape2) {
-  let markup = escape2(run.text);
-  if (run.em) {
-    markup = `<em>${markup}</em>`;
-  }
-  if (run.strong) {
-    markup = `<strong>${markup}</strong>`;
-  }
-  return markup;
-}
-function markdownParagraphs(markdown) {
-  const paragraphs = [];
-  for (const paragraph of markdown.replace(/\r\n?/g, `
-`).replace(/\\\n/g, `
-`).replace(/^#+[ \t]+/gm, "").replace(/^[ \t]*>[ \t]?/gm, "").split(/\n[ \t]*\n\s*/)) {
-    const trimmed = paragraph.replace(/\s+/g, " ").trim();
-    if (trimmed) {
-      paragraphs.push(isSceneBreak(trimmed) ? "* * *" : trimmed);
-    }
-  }
-  return paragraphs;
-}
-var ZIP_DOS_DATE = 0 << 9 | 1 << 5 | 1;
-function writeZip(outFile, entries, writeOptions = {}) {
-  const localParts = [];
-  const centralParts = [];
-  let offset = 0;
-  for (const entry of entries) {
-    const name = Buffer.from(entry.name, "utf8");
-    const content = Buffer.isBuffer(entry.content) ? entry.content : Buffer.from(entry.content, "utf8");
-    const crc = crc32(content);
-    const localHeader = Buffer.alloc(30);
-    localHeader.writeUInt32LE(67324752, 0);
-    localHeader.writeUInt16LE(20, 4);
-    localHeader.writeUInt16LE(0, 6);
-    localHeader.writeUInt16LE(0, 8);
-    localHeader.writeUInt16LE(0, 10);
-    localHeader.writeUInt16LE(ZIP_DOS_DATE, 12);
-    localHeader.writeUInt32LE(crc, 14);
-    localHeader.writeUInt32LE(content.length, 18);
-    localHeader.writeUInt32LE(content.length, 22);
-    localHeader.writeUInt16LE(name.length, 26);
-    localHeader.writeUInt16LE(0, 28);
-    localParts.push(localHeader, name, content);
-    const centralHeader = Buffer.alloc(46);
-    centralHeader.writeUInt32LE(33639248, 0);
-    centralHeader.writeUInt16LE(20, 4);
-    centralHeader.writeUInt16LE(20, 6);
-    centralHeader.writeUInt16LE(0, 8);
-    centralHeader.writeUInt16LE(0, 10);
-    centralHeader.writeUInt16LE(0, 12);
-    centralHeader.writeUInt16LE(ZIP_DOS_DATE, 14);
-    centralHeader.writeUInt32LE(crc, 16);
-    centralHeader.writeUInt32LE(content.length, 20);
-    centralHeader.writeUInt32LE(content.length, 24);
-    centralHeader.writeUInt16LE(name.length, 28);
-    centralHeader.writeUInt16LE(0, 30);
-    centralHeader.writeUInt16LE(0, 32);
-    centralHeader.writeUInt16LE(0, 34);
-    centralHeader.writeUInt16LE(0, 36);
-    centralHeader.writeUInt32LE(0, 38);
-    centralHeader.writeUInt32LE(offset, 42);
-    centralParts.push(centralHeader, name);
-    offset += localHeader.length + name.length + content.length;
-  }
-  let centralSize = 0;
-  for (const part of centralParts) {
-    centralSize += part.length;
-  }
-  const end = Buffer.alloc(22);
-  end.writeUInt32LE(101010256, 0);
-  end.writeUInt16LE(0, 4);
-  end.writeUInt16LE(0, 6);
-  end.writeUInt16LE(entries.length, 8);
-  end.writeUInt16LE(entries.length, 10);
-  end.writeUInt32LE(centralSize, 12);
-  end.writeUInt32LE(offset, 16);
-  end.writeUInt16LE(0, 20);
-  writeFile(outFile, Buffer.concat(localParts.concat(centralParts, end)), writeOptions);
-}
-function crc32(buffer) {
-  let crc = 4294967295;
-  for (const byte of buffer) {
-    crc = CRC_TABLE[(crc ^ byte) & 255] ^ crc >>> 8;
-  }
-  return (crc ^ 4294967295) >>> 0;
-}
-var CRC_TABLE = [];
-for (let index = 0;index < 256; index += 1) {
-  let value = index;
-  for (let bit = 0;bit < 8; bit += 1) {
-    value = value & 1 ? 3988292384 ^ value >>> 1 : value >>> 1;
-  }
-  CRC_TABLE.push(value >>> 0);
-}
-var XML_INVALID_CHARACTERS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
-function xmlEscape(value) {
-  return String(value).replace(XML_INVALID_CHARACTERS, "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
 var MAX_SCAN_FILE_BYTES = 5 * 1024 * 1024;
 var MAX_SCAN_FILES = 5000;
 var MAX_SCAN_DEPTH = 10;
 function assertFileSizeWithinLimit(filePath) {
-  const size = fs3.statSync(filePath).size;
+  const size = fs4.statSync(filePath).size;
   if (size > MAX_SCAN_FILE_BYTES) {
     throw new Error("Refusing to read oversized file " + filePath + ": " + size + " bytes exceeds the " + MAX_SCAN_FILE_BYTES + " byte limit");
   }
 }
 function readEntityFiles(root, relativeDir, mapEntity, scanErrors) {
-  const directory = path4.join(root, relativeDir);
-  if (!fs3.existsSync(directory)) {
+  const directory = path5.join(root, relativeDir);
+  if (!fs4.existsSync(directory)) {
     return [];
   }
   assertSafeProjectDirectory(directory, root);
   const entities = [];
-  const files = fs3.readdirSync(directory, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".md") && entry.name !== "_index.md").map((entry) => entry.name).sort();
+  const files = fs4.readdirSync(directory, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".md") && entry.name !== "_index.md").map((entry) => entry.name).sort();
   if (files.length > MAX_SCAN_FILES) {
     throw new Error("Too many files in " + relativeDir + ": " + files.length + " exceeds the " + MAX_SCAN_FILES + " file limit");
   }
   for (const file of files) {
-    const fullPath = path4.join(directory, file);
-    const label2 = path4.join(relativeDir, file);
+    const fullPath = path5.join(directory, file);
+    const label2 = path5.join(relativeDir, file);
     try {
       const markdown = readMarkdown(fullPath, root);
-      entities.push(mapEntity(path4.basename(file, ".md"), fullPath, markdown.data, markdown));
+      entities.push(mapEntity(path5.basename(file, ".md"), fullPath, markdown.data, markdown));
     } catch (error) {
       const message = error.message.startsWith(`${fullPath} `) ? error.message.slice(fullPath.length + 1) : error.message;
       scanErrors.push(`${label2}: ${message}`);
@@ -8123,15 +8229,15 @@ function readEntityFiles(root, relativeDir, mapEntity, scanErrors) {
   return entities;
 }
 function requireStoryFile(projectRoot) {
-  const storyPath = path4.join(projectRoot, "story.md");
-  if (!fs3.existsSync(storyPath)) {
-    const hint = path4.basename(projectRoot).startsWith("-") ? `; ${path4.basename(projectRoot)} is not an option (run story help)` : "";
+  const storyPath = path5.join(projectRoot, "story.md");
+  if (!fs4.existsSync(storyPath)) {
+    const hint = path5.basename(projectRoot).startsWith("-") ? `; ${path5.basename(projectRoot)} is not an option (run story help)` : "";
     throw new Error(`${projectRoot} is not a story project: missing story.md${hint}`);
   }
   return storyPath;
 }
 function readExemptions(root, scanErrors) {
-  const exemptionsPath = path4.join(root, "continuity", "exemptions.md");
+  const exemptionsPath = path5.join(root, "continuity", "exemptions.md");
   if (!lstatIfExists(exemptionsPath)) {
     return [];
   }
@@ -8139,7 +8245,7 @@ function readExemptions(root, scanErrors) {
   try {
     raw = readTextFile(exemptionsPath);
   } catch (error) {
-    scanErrors.push(`${path4.join("continuity", "exemptions.md")}: ${error.message}`);
+    scanErrors.push(`${path5.join("continuity", "exemptions.md")}: ${error.message}`);
     return [];
   }
   let data;
@@ -8162,7 +8268,7 @@ function readExemptions(root, scanErrors) {
   return exemptions;
 }
 function readOptionalRootFile(root, name, scanErrors) {
-  const filePath = path4.join(root, name);
+  const filePath = path5.join(root, name);
   if (!lstatIfExists(filePath)) {
     return null;
   }
@@ -8175,7 +8281,7 @@ function readOptionalRootFile(root, name, scanErrors) {
   }
 }
 function readStyleSheet(root, scanErrors) {
-  const filePath = path4.join(root, STYLE_SHEET_FILE);
+  const filePath = path5.join(root, STYLE_SHEET_FILE);
   if (!lstatIfExists(filePath)) {
     return null;
   }
@@ -8198,24 +8304,6 @@ function readMarkdown(filePath, root) {
     throw new Error(error.message.startsWith(`${filePath} `) ? error.message.slice(filePath.length + 1) : error.message);
   }
 }
-function writeFile(filePath, contents, options = {}) {
-  const target = prepareWriteTarget(filePath, options.root);
-  const existing = lstatIfExists(target);
-  if (!existing || existing.nlink <= 1) {
-    fs3.writeFileSync(target, contents, "utf8");
-    return;
-  }
-  fs3.accessSync(target, fs3.constants.W_OK);
-  const temporary = path4.join(path4.dirname(target), `.story-${process.pid}.tmp`);
-  try {
-    fs3.writeFileSync(temporary, contents, { encoding: "utf8", mode: existing.mode & 511 });
-    fs3.chmodSync(temporary, existing.mode & 511);
-    fs3.renameSync(temporary, target);
-  } catch (error) {
-    fs3.rmSync(temporary, { force: true });
-    throw Object.assign(new Error(`Cannot replace hard-linked ${target}: ${error.code ?? error.message}`), { code: error.code, path: target, syscall: "rename" });
-  }
-}
 function writeChanged(filePath, contents, changed, root) {
   if (safeRead(filePath, root) !== contents) {
     writeFile(filePath, contents, { root });
@@ -8223,7 +8311,7 @@ function writeChanged(filePath, contents, changed, root) {
   }
 }
 function safeRead(filePath, root) {
-  if (!fs3.existsSync(filePath)) {
+  if (!fs4.existsSync(filePath)) {
     return "";
   }
   if (root) {
@@ -8246,28 +8334,28 @@ var ENTITY_SCAN_DIRS = [
   "characters",
   "chapters",
   "scenes",
-  path4.join("worldbuilding", "locations"),
-  path4.join("worldbuilding", "systems"),
-  path4.join("worldbuilding", "factions"),
-  path4.join("worldbuilding", "artifacts"),
-  path4.join("plot", "arcs"),
-  path4.join("continuity", "questions"),
-  path4.join("continuity", "promises"),
-  path4.join("continuity", "clues"),
-  path4.join("glossary", "terms"),
+  path5.join("worldbuilding", "locations"),
+  path5.join("worldbuilding", "systems"),
+  path5.join("worldbuilding", "factions"),
+  path5.join("worldbuilding", "artifacts"),
+  path5.join("plot", "arcs"),
+  path5.join("continuity", "questions"),
+  path5.join("continuity", "promises"),
+  path5.join("continuity", "clues"),
+  path5.join("glossary", "terms"),
   MATTER_DIR,
   RESEARCH_DIR
 ];
 function entityFileNames(root, relativeDir) {
-  const directory = path4.join(root, relativeDir);
-  if (!fs3.existsSync(directory)) {
+  const directory = path5.join(root, relativeDir);
+  if (!fs4.existsSync(directory)) {
     return [];
   }
-  return fs3.readdirSync(directory).filter((name) => name.endsWith(".md") && name !== "_index.md").sort().map((name) => path4.join(relativeDir, name));
+  return fs4.readdirSync(directory).filter((name) => name.endsWith(".md") && name !== "_index.md").sort().map((name) => path5.join(relativeDir, name));
 }
 function collectStrayFileWarnings(project, warnings) {
   const root = project.root;
-  const topEntries = fs3.readdirSync(root, { withFileTypes: true });
+  const topEntries = fs4.readdirSync(root, { withFileTypes: true });
   const strayTop = [];
   for (const entry of topEntries) {
     if (entry.isFile() && entry.name.endsWith(".md") && entry.name !== "story.md" && entry.name !== STYLE_SHEET_FILE && entry.name !== PROGRESS_FILE) {
@@ -8280,14 +8368,14 @@ function collectStrayFileWarnings(project, warnings) {
   }
   const nested = [];
   for (const relativeDir of ENTITY_SCAN_DIRS) {
-    const directory = path4.join(root, relativeDir);
-    if (!fs3.existsSync(directory)) {
+    const directory = path5.join(root, relativeDir);
+    if (!fs4.existsSync(directory)) {
       continue;
     }
     for (const file of markdownFiles(directory)) {
-      const relativePath = path4.relative(directory, file);
-      if (relativePath.includes(path4.sep) || path4.dirname(relativePath) !== ".") {
-        nested.push(path4.join(relativeDir, relativePath));
+      const relativePath = path5.relative(directory, file);
+      if (relativePath.includes(path5.sep) || path5.dirname(relativePath) !== ".") {
+        nested.push(path5.join(relativeDir, relativePath));
       }
     }
   }
@@ -8340,36 +8428,36 @@ function fileStem(storyId) {
 var SOURCE_ROOT_FILES = new Set(["story.md", STYLE_SHEET_FILE, PROGRESS_FILE]);
 var SOURCE_DIRECTORIES = ["characters", "chapters", "scenes", "worldbuilding", "plot", "continuity", "glossary", MATTER_DIR, RESEARCH_DIR];
 function assertNotProjectSource(project, outFile) {
-  const realRoot = fs3.realpathSync.native(project.root);
+  const realRoot = fs4.realpathSync.native(project.root);
   const realTarget = realPathThroughAncestors(outFile);
   const candidates = [[project.root, outFile], [realRoot, realTarget], [realRoot.toLowerCase(), realTarget.toLowerCase()]];
   for (const [root, target] of candidates) {
-    const relativePath = path4.relative(root, target);
-    if (relativePath === "" || relativePath.startsWith("..") || path4.isAbsolute(relativePath)) {
+    const relativePath = path5.relative(root, target);
+    if (relativePath === "" || relativePath.startsWith("..") || path5.isAbsolute(relativePath)) {
       continue;
     }
     const lower = relativePath.toLowerCase();
-    const [first] = lower.split(path4.sep);
+    const [first] = lower.split(path5.sep);
     if (SOURCE_ROOT_FILES.has(lower) || SOURCE_DIRECTORIES.includes(first)) {
-      throw new Error(`Refusing to write generated output to ${path4.relative(project.root, outFile)}: it is project source. Use a path such as dist/ instead`);
+      throw new Error(`Refusing to write generated output to ${path5.relative(project.root, outFile)}: it is project source. Use a path such as dist/ instead`);
     }
   }
 }
 function realPathThroughAncestors(target) {
   const missing = [];
   let current = target;
-  while (!fs3.existsSync(current)) {
-    missing.unshift(path4.basename(current));
-    current = path4.dirname(current);
+  while (!fs4.existsSync(current)) {
+    missing.unshift(path5.basename(current));
+    current = path5.dirname(current);
   }
-  return path4.join(fs3.realpathSync.native(current), ...missing);
+  return path5.join(fs4.realpathSync.native(current), ...missing);
 }
 function resolveOutputPath(project, out, defaultRelativePath, enforceRoot) {
   const rawOut = out ?? defaultRelativePath;
-  const outFile = path4.resolve(project.root, rawOut);
-  const shouldEnforceRoot = enforceRoot ?? !path4.isAbsolute(String(rawOut));
+  const outFile = path5.resolve(project.root, rawOut);
+  const shouldEnforceRoot = enforceRoot ?? !path5.isAbsolute(String(rawOut));
   assertNotProjectSource(project, outFile);
-  if (lstatIfExists(outFile)?.isDirectory() || outFile === path4.join(project.root, "dist")) {
+  if (lstatIfExists(outFile)?.isDirectory() || outFile === path5.join(project.root, "dist")) {
     throw new Error(`--out ${rawOut} is a directory: give a file path`);
   }
   return {
@@ -8377,90 +8465,6 @@ function resolveOutputPath(project, out, defaultRelativePath, enforceRoot) {
     enforceRoot: shouldEnforceRoot,
     writeOptions: shouldEnforceRoot ? { root: project.root } : {}
   };
-}
-function prepareWriteTarget(filePath, root) {
-  const target = path4.resolve(filePath);
-  if (root) {
-    assertLexicallyInsideRoot(target, root);
-    assertExistingAncestorInsideRoot(path4.dirname(target), root);
-  }
-  fs3.mkdirSync(path4.dirname(target), { recursive: true });
-  if (root) {
-    assertSafeProjectParent(target, root);
-  }
-  rejectSymlinkTarget(target, "write");
-  return target;
-}
-function assertSafeProjectPath(filePath, root) {
-  const target = path4.resolve(filePath);
-  assertLexicallyInsideRoot(target, root);
-  assertSafeProjectParent(target, root);
-  rejectSymlinkTarget(target, "read");
-}
-function assertSafeProjectDirectory(directory, root) {
-  const target = path4.resolve(directory);
-  assertLexicallyInsideRoot(target, root);
-  const stats = lstatIfExists(target);
-  if (stats) {
-    if (stats.isSymbolicLink()) {
-      throw new Error(`Refusing to use symlinked project directory: ${target}`);
-    }
-    if (!stats.isDirectory()) {
-      throw new Error(`Project path is not a directory: ${target}`);
-    }
-  }
-  const rootReal = fs3.realpathSync(path4.resolve(root));
-  const directoryReal = fs3.realpathSync(target);
-  if (!isPathInside2(rootReal, directoryReal)) {
-    throw new Error(`Refusing to use project directory outside root: ${target}`);
-  }
-}
-function assertSafeProjectParent(filePath, root) {
-  const rootReal = fs3.realpathSync(path4.resolve(root));
-  const parentReal = fs3.realpathSync(path4.dirname(path4.resolve(filePath)));
-  if (!isPathInside2(rootReal, parentReal)) {
-    throw new Error(`Refusing to access project path outside root: ${filePath}`);
-  }
-}
-function assertExistingAncestorInsideRoot(target, root) {
-  let current = path4.resolve(target);
-  while (!lstatIfExists(current)) {
-    const parent = path4.dirname(current);
-    if (parent === current) {
-      break;
-    }
-    current = parent;
-  }
-  let rootReal;
-  let currentReal;
-  try {
-    rootReal = fs3.realpathSync(path4.resolve(root));
-    currentReal = fs3.realpathSync(current);
-  } catch {
-    throw new Error(`Refusing to access project path outside root: ${target}`);
-  }
-  if (!isPathInside2(rootReal, currentReal)) {
-    throw new Error(`Refusing to access project path outside root: ${target}`);
-  }
-}
-function assertLexicallyInsideRoot(filePath, root) {
-  const rootPath = path4.resolve(root);
-  const target = path4.resolve(filePath);
-  if (!isPathInside2(rootPath, target)) {
-    throw new Error(`Refusing to access path outside project root: ${target}`);
-  }
-}
-function rejectSymlinkTarget(filePath, action2) {
-  if (lstatIfExists(filePath)?.isSymbolicLink()) {
-    throw new Error(`Refusing to ${action2} through symlink: ${filePath}`);
-  }
-}
-function lstatIfExists(filePath) {
-  return fs3.lstatSync(filePath, { throwIfNoEntry: false }) ?? null;
-}
-function isPathInside2(root, target) {
-  const relativePath = path4.relative(root, target);
-  return !path4.isAbsolute(relativePath) && (relativePath === "" || !relativePath.split(path4.sep).includes(".."));
 }
 function asArray(value) {
   if (Array.isArray(value)) {
@@ -8577,10 +8581,10 @@ function validateFormRange(project, warnings) {
 function validateIndexFrontmatter(project, errors) {
   for (const [relativePath, expectedType] of INDEX_SCHEMAS) {
     const label2 = relativePath;
-    if (!fs3.existsSync(path4.join(project.root, relativePath))) {
+    if (!fs4.existsSync(path5.join(project.root, relativePath))) {
       continue;
     }
-    const data = readValidationData(path4.join(project.root, relativePath), project.root, label2, errors);
+    const data = readValidationData(path5.join(project.root, relativePath), project.root, label2, errors);
     if (!data) {
       continue;
     }
@@ -8593,7 +8597,7 @@ function validateIndexFrontmatter(project, errors) {
     if (data.story !== undefined && data.story !== project.storyId && !storyIdIsFallback(project)) {
       errors.push(`${label2} story must be ${project.storyId}`);
     }
-    if (relativePath === path4.join("plot", "_index.md")) {
+    if (relativePath === path5.join("plot", "_index.md")) {
       requireFields(data, ["structure"], label2, errors);
       requireScalar(data, "structure", label2, errors);
     }
@@ -8837,7 +8841,7 @@ function validateScenes(project, errors) {
     if (Number.isInteger(data.scene) && data.scene <= 0) {
       errors.push(`${label2} scene must be greater than 0`);
     }
-    const filenameMatch = SCENE_FILENAME_PATTERN.exec(path4.basename(scene.file));
+    const filenameMatch = SCENE_FILENAME_PATTERN.exec(path5.basename(scene.file));
     if (!filenameMatch) {
       errors.push(`${label2} filename must match {chapter}-scene-{NN}.md`);
     } else {
@@ -8862,7 +8866,7 @@ function validateScenes(project, errors) {
   }
 }
 function validateContinuityState(project, errors) {
-  const label2 = path4.join("continuity", "state.md");
+  const label2 = path5.join("continuity", "state.md");
   if (!project.continuity) {
     return;
   }
@@ -8940,11 +8944,11 @@ function validateClues(project, errors) {
   }
 }
 function validateExemptions(project, errors) {
-  const exemptionsPath = path4.join(project.root, "continuity", "exemptions.md");
-  if (!fs3.existsSync(exemptionsPath)) {
+  const exemptionsPath = path5.join(project.root, "continuity", "exemptions.md");
+  if (!fs4.existsSync(exemptionsPath)) {
     return;
   }
-  const label2 = path4.join("continuity", "exemptions.md");
+  const label2 = path5.join("continuity", "exemptions.md");
   const data = readValidationData(exemptionsPath, project.root, label2, errors);
   if (!data) {
     return;
@@ -9050,9 +9054,9 @@ function validateProgressLog(project, errors) {
   });
 }
 function validateOptionalRegistry(project, directory, expectedType, errors) {
-  const indexPath = path4.join(project.root, directory, "_index.md");
-  if (fs3.existsSync(indexPath)) {
-    const label2 = path4.join(directory, "_index.md");
+  const indexPath = path5.join(project.root, directory, "_index.md");
+  if (fs4.existsSync(indexPath)) {
+    const label2 = path5.join(directory, "_index.md");
     const data = readValidationData(indexPath, project.root, label2, errors);
     if (data && data.type !== expectedType) {
       errors.push(`${label2} type must be ${expectedType}`);
@@ -9148,12 +9152,12 @@ function validateCover(project, errors) {
 }
 function coverImage(project) {
   const cover = String(project.story.data.cover).trim();
-  const mediaType = COVER_MEDIA_TYPES[path4.extname(cover).toLowerCase()];
+  const mediaType = COVER_MEDIA_TYPES[path5.extname(cover).toLowerCase()];
   if (mediaType === undefined) {
     throw new Error(`story.md cover ${cover} must be a ${Object.keys(COVER_MEDIA_TYPES).join(", ")} image`);
   }
-  const filePath = path4.resolve(project.root, cover);
-  if (!isPathInside2(project.root, filePath)) {
+  const filePath = path5.resolve(project.root, cover);
+  if (!isPathInside(project.root, filePath)) {
     throw new Error(`story.md cover ${cover} must be inside the project`);
   }
   if (!lstatIfExists(filePath)?.isFile()) {
@@ -9161,7 +9165,7 @@ function coverImage(project) {
   }
   assertSafeProjectPath(filePath, project.root);
   assertFileSizeWithinLimit(filePath);
-  return { filePath, mediaType, extension: mediaType === "image/jpeg" ? "jpg" : path4.extname(cover).slice(1).toLowerCase() };
+  return { filePath, mediaType, extension: mediaType === "image/jpeg" ? "jpg" : path5.extname(cover).slice(1).toLowerCase() };
 }
 function validateEntityId(id, label2, errors) {
   if (id !== kebabCase(id)) {
@@ -9276,19 +9280,19 @@ function chapterNumber(value, file) {
   return value !== undefined && isPositiveIntegerValue(value) ? Number(value) : chapterNumberFromFile(file);
 }
 function chapterNumberFromFile(file) {
-  const match = CHAPTER_FILENAME_PATTERN.exec(path4.basename(file));
+  const match = CHAPTER_FILENAME_PATTERN.exec(path5.basename(file));
   return match ? Number.parseInt(match[1], 10) : 0;
 }
 function sceneNumberFromFile(file) {
-  const match = SCENE_FILENAME_PATTERN.exec(path4.basename(file));
+  const match = SCENE_FILENAME_PATTERN.exec(path5.basename(file));
   return match ? Number.parseInt(match[2], 10) : 0;
 }
 function sceneChapterFromFile(file) {
-  const match = SCENE_FILENAME_PATTERN.exec(path4.basename(file));
+  const match = SCENE_FILENAME_PATTERN.exec(path5.basename(file));
   return match ? match[1] : "";
 }
 function relative2(project, file) {
-  return path4.relative(project.root, file);
+  return path5.relative(project.root, file);
 }
 
 // src/import.js
@@ -9350,12 +9354,12 @@ var CANDIDATE_STOPWORDS = new Set([
 var MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024;
 var MAX_IMPORT_FILES = 500;
 function rejectSymlinkedSource(filePath) {
-  if (fs4.lstatSync(filePath).isSymbolicLink()) {
+  if (fs5.lstatSync(filePath).isSymbolicLink()) {
     throw new Error("Refusing to import symlinked source: " + filePath);
   }
 }
 function assertImportFileSize(filePath) {
-  const size = fs4.statSync(filePath).size;
+  const size = fs5.statSync(filePath).size;
   if (size > MAX_IMPORT_FILE_BYTES) {
     throw new Error("Refusing to import oversized file " + filePath + ": " + size + " bytes exceeds the " + MAX_IMPORT_FILE_BYTES + " byte limit");
   }
@@ -9366,11 +9370,11 @@ function importManuscript(options) {
     throw new Error("An import source file or directory is required");
   }
   const cwd = options.cwd ?? process.cwd();
-  const source = path5.resolve(cwd, rawSource);
-  if (!fs4.existsSync(source)) {
+  const source = path6.resolve(cwd, rawSource);
+  if (!fs5.existsSync(source)) {
     throw new Error(`Import source not found: ${source}`);
   }
-  if (fs4.statSync(source).isDirectory() && fs4.existsSync(path5.join(source, "story.md"))) {
+  if (fs5.statSync(source).isDirectory() && fs5.existsSync(path6.join(source, "story.md"))) {
     throw new Error(`${rawSource} is already a story project (it has story.md); import reads manuscript files, so point it at the draft instead`);
   }
   const chapters = splitChapters(readSourceDocuments(source));
@@ -9387,22 +9391,22 @@ function importManuscript(options) {
     themes: options.themes,
     pov: options.pov,
     tense: options.tense,
-    synopsis: options.synopsis ?? `Imported from ${path5.basename(source)}. Replace with a 2-3 sentence synopsis.`,
+    synopsis: options.synopsis ?? `Imported from ${path6.basename(source)}. Replace with a 2-3 sentence synopsis.`,
     force: options.force
   });
-  const chaptersDir = path5.join(created.root, "chapters");
-  for (const name of fs4.readdirSync(chaptersDir)) {
+  const chaptersDir = path6.join(created.root, "chapters");
+  for (const name of fs5.readdirSync(chaptersDir)) {
     if (!/^chapter-\d+\.md$/i.test(name)) {
       continue;
     }
-    fs4.unlinkSync(path5.join(chaptersDir, name));
+    fs5.unlinkSync(path6.join(chaptersDir, name));
   }
   let totalWords = 0;
   chapters.forEach((chapter, index) => {
     const number = index + 1;
     const words = wordCount(chapter.prose);
     totalWords += words;
-    const file = path5.join(chaptersDir, `chapter-${String(number).padStart(2, "0")}.md`);
+    const file = path6.join(chaptersDir, `chapter-${String(number).padStart(2, "0")}.md`);
     const title = chapter.title || `Chapter ${number}`;
     writeFile(file, chapterMarkdown(title, number, words, chapter.prose), { root: created.root });
   });
@@ -9440,17 +9444,17 @@ function addCandidate(counts, name) {
 }
 function readSourceDocuments(source) {
   rejectSymlinkedSource(source);
-  if (fs4.statSync(source).isFile()) {
+  if (fs5.statSync(source).isFile()) {
     assertImportFileSize(source);
-    return [{ name: path5.basename(source), text: fs4.readFileSync(source, "utf8") }];
+    return [{ name: path6.basename(source), text: fs5.readFileSync(source, "utf8") }];
   }
   const names = [];
-  for (const entry of fs4.readdirSync(source, { withFileTypes: true })) {
-    const fullPath = path5.join(source, entry.name);
-    if (fs4.lstatSync(fullPath).isSymbolicLink()) {
+  for (const entry of fs5.readdirSync(source, { withFileTypes: true })) {
+    const fullPath = path6.join(source, entry.name);
+    if (fs5.lstatSync(fullPath).isSymbolicLink()) {
       let targetIsDocument = false;
       try {
-        targetIsDocument = fs4.statSync(fullPath).isFile();
+        targetIsDocument = fs5.statSync(fullPath).isFile();
       } catch {
         targetIsDocument = false;
       }
@@ -9468,9 +9472,9 @@ function readSourceDocuments(source) {
     throw new Error("Too many import files in " + source + ": " + names.length + " exceeds the " + MAX_IMPORT_FILES + " file limit");
   }
   const documents = names.map((name) => {
-    const fullPath = path5.join(source, name);
+    const fullPath = path6.join(source, name);
     assertImportFileSize(fullPath);
-    return { name, text: fs4.readFileSync(fullPath, "utf8") };
+    return { name, text: fs5.readFileSync(fullPath, "utf8") };
   });
   if (documents.length === 0) {
     throw new Error(`No markdown or text files found in ${source}`);
@@ -9642,7 +9646,7 @@ function singleChapter(text, fileName) {
     };
   }
   return {
-    title: titleCaseSlug(path5.basename(fileName, path5.extname(fileName))),
+    title: titleCaseSlug(path6.basename(fileName, path6.extname(fileName))),
     prose: text.trim()
   };
 }
@@ -9753,7 +9757,7 @@ var COMMANDS = [
       io.stdout.write(`Created story project: ${result.root}
 `);
       for (const linkedBook of result.linkedBooks) {
-        io.stdout.write(`Updated series links in ${path6.join(linkedBook, "story.md")}
+        io.stdout.write(`Updated series links in ${path7.join(linkedBook, "story.md")}
 `);
       }
       return 0;
@@ -10382,8 +10386,8 @@ function describeError(error, cwd) {
   if (!reason || typeof error.path !== "string") {
     return error.message;
   }
-  const relativePath = path7.relative(cwd, error.path);
-  const shown = relativePath !== "" && !relativePath.startsWith("..") && !path7.isAbsolute(relativePath) ? relativePath : error.path;
+  const relativePath = path8.relative(cwd, error.path);
+  const shown = relativePath !== "" && !relativePath.startsWith("..") && !path8.isAbsolute(relativePath) ? relativePath : error.path;
   return `Cannot ${FILE_ERROR_ACTIONS[error.syscall] ?? "use"} ${shown}: ${reason}`;
 }
 function commandUsageError(command, parsed) {
@@ -10410,18 +10414,18 @@ function lastOptionValue(value) {
 function resolveRoot(cwd, parsed, name) {
   const flagPath = lastOptionValue(parsed.options.path);
   if (COMMANDS_BY_NAME.get(name)?.project !== "positional") {
-    return path7.resolve(cwd, flagPath ?? ".");
+    return path8.resolve(cwd, flagPath ?? ".");
   }
   const positionalPath = parsed.positionals[1];
   if (positionalPath !== undefined && flagPath !== undefined) {
-    const resolvedPositional = path7.resolve(cwd, positionalPath);
-    const resolvedFlag = path7.resolve(cwd, flagPath);
+    const resolvedPositional = path8.resolve(cwd, positionalPath);
+    const resolvedFlag = path8.resolve(cwd, flagPath);
     if (resolvedPositional !== resolvedFlag) {
       throw new Error(`Conflicting project paths: ${positionalPath} and --path ${flagPath}. Use either a positional path or --path, not both.`);
     }
     return resolvedFlag;
   }
-  return path7.resolve(cwd, flagPath ?? positionalPath ?? ".");
+  return path8.resolve(cwd, flagPath ?? positionalPath ?? ".");
 }
 
 // bin/story.js
