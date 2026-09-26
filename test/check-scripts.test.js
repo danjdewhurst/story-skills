@@ -7,6 +7,7 @@ import { collectResult, compareFindings } from "../scripts/check-examples.js";
 import { docVersionFiles } from "../scripts/doc-versions.js";
 import { checkDocVersions, checkMarketplaces, checkSkillFrontmatter, checkTemplateStoryRef, checkVersionModule, expectEqual } from "../scripts/check-metadata.js";
 import { checkFixtureSkill } from "../scripts/check-evals.js";
+import { pinnedBunVersion } from "../scripts/bun-version.js";
 import { PREFLIGHT } from "../scripts/release.js";
 import { spawnSync } from "node:child_process";
 import { fillTemplate } from "../evals/run-evals.js";
@@ -294,6 +295,14 @@ describe("github workflows", () => {
       expect(ci).toContain(step);
     }
     expect(ci).toContain("node skills/story-maintenance/scripts/story.js");
+  });
+
+  test("ci pins the same bun that packageManager pins", () => {
+    // check:fallback compares the committed bundle byte for byte, and Bun's
+    // bundler renames generated identifiers between releases, so CI has to
+    // build on the version that produced the committed bundle.
+    const ci = readRepo(".github/workflows/ci.yml");
+    expect(ci).toContain(`bun-version: ${pinnedBunVersion()}`);
   });
 
   test("ci runs the source and fallback CLIs on the lowest supported Node", () => {
