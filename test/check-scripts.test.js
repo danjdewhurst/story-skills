@@ -300,9 +300,13 @@ describe("github workflows", () => {
   test("ci pins the same bun that packageManager pins", () => {
     // check:fallback compares the committed bundle byte for byte, and Bun's
     // bundler renames generated identifiers between releases, so CI has to
-    // build on the version that produced the committed bundle.
+    // build on the version that produced the committed bundle. Collect the
+    // values and compare exactly: a substring check passes on a real drift,
+    // because the pin can be a prefix of the CI version (1.3.1 against
+    // 1.3.14), and it cannot see a missing or duplicated key either.
     const ci = readRepo(".github/workflows/ci.yml");
-    expect(ci).toContain(`bun-version: ${pinnedBunVersion()}`);
+    const pins = [...ci.matchAll(/^[ \t]*bun-version:[ \t]*(\S+)[ \t]*$/gm)].map((match) => match[1]);
+    expect(pins).toEqual([pinnedBunVersion()]);
   });
 
   test("ci runs the source and fallback CLIs on the lowest supported Node", () => {

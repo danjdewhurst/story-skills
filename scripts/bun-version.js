@@ -7,10 +7,12 @@ export const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)
 
 // The bundled fallback is compared byte for byte, and Bun's bundler renames
 // generated identifiers between releases, so the pin in packageManager is the
-// only version that reproduces the committed bundle.
+// only version that reproduces the committed bundle. The trailing "+sha512..."
+// is the integrity suffix corepack writes into packageManager; it is not part
+// of the version, so accept it and drop it.
 export function pinnedBunVersion() {
   const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf8"));
-  const match = /^bun@(\d+\.\d+\.\d+)$/.exec(packageJson.packageManager ?? "");
+  const match = /^bun@(\d+\.\d+\.\d+)(?:\+\S+)?$/.exec(packageJson.packageManager ?? "");
   if (!match) {
     throw new Error(`package.json packageManager must look like "bun@X.Y.Z", got ${JSON.stringify(packageJson.packageManager)}`);
   }

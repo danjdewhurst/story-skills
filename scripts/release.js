@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { bumpDocVersions, docVersionFiles } from "./doc-versions.js";
+import { bunVersionAdvice, pinnedBunVersion, runningBunVersion } from "./bun-version.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const VERSION_FILES = ["package.json", ".codex-plugin/plugin.json", ".claude-plugin/plugin.json"];
@@ -116,6 +117,16 @@ function preflight(nextVersion, tag, name) {
   }
   if (git("status", "--porcelain") !== "") {
     fail("working tree is not clean. Commit or stash your changes first.");
+  }
+  // writeVersions() bumps the version files and the STORY_REF templates before
+  // it rebuilds the fallback, and that rebuild refuses to run on an unpinned
+  // bun. Check the pin here so the release stops before the first write rather
+  // than leaving a half-bumped tree to unpick by hand.
+  const pinnedBun = pinnedBunVersion();
+  const runningBun = runningBunVersion();
+  if (runningBun !== pinnedBun) {
+    console.error(bunVersionAdvice(pinnedBun, runningBun));
+    fail(`releases are cut on bun@${pinnedBun}, which builds the committed fallback.`);
   }
   git("fetch", "origin", RELEASE_BRANCH, "--tags");
   if (git("rev-parse", "HEAD") !== git("rev-parse", `origin/${RELEASE_BRANCH}`)) {
