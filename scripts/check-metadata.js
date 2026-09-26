@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseFrontmatter } from "../src/frontmatter.js";
+import { parsePinnedBunVersion } from "./bun-pin.js";
 import { docVersionFiles, staleDocVersions } from "./doc-versions.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -55,6 +56,44 @@ export function checkTemplateStoryRef(failures, packageVersion, templatesDir, re
       continue;
     }
     expectEqual(failures, `templates/github/${name} STORY_REF`, `v${packageVersion}`, match[1]);
+  }
+  return failures;
+}
+
+// The committed fallback bundle only reproduces byte for byte on the pinned
+// Bun, so CI must install the same version `packageManager` names.
+export function checkWorkflowBunPin(failures, packageManager, ciWorkflow) {
+  const pinned = parsePinnedBunVersion(packageManager);
+  if (!pinned) {
+    failures.push(`package.json packageManager must pin an exact Bun version, got ${JSON.stringify(packageManager)}`);
+    return failures;
+  }
+
+  const match = /^\s*bun-version:\s*(\S+)\s*$/m.exec(ciWorkflow);
+  if (!match) {
+    failures.push(".github/workflows/ci.yml is missing bun-version");
+    return failures;
+  }
+
+  return expectEqual(failures, ".github/workflows/ci.yml bun-version", pinned, match[1]);
+}
+
+// docs/development.md tells contributors which Bun to install, so it is the
+// one place the pin is written out in prose. Keep it aligned with the pin.
+export function checkDocBunPin(failures, packageManager, developmentDoc) {
+  const pinned = parsePinnedBunVersion(packageManager);
+  if (!pinned) {
+    return failures;
+  }
+
+  const found = [...developmentDoc.matchAll(/`bun@(\d+\.\d+\.\d+)`/g)].map((match) => match[1]);
+  if (found.length === 0) {
+    failures.push(`docs/development.md must name the pinned Bun version as \`bun@${pinned}\``);
+    return failures;
+  }
+
+  for (const version of new Set(found.filter((version) => version !== pinned))) {
+    failures.push(`docs/development.md bun pin mismatch: expected ${pinned}, got ${version}`);
   }
   return failures;
 }
@@ -156,6 +195,14 @@ function main() {
   checkTemplateStoryRef(failures, packageJson.version, path.join(repoRoot, "templates", "github"), (filePath) =>
     fs.readFileSync(filePath, "utf8")
   );
+
+  checkWorkflowBunPin(
+    failures,
+    packageJson.packageManager,
+    fs.readFileSync(path.join(repoRoot, ".github", "workflows", "ci.yml"), "utf8")
+  );
+
+  checkDocBunPin(failures, packageJson.packageManager, fs.readFileSync(path.join(repoRoot, "docs", "development.md"), "utf8"));
 
   checkDocVersions(failures, packageJson.version, docVersionFiles(repoRoot), (relativePath) =>
     fs.readFileSync(path.join(repoRoot, relativePath), "utf8")
