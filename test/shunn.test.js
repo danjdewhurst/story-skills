@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { buildBook, createStoryProject } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, readArchiveText, writeMarkdown } from "./helpers.js";
 
 function shunnProject() {
   const cwd = makeTempDir();
@@ -86,15 +86,15 @@ describe("shunn manuscript format", () => {
   test("docx --shunn embeds Shunn manuscript XML formatting", () => {
     const { root } = shunnProject();
     const { outFile } = buildBook(root, { format: "docx", shunn: true });
-    const bytes = fs.readFileSync(outFile);
+    const text = readArchiveText(outFile);
 
-    expect(bytes.includes("Courier New")).toBe(true);
-    expect(bytes.includes(`<w:sz w:val="24"/>`)).toBe(true);
-    expect(bytes.includes(`<w:spacing w:line="480" w:lineRule="auto"/>`)).toBe(true);
-    expect(bytes.includes(`<w:br w:type="page"/>`)).toBe(true);
-    expect(bytes.includes("Approximately 11 words")).toBe(true);
-    expect(bytes.includes("<w:b/>")).toBe(true);
-    expect(bytes.includes("<w:i/>")).toBe(true);
+    expect(text).toContain("Courier New");
+    expect(text).toContain(`<w:sz w:val="24"/>`);
+    expect(text).toContain(`<w:spacing w:line="480" w:lineRule="auto"/>`);
+    expect(text).toContain(`<w:br w:type="page"/>`);
+    expect(text).toContain("Approximately 11 words");
+    expect(text).toContain("<w:b/>");
+    expect(text).toContain("<w:i/>");
   });
 
   test("docx --shunn output is byte-identical under SOURCE_DATE_EPOCH", () => {
@@ -124,8 +124,8 @@ describe("shunn manuscript format", () => {
     const docx = invoke(cwd, ["build", root, "--format", "docx", "--shunn"]);
     expect(docx.code).toBe(0);
     expect(docx.out).toContain("shunn-story.docx");
-    const bytes = fs.readFileSync(path.join(root, "dist", "shunn-story.docx"));
-    expect(bytes.includes(`<w:br w:type="page"/>`)).toBe(true);
+    const text = readArchiveText(path.join(root, "dist", "shunn-story.docx"));
+    expect(text).toContain(`<w:br w:type="page"/>`);
   });
 
   test("cli rejects unknown build formats", () => {

@@ -4,7 +4,7 @@ import path from "node:path";
 import { checkProjectSchema } from "../scripts/check-schema.js";
 import { runCli } from "../src/cli.js";
 import { buildBook, createEntity, createStoryProject, exportManuscript, removeEntity, renameEntity, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, readArchiveEntries, readArchiveText, writeMarkdown } from "./helpers.js";
 
 const PNG_BYTES = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
 
@@ -188,7 +188,7 @@ describe("matter in export and build", () => {
   test("docx places matter around the chapters", () => {
     const { root } = matterProject();
     withBookMatter(root);
-    const docx = fs.readFileSync(buildBook(root, { format: "docx" }).outFile).toString("utf8");
+    const docx = readArchiveText(buildBook(root, { format: "docx" }).outFile);
     const order = ["For the lamplighters.", "Chapter 1: Opening", "Acknowledgments", "The harbor is invented."].map((text) => docx.indexOf(text));
 
     expect(order.every((index) => index > 0)).toBe(true);
@@ -201,8 +201,8 @@ describe("matter in export and build", () => {
     withBookMatter(root);
     fs.writeFileSync(path.join(root, "cover.PNG"), PNG_BYTES);
     setStoryFields(root, "cover: cover.PNG\nauthor: Ada Writer");
-    const epub = fs.readFileSync(buildBook(root, { format: "epub" }).outFile);
-    const text = epub.toString("latin1");
+    const entries = readArchiveEntries(buildBook(root, { format: "epub" }).outFile);
+    const text = entries.map((entry) => `${entry.name}\n${entry.content.toString("utf8")}`).join("\n");
 
     expect(text).toContain("<dc:creator>Ada Writer</dc:creator>");
     expect(text).toContain('<meta name="cover" content="cover-image"/>');
@@ -215,7 +215,7 @@ describe("matter in export and build", () => {
     expect(text).toContain('<body epub:type="backmatter"><h1>Acknowledgments</h1><p>Thanks to <em>everyone</em>.</p></body>');
     expect(text).toContain('<img src="images/cover.png" alt="Cover of Matter Story"/>');
     expect(text).toContain("OEBPS/images/cover.png");
-    expect(epub.includes(PNG_BYTES)).toBe(true);
+    expect(entries.find((entry) => entry.name === "OEBPS/images/cover.png").content.equals(PNG_BYTES)).toBe(true);
     expect(text).not.toContain("back-unwritten");
   });
 
@@ -223,13 +223,13 @@ describe("matter in export and build", () => {
     const { root } = matterProject();
     fs.writeFileSync(path.join(root, "cover.jpeg"), Buffer.from([0xff, 0xd8, 0xff]));
     setStoryFields(root, "cover: cover.jpeg");
-    const text = fs.readFileSync(buildBook(root, { format: "epub" }).outFile).toString("latin1");
+    const text = readArchiveText(buildBook(root, { format: "epub" }).outFile);
     expect(text).toContain('href="images/cover.jpg" media-type="image/jpeg"');
   });
 
   test("epub without cover or author has neither", () => {
     const { root } = matterProject();
-    const text = fs.readFileSync(buildBook(root, { format: "epub" }).outFile).toString("utf8");
+    const text = readArchiveText(buildBook(root, { format: "epub" }).outFile);
     expect(text).not.toContain("cover");
     expect(text).not.toContain("dc:creator");
   });

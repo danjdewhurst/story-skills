@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { buildBook, createStoryProject } from "../src/story.js";
-import { makeTempDir, writeMarkdown } from "./helpers.js";
+import { makeTempDir, readArchiveText, writeMarkdown } from "./helpers.js";
 
 function shunnProject() {
   const cwd = makeTempDir();
@@ -33,7 +33,7 @@ describe("shunn docx assertions on decoded text", () => {
   test("docx --shunn embeds Shunn manuscript XML formatting", () => {
     const { root } = shunnProject();
     const { outFile } = buildBook(root, { format: "docx", shunn: true });
-    const text = fs.readFileSync(outFile, "utf8");
+    const text = readArchiveText(outFile);
 
     expect(text).toContain("Courier New");
     expect(text).toContain(`<w:sz w:val="24"/>`);

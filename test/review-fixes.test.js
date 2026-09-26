@@ -18,7 +18,7 @@ import {
   validateProject,
   voicesReport
 } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, readArchiveText, writeMarkdown } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -204,7 +204,7 @@ describe("review fixes", () => {
     const legal = path.join(root, "matter", "legal.md");
     fs.writeFileSync(legal, fs.readFileSync(legal, "utf8").replace("title: Legal", "title: Copyright Notice") + "\nAll mine.\n");
     expect(fs.readFileSync(buildBook(root, { format: "narration" }).outFile, "utf8")).not.toContain("Copyright Notice");
-    expect(fs.readFileSync(buildBook(root, { format: "epub" }).outFile).toString("utf8")).toContain('<body epub:type="frontmatter copyright-page"><h1>Copyright Notice</h1>');
+    expect(readArchiveText(buildBook(root, { format: "epub" }).outFile)).toContain('<body epub:type="frontmatter copyright-page"><h1>Copyright Notice</h1>');
     const print = fs.readFileSync(buildBook(root, { format: "print" }).outFile, "utf8");
     expect(print.indexOf('id="front-legal"')).toBeLessThan(print.indexOf('class="toc"'));
   });
