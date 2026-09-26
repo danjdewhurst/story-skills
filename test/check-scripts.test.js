@@ -7,6 +7,7 @@ import { collectResult, compareFindings } from "../scripts/check-examples.js";
 import { docVersionFiles } from "../scripts/doc-versions.js";
 import { checkDocVersions, checkMarketplaces, checkSkillFrontmatter, checkTemplateStoryRef, checkVersionModule, expectEqual } from "../scripts/check-metadata.js";
 import { checkFixtureSkill } from "../scripts/check-evals.js";
+import { MISSING_BUN_MESSAGE, missingBunMessage } from "../scripts/bun-missing.js";
 import { PREFLIGHT } from "../scripts/release.js";
 import { spawnSync } from "node:child_process";
 import { fillTemplate } from "../evals/run-evals.js";
@@ -64,6 +65,29 @@ describe("release preflight", () => {
     expect(PREFLIGHT).toContain("check:metadata");
     expect(PREFLIGHT).toContain("check:evals");
     expect(PREFLIGHT).toContain("test:examples");
+  });
+});
+
+describe("missing bun", () => {
+  test("reports only a failed spawn of a missing binary", () => {
+    expect(missingBunMessage({ code: "ENOENT", syscall: "spawnSync bun" })).toBe(MISSING_BUN_MESSAGE);
+    expect(MISSING_BUN_MESSAGE).toContain("https://bun.sh");
+    expect(missingBunMessage({ code: "EACCES" })).toBeNull();
+    expect(missingBunMessage(undefined)).toBeNull();
+  });
+
+  test("check-fallback names the missing binary instead of crashing on null output", () => {
+    // AGENTS.md and docs/development.md both send contributors to
+    // `bun run check:fallback`, so a contributor without Bun must get the
+    // install hint, not a TypeError about the stream chunk spawnSync never wrote.
+    const res = spawnSync(process.execPath, [path.join(repoRoot, "scripts", "check-fallback.js")], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      env: { ...process.env, PATH: makeTempDir("story-empty-path-") }
+    });
+    expect(res.status).toBe(1);
+    expect(res.stderr.trim()).toBe(MISSING_BUN_MESSAGE);
+    expect(res.stderr).not.toContain("ERR_INVALID_ARG_TYPE");
   });
 });
 
