@@ -127,6 +127,16 @@ hand before/after skill changes, with results recorded below.
 | `revision-continuity` | Revision restraint: the sea-chest stays shut and the key-leaver unnamed while every fact survives. Evaluates the `revision-continuity` skill. |
 | `series-continuity` | Canon carried forward: deaths, the paraffin-fired lens, the shut chest, and the open question survive into book two with no new characters. Evaluates the `series-continuity` skill. |
 | `genre-craft-mystery` | Fair-play contract stated and the passage ends on the open question. Evaluates the `genre-craft` skill (mystery). |
+| `deep-pov` | Filter words and thought-tags struck from a mild-interiority passage ("I noticed the key" becomes the key in the pocket) with the canon intact. Evaluates the `scene-craft` skill. |
+| `motif-restraint` | The motif carries the chapter's idea through what Tomas does; naming the theme or explaining what the motif means fails. Evaluates the `theme-craft` skill. |
+| `screenplay-fountain` | A passage adapted into one Fountain scene: slugline, source note, and nothing on the page a camera could not photograph. Voiceover, camera directions, and kept first-person narration fail. Evaluates the `adaptation` skill. |
+
+Twelve fixtures cover eight skills: `chapter-writing` (six), `line-editing`,
+`revision-continuity`, `series-continuity`, `genre-craft`, `scene-craft`,
+`theme-craft`, and `adaptation`. The other thirteen skills have no
+behavioural regression net and rely on human review. A skill is worth a
+fixture when a substring checker can tell a good output from a bad one; a
+fixture that passes whatever the skill does is worse than an honest gap.
 
 ## Check format
 
@@ -142,6 +152,7 @@ hand before/after skill changes, with results recorded below.
 - `paragraphs`: exact paragraph count, for briefs that promise one (no-invention: two paragraphs). Fenced code blocks are exempt.
 - `ends_with_question`: when `true`, the draft must end on `?` (question-stays-open, genre-craft-mystery).
 - `requires_first_person` / `requires_past_tense`: when `true`, the draft must show first-person pronouns / at least 2 past-tense markers. Both are coarse proxies (the past-tense list counts `red` as past tense, hence the ≥2 minimum), tripwires for ignored briefs rather than classifiers.
+- `expected_overlaps`: the phrase collisions this fixture means to have, so `scripts/check-evals.js` stays quiet about them. `in_input` holds `["<banned phrase>"]` entries for tells the input is deliberately seeded with (anti-slop's brief asks for their removal); `with_required` holds `["<banned phrase>", "<required phrase>"]` entries for traps that have to contain a canon name (`it was Petra` beside required `Petra`). An unlisted collision warns, so a new one is visible; a listed collision that no longer exists fails, so the list cannot outlive the phrases it covers.
 - `voice_drift`: for keep-my-voice briefs, the largest change allowed per marker between input and draft. Markers are `contraction_rate`, `first_person_rate`, and `hedge_rate` (all per 100 words) and `mean_word_length`. Limits are regression tripwires calibrated so the known-good draft passes with headroom (voice-preservation drifts +1.21/+1.62/0.00/−0.31 against limits 3.0/3.0/2.0/0.6), not perceptual thresholds. Drift is directional: rates fail when they fall past the limit (voice stripped) and warn on overshoot; `mean_word_length` fails when it rises past the limit and warns on a fall.
 
 Every fixture also gets three well-formedness checks the checker applies itself: no doubled spaces inside a line, no space before punctuation, and no empty clause between punctuation marks. Four structure checks run on every draft as well: the binary-contrast scaffolds ("not just X but Y", "isn't just", "it's not about X, it's Y", "not because X but because Y"), which no fixture's ideal draft needs.
@@ -154,4 +165,11 @@ draft would spring (a resolution, an invention, a tell). Banned phrases
 should be ones a lazy draft would plausibly introduce; do not ban words the
 ideal draft might legitimately use. Add a known-good draft to `examples/`
 and check it passes. Then run `node scripts/check-evals.js` to validate the
-fixture schema.
+fixture schema; record any collision it reports in `expected_overlaps` if
+the fixture means it, and fix the phrase if it does not.
+
+Check the fixture bites before trusting it: write the draft the skill is
+supposed to prevent (the unrewritten passage, the on-the-nose version, the
+lazy adaptation), run `node evals/run-evals.js evals/fixtures/<name>
+<that-draft>.md`, and confirm it fails on the checks the fixture exists
+for.
