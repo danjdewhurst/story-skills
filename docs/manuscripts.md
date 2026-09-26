@@ -863,7 +863,7 @@ Links, images, lists, and other markdown are not converted and appear as their l
 
 ### Reproducible builds
 
-Builds are deterministic: the same sources produce byte-identical files. The HTML, print, narration, and metadata builds contain no dates or timestamps, so a diff between two builds shows only what changed in the book. EPUB and DOCX packages date every ZIP entry 1980-01-01, and drop control characters that XML does not allow. The EPUB `dcterms:modified` date comes from the `SOURCE_DATE_EPOCH` environment variable (whole seconds since the Unix epoch) when it is set, and is `2000-01-01T00:00:00Z` otherwise, including when the value is not a whole number of seconds or falls after the year 9999:
+Builds are deterministic: the same sources produce byte-identical files. The HTML, print, narration, and metadata builds contain no dates or timestamps, so a diff between two builds shows only what changed in the book. EPUB and DOCX packages date every ZIP entry 1980-01-01, and drop control characters that XML does not allow. Entries are deflated at a fixed level, which keeps repeat builds identical, and their names carry the ZIP UTF-8 name flag; the EPUB `mimetype` entry stays first and uncompressed as the OCF container format requires. The EPUB `dcterms:modified` date comes from the `SOURCE_DATE_EPOCH` environment variable (whole seconds since the Unix epoch) when it is set, and is `2000-01-01T00:00:00Z` otherwise, including when the value is not a whole number of seconds or falls after the year 9999:
 
 ```shell
 SOURCE_DATE_EPOCH=1700000000 story build . --format epub
