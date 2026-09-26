@@ -6,7 +6,7 @@ import { parseFrontmatter } from "../src/frontmatter.js";
 import { importManuscript } from "../src/import.js";
 import { buildSeries } from "../src/series.js";
 import { buildBook, createEntity, createStoryProject, scanProject, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, readArchiveText, writeMarkdown } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -140,13 +140,13 @@ number: 1
 status: draft
 word-count: 0
 `, "## Chapter Text\n\nFirst line.\n  \t\nSecond line.\n \n* * *\n\nThird line.");
-    let epub = fs.readFileSync(buildBook(root, { format: "epub" }).outFile).toString("utf8");
+    let epub = readArchiveText(buildBook(root, { format: "epub" }).outFile);
     expect(epub).toContain("<p>First line.</p>");
     expect(epub).toContain("<p>Second line.</p>");
     expect(epub).toContain("<p>* * *</p>");
 
     fs.writeFileSync(chapterPath, fs.readFileSync(chapterPath, "utf8").replace(/\n/g, "\r\n"), "utf8");
-    epub = fs.readFileSync(buildBook(root, { format: "epub" }).outFile).toString("utf8");
+    epub = readArchiveText(buildBook(root, { format: "epub" }).outFile);
     expect(epub).toContain("<p>First line.</p>");
     expect(epub).toContain("<p>Second line.</p>");
     expect(epub).toContain("<p>Third line.</p>");

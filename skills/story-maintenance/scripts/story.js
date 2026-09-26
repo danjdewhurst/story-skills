@@ -535,8 +535,8 @@ function scanComments(text, replacement = "") {
         const lineEnd = source.indexOf(`
 `, tick) === -1 ? source.length : source.indexOf(`
 `, tick);
-        const close2 = source.indexOf("`", tick + 1);
-        const end = close2 !== -1 && close2 < lineEnd ? close2 + 1 : tick + 1;
+        const close = source.indexOf("`", tick + 1);
+        const end = close !== -1 && close < lineEnd ? close + 1 : tick + 1;
         result += source.slice(position, end);
         position = end;
         continue;
@@ -629,6 +629,7 @@ import { Buffer } from "node:buffer";
 import { execFileSync } from "node:child_process";
 import fs3 from "node:fs";
 import path4 from "node:path";
+import { deflateRawSync } from "node:zlib";
 
 // src/continuity.js
 import path from "node:path";
@@ -1779,11 +1780,11 @@ function quoteMatches(paragraph) {
   };
   const findSingleClose = (from) => {
     if (next.closeSingle !== Infinity && next.closeSingle < from) {
-      let index2 = paragraph.indexOf("’", from);
-      while (index2 !== -1 && LETTER.test(paragraph[index2 + 1] ?? "")) {
-        index2 = paragraph.indexOf("’", index2 + 1);
+      let index = paragraph.indexOf("’", from);
+      while (index !== -1 && LETTER.test(paragraph[index + 1] ?? "")) {
+        index = paragraph.indexOf("’", index + 1);
       }
-      next.closeSingle = index2 === -1 ? Infinity : index2;
+      next.closeSingle = index === -1 ? Infinity : index;
     }
     return next.closeSingle;
   };
@@ -3074,13 +3075,13 @@ var STORY_FORMS = new Map([
   ["picture-book", { min: 1, max: 1000, target: 500 }],
   ["chapter-book", { min: 4000, max: 15000, target: 1e4 }]
 ]);
-function formRangeWarning(form, words, label2) {
+function formRangeWarning(form, words, label) {
   const range = STORY_FORMS.get(form);
   if (!range || range.min === null || !Number.isInteger(words) || words <= 0) {
     return "";
   }
   if (words < range.min || words > range.max) {
-    return `${label2} ${words} is outside the usual ${form} range of ${range.min}-${range.max} words`;
+    return `${label} ${words} is outside the usual ${form} range of ${range.min}-${range.max} words`;
   }
   return "";
 }
@@ -3151,11 +3152,11 @@ function validatePublishing(data, errors, warnings) {
 function normalizeIsbn(value) {
   const compact = String(value ?? "").replace(/[\s-]/g, "").toUpperCase();
   if (/^97[89]\d{10}$/.test(compact)) {
-    const sum = [...compact.slice(0, 12)].reduce((total2, digit, index) => total2 + Number(digit) * (index % 2 === 0 ? 1 : 3), 0);
+    const sum = [...compact.slice(0, 12)].reduce((total, digit, index) => total + Number(digit) * (index % 2 === 0 ? 1 : 3), 0);
     return (10 - sum % 10) % 10 === Number(compact[12]) ? compact : "";
   }
   if (/^\d{9}[\dX]$/.test(compact)) {
-    const sum = [...compact].reduce((total2, char, index) => total2 + (char === "X" ? 10 : Number(char)) * (10 - index), 0);
+    const sum = [...compact].reduce((total, char, index) => total + (char === "X" ? 10 : Number(char)) * (10 - index), 0);
     return sum % 11 === 0 ? compact : "";
   }
   return "";
@@ -3228,7 +3229,7 @@ function metadataSheet(input) {
     "",
     "## Readiness",
     "",
-    ...checks.map(([label2, ok]) => `- [${ok ? "x" : " "}] ${label2}`),
+    ...checks.map(([label, ok]) => `- [${ok ? "x" : " "}] ${label}`),
     ""
   ].join(`
 `);
@@ -3519,31 +3520,31 @@ function readPasses(storyData) {
   }
   return raw.filter((entry) => entry && typeof entry === "object" && !Array.isArray(entry) && typeof entry.pass === "string").map((entry) => ({ pass: entry.pass, status: typeof entry.status === "string" ? entry.status : "pending" }));
 }
-function validatePasses(data, label2, errors) {
+function validatePasses(data, label, errors) {
   const raw = data["revision-passes"];
   if (raw === undefined) {
     return;
   }
   if (!Array.isArray(raw)) {
-    errors.push(`${label2} frontmatter field revision-passes must be a list`);
+    errors.push(`${label} frontmatter field revision-passes must be a list`);
     return;
   }
   const seen = new Set;
   for (const entry of raw) {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-      errors.push(`${label2} frontmatter field revision-passes must contain objects`);
+      errors.push(`${label} frontmatter field revision-passes must contain objects`);
       continue;
     }
     if (typeof entry.pass !== "string" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(entry.pass)) {
-      errors.push(`${label2} revision pass ${entry.pass ?? "(missing)"} must be a kebab-case name`);
+      errors.push(`${label} revision pass ${entry.pass ?? "(missing)"} must be a kebab-case name`);
       continue;
     }
     if (seen.has(entry.pass)) {
-      errors.push(`${label2} lists revision pass ${entry.pass} more than once`);
+      errors.push(`${label} lists revision pass ${entry.pass} more than once`);
     }
     seen.add(entry.pass);
     if (entry.status !== undefined && !PASS_STATUSES.has(entry.status)) {
-      errors.push(`${label2} revision pass ${entry.pass} has unsupported status ${entry.status}`);
+      errors.push(`${label} revision pass ${entry.pass} has unsupported status ${entry.status}`);
     }
   }
 }
@@ -3783,9 +3784,9 @@ function computeProgress({ words, target, deadline, today, chapters, sessions })
     const last = sessions[sessions.length - 1];
     result.lastSession = { date: last.date, words: last.words, since: words - last.words };
     const recent = sessions.slice(-PACE_SESSIONS);
-    const span2 = parseClockDate(recent[recent.length - 1].date).days - parseClockDate(recent[0].date).days;
-    if (recent.length > 1 && span2 > 0) {
-      result.pace = (recent[recent.length - 1].words - recent[0].words) / span2;
+    const span = parseClockDate(recent[recent.length - 1].date).days - parseClockDate(recent[0].date).days;
+    if (recent.length > 1 && span > 0) {
+      result.pace = (recent[recent.length - 1].words - recent[0].words) / span;
       if (result.remaining > 0 && result.pace > 0) {
         result.projected = formatDate(todayDays + Math.ceil(result.remaining / result.pace));
       }
@@ -3879,27 +3880,27 @@ function readBookFrontmatter(root) {
 function validateSeriesLinks(root, data, errors) {
   for (const [field, inverse] of SERIES_LINK_INVERSES) {
     for (const target of seriesLinks(root, data, field)) {
-      const label2 = `story.md ${field} ${seriesLinkPath(root, target)}`;
+      const label = `story.md ${field} ${seriesLinkPath(root, target)}`;
       if (target === root) {
-        errors.push(`${label2} points at this book`);
+        errors.push(`${label} points at this book`);
         continue;
       }
       let other;
       try {
         other = readBookFrontmatter(target);
       } catch (error) {
-        errors.push(`${label2}: ${error.message}`);
+        errors.push(`${label}: ${error.message}`);
         continue;
       }
       if (!other) {
-        errors.push(`${label2} is not a story project: missing story.md`);
+        errors.push(`${label} is not a story project: missing story.md`);
         continue;
       }
       if (!seriesLinks(target, other, inverse).includes(root)) {
-        errors.push(`${label2} is missing backlink: add ${seriesLinkPath(target, root)} to its ${inverse}`);
+        errors.push(`${label} is missing backlink: add ${seriesLinkPath(target, root)} to its ${inverse}`);
       }
       if (data.series !== undefined && other.series !== undefined && data.series !== other.series) {
-        errors.push(`${label2} belongs to series ${other.series}, not ${data.series}`);
+        errors.push(`${label} belongs to series ${other.series}, not ${data.series}`);
       }
     }
   }
@@ -4024,19 +4025,19 @@ function discoverBooks(startRoot, scan, errors) {
       errors.push("Series links exceed the " + MAX_SERIES_BOOKS + " book limit; refusing to traverse further");
       break;
     }
-    const label2 = seriesLinkPath(startRoot, root) || ".";
+    const label = seriesLinkPath(startRoot, root) || ".";
     if (!isPathInside(scopeRoot, resolved) || !isPathInside(scopeReal, effective)) {
-      errors.push(label2 + " points outside the series directory " + scopeRoot + "; refusing to follow");
+      errors.push(label + " points outside the series directory " + scopeRoot + "; refusing to follow");
       visited.set(effective, null);
       continue;
     }
     if (depth > MAX_SERIES_DEPTH) {
-      errors.push(label2 + " exceeds the series traversal depth of " + MAX_SERIES_DEPTH + "; refusing to follow further links");
+      errors.push(label + " exceeds the series traversal depth of " + MAX_SERIES_DEPTH + "; refusing to follow further links");
       visited.set(effective, null);
       continue;
     }
     if (!fs2.existsSync(path3.join(root, "story.md"))) {
-      errors.push(`${label2} is not a story project: missing story.md`);
+      errors.push(`${label} is not a story project: missing story.md`);
       visited.set(effective, null);
       continue;
     }
@@ -4044,18 +4045,18 @@ function discoverBooks(startRoot, scan, errors) {
     try {
       project = scan(root);
     } catch (error) {
-      errors.push(`${label2}: ${error.message}`);
+      errors.push(`${label}: ${error.message}`);
       visited.set(effective, null);
       continue;
     }
     for (const scanError of project.fileErrors ?? []) {
-      errors.push(`${label2}: ${scanError}`);
+      errors.push(`${label}: ${scanError}`);
     }
     const data = project.story.data;
     const book = {
       root,
       key: effective,
-      label: label2,
+      label,
       project,
       title: String(data.title ?? path3.basename(root)),
       series: data.series,
@@ -4244,7 +4245,7 @@ function firstMatching(books, key, predicate) {
 }
 function sharedCanon(books) {
   const shared = [];
-  for (const [key, label2] of SHARED_CANON) {
+  for (const [key, label] of SHARED_CANON) {
     const counts = new Map;
     for (const book of books) {
       for (const entity of book.project[key]) {
@@ -4253,7 +4254,7 @@ function sharedCanon(books) {
     }
     const ids = [...counts].filter(([, count]) => count > 1).map(([id]) => id).sort();
     if (ids.length > 0) {
-      shared.push({ label: label2, ids });
+      shared.push({ label, ids });
     }
   }
   const factBooks = new Map;
@@ -4826,7 +4827,7 @@ function validateLinksOf(project) {
   const artifactIds = new Set(project.artifacts.map((item) => item.id));
   const hasMention = (id) => characters.has(id) || artifactIds.has(id);
   for (const character of project.characters) {
-    const label2 = relative2(project, character.file);
+    const label = relative2(project, character.file);
     for (const relationship of character.relationships) {
       if (!relationship || typeof relationship !== "object" || Array.isArray(relationship)) {
         continue;
@@ -4836,11 +4837,11 @@ function validateLinksOf(project) {
         continue;
       }
       if (target !== kebabCase(target)) {
-        errors.push(`${label2} relationship character ${target} must be kebab-case`);
+        errors.push(`${label} relationship character ${target} must be kebab-case`);
         continue;
       }
       if (!characters.has(target)) {
-        errors.push(`${label2} references missing character ${target}`);
+        errors.push(`${label} references missing character ${target}`);
       } else {
         const backlinks = [];
         for (const entry of characters.get(target).relationships) {
@@ -4849,7 +4850,7 @@ function validateLinksOf(project) {
           }
         }
         if (backlinks.length === 0) {
-          errors.push(`${label2} relationship to ${target} is missing backlink`);
+          errors.push(`${label} relationship to ${target} is missing backlink`);
         } else {
           const expectedTypes = inverseRelationshipTypes(relationship.type);
           let matched = expectedTypes.length === 0;
@@ -4864,159 +4865,159 @@ function validateLinksOf(project) {
           }
           const legacy = !matched && types.some((type) => LEGACY_RELATIONSHIP_PAIRS.has(`${relationship.type}>${type}`));
           if (legacy) {
-            warnings.push(`${label2} relationship ${relationship.type} to ${target} has backlink ${types.join(", ")}, a pairing from before story-skills 0.10.0; change the backlink to ${expectedTypes.join(" or ")}`);
+            warnings.push(`${label} relationship ${relationship.type} to ${target} has backlink ${types.join(", ")}, a pairing from before story-skills 0.10.0; change the backlink to ${expectedTypes.join(" or ")}`);
           } else if (!matched) {
-            errors.push(`${label2} relationship ${relationship.type} to ${target} expects backlink type ${expectedTypes.join(" or ")}, got ${types.join(", ") || "none"}`);
+            errors.push(`${label} relationship ${relationship.type} to ${target} expects backlink type ${expectedTypes.join(" or ")}, got ${types.join(", ") || "none"}`);
           }
         }
       }
     }
     for (const locationId of character.locations) {
-      checkIdReference(errors, label2, locationId, "location", hasLocation);
+      checkIdReference(errors, label, locationId, "location", hasLocation);
       if (typeof locationId === "string" && locationId !== "" && locationId === kebabCase(locationId) && locations.has(locationId) && !locations.get(locationId).notableCharacters.includes(character.id)) {
-        errors.push(`${label2} location ${locationId} is missing notable-character backlink`);
+        errors.push(`${label} location ${locationId} is missing notable-character backlink`);
       }
     }
     if (character.diedIn) {
-      checkIdReference(errors, label2, character.diedIn, "chapter", hasChapter);
+      checkIdReference(errors, label, character.diedIn, "chapter", hasChapter);
     }
   }
   for (const location of project.locations) {
-    const label2 = relative2(project, location.file);
+    const label = relative2(project, location.file);
     for (const route of location.routes) {
       if (!route || typeof route !== "object" || Array.isArray(route) || typeof route.to !== "string" || route.to === "") {
         continue;
       }
       if (route.to === location.id) {
-        errors.push(`${label2} route points at itself`);
+        errors.push(`${label} route points at itself`);
         continue;
       }
-      checkIdReference(errors, `${label2} route`, route.to, "location", hasLocation);
+      checkIdReference(errors, `${label} route`, route.to, "location", hasLocation);
     }
     for (const characterId of location.notableCharacters) {
-      checkIdReference(errors, label2, characterId, "character", hasCharacter);
+      checkIdReference(errors, label, characterId, "character", hasCharacter);
       if (typeof characterId === "string" && characterId !== "" && characterId === kebabCase(characterId) && characters.has(characterId) && !characters.get(characterId).locations.includes(location.id)) {
-        errors.push(`${label2} notable character ${characterId} is missing location backlink`);
+        errors.push(`${label} notable character ${characterId} is missing location backlink`);
       }
     }
   }
   for (const arc of project.arcs) {
-    const label2 = relative2(project, arc.file);
+    const label = relative2(project, arc.file);
     for (const characterId of arc.characters) {
-      checkIdReference(errors, label2, characterId, "character", hasCharacter);
+      checkIdReference(errors, label, characterId, "character", hasCharacter);
     }
   }
   for (const chapter of project.chapters) {
-    const label2 = relative2(project, chapter.file);
+    const label = relative2(project, chapter.file);
     if (chapter.pov) {
       const povText = String(chapter.pov);
       if (povText !== kebabCase(povText)) {
-        errors.push(`${label2} references POV character ${povText} which must be kebab-case`);
+        errors.push(`${label} references POV character ${povText} which must be kebab-case`);
       } else if (!characters.has(chapter.pov)) {
-        errors.push(`${label2} references missing POV character ${chapter.pov}`);
+        errors.push(`${label} references missing POV character ${chapter.pov}`);
       }
     }
     for (const characterId of chapter.characters) {
-      checkIdReference(errors, label2, characterId, "character", hasCharacter);
+      checkIdReference(errors, label, characterId, "character", hasCharacter);
     }
     for (const mentionId of chapter.mentions) {
-      checkIdReference(errors, label2, mentionId, "character or artifact", hasMention);
+      checkIdReference(errors, label, mentionId, "character or artifact", hasMention);
     }
     for (const locationId of chapter.locations) {
-      checkIdReference(errors, label2, locationId, "location", hasLocation);
+      checkIdReference(errors, label, locationId, "location", hasLocation);
     }
     for (const arcId of chapter.arcsAdvanced) {
-      checkIdReference(errors, label2, arcId, "arc", hasArc);
+      checkIdReference(errors, label, arcId, "arc", hasArc);
     }
   }
   for (const faction of project.factions) {
-    const label2 = relative2(project, faction.file);
+    const label = relative2(project, faction.file);
     for (const characterId of faction.members) {
-      checkIdReference(errors, label2, characterId, "member", hasCharacter);
+      checkIdReference(errors, label, characterId, "member", hasCharacter);
     }
     for (const locationId of faction.locations) {
-      checkIdReference(errors, label2, locationId, "location", hasLocation);
+      checkIdReference(errors, label, locationId, "location", hasLocation);
     }
   }
   for (const artifact of project.artifacts) {
-    const label2 = relative2(project, artifact.file);
+    const label = relative2(project, artifact.file);
     if (artifact.owner) {
       const ownerText = String(artifact.owner);
       if (ownerText !== kebabCase(ownerText)) {
-        errors.push(`${label2} references owner ${ownerText} which must be kebab-case`);
+        errors.push(`${label} references owner ${ownerText} which must be kebab-case`);
       } else if (!characters.has(artifact.owner) && !factions.has(artifact.owner)) {
-        errors.push(`${label2} references missing owner ${artifact.owner}`);
+        errors.push(`${label} references missing owner ${artifact.owner}`);
       }
     }
     if (artifact.location) {
-      checkIdReference(errors, label2, artifact.location, "location", hasLocation);
+      checkIdReference(errors, label, artifact.location, "location", hasLocation);
     }
   }
   for (const scene of project.scenes) {
-    const label2 = relative2(project, scene.file);
+    const label = relative2(project, scene.file);
     if (scene.chapter) {
       const chapterText = String(scene.chapter);
       if (chapterText !== kebabCase(chapterText)) {
-        errors.push(`${label2} references chapter ${chapterText} which must be kebab-case`);
+        errors.push(`${label} references chapter ${chapterText} which must be kebab-case`);
       } else if (!chapters.has(scene.chapter)) {
-        errors.push(`${label2} references missing chapter ${scene.chapter}`);
+        errors.push(`${label} references missing chapter ${scene.chapter}`);
       }
     }
     if (scene.pov) {
       const povText = String(scene.pov);
       if (povText !== kebabCase(povText)) {
-        errors.push(`${label2} references POV character ${povText} which must be kebab-case`);
+        errors.push(`${label} references POV character ${povText} which must be kebab-case`);
       } else if (!characters.has(scene.pov)) {
-        errors.push(`${label2} references missing POV character ${scene.pov}`);
+        errors.push(`${label} references missing POV character ${scene.pov}`);
       }
     }
     if (scene.location) {
-      checkIdReference(errors, label2, scene.location, "location", hasLocation);
+      checkIdReference(errors, label, scene.location, "location", hasLocation);
     }
     for (const characterId of scene.characters) {
-      checkIdReference(errors, label2, characterId, "character", hasCharacter);
+      checkIdReference(errors, label, characterId, "character", hasCharacter);
     }
     for (const mentionId of scene.mentions) {
-      checkIdReference(errors, label2, mentionId, "character or artifact", hasMention);
+      checkIdReference(errors, label, mentionId, "character or artifact", hasMention);
     }
     for (const arcId of scene.arcsAdvanced) {
-      checkIdReference(errors, label2, arcId, "arc", hasArc);
+      checkIdReference(errors, label, arcId, "arc", hasArc);
     }
   }
   for (const note of project.research) {
-    const label2 = relative2(project, note.file);
+    const label = relative2(project, note.file);
     for (const chapterId of note.usedIn) {
-      checkIdReference(errors, label2, chapterId, "chapter", hasScheduledChapter);
+      checkIdReference(errors, label, chapterId, "chapter", hasScheduledChapter);
     }
   }
   for (const question of project.questions) {
-    const label2 = relative2(project, question.file);
-    checkIdReference(errors, label2, question.introduced, "chapter", question.status === "open" ? hasScheduledChapter : hasChapter);
-    checkIdReference(errors, label2, question.resolved, "chapter", hasChapter);
+    const label = relative2(project, question.file);
+    checkIdReference(errors, label, question.introduced, "chapter", question.status === "open" ? hasScheduledChapter : hasChapter);
+    checkIdReference(errors, label, question.resolved, "chapter", hasChapter);
     for (const characterId of question.characters) {
-      checkIdReference(errors, label2, characterId, "character", hasCharacter);
+      checkIdReference(errors, label, characterId, "character", hasCharacter);
     }
   }
   for (const promise of project.promises) {
-    const label2 = relative2(project, promise.file);
-    checkIdReference(errors, label2, promise.planted, "chapter", promise.status === "planned" ? hasScheduledChapter : hasChapter);
-    checkIdReference(errors, label2, promise.payoff, "chapter", promise.status === "paid-off" ? hasChapter : hasScheduledChapter);
+    const label = relative2(project, promise.file);
+    checkIdReference(errors, label, promise.planted, "chapter", promise.status === "planned" ? hasScheduledChapter : hasChapter);
+    checkIdReference(errors, label, promise.payoff, "chapter", promise.status === "paid-off" ? hasChapter : hasScheduledChapter);
     for (const arcId of promise.arcs) {
-      checkIdReference(errors, label2, arcId, "arc", hasArc);
+      checkIdReference(errors, label, arcId, "arc", hasArc);
     }
     for (const characterId of promise.characters) {
-      checkIdReference(errors, label2, characterId, "character", hasCharacter);
+      checkIdReference(errors, label, characterId, "character", hasCharacter);
     }
   }
   for (const clue of project.clues) {
-    const label2 = relative2(project, clue.file);
-    checkIdReference(errors, label2, clue.planted, "chapter", clue.status === "planned" ? hasScheduledChapter : hasChapter);
-    checkIdReference(errors, label2, clue.payoff, "chapter", clue.status === "paid-off" ? hasChapter : hasScheduledChapter);
+    const label = relative2(project, clue.file);
+    checkIdReference(errors, label, clue.planted, "chapter", clue.status === "planned" ? hasScheduledChapter : hasChapter);
+    checkIdReference(errors, label, clue.payoff, "chapter", clue.status === "paid-off" ? hasChapter : hasScheduledChapter);
     for (const arcId of clue.arcs) {
-      checkIdReference(errors, label2, arcId, "arc", hasArc);
+      checkIdReference(errors, label, arcId, "arc", hasArc);
     }
     for (const characterId of clue.characters) {
-      checkIdReference(errors, label2, characterId, "character", hasCharacter);
+      checkIdReference(errors, label, characterId, "character", hasCharacter);
     }
   }
   validateTimelineAndArcBodyRefs(project, chapters, errors);
@@ -5046,12 +5047,12 @@ function validateTimelineAndArcBodyRefs(project, chapters, errors) {
     }
   }
   for (const arc of project.arcs) {
-    const label2 = relative2(project, arc.file);
+    const label = relative2(project, arc.file);
     let body = "";
     try {
       body = readMarkdown(arc.file, project.root).body ?? "";
     } catch (error) {
-      const message = label2 + ": " + error.message;
+      const message = label + ": " + error.message;
       if (!errors.includes(message)) {
         errors.push(message);
       }
@@ -5059,15 +5060,15 @@ function validateTimelineAndArcBodyRefs(project, chapters, errors) {
     }
     for (const token of extractChapterIdTokens(body)) {
       if (!chapterIds.has(token)) {
-        errors.push(`${label2} references missing chapter ${token}`);
+        errors.push(`${label} references missing chapter ${token}`);
       }
     }
     for (const target of extractMarkdownLinkTargets(body)) {
-      checkBodyLinkTarget(project, label2, target, errors);
+      checkBodyLinkTarget(project, label, target, errors);
     }
   }
 }
-function checkBodyLinkTarget(project, label2, target, errors) {
+function checkBodyLinkTarget(project, label, target, errors) {
   const cleaned = String(target).trim();
   if (!cleaned || /^(https?:|mailto:|#)/i.test(cleaned)) {
     return;
@@ -5082,16 +5083,16 @@ function checkBodyLinkTarget(project, label2, target, errors) {
     return;
   }
   if (id !== kebabCase(id)) {
-    errors.push(`${label2} links to ${cleaned} which must be kebab-case`);
+    errors.push(`${label} links to ${cleaned} which must be kebab-case`);
     return;
   }
-  const resolved = path4.resolve(path4.dirname(path4.join(project.root, label2)), pathOnly);
+  const resolved = path4.resolve(path4.dirname(path4.join(project.root, label)), pathOnly);
   if (!isPathInside2(path4.resolve(project.root), resolved) || !fs3.existsSync(resolved) || !fs3.statSync(resolved).isFile()) {
-    errors.push(`${label2} links to missing file ${cleaned}`);
+    errors.push(`${label} links to missing file ${cleaned}`);
     return;
   }
   if (!isPathInside2(fs3.realpathSync(project.root), fs3.realpathSync(resolved))) {
-    errors.push(`${label2} links to ${cleaned} which resolves outside the project`);
+    errors.push(`${label} links to ${cleaned} which resolves outside the project`);
     return;
   }
   const known = new Set;
@@ -5116,7 +5117,7 @@ function checkBodyLinkTarget(project, label2, target, errors) {
     }
   }
   if (!known.has(id)) {
-    errors.push(`${label2} links to missing file ${cleaned}`);
+    errors.push(`${label} links to missing file ${cleaned}`);
   }
 }
 function checkProjectContinuity(root) {
@@ -5489,10 +5490,10 @@ function compareProject(root, options = {}) {
   const project = scanProject(root);
   const current = project.chapters.map((chapter) => comparableChapter(chapter.id, readMarkdown(chapter.file, project.root)));
   let previous;
-  let label2;
+  let label;
   if (hasRef) {
     previous = chaptersAtGitRef(project.root, options.ref);
-    label2 = `git ref ${options.ref}`;
+    label = `git ref ${options.ref}`;
   } else {
     const otherRoot = path4.resolve(options.cwd ?? process.cwd(), options.against);
     const other = scanProject(otherRoot);
@@ -5500,13 +5501,13 @@ function compareProject(root, options = {}) {
       throw new Error(`Cannot read ${otherRoot}: ${other.fileErrors[0]}`);
     }
     previous = other.chapters.map((chapter) => comparableChapter(chapter.id, readMarkdown(chapter.file, other.root)));
-    label2 = otherRoot;
+    label = otherRoot;
   }
   return {
     ok: project.fileErrors.length === 0,
     errors: [...project.fileErrors],
     warnings: [],
-    label: label2,
+    label,
     ...compareChapters(previous, current)
   };
 }
@@ -5678,10 +5679,10 @@ function proseReport(root) {
   const rules = proseRules(project.styleSheet?.data, project.characters.map((character) => character.name));
   const chapters = [];
   for (const chapter of project.chapters) {
-    const label2 = relative2(project, chapter.file);
+    const label = relative2(project, chapter.file);
     const analysis = analyzeChapter(chapterProse(readMarkdown(chapter.file, project.root).body, " "), rules);
-    chapters.push({ file: label2, title: chapter.title, analysis });
-    warnings.push(...chapterFindings(label2, analysis));
+    chapters.push({ file: label, title: chapter.title, analysis });
+    warnings.push(...chapterFindings(label, analysis));
   }
   const phrases = repeatedPhrases(chapters.map((chapter) => chapter.analysis));
   const names = similarNames(project.characters);
@@ -6113,8 +6114,8 @@ function renameEntity(root, options) {
   if (!fs3.existsSync(oldFile)) {
     if (newFile !== oldFile && fs3.existsSync(newFile) && readMarkdown(newFile, project.root).data[config.titleField] === name) {
       writeReferencePlan(project.root, replaceEntityReferences(project.root, kind, oldId, newId, new Map));
-      const reindexed2 = reindexProject(project.root);
-      return { kind, oldId, id: newId, file: newFile, changed: [newFile].concat(reindexed2.changed), resumed: true };
+      const reindexed = reindexProject(project.root);
+      return { kind, oldId, id: newId, file: newFile, changed: [newFile].concat(reindexed.changed), resumed: true };
     }
     throw new Error(`${kind} ${oldId} does not exist`);
   }
@@ -6418,7 +6419,7 @@ ${themeTracking || `| Theme | Arcs | Chapters |
 }
 function chapterIndex(storyId, chapters) {
   const rows = chapters.length === 0 ? ["| *No chapters yet* | | | | | |"] : chapters.map((chapter) => `| ${chapter.number} | ${chapter.title} | ${chapter.pov} | ${chapter.status} | ${chapter.wordCount} | [${chapter.id}](${path4.basename(chapter.file)}) |`);
-  const total2 = chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
+  const total = chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
   return `${stringifyFrontmatter({ type: "chapter-registry", story: storyId })}# Chapters
 
 ## Registry
@@ -6428,7 +6429,7 @@ function chapterIndex(storyId, chapters) {
 ${rows.join(`
 `)}
 
-## Total Word Count: ${total2}
+## Total Word Count: ${total}
 `;
 }
 function timeline(storyId) {
@@ -6725,8 +6726,8 @@ function appendActionLines(lines, actions) {
 function buildEntity(project, kind, name, options) {
   if (kind === "chapter") {
     const number = options.number === undefined ? project.chapters.reduce((max, chapter) => Math.max(max, chapter.number), 0) + 1 : requirePositiveInteger(options.number, "chapter number");
-    const id2 = `chapter-${String(number).padStart(2, "0")}`;
-    return entityResult(project, kind, id2, chapterFile(name, number, options));
+    const id = `chapter-${String(number).padStart(2, "0")}`;
+    return entityResult(project, kind, id, chapterFile(name, number, options));
   }
   if (kind === "scene") {
     if (options.chapter === undefined && project.chapters.length === 0) {
@@ -6738,8 +6739,8 @@ function buildEntity(project, kind, name, options) {
       throw new Error(`chapter ${chapter} does not exist: add it with story add chapter, or pass --chapter with an existing chapter id`);
     }
     const scene = options.scene === undefined ? nextSceneNumber(project, chapter) : requirePositiveInteger(options.scene, "scene number");
-    const id2 = `${chapter}-scene-${String(scene).padStart(2, "0")}`;
-    return entityResult(project, kind, id2, sceneFile(name, chapter, scene, options));
+    const id = `${chapter}-scene-${String(scene).padStart(2, "0")}`;
+    return entityResult(project, kind, id, sceneFile(name, chapter, scene, options));
   }
   const id = kebabCase(name);
   if (!id) {
@@ -6846,15 +6847,15 @@ function assertPortableId(id, kind) {
     throw new Error(`Cannot use ${kind} id ${id}: Windows reserves the file name ${file}. Choose a longer name, such as "${id} ${kind}"`);
   }
 }
-function requireKebabId(id, label2) {
+function requireKebabId(id, label) {
   if (!isKebabId2(id)) {
-    throw new Error(`${label2} must be a kebab-case id, got "${id}"`);
+    throw new Error(`${label} must be a kebab-case id, got "${id}"`);
   }
 }
-function requirePositiveInteger(value, label2) {
+function requirePositiveInteger(value, label) {
   const number = Number(value);
   if (!Number.isInteger(number) || number <= 0) {
-    throw new Error(`${label2} must be a positive integer, got ${value}`);
+    throw new Error(`${label} must be a positive integer, got ${value}`);
   }
   return number;
 }
@@ -7539,16 +7540,16 @@ function applyEntityBacklinks(root, kind, id, data) {
     }
   }
   if (kind === "scene" && isKebabId2(data.chapter)) {
-    const chapterFile2 = path4.join("chapters", `${data.chapter}.md`);
-    const exists = (dir, id2) => fs3.existsSync(path4.join(root, dir, `${id2}.md`));
+    const chapterFile = path4.join("chapters", `${data.chapter}.md`);
+    const exists = (dir, id) => fs3.existsSync(path4.join(root, dir, `${id}.md`));
     if (isKebabId2(data.location) && exists(path4.join("worldbuilding", "locations"), data.location)) {
-      addFrontmatterListValue(root, chapterFile2, "locations", data.location);
+      addFrontmatterListValue(root, chapterFile, "locations", data.location);
     }
-    const chapterPath = path4.join(root, chapterFile2);
+    const chapterPath = path4.join(root, chapterFile);
     const mentions = fs3.existsSync(chapterPath) ? asArray(readMarkdown(chapterPath, root).data.mentions) : [];
     for (const characterId of asArray(data.characters)) {
       if (isKebabId2(characterId) && exists("characters", characterId) && !mentions.includes(characterId)) {
-        addFrontmatterListValue(root, chapterFile2, "characters", characterId);
+        addFrontmatterListValue(root, chapterFile, "characters", characterId);
       }
     }
   }
@@ -7596,8 +7597,8 @@ function markdownFiles(root, depth = 0, collected = null) {
   }
   return files;
 }
-function manuscriptParts(project, action2 = "build") {
-  assertProjectParses(project, action2);
+function manuscriptParts(project, action = "build") {
+  assertProjectParses(project, action);
   if (project.chapters.length === 0) {
     throw new Error("No chapters found to export");
   }
@@ -7710,7 +7711,7 @@ function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
   const spine = documents.map((doc) => `<itemref idref="${doc.id}"/>`);
   const modified = epubModifiedTimestamp();
   writeZip(outFile, [
-    { name: "mimetype", content: "application/epub+zip" },
+    { name: "mimetype", content: "application/epub+zip", stored: true },
     { name: "META-INF/container.xml", content: `<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>` },
     { name: "OEBPS/content.opf", content: `<?xml version="1.0" encoding="UTF-8"?><package version="3.0" unique-identifier="book-id" xmlns="http://www.idpf.org/2007/opf"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book-id">${identifier}</dc:identifier><dc:title>${xmlEscape(manuscript.title)}</dc:title>${creator}<dc:language>${lang}</dc:language>${optional}<meta property="dcterms:modified">${modified}</meta>${accessibility}${coverMeta.join("")}</metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>${coverItems.join("")}${items.join("")}</manifest><spine>${coverSpine.join("")}${spine.join("")}</spine></package>` },
     { name: "OEBPS/nav.xhtml", content: navXhtml(manuscript.title, documents, lang) },
@@ -7990,8 +7991,8 @@ function canPairEmphasis(opener, closer) {
   const ruleOfThree = both && (opener.original + closer.original) % 3 === 0 && !(opener.original % 3 === 0 && closer.original % 3 === 0);
   return opener.delimiter === closer.delimiter && !ruleOfThree;
 }
-function runMarkup(run, escape2) {
-  let markup = escape2(run.text);
+function runMarkup(run, escape) {
+  let markup = escape(run.text);
   if (run.em) {
     markup = `<em>${markup}</em>`;
   }
@@ -8013,6 +8014,10 @@ function markdownParagraphs(markdown) {
   return paragraphs;
 }
 var ZIP_DOS_DATE = 0 << 9 | 1 << 5 | 1;
+var ZIP_UTF8_NAME_FLAG = 2048;
+var ZIP_STORED = 0;
+var ZIP_DEFLATED = 8;
+var ZIP_DEFLATE_LEVEL = 9;
 function writeZip(outFile, entries, writeOptions = {}) {
   const localParts = [];
   const centralParts = [];
@@ -8021,29 +8026,33 @@ function writeZip(outFile, entries, writeOptions = {}) {
     const name = Buffer.from(entry.name, "utf8");
     const content = Buffer.isBuffer(entry.content) ? entry.content : Buffer.from(entry.content, "utf8");
     const crc = crc32(content);
+    const deflated = entry.stored ? null : deflateRawSync(content, { level: ZIP_DEFLATE_LEVEL });
+    const compressed = deflated !== null && deflated.length < content.length;
+    const body = compressed ? deflated : content;
+    const method = compressed ? ZIP_DEFLATED : ZIP_STORED;
     const localHeader = Buffer.alloc(30);
     localHeader.writeUInt32LE(67324752, 0);
     localHeader.writeUInt16LE(20, 4);
-    localHeader.writeUInt16LE(0, 6);
-    localHeader.writeUInt16LE(0, 8);
+    localHeader.writeUInt16LE(ZIP_UTF8_NAME_FLAG, 6);
+    localHeader.writeUInt16LE(method, 8);
     localHeader.writeUInt16LE(0, 10);
     localHeader.writeUInt16LE(ZIP_DOS_DATE, 12);
     localHeader.writeUInt32LE(crc, 14);
-    localHeader.writeUInt32LE(content.length, 18);
+    localHeader.writeUInt32LE(body.length, 18);
     localHeader.writeUInt32LE(content.length, 22);
     localHeader.writeUInt16LE(name.length, 26);
     localHeader.writeUInt16LE(0, 28);
-    localParts.push(localHeader, name, content);
+    localParts.push(localHeader, name, body);
     const centralHeader = Buffer.alloc(46);
     centralHeader.writeUInt32LE(33639248, 0);
     centralHeader.writeUInt16LE(20, 4);
     centralHeader.writeUInt16LE(20, 6);
-    centralHeader.writeUInt16LE(0, 8);
-    centralHeader.writeUInt16LE(0, 10);
+    centralHeader.writeUInt16LE(ZIP_UTF8_NAME_FLAG, 8);
+    centralHeader.writeUInt16LE(method, 10);
     centralHeader.writeUInt16LE(0, 12);
     centralHeader.writeUInt16LE(ZIP_DOS_DATE, 14);
     centralHeader.writeUInt32LE(crc, 16);
-    centralHeader.writeUInt32LE(content.length, 20);
+    centralHeader.writeUInt32LE(body.length, 20);
     centralHeader.writeUInt32LE(content.length, 24);
     centralHeader.writeUInt16LE(name.length, 28);
     centralHeader.writeUInt16LE(0, 30);
@@ -8053,7 +8062,7 @@ function writeZip(outFile, entries, writeOptions = {}) {
     centralHeader.writeUInt32LE(0, 38);
     centralHeader.writeUInt32LE(offset, 42);
     centralParts.push(centralHeader, name);
-    offset += localHeader.length + name.length + content.length;
+    offset += localHeader.length + name.length + body.length;
   }
   let centralSize = 0;
   for (const part of centralParts) {
@@ -8111,13 +8120,13 @@ function readEntityFiles(root, relativeDir, mapEntity, scanErrors) {
   }
   for (const file of files) {
     const fullPath = path4.join(directory, file);
-    const label2 = path4.join(relativeDir, file);
+    const label = path4.join(relativeDir, file);
     try {
       const markdown = readMarkdown(fullPath, root);
       entities.push(mapEntity(path4.basename(file, ".md"), fullPath, markdown.data, markdown));
     } catch (error) {
       const message = error.message.startsWith(`${fullPath} `) ? error.message.slice(fullPath.length + 1) : error.message;
-      scanErrors.push(`${label2}: ${message}`);
+      scanErrors.push(`${label}: ${message}`);
     }
   }
   return entities;
@@ -8231,11 +8240,11 @@ function safeRead(filePath, root) {
   }
   return readTextFile(filePath);
 }
-function readValidationData(file, root, label2, errors) {
+function readValidationData(file, root, label, errors) {
   try {
     return readMarkdown(file, root).data;
   } catch (error) {
-    const message = `${label2}: ${error.message}`;
+    const message = `${label}: ${error.message}`;
     if (!errors.includes(message)) {
       errors.push(message);
     }
@@ -8296,17 +8305,17 @@ function collectStrayFileWarnings(project, warnings) {
     warnings.push(`${nestedPath} is nested inside an entity directory and is ignored`);
   }
 }
-function checkIdReference(errors, label2, value, kind, exists) {
+function checkIdReference(errors, label, value, kind, exists) {
   const text = String(value ?? "");
   if (text === "") {
     return;
   }
   if (text !== kebabCase(text)) {
-    errors.push(`${label2} references ${kind} ${text} which must be kebab-case`);
+    errors.push(`${label} references ${kind} ${text} which must be kebab-case`);
     return;
   }
   if (!exists(text)) {
-    errors.push(`${label2} references missing ${kind} ${text}`);
+    errors.push(`${label} references missing ${kind} ${text}`);
   }
 }
 function extractChapterIdTokens(body) {
@@ -8450,9 +8459,9 @@ function assertLexicallyInsideRoot(filePath, root) {
     throw new Error(`Refusing to access path outside project root: ${target}`);
   }
 }
-function rejectSymlinkTarget(filePath, action2) {
+function rejectSymlinkTarget(filePath, action) {
   if (lstatIfExists(filePath)?.isSymbolicLink()) {
-    throw new Error(`Refusing to ${action2} through symlink: ${filePath}`);
+    throw new Error(`Refusing to ${action} through symlink: ${filePath}`);
   }
 }
 function lstatIfExists(filePath) {
@@ -8576,216 +8585,216 @@ function validateFormRange(project, warnings) {
 }
 function validateIndexFrontmatter(project, errors) {
   for (const [relativePath, expectedType] of INDEX_SCHEMAS) {
-    const label2 = relativePath;
+    const label = relativePath;
     if (!fs3.existsSync(path4.join(project.root, relativePath))) {
       continue;
     }
-    const data = readValidationData(path4.join(project.root, relativePath), project.root, label2, errors);
+    const data = readValidationData(path4.join(project.root, relativePath), project.root, label, errors);
     if (!data) {
       continue;
     }
-    requireFields(data, ["type", "story"], label2, errors);
-    requireScalar(data, "type", label2, errors);
-    requireScalar(data, "story", label2, errors);
+    requireFields(data, ["type", "story"], label, errors);
+    requireScalar(data, "type", label, errors);
+    requireScalar(data, "story", label, errors);
     if (data.type !== undefined && data.type !== expectedType) {
-      errors.push(`${label2} type must be ${expectedType}`);
+      errors.push(`${label} type must be ${expectedType}`);
     }
     if (data.story !== undefined && data.story !== project.storyId && !storyIdIsFallback(project)) {
-      errors.push(`${label2} story must be ${project.storyId}`);
+      errors.push(`${label} story must be ${project.storyId}`);
     }
     if (relativePath === path4.join("plot", "_index.md")) {
-      requireFields(data, ["structure"], label2, errors);
-      requireScalar(data, "structure", label2, errors);
+      requireFields(data, ["structure"], label, errors);
+      requireScalar(data, "structure", label, errors);
     }
   }
 }
 function validateCharacters(project, errors) {
   for (const character of project.characters) {
-    const label2 = relative2(project, character.file);
-    const data = readValidationData(character.file, project.root, label2, errors);
+    const label = relative2(project, character.file);
+    const data = readValidationData(character.file, project.root, label, errors);
     if (!data) {
       continue;
     }
-    validateEntityId(character.id, label2, errors);
-    requireFields(data, ["name", "role", "status"], label2, errors);
-    requireScalar(data, "name", label2, errors);
-    requireScalar(data, "role", label2, errors);
-    requireScalar(data, "status", label2, errors);
-    validateEnum(data, "role", CHARACTER_ROLES, label2, errors);
-    validateEnum(data, "status", CHARACTER_STATUSES, label2, errors);
+    validateEntityId(character.id, label, errors);
+    requireFields(data, ["name", "role", "status"], label, errors);
+    requireScalar(data, "name", label, errors);
+    requireScalar(data, "role", label, errors);
+    requireScalar(data, "status", label, errors);
+    validateEnum(data, "role", CHARACTER_ROLES, label, errors);
+    validateEnum(data, "status", CHARACTER_STATUSES, label, errors);
     if (data["died-in"] !== undefined) {
-      requireScalar(data, "died-in", label2, errors);
+      requireScalar(data, "died-in", label, errors);
     }
     if (data.arc !== undefined) {
-      requireScalar(data, "arc", label2, errors);
+      requireScalar(data, "arc", label, errors);
     }
-    validateStringArray(data, "aliases", label2, errors);
-    validateStringArray(data, "locations", label2, errors);
-    validateStringArray(data, "tags", label2, errors);
-    validateStringArray(data, "voice-words", label2, errors);
-    validateStringArray(data, "voice-avoid", label2, errors);
-    validateRelationships(data, label2, errors);
+    validateStringArray(data, "aliases", label, errors);
+    validateStringArray(data, "locations", label, errors);
+    validateStringArray(data, "tags", label, errors);
+    validateStringArray(data, "voice-words", label, errors);
+    validateStringArray(data, "voice-avoid", label, errors);
+    validateRelationships(data, label, errors);
   }
 }
 function validateLocations(project, errors) {
   for (const location of project.locations) {
-    const label2 = relative2(project, location.file);
-    const data = readValidationData(location.file, project.root, label2, errors);
+    const label = relative2(project, location.file);
+    const data = readValidationData(location.file, project.root, label, errors);
     if (!data) {
       continue;
     }
-    validateEntityId(location.id, label2, errors);
-    requireFields(data, ["name", "type"], label2, errors);
-    requireScalar(data, "name", label2, errors);
-    requireScalar(data, "type", label2, errors);
-    validateStringArray(data, "notable-characters", label2, errors);
-    validateStringArray(data, "tags", label2, errors);
-    validateObjectArray(data, "routes", label2, errors);
+    validateEntityId(location.id, label, errors);
+    requireFields(data, ["name", "type"], label, errors);
+    requireScalar(data, "name", label, errors);
+    requireScalar(data, "type", label, errors);
+    validateStringArray(data, "notable-characters", label, errors);
+    validateStringArray(data, "tags", label, errors);
+    validateObjectArray(data, "routes", label, errors);
     for (const route of Array.isArray(data.routes) ? data.routes : []) {
       if (!route || typeof route !== "object" || Array.isArray(route)) {
         continue;
       }
       if (typeof route.to !== "string" || route.to === "") {
-        errors.push(`${label2} route is missing to`);
+        errors.push(`${label} route is missing to`);
       }
       if (typeof route.hours !== "number" || !Number.isFinite(route.hours) || route.hours <= 0) {
-        errors.push(`${label2} route to ${route.to ?? "?"} hours must be a positive number`);
+        errors.push(`${label} route to ${route.to ?? "?"} hours must be a positive number`);
       }
-      requireScalar(route, "mode", `${label2} route to ${route.to ?? "?"}`, errors);
+      requireScalar(route, "mode", `${label} route to ${route.to ?? "?"}`, errors);
     }
   }
 }
 function validateSystems(project, errors) {
   for (const system of project.systems) {
-    const label2 = relative2(project, system.file);
-    const data = readValidationData(system.file, project.root, label2, errors);
+    const label = relative2(project, system.file);
+    const data = readValidationData(system.file, project.root, label, errors);
     if (!data) {
       continue;
     }
-    validateEntityId(system.id, label2, errors);
-    requireFields(data, ["name", "type"], label2, errors);
-    requireScalar(data, "name", label2, errors);
-    requireScalar(data, "type", label2, errors);
+    validateEntityId(system.id, label, errors);
+    requireFields(data, ["name", "type"], label, errors);
+    requireScalar(data, "name", label, errors);
+    requireScalar(data, "type", label, errors);
     if (data.prevalence !== undefined) {
-      requireScalar(data, "prevalence", label2, errors);
+      requireScalar(data, "prevalence", label, errors);
     }
   }
 }
 function validateFactions(project, errors) {
   for (const faction of project.factions) {
-    const label2 = relative2(project, faction.file);
-    const data = readValidationData(faction.file, project.root, label2, errors);
+    const label = relative2(project, faction.file);
+    const data = readValidationData(faction.file, project.root, label, errors);
     if (!data) {
       continue;
     }
-    validateEntityId(faction.id, label2, errors);
-    requireFields(data, ["name", "type", "status"], label2, errors);
-    requireScalar(data, "name", label2, errors);
-    requireScalar(data, "type", label2, errors);
-    requireScalar(data, "status", label2, errors);
-    validateEnum(data, "type", FACTION_TYPES, label2, errors);
-    validateEnum(data, "status", FACTION_STATUSES, label2, errors);
-    validateStringArray(data, "members", label2, errors);
-    validateStringArray(data, "locations", label2, errors);
-    validateStringArray(data, "tags", label2, errors);
+    validateEntityId(faction.id, label, errors);
+    requireFields(data, ["name", "type", "status"], label, errors);
+    requireScalar(data, "name", label, errors);
+    requireScalar(data, "type", label, errors);
+    requireScalar(data, "status", label, errors);
+    validateEnum(data, "type", FACTION_TYPES, label, errors);
+    validateEnum(data, "status", FACTION_STATUSES, label, errors);
+    validateStringArray(data, "members", label, errors);
+    validateStringArray(data, "locations", label, errors);
+    validateStringArray(data, "tags", label, errors);
   }
 }
 function validateArtifacts(project, errors) {
   for (const artifact of project.artifacts) {
-    const label2 = relative2(project, artifact.file);
-    const data = readValidationData(artifact.file, project.root, label2, errors);
+    const label = relative2(project, artifact.file);
+    const data = readValidationData(artifact.file, project.root, label, errors);
     if (!data) {
       continue;
     }
-    validateEntityId(artifact.id, label2, errors);
-    requireFields(data, ["name", "type", "status"], label2, errors);
-    requireScalar(data, "name", label2, errors);
-    requireScalar(data, "type", label2, errors);
-    requireScalar(data, "status", label2, errors);
-    requireScalar(data, "owner", label2, errors);
-    requireScalar(data, "location", label2, errors);
-    validateEnum(data, "type", ARTIFACT_TYPES, label2, errors);
-    validateEnum(data, "status", ARTIFACT_STATUSES, label2, errors);
-    validateStringArray(data, "tags", label2, errors);
+    validateEntityId(artifact.id, label, errors);
+    requireFields(data, ["name", "type", "status"], label, errors);
+    requireScalar(data, "name", label, errors);
+    requireScalar(data, "type", label, errors);
+    requireScalar(data, "status", label, errors);
+    requireScalar(data, "owner", label, errors);
+    requireScalar(data, "location", label, errors);
+    validateEnum(data, "type", ARTIFACT_TYPES, label, errors);
+    validateEnum(data, "status", ARTIFACT_STATUSES, label, errors);
+    validateStringArray(data, "tags", label, errors);
   }
 }
 function validateArcs(project, errors) {
   for (const arc of project.arcs) {
-    const label2 = relative2(project, arc.file);
-    const data = readValidationData(arc.file, project.root, label2, errors);
+    const label = relative2(project, arc.file);
+    const data = readValidationData(arc.file, project.root, label, errors);
     if (!data) {
       continue;
     }
-    validateEntityId(arc.id, label2, errors);
-    requireFields(data, ["name", "type", "status"], label2, errors);
-    requireScalar(data, "name", label2, errors);
-    requireScalar(data, "type", label2, errors);
-    requireScalar(data, "status", label2, errors);
-    validateEnum(data, "type", ARC_TYPES, label2, errors);
-    validateEnum(data, "status", ARC_STATUSES, label2, errors);
-    validateStringArray(data, "characters", label2, errors);
-    validateStringArray(data, "themes", label2, errors);
-    validateStringArray(data, "acts", label2, errors);
+    validateEntityId(arc.id, label, errors);
+    requireFields(data, ["name", "type", "status"], label, errors);
+    requireScalar(data, "name", label, errors);
+    requireScalar(data, "type", label, errors);
+    requireScalar(data, "status", label, errors);
+    validateEnum(data, "type", ARC_TYPES, label, errors);
+    validateEnum(data, "status", ARC_STATUSES, label, errors);
+    validateStringArray(data, "characters", label, errors);
+    validateStringArray(data, "themes", label, errors);
+    validateStringArray(data, "acts", label, errors);
   }
 }
 function validateChapters(project, errors) {
   const seenNumbers = new Map;
   for (const chapter of project.chapters) {
-    const label2 = relative2(project, chapter.file);
-    const data = readValidationData(chapter.file, project.root, label2, errors);
+    const label = relative2(project, chapter.file);
+    const data = readValidationData(chapter.file, project.root, label, errors);
     if (!data) {
       continue;
     }
     const filenameNumber = chapterNumberFromFile(chapter.file);
-    validateEntityId(chapter.id, label2, errors);
-    requireFields(data, ["title", "number", "status"], label2, errors);
-    requireScalar(data, "title", label2, errors);
-    requireScalar(data, "status", label2, errors);
-    requireInteger(data, "number", label2, errors);
-    validateEnum(data, "status", CHAPTER_STATUSES, label2, errors);
-    validateStringArray(data, "locations", label2, errors);
-    validateStringArray(data, "characters", label2, errors);
-    validateStringArray(data, "mentions", label2, errors);
-    validateStringArray(data, "arcs-advanced", label2, errors);
+    validateEntityId(chapter.id, label, errors);
+    requireFields(data, ["title", "number", "status"], label, errors);
+    requireScalar(data, "title", label, errors);
+    requireScalar(data, "status", label, errors);
+    requireInteger(data, "number", label, errors);
+    validateEnum(data, "status", CHAPTER_STATUSES, label, errors);
+    validateStringArray(data, "locations", label, errors);
+    validateStringArray(data, "characters", label, errors);
+    validateStringArray(data, "mentions", label, errors);
+    validateStringArray(data, "arcs-advanced", label, errors);
     if (data.pov !== undefined) {
-      requireScalar(data, "pov", label2, errors);
+      requireScalar(data, "pov", label, errors);
     }
     if (data["word-count"] !== undefined) {
-      requireInteger(data, "word-count", label2, errors, 0);
+      requireInteger(data, "word-count", label, errors, 0);
     }
     if (data["target-words"] !== undefined) {
-      requireInteger(data, "target-words", label2, errors, 1);
+      requireInteger(data, "target-words", label, errors, 1);
     }
     if (data.date !== undefined) {
-      requireScalar(data, "date", label2, errors);
+      requireScalar(data, "date", label, errors);
     }
     if (data.time !== undefined) {
-      requireScalar(data, "time", label2, errors);
+      requireScalar(data, "time", label, errors);
     }
     if (data.mode !== undefined) {
-      requireScalar(data, "mode", label2, errors);
+      requireScalar(data, "mode", label, errors);
     }
     if (data["episode-question"] !== undefined) {
-      requireScalar(data, "episode-question", label2, errors);
+      requireScalar(data, "episode-question", label, errors);
     }
     if (data["time-skip"] !== undefined) {
-      requireScalar(data, "time-skip", label2, errors);
+      requireScalar(data, "time-skip", label, errors);
     }
-    validateEnum(data, "hook", CHAPTER_HOOKS, label2, errors);
+    validateEnum(data, "hook", CHAPTER_HOOKS, label, errors);
     if (filenameNumber === 0) {
-      errors.push(`${label2} filename must match chapter-{NN}.md`);
+      errors.push(`${label} filename must match chapter-{NN}.md`);
     } else if (Number.isInteger(data.number) && data.number !== filenameNumber) {
-      errors.push(`${label2} number must match filename chapter number ${filenameNumber}`);
+      errors.push(`${label} number must match filename chapter number ${filenameNumber}`);
     }
     if (Number.isInteger(data.number)) {
       if (data.number <= 0) {
-        errors.push(`${label2} number must be greater than 0`);
+        errors.push(`${label} number must be greater than 0`);
       }
       const existing = seenNumbers.get(data.number);
       if (existing) {
-        errors.push(`${label2} duplicates chapter number ${data.number} from ${existing}`);
+        errors.push(`${label} duplicates chapter number ${data.number} from ${existing}`);
       } else {
-        seenNumbers.set(data.number, label2);
+        seenNumbers.set(data.number, label);
       }
     }
   }
@@ -8793,148 +8802,148 @@ function validateChapters(project, errors) {
 function validateScenes(project, errors) {
   const seenKeys = new Map;
   for (const scene of project.scenes) {
-    const label2 = relative2(project, scene.file);
-    const data = readValidationData(scene.file, project.root, label2, errors);
+    const label = relative2(project, scene.file);
+    const data = readValidationData(scene.file, project.root, label, errors);
     if (!data) {
       continue;
     }
-    validateEntityId(scene.id, label2, errors);
-    requireFields(data, ["title", "chapter", "scene", "status"], label2, errors);
-    requireScalar(data, "title", label2, errors);
-    requireScalar(data, "chapter", label2, errors);
-    requireScalar(data, "status", label2, errors);
-    requireInteger(data, "scene", label2, errors);
-    validateEnum(data, "status", SCENE_STATUSES, label2, errors);
-    validateStringArray(data, "characters", label2, errors);
-    validateStringArray(data, "mentions", label2, errors);
-    validateStringArray(data, "arcs-advanced", label2, errors);
-    validateObjectArray(data, "state-changes", label2, errors);
+    validateEntityId(scene.id, label, errors);
+    requireFields(data, ["title", "chapter", "scene", "status"], label, errors);
+    requireScalar(data, "title", label, errors);
+    requireScalar(data, "chapter", label, errors);
+    requireScalar(data, "status", label, errors);
+    requireInteger(data, "scene", label, errors);
+    validateEnum(data, "status", SCENE_STATUSES, label, errors);
+    validateStringArray(data, "characters", label, errors);
+    validateStringArray(data, "mentions", label, errors);
+    validateStringArray(data, "arcs-advanced", label, errors);
+    validateObjectArray(data, "state-changes", label, errors);
     if (data.pov !== undefined) {
-      requireScalar(data, "pov", label2, errors);
+      requireScalar(data, "pov", label, errors);
     }
     if (data.location !== undefined) {
-      requireScalar(data, "location", label2, errors);
+      requireScalar(data, "location", label, errors);
     }
     if (data.date !== undefined) {
-      requireScalar(data, "date", label2, errors);
+      requireScalar(data, "date", label, errors);
     }
     if (data.time !== undefined) {
-      requireScalar(data, "time", label2, errors);
+      requireScalar(data, "time", label, errors);
     }
     if (data.dilemma !== undefined) {
-      requireScalar(data, "dilemma", label2, errors);
+      requireScalar(data, "dilemma", label, errors);
     }
     if (data["travel-hours"] !== undefined && typeof data["travel-hours"] !== "number") {
-      errors.push(`${label2} frontmatter field travel-hours must be a number`);
+      errors.push(`${label} frontmatter field travel-hours must be a number`);
     }
     if (data.sequel !== undefined && typeof data.sequel !== "boolean") {
-      errors.push(`${label2} frontmatter field sequel must be a boolean`);
+      errors.push(`${label} frontmatter field sequel must be a boolean`);
     }
-    validateEnum(data, "outcome", SCENE_OUTCOMES, label2, errors);
+    validateEnum(data, "outcome", SCENE_OUTCOMES, label, errors);
     if (data["flashback-to"] !== undefined) {
-      requireScalar(data, "flashback-to", label2, errors);
+      requireScalar(data, "flashback-to", label, errors);
     }
     if (Number.isInteger(data.scene) && data.scene <= 0) {
-      errors.push(`${label2} scene must be greater than 0`);
+      errors.push(`${label} scene must be greater than 0`);
     }
     const filenameMatch = SCENE_FILENAME_PATTERN.exec(path4.basename(scene.file));
     if (!filenameMatch) {
-      errors.push(`${label2} filename must match {chapter}-scene-{NN}.md`);
+      errors.push(`${label} filename must match {chapter}-scene-{NN}.md`);
     } else {
       const [, filenameChapter, filenameSceneText] = filenameMatch;
       const filenameScene = Number.parseInt(filenameSceneText, 10);
       if (typeof data.chapter === "string" && data.chapter !== "" && data.chapter !== filenameChapter) {
-        errors.push(`${label2} chapter must match filename chapter ${filenameChapter}`);
+        errors.push(`${label} chapter must match filename chapter ${filenameChapter}`);
       }
       if (Number.isInteger(data.scene) && data.scene !== filenameScene) {
-        errors.push(`${label2} scene must match filename scene number ${filenameScene}`);
+        errors.push(`${label} scene must match filename scene number ${filenameScene}`);
       }
     }
     if (typeof data.chapter === "string" && data.chapter !== "" && Number.isInteger(data.scene)) {
       const key = `${data.chapter}::${data.scene}`;
       const existing = seenKeys.get(key);
       if (existing) {
-        errors.push(`${label2} duplicates scene ${data.scene} of ${data.chapter} from ${existing}`);
+        errors.push(`${label} duplicates scene ${data.scene} of ${data.chapter} from ${existing}`);
       } else {
-        seenKeys.set(key, label2);
+        seenKeys.set(key, label);
       }
     }
   }
 }
 function validateContinuityState(project, errors) {
-  const label2 = path4.join("continuity", "state.md");
+  const label = path4.join("continuity", "state.md");
   if (!project.continuity) {
     return;
   }
   const data = project.continuity.data;
-  requireFields(data, ["type", "story", "current-chapter"], label2, errors);
-  requireScalar(data, "type", label2, errors);
-  requireScalar(data, "story", label2, errors);
-  requireInteger(data, "current-chapter", label2, errors, 0);
-  validateObjectArray(data, "character-state", label2, errors);
-  validateObjectArray(data, "object-state", label2, errors);
-  validateObjectArray(data, "knowledge-state", label2, errors);
+  requireFields(data, ["type", "story", "current-chapter"], label, errors);
+  requireScalar(data, "type", label, errors);
+  requireScalar(data, "story", label, errors);
+  requireInteger(data, "current-chapter", label, errors, 0);
+  validateObjectArray(data, "character-state", label, errors);
+  validateObjectArray(data, "object-state", label, errors);
+  validateObjectArray(data, "knowledge-state", label, errors);
   if (data.type !== undefined && data.type !== "continuity-state") {
-    errors.push(`${label2} type must be continuity-state`);
+    errors.push(`${label} type must be continuity-state`);
   }
   if (data.story !== undefined && data.story !== project.storyId && !storyIdIsFallback(project)) {
-    errors.push(`${label2} story must be ${project.storyId}`);
+    errors.push(`${label} story must be ${project.storyId}`);
   }
 }
 function validateQuestions(project, errors) {
   for (const question of project.questions) {
-    const label2 = relative2(project, question.file);
-    const data = readValidationData(question.file, project.root, label2, errors);
+    const label = relative2(project, question.file);
+    const data = readValidationData(question.file, project.root, label, errors);
     if (!data) {
       continue;
     }
-    validateEntityId(question.id, label2, errors);
-    requireFields(data, ["title", "status"], label2, errors);
-    requireScalar(data, "title", label2, errors);
-    requireScalar(data, "status", label2, errors);
-    requireScalar(data, "introduced", label2, errors);
-    requireScalar(data, "resolved", label2, errors);
-    validateEnum(data, "status", QUESTION_STATUSES, label2, errors);
-    validateStringArray(data, "characters", label2, errors);
+    validateEntityId(question.id, label, errors);
+    requireFields(data, ["title", "status"], label, errors);
+    requireScalar(data, "title", label, errors);
+    requireScalar(data, "status", label, errors);
+    requireScalar(data, "introduced", label, errors);
+    requireScalar(data, "resolved", label, errors);
+    validateEnum(data, "status", QUESTION_STATUSES, label, errors);
+    validateStringArray(data, "characters", label, errors);
   }
 }
 function validatePromises(project, errors) {
   for (const promise of project.promises) {
-    const label2 = relative2(project, promise.file);
-    const data = readValidationData(promise.file, project.root, label2, errors);
+    const label = relative2(project, promise.file);
+    const data = readValidationData(promise.file, project.root, label, errors);
     if (!data) {
       continue;
     }
-    validateEntityId(promise.id, label2, errors);
-    requireFields(data, ["title", "status"], label2, errors);
-    requireScalar(data, "title", label2, errors);
-    requireScalar(data, "status", label2, errors);
-    requireScalar(data, "planted", label2, errors);
-    requireScalar(data, "payoff", label2, errors);
-    validateEnum(data, "status", PROMISE_STATUSES, label2, errors);
-    validateStringArray(data, "arcs", label2, errors);
-    validateStringArray(data, "characters", label2, errors);
+    validateEntityId(promise.id, label, errors);
+    requireFields(data, ["title", "status"], label, errors);
+    requireScalar(data, "title", label, errors);
+    requireScalar(data, "status", label, errors);
+    requireScalar(data, "planted", label, errors);
+    requireScalar(data, "payoff", label, errors);
+    validateEnum(data, "status", PROMISE_STATUSES, label, errors);
+    validateStringArray(data, "arcs", label, errors);
+    validateStringArray(data, "characters", label, errors);
   }
 }
 function validateClues(project, errors) {
   for (const clue of project.clues) {
-    const label2 = relative2(project, clue.file);
-    const data = readValidationData(clue.file, project.root, label2, errors);
+    const label = relative2(project, clue.file);
+    const data = readValidationData(clue.file, project.root, label, errors);
     if (!data) {
       continue;
     }
-    validateEntityId(clue.id, label2, errors);
-    requireFields(data, ["title", "status"], label2, errors);
-    requireScalar(data, "title", label2, errors);
-    requireScalar(data, "status", label2, errors);
-    requireScalar(data, "planted", label2, errors);
-    requireScalar(data, "payoff", label2, errors);
-    validateEnum(data, "status", CLUE_STATUSES, label2, errors);
-    validateStringArray(data, "arcs", label2, errors);
-    validateStringArray(data, "characters", label2, errors);
+    validateEntityId(clue.id, label, errors);
+    requireFields(data, ["title", "status"], label, errors);
+    requireScalar(data, "title", label, errors);
+    requireScalar(data, "status", label, errors);
+    requireScalar(data, "planted", label, errors);
+    requireScalar(data, "payoff", label, errors);
+    validateEnum(data, "status", CLUE_STATUSES, label, errors);
+    validateStringArray(data, "arcs", label, errors);
+    validateStringArray(data, "characters", label, errors);
     for (const field of ["significance-delayed", "red-herring"]) {
       if (data[field] !== undefined && typeof data[field] !== "boolean") {
-        errors.push(`${label2} frontmatter field ${field} must be a boolean`);
+        errors.push(`${label} frontmatter field ${field} must be a boolean`);
       }
     }
   }
@@ -8944,25 +8953,25 @@ function validateExemptions(project, errors) {
   if (!fs3.existsSync(exemptionsPath)) {
     return;
   }
-  const label2 = path4.join("continuity", "exemptions.md");
-  const data = readValidationData(exemptionsPath, project.root, label2, errors);
+  const label = path4.join("continuity", "exemptions.md");
+  const data = readValidationData(exemptionsPath, project.root, label, errors);
   if (!data) {
     return;
   }
   if (data.type !== "exemption-log") {
-    errors.push(`${label2} type must be exemption-log`);
+    errors.push(`${label} type must be exemption-log`);
   }
   const entries = data.exemptions;
   if (entries === undefined) {
-    errors.push(`${label2} is missing frontmatter field exemptions`);
+    errors.push(`${label} is missing frontmatter field exemptions`);
     return;
   }
   if (!Array.isArray(entries)) {
-    errors.push(`${label2} frontmatter field exemptions must be a list`);
+    errors.push(`${label} frontmatter field exemptions must be a list`);
     return;
   }
   for (const [index, entry] of entries.entries()) {
-    const entryLabel = `${label2} exemptions[${index}]`;
+    const entryLabel = `${label} exemptions[${index}]`;
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
       errors.push(`${entryLabel} must be a mapping`);
       continue;
@@ -8979,17 +8988,17 @@ function validateExemptions(project, errors) {
 }
 function validateGlossaryTerms(project, errors) {
   for (const term of project.glossaryTerms) {
-    const label2 = relative2(project, term.file);
-    const data = readValidationData(term.file, project.root, label2, errors);
+    const label = relative2(project, term.file);
+    const data = readValidationData(term.file, project.root, label, errors);
     if (!data) {
       continue;
     }
-    validateEntityId(term.id, label2, errors);
-    requireFields(data, ["term", "category"], label2, errors);
-    requireScalar(data, "term", label2, errors);
-    requireScalar(data, "category", label2, errors);
-    validateEnum(data, "category", TERM_CATEGORIES, label2, errors);
-    validateStringArray(data, "aliases", label2, errors);
+    validateEntityId(term.id, label, errors);
+    requireFields(data, ["term", "category"], label, errors);
+    requireScalar(data, "term", label, errors);
+    requireScalar(data, "category", label, errors);
+    validateEnum(data, "category", TERM_CATEGORIES, label, errors);
+    validateStringArray(data, "aliases", label, errors);
   }
 }
 function validateStyleSheet(project, errors) {
@@ -8997,18 +9006,18 @@ function validateStyleSheet(project, errors) {
     return;
   }
   const data = project.styleSheet.data;
-  const label2 = STYLE_SHEET_FILE;
+  const label = STYLE_SHEET_FILE;
   if (data.type !== "style-sheet") {
-    errors.push(`${label2} type must be style-sheet`);
+    errors.push(`${label} type must be style-sheet`);
   }
-  requireScalar(data, "dialect", label2, errors);
-  validateEnum(data, "dialect", STYLE_DIALECTS, label2, errors);
-  validateObjectArray(data, "preferred", label2, errors);
+  requireScalar(data, "dialect", label, errors);
+  validateEnum(data, "dialect", STYLE_DIALECTS, label, errors);
+  validateObjectArray(data, "preferred", label, errors);
   asArray(data.preferred).forEach((entry, index) => {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
       return;
     }
-    const entryLabel = `${label2} preferred[${index}]`;
+    const entryLabel = `${label} preferred[${index}]`;
     for (const field of ["use", "avoid"]) {
       if (typeof entry[field] !== "string" || entry[field].trim() === "") {
         errors.push(`${entryLabel} requires a non-empty ${field}`);
@@ -9018,8 +9027,8 @@ function validateStyleSheet(project, errors) {
       errors.push(`${entryLabel} use and avoid must differ`);
     }
   });
-  validateStringArray(data, "watch-words", label2, errors);
-  validateStringArray(data, "allow-words", label2, errors);
+  validateStringArray(data, "watch-words", label, errors);
+  validateStringArray(data, "allow-words", label, errors);
 }
 function validateProgressLog(project, errors) {
   if (project.progressLog === null) {
@@ -9035,27 +9044,27 @@ function validateProgressLog(project, errors) {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
       return;
     }
-    const label2 = `${PROGRESS_FILE} sessions[${index}]`;
+    const label = `${PROGRESS_FILE} sessions[${index}]`;
     const dateError = storyDateError(entry.date);
     if (entry.date === undefined || dateError !== "") {
-      errors.push(`${label2} ${dateError || "requires a date"}`);
+      errors.push(`${label} ${dateError || "requires a date"}`);
     } else if (seen.has(String(entry.date))) {
-      errors.push(`${label2} repeats date ${entry.date}`);
+      errors.push(`${label} repeats date ${entry.date}`);
     } else {
       seen.add(String(entry.date));
     }
     if (!Number.isInteger(entry.words) || entry.words < 0) {
-      errors.push(`${label2} words must be a non-negative integer`);
+      errors.push(`${label} words must be a non-negative integer`);
     }
   });
 }
 function validateOptionalRegistry(project, directory, expectedType, errors) {
   const indexPath = path4.join(project.root, directory, "_index.md");
   if (fs3.existsSync(indexPath)) {
-    const label2 = path4.join(directory, "_index.md");
-    const data = readValidationData(indexPath, project.root, label2, errors);
+    const label = path4.join(directory, "_index.md");
+    const data = readValidationData(indexPath, project.root, label, errors);
     if (data && data.type !== expectedType) {
-      errors.push(`${label2} type must be ${expectedType}`);
+      errors.push(`${label} type must be ${expectedType}`);
     }
   }
 }
@@ -9063,71 +9072,71 @@ function validateResearch(project, errors, warnings) {
   validateOptionalRegistry(project, RESEARCH_DIR, "research-registry", errors);
   const chapterStatus = new Map(project.chapters.map((chapter) => [chapter.id, chapter.status]));
   for (const note of project.research) {
-    const label2 = relative2(project, note.file);
-    const data = readValidationData(note.file, project.root, label2, errors);
+    const label = relative2(project, note.file);
+    const data = readValidationData(note.file, project.root, label, errors);
     if (!data) {
       continue;
     }
-    validateEntityId(note.id, label2, errors);
-    requireFields(data, ["title", "status"], label2, errors);
-    requireScalar(data, "title", label2, errors);
-    validateEnum(data, "status", RESEARCH_STATUSES, label2, errors);
-    validateStringArray(data, "sources", label2, errors);
-    validateStringArray(data, "used-in", label2, errors);
-    validateEnum(data, "accuracy", RESEARCH_ACCURACY, label2, errors);
-    validateEnum(data, "confidence", RESEARCH_CONFIDENCE, label2, errors);
-    validateEnum(data, "method", RESEARCH_METHODS, label2, errors);
-    validateStringArray(data, "risk", label2, errors);
-    validateStringArray(data, "reviewed-by", label2, errors);
+    validateEntityId(note.id, label, errors);
+    requireFields(data, ["title", "status"], label, errors);
+    requireScalar(data, "title", label, errors);
+    validateEnum(data, "status", RESEARCH_STATUSES, label, errors);
+    validateStringArray(data, "sources", label, errors);
+    validateStringArray(data, "used-in", label, errors);
+    validateEnum(data, "accuracy", RESEARCH_ACCURACY, label, errors);
+    validateEnum(data, "confidence", RESEARCH_CONFIDENCE, label, errors);
+    validateEnum(data, "method", RESEARCH_METHODS, label, errors);
+    validateStringArray(data, "risk", label, errors);
+    validateStringArray(data, "reviewed-by", label, errors);
     for (const risk of Array.isArray(data.risk) ? data.risk : []) {
       if (typeof risk === "string" && !RESEARCH_RISKS.has(risk)) {
-        errors.push(`${label2} risk has unsupported value ${risk}`);
+        errors.push(`${label} risk has unsupported value ${risk}`);
       }
     }
     const invented = note.accuracy === "invented";
     if (!invented && note.status === "verified" && note.sources.length === 0) {
-      warnings.push(`${label2} is verified but lists no sources`);
+      warnings.push(`${label} is verified but lists no sources`);
     }
     const settled = note.usedIn.filter((chapterId) => SETTLED_CHAPTER_STATUSES.has(chapterStatus.get(chapterId)));
     if (!invented && (note.status === "open" || note.status === "disputed")) {
       for (const chapterId of settled) {
-        warnings.push(`${label2} is ${note.status} but ${chapterId} relies on it and is ${chapterStatus.get(chapterId)}`);
+        warnings.push(`${label} is ${note.status} but ${chapterId} relies on it and is ${chapterStatus.get(chapterId)}`);
       }
     }
     if (note.risk.length > 0 && note.reviewedBy.length === 0 && settled.length > 0) {
-      warnings.push(`${label2} carries ${note.risk.join(", ")} risk but has no reviewed-by, and ${settled.join(", ")} relies on it`);
+      warnings.push(`${label} carries ${note.risk.join(", ")} risk but has no reviewed-by, and ${settled.join(", ")} relies on it`);
     }
   }
 }
 function validateMatter(project, errors, warnings) {
   validateOptionalRegistry(project, MATTER_DIR, "matter-registry", errors);
   for (const matter of project.matter) {
-    const label2 = relative2(project, matter.file);
+    const label = relative2(project, matter.file);
     if (matter.empty) {
-      warnings.push(`${label2} has no text and is left out of export and build`);
+      warnings.push(`${label} has no text and is left out of export and build`);
     }
-    const data = readValidationData(matter.file, project.root, label2, errors);
+    const data = readValidationData(matter.file, project.root, label, errors);
     if (!data) {
       continue;
     }
-    validateEntityId(matter.id, label2, errors);
-    requireFields(data, ["title", "placement"], label2, errors);
-    requireScalar(data, "title", label2, errors);
-    validateEnum(data, "placement", MATTER_PLACEMENTS, label2, errors);
+    validateEntityId(matter.id, label, errors);
+    requireFields(data, ["title", "placement"], label, errors);
+    requireScalar(data, "title", label, errors);
+    validateEnum(data, "placement", MATTER_PLACEMENTS, label, errors);
     if (data.order !== undefined) {
-      requireInteger(data, "order", label2, errors, 0);
+      requireInteger(data, "order", label, errors, 0);
     }
     if (data.heading !== undefined && typeof data.heading !== "boolean") {
-      errors.push(`${label2} heading must be true or false`);
+      errors.push(`${label} heading must be true or false`);
     }
-    validateEnum(data, "permission", MATTER_PERMISSIONS, label2, errors);
-    requireScalar(data, "rights-holder", label2, errors);
-    requireScalar(data, "credit", label2, errors);
+    validateEnum(data, "permission", MATTER_PERMISSIONS, label, errors);
+    requireScalar(data, "rights-holder", label, errors);
+    requireScalar(data, "credit", label, errors);
     if (data.permission === "pending" && project.story.data.status === "complete") {
-      warnings.push(`${label2} permission is still pending and the story is complete`);
+      warnings.push(`${label} permission is still pending and the story is complete`);
     }
     if (data.permission === "granted" && (typeof data["rights-holder"] !== "string" || data["rights-holder"].trim() === "")) {
-      warnings.push(`${label2} permission is granted but no rights-holder is recorded`);
+      warnings.push(`${label} permission is granted but no rights-holder is recorded`);
     }
   }
 }
@@ -9163,90 +9172,90 @@ function coverImage(project) {
   assertFileSizeWithinLimit(filePath);
   return { filePath, mediaType, extension: mediaType === "image/jpeg" ? "jpg" : path4.extname(cover).slice(1).toLowerCase() };
 }
-function validateEntityId(id, label2, errors) {
+function validateEntityId(id, label, errors) {
   if (id !== kebabCase(id)) {
-    errors.push(`${label2} filename id must be kebab-case`);
+    errors.push(`${label} filename id must be kebab-case`);
   }
 }
-function requireScalar(data, field, label2, errors) {
+function requireScalar(data, field, label, errors) {
   if (data[field] !== undefined && (Array.isArray(data[field]) || typeof data[field] === "object")) {
-    errors.push(`${label2} frontmatter field ${field} must be a scalar`);
+    errors.push(`${label} frontmatter field ${field} must be a scalar`);
   }
 }
-function requireArray(data, field, label2, errors) {
+function requireArray(data, field, label, errors) {
   if (data[field] !== undefined && !Array.isArray(data[field])) {
-    errors.push(`${label2} frontmatter field ${field} must be a list`);
+    errors.push(`${label} frontmatter field ${field} must be a list`);
   }
 }
-function requireInteger(data, field, label2, errors, minimum) {
+function requireInteger(data, field, label, errors, minimum) {
   if (data[field] === undefined) {
     return;
   }
   if (!Number.isInteger(data[field])) {
-    errors.push(`${label2} frontmatter field ${field} must be an integer`);
+    errors.push(`${label} frontmatter field ${field} must be an integer`);
   } else if (minimum !== undefined && data[field] < minimum) {
-    errors.push(`${label2} frontmatter field ${field} must be at least ${minimum}`);
+    errors.push(`${label} frontmatter field ${field} must be at least ${minimum}`);
   }
 }
-function validateStringArray(data, field, label2, errors) {
+function validateStringArray(data, field, label, errors) {
   if (data[field] === undefined) {
     return;
   }
   if (!Array.isArray(data[field])) {
-    errors.push(`${label2} frontmatter field ${field} must be a list`);
+    errors.push(`${label} frontmatter field ${field} must be a list`);
     return;
   }
   for (const item of data[field]) {
     if (typeof item !== "string" || item.trim() === "") {
-      errors.push(`${label2} frontmatter field ${field} must contain only non-empty strings`);
+      errors.push(`${label} frontmatter field ${field} must contain only non-empty strings`);
     }
   }
 }
-function validateObjectArray(data, field, label2, errors) {
+function validateObjectArray(data, field, label, errors) {
   if (data[field] === undefined) {
     return;
   }
   if (!Array.isArray(data[field])) {
-    errors.push(`${label2} frontmatter field ${field} must be a list`);
+    errors.push(`${label} frontmatter field ${field} must be a list`);
     return;
   }
   for (const item of data[field]) {
     if (!item || typeof item !== "object" || Array.isArray(item)) {
-      errors.push(`${label2} frontmatter field ${field} must contain objects`);
+      errors.push(`${label} frontmatter field ${field} must contain objects`);
     }
   }
 }
-function validateRelationships(data, label2, errors) {
+function validateRelationships(data, label, errors) {
   if (data.relationships === undefined) {
     return;
   }
   if (!Array.isArray(data.relationships)) {
-    errors.push(`${label2} frontmatter field relationships must be a list`);
+    errors.push(`${label} frontmatter field relationships must be a list`);
     return;
   }
   for (const relationship of data.relationships) {
     if (!relationship || typeof relationship !== "object" || Array.isArray(relationship)) {
-      errors.push(`${label2} frontmatter field relationships must contain objects`);
+      errors.push(`${label} frontmatter field relationships must contain objects`);
       continue;
     }
     if (typeof relationship.character !== "string" || relationship.character.trim() === "") {
-      errors.push(`${label2} relationship is missing character`);
+      errors.push(`${label} relationship is missing character`);
     } else if (relationship.character !== kebabCase(relationship.character)) {
-      errors.push(`${label2} relationship character ${relationship.character} must be kebab-case`);
+      errors.push(`${label} relationship character ${relationship.character} must be kebab-case`);
     }
     if (typeof relationship.type !== "string" || relationship.type.trim() === "") {
-      errors.push(`${label2} relationship to ${relationship.character ?? "unknown"} is missing type`);
+      errors.push(`${label} relationship to ${relationship.character ?? "unknown"} is missing type`);
     }
   }
 }
-function validateEnum(data, field, allowed, label2, errors) {
+function validateEnum(data, field, allowed, label, errors) {
   if (Array.isArray(data[field])) {
-    const message = `${label2} frontmatter field ${field} must be a single value, not a list`;
-    if (!errors.includes(`${label2} frontmatter field ${field} must be a scalar`)) {
+    const message = `${label} frontmatter field ${field} must be a single value, not a list`;
+    if (!errors.includes(`${label} frontmatter field ${field} must be a scalar`)) {
       errors.push(message);
     }
   } else if (data[field] !== undefined && !allowed.has(data[field])) {
-    errors.push(`${label2} frontmatter field ${field} has unsupported value ${data[field]}`);
+    errors.push(`${label} frontmatter field ${field} has unsupported value ${data[field]}`);
   }
 }
 function inverseRelationshipTypes(type) {
@@ -9259,10 +9268,10 @@ function formatCheck(result) {
   const status = result.ok ? "ok" : "failed";
   return `${status} (${result.errors.length} errors, ${result.warnings.length} warnings)`;
 }
-function requireFields(data, fields, label2, errors) {
+function requireFields(data, fields, label, errors) {
   for (const field of fields) {
     if (data[field] === undefined || data[field] === "") {
-      errors.push(`${label2} is missing frontmatter field ${field}`);
+      errors.push(`${label} is missing frontmatter field ${field}`);
     }
   }
 }
@@ -9923,9 +9932,9 @@ var COMMANDS = [
     ],
     project: "positional",
     run({ io, root }) {
-      const timeline2 = storyTimeline(root());
-      io.stdout.write(formatTimeline(timeline2, timeline2.totalChapters));
-      return reportResult(io, timeline2, "Timeline built", "Timeline failed");
+      const timeline = storyTimeline(root());
+      io.stdout.write(formatTimeline(timeline, timeline.totalChapters));
+      return reportResult(io, timeline, "Timeline built", "Timeline failed");
     }
   },
   {
@@ -10390,8 +10399,8 @@ function commandUsageError(command, parsed) {
   const maxArgs = command.args ?? (command.project === "positional" ? 1 : 0);
   const extra = parsed.positionals.slice(1 + maxArgs);
   if (extra.length > 0) {
-    const plural3 = extra.length === 1 ? "" : "s";
-    return `Unexpected argument${plural3} for story ${command.usage}: ${extra.join(" ")}`;
+    const plural = extra.length === 1 ? "" : "s";
+    return `Unexpected argument${plural} for story ${command.usage}: ${extra.join(" ")}`;
   }
   const allowed = new Set(command.options ?? []);
   if (command.project !== "none") {
