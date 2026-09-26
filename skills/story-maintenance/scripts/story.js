@@ -629,6 +629,7 @@ import { Buffer } from "node:buffer";
 import { execFileSync } from "node:child_process";
 import fs3 from "node:fs";
 import path4 from "node:path";
+import { deflateRawSync } from "node:zlib";
 
 // src/continuity.js
 import path from "node:path";
@@ -7710,7 +7711,7 @@ function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
   const spine = documents.map((doc) => `<itemref idref="${doc.id}"/>`);
   const modified = epubModifiedTimestamp();
   writeZip(outFile, [
-    { name: "mimetype", content: "application/epub+zip" },
+    { name: "mimetype", content: "application/epub+zip", stored: true },
     { name: "META-INF/container.xml", content: `<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>` },
     { name: "OEBPS/content.opf", content: `<?xml version="1.0" encoding="UTF-8"?><package version="3.0" unique-identifier="book-id" xmlns="http://www.idpf.org/2007/opf"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book-id">${identifier}</dc:identifier><dc:title>${xmlEscape(manuscript.title)}</dc:title>${creator}<dc:language>${lang}</dc:language>${optional}<meta property="dcterms:modified">${modified}</meta>${accessibility}${coverMeta.join("")}</metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>${coverItems.join("")}${items.join("")}</manifest><spine>${coverSpine.join("")}${spine.join("")}</spine></package>` },
     { name: "OEBPS/nav.xhtml", content: navXhtml(manuscript.title, documents, lang) },
@@ -8013,6 +8014,10 @@ function markdownParagraphs(markdown) {
   return paragraphs;
 }
 var ZIP_DOS_DATE = 0 << 9 | 1 << 5 | 1;
+var ZIP_UTF8_NAME_FLAG = 2048;
+var ZIP_STORED = 0;
+var ZIP_DEFLATED = 8;
+var ZIP_DEFLATE_LEVEL = 9;
 function writeZip(outFile, entries, writeOptions = {}) {
   const localParts = [];
   const centralParts = [];
@@ -8021,29 +8026,33 @@ function writeZip(outFile, entries, writeOptions = {}) {
     const name = Buffer.from(entry.name, "utf8");
     const content = Buffer.isBuffer(entry.content) ? entry.content : Buffer.from(entry.content, "utf8");
     const crc = crc32(content);
+    const deflated = entry.stored ? null : deflateRawSync(content, { level: ZIP_DEFLATE_LEVEL });
+    const compressed = deflated !== null && deflated.length < content.length;
+    const body = compressed ? deflated : content;
+    const method = compressed ? ZIP_DEFLATED : ZIP_STORED;
     const localHeader = Buffer.alloc(30);
     localHeader.writeUInt32LE(67324752, 0);
     localHeader.writeUInt16LE(20, 4);
-    localHeader.writeUInt16LE(0, 6);
-    localHeader.writeUInt16LE(0, 8);
+    localHeader.writeUInt16LE(ZIP_UTF8_NAME_FLAG, 6);
+    localHeader.writeUInt16LE(method, 8);
     localHeader.writeUInt16LE(0, 10);
     localHeader.writeUInt16LE(ZIP_DOS_DATE, 12);
     localHeader.writeUInt32LE(crc, 14);
-    localHeader.writeUInt32LE(content.length, 18);
+    localHeader.writeUInt32LE(body.length, 18);
     localHeader.writeUInt32LE(content.length, 22);
     localHeader.writeUInt16LE(name.length, 26);
     localHeader.writeUInt16LE(0, 28);
-    localParts.push(localHeader, name, content);
+    localParts.push(localHeader, name, body);
     const centralHeader = Buffer.alloc(46);
     centralHeader.writeUInt32LE(33639248, 0);
     centralHeader.writeUInt16LE(20, 4);
     centralHeader.writeUInt16LE(20, 6);
-    centralHeader.writeUInt16LE(0, 8);
-    centralHeader.writeUInt16LE(0, 10);
+    centralHeader.writeUInt16LE(ZIP_UTF8_NAME_FLAG, 8);
+    centralHeader.writeUInt16LE(method, 10);
     centralHeader.writeUInt16LE(0, 12);
     centralHeader.writeUInt16LE(ZIP_DOS_DATE, 14);
     centralHeader.writeUInt32LE(crc, 16);
-    centralHeader.writeUInt32LE(content.length, 20);
+    centralHeader.writeUInt32LE(body.length, 20);
     centralHeader.writeUInt32LE(content.length, 24);
     centralHeader.writeUInt16LE(name.length, 28);
     centralHeader.writeUInt16LE(0, 30);
@@ -8053,7 +8062,7 @@ function writeZip(outFile, entries, writeOptions = {}) {
     centralHeader.writeUInt32LE(0, 38);
     centralHeader.writeUInt32LE(offset, 42);
     centralParts.push(centralHeader, name);
-    offset += localHeader.length + name.length + content.length;
+    offset += localHeader.length + name.length + body.length;
   }
   let centralSize = 0;
   for (const part of centralParts) {
