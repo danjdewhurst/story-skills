@@ -159,6 +159,31 @@ describe("release preflight", () => {
   });
 });
 
+// Emptying PATH is what hides bun from the script under test, but it also hides
+// a bare `node`, so the runtime has to be resolved to an absolute path first.
+function resolveOnPath(command) {
+  for (const dir of (process.env.PATH || "").split(path.delimiter)) {
+    const candidate = dir && path.join(dir, command);
+    try {
+      if (candidate && fs.statSync(candidate).isFile()) {
+        fs.accessSync(candidate, fs.constants.X_OK);
+        return candidate;
+      }
+    } catch {
+      // Not this directory; keep looking.
+    }
+  }
+  return null;
+}
+
+// package.json defines check:fallback as `node scripts/check-fallback.js`, so
+// node is the runtime worth measuring; under `bun test` process.execPath is bun,
+// which would miss a node-only regression. Falls back to the current runtime
+// where node is not installed.
+function nodeRuntime() {
+  return resolveOnPath("node") || process.execPath;
+}
+
 describe("missing bun", () => {
   test("reports only a failed spawn of a missing binary", () => {
     expect(missingBunMessage({ code: "ENOENT", syscall: "spawnSync bun" })).toBe(MISSING_BUN_MESSAGE);
@@ -171,16 +196,20 @@ describe("missing bun", () => {
     // AGENTS.md and docs/development.md both send contributors to
     // `bun run check:fallback`, so a contributor without Bun must get the
     // install hint, not a TypeError about the stream chunk spawnSync never wrote.
-    const res = spawnSync(process.execPath, [path.join(repoRoot, "scripts", "check-fallback.js")], {
+    const runtime = nodeRuntime();
+    const res = spawnSync(runtime, [path.join(repoRoot, "scripts", "check-fallback.js")], {
       cwd: repoRoot,
       encoding: "utf8",
       env: { ...process.env, PATH: makeTempDir("story-empty-path-") }
     });
     // The Bun pin check runs first, so a missing Bun gets its install hint.
-    expect(res.status).toBe(1);
-    expect(res.stderr).toContain("`bun --version` did not run here");
-    expect(res.stderr).toContain("https://bun.sh/install");
-    expect(res.stderr).not.toContain("ERR_INVALID_ARG_TYPE");
+    expect(res.status, runtime).toBe(1);
+    expect(res.stderr, runtime).toContain("`bun --version` did not run here");
+    expect(res.stderr, runtime).toContain("https://bun.sh/install");
+    // The crash this replaced raised ERR_INVALID_ARG_TYPE under node and
+    // ERR_STREAM_NULL_VALUES under bun; both print a TypeError, so asserting on
+    // the shared word catches the regression under either runtime.
+    expect(res.stderr, runtime).not.toContain("TypeError");
   });
 });
 
