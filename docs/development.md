@@ -20,9 +20,12 @@ If you want to use Story Skills rather than change it, start with [Getting start
 
 ## Setting up
 
-You need [Bun](https://bun.sh) for development (the repository pins `bun@1.3.14` in `package.json`) and Node 18 or later, because the CLI and the check scripts must run under plain Node. The package has no runtime or development dependencies, so `bun install` has nothing to download; run it anyway so your setup matches CI.
+You need [Bun](https://bun.sh) for development and Node 18 or later, because the CLI and the check scripts must run under plain Node. The package has no runtime or development dependencies, so `bun install` has nothing to download; run it anyway so your setup matches CI.
+
+Install the exact Bun the repository pins. `package.json` sets `packageManager` to `bun@1.3.14`, `.github/workflows/ci.yml` pins `bun-version: 1.3.14`, and a test in `test/check-scripts.test.js` keeps the two in step. The version matters because [`check:fallback`](#the-bundled-fallback) compares the committed bundle byte for byte, and Bun's bundler renames generated identifiers between releases, so on a different Bun that check fails on an untouched checkout.
 
 ```shell
+bun upgrade --to 1.3.14          # or, per shell: mise use bun@1.3.14
 git clone https://github.com/danjdewhurst/story-skills.git
 cd story-skills
 bun install
@@ -44,8 +47,8 @@ All scripts live in `package.json`.
 | `bun run check:metadata` | `scripts/check-metadata.js` | Changes to skills, plugin manifests, templates, or versions |
 | `bun run check:evals` | `scripts/check-evals.js` | Changes to eval fixtures or skill names |
 | `bun run eval:selftest` | `evals/run-evals.js --all evals/examples` | Changes to the eval checker or fixtures |
-| `bun run build:fallback` | `bun build` of `bin/story.js` into the skill folder | After any change to `src/` |
-| `bun run check:fallback` | `scripts/check-fallback.js` | Confirms the committed fallback matches a fresh build |
+| `bun run build:fallback` | `bun build` of `bin/story.js` into the skill folder, gated on the pinned Bun | After any change to `src/` |
+| `bun run check:fallback` | `scripts/check-fallback.js` | Confirms the committed fallback matches a fresh build on the pinned Bun |
 | `bun run check:node-help` | `node skills/story-maintenance/scripts/story.js --help` | Confirms the fallback runs under Node |
 | `bun run release <bump>` | `scripts/release.js` | Cutting a release (maintainers only) |
 
@@ -218,7 +221,7 @@ Add an entry to `OPTIONS` in `src/options.js`, placed where it should appear in 
 bun run build:fallback
 ```
 
-The script runs `bun build ./bin/story.js --target=node --outfile=skills/story-maintenance/scripts/story.js`.
+The script runs `bun build ./bin/story.js --target=node --outfile=skills/story-maintenance/scripts/story.js`, but only on the pinned Bun. On any other version it refuses to write the bundle and tells you why, because rebuilding on a different Bun rewrites the whole file with renamed internal identifiers: that buries your actual `src/` change in unrelated churn and turns CI red, since CI builds on the pinned version.
 
 It exists because many users install only the `skills/` folder: they copy skills into `.claude/skills/` or `.agents/skills/`, or use a skills installer. Those installs have no `src/` and no `story` binary on `PATH`. The skills fall back to `node ../story-maintenance/scripts/story.js`, resolved relative to the skill folder, so the fallback has to be committed, current, and runnable under Node 18. The `package.json` beside it (`{"type":"module"}`) makes Node treat it as an ES module even when the skills sit under a CommonJS `package.json`. It also inlines `src/version.js`, which is why the release script rebuilds it after bumping the version.
 
@@ -230,10 +233,18 @@ Two checks keep it honest:
   Bundled story-maintenance fallback is up to date.
   ```
 
-  If it fails, it prints `Bundled story-maintenance fallback is out of date.` and `Run: bun run build:fallback`.
+  On the pinned Bun, a mismatch means the bundle really is stale: it prints `Bundled story-maintenance fallback is out of date.` and `Run: bun run build:fallback`. On any other Bun it cannot tell a stale bundle from bundler churn, so it reports the version difference instead and asks you to re-run on the pinned Bun rather than sending you to `build:fallback`.
 - `bun run check:node-help` (and the CI Node matrix) runs the fallback under Node to confirm it starts.
 
 Never edit the generated file by hand, and always commit it alongside the `src/` change that produced it.
+
+### Moving the pinned Bun
+
+Because the bundle is only reproducible on the Bun that built it, a Bun upgrade is its own change, never a rider on a feature branch:
+
+1. Update `packageManager` in `package.json` and `bun-version` in `.github/workflows/ci.yml` to the new version.
+2. Install that Bun and rebuild: `bun run build:fallback`. Updating the pin first is what unlocks the build — the gate compares your Bun against `packageManager`, so once they agree it builds normally. (`--allow-bun-mismatch` exists to force a build on an unpinned Bun for local debugging; do not commit its output.)
+3. Commit the rebuilt bundle and the two pins together as a single `chore:` commit, with no other changes in it, then confirm `bun run check:fallback` and `bun run test` pass.
 
 ## Tests
 

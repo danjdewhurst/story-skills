@@ -22,7 +22,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build:fallback": "bun build ./bin/story.js --target=node --outfile=skills/story-maintenance/scripts/story.js",
+    "build:fallback": "node scripts/build-fallback.js",
     "check:metadata": "node scripts/check-metadata.js",
     "check:fallback": "node scripts/check-fallback.js",
     "check:evals": "node scripts/check-evals.js",
