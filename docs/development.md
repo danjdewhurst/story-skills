@@ -20,14 +20,19 @@ If you want to use Story Skills rather than change it, start with [Getting start
 
 ## Setting up
 
-You need [Bun](https://bun.sh) for development (the repository pins `bun@1.3.14` in `package.json`) and Node 18 or later, because the CLI and the check scripts must run under plain Node. The package has no runtime or development dependencies, so `bun install` has nothing to download; run it anyway so your setup matches CI.
+You need [Bun](https://bun.sh) for development and Node 18 or later, because the CLI and the check scripts must run under plain Node. The package has no runtime or development dependencies, so `bun install` has nothing to download; run it anyway so your setup matches CI.
+
+Install the exact Bun the repository pins in `package.json`, currently `bun@1.4.2`:
 
 ```shell
+curl -fsSL https://bun.sh/install | bash -s "bun-v1.4.2"
 git clone https://github.com/danjdewhurst/story-skills.git
 cd story-skills
 bun install
 bun run story -- --help
 ```
+
+The pin is not cosmetic. `skills/story-maintenance/scripts/story.js` is a committed Bun build of the CLI, and `check:fallback` compares it byte for byte against a fresh build. Bun renames generated identifiers between releases, so building that bundle with a different Bun rewrites hundreds of lines that change nothing, and the check fails on an untouched checkout. `build:fallback` and `check:fallback` both stop with an explanation when `bun --version` does not match the pin, and `check:metadata` keeps the pin, `bun-version` in [`ci.yml`](../.github/workflows/ci.yml), and the version named above in step. Moving the project to a newer Bun is those three edits plus `bun run build:fallback` and the regenerated bundle in the same commit.
 
 `bun run story -- <args>` runs the CLI straight from `src/`. Everything after `--` is passed to `story`, so `bun run story -- validate examples/the-last-ember` validates an example project.
 
@@ -44,8 +49,8 @@ All scripts live in `package.json`.
 | `bun run check:metadata` | `scripts/check-metadata.js` | Changes to skills, plugin manifests, templates, or versions |
 | `bun run check:evals` | `scripts/check-evals.js` | Changes to eval fixtures or skill names |
 | `bun run eval:selftest` | `evals/run-evals.js --all evals/examples` | Changes to the eval checker or fixtures |
-| `bun run build:fallback` | `bun build` of `bin/story.js` into the skill folder | After any change to `src/` |
-| `bun run check:fallback` | `scripts/check-fallback.js` | Confirms the committed fallback matches a fresh build |
+| `bun run build:fallback` | `scripts/build-fallback.js`, a `bun build` of `bin/story.js` into the skill folder | After any change to `src/` |
+| `bun run check:fallback` | `scripts/check-fallback.js` | Confirms the committed fallback matches a fresh build from the pinned Bun |
 | `bun run check:node-help` | `node skills/story-maintenance/scripts/story.js --help` | Confirms the fallback runs under Node |
 | `bun run release <bump>` | `scripts/release.js` | Cutting a release (maintainers only) |
 
@@ -437,7 +442,7 @@ Both plugin manifests pick up new skills automatically: `.codex-plugin/plugin.js
 
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on pushes to `main` and on every pull request. A new run on the same ref cancels the one in progress. The workflow file is the source of truth for which checks run and in what order.
 
-The `test` job uses Bun 1.3.14 and runs, in order:
+The `test` job installs the Bun version pinned by `packageManager` in `package.json` (`check:metadata` fails if `bun-version` drifts from the pin) and runs, in order:
 
 1. `bun install`
 2. `bun run check:metadata`

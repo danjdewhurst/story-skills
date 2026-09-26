@@ -24,7 +24,7 @@ Primary paths:
 
 ## Development Commands
 
-Use Bun for local development:
+Use Bun for local development, at the exact version `packageManager` pins in `package.json`. The committed fallback bundle is compared byte for byte, and Bun's bundler renames generated identifiers between releases, so `build:fallback` and `check:fallback` refuse to run on any other Bun. See [Setting up](docs/development.md#setting-up).
 
 ```shell
 bun install

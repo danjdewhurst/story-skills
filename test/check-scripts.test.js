@@ -5,7 +5,8 @@ import { makeTempDir } from "./helpers.js";
 import { checkCoverage, parseLcov } from "../scripts/check-coverage.js";
 import { collectResult, compareFindings } from "../scripts/check-examples.js";
 import { docVersionFiles } from "../scripts/doc-versions.js";
-import { checkDocVersions, checkMarketplaces, checkSkillFrontmatter, checkTemplateStoryRef, checkVersionModule, expectEqual } from "../scripts/check-metadata.js";
+import { checkDocBunPin, checkDocVersions, checkMarketplaces, checkSkillFrontmatter, checkTemplateStoryRef, checkVersionModule, checkWorkflowBunPin, expectEqual } from "../scripts/check-metadata.js";
+import { bunPinFailure, localBunVersion, parsePinnedBunVersion, readPinnedBunVersion } from "../scripts/bun-pin.js";
 import { checkFixtureSkill } from "../scripts/check-evals.js";
 import { PREFLIGHT } from "../scripts/release.js";
 import { spawnSync } from "node:child_process";
@@ -150,6 +151,89 @@ describe("checkSkillFrontmatter", () => {
     expect(failures.join("\n")).toContain("skills/no-file is missing SKILL.md");
     expect(failures.join("\n")).toContain("skills/bad-name/SKILL.md name");
     expect(failures.join("\n")).toContain("skills/no-desc/SKILL.md is missing description");
+  });
+});
+
+describe("bun pin", () => {
+  test("parses only an exact bun pin", () => {
+    expect(parsePinnedBunVersion("bun@1.4.2")).toBe("1.4.2");
+    expect(parsePinnedBunVersion("  bun@1.4.2  ")).toBe("1.4.2");
+    expect(parsePinnedBunVersion("bun@^1.4.2")).toBe(null);
+    expect(parsePinnedBunVersion("bun@1.4")).toBe(null);
+    expect(parsePinnedBunVersion("pnpm@9.0.0")).toBe(null);
+    expect(parsePinnedBunVersion(undefined)).toBe(null);
+  });
+
+  test("localBunVersion reports the running bun and tolerates a missing one", () => {
+    expect(localBunVersion()).toBe(Bun.version);
+    expect(localBunVersion(() => ({ status: 1, stdout: "" }))).toBe(null);
+    expect(localBunVersion(() => ({ status: 0, stdout: "  \n" }))).toBe(null);
+    expect(localBunVersion(() => null)).toBe(null);
+  });
+
+  test("bunPinFailure explains drift instead of blaming the bundle", () => {
+    expect(bunPinFailure("1.4.2", "1.4.2")).toBe(null);
+    expect(bunPinFailure(null, "1.4.2")).toContain("must pin an exact Bun version");
+    expect(bunPinFailure("1.4.2", null)).toContain("bun-v1.4.2");
+    const drift = bunPinFailure("1.4.2", "1.3.14");
+    expect(drift).toContain("this machine runs Bun 1.3.14");
+    expect(drift).toContain('set packageManager to "bun@1.3.14"');
+    // The point of the message: drift must not read as a stale bundle.
+    expect(drift).not.toContain("out of date");
+  });
+
+  test("the repository pin matches the bun that built the committed fallback", () => {
+    expect(readPinnedBunVersion()).toBe(parsePinnedBunVersion(JSON.parse(readRepo("package.json")).packageManager));
+    expect(readPinnedBunVersion()).not.toBe(null);
+  });
+
+  test("check:fallback refuses to compare bytes under an unpinned bun", () => {
+    // A fake `bun` earlier on PATH stands in for a contributor on another release.
+    const fakeBin = makeTempDir("story-fake-bun-");
+    fs.writeFileSync(path.join(fakeBin, "bun"), '#!/bin/sh\nif [ "$1" = "--version" ]; then echo 9.9.9; exit 0; fi\nexit 1\n', "utf8");
+    fs.chmodSync(path.join(fakeBin, "bun"), 0o755);
+    const res = spawnSync("node", [path.join(repoRoot, "scripts", "check-fallback.js")], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}` }
+    });
+    expect(res.status).toBe(1);
+    expect(res.stderr).toContain("this machine runs Bun 9.9.9");
+    expect(res.stderr).not.toContain("out of date");
+  });
+});
+
+describe("check-metadata bun pin", () => {
+  test("ci installs the pinned bun", () => {
+    const packageJson = JSON.parse(readRepo("package.json"));
+    expect(checkWorkflowBunPin([], packageJson.packageManager, readRepo(".github/workflows/ci.yml"))).toEqual([]);
+  });
+
+  test("the development guide names the pinned bun", () => {
+    const packageJson = JSON.parse(readRepo("package.json"));
+    expect(checkDocBunPin([], packageJson.packageManager, readRepo("docs/development.md"))).toEqual([]);
+    expect(readRepo("docs/development.md")).toContain(`bun-v${parsePinnedBunVersion(packageJson.packageManager)}`);
+  });
+
+  test("flags a development guide that names another bun", () => {
+    expect(checkDocBunPin([], "bun@1.4.2", "pins `bun@1.3.14` and also `bun@1.3.14`\n")).toEqual([
+      "docs/development.md bun pin mismatch: expected 1.4.2, got 1.3.14"
+    ]);
+    expect(checkDocBunPin([], "bun@1.4.2", "no pin here\n")).toEqual([
+      "docs/development.md must name the pinned Bun version as `bun@1.4.2`"
+    ]);
+    // An unparseable pin is reported once by checkWorkflowBunPin, not twice.
+    expect(checkDocBunPin([], "bun@latest", "no pin here\n")).toEqual([]);
+  });
+
+  test("flags a ci bun-version that drifts from packageManager", () => {
+    expect(checkWorkflowBunPin([], "bun@1.4.2", "          bun-version: 1.3.14\n")).toEqual([
+      ".github/workflows/ci.yml bun-version mismatch: expected 1.4.2, got 1.3.14"
+    ]);
+    expect(checkWorkflowBunPin([], "bun@1.4.2", "name: CI\n")).toEqual([".github/workflows/ci.yml is missing bun-version"]);
+    expect(checkWorkflowBunPin([], "bun@^1.4.2", "          bun-version: 1.4.2\n")).toEqual([
+      'package.json packageManager must pin an exact Bun version, got "bun@^1.4.2"'
+    ]);
   });
 });
 

@@ -3,7 +3,7 @@
   "version": "0.11.0",
   "description": "Agent skills and a companion CLI for planning, tracking, and drafting fiction in markdown.",
   "type": "module",
-  "packageManager": "bun@1.3.14",
+  "packageManager": "bun@1.4.2",
   "engines": {
     "node": ">=18"
   },
@@ -22,7 +22,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build:fallback": "bun build ./bin/story.js --target=node --outfile=skills/story-maintenance/scripts/story.js",
+    "build:fallback": "node scripts/build-fallback.js",
     "check:metadata": "node scripts/check-metadata.js",
     "check:fallback": "node scripts/check-fallback.js",
     "check:evals": "node scripts/check-evals.js",
