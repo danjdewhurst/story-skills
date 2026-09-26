@@ -206,6 +206,24 @@ describe("series validation and reporting", () => {
     expect(() => seriesReport(path.join(cwd, "missing"))).toThrow("is not a story project");
   });
 
+  test("breaks unconstrained book ties by title", () => {
+    const cwd = makeTempDir();
+    const zephyr = book(cwd, "Zephyr");
+    const anvil = book(cwd, "Anvil");
+    const marrow = book(cwd, "Marrow");
+    for (const root of [zephyr, anvil, marrow]) {
+      setStory(root, { series: "saga", "book-number": undefined });
+    }
+    // Discovery walks `precedes` in order, so list Marrow first: only the title
+    // tie-break can put Anvil ahead of it.
+    setStory(zephyr, { precedes: ["../marrow", "../anvil"] });
+
+    const report = seriesReport(zephyr);
+    expect(report.ordered).toBe(true);
+    // Zephyr precedes both; Anvil and Marrow share book-number and fall back to title.
+    expect(report.books.map((entry) => entry.title)).toEqual(["Zephyr", "Anvil", "Marrow"]);
+  });
+
   test("orders a diamond chronology and checks shared canon across books", () => {
     const cwd = makeTempDir();
     const origins = book(cwd, "Origins");

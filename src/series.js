@@ -330,7 +330,7 @@ function checkDuplicateBookNumbers(books, errors) {
 // Books with no chronological constraint between them fall back to
 // publication order, then title, so the report is deterministic.
 function compareBooks(left, right) {
-  return (left.bookNumber ?? Infinity) - (right.bookNumber ?? Infinity) || left.title.localeCompare(right.title);
+  return (left.bookNumber ?? Infinity) - (right.bookNumber ?? Infinity) || left.title.localeCompare(right.title, "en");
 }
 
 function checkSharedCanon({ order, later }, errors, warnings) {

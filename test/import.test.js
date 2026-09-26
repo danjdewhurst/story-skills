@@ -92,6 +92,19 @@ describe("manuscript import", () => {
     expect(extractNameCandidates(repeated)).toEqual([{ name: "Vex Marrow", count: 3 }]);
   });
 
+  test("breaks candidate count ties by name", () => {
+    const tied = [
+      "He saw Zephyr, then Anvil, then Marrow.",
+      "She saw Zephyr, then Anvil, then Marrow.",
+      "They saw Zephyr, then Anvil, then Marrow."
+    ].join(" ");
+    expect(extractNameCandidates(tied)).toEqual([
+      { name: "Anvil", count: 3 },
+      { name: "Marrow", count: 3 },
+      { name: "Zephyr", count: 3 }
+    ]);
+  });
+
   test("preserves pre-H1 preamble in single-chapter imports", () => {
     const cwd = makeTempDir();
     fs.writeFileSync(path.join(cwd, "story.md"), [

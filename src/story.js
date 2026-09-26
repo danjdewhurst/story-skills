@@ -2805,7 +2805,7 @@ function buildProjectActions(project, validation, links, continuity, displayPath
     actions.push(action("P2", "Create first character", `Use story add character "Name" --role protagonist${where === "." ? "" : ` --path ${where}`} before drafting prose.`));
   }
   // Array#sort is stable (ES2019+), so actions sharing a priority keep their insertion order.
-  actions.sort((left, right) => left.priority.localeCompare(right.priority));
+  actions.sort((left, right) => left.priority.localeCompare(right.priority, "en"));
   if (maintenanceCount === 0 && validation.ok && links.ok && continuity.ok && continuity.warnings.length === 0 && staleChapters.length === 0 && chaptersWithoutScenes.length === 0) {
     actions.push(action("P3", "Project is mechanically healthy", "No deterministic maintenance issues are blocking the next writing pass."));
   }
