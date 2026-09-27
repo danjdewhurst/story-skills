@@ -1,5 +1,5 @@
-Ahoy, Tomas! Here's the new stock,
-And your paraffin, right on the clock.
-    You could switch it today
-    If you'd do what they say,
-But you're deaf as the rest of your rock.
+It's the paraffin, Tomas. Hooray!
+You can fetch it: it's Thursday today!
+    You could switch, like they said,
+    To electric instead,
+But you'd sooner not hear what I say.

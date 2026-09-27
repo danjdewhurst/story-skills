@@ -241,11 +241,13 @@ function main() {
         );
       }
     }
-    if ("paragraphs" in checks) {
-      check(
-        Number.isInteger(checks.paragraphs) && checks.paragraphs > 0,
-        `${name}/checks.json: paragraphs must be a positive integer`
-      );
+    for (const key of ["paragraphs", "lines"]) {
+      if (key in checks) {
+        check(
+          Number.isInteger(checks[key]) && checks[key] > 0,
+          `${name}/checks.json: ${key} must be a positive integer`
+        );
+      }
     }
     for (const key of ["ends_with_question", "requires_first_person", "requires_past_tense"]) {
       if (key in checks) {

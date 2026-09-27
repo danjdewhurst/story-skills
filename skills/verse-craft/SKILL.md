@@ -69,7 +69,10 @@ speaks or sings it.
 3. For story verse, read `story.md` (era, setting, tone), the speaker's
    character file (voice notes, `voice-words`, `voice-avoid`, education),
    and the chapter it goes in. Verse must not state canon the project
-   does not already hold: no new names, history, or world rules.
+   does not already hold: no new names, history, or world rules, and no
+   small facts either (how long something has gone on, what goods come
+   in, who signs for what). Comic verse reaches for these to fill a line
+   or land a rhyme; build the joke from facts the project states.
 4. Ask which accent the verse is scanned in when it matters (British and
    American stress differ on words such as *address*, *garage*,
    *cigarette*), and which dialect the rhymes must work in.
@@ -127,7 +130,12 @@ Rescan every line you change.
 ### 6. Place story verse
 
 1. Put the verse where it is read: in the chapter body, or in a `matter/`
-   file for an epigraph (`story add matter`).
+   file for an epigraph, created without a printed page title:
+
+```shell
+story add matter "Epigraph" --heading false
+```
+
 2. Keep line breaks through every build: end each line of a stanza,
    except the last, with a backslash (`\`), and leave a blank line
    between stanzas. For verse set off from the prose, put the stanza in

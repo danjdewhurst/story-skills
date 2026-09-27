@@ -130,7 +130,7 @@ hand before/after skill changes, with results recorded below.
 | `deep-pov` | Filter words and thought-tags struck from a mild-interiority passage ("I noticed the key" becomes the key in the pocket) with the canon intact. Evaluates the `scene-craft` skill. |
 | `motif-restraint` | The motif carries the chapter's idea through what Tomas does; naming the theme or explaining what the motif means fails. Evaluates the `theme-craft` skill. |
 | `screenplay-fountain` | A passage adapted into one Fountain scene: slugline, source note, and nothing on the page a camera could not photograph. Voiceover, camera directions, and kept first-person narration fail. Evaluates the `adaptation` skill. |
-| `verse-limerick` | One limerick in a character's voice: it names Tomas and the paraffin, stays in one stanza under 60 words, and keeps the key secret. Archaic filler (*o'er*, *nigh*, *did come*), a preface, and a scansion table in the output fail. The checker cannot hear meter, so read the draft. Evaluates the `verse-craft` skill. |
+| `verse-limerick` | One limerick in a character's voice: it names Tomas and the paraffin, stays in one five-line stanza under 60 words, and keeps the key secret. Archaic filler (*o'er*, *nigh*, *did come*) and a scansion table in the output fail. The checker cannot hear meter, so read the draft. Evaluates the `verse-craft` skill. |
 
 Thirteen fixtures cover nine skills: `chapter-writing` (six), `line-editing`,
 `revision-continuity`, `series-continuity`, `genre-craft`, `scene-craft`,
@@ -151,6 +151,7 @@ fixture that passes whatever the skill does is worse than an honest gap.
 - `max_words_ratio` / `min_words_ratio`: draft length bounds relative to the input, to catch padding and over-cutting.
 - `max_words`: absolute draft word cap, for briefs that promise one (canon-keeping: under 220 words).
 - `paragraphs`: exact paragraph count, for briefs that promise one (no-invention: two paragraphs). Fenced code blocks are exempt.
+- `lines`: exact count of nonblank lines, for verse briefs that promise one (verse-limerick: five lines). Fenced code blocks are exempt.
 - `ends_with_question`: when `true`, the draft must end on `?` (question-stays-open, genre-craft-mystery).
 - `requires_first_person` / `requires_past_tense`: when `true`, the draft must show first-person pronouns / at least 2 past-tense markers. Both are coarse proxies (the past-tense list counts `red` as past tense, hence the ≥2 minimum), tripwires for ignored briefs rather than classifiers.
 - `expected_overlaps`: the phrase collisions this fixture means to have, so `scripts/check-evals.js` stays quiet about them. `in_input` holds `["<banned phrase>"]` entries for tells the input is deliberately seeded with (anti-slop's brief asks for their removal); `with_required` holds `["<banned phrase>", "<required phrase>"]` entries for a banned phrase that sits inside a required one (`brass key` beside required `Petra's brass key`), the one case where keeping the canon trips the trap; a banned phrase that contains a required name (`it was Petra` beside `Petra`) is harmless and needs no entry. An unlisted collision warns, so a new one is visible; a listed collision that no longer exists fails, so the list cannot outlive the phrases it covers.

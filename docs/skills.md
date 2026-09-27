@@ -590,7 +590,7 @@ When `story.md` links other books, reveals the series depends on get a stable `f
 
 **Writes.** A standalone poem file where you ask for it, or verse in chapter prose and `matter/` files.
 
-**CLI.** None for a standalone poem. For story verse, `story add matter` for an epigraph page, then `story wordcount --write`, `story links`, and `story validate`.
+**CLI.** None for a standalone poem. For story verse, `story add matter "Epigraph" --heading false` for an epigraph page, then `story wordcount --write`, `story links`, and `story validate`.
 
 **References.**
 

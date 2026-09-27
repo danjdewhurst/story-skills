@@ -17,10 +17,10 @@ user bends a form on purpose, follow the user.
 
 ```text
 A keeper who lived on a rock
-Wound the lamp by the tick of a clock.
-    When the clock lost a hand
+Whose lamp was as true as a clock.
+    When his clock lost a hand
     He relied on the sand,
-And now keeps his accounts in a sock.
+And he keeps his accounts in a sock.
 ```
 
 Faults: a line 5 with no turn; a limp beat count in lines 3 and 4; the

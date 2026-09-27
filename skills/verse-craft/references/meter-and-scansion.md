@@ -31,10 +31,12 @@ uses before judging it.
 2. One-syllable words take stress from their role: nouns, main verbs,
    adjectives, and adverbs usually stress; articles, prepositions,
    conjunctions, and pronouns usually do not.
-3. Meter can promote a weak syllable a little (*and* on the third beat
-   of "the KEEP-er AND his WIFE"), but it cannot shift a word's own
-   stress. If the meter needs *KEEP-er* read as *keep-ER*, the line
-   fails.
+3. Stress is relative. Meter can promote a weak syllable a little
+   (*and* on the third beat of "the KEEP-er AND his WIFE"), and a
+   one-syllable verb between two stronger stresses can take a weak
+   position ("when his CLOCK lost a HAND"); mark that as deliberate.
+   Meter cannot shift a word's own stress: if it needs *KEEP-er* read as
+   *keep-ER*, the line fails.
 4. Accent changes stress and syllable count. Ask which accent the verse
    is for when a word such as *address*, *garage*, *fire*, *flower*, or
    *poem* sits on a key beat.
@@ -49,10 +51,10 @@ count, the rhyme letter, and a verdict.
 | Line | Scansion | Syll | Beats | Rhyme | Verdict |
 |------|----------|------|-------|-------|---------|
 | 1 | a KEEP / er who LIVED / on a ROCK | 8 | 3 | A | ok |
-| 2 | wound the LAMP / by the TICK / of a CLOCK | 9 | 3 | A | ok |
-| 3 | when the CLOCK / lost a HAND | 6 | 2 | B | ok |
+| 2 | whose LAMP / was as TRUE / as a CLOCK | 8 | 3 | A | ok |
+| 3 | when his CLOCK / lost a HAND | 6 | 2 | B | deliberate: *lost* demoted between two stronger stresses |
 | 4 | he re-LIED / on the SAND | 6 | 2 | B | ok |
-| 5 | and now KEEPS / his ac-COUNTS / in a SOCK | 9 | 3 | A | ok |
+| 5 | and he KEEPS / his ac-COUNTS / in a SOCK | 9 | 3 | A | ok |
 ```
 
 Verdicts:

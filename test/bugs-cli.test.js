@@ -278,3 +278,15 @@ describe("#98 banned-phrase inflection", () => {
     expect(trapResults(["delve"], "The delft plates.")).toEqual([[true, 'trap avoided: "delve"']]);
   });
 });
+
+describe("eval checker line count", () => {
+  function lineResult(draft) {
+    return checkDraft({ lines: 5, required: [] }, "", draft).filter(([, label]) => label.includes(" line(s), "));
+  }
+
+  test("counts nonblank verse lines, not paragraphs", () => {
+    expect(lineResult("Tomas brought paraffin.")).toEqual([[false, "structure: 1 line(s), brief asks for 5"]]);
+    expect(lineResult("one\ntwo\n\n  three\nfour\nfive\n")).toEqual([[true, "structure: 5 line(s), brief asks for 5"]]);
+    expect(lineResult("one\ntwo\nthree\nfour\nfive\n```\nsix\n```\n")).toEqual([[true, "structure: 5 line(s), brief asks for 5"]]);
+  });
+});

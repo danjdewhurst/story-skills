@@ -124,6 +124,13 @@ function stripCodeFences(text) {
   return text.replace(/```[\s\S]*?```/g, "").replace(/```[\s\S]*$/g, "");
 }
 
+// Nonblank lines outside code fences: the line count of a poem.
+function lines(text) {
+  return stripCodeFences(text)
+    .split("\n")
+    .filter((line) => line.trim() !== "");
+}
+
 function paragraphs(text) {
   return stripCodeFences(text)
     .split(/\n\s*\n/)
@@ -268,6 +275,13 @@ export function checkDraft(checks, inputText, draftText) {
     results.push([
       count === checks.paragraphs,
       `structure: ${count} paragraph(s), brief asks for ${checks.paragraphs}`,
+    ]);
+  }
+  if (checks.lines !== undefined) {
+    const count = lines(draftText).length;
+    results.push([
+      count === checks.lines,
+      `structure: ${count} line(s), brief asks for ${checks.lines}`,
     ]);
   }
   if (checks.ends_with_question === true) {

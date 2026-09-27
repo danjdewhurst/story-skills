@@ -29,10 +29,10 @@ apostrophe (B').
 
 ```text
 A keeper who lived on a rock      A
-Wound the lamp by the tick of a clock.   A
-When the clock lost a hand        B
+Whose lamp was as true as a clock.   A
+When his clock lost a hand        B
 He relied on the sand,            B
-And now keeps his accounts in a sock.    A
+And he keeps his accounts in a sock.    A
 ```
 
 Label the scheme under the scansion table and compare it with the form's
