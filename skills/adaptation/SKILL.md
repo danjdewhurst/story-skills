@@ -103,7 +103,11 @@ Follow `references/picture-book.md`.
 2. Make the pagination plan in `adaptations/picture-book/pagination.md`:
    32 pages, 14 spreads of story, a page-turn beat on each spread.
 3. Keep the text in chapters, one chapter per spread, and the
-   illustration briefs and art notes in the plan, not the prose.
+   illustration briefs and art notes in the plan, not the prose (text in a
+   chapter is counted and ships in every build). Give each spread one
+   scene record and a `hook` for its page-turn beat, and set `story.md`
+   to `status: revising` once all spreads are drafted; see "Spreads And
+   The CLI Checks" in the reference for the warnings this clears.
 
 ### 4. Comics or graphic novel script
 
