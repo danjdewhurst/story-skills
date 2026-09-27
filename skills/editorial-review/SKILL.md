@@ -136,8 +136,9 @@ For beta readers, editors, or agents who never open a terminal:
    `templates/github/`): copy `review-copy.yml` into `.github/workflows/`
    to publish the HTML copy to GitHub Pages on every push to `main`, and
    `ISSUE_TEMPLATE/manuscript-note.yml` into `.github/ISSUE_TEMPLATE/` so
-   readers file notes with an anchor and a type (typo, confusion,
-   continuity, sensitivity, praise, other). Ask before creating files in
+   readers file notes with an anchor and a type (typo or wording,
+   confusing, continuity, pacing, character, sensitivity or authenticity,
+   loved this, other). Ask before creating files in
    `.github/`, and warn that a public Pages site makes the manuscript
    public unless the repository and Pages are private.
 3. Collect issue notes into a feedback round and triage them with

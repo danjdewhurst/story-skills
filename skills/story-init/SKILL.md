@@ -16,7 +16,7 @@ Initialize a new story project with a structured markdown folder layout. Creates
 - NOT for adding to an existing story project (use the domain-specific skills instead)
 - NOT for a sequel, prequel, or companion to an existing book: use `series-continuity`, which links the projects and carries canon across
 - NOT for finding the idea itself: when the user has only a vague notion ("something about lighthouses"), several competing ideas, or no premise yet, run the `premise-workshop` skill first, then return here with the chosen premise, form, and genre
-- NOT for converting an existing manuscript or chapter drafts: run `story import <source> --title "{Title}"` instead, then build out the bible from the entity candidates it prints
+- NOT for converting an existing manuscript or chapter drafts: run `story import <source> --title '{Title}'` instead, then build out the bible from the entity candidates it prints. Import does not accept `--form`, so afterwards set `form` and `target-words` in `story.md` by hand (see the form list and defaults below); without them `story validate` never checks length and `story progress` has no target
 
 ## Workflow
 
@@ -33,8 +33,10 @@ Initialize a new story project with a structured markdown folder layout. Creates
 If the Story CLI is available, prefer using it to create the starter project, then inspect and refine the generated files as needed:
 
 ```shell
-story init "{Title}" --form "{form}" --genre "{genre}" --sub-genre "{sub-genre}" --setting-era "{era}" --pov "{pov-style}" --tense "{tense}" --synopsis "{synopsis}" --theme "{theme-1}" --theme "{theme-2}"
+story init '{Title}' --form '{form}' --genre '{genre}' --sub-genre '{sub-genre}' --setting-era '{era}' --pov '{pov-style}' --tense '{tense}' --synopsis '{synopsis}' --theme '{theme-1}' --theme '{theme-2}'
 ```
+
+The values are the user's own words, so quote each one for the shell: wrap it in single quotes and write any single quote inside it as `'\''`. Never paste a value into double quotes, where `$(...)`, backticks, and `"` still take effect.
 
 `--form` records `form` in `story.md` and, when no target is given, sets a default `target-words` for the form (novel 80,000, novella 30,000, novelette 12,000, short story 5,000, flash 1,000, chapter book 10,000, picture book 500; serials get no book-level default). `story validate` then warns when `target-words` is outside the form's usual range. For short forms, point the user to `references/short-story-form.md` in the `plot-structure` skill.
 

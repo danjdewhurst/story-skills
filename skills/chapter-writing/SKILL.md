@@ -23,7 +23,7 @@ The in-repo `line-editing` skill owns the prose-quality pass (line edit, voice d
 The external `better-writing` skill is an optional complement for general prose quality and anti-generic writing checks. Before drafting or revising chapter prose, check whether it is available in the active agent environment. Detect it by looking for its skill directory in the configured skills paths:
 
 ```shell
-ls -d ~/.claude/skills/better-writing .claude/skills/better-writing skills/better-writing 2>/dev/null
+ls -d ~/.claude/skills/better-writing .claude/skills/better-writing ~/.agents/skills/better-writing .agents/skills/better-writing skills/better-writing 2>/dev/null
 ```
 
 - If a `better-writing` directory exists (containing `SKILL.md`), use it for prose quality, voice calibration, anti-generic writing checks, and the final pre-flight pass before saving the chapter.

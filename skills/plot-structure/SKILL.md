@@ -32,7 +32,7 @@ A story project must already exist (created via the story-init skill). Verify by
    - Type (main, subplot, character, thematic)
    - Which characters are involved
    - Which themes it serves
-   - Which MICE threads the arc carries (optional `mice-threads:` frontmatter, e.g. `[event, character]`; see `references/mice-quotient.md`)
+   - Which MICE threads the arc carries (optional `mice-threads:` frontmatter, written as a block list with one `- event` or `- character` item per line, not a `[event, character]` flow list; see `references/mice-quotient.md`)
 5. Build the arc through conversation: setup, escalations, climax, resolution
 6. Write the file using `references/arc-template.md` (or scaffold it with `story add arc "{Name}" --type main --character {id} --theme {theme}`, then fill in the sections)
 7. Save to `plot/arcs/{arc-name-kebab}.md`
@@ -62,7 +62,7 @@ When adding events:
 - Use the `| When | Event | Arc | Chapter |` table with these cell formats:
   - **When:** story-relative time for story events (e.g. `Day 1, morning`), or how long ago for backstory (e.g. `12 years ago`, `~300 years ago`)
   - **Event:** one concise line describing what happened
-  - **Arc:** the arc's display name as written in its file (e.g. `The Drowned Witness`), or `-` when the event belongs to no arc
+  - **Arc:** the arc's display name as written in its file (e.g. `The Drowned Witness`), or `-` when the event belongs to no arc. `story rename arc` rewrites ids but not display names, and nothing checks this cell, so after renaming an arc search for the old name (`grep -rn "Old Name" .`) and update each hit by hand, including the timeline rows
   - **Chapter:** `Ch {N}` once the event is written (e.g. `Ch 1`), or `-` for backstory and unwritten events
 
 When reviewing the timeline:

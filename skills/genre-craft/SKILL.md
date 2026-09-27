@@ -87,8 +87,11 @@ exist or be in progress.
 - Clue `planted` must precede `payoff` (`story continuity` flags payoff-before-
   plant as an error); deadline promises follow the same ordering logic as
   promise/question ordering.
-- Bidirectional links apply: clues link suspects and chapters; suspects'
-  character files link back to the clue ids that implicate or clear them.
+- Clues carry the links: each clue names its `planted` and `payoff`
+  chapters and, under `characters`, the suspects it implicates or clears,
+  and `story links` checks those ids. Character files have no clue field;
+  to list a suspect's clues, search the clue files for the character id
+  (`grep -l {character-id} continuity/clues/*.md`).
 - Genre audits live in the revision plan or `continuity/` audit files —
   never only in chat.
 

@@ -110,7 +110,7 @@ If `story` is not installed, use `bun run story --` from the Story Skills reposi
 
 Take a snapshot before a revision pass that touches more than one chapter, and name it after the draft it preserves (`draft-1`, `pre-beta-edit`).
 
-- **Git projects:** check `git status`. Ask the user before committing anything; with approval, commit the current state and tag it: `git add -A && git commit -m "Draft 1 before developmental pass" && git tag draft-1`. Never push, rewrite history, or delete tags without explicit approval.
+- **Git projects:** check `git status`, and make sure `.gitignore` lists `dist/` (the CLI never creates one) so build output such as EPUB and DOCX files stays out of every snapshot and `story compare --ref` baseline; add the line if it is missing. Ask the user before committing anything; with approval, commit the current state and tag it: `git add -A && git commit -m "Draft 1 before developmental pass" && git tag draft-1`. Never push, rewrite history, or delete tags without explicit approval.
 - **Projects without git:** offer to run `git init` first. If the user declines, copy the whole project folder beside it (`../the-tide-room-draft-1`), never into the project, where `story` commands would scan the copy.
 
 After the pass, compare with the snapshot and report the result:
