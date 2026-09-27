@@ -27,18 +27,24 @@ export const EXPECTED_CONTINUITY = {
   }
 };
 
+// A finding's text; the checks raise { code, message, file } findings.
+function text(finding) {
+  return typeof finding === "string" ? finding : finding.message;
+}
+
 export function collectResult(failures, exampleName, command, result) {
   for (const error of result.errors) {
-    failures.push(`${exampleName} ${command} error: ${error}`);
+    failures.push(`${exampleName} ${command} error: ${text(error)}`);
   }
 
   for (const warning of result.warnings) {
-    failures.push(`${exampleName} ${command} warning: ${warning}`);
+    failures.push(`${exampleName} ${command} warning: ${text(warning)}`);
   }
   return failures;
 }
 
-export function compareFindings(failures, exampleName, kind, expected, actual) {
+export function compareFindings(failures, exampleName, kind, expected, findings) {
+  const actual = findings.map(text);
   for (const finding of expected) {
     if (!actual.includes(finding)) {
       failures.push(`${exampleName} continuity is missing expected ${kind}: ${finding}`);
@@ -76,7 +82,7 @@ export function tweeBuildFindings(root) {
     const first = buildBook(root, { format: "twee", out: path.join(scratch, "first.twee") });
     const second = buildBook(root, { format: "twee", out: path.join(scratch, "second.twee") });
     const same = fs.readFileSync(first.outFile, "utf8") === fs.readFileSync(second.outFile, "utf8");
-    const warnings = first.warnings.filter((warning) => !warning.startsWith("story.md has no ifid"));
+    const warnings = first.warnings.map(text).filter((warning) => !warning.startsWith("story.md has no ifid"));
     return [...warnings, ...(same ? [] : ["two twee builds differ"])];
   } catch (error) {
     return [error.message];

@@ -65,7 +65,7 @@ describe("continuity exemptions", () => {
     expect(after.ok).toBe(true);
     expect(messages(after.errors)).toEqual([]);
     expect(after.dismissed).toEqual([
-      { finding: messages(before.errors)[0], reason: "Flashback approved by editor" }
+      { finding: before.errors[0], reason: "Flashback approved by editor" }
     ]);
   });
 

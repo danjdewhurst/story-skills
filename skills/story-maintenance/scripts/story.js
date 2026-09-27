@@ -43,7 +43,74 @@ var FINDING_CODES = {
   "voice-sound-alike": "warning",
   "name-clash": "error",
   "name-look-alike": "warning",
-  "name-shared-initial": "warning"
+  "name-shared-initial": "warning",
+  "revived-without-death": "error",
+  "deceased-in-cast": "warning",
+  "died-in-missing-chapter": "error",
+  "revived-in-missing-chapter": "error",
+  "revival-before-death": "error",
+  "death-status-mismatch": "error",
+  "revival-status-mismatch": "error",
+  "posthumous-appearance": "error",
+  "pov-not-in-cast": "warning",
+  "pov-scene-mismatch": "warning",
+  "scene-cast-not-in-chapter": "warning",
+  "scene-location-not-in-chapter": "warning",
+  "cut-character-in-cast": "warning",
+  "cut-character-in-arc": "warning",
+  "cut-character-relationship": "warning",
+  "chapter-numbering-start": "warning",
+  "chapter-numbering-gap": "warning",
+  "promise-payoff-before-plant": "error",
+  "promise-payoff-missing": "error",
+  "promise-plant-missing": "error",
+  "promise-stale-planned": "warning",
+  "promise-payoff-passed": "warning",
+  "promise-unpaid": "warning",
+  "question-resolved-before-introduced": "error",
+  "question-resolution-missing": "error",
+  "question-open-but-resolved": "error",
+  "complete-with-open-promise": "error",
+  "complete-with-open-question": "error",
+  "complete-with-open-clue": "error",
+  "clue-payoff-before-plant": "error",
+  "clue-payoff-missing": "error",
+  "clue-plant-missing": "error",
+  "clue-stale-planned": "warning",
+  "clue-payoff-passed": "warning",
+  "clue-unpaid": "warning",
+  "current-chapter-ahead": "error",
+  "current-chapter-behind": "warning",
+  "state-missing-character": "error",
+  "state-duplicate-character": "warning",
+  "state-missing-location": "error",
+  "state-fact-not-kebab": "error",
+  "state-duplicate-fact": "error",
+  "state-missing-knows": "error",
+  "state-missing-chapter": "error",
+  "state-missing-artifact": "error",
+  "state-duplicate-artifact": "warning",
+  "state-missing-owner": "error",
+  "state-status-conflict": "warning",
+  "deceased-learning": "warning",
+  "posthumous-learning": "error",
+  "learner-not-in-cast": "warning",
+  "knowledge-not-recorded": "warning",
+  "state-tracks-dead-character": "warning",
+  "state-location-drift": "warning",
+  "object-not-recorded": "warning",
+  "state-object-drift": "warning",
+  "state-entry-not-mapping": "error",
+  "gone-artifact-used": "error",
+  "gone-artifact-mentioned": "error",
+  "malformed-date": "warning",
+  "malformed-time": "warning",
+  "negative-travel-hours": "warning",
+  "travel-hours-undated": "warning",
+  "clock-backward": "warning",
+  "travel-too-fast": "error",
+  "route-same-time": "error",
+  "route-too-fast": "error"
 };
 function codesAt(level) {
   return Object.keys(FINDING_CODES).filter((code) => FINDING_CODES[code] === level);
@@ -505,7 +572,7 @@ function withExemptions(project, result) {
 }
 function dismissFinding(finding, exemptions, kept, dismissed) {
   const portable = (text) => text.replace(/\\/g, "/");
-  const match = exemptions.find((exemption) => portable(finding).includes(portable(exemption.pattern)));
+  const match = exemptions.find((exemption) => portable(asFinding(finding).message).includes(portable(exemption.pattern)));
   if (match) {
     dismissed.push({ finding, reason: match.reason });
   } else {
@@ -516,13 +583,13 @@ function checkCharacterDeaths(project, context, errors, warnings) {
   for (const character of project.characters) {
     const label = relative(project, character.file);
     if (character.revivedIn && !character.diedIn) {
-      errors.push(`${label} has revived-in ${character.revivedIn} but no died-in; set died-in or remove revived-in`);
+      errors.push(err("revived-without-death", `${label} has revived-in ${character.revivedIn} but no died-in; set died-in or remove revived-in`, label));
     }
     if (!character.diedIn) {
       if (character.status === "deceased") {
         for (const entry of [...project.chapters, ...project.scenes]) {
           if (castIncludes(entry, character.id)) {
-            warnings.push(`${relative(project, entry.file)} lists ${character.id}, who died before the story (deceased with no died-in); move appearances to mentions`);
+            warnings.push(warn("deceased-in-cast", `${relative(project, entry.file)} lists ${character.id}, who died before the story (deceased with no died-in); move appearances to mentions`, relative(project, entry.file)));
           }
         }
       }
@@ -530,36 +597,36 @@ function checkCharacterDeaths(project, context, errors, warnings) {
     }
     const deathNumber = context.chapterNumbers.get(character.diedIn);
     if (deathNumber === undefined) {
-      errors.push(`${label} died-in references missing chapter ${character.diedIn}`);
+      errors.push(err("died-in-missing-chapter", `${label} died-in references missing chapter ${character.diedIn}`, label));
       continue;
     }
     if (character.revivedIn) {
       if (!context.chapterNumbers.has(character.revivedIn)) {
-        errors.push(`${label} revived-in references missing chapter ${character.revivedIn}`);
+        errors.push(err("revived-in-missing-chapter", `${label} revived-in references missing chapter ${character.revivedIn}`, label));
         continue;
       }
       if (!context.chronology.after(character.revivedIn, character.diedIn)) {
-        errors.push(`${label} is revived in ${character.revivedIn}, not after dying in ${character.diedIn}`);
+        errors.push(err("revival-before-death", `${label} is revived in ${character.revivedIn}, not after dying in ${character.diedIn}`, label));
         continue;
       }
     }
     const deathWritten = !context.chronology.outline.has(character.diedIn);
     const revivalWritten = character.revivedIn !== "" && !context.chronology.outline.has(character.revivedIn);
     if (deathWritten && !revivalWritten && character.status !== "deceased") {
-      errors.push(`${label} has died-in ${character.diedIn} but status ${character.status || "unset"}; set status: deceased`);
+      errors.push(err("death-status-mismatch", `${label} has died-in ${character.diedIn} but status ${character.status || "unset"}; set status: deceased`, label));
     }
     if (revivalWritten && character.status === "deceased") {
-      errors.push(`${label} has revived-in ${character.revivedIn} but status deceased; set status: alive`);
+      errors.push(err("revival-status-mismatch", `${label} has revived-in ${character.revivedIn} but status deceased; set status: alive`, label));
     }
     const window = deathWindow(character, context.chronology);
     for (const chapter of project.chapters) {
       if (window.deadIn(chapter.id) && castIncludes(chapter, character.id)) {
-        errors.push(`${relative(project, chapter.file)} lists ${character.id}, who died in ${character.diedIn}; move posthumous appearances to mentions`);
+        errors.push(err("posthumous-appearance", `${relative(project, chapter.file)} lists ${character.id}, who died in ${character.diedIn}; move posthumous appearances to mentions`, relative(project, chapter.file)));
       }
     }
     for (const scene of project.scenes) {
       if (window.deadIn(scene.chapter) && castIncludes(scene, character.id)) {
-        errors.push(`${relative(project, scene.file)} lists ${character.id}, who died in ${character.diedIn}; move posthumous appearances to mentions`);
+        errors.push(err("posthumous-appearance", `${relative(project, scene.file)} lists ${character.id}, who died in ${character.diedIn}; move posthumous appearances to mentions`, relative(project, scene.file)));
       }
     }
   }
@@ -567,11 +634,11 @@ function checkCharacterDeaths(project, context, errors, warnings) {
 function checkChapterCasts(project, warnings) {
   for (const chapter of project.chapters) {
     if (chapter.pov && !chapter.characters.includes(chapter.pov) && !chapter.mentions.includes(chapter.pov)) {
-      warnings.push(`${relative(project, chapter.file)} POV character ${chapter.pov} is not listed in characters`);
+      warnings.push(warn("pov-not-in-cast", `${relative(project, chapter.file)} POV character ${chapter.pov} is not listed in characters`, relative(project, chapter.file)));
     }
     const scenePovs = [...new Set(project.scenes.filter((scene) => scene.chapter === chapter.id && scene.pov).map((scene) => scene.pov))];
     if (chapter.pov && scenePovs.length > 0 && !scenePovs.includes(chapter.pov)) {
-      warnings.push(`${relative(project, chapter.file)} has POV ${chapter.pov} but its scenes are told by ${scenePovs.join(", ")}`);
+      warnings.push(warn("pov-scene-mismatch", `${relative(project, chapter.file)} has POV ${chapter.pov} but its scenes are told by ${scenePovs.join(", ")}`, relative(project, chapter.file)));
     }
   }
 }
@@ -580,7 +647,7 @@ function checkSceneCasts(project, warnings) {
   for (const scene of project.scenes) {
     const label = relative(project, scene.file);
     if (scene.pov && !scene.characters.includes(scene.pov) && !scene.mentions.includes(scene.pov)) {
-      warnings.push(`${label} POV character ${scene.pov} is not listed in characters`);
+      warnings.push(warn("pov-not-in-cast", `${label} POV character ${scene.pov} is not listed in characters`, label));
     }
     const chapter = chapters.get(scene.chapter);
     if (!chapter) {
@@ -588,11 +655,11 @@ function checkSceneCasts(project, warnings) {
     }
     for (const characterId of scene.characters) {
       if (!chapter.characters.includes(characterId) && !chapter.mentions.includes(characterId)) {
-        warnings.push(`${label} lists ${characterId} but ${relative(project, chapter.file)} does not list them in characters or mentions`);
+        warnings.push(warn("scene-cast-not-in-chapter", `${label} lists ${characterId} but ${relative(project, chapter.file)} does not list them in characters or mentions`, label));
       }
     }
     if (scene.location && !chapter.locations.includes(scene.location)) {
-      warnings.push(`${label} is set in ${scene.location} but ${relative(project, chapter.file)} does not list that location`);
+      warnings.push(warn("scene-location-not-in-chapter", `${label} is set in ${scene.location} but ${relative(project, chapter.file)} does not list that location`, label));
     }
   }
 }
@@ -604,13 +671,13 @@ function checkCutCharacters(project, warnings) {
   for (const entry of [...project.chapters, ...project.scenes]) {
     const listed = [...new Set([idText(entry.pov), ...entry.characters.map(idText)])].filter((id) => cut.has(id));
     for (const id of listed) {
-      warnings.push(`${relative(project, entry.file)} lists ${id}, who has status: cut; drop them from pov and characters`);
+      warnings.push(warn("cut-character-in-cast", `${relative(project, entry.file)} lists ${id}, who has status: cut; drop them from pov and characters`, relative(project, entry.file)));
     }
   }
   for (const arc of project.arcs) {
     for (const id of new Set(arc.characters.map(idText))) {
       if (cut.has(id)) {
-        warnings.push(`${relative(project, arc.file)} lists ${id}, who has status: cut; drop them from characters`);
+        warnings.push(warn("cut-character-in-arc", `${relative(project, arc.file)} lists ${id}, who has status: cut; drop them from characters`, relative(project, arc.file)));
       }
     }
   }
@@ -624,18 +691,18 @@ function checkCutCharacters(project, warnings) {
         continue;
       }
       const who = cut.has(target) ? target : character.id;
-      warnings.push(`${relative(project, character.file)} has a relationship with ${target}, but ${who} has status: cut; drop the relationship on both sides`);
+      warnings.push(warn("cut-character-relationship", `${relative(project, character.file)} has a relationship with ${target}, but ${who} has status: cut; drop the relationship on both sides`, relative(project, character.file)));
     }
   }
 }
 function checkChapterSequence(project, warnings) {
   const numbers = project.chapters.map((chapter) => chapter.number).filter((number) => Number.isInteger(number) && number > 0).sort((left, right) => left - right);
   if (numbers.length > 0 && numbers[0] > 1) {
-    warnings.push(`Chapter numbering starts at ${numbers[0]}, not 1`);
+    warnings.push(warn("chapter-numbering-start", `Chapter numbering starts at ${numbers[0]}, not 1`));
   }
   for (let index = 1;index < numbers.length; index += 1) {
     if (numbers[index] > numbers[index - 1] + 1) {
-      warnings.push(`Chapter numbering skips from ${numbers[index - 1]} to ${numbers[index]}`);
+      warnings.push(warn("chapter-numbering-gap", `Chapter numbering skips from ${numbers[index - 1]} to ${numbers[index]}`));
     }
   }
 }
@@ -647,21 +714,21 @@ function checkPromises(project, context, errors, warnings) {
     const label = relative(project, promise.file);
     const plantedNumber = context.chapterNumbers.get(promise.planted);
     if (scheduledOutOfOrder(context, promise.planted, promise.payoff)) {
-      errors.push(`${label} pays off in ${promise.payoff} before it is planted in ${promise.planted}`);
+      errors.push(err("promise-payoff-before-plant", `${label} pays off in ${promise.payoff} before it is planted in ${promise.planted}`, label));
     }
     if (promise.status === "paid-off" && !promise.payoff) {
-      errors.push(`${label} is paid-off but has no payoff chapter`);
+      errors.push(err("promise-payoff-missing", `${label} is paid-off but has no payoff chapter`, label));
     }
     if (promise.status === "planted" && !promise.planted) {
-      errors.push(`${label} is planted but has no planted chapter`);
+      errors.push(err("promise-plant-missing", `${label} is planted but has no planted chapter`, label));
     }
     const stale = stalePlannedWarning(label, promise, context);
     if (stale) {
-      warnings.push(stale);
+      warnings.push(warn("promise-stale-planned", stale, label));
     }
     const chekhov = chekhovWarning(label, promise.planted, plantedNumber, promise.payoff, referencedChapterNumber(context.chapterNumbers, promise.payoff), context);
     if (promise.status === "planted" && chekhov) {
-      warnings.push(chekhov);
+      warnings.push(warn(chekhov.passed ? "promise-payoff-passed" : "promise-unpaid", chekhov.message, label));
     }
   }
 }
@@ -672,13 +739,13 @@ function checkQuestions(project, context, errors) {
     }
     const label = relative(project, question.file);
     if (scheduledOutOfOrder(context, question.introduced, question.resolved)) {
-      errors.push(`${label} resolves in ${question.resolved} before it is introduced in ${question.introduced}`);
+      errors.push(err("question-resolved-before-introduced", `${label} resolves in ${question.resolved} before it is introduced in ${question.introduced}`, label));
     }
     if ((question.status === "answered" || question.status === "resolved") && !question.resolved) {
-      errors.push(`${label} is ${question.status} but has no resolved chapter`);
+      errors.push(err("question-resolution-missing", `${label} is ${question.status} but has no resolved chapter`, label));
     }
     if (question.status === "open" && question.resolved) {
-      errors.push(`${label} records resolved chapter ${question.resolved} but status is still open`);
+      errors.push(err("question-open-but-resolved", `${label} records resolved chapter ${question.resolved} but status is still open`, label));
     }
   }
 }
@@ -688,17 +755,17 @@ function checkStoryCompletion(project, errors) {
   }
   for (const promise of project.promises) {
     if (promise.status === "planned" || promise.status === "planted") {
-      errors.push(`story.md is complete but ${relative(project, promise.file)} is still ${promise.status}`);
+      errors.push(err("complete-with-open-promise", `story.md is complete but ${relative(project, promise.file)} is still ${promise.status}`, "story.md"));
     }
   }
   for (const question of project.questions) {
     if (question.status === "open") {
-      errors.push(`story.md is complete but ${relative(project, question.file)} is still open`);
+      errors.push(err("complete-with-open-question", `story.md is complete but ${relative(project, question.file)} is still open`, "story.md"));
     }
   }
   for (const clue of project.clues) {
     if (clue.status === "planned" || clue.status === "planted") {
-      errors.push(`story.md is complete but ${relative(project, clue.file)} is still ${clue.status}`);
+      errors.push(err("complete-with-open-clue", `story.md is complete but ${relative(project, clue.file)} is still ${clue.status}`, "story.md"));
     }
   }
 }
@@ -710,21 +777,21 @@ function checkClues(project, context, errors, warnings) {
     const label = relative(project, clue.file);
     const plantedNumber = context.chapterNumbers.get(clue.planted);
     if (scheduledOutOfOrder(context, clue.planted, clue.payoff)) {
-      errors.push(`${label} pays off in ${clue.payoff} before it is planted in ${clue.planted}`);
+      errors.push(err("clue-payoff-before-plant", `${label} pays off in ${clue.payoff} before it is planted in ${clue.planted}`, label));
     }
     if (clue.status === "paid-off" && !clue.payoff) {
-      errors.push(`${label} has status paid-off but no payoff chapter recorded`);
+      errors.push(err("clue-payoff-missing", `${label} has status paid-off but no payoff chapter recorded`, label));
     }
     if (clue.status === "planted" && !clue.planted) {
-      errors.push(`${label} is planted but no plant chapter recorded`);
+      errors.push(err("clue-plant-missing", `${label} is planted but no plant chapter recorded`, label));
     }
     const stale = stalePlannedWarning(label, clue, context);
     if (stale) {
-      warnings.push(stale);
+      warnings.push(warn("clue-stale-planned", stale, label));
     }
     const chekhov = chekhovWarning(label, clue.planted, plantedNumber, clue.payoff, referencedChapterNumber(context.chapterNumbers, clue.payoff), context);
     if (clue.status === "planted" && chekhov) {
-      warnings.push(chekhov);
+      warnings.push(warn(chekhov.passed ? "clue-payoff-passed" : "clue-unpaid", chekhov.message, label));
     }
   }
 }
@@ -751,18 +818,18 @@ function referencedChapterNumber(chapterNumbers, id) {
 }
 function chekhovWarning(label, planted, plantedNumber, payoff, payoffNumber, context) {
   if (plantedNumber === undefined) {
-    return "";
+    return null;
   }
   const latestChapter = context.latestChapter;
   const since = context.chapterNumberList.filter((number) => number > plantedNumber && number <= latestChapter).length;
   if (payoff && payoffNumber !== undefined) {
     const drafted = context.chapterNumbers.has(payoff) ? context.draftedChapters.has(payoff) : payoffNumber <= latestChapter;
-    return drafted ? `${label} payoff chapter ${payoff} has passed and status is still planted` : "";
+    return drafted ? { passed: true, message: `${label} payoff chapter ${payoff} has passed and status is still planted` } : null;
   }
   if (since < CHEKHOV_CHAPTER_GAP) {
-    return "";
+    return null;
   }
-  return `${label} was planted in ${planted}, ${since} chapters ago, and has no payoff yet`;
+  return { passed: false, message: `${label} was planted in ${planted}, ${since} chapters ago, and has no payoff yet` };
 }
 function checkContinuityState(project, context, errors, warnings) {
   if (!project.continuity) {
@@ -773,114 +840,114 @@ function checkContinuityState(project, context, errors, warnings) {
   const currentChapter = data["current-chapter"];
   if (Number.isInteger(currentChapter)) {
     if (currentChapter > context.highestChapter) {
-      errors.push(`${label} current-chapter ${currentChapter} is ahead of the latest chapter ${context.highestChapter}`);
+      errors.push(err("current-chapter-ahead", `${label} current-chapter ${currentChapter} is ahead of the latest chapter ${context.highestChapter}`, label));
     } else if (currentChapter < context.latestChapter) {
-      warnings.push(`${label} current-chapter ${currentChapter} is behind the latest chapter ${context.latestChapter}; update continuity state after drafting`);
+      warnings.push(warn("current-chapter-behind", `${label} current-chapter ${currentChapter} is behind the latest chapter ${context.latestChapter}; update continuity state after drafting`, label));
     }
   }
   const seenCharacters = new Map;
   for (const [index, entry] of stateEntries(data["character-state"]).entries()) {
     const entryLabel = `${label} character-state[${index}]`;
-    if (!requireMapping(entry, entryLabel, errors)) {
+    if (!requireMapping(entry, entryLabel, label, errors)) {
       continue;
     }
     const character = idText(entry.character);
     if (!character || !context.characters.has(character)) {
-      errors.push(`${entryLabel} references missing character ${character || "(unset)"}`);
+      errors.push(err("state-missing-character", `${entryLabel} references missing character ${character || "(unset)"}`, label));
     }
     if (character) {
       if (seenCharacters.has(character)) {
-        warnings.push(`${entryLabel} repeats character ${character} from character-state[${seenCharacters.get(character)}]; keep one entry per character`);
+        warnings.push(warn("state-duplicate-character", `${entryLabel} repeats character ${character} from character-state[${seenCharacters.get(character)}]; keep one entry per character`, label));
       } else {
         seenCharacters.set(character, index);
       }
     }
     const location = idText(entry.location);
     if (location && !context.locations.has(location)) {
-      errors.push(`${entryLabel} references missing location ${location}`);
+      errors.push(err("state-missing-location", `${entryLabel} references missing location ${location}`, label));
     }
   }
   const knownFacts = new Map;
   for (const [index, entry] of stateEntries(data["knowledge-state"]).entries()) {
     const entryLabel = `${label} knowledge-state[${index}]`;
-    if (!requireMapping(entry, entryLabel, errors)) {
+    if (!requireMapping(entry, entryLabel, label, errors)) {
       continue;
     }
     const character = idText(entry.character);
     if (entry.fact !== undefined) {
       const fact = String(entry.fact);
       if (!isKebabId(fact)) {
-        errors.push(`${entryLabel} fact ${fact || "(empty)"} must be a kebab-case id`);
+        errors.push(err("state-fact-not-kebab", `${entryLabel} fact ${fact || "(empty)"} must be a kebab-case id`, label));
       } else if (character) {
         const key = `${character}\x00${fact}`;
         if (knownFacts.has(key)) {
-          errors.push(`${entryLabel} repeats fact ${fact} for ${character} from knowledge-state[${knownFacts.get(key)}]`);
+          errors.push(err("state-duplicate-fact", `${entryLabel} repeats fact ${fact} for ${character} from knowledge-state[${knownFacts.get(key)}]`, label));
         } else {
           knownFacts.set(key, index);
         }
       }
     }
     if (!character || !context.characters.has(character)) {
-      errors.push(`${entryLabel} references missing character ${character || "(unset)"}`);
+      errors.push(err("state-missing-character", `${entryLabel} references missing character ${character || "(unset)"}`, label));
     }
     if (!entry.knows) {
-      errors.push(`${entryLabel} is missing knows`);
+      errors.push(err("state-missing-knows", `${entryLabel} is missing knows`, label));
     }
     const learnedIn = idText(entry["learned-in"]);
     if (learnedIn && !context.chapterNumbers.has(learnedIn)) {
-      errors.push(`${entryLabel} references missing chapter ${learnedIn}`);
+      errors.push(err("state-missing-chapter", `${entryLabel} references missing chapter ${learnedIn}`, label));
     }
-    checkPosthumousLearning(context.characters.get(character), learnedIn, entryLabel, context, errors, warnings);
+    checkPosthumousLearning(context.characters.get(character), learnedIn, entryLabel, label, context, errors, warnings);
   }
   const seenArtifacts = new Map;
   for (const [index, entry] of stateEntries(data["object-state"]).entries()) {
     const entryLabel = `${label} object-state[${index}]`;
-    if (!requireMapping(entry, entryLabel, errors)) {
+    if (!requireMapping(entry, entryLabel, label, errors)) {
       continue;
     }
     const artifactId = idText(entry.artifact);
     const artifact = context.artifacts.get(artifactId);
     if (!artifactId || !artifact) {
-      errors.push(`${entryLabel} references missing artifact ${artifactId || "(unset)"}`);
+      errors.push(err("state-missing-artifact", `${entryLabel} references missing artifact ${artifactId || "(unset)"}`, label));
     }
     const since = idText(entry.since);
     if (artifactId) {
       const key = `${artifactId}\x00${since}`;
       if (seenArtifacts.has(key)) {
-        warnings.push(`${entryLabel} repeats artifact ${artifactId} from object-state[${seenArtifacts.get(key)}]; keep one entry per artifact${since ? ` per since chapter` : ""}`);
+        warnings.push(warn("state-duplicate-artifact", `${entryLabel} repeats artifact ${artifactId} from object-state[${seenArtifacts.get(key)}]; keep one entry per artifact${since ? ` per since chapter` : ""}`, label));
       } else {
         seenArtifacts.set(key, index);
       }
     }
     const owner = idText(entry.owner);
     if (owner && !context.characters.has(owner) && !context.factions.has(owner)) {
-      errors.push(`${entryLabel} references missing owner ${owner}`);
+      errors.push(err("state-missing-owner", `${entryLabel} references missing owner ${owner}`, label));
     }
     const location = idText(entry.location);
     if (location && !context.locations.has(location)) {
-      errors.push(`${entryLabel} references missing location ${location}`);
+      errors.push(err("state-missing-location", `${entryLabel} references missing location ${location}`, label));
     }
     if (since && !context.chapterNumbers.has(since)) {
-      errors.push(`${entryLabel} references missing since chapter ${since}`);
+      errors.push(err("state-missing-chapter", `${entryLabel} references missing since chapter ${since}`, label));
     }
     if (entry.status && artifact && artifact.status && entry.status !== artifact.status && latestObjectEntry(data, artifactId, context) === entry) {
-      warnings.push(`${entryLabel} status ${entry.status} conflicts with ${relative(project, artifact.file)} status ${artifact.status}`);
+      warnings.push(warn("state-status-conflict", `${entryLabel} status ${entry.status} conflicts with ${relative(project, artifact.file)} status ${artifact.status}`, label));
     }
   }
 }
-function checkPosthumousLearning(character, learnedIn, entryLabel, context, errors, warnings) {
+function checkPosthumousLearning(character, learnedIn, entryLabel, file, context, errors, warnings) {
   if (!character || !context.chapterNumbers.has(learnedIn)) {
     return;
   }
   if (!character.diedIn) {
     if (character.status === "deceased") {
-      warnings.push(`${entryLabel} has ${character.id} learn something in ${learnedIn}, but ${character.id} died before the story (deceased with no died-in)`);
+      warnings.push(warn("deceased-learning", `${entryLabel} has ${character.id} learn something in ${learnedIn}, but ${character.id} died before the story (deceased with no died-in)`, file));
     }
     return;
   }
   const window = deathWindow(character, context.chronology);
   if (window && window.deadIn(learnedIn)) {
-    errors.push(`${entryLabel} has ${character.id} learn something in ${learnedIn}, after they died in ${character.diedIn}`);
+    errors.push(err("posthumous-learning", `${entryLabel} has ${character.id} learn something in ${learnedIn}, after they died in ${character.diedIn}`, file));
   }
 }
 function checkSceneLearning(project, context, errors, warnings) {
@@ -890,7 +957,7 @@ function checkSceneLearning(project, context, errors, warnings) {
         continue;
       }
       const character = context.characters.get(idText(change.character));
-      checkPosthumousLearning(character, scene.chapter, `${relative(project, scene.file)} state-change`, context, errors, warnings);
+      checkPosthumousLearning(character, scene.chapter, `${relative(project, scene.file)} state-change`, relative(project, scene.file), context, errors, warnings);
     }
   }
 }
@@ -927,7 +994,7 @@ function checkStateAgainstStory(project, context, warnings) {
     const entryLabel = `${label} knowledge-state[${index}]`;
     const chapter = chaptersById.get(learnedIn);
     if (chapter.status !== "outline" && !inCast(chapter, character) && !scenesOf(learnedIn).some((scene) => inCast(scene, character))) {
-      warnings.push(`${entryLabel} has ${character} learn something in ${learnedIn}, which does not list ${character} in characters or pov`);
+      warnings.push(warn("learner-not-in-cast", `${entryLabel} has ${character} learn something in ${learnedIn}, which does not list ${character} in characters or pov`, label));
     }
   }
   const unmatched = [];
@@ -961,7 +1028,7 @@ function checkStateAgainstStory(project, context, warnings) {
       used.add(pair.index);
       continue;
     }
-    warnings.push(`${relative(project, scene.file)} state-changes record ${character} learning "${String(change.knowledge).trim()}" but ${label} has no knowledge-state entry for it learned by ${scene.chapter}`);
+    warnings.push(warn("knowledge-not-recorded", `${relative(project, scene.file)} state-changes record ${character} learning "${String(change.knowledge).trim()}" but ${label} has no knowledge-state entry for it learned by ${scene.chapter}`, relative(project, scene.file)));
   }
   const current = project.chapters.find((chapter) => chapter.number === currentChapter);
   for (const [index, entry] of stateEntries(data["character-state"]).entries()) {
@@ -972,7 +1039,7 @@ function checkStateAgainstStory(project, context, warnings) {
     const entryLabel = `${label} character-state[${index}]`;
     const window = windows.get(character);
     if (window && current && (current.id === window.died || window.deadIn(current.id))) {
-      warnings.push(`${entryLabel} tracks ${character}, who died in ${window.died}; remove the entry once they are dead`);
+      warnings.push(warn("state-tracks-dead-character", `${entryLabel} tracks ${character}, who died in ${window.died}; remove the entry once they are dead`, label));
       continue;
     }
     const location = idText(entry.location);
@@ -981,7 +1048,7 @@ function checkStateAgainstStory(project, context, warnings) {
     }
     const last = scenesOf(current.id).filter((scene) => inCast(scene, character) && scene.location).pop();
     if (last && last.location !== location && !current.locations.includes(location)) {
-      warnings.push(`${entryLabel} puts ${character} at ${location}, but their last scene in ${current.id}, ${relative(project, last.file)}, is at ${last.location} and the chapter does not list ${location}`);
+      warnings.push(warn("state-location-drift", `${entryLabel} puts ${character} at ${location}, but their last scene in ${current.id}, ${relative(project, last.file)}, is at ${last.location} and the chapter does not list ${location}`, label));
     }
   }
   const lastSet = new Map;
@@ -1004,7 +1071,7 @@ function checkStateAgainstStory(project, context, warnings) {
   for (const { artifact, field, value, scene } of lastSet.values()) {
     const entry = latestObjectEntry(data, artifact, context);
     if (!entry) {
-      warnings.push(`${relative(project, scene.file)} state-changes set ${artifact} ${field} ${value} but ${label} has no object-state entry for ${artifact}`);
+      warnings.push(warn("object-not-recorded", `${relative(project, scene.file)} state-changes set ${artifact} ${field} ${value} but ${label} has no object-state entry for ${artifact}`, relative(project, scene.file)));
       continue;
     }
     const since = idText(entry.since);
@@ -1012,7 +1079,7 @@ function checkStateAgainstStory(project, context, warnings) {
     const stated = idText(entry[field]);
     if (!newer && stated !== value) {
       const index = stateEntries(data["object-state"]).indexOf(entry);
-      warnings.push(`${label} object-state[${index}] gives ${artifact} ${field} ${stated || "(unset)"}, but ${relative(project, scene.file)} state-changes last set it to ${value}`);
+      warnings.push(warn("state-object-drift", `${label} object-state[${index}] gives ${artifact} ${field} ${stated || "(unset)"}, but ${relative(project, scene.file)} state-changes last set it to ${value}`, label));
     }
   }
 }
@@ -1059,9 +1126,9 @@ function stateEntries(value) {
 function isKebabId(value) {
   return value !== "" && value === kebabCase(value);
 }
-function requireMapping(entry, entryLabel, errors) {
+function requireMapping(entry, entryLabel, file, errors) {
   if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-    errors.push(`${entryLabel} must be a mapping`);
+    errors.push(err("state-entry-not-mapping", `${entryLabel} must be a mapping`, file));
     return false;
   }
   return true;
@@ -1079,10 +1146,10 @@ function checkPropCustody(project, context, errors) {
       }
       const sceneLabel = relative(project, scene.file);
       if (scene.stateChanges.some((change) => stateChangeTargets(change, artifact))) {
-        errors.push(`${sceneLabel} uses ${artifact}, destroyed/lost ${beforeStory ? "before the story" : `since ${since}`}`);
+        errors.push(err("gone-artifact-used", `${sceneLabel} uses ${artifact}, destroyed/lost ${beforeStory ? "before the story" : `since ${since}`}`, sceneLabel));
       }
       if (!beforeStory && scene.mentions.includes(artifact)) {
-        errors.push(`${sceneLabel} mentions ${artifact}, destroyed/lost since ${since}`);
+        errors.push(err("gone-artifact-mentioned", `${sceneLabel} mentions ${artifact}, destroyed/lost since ${since}`, sceneLabel));
       }
     }
     for (const chapter of project.chapters) {
@@ -1090,7 +1157,7 @@ function checkPropCustody(project, context, errors) {
         continue;
       }
       if (chapter.mentions.includes(artifact)) {
-        errors.push(`${relative(project, chapter.file)} mentions ${artifact}, destroyed/lost since ${since}`);
+        errors.push(err("gone-artifact-mentioned", `${relative(project, chapter.file)} mentions ${artifact}, destroyed/lost since ${since}`, relative(project, chapter.file)));
       }
     }
   }
@@ -1147,24 +1214,24 @@ function checkClock(project, errors, warnings) {
   for (const scene of project.scenes) {
     const label = relative(project, scene.file);
     if (scene.date !== "" && !parseClockDate(scene.date)) {
-      warnings.push(`${label} has malformed date "${scene.date}"`);
+      warnings.push(warn("malformed-date", `${label} has malformed date "${scene.date}"`, label));
     }
     if (scene.time !== "" && parseClockTime(scene.time) === undefined) {
-      warnings.push(`${label} has malformed time "${scene.time}"`);
+      warnings.push(warn("malformed-time", `${label} has malformed time "${scene.time}"`, label));
     }
     if (scene.travelHours < 0) {
-      warnings.push(`${label} has negative travel-hours ${scene.travelHours}`);
+      warnings.push(warn("negative-travel-hours", `${label} has negative travel-hours ${scene.travelHours}`, label));
     }
     if (scene.date === "" && scene.travelHours > 0) {
-      warnings.push(`${label} has travel-hours but no date, so the clock check skips it`);
+      warnings.push(warn("travel-hours-undated", `${label} has travel-hours but no date, so the clock check skips it`, label));
     }
   }
   for (const chapter of project.chapters) {
     if (chapter.date !== "" && !parseClockDate(chapter.date)) {
-      warnings.push(`Chapter ${chapter.number} has malformed date "${chapter.date}"`);
+      warnings.push(warn("malformed-date", `Chapter ${chapter.number} has malformed date "${chapter.date}"`));
     }
     if (chapter.time !== "" && parseClockTime(chapter.time) === undefined) {
-      warnings.push(`Chapter ${chapter.number} has malformed time "${chapter.time}"`);
+      warnings.push(warn("malformed-time", `Chapter ${chapter.number} has malformed time "${chapter.time}"`));
     }
   }
   const strands = new Map;
@@ -1181,6 +1248,7 @@ function checkClock(project, errors, warnings) {
     const minutes = parseClockTime(unit.time);
     stamps.push({
       label: isChapter ? `Chapter ${unit.number}` : relative(project, unit.file),
+      file: isChapter ? null : relative(project, unit.file),
       isChapter,
       date: parsed.text,
       time: minutes === undefined ? "" : unit.time.trim(),
@@ -1266,11 +1334,11 @@ function advanceClock(reference, current) {
 }
 function backwardFinding(current, reference) {
   if (!current.isChapter) {
-    return `${current.label} timestamp runs backward`;
+    return warn("clock-backward", `${current.label} timestamp runs backward`, current.file);
   }
   const sameDay = current.days === reference.days;
   const when = (stamp) => sameDay && stamp.time ? `${stamp.date} ${stamp.time}` : stamp.date;
-  return `${current.label} date ${when(current)} is earlier than ${reference.label} date ${when(reference)}`;
+  return warn("clock-backward", `${current.label} date ${when(current)} is earlier than ${reference.label} date ${when(reference)}`);
 }
 function checkTravelHours(current, reference, errors) {
   if (!(current.travelHours > 0) || current.minutes === undefined || reference.minutes === undefined) {
@@ -1279,7 +1347,7 @@ function checkTravelHours(current, reference, errors) {
   const elapsedHours = (current.latest - reference.earliest) / 60;
   if (elapsedHours < current.travelHours - 0.000000001) {
     const gap = current.exact && reference.exact ? `only ${formatHours(elapsedHours, Math.floor)}` : `at most ${formatHours(elapsedHours, Math.floor)}`;
-    errors.push(`${current.label} allows ${gap} for travel of ${current.travelHours}h`);
+    errors.push(err("travel-too-fast", `${current.label} allows ${gap} for travel of ${current.travelHours}h`, current.file));
   }
 }
 var TIME_RANGES = new Map([
@@ -1349,12 +1417,12 @@ function checkRouteTravel(project, errors) {
         const elapsed = Math.max(forwardGap, (previous.latest - current.earliest) / 60);
         const needed = graph.has(from) && graph.has(to) ? distance(from, to) : undefined;
         if (needed === undefined && elapsed === 0 && previous.exact && current.exact) {
-          errors.push(`${current.label} puts ${characterId} at ${to} at the same time as ${previous.label} at ${from}`);
+          errors.push(err("route-same-time", `${current.label} puts ${characterId} at ${to} at the same time as ${previous.label} at ${from}`, current.label));
           break;
         }
         if (needed !== undefined && elapsed < needed - 0.000000001) {
           const gap = previous.exact && current.exact ? formatHours(elapsed, Math.floor) : `at most ${formatHours(elapsed, Math.floor)}`;
-          errors.push(`${current.label} puts ${characterId} at ${to} ${gap} after ${previous.label} at ${from}, but the fastest route takes ${formatHours(needed, Math.ceil)}`);
+          errors.push(err("route-too-fast", `${current.label} puts ${characterId} at ${to} ${gap} after ${previous.label} at ${from}, but the fastest route takes ${formatHours(needed, Math.ceil)}`, current.label));
           break;
         }
       }

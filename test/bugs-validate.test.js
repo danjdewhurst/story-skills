@@ -326,7 +326,7 @@ describe("#162 exemptions", () => {
     const root = exemptionProject();
     writeExemptions(root, '  - pattern: " ann, who died in chapter-01"\n    reason: "Ann is a ghost"');
     const result = checkProjectContinuity(root);
-    expect(result.dismissed.map((entry) => entry.finding)).toEqual([expect.stringContaining("lists ann, who died")]);
+    expect(result.dismissed.map((entry) => entry.finding.message)).toEqual([expect.stringContaining("lists ann, who died")]);
     expect(messages(result.errors)).toContain("chapters/chapter-03.md lists joann, who died in chapter-01; move posthumous appearances to mentions");
   });
 
