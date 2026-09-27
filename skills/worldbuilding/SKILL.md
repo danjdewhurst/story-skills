@@ -101,10 +101,32 @@ Then:
 ## Updating World Elements
 
 1. Read the existing file
-2. Make the requested changes
+2. Make the requested changes. If a location or faction changes partway through the story (a city falls, a guild disbands), add a progression instead of editing the opening value (see Changes Over the Story)
 3. If cross-references changed, update the linked files
 4. Update `worldbuilding/_index.md` if name, type, or status changed
 5. When CLI access is available, run `story reindex .`, `story links .`, and `story validate .`
+
+## Changes Over the Story
+
+Location and faction files describe the world as the story opens. Record a later change as a progression, so drafting an early chapter does not see what happens in a late one:
+
+```yaml
+progressions:
+  - from: chapter-10
+    field: status
+    value: occupied
+  - from: chapter-10
+    field: controlled-by
+    value: lord-maren
+```
+
+- `from` is the first chapter where the new value holds. It may be a planned `chapter-NN` with no file yet
+- `field` is a kebab-case single-value field, existing (`status`, `controlled-by`, `region`) or new (`ruler`, `population-note`). List fields (`notable-characters`, `routes`, `members`, `locations`, `tags`) cannot change this way
+- `value` is one value. A faction's `type` and `status` must stay within their allowed values
+- Keep entries in story order, and read the progressions up to the chapter being drafted before describing the place or faction in it
+- Artifacts and systems do not take progressions; track an artifact's changes with `object-state` and scene `state-changes` (see the revision-continuity skill)
+
+After adding or editing progressions, run `story validate .` and `story links .`.
 
 ## Cross-Referencing
 

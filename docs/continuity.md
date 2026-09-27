@@ -553,6 +553,13 @@ $ story knowledge jonas-reed --at chapter-04
 
 The command exits 2 with `Unknown character <id>` or `Unknown chapter <id>` if either id does not exist, exits 3 with the parse error instead (such as `characters/mara.md: is missing YAML frontmatter`) when the character's file fails to parse, and exits 2 with the usage line if you leave out the character or `--at`. Entries whose `learned-in` chapter does not exist are skipped here; `story continuity` reports them as errors.
 
+After the knowledge, it lists the character's [progressions](project-format.md#progressions) that apply by the `--at` chapter: changes such as a new `status`, a scar, or a title, each with the chapter it takes effect from and the value it replaced. A change planned for chapter 20 stays out of the answer for chapter 5, so an agent drafting chapter 5 does not write it in early:
+
+```text
+State at chapter-03:
+- status: missing (from chapter-02, was alive)
+```
+
 The answer is only as good as the state file. After drafting a chapter in which someone learns something that matters later, add a `knowledge-state` entry with `learned-in`. Before revising a scene in which a character acts on a secret, run `story knowledge` for that chapter.
 
 ## Story timeline

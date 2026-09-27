@@ -43,10 +43,32 @@ story validate .
 
 1. Read the existing character file
 2. Read `characters/_index.md` for context on other characters
-3. Make the requested changes
+3. Make the requested changes. If the change happens partway through the story (a scar, a new title, a turn to the other side), add a progression instead of editing the opening value (see Changes Over the Story)
 4. If relationships changed, update the other character's file (bidirectional)
 5. Update `characters/_index.md` if role or status changed
 6. When CLI access is available, run `story reindex .`, `story links .`, and `story validate .`
+
+## Changes Over the Story
+
+A character file describes the character as the story opens. Record a change that happens in a later chapter as a progression, so an agent drafting an earlier chapter does not write it in too soon:
+
+```yaml
+progressions:
+  - from: chapter-10
+    field: scar
+    value: "Jaw to collarbone, taken holding a door"
+  - from: chapter-14
+    field: role
+    value: antagonist
+```
+
+- `from` is the first chapter where the new value holds. It may be a planned `chapter-NN` with no file yet
+- `field` is kebab-case. It can be an existing single-value field (`status`, `role`, `arc`) or a new one (`scar`, `title`). List fields (`aliases`, `relationships`, `locations`, `tags`, voice lists) cannot change this way; record a shifted relationship as its own field, such as `standing-with-kael: estranged`
+- `value` is one value. `role` and `status` values must be ones the character file allows
+- Keep entries in story order. Do not use a progression for a death: set `died-in` (see below)
+- Before drafting or revising a chapter, run `story knowledge {id} --at chapter-NN` to see what the character knows and which changes already apply there, and write to that state rather than the opening frontmatter alone
+
+After adding or editing progressions, run `story validate .` and `story links .`.
 
 ## Renaming or Killing Off a Character
 

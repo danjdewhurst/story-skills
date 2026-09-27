@@ -525,6 +525,7 @@ arc: redemption
 | `voice-words` | list of strings | no | Words and phrases the character reaches for in dialogue. |
 | `voice-avoid` | list of strings | no | Words the character would never say. |
 | `pronunciation` | string | no | A respelling such as `SHUR-sha`, for the narration build's pronunciation guide. |
+| `progressions` | list of mappings | no | Changes to single-value fields from a chapter on. See [Progressions](#progressions). |
 
 Status notes:
 
@@ -575,6 +576,7 @@ Files: `worldbuilding/locations/<location-id>.md`. Created with `story add locat
 | `status` | string | no | Free text (default `unknown`). |
 | `routes` | list of mappings | no | Journeys to other locations, with travel times. See below. |
 | `pronunciation` | string | no | Respelling for the narration build (see [Characters](#characters)). |
+| `progressions` | list of mappings | no | Changes from a chapter on, such as `status` or `controlled-by`. See [Progressions](#progressions). |
 
 #### Routes
 
@@ -619,6 +621,7 @@ Files: `worldbuilding/factions/<faction-id>.md`. Created with `story add faction
 | `locations` | list of location ids | no | Where the faction operates. |
 | `tags` | list of strings | no | Free labels. |
 | `pronunciation` | string | no | Respelling for the narration build. |
+| `progressions` | list of mappings | no | Changes from a chapter on, such as `status`. See [Progressions](#progressions). |
 
 ### Artifacts
 
@@ -635,6 +638,41 @@ Files: `worldbuilding/artifacts/<artifact-id>.md`, for objects that matter to th
 | `pronunciation` | string | no | Respelling for the narration build. |
 
 The [worldbuilding skill](../skills/worldbuilding/SKILL.md) has body templates for each kind.
+
+### Progressions
+
+A character, location, or faction file describes the entity as the story opens. When something about it changes partway through, a scar, a new title, a city falling, a guild disbanding, record the change as a progression instead of editing the opening value. Then an agent drafting chapter 5 does not see what happens in chapter 20.
+
+```yaml
+progressions:
+  - from: chapter-10
+    field: status
+    value: occupied
+  - from: chapter-10
+    field: controlled-by
+    value: lord-maren
+  - from: chapter-11
+    field: status
+    value: "sealed and cooling"
+```
+
+| Field | Type | Required | Meaning |
+|-------|------|----------|---------|
+| `progressions[].from` | chapter id | yes | The first chapter in which the new value holds. It may be a planned `chapter-NN` with no file yet. |
+| `progressions[].field` | kebab-case string | yes | The field that changes. It may be a field the file already has (`status`, `role`, `controlled-by`) or a new one (`scar`, `title`). |
+| `progressions[].value` | string, number, or boolean | yes | The value from that chapter on. An empty string clears the field, such as a location no longer `controlled-by` anyone. |
+
+At a given chapter, an entity's state is its frontmatter with every progression from that chapter or earlier applied in story order, so a change listed `from: chapter-10` already holds while chapter 10 is drafted. Chapters compare in story time, as `died-in` does: by date when both chapters are dated, else by number. A planned chapter compares by the number in its id. `story knowledge <character-id> --at <chapter-id>` prints the changes that apply to a character after its knowledge. The resolver behind it, `entityStateAt(frontmatter, chapterId, chronology)` in `src/progressions.js`, is exported for other commands.
+
+Rules:
+
+- `story validate` errors when `progressions` is not a list, when an entry is not a mapping or lacks `from`, `field`, or `value`, when `field` is not kebab-case, when `value` is a list or mapping, and when two entries change the same field from the same chapter. Entries must be listed in story order: an entry whose chapter comes before the previous entry's is an error.
+- A progression holds one value, so it cannot change a list field (`aliases`, `relationships`, `locations`, `tags`, `voice-words`, `voice-avoid`, `notable-characters`, `routes`, `members`). It also cannot change `id`, `progressions`, `died-in`, or `revived-in`. Record a changed relationship as its own field, such as `field: standing-with-kael`.
+- A value for an enum field must be allowed there: a character's `role` and `status`, a faction's `type` and `status`.
+- A character progression to `status: deceased` warns unless `died-in` names the same chapter, since `story continuity` reads deaths from `died-in`.
+- `story links` errors when `from` names a chapter that does not exist and is not a planned `chapter-NN` spelled the way `story add chapter` writes it.
+
+`story move chapter` rewrites `from` like any other chapter reference, and `story remove chapter` refuses while a progression starts in that chapter. `story rename` rewrites a `value` whose `field` is a reference field, such as `controlled-by` or a character's `arc`, and `story remove` clears a `value` that named the removed entity, as it clears the field itself.
 
 ## Plot
 
@@ -1114,6 +1152,7 @@ Fields that name another entity hold its id. `story links` checks that each id i
 | Character | `relationships[].character` | Character, with a backlink (see [Relationship types](#relationship-types)) |
 | Character | `locations` | Location that lists the character in `notable-characters` |
 | Character | `died-in`, `revived-in` | Chapter |
+| Character, location, faction | `progressions[].from` | Chapter; may be a scheduled `chapter-NN` with no chapter file yet (see [Progressions](#progressions)) |
 | Location | `notable-characters` | Character that lists the location in `locations` |
 | Location | `routes[].to` | Another location (not the location itself) |
 | Faction | `members` | Character |
@@ -1142,13 +1181,13 @@ A promise or clue can schedule its setup and payoff ahead of the drafted book: `
 
 When you add a character with `--location`, or a location with `--character`, `story add` writes the backlink into the other file.
 
-`story rename` and `story remove` keep ids consistent across every file's frontmatter (except `story.md`). They rewrite the entity-reference fields in the table above (including a location's `routes[].to`), plus `controlled-by`, the state-file fields (`character`, `location`, `artifact`, `owner`, `learned-in`, `since`), and the `character` and `target` (an artifact) keys inside a scene's `state-changes`. A field that can name more than one kind (`owner`, `controlled-by`, `mentions`) is left alone when another kind has an entity with the same id. Beyond that:
+`story rename` and `story remove` keep ids consistent across every file's frontmatter (except `story.md`). They rewrite the entity-reference fields in the table above (including a location's `routes[].to`), plus `controlled-by`, the state-file fields (`character`, `location`, `artifact`, `owner`, `learned-in`, `since`), the `character` and `target` (an artifact) keys inside a scene's `state-changes`, and a progression's `value` when its `field` is one of these reference fields. A field that can name more than one kind (`owner`, `controlled-by`, `mentions`) is left alone when another kind has an entity with the same id. Beyond that:
 
 - `story rename` also rewrites markdown links, inline or reference-style definitions, in any project file, that point at the renamed file. `rename` and `add` refuse an id that another kind sharing one of those fields already uses, since the references could not tell them apart.
-- `story remove` clears a scalar reference (except that `remove chapter` refuses while `died-in`, `since`, or `learned-in` names the chapter, since an empty value there means "before the story"), drops the id from a list, and drops a whole `relationships`, `character-state`, `knowledge-state`, `object-state`, or `routes` entry whose identifying `character`, `artifact`, or `to` was removed. It does not edit bodies, so bare `chapter-NN` tokens and links to a removed file remain. `story links` reports them only in `plot/timeline.md` and arc bodies; find leftovers elsewhere (hand-written registry sections, `style-sheet.md`, other entity bodies) by hand.
+- `story remove` clears a scalar reference (except that `remove chapter` refuses while `died-in`, `since`, `learned-in`, or a progression's `from` names the chapter, since an empty value there means "before the story" and a progression needs its chapter), drops the id from a list, and drops a whole `relationships`, `character-state`, `knowledge-state`, `object-state`, or `routes` entry whose identifying `character`, `artifact`, or `to` was removed. A progression's `value` that named the removed entity is cleared like any other scalar reference. It does not edit bodies, so bare `chapter-NN` tokens and links to a removed file remain. `story links` reports them only in `plot/timeline.md` and arc bodies; find leftovers elsewhere (hand-written registry sections, `style-sheet.md`, other entity bodies) by hand.
 - Neither command edits `follows` or `precedes`, which name other projects rather than entities.
 
-When `story move` renumbers a chapter or moves a scene, it rewrites the old chapter or scene id in these fields and in `current-chapter`, rewrites markdown links to the moved files, and updates bare chapter and scene ids in `plot/timeline.md`, arc bodies, and `plot/_index.md`.
+When `story move` renumbers a chapter or moves a scene, it rewrites the old chapter or scene id in these fields, in `progressions[].from`, and in `current-chapter`, rewrites markdown links to the moved files, and updates bare chapter and scene ids in `plot/timeline.md`, arc bodies, and `plot/_index.md`.
 
 The CLI reference covers [`rename`](cli-reference.md#rename), [`move`](cli-reference.md#move), and [`remove`](cli-reference.md#remove).
 

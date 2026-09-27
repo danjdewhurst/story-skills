@@ -50,7 +50,7 @@ Absolute paths in output are shortened to `~/stories/...`.
 | | [`wordcount [path]`](#wordcount) | Count chapter prose words | With `--write` |
 | | [`links [path]`](#links) | Check cross-references and backlinks | No |
 | Analysis | [`continuity [path]`](#continuity) | Check deaths, casts, promises, questions, clues, prop custody, clock and travel time, routes, and state | No |
-| | [`knowledge <id>`](#knowledge) | List what a character knew at a chapter | No |
+| | [`knowledge <id>`](#knowledge) | List what a character knew at a chapter, and how their progressions had changed them | No |
 | | [`compare [path]`](#compare) | Compare chapters with an earlier draft | No |
 | | [`progress [path]`](#progress) | Show words against targets and deadline | With `--log` |
 | | [`timeline [path]`](#timeline) | Show scenes in story-time order, POV balance, presence | No |
@@ -587,6 +587,7 @@ Checks that the project is structurally sound:
 - `target-words`, and the manuscript length of a complete story, fall inside the usual range for the `form` in `story.md` (warning)
 - publishing fields in `story.md` are well formed: `language` is a BCP 47 tag, `isbn` a valid ISBN-10 or ISBN-13, `publication-date` a real date, `subjects` BISAC codes; more than seven `keywords` is a warning
 - `revision-passes` in `story.md` is a list of kebab-case passes with a `pending`, `in-progress`, or `done` status
+- `progressions` on characters, locations, and factions are well formed and in story order: each entry has a `from` chapter, a kebab-case `field` that is not a list field, and a single `value` allowed for that field, and no two entries change the same field from the same chapter; a character progression to `status: deceased` without a matching `died-in` is a warning (see [Progressions](project-format.md#progressions))
 - `style-sheet.md`, `progress.md`, `continuity/exemptions.md`, and the `story.md` `cover` image are well formed, when present
 - `follows`, `precedes`, and `cover` in `story.md` use `/`, not a Windows `\`, which resolves on Windows but not on Linux or macOS CI (warning: `story.md follows ..\ser1 uses a backslash; write ../ser1 so the path works on every system`); `story links` reports the same in series links, and in markdown links in `plot/timeline.md` and arc bodies, as errors
 
@@ -684,6 +685,7 @@ Checks that references between entities point at entities that exist and that tw
 - character `locations` and location `notable-characters`, which must list each other
 - location `routes`, whose `to` must name another existing location
 - a character's `died-in` and `revived-in` chapters
+- the `from` chapter of each progression on a character, location, or faction, which may be a scheduled `chapter-NN` with no chapter file yet
 - arc characters, faction members and locations, and artifact owners and locations
 - chapter and scene POV, `characters`, `mentions` (a character or an artifact), locations, and `arcs-advanced`, and each scene's chapter
 - the chapter, character, and arc ids in questions, promises, and clues, and the `used-in` chapters of research notes. A promise or clue `payoff`, its `planted` while `status: planned`, an `open` question's `introduced`, and a research note's `used-in` may name a scheduled `chapter-NN` that has no chapter file yet, unless its number is 0 or belongs to an existing chapter under another id (`chapter-1` beside `chapter-01`)
@@ -799,6 +801,15 @@ story knowledge kael-voss --at chapter-01
 
 ```text
 - The tunnels from the Vale side reach the Whisper Gate into the High Keep (pre-existing knowledge)
+```
+
+After the knowledge, it prints the character's [progressions](project-format.md#progressions) that apply by that chapter, oldest first, each with the value it replaced. A progression from the `--at` chapter itself counts. A character with `status: alive` and a progression `from: chapter-02` to `missing` prints, at `chapter-03`:
+
+```text
+No recorded knowledge for mara-finn at chapter-03
+State at chapter-03:
+- status: missing (from chapter-02, was alive)
+- scar: jaw to collarbone (from chapter-03)
 ```
 
 With nothing recorded, it prints `No recorded knowledge for <id> at <chapter-id>` and exits 0. A missing argument or an unknown character or chapter exits 2; a character file that fails to parse exits 3. A broken character file prints its parse error, such as `characters/mara.md: is missing YAML frontmatter`, rather than `Unknown character`:
@@ -1824,6 +1835,7 @@ Chapter and scene ids come from their numbers, so reordering the book changes id
 - `chapter` on each of the chapter's scenes
 - `planted` and `payoff` on promises and clues, and `introduced` and `resolved` on questions
 - `used-in` on research notes and `died-in` and `revived-in` on characters
+- `from` in the `progressions` of characters, locations, and factions
 - `since` and `learned-in` in `continuity/state.md`, and `current-chapter` when it held the moved chapter's number
 - markdown links to the moved chapter and scene files, anywhere in the project
 - bare chapter and scene ids in the bodies of `plot/timeline.md` and `plot/arcs/*.md`, the ones `story links` checks, and in `plot/_index.md` (the Theme Tracking table). An id is a whole token: `chapter-01-draft` and `pre-chapter-01` are left alone, by `move` and `links` alike
@@ -1886,7 +1898,7 @@ As with `rename`, every file is parsed before anything is written, so a file tha
 story remove <kind> <id> [--path <project>]
 ```
 
-Deletes the entity file and scrubs its id from every reference field, searching the same markdown files as `rename`. List entries are removed, single-value fields are cleared, and whole entries in `relationships`, `character-state`, `knowledge-state`, `object-state`, and location `routes` are dropped when they are about the removed entity. Prose and markdown links in file bodies are never changed, so `remove` lists the files that still link to the removed file (a registry's own sections included) or, for a chapter or scene, still name its id in `plot/timeline.md`, `plot/_index.md`, or an arc, and any `continuity/exemptions.md` patterns naming the id, which no longer match anything (`warning: characters/_index.md, plot/arcs/main.md still mention character bo in links in the text, which remove does not change: edit them, then run story links`). Names in prose are not listed; find them by hand, for example with `grep -rn brass-sounding-line .`. As with `rename`, every file is parsed before anything is deleted, so a file that fails to parse, or an entity file, registry, or fixed project file with no frontmatter, leaves the project unchanged. References are scrubbed before the entity file is deleted, so an interrupted `remove` can simply be run again.
+Deletes the entity file and scrubs its id from every reference field, searching the same markdown files as `rename`. List entries are removed, single-value fields are cleared, and whole entries in `relationships`, `character-state`, `knowledge-state`, `object-state`, and location `routes` are dropped when they are about the removed entity. A `progressions` entry whose `value` was the removed id keeps its chapter and field, with the value cleared. Prose and markdown links in file bodies are never changed, so `remove` lists the files that still link to the removed file (a registry's own sections included) or, for a chapter or scene, still name its id in `plot/timeline.md`, `plot/_index.md`, or an arc, and any `continuity/exemptions.md` patterns naming the id, which no longer match anything (`warning: characters/_index.md, plot/arcs/main.md still mention character bo in links in the text, which remove does not change: edit them, then run story links`). Names in prose are not listed; find them by hand, for example with `grep -rn brass-sounding-line .`. As with `rename`, every file is parsed before anything is deleted, so a file that fails to parse, or an entity file, registry, or fixed project file with no frontmatter, leaves the project unchanged. References are scrubbed before the entity file is deleted, so an interrupted `remove` can simply be run again.
 
 `remove chapter` refuses while scenes still point at the chapter, so remove those first:
 
@@ -1895,7 +1907,7 @@ $ story remove chapter chapter-01
 chapter chapter-01 still has scenes: chapter-01-scene-01. Remove them first with story remove scene <id>
 ```
 
-It also refuses while a character's `died-in` or a `since` or `learned-in` in `continuity/state.md` names the chapter, because an empty value there means "before the story": `chapter chapter-05 is still named by died-in, since, learned-in in characters/bob.md; an empty value there means before the story, so point them at another chapter first`.
+It also refuses while a character's `died-in`, a `since` or `learned-in` in `continuity/state.md`, or a progression's `from` names the chapter, because an empty value there means "before the story" and a progression needs the chapter it starts in: `chapter chapter-05 is still named by died-in, since, learned-in, or a progression's from in characters/bob.md; an empty value there means before the story, and a progression needs the chapter it starts in, so point them at another chapter first`.
 
 Removing a chapter also walks back statuses that depended on it. A `planted` promise or clue whose `planted` chapter is cleared becomes `planned`; a `paid-off` one whose `payoff` is cleared becomes `planted`, or `planned` when its `planted` chapter is gone too; an `answered` or `resolved` question whose `resolved` chapter is cleared becomes `open`.
 
