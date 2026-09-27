@@ -787,7 +787,9 @@ warning: characters sera-voss and seren-hale have similar first names (Sera Voss
 
 The said-bookism list includes tags such as `barked`, `growled`, `hissed`, `laughed`, `smiled`, `snapped`, and `sighed`. `whispered`, `muttered`, and `shouted` are left out on purpose, because they describe volume, which `said` cannot.
 
-Prose findings are always warnings. `story prose` exits 0 on any readable project, so you can run it freely.
+The filter-word, adverb, and said-bookism limits are defaults: `--max-filter-words`, `--max-adverbs`, and `--max-bookisms` change them for a run, and `cli-defaults` in `story.md` changes them for the book (see [CLI defaults and severity](project-format.md#cli-defaults-and-severity)).
+
+Prose findings are warnings. `story prose` exits 0 on any readable project, so you can run it freely, unless a `severity` entry in `story.md` promotes a prose warning, such as `prose-avoided-spelling`, to an error.
 
 To check a passage before it goes into a chapter file, pipe it in with `-` in place of the path: `story prose - < draft-scene.md`. The passage is linted with the same rules and the style sheet of the project in the current directory (or `--path`), and its findings are labelled `stdin`. See [Reading from stdin](cli-reference.md#reading-from-stdin).
 

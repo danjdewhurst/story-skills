@@ -222,6 +222,31 @@ $ story timeline --trim 6x9
 --trim does not apply to story timeline
 ```
 
+### Defaults and severity from story.md
+
+A project can set default flags per command and change how some warnings are reported, in the optional `cli-defaults` and `severity` fields of `story.md`:
+
+```yaml
+cli-defaults:
+  - command: build
+    format: html
+  - command: prose
+    max-adverbs: 10
+severity:
+  - warning: todo-markers
+    level: error
+```
+
+With these, `story build` builds the HTML review copy, `story prose` warns above 10 adverbs per 1,000 narration words, and `story validate` fails on a leftover `[TODO` marker:
+
+```text
+$ story validate
+Project validation failed: 1 errors, 0 warnings, 0 dismissed
+error: chapters/chapter-03.md has 1 [TODO marker in its prose, which every build prints: resolve it or move it into an HTML comment [todo-markers]
+```
+
+Defaults apply with `--json` too, and to `prose -` and `voices -` inside a project; `--json` itself cannot be a default. With `--json`, a promoted warning is a diagnostic with `severity` `"error"` and makes `ok` false, and an `off` warning is a `dismissed` diagnostic. `story prose --json` reports the limits it used in `data.thresholds`. A flag on the command line always wins over a default: `story build --format epub` still builds an EPUB, and it also drops any default `--trim`, `--stamp`, `--note-url`, or `--shunn`, which belong with a particular format. Likewise `--ref` or `--against` on `compare` drops a default for the other. `level: off` reports a warning as `dismissed:` instead. Only the eleven warnings with codes can be overridden, and `story validate` rejects unknown commands, flags, codes, and levels; while either field is invalid, other commands refuse to run until it is fixed and exit 3. The [Project format reference](project-format.md#cli-defaults-and-severity) lists the codes and every rule.
+
 ### Output streams and exit codes
 
 The CLI prints results to stdout and diagnostics to stderr.
@@ -237,15 +262,15 @@ The examples on this page show stdout and stderr together, as a terminal does.
 
 | Exit code | Meaning |
 |---|---|
-| `0` | The command succeeded. For checks, there were no errors. Warnings and dismissed findings do not change the exit code. |
+| `0` | The command succeeded. For checks, there were no errors. Warnings and dismissed findings do not change the exit code, unless `severity` in `story.md` promotes a warning to an error. |
 | `1` | Findings: a check reported at least one `error:` line. |
 | `2` | Usage error: an unknown command or option, a missing or invalid option value, an unexpected argument or option, a missing required argument (such as `knowledge` without `--at`), an id that does not exist, or an `import` source that is missing or cannot be read. |
-| `3` | Not a usable story project: no `story.md`, a file the command needs cannot be read or parsed or is a symlink, a newer schema than this CLI knows, or nothing to build from. |
+| `3` | Not a usable story project: no `story.md`, invalid `cli-defaults` or `severity` in `story.md` (for commands other than `validate`, `report`, `next`, and `doctor`), a file the command needs cannot be read or parsed or is a symlink, a newer schema than this CLI knows, or nothing to build from. |
 | `4` | Refused or failed write: the target already exists, is project source or outside the project, is a symlink, is locked by another story command, changed on disk meanwhile, or the file system refused it. |
 
 Findings keep `1`, so `story validate || exit 1` fails on errors as it always has. Before these codes were split, every failure exited `1`; a script that tested for `1` to catch a usage error, a missing project, or a refused write should test for `2`, `3`, or `4` instead, or for any non-zero code. The codes are exported as `EXIT_CODES` from `src/exit-codes.js`.
 
-`report`, `next`, and `doctor` summarise check results but always exit 0 on a readable project. `prose`, `pacing`, `clues`, and `voices` report every craft finding as a warning, so they exit 1 only when a file fails to parse. `passes` exits 0 unless it refuses a change: `2` for a bad pass name, `3` for a `story.md` it cannot safely rewrite, `4` when the write fails. `names` exits 1 when a candidate clashes with an existing name. Use `validate`, `links`, and `continuity` when you need a failing exit code, for example in CI (see [Automation and CI](automation.md)).
+`report`, `next`, and `doctor` summarise check results but always exit 0 on a readable project. `prose`, `pacing`, `clues`, and `voices` report every craft finding as a warning, so they exit 1 only when a file fails to parse or a [`severity`](#defaults-and-severity-from-storymd) entry in `story.md` promotes one of their warnings to an error. `passes` exits 0 unless it refuses a change: `2` for a bad pass name, `3` for a `story.md` it cannot safely rewrite, `4` when the write fails. `names` exits 1 when a candidate clashes with an existing name. Use `validate`, `links`, and `continuity` when you need a failing exit code, for example in CI (see [Automation and CI](automation.md)).
 
 ### JSON output
 
@@ -959,7 +984,15 @@ story prose [path|-]
 
 An advisory prose lint. For each chapter it reports sentence count, average and longest sentence length and their spread, filter words and `-ly` adverbs per 1,000 narration words, dialogue tags and said-bookisms, words echoed within 30 words, and watch words and avoided spellings from `style-sheet.md`. Across the manuscript it lists repeated four-word phrases and characters with similar first names. Like `wordcount`, it ignores code between closed `` ``` `` fences.
 
-Style findings are warnings and never fail the run. `prose` exits 1 only when a file's frontmatter fails to parse.
+Style findings are warnings, so `prose` exits 1 only when a file's frontmatter fails to parse, or when a `severity` entry in `story.md` promotes a prose warning to an error (see [Defaults and severity from story.md](#defaults-and-severity-from-storymd)).
+
+Three flags change the warning thresholds. Each takes a number 0 or more; set them for every run with `cli-defaults` in `story.md`.
+
+| Flag | Warns when a chapter has more than | Default |
+|---|---|---|
+| `--max-filter-words <n>` | `n` filter words per 1,000 narration words | 10 |
+| `--max-adverbs <n>` | `n` `-ly` adverbs per 1,000 narration words | 12 |
+| `--max-bookisms <n>` | `n` said-bookism dialogue tags (a whole number) | 2 |
 
 `story prose -` lints a passage from stdin instead of the chapters, with the style sheet and character names of the project given by `--path` or the current directory (and the default rules outside a project). The passage is reported as `stdin`, and similar character names, a bible finding, are left out. A whole chapter file can be piped: its frontmatter is skipped and only its prose (the text under `## Chapter Text`) is linted, as for a chapter in the project. A chapter or scene file in the project that fails to parse does not fail a passage check, since the passage stands in for them; a broken style sheet or character file still does.
 
@@ -2092,6 +2125,9 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--init` | | `passes` | Boolean; adds the missing default passes |
 | `--start` | `<pass>` | `passes` | Kebab-case pass name; marks it `in-progress` |
 | `--done` | `<pass>` | `passes` | Kebab-case pass name; marks it `done` |
+| `--max-filter-words` | `<n>` | `prose` | Number 0 or more; default 10 per 1,000 narration words |
+| `--max-adverbs` | `<n>` | `prose` | Number 0 or more; default 12 per 1,000 narration words |
+| `--max-bookisms` | `<n>` | `prose` | Whole number 0 or more; default 2 per chapter |
 | `--pages` | `<n>` | `synopsis` | `1` or `3` |
 | `--actionable` | | `report` | Boolean |
 | `--id` | `<kebab-id>` | `add` (every kind except `chapter` and `scene`), `rename` | The entity id, instead of one derived from the name; required when the name has no ASCII letters or digits. Refused for `chapter` and `scene`, whose ids come from their numbers |

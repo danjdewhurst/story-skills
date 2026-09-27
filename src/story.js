@@ -19,12 +19,13 @@ import { copyrightPage, metadataSheet, publishingMeta, validatePublishing } from
 import { DEFAULT_TRIM, estimateBookPages, paragraphLabels, printHtml, reviewHtml, TRIM_SIZES } from "./html.js";
 import { narrationScript, pronunciationGuide } from "./narration.js";
 import { htmlBook, writeDocx, writeEpub, writeShunnDocx, writeShunnMarkdown } from "./packaging.js";
+import { validateCliConfig } from "./config.js";
 import { DEFAULT_PASSES, addedPassNotes, nextPass, passChecks, readPasses, updatePasses, validatePasses } from "./passes.js";
 import { CHAPTER_HOOKS, SCENE_OUTCOMES, buildPacing } from "./pacing.js";
 import { compareChapters, mapLabels, proseParagraphs } from "./compare.js";
 import { PROGRESS_FILE, cleanSessions, computeProgress, formatPercent, localDate, withSession } from "./progress.js";
 import { plural } from "./plural.js";
-import { analyzeChapter, chapterFindings, proseRules, repeatedPhrases, similarNames } from "./prose.js";
+import { analyzeChapter, chapterFindings, proseRules, proseThresholds, repeatedPhrases, similarNames } from "./prose.js";
 import { splitSentences } from "./sentences.js";
 import { areSiblingBooks, buildSeries, canonicalPath, discoverSeriesBooks, isBookNumber, linksInclude, readBookFrontmatter, seriesId, seriesLinkPath, seriesLinks, validateSeriesLinks, withSeriesBacklink } from "./series.js";
 import { EXIT_CODES, projectError, refusedError, usageError, withDefaultExitCode } from "./exit-codes.js";
@@ -2186,11 +2187,13 @@ function passageErrors(project) {
 }
 
 // Advisory prose lint: counts per chapter plus manuscript-wide repeats.
-// Findings are warnings, never errors, so the command always exits 0 on a
-// readable project.
+// Findings are warnings, never errors, so the command exits 0 on a readable
+// project unless story.md severity promotes one. `thresholds` in the result
+// are the warning limits the run used, after any --max-* flags.
 export function proseReport(root, options = {}) {
+  const thresholds = proseThresholds(options);
   if (options.passage !== undefined) {
-    return prosePassageReport(root, options.passage);
+    return prosePassageReport(root, options.passage, thresholds);
   }
   const project = scanProject(root);
   const errors = [...project.fileErrors];
@@ -2203,7 +2206,7 @@ export function proseReport(root, options = {}) {
     const label = relative(project, chapter.file);
     const analysis = analyzeChapter(chapterProse(readMarkdown(chapter.file, project.root).body, " "), rules);
     chapters.push({ file: label, title: chapter.title, analysis });
-    warnings.push(...chapterFindings(label, analysis));
+    warnings.push(...chapterFindings(label, analysis, thresholds));
   }
   const phrases = repeatedPhrases(chapters.map((chapter) => chapter.analysis));
   const similar = similarNames(project.characters);
@@ -2218,15 +2221,21 @@ export function proseReport(root, options = {}) {
     words: chapters.reduce((sum, chapter) => sum + chapter.analysis.words, 0),
     chapters,
     phrases,
-    similarNames: similar
+    similarNames: similar,
+    thresholds: thresholdSummary(thresholds)
   };
+}
+
+// The limits the --max-* flags set, named as the flags are.
+function thresholdSummary(thresholds) {
+  return { maxFilterWords: thresholds.filterPerThousand, maxAdverbs: thresholds.adverbsPerThousand, maxBookisms: thresholds.maxBookisms };
 }
 
 // `story prose -`: the same per-chapter lint over one piped passage, with
 // the project's style sheet and character names when `root` names a
 // project, and the default rules when it is null. Similar character names
 // are a bible finding, not a passage one, so they are left out.
-function prosePassageReport(root, passage) {
+function prosePassageReport(root, passage, thresholds) {
   const project = root === null ? null : scanProject(root);
   const errors = project === null ? [] : passageErrors(project);
   const names = project === null ? [] : [...project.characters.map((character) => character.name), ...existingNames(project).map((entry) => entry.name)];
@@ -2234,13 +2243,14 @@ function prosePassageReport(root, passage) {
   return {
     ok: errors.length === 0,
     errors,
-    warnings: chapterFindings(PASSAGE_LABEL, analysis),
+    warnings: chapterFindings(PASSAGE_LABEL, analysis, thresholds),
     passage: true,
     styleSheet: Boolean(project?.styleSheet),
     words: analysis.words,
     chapters: [{ file: PASSAGE_LABEL, title: "passage", analysis }],
     phrases: repeatedPhrases([analysis]),
-    similarNames: []
+    similarNames: [],
+    thresholds: thresholdSummary(thresholds)
   };
 }
 
@@ -5787,6 +5797,7 @@ function validateStoryFrontmatter(project, errors) {
   }
   validateCover(project, errors);
   validatePasses(data, "story.md", errors);
+  validateCliConfig(data, errors);
   validateDeadline(data, errors);
 
   if (newerSchemaVersion(data["schema-version"]) !== null) {

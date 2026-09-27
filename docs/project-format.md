@@ -325,6 +325,8 @@ tense: past
 | `deadline` | `YYYY-MM-DD` | no | Due date; `story progress` reports days left and words a day needed. Must be a real calendar day. |
 | `draft-mode` | string | no | `discovered` marks a discovery-drafted project, `outlined` an outline-first one; any other value is a validate error. In a `discovered` project, `story next` treats a drafted chapter with no `mode` of its own as discovered. |
 | `revision-passes` | list of mappings | no | Named revision passes and their progress. See [Revision passes](#revision-passes). |
+| `cli-defaults` | list of mappings | no | Default flags for `story` commands. See [CLI defaults and severity](#cli-defaults-and-severity). |
+| `severity` | list of mappings | no | Named warnings promoted to errors or turned off. See [CLI defaults and severity](#cli-defaults-and-severity). |
 | `cover` | path | no | Cover image inside the project: `.jpg`, `.jpeg`, `.png`, `.gif`, or `.webp`. `story build --format epub` embeds it. |
 | `authors`, `language`, `isbn`, `publisher`, `publication-date`, `description`, `keywords`, `subjects`, `copyright`, `cover-alt`, `ai-disclosure`, `chapter-label`, `contents-label` | various | no | Publishing metadata read by `story build`. See [Publishing metadata](#publishing-metadata). |
 
@@ -388,6 +390,62 @@ revision-passes:
 | `proof` | Typos and layout in the built book | `story build --format print`, `story build --format html` |
 
 While the story `status` is `revising`, `story next` recommends the pass that is `in-progress`, or else the first pass that is not `done`, or `story passes --init` when no passes are recorded. The [revision-continuity skill](../skills/revision-continuity/SKILL.md) works through the passes.
+
+### CLI defaults and severity
+
+Two optional fields configure the `story` CLI for this project, so a CI job or a writer's own habits live beside the manuscript rather than in a script. Both are lists of mappings, like `revision-passes`:
+
+```yaml
+cli-defaults:
+  - command: build
+    format: html
+  - command: prose
+    max-adverbs: 10
+    max-filter-words: 8
+severity:
+  - warning: todo-markers
+    level: error
+  - warning: prose-avoided-spelling
+    level: error
+  - warning: stale-word-count
+    level: off
+```
+
+`cli-defaults` sets default flags per command:
+
+| Field | Type | Required | Meaning |
+|-------|------|----------|---------|
+| `cli-defaults[].command` | command name | yes | A `story` command that reads a project. `init` and `import`, which create one, and `add`, `rename`, `move`, `remove`, and `knowledge`, which act on one named entity, cannot take defaults. Give each command one entry. |
+| `cli-defaults[].<flag>` | string, number, or boolean | no | A flag that command accepts, without the leading `--`: `format: html` is `--format html`. A boolean flag takes `true` or `false` (or `yes`, `no`, `on`, `off`, `1`, `0`). |
+
+A flag given on the command line always wins, so with the entry above `story build --format epub` builds an EPUB. Some flags only make sense together, so a command-line flag drops the defaults for its whole group: any of `--format`, `--shunn`, `--trim`, `--stamp`, or `--note-url` on `build`, and `--ref` or `--against` on `compare`. `passes --start` and `--done` and `progress --date` name one target and cannot be defaults, and `json` cannot be one either, because it changes the output a script reads: pass `--json` on the command line. Defaults also apply to `--json` runs and to a passage piped to `story prose -` or `story voices -` inside a project (the project is `--path`, else the current directory). `path` cannot be set: the project is the folder `story.md` is in. When a command fails with an error that names a flag `cli-defaults` filled in, or its value, the error ends with that flag, such as `(story.md cli-defaults set --format scroll)`, so a bad value is easy to trace.
+
+`severity` changes how a named warning is reported:
+
+| Field | Type | Required | Meaning |
+|-------|------|----------|---------|
+| `severity[].warning` | warning code | yes | One of the codes below. Give each code once. |
+| `severity[].level` | enum | yes | `error` reports the warning as an error, with its code in brackets, so the command exits 1; with `--json` it is a diagnostic with `severity: "error"` and `ok` is false. `off` reports it as `dismissed`, with the note `severity <code> is off in story.md` (the `exemption` of its `--json` diagnostic). `warning` keeps the default. |
+
+Only these warnings have codes. Each belongs to one command, and an override changes that command's findings only; the check counts that `report`, `next`, and `doctor` print are not affected:
+
+| Code | Command | Warning |
+|------|---------|---------|
+| `todo-markers` | `validate` | `<chapter> has N [TODO markers in its prose, which every build prints...` |
+| `stale-registry` | `validate` | `<registry> does not list <file>; run story reindex` |
+| `stale-word-count` | `validate` | `<chapter> declares N words but contains M`, or `has no word-count` |
+| `prose-filter-words` | `prose` | `<chapter> has N filter words per 1,000 narration words (over T)...` |
+| `prose-adverbs` | `prose` | `<chapter> has N -ly adverbs per 1,000 narration words (over T)...` |
+| `prose-bookisms` | `prose` | `<chapter> has N said-bookism dialogue tags...` |
+| `prose-avoided-spelling` | `prose` | `<chapter> uses "gray" N times; style sheet prefers "grey"` |
+| `pacing-no-hook` | `pacing` | `<chapter> has no hook: record how the chapter ending pulls the reader on` |
+| `clue-unplanted` | `clues` | `clue <id> is revealed in <chapter> but never planted...` |
+| `clue-late-plant` | `clues` | `clue <id> is planted in the same chapter as its reveal...` |
+| `voice-avoid` | `voices` | `<character> says "<word>", which is in their voice-avoid list...` |
+
+The `prose` thresholds are flags (`--max-filter-words`, `--max-adverbs`, `--max-bookisms`), so `cli-defaults` sets them too. See [`story prose`](cli-reference.md#prose).
+
+`story validate` errors on a field that is not a list of mappings, an unknown or repeated command, a command or flag that cannot take defaults (including `json`), a flag the command does not accept (with a suggestion for a near miss), a boolean flag with a value other than true or false, a value flag with no value, a `prose` threshold that is not a number 0 or more, an unknown or repeated warning code, a level other than `error`, `warning`, or `off`, and any other key in a `severity` entry. While either field is invalid, every command except `validate`, `report`, `next`, and `doctor` refuses to run, lists the problems, and exits 3 (an unusable project; with `--json`, as the JSON error object), so a typo cannot silently drop a severity a CI job relies on; those four ignore both fields and report the problems through validation.
 
 ### Publishing metadata
 

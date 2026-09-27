@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { formatClueMatrix } from "./clues.js";
 import { formatComparison, formatLabelMapping } from "./compare.js";
+import { applySeverity } from "./config.js";
 import { importManuscript } from "./import.js";
 import { diagnosticsFrom, resultData, wantsJson, writeJsonResult } from "./json.js";
 import { isTruthy } from "./options.js";
@@ -70,8 +71,10 @@ const ADD_OPTIONS = [
 // the command name (default: 1 for "positional", 0 otherwise) and `options`
 // lists the flags the command reads besides --path, so a stray argument or
 // flag is an error rather than silently ignored. `run` receives
-// { parsed, io, cwd, root }, where root() resolves the project path, and
-// returns the exit code.
+// { parsed, io, cwd, root, severity }, where root() resolves the project
+// path and severity lists the story.md severity overrides for the command
+// (passed to applySeverity), and returns the exit code. story.md
+// cli-defaults are already merged into parsed.options.
 export const COMMANDS = [
   {
     name: "init",
@@ -155,7 +158,7 @@ export const COMMANDS = [
     summary: ["Check project structure, frontmatter, and registries"],
     project: "positional",
     options: ["json"],
-    run: ({ parsed, io, root }) => reportCheck(parsed, io, "validate", validateProject(root()), "Project is valid", "Project validation failed")
+    run: ({ parsed, io, root, severity }) => reportCheck(parsed, io, "validate", applySeverity(validateProject(root()), severity), "Project is valid", "Project validation failed")
   },
   {
     name: "reindex",
@@ -303,11 +306,11 @@ export const COMMANDS = [
       "- lints a passage from stdin"
     ],
     project: "positional",
-    options: ["json"],
-    run({ parsed, io, cwd, root }) {
-      const report = parsed.positionals[1] === STDIN_ARG
-        ? proseReport(passageRoot(parsed, cwd, false), { passage: pipedText(io, "prose") })
-        : proseReport(root());
+    options: ["json", "max-filter-words", "max-adverbs", "max-bookisms"],
+    run({ parsed, io, cwd, root, severity }) {
+      const report = applySeverity(parsed.positionals[1] === STDIN_ARG
+        ? proseReport(passageRoot(parsed, cwd, false), { ...parsed.options, passage: pipedText(io, "prose") })
+        : proseReport(root(), parsed.options), severity);
       if (wantsJson(parsed)) {
         // Each chapter's tokenized sentences feed the repeated-phrase check;
         // they are the whole chapter again, so --json leaves them out.
@@ -364,8 +367,8 @@ export const COMMANDS = [
     ],
     project: "positional",
     options: ["json"],
-    run({ parsed, io, root }) {
-      const report = pacingReport(root());
+    run({ parsed, io, root, severity }) {
+      const report = applySeverity(pacingReport(root()), severity);
       if (wantsJson(parsed)) {
         return reportJson(io, "pacing", report);
       }
@@ -383,8 +386,8 @@ export const COMMANDS = [
     ],
     project: "positional",
     options: ["json"],
-    run({ parsed, io, root }) {
-      const report = clueReport(root());
+    run({ parsed, io, root, severity }) {
+      const report = applySeverity(clueReport(root()), severity);
       if (wantsJson(parsed)) {
         return reportJson(io, "clues", report);
       }
@@ -403,10 +406,10 @@ export const COMMANDS = [
     ],
     project: "positional",
     options: ["json"],
-    run({ parsed, io, cwd, root }) {
-      const report = parsed.positionals[1] === STDIN_ARG
+    run({ parsed, io, cwd, root, severity }) {
+      const report = applySeverity(parsed.positionals[1] === STDIN_ARG
         ? voicesReport(passageRoot(parsed, cwd, true), { passage: pipedText(io, "voices") })
-        : voicesReport(root());
+        : voicesReport(root()), severity);
       if (wantsJson(parsed)) {
         return reportJson(io, "voices", report, { passage: parsed.positionals[1] === STDIN_ARG });
       }
@@ -785,7 +788,7 @@ function reportResult(io, result, successMessage, failureMessage) {
   }
 
   for (const entry of dismissed) {
-    io.stderr.write(`dismissed: ${entry.finding} (exemption: ${entry.reason})\n`);
+    io.stderr.write(`dismissed: ${entry.finding} (${entry.note ?? `exemption: ${entry.reason}`})\n`);
   }
 
   return result.ok ? EXIT_CODES.ok : EXIT_CODES.findings;

@@ -55,14 +55,14 @@ npx --yes --package story-skills@0.15.0 story --version
 
 ### Exit codes
 
-Every command exits `0` on success. A failure exits with a code that says what kind of failure it was, so a script can tell a manuscript with errors from a mistyped command line. Warnings never change the exit code.
+Every command exits `0` on success. A failure exits with a code that says what kind of failure it was, so a script can tell a manuscript with errors from a mistyped command line. Warnings do not change the exit code unless a `severity` entry in `story.md` promotes them to errors (see [Failing on warnings](#failing-on-warnings)).
 
 | Code | Meaning | Examples |
 |---|---|---|
 | `0` | Success. For checks, no errors. | `Project is valid`, or only warnings. |
 | `1` | Findings: a check reported at least one `error:` line. | `validate`, `links`, or `continuity` found an error; `names` found a clash. |
 | `2` | Usage error: the command line was wrong. | An unknown command or option, a missing option value, an unexpected argument, an unsupported `--format`, or an id that does not exist (`Unknown character nobody`). |
-| `3` | Not a usable story project. | No `story.md` at the path, a file the command needs cannot be read or parsed (`Cannot export: fix this file first`) or is a symlink, a project with a newer schema, or nothing to build (`No chapters found to export`). |
+| `3` | Not a usable story project. | No `story.md` at the path, invalid `cli-defaults` or `severity` in `story.md` (every command except `validate`, `report`, `next`, and `doctor`), a file the command needs cannot be read or parsed (`Cannot export: fix this file first`) or is a symlink, a project with a newer schema, or nothing to build (`No chapters found to export`). |
 | `4` | Refused or failed write. The message says what, if anything, was changed. | The target already exists (`init` without `--force`, `add` of an existing id), `--out` points at project source, outside the project, or through a symlink, another story command holds the project lock, a file changed on disk meanwhile, or the file system refused the write (`permission denied`, a full disk). |
 
 Because findings keep `1`, `story validate "$STORY_DIR" || exit 1` and the GitHub Actions templates fail a job exactly as before. Scripts that test for `1` specifically to mean "any failure" need to accept `2`, `3`, and `4` too; `[ $? -ne 0 ]` or `|| exit` works for every code.
@@ -75,7 +75,7 @@ Which commands can report findings (exit `1`):
 | `links` | A cross-reference points at a missing file, or a required backlink is missing. |
 | `continuity` | A continuity contract is broken, such as a dead character listed in a later chapter or a payoff before its setup. Findings matched by `continuity/exemptions.md` are dismissed and do not count. |
 | `series` | A linked path is not a story project, the chronology has a cycle, two books share a `book-number`, linked books declare different series, or shared canon contradicts itself, such as a character who died in an earlier book appearing later. A missing series backlink is caught by `links`, not `series`. |
-| `compare`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `diagram` | A project file cannot be parsed and is reported as an `error:` line. Their own findings are advisory. `compare` exits 3 instead when a chapter cannot be parsed, because it cannot compare without it. |
+| `compare`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `diagram` | A project file cannot be parsed and is reported as an `error:` line. Their own findings are advisory, unless `severity` in `story.md` promotes one to an error. `compare` exits 3 instead when a chapter cannot be parsed, because it cannot compare without it. |
 | `names` | A candidate name clashes with an existing one. |
 | `report`, `next`, `doctor` | Never, on a readable project. They summarise the checks but always exit 0. |
 | All other commands | Never: they succeed, or stop with `2`, `3`, or `4`. |
@@ -171,7 +171,39 @@ Project is valid: 0 errors, 1 warnings, 0 dismissed
 warning: chapters/chapter-01.md declares 1 words but contains 993
 ```
 
-If you want CI to be stricter, there is no `--strict` flag, but you can fail on any `warning:` line:
+To fail on particular warnings, promote them to errors in `story.md`. The setting lives with the manuscript, so a local run and CI fail the same way:
+
+```yaml
+severity:
+  - warning: stale-word-count
+    level: error
+  - warning: todo-markers
+    level: error
+  - warning: prose-avoided-spelling
+    level: error
+```
+
+```text
+$ story validate; echo "exit=$?"
+Project validation failed: 1 errors, 0 warnings, 0 dismissed
+error: chapters/chapter-01.md declares 900 words but contains 993 [stale-word-count]
+exit=1
+```
+
+A promoted warning ends with its code in brackets. `level: off` does the opposite and reports a warning as `dismissed:`. Only the warnings listed under [CLI defaults and severity](project-format.md#cli-defaults-and-severity) have codes: word counts, registries, and `[TODO` markers from `validate`, and the thresholds and style-sheet spellings from `prose`, plus a few from `pacing`, `clues`, and `voices`.
+
+The same place holds default flags, such as stricter `prose` thresholds for every run, local or in CI. A flag on the command line still wins:
+
+```yaml
+cli-defaults:
+  - command: prose
+    max-filter-words: 8
+    max-adverbs: 10
+```
+
+The same holds with `--json`: a promoted warning is a diagnostic with `"severity": "error"`, `ok` is `false`, and the run exits 1. Run `story validate` after editing either field: it rejects an unknown command, flag, warning code, or level, and while either field is invalid the other commands refuse to run, exiting 3, rather than silently skip a severity your job relies on.
+
+To fail on every warning, including those without a code, there is no `--strict` flag, but you can fail on any `warning:` line:
 
 ```shell
 set -o pipefail
@@ -436,7 +468,7 @@ Useful steps to add to `story-checks.yml`:
 
 | Step | Command | Effect |
 |---|---|---|
-| Prose lint in the log | `story prose "$STORY_DIR"` | Prints per-chapter prose statistics. Always exits 0 on a readable project. |
+| Prose lint in the log | `story prose "$STORY_DIR"` | Prints per-chapter prose statistics. Exits 0 on a readable project unless `severity` in `story.md` promotes a prose warning. |
 | Timeline in the log | `story timeline "$STORY_DIR"` | Prints scene chronology, POV balance, and character presence. |
 | Fail on stale generated data | `story wordcount "$STORY_DIR" --write`, `story reindex "$STORY_DIR"`, then `git diff --exit-code` | See [Failing on warnings](#failing-on-warnings). |
 | Build a reading copy | `story build "$STORY_DIR" --format epub` | Writes `dist/<story-id>.epub`, which you can upload with `actions/upload-artifact`. |

@@ -1,3 +1,4 @@
+import { usageError } from "./exit-codes.js";
 import { escapeRegExp, scanComments, splitWords, withoutFenceMarkers } from "./markdown.js";
 import { givenName } from "./names.js";
 import { splitSentences } from "./sentences.js";
@@ -92,7 +93,7 @@ export const PROSE_THRESHOLDS = {
   // Rates on a few dozen words swing wildly, so rate warnings need this much
   // narration first.
   minRateWords: 300,
-  bookismsPerChapter: 3,
+  maxBookisms: 2,
   echoWindow: 30,
   echoMinLength: 5,
   uniformMinSentences: 20,
@@ -101,6 +102,24 @@ export const PROSE_THRESHOLDS = {
   phraseMinCount: 3,
   phraseLimit: 10
 };
+
+// The thresholds with the story prose --max-* flags applied. Each flag is a
+// number 0 or more; --max-bookisms is a whole number.
+export function proseThresholds(options = {}) {
+  const thresholds = { ...PROSE_THRESHOLDS };
+  for (const [flag, key, whole] of [["max-filter-words", "filterPerThousand", false], ["max-adverbs", "adverbsPerThousand", false], ["max-bookisms", "maxBookisms", true]]) {
+    const raw = options[flag];
+    if (raw === undefined) {
+      continue;
+    }
+    const text = String(raw).trim();
+    if (!(whole ? /^\d+$/ : /^\d+(?:\.\d+)?$/).test(text) || !Number.isFinite(Number(text))) {
+      throw usageError(`--${flag} must be ${whole ? "a whole number" : "a number"} 0 or more, such as ${PROSE_THRESHOLDS[key]}`);
+    }
+    thresholds[key] = Number(text);
+  }
+  return thresholds;
+}
 
 // `names` are every name and alias in the bible: their words are never
 // adverbs or echoes, and a capitalised name is never a dialect spelling.
@@ -186,7 +205,7 @@ export function chapterFindings(label, analysis, thresholds = PROSE_THRESHOLDS) 
     findings.push(`${label} has ${formatAgainst(adverbRate, thresholds.adverbsPerThousand, "over")} -ly adverbs per 1,000 narration words (over ${thresholds.adverbsPerThousand}): ${formatCounts(analysis.adverbs, 5)}`);
   }
   const bookisms = total(analysis.bookisms);
-  if (bookisms >= thresholds.bookismsPerChapter) {
+  if (bookisms > thresholds.maxBookisms) {
     findings.push(`${label} has ${bookisms} said-bookism dialogue tags: ${formatCounts(analysis.bookisms, 5)}`);
   }
   const stats = analysis.sentences;

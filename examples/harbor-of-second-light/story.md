@@ -23,6 +23,14 @@ keywords:
 subjects:
   - FIC028000
   - FIC022000
+cli-defaults:
+  - command: build
+    format: html
+  - command: prose
+    max-adverbs: 10
+severity:
+  - warning: todo-markers
+    level: error
 ---
 
 

@@ -11,13 +11,20 @@ outline divider.
 | Avoided spelling | Each `preferred` avoid form and each dialect-pair avoid form, anywhere in the prose | Any occurrence |
 | Filter words | *felt, saw, heard, noticed, realized/realised, wondered, seemed, watched, knew, decided, thought, sensed* in narration | Over 10 per 1,000 narration words, once a chapter has 300 narration words |
 | -ly adverbs | Narration words ending in *-ly*, minus common non-adverbs (*only, family, early*) and character-name tokens | Over 12 per 1,000 narration words, once a chapter has 300 narration words |
-| Said-bookisms | Tags such as *hissed, snapped, retorted, exclaimed, smirked* in the first three words after a closing quote | 3 or more in a chapter |
+| Said-bookisms | Tags such as *hissed, snapped, retorted, exclaimed, smirked* in the first three words after a closing quote | Over 2 in a chapter |
 | Plain tags | *said, asked* after a closing quote | Never; context only |
 | Echoes | A word of 5+ letters repeated within 30 words, ignoring common function words and character names | Never; listed for rereading |
 | Sentence rhythm | Words per sentence: average, longest, and spread (standard deviation) | Spread under 5 words across 20 or more sentences |
 | Watch words | Each `watch-words` entry | Never; counts are listed |
 | Repeated phrases | 4-word sequences inside one sentence, across the whole manuscript, that are not all function words | Never; the top 10 with 3+ uses are listed |
 | Similar names | Character first names that match, share their first three letters, or are one or two edits apart | Any pair |
+
+The filter-word, adverb, and said-bookism limits are defaults. `story prose
+--max-filter-words <n>`, `--max-adverbs <n>`, and `--max-bookisms <n>`
+change them for one run; to change them for the book, record them under
+`cli-defaults` in `story.md` (see `docs/project-format.md`, CLI defaults and
+severity) and run `story validate`. A `severity` entry there can also make a
+prose warning such as `prose-avoided-spelling` fail the run.
 
 ## Responding
 

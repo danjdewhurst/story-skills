@@ -1,9 +1,10 @@
 import path from "node:path";
 import { COMMANDS } from "./commands.js";
+import { applyDefaults, readCliConfig, severityFor } from "./config.js";
 import { diagnostic, writeJsonResult } from "./json.js";
 import { formatOptionsHelp, isBooleanLiteralToken, isTruthy, parseArgs, suggestion, takesValue } from "./options.js";
 import { VERSION } from "./version.js";
-import { EXIT_CODES, exitCodeFor, usageError } from "./exit-codes.js";
+import { EXIT_CODES, exitCodeFor, projectError, usageError } from "./exit-codes.js";
 
 export { isTruthy, parseArgs };
 
@@ -55,7 +56,13 @@ function formatCommandsHelp() {
   return lines;
 }
 
+// Commands that still run when story.md cli-defaults or severity is invalid,
+// ignoring both, because they report the problem: validate lists it, and
+// report, next, and doctor include it in their checks.
+const CONFIG_REPAIR_COMMANDS = new Set(["validate", "report", "next", "doctor"]);
+
 export function runCli(argv, io) {
+  let configured = [];
   // A command asked for --json reports a usage error or a failure as a JSON
   // result too, so a script reading stdout always gets one object.
   const jsonCommand = COMMANDS_BY_NAME.get(commandWord(argv));
@@ -111,9 +118,13 @@ export function runCli(argv, io) {
       return EXIT_CODES.usage;
     }
 
-    return command.run({ parsed, io, cwd, root: () => resolveRoot(cwd, parsed, name) });
+    const root = () => resolveRoot(cwd, parsed, name);
+    const config = command.project === "none" ? null : projectConfig(command, configRoot(cwd, parsed, root));
+    configured = config === null ? [] : applyDefaults(config, name, parsed.options).map((key) => [key, parsed.options[key]]);
+    const severity = config === null ? [] : severityFor(config, name);
+    return command.run({ parsed, io, cwd, root, severity });
   } catch (error) {
-    const message = describeError(error, io.cwd ?? process.cwd());
+    const message = `${describeError(error, io.cwd ?? process.cwd())}${configuredHint(error, configured)}`;
     const exitCode = exitCodeFor(error);
     if (failJson) {
       return failJson(message, exitCode);
@@ -121,6 +132,35 @@ export function runCli(argv, io) {
     io.stderr.write(`${message}\n`);
     return exitCode;
   }
+}
+
+// The project whose story.md holds the config. A passage piped to `story
+// prose -` or `story voices -` takes the place of [path], so the project is
+// --path, else the current directory, as for the passage itself.
+function configRoot(cwd, parsed, root) {
+  return parsed.positionals[1] === "-" ? path.resolve(cwd, lastOptionValue(parsed.options.path) ?? ".") : root();
+}
+
+// story.md cli-defaults and severity. An invalid config stops every command
+// except the ones that report it, so a typo cannot quietly drop a severity
+// promotion a CI job relies on. It exits as an unusable project.
+function projectConfig(command, root) {
+  const config = readCliConfig(root);
+  if (config.errors.length === 0) {
+    return config;
+  }
+  if (CONFIG_REPAIR_COMMANDS.has(command.name)) {
+    return null;
+  }
+  throw projectError(`Fix cli-defaults or severity in story.md before running story ${command.name} (story validate lists every problem): ${config.errors.join("; ")}`);
+}
+
+// When an error names a flag that story.md cli-defaults filled in, or its
+// value, say so: the bad value came from there, not the command line.
+function configuredHint(error, configured) {
+  const message = String(error?.message);
+  const named = configured.filter(([key, value]) => message.includes(`--${key}`) || (typeof value === "string" && message.includes(value)));
+  return named.length === 0 ? "" : ` (story.md cli-defaults set ${named.map(([key, value]) => (value === true ? `--${key}` : `--${key} ${value}`)).join(", ")})`;
 }
 
 // The command word, read from the raw arguments so it is known even when

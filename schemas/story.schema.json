@@ -57,6 +57,29 @@
               "status": { "enum": ["pending", "in-progress", "done"] }
             }
           }
+        },
+        "cli-defaults": {
+          "type": "array",
+          "description": "Default flags per story command. Each entry names a command that takes a project; its other keys are flags that command accepts, without the leading --. A flag given on the command line always wins. story validate rejects unknown commands and flags.",
+          "items": {
+            "type": "object",
+            "required": ["command"],
+            "properties": {
+              "command": { "type": "string", "pattern": "^[a-z]+$" }
+            }
+          }
+        },
+        "severity": {
+          "type": "array",
+          "description": "Promote a named warning to an error, or turn it off (it is then reported as dismissed).",
+          "items": {
+            "type": "object",
+            "required": ["warning", "level"],
+            "properties": {
+              "warning": { "enum": ["todo-markers", "stale-registry", "stale-word-count", "prose-filter-words", "prose-adverbs", "prose-bookisms", "prose-avoided-spelling", "pacing-no-hook", "clue-unplanted", "clue-late-plant", "voice-avoid"] },
+              "level": { "enum": ["error", "warning", "off"] }
+            }
+          }
         }
       }
     },

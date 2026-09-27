@@ -38,7 +38,7 @@
         "file": { "type": ["string", "null"], "description": "The project file the finding names first, relative to the project root; stdin for a finding about a passage piped to prose - or voices -; or null." },
         "message": { "type": "string", "minLength": 1, "description": "The finding as the text output prints it." },
         "code": { "type": "string", "minLength": 1, "description": "The check that raised the finding: validate, links, continuity, or the command name." },
-        "exemption": { "type": "string", "description": "For a dismissed finding, the reason from continuity/exemptions.md." }
+        "exemption": { "type": "string", "description": "For a dismissed finding, the reason from continuity/exemptions.md, or \"severity <code> is off in story.md\" for a warning a story.md severity entry turned off." }
       }
     },
     "count": { "type": "integer", "minimum": 0 },
@@ -250,9 +250,19 @@
     },
     "data-prose": {
       "type": "object",
-      "required": ["styleSheet", "words", "chapters", "phrases", "similarNames"],
+      "required": ["styleSheet", "words", "chapters", "phrases", "similarNames", "thresholds"],
       "properties": {
         "styleSheet": { "type": "boolean" },
+        "thresholds": {
+          "type": "object",
+          "description": "The warning limits the run used, after --max-filter-words, --max-adverbs, --max-bookisms, and story.md cli-defaults.",
+          "required": ["maxFilterWords", "maxAdverbs", "maxBookisms"],
+          "properties": {
+            "maxFilterWords": { "type": "number", "minimum": 0 },
+            "maxAdverbs": { "type": "number", "minimum": 0 },
+            "maxBookisms": { "$ref": "#/$defs/count" }
+          }
+        },
         "words": { "$ref": "#/$defs/count" },
         "chapters": {
           "type": "array",

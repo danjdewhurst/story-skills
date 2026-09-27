@@ -5,6 +5,8 @@ import { usageError } from "./exit-codes.js";
 // (boolean flags have none), `repeatable` collects every value given, and
 // `help` lists the help lines; options without help are accepted aliases
 // (plural forms such as --characters) that stay out of the help text.
+// `aliasOf` names the flag an alias shares its value with, so a flag given
+// on the command line overrides a story.md default set through either name.
 export const OPTIONS = [
   { name: "title", value: "<name>", help: ["Story title for import"] },
   { name: "dir", value: "<path>", help: ["Target directory for init or import"] },
@@ -12,7 +14,7 @@ export const OPTIONS = [
   { name: "sub-genre", value: "<name>", help: ["Story sub-genre for init or import"] },
   { name: "setting-era", value: "<name>", help: ["Setting era for init or import"] },
   { name: "theme", value: "<name>", repeatable: true, help: ["Theme for init, import, or add arc; repeatable"] },
-  { name: "themes", value: "<a,b>", repeatable: true, help: ["Comma-separated themes for init, import, or add arc"] },
+  { name: "themes", value: "<a,b>", repeatable: true, aliasOf: "theme", help: ["Comma-separated themes for init, import, or add arc"] },
   { name: "pov", value: "<style|id>", help: ["POV style for init or import; POV character id", "for add chapter/scene (also added to characters)"] },
   { name: "tense", value: "<tense>", help: ["Narrative tense for init or import"] },
   { name: "form", value: "<form>", help: ["Story form for init (novel, novella, novelette,", "short-story, flash, serial, picture-book,", "chapter-book); sets a default target-words"] },
@@ -45,6 +47,9 @@ export const OPTIONS = [
   { name: "init", help: ["Add the default revision passes for passes"] },
   { name: "start", value: "<pass>", help: ["Mark a revision pass in progress for passes"] },
   { name: "done", value: "<pass>", help: ["Mark a revision pass done for passes"] },
+  { name: "max-filter-words", value: "<n>", help: ["Warn above n filter words per 1,000 narration", "words for prose (default 10)"] },
+  { name: "max-adverbs", value: "<n>", help: ["Warn above n -ly adverbs per 1,000 narration", "words for prose (default 12)"] },
+  { name: "max-bookisms", value: "<n>", help: ["Warn above n said-bookism tags in a chapter for", "prose (default 2)"] },
   { name: "pages", value: "<n>", help: ["Synopsis length for synopsis (1 or 3)"] },
   { name: "actionable", help: ["Include next actions in report"] },
   { name: "json", help: ["Print one JSON result object (apiVersion,", "command, ok, data, diagnostics, writes) instead", "of text, for the check and analysis commands"] },
@@ -64,16 +69,16 @@ export const OPTIONS = [
   { name: "outcome", value: "<name>", help: ["Scene outcome for add scene (yes, no, yes-but,", "no-and)"] },
   { name: "hook", value: "<name>", help: ["Chapter-ending hook for add chapter (cliffhanger,", "question, revelation, reversal, decision,", "emotional, resolution)"] },
   { name: "location", value: "<id>", repeatable: true, help: ["Location reference for add"] },
-  { name: "locations", value: "<ids>", repeatable: true },
+  { name: "locations", value: "<ids>", repeatable: true, aliasOf: "location" },
   { name: "character", value: "<id>", repeatable: true, help: ["Character reference for add; repeatable"] },
-  { name: "characters", value: "<ids>", repeatable: true },
+  { name: "characters", value: "<ids>", repeatable: true, aliasOf: "character" },
   { name: "mention", value: "<id>", repeatable: true, help: ["Mentioned character for add chapter/scene;", "repeatable"] },
-  { name: "mentions", value: "<ids>", repeatable: true },
+  { name: "mentions", value: "<ids>", repeatable: true, aliasOf: "mention" },
   { name: "member", value: "<id>", repeatable: true, help: ["Faction member reference for add faction; repeatable"] },
-  { name: "members", value: "<ids>", repeatable: true },
+  { name: "members", value: "<ids>", repeatable: true, aliasOf: "member" },
   { name: "owner", value: "<id>", help: ["Owner reference for add artifact"] },
   { name: "arc", value: "<id>", repeatable: true, help: ["Arc reference for add (arc theme for add", "character); repeatable"] },
-  { name: "arcs", value: "<ids>", repeatable: true },
+  { name: "arcs", value: "<ids>", repeatable: true, aliasOf: "arc" },
   { name: "introduced", value: "<id>", help: ["Chapter id for add question"] },
   { name: "resolved", value: "<id>", help: ["Chapter id for add question"] },
   { name: "planted", value: "<id>", help: ["Chapter id for add promise/clue"] },
@@ -82,18 +87,18 @@ export const OPTIONS = [
   { name: "red-herring", help: ["Mark add clue as a red herring"] },
   { name: "category", value: "<name>", help: ["Category for add term"] },
   { name: "alias", value: "<name>", repeatable: true, help: ["Alias for add term; repeatable"] },
-  { name: "aliases", value: "<names>", repeatable: true },
+  { name: "aliases", value: "<names>", repeatable: true, aliasOf: "alias" },
   { name: "region", value: "<name>", help: ["Region for add location"] },
   { name: "population", value: "<name>", help: ["Population for add location"] },
   { name: "controlled-by", value: "<id>", help: ["Controlling faction for add location"] },
   { name: "prevalence", value: "<name>", help: ["Prevalence for add system"] },
   { name: "acts", value: "<a,b>", repeatable: true, help: ["Comma-separated acts for add arc; repeatable"] },
-  { name: "act", value: "<name>", repeatable: true },
+  { name: "act", value: "<name>", repeatable: true, aliasOf: "acts" },
   { name: "placement", value: "<front|back>", help: ["Placement for add matter (default front)"] },
   { name: "order", value: "<n>", help: ["Order within its placement for add matter"] },
   { name: "heading", help: ["Print the page title for add matter; --heading", "false for a dedication or epigraph"] },
   { name: "source", value: "<text>", repeatable: true, help: ["Source for add research; repeatable"] },
-  { name: "sources", value: "<texts>", repeatable: true },
+  { name: "sources", value: "<texts>", repeatable: true, aliasOf: "source" },
   { name: "used-in", value: "<chapter-id>", repeatable: true, help: ["Chapter that relies on add research; repeatable"] },
   { name: "accuracy", value: "<level>", help: ["Accuracy for add research (must-be-accurate,", "blended, invented)"] },
   { name: "confidence", value: "<level>", help: ["Confidence for add research (high, medium, low)"] },
@@ -156,7 +161,7 @@ function addOption(options, key, value) {
   }
 }
 
-function normalizeBooleanValue(key, value) {
+export function normalizeBooleanValue(key, value) {
   if (typeof value !== "string") {
     return Boolean(value);
   }
@@ -192,6 +197,13 @@ export function isTruthy(value) {
     return true;
   }
   return Boolean(current);
+}
+
+// A flag and its aliases, which share one value: `character` and
+// `characters`, `theme` and `themes`.
+export function optionFamily(name) {
+  const canonical = OPTIONS.find((option) => option.name === name)?.aliasOf ?? name;
+  return [canonical, ...OPTIONS.filter((option) => option.aliasOf === canonical).map((option) => option.name)];
 }
 
 export function isBooleanLiteralToken(token) {
