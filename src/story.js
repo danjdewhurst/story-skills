@@ -7,7 +7,7 @@ import { chapterChronology, renumberedChronology } from "./chronology.js";
 import { PROGRESSION_KINDS, entityStateAt, sortProgressions, validateProgressions } from "./progressions.js";
 import { FRONTMATTER_PATTERN, parseFrontmatter, replaceFrontmatter, stringifyFrontmatter, withoutLeadingFrontmatter } from "./frontmatter.js";
 import { buildContext, DEFAULT_CONTEXT_BUDGET, DEFAULT_CONTEXT_SCENES } from "./context.js";
-import { assertExistingAncestorInsideRoot, assertLexicallyInsideRoot, assertSafeProjectDirectory, assertSafeProjectPath, isPathInside, lstatIfExists, readTextFile, TEMPORARY_FILE_PATTERN, writeFile } from "./files.js";
+import { assertExistingAncestorInsideRoot, assertLexicallyInsideRoot, assertSafeProjectDirectory, assertSafeProjectPath, isPathInside, lstatIfExists, makeDirectories, nearestExistingAncestor, readTextFile, TEMPORARY_FILE_PATTERN, writeFile } from "./files.js";
 import { isTruthy } from "./options.js";
 import { withProjectLock } from "./lock.js";
 import { chapterHeading, chapterProse, countTodoMarkers, escapeRegExp, extractSection, fencedLineIndexes, hasUnclosedComment, kebabCase, scanComments, titleCaseSlug, wordCount } from "./markdown.js";
@@ -237,7 +237,7 @@ export function createStoryProject(options) {
   // runs on an existing project.
   options.beforeWrite?.(root, existingStory !== null);
   for (const directory of PROJECT_DIRECTORIES) {
-    fs.mkdirSync(path.join(root, directory), { recursive: true });
+    makeDirectories(path.join(root, directory));
   }
 
   const storyWritten = writeStarterFile(path.join(root, "story.md"), storyBible({
@@ -1971,7 +1971,7 @@ function withProjectAtGitRef(root, ref, read) {
       if (/[\\:]/.test(entry.name) || !isPathInside(dir, target)) {
         return;
       }
-      fs.mkdirSync(path.dirname(target), { recursive: true });
+      makeDirectories(path.dirname(target));
       fs.writeFileSync(target, contents[index]);
     });
     return read(dir);
@@ -4819,7 +4819,7 @@ function ensureDirectory(directory, changed, root) {
   if (!fs.existsSync(directory)) {
     assertLexicallyInsideRoot(directory, root);
     assertExistingAncestorInsideRoot(directory, root);
-    fs.mkdirSync(directory, { recursive: true });
+    makeDirectories(directory);
     assertSafeProjectDirectory(directory, root);
     changed.push(directory);
     return;
@@ -5937,13 +5937,8 @@ function assertNotProjectSource(project, outFile) {
 // appended, so a new file under a symlinked folder resolves to its target.
 // The walk stops at the latest at the filesystem root, which always exists.
 function realPathThroughAncestors(target) {
-  const missing = [];
-  let current = target;
-  while (!fs.existsSync(current)) {
-    missing.unshift(path.basename(current));
-    current = path.dirname(current);
-  }
-  return path.join(fs.realpathSync.native(current), ...missing);
+  const { ancestor, missing } = nearestExistingAncestor(target, fs.existsSync);
+  return path.join(fs.realpathSync.native(ancestor), ...missing);
 }
 
 function resolveOutputPath(project, out, defaultRelativePath, enforceRoot) {

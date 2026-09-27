@@ -28,6 +28,10 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - `bun run check:metadata` fails when `CHANGELOG.md` has no section for the current package version.
 - The npm package now includes `CHANGELOG.md`.
 
+### Fixed
+
+- `story build --out` and `story init --dir` pointing at a folder the file system will not create (one under `/proc`) exit `4` naming that folder instead of hanging at 100% CPU. ([#279](https://github.com/danjdewhurst/story-skills/issues/279))
+
 ## [0.15.0] - 2026-09-27
 
 ### Added

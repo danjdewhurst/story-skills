@@ -2525,7 +2525,7 @@ function prepareWriteTarget(filePath, root) {
     assertLexicallyInsideRoot(target, root);
     assertExistingAncestorInsideRoot(path3.dirname(target), root);
   }
-  fs.mkdirSync(path3.dirname(target), { recursive: true });
+  makeDirectories(path3.dirname(target));
   if (root) {
     assertSafeProjectParent(target, root);
   }
@@ -2564,14 +2564,7 @@ function assertSafeProjectParent(filePath, root) {
   }
 }
 function assertExistingAncestorInsideRoot(target, root) {
-  let current = path3.resolve(target);
-  while (!lstatIfExists(current)) {
-    const parent = path3.dirname(current);
-    if (parent === current) {
-      break;
-    }
-    current = parent;
-  }
+  const { ancestor: current } = nearestExistingAncestor(target);
   let rootReal;
   let currentReal;
   try {
@@ -2583,6 +2576,39 @@ function assertExistingAncestorInsideRoot(target, root) {
   if (!isPathInside(rootReal, currentReal)) {
     throw projectError(`Refusing to access project path outside root: ${target}`);
   }
+}
+function nearestExistingAncestor(target, exists = lstatIfExists) {
+  const missing = [];
+  let current = path3.resolve(target);
+  while (!exists(current)) {
+    const parent = path3.dirname(current);
+    if (parent === current) {
+      break;
+    }
+    missing.unshift(path3.basename(current));
+    current = parent;
+  }
+  return { ancestor: current, missing };
+}
+function makeDirectories(directory) {
+  const { ancestor, missing } = nearestExistingAncestor(directory);
+  if (missing.length === 0 && fs.statSync(ancestor, { throwIfNoEntry: false })?.isDirectory() !== true) {
+    throw directoryError(ancestor, "ENOTDIR");
+  }
+  let current = ancestor;
+  for (const name of missing) {
+    current = path3.join(current, name);
+    try {
+      fs.mkdirSync(current);
+    } catch (error) {
+      if (error.code !== "EEXIST" || lstatIfExists(current)?.isDirectory() !== true) {
+        throw directoryError(current, error.code ?? error.message);
+      }
+    }
+  }
+}
+function directoryError(directory, code) {
+  return Object.assign(new Error(`Cannot create directory ${directory}: ${code}`), { code, path: directory, syscall: "mkdir", exitCode: EXIT_CODES.refused });
 }
 function assertLexicallyInsideRoot(filePath, root) {
   const rootPath = path3.resolve(root);
@@ -7458,7 +7484,7 @@ function createStoryProject(options) {
   const themes = normalizeList(options.themes, ["change"]);
   options.beforeWrite?.(root, existingStory !== null);
   for (const directory of PROJECT_DIRECTORIES) {
-    fs7.mkdirSync(path8.join(root, directory), { recursive: true });
+    makeDirectories(path8.join(root, directory));
   }
   const storyWritten = writeStarterFile(path8.join(root, "story.md"), storyBible({
     title,
@@ -8922,7 +8948,7 @@ function withProjectAtGitRef(root, ref, read) {
       if (/[\\:]/.test(entry.name) || !isPathInside(dir, target)) {
         return;
       }
-      fs7.mkdirSync(path8.dirname(target), { recursive: true });
+      makeDirectories(path8.dirname(target));
       fs7.writeFileSync(target, contents[index]);
     });
     return read(dir);
@@ -11336,7 +11362,7 @@ function ensureDirectory(directory, changed, root) {
   if (!fs7.existsSync(directory)) {
     assertLexicallyInsideRoot(directory, root);
     assertExistingAncestorInsideRoot(directory, root);
-    fs7.mkdirSync(directory, { recursive: true });
+    makeDirectories(directory);
     assertSafeProjectDirectory(directory, root);
     changed.push(directory);
     return;
@@ -12199,13 +12225,8 @@ function assertNotProjectSource(project, outFile) {
   }
 }
 function realPathThroughAncestors(target) {
-  const missing = [];
-  let current = target;
-  while (!fs7.existsSync(current)) {
-    missing.unshift(path8.basename(current));
-    current = path8.dirname(current);
-  }
-  return path8.join(fs7.realpathSync.native(current), ...missing);
+  const { ancestor, missing } = nearestExistingAncestor(target, fs7.existsSync);
+  return path8.join(fs7.realpathSync.native(ancestor), ...missing);
 }
 function resolveOutputPath(project, out, defaultRelativePath, enforceRoot) {
   const rawOut = out ?? defaultRelativePath;

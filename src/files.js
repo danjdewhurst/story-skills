@@ -130,7 +130,7 @@ function prepareWriteTarget(filePath, root) {
     assertExistingAncestorInsideRoot(path.dirname(target), root);
   }
 
-  fs.mkdirSync(path.dirname(target), { recursive: true });
+  makeDirectories(path.dirname(target));
 
   if (root) {
     assertSafeProjectParent(target, root);
@@ -179,16 +179,9 @@ function assertSafeProjectParent(filePath, root) {
 
 // Resolves the nearest existing ancestor of a path that may not exist yet and
 // confirms it stays inside the root, so a symlinked intermediate directory
-// cannot make a recursive mkdir create directories outside the project.
+// cannot make makeDirectories create directories outside the project.
 export function assertExistingAncestorInsideRoot(target, root) {
-  let current = path.resolve(target);
-  while (!lstatIfExists(current)) {
-    const parent = path.dirname(current);
-    if (parent === current) {
-      break;
-    }
-    current = parent;
-  }
+  const { ancestor: current } = nearestExistingAncestor(target);
   let rootReal;
   let currentReal;
   try {
@@ -200,6 +193,56 @@ export function assertExistingAncestorInsideRoot(target, root) {
   if (!isPathInside(rootReal, currentReal)) {
     throw projectError(`Refusing to access project path outside root: ${target}`);
   }
+}
+
+// The nearest ancestor of a path (or the path itself) that exists, and the
+// names below it that do not, top first. `exists` defaults to lstat, so a
+// symlink counts as existing whether or not it resolves. The walk stops at
+// the filesystem root, which always exists.
+export function nearestExistingAncestor(target, exists = lstatIfExists) {
+  const missing = [];
+  let current = path.resolve(target);
+  while (!exists(current)) {
+    const parent = path.dirname(current);
+    if (parent === current) {
+      break;
+    }
+    missing.unshift(path.basename(current));
+    current = parent;
+  }
+  return { ancestor: current, missing };
+}
+
+// Creates a directory and any missing parents, one level at a time. Node's
+// recursive mkdir reads ENOENT as "the parent is missing", so where a file
+// system answers ENOENT for a directory it will not create (procfs does, for
+// /proc/anything), it creates the existing parent and retries the child
+// forever. Here the first directory that cannot be created stops the walk
+// with an error naming it. A directory another process created in the
+// meantime counts as created, but a symlink raced into its place does not,
+// so the walk cannot continue outside the folder it checked. Callers run
+// their root-confinement checks before calling this.
+export function makeDirectories(directory) {
+  const { ancestor, missing } = nearestExistingAncestor(directory);
+  // The existing ancestor may be a symlink to a folder (`--out link/book.md`).
+  if (missing.length === 0 && fs.statSync(ancestor, { throwIfNoEntry: false })?.isDirectory() !== true) {
+    throw directoryError(ancestor, "ENOTDIR");
+  }
+  let current = ancestor;
+  for (const name of missing) {
+    current = path.join(current, name);
+    try {
+      fs.mkdirSync(current);
+    } catch (error) {
+      if (error.code !== "EEXIST" || lstatIfExists(current)?.isDirectory() !== true) {
+        throw directoryError(current, error.code ?? error.message);
+      }
+    }
+  }
+}
+
+function directoryError(directory, code) {
+  return Object.assign(new Error(`Cannot create directory ${directory}: ${code}`), { code, path: directory, syscall: "mkdir", exitCode: EXIT_CODES.refused });
 }
 
 export function assertLexicallyInsideRoot(filePath, root) {
