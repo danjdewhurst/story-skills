@@ -8874,6 +8874,7 @@ function screenplayOutline(project, book) {
   const bookChapters = new Set(project.chapters.map((chapter) => chapter.id));
   const unset = new Set;
   const noScenes = [];
+  const chronology = chapterChronology(project);
   for (const scene of project.scenes) {
     if (!bookChapters.has(scene.chapter)) {
       warnings.push(`${relative2(project, scene.file)} names chapter ${scene.chapter || "(none)"}, which is not in the book, and is left out of the screenplay`);
@@ -8882,7 +8883,8 @@ function screenplayOutline(project, book) {
   const chapters = project.chapters.map((chapter, index) => {
     const scenes = project.scenes.filter((scene) => scene.chapter === chapter.id).sort((left, right) => left.scene - right.scene || left.file.localeCompare(right.file, "en")).map((scene) => {
       const location = locations.get(scene.location);
-      const setting = scene.setting || location?.setting || "";
+      const place = location === undefined ? {} : entityStateAt(location.frontmatter, chapter.id, chronology).state;
+      const setting = scene.setting || (typeof place.setting === "string" ? place.setting : "");
       const notes = [];
       if (scene.location === "") {
         notes.push("No location on the scene record: set location for the heading.");
@@ -8907,7 +8909,7 @@ function screenplayOutline(project, book) {
       return {
         id: scene.id,
         title: String(scene.title),
-        locationName: scene.location === "" ? "" : String(location?.name ?? titleCaseSlug(scene.location)),
+        locationName: scene.location === "" ? "" : String(place.name ?? titleCaseSlug(scene.location)),
         setting,
         date: scene.date,
         time: scene.time || chapter.time,
@@ -11901,7 +11903,7 @@ var PROGRESSION_RULES = {
   },
   location: {
     lists: new Set(["notable-characters", "tags", "routes"]),
-    enums: new Map
+    enums: new Map([["setting", SCENE_SETTINGS]])
   },
   faction: {
     lists: new Set(["members", "locations", "tags"]),

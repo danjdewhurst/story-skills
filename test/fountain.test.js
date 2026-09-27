@@ -179,7 +179,7 @@ describe("fountain build", () => {
     expect(io.error()).toContain("warning: No setting (interior, exterior, or both) for gallery");
 
     const bad = memoryIo(root);
-    expect(runCli(["build", root, "--format", "fdx"], bad)).toBe(1);
+    expect(runCli(["build", root, "--format", "fdx"], bad)).toBe(2);
     expect(bad.error()).toContain("Supported formats: markdown, epub, docx, shunn, html, print, narration, metadata, fountain");
   });
 });
@@ -249,5 +249,64 @@ describe("fountain text", () => {
     expect(text).toContain("## Untitled\n");
     expect(text).toContain("EXT. HARBOR\n\n= = Open /\\* here\n\n[[Source: chapter-01-scene-01]]\n[[Characters: MARA]]\n[[ends in [a] ]]\n");
     expect(text).not.toContain("/*");
+  });
+});
+
+describe("fountain build integration", () => {
+  test("exit codes: an unknown format is usage, an unbuildable project is 3, a refused --out is 4", () => {
+    const root = lighthouse();
+    const out = path.join("adaptations", "screenplay", "script.fountain");
+    expect(runCli(["build", root, "--format", "fountain", "--out", out], memoryIo(root))).toBe(0);
+    const refused = memoryIo(root);
+    expect(runCli(["build", root, "--format", "fountain", "--out", out], refused)).toBe(4);
+    expect(refused.error()).toContain("Refusing to overwrite");
+    expect(runCli(["build", root, "--format", "fountain", "--out", "chapters/x.fountain"], memoryIo(root))).toBe(4);
+    expect(runCli(["build", root, "--format", "fountainx"], memoryIo(root))).toBe(2);
+
+    writeMarkdown(path.join(root, "chapters", "chapter-04.md"), "title: Bad\nnumber: 0\nstatus: draft", "## Chapter Text\n\nX.\n");
+    const unusable = memoryIo(root);
+    expect(runCli(["build", root, "--format", "fountain"], unusable)).toBe(3);
+    expect(unusable.error()).toContain("chapter number must be a positive integer to build");
+  });
+
+  test("cli-defaults can make fountain the default build, and --format on the command line still wins", () => {
+    const root = lighthouse();
+    const storyPath = path.join(root, "story.md");
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("schema-version: 2\n", "schema-version: 2\ncli-defaults:\n  - command: build\n    format: fountain\n"), "utf8");
+    const io = memoryIo(root);
+    expect(runCli(["build", root], io)).toBe(0);
+    expect(io.output()).toContain("as fountain to");
+    const epub = memoryIo(root);
+    expect(runCli(["build", root, "--format", "epub"], epub)).toBe(0);
+    expect(epub.output()).toContain("as epub to");
+    // A default --trim is dropped along with the default --format.
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("    format: fountain\n", "    format: print\n    trim: 6x9\n"), "utf8");
+    const fountain = memoryIo(root);
+    expect(runCli(["build", root, "--format", "fountain"], fountain)).toBe(0);
+    expect(fountain.output()).toContain("as fountain to");
+  });
+
+  test("a location's setting and name follow its progressions by chapter", () => {
+    const root = lighthouse();
+    writeMarkdown(path.join(root, "worldbuilding", "locations", "gallery.md"), [
+      "name: Gallery",
+      "type: building",
+      "setting: exterior",
+      "progressions:",
+      "  - from: chapter-02",
+      "    field: setting",
+      "    value: interior",
+      "  - from: chapter-02",
+      "    field: name",
+      "    value: Glassed Gallery"
+    ].join("\n"), "# Gallery\n");
+    const text = fs.readFileSync(buildBook(root, { format: "fountain" }).outFile, "utf8");
+    // Chapter 1 reads the location as it opens; chapter 2 reads the progression.
+    expect(text).toContain("EXT. GALLERY - MORNING");
+    expect(text).toContain("INT. GLASSED GALLERY - NIGHT");
+    expect(validateProject(root).errors).toEqual([]);
+
+    writeMarkdown(path.join(root, "worldbuilding", "locations", "gallery.md"), "name: Gallery\ntype: building\nprogressions:\n  - from: chapter-02\n    field: setting\n    value: indoors", "# Gallery\n");
+    expect(validateProject(root).errors).toContain("worldbuilding/locations/gallery.md progressions[0] setting has unsupported value indoors");
   });
 });

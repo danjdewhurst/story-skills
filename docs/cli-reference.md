@@ -2027,7 +2027,7 @@ $ story build --format print --trim 7x10
 Unsupported trim size: 7x10. Supported sizes: 5x8, 5.25x8, 5.5x8.5, 6x9, a5
 
 $ story build --format pdf
-Unsupported build format: pdf. Supported formats: markdown, epub, docx, shunn, html, print, narration, metadata
+Unsupported build format: pdf. Supported formats: markdown, epub, docx, shunn, html, print, narration, metadata, fountain
 ```
 
 An empty value (`--format=`) reads `Unsupported build format: (empty). ...`.
@@ -2132,7 +2132,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--against` | `<path>` | `compare` | Exclusive with `--ref` |
 | `--path` | `<path>` | Every command except `init` and `import` | Project root |
 | `--out` | `<file>` | `export`, `build`, `synopsis`, `diagram` | Relative to the project root |
-| `--format` | `<name>` | `build` | `markdown`, `md`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata` |
+| `--format` | `<name>` | `build` | `markdown`, `md`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain` |
 | `--trim` | `<size>` | `build` | Only with `--format print`: `5x8`, `5.25x8`, `5.5x8.5` (default), `6x9`, `a5` |
 | `--stamp` | `<label>` | `build` | Only with `--format html`: a build label printed in the review copy |
 | `--shunn` | | `build` | Boolean; only with `--format docx` |

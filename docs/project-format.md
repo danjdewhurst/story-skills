@@ -575,7 +575,7 @@ Files: `worldbuilding/locations/<location-id>.md`. Created with `story add locat
 | `tags` | list of strings | no | Free labels. |
 | `status` | string | no | Free text (default `unknown`). |
 | `routes` | list of mappings | no | Journeys to other locations, with travel times. See below. |
-| `setting` | enum | no | `interior`, `exterior`, or `both`: the `INT.`, `EXT.`, or `INT./EXT.` in the scene headings of `story build --format fountain`. A scene's own `setting` overrides it. |
+| `setting` | enum | no | `interior`, `exterior`, or `both`: the `INT.`, `EXT.`, or `INT./EXT.` in the scene headings of `story build --format fountain`. A scene's own `setting` overrides it, and a [progression](#progressions) can change it from a chapter on. |
 | `pronunciation` | string | no | Respelling for the narration build (see [Characters](#characters)). |
 | `progressions` | list of mappings | no | Changes from a chapter on, such as `status` or `controlled-by`. See [Progressions](#progressions). |
 
@@ -669,7 +669,7 @@ Rules:
 
 - `story validate` errors when `progressions` is not a list, when an entry is not a mapping or lacks `from`, `field`, or `value`, when `field` is not kebab-case, when `value` is a list or mapping, and when two entries change the same field from the same chapter. Entries must be listed in story order: an entry whose chapter comes before the previous entry's is an error.
 - A progression holds one value, so it cannot change a list field (`aliases`, `relationships`, `locations`, `tags`, `voice-words`, `voice-avoid`, `notable-characters`, `routes`, `members`). It also cannot change `id`, `progressions`, `died-in`, or `revived-in`. Record a changed relationship as a progression on its own field, such as `field: standing-with-kael` with `value: estranged`.
-- A value for an enum field must be allowed there: a character's `role` and `status`, a faction's `type` and `status`.
+- A value for an enum field must be allowed there: a character's `role` and `status`, a location's `setting`, a faction's `type` and `status`.
 - A character progression to `status: deceased` warns unless `died-in` names the same chapter, since `story continuity` reads deaths from `died-in`.
 - `story links` errors when `from` names a chapter that does not exist and is not a planned `chapter-NN` spelled the way `story add chapter` writes it.
 
