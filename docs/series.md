@@ -205,7 +205,7 @@ Series is consistent: 0 errors, 0 warnings, 0 dismissed
 
 The header shows the `series-title` when a book sets one, otherwise the `series` id. Each book line shows its title, its `book-number` (or `unnumbered`), its `status` (or `no status`), and its path relative to the book you ran the command on. `.` is that book. Running it on The Fall of the Citadel lists the same books in the same order; only the paths change, since they are relative to the book you start from. The report goes to standard output, and the summary line plus any `error:` and `warning:` lines go to standard error.
 
-`story series` works on a standalone book too. It reports a one-book `Unnamed series` with `- None` under `Shared canon:` and exits `0`. A path with no `story.md` fails with `<absolute path> is not a story project: missing story.md` and exit code `1`.
+`story series` works on a standalone book too. It reports a one-book `Unnamed series` with `- None` under `Shared canon:` and exits `0`. A path with no `story.md` fails with `<absolute path> is not a story project: missing story.md` and exit code `3`.
 
 ### Ordering
 

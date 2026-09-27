@@ -55,7 +55,19 @@ npx --yes --package story-skills@0.15.0 story --version
 
 ### Exit codes
 
-Every command exits `0` on success and `1` on failure. Warnings never change the exit code.
+Every command exits `0` on success. A failure exits with a code that says what kind of failure it was, so a script can tell a manuscript with errors from a mistyped command line. Warnings never change the exit code.
+
+| Code | Meaning | Examples |
+|---|---|---|
+| `0` | Success. For checks, no errors. | `Project is valid`, or only warnings. |
+| `1` | Findings: a check reported at least one `error:` line. | `validate`, `links`, or `continuity` found an error; `names` found a clash. |
+| `2` | Usage error: the command line was wrong. | An unknown command or option, a missing option value, an unexpected argument, an unsupported `--format`, or an id that does not exist (`Unknown character nobody`). |
+| `3` | Not a usable story project. | No `story.md` at the path, a file the command needs cannot be read or parsed (`Cannot export: fix this file first`), a project with a newer schema, or nothing to build (`No chapters found to export`). |
+| `4` | Refused write. Nothing, or only what the message names, was changed. | The target already exists (`init` without `--force`, `add` of an existing id), `--out` points at project source, another story command holds the project lock, a file changed on disk meanwhile, or the file system refused the write (`permission denied`, a full disk). |
+
+Because findings keep `1`, `story validate "$STORY_DIR" || exit 1` and the GitHub Actions templates fail a job exactly as before. Scripts that test for `1` specifically to mean "any failure" need to accept `2`, `3`, and `4` too; `[ $? -ne 0 ]` or `|| exit` works for every code.
+
+Which commands can report findings (exit `1`):
 
 | Command | Exits 1 when |
 |---|---|
@@ -63,13 +75,14 @@ Every command exits `0` on success and `1` on failure. Warnings never change the
 | `links` | A cross-reference points at a missing file, or a required backlink is missing. |
 | `continuity` | A continuity contract is broken, such as a dead character listed in a later chapter or a payoff before its setup. Findings matched by `continuity/exemptions.md` are dismissed and do not count. |
 | `series` | A linked path is not a story project, the chronology has a cycle, two books share a `book-number`, linked books declare different series, or shared canon contradicts itself, such as a character who died in an earlier book appearing later. A missing series backlink is caught by `links`, not `series`. |
-| `compare`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices` | A project file cannot be parsed. Their own findings are advisory. |
+| `compare`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `diagram` | A project file cannot be parsed and is reported as an `error:` line. Their own findings are advisory. `compare` exits 3 instead when a chapter cannot be parsed, because it cannot compare without it. |
 | `names` | A candidate name clashes with an existing one. |
-| `passes` | It refuses a change, such as a pass name that is not kebab-case or a `story.md` that cannot be parsed. |
 | `report`, `next`, `doctor` | Never, on a readable project. They summarise the checks but always exit 0. |
-| Any command | Unknown command or option, missing option value, invalid argument, or a refused write. |
+| All other commands | Never: they succeed, or stop with `2`, `3`, or `4`. |
 
 `report --actionable`, `next`, and `doctor` are for reading, not gating. Use `validate`, `links`, and `continuity` when a job must fail.
+
+Before this split, every failure exited `1`. If a script relied on `1` for a usage error, a missing project, or a refused write, update it to the new code.
 
 Here is a passing check and a failing one, using the examples in this repository:
 
@@ -105,8 +118,8 @@ By default, output is plain text with stable line prefixes, so you can filter it
 - `validate`, `links`, and `continuity` write only to **stderr**: one summary line, then one line per finding, prefixed `error:`, `warning:`, or `dismissed:`. Nothing goes to stdout.
 - `compare`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `names`, and `series` write their report to stdout and the same summary and finding lines to stderr.
 - Every other command writes its report or confirmation to stdout.
-- A command that cannot run, for example because of an unknown option or a missing argument, prints one error line to stderr. An unknown command also prints the full help text after the error.
-- Pointing any command at a directory without `story.md` prints `<path> is not a story project: missing story.md` to stderr and exits 1. In a project that has `story.md`, `validate` reports each other missing required file as an `error:` finding and exits 1.
+- A command that cannot run, for example because of an unknown option or a missing argument, prints one error line to stderr and exits 2. An unknown command also prints the full help text after the error.
+- Pointing any command at a directory without `story.md` prints `<path> is not a story project: missing story.md` to stderr and exits 3. In a project that has `story.md`, `validate` reports each other missing required file as an `error:` finding and exits 1.
 
 To capture findings, redirect stderr:
 
@@ -513,7 +526,7 @@ story links .
 story continuity .
 ```
 
-Each command exits 1 on errors, which fails the job. Add `story report . --actionable` at the end if you want a readable summary in the log.
+Each command exits 1 on errors, and 2, 3, or 4 when it cannot run at all, so any failure fails the job. Add `story report . --actionable` at the end if you want a readable summary in the log.
 
 ## See also
 

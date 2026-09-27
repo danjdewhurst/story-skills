@@ -95,7 +95,7 @@ Options:
   -v, --version             Show the story CLI version
 ```
 
-`story help` with a name that is not a command fails like an unknown command (below): `story help frob` prints `Unknown command: frob` and exits 1.
+`story help` with a name that is not a command fails like an unknown command (below): `story help frob` prints `Unknown command: frob` and exits 2.
 
 `story --version` (or `-v`) prints the version and exits 0. It wins over every other command and option on the line, including `--help`, but not over a malformed command line: `story validate --bogus -v` still fails with `Unknown option --bogus`, and `story export --out -v` with `Missing value for --out`.
 
@@ -107,7 +107,7 @@ story --version
 0.15.0
 ```
 
-An unknown command prints `Unknown command: <name>`, with a suggestion when the name is close to a real command, and a pointer to the help, to stderr, and exits 1:
+An unknown command prints `Unknown command: <name>`, with a suggestion when the name is close to a real command, and a pointer to the help, to stderr, and exits 2:
 
 ```text
 $ story valdate
@@ -238,9 +238,14 @@ The examples on this page show stdout and stderr together, as a terminal does.
 | Exit code | Meaning |
 |---|---|
 | `0` | The command succeeded. For checks, there were no errors. Warnings and dismissed findings do not change the exit code. |
-| `1` | A check found at least one error, the command failed (unknown command or option, missing value, unexpected argument or option, missing project, refused write), or `knowledge` was called without its required arguments. |
+| `1` | Findings: a check reported at least one `error:` line. |
+| `2` | Usage error: an unknown command or option, a missing or invalid option value, an unexpected argument or option, a missing required argument (such as `knowledge` without `--at`), or an id that does not exist. |
+| `3` | Not a usable story project: no `story.md`, a file the command needs cannot be read or parsed, a newer schema than this CLI knows, or nothing to build from. |
+| `4` | Refused write: the target already exists, is project source or outside the project, goes through a symlink, is locked by another story command, changed on disk meanwhile, or the file system refused it. |
 
-`report`, `next`, and `doctor` summarise check results but always exit 0 on a readable project. `prose`, `pacing`, `clues`, and `voices` report every craft finding as a warning, so they exit 1 only when a file fails to parse. `passes` exits 1 only when it refuses a change. `names` exits 1 when a candidate clashes with an existing name. Use `validate`, `links`, and `continuity` when you need a failing exit code, for example in CI (see [Automation and CI](automation.md)).
+Findings keep `1`, so `story validate || exit 1` fails on errors as it always has. Before these codes were split, every failure exited `1`; a script that tested for `1` to catch a usage error, a missing project, or a refused write should test for `2`, `3`, or `4` instead, or for any non-zero code. The codes are exported as `EXIT_CODES` from `src/exit-codes.js`.
+
+`report`, `next`, and `doctor` summarise check results but always exit 0 on a readable project. `prose`, `pacing`, `clues`, and `voices` report every craft finding as a warning, so they exit 1 only when a file fails to parse. `passes` exits 0 unless it refuses a change: `2` for a bad pass name, `3` for a `story.md` it cannot safely rewrite, `4` when the write fails. `names` exits 1 when a candidate clashes with an existing name. Use `validate`, `links`, and `continuity` when you need a failing exit code, for example in CI (see [Automation and CI](automation.md)).
 
 ### JSON output
 
@@ -744,7 +749,7 @@ Every rule, and how to write exemptions, is in [Continuity and analysis](continu
 story knowledge <character-id> --at <chapter-id> [--path <project>]
 ```
 
-Lists the `knowledge-state` entries in `continuity/state.md` that a character knew by a given chapter. An entry counts if its `learned-in` chapter is at or before `--at` (by story date when both chapters are dated, else by chapter number); an entry with no `learned-in` is pre-existing knowledge and always counts. It exits 1 with the parse error when a chapter file, the character file, or `continuity/state.md` fails to parse, and when one of the character's entries has no `knows`.
+Lists the `knowledge-state` entries in `continuity/state.md` that a character knew by a given chapter. An entry counts if its `learned-in` chapter is at or before `--at` (by story date when both chapters are dated, else by chapter number); an entry with no `learned-in` is pre-existing knowledge and always counts. It exits 3 with the parse error when a chapter file, the character file, or `continuity/state.md` fails to parse, and when one of the character's entries has no `knows`.
 
 | Option | Effect |
 |---|---|
@@ -771,7 +776,7 @@ story knowledge kael-voss --at chapter-01
 - The tunnels from the Vale side reach the Whisper Gate into the High Keep (pre-existing knowledge)
 ```
 
-With nothing recorded, it prints `No recorded knowledge for <id> at <chapter-id>` and exits 0. A missing argument, an unknown character or chapter, or a character file that fails to parse exits 1. A broken character file prints its parse error, such as `characters/mara.md: is missing YAML frontmatter`, rather than `Unknown character`:
+With nothing recorded, it prints `No recorded knowledge for <id> at <chapter-id>` and exits 0. A missing argument or an unknown character or chapter exits 2; a character file that fails to parse exits 3. A broken character file prints its parse error, such as `characters/mara.md: is missing YAML frontmatter`, rather than `Unknown character`:
 
 ```text
 $ story knowledge kael-voss
@@ -1332,7 +1337,7 @@ Checks one or more candidate names against every name in the story bible: charac
 | `check` | It looks like an existing name (same first four letters, or one or two letters different), or shares an initial with a protagonist, antagonist, deuteragonist, or narrator | Warning |
 | `clear` | No clash or look-alike | Nothing |
 
-Titles such as `Lord`, `Captain`, or `The` are skipped when finding a given name, so `Lord Maren` is compared as `Maren`. `names` exits 1 when any candidate is `taken`, and with no names it prints its usage line and exits 1.
+Titles such as `Lord`, `Captain`, or `The` are skipped when finding a given name, so `Lord Maren` is compared as `Maren`. `names` exits 1 when any candidate is `taken`, and with no names it prints its usage line and exits 2.
 
 In The Salt Road:
 
@@ -1386,7 +1391,7 @@ Prints [Mermaid](https://mermaid.js.org/) diagram source generated from frontmat
 | `--out <file>` | Write the source to this path, relative to the project root, instead of stdout. Project source paths are refused (see [Where commands write](#where-commands-write)) | Print to stdout |
 | `--path <path>` | Project root | Current directory |
 
-`diagram` prints and writes nothing while any project file fails to parse, because the diagram would silently drop entities; it reports the parse errors on stderr and exits 1. An unknown or missing kind exits 1:
+`diagram` prints and writes nothing while any project file fails to parse, because the diagram would silently drop entities; it reports the parse errors on stderr and exits 1. An unknown or missing kind exits 2:
 
 ```text
 $ story diagram maps

@@ -54,7 +54,7 @@ For flags and exit codes of every command, see the [CLI reference](cli-reference
 
 Most commands take the project as an optional positional path or `--path`. `knowledge`, `names`, and `diagram` take only `--path`, because their positional arguments are a character id, candidate names, and a diagram kind.
 
-Only `continuity` and `names` fail because of what the story says: `continuity` on a contradiction, `names` on a candidate that is already taken. The others exit 1 only on bad arguments or files that do not parse. `pacing`, `clues`, `prose`, and `voices` findings are always warnings, and `report`, `next`, and `doctor` exit 0 whatever the checks find. For when each command exits 1, see [Output streams and exit codes](cli-reference.md#output-streams-and-exit-codes).
+Only `continuity` and `names` fail because of what the story says: `continuity` on a contradiction, `names` on a candidate that is already taken. The others exit 1 only on files that do not parse, and 2 on bad arguments. `pacing`, `clues`, `prose`, and `voices` findings are always warnings, and `report`, `next`, and `doctor` exit 0 whatever the checks find. For when each command exits 1, see [Output streams and exit codes](cli-reference.md#output-streams-and-exit-codes).
 
 ## Find your message
 
@@ -551,7 +551,7 @@ $ story knowledge jonas-reed --at chapter-04
 - which ledger page names the firestarter (learned in chapter-04)
 ```
 
-The command exits 1 with `Unknown character <id>` or `Unknown chapter <id>` if either id does not exist, prints the parse error instead (such as `characters/mara.md: is missing YAML frontmatter`) when the character's file fails to parse, and prints the usage line if you leave out the character or `--at`. Entries whose `learned-in` chapter does not exist are skipped here; `story continuity` reports them as errors.
+The command exits 2 with `Unknown character <id>` or `Unknown chapter <id>` if either id does not exist, exits 3 with the parse error instead (such as `characters/mara.md: is missing YAML frontmatter`) when the character's file fails to parse, and exits 2 with the usage line if you leave out the character or `--at`. Entries whose `learned-in` chapter does not exist are skipped here; `story continuity` reports them as errors.
 
 The answer is only as good as the state file. After drafting a chapter in which someone learns something that matters later, add a `knowledge-state` entry with `learned-in`. Before revising a scene in which a character acts on a secret, run `story knowledge` for that chapter.
 
@@ -1005,7 +1005,7 @@ $ story diagram timeline --out dist/timeline.mmd
 Wrote timeline diagram to /home/you/books/the-unraveled-thread/dist/timeline.mmd
 ```
 
-A relative `--out` path is resolved against the project root and must stay inside it; `dist/` keeps diagrams with the other disposable build output. Nothing is written if any project file fails to parse, because a diagram drawn from a partial scan would silently drop entities. A missing or unknown kind exits 1 with `Unknown diagram kind: <kind>. Supported kinds: relationships, locations, timeline, clues, arcs`.
+A relative `--out` path is resolved against the project root and must stay inside it; `dist/` keeps diagrams with the other disposable build output. Nothing is written if any project file fails to parse, because a diagram drawn from a partial scan would silently drop entities. A missing or unknown kind exits 2 with `Unknown diagram kind: <kind>. Supported kinds: relationships, locations, timeline, clues, arcs`.
 
 ## Story progress
 
@@ -1185,13 +1185,13 @@ revision-passes:
   # ...and so on to proof
 ```
 
-`story passes` exits 0 unless it cannot write: a pass name that is not kebab-case exits 1 with `Revision pass names must be kebab-case, got <name>`, and a `revision-passes` list that `story validate` would reject exits 1 with `Fix revision-passes in story.md before changing it: ...`. `story validate` requires a list of objects, each with a kebab-case `pass` listed once and an optional `status` of `pending` (the default), `in-progress`, or `done`.
+`story passes` exits 0 unless it cannot write: a pass name that is not kebab-case exits 2 with `Revision pass names must be kebab-case, got <name>`, and a `revision-passes` list that `story validate` would reject exits 3 with `Fix revision-passes in story.md before changing it: ...`. `story validate` requires a list of objects, each with a kebab-case `pass` listed once and an optional `status` of `pending` (the default), `in-progress`, or `done`.
 
 While `story.md` has `status: revising`, [`story next`](#story-next) turns the ladder into an action: `Plan revision passes` when none are recorded, then `Revision pass: <name>` with the pass's focus and checks, until every pass is done. The [`revision-continuity`](../skills/revision-continuity/SKILL.md) skill works through the passes one at a time.
 
 ## Report, next, and doctor
 
-These three commands run `validate`, `links`, and `continuity` together and summarise the results. They exit 0 whatever the checks find (only a folder without `story.md` makes them exit 1): use them to decide what to do, and use the individual checks in scripts and CI.
+These three commands run `validate`, `links`, and `continuity` together and summarise the results. They exit 0 whatever the checks find (only a folder without `story.md` makes them fail, with exit code 3): use them to decide what to do, and use the individual checks in scripts and CI.
 
 ### story report
 

@@ -77,7 +77,7 @@ jobs:
           npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story links "$STORY_DIR"
           npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story continuity "$STORY_DIR"
 
-      # story build exits 1 with "No chapters found to export" on a project
+      # story build exits 3 with "No chapters found to export" on a project
       # that has no chapters yet, such as one fresh from story init.
       - name: Look for chapters
         id: chapters

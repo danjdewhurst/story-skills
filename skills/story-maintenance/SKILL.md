@@ -130,6 +130,7 @@ Use:
 ## Failure Handling
 
 - Treat CLI errors as actionable maintenance findings.
+- Read the exit code to decide what to do next: `1` means the check found `error:` findings to fix in the project; `2` means the command line was wrong (fix the command, not the project); `3` means the path is not a usable story project or a file it needs does not parse (repair that file, or point at the folder with `story.md`); `4` means a write was refused (the target exists, is project source, is locked by another story command, or is not writable), so resolve the conflict rather than forcing it.
 - Fix broken references, missing required files, stale registries, or incorrect word counts when the requested task implies doing so.
 - Do not overwrite creative prose or story content merely to satisfy a mechanical check.
 - If a validation warning reflects intentional user data, report it rather than silently changing it.
