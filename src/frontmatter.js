@@ -417,3 +417,24 @@ function needsQuotes(text) {
 function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
+
+const FRONTMATTER_BLOCK_PATTERN = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
+// A YAML line: blank, a comment, a list item, an indented continuation, or a
+// key with no spaces in it ("She said: go now." is prose, not a key).
+const YAML_LINE_PATTERN = /^(?:\s*$|\s*#|\s*-\s|\s*-$|\s+\S|(?:[A-Za-z0-9_][A-Za-z0-9_.-]*|"[^"\n]*"|'[^'\n]*')[ \t]*:(?:\s|$))/;
+
+// Removes leading YAML frontmatter, including YAML the strict parser rejects,
+// such as nested maps from Pandoc or Obsidian. A leading `---` scene break is
+// kept: a block that opens with a blank line, or has a line that is not YAML
+// (a key with spaces, a sentence), is prose.
+export function withoutLeadingFrontmatter(text) {
+  const match = FRONTMATTER_BLOCK_PATTERN.exec(text);
+  if (!match) {
+    return text;
+  }
+  const lines = match[1].split(/\r?\n/);
+  if (lines[0].trim() === "" || !lines.every((line) => YAML_LINE_PATTERN.test(line))) {
+    return text;
+  }
+  return text.slice(match[0].length);
+}

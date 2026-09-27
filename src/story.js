@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { checkContinuity, idText, storyDateError, storyTimeError } from "./continuity.js";
 import { chapterChronology } from "./chronology.js";
-import { FRONTMATTER_PATTERN, parseFrontmatter, replaceFrontmatter, stringifyFrontmatter } from "./frontmatter.js";
+import { FRONTMATTER_PATTERN, parseFrontmatter, replaceFrontmatter, stringifyFrontmatter, withoutLeadingFrontmatter } from "./frontmatter.js";
 import { assertExistingAncestorInsideRoot, assertLexicallyInsideRoot, assertSafeProjectDirectory, assertSafeProjectPath, isPathInside, lstatIfExists, readTextFile, TEMPORARY_FILE_PATTERN, writeFile } from "./files.js";
 import { isTruthy } from "./options.js";
 import { withProjectLock } from "./lock.js";
@@ -2147,12 +2147,16 @@ export function namesReport(root, candidates) {
 }
 
 // Dialogue fingerprints per character from attributed speech. Advisory.
-export function voicesReport(root) {
+// With `passage` (text piped to `story voices -`), that text stands in for
+// the chapters, attributed against the project's characters.
+export function voicesReport(root, options = {}) {
   const project = scanProject(root);
-  const chapters = project.chapters.map((chapter) => ({
-    id: chapter.id,
-    paragraphs: proseParagraphs(chapterProse(readMarkdown(chapter.file, project.root).body, " "))
-  }));
+  const chapters = options.passage === undefined
+    ? project.chapters.map((chapter) => ({
+      id: chapter.id,
+      paragraphs: proseParagraphs(chapterProse(readMarkdown(chapter.file, project.root).body, " "))
+    }))
+    : [{ id: PASSAGE_LABEL, paragraphs: proseParagraphs(passageProse(options.passage)) }];
   return { ok: project.fileErrors.length === 0, errors: [...project.fileErrors], ...buildVoices(project, chapters) };
 }
 
@@ -2162,10 +2166,23 @@ export function pacingReport(root) {
   return { ok: project.fileErrors.length === 0, errors: [...project.fileErrors], ...buildPacing(project) };
 }
 
+// The label a passage piped to `story prose -` or `story voices -` goes by
+// in findings, in place of a chapter file or id.
+const PASSAGE_LABEL = "stdin";
+
+// The prose of a piped passage: a whole chapter file (frontmatter and
+// outline included) lints as its chapter text, as the chapter itself would.
+function passageProse(text) {
+  return chapterProse(withoutLeadingFrontmatter(String(text).replace(/\r\n?/g, "\n")), " ");
+}
+
 // Advisory prose lint: counts per chapter plus manuscript-wide repeats.
 // Findings are warnings, never errors, so the command always exits 0 on a
 // readable project.
-export function proseReport(root) {
+export function proseReport(root, options = {}) {
+  if (options.passage !== undefined) {
+    return prosePassageReport(root, options.passage);
+  }
   const project = scanProject(root);
   const errors = [...project.fileErrors];
   const warnings = [];
@@ -2193,6 +2210,28 @@ export function proseReport(root) {
     chapters,
     phrases,
     similarNames: similar
+  };
+}
+
+// `story prose -`: the same per-chapter lint over one piped passage, with
+// the project's style sheet and character names when `root` names a
+// project, and the default rules when it is null. Similar character names
+// are a bible finding, not a passage one, so they are left out.
+function prosePassageReport(root, passage) {
+  const project = root === null ? null : scanProject(root);
+  const errors = project === null ? [] : [...project.fileErrors];
+  const names = project === null ? [] : [...project.characters.map((character) => character.name), ...existingNames(project).map((entry) => entry.name)];
+  const analysis = analyzeChapter(passageProse(passage), proseRules(project?.styleSheet?.data, names));
+  return {
+    ok: errors.length === 0,
+    errors,
+    warnings: chapterFindings(PASSAGE_LABEL, analysis),
+    passage: true,
+    styleSheet: Boolean(project?.styleSheet),
+    words: analysis.words,
+    chapters: [{ file: PASSAGE_LABEL, title: "passage", analysis }],
+    phrases: repeatedPhrases([analysis]),
+    similarNames: []
   };
 }
 

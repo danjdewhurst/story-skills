@@ -240,7 +240,7 @@ describe("cli", () => {
     expect(help).toContain("series [path]");
     expect(help).toContain("--follows <path>");
     expect(help).toContain("--precedes <path>");
-    expect(help).toContain("import <source>");
+    expect(help).toContain("import <source|->");
     expect(help).toContain("--title <name>");
     expect(help).toContain("--role <name>");
     expect(help).toContain("--introduced <id>");

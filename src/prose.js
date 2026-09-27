@@ -243,7 +243,7 @@ export function similarNames(characters) {
 
 export function formatProseReport(report) {
   const chapterCount = `${report.chapters.length} ${report.chapters.length === 1 ? "chapter" : "chapters"}`;
-  const lines = [`Prose report: ${chapterCount}, ${report.words} words`];
+  const lines = [`Prose report: ${report.passage ? "passage from stdin" : chapterCount}, ${report.words} words`];
   if (!report.styleSheet) {
     lines.push("No style-sheet.md: spelling and watch-word checks are off");
   }
@@ -263,9 +263,12 @@ export function formatProseReport(report) {
       lines.push(`  Spelling: ${analysis.variants.map((entry) => `${entry.avoid} ${entry.count} (use ${entry.use})`).join(", ")}`);
     }
   }
-  lines.push("", "Manuscript:");
+  lines.push("", report.passage ? "Passage:" : "Manuscript:");
   lines.push(`  Repeated ${PROSE_THRESHOLDS.phraseLength}-word phrases: ${report.phrases.map((entry) => `"${entry.phrase}" ${entry.count}`).join(", ") || "none"}`);
-  lines.push(`  Similar character names: ${report.similarNames.map(([a, b]) => `${a.name} / ${b.name}`).join(", ") || "none"}`);
+  // Similar names are a bible finding, so a passage report leaves them out.
+  if (!report.passage) {
+    lines.push(`  Similar character names: ${report.similarNames.map(([a, b]) => `${a.name} / ${b.name}`).join(", ") || "none"}`);
+  }
   return `${lines.join("\n")}\n`;
 }
 

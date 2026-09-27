@@ -4,6 +4,7 @@ import { formatClueMatrix } from "./clues.js";
 import { formatComparison, formatLabelMapping } from "./compare.js";
 import { importManuscript } from "./import.js";
 import { isTruthy } from "./options.js";
+import { STDIN_ARG, readStdin, stdinText } from "./stdin.js";
 import { formatNames } from "./names.js";
 import { formatPacing } from "./pacing.js";
 import { formatPasses } from "./passes.js";
@@ -104,14 +105,15 @@ export const COMMANDS = [
   },
   {
     name: "import",
-    usage: "import <source>",
-    summary: ["Split an existing manuscript into a new story project"],
+    usage: "import <source|->",
+    summary: ["Split an existing manuscript into a new story project;", "- reads the manuscript from stdin"],
     project: "none",
     args: 1,
     options: ["title", "dir", "genre", "sub-genre", "setting-era", "theme", "themes", "pov", "tense", "synopsis", "force"],
     run({ parsed, io, cwd }) {
       const result = importManuscript({
         source: parsed.positionals[1],
+        readStdin: () => pipedText(io, "import"),
         title: parsed.options.title,
         cwd,
         dir: parsed.options.dir,
@@ -275,15 +277,18 @@ export const COMMANDS = [
   },
   {
     name: "prose",
-    usage: "prose [path]",
+    usage: "prose [path|-]",
     summary: [
       "Lint chapter prose: filter words, adverbs, dialogue",
       "tags, echoes, rhythm, repeated phrases, similar",
-      "names, and style-sheet.md spellings and watch words"
+      "names, and style-sheet.md spellings and watch words;",
+      "- lints a passage from stdin"
     ],
     project: "positional",
-    run({ io, root }) {
-      const report = proseReport(root());
+    run({ parsed, io, cwd, root }) {
+      const report = parsed.positionals[1] === STDIN_ARG
+        ? proseReport(passageRoot(parsed, cwd, false), { passage: pipedText(io, "prose") })
+        : proseReport(root());
       io.stdout.write(formatProseReport(report));
       return reportResult(io, report, "Prose check complete", "Prose check failed");
     }
@@ -356,15 +361,18 @@ export const COMMANDS = [
   },
   {
     name: "voices",
-    usage: "voices [path]",
+    usage: "voices [path|-]",
     summary: [
       "Fingerprint each character's tagged dialogue and flag",
       "voice-avoid words, unused voice-words, and",
-      "characters who sound alike"
+      "characters who sound alike; - checks a passage",
+      "from stdin"
     ],
     project: "positional",
-    run({ io, root }) {
-      const report = voicesReport(root());
+    run({ parsed, io, cwd, root }) {
+      const report = parsed.positionals[1] === STDIN_ARG
+        ? voicesReport(passageRoot(parsed, cwd, true), { passage: pipedText(io, "voices") })
+        : voicesReport(root());
       io.stdout.write(formatVoices(report));
       return reportResult(io, report, "Voice check complete", "Voice check failed");
     }
@@ -602,6 +610,24 @@ function nameWords(parsed, from, cwd, command) {
     }
   }
   return words;
+}
+
+// Text piped to `story <command> -`. `io.readStdin` stands in for the real
+// stdin in tests.
+function pipedText(io, command) {
+  return stdinText(command, io.readStdin ? io.readStdin() : readStdin(command));
+}
+
+// The project for a passage piped to `story prose -` or `story voices -`:
+// the `-` takes the place of [path], so the project is --path, else the
+// current directory. prose also runs outside a project, with the default
+// rules; voices needs the project's characters, so it reports the usual
+// missing story.md error.
+function passageRoot(parsed, cwd, required) {
+  if (parsed.options.path !== undefined) {
+    return path.resolve(cwd, parsed.options.path);
+  }
+  return required || fs.existsSync(path.join(cwd, "story.md")) ? path.resolve(cwd) : null;
 }
 
 function writeWarnings(io, result) {
