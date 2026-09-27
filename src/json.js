@@ -4,8 +4,10 @@ import { isTruthy } from "./options.js";
 
 // The version of the --json result envelope. Adding a field keeps it;
 // renaming, removing, or retyping one bumps it. schemas/result.schema.json
-// describes this version.
-export const API_VERSION = "story/v1";
+// describes this version. story/v2 made diagnostics[].code the finding's
+// rule code, where story/v1 (0.16.0) had the check name, and added
+// diagnostics[].check.
+export const API_VERSION = "story/v2";
 
 export function wantsJson(parsed) {
   return isTruthy(parsed.options.json);

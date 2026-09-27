@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/danjdewhurst/story-skills/schemas/result.schema.json",
-  "title": "Story Skills CLI result, apiVersion story/v1",
-  "$comment": "The object `story <command> --json` prints. The envelope is the same for every command; `data` depends on `command` and is described under $defs/data-<command>. A failure before the command produced a result (a usage error, a missing project) has data null. Fields may be added within story/v1; renaming, removing, or retyping one changes apiVersion.",
+  "title": "Story Skills CLI result, apiVersion story/v2",
+  "$comment": "The object `story <command> --json` prints. The envelope is the same for every command; `data` depends on `command` and is described under $defs/data-<command>. A failure before the command produced a result (a usage error, a missing project) has data null. Fields may be added within story/v2; renaming, removing, or retyping one changes apiVersion. story/v2 made diagnostics[].code the finding's rule code (story/v1, in 0.16.0, had the check name there) and added diagnostics[].check.",
   "type": "object",
   "required": ["apiVersion", "command", "ok", "data", "diagnostics", "writes"],
   "properties": {
-    "apiVersion": { "const": "story/v1" },
+    "apiVersion": { "const": "story/v2" },
     "command": {
       "enum": ["validate", "links", "continuity", "series", "next", "doctor", "report", "knowledge", "context", "timeline", "prose", "voices", "pacing", "clues", "progress"]
     },

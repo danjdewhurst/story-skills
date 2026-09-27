@@ -135,7 +135,7 @@ The check and analysis commands (`validate`, `links`, `continuity`, `series`, `r
 
 ```json
 {
-  "apiVersion": "story/v1",
+  "apiVersion": "story/v2",
   "command": "validate",
   "ok": true,
   "data": { "errors": 0, "warnings": 1, "dismissed": 0 },

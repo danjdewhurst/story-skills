@@ -282,7 +282,7 @@ Every result has the same envelope:
 
 | Field | Meaning |
 |---|---|
-| `apiVersion` | `"story/v1"`. Fields may be added within a version; renaming, removing, or retyping one changes it. |
+| `apiVersion` | `"story/v2"`. Fields may be added within a version; renaming, removing, or retyping one changes it. `story/v1`, in 0.16.0, put the check name in `code`; `story/v2` puts the rule code there and the check name in `check`. |
 | `command` | The command that ran, such as `"continuity"`. |
 | `ok` | `true` exactly when the command exits `0`. |
 | `data` | The command's result: counts for `validate`, `links`, and `continuity`; the report, grid, or profile for the others. `null` when the command stopped before producing one. Fields a project does not set are `null`, not missing. |
@@ -299,7 +299,7 @@ story continuity examples/the-unraveled-thread --json
 
 ```text
 {
-  "apiVersion": "story/v1",
+  "apiVersion": "story/v2",
   "command": "continuity",
   "ok": false,
   "data": {

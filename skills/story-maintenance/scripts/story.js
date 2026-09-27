@@ -14067,7 +14067,7 @@ ${prose}
 }
 
 // src/json.js
-var API_VERSION = "story/v1";
+var API_VERSION = "story/v2";
 function wantsJson(parsed) {
   return isTruthy(parsed.options.json);
 }
