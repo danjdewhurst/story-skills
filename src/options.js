@@ -106,6 +106,11 @@ const VALUE_OPTIONS = new Set(OPTIONS.filter((option) => option.value !== undefi
 // `--out a.md --out b.md` writes b.md.
 const REPEATABLE_OPTIONS = new Set(OPTIONS.filter((option) => option.repeatable).map((option) => option.name));
 
+// Whether --name reads the next argument as its value.
+export function takesValue(name) {
+  return VALUE_OPTIONS.has(name);
+}
+
 const OPTION_COLUMN = 28;
 
 // Help lines for every option, or only the named ones (per-command help).
@@ -188,7 +193,7 @@ export function isTruthy(value) {
   return Boolean(current);
 }
 
-function isBooleanLiteralToken(token) {
+export function isBooleanLiteralToken(token) {
   return typeof token === "string" && /^(true|false|0|1|yes|no|on|off)$/i.test(token);
 }
 

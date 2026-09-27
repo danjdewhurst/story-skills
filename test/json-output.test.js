@@ -85,6 +85,18 @@ describe("--json result envelope", () => {
     expect(envelope.data.actions.length).toBeGreaterThan(0);
   });
 
+  test("report lists a parse error once, though every check reports it", () => {
+    const root = brokenProject();
+    fs.writeFileSync(path.join(root, "chapters", "chapter-02.md"), "No frontmatter here.\n", "utf8");
+    const { envelope } = invokeJson(root, ["report", "--json"]);
+    const parseErrors = envelope.diagnostics.filter((entry) => entry.message.includes("missing YAML frontmatter"));
+    expect(parseErrors).toHaveLength(1);
+    expect(parseErrors[0].code).toBe("validate");
+    const keys = envelope.diagnostics.map((entry) => `${entry.severity} ${entry.message}`);
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(envelope.data.checks.links.errors).toBeGreaterThan(0);
+  });
+
   test("dismissed continuity findings carry their exemption", () => {
     const cwd = makeTempDir();
     const { root } = createStoryProject({ cwd, title: "Dismissed Json", force: false });
@@ -122,6 +134,32 @@ describe("--json result envelope", () => {
     expect(missing.envelope).toMatchObject({ command: "validate", ok: false });
   });
 
+  test("--json before the command still reports failures as JSON", () => {
+    const root = path.join(examplesRoot, "the-last-ember");
+    const missing = invokeJson(makeTempDir(), ["--json", "validate"]);
+    expect(missing.envelope).toMatchObject({ command: "validate", ok: false, data: null });
+
+    const afterPath = invokeJson(root, ["--path", root, "--json", "knowledge", "sera-voss"]);
+    expect(afterPath.envelope.command).toBe("knowledge");
+    expect(afterPath.envelope.diagnostics[0].message).toContain("Usage: story knowledge");
+
+    const parseError = invokeJson(root, ["--json", "prose", "--jsn"]);
+    expect(parseError.envelope.command).toBe("prose");
+    expect(parseError.envelope.diagnostics[0].message).toContain("Unknown option --jsn");
+
+    const extra = invokeJson(root, ["--json", "--", "validate", ".", "extra"]);
+    expect(extra.envelope.diagnostics[0].message).toContain("Unexpected argument");
+
+    const success = invokeJson(root, ["--json", "clues"]);
+    expect(success.envelope).toMatchObject({ command: "clues", ok: true });
+  });
+
+  test("an option with no command is not mistaken for one", () => {
+    const result = invoke(makeTempDir(), ["--json"]);
+    expect(result.code).toBe(0);
+    expect(result.out).toContain("Usage: story <command>");
+  });
+
   test("usage and parse errors are JSON results when --json is on", () => {
     const root = path.join(examplesRoot, "the-last-ember");
     const extra = invokeJson(root, ["validate", ".", "extra", "--json"]);
@@ -133,6 +171,12 @@ describe("--json result envelope", () => {
 
     const badValue = invokeJson(root, ["pacing", "--json=maybe"]);
     expect(badValue.envelope.diagnostics[0].message).toContain('Unknown value "maybe" for --json');
+  });
+
+  test("knowledge without --at prints its usage as text without --json", () => {
+    const result = invoke(path.join(examplesRoot, "the-last-ember"), ["knowledge", "sera-voss"]);
+    expect(result.code).toBe(1);
+    expect(result.err).toBe("Usage: story knowledge <character-id> --at <chapter-id> [--path <project>]\n");
   });
 
   test("--json false, --json=off, and options after -- keep the text output", () => {
@@ -163,6 +207,18 @@ describe("--json result envelope", () => {
     expect(envelope.writes).toEqual([file]);
     expect(envelope.data.logged).toEqual({ file, date: "2026-01-02", words: 0 });
     expect(fs.existsSync(file)).toBe(true);
+  });
+
+  test("prose --json with similar names and style-sheet spellings matches the schema", () => {
+    const root = brokenProject();
+    writeMarkdown(path.join(root, "characters", "mara-dole.md"), "name: Mara Dole\nrole: protagonist\nstatus: alive", "# Mara\n");
+    writeMarkdown(path.join(root, "characters", "mary-vance.md"), "name: Mary Vance\nrole: supporting\nstatus: alive", "# Mary\n");
+    writeMarkdown(path.join(root, "style-sheet.md"), "type: style-sheet\nstory: broken-json\npreferred:\n  - use: grey\n    avoid: gray", "# Style\n");
+    writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: Opening\nnumber: 1\nstatus: draft\nword-count: 0", "## Chapter Text\n\nThe gray sky fell. The gray sky fell. The gray sky fell.\n");
+    const { envelope } = invokeJson(root, ["prose", "--json"]);
+    expect(envelope.data.similarNames.map((pair) => pair.map((entry) => entry.id))).toEqual([["mara-dole", "mary-vance"]]);
+    expect(envelope.data.chapters[0].analysis.variants).toEqual([{ use: "grey", avoid: "gray", source: "style sheet", count: 3 }]);
+    expect(envelope.data.phrases.length).toBeGreaterThan(0);
   });
 
   test("prose --json leaves out each chapter's tokenized sentences", () => {
@@ -208,6 +264,18 @@ describe("result.schema.json", () => {
     const errors = validateAgainstSchema(envelope, schema);
     expect(errors).toContain("$.data: missing required medianWords");
     expect(errors).toContain("$.data.rows: expected array, got string");
+  });
+
+  test("data must be an object or null", () => {
+    for (const data of ["text", [], 3]) {
+      const envelope = { apiVersion: API_VERSION, command: "timeline", ok: true, data, diagnostics: [], writes: [] };
+      expect(validateAgainstSchema(envelope, schema).length).toBeGreaterThan(0);
+    }
+  });
+
+  test("an if without a then, or a then without an if, is refused", () => {
+    expect(() => validateAgainstSchema(1, { if: { type: "integer" } })).toThrow("Schema if without then at #");
+    expect(() => validateAgainstSchema(1, { allOf: [{ then: { type: "integer" } }] })).toThrow("Schema then without if at #/allOf/0");
   });
 
   test("a result without data must not be ok", () => {

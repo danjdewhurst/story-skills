@@ -1,7 +1,7 @@
 import path from "node:path";
 import { COMMANDS } from "./commands.js";
 import { diagnostic, writeJsonResult } from "./json.js";
-import { formatOptionsHelp, isTruthy, parseArgs, suggestion } from "./options.js";
+import { formatOptionsHelp, isBooleanLiteralToken, isTruthy, parseArgs, suggestion, takesValue } from "./options.js";
 import { VERSION } from "./version.js";
 
 export { isTruthy, parseArgs };
@@ -55,13 +55,14 @@ function formatCommandsHelp() {
 }
 
 export function runCli(argv, io) {
-  const named = COMMANDS_BY_NAME.get(argv[0]);
   // A command asked for --json reports a usage error or a failure as a JSON
   // result too, so a script reading stdout always gets one object.
-  const failJson = named?.options?.includes("json") && jsonRequested(argv)
-    ? (message) => writeJsonResult(io, { command: named.name, ok: false, diagnostics: [diagnostic("error", message, named.name)] })
+  const jsonCommand = COMMANDS_BY_NAME.get(commandWord(argv));
+  const failJson = jsonCommand?.options?.includes("json") && jsonRequested(argv)
+    ? (message) => writeJsonResult(io, { command: jsonCommand.name, ok: false, diagnostics: [diagnostic("error", message, jsonCommand.name)] })
     : null;
   try {
+    const named = COMMANDS_BY_NAME.get(argv[0]);
     const parsed = parseArgs(argv, named ? [...(named.options ?? []), ...(named.project === "none" ? [] : ["path"])] : undefined);
     const cwd = io.cwd ?? process.cwd();
     const name = parsed.positionals[0];
@@ -120,6 +121,25 @@ export function runCli(argv, io) {
   }
 }
 
+// The command word, read from the raw arguments so it is known even when
+// they fail to parse: the first argument that is neither an option nor an
+// option's value (`story --json validate` and `story --path x validate`).
+function commandWord(argv) {
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === "--") {
+      return argv[index + 1];
+    }
+    if (!arg.startsWith("-")) {
+      return arg;
+    }
+    if (arg.startsWith("--") && !arg.includes("=") && takesValue(arg.slice(2))) {
+      index += 1;
+    }
+  }
+  return undefined;
+}
+
 // Whether argv turns on --json, read from the raw arguments so a parse error
 // is still reported as JSON. The last --json wins, as parseArgs keeps it, and
 // `--` ends the options.
@@ -128,9 +148,12 @@ function jsonRequested(argv) {
   for (let index = 0; index < argv.length && argv[index] !== "--"; index += 1) {
     const arg = argv[index];
     if (arg === "--json") {
-      requested = !/^(false|0|no|off)$/i.test(argv[index + 1] ?? "");
+      // As parseArgs reads it: a boolean literal after the flag is its value.
+      const next = argv[index + 1];
+      requested = isBooleanLiteralToken(next) ? isTruthy(next) : true;
     } else if (arg.startsWith("--json=")) {
-      requested = !/^(false|0|no|off)$/i.test(arg.slice("--json=".length).trim());
+      // An invalid value (--json=maybe) is a parse error, reported as JSON.
+      requested = isTruthy(arg.slice("--json=".length)) || !isBooleanLiteralToken(arg.slice("--json=".length).trim());
     }
   }
   return requested;

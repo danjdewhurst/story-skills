@@ -162,6 +162,11 @@ export function assertSupportedSchema(schema, root = schema, at = "#") {
   for (const [index, child] of (schema.allOf ?? []).entries()) {
     assertSupportedSchema(child, root, `${at}/allOf/${index}`);
   }
+  // `if` and `then` only work as a pair here (there is no `else`), so a
+  // lone one is a mistake rather than a no-op.
+  if (Boolean(schema.if) !== Boolean(schema.then)) {
+    throw new Error(`Schema ${schema.if ? "if" : "then"} without ${schema.if ? "then" : "if"} at ${at}`);
+  }
   for (const keyword of ["if", "then"]) {
     if (schema[keyword]) {
       assertSupportedSchema(schema[keyword], root, `${at}/${keyword}`);

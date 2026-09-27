@@ -4787,6 +4787,9 @@ var OPTIONS = [
 var BOOLEAN_OPTIONS = new Set(OPTIONS.filter((option) => option.value === undefined).map((option) => option.name));
 var VALUE_OPTIONS = new Set(OPTIONS.filter((option) => option.value !== undefined).map((option) => option.name));
 var REPEATABLE_OPTIONS = new Set(OPTIONS.filter((option) => option.repeatable).map((option) => option.name));
+function takesValue(name) {
+  return VALUE_OPTIONS.has(name);
+}
 var OPTION_COLUMN = 28;
 function formatOptionsHelp(names = null) {
   const rows = OPTIONS.filter((option) => option.help && (names === null || names.includes(option.name))).map((option) => ({ flag: `--${option.name}${option.value ? ` ${option.value}` : ""}`, help: option.help })).concat([
@@ -12842,13 +12845,7 @@ var COMMANDS = [
       const characterId = parsed.positionals[1];
       const atChapterId = parsed.options.at;
       if (!characterId || typeof atChapterId !== "string") {
-        const usage = "Usage: story knowledge <character-id> --at <chapter-id> [--path <project>]";
-        if (wantsJson(parsed)) {
-          return writeJsonResult(io, { command: "knowledge", ok: false, diagnostics: [diagnostic("error", usage, "knowledge")] });
-        }
-        io.stderr.write(`${usage}
-`);
-        return 1;
+        throw new Error("Usage: story knowledge <character-id> --at <chapter-id> [--path <project>]");
       }
       const entries = knowledgeAtChapter(root(), characterId, atChapterId);
       if (wantsJson(parsed)) {
@@ -13336,7 +13333,7 @@ function reportCheck(parsed, io, command, result, successMessage, failureMessage
     return writeJsonResult(io, {
       command,
       ok: result.ok,
-      data: { errors: result.errors.length, warnings: result.warnings.length, dismissed: (result.dismissed ?? []).length },
+      data: checkCounts(result),
       diagnostics: diagnosticsFrom(result, command)
     });
   }
@@ -13345,22 +13342,23 @@ function reportCheck(parsed, io, command, result, successMessage, failureMessage
 function reportJson(io, command, result, { writes = [] } = {}) {
   return writeJsonResult(io, { command, ok: result.ok, data: resultData(result), diagnostics: diagnosticsFrom(result, command), writes });
 }
+function checkCounts(result) {
+  return { errors: result.errors.length, warnings: result.warnings.length, dismissed: (result.dismissed ?? []).length };
+}
 function reportProjectJson(io, command, report) {
   const { validation, links, continuity, ...rest } = report;
   const checks = { validate: validation, links, continuity };
+  const seen = new Set;
+  const diagnostics = Object.entries(checks).flatMap(([name, check]) => diagnosticsFrom(check, name)).filter((entry) => {
+    const key = `${entry.severity}
+${entry.message}`;
+    return !seen.has(key) && seen.add(key);
+  });
   return writeJsonResult(io, {
     command,
     ok: true,
-    data: {
-      ...rest,
-      checks: Object.fromEntries(Object.entries(checks).map(([name, check]) => [name, {
-        ok: check.ok,
-        errors: check.errors.length,
-        warnings: check.warnings.length,
-        dismissed: (check.dismissed ?? []).length
-      }]))
-    },
-    diagnostics: Object.entries(checks).flatMap(([name, check]) => diagnosticsFrom(check, name))
+    data: { ...rest, checks: Object.fromEntries(Object.entries(checks).map(([name, check]) => [name, { ok: check.ok, ...checkCounts(check) }])) },
+    diagnostics
   });
 }
 function reportResult(io, result, successMessage, failureMessage) {
@@ -13431,9 +13429,10 @@ function formatCommandsHelp() {
   return lines;
 }
 function runCli(argv, io) {
-  const named = COMMANDS_BY_NAME.get(argv[0]);
-  const failJson = named?.options?.includes("json") && jsonRequested(argv) ? (message) => writeJsonResult(io, { command: named.name, ok: false, diagnostics: [diagnostic("error", message, named.name)] }) : null;
+  const jsonCommand = COMMANDS_BY_NAME.get(commandWord(argv));
+  const failJson = jsonCommand?.options?.includes("json") && jsonRequested(argv) ? (message) => writeJsonResult(io, { command: jsonCommand.name, ok: false, diagnostics: [diagnostic("error", message, jsonCommand.name)] }) : null;
   try {
+    const named = COMMANDS_BY_NAME.get(argv[0]);
     const parsed = parseArgs(argv, named ? [...named.options ?? [], ...named.project === "none" ? [] : ["path"]] : undefined);
     const cwd = io.cwd ?? process.cwd();
     const name = parsed.positionals[0];
@@ -13490,14 +13489,30 @@ Run story --help to list commands.
     return 1;
   }
 }
+function commandWord(argv) {
+  for (let index = 0;index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === "--") {
+      return argv[index + 1];
+    }
+    if (!arg.startsWith("-")) {
+      return arg;
+    }
+    if (arg.startsWith("--") && !arg.includes("=") && takesValue(arg.slice(2))) {
+      index += 1;
+    }
+  }
+  return;
+}
 function jsonRequested(argv) {
   let requested = false;
   for (let index = 0;index < argv.length && argv[index] !== "--"; index += 1) {
     const arg = argv[index];
     if (arg === "--json") {
-      requested = !/^(false|0|no|off)$/i.test(argv[index + 1] ?? "");
+      const next = argv[index + 1];
+      requested = isBooleanLiteralToken(next) ? isTruthy(next) : true;
     } else if (arg.startsWith("--json=")) {
-      requested = !/^(false|0|no|off)$/i.test(arg.slice("--json=".length).trim());
+      requested = isTruthy(arg.slice("--json=".length)) || !isBooleanLiteralToken(arg.slice("--json=".length).trim());
     }
   }
   return requested;

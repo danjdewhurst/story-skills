@@ -11,6 +11,7 @@
       "enum": ["validate", "links", "continuity", "series", "next", "doctor", "report", "knowledge", "timeline", "prose", "voices", "pacing", "clues", "progress"]
     },
     "ok": { "type": "boolean", "description": "True exactly when the command exits 0." },
+    "data": { "type": ["object", "null"] },
     "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/diagnostic" } },
     "writes": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Absolute paths of the files the command wrote." }
   },
@@ -283,14 +284,39 @@
                   "bookisms": { "type": "array", "items": { "$ref": "#/$defs/word-count" } },
                   "echoes": { "type": "array", "items": { "$ref": "#/$defs/word-count" } },
                   "watch": { "type": "array", "items": { "$ref": "#/$defs/word-count" } },
-                  "variants": { "type": "array", "items": { "type": "object" } }
+                  "variants": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["use", "avoid", "source", "count"],
+                      "properties": { "use": { "type": "string" }, "avoid": { "type": "string" }, "source": { "type": "string" }, "count": { "$ref": "#/$defs/count" } }
+                    }
+                  }
                 }
               }
             }
           }
         },
-        "phrases": { "type": "array", "items": { "type": "object" } },
-        "similarNames": { "type": "array", "items": { "type": "object" } }
+        "phrases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["phrase", "count"],
+            "properties": { "phrase": { "type": "string" }, "count": { "$ref": "#/$defs/count" } }
+          }
+        },
+        "similarNames": {
+          "type": "array",
+          "description": "Pairs of characters whose first names a reader could confuse.",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "name", "first"],
+              "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "first": { "type": "string" } }
+            }
+          }
+        }
       }
     },
     "data-voices": {

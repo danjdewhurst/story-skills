@@ -3,7 +3,7 @@ import path from "node:path";
 import { formatClueMatrix } from "./clues.js";
 import { formatComparison, formatLabelMapping } from "./compare.js";
 import { importManuscript } from "./import.js";
-import { diagnostic, diagnosticsFrom, exitCodeFor, resultData, wantsJson, writeJsonResult } from "./json.js";
+import { diagnosticsFrom, exitCodeFor, resultData, wantsJson, writeJsonResult } from "./json.js";
 import { isTruthy } from "./options.js";
 import { STDIN_ARG, readStdin, stdinText } from "./stdin.js";
 import { formatNames } from "./names.js";
@@ -215,12 +215,8 @@ export const COMMANDS = [
       const characterId = parsed.positionals[1];
       const atChapterId = parsed.options.at;
       if (!characterId || typeof atChapterId !== "string") {
-        const usage = "Usage: story knowledge <character-id> --at <chapter-id> [--path <project>]";
-        if (wantsJson(parsed)) {
-          return writeJsonResult(io, { command: "knowledge", ok: false, diagnostics: [diagnostic("error", usage, "knowledge")] });
-        }
-        io.stderr.write(`${usage}\n`);
-        return 1;
+        // Thrown, so runCli reports it as text or, with --json, as a result.
+        throw new Error("Usage: story knowledge <character-id> --at <chapter-id> [--path <project>]");
       }
       const entries = knowledgeAtChapter(root(), characterId, atChapterId);
       if (wantsJson(parsed)) {
@@ -730,7 +726,7 @@ function reportCheck(parsed, io, command, result, successMessage, failureMessage
     return writeJsonResult(io, {
       command,
       ok: result.ok,
-      data: { errors: result.errors.length, warnings: result.warnings.length, dismissed: (result.dismissed ?? []).length },
+      data: checkCounts(result),
       diagnostics: diagnosticsFrom(result, command)
     });
   }
@@ -743,25 +739,30 @@ function reportJson(io, command, result, { writes = [] } = {}) {
   return writeJsonResult(io, { command, ok: result.ok, data: resultData(result), diagnostics: diagnosticsFrom(result, command), writes });
 }
 
+function checkCounts(result) {
+  return { errors: result.errors.length, warnings: result.warnings.length, dismissed: (result.dismissed ?? []).length };
+}
+
 // report, next, and doctor run validate, links, and continuity: their
 // findings become diagnostics coded by check, and the data summarizes each
 // check. These commands exit 0 whatever the checks find, so ok is true.
 function reportProjectJson(io, command, report) {
   const { validation, links, continuity, ...rest } = report;
   const checks = { validate: validation, links, continuity };
+  // A file that fails to parse is reported by every check; list it once,
+  // under the first check that raised it.
+  const seen = new Set();
+  const diagnostics = Object.entries(checks)
+    .flatMap(([name, check]) => diagnosticsFrom(check, name))
+    .filter((entry) => {
+      const key = `${entry.severity}\n${entry.message}`;
+      return !seen.has(key) && seen.add(key);
+    });
   return writeJsonResult(io, {
     command,
     ok: true,
-    data: {
-      ...rest,
-      checks: Object.fromEntries(Object.entries(checks).map(([name, check]) => [name, {
-        ok: check.ok,
-        errors: check.errors.length,
-        warnings: check.warnings.length,
-        dismissed: (check.dismissed ?? []).length
-      }]))
-    },
-    diagnostics: Object.entries(checks).flatMap(([name, check]) => diagnosticsFrom(check, name))
+    data: { ...rest, checks: Object.fromEntries(Object.entries(checks).map(([name, check]) => [name, { ok: check.ok, ...checkCounts(check) }])) },
+    diagnostics
   });
 }
 

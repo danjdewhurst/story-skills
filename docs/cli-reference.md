@@ -259,7 +259,7 @@ Every result has the same envelope:
 
 `report`, `next`, and `doctor` put a `checks` summary in `data` (`ok` and error, warning, and dismissed counts for `validate`, `links`, and `continuity`) and list each check's findings in `diagnostics`. They still exit `0`, so their `ok` is `true` even when a check fails: read `data.checks` to gate on them. `report --json` always includes `actions`.
 
-A command that cannot run (an unknown option, a missing argument, a missing project, an unknown id) also prints an envelope when `--json` is on, with `ok: false`, `data: null`, and the error as its one diagnostic. `--json false` and `--json=off` keep the text output.
+A command that cannot run (an unknown option, a missing argument, a missing project, an unknown id) also prints an envelope when `--json` is on, with `ok: false`, `data: null`, and the error as its one diagnostic. `--json false` and `--json=off` keep the text output. `--help` and `--version` print their usual text even with `--json`.
 
 ```shell
 story continuity examples/the-unraveled-thread --json
