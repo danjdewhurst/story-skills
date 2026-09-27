@@ -249,16 +249,14 @@ story add question "Who was the drowned man" --introduced chapter-01
 story add promise "The Lamp Log" --planted chapter-01
 ```
 
-Plans can name characters and chapters that do not exist yet, but `story links` treats every id without a file as an error. At this stage, before the cast or any chapter scaffold exists, it reports:
+Plans can name chapters that do not exist yet, but `story links` treats a missing character as an error. At this stage, before the cast exists, it reports:
 
 ```text
-Link check failed: 3 errors, 0 warnings, 0 dismissed
+Link check failed: 1 errors, 0 warnings, 0 dismissed
 error: plot/arcs/the-drowned-stranger.md references missing character nell-carrow
-error: continuity/questions/who-was-the-drowned-man.md references missing chapter chapter-01
-error: continuity/promises/the-lamp-log.md references missing chapter chapter-01
 ```
 
-`story validate` still passes, because it checks structure rather than references. The character error clears in step 3. Chapter ids in ledgers, arc bodies, and `plot/timeline.md` stay errors until those chapters exist, so either scaffold them with `story add chapter` or expect these errors until you draft that far. The exception is a promise or clue that is scheduled rather than on the page: its `payoff`, and its `planted` chapter while `status: planned` (`story add promise "The Lamp Log" --planted chapter-01 --status planned`), may name a chapter that has no file yet. If you would rather keep `story links` clean throughout, build the cast before the arc.
+`story validate` still passes, because it checks structure rather than references. The character error clears in step 3. The chapter ids are allowed because they are scheduled rather than on the page: an open question's `introduced` chapter, a `planned` promise or clue's `planted` chapter, any unpaid `payoff`, and chapter ids in arc bodies may name a chapter that has no file yet. `story add promise` and `story add clue` record `status: planned` on their own when `--planted` names a chapter that does not exist. Once a question is resolved or a promise is marked `planted`, its chapters must exist, and `plot/timeline.md` always needs real chapters. If you would rather keep `story links` clean throughout, build the cast before the arc.
 
 ### 3. Build the cast
 
