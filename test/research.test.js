@@ -4,7 +4,7 @@ import path from "node:path";
 import { checkProjectSchema } from "../scripts/check-schema.js";
 import { runCli } from "../src/cli.js";
 import { createEntity, createStoryProject, formatProjectReport, projectReport, reindexProject, removeEntity, validateLinks, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 function researchProject() {
   const cwd = makeTempDir();
@@ -42,8 +42,8 @@ describe("research notes", () => {
     const index = fs.readFileSync(path.join(root, "research", "_index.md"), "utf8");
     expect(index).toContain("type: research-registry");
     expect(index).toContain("| Tidal Bore Timing | open | chapter-01 | [tidal-bore-timing](tidal-bore-timing.md) |");
-    expect(validateProject(root).errors).toEqual([]);
-    expect(validateLinks(root).errors).toEqual([]);
+    expect(messages(validateProject(root).errors)).toEqual([]);
+    expect(messages(validateLinks(root).errors)).toEqual([]);
     expect(checkProjectSchema(root)).toEqual([]);
   });
 
@@ -68,7 +68,9 @@ describe("research notes", () => {
     createEntity(root, { kind: "research", name: "Signal Codes", status: "verified" });
     writeMarkdown(path.join(root, "research", "bad-note.md"), "status: guessed\nsources: one\nused-in:\n  - \"\"");
     setChapterStatus(root, "final");
-    const { errors, warnings } = validateProject(root);
+    const findings = validateProject(root);
+    const errors = messages(findings.errors);
+    const warnings = messages(findings.warnings);
 
     expect(errors).toContain("research/bad-note.md is missing frontmatter field title");
     expect(errors).toContain("research/bad-note.md frontmatter field status has unsupported value guessed");
@@ -79,14 +81,14 @@ describe("research notes", () => {
     expect(warnings).toContain("research/_index.md does not list research/bad-note.md; run story reindex");
 
     setChapterStatus(root, "draft");
-    expect(validateProject(root).warnings.join("\n")).not.toContain("relies on it");
+    expect(messages(validateProject(root).warnings).join("\n")).not.toContain("relies on it");
   });
 
   test("validate rejects a research registry with the wrong type", () => {
     const { root } = researchProject();
     createEntity(root, { kind: "research", name: "Lamp Oil" });
     writeMarkdown(path.join(root, "research", "_index.md"), "type: notes\nstory: research-story", "# Research\n");
-    expect(validateProject(root).errors).toContain("research/_index.md type must be research-registry");
+    expect(messages(validateProject(root).errors)).toContain("research/_index.md type must be research-registry");
   });
 
   test("links accepts plot links to research notes and matter pages", () => {
@@ -95,7 +97,7 @@ describe("research notes", () => {
     createEntity(root, { kind: "matter", name: "Author Note", placement: "back" });
     const timelinePath = path.join(root, "plot", "timeline.md");
     fs.appendFileSync(timelinePath, "\nSee [lamp oil](../research/lamp-oil.md) and [the note](../matter/author-note.md).\n", "utf8");
-    expect(validateLinks(root).errors).toEqual([]);
+    expect(messages(validateLinks(root).errors)).toEqual([]);
   });
 
   test("links accepts scheduled used-in chapters and reports typos", () => {
@@ -106,7 +108,7 @@ describe("research notes", () => {
     // ...and links catches one written by hand; chapter-09 is not written yet.
     const note = path.join(root, "research", "lamp-oil.md");
     fs.writeFileSync(note, fs.readFileSync(note, "utf8").replace("  - chapter-09", "  - chapter-09\n  - chapter-1"));
-    expect(validateLinks(root).errors).toEqual(["research/lamp-oil.md references missing chapter chapter-1"]);
+    expect(messages(validateLinks(root).errors)).toEqual(["research/lamp-oil.md references missing chapter chapter-1"]);
   });
 
   test("removing a chapter scrubs used-in and report counts notes", () => {

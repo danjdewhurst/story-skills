@@ -14,7 +14,7 @@ import {
   validateLinks,
   validateProject
 } from "../src/story.js";
-import { makeTempDir, memoryIo } from "./helpers.js";
+import { makeTempDir, memoryIo, messages } from "./helpers.js";
 
 const EXAMPLES = path.join(import.meta.dir, "..", "examples");
 const isRoot = process.getuid?.() === 0;
@@ -85,7 +85,7 @@ describe("project lock (#196)", () => {
     process.env.STORY_LOCK_WAIT_MS = "0";
     expect(invoke(root, ["rename", "character", "ilya-venn", "Zed Quill"]).code).toBe(0);
     expect(fs.existsSync(path.join(root, LOCK_FILE))).toBe(false);
-    expect(validateLinks(root).errors).toEqual([]);
+    expect(messages(validateLinks(root).errors)).toEqual([]);
   });
 
   test("nested write commands in one process do not wait on themselves, and the lock is released on failure", () => {
@@ -114,7 +114,7 @@ describe("project lock (#196)", () => {
     const result = spawnSync(process.execPath, ["-e", script], { encoding: "utf8" });
     expect(result.stdout.trim()).toBe("0,0");
     expect(fs.readdirSync(path.join(root, "characters")).sort()).toEqual(["_index.md", "ilya-stone.md", "mara-quill.md", "theo-brand.md"]);
-    expect(validateLinks(root).errors).toEqual([]);
+    expect(messages(validateLinks(root).errors)).toEqual([]);
   });
 
   test("writeFile refuses to overwrite a file saved since it was read", () => {
@@ -141,7 +141,7 @@ describe("write preflight (#198)", () => {
     expect(snapshot(root)).toEqual(before);
     fs.chmodSync(arc, 0o644);
     expect(invoke(root, ["rename", "character", "ilya-venn", "Zed Quill"]).code).toBe(0);
-    expect(validateLinks(root).errors).toEqual([]);
+    expect(messages(validateLinks(root).errors)).toEqual([]);
   });
 
   test.skipIf(isRoot)("move and remove check the folders they write into", () => {
@@ -177,7 +177,7 @@ describe("write preflight (#198)", () => {
     expect(result.code).toBe(4);
     expect(result.err).toContain("an input/output error. Some files were already updated: fix the problem and run the same command again to finish");
     expect(invoke(root, ["rename", "character", "ilya-venn", "Zed Quill"]).code).toBe(0);
-    expect(validateLinks(root).errors).toEqual([]);
+    expect(messages(validateLinks(root).errors)).toEqual([]);
   });
 });
 
@@ -189,7 +189,7 @@ describe("remove (#206, #103)", () => {
     const result = invoke(root, ["remove", "character", "edran-vale"]);
     expect(result.code).toBe(0);
     expect(result.out).toBe("Removed references to character edran-vale: its file was already gone\n");
-    expect(validateLinks(root).errors).toEqual([]);
+    expect(messages(validateLinks(root).errors)).toEqual([]);
     // Nothing left: the id is now simply unknown.
     expect(invoke(root, ["remove", "character", "edran-vale"]).err).toBe("character edran-vale does not exist\n");
   });
@@ -283,7 +283,7 @@ describe("damaged registries point at reindex (#199)", () => {
   test("validate and rename name story reindex for an emptied registry", () => {
     const root = copyExample("harbor-of-second-light");
     fs.writeFileSync(path.join(root, "characters", "_index.md"), "");
-    expect(validateProject(root).errors).toContain(`${path.join("characters", "_index.md")}: is missing YAML frontmatter (it is a registry: run story reindex to rebuild it)`);
+    expect(messages(validateProject(root).errors)).toContain(`${path.join("characters", "_index.md")}: is missing YAML frontmatter (it is a registry: run story reindex to rebuild it)`);
     expect(() => renameEntity(root, { kind: "character", id: "ilya-venn", name: "Zed Q" }))
       .toThrow(`${path.join("characters", "_index.md")} is missing YAML frontmatter (it is a registry: run story reindex to rebuild it); nothing was changed`);
     expect(invoke(root, ["reindex"]).code).toBe(0);

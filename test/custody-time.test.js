@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { checkContinuity } from "../src/continuity.js";
 import { createStoryProject, scanProject, validateLinks } from "../src/story.js";
-import { makeTempDir, writeMarkdown } from "./helpers.js";
+import { makeTempDir, writeMarkdown, messages } from "./helpers.js";
 
 function baseProject(chapters) {
   const cwd = makeTempDir();
@@ -55,7 +55,7 @@ state-changes:
 `);
 
     const result = checkContinuity(scanProject(root));
-    expect(result.errors).toContain(
+    expect(messages(result.errors)).toContain(
       "scenes/chapter-03-scene-01.md uses moon-blade, destroyed/lost since chapter-02"
     );
     expect(result.ok).toBe(false);
@@ -70,10 +70,10 @@ mentions:
 `);
 
     const result = checkContinuity(scanProject(root));
-    expect(result.errors).toContain(
+    expect(messages(result.errors)).toContain(
       "scenes/chapter-02-scene-01.md mentions moon-blade, destroyed/lost since chapter-01"
     );
-    const links = validateLinks(root).errors.join("\n");
+    const links = messages(validateLinks(root).errors).join("\n");
     expect(links).not.toContain("moon-blade");
   });
 
@@ -83,7 +83,7 @@ mentions:
 mentions:
   - ghost-blade
 `);
-    expect(validateLinks(root).errors).toContain(
+    expect(messages(validateLinks(root).errors)).toContain(
       "scenes/chapter-02-scene-01.md references missing character or artifact ghost-blade"
     );
   });
@@ -96,8 +96,8 @@ mentions:
     fs.writeFileSync(chapterPath, raw.replace("word-count: 0", "word-count: 0\nmentions:\n  - moon-blade"), "utf8");
 
     const result = checkContinuity(scanProject(root));
-    expect(result.errors).toContain("chapters/chapter-03.md mentions moon-blade, destroyed/lost since chapter-02");
-    expect(validateLinks(root).errors.join("\n")).not.toContain("moon-blade");
+    expect(messages(result.errors)).toContain("chapters/chapter-03.md mentions moon-blade, destroyed/lost since chapter-02");
+    expect(messages(validateLinks(root).errors).join("\n")).not.toContain("moon-blade");
   });
 
   test("ignores references at or before the since chapter", () => {
@@ -116,7 +116,7 @@ mentions:
 `);
 
     const result = checkContinuity(scanProject(root));
-    expect(result.errors).toEqual([]);
+    expect(messages(result.errors)).toEqual([]);
     expect(result.ok).toBe(true);
   });
 
@@ -130,7 +130,7 @@ state-changes:
 `);
 
     const result = checkContinuity(scanProject(root));
-    expect(result.errors).toEqual([]);
+    expect(messages(result.errors)).toEqual([]);
   });
 
   test("an artifact destroyed with no since chapter was lost before the story", () => {
@@ -146,8 +146,8 @@ state-changes:
 `);
 
     const result = checkContinuity(scanProject(root));
-    expect(result.warnings.join("\n")).not.toContain("no since chapter");
-    expect(result.errors).toEqual(["scenes/chapter-02-scene-01.md uses moon-blade, destroyed/lost before the story"]);
+    expect(messages(result.warnings).join("\n")).not.toContain("no since chapter");
+    expect(messages(result.errors)).toEqual(["scenes/chapter-02-scene-01.md uses moon-blade, destroyed/lost before the story"]);
   });
 
   test("errors when the since chapter does not exist", () => {
@@ -155,7 +155,7 @@ state-changes:
     setObjectState(root, `  - artifact: moon-blade\n    status: destroyed\n    since: chapter-09\n`);
 
     const result = checkContinuity(scanProject(root));
-    expect(result.errors).toContain("continuity/state.md object-state[0] references missing since chapter chapter-09");
+    expect(messages(result.errors)).toContain("continuity/state.md object-state[0] references missing since chapter chapter-09");
   });
 
   test("skips malformed object-state entries without crashing", () => {
@@ -163,7 +163,7 @@ state-changes:
     setObjectState(root, `  - just-a-string\n  - artifact: ""\n    status: destroyed\n    since: chapter-01\n`);
 
     const result = checkContinuity(scanProject(root));
-    expect(result.errors).not.toContain(expect.stringContaining("destroyed/lost since"));
+    expect(messages(result.errors)).not.toContain(expect.stringContaining("destroyed/lost since"));
   });
 
   test("skips non-object state-changes when checking custody", () => {
@@ -176,7 +176,7 @@ state-changes:
 `);
 
     const result = checkContinuity(scanProject(root));
-    expect(result.errors).toEqual([]);
+    expect(messages(result.errors)).toEqual([]);
     expect(result.ok).toBe(true);
   });
 });
@@ -194,8 +194,8 @@ time: "09:00"
 `);
 
     const result = checkContinuity(scanProject(root));
-    expect(result.warnings).toContain("scenes/chapter-01-scene-02.md timestamp runs backward");
-    expect(result.errors).toEqual([]);
+    expect(messages(result.warnings)).toContain("scenes/chapter-01-scene-02.md timestamp runs backward");
+    expect(messages(result.errors)).toEqual([]);
     expect(result.ok).toBe(true);
   });
 
@@ -211,8 +211,8 @@ time: dawn
 `);
 
     const result = checkContinuity(scanProject(root));
-    expect(result.warnings).toContain("scenes/chapter-01-scene-02.md timestamp runs backward");
-    expect(result.errors).toEqual([]);
+    expect(messages(result.warnings)).toContain("scenes/chapter-01-scene-02.md timestamp runs backward");
+    expect(messages(result.errors)).toEqual([]);
     expect(result.ok).toBe(true);
   });
 
@@ -231,8 +231,8 @@ date: 2026-01-06
 `);
 
     const result = checkContinuity(scanProject(root));
-    expect(result.errors).toEqual([]);
-    expect(result.warnings).toEqual([]);
+    expect(messages(result.errors)).toEqual([]);
+    expect(messages(result.warnings)).toEqual([]);
   });
 
   test("flags travel that allows less time than travel-hours", () => {
@@ -248,7 +248,7 @@ travel-hours: 3
 `);
 
     const result = checkContinuity(scanProject(root));
-    expect(result.errors).toContain("scenes/chapter-01-scene-02.md allows only 2h for travel of 3h");
+    expect(messages(result.errors)).toContain("scenes/chapter-01-scene-02.md allows only 2h for travel of 3h");
   });
 
   test("accepts travel within the asserted travel-hours", () => {
@@ -264,7 +264,7 @@ travel-hours: 2
 `);
 
     const result = checkContinuity(scanProject(root));
-    expect(result.errors).toEqual([]);
+    expect(messages(result.errors)).toEqual([]);
   });
 
   test("skips travel checks when a timestamp has no time", () => {
@@ -283,7 +283,7 @@ travel-hours: 3
 `);
 
     const result = checkContinuity(scanProject(root));
-    expect(result.errors).toEqual([]);
+    expect(messages(result.errors)).toEqual([]);
   });
 
   test("no scene dates means no time findings", () => {
@@ -303,7 +303,7 @@ date: not-a-date
 time: "10:00"
 `);
     const result = checkContinuity(scanProject(root));
-    expect(result.warnings).toContain(`scenes/chapter-01-scene-01.md has malformed date "not-a-date"`);
+    expect(messages(result.warnings)).toContain(`scenes/chapter-01-scene-01.md has malformed date "not-a-date"`);
     expect(result.ok).toBe(true);
   });
 
@@ -335,11 +335,11 @@ time: "10:75"
 `);
 
     const result = checkContinuity(scanProject(root));
-    expect(result.warnings).toContain(`scenes/chapter-01-scene-02.md has malformed date "2026-02-30"`);
-    expect(result.warnings).toContain(`scenes/chapter-01-scene-03.md has malformed date "2026-13-01"`);
-    expect(result.warnings).toContain(`scenes/chapter-01-scene-04.md has malformed date "2026-01-32"`);
-    expect(result.warnings).toContain(`scenes/chapter-01-scene-05.md has malformed time "25:00"`);
-    expect(result.warnings).toContain(`scenes/chapter-01-scene-06.md has malformed time "10:75"`);
+    expect(messages(result.warnings)).toContain(`scenes/chapter-01-scene-02.md has malformed date "2026-02-30"`);
+    expect(messages(result.warnings)).toContain(`scenes/chapter-01-scene-03.md has malformed date "2026-13-01"`);
+    expect(messages(result.warnings)).toContain(`scenes/chapter-01-scene-04.md has malformed date "2026-01-32"`);
+    expect(messages(result.warnings)).toContain(`scenes/chapter-01-scene-05.md has malformed time "25:00"`);
+    expect(messages(result.warnings)).toContain(`scenes/chapter-01-scene-06.md has malformed time "10:75"`);
     expect(result.ok).toBe(true);
   });
 
@@ -355,7 +355,7 @@ time: noon
 `);
 
     const result = checkContinuity(scanProject(root));
-    expect(result.warnings).toContain(`scenes/chapter-01-scene-02.md has malformed time "noon"`);
+    expect(messages(result.warnings)).toContain(`scenes/chapter-01-scene-02.md has malformed time "noon"`);
   });
 
   test("warns on negative travel-hours", () => {
@@ -367,7 +367,7 @@ travel-hours: -2
 `);
 
     const result = checkContinuity(scanProject(root));
-    expect(result.warnings).toContain("scenes/chapter-01-scene-01.md has negative travel-hours -2");
+    expect(messages(result.warnings)).toContain("scenes/chapter-01-scene-01.md has negative travel-hours -2");
   });
 
   test("warns when a higher-numbered chapter has an earlier date", () => {
@@ -387,7 +387,7 @@ time: "10:00"
 
     const result = checkContinuity(scanProject(root));
     // Chapter 1 has a scene, so the scene stands for it in the clock.
-    expect(result.warnings).toContain("Chapter 3 date 2026-01-01 is earlier than scenes/chapter-01-scene-01.md date 2026-01-10");
+    expect(messages(result.warnings)).toContain("Chapter 3 date 2026-01-01 is earlier than scenes/chapter-01-scene-01.md date 2026-01-10");
   });
 
   test("checks chapter dates when no scene has a date", () => {
@@ -399,8 +399,8 @@ time: "10:00"
     }
 
     const result = checkContinuity(scanProject(root));
-    expect(result.warnings).toContain("Chapter 3 date 2026-01-01 is earlier than Chapter 1 date 2026-01-10");
-    expect(result.errors).toEqual([]);
+    expect(messages(result.warnings)).toContain("Chapter 3 date 2026-01-01 is earlier than Chapter 1 date 2026-01-10");
+    expect(messages(result.errors)).toEqual([]);
     expect(result.ok).toBe(true);
   });
 
@@ -411,7 +411,7 @@ time: "10:00"
     fs.writeFileSync(chapterPath, raw.replace("word-count: 0", "word-count: 0\ndate: 2026-02-30"), "utf8");
 
     const result = checkContinuity(scanProject(root));
-    expect(result.warnings).toContain(`Chapter 2 has malformed date "2026-02-30"`);
+    expect(messages(result.warnings)).toContain(`Chapter 2 has malformed date "2026-02-30"`);
   });
 
   test("warns on malformed chapter dates and times", () => {
@@ -428,8 +428,8 @@ time: "10:00"
 `);
 
     const result = checkContinuity(scanProject(root));
-    expect(result.warnings).toContain(`Chapter 2 has malformed date "2026-02-30"`);
-    expect(result.warnings).toContain(`Chapter 1 has malformed time "someday"`);
+    expect(messages(result.warnings)).toContain(`Chapter 2 has malformed date "2026-02-30"`);
+    expect(messages(result.warnings)).toContain(`Chapter 1 has malformed time "someday"`);
   });
 
   test("does not turn a backward timestamp into a travel error", () => {
@@ -438,8 +438,8 @@ time: "10:00"
     writeScene(root, 1, 2, "date: 2026-01-05\ntime: 10:00\ntravel-hours: 1");
     const result = checkContinuity(scanProject(root));
     expect(result.ok).toBe(true);
-    expect(result.warnings.join("\n")).toContain("timestamp runs backward");
-    expect(result.errors.join("\n")).not.toContain("travel");
+    expect(messages(result.warnings).join("\n")).toContain("timestamp runs backward");
+    expect(messages(result.errors).join("\n")).not.toContain("travel");
   });
 
   test("warns when scene dates run backward across chapters", () => {
@@ -447,7 +447,7 @@ time: "10:00"
     writeScene(root, 1, 1, "date: 2026-05-01\ntime: 12:00");
     writeScene(root, 2, 1, "date: 2026-01-01\ntime: 12:00");
     const result = checkContinuity(scanProject(root));
-    expect(result.warnings.join("\n")).toContain("scenes/chapter-02-scene-01.md timestamp runs backward");
+    expect(messages(result.warnings).join("\n")).toContain("scenes/chapter-02-scene-01.md timestamp runs backward");
   });
 
   test("continuity reports a character file that failed to parse", () => {
@@ -455,7 +455,7 @@ time: "10:00"
     fs.writeFileSync(path.join(root, "characters", "ada.md"), "not frontmatter\n", "utf8");
     const result = checkContinuity(scanProject(root));
     expect(result.ok).toBe(false);
-    expect(result.errors.join("\n")).toContain("characters/ada.md");
+    expect(messages(result.errors).join("\n")).toContain("characters/ada.md");
   });
 });
 
@@ -472,8 +472,8 @@ time: "09:00"
 `);
 
     const result = checkContinuity(scanProject(root));
-    expect(result.warnings.join("\n")).not.toContain("malformed date");
-    expect(result.warnings).toContain("scenes/chapter-01-scene-02.md timestamp runs backward");
+    expect(messages(result.warnings).join("\n")).not.toContain("malformed date");
+    expect(messages(result.warnings)).toContain("scenes/chapter-01-scene-02.md timestamp runs backward");
   });
 
   test("still rejects impossible low-year dates", () => {
@@ -482,7 +482,7 @@ time: "09:00"
 date: 0042-02-30
 `);
     const result = checkContinuity(scanProject(root));
-    expect(result.warnings.join("\n")).toContain('malformed date "0042-02-30"');
+    expect(messages(result.warnings).join("\n")).toContain('malformed date "0042-02-30"');
   });
 
   test("outline-only chapters do not advance the latest chapter", () => {
@@ -503,14 +503,14 @@ planted: chapter-01
 `, "# Early Gun\n");
 
     const result = checkContinuity(scanProject(root));
-    const warnings = result.warnings.join("\n");
+    const warnings = messages(result.warnings).join("\n");
     expect(warnings).not.toContain("chapters ago");
     expect(warnings).not.toContain("is behind the latest chapter");
-    expect(result.errors.join("\n")).not.toContain("is ahead of the latest chapter");
+    expect(messages(result.errors).join("\n")).not.toContain("is ahead of the latest chapter");
 
     const draftedPath = path.join(root, "chapters", "chapter-04.md");
     fs.writeFileSync(draftedPath, fs.readFileSync(draftedPath, "utf8").replace("status: outline", "status: draft"), "utf8");
-    const drafted = checkContinuity(scanProject(root)).warnings.join("\n");
+    const drafted = messages(checkContinuity(scanProject(root)).warnings).join("\n");
     expect(drafted).toContain("early-gun.md was planted in chapter-01, 3 chapters ago");
     expect(drafted).toContain("current-chapter 1 is behind the latest chapter 4");
   });

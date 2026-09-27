@@ -15,7 +15,7 @@ import {
   validateProject
 } from "../src/story.js";
 import { RESULT_SCHEMA_PATH, checkProjectSchema, validateAgainstSchema } from "../scripts/check-schema.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 function writeChapter(root, number, extra = "") {
   const id = `chapter-${String(number).padStart(2, "0")}`;
@@ -220,8 +220,8 @@ describe("validateProgressions", () => {
 describe("progressions in a project", () => {
   test("a valid project passes validate, links, and the schema", () => {
     const { root } = progressionProject();
-    expect(validateProject(root).errors).toEqual([]);
-    expect(validateLinks(root).errors).toEqual([]);
+    expect(messages(validateProject(root).errors)).toEqual([]);
+    expect(messages(validateLinks(root).errors)).toEqual([]);
     expect(checkProjectSchema(root)).toEqual([]);
   });
 
@@ -258,7 +258,7 @@ progressions:
     field: status
     value: scattered
 `, "# River Guild\n");
-    expect(validateProject(root).errors).toEqual([
+    expect(messages(validateProject(root).errors)).toEqual([
       "characters/mara-finn.md progressions[1] cannot change aliases, which is a list; a progression holds a single value",
       "characters/mara-finn.md progressions[1] from chapter-01 comes before progressions[0] from chapter-03 in the story; list progressions in story order",
       "worldbuilding/locations/old-mill.md progressions[0] cannot change routes, which is a list; a progression holds a single value",
@@ -271,9 +271,9 @@ progressions:
     field: status
     value: deceased`;
     const { root } = progressionProject({ maraProgressions: deceased });
-    expect(validateProject(root).warnings).toContain("characters/mara-finn.md progressions[0] makes mara-finn deceased from chapter-03; set died-in: chapter-03 too so story continuity checks appearances after the death");
+    expect(messages(validateProject(root).warnings)).toContain("characters/mara-finn.md progressions[0] makes mara-finn deceased from chapter-03; set died-in: chapter-03 too so story continuity checks appearances after the death");
     const recorded = progressionProject({ maraProgressions: deceased, extraMara: "died-in: chapter-03\n" });
-    expect(validateProject(recorded.root).warnings.filter((warning) => warning.includes("progressions"))).toEqual([]);
+    expect(messages(validateProject(recorded.root).warnings).filter((warning) => warning.includes("progressions"))).toEqual([]);
   });
 
   test("links reports unknown chapters and allows planned ones", () => {
@@ -292,7 +292,7 @@ progressions:
   - from: chapter-20
     field: title
     value: queen` });
-    expect(validateLinks(root).errors).toEqual([
+    expect(messages(validateLinks(root).errors)).toEqual([
       "characters/mara-finn.md progressions[1] references missing chapter chapter-2",
       "characters/mara-finn.md progressions[2] references chapter Chapter-Five which must be kebab-case",
       "characters/mara-finn.md progressions[3] references missing chapter prologue"
@@ -387,8 +387,8 @@ describe("progressions follow reference rewrites", () => {
     moveEntity(root, { kind: "chapter", id: "chapter-04", number: 7 });
     expect(read(root, "worldbuilding", "factions", "river-guild.md")).toContain("  - from: chapter-07\n    field: status\n    value: disbanded\n");
     expect(read(root, "characters", "mara-finn.md")).toContain("  - from: chapter-02\n    field: status\n");
-    expect(validateLinks(root).errors).toEqual([]);
-    expect(validateProject(root).errors).toEqual([]);
+    expect(messages(validateLinks(root).errors)).toEqual([]);
+    expect(messages(validateProject(root).errors)).toEqual([]);
   });
 
   test("move chapter puts progressions back in story order", () => {
@@ -397,7 +397,7 @@ describe("progressions follow reference rewrites", () => {
     const mara = read(root, "characters", "mara-finn.md");
     expect(mara.indexOf("from: chapter-03")).toBeLessThan(mara.indexOf("from: chapter-05"));
     expect(mara).toContain("  - from: chapter-05\n    field: status\n    value: missing\n");
-    expect(validateProject(root).errors).toEqual([]);
+    expect(messages(validateProject(root).errors)).toEqual([]);
     expect(entityStateAtChapter(root, "character", "mara-finn", "chapter-03").state.status).toBe("alive");
   });
 
@@ -423,7 +423,7 @@ progressions:
     moveEntity(root, { kind: "chapter", id: "chapter-02", number: 1 });
     const mara = read(root, "characters", "mara-finn.md");
     expect(mara.indexOf("from: chapter-03")).toBeLessThan(mara.indexOf("from: chapter-01"));
-    expect(validateProject(root).errors.filter((error) => error.includes("progressions"))).toEqual([]);
+    expect(messages(validateProject(root).errors).filter((error) => error.includes("progressions"))).toEqual([]);
   });
 
   test("sortProgressions orders by story time and keeps unknown chapters last", () => {
@@ -437,7 +437,7 @@ progressions:
     field: title
     value: queen` });
     const result = moveEntity(root, { kind: "chapter", id: "chapter-04", number: 9 });
-    expect(result.warnings).toEqual(["chapter-09 was already referenced before this move, and those references now point at the moved chapter: characters/mara-finn.md. Check them"]);
+    expect(messages(result.warnings)).toEqual(["chapter-09 was already referenced before this move, and those references now point at the moved chapter: characters/mara-finn.md. Check them"]);
   });
 
   test("remove chapter refuses while a progression starts there", () => {
@@ -464,7 +464,7 @@ progressions:
     const mill = read(root, "worldbuilding", "locations", "old-mill.md");
     expect(mill).toContain("  - from: chapter-02\n    field: controlled-by\n    value: \"\"\n");
     expect(mill).toContain("  - from: chapter-02\n    field: status\n    value: burned\n");
-    expect(validateProject(root).errors).toEqual([]);
+    expect(messages(validateProject(root).errors)).toEqual([]);
     expect(entityStateAtChapter(root, "location", "old-mill", "chapter-02").state["controlled-by"]).toBe("");
   });
 });

@@ -4,7 +4,7 @@ import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { formatPacing } from "../src/pacing.js";
 import { createEntity, createStoryProject, pacingReport, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -58,7 +58,7 @@ describe("story pacing", () => {
       status: "draft"
     });
     expect(report.totals).toEqual({ scenes: 2, sequels: 1, outcomesRecorded: 2, setbacks: 2, hooks: 1 });
-    expect(report.warnings).toEqual([]);
+    expect(messages(report.warnings)).toEqual([]);
 
     const text = formatPacing(report);
     expect(text).toContain("Outcomes: 100% of recorded outcomes are setbacks or complications");
@@ -77,7 +77,7 @@ describe("story pacing", () => {
     writeScene(root, "chapter-03", 1, "outcome: yes");
     writeScene(root, "chapter-04", 1, "outcome: no");
 
-    expect(pacingReport(root).warnings).toEqual([
+    expect(messages(pacingReport(root).warnings)).toEqual([
       "chapter-04 has no hook: record how the chapter ending pulls the reader on",
       "3 scenes in a row end in an outright yes (chapter-01-scene-01 to chapter-03-scene-01): raise the cost with yes-but or no-and",
       "4 scene units in a row with no sequel (chapter-01-scene-01 to chapter-04-scene-01): give the POV character room to react and decide",
@@ -95,7 +95,7 @@ describe("story pacing", () => {
     writeScene(root, "chapter-01", 3, "outcome: yes");
     writeScene(root, "chapter-01", 4, "outcome: yes");
     writeScene(root, "chapter-01", 5, "outcome: yes");
-    expect(pacingReport(root).warnings).toEqual([
+    expect(messages(pacingReport(root).warnings)).toEqual([
       "4 scenes in a row end in an outright yes (chapter-01-scene-01 to chapter-01-scene-05): raise the cost with yes-but or no-and"
     ]);
     writeChapter(root, 2, "status: outline", 10);
@@ -112,7 +112,7 @@ describe("story pacing", () => {
       writeScene(root, "chapter-01", scene, "outcome: no");
     }
     writeScene(root, "chapter-01", 5, "sequel: true");
-    expect(pacingReport(root).warnings).toEqual([
+    expect(messages(pacingReport(root).warnings)).toEqual([
       "4 scene units in a row with no sequel (chapter-01-scene-01 to chapter-01-scene-04): give the POV character room to react and decide",
       "3 chapters in a row end on resolution (chapter-01 to chapter-03): readers can put the book down"
     ]);
@@ -124,12 +124,12 @@ describe("story pacing", () => {
     createEntity(root, { kind: "scene", name: "Arrival", chapter: "chapter-01", outcome: "no-and" });
     expect(fs.readFileSync(path.join(root, "chapters", "chapter-01.md"), "utf8")).toContain("hook: cliffhanger");
     expect(fs.readFileSync(path.join(root, "scenes", "chapter-01-scene-01.md"), "utf8")).toContain("outcome: no-and");
-    expect(validateProject(root).errors).toEqual([]);
+    expect(messages(validateProject(root).errors)).toEqual([]);
 
     expect(() => createEntity(root, { kind: "scene", name: "Bad", chapter: "chapter-01", outcome: "maybe" })).toThrow();
     writeScene(root, "chapter-01", 3, "outcome: maybe");
     writeChapter(root, 2, "status: draft\nhook: meh", 5);
-    const errors = validateProject(root).errors;
+    const errors = messages(validateProject(root).errors);
     expect(errors).toContain("scenes/chapter-01-scene-03.md frontmatter field outcome has unsupported value maybe");
     expect(errors).toContain("chapters/chapter-02.md frontmatter field hook has unsupported value meh");
   });

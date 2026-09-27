@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { copyrightPage, normalizeIsbn, publishingMeta } from "../src/publishing.js";
 import { buildBook, createEntity, createStoryProject, validateProject } from "../src/story.js";
-import { makeTempDir, readArchiveText, writeMarkdown } from "./helpers.js";
+import { makeTempDir, readArchiveText, writeMarkdown, messages } from "./helpers.js";
 
 const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
@@ -52,7 +52,7 @@ describe("publishing metadata", () => {
   });
 
   test("validate accepts full metadata and reports malformed fields", () => {
-    expect(validateProject(project(FULL_METADATA)).errors).toEqual([]);
+    expect(messages(validateProject(project(FULL_METADATA)).errors)).toEqual([]);
 
     const root = project(`language: english!
 isbn: 978-0-306-40615-8
@@ -73,7 +73,7 @@ publisher:
 authors: Solo
 author: Solo`);
     const result = validateProject(root);
-    expect(result.errors).toEqual(expect.arrayContaining([
+    expect(messages(result.errors)).toEqual(expect.arrayContaining([
       "story.md language english! must be a BCP 47 tag such as en, en-GB, or fr",
       "story.md isbn 978-0-306-40615-8 is not a valid ISBN-13 or ISBN-10 (check the digits and checksum)",
       "story.md publication-date date must be a real YYYY-MM-DD calendar day, got 2026-13-01",
@@ -81,7 +81,7 @@ author: Solo`);
       "story.md frontmatter field publisher must be text",
       "story.md frontmatter field authors must be a list of text"
     ]));
-    expect(result.warnings).toEqual(expect.arrayContaining([
+    expect(messages(result.warnings)).toEqual(expect.arrayContaining([
       "story.md lists 8 keywords; most retailers accept 7",
       "story.md sets both author and authors; builds use authors"
     ]));

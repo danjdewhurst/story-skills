@@ -4,6 +4,7 @@ import path from "node:path";
 // the import is circular. COMMANDS is only read inside functions, after every
 // module has finished loading.
 import { COMMANDS } from "./commands.js";
+import { asFinding, codesAt } from "./findings.js";
 import { parseFrontmatter } from "./frontmatter.js";
 import { OPTIONS, normalizeBooleanValue, optionFamily, suggestion } from "./options.js";
 import { proseThresholds } from "./prose.js";
@@ -18,24 +19,6 @@ import { proseThresholds } from "./prose.js";
 //       level: error
 
 export const SEVERITY_LEVELS = ["error", "warning", "off"];
-
-// Warnings that `severity` can name. Each code belongs to one command and
-// matches the finding text that command writes; test/config.test.js pins
-// every pattern against a real finding, so a reworded message fails a test
-// rather than silently escaping its override.
-export const FINDING_CODES = {
-  "todo-markers": { command: "validate", pattern: / has \d+ \[TODO markers? in its prose, which every build prints/ },
-  "stale-registry": { command: "validate", pattern: / does not list .+; run story reindex$/ },
-  "stale-word-count": { command: "validate", pattern: / (?:has no word-count \(contains \d+\)|declares \S+ words? but contains \d+)$/ },
-  "prose-filter-words": { command: "prose", pattern: / filter words per 1,000 narration words \(over / },
-  "prose-adverbs": { command: "prose", pattern: / -ly adverbs per 1,000 narration words \(over / },
-  "prose-bookisms": { command: "prose", pattern: / has \d+ said-bookism dialogue tags: / },
-  "prose-avoided-spelling": { command: "prose", pattern: / uses ".+" (?:once|\d+ times); .+ prefers ".+"$/ },
-  "pacing-no-hook": { command: "pacing", pattern: / has no hook: record how the chapter ending pulls the reader on$/ },
-  "clue-unplanted": { command: "clues", pattern: / is revealed in \S+ but never planted: readers cannot play fair$/ },
-  "clue-late-plant": { command: "clues", pattern: / its reveal \(.+\): late plant gives readers no time to notice it$/ },
-  "voice-avoid": { command: "voices", pattern: /, which is in their voice-avoid list \(/ }
-};
 
 // Commands that act on one named entity: a default would send every run to
 // the same target, so cli-defaults refuses them.
@@ -151,7 +134,7 @@ function parseCommandDefaults(command, item, label, errors) {
 
 function parseSeverity(raw, errors) {
   const severity = {};
-  const codes = Object.keys(FINDING_CODES);
+  const codes = codesAt("warning");
   for (const [index, item] of listItems(raw, "severity", errors)) {
     const label = `story.md severity[${index}]`;
     const extra = Object.keys(item).filter((key) => key !== "warning" && key !== "level");
@@ -163,7 +146,7 @@ function parseSeverity(raw, errors) {
       errors.push(`${label} must name a warning`);
       continue;
     }
-    if (!Object.hasOwn(FINDING_CODES, code)) {
+    if (!codes.includes(code)) {
       errors.push(`${label} names unknown warning ${code}${suggestion(code, codes)}`);
       continue;
     }
@@ -217,10 +200,11 @@ export function applyDefaults(config, commandName, options) {
   return filled;
 }
 
-// The severity overrides that apply to one command, as [code, level] pairs.
-export function severityFor(config, commandName) {
-  return Object.entries(config.severity)
-    .filter(([code]) => FINDING_CODES[code].command === commandName);
+// The severity overrides, as [code, level] pairs. A code names one rule
+// wherever it is checked, so an override applies to every command that
+// reports that warning.
+export function severityFor(config) {
+  return Object.entries(config.severity);
 }
 
 // Moves warnings a severity override names: `error` makes them errors (so the
@@ -229,18 +213,20 @@ export function applySeverity(result, overrides) {
   if (overrides.length === 0) {
     return result;
   }
+  const levels = new Map(overrides);
   const errors = [...result.errors];
   const warnings = [];
   const dismissed = [...(result.dismissed ?? [])];
   for (const warning of result.warnings) {
-    const match = overrides.find(([code]) => FINDING_CODES[code].pattern.test(warning));
-    if (match === undefined || match[1] === "warning") {
+    const code = asFinding(warning).code;
+    const level = levels.get(code) ?? "warning";
+    if (level === "warning") {
       warnings.push(warning);
-    } else if (match[1] === "error") {
-      errors.push(`${warning} [${match[0]}]`);
+    } else if (level === "error") {
+      errors.push(warning);
     } else {
       // `reason` is the --json exemption; `note` replaces "exemption:" in text.
-      const note = `severity ${match[0]} is off in story.md`;
+      const note = `severity ${code} is off in story.md`;
       dismissed.push({ finding: warning, reason: note, note });
     }
   }

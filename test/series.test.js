@@ -21,7 +21,7 @@ import {
   validateLinks,
   validateProject
 } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -172,13 +172,13 @@ describe("series validation and reporting", () => {
     const cwd = makeTempDir();
     const root = book(cwd, "Book One");
     setStory(root, { series: "Not Kebab", "book-number": -1, follows: "../x" });
-    expect(validateProject(root).errors).toEqual(expect.arrayContaining([
+    expect(messages(validateProject(root).errors)).toEqual(expect.arrayContaining([
       "story.md series must be a kebab-case id",
       "story.md book-number must be a number 0 or more, such as 2, 0 for a prequel, or 1.5 for a novella",
       "story.md frontmatter field follows must be a list"
     ]));
     setStory(root, { series: ["a"], "book-number": "two", follows: undefined, precedes: [""] });
-    expect(validateProject(root).errors).toEqual(expect.arrayContaining([
+    expect(messages(validateProject(root).errors)).toEqual(expect.arrayContaining([
       "story.md frontmatter field series must be a scalar",
       "story.md book-number must be a number 0 or more, such as 2, 0 for a prequel, or 1.5 for a novella",
       "story.md frontmatter field precedes must contain only non-empty strings"
@@ -255,14 +255,14 @@ describe("series validation and reporting", () => {
     const report = seriesReport(finale);
     expect(report.series).toBe("saga");
     expect(report.books.map((entry) => entry.label)).toEqual(["../origins", "../west", "../east", "."]);
-    expect(report.errors).toEqual([
+    expect(messages(report.errors)).toEqual([
       "../gone is not a story project: missing story.md",
       "characters/nameless.md has status unset, but nameless is deceased in earlier book origins; set status: deceased",
       "characters/old-king.md has status alive, but old-king is deceased in earlier book origins; set status: deceased",
       "chapters/chapter-01.md lists old-king, who died in earlier book origins; move appearances to mentions",
       "scenes/chapter-01-scene-01.md lists ghost, who died in earlier book East; move appearances to mentions"
     ]);
-    expect(report.warnings).toEqual([
+    expect(messages(report.warnings)).toEqual([
       "Linked books Finale, East set no series id; add series: saga",
       "characters/old-king.md name \"The Old King\" differs from \"Old King\" in ../east/characters/old-king.md",
       "worldbuilding/artifacts/crown.md has status unset, but crown was destroyed in earlier book origins"
@@ -321,7 +321,7 @@ describe("series validation and reporting", () => {
     ].join("\n")), "# State\n");
 
     const report = seriesReport(finale);
-    expect(report.errors).toEqual([
+    expect(messages(report.errors)).toEqual([
       "continuity/state.md knowledge-state[0] has ana learn heir-survived in chapter-01, but they already know it in earlier book Origins (../origins/continuity/state.md knowledge-state[0])"
     ]);
     expect(report.shared).toEqual([{ label: "Facts", ids: ["heir-survived"] }]);
@@ -338,7 +338,7 @@ describe("series validation and reporting", () => {
     const report = seriesReport(one);
     expect(report.ordered).toBe(false);
     expect(report.series).toBe("alpha");
-    expect(report.errors).toEqual([
+    expect(messages(report.errors)).toEqual([
       "Linked books belong to different series: alpha, beta",
       "Series chronology has a cycle between One, Two; check follows and precedes"
     ]);
@@ -365,7 +365,7 @@ describe("series traversal limits", () => {
     setStory(root, { follows: [path.relative(root, outsideBook)] });
     const report = seriesReport(root);
     expect(report.ok).toBe(false);
-    expect(report.errors.join("\n")).toContain("points outside the series directory");
+    expect(messages(report.errors).join("\n")).toContain("points outside the series directory");
   });
 
   test("refuses links that escape the scope through a symlink", () => {
@@ -382,7 +382,7 @@ describe("series traversal limits", () => {
     setStory(root, { follows: ["../sneaky"] });
     const report = seriesReport(root);
     expect(report.ok).toBe(false);
-    expect(report.errors.join("\n")).toContain("points outside the series directory");
+    expect(messages(report.errors).join("\n")).toContain("points outside the series directory");
   });
 
   test("visits a book reached through a symlink alias only once", () => {
@@ -410,7 +410,7 @@ describe("series traversal limits", () => {
     fs.writeFileSync(storyPath, markdown.replace("---\n", "---\nlogline: >\n  folded text\n"), "utf8");
     const report = seriesReport(two);
     expect(report.ok).toBe(false);
-    expect(report.errors.join("\n")).toContain("../book-one: story.md: Unsupported frontmatter line");
+    expect(messages(report.errors).join("\n")).toContain("../book-one: story.md: Unsupported frontmatter line");
     const cli = invoke(cwd, ["series", "--path", "book-two"]);
     expect(cli.code).toBe(1);
   });
@@ -425,7 +425,7 @@ describe("series traversal limits", () => {
     fs.symlinkSync(outside, path.join(one, "worldbuilding"), "dir");
     const report = seriesReport(two);
     expect(report.ok).toBe(false);
-    expect(report.errors.join("\n")).toContain("../book-one: Refusing to use project directory outside root");
+    expect(messages(report.errors).join("\n")).toContain("../book-one: Refusing to use project directory outside root");
   });
 
   test("orders a book reached through a symlink and through its real path as one book", () => {
@@ -495,7 +495,7 @@ describe("series traversal limits", () => {
     });
     expect(report.books).toEqual([]);
     expect(report.ok).toBe(false);
-    expect(report.errors.join("\n")).toContain("missing story.md");
+    expect(messages(report.errors).join("\n")).toContain("missing story.md");
   });
 
   test("reports scan errors from a linked book", () => {
@@ -507,7 +507,7 @@ describe("series traversal limits", () => {
     fs.writeFileSync(path.join(two, "characters", "ada.md"), "not frontmatter\n", "utf8");
     const report = seriesReport(one);
     expect(report.ok).toBe(false);
-    expect(report.errors.join("\n")).toContain("characters/ada.md");
+    expect(messages(report.errors).join("\n")).toContain("characters/ada.md");
   });
 
   test("does not false-fail at exactly 100 books with reciprocal links", () => {
@@ -522,7 +522,7 @@ describe("series traversal limits", () => {
       setStory(other, { precedes: [`../${first}`] });
     }
     const report = seriesReport(books[0]);
-    expect(report.errors.join("\n")).not.toContain("book limit");
+    expect(messages(report.errors).join("\n")).not.toContain("book limit");
   });
 
   test("follows a long linear chain to its end", () => {
@@ -538,7 +538,7 @@ describe("series traversal limits", () => {
       previous = root;
     }
     const report = seriesReport(chain[chain.length - 1]);
-    expect(report.errors).toEqual([]);
+    expect(messages(report.errors)).toEqual([]);
     expect(report.books).toHaveLength(13);
   });
 
@@ -568,6 +568,6 @@ describe("series traversal limits", () => {
       continuity: null
     });
     const report = buildSeries(start, fakeScan);
-    expect(report.errors.join("\n")).toContain("book limit");
+    expect(messages(report.errors).join("\n")).toContain("book limit");
   });
 });

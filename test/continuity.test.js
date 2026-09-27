@@ -12,7 +12,7 @@ import {
   validateLinks,
   validateProject
 } from "../src/story.js";
-import { makeTempDir, writeMarkdown } from "./helpers.js";
+import { makeTempDir, writeMarkdown, messages } from "./helpers.js";
 
 function writeChapter(root, number, frontmatter) {
   writeMarkdown(path.join(root, "chapters", `chapter-${String(number).padStart(2, "0")}.md`), `
@@ -168,8 +168,8 @@ current-chapter: 0
 `, "# Continuity State\n");
 
     const result = checkContinuity(scanProject(root));
-    const errors = result.errors.join("\n");
-    const warnings = result.warnings.join("\n");
+    const errors = messages(result.errors).join("\n");
+    const warnings = messages(result.warnings).join("\n");
 
     expect(result.ok).toBe(false);
     expect(errors).toContain("characters/liv-marsh.md has died-in chapter-01 but status alive; set status: deceased");
@@ -187,9 +187,9 @@ current-chapter: 0
     expect(warnings).not.toContain("chapter-03-scene-01.md lists old-tomas");
 
     expect(checkProjectContinuity(root).ok).toBe(false);
-    expect(validateProject(root).errors.join("\n")).not.toContain("died-in");
+    expect(messages(validateProject(root).errors).join("\n")).not.toContain("died-in");
 
-    const links = validateLinks(root).errors.join("\n");
+    const links = messages(validateLinks(root).errors).join("\n");
     expect(links).toContain("chapters/chapter-03.md references missing character or artifact nobody-here");
     expect(links).toContain("scenes/chapter-77-scene-01.md references missing character or artifact nobody-scene");
   });
@@ -310,8 +310,8 @@ object-state:
 `, "# Continuity State\n");
 
     const result = checkContinuity(scanProject(root));
-    const errors = result.errors.join("\n");
-    const warnings = result.warnings.join("\n");
+    const errors = messages(result.errors).join("\n");
+    const warnings = messages(result.warnings).join("\n");
 
     expect(result.ok).toBe(false);
     expect(result.errors).toHaveLength(20);
@@ -388,7 +388,7 @@ state-changes: []
 `, "# Opening\n");
 
     const result = checkContinuity(scanProject(root));
-    expect(result.warnings.join("\n")).toContain("scenes/chapter-01-scene-01.md is set in old-mill but chapters/chapter-01.md does not list that location");
+    expect(messages(result.warnings).join("\n")).toContain("scenes/chapter-01-scene-01.md is set in old-mill but chapters/chapter-01.md does not list that location");
   });
 
   test("checks knowledge fact ids are kebab-case and unique per character", () => {
@@ -426,7 +426,7 @@ knowledge-state:
     knows: no id at all
 `, "# State\n");
 
-    expect(checkProjectContinuity(root).errors).toEqual([
+    expect(messages(checkProjectContinuity(root).errors)).toEqual([
       "continuity/state.md knowledge-state[2] repeats fact mill-was-burned for ana-roe from knowledge-state[0]",
       "continuity/state.md knowledge-state[3] fact Not Kebab must be a kebab-case id",
       "continuity/state.md knowledge-state[4] fact (empty) must be a kebab-case id"

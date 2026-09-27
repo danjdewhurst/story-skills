@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { formatRuntime } from "../src/narration.js";
 import { buildBook, createEntity, createStoryProject, validateProject } from "../src/story.js";
-import { makeTempDir, writeMarkdown } from "./helpers.js";
+import { makeTempDir, writeMarkdown, messages } from "./helpers.js";
 
 function project() {
   const cwd = makeTempDir();
@@ -48,7 +48,7 @@ describe("narration build", () => {
     expect(text).not.toContain("All rights reserved");
     expect(text).toContain("## Historical Note\n\n[under 1 min]\n\nThe clans are invented.\n\n## Closing Credits");
     expect(text.trimEnd().endsWith("You have been listening to Siorsa, written by Ada Writer, narrated by [narrator].")).toBe(true);
-    expect(validateProject(root).errors).toEqual([]);
+    expect(messages(validateProject(root).errors)).toEqual([]);
   });
 
   test("says how to add pronunciations when there are none, and validate checks their type", () => {
@@ -61,7 +61,7 @@ describe("narration build", () => {
     expect(text).toContain("You have been listening to Plain, narrated by [narrator].");
 
     writeMarkdown(path.join(root, "glossary", "terms", "odd.md"), "term: Odd\ncategory: term\npronunciation:\n  - one\n  - two", "# Odd\n");
-    expect(validateProject(root).errors).toContain("glossary/terms/odd.md frontmatter field pronunciation must be text");
+    expect(messages(validateProject(root).errors)).toContain("glossary/terms/odd.md frontmatter field pronunciation must be text");
   });
 
   test("formatRuntime rounds to minutes", () => {

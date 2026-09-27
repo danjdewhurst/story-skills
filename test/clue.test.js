@@ -15,7 +15,7 @@ import {
   validateLinks,
   validateProject
 } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 function writeChapter(root, number) {
   writeMarkdown(path.join(root, "chapters", `chapter-${String(number).padStart(2, "0")}.md`), `
@@ -112,13 +112,13 @@ planted: chapter-01
 `);
 
     const result = checkContinuity(scanProject(root));
-    expect(result.errors).toContain(
+    expect(messages(result.errors)).toContain(
       "continuity/clues/backward-clue.md pays off in chapter-01 before it is planted in chapter-03"
     );
-    expect(result.errors).toContain(
+    expect(messages(result.errors)).toContain(
       "continuity/clues/planted-nowhere.md is planted but no plant chapter recorded"
     );
-    expect(result.errors).toContain(
+    expect(messages(result.errors)).toContain(
       "continuity/clues/paid-unrecorded.md has status paid-off but no payoff chapter recorded"
     );
     expect(result.ok).toBe(false);
@@ -132,7 +132,7 @@ planted: chapter-01
 `);
 
     const result = checkContinuity(scanProject(root));
-    expect(result.warnings).toContain(
+    expect(messages(result.warnings)).toContain(
       "continuity/clues/stale-clue.md was planted in chapter-01, 4 chapters ago, and has no payoff yet"
     );
     expect(result.ok).toBe(true);
@@ -146,7 +146,7 @@ planted: chapter-01
 payoff: chapter-10
 `);
     const aheadResult = checkContinuity(scanProject(ahead));
-    expect(aheadResult.warnings.join("\n")).not.toContain("later-clue");
+    expect(messages(aheadResult.warnings).join("\n")).not.toContain("later-clue");
 
     const passed = clueProject(4);
     writeClue(passed, "missed-clue", `
@@ -155,7 +155,7 @@ planted: chapter-01
 payoff: chapter-02
 `);
     const passedResult = checkContinuity(scanProject(passed));
-    expect(passedResult.warnings).toContain(
+    expect(messages(passedResult.warnings)).toContain(
       "continuity/clues/missed-clue.md payoff chapter chapter-02 has passed and status is still planted"
     );
   });
@@ -168,8 +168,8 @@ planted: chapter-02
 `);
 
     const result = checkContinuity(scanProject(root));
-    expect(result.warnings).toEqual([]);
-    expect(result.errors).toEqual([]);
+    expect(messages(result.warnings)).toEqual([]);
+    expect(messages(result.errors)).toEqual([]);
   });
 
   test("complete stories reject planned and planted clues", () => {
@@ -186,10 +186,10 @@ planted: chapter-01
     fs.writeFileSync(storyPath, storyRaw.replace("status: planning", "status: complete"), "utf8");
 
     const result = checkContinuity(scanProject(root));
-    expect(result.errors).toContain(
+    expect(messages(result.errors)).toContain(
       "story.md is complete but continuity/clues/open-clue.md is still planned"
     );
-    expect(result.errors).toContain(
+    expect(messages(result.errors)).toContain(
       "story.md is complete but continuity/clues/growing-clue.md is still planted"
     );
   });
@@ -257,9 +257,9 @@ characters: not-a-list
 
     const result = validateProject(root);
     expect(result.ok).toBe(false);
-    expect(result.errors.join("\n")).toContain("frontmatter field status has unsupported value ");
-    expect(result.errors.join("\n")).toContain("frontmatter field significance-delayed must be a boolean");
-    expect(result.errors.join("\n")).toContain("frontmatter field characters must be a list");
+    expect(messages(result.errors).join("\n")).toContain("frontmatter field status has unsupported value ");
+    expect(messages(result.errors).join("\n")).toContain("frontmatter field significance-delayed must be a boolean");
+    expect(messages(result.errors).join("\n")).toContain("frontmatter field characters must be a list");
   });
 
   test("validate accepts a well-formed clue", () => {
@@ -267,7 +267,7 @@ characters: not-a-list
     createEntity(root, { kind: "clue", name: "The Marked Locket", planted: "chapter-01", payoff: "chapter-02", "significance-delayed": true });
 
     const result = validateProject(root);
-    expect(result.errors.filter((error) => error.includes("clues/"))).toEqual([]);
+    expect(messages(result.errors).filter((error) => error.includes("clues/"))).toEqual([]);
   });
 
   test("links flags clue references to missing chapters, arcs, and characters", () => {
@@ -284,11 +284,11 @@ characters:
 
     const result = validateLinks(root);
     expect(result.ok).toBe(false);
-    expect(result.errors).toContain("continuity/clues/dangling-clue.md references missing chapter chapter-09");
+    expect(messages(result.errors)).toContain("continuity/clues/dangling-clue.md references missing chapter chapter-09");
     // A payoff past the last chapter is scheduled, not missing.
-    expect(result.errors).not.toContain("continuity/clues/dangling-clue.md references missing chapter chapter-10");
-    expect(result.errors).toContain("continuity/clues/dangling-clue.md references missing arc missing-arc");
-    expect(result.errors).toContain("continuity/clues/dangling-clue.md references missing character missing-character");
+    expect(messages(result.errors)).not.toContain("continuity/clues/dangling-clue.md references missing chapter chapter-10");
+    expect(messages(result.errors)).toContain("continuity/clues/dangling-clue.md references missing arc missing-arc");
+    expect(messages(result.errors)).toContain("continuity/clues/dangling-clue.md references missing character missing-character");
   });
 
   test("validate accepts abandoned clue status and continuity skips abandoned ordering", () => {
@@ -300,10 +300,10 @@ payoff: chapter-01
 `);
 
     const validation = validateProject(root);
-    expect(validation.errors.filter((error) => error.includes("cut-clue"))).toEqual([]);
+    expect(messages(validation.errors).filter((error) => error.includes("cut-clue"))).toEqual([]);
 
     const result = checkContinuity(scanProject(root));
-    expect(result.errors.filter((error) => error.includes("cut-clue"))).toEqual([]);
+    expect(messages(result.errors).filter((error) => error.includes("cut-clue"))).toEqual([]);
   });
 
   test("validate rejects non-scalar planted and payoff in clue files", () => {
@@ -321,8 +321,8 @@ payoff:
 
     const result = validateProject(root);
     expect(result.ok).toBe(false);
-    expect(result.errors).toContain("continuity/clues/list-planted.md frontmatter field planted must be a scalar");
-    expect(result.errors).toContain("continuity/clues/map-payoff.md frontmatter field payoff must be a scalar");
+    expect(messages(result.errors)).toContain("continuity/clues/list-planted.md frontmatter field planted must be a scalar");
+    expect(messages(result.errors)).toContain("continuity/clues/map-payoff.md frontmatter field payoff must be a scalar");
   });
 
   test("warns on nested files inside continuity/clues", () => {
@@ -333,7 +333,7 @@ status: planned
 `, "# Nested\n");
 
     const validation = validateProject(root);
-    expect(validation.warnings.join("\n")).toContain("continuity/clues/extra/nested.md is nested inside an entity directory and is ignored");
+    expect(messages(validation.warnings).join("\n")).toContain("continuity/clues/extra/nested.md is nested inside an entity directory and is ignored");
   });
 
   test("body links to clue ids resolve instead of reporting missing", () => {
@@ -344,7 +344,7 @@ status: planned
     fs.writeFileSync(timelinePath, `${timelineRaw}\nSee [Known Clue](../continuity/clues/known-clue.md).\nSee [Ghost Clue](ghost-clue.md).\n`, "utf8");
 
     const result = validateLinks(root);
-    expect(result.errors.join("\n")).toContain("links to missing file ghost-clue.md");
-    expect(result.errors.join("\n")).not.toContain("known-clue");
+    expect(messages(result.errors).join("\n")).toContain("links to missing file ghost-clue.md");
+    expect(messages(result.errors).join("\n")).not.toContain("known-clue");
   });
 });

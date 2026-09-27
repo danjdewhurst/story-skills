@@ -18,7 +18,7 @@ import {
 } from "../src/story.js";
 import { checkProjectSchema } from "../scripts/check-schema.js";
 import { staleRegistries } from "../scripts/check-examples.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const examplesRoot = path.join(repoRoot, "examples");
@@ -48,11 +48,11 @@ describe("#57 migrate creates plot/timeline.md", () => {
   test("a project missing the timeline validates after one migrate", () => {
     const root = copyExample("the-unraveled-thread");
     fs.rmSync(path.join(root, "plot", "timeline.md"));
-    expect(validateProject(root).errors).toContain("Missing required path: plot/timeline.md (story migrate adds missing registries)");
+    expect(messages(validateProject(root).errors)).toContain("Missing required path: plot/timeline.md (story migrate adds missing registries)");
     const result = migrateProject(root);
     expect(result.changed).toContain(path.join(root, "plot", "timeline.md"));
     expect(parseFrontmatter(fs.readFileSync(path.join(root, "plot", "timeline.md"), "utf8")).data.type).toBe("timeline");
-    expect(validateProject(root).errors.filter((error) => error.startsWith("Missing required path"))).toEqual([]);
+    expect(messages(validateProject(root).errors).filter((error) => error.startsWith("Missing required path"))).toEqual([]);
   });
 });
 
@@ -121,7 +121,7 @@ describe("#71 ids and names fold Latin letters without decompositions", () => {
     createEntity(root, { kind: "character", name: "Łukasz Nowak" });
     createEntity(root, { kind: "character", name: "Søren" });
     const report = namesReport(root, ["Lukasz", "Soren"]);
-    expect(report.errors).toEqual([
+    expect(messages(report.errors)).toEqual([
       "\"Lukasz\" clashes with character lukasz-nowak (Łukasz)",
       "\"Soren\" clashes with character soren (Søren)"
     ]);
@@ -142,7 +142,7 @@ describe("#75 migrate on a broken or newer story.md", () => {
     const before = fs.readFileSync(storyPath, "utf8");
     expect(() => migrateProject(root)).toThrow("story.md uses schema-version 3, newer than this CLI (2); upgrade story-skills");
     expect(fs.readFileSync(storyPath, "utf8")).toBe(before);
-    expect(validateProject(root).errors).toContain("story.md uses schema-version 3, newer than this CLI (2); upgrade story-skills");
+    expect(messages(validateProject(root).errors)).toContain("story.md uses schema-version 3, newer than this CLI (2); upgrade story-skills");
   });
 
   test("an older schema-version is still upgraded", () => {
@@ -255,7 +255,7 @@ describe("#128 missing registry link warning names the file", () => {
     const root = newProject();
     writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft", "\n## Chapter Text\n\nShe climbed.\n");
     writeMarkdown(path.join(root, "worldbuilding", "locations", "harbor.md"), "name: Harbor\ntype: city\nstatus: active", "# Harbor\n");
-    const { warnings } = validateProject(root);
+    const warnings = messages(validateProject(root).warnings);
     expect(warnings).toContain("chapters/_index.md does not list chapters/chapter-01.md; run story reindex");
     expect(warnings).toContain("worldbuilding/_index.md does not list worldbuilding/locations/harbor.md; run story reindex");
   });
@@ -266,7 +266,7 @@ describe("#132 validate rejects non-string text fields", () => {
     const root = copyExample("the-last-ember");
     editFile(path.join(root, "chapters", "chapter-01.md"), (text) => text.replace(/^title: .*$/m, "title: 1984"));
     editFile(path.join(root, "characters", "kael-voss.md"), (text) => text.replace(/^name: .*$/m, "name: 7"));
-    const { errors } = validateProject(root);
+    const errors = messages(validateProject(root).errors);
     expect(errors).toContain('chapters/chapter-01.md frontmatter field title must be text: quote it as title: "1984"');
     expect(errors).toContain('characters/kael-voss.md frontmatter field name must be text: quote it as name: "7"');
   });
@@ -297,7 +297,7 @@ describe("#132 validate rejects non-string text fields", () => {
   test("a numeric population is allowed by both", () => {
     const root = copyExample("the-last-ember");
     editFile(path.join(root, "worldbuilding", "locations", "ashen-citadel.md"), (text) => text.replace(/^population: .*$/m, "population: 12000"));
-    expect(validateProject(root).errors).toEqual([]);
+    expect(messages(validateProject(root).errors)).toEqual([]);
     expect(checkProjectSchema(root)).toEqual([]);
   });
 });
@@ -327,28 +327,28 @@ describe("#162 exemptions", () => {
     writeExemptions(root, '  - pattern: " ann, who died in chapter-01"\n    reason: "Ann is a ghost"');
     const result = checkProjectContinuity(root);
     expect(result.dismissed.map((entry) => entry.finding)).toEqual([expect.stringContaining("lists ann, who died")]);
-    expect(result.errors).toContain("chapters/chapter-03.md lists joann, who died in chapter-01; move posthumous appearances to mentions");
+    expect(messages(result.errors)).toContain("chapters/chapter-03.md lists joann, who died in chapter-01; move posthumous appearances to mentions");
   });
 
   test("an entry without a reason dismisses nothing", () => {
     const root = exemptionProject();
     writeExemptions(root, '  - pattern: "chapter-03.md lists ann"');
     expect(checkProjectContinuity(root).dismissed).toEqual([]);
-    expect(validateProject(root).errors).toContain("continuity/exemptions.md exemptions[0] is missing a non-empty reason");
+    expect(messages(validateProject(root).errors)).toContain("continuity/exemptions.md exemptions[0] is missing a non-empty reason");
   });
 
   test("a refused exemptions file or state file is named by its project path", () => {
     const root = exemptionProject();
     fs.mkdirSync(path.join(root, "continuity", "exemptions.md"));
     const result = checkProjectContinuity(root);
-    const refusal = result.errors.find((error) => error.startsWith("continuity/exemptions.md:"));
+    const refusal = messages(result.errors).find((error) => error.startsWith("continuity/exemptions.md:"));
     expect(refusal).toBe("continuity/exemptions.md: Refusing to read continuity/exemptions.md: not a regular file");
 
     const statePath = path.join(root, "continuity", "state.md");
     const outside = path.join(makeTempDir(), "state.md");
     fs.renameSync(statePath, outside);
     fs.symlinkSync(outside, statePath);
-    const errors = validateProject(root).errors.join("\n");
+    const errors = messages(validateProject(root).errors).join("\n");
     expect(errors).toContain("continuity/state.md");
     expect(errors).not.toContain(root);
   });
@@ -360,8 +360,8 @@ describe("#205 dot-files in entity folders are skipped", () => {
     fs.writeFileSync(path.join(root, "chapters", "._chapter-01.md"), Buffer.from("\u0000\u0005\u0016\u0007\u0000\u0002\u0000\u0000Mac OS X        \u0000\u0002", "latin1"));
     fs.writeFileSync(path.join(root, "._story.md"), "\u0000\u0005");
     const validation = validateProject(root);
-    expect(validation.errors.filter((error) => error.includes("._"))).toEqual([]);
-    expect(validation.warnings.filter((warning) => warning.includes("._"))).toEqual([]);
+    expect(messages(validation.errors).filter((error) => error.includes("._"))).toEqual([]);
+    expect(messages(validation.warnings).filter((warning) => warning.includes("._"))).toEqual([]);
     expect(invoke(root, ["wordcount", "."]).code).toBe(0);
     const out = path.join(makeTempDir(), "book.md");
     expect(invoke(root, ["build", ".", "--format", "markdown", "--out", out]).code).toBe(0);
@@ -374,7 +374,7 @@ describe("#224 chapter numbering that starts after 1", () => {
     for (const number of [3, 4, 6]) {
       createEntity(root, { kind: "chapter", name: `C${number}`, number });
     }
-    const { warnings } = checkProjectContinuity(root);
+    const warnings = messages(checkProjectContinuity(root).warnings);
     expect(warnings).toContain("Chapter numbering starts at 3, not 1");
     expect(warnings).toContain("Chapter numbering skips from 4 to 6");
   });
@@ -382,6 +382,6 @@ describe("#224 chapter numbering that starts after 1", () => {
   test("a book starting at chapter 1 gets no start warning", () => {
     const root = newProject();
     createEntity(root, { kind: "chapter", name: "One" });
-    expect(checkProjectContinuity(root).warnings.filter((warning) => warning.includes("starts at"))).toEqual([]);
+    expect(messages(checkProjectContinuity(root).warnings).filter((warning) => warning.includes("starts at"))).toEqual([]);
   });
 });

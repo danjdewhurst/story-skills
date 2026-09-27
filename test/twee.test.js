@@ -6,7 +6,7 @@ import { parseFrontmatter } from "../src/frontmatter.js";
 import { buildBook, createStoryProject, moveEntity, removeEntity, validateLinks, validateProject } from "../src/story.js";
 import { derivedIfid, isIfid, tweeSource } from "../src/twee.js";
 import { SCHEMA_PATH, buildSchemaDocument, validateAgainstSchema } from "../scripts/check-schema.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 const schema = JSON.parse(fs.readFileSync(SCHEMA_PATH, "utf8"));
 
@@ -50,7 +50,7 @@ describe("twee build", () => {
     const result = buildBook(root, { format: "twee" });
     expect(result.outFile).toBe(path.join(root, "dist", "gull-rock.twee"));
     expect(result.format).toBe("twee");
-    expect(result.warnings).toEqual([]);
+    expect(messages(result.warnings)).toEqual([]);
     expect(read(result.outFile)).toBe([
       ":: StoryTitle",
       "Gull Rock",
@@ -82,7 +82,7 @@ describe("twee build", () => {
       "The ship on the reef. THE END.",
       ""
     ].join("\n"));
-    expect(validateProject(root).errors).toEqual([]);
+    expect(messages(validateProject(root).errors)).toEqual([]);
     expect(validateLinks(root)).toMatchObject({ errors: [], warnings: [] });
   });
 
@@ -92,7 +92,7 @@ describe("twee build", () => {
     chapter(root, 2, "Two.");
     const result = buildBook(root, { format: "twee" });
     const ifid = derivedIfid("plain-line");
-    expect(result.warnings).toEqual([`story.md has no ifid, so the build derived ${ifid} from the story id; add ifid: ${ifid} to story.md to keep it if the title changes`]);
+    expect(messages(result.warnings)).toEqual([`story.md has no ifid, so the build derived ${ifid} from the story id; add ifid: ${ifid} to story.md to keep it if the title changes`]);
     const first = read(result.outFile);
     expect(first).toContain(`"ifid": "${ifid}"`);
     expect(first).toContain(":: chapter-01\nOne.\n\n[[Continue->chapter-02]]\n\n:: chapter-02\nTwo.\n");
@@ -104,14 +104,14 @@ describe("twee build", () => {
     const root = branching();
     setIfid(root, `ifid: ${IFID.toLowerCase()}\n`);
     const result = buildBook(root, { format: "twee" });
-    expect(result.warnings).toEqual([]);
+    expect(messages(result.warnings)).toEqual([]);
     expect(read(result.outFile)).toContain(`"ifid": "${IFID}"`);
-    expect(validateProject(root).errors).toEqual([]);
+    expect(messages(validateProject(root).errors)).toEqual([]);
     expect(validateAgainstSchema(buildSchemaDocument(root), schema)).toEqual([]);
 
     // A mistyped ifid stops the build rather than shipping another story's id.
     setIfid(root, "ifid: not-a-uuid\n");
-    expect(validateProject(root).errors).toContain("story.md ifid must be a version 4 UUID, such as 3F2C9A61-7B1D-4E8A-9C3B-2A6D5E4F1B07");
+    expect(messages(validateProject(root).errors)).toContain("story.md ifid must be a version 4 UUID, such as 3F2C9A61-7B1D-4E8A-9C3B-2A6D5E4F1B07");
     expect(validateAgainstSchema(buildSchemaDocument(root), schema).join("\n")).toContain("not-a-uuid");
     expect(() => buildBook(root, { format: "twee" })).toThrow("Cannot build twee until these are fixed:\nstory.md ifid must be a version 4 UUID");
   });
@@ -132,16 +132,16 @@ describe("twee build", () => {
     const root = branching();
     chapter(root, 5, "Nobody gets here.");
     const result = buildBook(root, { format: "twee" });
-    expect(result.warnings).toEqual(["chapters/chapter-05.md cannot be reached: no choice path from chapter-01 leads to it"]);
+    expect(messages(result.warnings)).toEqual(["chapters/chapter-05.md cannot be reached: no choice path from chapter-01 leads to it"]);
     expect(read(result.outFile)).toContain(":: chapter-05\nNobody gets here.\n");
-    expect(validateLinks(root).warnings).toEqual(["chapters/chapter-05.md cannot be reached: no choice path from chapter-01 leads to it"]);
+    expect(messages(validateLinks(root).warnings)).toEqual(["chapters/chapter-05.md cannot be reached: no choice path from chapter-01 leads to it"]);
 
     // A chapter not written yet is a plan to links, but the build needs it.
     chapter(root, 4, "End.", choices(["Try again", "chapter-09"]));
     expect(() => buildBook(root, { format: "twee" })).toThrow("Cannot build twee until these are fixed:\nchapters/chapter-04.md choices[0] references missing chapter chapter-09");
-    expect(validateLinks(root).errors).toEqual([]);
+    expect(messages(validateLinks(root).errors)).toEqual([]);
     chapter(root, 4, "End.", choices(["Try again", "chapter-9"]));
-    expect(validateLinks(root).errors).toEqual(["chapters/chapter-04.md choices[0] references missing chapter chapter-9"]);
+    expect(messages(validateLinks(root).errors)).toEqual(["chapters/chapter-04.md choices[0] references missing chapter chapter-9"]);
 
     chapter(root, 4, "End.", "choices: chapter-01");
     expect(() => buildBook(root, { format: "twee" })).toThrow("chapters/chapter-04.md frontmatter field choices must be a list of { text, to } entries");
@@ -171,7 +171,7 @@ describe("twee build", () => {
   - text: Padded
     to: "chapter-02 "`);
     chapter(root, 2, "End.");
-    const errors = validateProject(root).errors;
+    const errors = messages(validateProject(root).errors);
     expect(errors).toContain("chapters/chapter-01.md choices[8] to chapter-02  must be a kebab-case chapter id");
     expect(errors).toEqual([
       "chapters/chapter-01.md choices[0] must have text and to, such as { text: Follow the light, to: chapter-02 }",
@@ -222,7 +222,7 @@ describe("twee on the command line", () => {
     const root = branching();
     const storyPath = path.join(root, "story.md");
     fs.writeFileSync(storyPath, read(storyPath).replace("schema-version: 2\n", "schema-version: 2\ncli-defaults:\n  - command: build\n    format: twee\n"));
-    expect(validateProject(root).errors).toEqual([]);
+    expect(messages(validateProject(root).errors)).toEqual([]);
     const io = memoryIo(root);
     expect(runCli(["build", root], io)).toBe(0);
     expect(io.output()).toContain("as twee to");
@@ -246,10 +246,10 @@ describe("choice targets follow move and remove", () => {
 
   test("remove drops the choices that led to the removed chapter", () => {
     const root = branching();
-    expect(removeEntity(root, { kind: "chapter", id: "chapter-03" }).warnings).toEqual(["chapters/chapter-01.md had choices leading to chapter-03, which remove dropped; a chapter left with no choices is an ending, so check where it leads now"]);
+    expect(messages(removeEntity(root, { kind: "chapter", id: "chapter-03" }).warnings)).toEqual(["chapters/chapter-01.md had choices leading to chapter-03, which remove dropped; a chapter left with no choices is an ending, so check where it leads now"]);
     expect(choiceTargets(root, "chapter-01")).toEqual([{ text: "Search the rocks", to: "chapter-02" }]);
     chapter(root, 3, "Back.", choices(["Go up", "chapter-04"]));
-    expect(removeEntity(root, { kind: "chapter", id: "chapter-04" }).warnings[0]).toStartWith("chapters/chapter-02.md, chapters/chapter-03.md had choices leading to chapter-04, which remove dropped; a chapter left with no choices is an ending, so check where they lead now");
+    expect(messages(removeEntity(root, { kind: "chapter", id: "chapter-04" }).warnings)[0]).toStartWith("chapters/chapter-02.md, chapters/chapter-03.md had choices leading to chapter-04, which remove dropped; a chapter left with no choices is an ending, so check where they lead now");
     expect(validateLinks(root)).toMatchObject({ errors: [], warnings: ["chapters/chapter-03.md cannot be reached: no choice path from chapter-01 leads to it"] });
   });
 
@@ -258,7 +258,7 @@ describe("choice targets follow move and remove", () => {
     chapter(root, 1, "Start.", choices(["Go", "chapter-03"]));
     chapter(root, 2, "Middle.");
     chapter(root, 3, "End.");
-    expect(removeEntity(root, { kind: "chapter", id: "chapter-03" }).warnings).toEqual(["chapters/chapter-01.md had the last choices in the book, leading to chapter-03, which remove dropped; with no choices left the book is linear again and each chapter continues to the next, so add choices back to keep it branching"]);
+    expect(messages(removeEntity(root, { kind: "chapter", id: "chapter-03" }).warnings)).toEqual(["chapters/chapter-01.md had the last choices in the book, leading to chapter-03, which remove dropped; with no choices left the book is linear again and each chapter continues to the next, so add choices back to keep it branching"]);
     expect(choiceTargets(root, "chapter-01")).toEqual([]);
   });
 

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { createStoryProject, reindexProject, validateProject } from "../src/story.js";
-import { makeTempDir } from "./helpers.js";
+import { makeTempDir, messages } from "./helpers.js";
 
 describe("retitled story", () => {
   test("validate points at story reindex, which clears the stale story ids", () => {
@@ -12,10 +12,10 @@ describe("retitled story", () => {
 
     const before = validateProject(root);
     expect(before.ok).toBe(false);
-    expect(before.errors).toContain(
+    expect(messages(before.errors)).toContain(
       "characters/_index.md story must be the-keeper-of-gull-rock (run story reindex after changing the story.md title)"
     );
-    expect(before.errors.join("\n")).toContain("continuity/state.md story must be the-keeper-of-gull-rock (run story reindex");
+    expect(messages(before.errors).join("\n")).toContain("continuity/state.md story must be the-keeper-of-gull-rock (run story reindex");
 
     reindexProject(root);
     expect(validateProject(root).ok).toBe(true);

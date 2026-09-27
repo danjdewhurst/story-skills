@@ -12,7 +12,7 @@ import { analyzeChapter, chapterFindings, proseRules, similarNames } from "../sr
 import { splitSentences } from "../src/sentences.js";
 import { buildVoices, quotedSpans } from "../src/voices.js";
 import { createEntity, createStoryProject, projectProgress, proseReport, validateProject, voicesReport } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -64,7 +64,7 @@ describe("progress (#56, #72, #216, #220)", () => {
     const replaced = fs.readFileSync(path.join(root, "progress.md"), "utf8");
     expect(replaced).toContain("note: good day");
     expect(replaced).toContain("words: 4");
-    expect(validateProject(root).errors).toEqual([]);
+    expect(messages(validateProject(root).errors)).toEqual([]);
   });
 
   test("#72 a padded --date is trimmed, so a second log replaces the first", () => {
@@ -80,7 +80,7 @@ describe("progress (#56, #72, #216, #220)", () => {
   test("#72 validate catches a duplicate date hidden by padding", () => {
     const root = newProject();
     fs.writeFileSync(path.join(root, "progress.md"), "---\ntype: progress-log\nsessions:\n  - date: \" 2026-09-25\"\n    words: 1\n  - date: 2026-09-25\n    words: 2\n---\n", "utf8");
-    expect(validateProject(root).errors.join("\n")).toContain("repeats date 2026-09-25");
+    expect(messages(validateProject(root).errors).join("\n")).toContain("repeats date 2026-09-25");
   });
 
   test("#72 progress reports an invalid target-words or deadline", () => {
@@ -250,12 +250,12 @@ describe("prose (#81, #126, #210, #211, #212, #213, #216)", () => {
       variants: [], narrationWords: 0, filterWords: [], adverbs: [], bookisms: [],
       sentences: { count: 20, mean: 5, longest: 12, spread: 4.975 }
     });
-    expect(findings[0]).toContain("spread 4.97 words");
+    expect(messages(findings)[0]).toContain("spread 4.97 words");
     const rate = chapterFindings("ch", {
       variants: [], narrationWords: 1000, filterWords: [{ word: "felt", count: 10.04 }], adverbs: [], bookisms: [],
       sentences: { count: 0, mean: 0, longest: 0, spread: 0 }
     });
-    expect(rate[0]).toContain("has 10.04 filter words");
+    expect(messages(rate)[0]).toContain("has 10.04 filter words");
   });
 });
 
@@ -313,7 +313,7 @@ describe("voices (#83, #210, #214, #215, #216, #217)", () => {
   test("#217 shares exactly 10 points apart are treated alike", () => {
     const lines = (name, questions) => Array.from({ length: 10 }, (_, index) => `"${index < questions ? "Where are we going now?" : "We are going home now."}" ${name} said.`);
     const report = buildVoices(project(["Anna", "Bert", "Cara"]), [{ id: "chapter-01", paragraphs: [...lines("Anna", 3), ...lines("Bert", 2), ...lines("Cara", 4)] }]);
-    expect(report.warnings.filter((warning) => warning.includes("may sound alike") && warning.includes("anna"))).toEqual([]);
+    expect(messages(report.warnings).filter((warning) => warning.includes("may sound alike") && warning.includes("anna"))).toEqual([]);
   });
 });
 
@@ -322,7 +322,7 @@ describe("pacing and clues (#216, #217, #223)", () => {
 
   test("#217 the median is compared exactly", () => {
     const pacing = buildPacing({ chapters: [100, 100, 101, 202].map((words, index) => chapter(index + 1, words)), scenes: [] });
-    expect(pacing.warnings.join("\n")).toContain("chapter-04 runs 202 words, over twice the median chapter");
+    expect(messages(pacing.warnings).join("\n")).toContain("chapter-04 runs 202 words, over twice the median chapter");
   });
 
   test("#216 #223 pacing says 1 scene and keeps wide rows aligned", () => {
@@ -366,6 +366,6 @@ describe("rounding and plurals elsewhere (#216)", () => {
   test("validate says a chapter has no word-count instead of declaring 0", () => {
     const root = newProject();
     fs.writeFileSync(path.join(root, "chapters", "chapter-01.md"), "---\ntitle: One\nnumber: 1\nstatus: draft\n---\n## Chapter Text\n\nOne two three.\n", "utf8");
-    expect(validateProject(root).warnings).toContain("chapters/chapter-01.md has no word-count (contains 3)");
+    expect(messages(validateProject(root).warnings)).toContain("chapters/chapter-01.md has no word-count (contains 3)");
   });
 });

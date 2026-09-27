@@ -4,7 +4,7 @@ import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { analyzeChapter, proseRules, repeatedPhrases, similarNames } from "../src/prose.js";
 import { createEntity, createStoryProject, proseReport, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 function proseProject(title = "Prose Story") {
   const cwd = makeTempDir();
@@ -44,8 +44,8 @@ describe("style sheet", () => {
     expect(text).toContain("dialect: unspecified");
     expect(text).toContain("## Character Voices");
     const validation = validateProject(root);
-    expect(validation.errors).toEqual([]);
-    expect(validation.warnings.join("\n")).not.toContain("style-sheet.md");
+    expect(messages(validation.errors)).toEqual([]);
+    expect(messages(validation.warnings).join("\n")).not.toContain("style-sheet.md");
   });
 
   test("init --force adds a missing style sheet and keeps an existing one", () => {
@@ -62,7 +62,7 @@ describe("style sheet", () => {
   test("a project without a style sheet is still valid", () => {
     const { root } = proseProject();
     fs.rmSync(path.join(root, "style-sheet.md"));
-    expect(validateProject(root).errors).toEqual([]);
+    expect(messages(validateProject(root).errors)).toEqual([]);
   });
 
   test("validate rejects malformed style-sheet frontmatter", () => {
@@ -79,7 +79,7 @@ watch-words: suddenly
 allow-words:
   - ""
 `);
-    const { errors } = validateProject(root);
+    const errors = messages(validateProject(root).errors);
 
     expect(errors).toContain("style-sheet.md type must be style-sheet");
     expect(errors).toContain("style-sheet.md frontmatter field dialect has unsupported value klingon");
@@ -93,7 +93,7 @@ allow-words:
   test("validate reports an unparsable style sheet", () => {
     const { root } = proseProject();
     fs.writeFileSync(path.join(root, "style-sheet.md"), "# no frontmatter\n", "utf8");
-    expect(validateProject(root).errors.join("\n")).toContain("style-sheet.md:");
+    expect(messages(validateProject(root).errors).join("\n")).toContain("style-sheet.md:");
   });
 });
 
@@ -206,7 +206,7 @@ describe("proseReport", () => {
     writeChapter(root, 1, `${flat}\n\n"Go," she hissed. "Now," he snapped. "Fine," she retorted.`);
 
     const report = proseReport(root);
-    const warnings = report.warnings.join("\n");
+    const warnings = messages(report.warnings).join("\n");
 
     expect(report.ok).toBe(true);
     expect(report.styleSheet).toBe(true);
@@ -220,13 +220,13 @@ describe("proseReport", () => {
   test("rate findings wait for enough narration", () => {
     const { root } = proseProject();
     writeChapter(root, 1, "She felt it. She saw it. She knew it slowly.");
-    expect(proseReport(root).warnings).toEqual([]);
+    expect(messages(proseReport(root).warnings)).toEqual([]);
   });
 
   test("reports adverb density over the threshold", () => {
     const { root } = proseProject();
     writeChapter(root, 1, "He moved quickly across the long wide field toward the old grey barn and home. ".repeat(30));
-    expect(proseReport(root).warnings.join("\n")).toMatch(/-ly adverbs per 1,000 narration words \(over 12\): quickly 30/);
+    expect(messages(proseReport(root).warnings).join("\n")).toMatch(/-ly adverbs per 1,000 narration words \(over 12\): quickly 30/);
   });
 
   test("collects unreadable chapters as errors", () => {
@@ -238,7 +238,7 @@ describe("proseReport", () => {
 
     expect(report.ok).toBe(true);
     expect(broken.ok).toBe(false);
-    expect(broken.errors.join("\n")).toContain("chapters/chapter-01.md");
+    expect(messages(broken.errors).join("\n")).toContain("chapters/chapter-01.md");
   });
 
   test("story prose prints the report and exits 0 with warnings", () => {

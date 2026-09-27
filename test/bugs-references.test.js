@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { checkProjectContinuity, createEntity, createStoryProject, moveEntity, removeEntity, renameEntity, scanProject, validateLinks, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -64,7 +64,7 @@ describe("reference handling in add, rename, remove, and move", () => {
 
     createEntity(root, { kind: "scene", name: "A", chapter: "chapter-01" });
     fs.appendFileSync(path.join(root, "plot", "timeline.md"), "\n- chapter-03-scene-01 left over\n");
-    expect(moveEntity(root, { kind: "scene", id: "chapter-01-scene-01", chapter: "chapter-03" }).warnings.join("\n")).toContain("plot/timeline.md");
+    expect(messages(moveEntity(root, { kind: "scene", id: "chapter-01-scene-01", chapter: "chapter-03" }).warnings).join("\n")).toContain("plot/timeline.md");
   });
 
   test("#68 add refuses a resolved or status chapter that is not written yet", () => {
@@ -77,7 +77,7 @@ describe("reference handling in add, rename, remove, and move", () => {
     expect(fs.readdirSync(path.join(root, "continuity", "questions"))).toEqual(["_index.md"]);
     createEntity(root, { kind: "question", name: "When", introduced: "chapter-01", resolved: "chapter-01" });
     createEntity(root, { kind: "promise", name: "Q", planted: "chapter-01", payoff: "chapter-05" });
-    expect(validateLinks(root).errors).toEqual([]);
+    expect(messages(validateLinks(root).errors)).toEqual([]);
   });
 
   test("#69 rename and remove artifact follow state-changes target", () => {
@@ -141,8 +141,8 @@ describe("reference handling in add, rename, remove, and move", () => {
     expect(chapter.locations).toEqual(["port-kestrel"]);
     createEntity(root, { kind: "research", name: "R", risk: ["legal", "legal"], "used-in": ["chapter-01", "chapter-01"] });
     expect(read(root, "research", "r.md")).toContain("used-in:\n  - chapter-01\n");
-    expect(validateProject(root).errors).toEqual([]);
-    expect(validateLinks(root).errors).toEqual([]);
+    expect(messages(validateProject(root).errors)).toEqual([]);
+    expect(messages(validateLinks(root).errors)).toEqual([]);
   });
 
   test("#101 rename and move rewrite reference-style link definitions, and links checks them", () => {
@@ -154,7 +154,7 @@ describe("reference handling in add, rename, remove, and move", () => {
     expect(read(root, "chapters", "chapter-01.md")).toContain("[bo-link]: ../characters/bob-ray.md\n");
 
     fs.appendFileSync(path.join(root, "plot", "timeline.md"), "\n[gone]: ../characters/ghost.md\n");
-    expect(validateLinks(root).errors).toContain("plot/timeline.md links to missing file ../characters/ghost.md");
+    expect(messages(validateLinks(root).errors)).toContain("plot/timeline.md links to missing file ../characters/ghost.md");
   });
 
   test("#127 move rewrites chapter ids in the plot/_index.md theme tracking table", () => {
@@ -195,7 +195,7 @@ describe("reference handling in add, rename, remove, and move", () => {
     expect(() => createEntity(root, { kind: "research", name: "R", "used-in": "chapter-003" })).toThrow("did you mean chapter-03?");
     createEntity(root, { kind: "promise", name: "P", payoff: "chapter-03" });
     edit(root, path.join("continuity", "promises", "p.md"), "payoff: chapter-03", "payoff: chapter-3");
-    expect(validateLinks(root).errors).toContain("continuity/promises/p.md references missing chapter chapter-3");
+    expect(messages(validateLinks(root).errors)).toContain("continuity/promises/p.md references missing chapter chapter-3");
   });
 
   test("#176 add and rename refuse an id another kind uses in a shared reference field", () => {
@@ -237,12 +237,12 @@ describe("reference handling in add, rename, remove, and move", () => {
     createEntity(root, { kind: "chapter", name: "A" });
     createEntity(root, { kind: "scene", name: "x", chapter: "chapter-01" });
     fs.appendFileSync(path.join(root, "plot", "timeline.md"), "- chapter-01-draft notes\n- chapter-01-scene-01b alt take\n- pre-chapter-01 backstory\n- chapter-01-scene-01 happens\n");
-    expect(validateLinks(root).errors).toEqual([]);
+    expect(messages(validateLinks(root).errors)).toEqual([]);
     moveEntity(root, { kind: "chapter", id: "chapter-01", number: 2 });
     expect(read(root, "plot", "timeline.md")).toContain("- chapter-02-scene-01 happens\n");
-    expect(validateLinks(root).errors).toEqual([]);
+    expect(messages(validateLinks(root).errors)).toEqual([]);
     fs.appendFileSync(path.join(root, "plot", "timeline.md"), "- chapter-02-scene-09 happens\n");
-    expect(validateLinks(root).errors).toEqual(["plot/timeline.md references missing scene chapter-02-scene-09"]);
-    expect(checkProjectContinuity(root).errors).toEqual([]);
+    expect(messages(validateLinks(root).errors)).toEqual(["plot/timeline.md references missing scene chapter-02-scene-09"]);
+    expect(messages(checkProjectContinuity(root).errors)).toEqual([]);
   });
 });

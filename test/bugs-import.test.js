@@ -4,7 +4,7 @@ import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { extractNameCandidates, importManuscript } from "../src/import.js";
 import { createStoryProject, exportManuscript, scanProject, synopsisBook, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo } from "./helpers.js";
+import { makeTempDir, memoryIo, messages } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -52,7 +52,7 @@ describe("import word counts (#124)", () => {
     const { result, chapters } = importText("# Chapter 1: One\n\nShe walked.\n\n<!-- note to self: fix this later please -->\n\nHe ran.\n");
     expect(result.words).toBe(4);
     expect(chapters[0].declaredWordCount).toBe(4);
-    expect(validateProject(result.root).warnings.filter((warning) => warning.includes("declares"))).toEqual([]);
+    expect(messages(validateProject(result.root).warnings).filter((warning) => warning.includes("declares"))).toEqual([]);
   });
 });
 
@@ -67,7 +67,7 @@ describe("init and import --force on an existing project (#125, #153)", () => {
 
     expect(again.storyId).toBe("the-lamp-at-gull-rock");
     expect(fs.readFileSync(path.join(root, "continuity", "clues", "_index.md"), "utf8")).toContain("story: the-lamp-at-gull-rock");
-    expect(validateProject(root).errors).toEqual([]);
+    expect(messages(validateProject(root).errors)).toEqual([]);
   });
 
   test("init --force names the options a kept story.md did not take", () => {
@@ -124,7 +124,7 @@ describe("headings in comments and code (#144)", () => {
     const { result, chapters } = importText("## Chapter 1: Start\n\nText.\n\n<!--\nOutline:\n## Chapter 2: Planned\nsomething\n-->\n\nMore of chapter one.\n\n```\n## Chapter 9: in code\n```\n\nStill chapter one.\n");
     expect(chapters.map((chapter) => chapter.title)).toEqual(["Start"]);
     expect(chapterText(result.root, 1)).toContain("## Chapter 9: in code");
-    expect(validateProject(result.root).warnings.join("\n")).not.toContain("never closes");
+    expect(messages(validateProject(result.root).warnings).join("\n")).not.toContain("never closes");
   });
 });
 
@@ -291,7 +291,7 @@ describe("import --force parse check (#178)", () => {
     const result = importManuscript({ source: "one.md", title: "Gg", cwd, dir: "gg", force: true });
 
     expect(result.chapters).toBe(1);
-    expect(validateProject(result.root).errors).toEqual([]);
+    expect(messages(validateProject(result.root).errors)).toEqual([]);
   });
 });
 

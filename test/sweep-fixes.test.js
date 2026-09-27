@@ -27,7 +27,7 @@ import {
   validateLinks,
   validateProject
 } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -50,7 +50,7 @@ describe("project structure", () => {
     for (const dir of ["worldbuilding/locations", "worldbuilding/systems", "plot/arcs", "glossary/terms"]) {
       fs.rmSync(path.join(root, dir), { recursive: true });
     }
-    expect(validateProject(root).errors).toEqual([]);
+    expect(messages(validateProject(root).errors)).toEqual([]);
     createEntity(root, { kind: "location", name: "Port" });
     expect(fs.existsSync(path.join(root, "worldbuilding", "locations", "port.md"))).toBe(true);
   });
@@ -76,7 +76,7 @@ describe("project structure", () => {
   test("validate and doctor report the same errors on a partial project", () => {
     const root = newProject();
     fs.rmSync(path.join(root, "scenes"), { recursive: true });
-    expect(projectActions(root).validation.errors).toEqual(validateProject(root).errors);
+    expect(messages(projectActions(root).validation.errors)).toEqual(messages(validateProject(root).errors));
   });
 });
 
@@ -198,8 +198,8 @@ describe("entity commands", () => {
     expect(project.clues[0].status).toBe("planned");
     expect(project.promises.map((promise) => [promise.id, promise.status])).toEqual([["debt", "planted"], ["oath", "planned"]]);
     expect(project.questions[0].status).toBe("open");
-    expect(validateProject(root).errors).toEqual([]);
-    expect(checkProjectContinuity(root).errors).toEqual([]);
+    expect(messages(validateProject(root).errors)).toEqual([]);
+    expect(messages(checkProjectContinuity(root).errors)).toEqual([]);
   });
 
   test("rename updates the entity heading", () => {
@@ -218,7 +218,7 @@ describe("entity commands", () => {
     createEntity(root, { kind: "chapter", name: "Three", number: 3 });
     createEntity(root, { kind: "question", name: "Who", introduced: "chapter-01", resolved: "chapter-03" });
     expect(scanProject(root).questions[0].status).toBe("answered");
-    expect(checkProjectContinuity(root).errors).toEqual([]);
+    expect(messages(checkProjectContinuity(root).errors)).toEqual([]);
     expect(() => createEntity(root, { kind: "question", name: "Why", resolved: "chapter-03", status: "open" })).toThrow("cannot have status open");
   });
 
@@ -230,7 +230,7 @@ describe("entity commands", () => {
     const project = scanProject(root);
     expect(project.chapters[0].characters).toEqual(["mara"]);
     expect(project.scenes[0].characters).toEqual(["mara"]);
-    expect(checkProjectContinuity(root).warnings.join("\n")).not.toContain("is not listed in characters");
+    expect(messages(checkProjectContinuity(root).warnings).join("\n")).not.toContain("is not listed in characters");
   });
 
   test("init takes the story id from --dir when the title has no ASCII letters", () => {
@@ -240,7 +240,7 @@ describe("entity commands", () => {
     createEntity(created.root, { kind: "chapter", name: "One", number: 1 });
     const built = buildBook(created.root, { format: "epub" });
     expect(path.basename(built.outFile)).toBe("war-and-peace.epub");
-    expect(validateProject(created.root).errors).toEqual([]);
+    expect(messages(validateProject(created.root).errors)).toEqual([]);
   });
 });
 
@@ -250,7 +250,7 @@ describe("continuity ledger", () => {
     createEntity(root, { kind: "chapter", name: "One", number: 1 });
     createEntity(root, { kind: "clue", name: "Locket", planted: "chapter-01", payoff: "chapter-05" });
     createEntity(root, { kind: "promise", name: "Duel", planted: "chapter-04", status: "planned" });
-    expect(validateLinks(root).errors).toEqual([]);
+    expect(messages(validateLinks(root).errors)).toEqual([]);
     // A planted status needs the chapter written, so add refuses it (#68).
     expect(() => createEntity(root, { kind: "clue", name: "Ring", planted: "chapter-04", status: "planted" })).toThrow("--planted chapter-04 is not written yet");
   });
@@ -261,7 +261,7 @@ describe("continuity ledger", () => {
     createEntity(root, { kind: "clue", name: "Locket", planted: "chapter-01", status: "planned" });
     createEntity(root, { kind: "promise", name: "Duel", planted: "chapter-01", status: "planned" });
     createEntity(root, { kind: "clue", name: "Ring", planted: "chapter-03", status: "planned" });
-    const warnings = checkProjectContinuity(root).warnings;
+    const warnings = messages(checkProjectContinuity(root).warnings);
     expect(warnings).toContain("continuity/clues/locket.md records planted chapter chapter-01 but status is still planned");
     expect(warnings).toContain("continuity/promises/duel.md records planted chapter chapter-01 but status is still planned");
     expect(warnings.join("\n")).not.toContain("ring.md");
@@ -323,7 +323,7 @@ describe("reports and views", () => {
     createEntity(root, { kind: "chapter", name: "One", number: 1 });
     createEntity(root, { kind: "scene", name: "S1", chapter: "chapter-01", character: "mara", location: "a", date: "2024-01-01", time: "00:00" });
     createEntity(root, { kind: "scene", name: "S2", chapter: "chapter-01", character: "mara", location: "b", date: "2024-01-01", time: "10:59" });
-    const error = checkProjectContinuity(root).errors.find((entry) => entry.includes("fastest route"));
+    const error = messages(checkProjectContinuity(root).errors).find((entry) => entry.includes("fastest route"));
     expect(error).toContain("10.9h after");
     expect(error).toContain("takes 11h");
   });
@@ -370,7 +370,7 @@ describe("builds", () => {
   test("export defaults to dist/manuscript.md", () => {
     const root = bookProject("Text.");
     expect(exportManuscript(root).outFile).toBe(path.join(root, "dist", "manuscript.md"));
-    expect(validateProject(root).warnings.join("\n")).not.toContain("manuscript.md");
+    expect(messages(validateProject(root).warnings).join("\n")).not.toContain("manuscript.md");
   });
 
   test("HTML comments stay out of word counts and builds", () => {
@@ -537,7 +537,7 @@ describe("round two", () => {
     createEntity(root, { kind: "clue", name: "Locket", planted: "chapter-01", payoff: "chapter-09" });
     createEntity(root, { kind: "promise", name: "Duel", planted: "chapter-07", status: "planned", payoff: "chapter-12" });
     createEntity(root, { kind: "chapter", name: "Finale", number: 20 });
-    expect(validateLinks(root).errors).toEqual([]);
+    expect(messages(validateLinks(root).errors)).toEqual([]);
   });
 
   test("plain-text import leaves sentences that start like headings alone", () => {
@@ -593,7 +593,7 @@ describe("round two", () => {
     appendProse(root, "chapters/chapter-01.md", "Type `<!-- x -->` here.\n\nZeta <!-- unterminated");
     const html = fs.readFileSync(buildBook(root, { format: "html" }).outFile, "utf8");
     expect(html).toContain("Type &lt;!-- x --&gt; here.");
-    expect(validateProject(root).warnings).toContain("chapters/chapter-01.md opens an HTML comment (<!--) that never closes, so the text after it shows in builds and word counts");
+    expect(messages(validateProject(root).warnings)).toContain("chapters/chapter-01.md opens an HTML comment (<!--) that never closes, so the text after it shows in builds and word counts");
   });
 });
 
@@ -609,7 +609,7 @@ describe("round three", () => {
     const started = performance.now();
     expect(computeWordCounts(root).total).toBe(0);
     expect(validateLinks(root).ok).toBe(false);
-    expect(validateProject(root).errors.join("\n")).toContain("through symlink");
+    expect(messages(validateProject(root).errors).join("\n")).toContain("through symlink");
     expect(performance.now() - started).toBeLessThan(5000);
   });
 
@@ -627,7 +627,7 @@ describe("round three", () => {
     writeMarkdown(path.join(root, "continuity", "clues", "locket.md"), "title: Locket\nstatus: planted\nplanted: chapter-01\npayoff: chapter-1");
     writeMarkdown(path.join(root, "continuity", "clues", "zero.md"), "title: Zero\nstatus: planted\nplanted: chapter-01\npayoff: chapter-00");
     createEntity(root, { kind: "clue", name: "Later", planted: "chapter-01", payoff: "chapter-09" });
-    const errors = validateLinks(root).errors;
+    const errors = messages(validateLinks(root).errors);
     expect(errors).toContain("continuity/clues/locket.md references missing chapter chapter-1");
     expect(errors).toContain("continuity/clues/zero.md references missing chapter chapter-00");
     expect(errors.join("\n")).not.toContain("chapter-09");
@@ -649,7 +649,7 @@ describe("round three", () => {
     createEntity(root, { kind: "chapter", name: "One", number: 1 });
     appendProse(root, "chapters/chapter-01.md", "```\n<!-- literal\n```\n\nKept paragraph here.\n\n```\nend -->\n```");
     expect(computeWordCounts(root).total).toBe(5);
-    expect(validateProject(root).warnings.join("\n")).not.toContain("never closes");
+    expect(messages(validateProject(root).warnings).join("\n")).not.toContain("never closes");
     const started = performance.now();
     appendProse(root, "chapters/chapter-01.md", `${"[a](b ".repeat(20000)}${"<!--".repeat(20000)}`);
     computeWordCounts(root);
@@ -706,7 +706,7 @@ describe("round three", () => {
     createEntity(root, { kind: "character", name: "Mara" });
     expect(() => renameEntity(root, { kind: "character", id: "mara", name: "Aux" })).toThrow("Windows reserves");
     writeMarkdown(path.join(root, "characters", "nul.md"), "name: Nul\nrole: minor\nstatus: alive");
-    expect(validateProject(root).warnings).toContain("characters/nul.md uses a file name Windows reserves, so the project cannot be checked out on Windows; rename the entity");
+    expect(messages(validateProject(root).warnings)).toContain("characters/nul.md uses a file name Windows reserves, so the project cannot be checked out on Windows; rename the entity");
   });
 
   test("exemption patterns match paths written with either separator", () => {
@@ -809,7 +809,7 @@ describe("round three", () => {
     fs.symlinkSync(outside, path.join(root, "continuity", "exemptions.md"));
     const result = checkProjectContinuity(root);
     expect(result.ok).toBe(false);
-    expect(result.errors.join("\n")).toContain("continuity/exemptions.md: Refusing to read through symlink");
+    expect(messages(result.errors).join("\n")).toContain("continuity/exemptions.md: Refusing to read through symlink");
   });
 });
 
@@ -975,7 +975,7 @@ describe("round four", () => {
     createEntity(root, { kind: "chapter", name: "One", number: 1 });
     createEntity(root, { kind: "scene", name: "S1", chapter: "chapter-01", character: "mara", location: "a", date: "2024-01-01", time: "00:00" });
     createEntity(root, { kind: "scene", name: "S2", chapter: "chapter-01", character: "mara", location: "d", date: "2024-01-01", time: "02:00" });
-    const error = checkProjectContinuity(root).errors.find((entry) => entry.includes("fastest route"));
+    const error = messages(checkProjectContinuity(root).errors).find((entry) => entry.includes("fastest route"));
     expect(error).toContain("takes 3h");
   });
 });
@@ -990,13 +990,13 @@ describe("round five", () => {
     createEntity(root, { kind: "scene", name: "E", chapter: "chapter-01", character: "mara", location: "x", date: "2024-01-01", time: "19:00" });
     createEntity(root, { kind: "scene", name: "M", chapter: "chapter-01", character: "mara", location: "y", date: "2024-01-01", time: "night" });
     createEntity(root, { kind: "scene", name: "C", chapter: "chapter-01", character: "mara", location: "y", date: "2024-01-01", time: "20:30" });
-    expect(checkProjectContinuity(root).errors).toContain("scenes/chapter-01-scene-03.md puts mara at y 1.5h after scenes/chapter-01-scene-01.md at x, but the fastest route takes 1.6h");
+    expect(messages(checkProjectContinuity(root).errors)).toContain("scenes/chapter-01-scene-03.md puts mara at y 1.5h after scenes/chapter-01-scene-01.md at x, but the fastest route takes 1.6h");
   });
 
   test("a question may be introduced in a chapter not written yet", () => {
     const root = newProject();
     createEntity(root, { kind: "question", name: "Who", introduced: "chapter-02" });
-    expect(validateLinks(root).errors).toEqual([]);
+    expect(messages(validateLinks(root).errors)).toEqual([]);
     createEntity(root, { kind: "chapter", name: "One", number: 1 });
     // A resolved chapter must exist, so add refuses it (#68).
     expect(() => createEntity(root, { kind: "question", name: "Why", introduced: "chapter-01", resolved: "chapter-04" })).toThrow("--resolved chapter-04 is not written yet");
@@ -1012,7 +1012,7 @@ describe("round five", () => {
     const chapter = scanProject(root).chapters[0];
     expect(chapter.locations).toEqual(["harbor"]);
     expect(chapter.characters).toEqual(["mara"]);
-    expect(checkProjectContinuity(root).warnings.join("\n")).not.toContain("does not list");
+    expect(messages(checkProjectContinuity(root).warnings).join("\n")).not.toContain("does not list");
   });
 
   test("next stops suggesting chapters for a finished book and sorts by priority", () => {
@@ -1102,16 +1102,16 @@ describe("round six", () => {
     writeMarkdown(path.join(root, "characters", "theo.md"), "name: Theo\nrole: supporting\nstatus: alive\nrelationships:\n  - character: ilya\n    type: former-supervisor");
     writeMarkdown(path.join(root, "characters", "mara.md"), "name: Mara\nrole: protagonist\nstatus: alive\nrelationships:\n  - character: ilya\n    type: antagonist");
     const result = validateLinks(root);
-    expect(result.errors).toEqual([]);
-    expect(result.warnings).toContain("characters/ilya.md relationship adversary to mara has backlink antagonist, a pairing from before story-skills 0.10.0; change the backlink to adversary");
-    expect(result.warnings.filter((warning) => warning.includes("change the backlink to former-subordinate"))).toHaveLength(2);
+    expect(messages(result.errors)).toEqual([]);
+    expect(messages(result.warnings)).toContain("characters/ilya.md relationship adversary to mara has backlink antagonist, a pairing from before story-skills 0.10.0; change the backlink to adversary");
+    expect(messages(result.warnings).filter((warning) => warning.includes("change the backlink to former-subordinate"))).toHaveLength(2);
   });
 
   test("a character who died before the story is flagged in a cast", () => {
     const root = newProject();
     writeMarkdown(path.join(root, "characters", "tam.md"), "name: Tam\nrole: minor\nstatus: deceased");
     createEntity(root, { kind: "chapter", name: "One", number: 1, pov: "tam" });
-    expect(checkProjectContinuity(root).warnings).toContain("chapters/chapter-01.md lists tam, who died before the story (deceased with no died-in); move appearances to mentions");
+    expect(messages(checkProjectContinuity(root).warnings)).toContain("chapters/chapter-01.md lists tam, who died before the story (deceased with no died-in); move appearances to mentions");
   });
 
   test("next asks for post-hoc notes on discovered chapters", () => {
@@ -1127,7 +1127,7 @@ describe("round six", () => {
   test("a missing registry points to story migrate, and abandoned stories get no draft suggestion", () => {
     const root = newProject();
     fs.rmSync(path.join(root, "continuity", "clues"), { recursive: true });
-    expect(validateProject(root).errors).toContain("Missing required path: continuity/clues/_index.md (story migrate adds missing registries)");
+    expect(messages(validateProject(root).errors)).toContain("Missing required path: continuity/clues/_index.md (story migrate adds missing registries)");
     migrateProject(root);
     const story = path.join(root, "story.md");
     fs.writeFileSync(story, fs.readFileSync(story, "utf8").replace(/status: \w+/, "status: abandoned"));
@@ -1201,7 +1201,7 @@ describe("round seven", () => {
   test("parse errors name files by their project path only", () => {
     const root = newProject();
     fs.writeFileSync(path.join(root, "progress.md"), "no frontmatter\n");
-    const errors = validateProject(root).errors;
+    const errors = messages(validateProject(root).errors);
     expect(errors).toContain("progress.md: is missing YAML frontmatter");
     expect(errors.join("\n")).not.toContain(root);
   });
@@ -1209,7 +1209,7 @@ describe("round seven", () => {
   test("an unreadable story.md is reported once", () => {
     const root = newProject();
     fs.writeFileSync(path.join(root, "story.md"), "no frontmatter\n");
-    expect(validateProject(root).errors).toEqual(["story.md: is missing YAML frontmatter"]);
+    expect(messages(validateProject(root).errors)).toEqual(["story.md: is missing YAML frontmatter"]);
   });
 
   test("file-system errors are described in plain words", () => {
@@ -1245,12 +1245,12 @@ describe("round seven", () => {
     const chapter = path.join(root, "chapters", "chapter-01.md");
     fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace("word-count: 0", "word-count: many").replace("status: outline", "status:\n  - draft"));
     let result = validateProject(root);
-    expect(result.warnings.join("\n")).not.toContain("NaN");
+    expect(messages(result.warnings).join("\n")).not.toContain("NaN");
     fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace("word-count: many", "word-count: many\nhook:\n  - cliffhanger"));
-    expect(validateProject(root).errors).toContain("chapters/chapter-01.md frontmatter field hook must be a single value, not a list");
+    expect(messages(validateProject(root).errors)).toContain("chapters/chapter-01.md frontmatter field hook must be a single value, not a list");
     // One error for the list, not two.
     result = validateProject(root);
-    expect(result.errors.filter((error) => error.includes("field status"))).toEqual(["chapters/chapter-01.md frontmatter field status must be a scalar"]);
+    expect(messages(result.errors).filter((error) => error.includes("field status"))).toEqual(["chapters/chapter-01.md frontmatter field status must be a scalar"]);
   });
 
   test("the CLI suggests near misses and treats -x as an option", () => {
@@ -1300,7 +1300,7 @@ describe("round eight", () => {
     fs.writeFileSync(one, fs.readFileSync(one, "utf8").replace("mara-quill", "mara-tide"));
     // ...so a rerun finishes the job.
     expect(renameEntity(root, { kind: "character", id: "mara-quill", name: "Mara Tide" }).id).toBe("mara-tide");
-    expect(validateLinks(root).errors).toEqual([]);
+    expect(messages(validateLinks(root).errors)).toEqual([]);
     // Killed after the old file was deleted, only the reindex was missed; a
     // rerun resumes rather than failing with "does not exist".
     expect(invoke(path.dirname(root), ["rename", "character", "mara-quill", "Mara Tide", "--path", root]).out).toContain("Finished an interrupted rename of character mara-quill to mara-tide");
@@ -1336,7 +1336,7 @@ describe("round eight", () => {
   test("an untitled story.md does not set off registry story errors", () => {
     const root = newProject();
     fs.writeFileSync(path.join(root, "story.md"), "---\nfoo: bar\n---\n");
-    expect(validateProject(root).errors.join("\n")).not.toContain("story must be");
+    expect(messages(validateProject(root).errors).join("\n")).not.toContain("story must be");
   });
 
   test("a chapter pov that none of its scenes share is flagged", () => {
@@ -1345,7 +1345,7 @@ describe("round eight", () => {
     createEntity(root, { kind: "character", name: "Tam" });
     createEntity(root, { kind: "chapter", name: "One", number: 1, pov: "mara", character: "tam" });
     createEntity(root, { kind: "scene", name: "Dock", chapter: "chapter-01", pov: "tam" });
-    expect(checkProjectContinuity(root).warnings).toContain("chapters/chapter-01.md has POV mara but its scenes are told by tam");
+    expect(messages(checkProjectContinuity(root).warnings)).toContain("chapters/chapter-01.md has POV mara but its scenes are told by tam");
   });
 
   test("a payoff chapter that has passed warns at once", () => {
@@ -1353,7 +1353,7 @@ describe("round eight", () => {
     createEntity(root, { kind: "chapter", name: "One", number: 1, status: "draft" });
     createEntity(root, { kind: "chapter", name: "Two", number: 2, status: "draft" });
     createEntity(root, { kind: "clue", name: "Herring", planted: "chapter-01", payoff: "chapter-02", "red-herring": true });
-    expect(checkProjectContinuity(root).warnings).toContain("continuity/clues/herring.md payoff chapter chapter-02 has passed and status is still planted");
+    expect(messages(checkProjectContinuity(root).warnings)).toContain("continuity/clues/herring.md payoff chapter chapter-02 has passed and status is still planted");
   });
 
   test("voices sees a pronoun tag across an ellipsis or bracket", () => {
@@ -1376,7 +1376,7 @@ describe("round eight", () => {
   test("links rejects a pov that is a name, not an id", () => {
     const root = newProject();
     writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft\npov: Mara Quill");
-    expect(validateLinks(root).errors.join("\n")).toContain("must be kebab-case");
+    expect(messages(validateLinks(root).errors).join("\n")).toContain("must be kebab-case");
   });
 
   test("artifact mentions at or before since, and mentions of pre-story losses, are fine", () => {
@@ -1388,13 +1388,13 @@ describe("round eight", () => {
     }
     const state = path.join(root, "continuity", "state.md");
     fs.writeFileSync(state, fs.readFileSync(state, "utf8").replace("object-state: []", "object-state:\n  - artifact: blade\n    status: destroyed\n    since: chapter-02\n  - artifact: crown\n    status: lost"));
-    expect(checkProjectContinuity(root).errors).toEqual(["chapters/chapter-03.md mentions blade, destroyed/lost since chapter-02"]);
+    expect(messages(checkProjectContinuity(root).errors)).toEqual(["chapters/chapter-03.md mentions blade, destroyed/lost since chapter-02"]);
   });
 
   test("malformed exemption entries give one error each and never crash", () => {
     const root = newProject();
     writeMarkdown(path.join(root, "continuity", "exemptions.md"), "type: exemption-log\nexemptions:\n  - just-a-string\n  - ~");
-    const errors = validateProject(root).errors.filter((error) => error.includes("exemptions"));
+    const errors = messages(validateProject(root).errors).filter((error) => error.includes("exemptions"));
     expect(errors.filter((error) => error.includes("must be a mapping"))).toHaveLength(2);
     expect(errors.join("\n")).not.toContain("non-empty pattern");
   });
@@ -1405,7 +1405,7 @@ describe("round eight", () => {
     createEntity(root, { kind: "chapter", name: "Two", number: 2 });
     createEntity(root, { kind: "promise", name: "Oath", planted: "chapter-01", payoff: "chapter-02" });
     createEntity(root, { kind: "clue", name: "Ring", planted: "chapter-01", payoff: "chapter-02" });
-    expect(checkProjectContinuity(root).errors).toEqual([]);
+    expect(messages(checkProjectContinuity(root).errors)).toEqual([]);
   });
 
   test("removing a chapter reopens a resolved question", () => {
@@ -1477,8 +1477,8 @@ describe("move", () => {
     expect(stateData["knowledge-state"][0]["learned-in"]).toBe("chapter-03");
     expect(fs.readFileSync(path.join(root, "plot", "timeline.md"), "utf8")).toContain("- chapter-03: the dock (chapter-03-scene-01)");
     expect(fs.readFileSync(project.chapters[1].file, "utf8")).toContain("# Chapter 3: Two");
-    expect(validateProject(root).errors).toEqual([]);
-    expect(validateLinks(root).errors).toEqual([]);
+    expect(messages(validateProject(root).errors)).toEqual([]);
+    expect(messages(validateLinks(root).errors)).toEqual([]);
   });
 
   test("move chapter refuses a taken number and names the fix", () => {
@@ -1499,7 +1499,7 @@ describe("move", () => {
     moveEntity(root, { kind: "scene", id: "chapter-01-scene-01", scene: 4 });
     project = scanProject(root);
     expect(project.scenes[0].id).toBe("chapter-01-scene-04");
-    expect(validateLinks(root).errors).toEqual([]);
+    expect(messages(validateLinks(root).errors)).toEqual([]);
     expect(() => moveEntity(root, { kind: "scene", id: "chapter-01-scene-04" })).toThrow("move scene requires --chapter <id>, --scene <n>, or both");
     expect(() => moveEntity(root, { kind: "scene", id: "chapter-01-scene-04", chapter: "chapter-07" })).toThrow("chapter chapter-07 does not exist");
     expect(() => moveEntity(root, { kind: "scene", id: "chapter-01-scene-04", scene: 4 })).toThrow("is already scene 4");

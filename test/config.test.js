@@ -3,11 +3,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { COMMANDS } from "../src/commands.js";
-import { FINDING_CODES, SEVERITY_LEVELS, applyDefaults, applySeverity, parseCliConfig, readCliConfig } from "../src/config.js";
+import { SEVERITY_LEVELS, applyDefaults, applySeverity, parseCliConfig, readCliConfig } from "../src/config.js";
+import { codesAt, warn } from "../src/findings.js";
 import { OPTIONS, optionFamily } from "../src/options.js";
 import { PROSE_THRESHOLDS, proseThresholds } from "../src/prose.js";
 import { createStoryProject, proseReport, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 function invoke(cwd, argv, stdin) {
   const io = memoryIo(cwd);
@@ -40,8 +41,24 @@ ${fields.trim()}
 `, `## Chapter Text\n\n${body}\n`);
 }
 
-// A project that raises every warning FINDING_CODES names, so each pattern is
-// pinned against the text its command really writes.
+// The eleven codes story.md severity could name before every finding had a
+// code, and the command that raises each. Projects already name them, so
+// they keep these names.
+const LEGACY_CODES = {
+  "todo-markers": "validate",
+  "stale-registry": "validate",
+  "stale-word-count": "validate",
+  "prose-filter-words": "prose",
+  "prose-adverbs": "prose",
+  "prose-bookisms": "prose",
+  "prose-avoided-spelling": "prose",
+  "pacing-no-hook": "pacing",
+  "clue-unplanted": "clues",
+  "clue-late-plant": "clues",
+  "voice-avoid": "voices"
+};
+
+// A project that raises every warning LEGACY_CODES names.
 function noisyProject() {
   const { root, cwd } = project();
   writeMarkdown(path.join(root, "style-sheet.md"), "type: style-sheet\npreferred:\n  - use: grey\n    avoid: gray", "# Style Sheet\n");
@@ -60,53 +77,35 @@ function noisyProject() {
 }
 
 describe("finding codes", () => {
-  test("every code matches a finding its command writes, and only its own", () => {
+  test("the codes severity named before every finding had one keep their names", () => {
     const { root, cwd } = noisyProject();
-    const all = Object.keys(FINDING_CODES).map((code) => `  - warning: ${code}\n    level: error`).join("\n");
+    const all = Object.keys(LEGACY_CODES).map((code) => `  - warning: ${code}\n    level: error`).join("\n");
     configure(root, `severity:\n${all}`);
     const seen = new Set();
-    for (const command of new Set(Object.values(FINDING_CODES).map((entry) => entry.command))) {
+    for (const command of new Set(Object.values(LEGACY_CODES))) {
       const result = invoke(cwd, [command, root]);
       expect(result.code).toBe(1);
       for (const line of result.err.split("\n").filter((entry) => entry.startsWith("error: "))) {
         const code = /\[([a-z-]+)\]$/.exec(line)?.[1];
-        if (code !== undefined) {
-          expect(FINDING_CODES[code].command).toBe(command);
+        if (Object.hasOwn(LEGACY_CODES, code ?? "")) {
+          expect(LEGACY_CODES[code]).toBe(command);
           seen.add(code);
         }
       }
     }
-    expect([...seen].sort()).toEqual(Object.keys(FINDING_CODES).sort());
+    expect([...seen].sort()).toEqual(Object.keys(LEGACY_CODES).sort());
   });
 
-  test("the missing word-count wording is a stale-word-count finding too", () => {
-    expect(FINDING_CODES["stale-word-count"].pattern.test("chapters/chapter-01.md has no word-count (contains 12)")).toBe(true);
-  });
-
-  test("no finding matches two codes", () => {
-    const samples = [
-      "chapters/chapter-01.md has 2 [TODO markers in its prose, which every build prints: resolve them or move them into an HTML comment",
-      "chapters/_index.md does not list chapter-02.md; run story reindex",
-      "chapters/chapter-01.md declares 1 word but contains 4",
-      "chapters/chapter-01.md declares -5 words but contains 4",
-      "chapters/chapter-01.md has 12.5 filter words per 1,000 narration words (over 10): felt 3",
-      "chapters/chapter-01.md has 13 -ly adverbs per 1,000 narration words (over 12): slowly 3",
-      "chapters/chapter-01.md has 3 said-bookism dialogue tags: hissed 1",
-      "chapters/chapter-01.md uses \"gray\" once; style sheet prefers \"grey\"",
-      "chapter-01 has no hook: record how the chapter ending pulls the reader on",
-      "clue lost-key is revealed in chapter-02 but never planted: readers cannot play fair",
-      "clue wet-boots is planted in the same chapter as its reveal (chapter-02 -> chapter-02): late plant gives readers no time to notice it",
-      "mara-quill says \"okay\", which is in their voice-avoid list (chapter-01)"
-    ];
-    for (const sample of samples) {
-      expect(Object.values(FINDING_CODES).filter((entry) => entry.pattern.test(sample))).toHaveLength(1);
-    }
+  test("a chapter with no word-count raises stale-word-count", () => {
+    const { root } = project();
+    writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft", "## Chapter Text\n\nWords here.\n");
+    expect(validateProject(root).warnings).toContainEqual(warn("stale-word-count", `${path.join("chapters", "chapter-01.md")} has no word-count (contains 2)`, path.join("chapters", "chapter-01.md")));
   });
 
   test("the schema lists the same warning codes and levels as the validator", () => {
     const schema = JSON.parse(fs.readFileSync(path.join(import.meta.dir, "..", "schemas", "story.schema.json"), "utf8"));
     const severity = schema.properties.story.properties.severity.items.properties;
-    expect(severity.warning.enum).toEqual(Object.keys(FINDING_CODES));
+    expect(severity.warning.enum).toEqual(codesAt("warning"));
     expect(severity.level.enum).toEqual(SEVERITY_LEVELS);
     const command = new RegExp(schema.properties.story.properties["cli-defaults"].items.properties.command.pattern, "u");
     expect(COMMANDS.every((entry) => command.test(entry.name))).toBe(true);
@@ -141,9 +140,11 @@ describe("severity", () => {
   });
 
   test("applySeverity keeps continuity-style dismissals and an already failing result", () => {
-    const result = { ok: false, errors: ["broken"], warnings: ["chapter-01 has no hook: record how the chapter ending pulls the reader on", "other"], dismissed: [{ finding: "x", reason: "y" }] };
+    const hook = warn("pacing-no-hook", "chapter-01 has no hook: record how the chapter ending pulls the reader on");
+    const other = warn("voice-avoid", "other");
+    const result = { ok: false, errors: ["broken"], warnings: [hook, other], dismissed: [{ finding: "x", reason: "y" }] };
     const applied = applySeverity(result, [["pacing-no-hook", "off"]]);
-    expect(applied).toEqual({ ok: false, errors: ["broken"], warnings: ["other"], dismissed: [{ finding: "x", reason: "y" }, { finding: result.warnings[0], reason: "severity pacing-no-hook is off in story.md", note: "severity pacing-no-hook is off in story.md" }] });
+    expect(applied).toEqual({ ok: false, errors: ["broken"], warnings: [other], dismissed: [{ finding: "x", reason: "y" }, { finding: hook, reason: "severity pacing-no-hook is off in story.md", note: "severity pacing-no-hook is off in story.md" }] });
     expect(applySeverity(result, [])).toBe(result);
   });
 });
@@ -211,7 +212,7 @@ describe("cli-defaults", () => {
     expect(readCliConfig(cwd)).toEqual({ defaults: {}, severity: {}, errors: [] });
     expect(invoke(cwd, ["init", "Fresh", "--dir", "fresh"]).code).toBe(0);
     fs.writeFileSync(path.join(cwd, "fresh", "story.md"), "no frontmatter\n", "utf8");
-    expect(readCliConfig(path.join(cwd, "fresh")).errors).toEqual([]);
+    expect(messages(readCliConfig(path.join(cwd, "fresh")).errors)).toEqual([]);
   });
 });
 
@@ -245,14 +246,14 @@ describe("config validation", () => {
     test(message, () => {
       const { root } = project();
       configure(root, yaml);
-      expect(validateProject(root).errors).toEqual([message]);
+      expect(messages(validateProject(root).errors)).toEqual([message]);
     });
   }
 
   test("a valid config passes validate and the schema's shape", () => {
     const { root } = project();
     configure(root, "cli-defaults:\n  - command: build\n    format: html\n    shunn: false\n  - command: synopsis\n    pages: 3\n  - command: validate\nseverity:\n  - warning: todo-markers\n    level: error");
-    expect(validateProject(root).errors).toEqual([]);
+    expect(messages(validateProject(root).errors)).toEqual([]);
   });
 
   test("an invalid config stops other commands but not the ones that report it", () => {
@@ -278,7 +279,7 @@ describe("with --json and stdin", () => {
     expect(result.code).toBe(1);
     const json = JSON.parse(result.out);
     expect(json.ok).toBe(false);
-    const promoted = json.diagnostics.find((entry) => entry.message.endsWith("[todo-markers]"));
+    const promoted = json.diagnostics.find((entry) => entry.message.includes("[TODO marker"));
     expect(promoted).toMatchObject({ severity: "error", file: "chapters/chapter-01.md", code: "validate" });
     const dismissed = json.diagnostics.find((entry) => entry.message.includes("declares 3 words"));
     expect(dismissed).toMatchObject({ severity: "dismissed", exemption: "severity stale-word-count is off in story.md" });
@@ -328,8 +329,8 @@ describe("prose thresholds", () => {
 
   test("--max-bookisms warns only above the limit", () => {
     const { root } = noisyProject();
-    expect(proseReport(root, { "max-bookisms": "3" }).warnings.join("\n")).not.toContain("said-bookism");
-    expect(proseReport(root, { "max-bookisms": "2" }).warnings.join("\n")).toContain("has 3 said-bookism dialogue tags");
+    expect(messages(proseReport(root, { "max-bookisms": "3" }).warnings).join("\n")).not.toContain("said-bookism");
+    expect(messages(proseReport(root, { "max-bookisms": "2" }).warnings).join("\n")).toContain("has 3 said-bookism dialogue tags");
   });
 
   test("the threshold flags are prose-only options", () => {

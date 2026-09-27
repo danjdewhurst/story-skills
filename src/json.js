@@ -1,4 +1,5 @@
 import { EXIT_CODES } from "./exit-codes.js";
+import { asFinding } from "./findings.js";
 import { isTruthy } from "./options.js";
 
 // The version of the --json result envelope. Adding a field keeps it;
@@ -34,7 +35,7 @@ export function diagnosticsFrom(result, code) {
 }
 
 export function diagnostic(severity, message, code) {
-  const text = String(message);
+  const text = asFinding(message).message;
   return { severity, file: messageFile(text), message: text, code };
 }
 

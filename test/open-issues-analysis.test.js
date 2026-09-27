@@ -7,7 +7,7 @@ import { formatClueMatrix } from "../src/clues.js";
 import { splitWords, wordCount } from "../src/markdown.js";
 import { splitSentences } from "../src/sentences.js";
 import { buildBook, clueReport, createEntity, createStoryProject, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -124,7 +124,7 @@ describe("#133 [TODO markers in chapter prose", () => {
     writeChapter(root, 1, "A boy called Harry Rowe [TODO: check bible] came.\n\n<!-- [TODO: fine here] -->");
     writeChapter(root, 2, "Clean prose.\n\n<!-- [TODO: only a note] -->");
     const report = validateProject(root);
-    const todo = report.warnings.filter((warning) => warning.includes("[TODO"));
+    const todo = messages(report.warnings).filter((warning) => warning.includes("[TODO"));
     expect(todo).toEqual([`${path.join("chapters", "chapter-01.md")} has 1 [TODO marker in its prose, which every build prints: resolve it or move it into an HTML comment`]);
 
     const { outFile } = buildBook(root, { format: "metadata" });

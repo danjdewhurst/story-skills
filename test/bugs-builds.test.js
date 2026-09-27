@@ -4,7 +4,7 @@ import path from "node:path";
 import { shunnWordCount } from "../src/packaging.js";
 import { textDirection } from "../src/publishing.js";
 import { buildBook, createStoryProject, exportManuscript, synopsisBook, validateProject } from "../src/story.js";
-import { makeTempDir, readArchiveEntries, writeMarkdown } from "./helpers.js";
+import { makeTempDir, readArchiveEntries, writeMarkdown, messages } from "./helpers.js";
 
 const PNG_BYTES = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
 
@@ -101,7 +101,7 @@ describe("build and export bug fixes", () => {
     expect(sheet).toContain("- [ ] Publisher or imprint");
     expect(sheet).toContain("- [ ] Copyright line");
     expect(sheet).toContain("- [ ] Cover image");
-    expect(validateProject(root).warnings).toContain("story.md author is still a [TODO] placeholder; builds leave it out");
+    expect(messages(validateProject(root).warnings)).toContain("story.md author is still a [TODO] placeholder; builds leave it out");
 
     fs.mkdirSync(path.join(root, "assets"));
     fs.writeFileSync(path.join(root, "assets", "cover.png"), PNG_BYTES);
@@ -129,7 +129,7 @@ describe("build and export bug fixes", () => {
     const epub = buildBook(root, { format: "epub" }).outFile;
     expect(entry(epub, "OEBPS/chapter-01.xhtml")).toContain("<title>Chapter 1</title>");
     expect(entry(epub, "OEBPS/chapter-02.xhtml")).toContain("<h1>Chapter 2</h1>");
-    expect(validateProject(root).errors).toContain("chapters/chapter-01.md is missing frontmatter field title");
+    expect(messages(validateProject(root).errors)).toContain("chapters/chapter-01.md is missing frontmatter field title");
   });
 
   test("#121 and #219 the Shunn title page has no bare by and a rounded count", () => {

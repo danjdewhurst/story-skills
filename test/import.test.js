@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { compareImportNames, extractNameCandidates, importManuscript } from "../src/import.js";
 import { exportManuscript, scanProject, validateProject } from "../src/story.js";
-import { makeTempDir } from "./helpers.js";
+import { makeTempDir, messages } from "./helpers.js";
 
 const PROSE = [
   "Mara Quill walked The Long Pier at dawn. The gulls followed Mara Quill past the locked door,",
@@ -302,7 +302,7 @@ describe("manuscript import", () => {
     expect(first).toContain("\n# Chapter 1\n");
     expect(first).not.toContain("Chapter 1: Chapter 1");
     expect(second).toContain("\n# Chapter 2: The Road\n");
-    expect(validateProject(result.root).errors).toEqual([]);
+    expect(messages(validateProject(result.root).errors)).toEqual([]);
 
     const { outFile } = exportManuscript(result.root);
     const manuscript = fs.readFileSync(outFile, "utf8");

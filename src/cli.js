@@ -121,7 +121,7 @@ export function runCli(argv, io) {
     const root = () => resolveRoot(cwd, parsed, name);
     const config = command.project === "none" ? null : projectConfig(command, configRoot(cwd, parsed, root));
     configured = config === null ? [] : applyDefaults(config, name, parsed.options).map((key) => [key, parsed.options[key]]);
-    const severity = config === null ? [] : severityFor(config, name);
+    const severity = config === null ? [] : severityFor(config);
     return command.run({ parsed, io, cwd, root, severity });
   } catch (error) {
     const message = `${describeError(error, io.cwd ?? process.cwd())}${configuredHint(error, configured)}`;

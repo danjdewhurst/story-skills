@@ -15,7 +15,7 @@ import {
   validateProject,
   writeFile
 } from "../src/story.js";
-import { makeTempDir, memoryIo } from "./helpers.js";
+import { makeTempDir, memoryIo, messages } from "./helpers.js";
 
 const BIN = path.join(import.meta.dir, "..", "bin", "story.js");
 const isRoot = process.getuid?.() === 0;
@@ -125,7 +125,7 @@ describe("atomic writes (#190, #197)", () => {
     createEntity(root, { kind: "chapter", name: "One", number: 1 });
     fs.writeFileSync(path.join(root, "chapters", ".chapter-01.md.story-4242.tmp"), "partial");
     fs.writeFileSync(path.join(root, "chapters", ".story-687110.tmp"), "partial");
-    const { warnings } = validateProject(root);
+    const warnings = messages(validateProject(root).warnings);
     expect(warnings).toContain(`${path.join("chapters", ".chapter-01.md.story-4242.tmp")} was left by an interrupted write to ${path.join("chapters", "chapter-01.md")}; delete it once the files beside it look right`);
     expect(warnings).toContain(`${path.join("chapters", ".story-687110.tmp")} was left by an interrupted write; delete it once the files beside it look right`);
   });
@@ -179,7 +179,7 @@ describe("interrupted rename (#181, #192)", () => {
     expect(rerun.err).toBe("");
     expect(rerun.code).toBe(0);
     expect(listDir(root, "characters")).toEqual(["_index.md", "zed-quill.md"]);
-    expect(validateLinks(root).errors).toEqual([]);
+    expect(messages(validateLinks(root).errors)).toEqual([]);
   });
 });
 
@@ -206,7 +206,7 @@ describe("interrupted move (#191, #193, #194)", () => {
     expect(moveEntity(root, { kind: "chapter", id: "chapter-01", number: 5 }).id).toBe("chapter-05");
     expect(listDir(root, "chapters")).toEqual(["_index.md", "chapter-02.md", "chapter-03.md", "chapter-05.md"]);
     expect(listDir(root, "scenes")).toEqual(["_index.md", "chapter-02-scene-01.md", "chapter-02-scene-02.md", "chapter-05-scene-01.md"]);
-    expect(validateLinks(root).errors).toEqual([]);
+    expect(messages(validateLinks(root).errors)).toEqual([]);
   });
 
   test("move scene adds the cast before deleting the old scene, so a rerun finishes", () => {
@@ -227,7 +227,7 @@ describe("interrupted move (#191, #193, #194)", () => {
     const rerun = invoke(root, ["move", "scene", "chapter-02-scene-02", "--chapter", "chapter-01"]);
     expect(rerun.out).toContain("to chapter-01-scene-02");
     expect(listDir(root, "scenes")).toEqual(["_index.md", "chapter-01-scene-01.md", "chapter-01-scene-02.md", "chapter-02-scene-01.md"]);
-    expect(validateLinks(root).errors).toEqual([]);
+    expect(messages(validateLinks(root).errors)).toEqual([]);
   });
 
   test("a move onto an identical placeholder is refused", () => {
@@ -255,7 +255,7 @@ describe("interrupted add (#202)", () => {
     expect(fs.existsSync(path.join(root, "characters", "nia-holt.md"))).toBe(true);
     const rerun = invoke(root, ["add", "character", "Nia Holt", "--location", "port-kestrel"]);
     expect(rerun.out).toContain("Finished an interrupted add of character nia-holt");
-    expect(validateLinks(root).errors).toEqual([]);
+    expect(messages(validateLinks(root).errors)).toEqual([]);
     // A finished add is listed in the registry, so adding it again is refused.
     expect(() => createEntity(root, { kind: "character", name: "Nia Holt", location: "port-kestrel" })).toThrow("already exists");
   });

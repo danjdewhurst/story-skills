@@ -5,7 +5,7 @@ import { checkProjectSchema } from "../scripts/check-schema.js";
 import { runCli } from "../src/cli.js";
 import { computeProgress, formatProgress, localDate } from "../src/progress.js";
 import { createStoryProject, formatProjectReport, projectProgress, projectReport, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 function progressProject(storyFields = "target-words: 1000\ndeadline: 2026-10-01") {
   const cwd = makeTempDir();
@@ -57,8 +57,8 @@ describe("story progress", () => {
     expect(progress.pace).toBe(20);
     expect(progress.projected).toBe("2026-10-06");
     expect(progress.lastSession).toEqual({ date: "2026-09-06", words: 400, since: 0 });
-    expect(validateProject(root).errors).toEqual([]);
-    expect(validateProject(root).warnings.join("\n")).not.toContain("progress.md");
+    expect(messages(validateProject(root).errors)).toEqual([]);
+    expect(messages(validateProject(root).warnings).join("\n")).not.toContain("progress.md");
     expect(checkProjectSchema(root)).toEqual([]);
   });
 
@@ -80,7 +80,7 @@ describe("story progress", () => {
     expect(() => projectProgress(root, { log: true, date: "2026-09-01" })).toThrow("Cannot log progress: progress.md does not parse");
     const result = projectProgress(root, { date: "2026-09-01" });
     expect(result.ok).toBe(false);
-    expect(result.errors.join("\n")).toContain("progress.md:");
+    expect(messages(result.errors).join("\n")).toContain("progress.md:");
   });
 
   test("defaults the date to today", () => {
@@ -92,7 +92,7 @@ describe("story progress", () => {
     const { root } = progressProject("deadline: 2026-13-01");
     writeChapter(root, 3, 10, "target-words: 0");
     writeMarkdown(path.join(root, "progress.md"), "type: notes\nsessions:\n  - date: 2026-09-01\n    words: 5\n  - date: 2026-09-01\n    words: -1\n  - words: 3\n  - nope");
-    const { errors } = validateProject(root);
+    const errors = messages(validateProject(root).errors);
 
     expect(errors).toContain("story.md deadline date must be a real YYYY-MM-DD calendar day, got 2026-13-01");
     expect(errors.join("\n")).toContain("chapters/chapter-03.md frontmatter field target-words");
@@ -106,7 +106,7 @@ describe("story progress", () => {
   test("validate rejects a non-string, empty, or list deadline", () => {
     for (const value of ["20261001", '""', "\n  - 2026-10-01"]) {
       const { root } = progressProject(`deadline: ${value}`);
-      expect(validateProject(root).errors).toContain("story.md deadline must be a YYYY-MM-DD date");
+      expect(messages(validateProject(root).errors)).toContain("story.md deadline must be a YYYY-MM-DD date");
     }
   });
 

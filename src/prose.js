@@ -1,4 +1,5 @@
 import { usageError } from "./exit-codes.js";
+import { warn } from "./findings.js";
 import { escapeRegExp, scanComments, splitWords, withoutFenceMarkers } from "./markdown.js";
 import { givenName } from "./names.js";
 import { splitSentences } from "./sentences.js";
@@ -193,20 +194,20 @@ export function analyzeChapter(prose, rules) {
 export function chapterFindings(label, analysis, thresholds = PROSE_THRESHOLDS) {
   const findings = [];
   for (const variant of analysis.variants) {
-    findings.push(`${label} uses "${variant.avoid}" ${times(variant.count)}; ${variant.source} prefers "${variant.use}"`);
+    findings.push(warn("prose-avoided-spelling", `${label} uses "${variant.avoid}" ${times(variant.count)}; ${variant.source} prefers "${variant.use}"`, label));
   }
   const rated = analysis.narrationWords >= thresholds.minRateWords;
   const filterRate = perThousand(total(analysis.filterWords), analysis.narrationWords);
   if (rated && filterRate > thresholds.filterPerThousand) {
-    findings.push(`${label} has ${formatAgainst(filterRate, thresholds.filterPerThousand, "over")} filter words per 1,000 narration words (over ${thresholds.filterPerThousand}): ${formatCounts(analysis.filterWords, 5)}`);
+    findings.push(warn("prose-filter-words", `${label} has ${formatAgainst(filterRate, thresholds.filterPerThousand, "over")} filter words per 1,000 narration words (over ${thresholds.filterPerThousand}): ${formatCounts(analysis.filterWords, 5)}`, label));
   }
   const adverbRate = perThousand(total(analysis.adverbs), analysis.narrationWords);
   if (rated && adverbRate > thresholds.adverbsPerThousand) {
-    findings.push(`${label} has ${formatAgainst(adverbRate, thresholds.adverbsPerThousand, "over")} -ly adverbs per 1,000 narration words (over ${thresholds.adverbsPerThousand}): ${formatCounts(analysis.adverbs, 5)}`);
+    findings.push(warn("prose-adverbs", `${label} has ${formatAgainst(adverbRate, thresholds.adverbsPerThousand, "over")} -ly adverbs per 1,000 narration words (over ${thresholds.adverbsPerThousand}): ${formatCounts(analysis.adverbs, 5)}`, label));
   }
   const bookisms = total(analysis.bookisms);
   if (bookisms > thresholds.maxBookisms) {
-    findings.push(`${label} has ${bookisms} said-bookism dialogue tags: ${formatCounts(analysis.bookisms, 5)}`);
+    findings.push(warn("prose-bookisms", `${label} has ${bookisms} said-bookism dialogue tags: ${formatCounts(analysis.bookisms, 5)}`, label));
   }
   const stats = analysis.sentences;
   if (stats.count >= thresholds.uniformMinSentences && stats.spread < thresholds.uniformSpread) {

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { buildBook, createEntity, createStoryProject, validateProject } from "../src/story.js";
-import { makeTempDir, writeMarkdown } from "./helpers.js";
+import { makeTempDir, writeMarkdown, messages } from "./helpers.js";
 
 function project(fields) {
   const cwd = makeTempDir();
@@ -47,7 +47,7 @@ ai-disclosure: No AI was used.`);
     expect(text).toContain("- [ ] Copyright line (`copyright`) or copyright matter page");
     expect(text).toContain("- [ ] Cover image (`cover`)");
     expect(text).toContain("- [ ] Story status is complete");
-    expect(validateProject(root).errors).toEqual([]);
+    expect(messages(validateProject(root).errors)).toEqual([]);
   });
 
   test("a copyright matter page counts, and an empty story.md lists everything missing", () => {
@@ -63,6 +63,6 @@ ai-disclosure: No AI was used.`);
 
   test("an unquoted ISBN-10 that lost its leading zero asks to be quoted", () => {
     const root = project("isbn: 0306406152");
-    expect(validateProject(root).errors).toContain("story.md isbn 306406152 is not a valid ISBN-13 or ISBN-10 (check the digits and checksum; quote it so leading zeros survive)");
+    expect(messages(validateProject(root).errors)).toContain("story.md isbn 306406152 is not a valid ISBN-13 or ISBN-10 (check the digits and checksum; quote it so leading zeros survive)");
   });
 });

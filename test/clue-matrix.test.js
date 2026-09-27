@@ -4,7 +4,7 @@ import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { formatClueMatrix } from "../src/clues.js";
 import { clueReport, createEntity, createStoryProject, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -47,7 +47,7 @@ describe("story clues", () => {
       ["same-page", "..x."]
     ]);
     expect(report.totals).toEqual({ clues: 3, redHerrings: 0, planted: 3, revealed: 2 });
-    expect(report.warnings).toEqual([
+    expect(messages(report.warnings)).toEqual([
       "clue same-page is planted in the same chapter as its reveal (chapter-03 -> chapter-03): late plant gives readers no time to notice it"
     ]);
 
@@ -66,7 +66,7 @@ describe("story clues", () => {
     writeClue(root, "e-dropped", "status: dropped\npayoff: chapter-05");
 
     const report = clueReport(root);
-    expect(report.warnings).toEqual([
+    expect(messages(report.warnings)).toEqual([
       "clue c-silent lists no characters: record who could notice it",
       "clue d-herring is a red herring with no payoff: record the chapter that debunks it",
       "clue b-late is planted in the chapter before its reveal (chapter-03 -> chapter-04): late plant gives readers no time to notice it",
@@ -88,7 +88,7 @@ describe("story clues", () => {
     expect(fs.readFileSync(path.join(root, "continuity", "clues", "plain.md"), "utf8")).not.toContain("red-herring");
 
     writeClue(root, "bad-flag", "status: planned\nred-herring: yes please");
-    expect(validateProject(root).errors).toContain("continuity/clues/bad-flag.md frontmatter field red-herring must be a boolean");
+    expect(messages(validateProject(root).errors)).toContain("continuity/clues/bad-flag.md frontmatter field red-herring must be a boolean");
   });
 
   test("CLI prints the grid and an empty-state hint", () => {

@@ -4,7 +4,7 @@ import path from "node:path";
 import { checkProjectSchema } from "../scripts/check-schema.js";
 import { runCli } from "../src/cli.js";
 import { buildBook, createEntity, createStoryProject, exportManuscript, removeEntity, renameEntity, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo, readArchiveEntries, readArchiveText, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, readArchiveEntries, readArchiveText, writeMarkdown, messages } from "./helpers.js";
 
 const PNG_BYTES = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
 
@@ -83,9 +83,9 @@ describe("story add matter", () => {
     expect(fs.readFileSync(indexPath, "utf8")).toContain("*No matter pages yet*");
 
     writeMatter(root, "stray", "title: Stray\nplacement: back", "Text.\n");
-    expect(validateProject(root).warnings).toContain("matter/_index.md does not list matter/stray.md; run story reindex");
+    expect(messages(validateProject(root).warnings)).toContain("matter/_index.md does not list matter/stray.md; run story reindex");
     writeMarkdown(indexPath, "type: notes\nstory: matter-story", "# Matter\n");
-    expect(validateProject(root).errors).toContain("matter/_index.md type must be matter-registry");
+    expect(messages(validateProject(root).errors)).toContain("matter/_index.md type must be matter-registry");
   });
 
   test("builds refuse matter files whose names are not kebab-case", () => {
@@ -122,8 +122,8 @@ describe("matter validation", () => {
     withBookMatter(root);
     const result = validateProject(root);
 
-    expect(result.errors).toEqual([]);
-    expect(result.warnings).toContain("matter/unwritten.md has no text and is left out of export and build");
+    expect(messages(result.errors)).toEqual([]);
+    expect(messages(result.warnings)).toContain("matter/unwritten.md has no text and is left out of export and build");
     expect(checkProjectSchema(root)).toEqual([]);
   });
 
@@ -132,7 +132,9 @@ describe("matter validation", () => {
     writeMatter(root, "broken", "order: -2\nheading: sometimes\nplacement: middle", "Text.\n");
     writeMatter(root, "untitled", "placement: front", "Text.\n");
     writeMarkdown(path.join(root, "matter", "drafts", "old.md"), "title: Old\nplacement: front", "Old.\n");
-    const { errors, warnings } = validateProject(root);
+    const findings = validateProject(root);
+    const errors = messages(findings.errors);
+    const warnings = messages(findings.warnings);
 
     expect(errors).toContain("matter/broken.md is missing frontmatter field title");
     expect(errors).toContain("matter/broken.md frontmatter field placement has unsupported value middle");
@@ -144,7 +146,7 @@ describe("matter validation", () => {
 
   test("validates the story.md cover path", () => {
     const { root } = matterProject();
-    const coverErrors = () => validateProject(root).errors.filter((error) => error.includes("cover"));
+    const coverErrors = () => messages(validateProject(root).errors).filter((error) => error.includes("cover"));
 
     setStoryFields(root, "cover: art/cover.png");
     expect(coverErrors()).toEqual(["story.md cover art/cover.png does not exist"]);

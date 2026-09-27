@@ -93,3 +93,8 @@ export function readArchiveText(file) {
     .map((entry) => `${entry.name}\n${entry.content.toString("utf8")}\n`)
     .join("");
 }
+
+// The text of each finding in a result's errors or warnings.
+export function messages(findings) {
+  return findings.map((finding) => (typeof finding === "string" ? finding : finding.message));
+}

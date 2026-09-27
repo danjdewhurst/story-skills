@@ -4,7 +4,7 @@ import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { formRangeWarning } from "../src/forms.js";
 import { createStoryProject, formatProjectReport, projectReport, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -42,15 +42,15 @@ describe("story form", () => {
     const cwd = makeTempDir();
     const { root } = createStoryProject({ cwd, title: "Too Long", form: "flash" });
     editStory(root, "target-words: 1000", "target-words: 9000");
-    expect(validateProject(root).warnings).toContain("story.md target-words 9000 is outside the usual flash range of 1-1500 words");
+    expect(messages(validateProject(root).warnings)).toContain("story.md target-words 9000 is outside the usual flash range of 1-1500 words");
 
     editStory(root, "target-words: 9000", "target-words: 900");
     editStory(root, "status: planning", "status: complete");
     writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: final\nword-count: 1600", `## Chapter Text\n\n${"word ".repeat(1600)}\n`);
-    expect(validateProject(root).warnings).toContain("Manuscript length 1600 is outside the usual flash range of 1-1500 words");
+    expect(messages(validateProject(root).warnings)).toContain("Manuscript length 1600 is outside the usual flash range of 1-1500 words");
 
     editStory(root, "form: flash", "form: sonnet");
-    expect(validateProject(root).errors).toContain("story.md frontmatter field form has unsupported value sonnet");
+    expect(messages(validateProject(root).errors)).toContain("story.md frontmatter field form has unsupported value sonnet");
   });
 
   test("formRangeWarning ignores unknown forms, serials, and missing counts", () => {

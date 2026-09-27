@@ -4,7 +4,7 @@ import path from "node:path";
 import { checkContinuity } from "../src/continuity.js";
 import { createStoryProject, scanProject, validateProject } from "../src/story.js";
 import { runCli } from "../src/cli.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 function exemptionProject() {
   const cwd = makeTempDir();
@@ -63,9 +63,9 @@ describe("continuity exemptions", () => {
     writeExemptions(root, [{ pattern: "edran-vale", reason: "Flashback approved by editor" }]);
     const after = checkContinuity(scanProject(root));
     expect(after.ok).toBe(true);
-    expect(after.errors).toEqual([]);
+    expect(messages(after.errors)).toEqual([]);
     expect(after.dismissed).toEqual([
-      { finding: before.errors[0], reason: "Flashback approved by editor" }
+      { finding: messages(before.errors)[0], reason: "Flashback approved by editor" }
     ]);
   });
 
@@ -91,7 +91,7 @@ planted: chapter-01
 
     writeExemptions(root, [{ pattern: "no payoff yet", reason: "Payoff lands in the sequel" }]);
     const after = checkContinuity(scanProject(root));
-    expect(after.warnings).toEqual([]);
+    expect(messages(after.warnings)).toEqual([]);
     expect(after.dismissed).toHaveLength(before.warnings.length);
     for (const entry of after.dismissed) {
       expect(entry.reason).toBe("Payoff lands in the sequel");
@@ -115,18 +115,18 @@ planted: chapter-01
     writeExemptions(root, [{ pattern: "   ", reason: "Blanket exemption" }]);
     const after = checkContinuity(scanProject(root));
     expect(after.ok).toBe(false);
-    expect(after.errors).toEqual(before.errors);
+    expect(messages(after.errors)).toEqual(messages(before.errors));
     expect(after.dismissed).toEqual([]);
   });
 
   test("validate rejects blanket exemption patterns shorter than 4 characters", () => {
     const { root } = exemptionProject();
     writeExemptions(root, [{ pattern: "ch", reason: "Too generic" }]);
-    const errors = validateProject(root).errors;
+    const errors = messages(validateProject(root).errors);
     expect(errors).toContain("continuity/exemptions.md exemptions[0] pattern must be at least 4 characters to avoid blanket exemptions");
 
     writeExemptions(root, [{ pattern: "edran", reason: "Specific enough" }]);
-    expect(validateProject(root).errors).toEqual([]);
+    expect(messages(validateProject(root).errors)).toEqual([]);
   });
 
   test("cli exits 0 when only dismissed errors remain and prints dismissed lines", () => {
@@ -154,7 +154,7 @@ planted: chapter-01
     expect(result.code).toBe(1);
     expect(result.err).toContain("Continuity check failed: 1 errors, 0 warnings, 0 dismissed");
     expect(result.err).not.toContain("dismissed: ");
-    expect(validateProject(root).errors.join("\n")).toContain("at least 4 characters");
+    expect(messages(validateProject(root).errors).join("\n")).toContain("at least 4 characters");
   });
 
   test("cli prints dismissed lines to stderr even when errors remain", () => {
@@ -211,18 +211,18 @@ exemptions:
   - pattern: "x"
     reason: "y"
 `, "# Bad\n");
-    expect(validateProject(root).errors).toContain("continuity/exemptions.md type must be exemption-log");
+    expect(messages(validateProject(root).errors)).toContain("continuity/exemptions.md type must be exemption-log");
 
     writeMarkdown(path.join(root, "continuity", "exemptions.md"), `
 type: exemption-log
 `, "# Bad\n");
-    expect(validateProject(root).errors).toContain("continuity/exemptions.md is missing frontmatter field exemptions");
+    expect(messages(validateProject(root).errors)).toContain("continuity/exemptions.md is missing frontmatter field exemptions");
 
     writeMarkdown(path.join(root, "continuity", "exemptions.md"), `
 type: exemption-log
 exemptions: nope
 `, "# Bad\n");
-    expect(validateProject(root).errors).toContain("continuity/exemptions.md frontmatter field exemptions must be a list");
+    expect(messages(validateProject(root).errors)).toContain("continuity/exemptions.md frontmatter field exemptions must be a list");
 
     writeMarkdown(path.join(root, "continuity", "exemptions.md"), `
 type: exemption-log
@@ -231,7 +231,7 @@ exemptions:
     reason: ""
   - just-a-string
 `, "# Bad\n");
-    const errors = validateProject(root).errors;
+    const errors = messages(validateProject(root).errors);
     expect(errors).toContain("continuity/exemptions.md exemptions[0] is missing a non-empty pattern");
     expect(errors).toContain("continuity/exemptions.md exemptions[0] is missing a non-empty reason");
     expect(errors).toContain("continuity/exemptions.md exemptions[1] must be a mapping");
@@ -245,7 +245,7 @@ exemptions:
   - reason: "Has a reason but no pattern"
   - pattern: "has-a-pattern-but-no-reason"
 `, "# Bad\n");
-    const errors = validateProject(root).errors;
+    const errors = messages(validateProject(root).errors);
     expect(errors).toContain("continuity/exemptions.md exemptions[0] is missing a non-empty pattern");
     expect(errors).toContain("continuity/exemptions.md exemptions[1] is missing a non-empty reason");
   });
@@ -254,13 +254,13 @@ exemptions:
     const { root } = exemptionProject();
     writeExemptions(root, [{ pattern: "edran-vale", reason: "Flashback approved by editor" }]);
     const result = validateProject(root);
-    expect(result.errors).toEqual([]);
+    expect(messages(result.errors)).toEqual([]);
   });
 
   test("validate passes when no exemption log exists", () => {
     const { root } = exemptionProject();
     const result = validateProject(root);
-    expect(result.errors).toEqual([]);
+    expect(messages(result.errors)).toEqual([]);
   });
 
   test("validate reports unreadable exemption logs without crashing", () => {
@@ -268,6 +268,6 @@ exemptions:
     fs.writeFileSync(path.join(root, "continuity", "exemptions.md"), "not: [valid\n", "utf8");
     const result = validateProject(root);
     expect(result.errors.length).toBeGreaterThan(0);
-    expect(result.errors[0]).toContain("continuity/exemptions.md");
+    expect(messages(result.errors)[0]).toContain("continuity/exemptions.md");
   });
 });

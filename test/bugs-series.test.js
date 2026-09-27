@@ -5,7 +5,7 @@ import { runCli } from "../src/cli.js";
 import { parseFrontmatter } from "../src/frontmatter.js";
 import { buildSeries } from "../src/series.js";
 import { createEntity, createStoryProject, renameEntity, scanProject, validateLinks } from "../src/story.js";
-import { makeTempDir, memoryIo } from "./helpers.js";
+import { makeTempDir, memoryIo, messages } from "./helpers.js";
 
 const EXAMPLES = path.join(import.meta.dir, "..", "examples");
 
@@ -203,8 +203,8 @@ describe("#232 an unparseable linked story.md is not read as an empty book", () 
     createStoryProject({ cwd, title: "Embers of the Vale", follows: ["the-last-ember"] });
     edit(path.join(cwd, "embers-of-the-vale", "story.md"), "title:", "bad line no colon\ntitle:");
     const report = buildSeries(path.join(cwd, "the-last-ember"), scanProject);
-    expect(report.errors.join("\n")).toContain("../embers-of-the-vale: story.md:");
-    expect(report.warnings.join("\n")).not.toContain("set no series id");
+    expect(messages(report.errors).join("\n")).toContain("../embers-of-the-vale: story.md:");
+    expect(messages(report.warnings).join("\n")).not.toContain("set no series id");
     expect(report.books.map((book) => book.label)).toEqual(["../the-fall-of-the-citadel", "."]);
   });
 
@@ -240,7 +240,7 @@ describe("#234 series name check ignores Unicode normalization", () => {
     edit(path.join(cwd, "the-last-ember", "characters", "kael-voss.md"), /^name: .*$/m, `name: "${"Kaël Voss".normalize("NFC")}"`);
     edit(path.join(sequel, "kael-voss.md"), /^name: .*$/m, `name: "${"Kaël Voss".normalize("NFD")}"`);
     const report = buildSeries(path.join(cwd, "embers-of-the-vale"), scanProject);
-    expect(report.warnings.filter((warning) => warning.startsWith("characters/kael-voss.md name"))).toEqual([]);
+    expect(messages(report.warnings).filter((warning) => warning.startsWith("characters/kael-voss.md name"))).toEqual([]);
   });
 });
 
@@ -249,8 +249,8 @@ describe("#235 a backlink through a symlink counts as the same book", () => {
     const cwd = copyExampleSeries();
     fs.renameSync(path.join(cwd, "the-last-ember"), path.join(cwd, "book-one"));
     fs.symlinkSync("book-one", path.join(cwd, "the-last-ember"));
-    expect(validateLinks(path.join(cwd, "book-one")).errors).toEqual([]);
-    expect(validateLinks(path.join(cwd, "the-last-ember")).errors).toEqual([]);
+    expect(messages(validateLinks(path.join(cwd, "book-one")).errors)).toEqual([]);
+    expect(messages(validateLinks(path.join(cwd, "the-last-ember")).errors)).toEqual([]);
   });
 
   test("init through a symlinked path does not add a duplicate backlink", () => {
@@ -270,9 +270,9 @@ describe("#236 a blank series id is treated as missing", () => {
     const cwd = copyExampleSeries();
     edit(path.join(cwd, "the-fall-of-the-citadel", "story.md"), "series: the-ember-cycle", 'series: ""');
     const report = buildSeries(path.join(cwd, "the-last-ember"), scanProject);
-    expect(report.errors.join("\n")).not.toContain("different series");
-    expect(report.warnings.join("\n")).toContain("The Fall of the Citadel set no series id; add series: the-ember-cycle");
-    expect(validateLinks(path.join(cwd, "the-last-ember")).errors.join("\n")).not.toContain("belongs to series");
+    expect(messages(report.errors).join("\n")).not.toContain("different series");
+    expect(messages(report.warnings).join("\n")).toContain("The Fall of the Citadel set no series id; add series: the-ember-cycle");
+    expect(messages(validateLinks(path.join(cwd, "the-last-ember")).errors).join("\n")).not.toContain("belongs to series");
   });
 });
 
@@ -311,13 +311,13 @@ describe("#239 citing another book in the timeline", () => {
 
   test("links accepts an existing file in a linked book and ignores ids inside URLs", () => {
     const { root } = sequelTimeline();
-    expect(validateLinks(root).errors).toEqual([]);
+    expect(messages(validateLinks(root).errors)).toEqual([]);
   });
 
   test("links still reports a missing file in a linked book", () => {
     const { root, timeline } = sequelTimeline();
     edit(timeline, "chapters/chapter-01.md)", "chapters/chapter-99.md)");
-    expect(validateLinks(root).errors).toEqual(["plot/timeline.md links to missing file ../../the-fall-of-the-citadel/chapters/chapter-99.md"]);
+    expect(messages(validateLinks(root).errors)).toEqual(["plot/timeline.md links to missing file ../../the-fall-of-the-citadel/chapters/chapter-99.md"]);
   });
 
   test("move leaves paths into other books and URLs alone", () => {

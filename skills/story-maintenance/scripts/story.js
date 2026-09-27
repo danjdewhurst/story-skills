@@ -7,6 +7,30 @@ import path11 from "node:path";
 import fs9 from "node:fs";
 import path10 from "node:path";
 
+// src/findings.js
+function warn(code, message, file = null) {
+  return { code, message, file };
+}
+function asFinding(value) {
+  return typeof value === "string" ? { code: null, message: value, file: null } : value;
+}
+var FINDING_CODES = {
+  "todo-markers": "warning",
+  "stale-registry": "warning",
+  "stale-word-count": "warning",
+  "prose-filter-words": "warning",
+  "prose-adverbs": "warning",
+  "prose-bookisms": "warning",
+  "prose-avoided-spelling": "warning",
+  "pacing-no-hook": "warning",
+  "clue-unplanted": "warning",
+  "clue-late-plant": "warning",
+  "voice-avoid": "warning"
+};
+function codesAt(level) {
+  return Object.keys(FINDING_CODES).filter((code) => FINDING_CODES[code] === level);
+}
+
 // src/clues.js
 var LIVE_STATUSES = new Set(["planned", "planted", "paid-off"]);
 function buildClueMatrix(project) {
@@ -35,11 +59,11 @@ function buildClueMatrix(project) {
       continue;
     }
     if (clue.payoff !== "" && clue.planted === "") {
-      warnings.push(`${label} is revealed in ${clue.payoff} but never planted: readers cannot play fair`);
+      warnings.push(warn("clue-unplanted", `${label} is revealed in ${clue.payoff} but never planted: readers cannot play fair`));
     }
     if (plantAt !== undefined && payoffAt !== undefined && payoffAt - plantAt >= 0 && payoffAt - plantAt < 2) {
       const where = payoffAt === plantAt ? "the same chapter as" : "the chapter before";
-      warnings.push(`${label} is planted in ${where} its reveal (${clue.planted} -> ${clue.payoff}): late plant gives readers no time to notice it`);
+      warnings.push(warn("clue-late-plant", `${label} is planted in ${where} its reveal (${clue.planted} -> ${clue.payoff}): late plant gives readers no time to notice it`));
     }
     if (clue.characters.length === 0) {
       warnings.push(`${label} lists no characters: record who could notice it`);
@@ -4314,7 +4338,7 @@ function buildVoices(project, chapters) {
       const pattern = phrasePattern(phrase);
       const chaptersUsing = [...new Set(said.filter((line) => pattern.test(line.text)).map((line) => line.chapter))];
       if (chaptersUsing.length > 0) {
-        warnings.push(`${character.id} says "${phrase}", which is in their voice-avoid list (${chaptersUsing.join(", ")})`);
+        warnings.push(warn("voice-avoid", `${character.id} says "${phrase}", which is in their voice-avoid list (${chaptersUsing.join(", ")})`));
       }
     }
     if (said.length >= VOICE_THRESHOLDS.minLines) {
@@ -4985,20 +5009,20 @@ function analyzeChapter(prose, rules) {
 function chapterFindings(label, analysis, thresholds = PROSE_THRESHOLDS) {
   const findings = [];
   for (const variant of analysis.variants) {
-    findings.push(`${label} uses "${variant.avoid}" ${times(variant.count)}; ${variant.source} prefers "${variant.use}"`);
+    findings.push(warn("prose-avoided-spelling", `${label} uses "${variant.avoid}" ${times(variant.count)}; ${variant.source} prefers "${variant.use}"`, label));
   }
   const rated = analysis.narrationWords >= thresholds.minRateWords;
   const filterRate = perThousand(total(analysis.filterWords), analysis.narrationWords);
   if (rated && filterRate > thresholds.filterPerThousand) {
-    findings.push(`${label} has ${formatAgainst(filterRate, thresholds.filterPerThousand, "over")} filter words per 1,000 narration words (over ${thresholds.filterPerThousand}): ${formatCounts(analysis.filterWords, 5)}`);
+    findings.push(warn("prose-filter-words", `${label} has ${formatAgainst(filterRate, thresholds.filterPerThousand, "over")} filter words per 1,000 narration words (over ${thresholds.filterPerThousand}): ${formatCounts(analysis.filterWords, 5)}`, label));
   }
   const adverbRate = perThousand(total(analysis.adverbs), analysis.narrationWords);
   if (rated && adverbRate > thresholds.adverbsPerThousand) {
-    findings.push(`${label} has ${formatAgainst(adverbRate, thresholds.adverbsPerThousand, "over")} -ly adverbs per 1,000 narration words (over ${thresholds.adverbsPerThousand}): ${formatCounts(analysis.adverbs, 5)}`);
+    findings.push(warn("prose-adverbs", `${label} has ${formatAgainst(adverbRate, thresholds.adverbsPerThousand, "over")} -ly adverbs per 1,000 narration words (over ${thresholds.adverbsPerThousand}): ${formatCounts(analysis.adverbs, 5)}`, label));
   }
   const bookisms = total(analysis.bookisms);
   if (bookisms > thresholds.maxBookisms) {
-    findings.push(`${label} has ${bookisms} said-bookism dialogue tags: ${formatCounts(analysis.bookisms, 5)}`);
+    findings.push(warn("prose-bookisms", `${label} has ${bookisms} said-bookism dialogue tags: ${formatCounts(analysis.bookisms, 5)}`, label));
   }
   const stats = analysis.sentences;
   if (stats.count >= thresholds.uniformMinSentences && stats.spread < thresholds.uniformSpread) {
@@ -5468,19 +5492,6 @@ function parseArgs(argv, suggestFrom = OPTIONS.map((option) => option.name)) {
 
 // src/config.js
 var SEVERITY_LEVELS = ["error", "warning", "off"];
-var FINDING_CODES = {
-  "todo-markers": { command: "validate", pattern: / has \d+ \[TODO markers? in its prose, which every build prints/ },
-  "stale-registry": { command: "validate", pattern: / does not list .+; run story reindex$/ },
-  "stale-word-count": { command: "validate", pattern: / (?:has no word-count \(contains \d+\)|declares \S+ words? but contains \d+)$/ },
-  "prose-filter-words": { command: "prose", pattern: / filter words per 1,000 narration words \(over / },
-  "prose-adverbs": { command: "prose", pattern: / -ly adverbs per 1,000 narration words \(over / },
-  "prose-bookisms": { command: "prose", pattern: / has \d+ said-bookism dialogue tags: / },
-  "prose-avoided-spelling": { command: "prose", pattern: / uses ".+" (?:once|\d+ times); .+ prefers ".+"$/ },
-  "pacing-no-hook": { command: "pacing", pattern: / has no hook: record how the chapter ending pulls the reader on$/ },
-  "clue-unplanted": { command: "clues", pattern: / is revealed in \S+ but never planted: readers cannot play fair$/ },
-  "clue-late-plant": { command: "clues", pattern: / its reveal \(.+\): late plant gives readers no time to notice it$/ },
-  "voice-avoid": { command: "voices", pattern: /, which is in their voice-avoid list \(/ }
-};
 var TARGETED_COMMANDS = new Set(["knowledge", "add", "rename", "move", "remove"]);
 var TARGETED_FLAGS = { passes: ["start", "done"], progress: ["date"] };
 var LINKED_FLAGS = {
@@ -5575,7 +5586,7 @@ function parseCommandDefaults(command, item, label, errors) {
 }
 function parseSeverity(raw, errors) {
   const severity = {};
-  const codes = Object.keys(FINDING_CODES);
+  const codes = codesAt("warning");
   for (const [index, item] of listItems(raw, "severity", errors)) {
     const label = `story.md severity[${index}]`;
     const extra = Object.keys(item).filter((key) => key !== "warning" && key !== "level");
@@ -5587,7 +5598,7 @@ function parseSeverity(raw, errors) {
       errors.push(`${label} must name a warning`);
       continue;
     }
-    if (!Object.hasOwn(FINDING_CODES, code)) {
+    if (!codes.includes(code)) {
       errors.push(`${label} names unknown warning ${code}${suggestion(code, codes)}`);
       continue;
     }
@@ -5633,24 +5644,26 @@ function applyDefaults(config, commandName, options) {
   }
   return filled;
 }
-function severityFor(config, commandName) {
-  return Object.entries(config.severity).filter(([code]) => FINDING_CODES[code].command === commandName);
+function severityFor(config) {
+  return Object.entries(config.severity);
 }
 function applySeverity(result, overrides) {
   if (overrides.length === 0) {
     return result;
   }
+  const levels = new Map(overrides);
   const errors = [...result.errors];
   const warnings = [];
   const dismissed = [...result.dismissed ?? []];
   for (const warning of result.warnings) {
-    const match = overrides.find(([code]) => FINDING_CODES[code].pattern.test(warning));
-    if (match === undefined || match[1] === "warning") {
+    const code = asFinding(warning).code;
+    const level = levels.get(code) ?? "warning";
+    if (level === "warning") {
       warnings.push(warning);
-    } else if (match[1] === "error") {
-      errors.push(`${warning} [${match[0]}]`);
+    } else if (level === "error") {
+      errors.push(warning);
     } else {
-      const note = `severity ${match[0]} is off in story.md`;
+      const note = `severity ${code} is off in story.md`;
       dismissed.push({ finding: warning, reason: note, note });
     }
   }
@@ -7213,7 +7226,7 @@ function buildPacing(project) {
       status: chapter.status
     });
     if (chapter.hook === "" && DRAFTED_STATUSES.has(chapter.status)) {
-      warnings.push(`${chapter.id} has no hook: record how the chapter ending pulls the reader on`);
+      warnings.push(warn("pacing-no-hook", `${chapter.id} has no hook: record how the chapter ending pulls the reader on`));
     }
   }
   let easyWins = [];
@@ -8061,16 +8074,17 @@ function validateProjectOf(project) {
     }
     for (const [link, file] of links) {
       if (!markdown.includes(link)) {
-        warnings.push(`${indexPath} does not list ${file}; run story reindex`);
+        warnings.push(warn("stale-registry", `${indexPath} does not list ${file}; run story reindex`, indexPath));
       }
     }
   }
   for (const chapter of project.chapters) {
+    const file = path8.relative(projectRoot, chapter.file);
     if (chapter.declaredWordCount !== null && chapter.declaredWordCount !== chapter.wordCount) {
-      warnings.push(chapter.wordCountMissing ? `${path8.relative(projectRoot, chapter.file)} has no word-count (contains ${chapter.wordCount})` : `${path8.relative(projectRoot, chapter.file)} declares ${plural2(chapter.declaredWordCount, "word")} but contains ${chapter.wordCount}`);
+      warnings.push(warn("stale-word-count", chapter.wordCountMissing ? `${file} has no word-count (contains ${chapter.wordCount})` : `${file} declares ${plural2(chapter.declaredWordCount, "word")} but contains ${chapter.wordCount}`, file));
     }
     if (chapter.todoMarkers > 0) {
-      warnings.push(`${path8.relative(projectRoot, chapter.file)} has ${plural2(chapter.todoMarkers, "[TODO marker")} in its prose, which every build prints: resolve ${chapter.todoMarkers === 1 ? "it" : "them"} or move ${chapter.todoMarkers === 1 ? "it" : "them"} into an HTML comment`);
+      warnings.push(warn("todo-markers", `${file} has ${plural2(chapter.todoMarkers, "[TODO marker")} in its prose, which every build prints: resolve ${chapter.todoMarkers === 1 ? "it" : "them"} or move ${chapter.todoMarkers === 1 ? "it" : "them"} into an HTML comment`, file));
     }
     if (chapter.unclosedComment) {
       warnings.push(`${path8.relative(projectRoot, chapter.file)} opens an HTML comment (<!--) that never closes, so the text after it shows in builds and word counts`);
@@ -10601,7 +10615,7 @@ function buildProjectActions(project, validation, links, continuity, displayPath
   if (continuity.errors.length > 0) {
     actions.push(action("P0", "Fix continuity contradictions", `Run story continuity ${where} and repair ${continuity.errors.length} deterministic continuity errors.`));
   }
-  const otherWarnings = validation.warnings.filter((warning) => !/ declares \S+ words but contains \d+$| has no machine-readable scene records$/.test(warning));
+  const otherWarnings = validation.warnings.filter((warning) => !/ declares \S+ words but contains \d+$| has no machine-readable scene records$/.test(asFinding(warning).message));
   if (otherWarnings.length > 0) {
     actions.push(action("P1", "Review validation warnings", `Run story validate ${where} and review ${otherWarnings.length} warning${otherWarnings.length === 1 ? "" : "s"}.`));
   }
@@ -13868,7 +13882,7 @@ function diagnosticsFrom(result, code) {
   ];
 }
 function diagnostic(severity, message, code) {
-  const text = String(message);
+  const text = asFinding(message).message;
   return { severity, file: messageFile(text), message: text, code };
 }
 function messageFile(message) {
@@ -14004,7 +14018,7 @@ var COMMANDS = [
       reportKeptStory(io, result, "--title");
       reportGitignore(io, result);
       for (const warning of result.warnings) {
-        io.stderr.write(`warning: ${warning}
+        io.stderr.write(`warning: ${asFinding(warning).message}
 `);
       }
       if (result.keptStory) {
@@ -14141,7 +14155,7 @@ var COMMANDS = [
       }
       io.stdout.write(formatContext(context));
       for (const warning of context.warnings) {
-        io.stderr.write(`warning: ${warning}
+        io.stderr.write(`warning: ${asFinding(warning).message}
 `);
       }
       return 0;
@@ -14586,7 +14600,7 @@ function passageRoot(parsed, cwd, required) {
 }
 function writeWarnings(io, result) {
   for (const warning of result.warnings ?? []) {
-    io.stderr.write(`warning: ${warning}
+    io.stderr.write(`warning: ${asFinding(warning).message}
 `);
   }
 }
@@ -14651,18 +14665,22 @@ function reportResult(io, result, successMessage, failureMessage) {
   io.stderr.write(`${result.ok ? successMessage : failureMessage}: ${result.errors.length} errors, ${result.warnings.length} warnings, ${dismissed.length} dismissed
 `);
   for (const error of result.errors) {
-    io.stderr.write(`error: ${error}
+    io.stderr.write(`error: ${findingLine(error)}
 `);
   }
   for (const warning of result.warnings) {
-    io.stderr.write(`warning: ${warning}
+    io.stderr.write(`warning: ${asFinding(warning).message}
 `);
   }
   for (const entry of dismissed) {
-    io.stderr.write(`dismissed: ${entry.finding} (${entry.note ?? `exemption: ${entry.reason}`})
+    io.stderr.write(`dismissed: ${asFinding(entry.finding).message} (${entry.note ?? `exemption: ${entry.reason}`})
 `);
   }
   return result.ok ? EXIT_CODES.ok : EXIT_CODES.findings;
+}
+function findingLine(value) {
+  const finding = asFinding(value);
+  return FINDING_CODES[finding.code] === "warning" ? `${finding.message} [${finding.code}]` : finding.message;
 }
 
 // src/version.js
@@ -14768,7 +14786,7 @@ Run story --help to list commands.
     const root = () => resolveRoot(cwd, parsed, name);
     const config = command.project === "none" ? null : projectConfig(command, configRoot(cwd, parsed, root));
     configured = config === null ? [] : applyDefaults(config, name, parsed.options).map((key) => [key, parsed.options[key]]);
-    const severity = config === null ? [] : severityFor(config, name);
+    const severity = config === null ? [] : severityFor(config);
     return command.run({ parsed, io, cwd, root, severity });
   } catch (error) {
     const message = `${describeError(error, io.cwd ?? process.cwd())}${configuredHint(error, configured)}`;

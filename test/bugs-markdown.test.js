@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { chapterProse, extractSection, scanComments, splitWords, wordCount } from "../src/markdown.js";
 import { buildBook, computeWordCounts, createEntity, createStoryProject, exportManuscript, synopsisBook, validateProject } from "../src/story.js";
-import { makeTempDir, readArchiveText, writeMarkdown } from "./helpers.js";
+import { makeTempDir, readArchiveText, writeMarkdown, messages } from "./helpers.js";
 
 function newProject(title = "Bugs") {
   return createStoryProject({ cwd: makeTempDir(), title }).root;
@@ -137,7 +137,7 @@ describe("#226 headings inside comments and fences", () => {
     const exported = fs.readFileSync(exportManuscript(root, { out: "dist/book.md" }).outFile, "utf8");
     expect(exported).not.toContain("Old draft");
     expect(exported).toContain("# Chapter 1: One\n\nNew prose.\n");
-    expect(validateProject(root).warnings.join("\n")).not.toContain("never closes");
+    expect(messages(validateProject(root).warnings).join("\n")).not.toContain("never closes");
   });
 
   test("a ## Chapter Text inside a code fence is ignored", () => {
@@ -161,7 +161,7 @@ describe("#227 a fence inside a comment", () => {
     createEntity(root, { kind: "chapter", name: "One", number: 1 });
     appendProse(root, "chapters/chapter-01.md", "Kept text.\n\n<!-- Old version:\nOld words here.\n```\nletter text\n```\nMore old words.\n-->\n\nNew text.");
     expect(computeWordCounts(root).total).toBe(4);
-    expect(validateProject(root).warnings.join("\n")).not.toContain("never closes");
+    expect(messages(validateProject(root).warnings).join("\n")).not.toContain("never closes");
     const html = build(root, "html");
     expect(html).not.toContain("Old words");
     expect(html).not.toContain("&lt;!--");

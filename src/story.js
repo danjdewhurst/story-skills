@@ -32,6 +32,7 @@ import { plural } from "./plural.js";
 import { analyzeChapter, chapterFindings, proseRules, proseThresholds, repeatedPhrases, similarNames } from "./prose.js";
 import { splitSentences } from "./sentences.js";
 import { areSiblingBooks, buildSeries, canonicalPath, discoverSeriesBooks, isBookNumber, linksInclude, readBookFrontmatter, seriesId, seriesLinkPath, seriesLinks, validateSeriesLinks, withSeriesBacklink } from "./series.js";
+import { asFinding, err, warn } from "./findings.js";
 import { EXIT_CODES, projectError, refusedError, usageError, withDefaultExitCode } from "./exit-codes.js";
 
 // writeFile moved to files.js with the rest of the write path guards; it is
@@ -905,20 +906,21 @@ export function validateProjectOf(project) {
     }
     for (const [link, file] of links) {
       if (!markdown.includes(link)) {
-        warnings.push(`${indexPath} does not list ${file}; run story reindex`);
+        warnings.push(warn("stale-registry", `${indexPath} does not list ${file}; run story reindex`, indexPath));
       }
     }
   }
 
   for (const chapter of project.chapters) {
+    const file = path.relative(projectRoot, chapter.file);
     if (chapter.declaredWordCount !== null && chapter.declaredWordCount !== chapter.wordCount) {
-      warnings.push(chapter.wordCountMissing
-        ? `${path.relative(projectRoot, chapter.file)} has no word-count (contains ${chapter.wordCount})`
-        : `${path.relative(projectRoot, chapter.file)} declares ${plural(chapter.declaredWordCount, "word")} but contains ${chapter.wordCount}`);
+      warnings.push(warn("stale-word-count", chapter.wordCountMissing
+        ? `${file} has no word-count (contains ${chapter.wordCount})`
+        : `${file} declares ${plural(chapter.declaredWordCount, "word")} but contains ${chapter.wordCount}`, file));
     }
 
     if (chapter.todoMarkers > 0) {
-      warnings.push(`${path.relative(projectRoot, chapter.file)} has ${plural(chapter.todoMarkers, "[TODO marker")} in its prose, which every build prints: resolve ${chapter.todoMarkers === 1 ? "it" : "them"} or move ${chapter.todoMarkers === 1 ? "it" : "them"} into an HTML comment`);
+      warnings.push(warn("todo-markers", `${file} has ${plural(chapter.todoMarkers, "[TODO marker")} in its prose, which every build prints: resolve ${chapter.todoMarkers === 1 ? "it" : "them"} or move ${chapter.todoMarkers === 1 ? "it" : "them"} into an HTML comment`, file));
     }
 
     if (chapter.unclosedComment) {
@@ -3971,7 +3973,7 @@ function buildProjectActions(project, validation, links, continuity, displayPath
   // Stale word counts and chapters without scenes get their own actions
   // below; every other validate warning (open research a final chapter relies
   // on, an empty matter page) is reviewed here.
-  const otherWarnings = validation.warnings.filter((warning) => !/ declares \S+ words but contains \d+$| has no machine-readable scene records$/.test(warning));
+  const otherWarnings = validation.warnings.filter((warning) => !/ declares \S+ words but contains \d+$| has no machine-readable scene records$/.test(asFinding(warning).message));
   if (otherWarnings.length > 0) {
     actions.push(action("P1", "Review validation warnings", `Run story validate ${where} and review ${otherWarnings.length} warning${otherWarnings.length === 1 ? "" : "s"}.`));
   }

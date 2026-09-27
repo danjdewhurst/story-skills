@@ -6,7 +6,7 @@ import { runCli } from "../src/cli.js";
 import { API_VERSION, diagnostic, diagnosticsFrom, resultData, writeJsonResult } from "../src/json.js";
 import { createStoryProject } from "../src/story.js";
 import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 const schema = JSON.parse(fs.readFileSync(RESULT_SCHEMA_PATH, "utf8"));
 const examplesRoot = path.resolve(import.meta.dir, "..", "examples");

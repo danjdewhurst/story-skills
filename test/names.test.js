@@ -3,7 +3,7 @@ import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { formatNames } from "../src/names.js";
 import { createEntity, createStoryProject, namesReport } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -30,7 +30,7 @@ describe("story names", () => {
     const { root } = namesProject();
     const report = namesReport(root, ["Mara", "the gull", "Glass", "Brass Key", "Rune Craft", "Tide Guild", "Mára"]);
     expect(report.ok).toBe(false);
-    expect(report.errors).toEqual([
+    expect(messages(report.errors)).toEqual([
       "\"Mara\" clashes with character mara-quill (Mara)",
       "\"the gull\" clashes with character ilya-venn (The Gull)",
       "\"Glass\" clashes with term tideglass (Glass)",
@@ -39,14 +39,14 @@ describe("story names", () => {
       "\"Tide Guild\" clashes with faction tide-guild (Tide Guild)",
       "\"Mára\" clashes with character mara-quill (Mara)"
     ]);
-    expect(report.warnings).not.toContain(expect.stringContaining("\"Mara\" looks like character mara-quill"));
+    expect(messages(report.warnings)).not.toContain(expect.stringContaining("\"Mara\" looks like character mara-quill"));
   });
 
   test("look-alikes and shared initials with major characters are warnings; cut characters are ignored", () => {
     const { root } = namesProject();
     const report = namesReport(root, ["Maro", "Saltmarch", "Milo", "Zander", "Ilyana", "Bo"]);
-    expect(report.errors).toEqual([]);
-    expect(report.warnings).toEqual([
+    expect(messages(report.errors)).toEqual([]);
+    expect(messages(report.warnings)).toEqual([
       "\"Maro\" looks like character mara-quill (Mara Quill)",
       "\"Saltmarch\" looks like location saltmarsh (Saltmarsh)",
       "\"Milo\" shares an initial with protagonist mara-quill (Mara Quill)",

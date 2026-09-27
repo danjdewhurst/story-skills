@@ -3,6 +3,7 @@
 // hooks, and length, plus advisory findings about runs that go slack. Reads
 // frontmatter only; everything here is a warning.
 
+import { warn } from "./findings.js";
 import { plural } from "./plural.js";
 
 export const SCENE_OUTCOMES = new Set(["yes", "no", "yes-but", "no-and"]);
@@ -41,7 +42,7 @@ export function buildPacing(project) {
       status: chapter.status
     });
     if (chapter.hook === "" && DRAFTED_STATUSES.has(chapter.status)) {
-      warnings.push(`${chapter.id} has no hook: record how the chapter ending pulls the reader on`);
+      warnings.push(warn("pacing-no-hook", `${chapter.id} has no hook: record how the chapter ending pulls the reader on`));
     }
   }
 

@@ -4,7 +4,7 @@ import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { parseFrontmatter, replaceFrontmatter } from "../src/frontmatter.js";
 import { checkProjectContinuity, createStoryProject, seriesReport, validateLinks, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo } from "./helpers.js";
+import { makeTempDir, memoryIo, messages } from "./helpers.js";
 
 const EXAMPLES = path.resolve(import.meta.dir, "..", "examples");
 
@@ -47,16 +47,16 @@ describe("#248 series metadata", () => {
     const cwd = emberSeries();
     const interlude = book(cwd, "Interlude", { follows: ["the-last-ember"] });
     setStory(interlude, { "book-number": 1.5 });
-    expect(validateProject(interlude).errors.join("\n")).not.toContain("book-number");
+    expect(messages(validateProject(interlude).errors).join("\n")).not.toContain("book-number");
     const report = seriesReport(interlude);
-    expect(report.errors).toEqual([]);
+    expect(messages(report.errors)).toEqual([]);
     expect(report.books.find((entry) => entry.title === "Interlude").bookNumber).toBe(1.5);
 
     setStory(interlude, { "book-number": 0 });
-    expect(validateProject(interlude).errors.join("\n")).not.toContain("book-number");
+    expect(messages(validateProject(interlude).errors).join("\n")).not.toContain("book-number");
 
     setStory(interlude, { "book-number": "1.5" });
-    expect(seriesReport(interlude).errors.join("\n")).toContain('story.md book-number "1.5" is not a number 0 or more');
+    expect(messages(seriesReport(interlude).errors).join("\n")).toContain('story.md book-number "1.5" is not a number 0 or more');
   });
 
   test("init accepts a decimal book number and numbers the next book after it", () => {
@@ -79,7 +79,7 @@ describe("#248 series metadata", () => {
     expect(invoke(cwd, ["series", "the-last-ember"]).out).toContain("# Series: The Ember Cycle");
 
     setStory(path.join(cwd, "the-fall-of-the-citadel"), { "series-title": "Ember Cycle" });
-    expect(seriesReport(root).warnings.join("\n")).toContain("Linked books set different series-title values");
+    expect(messages(seriesReport(root).warnings).join("\n")).toContain("Linked books set different series-title values");
   });
 
   test("init carries author, language, and series-title into the sequel", () => {
@@ -103,7 +103,7 @@ describe("#247 pronunciation across books and on systems", () => {
     const cwd = emberSeries();
     setFields(path.join(cwd, "the-last-ember", "characters", "lord-maren.md"), { pronunciation: "MARE-en" });
     setFields(path.join(cwd, "the-fall-of-the-citadel", "characters", "lord-maren.md"), { pronunciation: "MAH-ren" });
-    const warnings = seriesReport(path.join(cwd, "the-last-ember")).warnings.join("\n");
+    const warnings = messages(seriesReport(path.join(cwd, "the-last-ember")).warnings).join("\n");
     expect(warnings).toContain('pronunciation "MARE-en" differs from "MAH-ren"');
   });
 
@@ -117,7 +117,7 @@ describe("#247 pronunciation across books and on systems", () => {
     expect(script).toMatch(/\| Ember Magic \| EM-ber MAJ-ik \| system \|/);
 
     setFields(system, { pronunciation: 7 });
-    expect(validateProject(root).errors.join("\n")).toContain("worldbuilding/systems/ember-magic.md frontmatter field pronunciation must be text");
+    expect(messages(validateProject(root).errors).join("\n")).toContain("worldbuilding/systems/ember-magic.md frontmatter field pronunciation must be text");
   });
 });
 
@@ -144,7 +144,7 @@ describe("#246 destroyed artifacts and dead characters in later books", () => {
 
   test("series errors on a destroyed artifact used, and a dead character learning, in a later book", () => {
     const root = ashesRising();
-    const errors = seriesReport(root).errors.join("\n");
+    const errors = messages(seriesReport(root).errors).join("\n");
     expect(errors).toContain("scenes/chapter-01-scene-01.md uses blackened-crown, which was destroyed in earlier book The Last Ember");
     expect(errors).toContain("knowledge-state[0] has lord-maren learn something in chapter-01, but lord-maren died in earlier book The Last Ember");
   });
@@ -153,10 +153,10 @@ describe("#246 destroyed artifacts and dead characters in later books", () => {
     const root = ashesRising();
     setFields(path.join(root, "scenes", "chapter-01-scene-01.md"), { pov: "lord-maren", mentions: ["lord-maren"], "state-changes": [] });
     setFields(path.join(root, "continuity", "state.md"), { "knowledge-state": [] });
-    expect(seriesReport(root).errors.join("\n")).not.toContain("lord-maren");
+    expect(messages(seriesReport(root).errors).join("\n")).not.toContain("lord-maren");
 
     setFields(path.join(root, "scenes", "chapter-01-scene-01.md"), { mentions: [] });
-    expect(seriesReport(root).errors.join("\n")).toContain("scenes/chapter-01-scene-01.md lists lord-maren, who died in earlier book The Last Ember");
+    expect(messages(seriesReport(root).errors).join("\n")).toContain("scenes/chapter-01-scene-01.md lists lord-maren, who died in earlier book The Last Ember");
   });
 
   test("continuity errors when a character learns something after their death chapter", () => {
@@ -170,17 +170,17 @@ describe("#246 destroyed artifacts and dead characters in later books", () => {
     setFields(path.join(root, "continuity", "state.md"), {
       "knowledge-state": [{ character: "ann-lee", knows: "The truth", "learned-in": "chapter-02" }]
     });
-    expect(checkProjectContinuity(root).errors.join("\n")).toContain("knowledge-state[0] has ann-lee learn something in chapter-02, after they died in chapter-01");
+    expect(messages(checkProjectContinuity(root).errors).join("\n")).toContain("knowledge-state[0] has ann-lee learn something in chapter-02, after they died in chapter-01");
 
     setFields(path.join(root, "characters", "ann-lee.md"), { "died-in": "chapter-02" });
-    expect(checkProjectContinuity(root).errors.join("\n")).not.toContain("learn something");
+    expect(messages(checkProjectContinuity(root).errors).join("\n")).not.toContain("learn something");
 
     const character = path.join(root, "characters", "ann-lee.md");
     const markdown = fs.readFileSync(character, "utf8");
     const { data } = parseFrontmatter(markdown, character);
     delete data["died-in"];
     fs.writeFileSync(character, replaceFrontmatter(markdown, data), "utf8");
-    expect(checkProjectContinuity(root).warnings.join("\n")).toContain("ann-lee died before the story (deceased with no died-in)");
+    expect(messages(checkProjectContinuity(root).warnings).join("\n")).toContain("ann-lee died before the story (deceased with no died-in)");
   });
 });
 
@@ -209,7 +209,7 @@ describe("#79 long linear series", () => {
     }
     for (const start of ["b1", "b13"]) {
       const report = seriesReport(path.join(cwd, start));
-      expect(report.errors).toEqual([]);
+      expect(messages(report.errors)).toEqual([]);
       expect(report.books).toHaveLength(13);
     }
   });
@@ -221,10 +221,10 @@ describe("#203 backslash separators", () => {
     book(cwd, "Ser One", { series: "ser" });
     const two = book(cwd, "Ser Two", { follows: ["ser-one"] });
     setStory(two, { follows: ["..\\ser-one"], cover: "images\\cover.jpg" });
-    const warnings = validateProject(two).warnings.join("\n");
+    const warnings = messages(validateProject(two).warnings).join("\n");
     expect(warnings).toContain("story.md follows ..\\ser-one uses a backslash; write ../ser-one");
     expect(warnings).toContain("story.md cover images\\cover.jpg uses a backslash; write images/cover.jpg");
-    const errors = validateLinks(two).errors.join("\n");
+    const errors = messages(validateLinks(two).errors).join("\n");
     expect(errors).toContain("story.md follows ..\\ser-one uses a backslash; write ../ser-one so the link works on every system");
     expect(errors).not.toContain("is not a story project");
   });
@@ -235,7 +235,7 @@ describe("#203 backslash separators", () => {
     expect(invoke(root, ["add", "character", "Ilya Venn"]).code).toBe(0);
     const timeline = path.join(root, "plot", "timeline.md");
     fs.appendFileSync(timeline, "\n[Ilya](..\\characters\\ilya-venn.md)\n", "utf8");
-    const errors = validateLinks(root).errors.join("\n");
+    const errors = messages(validateLinks(root).errors).join("\n");
     expect(errors).toContain("links to ..\\characters\\ilya-venn.md with a backslash; write ../characters/ilya-venn.md");
     expect(errors).not.toContain("must be kebab-case");
   });

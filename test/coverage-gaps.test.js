@@ -7,7 +7,7 @@ import { chapterFindings } from "../src/prose.js";
 import { splitSentences } from "../src/sentences.js";
 import { splitOpenSpeech } from "../src/voices.js";
 import { compareProject, createEntity, createStoryProject, renameEntity, scanProject, validateProject } from "../src/story.js";
-import { makeTempDir, writeMarkdown } from "./helpers.js";
+import { makeTempDir, writeMarkdown, messages } from "./helpers.js";
 
 function git(cwd, ...args) {
   return execFileSync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Test", "-c", "init.defaultBranch=main", ...args], { cwd, encoding: "utf8" });
@@ -55,7 +55,7 @@ describe("prose findings", () => {
       bookisms: [],
       sentences: { count: 50, spread: 4.9999999 }
     });
-    expect(findings).toEqual(["Chapter 1 sentence lengths are uniform (spread 4.9999999 words over 50 sentences); vary the rhythm"]);
+    expect(messages(findings)).toEqual(["Chapter 1 sentence lengths are uniform (spread 4.9999999 words over 50 sentences); vary the rhythm"]);
   });
 });
 
@@ -130,7 +130,7 @@ describe("compare --ref git failures", () => {
     git(repo, "commit", "-qm", "chapters first");
     git(repo, "tag", "early");
     const result = compareProject(root, { ref: "early" });
-    expect(result.warnings).toContain("story.md does not exist at git ref early: the project may not have existed then");
+    expect(messages(result.warnings)).toContain("story.md does not exist at git ref early: the project may not have existed then");
   });
 });
 
@@ -167,13 +167,13 @@ describe("story.md validation", () => {
   test("an older schema-version is reported", () => {
     const root = newProject();
     writeStory(root, (text) => text.replace(/schema-version: \d+/, "schema-version: 1"));
-    expect(validateProject(root).errors).toContain("story.md schema-version must be 2");
+    expect(messages(validateProject(root).errors)).toContain("story.md schema-version must be 2");
   });
 
   test("a cover that is a directory is not a file", () => {
     const root = newProject();
     fs.mkdirSync(path.join(root, "cover.png"));
     writeStory(root, (text) => text.replace(/^---\n/, "---\ncover: cover.png\n"));
-    expect(validateProject(root).errors).toContain("story.md cover cover.png is not a file");
+    expect(messages(validateProject(root).errors)).toContain("story.md cover cover.png is not a file");
   });
 });

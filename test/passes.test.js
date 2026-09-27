@@ -4,7 +4,7 @@ import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { formatPasses, nextPass, readPasses, updatePasses } from "../src/passes.js";
 import { createEntity, createStoryProject, formatActionReport, projectActions, projectPasses, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo } from "./helpers.js";
+import { makeTempDir, memoryIo, messages } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -44,7 +44,7 @@ describe("story passes", () => {
     const after = fs.readFileSync(path.join(root, "story.md"), "utf8");
     expect(after.split("---")[2]).toBe(before.split("---")[2]);
     expect(after).toContain("  - pass: structure\n    status: in-progress");
-    expect(validateProject(root).errors).toEqual([]);
+    expect(messages(validateProject(root).errors)).toEqual([]);
   });
 
   test("update and next follow the ladder", () => {
@@ -69,7 +69,7 @@ describe("story passes", () => {
   test("validate rejects malformed pass lists", () => {
     const { root } = project();
     setStoryField(root, "revision-passes:\n  - pass: Bad Name\n  - pass: line\n    status: someday\n  - pass: line\n  - loose");
-    const errors = validateProject(root).errors;
+    const errors = messages(validateProject(root).errors);
     expect(errors).toContain("story.md revision pass Bad Name must be a kebab-case name");
     expect(errors).toContain("story.md revision pass line has unsupported status someday");
     expect(errors).toContain("story.md lists revision pass line more than once");
@@ -77,7 +77,7 @@ describe("story passes", () => {
 
     const other = project();
     setStoryField(other.root, "revision-passes: all");
-    expect(validateProject(other.root).errors).toContain("story.md frontmatter field revision-passes must be a list");
+    expect(messages(validateProject(other.root).errors)).toContain("story.md frontmatter field revision-passes must be a list");
   });
 
   test("story next recommends planning passes, then the next pass, while revising", () => {

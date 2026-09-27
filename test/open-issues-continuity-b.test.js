@@ -4,7 +4,7 @@ import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { checkContinuity } from "../src/continuity.js";
 import { createEntity, createStoryProject, scanProject } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 function pad(number) {
   return String(number).padStart(2, "0");
@@ -76,7 +76,7 @@ describe("two places at once (#171)", () => {
     writeScene(root, 1, 1, sighting("alpha"));
     writeScene(root, 1, 2, sighting("gamma"));
 
-    expect(continuity(root).errors).toEqual([
+    expect(messages(continuity(root).errors)).toEqual([
       "scenes/chapter-01-scene-02.md puts ann at gamma at the same time as scenes/chapter-01-scene-01.md at alpha"
     ]);
   });
@@ -86,7 +86,7 @@ describe("two places at once (#171)", () => {
     writeScene(root, 1, 1, sighting("alpha"));
     writeScene(root, 1, 2, sighting("beta"));
 
-    expect(continuity(root).errors).toEqual([
+    expect(messages(continuity(root).errors)).toEqual([
       "scenes/chapter-01-scene-02.md puts ann at beta at the same time as scenes/chapter-01-scene-01.md at alpha"
     ]);
   });
@@ -99,7 +99,7 @@ describe("two places at once (#171)", () => {
     writeScene(root, 1, 4, sighting("gamma", "morning"));
     writeScene(root, 1, 5, sighting("delta", "morning"));
 
-    expect(continuity(root).errors).toEqual([]);
+    expect(messages(continuity(root).errors)).toEqual([]);
   });
 
   test("still reports connected places with the route message", () => {
@@ -108,7 +108,7 @@ describe("two places at once (#171)", () => {
     writeScene(root, 1, 1, sighting("alpha"));
     writeScene(root, 1, 2, sighting("beta"));
 
-    expect(continuity(root).errors).toEqual([
+    expect(messages(continuity(root).errors)).toEqual([
       "scenes/chapter-01-scene-02.md puts ann at beta 0h after scenes/chapter-01-scene-01.md at alpha, but the fastest route takes 2h"
     ]);
   });
@@ -120,7 +120,7 @@ describe("clock order reads named times as windows (#84)", () => {
     writeScene(root, 1, 1, "date: 2024-01-01\ntime: \"10:20\"");
     writeScene(root, 1, 2, "date: 2024-01-01\ntime: morning");
 
-    expect(continuity(root).warnings.filter((warning) => warning.includes("runs backward"))).toEqual([]);
+    expect(messages(continuity(root).warnings).filter((warning) => warning.includes("runs backward"))).toEqual([]);
   });
 
   test("a time that cannot fall after the reference is still backward", () => {
@@ -129,8 +129,8 @@ describe("clock order reads named times as windows (#84)", () => {
     writeScene(root, 1, 2, "date: 2024-01-01\ntime: morning");
     writeScene(root, 1, 3, "date: 2024-01-01\ntime: \"14:00\"");
 
-    expect(continuity(root).warnings).toContain("scenes/chapter-01-scene-02.md timestamp runs backward");
-    expect(continuity(root).warnings).not.toContain("scenes/chapter-01-scene-03.md timestamp runs backward");
+    expect(messages(continuity(root).warnings)).toContain("scenes/chapter-01-scene-02.md timestamp runs backward");
+    expect(messages(continuity(root).warnings)).not.toContain("scenes/chapter-01-scene-03.md timestamp runs backward");
   });
 
   test("the reference keeps the later known time when a named window starts before it", () => {
@@ -139,17 +139,17 @@ describe("clock order reads named times as windows (#84)", () => {
     writeScene(root, 1, 2, "date: 2024-01-01\ntime: morning");
     writeScene(root, 1, 3, "date: 2024-01-01\ntime: \"10:00\"");
 
-    expect(continuity(root).warnings).toContain("scenes/chapter-01-scene-03.md timestamp runs backward");
+    expect(messages(continuity(root).warnings)).toContain("scenes/chapter-01-scene-03.md timestamp runs backward");
   });
 
   test("travel-hours uses the widest reading of named times", () => {
     const root = baseProject(1);
     writeScene(root, 1, 1, "date: 2024-01-01\ntime: morning");
     writeScene(root, 1, 2, "date: 2024-01-01\ntime: evening\ntravel-hours: 13");
-    expect(continuity(root).errors).toEqual([]);
+    expect(messages(continuity(root).errors)).toEqual([]);
 
     writeScene(root, 1, 2, "date: 2024-01-01\ntime: evening\ntravel-hours: 18");
-    expect(continuity(root).errors).toEqual(["scenes/chapter-01-scene-02.md allows at most 16.9h for travel of 18h"]);
+    expect(messages(continuity(root).errors)).toEqual(["scenes/chapter-01-scene-02.md allows at most 16.9h for travel of 18h"]);
   });
 
   test("the CLI repro gives no warning", () => {
@@ -162,7 +162,7 @@ describe("clock order reads named times as windows (#84)", () => {
     run(["add", "scene", "A", "--chapter", "chapter-01", "--date", "2024-01-01", "--time", "10:20"]);
     run(["add", "scene", "B", "--chapter", "chapter-01", "--date", "2024-01-01", "--time", "morning"]);
 
-    expect(continuity(root).warnings.filter((warning) => warning.includes("runs backward"))).toEqual([]);
+    expect(messages(continuity(root).warnings).filter((warning) => warning.includes("runs backward"))).toEqual([]);
   });
 });
 
@@ -178,7 +178,7 @@ describe("cut characters still referenced (#115)", () => {
     fs.writeFileSync(bobFile, fs.readFileSync(bobFile, "utf8").replace("relationships: []", "relationships:\n  - character: ann\n    type: friend"), "utf8");
     setStatus(bobFile, "cut");
 
-    const warnings = continuity(root).warnings.filter((warning) => warning.includes("status: cut"));
+    const warnings = messages(continuity(root).warnings).filter((warning) => warning.includes("status: cut"));
     expect(warnings).toEqual([
       "chapters/chapter-01.md lists bob, who has status: cut; drop them from pov and characters",
       "scenes/chapter-01-scene-01.md lists bob, who has status: cut; drop them from pov and characters",
@@ -193,7 +193,7 @@ describe("cut characters still referenced (#115)", () => {
     writeChapter(root, 1, "characters:\n  - ann");
     setStatus(path.join(root, "characters", "bob.md"), "cut");
 
-    expect(continuity(root).warnings.filter((warning) => warning.includes("status: cut"))).toEqual([]);
+    expect(messages(continuity(root).warnings).filter((warning) => warning.includes("status: cut"))).toEqual([]);
   });
 });
 
@@ -207,7 +207,7 @@ describe("planned and payoff warnings read the named chapter's own status (#164)
     writeMarkdown(path.join(root, "continuity", "clues", "glove.md"), "title: Glove\nstatus: planted\nplanted: chapter-01\npayoff: chapter-02", "# Glove\n");
 
     const result = continuity(root);
-    expect(result.warnings.filter((warning) => warning.includes("continuity/"))).toEqual([]);
+    expect(messages(result.warnings).filter((warning) => warning.includes("continuity/"))).toEqual([]);
   });
 
   test("drafted planted and payoff chapters still warn", () => {
@@ -215,7 +215,7 @@ describe("planned and payoff warnings read the named chapter's own status (#164)
     writeMarkdown(path.join(root, "continuity", "promises", "gun.md"), "title: Gun\nstatus: planned\nplanted: chapter-02", "# Gun\n");
     writeMarkdown(path.join(root, "continuity", "promises", "knife.md"), "title: Knife\nstatus: planted\nplanted: chapter-01\npayoff: chapter-03", "# Knife\n");
 
-    const warnings = continuity(root).warnings;
+    const warnings = messages(continuity(root).warnings);
     expect(warnings).toContain("continuity/promises/gun.md records planted chapter chapter-02 but status is still planned");
     expect(warnings).toContain("continuity/promises/knife.md payoff chapter chapter-03 has passed and status is still planted");
   });

@@ -5,7 +5,7 @@ import { runCli } from "../src/cli.js";
 import { estimateBookPages, printHtml } from "../src/html.js";
 import { importManuscript } from "../src/import.js";
 import { buildBook, createStoryProject, exportManuscript, synopsisBook, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo, readArchiveText, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, readArchiveText, writeMarkdown, messages } from "./helpers.js";
 
 function project(title = "Open Builds", storyFields = "") {
   const cwd = makeTempDir();
@@ -88,7 +88,7 @@ describe("unnumbered chapters (#244)", () => {
     expect(prologue).toContain("# Prologue\n");
     expect(fs.readFileSync(path.join(root, "chapters", "chapter-03.md"), "utf8")).toContain("title: Interval\nnumber: 3\nnumbered: false");
     expect(fs.readFileSync(path.join(root, "chapters", "chapter-02.md"), "utf8")).not.toContain("numbered:");
-    expect(validateProject(root).errors).toEqual([]);
+    expect(messages(validateProject(root).errors)).toEqual([]);
 
     const print = fs.readFileSync(buildBook(root, { format: "print" }).outFile, "utf8");
     expect(print.match(/<h1>[^<]*<\/h1>/g).slice(2)).toEqual([
@@ -121,7 +121,7 @@ describe("unnumbered chapters (#244)", () => {
     const { root } = project();
     chapter(root, 1, `title: ""\nnumbered: false`, "Text.");
     chapter(root, 2, "title: Two\nnumbered: nope", "Text.");
-    const errors = validateProject(root).errors;
+    const errors = messages(validateProject(root).errors);
     expect(errors).toContain("chapters/chapter-01.md is unnumbered (numbered: false), so it needs a title to print as its heading");
     expect(errors).toContain("chapters/chapter-02.md numbered must be true or false");
     expect(() => buildBook(root, { format: "html" })).toThrow("chapters/chapter-01.md: an unnumbered chapter needs a title to build");
@@ -141,7 +141,7 @@ describe("localised labels (#243)", () => {
   test("chapter-label and contents-label replace the English labels in every build", () => {
     const { root } = project("Die Glocke", "language: de\nchapter-label: Kapitel\ncontents-label: Inhalt\n");
     chapter(root, 1, "title: Das Riff", "Die Glocke läutete.");
-    expect(validateProject(root).errors).toEqual([]);
+    expect(messages(validateProject(root).errors)).toEqual([]);
 
     const print = fs.readFileSync(buildBook(root, { format: "print" }).outFile, "utf8");
     expect(print).toContain("<h1>Inhalt</h1>");
@@ -162,7 +162,7 @@ describe("localised labels (#243)", () => {
     expect(fs.readFileSync(buildBook(root, { format: "print" }).outFile, "utf8")).toContain("<h1>第1章: 風</h1>");
 
     const other = project("Bad Label", "chapter-label: 3\n");
-    expect(validateProject(other.root).errors).toContain("story.md frontmatter field chapter-label must be text");
+    expect(messages(validateProject(other.root).errors)).toContain("story.md frontmatter field chapter-label must be text");
   });
 });
 
@@ -243,11 +243,11 @@ describe("empty chapters (#134)", () => {
     chapter(root, 1, "title: One", "She climbed.");
     writeMarkdown(path.join(root, "chapters", "chapter-02.md"), "title: Unwritten\nnumber: 2\nstatus: outline\n", "## Chapter Text\n");
     const warning = "chapters/chapter-02.md has no prose yet, so export and build print it as a heading-only page";
-    expect(validateProject(root).warnings).not.toContain(warning);
+    expect(messages(validateProject(root).warnings)).not.toContain(warning);
 
     const storyPath = path.join(root, "story.md");
     fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace(/^status: \w+/m, "status: complete"), "utf8");
-    expect(validateProject(root).warnings).toContain(warning);
+    expect(messages(validateProject(root).warnings)).toContain(warning);
   });
 });
 

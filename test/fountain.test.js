@@ -4,7 +4,7 @@ import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { fountainScript, inline, sceneHeading, timeOfDay } from "../src/fountain.js";
 import { buildBook, createStoryProject, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 // The screenplay-fountain eval fixture as a story project: Tomas alone in
 // the lamp room of Greywidow Light at dusk.
@@ -115,11 +115,11 @@ describe("fountain build", () => {
     ].join("\n"));
     // No prose is carried over: a screenplay is written, not converted.
     expect(text).not.toContain("I climbed");
-    expect(result.warnings).toEqual([
+    expect(messages(result.warnings)).toEqual([
       "No scene records for chapter-03: the screenplay has no headings for that chapter",
       "No setting (interior, exterior, or both) for gallery: their scene headings are forced without INT. or EXT."
     ]);
-    expect(validateProject(root).errors).toEqual([]);
+    expect(messages(validateProject(root).errors)).toEqual([]);
   });
 
   test("builds into adaptations/ once and never replaces the draft there", () => {
@@ -153,7 +153,7 @@ describe("fountain build", () => {
     expect(text).toContain("INT./EXT. SEA CAVE\n\n= Missing Place\n\n[[Source: chapter-03-scene-02]]\n[[No location record for sea-cave: fix the scene's location or add the location.]]\n");
     expect(text).toContain(".LAMP ROOOM\n\n= Typo\n\n[[Source: chapter-03-scene-03]]\n[[No location record for lamp-rooom: fix the scene's location or add the location.]]\n[[No setting: add setting (interior, exterior, or both) to the scene for INT. or EXT.]]\n");
     expect(text).not.toContain("Stray");
-    expect(result.warnings).toEqual([
+    expect(messages(result.warnings)).toEqual([
       "scenes/chapter-09-scene-01.md names chapter chapter-09, which is not in the book, and is left out of the screenplay",
       "scenes/chapter-03-scene-01.md has no location; its screenplay heading reads LOCATION TBD",
       "scenes/chapter-03-scene-02.md names location sea-cave, which has no record; run story links",
@@ -166,7 +166,7 @@ describe("fountain build", () => {
     const root = lighthouse();
     writeMarkdown(path.join(root, "worldbuilding", "locations", "yard.md"), "name: Yard\ntype: building\nsetting: outside", "# Yard\n");
     writeMarkdown(path.join(root, "scenes", "chapter-03-scene-01.md"), "title: Odd\nchapter: chapter-03\nscene: 1\nstatus: draft\nsetting:\n  - interior", "# Odd\n");
-    const { errors } = validateProject(root);
+    const errors = messages(validateProject(root).errors);
     expect(errors).toContain("worldbuilding/locations/yard.md frontmatter field setting has unsupported value outside");
     expect(errors).toContain("scenes/chapter-03-scene-01.md frontmatter field setting must be a single value, not a list");
   });
@@ -304,9 +304,9 @@ describe("fountain build integration", () => {
     // Chapter 1 reads the location as it opens; chapter 2 reads the progression.
     expect(text).toContain("EXT. GALLERY - MORNING");
     expect(text).toContain("INT. GLASSED GALLERY - NIGHT");
-    expect(validateProject(root).errors).toEqual([]);
+    expect(messages(validateProject(root).errors)).toEqual([]);
 
     writeMarkdown(path.join(root, "worldbuilding", "locations", "gallery.md"), "name: Gallery\ntype: building\nprogressions:\n  - from: chapter-02\n    field: setting\n    value: indoors", "# Gallery\n");
-    expect(validateProject(root).errors).toContain("worldbuilding/locations/gallery.md progressions[0] setting has unsupported value indoors");
+    expect(messages(validateProject(root).errors)).toContain("worldbuilding/locations/gallery.md progressions[0] setting has unsupported value indoors");
   });
 });

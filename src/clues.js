@@ -3,6 +3,8 @@
 // notice. `story continuity` owns the hard ordering errors; everything here is
 // a warning.
 
+import { warn } from "./findings.js";
+
 const LIVE_STATUSES = new Set(["planned", "planted", "paid-off"]);
 
 export function buildClueMatrix(project) {
@@ -34,11 +36,11 @@ export function buildClueMatrix(project) {
       continue;
     }
     if (clue.payoff !== "" && clue.planted === "") {
-      warnings.push(`${label} is revealed in ${clue.payoff} but never planted: readers cannot play fair`);
+      warnings.push(warn("clue-unplanted", `${label} is revealed in ${clue.payoff} but never planted: readers cannot play fair`));
     }
     if (plantAt !== undefined && payoffAt !== undefined && payoffAt - plantAt >= 0 && payoffAt - plantAt < 2) {
       const where = payoffAt === plantAt ? "the same chapter as" : "the chapter before";
-      warnings.push(`${label} is planted in ${where} its reveal (${clue.planted} -> ${clue.payoff}): late plant gives readers no time to notice it`);
+      warnings.push(warn("clue-late-plant", `${label} is planted in ${where} its reveal (${clue.planted} -> ${clue.payoff}): late plant gives readers no time to notice it`));
     }
     if (clue.characters.length === 0) {
       warnings.push(`${label} lists no characters: record who could notice it`);

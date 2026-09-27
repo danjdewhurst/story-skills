@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { createEntity, createStoryProject, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -28,7 +28,7 @@ used-in:
 }
 
 function researchWarnings(root) {
-  return validateProject(root).warnings.filter((warning) => warning.startsWith("research/") && !warning.includes("registry"));
+  return messages(validateProject(root).warnings).filter((warning) => warning.startsWith("research/") && !warning.includes("registry"));
 }
 
 describe("research accuracy, method, and risk review", () => {
@@ -57,7 +57,7 @@ describe("research accuracy, method, and risk review", () => {
   test("risky notes used in settled chapters need a reviewer", () => {
     const { root } = project();
     writeNote(root, "dosage", "status: verified\nsources:\n  - BNF\nrisk:\n  - medical\n  - legal");
-    expect(validateProject(root).warnings).toContain("research/dosage.md carries medical, legal risk but has no reviewed-by, and chapter-01 relies on it");
+    expect(messages(validateProject(root).warnings)).toContain("research/dosage.md carries medical, legal risk but has no reviewed-by, and chapter-01 relies on it");
     writeNote(root, "dosage", "status: verified\nsources:\n  - BNF\nrisk:\n  - medical\nreviewed-by:\n  - ward nurse (retired)");
     expect(researchWarnings(root)).toEqual([]);
 
@@ -69,7 +69,7 @@ describe("research accuracy, method, and risk review", () => {
   test("validate rejects unknown accuracy, confidence, method, and risk values", () => {
     const { root } = project();
     writeNote(root, "odd", "status: open\naccuracy: vibes\nconfidence: total\nmethod: dream\nrisk:\n  - spicy\nreviewed-by: someone");
-    const errors = validateProject(root).errors;
+    const errors = messages(validateProject(root).errors);
     expect(errors).toContain("research/odd.md frontmatter field accuracy has unsupported value vibes");
     expect(errors).toContain("research/odd.md frontmatter field confidence has unsupported value total");
     expect(errors).toContain("research/odd.md frontmatter field method has unsupported value dream");

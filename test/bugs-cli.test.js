@@ -8,7 +8,7 @@ import { createEntity, createStoryProject, projectActions, validateLinks, valida
 import { findOverlaps } from "../scripts/check-evals.js";
 import { bumpVersion, parseReleaseArgs } from "../scripts/release.js";
 import { checkDraft } from "../evals/run-evals.js";
-import { makeTempDir, memoryIo } from "./helpers.js";
+import { makeTempDir, memoryIo, messages } from "./helpers.js";
 
 const repoRoot = path.resolve(import.meta.dir, "..");
 
@@ -182,7 +182,7 @@ describe("#109 discovered chapters", () => {
     fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace(/^mode: .*$/m, "mode: discoverd"));
     const story = path.join(root, "story.md");
     fs.writeFileSync(story, fs.readFileSync(story, "utf8").replace(/^status: /m, "draft-mode: pantsed\nstatus: "));
-    const errors = validateProject(root).errors;
+    const errors = messages(validateProject(root).errors);
     expect(errors).toContain("chapters/chapter-01.md frontmatter field mode has unsupported value discoverd");
     expect(errors).toContain("story.md frontmatter field draft-mode has unsupported value pantsed");
   });
@@ -214,9 +214,9 @@ describe("#112 scheduled chapters in arc bodies", () => {
     createEntity(root, { kind: "chapter", name: "One", number: 1 });
     const arc = createEntity(root, { kind: "arc", name: "Main", type: "main" });
     fs.appendFileSync(arc.file, "\n| 1 | Harry sees the lights | act-3 | chapter-09 | planned | |\n");
-    expect(validateLinks(root).errors).toEqual([]);
+    expect(messages(validateLinks(root).errors)).toEqual([]);
     fs.appendFileSync(arc.file, "\nA typo: chapter-1 and chapter-00.\n");
-    expect(validateLinks(root).errors).toEqual([
+    expect(messages(validateLinks(root).errors)).toEqual([
       "plot/arcs/main.md references missing chapter chapter-1",
       "plot/arcs/main.md references missing chapter chapter-00"
     ]);
@@ -225,7 +225,7 @@ describe("#112 scheduled chapters in arc bodies", () => {
   test("the timeline still needs chapters that exist", () => {
     const root = newProject();
     fs.appendFileSync(path.join(root, "plot", "timeline.md"), "\n- chapter-09: the lights\n");
-    expect(validateLinks(root).errors).toEqual(["plot/timeline.md references missing chapter chapter-09"]);
+    expect(messages(validateLinks(root).errors)).toEqual(["plot/timeline.md references missing chapter chapter-09"]);
   });
 });
 

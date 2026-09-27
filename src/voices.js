@@ -1,3 +1,4 @@
+import { warn } from "./findings.js";
 import { splitWords } from "./markdown.js";
 import { givenName } from "./names.js";
 import { plural } from "./plural.js";
@@ -96,7 +97,7 @@ export function buildVoices(project, chapters) {
       const pattern = phrasePattern(phrase);
       const chaptersUsing = [...new Set(said.filter((line) => pattern.test(line.text)).map((line) => line.chapter))];
       if (chaptersUsing.length > 0) {
-        warnings.push(`${character.id} says "${phrase}", which is in their voice-avoid list (${chaptersUsing.join(", ")})`);
+        warnings.push(warn("voice-avoid", `${character.id} says "${phrase}", which is in their voice-avoid list (${chaptersUsing.join(", ")})`));
       }
     }
     if (said.length >= VOICE_THRESHOLDS.minLines) {

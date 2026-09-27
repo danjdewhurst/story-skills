@@ -18,7 +18,7 @@ import {
   validateProject,
   voicesReport
 } from "../src/story.js";
-import { makeTempDir, memoryIo, readArchiveText, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, readArchiveText, writeMarkdown, messages } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -62,7 +62,7 @@ describe("review fixes", () => {
     for (const [scene, location, time] of [[1, "harbor", "08:00"], [2, "mill", "09:00"]]) {
       writeMarkdown(path.join(root, "scenes", `chapter-01-scene-0${scene}.md`), `title: S${scene}\nchapter: chapter-01\nscene: ${scene}\nstatus: draft\nlocation: ${location}\ndate: 2024-05-01\ntime: "${time}"\ncharacters:\n  - mara`, "# S\n");
     }
-    expect(checkProjectContinuity(root).errors).toEqual([]);
+    expect(messages(checkProjectContinuity(root).errors)).toEqual([]);
   });
 
   test("print css strings cannot close the style element", () => {
@@ -96,10 +96,10 @@ describe("review fixes", () => {
     const report = voicesReport(root);
     expect(report.unattributed).toBe(1);
     expect(report.profiles.map((entry) => [entry.id, entry.lines]).sort()).toEqual([["kael", 1], ["lord-maren", 1], ["sera", 1]]);
-    expect(report.warnings).toEqual([]);
+    expect(messages(report.warnings)).toEqual([]);
 
     writeMarkdown(path.join(root, "chapters", "chapter-02.md"), "title: Two\nnumber: 2\nstatus: draft", "## Chapter Text\n\n\"I don't care,\" Sera said.\n");
-    expect(voicesReport(root).warnings).toEqual(["sera says \"don\u2019t\", which is in their voice-avoid list (chapter-02)"]);
+    expect(messages(voicesReport(root).warnings)).toEqual(["sera says \"don\u2019t\", which is in their voice-avoid list (chapter-02)"]);
   });
 
   test("story names skips titles and articles and compares whole names whole", () => {
@@ -107,8 +107,8 @@ describe("review fixes", () => {
     writeMarkdown(path.join(root, "characters", "lord-maren.md"), "name: Lord Maren\nrole: antagonist\nstatus: alive\naliases:\n  - The Iron Lord", "# L\n");
     createEntity(root, { kind: "location", name: "The Ashen Citadel" });
     const report = namesReport(root, ["Lord Vance", "Theo", "The Hollow", "Tobias", "Maren", "Marek"]);
-    expect(report.errors).toEqual(["\"Maren\" clashes with character lord-maren (Maren)"]);
-    expect(report.warnings).toEqual([
+    expect(messages(report.errors)).toEqual(["\"Maren\" clashes with character lord-maren (Maren)"]);
+    expect(messages(report.warnings)).toEqual([
       "\"Marek\" looks like character lord-maren (Lord Maren)"
     ]);
   });
@@ -118,12 +118,12 @@ describe("review fixes", () => {
     for (const id of ["a", "b", "c"]) {
       writeMarkdown(path.join(root, "continuity", "clues", `${id}.md`), `title: ${id}\nstatus: planted\nplanted: chapter-01\ncharacters:\n  - x${id === "a" ? "\nsignificance-delayed: \"false\"" : ""}`, `# ${id}\n`);
     }
-    expect(clueReport(root).warnings).toContain("no clue is significance-delayed: every clue announces its meaning when planted");
+    expect(messages(clueReport(root).warnings)).toContain("no clue is significance-delayed: every clue announces its meaning when planted");
   });
 
   test("a non-text author is a validation error", () => {
     const { root } = project("author: 123");
-    expect(validateProject(root).errors).toContain("story.md frontmatter field author must be text");
+    expect(messages(validateProject(root).errors)).toContain("story.md frontmatter field author must be text");
   });
 
   test("arc nodes never collide with chapter nodes", () => {
@@ -170,7 +170,7 @@ describe("review fixes", () => {
     scene("chapter-01", 1, "location: x\ndate: 2020-01-01\ntime: \"23:00\"");
     scene("chapter-01", 2, "location: x\ndate: 2020-01-02");
     scene("chapter-01", 3, "location: y\ndate: 2020-01-02\ntime: \"01:00\"");
-    expect(checkProjectContinuity(root).errors).toEqual([
+    expect(messages(checkProjectContinuity(root).errors)).toEqual([
       "scenes/chapter-01-scene-03.md puts mara at y 2h after scenes/chapter-01-scene-01.md at x, but the fastest route takes 10h"
     ]);
 
@@ -180,14 +180,14 @@ describe("review fixes", () => {
     }
     scene("chapter-01", 1, "location: x\ndate: 2020-01-01");
     scene("chapter-01", 2, "location: z\ndate: 2020-01-02\ntime: \"01:00\"");
-    expect(checkProjectContinuity(root).errors).toEqual([
+    expect(messages(checkProjectContinuity(root).errors)).toEqual([
       "scenes/chapter-01-scene-02.md puts mara at z at most 25h after scenes/chapter-01-scene-01.md at x, but the fastest route takes 30h"
     ]);
 
     // Morning to afternoon can span 06:00 to 16:00, so a 9h route is possible.
     scene("chapter-01", 1, "location: x\ndate: 2020-01-01\ntime: morning");
     scene("chapter-01", 2, "location: y\ndate: 2020-01-01\ntime: afternoon");
-    expect(checkProjectContinuity(root).errors).toEqual([]);
+    expect(messages(checkProjectContinuity(root).errors)).toEqual([]);
   });
 
   test("rename leaves a `to` key outside routes alone", () => {
@@ -211,7 +211,7 @@ describe("review fixes", () => {
 
   test("an EAN-13 that is not an ISBN is rejected", () => {
     const { root } = project("isbn: \"4006381333931\"");
-    expect(validateProject(root).errors).toContain("story.md isbn 4006381333931 is not a valid ISBN-13 or ISBN-10 (check the digits and checksum)");
+    expect(messages(validateProject(root).errors)).toContain("story.md isbn 4006381333931 is not a valid ISBN-13 or ISBN-10 (check the digits and checksum)");
   });
 
   test("matter section ids cannot collide with paragraph anchors in the review copy", () => {
@@ -229,10 +229,10 @@ describe("review fixes", () => {
     const { root } = project();
     writeMarkdown(path.join(root, "characters", "mara.md"), "name: Mara\nrole: protagonist\nstatus: alive\naliases:\n  - Maro\n  - Mo", "# M\n");
     const report = namesReport(root, ["Mila", "Maro", "Mo"]);
-    expect(report.errors).toEqual([
+    expect(messages(report.errors)).toEqual([
       "\"Maro\" clashes with character mara (Maro)",
       "\"Mo\" clashes with character mara (Mo)"
     ]);
-    expect(report.warnings).toEqual(["\"Mila\" shares an initial with protagonist mara (Mara)"]);
+    expect(messages(report.warnings)).toEqual(["\"Mila\" shares an initial with protagonist mara (Mara)"]);
   });
 });

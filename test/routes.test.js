@@ -10,7 +10,7 @@ import {
   validateLinks,
   validateProject
 } from "../src/story.js";
-import { makeTempDir, writeMarkdown } from "./helpers.js";
+import { makeTempDir, writeMarkdown, messages } from "./helpers.js";
 
 function writeLocation(root, id, routes) {
   writeMarkdown(path.join(root, "worldbuilding", "locations", `${id}.md`), `
@@ -54,18 +54,18 @@ status: draft
 describe("location routes", () => {
   test("validate and links accept well-formed routes", () => {
     const root = routeProject();
-    expect(validateProject(root).errors).toEqual([]);
-    expect(validateLinks(root).errors).toEqual([]);
+    expect(messages(validateProject(root).errors)).toEqual([]);
+    expect(messages(validateLinks(root).errors)).toEqual([]);
   });
 
   test("validate rejects malformed routes and links rejects missing or self targets", () => {
     const root = routeProject();
     writeLocation(root, "bad", "routes:\n  - hours: -1\n    mode: boat\n  - to: nowhere\n    hours: 2\n  - to: bad\n    hours: 1\n  - plain");
-    const errors = validateProject(root).errors;
+    const errors = messages(validateProject(root).errors);
     expect(errors).toContain("worldbuilding/locations/bad.md route is missing to");
     expect(errors).toContain("worldbuilding/locations/bad.md route to ? hours must be a positive number");
     expect(errors).toContain("worldbuilding/locations/bad.md frontmatter field routes must contain objects");
-    const links = validateLinks(root).errors;
+    const links = messages(validateLinks(root).errors);
     expect(links).toContain("worldbuilding/locations/bad.md route references missing location nowhere");
     expect(links).toContain("worldbuilding/locations/bad.md route points at itself");
   });
@@ -79,7 +79,7 @@ describe("location routes", () => {
     writeScene(root, "chapter-02", 1, "location: keep\ndate: 2024-05-02\ncharacters:\n  - tom");
     writeScene(root, "chapter-02", 2, "location: harbor\ndate: 2024-05-03\ncharacters:\n  - tom");
     const result = checkProjectContinuity(root);
-    expect(result.errors).toEqual([
+    expect(messages(result.errors)).toEqual([
       "scenes/chapter-01-scene-02.md puts mara at keep 12h after scenes/chapter-01-scene-01.md at harbor, but the fastest route takes 16h"
     ]);
   });
@@ -92,7 +92,7 @@ describe("location routes", () => {
     writeScene(root, "chapter-01", 3, "location: tower\ndate: 2024-05-01\ntime: \"19:00\"\ncharacters:\n  - mara");
     writeScene(root, "chapter-01", 4, "location: mill\ndate: 2024-05-01\ntime: \"19:30\"\ncharacters:\n  - tom");
     writeScene(root, "chapter-01", 5, "location: mill\ndate: 2024-05-01\ntime: \"20:00\"\ncharacters:\n  - tom");
-    expect(checkProjectContinuity(root).errors).toEqual([
+    expect(messages(checkProjectContinuity(root).errors)).toEqual([
       "scenes/chapter-01-scene-02.md puts mara at mill 12h after scenes/chapter-01-scene-01.md at keep, but the fastest route takes 20h"
     ]);
   });
@@ -103,7 +103,7 @@ describe("location routes", () => {
     writeLocation(root, "lighthouse", "");
     writeScene(root, "chapter-01", 1, "location: harbor\ndate: 2024-05-01\ntime: 08:00\ncharacters:\n  - mara");
     writeScene(root, "chapter-01", 2, "location: isle\ndate: 2024-05-01\ntime: 08:05\ncharacters:\n  - mara");
-    expect(checkProjectContinuity(root).errors).toEqual([]);
+    expect(messages(checkProjectContinuity(root).errors)).toEqual([]);
   });
 
   test("rename and remove keep route targets current", () => {
@@ -114,6 +114,6 @@ describe("location routes", () => {
     const harbor = fs.readFileSync(path.join(root, "worldbuilding", "locations", "harbor.md"), "utf8");
     expect(harbor).not.toContain("old-mill");
     expect(harbor).not.toContain("hours: 6");
-    expect(validateProject(root).errors).toEqual([]);
+    expect(messages(validateProject(root).errors)).toEqual([]);
   });
 });

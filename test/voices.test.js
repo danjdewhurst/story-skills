@@ -3,7 +3,7 @@ import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { createStoryProject, validateProject, voicesReport } from "../src/story.js";
 import { formatVoices, quotedSpans } from "../src/voices.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -59,7 +59,7 @@ describe("story voices", () => {
     expect(tom.lines).toBe(2);
     expect(tom.contractions).toBeCloseTo(100 / 6, 5);
     expect(tom.questions).toBe(0.5);
-    expect(report.warnings).toEqual([
+    expect(messages(report.warnings)).toEqual([
       "mara-quill says \"okay\", which is in their voice-avoid list (chapter-01)"
     ]);
   });
@@ -71,7 +71,7 @@ describe("story voices", () => {
       lines.push(`"We go now. We go fast." Mara said.`, `"We go now. We go fast," Tom said.`);
     }
     writeChapter(root, 1, lines);
-    expect(voicesReport(root).warnings).toEqual([
+    expect(messages(voicesReport(root).warnings)).toEqual([
       "mara-quill does not say \"tide\" from their voice-words list in 5 attributed lines of dialogue",
       "mara-quill does not say \"reckon\" from their voice-words list in 5 attributed lines of dialogue",
       "mara-quill and tom-reed may sound alike: similar sentence length, contractions, questions, and exclamations"
@@ -109,6 +109,6 @@ describe("story voices", () => {
     expect(formatVoices({ profiles: [], unattributed: 3, warnings: [] })).toContain("0 speaking characters, 3 unattributed lines");
 
     writeCharacter(root, "bad", "Bad", "voice-words: nope");
-    expect(validateProject(root).errors).toContain("characters/bad.md frontmatter field voice-words must be a list");
+    expect(messages(validateProject(root).errors)).toContain("characters/bad.md frontmatter field voice-words must be a list");
   });
 });

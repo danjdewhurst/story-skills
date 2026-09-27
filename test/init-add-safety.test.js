@@ -6,7 +6,7 @@ import { parseFrontmatter } from "../src/frontmatter.js";
 import { importManuscript } from "../src/import.js";
 import { buildSeries } from "../src/series.js";
 import { buildBook, createEntity, createStoryProject, scanProject, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo, readArchiveText, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, readArchiveText, writeMarkdown, messages } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -33,7 +33,7 @@ describe("init", () => {
     const created = scanProject(path.join(cwd, "tk"));
     expect(created.storyId).toBe("tk");
     expect(created.title).toBe("東京物語");
-    expect(validateProject(path.join(cwd, "tk")).errors).toEqual([]);
+    expect(messages(validateProject(path.join(cwd, "tk")).errors)).toEqual([]);
   });
 
   test("--force adds missing starter files and never overwrites existing ones", () => {
@@ -99,7 +99,7 @@ describe("init", () => {
     fs.writeFileSync(twoStory, fs.readFileSync(twoStory, "utf8").replace("book-number: 2", "book-number: 1"), "utf8");
     const report = buildSeries(path.join(cwd, "book-one"), scanProject);
     expect(report.ok).toBe(false);
-    expect(report.errors.join("\n")).toContain("share book-number 1");
+    expect(messages(report.errors).join("\n")).toContain("share book-number 1");
   });
 });
 
@@ -226,7 +226,7 @@ number: 1
 status: draft
 word-count: -4
 `, "## Chapter Text\n\nText.");
-    const errors = validateProject(root).errors.join("\n");
+    const errors = messages(validateProject(root).errors).join("\n");
     expect(errors).toContain("target-words must be at least 1");
     expect(errors).toContain("current-chapter must be at least 0");
     expect(errors).toContain("word-count must be at least 0");
