@@ -41,8 +41,8 @@ For flags and exit codes of every command, see the [CLI reference](cli-reference
 | [`story timeline [path]`](#story-timeline) | What order do events happen in story time? Whose book is it? Who disappears? |
 | [`story pacing [path]`](#story-pacing) | Do scenes cost the characters enough, do chapters end with a pull, and are any chapters out of proportion? |
 | [`story clues [path]`](#story-clues) | Where is each clue planted and revealed, and does the mystery play fair? |
-| [`story prose [path]`](#story-prose) | Where does the prose lean on filter words, adverbs, said-bookisms, or off-sheet spellings? |
-| [`story voices [path]`](#story-voices) | How does each character talk, and do any two sound alike? |
+| [`story prose [path\|-]`](#story-prose) | Where does the prose lean on filter words, adverbs, said-bookisms, or off-sheet spellings? |
+| [`story voices [path\|-]`](#story-voices) | How does each character talk, and do any two sound alike? |
 | [`story names <name...>`](#story-names) | Is this candidate name already taken, or too close to one in use? |
 | [`story diagram <kind>`](#story-diagram) | What do the family tree, route map, timeline, clue flow, or arc map look like? |
 | [`story progress [path]`](#story-progress) | How far along is the draft against its targets and deadline? |
@@ -789,6 +789,8 @@ The said-bookism list includes tags such as `barked`, `growled`, `hissed`, `laug
 
 Prose findings are always warnings. `story prose` exits 0 on any readable project, so you can run it freely.
 
+To check a passage before it goes into a chapter file, pipe it in with `-` in place of the path: `story prose - < draft-scene.md`. The passage is linted with the same rules and the style sheet of the project in the current directory (or `--path`), and its findings are labelled `stdin`. See [Reading from stdin](cli-reference.md#reading-from-stdin).
+
 ### The style sheet
 
 `story prose` reads the optional `style-sheet.md` at the project root. Without one, it prints `No style-sheet.md: spelling and watch-word checks are off`. The `voice-style` skill creates and maintains it; see [Writing workflows](writing-workflows.md#voice-and-house-style).
@@ -829,6 +831,8 @@ story voices .
 ```
 
 `story voices` fingerprints each character's dialogue from the chapter prose, so you can see whether characters sound different from each other and from how you described them. It is advisory: every finding is a warning, and it exits 0 on any readable project.
+
+`story voices - < draft-scene.md` checks the dialogue in a piped passage instead, against the characters of the project in the current directory (or `--path`). See [Reading from stdin](cli-reference.md#reading-from-stdin).
 
 ### How lines are attributed
 

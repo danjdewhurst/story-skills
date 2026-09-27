@@ -82,6 +82,12 @@ readers could confuse. Warnings are advisory and the command exits 0 unless
 a file cannot be read. See `references/prose-checks.md` for what each
 count means and how to respond.
 
+To lint a passage that is not in a chapter file yet (a draft scene, a
+proposed rewrite), pipe it in with `-` in place of the path:
+`story prose - < draft-scene.md`. Run it from the project folder, or add
+`--path <project>`, so the style sheet applies. `story voices -` does the
+same for dialogue.
+
 ### 4. Run the dialogue voice check
 
 ```shell

@@ -43,7 +43,7 @@ Absolute paths in output are shortened to `~/stories/...`.
 | Group | Command | What it does | Writes files |
 |---|---|---|---|
 | Setup | [`init <title>`](#init) | Scaffold a new story project | Yes |
-| | [`import <source>`](#import) | Split an existing manuscript into a new project | Yes |
+| | [`import <source\|->`](#import) | Split an existing manuscript, or one piped to stdin, into a new project | Yes |
 | | [`migrate [path]`](#migrate) | Upgrade a project to the current schema | Yes |
 | Maintenance | [`validate [path]`](#validate) | Check structure, frontmatter, and registries | No |
 | | [`reindex [path]`](#reindex) | Rebuild registry tables from entity files | Yes |
@@ -54,14 +54,14 @@ Absolute paths in output are shortened to `~/stories/...`.
 | | [`compare [path]`](#compare) | Compare chapters with an earlier draft | No |
 | | [`progress [path]`](#progress) | Show words against targets and deadline | With `--log` |
 | | [`timeline [path]`](#timeline) | Show scenes in story-time order, POV balance, presence | No |
-| | [`prose [path]`](#prose) | Lint chapter prose | No |
+| | [`prose [path\|-]`](#prose) | Lint chapter prose, or a passage piped to stdin | No |
 | | [`series [path]`](#series) | Order linked books and check shared canon | No |
 | | [`report [path]`](#report) | Summarise inventory, progress, and checks | No |
 | | [`next [path]`](#next) | Recommend the next actions | No |
 | | [`doctor [path]`](#doctor) | Show health checks and repair steps | No |
 | Craft and revision | [`pacing [path]`](#pacing) | Show scenes, sequels, outcomes, hooks, and length per chapter | No |
 | | [`clues [path]`](#clues) | Show the clue plant and reveal grid and flag fair-play problems | No |
-| | [`voices [path]`](#voices) | Fingerprint each character's tagged dialogue | No |
+| | [`voices [path\|-]`](#voices) | Fingerprint each character's tagged dialogue, in the chapters or a passage piped to stdin | No |
 | | [`names <name...>`](#names) | Check candidate names for clashes and look-alikes | No |
 | | [`diagram <kind>`](#diagram) | Print Mermaid source for relationships, locations, timeline, clues, or arcs | With `--out` |
 | | [`passes [path]`](#passes) | Show and update the named revision passes in `story.md` | With `--init`, `--start`, or `--done` |
@@ -145,6 +145,8 @@ story validate the-last-ember --path the-salt-road
 Conflicting project paths: the-last-ember and --path the-salt-road. Use either a positional path or --path, not both.
 ```
 
+`prose -` and `voices -` read a passage from stdin instead of the chapters. The `-` takes the place of the positional path, so give the project with `--path` or run from its directory (see [Reading from stdin](#reading-from-stdin)).
+
 `init` and `import` refuse `--path` so it cannot be mistaken for the target directory:
 
 ```shell
@@ -167,6 +169,26 @@ story report /tmp
 
 Every command, including `validate`, `next`, and `doctor`, reports that same line. Once `story.md` is in place, `validate` lists every other missing required file, which makes it useful for diagnosing a half-built project.
 
+
+### Reading from stdin
+
+`-` in place of a file or project path reads standard input, so an agent can check a passage before writing it to a chapter file, or import a draft it has in hand.
+
+| Command | What `-` reads | Project |
+|---|---|---|
+| `story prose -` | A passage to lint | `--path`, else the current directory if it holds `story.md`, else none: the default rules without a style sheet |
+| `story voices -` | A passage whose dialogue to fingerprint | `--path`, else the current directory; required, since speakers are the project's characters |
+| `story import -` | The manuscript to split into chapters | None; `--dir` chooses where the new project goes, as usual |
+
+```shell
+story prose - --path ~/stories/the-last-ember < draft-scene.md
+printf '%s\n' "$PASSAGE" | story voices - --path ~/stories/the-last-ember
+pandoc draft.docx -t markdown | story import - --title "The Lost Coast"
+```
+
+- The input must be UTF-8 text of at most 5 MB. A leading byte-order mark is dropped, and a zip, a binary, or text in another encoding is refused as `import` refuses a file: `Cannot read stdin: it is not valid UTF-8 text. Pipe UTF-8 plain text or markdown instead`.
+- Empty input is an error (`story prose - read nothing from stdin: ...`), and so is a terminal, so the command never sits waiting for typing: `story prose - reads from stdin, but stdin is a terminal: pipe the text in, such as story prose - < draft.md`.
+- A file literally named `-` is reached as `./-`.
 ### Option syntax
 
 - Options can appear anywhere after the command: `story build --format epub .` and `story build . --format epub` are the same.
@@ -382,10 +404,10 @@ See [Series](series.md) for how linked books are ordered and checked, and [Getti
 ### import
 
 ```text
-story import <source> --title <name> [options]
+story import <source|-> --title <name> [options]
 ```
 
-Creates a new project from an existing manuscript. `<source>` is a single `.md`, `.markdown`, or `.txt` file, or a directory of them. `--title` is required. A directory that already has a `story.md` is refused, since it is a story project rather than a draft: `drafts/salt-road is already a story project (it has story.md); import reads manuscript files, so point it at the draft instead`.
+Creates a new project from an existing manuscript. `<source>` is a single `.md`, `.markdown`, or `.txt` file, or a directory of them, or `-` to read the manuscript from stdin. Piped text is read as markdown (as a `.md` file would be), a piped document with no chapter headings becomes `Chapter 1`, and the synopsis placeholder says `Imported from stdin`. `--title` is required. A directory that already has a `story.md` is refused, since it is a story project rather than a draft: `drafts/salt-road is already a story project (it has story.md); import reads manuscript files, so point it at the draft instead`.
 
 - A source file must be UTF-8 text; a leading byte-order mark is dropped, and a zip file (such as a `.docx`), a binary file, or text in another encoding is refused (`it is not valid UTF-8 text. Save it as UTF-8 plain text or markdown first`). CRLF and bare CR line endings are read as line breaks.
 - A file with `Chapter` headings (ATX `#` headings of any level, or setext headings underlined with `===` or `---`, with arabic numbers including decimals such as `12.5`, roman numerals, spelled-out numbers up to nine hundred and ninety-nine, or none) is split at each heading, and `Prologue`, `Epilogue`, `Interlude`, and `Afterword` headings become chapters of their own. Text before the first chapter heading becomes a chapter titled `Opening`, unless it is only HTML comments, which move to the top of the first chapter (the `<!-- Generated by story export. -->` marker is dropped). Headings inside code fences and HTML comments never split, and a `# Part ...` heading just before a chapter heading opens that chapter.
@@ -878,12 +900,36 @@ Timeline built: 0 errors, 0 warnings, 0 dismissed
 ### prose
 
 ```text
-story prose [path]
+story prose [path|-]
 ```
 
 An advisory prose lint. For each chapter it reports sentence count, average and longest sentence length and their spread, filter words and `-ly` adverbs per 1,000 narration words, dialogue tags and said-bookisms, words echoed within 30 words, and watch words and avoided spellings from `style-sheet.md`. Across the manuscript it lists repeated four-word phrases and characters with similar first names. Like `wordcount`, it ignores code between closed `` ``` `` fences.
 
 Style findings are warnings and never fail the run. `prose` exits 1 only when a file's frontmatter fails to parse.
+
+`story prose -` lints a passage from stdin instead of the chapters, with the style sheet and character names of the project given by `--path` or the current directory (and the default rules outside a project). The passage is reported as `stdin`, and similar character names, a bible finding, are left out. A whole chapter file can be piped: its frontmatter is skipped and only its prose (the text under `## Chapter Text`) is linted, as for a chapter in the project.
+
+On [`examples/the-last-ember`](../examples/the-last-ember/), with a five-sentence draft scene:
+
+```shell
+story prose - --path examples/the-last-ember < draft-scene.md
+```
+
+```text
+Prose report: passage from stdin, 32 words
+
+stdin: passage (32 words)
+  Sentences: 5, average 6.4 words, longest 15, spread 4.6
+  Filter words: 107.1 per 1k narration words (felt 1, knew 1, saw 1)
+  -ly adverbs: 35.7 per 1k narration words (slowly 1)
+  Dialogue tags: said 1; said-bookisms: none
+  Echoes within 30 words: none
+  Watch words: almost 1, something 1
+
+Passage:
+  Repeated 4-word phrases: none
+Prose check complete: 0 errors, 0 warnings, 0 dismissed
+```
 
 ```shell
 story prose
@@ -1189,7 +1235,7 @@ With no clues it prints `- None: add clues with story add clue "Name" --planted 
 ### voices
 
 ```text
-story voices [path]
+story voices [path|-]
 ```
 
 Builds a dialogue fingerprint for each character who speaks: lines and words of dialogue, average sentence length, contractions per 100 words, the share of questions and exclamations, and up to five signature words (words the character uses at least twice, at more than twice the rate of the other speakers; common words are ignored). A line is attributed only when its paragraph names the speaker next to a speech verb (`"...," Mara said` or `said Mara`) or, failing that, when the narration names exactly one character and has no pronoun tag (`she said`, `said he`) right after a closing quote or right before an opening one. A pronoun and speech verb elsewhere in the paragraph (`She said nothing more`) is narration and does not block the action beat. Other quoted lines are counted as unattributed, never guessed. Names match a character's full name, given name, and `aliases`.
@@ -1201,6 +1247,8 @@ It warns when:
 - two characters with at least five lines each have similar sentence length, contractions, questions, and exclamations
 
 `voices` exits 1 only when a file fails to parse.
+
+`story voices -` fingerprints the dialogue in a passage from stdin instead of the chapters, against the characters of the project given by `--path` or the current directory; outside a project it is an error. Findings name the passage as `stdin`: `warning: kael-voss says "soldiers", which is in their voice-avoid list (stdin)`. The five-line thresholds still apply, so a short passage only reports `voice-avoid` words.
 
 On a copy of [`examples/the-last-ember`](../examples/the-last-ember/), after adding `reckon` to `voice-words` and `soldiers` to `voice-avoid` in `characters/kael-voss.md` (as block lists; the parser does not read `[a, b]`):
 

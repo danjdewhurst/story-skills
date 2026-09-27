@@ -21,7 +21,7 @@ All output shown was captured by running the commands against copies of the exam
 
 | Command | Reads | Writes | Default output |
 |---------|-------|--------|----------------|
-| `story import <source>` | A manuscript file or a folder of chapter files | A new story project | `./<title-in-kebab-case>/` |
+| `story import <source\|->` | A manuscript file, a folder of chapter files, or a manuscript piped to stdin (`-`) | A new story project | `./<title-in-kebab-case>/` |
 | `story export [path]` | `story.md`, `chapters/`, `matter/` | One markdown manuscript | `dist/manuscript.md` |
 | `story build [path]` | `story.md`, `chapters/`, `matter/`, the cover image, and (for narration) `pronunciation` fields in the bible | One book file, script, or sheet | `dist/<story-id>.<ext>` |
 | `story synopsis [path]` | `story.md` and `plot/arcs/` | A synopsis scaffold | Printed to stdout |
@@ -200,6 +200,16 @@ Imported 4 chapters (14 words) into ~/stories/door
 | `chapter-04.md` | `notes.md` | `Notes` |
 
 Remove stray files such as notes from the folder before importing, or delete the chapter files they produce afterwards.
+
+### Importing from stdin
+
+With `-` as the source, `import` reads the manuscript from standard input, so a draft another tool prints never needs a file of its own:
+
+```shell
+pandoc draft.docx -t markdown | story import - --title "The Salt Road"
+```
+
+Piped text is read as markdown, as a `.md` file is, and split the same way. A piped document with no chapter headings becomes one chapter titled `Chapter 1`, and the synopsis placeholder says `Imported from stdin`. Empty input, a terminal, and text that is not UTF-8 are refused; see [Reading from stdin](cli-reference.md#reading-from-stdin).
 
 ### Entity candidates
 

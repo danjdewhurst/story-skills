@@ -69,6 +69,10 @@ story passes . --start line
    20 so the author can review them.
 4. Leave passages that are unusual but deliberate. When unsure whether a
    quirk is voice or error, ask.
+5. To check a rewritten passage before putting it in the chapter, pipe it
+   in: `story prose - < rewrite.md` lints it against the style sheet, and
+   `story voices - < rewrite.md` checks its dialogue against the
+   characters' `voice-avoid` lists.
 
 ### 3. Differentiate character voices
 
