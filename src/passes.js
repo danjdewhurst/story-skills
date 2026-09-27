@@ -1,3 +1,4 @@
+import { err } from "./findings.js";
 import { editDistance } from "./prose.js";
 import { usageError } from "./exit-codes.js";
 
@@ -56,25 +57,25 @@ export function validatePasses(data, label, errors) {
     return;
   }
   if (!Array.isArray(raw)) {
-    errors.push(`${label} frontmatter field revision-passes must be a list`);
+    errors.push(err("field-not-list", `${label} frontmatter field revision-passes must be a list`, label));
     return;
   }
   const seen = new Set();
   for (const entry of raw) {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-      errors.push(`${label} frontmatter field revision-passes must contain objects`);
+      errors.push(err("field-invalid-items", `${label} frontmatter field revision-passes must contain objects`, label));
       continue;
     }
     if (typeof entry.pass !== "string" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(entry.pass)) {
-      errors.push(`${label} revision pass ${entry.pass ?? "(missing)"} must be a kebab-case name`);
+      errors.push(err("id-not-kebab", `${label} revision pass ${entry.pass ?? "(missing)"} must be a kebab-case name`, label));
       continue;
     }
     if (seen.has(entry.pass)) {
-      errors.push(`${label} lists revision pass ${entry.pass} more than once`);
+      errors.push(err("duplicate-pass", `${label} lists revision pass ${entry.pass} more than once`, label));
     }
     seen.add(entry.pass);
     if (entry.status !== undefined && !PASS_STATUSES.has(entry.status)) {
-      errors.push(`${label} revision pass ${entry.pass} has unsupported status ${entry.status}`);
+      errors.push(err("unsupported-value", `${label} revision pass ${entry.pass} has unsupported status ${entry.status}`, label));
     }
   }
 }

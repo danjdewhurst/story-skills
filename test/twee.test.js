@@ -250,7 +250,8 @@ describe("choice targets follow move and remove", () => {
     expect(choiceTargets(root, "chapter-01")).toEqual([{ text: "Search the rocks", to: "chapter-02" }]);
     chapter(root, 3, "Back.", choices(["Go up", "chapter-04"]));
     expect(messages(removeEntity(root, { kind: "chapter", id: "chapter-04" }).warnings)[0]).toStartWith("chapters/chapter-02.md, chapters/chapter-03.md had choices leading to chapter-04, which remove dropped; a chapter left with no choices is an ending, so check where they lead now");
-    expect(validateLinks(root)).toMatchObject({ errors: [], warnings: ["chapters/chapter-03.md cannot be reached: no choice path from chapter-01 leads to it"] });
+    expect(messages(validateLinks(root).errors)).toEqual([]);
+    expect(messages(validateLinks(root).warnings)).toEqual(["chapters/chapter-03.md cannot be reached: no choice path from chapter-01 leads to it"]);
   });
 
   test("remove says when the last choice goes and the book turns linear", () => {

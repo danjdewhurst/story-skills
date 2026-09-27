@@ -499,7 +499,7 @@ function seriesBookNumbers(linked, requireComplete = false) {
   for (const book of linked) {
     const { books, complete, errors } = discoverSeriesBooks(book.root, scanProject);
     if (requireComplete && !complete) {
-      throw projectError(`Cannot compute the next book-number: part of the series linked from --${book.field} ${book.value} could not be read (${errors[0]}); fix it or pass --book-number`);
+      throw projectError(`Cannot compute the next book-number: part of the series linked from --${book.field} ${book.value} could not be read (${errors[0].message}); fix it or pass --book-number`);
     }
     for (const entry of books) {
       if (isBookNumber(entry.bookNumber)) {
@@ -575,7 +575,7 @@ function deriveStoryId(title, root) {
 // Every registry records the story id, which follows the story.md title, so
 // a retitled story leaves them all stale until `story reindex` rewrites them.
 function storyIdMismatch(label, project) {
-  return `${label} story must be ${project.storyId} (run story reindex after changing the story.md title)`;
+  return err("story-id-mismatch", `${label} story must be ${project.storyId} (run story reindex after changing the story.md title)`, label);
 }
 
 export function scanProject(root) {
@@ -586,7 +586,7 @@ export function scanProject(root) {
   try {
     story = readMarkdown(storyPath, projectRoot);
   } catch (error) {
-    scanErrors.push(`story.md: ${error.message}`);
+    scanErrors.push(err("unreadable-file", `story.md: ${error.message}`, "story.md"));
     story = { data: { title: path.basename(projectRoot) }, body: "", rawMarkdown: "", unreadable: true };
   }
   const storyId = deriveStoryId(story.data.title, projectRoot);
@@ -598,7 +598,7 @@ export function scanProject(root) {
     try {
       continuity = readMarkdown(continuityPath, projectRoot);
     } catch (error) {
-      scanErrors.push(`${path.join("continuity", "state.md")}: ${error.message}`);
+      scanErrors.push(err("unreadable-file", `${path.join("continuity", "state.md")}: ${error.message}`, path.join("continuity", "state.md")));
       continuity = null;
     }
   }
@@ -832,7 +832,7 @@ export function validateProjectOf(project) {
   const projectRoot = project.root;
   for (const requiredPath of REQUIRED_PATHS) {
     if (!fs.existsSync(path.join(projectRoot, requiredPath))) {
-      errors.push(`Missing required path: ${requiredPath} (story migrate adds missing registries)`);
+      errors.push(err("missing-required-path", `Missing required path: ${requiredPath} (story migrate adds missing registries)`));
     }
   }
   for (const scanError of project.fileErrors ?? []) {
@@ -866,7 +866,7 @@ export function validateProjectOf(project) {
   collectStrayFileWarnings(project, warnings);
   for (const file of ENTITY_SCAN_DIRS.flatMap((dir) => entityFileNames(projectRoot, dir))) {
     if (WINDOWS_RESERVED_ID.test(path.basename(file, ".md").toLowerCase())) {
-      warnings.push(`${file} uses a file name Windows reserves, so the project cannot be checked out on Windows; rename the entity`);
+      warnings.push(warn("windows-reserved-name", `${file} uses a file name Windows reserves, so the project cannot be checked out on Windows; rename the entity`, file));
     }
   }
 
@@ -901,7 +901,7 @@ export function validateProjectOf(project) {
     try {
       markdown = safeRead(path.join(projectRoot, indexPath), projectRoot);
     } catch (error) {
-      errors.push(`${indexPath}: ${error.message}`);
+      errors.push(err("unreadable-file", `${indexPath}: ${error.message}`, indexPath));
       continue;
     }
     for (const [link, file] of links) {
@@ -924,11 +924,11 @@ export function validateProjectOf(project) {
     }
 
     if (chapter.unclosedComment) {
-      warnings.push(`${path.relative(projectRoot, chapter.file)} opens an HTML comment (<!--) that never closes, so the text after it shows in builds and word counts`);
+      warnings.push(warn("unclosed-comment", `${file} opens an HTML comment (<!--) that never closes, so the text after it shows in builds and word counts`, file));
     }
 
     if (!project.scenes.some((scene) => scene.chapter === chapter.id)) {
-      warnings.push(`${path.relative(projectRoot, chapter.file)} has no machine-readable scene records`);
+      warnings.push(warn("no-scene-records", `${file} has no machine-readable scene records`, file));
     }
   }
 
@@ -987,11 +987,11 @@ export function validateLinksOf(project) {
         continue;
       }
       if (target !== kebabCase(target)) {
-        errors.push(`${label} relationship character ${target} must be kebab-case`);
+        errors.push(err("id-not-kebab", `${label} relationship character ${target} must be kebab-case`, label));
         continue;
       }
       if (!characters.has(target)) {
-        errors.push(`${label} references missing character ${target}`);
+        errors.push(err("missing-reference", `${label} references missing character ${target}`, label));
       } else {
         const backlinks = [];
         for (const entry of characters.get(target).relationships) {
@@ -1000,7 +1000,7 @@ export function validateLinksOf(project) {
           }
         }
         if (backlinks.length === 0) {
-          errors.push(`${label} relationship to ${target} is missing backlink`);
+          errors.push(err("missing-backlink", `${label} relationship to ${target} is missing backlink`, label));
         } else {
           const expectedTypes = inverseRelationshipTypes(relationship.type);
           let matched = expectedTypes.length === 0;
@@ -1017,9 +1017,9 @@ export function validateLinksOf(project) {
           if (legacy) {
             // Pairings the relationship reference recommended before 0.10.0
             // warn rather than fail, so an upgrade does not break CI.
-            warnings.push(`${label} relationship ${relationship.type} to ${target} has backlink ${types.join(", ")}, a pairing from before story-skills 0.10.0; change the backlink to ${expectedTypes.join(" or ")}`);
+            warnings.push(warn("legacy-backlink-type", `${label} relationship ${relationship.type} to ${target} has backlink ${types.join(", ")}, a pairing from before story-skills 0.10.0; change the backlink to ${expectedTypes.join(" or ")}`, label));
           } else if (!matched) {
-            errors.push(`${label} relationship ${relationship.type} to ${target} expects backlink type ${expectedTypes.join(" or ")}, got ${types.join(", ") || "none"}`);
+            errors.push(err("backlink-type-mismatch", `${label} relationship ${relationship.type} to ${target} expects backlink type ${expectedTypes.join(" or ")}, got ${types.join(", ") || "none"}`, label));
           }
         }
       }
@@ -1028,7 +1028,7 @@ export function validateLinksOf(project) {
     for (const locationId of character.locations) {
       checkIdReference(errors, label, locationId, "location", hasLocation);
       if (typeof locationId === "string" && locationId !== "" && locationId === kebabCase(locationId) && locations.has(locationId) && !locations.get(locationId).notableCharacters.includes(character.id)) {
-        errors.push(`${label} location ${locationId} is missing notable-character backlink`);
+        errors.push(err("missing-backlink", `${label} location ${locationId} is missing notable-character backlink`, label));
       }
     }
 
@@ -1045,7 +1045,7 @@ export function validateLinksOf(project) {
   for (const entity of [...project.characters, ...project.locations, ...project.factions]) {
     for (const [index, item] of asArray(entity.frontmatter.progressions).entries()) {
       if (item && typeof item === "object" && !Array.isArray(item)) {
-        checkIdReference(errors, `${relative(project, entity.file)} progressions[${index}]`, idText(item.from), "chapter", hasScheduledChapter);
+        checkIdReference(errors, `${relative(project, entity.file)} progressions[${index}]`, idText(item.from), "chapter", hasScheduledChapter, relative(project, entity.file));
       }
     }
   }
@@ -1058,15 +1058,15 @@ export function validateLinksOf(project) {
         continue;
       }
       if (to === location.id) {
-        errors.push(`${label} route points at itself`);
+        errors.push(err("route-to-self", `${label} route points at itself`, label));
         continue;
       }
-      checkIdReference(errors, `${label} route`, to, "location", hasLocation);
+      checkIdReference(errors, `${label} route`, to, "location", hasLocation, label);
     }
     for (const characterId of location.notableCharacters) {
       checkIdReference(errors, label, characterId, "character", hasCharacter);
       if (typeof characterId === "string" && characterId !== "" && characterId === kebabCase(characterId) && characters.has(characterId) && !characters.get(characterId).locations.includes(location.id)) {
-        errors.push(`${label} notable character ${characterId} is missing location backlink`);
+        errors.push(err("missing-backlink", `${label} notable character ${characterId} is missing location backlink`, label));
       }
     }
   }
@@ -1083,9 +1083,9 @@ export function validateLinksOf(project) {
     if (chapter.pov) {
       const povText = String(chapter.pov);
       if (povText !== kebabCase(povText)) {
-        errors.push(`${label} references POV character ${povText} which must be kebab-case`);
+        errors.push(err("id-not-kebab", `${label} references POV character ${povText} which must be kebab-case`, label));
       } else if (!characters.has(chapter.pov)) {
-        errors.push(`${label} references missing POV character ${chapter.pov}`);
+        errors.push(err("missing-reference", `${label} references missing POV character ${chapter.pov}`, label));
       }
     }
 
@@ -1118,9 +1118,9 @@ export function validateLinksOf(project) {
     if (artifact.owner) {
       const ownerText = String(artifact.owner);
       if (ownerText !== kebabCase(ownerText)) {
-        errors.push(`${label} references owner ${ownerText} which must be kebab-case`);
+        errors.push(err("id-not-kebab", `${label} references owner ${ownerText} which must be kebab-case`, label));
       } else if (!characters.has(artifact.owner) && !factions.has(artifact.owner)) {
-        errors.push(`${label} references missing owner ${artifact.owner}`);
+        errors.push(err("missing-reference", `${label} references missing owner ${artifact.owner}`, label));
       }
     }
     if (artifact.location) {
@@ -1133,17 +1133,17 @@ export function validateLinksOf(project) {
     if (scene.chapter) {
       const chapterText = String(scene.chapter);
       if (chapterText !== kebabCase(chapterText)) {
-        errors.push(`${label} references chapter ${chapterText} which must be kebab-case`);
+        errors.push(err("id-not-kebab", `${label} references chapter ${chapterText} which must be kebab-case`, label));
       } else if (!chapters.has(scene.chapter)) {
-        errors.push(`${label} references missing chapter ${scene.chapter}`);
+        errors.push(err("missing-reference", `${label} references missing chapter ${scene.chapter}`, label));
       }
     }
     if (scene.pov) {
       const povText = String(scene.pov);
       if (povText !== kebabCase(povText)) {
-        errors.push(`${label} references POV character ${povText} which must be kebab-case`);
+        errors.push(err("id-not-kebab", `${label} references POV character ${povText} which must be kebab-case`, label));
       } else if (!characters.has(scene.pov)) {
-        errors.push(`${label} references missing POV character ${scene.pov}`);
+        errors.push(err("missing-reference", `${label} references missing POV character ${scene.pov}`, label));
       }
     }
     if (scene.location) {
@@ -1206,7 +1206,7 @@ export function validateLinksOf(project) {
   // Like a promise's payoff, a choice may lead to a chapter not written yet;
   // the Twee build still needs it.
   const branches = branchGraph(project);
-  errors.push(...branches.missing.filter((choice) => !hasScheduledChapter(choice.to)).map((choice) => choice.message));
+  errors.push(...branches.missing.filter((choice) => !hasScheduledChapter(choice.to)).map((choice) => choice.finding));
   warnings.push(...branches.warnings);
   validateTimelineAndArcBodyRefs(project, chapters, errors, hasScheduledChapter);
   validateMatterBodyLinks(project, errors);
@@ -1224,12 +1224,12 @@ function validateTimelineAndArcBodyRefs(project, chapters, errors, hasScheduledC
   const checkTokens = (label, body, hasChapterToken = (token) => chapterIds.has(token)) => {
     for (const token of extractChapterIdTokens(body)) {
       if (!hasChapterToken(token)) {
-        errors.push(`${label} references missing chapter ${token}`);
+        errors.push(err("missing-reference", `${label} references missing chapter ${token}`, label));
       }
     }
     for (const token of extractSceneIdTokens(body)) {
       if (!sceneIds.has(token)) {
-        errors.push(`${label} references missing scene ${token}`);
+        errors.push(err("missing-reference", `${label} references missing scene ${token}`, label));
       }
     }
   };
@@ -1244,8 +1244,8 @@ function validateTimelineAndArcBodyRefs(project, chapters, errors, hasScheduledC
       }
     } catch (error) {
       const message = `${path.join("plot", "timeline.md")}: ${error.message}`;
-      if (!errors.includes(message)) {
-        errors.push(message);
+      if (!hasMessage(errors, message)) {
+        errors.push(err("unreadable-file", message, path.join("plot", "timeline.md")));
       }
     }
   }
@@ -1257,8 +1257,8 @@ function validateTimelineAndArcBodyRefs(project, chapters, errors, hasScheduledC
       body = readMarkdown(arc.file, project.root).body ?? '';
     } catch (error) {
       const message = label + ': ' + error.message;
-      if (!errors.includes(message)) {
-        errors.push(message);
+      if (!hasMessage(errors, message)) {
+        errors.push(err("unreadable-file", message, label));
       }
       continue;
     }
@@ -1280,8 +1280,8 @@ function validateMatterBodyLinks(project, errors) {
     } catch (error) {
       // The file changed or went missing after the scan.
       const message = `${label}: ${error.message}`;
-      if (!errors.includes(message)) {
-        errors.push(message);
+      if (!hasMessage(errors, message)) {
+        errors.push(err("unreadable-file", message, label));
       }
       continue;
     }
@@ -1300,7 +1300,7 @@ function checkBodyLinkTarget(project, label, target, errors) {
   // Checked before the id: on Linux a backslash is part of the file name, so
   // the kebab-case message below would hide the real problem.
   if (pathOnly.includes("\\") && /\.md$/i.test(pathOnly)) {
-    errors.push(`${label} links to ${cleaned} with a backslash; write ${portableSlashes(cleaned)} so the link works on every system`);
+    errors.push(err("link-backslash", `${label} links to ${cleaned} with a backslash; write ${portableSlashes(cleaned)} so the link works on every system`, label));
     return;
   }
   const base = path.basename(pathOnly);
@@ -1312,7 +1312,7 @@ function checkBodyLinkTarget(project, label, target, errors) {
     return;
   }
   if (id !== kebabCase(id)) {
-    errors.push(`${label} links to ${cleaned} which must be kebab-case`);
+    errors.push(err("link-not-kebab", `${label} links to ${cleaned} which must be kebab-case`, label));
     return;
   }
   const resolved = path.resolve(path.dirname(path.join(project.root, label)), pathOnly);
@@ -1327,18 +1327,18 @@ function checkBodyLinkTarget(project, label, target, errors) {
       return;
     }
     errors.push(linkedBook || !fs.existsSync(resolved)
-      ? `${label} links to missing file ${cleaned}`
-      : `${label} links to ${cleaned} which resolves outside the project`);
+      ? err("broken-link", `${label} links to missing file ${cleaned}`, label)
+      : err("link-outside-project", `${label} links to ${cleaned} which resolves outside the project`, label));
     return;
   }
   if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
-    errors.push(`${label} links to missing file ${cleaned}`);
+    errors.push(err("broken-link", `${label} links to missing file ${cleaned}`, label));
     return;
   }
   // existsSync and statSync follow symlinks, so a link can pass the lexical
   // check above and still land outside the project.
   if (!isPathInside(fs.realpathSync(project.root), fs.realpathSync(resolved))) {
-    errors.push(`${label} links to ${cleaned} which resolves outside the project`);
+    errors.push(err("link-outside-project", `${label} links to ${cleaned} which resolves outside the project`, label));
     return;
   }
   const known = new Set();
@@ -1363,7 +1363,7 @@ function checkBodyLinkTarget(project, label, target, errors) {
     }
   }
   if (!known.has(id)) {
-    errors.push(`${label} links to missing file ${cleaned}`);
+    errors.push(err("broken-link", `${label} links to missing file ${cleaned}`, label));
   }
 }
 
@@ -1380,15 +1380,15 @@ export function knowledgeAtChapter(root, characterId, atChapterId, project = sca
   const characters = new Map(project.characters.map((character) => [character.id, character]));
   if (!characters.has(characterId)) {
     // A character whose file fails to parse exists; say why it cannot be read.
-    const parseError = project.fileErrors.find((error) => error.startsWith(`${path.join("characters", `${characterId}.md`)}:`));
-    throw parseError ? projectError(parseError) : usageError(`Unknown character ${characterId}`);
+    const parseError = project.fileErrors.find((error) => error.file === path.join("characters", `${characterId}.md`));
+    throw parseError ? projectError(parseError.message) : usageError(`Unknown character ${characterId}`);
   }
 
   // Knowledge is dated by chapter, so a chapter that fails to parse would
   // silently drop what was learned in it.
-  const chapterError = project.fileErrors.find((error) => error.startsWith(`chapters${path.sep}`));
+  const chapterError = project.fileErrors.find((error) => error.file.startsWith(`chapters${path.sep}`));
   if (chapterError) {
-    throw projectError(chapterError);
+    throw projectError(chapterError.message);
   }
 
   const chronology = chapterChronology(project);
@@ -1397,14 +1397,9 @@ export function knowledgeAtChapter(root, characterId, atChapterId, project = sca
     throw usageError(`Unknown chapter ${atChapterId}`);
   }
 
-  let stateError = "";
-  for (const error of project.fileErrors ?? []) {
-    if (!stateError && String(error).startsWith(`${path.join("continuity", "state.md")}:`)) {
-      stateError = error;
-    }
-  }
+  const stateError = project.fileErrors.find((error) => error.file === path.join("continuity", "state.md"));
   if (stateError) {
-    throw projectError(stateError);
+    throw projectError(stateError.message);
   }
 
   const entries = [];
@@ -1442,14 +1437,14 @@ export function entityStateAtChapter(root, kind, id, atChapterId, project = scan
   const entity = collection.find((entry) => entry.id === id);
   if (!entity) {
     const entityFile = path.join(entityConfig(entityKind).dir, `${id}.md`);
-    const parseError = project.fileErrors.find((error) => error.startsWith(`${entityFile}:`));
-    throw parseError ? projectError(parseError) : usageError(`Unknown ${entityKind} ${id}`);
+    const parseError = project.fileErrors.find((error) => error.file === entityFile);
+    throw parseError ? projectError(parseError.message) : usageError(`Unknown ${entityKind} ${id}`);
   }
   // Progressions are ordered by chapter, so a chapter that fails to parse
   // would silently misplace them.
-  const chapterError = project.fileErrors.find((error) => error.startsWith(`chapters${path.sep}`));
+  const chapterError = project.fileErrors.find((error) => error.file.startsWith(`chapters${path.sep}`));
   if (chapterError) {
-    throw projectError(chapterError);
+    throw projectError(chapterError.message);
   }
   return entityStateAt(entity.frontmatter, atChapterId, chapterChronology(project));
 }
@@ -1466,11 +1461,11 @@ export function draftingContext(root, targetId, options = {}) {
   }
   const project = scanProject(root);
   // A target scene that fails to parse reports why, not "Unknown scene".
-  const blocking = project.fileErrors.find((error) => error.startsWith(`chapters${path.sep}`)
-    || error.startsWith(`${path.join("continuity", "state.md")}:`)
-    || error.startsWith(`${path.join("scenes", `${targetId}.md`)}:`));
+  const blocking = project.fileErrors.find((error) => error.file.startsWith(`chapters${path.sep}`)
+    || error.file === path.join("continuity", "state.md")
+    || error.file === path.join("scenes", `${targetId}.md`));
   if (blocking) {
-    throw projectError(blocking);
+    throw projectError(blocking.message);
   }
   return buildContext(project, targetId, (file) => readMarkdown(file, project.root).body, { budget, scenes });
 }
@@ -1710,9 +1705,9 @@ export function assertProjectParses(project, action, ignore = () => false) {
   // The style sheet, progress log, and exemptions never feed registries or
   // chapters.
   const ignored = [STYLE_SHEET_FILE, PROGRESS_FILE, path.join("continuity", "exemptions.md")];
-  const errors = (project.fileErrors ?? []).filter((error) => !ignored.some((file) => error.startsWith(`${file}:`)) && !ignore(error));
+  const errors = (project.fileErrors ?? []).filter((error) => !ignored.includes(error.file) && !ignore(error));
   if (errors.length > 0) {
-    throw projectError(`Cannot ${action}: fix ${errors.length === 1 ? "this file first (story validate reports it)" : "these files first (story validate reports them)"}:\n${errors.map((error) => `- ${error}`).join("\n")}`);
+    throw projectError(`Cannot ${action}: fix ${errors.length === 1 ? "this file first (story validate reports it)" : "these files first (story validate reports them)"}:\n${errors.map((error) => `- ${error.message}`).join("\n")}`);
   }
 }
 
@@ -1895,7 +1890,7 @@ export function compareProject(root, options = {}) {
     const otherRoot = path.resolve(options.cwd ?? process.cwd(), options.against);
     const other = scanProject(otherRoot);
     if (other.fileErrors.length > 0) {
-      throw projectError(`Cannot read ${otherRoot}: ${other.fileErrors[0]}`);
+      throw projectError(`Cannot read ${otherRoot}: ${other.fileErrors[0].message}`);
     }
     previous = other.chapters.map((chapter) => comparableChapter(chapter.id, readMarkdown(chapter.file, other.root)));
     label = otherRoot;
@@ -2092,7 +2087,7 @@ export function projectProgress(root, options = {}) {
   if (options.log) {
     // A chapter that fails to parse would be left out of the logged total.
     assertProjectParses(project, "log progress");
-    if (project.fileErrors.some((error) => error.startsWith(`${PROGRESS_FILE}:`))) {
+    if (project.fileErrors.some((error) => error.file === PROGRESS_FILE)) {
       throw projectError(`Cannot log progress: ${PROGRESS_FILE} does not parse`);
     }
     // Rewriting the log keeps only well-formed sessions, so refuse to log
@@ -2100,7 +2095,7 @@ export function projectProgress(root, options = {}) {
     const logErrors = [];
     validateProgressLog(project, logErrors);
     if (logErrors.length > 0) {
-      throw projectError(`Cannot log progress until ${PROGRESS_FILE} is fixed: ${logErrors.join("; ")}`);
+      throw projectError(`Cannot log progress until ${PROGRESS_FILE} is fixed: ${logErrors.map((error) => error.message).join("; ")}`);
     }
     const filePath = path.join(project.root, PROGRESS_FILE);
     const existing = project.progressLog;
@@ -2187,13 +2182,13 @@ export function projectPasses(root, change = {}) {
   if (!wantsChange) {
     return { passes, changed: false };
   }
-  if (project.fileErrors.some((error) => error.startsWith("story.md"))) {
+  if (project.fileErrors.some((error) => error.file === "story.md")) {
     throw projectError("story.md cannot be parsed; fix it before recording revision passes");
   }
   const passErrors = [];
   validatePasses(project.story.data, "story.md", passErrors);
   if (passErrors.length > 0) {
-    throw projectError(`Fix revision-passes in story.md before changing it: ${passErrors.join("; ")}`);
+    throw projectError(`Fix revision-passes in story.md before changing it: ${passErrors.map((error) => error.message).join("; ")}`);
   }
   const current = asArray(project.story.data["revision-passes"]);
   const next = updatePasses(current, change);
@@ -2253,7 +2248,7 @@ function passageProse(text) {
 // chapter or scene file does not fail its check; a broken style sheet or
 // character file, which the check reads, still does.
 function passageErrors(project) {
-  return project.fileErrors.filter((error) => !/^(?:chapters|scenes)[\\/]/.test(error));
+  return project.fileErrors.filter((error) => !/^(?:chapters|scenes)[\\/]/.test(error.file));
 }
 
 // Advisory prose lint: counts per chapter plus manuscript-wide repeats.
@@ -2421,8 +2416,8 @@ export function buildBook(root, options = {}) {
     // and a link target.
     const problems = [
       ...project.chapters.filter((chapter) => !isKebabId(chapter.id)).map((chapter) => `${relative(project, chapter.file)}: chapter file names must be kebab-case to name a passage`),
-      ...branches.problems,
-      ...branches.missing.map((choice) => choice.message),
+      ...branches.problems.map((problem) => problem.message),
+      ...branches.missing.map((choice) => choice.finding.message),
       ...(pinned === undefined || isIfid(pinned) ? [] : ["story.md ifid must be a version 4 UUID, such as 3F2C9A61-7B1D-4E8A-9C3B-2A6D5E4F1B07"])
     ];
     if (problems.length > 0) {
@@ -3973,7 +3968,7 @@ function buildProjectActions(project, validation, links, continuity, displayPath
   // Stale word counts and chapters without scenes get their own actions
   // below; every other validate warning (open research a final chapter relies
   // on, an empty matter page) is reviewed here.
-  const otherWarnings = validation.warnings.filter((warning) => !/ declares \S+ words but contains \d+$| has no machine-readable scene records$/.test(asFinding(warning).message));
+  const otherWarnings = validation.warnings.filter((warning) => warning.code !== "stale-word-count" && warning.code !== "no-scene-records");
   if (otherWarnings.length > 0) {
     actions.push(action("P1", "Review validation warnings", `Run story validate ${where} and review ${otherWarnings.length} warning${otherWarnings.length === 1 ? "" : "s"}.`));
   }
@@ -5400,13 +5395,13 @@ function chapterChoices(chapter, label) {
     return { choices, problems };
   }
   if (!Array.isArray(chapter.choices)) {
-    problems.push(`${label} frontmatter field choices must be a list of { text, to } entries`);
+    problems.push(err("field-not-list", `${label} frontmatter field choices must be a list of { text, to } entries`, label));
     return { choices, problems };
   }
   chapter.choices.forEach((choice, index) => {
     const at = `${label} choices[${index}]`;
     if (!choice || typeof choice !== "object" || Array.isArray(choice)) {
-      problems.push(`${at} must have text and to, such as { text: Follow the light, to: chapter-02 }`);
+      problems.push(err("invalid-choice", `${at} must have text and to, such as { text: Follow the light, to: chapter-02 }`, label));
       return;
     }
     const text = typeof choice.text === "string" ? choice.text.trim() : "";
@@ -5415,14 +5410,14 @@ function chapterChoices(chapter, label) {
     const to = typeof choice.to === "string" ? choice.to : "";
     const before = problems.length;
     if (text === "") {
-      problems.push(`${at} needs text: the words the reader picks, quoted if they look like a number`);
+      problems.push(err("invalid-choice", `${at} needs text: the words the reader picks, quoted if they look like a number`, label));
     } else if (TWEE_LINK_UNSAFE.test(text)) {
-      problems.push(`${at} text cannot contain [, ], |, ->, <-, or a line break, or end in <, which Twine reads as link syntax`);
+      problems.push(err("invalid-choice", `${at} text cannot contain [, ], |, ->, <-, or a line break, or end in <, which Twine reads as link syntax`, label));
     }
     if (to.trim() === "") {
-      problems.push(`${at} needs to: the id of the chapter it leads to, such as chapter-02`);
+      problems.push(err("invalid-choice", `${at} needs to: the id of the chapter it leads to, such as chapter-02`, label));
     } else if (to !== kebabCase(to)) {
-      problems.push(`${at} to ${to} must be a kebab-case chapter id`);
+      problems.push(err("id-not-kebab", `${at} to ${to} must be a kebab-case chapter id`, label));
     }
     if (problems.length === before) {
       choices.push({ text, to, index });
@@ -5455,7 +5450,7 @@ function branchGraph(project) {
     }
     for (const choice of entry.choices) {
       if (!ids.has(choice.to)) {
-        missing.push({ to: choice.to, message: `${entry.label} choices[${choice.index}] references missing chapter ${choice.to}` });
+        missing.push({ to: choice.to, finding: err("missing-reference", `${entry.label} choices[${choice.index}] references missing chapter ${choice.to}`, entry.label) });
       }
     }
     return { chapter: entry.chapter, links: entry.choices.filter((choice) => ids.has(choice.to)).map(({ text, to }) => ({ text, to })) };
@@ -5475,7 +5470,7 @@ function branchGraph(project) {
     }
     for (const passage of passages) {
       if (!reached.has(passage.chapter.id)) {
-        warnings.push(`${relative(project, passage.chapter.file)} cannot be reached: no choice path from ${start} leads to it`);
+        warnings.push(warn("unreachable-chapter", `${relative(project, passage.chapter.file)} cannot be reached: no choice path from ${start} leads to it`, relative(project, passage.chapter.file)));
       }
     }
   }
@@ -5549,7 +5544,7 @@ function readEntityFiles(root, relativeDir, mapEntity, scanErrors) {
       // always collected instead of thrown.
       // Parse errors name the absolute path; the label already names the file.
       const message = error.message.startsWith(`${fullPath} `) ? error.message.slice(fullPath.length + 1) : error.message;
-      scanErrors.push(`${label}: ${message}`);
+      scanErrors.push(err("unreadable-file", `${label}: ${message}`, label));
     }
   }
   return entities;
@@ -5604,7 +5599,7 @@ function readExemptions(root, scanErrors) {
   } catch (error) {
     // A refused file (a symlink, say) must not silently drop every
     // exemption, so continuity reports it like a parse error.
-    scanErrors.push(`${path.join("continuity", "exemptions.md")}: ${relativePathError(error, exemptionsPath, root).message}`);
+    scanErrors.push(err("unreadable-file", `${path.join("continuity", "exemptions.md")}: ${relativePathError(error, exemptionsPath, root).message}`, path.join("continuity", "exemptions.md")));
     return [];
   }
 
@@ -5649,7 +5644,7 @@ function readOptionalRootFile(root, name, scanErrors) {
     const markdown = readMarkdown(filePath, root);
     return { file: filePath, data: markdown.data, rawMarkdown: markdown.rawMarkdown };
   } catch (error) {
-    scanErrors.push(`${name}: ${error.message}`);
+    scanErrors.push(err("unreadable-file", `${name}: ${error.message}`, name));
     return null;
   }
 }
@@ -5665,7 +5660,7 @@ function readStyleSheet(root, scanErrors) {
     const markdown = readMarkdown(filePath, root);
     return { file: filePath, data: markdown.data, body: markdown.body };
   } catch (error) {
-    scanErrors.push(`${STYLE_SHEET_FILE}: ${error.message}`);
+    scanErrors.push(err("unreadable-file", `${STYLE_SHEET_FILE}: ${error.message}`, STYLE_SHEET_FILE));
     return null;
   }
 }
@@ -5718,7 +5713,8 @@ function readRegistryValidationData(file, root, label, errors) {
   const count = errors.length;
   const data = readValidationData(file, root, label, errors);
   if (data === null && errors.length > count) {
-    errors[errors.length - 1] += REGISTRY_HINT;
+    const last = errors[errors.length - 1];
+    errors[errors.length - 1] = { ...last, message: `${last.message}${REGISTRY_HINT}` };
   }
   return data;
 }
@@ -5728,11 +5724,17 @@ function readValidationData(file, root, label, errors) {
     return readMarkdown(file, root).data;
   } catch (error) {
     const message = `${label}: ${error.message}`;
-    if (!errors.includes(message)) {
-      errors.push(message);
+    if (!hasMessage(errors, message)) {
+      errors.push(err("unreadable-file", message, label));
     }
     return null;
   }
+}
+
+// Whether a finding with this text was already reported, so a file that
+// fails to parse is not reported twice.
+function hasMessage(findings, message) {
+  return findings.some((finding) => finding.message === message);
 }
 
 const ENTITY_SCAN_DIRS = [
@@ -5772,7 +5774,7 @@ function collectStrayFileWarnings(project, warnings) {
   }
   strayTop.sort();
   for (const name of strayTop) {
-    warnings.push(`${name} is not part of the story project model and is ignored`);
+    warnings.push(warn("stray-file", `${name} is not part of the story project model and is ignored`, name));
   }
 
   const nested = [];
@@ -5790,7 +5792,7 @@ function collectStrayFileWarnings(project, warnings) {
   }
   nested.sort();
   for (const nestedPath of nested) {
-    warnings.push(`${nestedPath} is nested inside an entity directory and is ignored`);
+    warnings.push(warn("nested-file", `${nestedPath} is nested inside an entity directory and is ignored`, nestedPath));
   }
 
   // The scan never reads through a symlink, so a linked chapter would drop
@@ -5805,14 +5807,14 @@ function collectStrayFileWarnings(project, warnings) {
       .map((entry) => path.join(relativeDir, entry.name))
       .sort();
     for (const linkPath of linked) {
-      warnings.push(`${linkPath} is a symlink and is ignored: replace it with the file itself`);
+      warnings.push(warn("symlinked-file", `${linkPath} is a symlink and is ignored: replace it with the file itself`, linkPath));
     }
   }
 
   for (const leftover of temporaryFiles(root).sort()) {
     const name = TEMPORARY_FILE_PATTERN.exec(path.basename(leftover))?.[1];
     const target = name ? ` to ${path.join(path.dirname(leftover), name)}` : "";
-    warnings.push(`${leftover} was left by an interrupted write${target}; delete it once the files beside it look right`);
+    warnings.push(warn("interrupted-write", `${leftover} was left by an interrupted write${target}; delete it once the files beside it look right`, leftover));
   }
 }
 
@@ -5833,17 +5835,17 @@ function temporaryFiles(root, depth = 0, relativeDir = "") {
   return found;
 }
 
-function checkIdReference(errors, label, value, kind, exists) {
+function checkIdReference(errors, label, value, kind, exists, file = label) {
   const text = String(value ?? "");
   if (text === "") {
     return;
   }
   if (text !== kebabCase(text)) {
-    errors.push(`${label} references ${kind} ${text} which must be kebab-case`);
+    errors.push(err("id-not-kebab", `${label} references ${kind} ${text} which must be kebab-case`, file));
     return;
   }
   if (!exists(text)) {
-    errors.push(`${label} references missing ${kind} ${text}`);
+    errors.push(err("missing-reference", `${label} references missing ${kind} ${text}`, file));
   }
 }
 
@@ -6084,7 +6086,7 @@ function validateTextFields(project, errors) {
     for (const field of fields) {
       const value = data?.[field];
       if (typeof value === "number" || typeof value === "boolean") {
-        errors.push(`${label} frontmatter field ${field} must be text: quote it as ${field}: "${value}"`);
+        errors.push(err("field-not-text", `${label} frontmatter field ${field} must be text: quote it as ${field}: "${value}"`, label));
       }
     }
   };
@@ -6116,10 +6118,10 @@ function validateStoryFrontmatter(project, errors) {
   validateEnum(data, "tense", STORY_TENSES, "story.md", errors);
   requireScalar(data, "series", "story.md", errors);
   if (data.series !== undefined && !isKebabId(data.series)) {
-    errors.push("story.md series must be a kebab-case id");
+    errors.push(err("id-not-kebab", "story.md series must be a kebab-case id", "story.md"));
   }
   if (data["book-number"] !== undefined && !isBookNumber(data["book-number"])) {
-    errors.push("story.md book-number must be a number 0 or more, such as 2, 0 for a prequel, or 1.5 for a novella");
+    errors.push(err("invalid-book-number", "story.md book-number must be a number 0 or more, such as 2, 0 for a prequel, or 1.5 for a novella", "story.md"));
   }
   validateStringArray(data, "follows", "story.md", errors);
   validateStringArray(data, "precedes", "story.md", errors);
@@ -6139,13 +6141,13 @@ function validateStoryFrontmatter(project, errors) {
   validateCliConfig(data, errors);
   validateDeadline(data, errors);
   if (data.ifid !== undefined && !isIfid(data.ifid)) {
-    errors.push("story.md ifid must be a version 4 UUID, such as 3F2C9A61-7B1D-4E8A-9C3B-2A6D5E4F1B07");
+    errors.push(err("invalid-ifid", "story.md ifid must be a version 4 UUID, such as 3F2C9A61-7B1D-4E8A-9C3B-2A6D5E4F1B07", "story.md"));
   }
 
   if (newerSchemaVersion(data["schema-version"]) !== null) {
-    errors.push(newerSchemaMessage(newerSchemaVersion(data["schema-version"])));
+    errors.push(err("schema-too-new", newerSchemaMessage(newerSchemaVersion(data["schema-version"])), "story.md"));
   } else if (data["schema-version"] !== undefined && data["schema-version"] !== STORY_SCHEMA_VERSION) {
-    errors.push(`story.md schema-version must be ${STORY_SCHEMA_VERSION}`);
+    errors.push(err("schema-version-mismatch", `story.md schema-version must be ${STORY_SCHEMA_VERSION}`, "story.md"));
   }
 }
 
@@ -6159,7 +6161,7 @@ function validatePortablePaths(project, warnings) {
   for (const field of ["follows", "precedes", "cover"]) {
     const values = Array.isArray(data[field]) ? data[field] : [data[field]];
     for (const value of values.filter((item) => typeof item === "string" && item.includes("\\"))) {
-      warnings.push(`story.md ${field} ${value} uses a backslash; write ${portableSlashes(value)} so the path works on every system`);
+      warnings.push(warn("backslash-path", `story.md ${field} ${value} uses a backslash; write ${portableSlashes(value)} so the path works on every system`, "story.md"));
     }
   }
 }
@@ -6172,7 +6174,7 @@ function validatePronunciations(project, errors) {
   const entities = [project.characters, project.locations, project.systems, project.factions, project.artifacts, project.glossaryTerms].flat();
   for (const entity of entities) {
     if (entity.pronunciation !== undefined && typeof entity.pronunciation !== "string") {
-      errors.push(`${relative(project, entity.file)} frontmatter field pronunciation must be text`);
+      errors.push(err("field-not-text", `${relative(project, entity.file)} frontmatter field pronunciation must be text`, relative(project, entity.file)));
     }
   }
 }
@@ -6181,13 +6183,13 @@ function validateFormRange(project, warnings) {
   const data = project.story.data;
   const targetWarning = formRangeWarning(data.form, data["target-words"], "story.md target-words");
   if (targetWarning !== "") {
-    warnings.push(targetWarning);
+    warnings.push(warn("form-length-range", targetWarning, "story.md"));
   }
   if (data.status === "complete") {
     const words = project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
     const wordsWarning = formRangeWarning(data.form, words, "Manuscript length");
     if (wordsWarning !== "") {
-      warnings.push(wordsWarning);
+      warnings.push(warn("form-length-range", wordsWarning));
     }
   }
 }
@@ -6208,7 +6210,7 @@ function validateIndexFrontmatter(project, errors) {
     requireScalar(data, "story", label, errors);
 
     if (data.type !== undefined && data.type !== expectedType) {
-      errors.push(`${label} type must be ${expectedType}`);
+      errors.push(err("wrong-type", `${label} type must be ${expectedType}`, label));
     }
 
     if (data.story !== undefined && data.story !== project.storyId && !storyIdIsFallback(project)) {
@@ -6274,7 +6276,7 @@ function validateCharacters(project, errors, warnings) {
     // Continuity reads a death from died-in, not from status.
     for (const [index, item] of asArray(data.progressions).entries()) {
       if (item && typeof item === "object" && item.field === "status" && item.value === "deceased" && idText(item.from) !== character.diedIn) {
-        warnings.push(`${label} progressions[${index}] makes ${character.id} deceased from ${idText(item.from) || "?"}; set died-in: ${idText(item.from) || "<chapter>"} too so story continuity checks appearances after the death`);
+        warnings.push(warn("deceased-without-died-in", `${label} progressions[${index}] makes ${character.id} deceased from ${idText(item.from) || "?"}; set died-in: ${idText(item.from) || "<chapter>"} too so story continuity checks appearances after the death`, label));
       }
     }
   }
@@ -6303,16 +6305,16 @@ function validateLocations(project, errors, warnings) {
       }
       const to = idText(route.to);
       if (to === "") {
-        errors.push(`${label} route is missing to`);
+        errors.push(err("missing-field", `${label} route is missing to`, label));
       } else if (destinations.has(to)) {
-        warnings.push(`${label} lists more than one route to ${to}; the travel check and story diagram use only the fastest`);
+        warnings.push(warn("duplicate-route", `${label} lists more than one route to ${to}; the travel check and story diagram use only the fastest`, label));
       } else {
         destinations.add(to);
       }
       if (typeof route.hours !== "number" || !Number.isFinite(route.hours) || route.hours <= 0) {
-        errors.push(`${label} route to ${route.to ?? "?"} hours must be a positive number`);
+        errors.push(err("invalid-route-hours", `${label} route to ${route.to ?? "?"} hours must be a positive number`, label));
       }
-      requireScalar(route, "mode", `${label} route to ${route.to ?? "?"}`, errors);
+      requireScalar(route, "mode", `${label} route to ${route.to ?? "?"}`, errors, label);
     }
     validateProgressions(data, label, PROGRESSION_RULES.location, chronology, errors);
   }
@@ -6449,31 +6451,31 @@ function validateChapters(project, errors, warnings) {
     validateEnum(data, "hook", CHAPTER_HOOKS, label, errors);
     errors.push(...chapterChoices(chapter, label).problems);
     if (data.numbered !== undefined && typeof data.numbered !== "boolean") {
-      errors.push(`${label} numbered must be true or false`);
+      errors.push(err("field-not-boolean", `${label} numbered must be true or false`, label));
     } else if (data.numbered === false && (typeof data.title !== "string" || data.title.trim() === "")) {
-      errors.push(`${label} is unnumbered (numbered: false), so it needs a title to print as its heading`);
+      errors.push(err("unnumbered-without-title", `${label} is unnumbered (numbered: false), so it needs a title to print as its heading`, label));
     }
     // A planned chapter with no prose yet would ship as a heading-only page.
     // While drafting that is normal, so validate says so only once the book
     // or the chapter claims to be finished; build and export always say so.
     if (chapter.wordCount === 0 && (project.story.data.status === "complete" || WRITTEN_CHAPTER_STATUSES.has(chapter.status))) {
-      warnings.push(`${label} has no prose yet, so export and build print it as a heading-only page`);
+      warnings.push(warn("empty-chapter", `${label} has no prose yet, so export and build print it as a heading-only page`, label));
     }
 
     if (filenameNumber === 0) {
-      errors.push(`${label} filename must match chapter-{NN}.md`);
+      errors.push(err("invalid-filename", `${label} filename must match chapter-{NN}.md`, label));
     } else if (Number.isInteger(data.number) && data.number !== filenameNumber) {
-      errors.push(`${label} number must match filename chapter number ${filenameNumber}`);
+      errors.push(err("filename-number-mismatch", `${label} number must match filename chapter number ${filenameNumber}`, label));
     }
 
     if (Number.isInteger(data.number)) {
       if (data.number <= 0) {
-        errors.push(`${label} number must be greater than 0`);
+        errors.push(err("field-below-minimum", `${label} number must be greater than 0`, label));
       }
 
       const existing = seenNumbers.get(data.number);
       if (existing) {
-        errors.push(`${label} duplicates chapter number ${data.number} from ${existing}`);
+        errors.push(err("duplicate-chapter-number", `${label} duplicates chapter number ${data.number} from ${existing}`, label));
       } else {
         seenNumbers.set(data.number, label);
       }
@@ -6516,10 +6518,10 @@ function validateScenes(project, errors) {
       requireScalar(data, "dilemma", label, errors);
     }
     if (data["travel-hours"] !== undefined && typeof data["travel-hours"] !== "number") {
-      errors.push(`${label} frontmatter field travel-hours must be a number`);
+      errors.push(err("field-not-number", `${label} frontmatter field travel-hours must be a number`, label));
     }
     if (data.sequel !== undefined && typeof data.sequel !== "boolean") {
-      errors.push(`${label} frontmatter field sequel must be a boolean`);
+      errors.push(err("field-not-boolean", `${label} frontmatter field sequel must be a boolean`, label));
     }
     validateEnum(data, "outcome", SCENE_OUTCOMES, label, errors);
     validateEnum(data, "setting", SCENE_SETTINGS, label, errors);
@@ -6527,20 +6529,20 @@ function validateScenes(project, errors) {
       requireScalar(data, "flashback-to", label, errors);
     }
     if (Number.isInteger(data.scene) && data.scene <= 0) {
-      errors.push(`${label} scene must be greater than 0`);
+      errors.push(err("field-below-minimum", `${label} scene must be greater than 0`, label));
     }
 
     const filenameMatch = SCENE_FILENAME_PATTERN.exec(path.basename(scene.file));
     if (!filenameMatch) {
-      errors.push(`${label} filename must match {chapter}-scene-{NN}.md`);
+      errors.push(err("invalid-filename", `${label} filename must match {chapter}-scene-{NN}.md`, label));
     } else {
       const [, filenameChapter, filenameSceneText] = filenameMatch;
       const filenameScene = Number.parseInt(filenameSceneText, 10);
       if (typeof data.chapter === "string" && data.chapter !== "" && data.chapter !== filenameChapter) {
-        errors.push(`${label} chapter must match filename chapter ${filenameChapter}`);
+        errors.push(err("filename-number-mismatch", `${label} chapter must match filename chapter ${filenameChapter}`, label));
       }
       if (Number.isInteger(data.scene) && data.scene !== filenameScene) {
-        errors.push(`${label} scene must match filename scene number ${filenameScene}`);
+        errors.push(err("filename-number-mismatch", `${label} scene must match filename scene number ${filenameScene}`, label));
       }
     }
 
@@ -6548,7 +6550,7 @@ function validateScenes(project, errors) {
       const key = `${data.chapter}::${data.scene}`;
       const existing = seenKeys.get(key);
       if (existing) {
-        errors.push(`${label} duplicates scene ${data.scene} of ${data.chapter} from ${existing}`);
+        errors.push(err("duplicate-scene-number", `${label} duplicates scene ${data.scene} of ${data.chapter} from ${existing}`, label));
       } else {
         seenKeys.set(key, label);
       }
@@ -6583,14 +6585,14 @@ function validateContinuityState(project, errors, warnings) {
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
         continue;
       }
-      warnNearMissKeys(entry, keys, `${label} ${list}[${index}]`, warnings);
+      warnNearMissKeys(entry, keys, `${label} ${list}[${index}]`, warnings, label);
       if (list === "object-state" && entry.status !== undefined && !ARTIFACT_STATUSES.has(entry.status)) {
-        errors.push(`${label} ${list}[${index}] status must be one of ${[...ARTIFACT_STATUSES].join(", ")}, got ${entry.status}`);
+        errors.push(err("unsupported-value", `${label} ${list}[${index}] status must be one of ${[...ARTIFACT_STATUSES].join(", ")}, got ${entry.status}`, label));
       }
     }
   }
   if (data.type !== undefined && data.type !== "continuity-state") {
-    errors.push(`${label} type must be continuity-state`);
+    errors.push(err("wrong-type", `${label} type must be continuity-state`, label));
   }
   if (data.story !== undefined && data.story !== project.storyId && !storyIdIsFallback(project)) {
     errors.push(storyIdMismatch(label, project));
@@ -6652,7 +6654,7 @@ function validateClues(project, errors) {
     validateStringArray(data, "characters", label, errors);
     for (const field of ["significance-delayed", "red-herring"]) {
       if (data[field] !== undefined && typeof data[field] !== "boolean") {
-        errors.push(`${label} frontmatter field ${field} must be a boolean`);
+        errors.push(err("field-not-boolean", `${label} frontmatter field ${field} must be a boolean`, label));
       }
     }
   }
@@ -6671,32 +6673,32 @@ function validateExemptions(project, errors) {
   }
 
   if (data.type !== "exemption-log") {
-    errors.push(`${label} type must be exemption-log`);
+    errors.push(err("wrong-type", `${label} type must be exemption-log`, label));
   }
 
   const entries = data.exemptions;
   if (entries === undefined) {
-    errors.push(`${label} is missing frontmatter field exemptions`);
+    errors.push(err("missing-field", `${label} is missing frontmatter field exemptions`, label));
     return;
   }
   if (!Array.isArray(entries)) {
-    errors.push(`${label} frontmatter field exemptions must be a list`);
+    errors.push(err("field-not-list", `${label} frontmatter field exemptions must be a list`, label));
     return;
   }
 
   for (const [index, entry] of entries.entries()) {
     const entryLabel = `${label} exemptions[${index}]`;
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-      errors.push(`${entryLabel} must be a mapping`);
+      errors.push(err("entry-not-mapping", `${entryLabel} must be a mapping`, label));
       continue;
     }
     if (typeof entry.pattern !== "string" || entry.pattern.trim() === "") {
-      errors.push(`${entryLabel} is missing a non-empty pattern`);
+      errors.push(err("missing-field", `${entryLabel} is missing a non-empty pattern`, label));
     } else if (entry.pattern.trim().length < 4) {
-      errors.push(`${entryLabel} pattern must be at least 4 characters to avoid blanket exemptions`);
+      errors.push(err("exemption-pattern-too-short", `${entryLabel} pattern must be at least 4 characters to avoid blanket exemptions`, label));
     }
     if (typeof entry.reason !== "string" || entry.reason.trim() === "") {
-      errors.push(`${entryLabel} is missing a non-empty reason`);
+      errors.push(err("missing-field", `${entryLabel} is missing a non-empty reason`, label));
     }
   }
 }
@@ -6724,7 +6726,7 @@ function validateStyleSheet(project, errors) {
   const data = project.styleSheet.data;
   const label = STYLE_SHEET_FILE;
   if (data.type !== "style-sheet") {
-    errors.push(`${label} type must be style-sheet`);
+    errors.push(err("wrong-type", `${label} type must be style-sheet`, label));
   }
   requireScalar(data, "dialect", label, errors);
   validateEnum(data, "dialect", STYLE_DIALECTS, label, errors);
@@ -6736,12 +6738,12 @@ function validateStyleSheet(project, errors) {
     const entryLabel = `${label} preferred[${index}]`;
     for (const field of ["use", "avoid"]) {
       if (typeof entry[field] !== "string" || entry[field].trim() === "") {
-        errors.push(`${entryLabel} requires a non-empty ${field}`);
+        errors.push(err("missing-field", `${entryLabel} requires a non-empty ${field}`, label));
       }
     }
     if (typeof entry.use === "string" && typeof entry.avoid === "string"
       && entry.use.trim().toLowerCase() === entry.avoid.trim().toLowerCase()) {
-      errors.push(`${entryLabel} use and avoid must differ`);
+      errors.push(err("style-use-equals-avoid", `${entryLabel} use and avoid must differ`, label));
     }
   });
   validateStringArray(data, "watch-words", label, errors);
@@ -6754,7 +6756,7 @@ function validateDeadline(data, errors) {
     // rather than silently switching the deadline off.
     const deadlineError = typeof data.deadline === "string" && data.deadline.trim() !== "" ? storyDateError(data.deadline) : "must be a YYYY-MM-DD date";
     if (deadlineError !== "") {
-      errors.push(`story.md deadline ${deadlineError}`);
+      errors.push(err("invalid-date", `story.md deadline ${deadlineError}`, "story.md"));
     }
   }
 }
@@ -6765,7 +6767,7 @@ function validateProgressLog(project, errors) {
   }
   const data = project.progressLog.data;
   if (data.type !== "progress-log") {
-    errors.push(`${PROGRESS_FILE} type must be progress-log`);
+    errors.push(err("wrong-type", `${PROGRESS_FILE} type must be progress-log`, PROGRESS_FILE));
   }
   validateObjectArray(data, "sessions", PROGRESS_FILE, errors);
   const seen = new Set();
@@ -6776,14 +6778,14 @@ function validateProgressLog(project, errors) {
     const label = `${PROGRESS_FILE} sessions[${index}]`;
     const dateError = storyDateError(entry.date);
     if (entry.date === undefined || dateError !== "") {
-      errors.push(`${label} ${dateError || "requires a date"}`);
+      errors.push(err("invalid-date", `${label} ${dateError || "requires a date"}`, PROGRESS_FILE));
     } else if (seen.has(String(entry.date).trim())) {
-      errors.push(`${label} repeats date ${String(entry.date).trim()}`);
+      errors.push(err("duplicate-session-date", `${label} repeats date ${String(entry.date).trim()}`, PROGRESS_FILE));
     } else {
       seen.add(String(entry.date).trim());
     }
     if (!Number.isInteger(entry.words) || entry.words < 0) {
-      errors.push(`${label} words must be a non-negative integer`);
+      errors.push(err("field-not-integer", `${label} words must be a non-negative integer`, PROGRESS_FILE));
     }
   });
 }
@@ -6794,7 +6796,7 @@ function validateOptionalRegistry(project, directory, expectedType, errors) {
     const label = path.join(directory, "_index.md");
     const data = readRegistryValidationData(indexPath, project.root, label, errors);
     if (data && data.type !== expectedType) {
-      errors.push(`${label} type must be ${expectedType}`);
+      errors.push(err("wrong-type", `${label} type must be ${expectedType}`, label));
     }
   }
 }
@@ -6821,23 +6823,23 @@ function validateResearch(project, errors, warnings) {
     validateStringArray(data, "reviewed-by", label, errors);
     for (const risk of Array.isArray(data.risk) ? data.risk : []) {
       if (typeof risk === "string" && !RESEARCH_RISKS.has(risk)) {
-        errors.push(`${label} risk has unsupported value ${risk}`);
+        errors.push(err("unsupported-value", `${label} risk has unsupported value ${risk}`, label));
       }
     }
     // Invented facts are the author's to decide, so they need no sources and
     // never hold up a final chapter.
     const invented = note.accuracy === "invented";
     if (!invented && note.status === "verified" && note.sources.length === 0) {
-      warnings.push(`${label} is verified but lists no sources`);
+      warnings.push(warn("research-no-sources", `${label} is verified but lists no sources`, label));
     }
     const settled = note.usedIn.filter((chapterId) => SETTLED_CHAPTER_STATUSES.has(chapterStatus.get(chapterId)));
     if (!invented && (note.status === "open" || note.status === "disputed")) {
       for (const chapterId of settled) {
-        warnings.push(`${label} is ${note.status} but ${chapterId} relies on it and is ${chapterStatus.get(chapterId)}`);
+        warnings.push(warn("research-unsettled", `${label} is ${note.status} but ${chapterId} relies on it and is ${chapterStatus.get(chapterId)}`, label));
       }
     }
     if (note.risk.length > 0 && note.reviewedBy.length === 0 && settled.length > 0) {
-      warnings.push(`${label} carries ${note.risk.join(", ")} risk but has no reviewed-by, and ${settled.join(", ")} relies on it`);
+      warnings.push(warn("research-unreviewed", `${label} carries ${note.risk.join(", ")} risk but has no reviewed-by, and ${settled.join(", ")} relies on it`, label));
     }
   }
 }
@@ -6847,7 +6849,7 @@ function validateMatter(project, errors, warnings) {
   for (const matter of project.matter) {
     const label = relative(project, matter.file);
     if (matter.empty) {
-      warnings.push(`${label} has no text and is left out of export and build`);
+      warnings.push(warn("empty-matter", `${label} has no text and is left out of export and build`, label));
     }
     const data = readValidationData(matter.file, project.root, label, errors);
     if (!data) {
@@ -6861,7 +6863,7 @@ function validateMatter(project, errors, warnings) {
       requireInteger(data, "order", label, errors, 0);
     }
     if (data.heading !== undefined && typeof data.heading !== "boolean") {
-      errors.push(`${label} heading must be true or false`);
+      errors.push(err("field-not-boolean", `${label} heading must be true or false`, label));
     }
     // Quoted material (an epigraph, lyrics, a poem) needs the rights
     // holder's permission before the book is published.
@@ -6869,10 +6871,10 @@ function validateMatter(project, errors, warnings) {
     requireScalar(data, "rights-holder", label, errors);
     requireScalar(data, "credit", label, errors);
     if (data.permission === "pending" && project.story.data.status === "complete") {
-      warnings.push(`${label} permission is still pending and the story is complete`);
+      warnings.push(warn("permission-pending", `${label} permission is still pending and the story is complete`, label));
     }
     if (data.permission === "granted" && (typeof data["rights-holder"] !== "string" || data["rights-holder"].trim() === "")) {
-      warnings.push(`${label} permission is granted but no rights-holder is recorded`);
+      warnings.push(warn("permission-no-rights-holder", `${label} permission is granted but no rights-holder is recorded`, label));
     }
   }
 }
@@ -6883,13 +6885,13 @@ function validateCover(project, errors) {
     return;
   }
   if (typeof cover !== "string" || cover.trim() === "") {
-    errors.push("story.md cover must be a path to an image file");
+    errors.push(err("invalid-cover", "story.md cover must be a path to an image file", "story.md"));
     return;
   }
   try {
     coverImage(project);
   } catch (error) {
-    errors.push(error.message);
+    errors.push(err("invalid-cover", error.message, "story.md"));
   }
 }
 
@@ -6934,19 +6936,19 @@ function coverImage(project) {
 
 function validateEntityId(id, label, errors) {
   if (id !== kebabCase(id)) {
-    errors.push(`${label} filename id must be kebab-case`);
+    errors.push(err("id-not-kebab", `${label} filename id must be kebab-case`, label));
   }
 }
 
-function requireScalar(data, field, label, errors) {
+function requireScalar(data, field, label, errors, file = label) {
   if (data[field] !== undefined && (Array.isArray(data[field]) || typeof data[field] === "object")) {
-    errors.push(`${label} frontmatter field ${field} must be a scalar`);
+    errors.push(err("field-not-scalar", `${label} frontmatter field ${field} must be a scalar`, file));
   }
 }
 
 function requireArray(data, field, label, errors) {
   if (data[field] !== undefined && !Array.isArray(data[field])) {
-    errors.push(`${label} frontmatter field ${field} must be a list`);
+    errors.push(err("field-not-list", `${label} frontmatter field ${field} must be a list`, label));
   }
 }
 
@@ -6955,9 +6957,9 @@ function requireInteger(data, field, label, errors, minimum) {
     return;
   }
   if (!Number.isInteger(data[field])) {
-    errors.push(`${label} frontmatter field ${field} must be an integer`);
+    errors.push(err("field-not-integer", `${label} frontmatter field ${field} must be an integer`, label));
   } else if (minimum !== undefined && data[field] < minimum) {
-    errors.push(`${label} frontmatter field ${field} must be at least ${minimum}`);
+    errors.push(err("field-below-minimum", `${label} frontmatter field ${field} must be at least ${minimum}`, label));
   }
 }
 
@@ -6967,13 +6969,13 @@ function validateStringArray(data, field, label, errors) {
   }
 
   if (!Array.isArray(data[field])) {
-    errors.push(`${label} frontmatter field ${field} must be a list`);
+    errors.push(err("field-not-list", `${label} frontmatter field ${field} must be a list`, label));
     return;
   }
 
   for (const item of data[field]) {
     if (typeof item !== "string" || item.trim() === "") {
-      errors.push(`${label} frontmatter field ${field} must contain only non-empty strings`);
+      errors.push(err("field-invalid-items", `${label} frontmatter field ${field} must contain only non-empty strings`, label));
     }
   }
 }
@@ -6982,7 +6984,7 @@ function validateStringArray(data, field, label, errors) {
 // `learned_in`, `Learned-In`, or `since_chapter`. Free-form keys stay allowed.
 const PREFIX_KEYS = new Set(["since", "learned-in", "died-in"]);
 
-function warnNearMissKeys(data, keys, label, warnings) {
+function warnNearMissKeys(data, keys, label, warnings, file = label) {
   for (const key of Object.keys(data)) {
     if (keys.includes(key)) {
       continue;
@@ -6990,7 +6992,7 @@ function warnNearMissKeys(data, keys, label, warnings) {
     const normalized = key.trim().toLowerCase().replace(/[\s_]+/g, "-");
     const intended = keys.find((known) => normalized === known || (PREFIX_KEYS.has(known) && normalized.startsWith(`${known}-`)) || normalized === known.replace(/-/g, ""));
     if (intended !== undefined && !Object.hasOwn(data, intended)) {
-      warnings.push(`${label} has ${key}; did you mean ${intended}?`);
+      warnings.push(warn("near-miss-key", `${label} has ${key}; did you mean ${intended}?`, file));
     }
   }
 }
@@ -7001,13 +7003,13 @@ function validateObjectArray(data, field, label, errors) {
   }
 
   if (!Array.isArray(data[field])) {
-    errors.push(`${label} frontmatter field ${field} must be a list`);
+    errors.push(err("field-not-list", `${label} frontmatter field ${field} must be a list`, label));
     return;
   }
 
   for (const item of data[field]) {
     if (!item || typeof item !== "object" || Array.isArray(item)) {
-      errors.push(`${label} frontmatter field ${field} must contain objects`);
+      errors.push(err("field-invalid-items", `${label} frontmatter field ${field} must contain objects`, label));
     }
   }
 }
@@ -7018,24 +7020,24 @@ function validateRelationships(data, label, errors) {
   }
 
   if (!Array.isArray(data.relationships)) {
-    errors.push(`${label} frontmatter field relationships must be a list`);
+    errors.push(err("field-not-list", `${label} frontmatter field relationships must be a list`, label));
     return;
   }
 
   for (const relationship of data.relationships) {
     if (!relationship || typeof relationship !== "object" || Array.isArray(relationship)) {
-      errors.push(`${label} frontmatter field relationships must contain objects`);
+      errors.push(err("field-invalid-items", `${label} frontmatter field relationships must contain objects`, label));
       continue;
     }
 
     if (typeof relationship.character !== "string" || relationship.character.trim() === "") {
-      errors.push(`${label} relationship is missing character`);
+      errors.push(err("missing-field", `${label} relationship is missing character`, label));
     } else if (relationship.character !== kebabCase(relationship.character)) {
-      errors.push(`${label} relationship character ${relationship.character} must be kebab-case`);
+      errors.push(err("id-not-kebab", `${label} relationship character ${relationship.character} must be kebab-case`, label));
     }
 
     if (typeof relationship.type !== "string" || relationship.type.trim() === "") {
-      errors.push(`${label} relationship to ${relationship.character ?? "unknown"} is missing type`);
+      errors.push(err("missing-field", `${label} relationship to ${relationship.character ?? "unknown"} is missing type`, label));
     }
   }
 }
@@ -7043,12 +7045,12 @@ function validateRelationships(data, label, errors) {
 function validateEnum(data, field, allowed, label, errors) {
   if (Array.isArray(data[field])) {
     // requireScalar may already have reported the same field.
-    const message = `${label} frontmatter field ${field} must be a single value, not a list`;
-    if (!errors.includes(`${label} frontmatter field ${field} must be a scalar`)) {
-      errors.push(message);
+    const scalar = `${label} frontmatter field ${field} must be a scalar`;
+    if (!hasMessage(errors, scalar)) {
+      errors.push(err("field-not-scalar", `${label} frontmatter field ${field} must be a single value, not a list`, label));
     }
   } else if (data[field] !== undefined && !allowed.has(data[field])) {
-    errors.push(`${label} frontmatter field ${field} has unsupported value ${data[field]}`);
+    errors.push(err("unsupported-value", `${label} frontmatter field ${field} has unsupported value ${data[field]}`, label));
   }
 }
 
@@ -7068,7 +7070,7 @@ function formatCheck(result) {
 function requireFields(data, fields, label, errors) {
   for (const field of fields) {
     if (data[field] === undefined || (typeof data[field] === "string" && data[field].trim() === "")) {
-      errors.push(`${label} is missing frontmatter field ${field}`);
+      errors.push(err("missing-field", `${label} is missing frontmatter field ${field}`, label));
     }
   }
 }

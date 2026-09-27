@@ -1925,7 +1925,7 @@ describe("review-findings hardening", () => {
     const big = "x".repeat(6 * 1024 * 1024);
     fs.writeFileSync(path.join(root, "chapters", "chapter-99.md"), big, "utf8");
     const project = scanProject(root);
-    expect(project.fileErrors.join("\n")).toContain("oversized");
+    expect(messages(project.fileErrors).join("\n")).toContain("oversized");
     expect(messages(validateProject(root).errors).join("\n")).toContain("oversized");
   });
 

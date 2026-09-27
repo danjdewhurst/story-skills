@@ -750,7 +750,7 @@ function isKebabId(value) {
 
 function requireMapping(entry, entryLabel, file, errors) {
   if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-    errors.push(err("state-entry-not-mapping", `${entryLabel} must be a mapping`, file));
+    errors.push(err("entry-not-mapping", `${entryLabel} must be a mapping`, file));
     return false;
   }
   return true;

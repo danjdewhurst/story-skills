@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { err, warn } from "./findings.js";
 import { parseFrontmatter, replaceFrontmatter } from "./frontmatter.js";
 import { readTextFile } from "./files.js";
 
@@ -88,12 +89,12 @@ export function validateSeriesLinks(root, data, errors) {
     const raw = Array.isArray(data[field]) ? data[field] : [data[field]];
     const backslashed = raw.filter((value) => typeof value === "string" && value.includes("\\"));
     for (const value of backslashed) {
-      errors.push(`story.md ${field} ${value} uses a backslash; write ${value.replace(/\\/g, "/")} so the link works on every system`);
+      errors.push(err("series-link-backslash", `story.md ${field} ${value} uses a backslash; write ${value.replace(/\\/g, "/")} so the link works on every system`, "story.md"));
     }
     for (const target of seriesLinks(root, { [field]: raw.filter((value) => !backslashed.includes(value)) }, field)) {
       const label = `story.md ${field} ${seriesLinkPath(root, target)}`;
       if (target === root || canonicalPath(target) === canonicalPath(root)) {
-        errors.push(`${label} points at this book`);
+        errors.push(err("series-link-self", `${label} points at this book`, "story.md"));
         continue;
       }
 
@@ -101,24 +102,24 @@ export function validateSeriesLinks(root, data, errors) {
       try {
         other = readBookFrontmatter(target);
       } catch (error) {
-        errors.push(`${label}: ${error.message}`);
+        errors.push(err("series-link-unreadable", `${label}: ${error.message}`, "story.md"));
         continue;
       }
       if (!other) {
-        errors.push(`${label} is not a story project: missing story.md`);
+        errors.push(err("series-link-not-project", `${label} is not a story project: missing story.md`, "story.md"));
         continue;
       }
 
       if (!areSiblingBooks(root, target)) {
-        errors.push(`${label} is not in the same parent folder as this book; story series only follows links between sibling book folders`);
+        errors.push(err("series-link-not-sibling", `${label} is not in the same parent folder as this book; story series only follows links between sibling book folders`, "story.md"));
       }
       if (!linksInclude(seriesLinks(target, other, inverse), root)) {
-        errors.push(`${label} is missing backlink: add ${seriesLinkPath(target, root)} to its ${inverse}`);
+        errors.push(err("series-missing-backlink", `${label} is missing backlink: add ${seriesLinkPath(target, root)} to its ${inverse}`, "story.md"));
       }
       const ownSeries = seriesId(data);
       const otherSeries = seriesId(other);
       if (ownSeries !== undefined && otherSeries !== undefined && ownSeries !== otherSeries) {
-        errors.push(`${label} belongs to series ${otherSeries}, not ${ownSeries}`);
+        errors.push(err("series-mismatch", `${label} belongs to series ${otherSeries}, not ${ownSeries}`, "story.md"));
       }
     }
   }
@@ -167,18 +168,18 @@ export function buildSeries(startRoot, scan) {
 
   const seriesIds = [...new Set(books.map((book) => book.series).filter((series) => series !== undefined))].sort();
   if (seriesIds.length > 1) {
-    errors.push(`Linked books belong to different series: ${seriesIds.join(", ")}`);
+    errors.push(err("series-conflict", `Linked books belong to different series: ${seriesIds.join(", ")}`));
   }
   const unnamed = books.filter((book) => book.series === undefined);
   if (seriesIds.length === 1 && unnamed.length > 0) {
-    warnings.push(`Linked books ${unnamed.map((book) => book.title).join(", ")} set no series id; add series: ${seriesIds[0]}`);
+    warnings.push(warn("series-id-missing", `Linked books ${unnamed.map((book) => book.title).join(", ")} set no series id; add series: ${seriesIds[0]}`));
   }
   for (const book of books.filter((candidate) => candidate.invalidBookNumber)) {
-    errors.push(`${book.label}: story.md book-number ${JSON.stringify(book.project.story.data["book-number"])} is not a number 0 or more; the book is listed as unnumbered`);
+    errors.push(err("invalid-book-number", `${book.label}: story.md book-number ${JSON.stringify(book.project.story.data["book-number"])} is not a number 0 or more; the book is listed as unnumbered`, path.join(book.label, "story.md")));
   }
   const seriesTitles = [...new Set(books.map((book) => book.seriesTitle).filter((title) => title !== undefined))].sort();
   if (seriesTitles.length > 1) {
-    warnings.push(`Linked books set different series-title values: ${seriesTitles.map((title) => `"${title}"`).join(", ")}; keep the series name identical everywhere`);
+    warnings.push(warn("series-title-mismatch", `Linked books set different series-title values: ${seriesTitles.map((title) => `"${title}"`).join(", ")}; keep the series name identical everywhere`));
   }
   checkDuplicateBookNumbers(books, errors);
 
@@ -266,7 +267,7 @@ function discoverBooks(startRoot, scan, errors) {
       continue;
     }
     if (visited.size >= MAX_SERIES_BOOKS) {
-      errors.push('Series links exceed the ' + MAX_SERIES_BOOKS + ' book limit; refusing to traverse further');
+      errors.push(err("series-too-many-books", 'Series links exceed the ' + MAX_SERIES_BOOKS + ' book limit; refusing to traverse further'));
       break;
     }
 
@@ -277,13 +278,13 @@ function discoverBooks(startRoot, scan, errors) {
     if (path.dirname(resolved) !== scopeRoot || path.dirname(effective) !== scopeReal) {
       const outside = !isPathInside(scopeRoot, resolved) || !isPathInside(scopeReal, effective);
       errors.push(outside
-        ? label + ' points outside the series directory ' + scopeRoot + '; refusing to follow'
-        : label + ' is not a sibling folder in the series directory ' + scopeRoot + '; keep series books side by side, refusing to follow');
+        ? err("series-link-outside", label + ' points outside the series directory ' + scopeRoot + '; refusing to follow')
+        : err("series-link-not-sibling", label + ' is not a sibling folder in the series directory ' + scopeRoot + '; keep series books side by side, refusing to follow'));
       visited.set(effective, null);
       continue;
     }
     if (!fs.existsSync(path.join(root, "story.md"))) {
-      errors.push(`${label} is not a story project: missing story.md`);
+      errors.push(err("series-link-not-project", `${label} is not a story project: missing story.md`));
       visited.set(effective, null);
       continue;
     }
@@ -292,12 +293,13 @@ function discoverBooks(startRoot, scan, errors) {
     try {
       project = scan(root);
     } catch (error) {
-      errors.push(`${label}: ${error.message}`);
+      errors.push(err("series-link-unreadable", `${label}: ${error.message}`));
       visited.set(effective, null);
       continue;
     }
+    // A linked book's file errors keep their codes, and name the book.
     for (const scanError of project.fileErrors ?? []) {
-      errors.push(`${label}: ${scanError}`);
+      errors.push({ ...scanError, message: `${label}: ${scanError.message}`, file: path.join(label, scanError.file) });
     }
     // An unparseable story.md has no series id, number, or links to trust,
     // so the book is reported once and left out rather than read as empty.
@@ -383,7 +385,7 @@ function chronologicalOrder(books, errors) {
 
   if (order.length < books.length) {
     const cycle = books.filter((book) => !order.includes(book)).map((book) => book.title);
-    errors.push(`Series chronology has a cycle between ${cycle.join(", ")}; check follows and precedes`);
+    errors.push(err("series-cycle", `Series chronology has a cycle between ${cycle.join(", ")}; check follows and precedes`));
     return null;
   }
   return { order, later };
@@ -398,7 +400,7 @@ function checkDuplicateBookNumbers(books, errors) {
   }
   for (const [number, labels] of [...byNumber].sort((left, right) => left[0] - right[0])) {
     if (labels.length > 1) {
-      errors.push(`Books ${labels.join(", ")} share book-number ${number}; book-number is publication order and must be unique`);
+      errors.push(err("duplicate-book-number", `Books ${labels.join(", ")} share book-number ${number}; book-number is publication order and must be unique`));
     }
   }
 }
@@ -447,14 +449,14 @@ function checkCanonNames(book, earlierBooks, warnings) {
     for (const entity of book.project[key]) {
       const match = canon.get(entity.id);
       if (match && canonText(entity[field]) !== canonText(match.entity[field])) {
-        warnings.push(`${bookFile(book, entity.file)} ${field} "${entity[field]}" differs from "${match.entity[field]}" in ${bookFile(match.book, match.entity.file)}`);
+        warnings.push(warn("canon-name-mismatch", `${bookFile(book, entity.file)} ${field} "${entity[field]}" differs from "${match.entity[field]}" in ${bookFile(match.book, match.entity.file)}`, bookFile(book, entity.file)));
       }
       // An audiobook narrator reads each book's own guide, so a respelling
       // that changes between books changes how the name is said.
       const said = pronunciationText(entity.pronunciation);
       const saidBefore = pronunciationText(match?.entity.pronunciation);
       if (said !== "" && saidBefore !== "" && said !== saidBefore) {
-        warnings.push(`${bookFile(book, entity.file)} pronunciation "${said}" differs from "${saidBefore}" in ${bookFile(match.book, match.entity.file)}`);
+        warnings.push(warn("canon-pronunciation-mismatch", `${bookFile(book, entity.file)} pronunciation "${said}" differs from "${saidBefore}" in ${bookFile(match.book, match.entity.file)}`, bookFile(book, entity.file)));
       }
     }
   }
@@ -479,7 +481,7 @@ function checkCanonDeaths(book, earlierBooks, errors) {
       continue;
     }
     if (character.status !== "deceased") {
-      errors.push(`${bookFile(book, character.file)} has status ${character.status || "unset"}, but ${character.id} is deceased in earlier book ${death.title}; set status: deceased`);
+      errors.push(err("canon-death-status", `${bookFile(book, character.file)} has status ${character.status || "unset"}, but ${character.id} is deceased in earlier book ${death.title}; set status: deceased`, bookFile(book, character.file)));
     }
   }
 
@@ -488,7 +490,7 @@ function checkCanonDeaths(book, earlierBooks, errors) {
       // A pov also listed in mentions narrates without appearing (a ghost),
       // as in single-book continuity.
       if (record.characters.includes(id) || (record.pov === id && !record.mentions.includes(id))) {
-        errors.push(`${bookFile(book, record.file)} lists ${id}, who died in earlier book ${death.title}; move appearances to mentions`);
+        errors.push(err("canon-posthumous-appearance", `${bookFile(book, record.file)} lists ${id}, who died in earlier book ${death.title}; move appearances to mentions`, bookFile(book, record.file)));
       }
     }
   }
@@ -497,7 +499,7 @@ function checkCanonDeaths(book, earlierBooks, errors) {
   for (const entry of knowledgeEntries(book)) {
     const death = deaths.get(entry.character);
     if (death && entry.learnedIn) {
-      errors.push(`${bookFile(book, entry.file)} knowledge-state[${entry.index}] has ${entry.character} learn something in ${entry.learnedIn}, but ${entry.character} died in earlier book ${death.title}; drop learned-in or the entry`);
+      errors.push(err("canon-posthumous-learning", `${bookFile(book, entry.file)} knowledge-state[${entry.index}] has ${entry.character} learn something in ${entry.learnedIn}, but ${entry.character} died in earlier book ${death.title}; drop learned-in or the entry`, bookFile(book, entry.file)));
     }
   }
 }
@@ -507,7 +509,7 @@ function checkDestroyedArtifacts(book, earlierBooks, errors, warnings) {
   for (const artifact of book.project.artifacts) {
     const earlier = destroyed.get(artifact.id);
     if (earlier && artifact.status !== "destroyed") {
-      warnings.push(`${bookFile(book, artifact.file)} has status ${artifact.status || "unset"}, but ${artifact.id} was destroyed in earlier book ${earlier.title}`);
+      warnings.push(warn("canon-destroyed-status", `${bookFile(book, artifact.file)} has status ${artifact.status || "unset"}, but ${artifact.id} was destroyed in earlier book ${earlier.title}`, bookFile(book, artifact.file)));
     }
   }
   // A scene that changes a destroyed artifact's state uses it on the page.
@@ -515,7 +517,7 @@ function checkDestroyedArtifacts(book, earlierBooks, errors, warnings) {
   for (const scene of book.project.scenes) {
     for (const [id, earlier] of destroyed) {
       if (scene.stateChanges.some((change) => change && typeof change === "object" && String(change.target ?? "") === id)) {
-        errors.push(`${bookFile(book, scene.file)} uses ${id}, which was destroyed in earlier book ${earlier.title}; account for its return or remove the state change`);
+        errors.push(err("canon-destroyed-artifact-used", `${bookFile(book, scene.file)} uses ${id}, which was destroyed in earlier book ${earlier.title}; account for its return or remove the state change`, bookFile(book, scene.file)));
       }
     }
   }
@@ -537,7 +539,7 @@ function checkKnownFacts(book, earlierBooks, errors) {
   for (const entry of knowledgeFacts(book)) {
     const prior = known.get(entry.key);
     if (prior && entry.learnedIn) {
-      errors.push(`${bookFile(book, entry.file)} knowledge-state[${entry.index}] has ${entry.character} learn ${entry.fact} in ${entry.learnedIn}, but they already know it in earlier book ${prior.book.title} (${bookFile(prior.book, prior.entry.file)} knowledge-state[${prior.entry.index}])`);
+      errors.push(err("canon-fact-relearned", `${bookFile(book, entry.file)} knowledge-state[${entry.index}] has ${entry.character} learn ${entry.fact} in ${entry.learnedIn}, but they already know it in earlier book ${prior.book.title} (${bookFile(prior.book, prior.entry.file)} knowledge-state[${prior.entry.index}])`, bookFile(book, entry.file)));
     }
   }
 }

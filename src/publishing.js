@@ -1,4 +1,5 @@
 import { storyDateError } from "./continuity.js";
+import { err, warn } from "./findings.js";
 import { isBookNumber, seriesDisplayName } from "./series.js";
 
 // Publishing metadata kept in story.md: what retailers, distributors, and the
@@ -60,46 +61,46 @@ export function publishingMeta(data) {
 export function validatePublishing(data, errors, warnings) {
   for (const field of SCALAR_FIELDS) {
     if (data[field] !== undefined && typeof data[field] !== "string" && !(field === "isbn" && typeof data[field] === "number")) {
-      errors.push(`story.md frontmatter field ${field} must be text`);
+      errors.push(err("field-not-text", `story.md frontmatter field ${field} must be text`, "story.md"));
     }
   }
   for (const field of ["keywords", "subjects", "authors"]) {
     if (data[field] !== undefined && (!Array.isArray(data[field]) || data[field].some((item) => typeof item !== "string"))) {
-      errors.push(`story.md frontmatter field ${field} must be a list of text`);
+      errors.push(err("field-not-list", `story.md frontmatter field ${field} must be a list of text`, "story.md"));
     }
   }
   if (typeof data.language === "string" && !isPlaceholder(data.language) && !LANGUAGE_PATTERN.test(data.language.trim())) {
-    errors.push(`story.md language ${data.language} must be a BCP 47 tag such as en, en-GB, or fr`);
+    errors.push(err("invalid-language", `story.md language ${data.language} must be a BCP 47 tag such as en, en-GB, or fr`, "story.md"));
   }
   const isbn = typeof data.isbn === "number" ? String(data.isbn) : data.isbn;
   if (typeof isbn === "string" && isbn.trim() !== "" && !isPlaceholder(isbn) && normalizeIsbn(isbn) === "") {
     const hint = typeof data.isbn === "number" ? "; quote it so leading zeros survive" : "";
-    errors.push(`story.md isbn ${isbn} is not a valid ISBN-13 or ISBN-10 (check the digits and checksum${hint})`);
+    errors.push(err("invalid-isbn", `story.md isbn ${isbn} is not a valid ISBN-13 or ISBN-10 (check the digits and checksum${hint})`, "story.md"));
   }
   if (typeof data["publication-date"] === "string" && !isPlaceholder(data["publication-date"])) {
     const dateError = storyDateError(data["publication-date"]);
     if (dateError !== "") {
-      errors.push(`story.md publication-date ${dateError}`);
+      errors.push(err("invalid-date", `story.md publication-date ${dateError}`, "story.md"));
     }
   }
   if (Array.isArray(data.subjects)) {
     for (const subject of data.subjects) {
       if (typeof subject === "string" && !isPlaceholder(subject) && !BISAC_PATTERN.test(subject.trim())) {
-        errors.push(`story.md subject ${subject} must be a BISAC code such as FIC022000`);
+        errors.push(err("invalid-subject", `story.md subject ${subject} must be a BISAC code such as FIC022000`, "story.md"));
       }
     }
   }
   if (Array.isArray(data.keywords) && data.keywords.length > MAX_KEYWORDS) {
-    warnings.push(`story.md lists ${data.keywords.length} keywords; most retailers accept ${MAX_KEYWORDS}`);
+    warnings.push(warn("too-many-keywords", `story.md lists ${data.keywords.length} keywords; most retailers accept ${MAX_KEYWORDS}`, "story.md"));
   }
   for (const field of [...SCALAR_FIELDS, "authors", "keywords", "subjects"]) {
     const values = Array.isArray(data[field]) ? data[field] : [data[field]];
     if (values.some(isPlaceholder)) {
-      warnings.push(`story.md ${field} is still a [TODO] placeholder; builds leave it out`);
+      warnings.push(warn("todo-placeholder", `story.md ${field} is still a [TODO] placeholder; builds leave it out`, "story.md"));
     }
   }
   if (data.author !== undefined && data.authors !== undefined) {
-    warnings.push("story.md sets both author and authors; builds use authors");
+    warnings.push(warn("author-and-authors", "story.md sets both author and authors; builds use authors", "story.md"));
   }
 }
 

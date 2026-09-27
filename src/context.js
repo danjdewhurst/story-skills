@@ -1,6 +1,7 @@
 import path from "node:path";
 import { chapterChronology, deathWindow } from "./chronology.js";
 import { idText } from "./continuity.js";
+import { warn } from "./findings.js";
 import { entityStateAt } from "./progressions.js";
 import { projectError, usageError } from "./exit-codes.js";
 import { extractSection } from "./markdown.js";
@@ -448,7 +449,7 @@ export function buildContext(project, targetId, readBody, options = {}) {
   previous.reverse();
 
   // Files left out because they failed to parse; each message names its file.
-  const warnings = [...(project.fileErrors ?? [])];
+  const warnings = (project.fileErrors ?? []).map((error) => warn("context-file-skipped", error.message, error.file));
   return {
     target: { kind: target.kind, id: target.id, chapter: target.chapter.id, number: targetNumber, title: target.chapter.title },
     budget,

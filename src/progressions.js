@@ -1,5 +1,6 @@
 import { idText } from "./continuity.js";
 import { usageError } from "./exit-codes.js";
+import { err } from "./findings.js";
 import { kebabCase } from "./markdown.js";
 
 // Timeline-scoped changes to a character, location, or faction. The
@@ -120,7 +121,7 @@ export function validateProgressions(data, label, rules, chronology, errors) {
     return;
   }
   if (!Array.isArray(data.progressions)) {
-    errors.push(`${label} frontmatter field progressions must be a list`);
+    errors.push(err("field-not-list", `${label} frontmatter field progressions must be a list`, label));
     return;
   }
   const seen = new Map();
@@ -128,39 +129,39 @@ export function validateProgressions(data, label, rules, chronology, errors) {
   for (const [index, item] of data.progressions.entries()) {
     const entryLabel = `${label} progressions[${index}]`;
     if (!item || typeof item !== "object" || Array.isArray(item)) {
-      errors.push(`${entryLabel} must be a mapping with from, field, and value`);
+      errors.push(err("entry-not-mapping", `${entryLabel} must be a mapping with from, field, and value`, label));
       continue;
     }
     const from = idText(item.from);
     if (from === "") {
-      errors.push(`${entryLabel} is missing from (the chapter the change takes effect)`);
+      errors.push(err("missing-field", `${entryLabel} is missing from (the chapter the change takes effect)`, label));
     }
     const field = item.field;
     let fieldOk = false;
     if (typeof field !== "string" || field.trim() === "") {
-      errors.push(`${entryLabel} is missing field`);
+      errors.push(err("missing-field", `${entryLabel} is missing field`, label));
     } else if (field !== kebabCase(field)) {
-      errors.push(`${entryLabel} field ${field} must be kebab-case`);
+      errors.push(err("id-not-kebab", `${entryLabel} field ${field} must be kebab-case`, label));
     } else if (RESERVED_FIELDS.has(field)) {
-      errors.push(`${entryLabel} cannot change ${field}${field === "died-in" || field === "revived-in" ? "; set it on the character and story continuity reads it by chapter" : ""}`);
+      errors.push(err("progression-fixed-field", `${entryLabel} cannot change ${field}${field === "died-in" || field === "revived-in" ? "; set it on the character and story continuity reads it by chapter" : ""}`, label));
     } else if (rules.lists.has(field)) {
-      errors.push(`${entryLabel} cannot change ${field}, which is a list; a progression holds a single value`);
+      errors.push(err("progression-list-field", `${entryLabel} cannot change ${field}, which is a list; a progression holds a single value`, label));
     } else {
       fieldOk = true;
     }
     const value = item.value;
     if (value === undefined || value === null) {
-      errors.push(`${entryLabel} is missing value`);
+      errors.push(err("missing-field", `${entryLabel} is missing value`, label));
     } else if (typeof value === "object") {
-      errors.push(`${entryLabel} value must be a single value, not a list or mapping`);
+      errors.push(err("field-not-scalar", `${entryLabel} value must be a single value, not a list or mapping`, label));
     } else if (fieldOk && rules.enums.has(field) && !rules.enums.get(field).has(value)) {
-      errors.push(`${entryLabel} ${field} has unsupported value ${value}`);
+      errors.push(err("unsupported-value", `${entryLabel} ${field} has unsupported value ${value}`, label));
     }
 
     if (from !== "" && fieldOk) {
       const key = `${from}\u0000${field}`;
       if (seen.has(key)) {
-        errors.push(`${entryLabel} repeats ${field} from ${from} (progressions[${seen.get(key)}])`);
+        errors.push(err("progression-duplicate", `${entryLabel} repeats ${field} from ${from} (progressions[${seen.get(key)}])`, label));
       } else {
         seen.set(key, index);
       }
@@ -169,7 +170,7 @@ export function validateProgressions(data, label, rules, chronology, errors) {
       continue;
     }
     if (latest && happensAfter(chronology, latest.from, from)) {
-      errors.push(`${entryLabel} from ${from} comes before progressions[${latest.index}] from ${latest.from} in the story; list progressions in story order`);
+      errors.push(err("progression-out-of-order", `${entryLabel} from ${from} comes before progressions[${latest.index}] from ${latest.from} in the story; list progressions in story order`, label));
       continue;
     }
     latest = { from, index };

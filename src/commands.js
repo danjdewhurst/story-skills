@@ -272,7 +272,8 @@ export const COMMANDS = [
       const context = draftingContext(root(), targetId, { budget: parsed.options.budget, scenes: parsed.options.scenes });
       if (wantsJson(parsed)) {
         const diagnostics = context.warnings.map((warning) => diagnostic("warning", warning, "context"));
-        return writeJsonResult(io, { command: "context", ok: true, data: context, diagnostics });
+        // data.warnings stays the plain text the result schema describes.
+        return writeJsonResult(io, { command: "context", ok: true, data: { ...context, warnings: context.warnings.map((warning) => warning.message) }, diagnostics });
       }
       io.stdout.write(formatContext(context));
       for (const warning of context.warnings) {

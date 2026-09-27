@@ -77,13 +77,13 @@ describe("series links", () => {
     const mismatch = [];
     validateSeriesLinks(two, { series: "saga", follows: ["../book-one"] }, mismatch);
 
-    expect(errors).toEqual([
+    expect(messages(errors)).toEqual([
       "story.md follows ../book-one is missing backlink: add ../book-two to its precedes",
       "story.md follows ../not-a-book is not a story project: missing story.md",
       `story.md follows ../broken: ${path.join(cwd, "broken", "story.md")} is missing YAML frontmatter`,
       "story.md follows  points at this book"
     ]);
-    expect(mismatch).toContain("story.md follows ../book-one belongs to series other, not saga");
+    expect(messages(mismatch)).toContain("story.md follows ../book-one belongs to series other, not saga");
   });
 
   test("adds a backlink once, appending to any existing list", () => {

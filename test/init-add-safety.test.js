@@ -196,7 +196,7 @@ describe("read containment", () => {
     fs.copyFileSync(path.join(root, "continuity", "state.md"), path.join(outside, "state.md"));
     fs.rmSync(path.join(root, "continuity"), { recursive: true, force: true });
     fs.symlinkSync(outside, path.join(root, "continuity"), "dir");
-    expect(scanProject(root).fileErrors.join("\n")).toContain("continuity/state.md: Refusing to access project path outside root");
+    expect(messages(scanProject(root).fileErrors).join("\n")).toContain("continuity/state.md: Refusing to access project path outside root");
   });
 
   test("refuses writes through a dangling symlinked directory", () => {

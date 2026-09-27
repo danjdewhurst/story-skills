@@ -138,7 +138,7 @@ export function importManuscript(options) {
         // starter-file checks that follow, with their own message.
         return;
       }
-      assertProjectParses(project, "import", (error) => /^chapters[\\/]chapter-\d+\.md:/i.test(error));
+      assertProjectParses(project, "import", (error) => /^chapters[\\/]chapter-\d+\.md$/i.test(error.file));
     }
   });
 

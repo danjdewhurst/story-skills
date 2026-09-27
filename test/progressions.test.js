@@ -161,7 +161,7 @@ describe("validateProgressions", () => {
   const check = (progressions) => {
     const errors = [];
     validateProgressions({ progressions }, "characters/mara.md", rules, chronology, errors);
-    return errors;
+    return messages(errors);
   };
 
   test("accepts well-formed entries, including planned chapters and scalar values", () => {

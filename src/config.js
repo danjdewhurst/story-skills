@@ -4,7 +4,7 @@ import path from "node:path";
 // the import is circular. COMMANDS is only read inside functions, after every
 // module has finished loading.
 import { COMMANDS } from "./commands.js";
-import { FINDING_CODES, asFinding, codesAt } from "./findings.js";
+import { FINDING_CODES, asFinding, codesAt, err } from "./findings.js";
 import { parseFrontmatter } from "./frontmatter.js";
 import { OPTIONS, normalizeBooleanValue, optionFamily, suggestion } from "./options.js";
 import { proseThresholds } from "./prose.js";
@@ -51,7 +51,7 @@ export function readCliConfig(root) {
 }
 
 export function validateCliConfig(data, errors) {
-  errors.push(...parseCliConfig(data).errors);
+  errors.push(...parseCliConfig(data).errors.map((message) => err("invalid-cli-config", message, "story.md")));
 }
 
 export function parseCliConfig(data) {
