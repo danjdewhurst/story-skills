@@ -2157,7 +2157,8 @@ export function voicesReport(root, options = {}) {
       paragraphs: proseParagraphs(chapterProse(readMarkdown(chapter.file, project.root).body, " "))
     }))
     : [{ id: PASSAGE_LABEL, paragraphs: proseParagraphs(passageProse(options.passage)) }];
-  return { ok: project.fileErrors.length === 0, errors: [...project.fileErrors], ...buildVoices(project, chapters) };
+  const errors = options.passage === undefined ? [...project.fileErrors] : passageErrors(project);
+  return { ok: errors.length === 0, errors, ...buildVoices(project, chapters) };
 }
 
 // Pacing dashboard over chapters and scene records. Findings are advisory.
@@ -2174,6 +2175,13 @@ const PASSAGE_LABEL = "stdin";
 // outline included) lints as its chapter text, as the chapter itself would.
 function passageProse(text) {
   return chapterProse(withoutLeadingFrontmatter(String(text).replace(/\r\n?/g, "\n")), " ");
+}
+
+// A piped passage stands in for the chapters and scenes, so a broken
+// chapter or scene file does not fail its check; a broken style sheet or
+// character file, which the check reads, still does.
+function passageErrors(project) {
+  return project.fileErrors.filter((error) => !/^(?:chapters|scenes)[\\/]/.test(error));
 }
 
 // Advisory prose lint: counts per chapter plus manuscript-wide repeats.
@@ -2219,7 +2227,7 @@ export function proseReport(root, options = {}) {
 // are a bible finding, not a passage one, so they are left out.
 function prosePassageReport(root, passage) {
   const project = root === null ? null : scanProject(root);
-  const errors = project === null ? [] : [...project.fileErrors];
+  const errors = project === null ? [] : passageErrors(project);
   const names = project === null ? [] : [...project.characters.map((character) => character.name), ...existingNames(project).map((entry) => entry.name)];
   const analysis = analyzeChapter(passageProse(passage), proseRules(project?.styleSheet?.data, names));
   return {

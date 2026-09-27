@@ -3325,6 +3325,7 @@ function formatNumber2(value) {
 }
 
 // src/import.js
+import { Buffer as Buffer4 } from "node:buffer";
 import fs7 from "node:fs";
 import path7 from "node:path";
 
@@ -8159,7 +8160,8 @@ function voicesReport(root, options = {}) {
     id: chapter.id,
     paragraphs: proseParagraphs(chapterProse(readMarkdown(chapter.file, project.root).body, " "))
   })) : [{ id: PASSAGE_LABEL, paragraphs: proseParagraphs(passageProse(options.passage)) }];
-  return { ok: project.fileErrors.length === 0, errors: [...project.fileErrors], ...buildVoices(project, chapters) };
+  const errors = options.passage === undefined ? [...project.fileErrors] : passageErrors(project);
+  return { ok: errors.length === 0, errors, ...buildVoices(project, chapters) };
 }
 function pacingReport(root) {
   const project = scanProject(root);
@@ -8169,6 +8171,9 @@ var PASSAGE_LABEL = "stdin";
 function passageProse(text) {
   return chapterProse(withoutLeadingFrontmatter(String(text).replace(/\r\n?/g, `
 `)), " ");
+}
+function passageErrors(project) {
+  return project.fileErrors.filter((error) => !/^(?:chapters|scenes)[\\/]/.test(error));
 }
 function proseReport(root, options = {}) {
   if (options.passage !== undefined) {
@@ -8204,7 +8209,7 @@ function proseReport(root, options = {}) {
 }
 function prosePassageReport(root, passage) {
   const project = root === null ? null : scanProject(root);
-  const errors = project === null ? [] : [...project.fileErrors];
+  const errors = project === null ? [] : passageErrors(project);
   const names = project === null ? [] : [...project.characters.map((character) => character.name), ...existingNames(project).map((entry) => entry.name)];
   const analysis = analyzeChapter(passageProse(passage), proseRules(project?.styleSheet?.data, names));
   return {
@@ -12112,6 +12117,20 @@ function importManuscript(options) {
   if (chapters.length === 0) {
     throw new Error("No chapter content found in import source");
   }
+  let totalWords = 0;
+  const chapterFiles = chapters.map((chapter, index) => {
+    const number = index + 1;
+    const words = wordCount(scanComments(chapter.prose).text);
+    totalWords += words;
+    const title = chapter.title || `Chapter ${number}`;
+    const name = `chapter-${String(number).padStart(2, "0")}.md`;
+    const text = chapterMarkdown(title, number, words, chapter.prose, chapter.unnumbered);
+    const bytes = Buffer4.byteLength(text, "utf8");
+    if (bytes > MAX_READ_BYTES) {
+      throw new Error(`Cannot import: ${name} would be ${bytes} bytes, over the ${MAX_READ_BYTES} byte limit story reads. Split the manuscript with chapter headings first`);
+    }
+    return { name, text };
+  });
   const created = createStoryProject({
     title: options.title,
     cwd,
@@ -12145,15 +12164,9 @@ function importManuscript(options) {
     }
     fs7.unlinkSync(path7.join(chaptersDir, name));
   }
-  let totalWords = 0;
-  chapters.forEach((chapter, index) => {
-    const number = index + 1;
-    const words = wordCount(scanComments(chapter.prose).text);
-    totalWords += words;
-    const file = path7.join(chaptersDir, `chapter-${String(number).padStart(2, "0")}.md`);
-    const title = chapter.title || `Chapter ${number}`;
-    writeFile(file, chapterMarkdown(title, number, words, chapter.prose, chapter.unnumbered), { root: created.root });
-  });
+  for (const chapter of chapterFiles) {
+    writeFile(path7.join(chaptersDir, chapter.name), chapter.text, { root: created.root });
+  }
   reindexProject(created.root);
   return {
     root: created.root,

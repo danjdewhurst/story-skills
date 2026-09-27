@@ -184,6 +184,19 @@ describe("story prose -", () => {
     expect(broken.err).toContain("Prose check failed: 1 errors");
   });
 
+  test("a broken chapter or scene file does not fail a passage check", () => {
+    const { root } = passageProject();
+    fs.writeFileSync(path.join(root, "chapters", "chapter-09.md"), "---\ntitle: Broken\n");
+    fs.mkdirSync(path.join(root, "scenes"), { recursive: true });
+    fs.writeFileSync(path.join(root, "scenes", "chapter-09-scene-01.md"), "---\ntitle: Broken\n");
+    expect(invoke(root, ["prose"]).code).toBe(1);
+    for (const command of ["prose", "voices"]) {
+      const result = invoke(root, [command, "-"], PASSAGE);
+      expect(result.code).toBe(0);
+      expect(result.err).toContain("0 errors");
+    }
+  });
+
   test("empty input and extra arguments are errors", () => {
     const cwd = makeTempDir();
     expect(invoke(cwd, ["prose", "-"], "").err).toContain("story prose - read nothing from stdin");
@@ -253,6 +266,15 @@ describe("story import -", () => {
     const cwd = makeTempDir();
     expect(invoke(cwd, ["import", "-", "--title", "Empty"], "").err).toBe("story import - read nothing from stdin: pipe the text in, such as story import - < draft.md\n");
     expect(invoke(cwd, ["import", "-", "--title", "Latin"], Buffer.from([0x63, 0x61, 0x66, 0xe9])).err).toContain("Cannot read stdin: it is not valid UTF-8 text");
+    expect(fs.readdirSync(cwd)).toEqual([]);
+  });
+
+  test("refuses a chapter too large to read back before creating the project", () => {
+    const cwd = makeTempDir();
+    const prose = `${"word ".repeat(Math.floor(MAX_STDIN_BYTES / 5) - 2)}\n`;
+    const result = invoke(cwd, ["import", "-", "--title", "Huge"], prose);
+    expect(result.code).toBe(1);
+    expect(result.err).toMatch(/^Cannot import: chapter-01\.md would be \d+ bytes, over the 5242880 byte limit story reads\. Split the manuscript with chapter headings first\n$/);
     expect(fs.readdirSync(cwd)).toEqual([]);
   });
 

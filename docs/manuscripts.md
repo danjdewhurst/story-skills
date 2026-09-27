@@ -261,7 +261,8 @@ Before it changes anything, import checks that the project's other files parse, 
 
 ### Import limits and safety
 
-- Each source file can be at most 5 MiB, and a source folder can contain at most 500 importable files.
+- Each source file, and a manuscript piped to stdin, can be at most 5 MiB, and a source folder can contain at most 500 importable files.
+- No chapter file may come out over 5 MiB, the most any story command reads. A one-chapter manuscript near the limit is refused before anything is written: `Cannot import: chapter-01.md would be <n> bytes, over the 5242880 byte limit story reads. Split the manuscript with chapter headings first`.
 - A source that is a symlink is refused. Inside a source folder, a symlink to a document is refused and any other symlink is skipped.
 - Import never follows a symlinked target directory.
 - A source folder that has a `story.md` is refused as a story project, so a project's bible files are never imported as chapters.

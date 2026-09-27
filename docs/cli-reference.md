@@ -907,7 +907,7 @@ An advisory prose lint. For each chapter it reports sentence count, average and 
 
 Style findings are warnings and never fail the run. `prose` exits 1 only when a file's frontmatter fails to parse.
 
-`story prose -` lints a passage from stdin instead of the chapters, with the style sheet and character names of the project given by `--path` or the current directory (and the default rules outside a project). The passage is reported as `stdin`, and similar character names, a bible finding, are left out. A whole chapter file can be piped: its frontmatter is skipped and only its prose (the text under `## Chapter Text`) is linted, as for a chapter in the project.
+`story prose -` lints a passage from stdin instead of the chapters, with the style sheet and character names of the project given by `--path` or the current directory (and the default rules outside a project). The passage is reported as `stdin`, and similar character names, a bible finding, are left out. A whole chapter file can be piped: its frontmatter is skipped and only its prose (the text under `## Chapter Text`) is linted, as for a chapter in the project. A chapter or scene file in the project that fails to parse does not fail a passage check, since the passage stands in for them; a broken style sheet or character file still does.
 
 On [`examples/the-last-ember`](../examples/the-last-ember/), with a five-sentence draft scene:
 
@@ -1248,7 +1248,7 @@ It warns when:
 
 `voices` exits 1 only when a file fails to parse.
 
-`story voices -` fingerprints the dialogue in a passage from stdin instead of the chapters, against the characters of the project given by `--path` or the current directory; outside a project it is an error. Findings name the passage as `stdin`: `warning: kael-voss says "soldiers", which is in their voice-avoid list (stdin)`. The five-line thresholds still apply, so a short passage only reports `voice-avoid` words.
+`story voices -` fingerprints the dialogue in a passage from stdin instead of the chapters, against the characters of the project given by `--path` or the current directory; outside a project it is an error. As for `prose -`, a broken chapter or scene file does not fail the check. Findings name the passage as `stdin`: `warning: kael-voss says "soldiers", which is in their voice-avoid list (stdin)`. The five-line thresholds still apply, so a short passage only reports `voice-avoid` words.
 
 On a copy of [`examples/the-last-ember`](../examples/the-last-ember/), after adding `reckon` to `voice-words` and `soldiers` to `voice-avoid` in `characters/kael-voss.md` (as block lists; the parser does not read `[a, b]`):
 

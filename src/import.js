@@ -1,7 +1,9 @@
+import { Buffer } from "node:buffer";
 import fs from "node:fs";
 import path from "node:path";
 import { parseFrontmatter, stringifyFrontmatter, withoutLeadingFrontmatter } from "./frontmatter.js";
 import { chapterHeading, fencedLineIndexes, scanComments, splitFences, titleCaseSlug, wordCount } from "./markdown.js";
+import { MAX_READ_BYTES } from "./files.js";
 import { STDIN_ARG, decodeUtf8 } from "./stdin.js";
 import { assertProjectParses, createStoryProject, reindexProject, scanProject, writeFile } from "./story.js";
 
@@ -87,6 +89,26 @@ export function importManuscript(options) {
     throw new Error("No chapter content found in import source");
   }
 
+  // Build every chapter file before touching the disk: frontmatter and
+  // headings make a chapter a little larger than its prose, and a file over
+  // the size story reads would leave a project no command can open.
+  let totalWords = 0;
+  const chapterFiles = chapters.map((chapter, index) => {
+    const number = index + 1;
+    // Count as the scanner does, without HTML comments.
+    const words = wordCount(scanComments(chapter.prose).text);
+    totalWords += words;
+    // An untitled numbered heading ("# Chapter 1") takes its new number.
+    const title = chapter.title || `Chapter ${number}`;
+    const name = `chapter-${String(number).padStart(2, "0")}.md`;
+    const text = chapterMarkdown(title, number, words, chapter.prose, chapter.unnumbered);
+    const bytes = Buffer.byteLength(text, "utf8");
+    if (bytes > MAX_READ_BYTES) {
+      throw new Error(`Cannot import: ${name} would be ${bytes} bytes, over the ${MAX_READ_BYTES} byte limit story reads. Split the manuscript with chapter headings first`);
+    }
+    return { name, text };
+  });
+
   const created = createStoryProject({
     title: options.title,
     cwd,
@@ -127,17 +149,9 @@ export function importManuscript(options) {
     fs.unlinkSync(path.join(chaptersDir, name));
   }
 
-  let totalWords = 0;
-  chapters.forEach((chapter, index) => {
-    const number = index + 1;
-    // Count as the scanner does, without HTML comments.
-    const words = wordCount(scanComments(chapter.prose).text);
-    totalWords += words;
-    const file = path.join(chaptersDir, `chapter-${String(number).padStart(2, "0")}.md`);
-    // An untitled numbered heading ("# Chapter 1") takes its new number.
-    const title = chapter.title || `Chapter ${number}`;
-    writeFile(file, chapterMarkdown(title, number, words, chapter.prose, chapter.unnumbered), { root: created.root });
-  });
+  for (const chapter of chapterFiles) {
+    writeFile(path.join(chaptersDir, chapter.name), chapter.text, { root: created.root });
+  }
 
   reindexProject(created.root);
 
