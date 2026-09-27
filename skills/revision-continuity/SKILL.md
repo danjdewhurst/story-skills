@@ -157,6 +157,7 @@ Run `story continuity .` first to collect the deterministic findings, then check
 - Promises/questions: durable continuity records match what the chapter now reveals or withholds
 - Scene state: every chapter scene has machine-readable POV, location, participants, arcs, and state-change notes
 - World rules: magic, technology, politics, and geography stay consistent with worldbuilding files
+- Deliberate findings: a dated flashback (`timestamp runs backward`) or a promise, question, or clue left open for a sequel (`is still planted` / `is still open` once `story.md` is `complete`) is correct as written. Do not change the data to silence it; add an entry to `continuity/exemptions.md` with the finding's text as `pattern` and a `reason`, then rerun `story continuity .` and confirm it shows as `dismissed`. Only genuine mistakes get fixed in the frontmatter
 - References: chapter frontmatter lists every major character, location, and arc advanced in the prose. A chapter with no references is fine by design (a quiet two-hander advances nothing on paper) — only flag missing references, never empty ones.
 - Registries: indexes, word counts, and links are current after edits
 

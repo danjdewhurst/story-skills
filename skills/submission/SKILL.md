@@ -80,7 +80,23 @@ Then check what the CLI cannot:
    user's direction.
 5. No `[TODO` markers remain in chapter prose.
 6. Open questions and planted promises are resolved, or deliberately left
-   for a sequel (check `story.md` `precedes`).
+   for a sequel (check `story.md` `precedes`). Once `story.md` is
+   `status: complete`, every open question and planned or planted promise
+   or clue is a `story continuity` error, which fails the story-checks CI.
+   No status means "pays off in the next book", so for each thread the
+   user confirms is left for a sequel, add an entry to
+   `continuity/exemptions.md` rather than changing its status:
+
+   ```yaml
+   ---
+   type: exemption-log
+   exemptions:
+     - pattern: "continuity/promises/the-sealed-letter.md is still planted"
+       reason: "Pays off in book two."
+   ---
+   ```
+
+   Rerun `story continuity .` and confirm the finding shows as `dismissed`.
 
 Give a verdict: `ready`, `ready-with-caveats` (list them), or `not-ready`
 (list the blockers and hand them to `revision-continuity`).

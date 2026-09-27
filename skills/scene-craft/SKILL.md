@@ -55,8 +55,10 @@ outline-first drafting workflow.
      sequel content (see `references/scene-sequel.md`)
     - Add `flashback-to:` (freeform note of the flashed-back moment,
       validated as a scalar by `story validate` but not used by continuity
-      checks) and move flashback-only characters to `mentions`
-      (see `references/flashbacks-time.md`)
+      checks) and move flashback-only characters to `mentions`. A dated
+      flashback warns `timestamp runs backward`; record that finding in
+      `continuity/exemptions.md` rather than changing the date (see
+      `references/flashbacks-time.md`)
    - Set `date:` (`YYYY-MM-DD`) and `time:` (`"HH:MM"` or `dawn`,
      `morning`, `midday`, `afternoon`, `evening`, `night`) once the
      scene's moment is settled, and `travel-hours:` (a number) when the
