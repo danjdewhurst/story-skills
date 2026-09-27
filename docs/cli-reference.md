@@ -2508,7 +2508,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 
 ### Codes: init and import
 
-These commands create a project, so no `severity` entry applies to them.
+These commands run before there is a `story.md` to read, so `severity` rejects an entry that names these codes.
 
 | Code | Level | Reported when |
 |---|---|---|

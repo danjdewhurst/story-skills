@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
+import { severityCodes } from "../src/config.js";
 import { FINDING_CODES, codesAt, err, warn } from "../src/findings.js";
 
 const repoRoot = path.join(import.meta.dir, "..");
@@ -113,6 +114,6 @@ describe("finding codes", () => {
     const result = JSON.parse(fs.readFileSync(path.join(repoRoot, "schemas", "result.schema.json"), "utf8"));
     expect(result.$defs.diagnostic.properties.code.enum).toEqual(Object.keys(FINDING_CODES));
     const story = JSON.parse(fs.readFileSync(path.join(repoRoot, "schemas", "story.schema.json"), "utf8"));
-    expect(story.properties.story.properties.severity.items.properties.warning.enum).toEqual(codesAt("warning"));
+    expect(story.properties.story.properties.severity.items.properties.warning.enum).toEqual(severityCodes());
   });
 });

@@ -882,10 +882,10 @@ function checkClock(project, errors, warnings) {
   }
   for (const chapter of project.chapters) {
     if (chapter.date !== "" && !parseClockDate(chapter.date)) {
-      warnings.push(warn("malformed-date", `Chapter ${chapter.number} has malformed date "${chapter.date}"`));
+      warnings.push(warn("malformed-date", `Chapter ${chapter.number} has malformed date "${chapter.date}"`, relative(project, chapter.file)));
     }
     if (chapter.time !== "" && parseClockTime(chapter.time) === undefined) {
-      warnings.push(warn("malformed-time", `Chapter ${chapter.number} has malformed time "${chapter.time}"`));
+      warnings.push(warn("malformed-time", `Chapter ${chapter.number} has malformed time "${chapter.time}"`, relative(project, chapter.file)));
     }
   }
 
@@ -905,7 +905,7 @@ function checkClock(project, errors, warnings) {
     const minutes = parseClockTime(unit.time);
     stamps.push({
       label: isChapter ? `Chapter ${unit.number}` : relative(project, unit.file),
-      file: isChapter ? null : relative(project, unit.file),
+      file: relative(project, unit.file),
       isChapter,
       date: parsed.text,
       time: minutes === undefined ? "" : unit.time.trim(),
@@ -1022,7 +1022,7 @@ function backwardFinding(current, reference) {
   }
   const sameDay = current.days === reference.days;
   const when = (stamp) => (sameDay && stamp.time ? `${stamp.date} ${stamp.time}` : stamp.date);
-  return warn("clock-backward", `${current.label} date ${when(current)} is earlier than ${reference.label} date ${when(reference)}`);
+  return warn("clock-backward", `${current.label} date ${when(current)} is earlier than ${reference.label} date ${when(reference)}`, current.file);
 }
 
 // The gap is taken at its most generous reading: the latest this unit can

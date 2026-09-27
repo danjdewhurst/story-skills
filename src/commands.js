@@ -272,8 +272,10 @@ export const COMMANDS = [
       const context = draftingContext(root(), targetId, { budget: parsed.options.budget, scenes: parsed.options.scenes });
       const checked = checkedWarnings(context.warnings, severity);
       if (wantsJson(parsed)) {
-        // data.warnings stays the plain text the result schema describes.
-        return writeJsonResult(io, { command: "context", ok: checked.ok, data: { ...context, warnings: context.warnings.map((warning) => warning.message) }, diagnostics: diagnosticsFrom(checked, "context") });
+        // data.warnings stays the plain text the result schema describes,
+        // and leaves out a warning story.md severity turned off.
+        const skipped = [...checked.errors, ...checked.warnings].map((finding) => finding.message);
+        return writeJsonResult(io, { command: "context", ok: checked.ok, data: { ...context, warnings: skipped }, diagnostics: diagnosticsFrom(checked, "context") });
       }
       io.stdout.write(formatContext(context));
       return writeFindings(io, checked);
@@ -724,7 +726,7 @@ function passageRoot(parsed, cwd, required) {
 
 // Warnings a command reports after its own output, with the story.md
 // severity overrides applied.
-function checkedWarnings(warnings, severity) {
+function checkedWarnings(warnings = [], severity) {
   return applySeverity({ ok: true, errors: [], warnings }, severity);
 }
 
@@ -732,15 +734,7 @@ function checkedWarnings(warnings, severity) {
 // build, an add, a drafting context): no summary line, and exit 1 only when
 // story.md severity promoted a warning to an error.
 function writeFindings(io, result) {
-  for (const error of result.errors) {
-    io.stderr.write(`error: ${findingLine(error)}\n`);
-  }
-  for (const warning of result.warnings) {
-    io.stderr.write(`warning: ${findingLine(warning)}\n`);
-  }
-  for (const entry of result.dismissed ?? []) {
-    io.stderr.write(`dismissed: ${entry.finding.message} (${entry.note})\n`);
-  }
+  printFindings(io, result);
   return result.ok ? EXIT_CODES.ok : EXIT_CODES.findings;
 }
 
@@ -829,19 +823,21 @@ function reportResult(io, result, successMessage, failureMessage) {
   const dismissed = result.dismissed ?? [];
   io.stderr.write(`${result.ok ? successMessage : failureMessage}: ${result.errors.length} errors, ${result.warnings.length} warnings, ${dismissed.length} dismissed\n`);
 
+  printFindings(io, result);
+  return result.ok ? EXIT_CODES.ok : EXIT_CODES.findings;
+}
+
+// One line on stderr per error, warning, and dismissed finding.
+function printFindings(io, result) {
   for (const error of result.errors) {
     io.stderr.write(`error: ${findingLine(error)}\n`);
   }
-
   for (const warning of result.warnings) {
     io.stderr.write(`warning: ${findingLine(warning)}\n`);
   }
-
-  for (const entry of dismissed) {
+  for (const entry of result.dismissed ?? []) {
     io.stderr.write(`dismissed: ${entry.finding.message} (${entry.note ?? `exemption: ${entry.reason}`})\n`);
   }
-
-  return result.ok ? EXIT_CODES.ok : EXIT_CODES.findings;
 }
 
 // A finding as the text output prints it. A warning, or a warning that

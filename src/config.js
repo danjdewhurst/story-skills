@@ -20,6 +20,15 @@ import { proseThresholds } from "./prose.js";
 
 export const SEVERITY_LEVELS = ["error", "warning", "off"];
 
+// Warnings that story init and story import report while making a project,
+// before any story.md is read, so no severity entry can apply to them.
+const PROJECTLESS_CODES = ["kept-story-options", "unsplit-chapter-lines"];
+
+// The warning codes a severity entry can name.
+export function severityCodes() {
+  return codesAt("warning").filter((code) => !PROJECTLESS_CODES.includes(code));
+}
+
 // Commands that act on one named entity: a default would send every run to
 // the same target, so cli-defaults refuses them.
 const TARGETED_COMMANDS = new Set(["knowledge", "add", "rename", "move", "remove"]);
@@ -134,7 +143,7 @@ function parseCommandDefaults(command, item, label, errors) {
 
 function parseSeverity(raw, errors) {
   const severity = {};
-  const codes = codesAt("warning");
+  const codes = severityCodes();
   for (const [index, item] of listItems(raw, "severity", errors)) {
     const label = `story.md severity[${index}]`;
     const extra = Object.keys(item).filter((key) => key !== "warning" && key !== "level");
@@ -150,6 +159,10 @@ function parseSeverity(raw, errors) {
     // severity cannot demote or silence one.
     if (FINDING_CODES[code] === "error") {
       errors.push(`${label} names ${code}, which is an error: severity changes only warnings`);
+      continue;
+    }
+    if (PROJECTLESS_CODES.includes(code)) {
+      errors.push(`${label} names ${code}, which story init or story import reports before there is a story.md to read: severity cannot change it`);
       continue;
     }
     if (!codes.includes(code)) {

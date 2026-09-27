@@ -3,6 +3,7 @@
 // hooks, and length, plus advisory findings about runs that go slack. Reads
 // frontmatter only; everything here is a warning.
 
+import path from "node:path";
 import { warn } from "./findings.js";
 import { plural } from "./plural.js";
 
@@ -16,6 +17,8 @@ const RESOLUTION_RUN = 3;
 
 export function buildPacing(project) {
   const chapters = [...project.chapters].sort((left, right) => left.number - right.number || left.id.localeCompare(right.id, "en"));
+  // The chapter file a finding is about, relative to the project.
+  const files = new Map(chapters.map((chapter) => [chapter.id, project.root === undefined ? null : path.relative(project.root, chapter.file)]));
   const warnings = [];
   const rows = [];
   const units = [];
@@ -42,7 +45,7 @@ export function buildPacing(project) {
       status: chapter.status
     });
     if (chapter.hook === "" && DRAFTED_STATUSES.has(chapter.status)) {
-      warnings.push(warn("pacing-no-hook", `${chapter.id} has no hook: record how the chapter ending pulls the reader on`));
+      warnings.push(warn("pacing-no-hook", `${chapter.id} has no hook: record how the chapter ending pulls the reader on`, files.get(chapter.id)));
     }
   }
 
@@ -82,9 +85,9 @@ export function buildPacing(project) {
   if (written.length >= 3) {
     for (const row of written) {
       if (row.words > median * 2) {
-        warnings.push(warn("pacing-long-chapter", `${row.id} runs ${row.words} words, over twice the median chapter (${formatMedian(median)}): consider splitting it`));
+        warnings.push(warn("pacing-long-chapter", `${row.id} runs ${row.words} words, over twice the median chapter (${formatMedian(median)}): consider splitting it`, files.get(row.id)));
       } else if (row.words < median / 2) {
-        warnings.push(warn("pacing-short-chapter", `${row.id} runs ${row.words} words, under half the median chapter (${formatMedian(median)}): check it earns its place`));
+        warnings.push(warn("pacing-short-chapter", `${row.id} runs ${row.words} words, under half the median chapter (${formatMedian(median)}): check it earns its place`, files.get(row.id)));
       }
     }
   }

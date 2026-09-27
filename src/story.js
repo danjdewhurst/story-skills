@@ -3983,9 +3983,17 @@ function buildProjectActions(project, validation, links, continuity, displayPath
   }
   const staleChapters = [];
   const chaptersWithoutScenes = [];
+  // A warning story.md severity promoted is counted with the errors above,
+  // and one it turned off is not an action.
+  const overridden = (code) => new Set([...validation.errors, ...(validation.dismissed ?? []).map((entry) => entry.finding)]
+    .filter((finding) => finding.code === code)
+    .map((finding) => finding.file));
+  const wordCountOverridden = overridden("stale-word-count");
+  const scenesOverridden = overridden("no-scene-records");
   let nextNumber = 1;
   for (const chapter of project.chapters) {
-    if (chapter.declaredWordCount !== chapter.wordCount) {
+    const file = relative(project, chapter.file);
+    if (chapter.declaredWordCount !== chapter.wordCount && !wordCountOverridden.has(file)) {
       staleChapters.push(chapter);
     }
     let hasScene = false;
@@ -3994,7 +4002,7 @@ function buildProjectActions(project, validation, links, continuity, displayPath
         hasScene = true;
       }
     }
-    if (!hasScene) {
+    if (!hasScene && !scenesOverridden.has(file)) {
       chaptersWithoutScenes.push(chapter);
     }
     if (Number.isInteger(chapter.number) && chapter.number > 0) {

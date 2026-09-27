@@ -27,24 +27,19 @@ export const EXPECTED_CONTINUITY = {
   }
 };
 
-// A finding's text; the checks raise { code, message, file } findings.
-function text(finding) {
-  return finding.message;
-}
-
 export function collectResult(failures, exampleName, command, result) {
   for (const error of result.errors) {
-    failures.push(`${exampleName} ${command} error: ${text(error)}`);
+    failures.push(`${exampleName} ${command} error: ${error.message}`);
   }
 
   for (const warning of result.warnings) {
-    failures.push(`${exampleName} ${command} warning: ${text(warning)}`);
+    failures.push(`${exampleName} ${command} warning: ${warning.message}`);
   }
   return failures;
 }
 
 export function compareFindings(failures, exampleName, kind, expected, findings) {
-  const actual = findings.map(text);
+  const actual = findings.map((finding) => finding.message);
   for (const finding of expected) {
     if (!actual.includes(finding)) {
       failures.push(`${exampleName} continuity is missing expected ${kind}: ${finding}`);
@@ -82,7 +77,7 @@ export function tweeBuildFindings(root) {
     const first = buildBook(root, { format: "twee", out: path.join(scratch, "first.twee") });
     const second = buildBook(root, { format: "twee", out: path.join(scratch, "second.twee") });
     const same = fs.readFileSync(first.outFile, "utf8") === fs.readFileSync(second.outFile, "utf8");
-    const warnings = first.warnings.filter((warning) => warning.code !== "derived-ifid").map(text);
+    const warnings = first.warnings.filter((warning) => warning.code !== "derived-ifid").map((warning) => warning.message);
     return [...warnings, ...(same ? [] : ["two twee builds differ"])];
   } catch (error) {
     return [error.message];

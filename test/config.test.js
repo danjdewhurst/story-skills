@@ -3,8 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { COMMANDS } from "../src/commands.js";
-import { SEVERITY_LEVELS, applyDefaults, applySeverity, parseCliConfig, readCliConfig } from "../src/config.js";
-import { codesAt, warn } from "../src/findings.js";
+import { SEVERITY_LEVELS, applyDefaults, applySeverity, parseCliConfig, readCliConfig, severityCodes } from "../src/config.js";
+import { warn } from "../src/findings.js";
 import { OPTIONS, optionFamily } from "../src/options.js";
 import { PROSE_THRESHOLDS, proseThresholds } from "../src/prose.js";
 import { createStoryProject, proseReport, validateProject } from "../src/story.js";
@@ -116,7 +116,7 @@ describe("finding codes", () => {
   test("the schema lists the same warning codes and levels as the validator", () => {
     const schema = JSON.parse(fs.readFileSync(path.join(import.meta.dir, "..", "schemas", "story.schema.json"), "utf8"));
     const severity = schema.properties.story.properties.severity.items.properties;
-    expect(severity.warning.enum).toEqual(codesAt("warning"));
+    expect(severity.warning.enum).toEqual(severityCodes());
     expect(severity.level.enum).toEqual(SEVERITY_LEVELS);
     const command = new RegExp(schema.properties.story.properties["cli-defaults"].items.properties.command.pattern, "u");
     expect(COMMANDS.every((entry) => command.test(entry.name))).toBe(true);
@@ -174,6 +174,55 @@ describe("severity", () => {
     expect(built.code).toBe(0);
     expect(built.err).toContain(`dismissed: ${unreachable} (severity unreachable-chapter is off in story.md)\n`);
     expect(invoke(other.cwd, ["report", other.root]).out).toContain("- Links: ok (0 errors, 0 warnings)\n");
+  });
+
+  test("next and doctor follow an override of the word-count and scene-record warnings", () => {
+    const off = project();
+    writeChapter(off.root, 1, "status: draft", "Words here.");
+    configure(off.root, "severity:\n  - warning: stale-word-count\n    level: off\n  - warning: no-scene-records\n    level: off");
+    for (const command of ["next", "doctor"]) {
+      const out = invoke(off.cwd, [command, off.root]).out;
+      expect(out).not.toContain("Refresh word counts");
+      expect(out).not.toContain("Add scene records");
+    }
+    const promoted = project();
+    writeChapter(promoted.root, 1, "status: draft", "Words here.");
+    configure(promoted.root, "severity:\n  - warning: stale-word-count\n    level: error");
+    const out = invoke(promoted.cwd, ["next", promoted.root]).out;
+    expect(out).toContain("Fix validation errors");
+    expect(out).not.toContain("Refresh word counts");
+    expect(out).toContain("Add scene records");
+  });
+
+  test("a promoted warning from add fails the command after the file is written", () => {
+    const { root, cwd } = project();
+    configure(root, "severity:\n  - warning: unknown-reference\n    level: error");
+    const result = invoke(cwd, ["add", "chapter", "One", "--character", "nobody", "--path", root]);
+    expect(result.code).toBe(1);
+    expect(result.out).toContain("Created chapter chapter-01");
+    expect(result.err).toContain("story links reports it until you add it [unknown-reference]\n");
+    expect(fs.existsSync(path.join(root, "chapters", "chapter-01.md"))).toBe(true);
+  });
+
+  test("a continuity exemption still dismisses a warning severity promotes", () => {
+    const { root, cwd } = project();
+    writeChapter(root, 2, "status: draft", "Words.");
+    writeMarkdown(path.join(root, "continuity", "exemptions.md"), "type: exemption-log\nstory: configured\nexemptions:\n  - pattern: \"numbering starts at 2\"\n    reason: \"Prologue cut\"", "# Exemptions\n");
+    configure(root, "severity:\n  - warning: chapter-numbering-start\n    level: error");
+    const result = invoke(cwd, ["continuity", root]);
+    expect(result.code).toBe(0);
+    expect(result.err).toContain("dismissed: Chapter numbering starts at 2, not 1 (exemption: Prologue cut)\n");
+  });
+
+  test("context --json leaves a warning severity turned off out of data.warnings", () => {
+    const { root, cwd } = project();
+    writeChapter(root, 1, "status: draft", "Words.");
+    fs.writeFileSync(path.join(root, "style-sheet.md"), "no frontmatter", "utf8");
+    configure(root, "severity:\n  - warning: context-file-skipped\n    level: off");
+    const json = JSON.parse(invoke(cwd, ["context", "chapter-01", "--path", root, "--json"]).out);
+    expect(json.ok).toBe(true);
+    expect(json.data.warnings).toEqual([]);
+    expect(json.diagnostics[0]).toMatchObject({ severity: "dismissed", code: "context-file-skipped" });
   });
 
   test("the deceased-without-died-in warning can be promoted", () => {
@@ -298,6 +347,7 @@ describe("config validation", () => {
     ["severity:\n  - level: error", "story.md severity[0] must name a warning"],
     ["severity:\n  - warning: todo-marker\n    level: error", "story.md severity[0] names unknown warning todo-marker; did you mean todo-markers?"],
     ["severity:\n  - warning: name-clash\n    level: off", "story.md severity[0] names name-clash, which is an error: severity changes only warnings"],
+    ["severity:\n  - warning: unsplit-chapter-lines\n    level: error", "story.md severity[0] names unsplit-chapter-lines, which story init or story import reports before there is a story.md to read: severity cannot change it"],
     ["severity:\n  - warning: todo-markers\n    level: fatal", "story.md severity[0] level must be one of error, warning, off"],
     ["severity:\n  - warning: todo-markers\n    level: error\n    note: ci", "story.md severity[0] has note: an entry takes only warning and level"],
     ["severity:\n  - warning: todo-markers\n    level: error\n  - warning: todo-markers\n    level: off", "story.md severity[1] repeats warning todo-markers"]

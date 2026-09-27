@@ -1303,7 +1303,9 @@ describe("round eight", () => {
     expect(messages(validateLinks(root).errors)).toEqual([]);
     // Killed after the old file was deleted, only the reindex was missed; a
     // rerun resumes rather than failing with "does not exist".
-    expect(invoke(path.dirname(root), ["rename", "character", "mara-quill", "Mara Tide", "--path", root]).out).toContain("Finished an interrupted rename of character mara-quill to mara-tide");
+    const resumed = invoke(path.dirname(root), ["rename", "character", "mara-quill", "Mara Tide", "--path", root]);
+    expect(resumed.out).toContain("Finished an interrupted rename of character mara-quill to mara-tide");
+    expect(resumed).toMatchObject({ code: 0, err: "" });
     // Renaming onto another entity with the same name is still refused.
     createEntity(root, { kind: "character", name: "Other" });
     createEntity(root, { kind: "character", name: "Other Two" });

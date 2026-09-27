@@ -3,6 +3,7 @@
 // notice. `story continuity` owns the hard ordering errors; everything here is
 // a warning.
 
+import path from "node:path";
 import { warn } from "./findings.js";
 
 const LIVE_STATUSES = new Set(["planned", "planted", "paid-off"]);
@@ -21,6 +22,7 @@ export function buildClueMatrix(project) {
 
   for (const clue of clues) {
     const label = `clue ${clue.id}`;
+    const file = path.relative(project.root, clue.file);
     const plantAt = position.get(clue.planted);
     const payoffAt = position.get(clue.payoff);
     rows.push({
@@ -36,17 +38,17 @@ export function buildClueMatrix(project) {
       continue;
     }
     if (clue.payoff !== "" && clue.planted === "") {
-      warnings.push(warn("clue-unplanted", `${label} is revealed in ${clue.payoff} but never planted: readers cannot play fair`));
+      warnings.push(warn("clue-unplanted", `${label} is revealed in ${clue.payoff} but never planted: readers cannot play fair`, file));
     }
     if (plantAt !== undefined && payoffAt !== undefined && payoffAt - plantAt >= 0 && payoffAt - plantAt < 2) {
       const where = payoffAt === plantAt ? "the same chapter as" : "the chapter before";
-      warnings.push(warn("clue-late-plant", `${label} is planted in ${where} its reveal (${clue.planted} -> ${clue.payoff}): late plant gives readers no time to notice it`));
+      warnings.push(warn("clue-late-plant", `${label} is planted in ${where} its reveal (${clue.planted} -> ${clue.payoff}): late plant gives readers no time to notice it`, file));
     }
     if (clue.characters.length === 0) {
-      warnings.push(warn("clue-no-characters", `${label} lists no characters: record who could notice it`));
+      warnings.push(warn("clue-no-characters", `${label} lists no characters: record who could notice it`, file));
     }
     if (clue.redHerring && clue.payoff === "") {
-      warnings.push(warn("clue-herring-unresolved", `${label} is a red herring with no payoff: record the chapter that debunks it`));
+      warnings.push(warn("clue-herring-unresolved", `${label} is a red herring with no payoff: record the chapter that debunks it`, file));
     }
   }
 

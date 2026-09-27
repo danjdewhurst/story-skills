@@ -850,7 +850,7 @@ How the skill handles findings:
 - Similar character names are raised with you first. If you agree to a rename, it checks the replacement with `story names "<Candidate>"`, then uses `story rename character <id> "<New Name>"` so every reference follows.
 - For `story voices` warnings, it revises the dialogue, or, when the draft has found a better voice, asks you before updating the character's `voice-words` or `voice-avoid`. Here, either Nell starts saying "reckon" or the word comes off her list.
 
-`story prose` and `story voices` exit 0 unless a file cannot be read, so they never block anything. See [Continuity and analysis](continuity.md#what-each-line-measures) for what each count measures.
+`story prose` and `story voices` exit 0 unless a file cannot be read or a `story.md` `severity` entry promotes one of their warnings, so by default they never block anything. See [Continuity and analysis](continuity.md#what-each-line-measures) for what each count measures.
 
 ### Checks
 

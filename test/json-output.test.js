@@ -275,6 +275,19 @@ describe("--json result envelope", () => {
   });
 });
 
+describe("diagnostic files", () => {
+  test("a finding about one chapter or clue names its file", () => {
+    const cwd = makeTempDir();
+    const { root } = createStoryProject({ cwd, title: "Filed", force: false });
+    writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft\ndate: 2024-13-40", "## Chapter Text\n\nWords.\n");
+    writeMarkdown(path.join(root, "continuity", "clues", "lost-key.md"), "title: Lost Key\nstatus: planted\nplanted: chapter-01", "# Lost Key\n");
+    const find = (command, code) => invokeJson(root, [command, "--json"]).envelope.diagnostics.find((entry) => entry.code === code);
+    expect(find("pacing", "pacing-no-hook").file).toBe(path.join("chapters", "chapter-01.md"));
+    expect(find("clues", "clue-no-characters").file).toBe(path.join("continuity", "clues", "lost-key.md"));
+    expect(find("continuity", "malformed-date").file).toBe(path.join("chapters", "chapter-01.md"));
+  });
+});
+
 describe("json helpers", () => {
   test("exit codes follow ok: 0 when it is true, else the failure's code", () => {
     const io = memoryIo(makeTempDir());
