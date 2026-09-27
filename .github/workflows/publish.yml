@@ -58,6 +58,9 @@ jobs:
           node bin/story.js --version
           node skills/story-maintenance/scripts/story.js --help > /dev/null
 
+      - name: Install and run the packed tarball
+        run: node scripts/check-package.js
+
       - name: Publish to npm
         run: |
           name="$(node -p "require('./package.json').name")"

@@ -453,7 +453,7 @@ Both plugin manifests pick up new skills automatically: `.codex-plugin/plugin.js
 
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on pushes to `main` and on every pull request. A new run on the same ref cancels the one in progress. The workflow file is the source of truth for which checks run and in what order.
 
-The `test` job installs the Bun version pinned by `packageManager` in `package.json` (`check:metadata` fails if `bun-version` drifts from the pin) and runs, in order:
+Both jobs check out with `persist-credentials: false`, since neither pushes. The `test` job installs the Bun version pinned by `packageManager` in `package.json` (`check:metadata` fails if `bun-version` drifts from the pin) and runs, in order:
 
 1. `bun install`
 2. `bun run check:metadata`
@@ -464,7 +464,7 @@ The `test` job installs the Bun version pinned by `packageManager` in `package.j
 7. `bun run test:examples`
 8. `node skills/story-maintenance/scripts/story.js --help`
 
-The `node` job runs on Node 18, 20, and 22 without Bun. It runs `node scripts/check-examples.js`, then `--version` and `validate examples/the-last-ember` against both the source CLI (`node bin/story.js`) and the bundled fallback. It then copies `skills/story-maintenance` into a temporary folder under a `{ "type": "commonjs" }` `package.json` and runs `--version` and `validate` against that copy, the way a copied install runs. This is what keeps the Node 18 floor in `engines.node` honest; `test/check-scripts.test.js` fails if the matrix stops including the floor.
+The `node` job runs on Node 18, 20, and 22 without Bun. It runs `node scripts/check-examples.js`, then `--version` and `validate examples/the-last-ember` against both the source CLI (`node bin/story.js`) and the bundled fallback. It then copies `skills/story-maintenance` into a temporary folder under a `{ "type": "commonjs" }` `package.json` and runs `--version` and `validate` against that copy, the way a copied install runs. Last, `node scripts/check-package.js` (also `bun run check:package`) runs `npm pack`, installs the tarball into an empty temporary folder, and runs the installed `story --version`, `story validate` on the packaged `the-last-ember` example, and the packaged fallback's `--version`. Every other check runs from the checkout, so this is the one that fails when a file the CLI imports is missing from the `files` list in `package.json`. This is what keeps the Node 18 floor in `engines.node` honest; `test/check-scripts.test.js` fails if the matrix stops including the floor.
 
 Every action in the repository's workflows and in `templates/github/` is pinned to a full commit SHA with the version tag in a trailing comment, and [`.github/dependabot.yml`](../.github/dependabot.yml) proposes weekly updates for the `github-actions` ecosystem. `test/check-scripts.test.js` enforces the pinning for `ci.yml` and the three workflow templates, so a new `uses:` line with a moving tag there fails `bun run test`. Dependabot updates only `.github/workflows/`, so the same test fails when a template's pin for an action differs from `ci.yml`: after merging a Dependabot bump, copy the new SHA and version comment into `templates/github/`. `publish.yml` is pinned the same way, but no test checks it, so keep it pinned by hand.
 
@@ -525,7 +525,7 @@ Release aborted: releases are cut from main.
 
 The tag push triggers [`.github/workflows/publish.yml`](../.github/workflows/publish.yml), which publishes the package through npm trusted publishing (OIDC). No npm token is stored anywhere and no local `npm login` is needed; npmjs.com trusts that workflow file by name, and provenance is attached automatically.
 
-The workflow checks out the tag, sets up Node 24, upgrades npm to 11 (trusted publishing needs npm 11.5.1 or later), fails if the tag does not equal `v` plus the `package.json` version, smoke-tests both CLIs, and runs `npm publish`. If the version is already on npm, it exits successfully without publishing, so re-running it is safe. The workflow also has a manual `workflow_dispatch` trigger that takes a `tag` input, for re-publishing an existing tag.
+The workflow checks out the tag, sets up Node 24, upgrades npm to 11 (trusted publishing needs npm 11.5.1 or later), fails if the tag does not equal `v` plus the `package.json` version, smoke-tests both CLIs, runs `node scripts/check-package.js` to install the packed tarball and run it, and runs `npm publish`. If the version is already on npm, it exits successfully without publishing, so re-running it is safe. The workflow also has a manual `workflow_dispatch` trigger that takes a `tag` input, for re-publishing an existing tag.
 
 Because trusted publishing is tied to the workflow file name, renaming `publish.yml` breaks publishing until the trusted publisher is updated on npmjs.com.
 

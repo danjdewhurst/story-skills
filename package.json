@@ -26,6 +26,7 @@
     "check:metadata": "node scripts/check-metadata.js",
     "check:fallback": "node scripts/check-fallback.js",
     "check:evals": "node scripts/check-evals.js",
+    "check:package": "node scripts/check-package.js",
     "check:node-help": "node skills/story-maintenance/scripts/story.js --help",
     "release": "node scripts/release.js",
     "test:examples": "node scripts/check-examples.js",

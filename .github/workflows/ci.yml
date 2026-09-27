@@ -88,3 +88,9 @@ jobs:
           cp -r skills/story-maintenance "$install/"
           node "$install/story-maintenance/scripts/story.js" --version
           node "$install/story-maintenance/scripts/story.js" validate examples/the-last-ember
+
+      # Everything above runs from the checkout. Install the packed tarball the
+      # way npm users get it, so a file missing from package.json "files"
+      # cannot ship a story bin that crashes on start.
+      - name: Install and run the packed tarball
+        run: node scripts/check-package.js
