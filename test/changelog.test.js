@@ -1,0 +1,102 @@
+import { describe, expect, test } from "bun:test";
+import fs from "node:fs";
+import path from "node:path";
+import { makeTempDir } from "./helpers.js";
+import { promoteUnreleased, unreleasedEntries } from "../scripts/changelog.js";
+import { checkChangelogVersion } from "../scripts/check-metadata.js";
+import { changelogProblemFor, updateChangelog } from "../scripts/release.js";
+
+const repoRoot = path.resolve(import.meta.dir, "..");
+const URL = "https://github.com/danjdewhurst/story-skills/compare";
+
+const changelog = (unreleased) => `# Changelog
+
+Intro.
+
+## [Unreleased]
+${unreleased}
+## [1.2.3] - 2026-01-01
+
+### Fixed
+
+- Old fix.
+
+[Unreleased]: ${URL}/v1.2.3...HEAD
+[1.2.3]: ${URL}/v1.2.2...v1.2.3
+`;
+
+describe("changelog", () => {
+  test("counts only list items under Unreleased", () => {
+    expect(unreleasedEntries(changelog("\n"))).toEqual([]);
+    expect(unreleasedEntries(changelog("\n### Added\n\n"))).toEqual([]);
+    expect(unreleasedEntries(changelog("\n### Added\n\n- New thing.\n* Other thing.\n\n"))).toEqual(["- New thing.", "* Other thing."]);
+    expect(unreleasedEntries("# Changelog\n\n## [1.0.0] - 2026-01-01\n\n- Old.\n")).toEqual([]);
+  });
+
+  test("promotes Unreleased entries under the new version and updates the links", () => {
+    const promoted = promoteUnreleased(changelog("\n### Added\n\n- New thing.\n\n"), "1.2.3", "1.3.0", "2026-02-03");
+    expect(promoted).toBe(`# Changelog
+
+Intro.
+
+## [Unreleased]
+
+## [1.3.0] - 2026-02-03
+
+### Added
+
+- New thing.
+
+## [1.2.3] - 2026-01-01
+
+### Fixed
+
+- Old fix.
+
+[Unreleased]: ${URL}/v1.3.0...HEAD
+[1.3.0]: ${URL}/v1.2.3...v1.3.0
+[1.2.3]: ${URL}/v1.2.2...v1.2.3
+`);
+    expect(unreleasedEntries(promoted)).toEqual([]);
+    expect(checkChangelogVersion([], "1.3.0", promoted)).toEqual([]);
+  });
+
+  test("appends links when the file has none", () => {
+    const promoted = promoteUnreleased("# Changelog\n\n## [Unreleased]\n\n- New.\n", "0.1.0", "0.2.0", "2026-02-03");
+    expect(promoted).toBe(`# Changelog\n\n## [Unreleased]\n\n## [0.2.0] - 2026-02-03\n\n- New.\n\n[Unreleased]: ${URL}/v0.2.0...HEAD\n[0.2.0]: ${URL}/v0.1.0...v0.2.0\n`);
+  });
+
+  test("refuses an empty or missing Unreleased section and a duplicate version", () => {
+    expect(() => promoteUnreleased(changelog("\n"), "1.2.3", "1.3.0", "2026-02-03")).toThrow("no entries");
+    expect(() => promoteUnreleased("# Changelog\n", "1.2.3", "1.3.0", "2026-02-03")).toThrow('no "## [Unreleased]"');
+    expect(() => promoteUnreleased(changelog("\n- New.\n\n"), "1.2.2", "1.2.3", "2026-02-03")).toThrow("already has a section for 1.2.3");
+  });
+
+  test("the release preflight reports an empty Unreleased section", () => {
+    expect(changelogProblemFor(changelog("\n"))).toContain('no entries under "## [Unreleased]"');
+    expect(changelogProblemFor(changelog("\n- New.\n\n"))).toBeNull();
+  });
+
+  test("updateChangelog rewrites the file in place", () => {
+    const dir = makeTempDir("story-changelog-");
+    fs.writeFileSync(path.join(dir, "CHANGELOG.md"), changelog("\n- New.\n\n"), "utf8");
+    expect(updateChangelog(dir, "1.2.3", "1.2.4", "2026-02-03")).toBe("CHANGELOG.md");
+    expect(fs.readFileSync(path.join(dir, "CHANGELOG.md"), "utf8")).toContain("## [1.2.4] - 2026-02-03\n\n- New.\n");
+  });
+
+  test("check:metadata requires a dated section and link for the package version", () => {
+    expect(checkChangelogVersion([], "1.2.3", changelog("\n"))).toEqual([]);
+    expect(checkChangelogVersion([], "1.2.4", changelog("\n"))).toEqual([
+      'CHANGELOG.md is missing a "## [1.2.4] - YYYY-MM-DD" section',
+      "CHANGELOG.md is missing the [1.2.4] link reference"
+    ]);
+    expect(checkChangelogVersion([], "1.2.3", changelog("\n").replace("## [Unreleased]\n", ""))).toEqual([
+      'CHANGELOG.md is missing the "## [Unreleased]" section'
+    ]);
+  });
+
+  test("the repository changelog matches the package version", () => {
+    const version = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf8")).version;
+    expect(checkChangelogVersion([], version, fs.readFileSync(path.join(repoRoot, "CHANGELOG.md"), "utf8"))).toEqual([]);
+  });
+});

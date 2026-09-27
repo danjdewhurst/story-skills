@@ -107,6 +107,22 @@ export function checkDocVersions(failures, packageVersion, relativePaths, readFi
   return failures;
 }
 
+// The release script moves the Unreleased entries under the new version, so
+// the released version must have its own section and compare link.
+export function checkChangelogVersion(failures, packageVersion, changelog) {
+  const escaped = packageVersion.replaceAll(".", "\\.");
+  if (!/^## \[Unreleased\]/m.test(changelog)) {
+    failures.push('CHANGELOG.md is missing the "## [Unreleased]" section');
+  }
+  if (!new RegExp(`^## \\[${escaped}\\] - \\d{4}-\\d{2}-\\d{2}$`, "m").test(changelog)) {
+    failures.push(`CHANGELOG.md is missing a "## [${packageVersion}] - YYYY-MM-DD" section`);
+  }
+  if (!new RegExp(`^\\[${escaped}\\]: `, "m").test(changelog)) {
+    failures.push(`CHANGELOG.md is missing the [${packageVersion}] link reference`);
+  }
+  return failures;
+}
+
 export function checkMarketplaces({ packageName, packageVersion, claudeMarketplace, agentsMarketplace, exists }) {
   const failures = [];
 
@@ -207,6 +223,8 @@ function main() {
   checkDocVersions(failures, packageJson.version, docVersionFiles(repoRoot), (relativePath) =>
     fs.readFileSync(path.join(repoRoot, relativePath), "utf8")
   );
+
+  checkChangelogVersion(failures, packageJson.version, fs.readFileSync(path.join(repoRoot, "CHANGELOG.md"), "utf8"));
 
   const marketplaceFailures = checkMarketplaces({
     packageName: packageJson.name,

@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { bumpDocVersions, docVersionFiles } from "./doc-versions.js";
 import { missingBunMessage } from "./bun-missing.js";
+import { CHANGELOG_FILE, promoteUnreleased, unreleasedEntries } from "./changelog.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const VERSION_FILES = ["package.json", ".codex-plugin/plugin.json", ".claude-plugin/plugin.json"];
@@ -157,6 +158,10 @@ function preflight(nextVersion, tag, name) {
   if (git("rev-parse", "HEAD") !== git("rev-parse", `origin/${RELEASE_BRANCH}`)) {
     fail(`local ${RELEASE_BRANCH} does not match origin/${RELEASE_BRANCH}. Pull or push first.`);
   }
+  const changelogProblem = changelogProblemFor(fs.readFileSync(path.join(repoRoot, CHANGELOG_FILE), "utf8"));
+  if (changelogProblem) {
+    fail(changelogProblem);
+  }
   if (git("tag", "--list", tag) !== "") {
     fail(`tag ${tag} already exists.`);
   }
@@ -180,6 +185,20 @@ function preflight(nextVersion, tag, name) {
     runBun(["run", script], { inherit: true });
   }
   console.log(`\nPreflight passed for ${nextVersion}.`);
+}
+
+// A release with nothing under Unreleased would publish an empty changelog
+// section, so the preflight refuses it before any slow check runs.
+export function changelogProblemFor(text) {
+  return unreleasedEntries(text).length === 0
+    ? `${CHANGELOG_FILE} has no entries under "## [Unreleased]". Add the user-visible changes first.`
+    : null;
+}
+
+export function updateChangelog(root, currentVersion, nextVersion, date) {
+  const filePath = path.join(root, CHANGELOG_FILE);
+  fs.writeFileSync(filePath, promoteUnreleased(fs.readFileSync(filePath, "utf8"), currentVersion, nextVersion, date));
+  return CHANGELOG_FILE;
 }
 
 export function updateVersionFiles(root, nextVersion) {
@@ -221,11 +240,17 @@ export function updateVersionFiles(root, nextVersion) {
   return updated;
 }
 
-function writeVersions(nextVersion) {
+function writeVersions(currentVersion, nextVersion) {
+  // The changelog goes first: it is the one rewrite that can refuse (a section
+  // for this version already exists), and it should refuse before any bump.
+  const date = new Date().toISOString().slice(0, 10);
+  const changelog = updateChangelog(repoRoot, currentVersion, nextVersion, date);
+  console.log(`Moved the Unreleased entries in ${CHANGELOG_FILE} under ${nextVersion} - ${date}`);
   const updated = updateVersionFiles(repoRoot, nextVersion);
   for (const relativePath of updated) {
     console.log(`Bumped ${relativePath} to ${nextVersion}`);
   }
+  updated.push(changelog);
   // The bundled fallback inlines src/version.js, so rebuild it with the bump.
   runBun(["run", "build:fallback"], { inherit: true });
   runBun(["run", "check:metadata"], { inherit: true });
@@ -254,11 +279,11 @@ function main(argv) {
 
   preflight(nextVersion, tag, packageJson.name);
   if (dryRun) {
-    console.log(`Dry run: would bump ${[...VERSION_FILES, VERSION_MODULE].join(", ")}, the STORY_REF templates, and the version examples in README.md and docs/, rebuild the fallback, commit, tag ${tag}, push, and create the GitHub release. The tag push publishes ${packageJson.name}@${nextVersion} to npm from GitHub Actions.`);
+    console.log(`Dry run: would bump ${[...VERSION_FILES, VERSION_MODULE].join(", ")}, the STORY_REF templates, and the version examples in README.md and docs/, move the ${CHANGELOG_FILE} Unreleased entries under ${nextVersion}, rebuild the fallback, commit, tag ${tag}, push, and create the GitHub release. The tag push publishes ${packageJson.name}@${nextVersion} to npm from GitHub Actions.`);
     return;
   }
 
-  const updated = writeVersions(nextVersion);
+  const updated = writeVersions(packageJson.version, nextVersion);
   git("add", ...updated, FALLBACK_FILE);
   git("commit", "-m", `chore: release ${nextVersion}`);
   git("tag", "-a", tag, "-m", tag);
