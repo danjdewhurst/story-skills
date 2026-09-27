@@ -5249,7 +5249,7 @@ function sortProgressions(list, chronology) {
 }
 function entityStateAt(data, atChapterId, chronology) {
   if (Number.isNaN(chapterPosition(chronology, atChapterId))) {
-    throw new Error(`Unknown chapter ${atChapterId}`);
+    throw usageError(`Unknown chapter ${atChapterId}`);
   }
   const state = {};
   for (const [key, value] of Object.entries(data ?? {})) {
@@ -7966,18 +7966,18 @@ function knowledgeAtChapter(root, characterId, atChapterId, project = scanProjec
 function entityStateAtChapter(root, kind, id, atChapterId, project = scanProject(root)) {
   const entityKind = normalizeKind(kind);
   if (!PROGRESSION_KINDS.includes(entityKind)) {
-    throw new Error(`Only ${PROGRESSION_KINDS.join(", ")} records carry progressions, not ${entityKind}`);
+    throw usageError(`Only ${PROGRESSION_KINDS.join(", ")} records carry progressions, not ${entityKind}`);
   }
   const collection = { character: project.characters, location: project.locations, faction: project.factions }[entityKind];
   const entity = collection.find((entry) => entry.id === id);
   if (!entity) {
     const entityFile = path7.join(entityConfig(entityKind).dir, `${id}.md`);
     const parseError = project.fileErrors.find((error) => error.startsWith(`${entityFile}:`));
-    throw new Error(parseError ?? `Unknown ${entityKind} ${id}`);
+    throw parseError ? projectError(parseError) : usageError(`Unknown ${entityKind} ${id}`);
   }
   const chapterError = project.fileErrors.find((error) => error.startsWith(`chapters${path7.sep}`));
   if (chapterError) {
-    throw new Error(chapterError);
+    throw projectError(chapterError);
   }
   return entityStateAt(entity.frontmatter, atChapterId, chapterChronology(project));
 }

@@ -812,6 +812,8 @@ State at chapter-03:
 - scar: jaw to collarbone (from chapter-03)
 ```
 
+With `--json`, `data` holds `character`, `at`, and `entries` (each `knows` and `learnedIn`). It also holds `state`, the character's frontmatter with the applied progressions and without `progressions`, and `changes`, one `{ field, value, from, previous }` per applied progression, oldest first. `previous` is absent when the field was not set before.
+
 With nothing recorded, it prints `No recorded knowledge for <id> at <chapter-id>` and exits 0. A missing argument or an unknown character or chapter exits 2; a character file that fails to parse exits 3. A broken character file prints its parse error, such as `characters/mara.md: is missing YAML frontmatter`, rather than `Unknown character`:
 
 ```text

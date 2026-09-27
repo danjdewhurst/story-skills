@@ -178,7 +178,7 @@
     },
     "data-knowledge": {
       "type": "object",
-      "required": ["character", "at", "entries"],
+      "required": ["character", "at", "entries", "state", "changes"],
       "properties": {
         "character": { "type": "string" },
         "at": { "type": "string" },
@@ -190,6 +190,21 @@
             "properties": {
               "knows": { "type": "string" },
               "learnedIn": { "type": "string", "description": "The chapter id it was learned in, or empty for pre-existing knowledge." }
+            }
+          }
+        },
+        "state": { "type": "object", "description": "The character's frontmatter with every progression up to and including the chapter applied, and progressions left out." },
+        "changes": {
+          "type": "array",
+          "description": "The progressions applied by the chapter, oldest first.",
+          "items": {
+            "type": "object",
+            "required": ["field", "value", "from"],
+            "properties": {
+              "field": { "type": "string", "minLength": 1 },
+              "value": { "type": ["string", "number", "boolean"] },
+              "from": { "type": "string", "minLength": 1, "description": "The chapter the change takes effect from." },
+              "previous": { "description": "The value the change replaced; absent when the field was not set before." }
             }
           }
         }

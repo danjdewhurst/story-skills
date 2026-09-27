@@ -1421,20 +1421,20 @@ export function knowledgeAtChapter(root, characterId, atChapterId, project = sca
 export function entityStateAtChapter(root, kind, id, atChapterId, project = scanProject(root)) {
   const entityKind = normalizeKind(kind);
   if (!PROGRESSION_KINDS.includes(entityKind)) {
-    throw new Error(`Only ${PROGRESSION_KINDS.join(", ")} records carry progressions, not ${entityKind}`);
+    throw usageError(`Only ${PROGRESSION_KINDS.join(", ")} records carry progressions, not ${entityKind}`);
   }
   const collection = { character: project.characters, location: project.locations, faction: project.factions }[entityKind];
   const entity = collection.find((entry) => entry.id === id);
   if (!entity) {
     const entityFile = path.join(entityConfig(entityKind).dir, `${id}.md`);
     const parseError = project.fileErrors.find((error) => error.startsWith(`${entityFile}:`));
-    throw new Error(parseError ?? `Unknown ${entityKind} ${id}`);
+    throw parseError ? projectError(parseError) : usageError(`Unknown ${entityKind} ${id}`);
   }
   // Progressions are ordered by chapter, so a chapter that fails to parse
   // would silently misplace them.
   const chapterError = project.fileErrors.find((error) => error.startsWith(`chapters${path.sep}`));
   if (chapterError) {
-    throw new Error(chapterError);
+    throw projectError(chapterError);
   }
   return entityStateAt(entity.frontmatter, atChapterId, chapterChronology(project));
 }

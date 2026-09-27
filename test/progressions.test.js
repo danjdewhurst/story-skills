@@ -14,7 +14,7 @@ import {
   validateLinks,
   validateProject
 } from "../src/story.js";
-import { checkProjectSchema } from "../scripts/check-schema.js";
+import { RESULT_SCHEMA_PATH, checkProjectSchema, validateAgainstSchema } from "../scripts/check-schema.js";
 import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
 function writeChapter(root, number, extra = "") {
@@ -84,6 +84,7 @@ function invoke(cwd, argv) {
   return { code, out: io.output(), err: io.error() };
 }
 
+const resultSchema = JSON.parse(fs.readFileSync(RESULT_SCHEMA_PATH, "utf8"));
 const read = (root, ...parts) => fs.readFileSync(path.join(root, ...parts), "utf8");
 
 describe("entityStateAt", () => {
@@ -339,6 +340,44 @@ progressions:
       "- arc: the-drowning (from chapter-03)",
       ""
     ].join("\n"));
+  });
+});
+
+describe("progressions with --json and exit codes", () => {
+  test("knowledge --json carries the resolved state and changes", () => {
+    const { root, cwd } = progressionProject();
+    const result = invoke(cwd, ["knowledge", "mara-finn", "--at", "chapter-02", "--path", root, "--json"]);
+    expect(result.err).toBe("");
+    expect(result.code).toBe(0);
+    const envelope = JSON.parse(result.out);
+    expect(validateAgainstSchema(envelope, resultSchema)).toEqual([]);
+    expect(envelope.data).toEqual({
+      character: "mara-finn",
+      at: "chapter-02",
+      entries: [],
+      state: { name: "Mara Finn", role: "protagonist", status: "missing" },
+      changes: [{ field: "status", value: "missing", from: "chapter-02", previous: "alive" }]
+    });
+  });
+
+  test("errors carry the usage, project, and refused exit codes", () => {
+    const { root, cwd } = progressionProject();
+    expect(invoke(cwd, ["remove", "chapter", "chapter-04", "--path", root]).code).toBe(4);
+    const code = (run) => {
+      try {
+        run();
+      } catch (error) {
+        return error.exitCode;
+      }
+      return 0;
+    };
+    expect(code(() => entityStateAtChapter(root, "artifact", "lamp", "chapter-01"))).toBe(2);
+    expect(code(() => entityStateAtChapter(root, "location", "nowhere", "chapter-01"))).toBe(2);
+    expect(code(() => entityStateAtChapter(root, "location", "old-mill", "prologue"))).toBe(2);
+    fs.writeFileSync(path.join(root, "worldbuilding", "factions", "river-guild.md"), "no frontmatter\n");
+    expect(code(() => entityStateAtChapter(root, "faction", "river-guild", "chapter-01"))).toBe(3);
+    fs.writeFileSync(path.join(root, "chapters", "chapter-04.md"), "no frontmatter\n");
+    expect(code(() => entityStateAtChapter(root, "location", "old-mill", "chapter-01"))).toBe(3);
   });
 });
 

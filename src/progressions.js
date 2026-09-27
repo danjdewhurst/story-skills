@@ -1,4 +1,5 @@
 import { idText } from "./continuity.js";
+import { usageError } from "./exit-codes.js";
 import { kebabCase } from "./markdown.js";
 
 // Timeline-scoped changes to a character, location, or faction. The
@@ -88,7 +89,7 @@ export function sortProgressions(list, chronology) {
 // (`story links` reports them).
 export function entityStateAt(data, atChapterId, chronology) {
   if (Number.isNaN(chapterPosition(chronology, atChapterId))) {
-    throw new Error(`Unknown chapter ${atChapterId}`);
+    throw usageError(`Unknown chapter ${atChapterId}`);
   }
   const state = {};
   for (const [key, value] of Object.entries(data ?? {})) {
