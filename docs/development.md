@@ -63,6 +63,7 @@ story-skills/
 ├── skills/<name>/SKILL.md        # published agent skills, plus references/
 ├── skills/story-maintenance/scripts/story.js   # generated Node fallback CLI
 ├── schemas/story.schema.json     # JSON schema for project frontmatter
+├── schemas/result.schema.json    # JSON schema for story <command> --json output
 ├── examples/                     # four sample story projects (shipped in the npm package)
 ├── test/                         # Bun tests (*.test.js), helpers.js, setup.js
 ├── scripts/                      # check scripts and the release script
@@ -113,6 +114,7 @@ flowchart LR
 | `bin/story.js` | Entry point. Passes `process.argv`, `cwd`, `stdout`, and `stderr` to `runCli` and sets `process.exitCode`. |
 | `src/cli.js` | Builds `HELP` and per-command help from the registries, handles `--help` and `--version`, looks up the command (suggesting a near miss for an unknown one), rejects `--path` on commands that create projects, resolves the project root, and turns thrown errors into a message on stderr and exit code 1, rewording Node file-system errors as `Cannot <action> <path>: <reason>`. |
 | `src/commands.js` | The `COMMANDS` registry: every command's name, usage, help summary, project-path mode, and `run` function, in help order (the analysis commands `diagram`, `names`, `pacing`, `clues`, and `voices` sit after `prose`; `passes` sits after `series`). Also the internal `reportResult` helper, which writes the standard `N errors, N warnings, N dismissed` summary and each finding to stderr and returns the exit code. |
+| `src/json.js` | The `--json` result envelope: `writeJsonResult(io, { command, ok, data, diagnostics, writes })` prints it and returns the exit code that matches `ok` (from `exitCodeFor`, which `reportResult` also uses), and `diagnosticsFrom(result, code)` turns a result's errors, warnings, and dismissed findings into diagnostics. `src/cli.js` uses it to report a usage error or thrown error as JSON when `--json` is on. |
 | `src/options.js` | The `OPTIONS` registry, `parseArgs`, `formatOptionsHelp`, and `isTruthy`. Includes the flags for `init --form`, `build --trim`, `passes --init` / `--start` / `--done`, `add scene --outcome`, `add chapter --hook`, `add clue --red-herring`, and `add research --accuracy` / `--confidence` / `--method` / `--risk`. |
 | `src/story.js` | The bulk of the CLI: `scanProject`, validation, link checks, reindexing, word counts, `add` / `rename` / `move` / `remove`, migration, reports, export, and synopsis. It also holds the file-reading wrappers for the newer commands (`clueReport`, `diagramProject`, `namesReport`, `pacingReport`, `projectPasses`, `voicesReport`) and `buildBook`, which assembles the manuscript with `manuscriptParts` and hands each format to the output modules below. |
 | `src/files.js` | Project file reads and writes, and the path-safety guards they share: `readTextFile`, `writeFile`, and the outside-root and symlink assertions every write goes through. |
@@ -315,7 +317,7 @@ When you change the project format, update the examples, the schema, and the tes
 - `continuity`: the durable state from `continuity/state.md` and the `exemptions` list from `continuity/exemptions.md`.
 - `progressLog` and `styleSheet`, when `progress.md` and `style-sheet.md` exist.
 
-It then validates the document with a small built-in validator. The validator supports only the keywords the schema uses: `$schema`, `$id`, `$comment`, `$defs`, `title`, `description`, `$ref`, `type`, `required`, `properties`, `items`, `enum`, `const`, `pattern`, `minimum`, `exclusiveMinimum`, and `minLength`. `type` may be a single type or an array of types, such as `["string", "integer"]`. It walks the whole schema first and throws on any other keyword, so the schema cannot quietly outgrow the validator. If you need a new keyword, add support for it in `check-schema.js` with tests.
+It then validates the document with a small built-in validator. The validator supports only the keywords the schema uses: `$schema`, `$id`, `$comment`, `$defs`, `title`, `description`, `$ref`, `type`, `required`, `properties`, `items`, `enum`, `const`, `pattern`, `minimum`, `exclusiveMinimum`, `minLength`, `allOf`, `if`, and `then`. `type` may be a single type or an array of types, such as `["string", "integer"]`. It walks the whole schema first and throws on any other keyword, so the schema cannot quietly outgrow the validator. If you need a new keyword, add support for it in `check-schema.js` with tests.
 
 The schema check runs as part of `test:examples` and in `test/schema.test.js`, which also checks that projects scaffolded by `story init` and `story add` match the schema. You can run it on its own:
 
@@ -326,6 +328,8 @@ node scripts/check-schema.js
 ```text
 Examples match schemas/story.schema.json: harbor-of-second-light, the-fall-of-the-citadel, the-last-ember, the-unraveled-thread
 ```
+
+[`schemas/result.schema.json`](../schemas/result.schema.json) describes the object `story <command> --json` prints: the envelope, and under `$defs/data-<command>` the `data` of each command, chosen with `allOf` and `if`/`then` on `command`. The envelope is built by `writeJsonResult` in [`src/json.js`](../src/json.js); a command that gains `--json` calls it, adds `json` to its `options` in `src/commands.js`, and adds its `data` to the schema. `test/json-output.test.js` runs every `--json` command on every example and checks the output against the schema, so a change to a command's result shows up there. Adding a field keeps `apiVersion` (`story/v1`); renaming, removing, or retyping one needs a new version.
 
 The CLI's own validation (`story validate`) lives in `src/story.js` and is separate from the JSON schema. A new frontmatter field usually needs both: the validation rule in `src/story.js` and the property in the schema. The current schema version is `STORY_SCHEMA_VERSION = 2` in `src/story.js`; `story migrate` upgrades older projects. The field-by-field reference is [Project format reference](project-format.md).
 

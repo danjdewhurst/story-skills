@@ -100,7 +100,7 @@ exit=1
 
 ### Output streams
 
-There is no `--json` or other machine-readable output mode. Output is plain text with stable line prefixes, so you can filter it with standard tools.
+By default, output is plain text with stable line prefixes, so you can filter it with standard tools. For a machine-readable result, see [JSON output](#json-output).
 
 - `validate`, `links`, and `continuity` write only to **stderr**: one summary line, then one line per finding, prefixed `error:`, `warning:`, or `dismissed:`. Nothing goes to stdout.
 - `compare`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `names`, and `series` write their report to stdout and the same summary and finding lines to stderr.
@@ -115,6 +115,39 @@ story validate . 2> validate.log
 ```
 
 The [CLI reference](cli-reference.md#output-streams-and-exit-codes) has the full rules.
+
+### JSON output
+
+The check and analysis commands (`validate`, `links`, `continuity`, `series`, `report`, `next`, `doctor`, `knowledge`, `progress`, `timeline`, `prose`, `pacing`, `clues`, and `voices`) take `--json`. It prints one JSON object to stdout and nothing to stderr, so a script can parse the result instead of the text:
+
+```json
+{
+  "apiVersion": "story/v1",
+  "command": "validate",
+  "ok": true,
+  "data": { "errors": 0, "warnings": 1, "dismissed": 0 },
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "file": "chapters/chapter-01.md",
+      "message": "chapters/chapter-01.md declares 1 words but contains 993",
+      "code": "validate"
+    }
+  ],
+  "writes": []
+}
+```
+
+`ok` is `true` exactly when the command exits `0`, so a job can read either. `diagnostics` holds every finding with its severity, file, message, and the check that raised it (`code`). A command that cannot run, such as one pointed at a folder without `story.md`, still prints an envelope, with `ok: false`, `data: null`, and the error as its diagnostic. [`schemas/result.schema.json`](../schemas/result.schema.json) describes the envelope and each command's `data`; `apiVersion` changes when a field is renamed, removed, or retyped. The [CLI reference](cli-reference.md#json-output) has the full rules.
+
+For example, to fail a job on any warning with [`jq`](https://jqlang.github.io/jq/):
+
+```shell
+story validate . --json > validate.json
+jq -e '[.diagnostics[] | select(.severity == "warning")] | length == 0' validate.json
+```
+
+`jq -e` exits 1 when the expression is false, and `story validate` has already exited 1 if there were errors.
 
 ### Failing on warnings
 

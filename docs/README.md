@@ -122,5 +122,6 @@ The repository includes four sample projects in [`examples/`](../examples/). The
 
 - [README](../README.md): the project overview.
 - [`schemas/story.schema.json`](../schemas/story.schema.json): the project format as a JSON schema.
+- [`schemas/result.schema.json`](../schemas/result.schema.json): the `--json` output of the CLI as a JSON schema.
 - [`templates/github/`](../templates/github/): the GitHub Actions workflows and the reader-note issue form to copy into a story repository.
 - [`AGENTS.md`](../AGENTS.md): the short rules for coding agents working on this repository.

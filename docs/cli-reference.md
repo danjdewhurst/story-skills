@@ -194,7 +194,7 @@ pandoc draft.docx -t markdown | story import - --title "The Lost Coast"
 - Options can appear anywhere after the command: `story build --format epub .` and `story build . --format epub` are the same.
 - Value options take the next argument (`--out book.md`) or an inline value (`--out=book.md`). Use the inline form when the value itself starts with `--` or is `-h` or `-v`, which would otherwise be read as an option.
 - Positional arguments may start with a single dash, so `story add term "-ism"` works. A lone `--` ends the options: everything after it is positional, so `story init -- --Untitled` creates a story titled `--Untitled`. Put any options before the `--`.
-- Boolean flags (`--force`, `--write`, `--log`, `--shunn`, `--init`, `--actionable`, `--sequel`, `--significance-delayed`, `--red-herring`, `--heading`) are true when present. They also accept an explicit value, inline or as the next argument: `true`, `false`, `yes`, `no`, `on`, `off`, `1`, or `0`. So `--write false` turns writing off, while `--write=maybe` is an error.
+- Boolean flags (`--force`, `--write`, `--log`, `--shunn`, `--init`, `--actionable`, `--json`, `--sequel`, `--significance-delayed`, `--red-herring`, `--heading`) are true when present. They also accept an explicit value, inline or as the next argument: `true`, `false`, `yes`, `no`, `on`, `off`, `1`, or `0`. So `--write false` turns writing off, while `--write=maybe` is an error.
 - Repeatable options collect every value, and list options also split on commas, so `--character ilse-marrow --character tobin-reyes` and `--characters ilse-marrow,tobin-reyes` produce the same list. `--source`, `--follows`, and `--precedes` keep each value whole.
 - A singular flag and its plural alias combine, so `add chapter --character ivo-pell --characters mara-quill` lists both; `add` also drops repeated values from a list. `add character --arc` is single-valued and has no plural alias.
 - For options that are not repeatable, the last value wins: `--out a.md --out b.md` writes `b.md`.
@@ -231,6 +231,7 @@ The CLI prints results to stdout and diagnostics to stderr.
 - `diagram` writes the Mermaid source (or, with `--out`, a confirmation) to stdout. If the project has a file that fails to parse, it writes the summary and error lines to stderr instead.
 - All other commands write a short confirmation or report to stdout.
 - Errors that stop a command (a bad option, a missing project, an unknown id) print one line to stderr.
+- With `--json`, the command prints one JSON object to stdout and nothing to stderr. See [JSON output](#json-output).
 
 The examples on this page show stdout and stderr together, as a terminal does.
 
@@ -240,6 +241,54 @@ The examples on this page show stdout and stderr together, as a terminal does.
 | `1` | A check found at least one error, the command failed (unknown command or option, missing value, unexpected argument or option, missing project, refused write), or `knowledge` was called without its required arguments. |
 
 `report`, `next`, and `doctor` summarise check results but always exit 0 on a readable project. `prose`, `pacing`, `clues`, and `voices` report every craft finding as a warning, so they exit 1 only when a file fails to parse. `passes` exits 1 only when it refuses a change. `names` exits 1 when a candidate clashes with an existing name. Use `validate`, `links`, and `continuity` when you need a failing exit code, for example in CI (see [Automation and CI](automation.md)).
+
+### JSON output
+
+`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. It works on the check and analysis commands: `validate`, `links`, `continuity`, `series`, `report`, `next`, `doctor`, `knowledge`, `progress`, `timeline`, `prose`, `pacing`, `clues`, and `voices`. Other commands refuse it (`--json does not apply to story wordcount`). Nothing is written to stderr, and the exit code is the same as without `--json`.
+
+Every result has the same envelope:
+
+| Field | Meaning |
+|---|---|
+| `apiVersion` | `"story/v1"`. Fields may be added within a version; renaming, removing, or retyping one changes it. |
+| `command` | The command that ran, such as `"continuity"`. |
+| `ok` | `true` exactly when the command exits `0`. |
+| `data` | The command's result: counts for `validate`, `links`, and `continuity`; the report, grid, or profile for the others. `null` when the command stopped before producing one. Fields a project does not set are `null`, not missing. |
+| `diagnostics` | One entry per finding, in the order the text output prints them: `severity` (`error`, `warning`, or `dismissed`), `file` (the project file the finding names first, or `null`), `message` (the line the text output prints after `error:` or `warning:`), and `code` (the check that raised it: `validate`, `links`, `continuity`, or the command's own name). A dismissed finding also has `exemption`, the reason from `continuity/exemptions.md`. |
+| `writes` | Absolute paths of the files the command wrote. Only `progress --log` writes. |
+
+`report`, `next`, and `doctor` put a `checks` summary in `data` (`ok` and error, warning, and dismissed counts for `validate`, `links`, and `continuity`) and list each check's findings in `diagnostics`. They still exit `0`, so their `ok` is `true` even when a check fails: read `data.checks` to gate on them. `report --json` always includes `actions`.
+
+A command that cannot run (an unknown option, a missing argument, a missing project, an unknown id) also prints an envelope when `--json` is on, with `ok: false`, `data: null`, and the error as its one diagnostic. `--json false` and `--json=off` keep the text output.
+
+```shell
+story continuity examples/the-unraveled-thread --json
+```
+
+```text
+{
+  "apiVersion": "story/v1",
+  "command": "continuity",
+  "ok": false,
+  "data": {
+    "errors": 4,
+    "warnings": 3,
+    "dismissed": 0
+  },
+  "diagnostics": [
+    {
+      "severity": "error",
+      "file": "chapters/chapter-04.md",
+      "message": "chapters/chapter-04.md lists edran-vale, who died in chapter-02; move posthumous appearances to mentions",
+      "code": "continuity"
+    },
+    ...
+  ],
+  "writes": []
+}
+```
+
+[`schemas/result.schema.json`](../schemas/result.schema.json) describes the envelope and the `data` of each command.
 
 ### Where commands write
 
