@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { Buffer } from "node:buffer";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
@@ -12,8 +13,12 @@ const examplesRoot = path.resolve(import.meta.dir, "..", "examples");
 const examples = fs.readdirSync(examplesRoot).sort().filter((name) => fs.existsSync(path.join(examplesRoot, name, "story.md")));
 const PATH_COMMANDS = ["validate", "links", "continuity", "series", "next", "doctor", "report", "timeline", "prose", "voices", "pacing", "clues", "progress"];
 
-function invoke(cwd, argv) {
+// `stdin`, when given, stands in for text piped to `story <command> -`.
+function invoke(cwd, argv, stdin) {
   const io = memoryIo(cwd);
+  if (stdin !== undefined) {
+    io.readStdin = () => Buffer.from(stdin);
+  }
   const code = runCli(argv, io);
   return { code, out: io.output(), err: io.error() };
 }
@@ -21,8 +26,8 @@ function invoke(cwd, argv) {
 // Runs a --json command and checks the contract every result keeps: one
 // JSON object on stdout, nothing on stderr, the schema, and ok matching the
 // exit code.
-function invokeJson(cwd, argv) {
-  const result = invoke(cwd, argv);
+function invokeJson(cwd, argv, stdin) {
+  const result = invoke(cwd, argv, stdin);
   expect(result.err).toBe("");
   const envelope = JSON.parse(result.out);
   expect(validateAgainstSchema(envelope, schema)).toEqual([]);
@@ -219,6 +224,41 @@ describe("--json result envelope", () => {
     expect(envelope.data.similarNames.map((pair) => pair.map((entry) => entry.id))).toEqual([["mara-dole", "mary-vance"]]);
     expect(envelope.data.chapters[0].analysis.variants).toEqual([{ use: "grey", avoid: "gray", source: "style sheet", count: 3 }]);
     expect(envelope.data.phrases.length).toBeGreaterThan(0);
+  });
+
+  test("prose - and voices - take --json, labelling the passage stdin", () => {
+    const cwd = makeTempDir();
+    const { root } = createStoryProject({ cwd, title: "Piped Json", force: false });
+    writeMarkdown(path.join(root, "characters", "mara-quill.md"), "name: Mara Quill\nrole: supporting\nstatus: alive\nvoice-avoid:\n  - okay", "# Mara\n");
+    writeMarkdown(path.join(root, "style-sheet.md"), "type: style-sheet\npreferred:\n  - use: grey\n    avoid: gray", "# Style Sheet\n");
+    const passage = "She felt the gray door give. \"Okay, come in,\" Mara said.\n";
+
+    const prose = invokeJson(cwd, ["prose", "-", "--path", root, "--json"], passage);
+    expect(prose.code).toBe(0);
+    expect(prose.envelope.data.chapters.map((chapter) => chapter.file)).toEqual(["stdin"]);
+    expect(prose.envelope.data.chapters[0].analysis.filterWords).toEqual([{ word: "felt", count: 1 }]);
+    expect(prose.envelope.data.chapters[0].analysis.phraseSentences).toBeUndefined();
+    expect(prose.envelope.diagnostics.length).toBeGreaterThan(0);
+    expect(prose.envelope.diagnostics.every((entry) => entry.file === "stdin")).toBe(true);
+
+    const voices = invokeJson(cwd, ["voices", "-", "--json", "--path", root], passage);
+    expect(voices.envelope.data.profiles.map((profile) => profile.id)).toEqual(["mara-quill"]);
+    const avoided = voices.envelope.diagnostics.find((entry) => entry.message.includes("okay"));
+    expect(avoided).toMatchObject({ severity: "warning", file: "stdin", code: "voices" });
+    expect(avoided.message).toContain("stdin");
+
+    // Without a project, prose still lints the passage.
+    expect(invokeJson(makeTempDir(), ["--json", "prose", "-"], passage).envelope.ok).toBe(true);
+  });
+
+  test("a stdin error under --json is the JSON error result", () => {
+    for (const command of ["prose", "voices"]) {
+      const { code, envelope } = invokeJson(makeTempDir(), [command, "-", "--json"], "");
+      expect(code).toBe(1);
+      expect(envelope).toMatchObject({ command, ok: false, data: null });
+      expect(envelope.diagnostics).toHaveLength(1);
+      expect(envelope.diagnostics[0].severity).toBe("error");
+    }
   });
 
   test("prose --json leaves out each chapter's tokenized sentences", () => {

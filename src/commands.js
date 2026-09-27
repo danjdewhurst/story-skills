@@ -49,6 +49,9 @@ import {
   voicesReport
 } from "./story.js";
 
+// How --json names a piped passage in a diagnostic, as the text output does.
+const STDIN_LABEL = "stdin";
+
 // Options accepted by `story add`; each entity kind reads the ones it needs.
 const ADD_OPTIONS = [
   "id", "number", "chapter", "scene", "type", "role", "status", "mode", "date", "time", "travel-hours", "dilemma",
@@ -308,7 +311,7 @@ export const COMMANDS = [
         // Each chapter's tokenized sentences feed the repeated-phrase check;
         // they are the whole chapter again, so --json leaves them out.
         const chapters = report.chapters.map(({ analysis: { phraseSentences, ...analysis }, ...chapter }) => ({ ...chapter, analysis }));
-        return reportJson(io, "prose", { ...report, chapters });
+        return reportJson(io, "prose", { ...report, chapters }, { passage: parsed.positionals[1] === STDIN_ARG });
       }
       io.stdout.write(formatProseReport(report));
       return reportResult(io, report, "Prose check complete", "Prose check failed");
@@ -404,7 +407,7 @@ export const COMMANDS = [
         ? voicesReport(passageRoot(parsed, cwd, true), { passage: pipedText(io, "voices") })
         : voicesReport(root());
       if (wantsJson(parsed)) {
-        return reportJson(io, "voices", report);
+        return reportJson(io, "voices", report, { passage: parsed.positionals[1] === STDIN_ARG });
       }
       io.stdout.write(formatVoices(report));
       return reportResult(io, report, "Voice check complete", "Voice check failed");
@@ -734,9 +737,11 @@ function reportCheck(parsed, io, command, result, successMessage, failureMessage
 }
 
 // An analysis result as --json: its findings become diagnostics and the rest
-// of the result is the data.
-function reportJson(io, command, result, { writes = [] } = {}) {
-  return writeJsonResult(io, { command, ok: result.ok, data: resultData(result), diagnostics: diagnosticsFrom(result, command), writes });
+// of the result is the data. A finding about a piped passage (`prose -`,
+// `voices -`) names no project file, so its file is the passage, stdin.
+function reportJson(io, command, result, { writes = [], passage = false } = {}) {
+  const diagnostics = diagnosticsFrom(result, command).map((entry) => (passage && entry.file === null ? { ...entry, file: STDIN_LABEL } : entry));
+  return writeJsonResult(io, { command, ok: result.ok, data: resultData(result), diagnostics, writes });
 }
 
 function checkCounts(result) {

@@ -254,12 +254,12 @@ Every result has the same envelope:
 | `command` | The command that ran, such as `"continuity"`. |
 | `ok` | `true` exactly when the command exits `0`. |
 | `data` | The command's result: counts for `validate`, `links`, and `continuity`; the report, grid, or profile for the others. `null` when the command stopped before producing one. Fields a project does not set are `null`, not missing. |
-| `diagnostics` | One entry per finding, in the order the text output prints them: `severity` (`error`, `warning`, or `dismissed`), `file` (the project file the finding names first, or `null`), `message` (the line the text output prints after `error:` or `warning:`), and `code` (the check that raised it: `validate`, `links`, `continuity`, or the command's own name). A dismissed finding also has `exemption`, the reason from `continuity/exemptions.md`. |
+| `diagnostics` | One entry per finding, in the order the text output prints them: `severity` (`error`, `warning`, or `dismissed`), `file` (the project file the finding names first, `stdin` for a finding about a passage piped to `prose -` or `voices -`, or `null`), `message` (the line the text output prints after `error:` or `warning:`), and `code` (the check that raised it: `validate`, `links`, `continuity`, or the command's own name). A dismissed finding also has `exemption`, the reason from `continuity/exemptions.md`. |
 | `writes` | Absolute paths of the files the command wrote. Only `progress --log` writes. |
 
 `report`, `next`, and `doctor` put a `checks` summary in `data` (`ok` and error, warning, and dismissed counts for `validate`, `links`, and `continuity`) and list each check's findings in `diagnostics`. They still exit `0`, so their `ok` is `true` even when a check fails: read `data.checks` to gate on them. `report --json` always includes `actions`.
 
-A command that cannot run (an unknown option, a missing argument, a missing project, an unknown id) also prints an envelope when `--json` is on, with `ok: false`, `data: null`, and the error as its one diagnostic. `--json false` and `--json=off` keep the text output. `--help` and `--version` print their usual text even with `--json`.
+A command that cannot run (an unknown option, a missing argument, a missing project, an unknown id) also prints an envelope when `--json` is on, with `ok: false`, `data: null`, and the error as its one diagnostic. `prose - --json` and `voices - --json` report a piped passage as one chapter with `file` `stdin`, and a stdin error, such as empty input, is the error envelope. `--json false` and `--json=off` keep the text output. `--help` and `--version` print their usual text even with `--json`.
 
 ```shell
 story continuity examples/the-unraveled-thread --json

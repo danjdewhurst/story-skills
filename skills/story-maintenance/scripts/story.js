@@ -12633,6 +12633,7 @@ function resultData(result) {
 }
 
 // src/commands.js
+var STDIN_LABEL = "stdin";
 var ADD_OPTIONS = [
   "id",
   "number",
@@ -12936,7 +12937,7 @@ var COMMANDS = [
       const report = parsed.positionals[1] === STDIN_ARG ? proseReport(passageRoot(parsed, cwd, false), { passage: pipedText(io, "prose") }) : proseReport(root());
       if (wantsJson(parsed)) {
         const chapters = report.chapters.map(({ analysis: { phraseSentences, ...analysis }, ...chapter }) => ({ ...chapter, analysis }));
-        return reportJson(io, "prose", { ...report, chapters });
+        return reportJson(io, "prose", { ...report, chapters }, { passage: parsed.positionals[1] === STDIN_ARG });
       }
       io.stdout.write(formatProseReport(report));
       return reportResult(io, report, "Prose check complete", "Prose check failed");
@@ -13031,7 +13032,7 @@ var COMMANDS = [
     run({ parsed, io, cwd, root }) {
       const report = parsed.positionals[1] === STDIN_ARG ? voicesReport(passageRoot(parsed, cwd, true), { passage: pipedText(io, "voices") }) : voicesReport(root());
       if (wantsJson(parsed)) {
-        return reportJson(io, "voices", report);
+        return reportJson(io, "voices", report, { passage: parsed.positionals[1] === STDIN_ARG });
       }
       io.stdout.write(formatVoices(report));
       return reportResult(io, report, "Voice check complete", "Voice check failed");
@@ -13339,8 +13340,9 @@ function reportCheck(parsed, io, command, result, successMessage, failureMessage
   }
   return reportResult(io, result, successMessage, failureMessage);
 }
-function reportJson(io, command, result, { writes = [] } = {}) {
-  return writeJsonResult(io, { command, ok: result.ok, data: resultData(result), diagnostics: diagnosticsFrom(result, command), writes });
+function reportJson(io, command, result, { writes = [], passage = false } = {}) {
+  const diagnostics = diagnosticsFrom(result, command).map((entry) => passage && entry.file === null ? { ...entry, file: STDIN_LABEL } : entry);
+  return writeJsonResult(io, { command, ok: result.ok, data: resultData(result), diagnostics, writes });
 }
 function checkCounts(result) {
   return { errors: result.errors.length, warnings: result.warnings.length, dismissed: (result.dismissed ?? []).length };

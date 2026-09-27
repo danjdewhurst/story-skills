@@ -35,7 +35,7 @@
       "required": ["severity", "file", "message", "code"],
       "properties": {
         "severity": { "enum": ["error", "warning", "dismissed"] },
-        "file": { "type": ["string", "null"], "description": "The project file the finding names first, relative to the project root, or null." },
+        "file": { "type": ["string", "null"], "description": "The project file the finding names first, relative to the project root; stdin for a finding about a passage piped to prose - or voices -; or null." },
         "message": { "type": "string", "minLength": 1, "description": "The finding as the text output prints it." },
         "code": { "type": "string", "minLength": 1, "description": "The check that raised the finding: validate, links, continuity, or the command name." },
         "exemption": { "type": "string", "description": "For a dismissed finding, the reason from continuity/exemptions.md." }
