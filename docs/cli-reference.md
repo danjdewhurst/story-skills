@@ -97,7 +97,7 @@ Options:
 
 `story help` with a name that is not a command fails like an unknown command (below): `story help frob` prints `Unknown command: frob` and exits 1.
 
-`story --version` (or `-v`) prints the version and exits 0. It wins over everything else on the line, including `--help`:
+`story --version` (or `-v`) prints the version and exits 0. It wins over every other command and option on the line, including `--help`, but not over a malformed command line: `story validate --bogus -v` still fails with `Unknown option --bogus`, and `story export --out -v` with `Missing value for --out`.
 
 ```shell
 story --version
@@ -208,7 +208,7 @@ The CLI prints results to stdout and diagnostics to stderr.
 - `compare`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `names`, and `series` write their report to stdout, then the same summary and finding lines to stderr.
 - `diagram` writes the Mermaid source (or, with `--out`, a confirmation) to stdout. If the project has a file that fails to parse, it writes the summary and error lines to stderr instead.
 - All other commands write a short confirmation or report to stdout.
-- Errors that stop a command (a bad option, a missing project, an unknown id) print one line to stderr. An unknown command also prints the usage summary.
+- Errors that stop a command (a bad option, a missing project, an unknown id) print one line to stderr.
 
 The examples on this page show stdout and stderr together, as a terminal does.
 
@@ -641,16 +641,15 @@ routes:
     mode: salt wagon
 ```
 
-a `saltmere` location, and a second scene that puts Ilse in Saltmere on the evening of the same day as the dawn scene at the harbour:
+a `saltmere` location, and a second scene that puts Ilse in Saltmere on the evening of the same day as the 06:30 scene at the harbour (both created with `story add scene`, which also adds `saltmere` to the chapter's `locations`):
 
 ```text
 $ story continuity
-Continuity check failed: 1 errors, 1 warnings, 0 dismissed
-error: scenes/chapter-01-scene-02.md puts ilse-varrow at saltmere at most 15.5h after scenes/chapter-01-scene-01.md at gull-harbour, but the fastest route takes 30h
-warning: scenes/chapter-01-scene-02.md is set in saltmere but chapters/chapter-01.md does not list that location
+Continuity check failed: 1 errors, 0 warnings, 0 dismissed
+error: scenes/chapter-01-scene-02.md puts ilse-varrow at saltmere at most 15.4h after scenes/chapter-01-scene-01.md at gull-harbour, but the fastest route takes 30h
 ```
 
-A named time such as `evening` covers a span of the clock, so the gap is measured at its most generous reading ("at most 15.5h"). Only a journey that is impossible on every reading is reported.
+A named time such as `evening` covers a span of the clock, so the gap is measured at its most generous reading ("at most 15.4h": `evening` runs to 21:59). Only a journey that is impossible on every reading is reported.
 
 Every rule, and how to write exemptions, is in [Continuity and analysis](continuity.md#story-continuity).
 
