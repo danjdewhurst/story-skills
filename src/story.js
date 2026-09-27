@@ -263,6 +263,7 @@ export function createStoryProject(options) {
   writeStarterFile(path.join(root, "continuity", "clues", "_index.md"), clueIndex(storyId, []), { root });
   writeStarterFile(path.join(root, "glossary", "_index.md"), glossaryIndex(storyId, []), { root });
   writeStarterFile(path.join(root, STYLE_SHEET_FILE), styleSheet(), { root });
+  const gitignore = writeStarterGitignore(root);
 
   const linkedBooks = [];
   // An existing story.md is preserved under --force, so only add backlinks
@@ -284,8 +285,46 @@ export function createStoryProject(options) {
     linkedBooks,
     keptStory: existingStory !== null,
     ignoredOptions,
+    gitignore,
     files: REQUIRED_PATHS.filter((entry) => entry.endsWith(".md"))
   };
+}
+
+// Builds land in dist/ and are regenerated from the markdown, so a new
+// project ignores them, along with files an interrupted story command or an
+// editor leaves behind.
+const STARTER_GITIGNORE = `# Build output: story build and story export regenerate it from the markdown
+dist/
+
+# Left behind when a story command is interrupted
+.story.lock
+.*.story-*.tmp
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+`;
+
+// Writes .gitignore when the project has none and never touches an existing
+// one (a symlink to a shared file included). Returns "created", "kept", or
+// "missing-dist" when a kept regular file does not ignore dist/.
+function writeStarterGitignore(root) {
+  const filePath = path.join(root, ".gitignore");
+  const existing = lstatIfExists(filePath);
+  if (!existing) {
+    writeFile(filePath, STARTER_GITIGNORE, { root });
+    return "created";
+  }
+  if (!existing.isFile()) {
+    return "kept";
+  }
+  const ignoresDist = readTextFile(filePath)
+    .split(/\r?\n/)
+    .some((line) => /^(?:\*\*\/|\/)?dist(?:\/(?:\*{1,2})?)?$/.test(line.trim()));
+  return ignoresDist ? "kept" : "missing-dist";
 }
 
 // Fields a linked book passes to a new book in its series: the retail series

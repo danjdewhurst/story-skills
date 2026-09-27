@@ -272,7 +272,7 @@ A parse error names the file by its path inside the project, never an absolute p
 story init <title> [options]
 ```
 
-Scaffolds a new story project: `story.md`, `style-sheet.md`, `plot/timeline.md`, `continuity/state.md`, every entity folder, and empty registries. The story id is the kebab-case form of the title (`The Salt Road` becomes `the-salt-road`), and the project goes in a directory of that name unless you pass `--dir`. A title with no ASCII letters or digits, such as `Война и мир`, has no kebab-case form, so it needs `--dir` with an ASCII folder name; the story id then comes from the folder name (`story init "Война и мир" --dir voina` gives the id `voina`). The id follows the `story.md` title on every run, so after changing the title run `story reindex` to rewrite it in the registries, `plot/timeline.md`, and `continuity/state.md`; until then `story validate` fails with `story must be <new-id>`.
+Scaffolds a new story project: `story.md`, `style-sheet.md`, `plot/timeline.md`, `continuity/state.md`, every entity folder, empty registries, and a `.gitignore`. The story id is the kebab-case form of the title (`The Salt Road` becomes `the-salt-road`), and the project goes in a directory of that name unless you pass `--dir`. A title with no ASCII letters or digits, such as `Война и мир`, has no kebab-case form, so it needs `--dir` with an ASCII folder name; the story id then comes from the folder name (`story init "Война и мир" --dir voina` gives the id `voina`). The id follows the `story.md` title on every run, so after changing the title run `story reindex` to rewrite it in the registries, `plot/timeline.md`, and `continuity/state.md`; until then `story validate` fails with `story must be <new-id>`.
 
 | Option | Effect | Default |
 |---|---|---|
@@ -305,6 +305,14 @@ story init "The Salt Road"
 ```
 
 With `--force` on a directory that already has a `story.md`, `init` keeps that `story.md`, prints `Updated story project: <dir>` instead of `Created`, and takes the story id for any new registry from the kept title. A title that differs from the kept one, and any `story.md` option you passed (`--genre`, `--form`, `--synopsis`, and so on), is named in a warning, since it was not applied: `warning: story.md already exists and was kept, so the title and --genre were not applied. Edit story.md to change them.`
+
+The `.gitignore` lists `dist/`, so builds stay out of commits, plus `.story.lock` and the `.*.story-*.tmp` files an interrupted command can leave behind, and common OS and editor files (`.DS_Store`, `Thumbs.db`, `*.swp`, `*.swo`, `*~`). `init` writes it only when the project has none, `--force` included, and never edits an existing one; a symlinked `.gitignore` is left alone and not read. When a kept `.gitignore` has no `dist/` rule (`dist`, `dist/`, `/dist/`, `dist/*`, `dist/**`, or `**/dist/`), `init` still succeeds and prints a note on stderr:
+
+```text
+note: .gitignore was kept and does not list dist/, so builds would be committed. Add a dist/ line to keep them out.
+```
+
+A `.gitignore` in an enclosing repository is not checked, so a book inside a larger repository gets its own `.gitignore` too; the two do not conflict.
 
 It also refuses a story id or target folder name that Windows reserves (`con`, `prn`, `aux`, `nul`, `com1` to `com9`, `lpt1` to `lpt9`, also with an extension such as `con.txt`), a folder name ending in a dot or space, and a folder name containing `< > : " | ? *`, because the project could not be checked out there:
 
@@ -391,7 +399,7 @@ Creates a new project from an existing manuscript. `<source>` is a single `.md`,
 
 Each chapter is written to `chapters/chapter-NN.md` with `status: draft` and its word count, and the registries are rebuilt. `import` then prints up to 25 capitalised names that appear three or more times, as candidates for `story add character` or `story add location`.
 
-`import` accepts `--dir`, `--genre`, `--sub-genre`, `--setting-era`, `--theme`, `--themes`, `--pov`, `--tense`, `--synopsis`, and `--force`, with the same meaning as for `init`. The series options (`--series`, `--book-number`, `--follows`, `--precedes`) and `--form` are errors (`--form does not apply to story import`); add `form` to `story.md` by hand after importing. Without `--synopsis`, the synopsis placeholder names the source file.
+`import` accepts `--dir`, `--genre`, `--sub-genre`, `--setting-era`, `--theme`, `--themes`, `--pov`, `--tense`, `--synopsis`, and `--force`, with the same meaning as for `init`, and writes the same `.gitignore` (or prints the same note about a kept one). The series options (`--series`, `--book-number`, `--follows`, `--precedes`) and `--form` are errors (`--form does not apply to story import`); add `form` to `story.md` by hand after importing. Without `--synopsis`, the synopsis placeholder names the source file.
 
 > [!WARNING]
 > With `--force` on an existing directory, `import` deletes every `chapter-NN.md` in `chapters/` before writing the imported chapters, and the frontmatter you filled in on those chapters is lost. Commit or back up the project first. It first checks that every other project file parses, and changes nothing if one does not. It keeps the existing `story.md` (warning about a `--title` or other `story.md` option it did not apply) and prints a note to run `story links`, since scenes and bible entries may point at chapters that are gone or changed.

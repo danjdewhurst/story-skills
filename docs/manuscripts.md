@@ -999,7 +999,7 @@ The result is a draft, not submission copy. Literary agents expect present tense
   ```
 - `--out` must name a file. `--out dist`, an existing folder, or any path ending in `/` is refused with `--out <path> is a directory: give a file path`, whether or not the folder exists yet; an empty `--out` is refused with `--out needs a file path`.
 
-Treat everything in `dist/` as disposable. It is regenerated from the markdown on every build, so never edit a built file to fix the book: change the chapter or matter file and build again. `story validate` and `story links` do not read `dist/`, and `story rename` and `story remove` never rewrite references inside it. The CLI does not create a `.gitignore`, so add `dist/` to your story repository's `.gitignore` unless you want to commit a particular build.
+Treat everything in `dist/` as disposable. It is regenerated from the markdown on every build, so never edit a built file to fix the book: change the chapter or matter file and build again. `story validate` and `story links` do not read `dist/`, and `story rename` and `story remove` never rewrite references inside it. `story init` and `story import` write a `.gitignore` that lists `dist/` when the project has none. They never edit an existing one, and print a note when it does not list `dist/`: add the line yourself unless you want to commit a particular build. A project created by an older version or by hand needs the line added too.
 
 `submission/` is different. The `submission` skill keeps hand-edited package files there, such as the rewritten synopsis and the query letter. The CLI does not validate `submission/`, and builds never include it.
 

@@ -95,6 +95,7 @@ export const COMMANDS = [
       });
       io.stdout.write(`${result.keptStory ? "Updated" : "Created"} story project: ${result.root}\n`);
       reportKeptStory(io, result, "the title");
+      reportGitignore(io, result);
       for (const linkedBook of result.linkedBooks) {
         io.stdout.write(`Updated series links in ${path.join(linkedBook, "story.md")}\n`);
       }
@@ -125,6 +126,7 @@ export const COMMANDS = [
       });
       io.stdout.write(`Imported ${result.chapters} ${result.chapters === 1 ? "chapter" : "chapters"} (${result.words} ${result.words === 1 ? "word" : "words"}) into ${result.root}\n`);
       reportKeptStory(io, result, "--title");
+      reportGitignore(io, result);
       for (const warning of result.warnings) {
         io.stderr.write(`warning: ${warning}\n`);
       }
@@ -623,6 +625,14 @@ function reportKeptStory(io, result, titleLabel) {
   const names = result.ignoredOptions.map((name) => (name === "title" ? titleLabel : name));
   const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
   io.stderr.write(`warning: story.md already exists and was kept, so ${list} ${names.length === 1 ? "was" : "were"} not applied. Edit story.md to change ${names.length === 1 ? "it" : "them"}.\n`);
+}
+
+// An existing .gitignore is never edited, so say when builds would be
+// committed with it.
+function reportGitignore(io, result) {
+  if (result.gitignore === "missing-dist") {
+    io.stderr.write("note: .gitignore was kept and does not list dist/, so builds would be committed. Add a dist/ line to keep them out.\n");
+  }
 }
 
 function collectThemes(options) {

@@ -6479,6 +6479,7 @@ function createStoryProject(options) {
   writeStarterFile(path6.join(root, "continuity", "clues", "_index.md"), clueIndex(storyId, []), { root });
   writeStarterFile(path6.join(root, "glossary", "_index.md"), glossaryIndex(storyId, []), { root });
   writeStarterFile(path6.join(root, STYLE_SHEET_FILE), styleSheet(), { root });
+  const gitignore = writeStarterGitignore(root);
   const linkedBooks = [];
   const existingLinks = storyWritten ? null : existingSeriesLinks(root);
   for (const { book, updated } of backlinks) {
@@ -6494,8 +6495,36 @@ function createStoryProject(options) {
     linkedBooks,
     keptStory: existingStory !== null,
     ignoredOptions,
+    gitignore,
     files: REQUIRED_PATHS.filter((entry) => entry.endsWith(".md"))
   };
+}
+var STARTER_GITIGNORE = `# Build output: story build and story export regenerate it from the markdown
+dist/
+
+# Left behind when a story command is interrupted
+.story.lock
+.*.story-*.tmp
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+`;
+function writeStarterGitignore(root) {
+  const filePath = path6.join(root, ".gitignore");
+  const existing = lstatIfExists(filePath);
+  if (!existing) {
+    writeFile(filePath, STARTER_GITIGNORE, { root });
+    return "created";
+  }
+  if (!existing.isFile()) {
+    return "kept";
+  }
+  const ignoresDist = readTextFile(filePath).split(/\r?\n/).some((line) => /^(?:\*\*\/|\/)?dist(?:\/(?:\*{1,2})?)?$/.test(line.trim()));
+  return ignoresDist ? "kept" : "missing-dist";
 }
 function inheritedStoryFields(data) {
   const fields = {};
@@ -12011,6 +12040,7 @@ function importManuscript(options) {
     chapters: chapters.length,
     words: totalWords,
     warnings,
+    gitignore: created.gitignore,
     candidates: extractNameCandidates(chapters.map((chapter) => chapter.prose).join(`
 
 `))
@@ -12539,6 +12569,7 @@ var COMMANDS = [
       io.stdout.write(`${result.keptStory ? "Updated" : "Created"} story project: ${result.root}
 `);
       reportKeptStory(io, result, "the title");
+      reportGitignore(io, result);
       for (const linkedBook of result.linkedBooks) {
         io.stdout.write(`Updated series links in ${path8.join(linkedBook, "story.md")}
 `);
@@ -12571,6 +12602,7 @@ var COMMANDS = [
       io.stdout.write(`Imported ${result.chapters} ${result.chapters === 1 ? "chapter" : "chapters"} (${result.words} ${result.words === 1 ? "word" : "words"}) into ${result.root}
 `);
       reportKeptStory(io, result, "--title");
+      reportGitignore(io, result);
       for (const warning of result.warnings) {
         io.stderr.write(`warning: ${warning}
 `);
@@ -13078,6 +13110,12 @@ function reportKeptStory(io, result, titleLabel) {
   const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
   io.stderr.write(`warning: story.md already exists and was kept, so ${list} ${names.length === 1 ? "was" : "were"} not applied. Edit story.md to change ${names.length === 1 ? "it" : "them"}.
 `);
+}
+function reportGitignore(io, result) {
+  if (result.gitignore === "missing-dist") {
+    io.stderr.write(`note: .gitignore was kept and does not list dist/, so builds would be committed. Add a dist/ line to keep them out.
+`);
+  }
 }
 function collectThemes(options) {
   return [].concat(options.theme ?? []).concat(options.themes ?? []).filter((value) => value !== undefined && value !== true);

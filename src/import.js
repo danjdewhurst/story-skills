@@ -146,6 +146,7 @@ export function importManuscript(options) {
     chapters: chapters.length,
     words: totalWords,
     warnings,
+    gitignore: created.gitignore,
     candidates: extractNameCandidates(chapters.map((chapter) => chapter.prose).join("\n\n"))
   };
 }
