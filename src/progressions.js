@@ -24,7 +24,7 @@ export const PROGRESSION_KINDS = ["character", "location", "faction"];
 const RESERVED_FIELDS = new Set(["progressions", "id", "died-in", "revived-in"]);
 
 // A plain `field` / `value` pair, with the chapter it takes effect from.
-function progressionEntry(item) {
+export function progressionEntry(item) {
   if (!item || typeof item !== "object" || Array.isArray(item)) {
     return null;
   }

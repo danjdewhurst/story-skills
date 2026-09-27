@@ -880,22 +880,7 @@ function checkCharacterDeaths(project, context, errors, warnings) {
       errors.push(err("revived-without-death", `${label} has revived-in ${character.revivedIn} but no died-in; set died-in or remove revived-in`, label));
     }
     if (!character.diedIn) {
-      for (const entry of [...project.chapters, ...project.scenes]) {
-        if (!castIncludes(entry, character.id)) {
-          continue;
-        }
-        const entryLabel = relative(project, entry.file);
-        const chapterId = entry.chapter ?? entry.id;
-        const { status, from } = statusAt(character, chapterId, context.chronology);
-        if (status !== "deceased") {
-          continue;
-        }
-        if (from === "") {
-          warnings.push(warn("deceased-in-cast", `${entryLabel} lists ${character.id}, who died before the story (deceased with no died-in); move appearances to mentions`, entryLabel));
-        } else if (happensAfter(context.chronology, chapterId, from)) {
-          warnings.push(warn("progression-deceased-in-cast", `${entryLabel} lists ${character.id}, whose progressions make them deceased from ${from}; move appearances after the death to mentions`, entryLabel));
-        }
-      }
+      checkStatusAppearances(project, character, context.chronology, warnings);
       continue;
     }
     const deathNumber = context.chapterNumbers.get(character.diedIn);
@@ -922,6 +907,7 @@ function checkCharacterDeaths(project, context, errors, warnings) {
       errors.push(err("revival-status-mismatch", `${label} has revived-in ${character.revivedIn} but status deceased; set status: alive`, label));
     }
     checkProgressionDeath(character, label, context.chronology, warnings);
+    checkStatusAppearances(project, character, context.chronology, warnings);
     const window = deathWindow(character, context.chronology);
     for (const chapter of project.chapters) {
       if (window.deadIn(chapter.id) && castIncludes(chapter, character.id)) {
@@ -935,22 +921,78 @@ function checkCharacterDeaths(project, context, errors, warnings) {
     }
   }
 }
-function statusProgressions(character) {
-  const list = Array.isArray(character.frontmatter.progressions) ? character.frontmatter.progressions : [];
-  return list.flatMap((item, index) => item && typeof item === "object" && item.field === "status" && idText(item.from) !== "" && item.value !== undefined && item.value !== null ? [{ index, from: idText(item.from), value: String(item.value) }] : []);
-}
-function statusAt(character, chapterId, chronology) {
-  if (!chronology.numbers.has(chapterId) || statusProgressions(character).length === 0) {
-    return { status: character.status, from: "" };
+function checkStatusAppearances(project, character, chronology, warnings) {
+  if (statusProgressions(character).length === 0 && character.status !== "deceased") {
+    return;
   }
-  const set = entityStateAt(character.frontmatter, chapterId, chronology).changes.filter((change) => change.field === "status").pop();
-  return set ? { status: String(set.value), from: set.from } : { status: character.status, from: "" };
+  for (const entry of [...project.chapters, ...project.scenes]) {
+    if (!castIncludes(entry, character.id)) {
+      continue;
+    }
+    const death = progressionDeathAt(character, entry.chapter ?? entry.id, chronology);
+    const entryLabel = relative(project, entry.file);
+    if (death?.from === "") {
+      warnings.push(warn("deceased-in-cast", `${entryLabel} lists ${character.id}, who died before the story (deceased with no died-in); move appearances to mentions`, entryLabel));
+    } else if (death) {
+      warnings.push(warn("progression-deceased-in-cast", `${entryLabel} lists ${character.id}, whose progressions make them deceased from ${death.from}; move appearances after the death to mentions`, entryLabel));
+    }
+  }
+}
+var STATUS_PROGRESSIONS = new WeakMap;
+function statusProgressions(character) {
+  if (!STATUS_PROGRESSIONS.has(character)) {
+    const list = Array.isArray(character.frontmatter.progressions) ? character.frontmatter.progressions : [];
+    STATUS_PROGRESSIONS.set(character, list.map((item, index) => ({ index, entry: progressionEntry(item) })).filter(({ entry }) => entry !== null && entry.field === "status").map(({ index, entry }) => ({ index, from: entry.from, value: String(entry.value) })));
+  }
+  return STATUS_PROGRESSIONS.get(character);
+}
+function progressionStatusAt(character, chapterId, chronology) {
+  let status = String(character.status);
+  let from = "";
+  let deadFrom = "";
+  if (chronology.numbers.has(chapterId) && statusProgressions(character).length > 0) {
+    for (const change of entityStateAt(character.frontmatter, chapterId, chronology).changes) {
+      if (change.field !== "status") {
+        continue;
+      }
+      const value = String(change.value);
+      if (value === "deceased" && status !== "deceased") {
+        deadFrom = change.from;
+      }
+      status = value;
+      from = change.from;
+    }
+  }
+  return { status, from, deadFrom };
+}
+function progressionDeathAt(character, chapterId, chronology) {
+  const from = progressionDeathFrom(character, chapterId, chronology);
+  if (from === null || from !== "" && !happensAfter(chronology, chapterId, from)) {
+    return null;
+  }
+  return { from };
+}
+function progressionDeathFrom(character, chapterId, chronology) {
+  const { status, deadFrom } = progressionStatusAt(character, chapterId, chronology);
+  if (status !== "deceased" || character.diedIn && deadFrom === "") {
+    return null;
+  }
+  if (character.diedIn && (character.revivedIn === "" || !happensAfter(chronology, deadFrom, character.revivedIn))) {
+    return null;
+  }
+  return deadFrom;
+}
+function progressionIndex(character, from) {
+  return statusProgressions(character).filter((entry) => entry.from === from).pop().index;
 }
 function checkProgressionDeath(character, label, chronology, warnings) {
   const died = character.diedIn;
   const revived = character.revivedIn;
-  const progressions = statusProgressions(character);
-  for (const { index, from, value } of progressions) {
+  const atDeath = progressionStatusAt(character, died, chronology);
+  if (atDeath.status !== "deceased" && atDeath.from !== "") {
+    warnings.push(warn("progression-death-conflict", `${label} progressions[${progressionIndex(character, atDeath.from)}] leaves ${character.id} ${atDeath.status} when they die in ${died}; add a status progression to deceased from ${died}`, label));
+  }
+  for (const { index, from, value } of statusProgressions(character)) {
     if (value !== "deceased" && happensAfter(chronology, from, died) && (revived === "" || happensAfter(chronology, revived, from))) {
       const fix = revived === "" ? `set revived-in: ${from} if they come back` : `move it to ${revived}, when they are revived`;
       warnings.push(warn("progression-death-conflict", `${label} progressions[${index}] sets status ${value} from ${from}, while ${character.id} is dead after dying in ${died}; ${fix}`, label));
@@ -959,10 +1001,9 @@ function checkProgressionDeath(character, label, chronology, warnings) {
   if (revived === "") {
     return;
   }
-  const { status, from } = statusAt(character, revived, chronology);
-  if (status === "deceased" && from !== "") {
-    const index = progressions.filter((entry) => entry.from === from).pop().index;
-    warnings.push(warn("progression-death-conflict", `${label} progressions[${index}] makes ${character.id} deceased from ${from}, which still holds when they are revived in ${revived}; add a status progression from ${revived}`, label));
+  const atRevival = progressionStatusAt(character, revived, chronology);
+  if (atRevival.status === "deceased" && atRevival.from !== "") {
+    warnings.push(warn("progression-death-conflict", `${label} progressions[${progressionIndex(character, atRevival.from)}] makes ${character.id} deceased from ${atRevival.from}, which still holds when they are revived in ${revived}; add a status progression from ${revived}`, label));
   }
 }
 function checkChapterCasts(project, warnings) {
@@ -1273,13 +1314,13 @@ function checkPosthumousLearning(character, learnedIn, entryLabel, file, context
   if (!character || !context.chapterNumbers.has(learnedIn)) {
     return;
   }
+  const death = progressionDeathAt(character, learnedIn, context.chronology);
+  if (death?.from === "") {
+    warnings.push(warn("deceased-learning", `${entryLabel} has ${character.id} learn something in ${learnedIn}, but ${character.id} died before the story (deceased with no died-in)`, file));
+  } else if (death) {
+    warnings.push(warn("progression-deceased-learning", `${entryLabel} has ${character.id} learn something in ${learnedIn}, but their progressions make them deceased from ${death.from}`, file));
+  }
   if (!character.diedIn) {
-    const { status, from } = statusAt(character, learnedIn, context.chronology);
-    if (status === "deceased" && from === "") {
-      warnings.push(warn("deceased-learning", `${entryLabel} has ${character.id} learn something in ${learnedIn}, but ${character.id} died before the story (deceased with no died-in)`, file));
-    } else if (status === "deceased" && happensAfter(context.chronology, learnedIn, from)) {
-      warnings.push(warn("progression-deceased-learning", `${entryLabel} has ${character.id} learn something in ${learnedIn}, but their progressions make them deceased from ${from}`, file));
-    }
     return;
   }
   const window = deathWindow(character, context.chronology);
@@ -1377,6 +1418,11 @@ function checkStateAgainstStory(project, context, warnings) {
     const window = windows.get(character);
     if (window && current && (current.id === window.died || window.deadIn(current.id))) {
       warnings.push(warn("state-tracks-dead-character", `${entryLabel} tracks ${character}, who died in ${window.died}; remove the entry once they are dead`, label));
+      continue;
+    }
+    const deadFrom = context.characters.has(character) && current ? progressionDeathFrom(context.characters.get(character), current.id, chronology) : null;
+    if (deadFrom && !chronology.outline.has(deadFrom) && chronology.numbers.has(deadFrom)) {
+      warnings.push(warn("state-tracks-dead-character", `${entryLabel} tracks ${character}, whose progressions make them deceased from ${deadFrom}; remove the entry once they are dead`, label));
       continue;
     }
     const location = idText(entry.location);
@@ -2089,9 +2135,9 @@ function entityStateAtTarget(frontmatter, chronology, chapterId) {
 }
 function characterStateAt(character, chronology, chapterId) {
   const { state, changes } = entityStateAtTarget(character.frontmatter, chronology, chapterId);
-  return { status: statusAt2(character, state, changes, chronology, chapterId), state, changes };
+  return { status: statusAt(character, state, changes, chronology, chapterId), state, changes };
 }
-function statusAt2(character, state, changes, chronology, chapterId) {
+function statusAt(character, state, changes, chronology, chapterId) {
   const died = String(character.diedIn ?? "");
   const status = String(state.status ?? character.status ?? "");
   if (died === "") {
@@ -12857,7 +12903,7 @@ function validateCharacters(project, errors, warnings) {
     validateProgressions(data, label, PROGRESSION_RULES.character, chronology, errors);
     for (const [index, item] of asArray(data.progressions).entries()) {
       if (item && typeof item === "object" && item.field === "status" && item.value === "deceased" && idText(item.from) !== character.diedIn) {
-        warnings.push(warn("deceased-without-died-in", `${label} progressions[${index}] makes ${character.id} deceased from ${idText(item.from) || "?"}; set died-in: ${idText(item.from) || "<chapter>"} too so story continuity checks appearances after the death`, label));
+        warnings.push(warn("deceased-without-died-in", `${label} progressions[${index}] makes ${character.id} deceased from ${idText(item.from) || "?"}; set died-in: ${idText(item.from) || "<chapter>"} too so story continuity treats appearances after the death as errors`, label));
       }
     }
   }

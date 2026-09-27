@@ -2343,7 +2343,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `posthumous-appearance` | error | A chapter or scene lists a character after their death. |
 | `deceased-in-cast` | warning | A chapter or scene lists a character who died before the story. |
 | `progression-deceased-in-cast` | warning | A chapter or scene lists a character, with no `died-in`, after a progression makes them `deceased`. |
-| `progression-death-conflict` | warning | A status progression contradicts `died-in` or `revived-in`: it sets another status while the character is dead, or leaves them `deceased` at the revival. |
+| `progression-death-conflict` | warning | A status progression contradicts `died-in` or `revived-in`: another status still holds at the death chapter or is set while the character is dead, or `deceased` still holds at the revival. |
 | `pov-not-in-cast` | warning | A POV character is not in the chapter or scene's `characters`. |
 | `pov-scene-mismatch` | warning | A chapter's POV tells none of its scenes. |
 | `scene-cast-not-in-chapter` | warning | A scene lists a character its chapter does not. |
@@ -2389,7 +2389,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `progression-deceased-learning` | warning | A character, with no `died-in`, learns something after a progression makes them `deceased`. |
 | `learner-not-in-cast` | warning | A character learns something in a chapter that does not list them. |
 | `knowledge-not-recorded` | warning | A scene records learning that `knowledge-state` does not. |
-| `state-tracks-dead-character` | warning | `character-state` tracks a character who is dead at `current-chapter`. |
+| `state-tracks-dead-character` | warning | `character-state` tracks a character who is dead at `current-chapter`, by `died-in` or by a status progression. |
 | `state-location-drift` | warning | `character-state` puts a character somewhere their last scene does not. |
 | `object-not-recorded` | warning | A scene changes an artifact that has no `object-state` entry. |
 | `state-object-drift` | warning | An artifact's `object-state` differs from the last scene that changed it. |

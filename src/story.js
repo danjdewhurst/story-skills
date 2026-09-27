@@ -6294,10 +6294,11 @@ function validateCharacters(project, errors, warnings) {
     validateRelationships(data, label, errors);
     warnNearMissKeys(data, ["died-in", "revived-in"], label, warnings);
     validateProgressions(data, label, PROGRESSION_RULES.character, chronology, errors);
-    // Continuity reads a death from died-in, not from status.
+    // Continuity checks a death from died-in fully (errors, state, series);
+    // a progression alone raises only warnings.
     for (const [index, item] of asArray(data.progressions).entries()) {
       if (item && typeof item === "object" && item.field === "status" && item.value === "deceased" && idText(item.from) !== character.diedIn) {
-        warnings.push(warn("deceased-without-died-in", `${label} progressions[${index}] makes ${character.id} deceased from ${idText(item.from) || "?"}; set died-in: ${idText(item.from) || "<chapter>"} too so story continuity checks appearances after the death`, label));
+        warnings.push(warn("deceased-without-died-in", `${label} progressions[${index}] makes ${character.id} deceased from ${idText(item.from) || "?"}; set died-in: ${idText(item.from) || "<chapter>"} too so story continuity treats appearances after the death as errors`, label));
       }
     }
   }

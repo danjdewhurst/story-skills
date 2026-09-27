@@ -271,7 +271,7 @@ progressions:
     field: status
     value: deceased`;
     const { root } = progressionProject({ maraProgressions: deceased });
-    expect(messages(validateProject(root).warnings)).toContain("characters/mara-finn.md progressions[0] makes mara-finn deceased from chapter-03; set died-in: chapter-03 too so story continuity checks appearances after the death");
+    expect(messages(validateProject(root).warnings)).toContain("characters/mara-finn.md progressions[0] makes mara-finn deceased from chapter-03; set died-in: chapter-03 too so story continuity treats appearances after the death as errors");
     const recorded = progressionProject({ maraProgressions: deceased, extraMara: "died-in: chapter-03\n" });
     expect(messages(validateProject(recorded.root).warnings).filter((warning) => warning.includes("progressions"))).toEqual([]);
   });

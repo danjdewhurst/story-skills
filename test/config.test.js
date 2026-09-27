@@ -231,7 +231,7 @@ describe("severity", () => {
     configure(root, "severity:\n  - warning: deceased-without-died-in\n    level: error");
     const result = invoke(cwd, ["validate", root]);
     expect(result.code).toBe(1);
-    expect(result.err).toContain("set died-in: chapter-02 too so story continuity checks appearances after the death [deceased-without-died-in]\n");
+    expect(result.err).toContain("set died-in: chapter-02 too so story continuity treats appearances after the death as errors [deceased-without-died-in]\n");
   });
 
   test("a promoted context warning fails the command, as text and as JSON", () => {
