@@ -133,18 +133,32 @@ function resolveTarget(project, targetId) {
 // so cards never show a later chapter's status.
 export function characterStateAt(character, chronology, chapterId) {
   const died = String(character.diedIn ?? "");
+  const status = String(character.status ?? "");
   if (died === "") {
-    return { status: String(character.status ?? "") };
+    // A `deceased` status with no died-in chapter cannot be dated, so it is
+    // left out rather than risk revealing a later death.
+    return { status: status === "deceased" ? "" : status };
   }
   if (died === chapterId) {
     return { status: "dies in this chapter" };
   }
-  const window = deathWindow(character, chronology);
-  const deadNow = window !== null && window.deadIn(chapterId);
+  // Read by the target: at or before it in reading order.
+  const readBy = (id) => chronology.numbers.has(id) && chronology.numbers.get(id) <= chronology.numbers.get(chapterId);
+  const deadIn = (revivedIn) => {
+    const window = deathWindow({ ...character, revivedIn }, chronology);
+    return window !== null && window.deadIn(chapterId);
+  };
+  const revivedIn = String(character.revivedIn ?? "");
+  const deadNow = deadIn(readBy(revivedIn) ? revivedIn : "");
+  // A revival read after the target is not known yet; when it would change
+  // the answer (it happens before the target in story time), say nothing.
+  if (revivedIn !== "" && !readBy(revivedIn) && deadNow !== deadIn(revivedIn)) {
+    return { status: "" };
+  }
   // A death in a later or unwritten chapter is not known yet. In a
   // flash-forward set after that death the character is dead in story time,
   // so the status is left out rather than shown as alive.
-  if (!chronology.numbers.has(died) || chronology.numbers.get(died) > chronology.numbers.get(chapterId)) {
+  if (!readBy(died)) {
     return { status: deadNow ? "" : "alive" };
   }
   return { status: deadNow ? `deceased (died in ${died})` : "alive" };
@@ -165,7 +179,8 @@ export function buildContext(project, targetId, readBody, options = {}) {
   const characters = new Map(project.characters.map((character) => [character.id, character]));
   const nameOf = (id) => (characters.has(id) ? `${characters.get(id).name} (${id})` : id);
   const unit = target.scene ?? target.chapter;
-  const pov = idText(unit.pov);
+  // A scene with no POV of its own is told from its chapter's.
+  const pov = idText(unit.pov) || idText(target.chapter.pov);
   const cast = [...new Set([pov, ...unit.characters.map(idText)].filter(Boolean))];
   const relative = (file) => path.relative(project.root, file);
   const statePath = path.join("continuity", "state.md");
@@ -202,7 +217,7 @@ export function buildContext(project, targetId, readBody, options = {}) {
   } else if (chapterScenes.length > 0) {
     targetLines.push("", "Scenes planned:", "", ...chapterScenes.map((scene) => `${scene.scene}. ${scene.title}${scene.outcome ? ` (outcome: ${scene.outcome})` : ""}`));
   }
-  sections.push({ id: "target", title: "Target", items: [item(`target:${target.id}`, "Target", relative(unit.file), lines(...targetLines))] });
+  sections.push({ id: "target", title: "Target", items: [item(`target:${target.id}`, "Target", [target.chapter, target.scene].filter(Boolean).map((entry) => relative(entry.file)).join(", "), lines(...targetLines))] });
 
   // 2. story.md essentials and style-sheet rules.
   const essentials = [];
@@ -255,6 +270,8 @@ export function buildContext(project, targetId, readBody, options = {}) {
     }
 
     const state = [];
+    // Every file the state lines come from, for the omitted-items list.
+    const stateSources = new Set();
     // continuity/state.md describes `current-chapter`; it is only safe when
     // that point is before the target.
     const currentChapter = project.continuity ? Number(project.continuity.data["current-chapter"]) : NaN;
@@ -262,6 +279,7 @@ export function buildContext(project, targetId, readBody, options = {}) {
       for (const entry of asList(project.continuity.data["character-state"])) {
         if (isMapping(entry) && idText(entry.character) === pov) {
           state.push(`- As of chapter ${currentChapter}: ${describeMapping(entry, ["character"])}`);
+          stateSources.add(statePath);
         }
       }
     }
@@ -271,11 +289,12 @@ export function buildContext(project, targetId, readBody, options = {}) {
         // character something (`target: <artifact>`, `owner: <pov>`).
         if (isMapping(change) && (idText(change.character) === pov || idText(change.owner) === pov)) {
           state.push(`- ${scene.chapter} scene ${scene.scene}: ${describeMapping(change, ["character"])}`);
+          stateSources.add(relative(scene.file));
         }
       }
     }
     if (state.length > 0) {
-      povItems.push(item(`state:${pov}`, `${nameOf(pov)}'s state`, statePath, lines(`### ${nameOf(pov)}'s state`, ...state)));
+      povItems.push(item(`state:${pov}`, `${nameOf(pov)}'s state`, [...stateSources].join(", "), lines(`### ${nameOf(pov)}'s state`, ...state)));
     }
   }
   sections.push({ id: "pov", title: "POV knowledge and state", items: povItems });

@@ -1675,15 +1675,24 @@ function resolveTarget(project, targetId) {
 }
 function characterStateAt(character, chronology, chapterId) {
   const died = String(character.diedIn ?? "");
+  const status = String(character.status ?? "");
   if (died === "") {
-    return { status: String(character.status ?? "") };
+    return { status: status === "deceased" ? "" : status };
   }
   if (died === chapterId) {
     return { status: "dies in this chapter" };
   }
-  const window = deathWindow(character, chronology);
-  const deadNow = window !== null && window.deadIn(chapterId);
-  if (!chronology.numbers.has(died) || chronology.numbers.get(died) > chronology.numbers.get(chapterId)) {
+  const readBy = (id) => chronology.numbers.has(id) && chronology.numbers.get(id) <= chronology.numbers.get(chapterId);
+  const deadIn = (revivedIn) => {
+    const window = deathWindow({ ...character, revivedIn }, chronology);
+    return window !== null && window.deadIn(chapterId);
+  };
+  const revivedIn = String(character.revivedIn ?? "");
+  const deadNow = deadIn(readBy(revivedIn) ? revivedIn : "");
+  if (revivedIn !== "" && !readBy(revivedIn) && deadNow !== deadIn(revivedIn)) {
+    return { status: "" };
+  }
+  if (!readBy(died)) {
     return { status: deadNow ? "" : "alive" };
   }
   return { status: deadNow ? `deceased (died in ${died})` : "alive" };
@@ -1698,7 +1707,7 @@ function buildContext(project, targetId, readBody, options = {}) {
   const characters = new Map(project.characters.map((character) => [character.id, character]));
   const nameOf = (id) => characters.has(id) ? `${characters.get(id).name} (${id})` : id;
   const unit = target.scene ?? target.chapter;
-  const pov = idText(unit.pov);
+  const pov = idText(unit.pov) || idText(target.chapter.pov);
   const cast = [...new Set([pov, ...unit.characters.map(idText)].filter(Boolean))];
   const relative = (file) => path2.relative(project.root, file);
   const statePath = path2.join("continuity", "state.md");
@@ -1730,7 +1739,7 @@ function buildContext(project, targetId, readBody, options = {}) {
   } else if (chapterScenes.length > 0) {
     targetLines.push("", "Scenes planned:", "", ...chapterScenes.map((scene) => `${scene.scene}. ${scene.title}${scene.outcome ? ` (outcome: ${scene.outcome})` : ""}`));
   }
-  sections.push({ id: "target", title: "Target", items: [item(`target:${target.id}`, "Target", relative(unit.file), lines(...targetLines))] });
+  sections.push({ id: "target", title: "Target", items: [item(`target:${target.id}`, "Target", [target.chapter, target.scene].filter(Boolean).map((entry) => relative(entry.file)).join(", "), lines(...targetLines))] });
   const essentials = [];
   const story = project.story.data;
   const storyText = lines(`### ${project.title}`, field("Genre", [story.genre, story["sub-genre"]].filter(Boolean).join(" / ")), field("Setting era", story["setting-era"]), field("POV", story.pov), field("Tense", story.tense), field("Form", story.form), field("Themes", Array.isArray(story.themes) ? story.themes : [story.themes].filter(Boolean)), field("Premise", story.premise), ...STORY_SECTIONS.map((heading) => subsection(heading, section(project.story.body ?? "", heading))));
@@ -1761,11 +1770,13 @@ ${body}`)));
       povItems.push(item(`knowledge:${pov}`, `What ${nameOf(pov)} knows`, statePath, lines(`### What ${nameOf(pov)} knows`, ...known)));
     }
     const state = [];
+    const stateSources = new Set;
     const currentChapter = project.continuity ? Number(project.continuity.data["current-chapter"]) : NaN;
     if (Number.isInteger(currentChapter) && currentChapter < targetNumber) {
       for (const entry of asList(project.continuity.data["character-state"])) {
         if (isMapping(entry) && idText(entry.character) === pov) {
           state.push(`- As of chapter ${currentChapter}: ${describeMapping(entry, ["character"])}`);
+          stateSources.add(statePath);
         }
       }
     }
@@ -1773,11 +1784,12 @@ ${body}`)));
       for (const change of scene.stateChanges) {
         if (isMapping(change) && (idText(change.character) === pov || idText(change.owner) === pov)) {
           state.push(`- ${scene.chapter} scene ${scene.scene}: ${describeMapping(change, ["character"])}`);
+          stateSources.add(relative(scene.file));
         }
       }
     }
     if (state.length > 0) {
-      povItems.push(item(`state:${pov}`, `${nameOf(pov)}'s state`, statePath, lines(`### ${nameOf(pov)}'s state`, ...state)));
+      povItems.push(item(`state:${pov}`, `${nameOf(pov)}'s state`, [...stateSources].join(", "), lines(`### ${nameOf(pov)}'s state`, ...state)));
     }
   }
   sections.push({ id: "pov", title: "POV knowledge and state", items: povItems });

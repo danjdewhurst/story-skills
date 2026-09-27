@@ -187,6 +187,22 @@ describe("story context", () => {
     expect(second).not.toContain("SPOILER-LATER-SCENE");
   });
 
+  test("a scene with no POV of its own uses its chapter's", () => {
+    const { root } = contextProject();
+    const text = textOf(contextOf(root, "chapter-01-scene-02"));
+    expect(text).toContain("- POV: Mara Finn (mara-finn)");
+    expect(text).toContain("### Mara Finn (POV)");
+    expect(text).toContain("- chapter-01 scene 1: physical cut hand");
+  });
+
+  test("omitted items name every file they draw on", () => {
+    const { root } = contextProject();
+    const context = contextOf(root, "chapter-02-scene-02", { budget: "1" });
+    const sources = new Map(context.omitted.map((entry) => [entry.id, entry.source]));
+    expect(sources.get("target:chapter-02-scene-02")).toBe(`${path.join("chapters", "chapter-02.md")}, ${path.join("scenes", "chapter-02-scene-02.md")}`);
+    expect(sources.get("state:mara-finn")).toBe(`${path.join("continuity", "state.md")}, ${path.join("scenes", "chapter-01-scene-01.md")}`);
+  });
+
   test("state.md is used only when it describes a point before the target", () => {
     const { root } = contextProject();
     expect(textOf(contextOf(root, "chapter-01"))).not.toContain("As of chapter");
@@ -308,6 +324,11 @@ describe("context helpers", () => {
     const revived = { ...jonas, diedIn: "chapter-01", revivedIn: "chapter-04" };
     expect(characterStateAt(revived, chronology, "chapter-02").status).toBe("deceased (died in chapter-01)");
     expect(characterStateAt({ status: "missing" }, chronology, "chapter-02").status).toBe("missing");
+    // An undated death could be a later one, so it is not shown.
+    expect(characterStateAt({ status: "deceased" }, chronology, "chapter-02").status).toBe("");
+    // Chapter 3 is read after chapter 2 but dated before it: a revival there
+    // is not known yet, and it would change the answer, so nothing is shown.
+    expect(characterStateAt({ status: "alive", diedIn: "chapter-01", revivedIn: "chapter-03" }, chronology, "chapter-02").status).toBe("");
     expect(characterStateAt({}, chronology, "chapter-02").status).toBe("");
     // A death in an unwritten chapter is not known yet.
     expect(characterStateAt({ status: "deceased", diedIn: "chapter-09" }, chronology, "chapter-02").status).toBe("alive");
