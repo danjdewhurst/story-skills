@@ -223,6 +223,14 @@ export function parseArgs(argv, suggestFrom = OPTIONS.map((option) => option.nam
     const key = arg.slice(2, equalIndex === -1 ? undefined : equalIndex);
     const inlineValue = equalIndex === -1 ? undefined : arg.slice(equalIndex + 1);
 
+    // `--help=true` and `--version=false` read like any other boolean flag.
+    if ((key === "help" || key === "version") && inlineValue !== undefined) {
+      if (normalizeBooleanValue(key, inlineValue)) {
+        options[key] = true;
+      }
+      continue;
+    }
+
     if (BOOLEAN_OPTIONS.has(key)) {
       if (inlineValue !== undefined) {
         addOption(options, key, inlineValue);

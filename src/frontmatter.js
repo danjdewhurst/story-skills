@@ -1,15 +1,23 @@
-export const FRONTMATTER_PATTERN = /^(?:\uFEFF)?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?/;
+// The closing delimiter is a line holding only `---` (and trailing spaces), so
+// `----` or `--- # end` never closes the block. The YAML source may be empty.
+export const FRONTMATTER_PATTERN = /^(?:\uFEFF)?---[ \t]*\r?\n(?:([\s\S]*?)\r?\n)?---[ \t]*(?:\r?\n|$)/;
+
+const OPENING_PATTERN = /^(?:\uFEFF)?---[ \t]*\r?\n/;
 
 export function parseFrontmatter(markdown, filePath = "markdown") {
   const match = FRONTMATTER_PATTERN.exec(markdown);
   if (!match) {
+    if (OPENING_PATTERN.test(markdown)) {
+      throw new Error(`${filePath} has unclosed YAML frontmatter: add a line holding only --- after the last field`);
+    }
     throw new Error(`${filePath} is missing YAML frontmatter`);
   }
 
+  const raw = match[1] ?? "";
   return {
-    data: parseYaml(match[1]),
+    data: parseYaml(raw),
     body: markdown.slice(match[0].length),
-    raw: match[1]
+    raw
   };
 }
 
@@ -50,9 +58,15 @@ export function replaceFrontmatter(markdown, data, bodyOverride) {
     throw new Error("Cannot replace missing YAML frontmatter");
   }
 
-  const [whole, opening, raw, closing] = match;
+  const [whole, opening, raw = "", separator, closingLine] = match;
   const eol = opening.endsWith("\r\n") ? "\r\n" : "\n";
-  const { data: original, blocks } = parseYamlBlocks(raw);
+  const closing = `${separator ?? eol}${closingLine}`;
+  // Source lines keep a trailing "\r" when they end in CRLF, so untouched
+  // lines keep their own line ending in a file that mixes LF and CRLF. The
+  // last line's ending belongs to the closing delimiter; carry it over too.
+  const crlfClose = closing.startsWith("\r");
+  const { data: original, blocks } = parseYamlBlocks(raw !== "" && crlfClose ? `${raw}\r` : raw);
+  const generatedEnd = eol === "\r\n" ? "\r" : "";
   const lines = [];
   const written = new Set();
 
@@ -69,34 +83,43 @@ export function replaceFrontmatter(markdown, data, bodyOverride) {
     if (isDeepEqual(original[block.key], value)) {
       lines.push(...block.lines);
     } else {
-      lines.push(...stringifyEntry(block.key, value, block.items));
+      lines.push(...stringifyEntry(block.key, value, block.items, generatedEnd));
     }
   }
 
   for (const [key, value] of Object.entries(data)) {
     if (!written.has(key)) {
-      lines.push(...stringifyEntry(key, value));
+      lines.push(...stringifyEntry(key, value, [], generatedEnd));
     }
   }
 
-  const body = lines.length > 0 ? `${lines.join(eol)}` : "";
   const rest = bodyOverride === undefined ? markdown.slice(whole.length) : String(bodyOverride);
+  if (lines.length === 0) {
+    return `${opening}${separator ?? ""}${closingLine}${rest}`;
+  }
+  let body = lines.join("\n");
+  if (crlfClose && body.endsWith("\r")) {
+    body = body.slice(0, -1);
+  }
   return `${opening}${body}${closing}${rest}`;
 }
 
 // Same shape as FRONTMATTER_PATTERN, split into the opening delimiter line,
-// the YAML source, and the closing delimiter (with its surrounding newlines).
-const FRONTMATTER_PARTS_PATTERN = /^((?:\uFEFF)?---[ \t]*\r?\n)([\s\S]*?)(\r?\n---[ \t]*(?:\r?\n)?)/;
+// the YAML source, the newline before the closing delimiter, and the closing
+// delimiter line.
+const FRONTMATTER_PARTS_PATTERN = /^((?:\uFEFF)?---[ \t]*\r?\n)(?:([\s\S]*?)(\r?\n))?(---[ \t]*(?:\r?\n|$))/;
 
-function stringifyEntry(key, value, originalItems = []) {
+// Newly written lines end with lineEnd ("\r" in a CRLF file) before the "\n"
+// join; reused source lines keep the ending they already have.
+function stringifyEntry(key, value, originalItems = [], lineEnd = "") {
   if (!Array.isArray(value)) {
-    return [`${key}: ${formatScalar(value)}`];
+    return [`${key}: ${formatScalar(value)}${lineEnd}`];
   }
   if (value.length === 0) {
-    return [`${key}: []`];
+    return [`${key}: []${lineEnd}`];
   }
 
-  const lines = [`${key}:`];
+  const lines = [`${key}:${lineEnd}`];
   // Original items keyed by value, each key a queue in file order, so every
   // item keeps its original formatting in one pass over long lists.
   const unused = new Map();
@@ -107,17 +130,44 @@ function stringifyEntry(key, value, originalItems = []) {
     }
     unused.get(itemKey).items.push(candidate);
   }
-  for (const item of value) {
+  const reused = new Set();
+  const matches = value.map((item) => {
     const queue = unused.get(valueKey(item));
     const reuse = queue?.items[queue.next];
     if (reuse && isDeepEqual(reuse.value, item)) {
-      lines.push(...reuse.lines);
       queue.next += 1;
-    } else {
-      lines.push(...stringifyItem(key, item));
+      reused.add(reuse);
+      return reuse;
     }
-  }
+    return null;
+  });
+  value.forEach((item, index) => {
+    if (matches[index]) {
+      lines.push(...matches[index].lines);
+      return;
+    }
+    // A changed mapping item (a rename touched one of its keys) keeps the
+    // original text of every key whose value did not change, so `code: 0451`
+    // is not rewritten as 451.
+    const original = isPlainObject(item) ? originalItems.find((candidate) => !reused.has(candidate)
+      && isPlainObject(candidate.value) && sameKeys(candidate.value, item) && candidate.lines.length === Object.keys(item).length) : undefined;
+    const fresh = stringifyItem(key, item).map((line) => `${line}${lineEnd}`);
+    if (!original) {
+      lines.push(...fresh);
+      return;
+    }
+    reused.add(original);
+    Object.keys(item).forEach((childKey, childIndex) => {
+      lines.push(isDeepEqual(original.value[childKey], item[childKey]) ? original.lines[childIndex] : fresh[childIndex]);
+    });
+  });
   return lines;
+}
+
+function sameKeys(left, right) {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  return leftKeys.length === rightKeys.length && leftKeys.every((childKey, index) => childKey === rightKeys[index]);
 }
 
 function stringifyItem(key, item) {
@@ -165,14 +215,17 @@ function parseYaml(source) {
 // Parses the supported YAML subset and records the source lines behind each
 // top-level entry and list item, so replaceFrontmatter can keep them verbatim.
 function parseYamlBlocks(source) {
-  const lines = source === "" ? [] : source.split(/\r?\n/);
+  // rawLines keep a trailing "\r" from CRLF endings for verbatim rewrites;
+  // lines drop it for parsing.
+  const rawLines = source === "" ? [] : source.split("\n");
+  const lines = rawLines.map((line) => line.replace(/\r$/, ""));
   const data = Object.create(null);
   const blocks = [];
 
   for (let index = 0; index < lines.length;) {
     const line = lines[index];
     if (!line.trim() || line.trimStart().startsWith("#")) {
-      blocks.push({ line });
+      blocks.push({ line: rawLines[index] });
       index += 1;
       continue;
     }
@@ -188,7 +241,7 @@ function parseYamlBlocks(source) {
     }
     if (rest !== "") {
       data[key] = parseScalar(rest);
-      blocks.push({ key, lines: [line], items: [] });
+      blocks.push({ key, lines: [rawLines[index]], items: [] });
       index += 1;
       continue;
     }
@@ -196,7 +249,7 @@ function parseYamlBlocks(source) {
     const parsed = parseArray(lines, index + 1);
     if (parsed.nextIndex === index + 1) {
       data[key] = "";
-      blocks.push({ key, lines: [line], items: [] });
+      blocks.push({ key, lines: [rawLines[index]], items: [] });
       index += 1;
       continue;
     }
@@ -204,10 +257,10 @@ function parseYamlBlocks(source) {
     data[key] = parsed.items;
     blocks.push({
       key,
-      lines: lines.slice(index, parsed.nextIndex),
+      lines: rawLines.slice(index, parsed.nextIndex),
       items: parsed.items.map((item, itemIndex) => ({
         value: toPlainObject(item),
-        lines: lines.slice(parsed.starts[itemIndex], parsed.starts[itemIndex + 1] ?? parsed.nextIndex)
+        lines: rawLines.slice(parsed.starts[itemIndex], parsed.starts[itemIndex + 1] ?? parsed.nextIndex)
       }))
     });
     index = parsed.nextIndex;
@@ -339,11 +392,26 @@ function formatScalar(value) {
   }
 
   const text = String(value);
-  if (text === '' || text === '[]' || /^(true|false|null|-?\d+(\.\d+)?)$/.test(text) || /^\s|\s$/.test(text) || /[:#\n"']/.test(text)) {
+  if (needsQuotes(text)) {
     return JSON.stringify(text);
   }
 
   return text;
+}
+
+// A plain (unquoted) value must read back as the same string in any YAML
+// parser, not only this one: quote values that YAML would read as a boolean,
+// null, or number, or that start with a YAML indicator character. Bare dates
+// stay unquoted: date fields are meant to read as dates.
+function needsQuotes(text) {
+  return text === ""
+    || /^\s|\s$/.test(text)
+    || /[:#"'\u0000-\u001f\u007f]/.test(text)
+    || /^[-?,[\]{}&*!|>%@`]/.test(text)
+    || /^(true|false|null|yes|no|on|off|~)$/i.test(text)
+    || /^[-+]?(\d[\d_]*(\.[\d_]*)?|\.\d[\d_]*)([eE][-+]?\d+)?$/.test(text)
+    || /^[-+]?0[xob][0-9a-f_]+$/i.test(text)
+    || /^[-+]?\.(inf|nan)$/i.test(text);
 }
 
 function isPlainObject(value) {

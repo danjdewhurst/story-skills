@@ -164,6 +164,7 @@ These checks keep the scene records and the chapter frontmatter in step, so the 
 | warning | `<chapter> has POV <id> but its scenes are told by <ids>` | The chapter's `pov` matches none of its scenes' `pov` values. Correct whichever is wrong. Scenes with no `pov` are not counted. |
 | warning | `<scene> lists <id> but <chapter> does not list them in characters or mentions` | Add the character to the parent chapter's `characters` or `mentions`. |
 | warning | `<scene> is set in <location> but <chapter> does not list that location` | Add the location to the chapter's `locations`. |
+| warning | `Chapter numbering starts at <n>, not 1` | Chapters before the first are missing, usually after `story remove chapter` or an unfinished `story move`. Add them, or renumber with `story move chapter <id> --number 1`. |
 | warning | `Chapter numbering skips from <n> to <m>` | Add the missing chapter, or close the gap with `story move chapter <id> --number <n>`. Scaffolding a far-off chapter ahead of time also triggers this. |
 
 ### Promises, questions, and clues
@@ -206,7 +207,7 @@ Entries with `status: abandoned` are skipped entirely. Everything else is checke
 
 #### Unfired setups (the Chekhov warning)
 
-A promise or clue with `status: planted` gets a warning as soon as its recorded `payoff` chapter has been drafted, however soon after the plant that is. With no `payoff` recorded, it gets one once its `planted` chapter is three or more chapters behind the latest drafted chapter. The latest drafted chapter is the highest-numbered chapter whose `status` is not `outline`, so scaffolding outline chapters ahead of time does not trigger the warning.
+A promise or clue with `status: planted` gets a warning as soon as its recorded `payoff` chapter has been drafted, however soon after the plant that is. With no `payoff` recorded, it gets one once three or more chapters follow its `planted` chapter, up to the latest drafted chapter. The gap counts chapter files, not chapter numbers, so chapters 2 and 10 are one chapter apart. The latest drafted chapter is the highest-numbered chapter whose `status` is not `outline`, so scaffolding outline chapters ahead of time does not trigger the warning.
 
 | Situation | Result |
 |-----------|--------|
@@ -258,7 +259,9 @@ object-state:
 |------|----------------|------------------|
 | `character-state` | `character` must be a character id; `location`, when set, must be a location id | anything else, such as `physical` and `emotional` |
 | `knowledge-state` | `character` must exist; `knows` is required; `learned-in`, when set, must be a chapter id; `fact`, when set, must be a kebab-case id, unique per character | none |
-| `object-state` | `artifact` must be an artifact id; `owner` must be a character or faction id; `location` must be a location id; `status` must match the artifact file; `since` (for destroyed or lost artifacts) must be a chapter id | anything else |
+| `object-state` | `artifact` must be an artifact id; `owner` must be a character or faction id; `location` must be a location id; `status` must be an artifact status and match the artifact file; `since`, when set, must be a chapter id | anything else |
+
+Keep one `character-state` entry per character and one `object-state` entry per artifact; a repeat is a warning. `story validate` also warns about a key that looks like a misspelt checked key, such as `learned_in` or `since_chapter` in a state entry or `died_in` in a character file, because a missing `learned-in`, `since`, or `died-in` means "before the story".
 
 | Severity | Message | Fix |
 |----------|---------|-----|
@@ -269,6 +272,7 @@ object-state:
 | error | `... knowledge-state[<i>] fact <id> must be a kebab-case id` | Use lowercase words joined by hyphens. |
 | error | `... knowledge-state[<i>] repeats fact <id> for <character> from knowledge-state[<j>]` | Keep one entry per fact per character. |
 | warning | `... object-state[<i>] status <a> conflicts with <artifact file> status <b>` | Make the artifact file and the state entry agree. |
+| warning | `... character-state[<i>] repeats character <id> from character-state[<j>]` or `object-state[<i>] repeats artifact <id> ...` | Merge the entries into one. |
 | error | `... <list>[<i>] must be a mapping` | Each list item must be a `key: value` block, not a bare string. |
 
 The optional `fact` id lets `story series` match the same piece of knowledge across books; see [Series](series.md). To ask what a character knew at a given point, use [`story knowledge`](#story-knowledge).
@@ -312,7 +316,7 @@ An entry with no `since` means the artifact was destroyed or lost before this st
 
 ### Clock and travel time
 
-Time checks switch on as soon as any scene or chapter has a `date`. Without dates, there are no time findings at all.
+Ordering and travel checks switch on as soon as any scene or chapter has a `date`. Malformed dates and times, and `travel-hours` on a scene with no `date`, are reported either way.
 
 | Field | On | Format |
 |-------|----|--------|
@@ -324,13 +328,12 @@ Named parts of day sort as fixed clock times: `dawn` 05:00, `morning` 07:00, `mi
 
 `story add chapter` and `story add scene` reject a bad `--date`, `--time`, or `--travel-hours` when they create the file. `story validate` rejects a non-numeric `travel-hours` and a `date` or `time` that is not a single value, but it does not check date or time formats, so a malformed date or time you type by hand is only reported by `story continuity`, as the warnings below.
 
-The checker walks dated scenes in reading order: by scene number within a chapter, then from the last dated scene of one chapter to the first dated scene of the next. For each step:
+The checker walks the same units as [`story timeline`](#story-timeline), in reading order: each chapter's scenes by scene number, or the chapter itself when it has no scene records. A chapter's `date` and `time` apply only when it stands in for its scenes this way. It keeps a reference point, the latest moment the story has reached so far, with the latest known time on that day. For each dated unit:
 
-- An earlier date, or the same date with an earlier time, is a **backward timestamp** warning.
-- If the scene has `travel-hours` and both scenes have a time, the hours between them must be at least `travel-hours`, or it is an error.
-- A step with a missing time on the same date is not compared.
-
-Chapter dates are checked separately: a higher-numbered chapter dated earlier than a lower-numbered one is a warning. A chapter's `date` does not apply to its scenes.
+- An earlier date than the reference, or the same date with an earlier time, is a **backward timestamp** warning. A unit that runs backward (a flashback, or a misdated unit) does not become the reference, so the units after it are still checked against the main line.
+- If the reference itself was out of place (a flash-forward prologue that the following units all fall before), the first unit after it is reported and the story continues from there, so one outlier gives one warning.
+- An untimed unit on the reference's day could happen at any time that day: it is never backward against that day, and the reference keeps its known time.
+- If the scene has `travel-hours` and both it and the reference have a time, the hours between them must be at least `travel-hours`, or it is an error.
 
 In the same copy, the scenes carry these dates. Chapter 3's scene is set the night before chapter 2's, and chapter 4's scene asserts a 30-hour journey from the scene before it:
 
@@ -341,10 +344,10 @@ In the same copy, the scenes carry these dates. Chapter 3's scene is set the nig
 | `chapter-03-scene-01` | `1924-10-20` | `"22:00"` | `flashback-to: the night of the fire` |
 | `chapter-04-scene-01` | `1924-10-21` | `"23:30"` | `travel-hours: 30` |
 
-The chapter 2 to chapter 3 step runs backward, so it gets a warning and no travel check. Chapter 4 is then measured from chapter 3's scene, 25.5 hours earlier. The clock findings from that run (alongside the custody errors above) are:
+Chapter 3's scene runs backward, so it gets a warning, no travel check, and does not become the reference. Chapter 4 is then measured from chapter 2's scene (`morning`, read as 07:00), 16.5 hours earlier. The clock findings from that run (alongside the custody errors above) are:
 
 ```text
-error: scenes/chapter-04-scene-01.md allows only 25.5h for travel of 30h
+error: scenes/chapter-04-scene-01.md allows only 16.5h for travel of 30h
 warning: scenes/chapter-03-scene-01.md timestamp runs backward
 ```
 
@@ -352,7 +355,8 @@ warning: scenes/chapter-03-scene-01.md timestamp runs backward
 |----------|---------|-----|
 | warning | `<scene> timestamp runs backward` | Correct the date or time. If the scene is a deliberate flashback, add an [exemption](#exemptions) for it. |
 | error | `<scene> allows only <x>h for travel of <y>h` | Move the scene later, shorten the journey, or lower `travel-hours`. |
-| warning | `Chapter <n> date <date> is earlier than Chapter <m> date <date>` | Correct the chapter date, or exempt a flashback chapter. |
+| warning | `Chapter <n> date <date> is earlier than Chapter <m> date <date>` | A chapter with no scene records runs backward. The dates include the times when both fall on the same day, and the reference may be a scene file instead of a chapter. Correct the chapter date, or exempt a flashback chapter. |
+| warning | `<scene> has travel-hours but no date, so the clock check skips it` | Add a `date` (and `time`) so the journey can be checked. |
 | warning | `<scene> has malformed date "<value>"`, `has malformed time "<value>"`, `has negative travel-hours <n>` | Use `YYYY-MM-DD`, `HH:MM` or a named part of day, and a number of hours that is zero or more. A scene with a malformed date is left out of the clock checks. |
 | warning | `Chapter <n> has malformed date "<value>"` or `malformed time "<value>"` | As above. |
 
@@ -376,9 +380,11 @@ routes:
 | `hours` | The fastest journey, as a positive number. `story validate` rejects zero, negative, and quoted values. |
 | `mode` | Optional free text, such as `dive skiff` or `cart`. `story diagram locations` prints it on the edge. |
 
+A location that lists the same destination twice uses only the fastest route; `story validate` warns about the repeat. `story diagram locations` draws exactly the routes the checker uses.
+
 A route is two-way unless the destination records its own route back, in which case each direction uses its own hours (a river that is quicker downstream, for example). The checker finds the fastest path through any number of places, so a harbour-to-mill route and a mill-to-keep route together give a harbour-to-keep time.
 
-Once any location has a valid route, `story continuity` follows every character through the dated scene records. A character is sighted at a scene's `location` when they are its `pov` or are listed in its `characters`; `mentions` do not count. For each sighting, the checker looks back at every earlier sighting of the same character at a different connected place, and reports an error if even the fastest route could not cover the distance in the time between them. Each scene is reported at most once per character.
+Once any location has a valid route, `story continuity` follows every character through the dated scene records. A character is sighted at a scene's `location` when they are its `pov` (or, for a scene with no `pov`, its chapter's `pov`, as `story timeline` shows it) or are listed in its `characters`; `mentions` do not count. For each sighting, the checker looks back at every earlier sighting of the same character at a different connected place, and reports an error if even the fastest route could not cover the distance in the time between them. Each scene is reported at most once per character.
 
 Scene times are read generously, so only journeys that are impossible on any reading are reported:
 
@@ -458,7 +464,8 @@ How matching works:
 - A finding is dismissed when its full text contains `pattern` as a plain, case-sensitive substring. There are no wildcards or regular expressions. Paths match whichever separator they were written with, so `continuity\promises\oath.md` in a pattern matches `continuity/promises/oath.md` in a finding, and the reverse, and one exemption log works on Windows, macOS, and Linux.
 - The first matching entry wins, and its `reason` is printed after the dismissed finding.
 - Both errors and warnings can be dismissed. The exit code depends only on the errors that remain.
-- A `pattern` shorter than 4 characters (after trimming whitespace) is ignored, so a pattern like `ch` cannot dismiss everything.
+- The pattern matches as written, including leading or trailing spaces, so `" ann, who died"` does not also dismiss the same finding for `joann`.
+- A `pattern` shorter than 4 characters (after trimming whitespace) is ignored, so a pattern like `ch` cannot dismiss everything. An entry with no `reason` is ignored too.
 
 Copy the pattern from the finding itself, and keep it specific: include the file name and the chapter, so a new finding of the same kind in another file still shows up. `story report`, `story next`, and `story doctor` count continuity findings after exemptions.
 
@@ -505,7 +512,7 @@ story timeline .
 
 `story timeline` is a read-only view. It never adds findings; `story continuity` owns the clock checks. It exits 1 only when a file does not parse. It prints up to four sections.
 
-**Chronology (story order)** lists every dated scene sorted by date and time, then by reading order. An entry with a date but no valid time sorts as midnight. A chapter with no scene files stands in for its scenes and uses the chapter's own `date` and `time`. An entry is marked `told in chapter <n>, after later events` when something that happens after it in story time was read before it. Scenes with `flashback-to` show that note too.
+**Chronology (story order)** lists every dated scene sorted by date and time, then by reading order. An entry with a date but no valid time could happen at any time that day, so it keeps its reading position among that day's timed entries. A chapter with no scene files stands in for its scenes and uses the chapter's own `date` and `time`. A scene whose `chapter` has no chapter file is still listed, placed by the number in its chapter id and noted `no chapter file for <chapter>`. An entry is marked `told in chapter <n>, after later events` when something that happens strictly after it in story time was read before it: a later day, or a later time on the same day when both have a time. Scenes with `flashback-to` show that note too.
 
 **Undated (reading order)** lists scenes and scene-less chapters with no valid date. The section is left out when everything is dated.
 
@@ -677,7 +684,7 @@ To see the same plant-to-reveal flow as a picture, run [`story diagram clues`](#
 story prose .
 ```
 
-`story prose` is an advisory prose lint. It counts; it never scores or rewrites. It reads only chapter prose: the text after `## Chapter Text` (or, failing that, after the outline and its `---` divider), without headings, HTML comments, code between closed `` ``` `` fences (as in word counts), or scene-break rules. A removed comment leaves a space, so the words on either side stay separate: `really<!--x-->quiet` is two words here, though word counts and builds join it into one. Quoted dialogue (straight `"..."`, curly `“...”`, or British `‘...’`, paired the same way as in [`story voices`](#story-voices)) is removed before the filter-word and adverb counts, so a character's own words are not held against the narration. A heading line is dropped on its own, so prose that follows a heading without a blank line still counts.
+`story prose` is an advisory prose lint. It counts; it never scores or rewrites. It reads only chapter prose: the text after `## Chapter Text` (or, failing that, after the outline and its `---` divider), without headings, HTML comments, `` ``` `` fence lines, or scene-break rules; the code between fences counts, as in word counts. A removed comment leaves a space, so the words on either side stay separate: `really<!--x-->quiet` is two words here, though word counts and builds join it into one. Quoted dialogue (straight `"..."`, curly `“...”`, or British `‘...’`, paired the same way as in [`story voices`](#story-voices)) is removed before the filter-word and adverb counts, so a character's own words are not held against the narration. A heading line is dropped on its own, so prose that follows a heading without a blank line still counts.
 
 From [`examples/the-last-ember`](../examples/the-last-ember/), which has a style sheet:
 
@@ -686,7 +693,7 @@ $ story prose examples/the-last-ember
 Prose report: 1 chapter, 993 words
 
 chapters/chapter-01.md: The Ember Wakes (993 words)
-  Sentences: 135, average 7.4 words, longest 28, spread 6.3
+  Sentences: 134, average 7.4 words, longest 28, spread 6.3
   Filter words: 7.0 per 1k narration words (felt 2, knew 2, saw 1)
   -ly adverbs: 9.8 per 1k narration words (barely 1, faintly 1, immediately 1, mechanically 1, sharply 1)
   Dialogue tags: said 4; said-bookisms: none
@@ -717,15 +724,15 @@ warning: characters sera-voss and seren-hale have similar first names (Sera Voss
 
 | Line | Measures | Becomes a warning when |
 |------|----------|------------------------|
-| Sentences | Sentence count, mean length, longest, and spread (standard deviation of sentence length, in words) | 20 or more sentences with a spread under 5: `sentence lengths are uniform ...; vary the rhythm` |
+| Sentences | Sentence count, mean length, longest, and spread (standard deviation of sentence length, in words). Titles and initials (`Mr.`, `Dr.`, `J. R.`, `U.S.`) and stammers (`I… I`) do not end a sentence | 20 or more sentences with a spread under 5: `sentence lengths are uniform ...; vary the rhythm` |
 | Filter words | `felt`, `saw`, `heard`, `noticed`, `realized`, `realised`, `wondered`, `seemed`, `watched`, `knew`, `decided`, `thought`, `sensed` in narration, per 1,000 narration words | Over 10 per 1,000, once the chapter has at least 300 narration words |
-| -ly adverbs | Words over four letters ending in `-ly`, minus a built-in list of non-adverbs (`family`, `early`, `only`, ...) and character name parts, per 1,000 narration words | Over 12 per 1,000, once the chapter has at least 300 narration words |
-| Dialogue tags | The first of `said`, `asked`, `says`, `asks`, or a said-bookism within three words after a closing quote, including a British `’` that closes a single-quoted line | 3 or more said-bookisms in a chapter |
-| Echoes | Words of five or more letters repeated within 30 words, excluding common words, character names, and numbers | Never; the counts are for rereading |
+| -ly adverbs | Words over four letters ending in `-ly`, minus a built-in list of non-adverbs (`family`, `early`, `only`, ...) and the words of every name and alias in the bible (characters, locations, factions, artifacts, systems, glossary terms), also in the possessive, per 1,000 narration words | Over 12 per 1,000, once the chapter has at least 300 narration words |
+| Dialogue tags | The first of `said`, `asked`, `says`, `asks`, or a said-bookism within three words after a closing quote, including a single quote that closes a single-quoted line. A quote ending in a full stop is followed by an action beat, not a tag (`"We leave at dawn." She smiled.`), and after `?` or `!` a capitalised word starts a beat unless it is a name before a plain tag (`"Now?" Mara asked.`) | 3 or more said-bookisms in a chapter |
+| Echoes | Words of five or more letters repeated within 30 words, excluding common words, names from the bible (also possessive), and numbers | Never; the counts are for rereading |
 | Watch words | Each `watch-words` entry from the style sheet | Never; the counts are for rereading |
 | Spelling | Uses of each `avoid` spelling from the style sheet or the chosen dialect | Always, one warning per spelling per chapter |
 | Repeated 4-word phrases | The ten most frequent four-word phrases used three or more times across the manuscript, ignoring phrases made only of common words | Never |
-| Similar character names | First names of three or more letters that are identical, share their first three letters, or are one edit apart (two edits when both names have five or more letters) | Always: `characters <a> and <b> have similar first names` |
+| Similar character names | First names (the first word that is not a title, so `Captain Mara Dole` is Mara) of three or more letters that are identical, share their first three letters, or are one edit apart (two edits when both names have five or more letters) | Always: `characters <a> and <b> have similar first names` |
 
 The said-bookism list includes tags such as `barked`, `growled`, `hissed`, `laughed`, `smiled`, `snapped`, and `sighed`. `whispered`, `muttered`, and `shouted` are left out on purpose, because they describe volume, which `said` cannot.
 
@@ -758,7 +765,7 @@ allow-words:
 | `watch-words` | Counted in every chapter, as a reminder of your own tics. |
 | `allow-words` | Silences a word as a filter word, said-bookism, adverb, or echo. Naming either spelling of a built-in dialect pair turns that pair off. |
 
-Matches are case-insensitive whole words, so `grey-haired` still counts as a use of `grey`. `story validate` checks the style sheet's shape: `type: style-sheet`, a known `dialect`, and a non-empty, different `use` and `avoid` in each `preferred` entry.
+Matches are case-insensitive whole words, so `grey-haired` still counts as a use of `grey`, and a straight apostrophe in the style sheet also matches a curly one in the manuscript (`don't` counts `don’t`). A capitalised word that is part of a name in the bible (`Dorian Gray`, `Center Point`) is not counted as an avoided spelling, and a `preferred` entry whose `use` and `avoid` are the same word is skipped. `story validate` checks the style sheet's shape: `type: style-sheet`, a known `dialect`, and a non-empty, different `use` and `avoid` in each `preferred` entry.
 
 ### Acting on the report
 
@@ -774,12 +781,12 @@ story voices .
 
 ### How lines are attributed
 
-It never guesses who is speaking. A paragraph's quoted lines (straight `"..."`, curly `“...”`, or British `‘...’`) go to a character only when the narration around them says who spoke:
+It never guesses who is speaking. A paragraph's quoted lines (straight `"..."` or `'...'`, curly `“...”`, British `‘...’`, or a paragraph that opens with a dash, `— Line, said Cy.`) go to a character only when the narration around them says who spoke:
 
 1. A speech tag: the character's name next to a speech verb such as `said`, `asked`, `replied`, `whispered`, `muttered`, `called`, `snapped`, or `went on`. A name before the verb wins over one after it, so in `"...," Sera told Kael` the line is Sera's, and `said Kael` gives it to Kael.
 2. Failing that, an action beat: narration that names exactly one character (`Kael shouldered his pack. "For the record..."`).
 
-Anything else is counted as unattributed. A character is matched by their full `name`, their given name (the first word that is not a title, so `Lord Maren` also matches `Maren`), and their `aliases`, case-sensitively. Pronoun tags (`she said`, `said he`, with `he`, `she`, `they`, `I`, or `we`) are never attributed, and a paragraph with one is left unattributed rather than credited to a character it merely names (`'It's nothing,' she said, holding it the way Tam used to`), so in close third person the POV character is often under-counted. A pronoun and speech verb count as a tag only right after a closing quote or right before an opening one (within about 40 characters); elsewhere in the paragraph they are narration, so `Mara set the ledger down. She said nothing more, and then: "We should go."` is still Mara's action beat. Characters with `status: cut` are ignored.
+Anything else is counted as unattributed. A character is matched by their full `name`, their given name (the first word that is not a title, so `Lord Maren` also matches `Maren`), and their `aliases`, case-sensitively. Pronoun tags (`she said`, `said he`, with `he`, `she`, `they`, `I`, or `we`) are never attributed, and a paragraph with one is left unattributed rather than credited to a character it merely names (`'It's nothing,' she said, holding it the way Tam used to`), so in close third person the POV character is often under-counted. A pronoun and speech verb count as a tag only right after a closing quote or right before an opening one (within about 40 characters); elsewhere in the paragraph they are narration, so `Mara set the ledger down. She said nothing more, and then: "We should go."` is still Mara's action beat. Characters with `status: cut` are ignored. Speech that runs over several paragraphs (an open quote at the paragraph end, reopened at the next paragraph start) goes to the speaker of the paragraph that attributes it, or counts as unattributed. Code between closed fences is ignored.
 
 ### What it prints
 
@@ -787,10 +794,10 @@ From [`examples/the-last-ember`](../examples/the-last-ember/):
 
 ```text
 $ story voices examples/the-last-ember
-Voices: 1 speaking characters, 35 unattributed lines
+Voices: 1 speaking character, 35 unattributed lines
 
 kael-voss: 9 lines, 76 words
-  Sentence length 5.1, contractions 2.6 per 100 words, questions 7%, exclamations 0%
+  Sentence length 5.1, contractions 6.6 per 100 words, questions 7%, exclamations 0%
   Signature words: jumpy, good, looking, sera, soldiers
 Voice check complete: 0 errors, 0 warnings, 0 dismissed
 ```
@@ -799,7 +806,7 @@ Sera speaks most of the chapter's dialogue, but her lines are tagged only with p
 
 - **Lines and words** of attributed dialogue.
 - **Sentence length**: mean words per spoken sentence.
-- **Contractions** per 100 words spoken (`don't`, `we're`, `I'd`).
+- **Contractions** per 100 words spoken (`don't`, `we're`, `I'd`, and `'s` after words where it cannot be a possessive: `it's`, `that's`, `let's`, `he's`, `where's`, ...).
 - **Questions** and **exclamations**: the share of spoken sentences ending in `?` or `!`.
 - **Signature words**: up to five words of four or more letters that the character says at least twice and more than twice as often, per word spoken, as everyone else combined. Common words are left out. `none yet` means nothing stands out.
 
@@ -825,7 +832,7 @@ $ story voices .
 Voices: 2 speaking characters, 29 unattributed lines
 
 kael-voss: 9 lines, 76 words
-  Sentence length 5.1, contractions 2.6 per 100 words, questions 7%, exclamations 0%
+  Sentence length 5.1, contractions 6.6 per 100 words, questions 7%, exclamations 0%
   Signature words: jumpy, good, looking, sera, soldiers
 
 sera-voss: 6 lines, 28 words
@@ -840,7 +847,7 @@ warning: kael-voss does not say "aye" from their voice-words list in 9 attribute
 |---------|--------------|-----|
 | `<id> says "<phrase>", which is in their voice-avoid list (<chapters>)` | Any attributed line contains the phrase. The chapters that use it are listed. | Rewrite the line, or remove the phrase from `voice-avoid` if the character has changed. |
 | `<id> does not say "<phrase>" from their voice-words list in <n> attributed lines of dialogue` | The character has five or more attributed lines and none uses the phrase. | Work the phrase in where it fits, or drop it from `voice-words`. |
-| `<a> and <b> may sound alike: similar sentence length, contractions, questions, and exclamations` | Both have five or more lines, and all four measures are close: sentence length within 1.5 words, contractions within 1.5 per 100 words, and question and exclamation shares each within 10 points. | Separate them on more than one axis: sentence length, contractions, vocabulary, what they ask about. Here Kael and Sera are not flagged, because their contraction rates differ by 2.6. |
+| `<a> and <b> may sound alike: similar sentence length, contractions, questions, and exclamations` | Both have five or more lines, and all four measures are close: sentence length within 1.5 words, contractions within 1.5 per 100 words, and question and exclamation shares each within 10 points (each difference strictly less than its limit). | Separate them on more than one axis: sentence length, contractions, vocabulary, what they ask about. Here Kael and Sera are not flagged, because their contraction rates differ by 6.6. |
 
 A low line count may mean few named tags rather than few lines. When a result matters, name the tags in a sample chapter and rerun.
 
@@ -903,16 +910,16 @@ flowchart LR
   ilya_venn["Councillor Ilya Venn"]
   mara_quill["Mara Quill"]
   theo_quill["Theo Quill"]
-  ilya_venn -.-|adversary| mara_quill
-  ilya_venn -.-|former-supervisor| theo_quill
-  mara_quill ===|sibling| theo_quill
+  ilya_venn -.-|"adversary"| mara_quill
+  ilya_venn -.-|"former-supervisor"| theo_quill
+  mara_quill ===|"sibling"| theo_quill
   classDef deceased stroke-dasharray: 4 4,color:#888
   class theo_quill deceased
 $ story diagram locations --path examples/harbor-of-second-light
 flowchart LR
   bellwether_reef["Bellwether Reef<br/>Western Shoals"]
   port_kestrel["Port Kestrel<br/>Western Shoals"]
-  port_kestrel ---|0.5h dive skiff| bellwether_reef
+  port_kestrel ---|"0.5h dive skiff"| bellwether_reef
 ```
 
 And the clue flow of [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/), matching the [`story clues`](#story-clues) grid:
@@ -927,9 +934,9 @@ flowchart LR
   chapter_01 ~~~ chapter_02
   chapter_02 ~~~ chapter_03
   chapter_03 ~~~ chapter_04
-  chapter_01 -->|Edran's Margin Notes| chapter_04
-  chapter_03 -->|The Burned Page| chapter_04
-  chapter_02 -.->|The Constable's Silence (red herring)| unrevealed(("not yet revealed"))
+  chapter_01 -->|"Edran's Margin Notes"| chapter_04
+  chapter_03 -->|"The Burned Page"| chapter_04
+  chapter_02 -.->|"The Constable's Silence (red herring)"| unrevealed(("not yet revealed"))
   classDef open stroke-dasharray: 4 4
   class unrevealed open
 ```
@@ -978,10 +985,10 @@ Chapter targets:
 Progress checked: 0 errors, 0 warnings, 0 dismissed
 ```
 
-- **Deadline** shows the words a day needed to finish on time, or `passed <n> days ago`. Without `target-words`, it shows only the days left.
+- **Deadline** shows the words a day needed to finish on time, `(today): <n> words needed` on the deadline day, or `passed <n> days ago`. Without `target-words`, it shows only the days left.
 - **Sessions** shows the change in words since the last logged session.
 - **Pace** is the words gained per calendar day across the last seven logged sessions. It needs at least two sessions on different days.
-- **Projected finish** extends that pace from today to the target. It is omitted when the pace is zero or negative, or when the target is met.
+- **Projected finish** extends that pace from today to the target. It is omitted when the pace rounds to zero or is negative, when the finish would be more than 100 years away, or when the target is met.
 - **Chapter targets** lists only chapters that set `target-words`.
 
 Without `target-words`, the first line reads `Progress: <n> words (no target-words in story.md)`. Without sessions, the sessions line reads `Sessions: none logged (run story progress --log after a writing session)`. The unmodified example shows both:
@@ -1051,7 +1058,7 @@ How to read it:
 
 - Chapters are matched by id (`chapter-04`), not by title or content. A chapter renumbered into a free slot shows as one removed and one added; two chapters that swap numbers both show as changed.
 - **% of paragraphs unchanged** is the share of the current chapter's paragraphs that appear word for word in the earlier version, ignoring whitespace. A chapter with 0% has had every paragraph touched, even if only lightly.
-- A chapter is `unchanged` only when every paragraph matches and the paragraph count is the same.
+- A chapter is `unchanged` only when its paragraphs are the same and in the same order. Scene-break lines are not counted as paragraphs.
 
 The [`revision-continuity`](../skills/revision-continuity/SKILL.md) skill takes a snapshot before any multi-chapter pass and runs `story compare` afterwards; see [Writing workflows](writing-workflows.md#revision-passes).
 
@@ -1250,12 +1257,13 @@ All three commands build the same action list. It is sorted by priority, P0 firs
 | P0 | Fix validation errors | `story validate` has errors |
 | P0 | Fix broken references | `story links` has errors |
 | P0 | Fix continuity contradictions | `story continuity` has errors after exemptions |
+| P1 | Review validation warnings | `story validate` has warnings other than stale word counts and missing scene records (which have their own actions below), such as open research a final chapter relies on or an empty matter page |
 | P1 | Review continuity warnings | `story continuity` has warnings after exemptions |
 | P1 | Refresh word counts | A chapter's `word-count` differs from its prose |
 | P1 | Add scene records | A chapter has no scene files in `scenes/` |
-| P1 | Reconcile discovered chapters | A chapter has `mode: discovered` and no `## Chapter Notes (post-hoc)` heading. The detail reads `Run the discovery-drafting reconcile loop and add ## Chapter Notes (post-hoc) for <ids>.` |
+| P1 | Reconcile discovered chapters | A chapter has `mode: discovered` (or, in a `draft-mode: discovered` project, no `mode` and some prose) and no `## Chapter Notes (post-hoc)` heading above `## Chapter Text`. The detail reads `Run the discovery-drafting reconcile loop and add ## Chapter Notes (post-hoc) for <ids>.` |
 | P1 | Plan revision passes | `story.md` has `status: revising` and no `revision-passes` |
-| P1 | Revision pass: `<name>` | `story.md` has `status: revising` and a pass that is not done |
+| P1 | Revision pass: `<name>` | `story.md` has `status: revising` and a pass that is not done. The check commands name the project path, like the rest of the list |
 | P2 | Track open questions | A question has `status: open` |
 | P2 | Review promises and payoffs | A promise is `planned` or `planted` |
 | P2 | Review open clues | A clue is `planned` or `planted` |

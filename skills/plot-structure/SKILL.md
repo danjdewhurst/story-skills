@@ -101,7 +101,7 @@ When pacing or the outline calls for reordering, move the files with the CLI rat
 
 - Move a scene to another chapter with `story move scene chapter-{NN}-scene-{MM} --chapter chapter-{NN} --path .` (next free number; add `--scene {M}` to place it), or reorder within its chapter with `--scene {M}` alone
 - Renumber a chapter with `story move chapter chapter-{NN} --number {N} --path .`. A taken number is refused, so to open a gap move the later chapters up one, highest first, then `story add chapter "{Title}" --number {N}`
-- `move` rewrites ids, links, and bare ids in `plot/timeline.md` and arc files, but not `Ch {N}` cells, prose, or outline beats: update those by hand, then run `story wordcount . --write`, `story validate .`, `story links .`, and `story pacing .`
+- `move` rewrites ids, links, and bare ids in `plot/timeline.md`, arc files, and the `plot/_index.md` Theme Tracking table, but not `Ch {N}` cells, prose, or outline beats: update those by hand, then run `story wordcount . --write`, `story validate .`, `story links .`, and `story pacing .`
 
 For splits, merges, and the full checklist, follow the `revision-continuity` skill's Structural Edits section.
 

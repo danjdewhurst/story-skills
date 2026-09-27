@@ -386,7 +386,8 @@ time: "10:00"
 `);
 
     const result = checkContinuity(scanProject(root));
-    expect(result.warnings).toContain("Chapter 3 date 2026-01-01 is earlier than Chapter 1 date 2026-01-10");
+    // Chapter 1 has a scene, so the scene stands for it in the clock.
+    expect(result.warnings).toContain("Chapter 3 date 2026-01-01 is earlier than scenes/chapter-01-scene-01.md date 2026-01-10");
   });
 
   test("checks chapter dates when no scene has a date", () => {
@@ -486,12 +487,15 @@ date: 0042-02-30
 
   test("outline-only chapters do not advance the latest chapter", () => {
     const root = baseProject(1);
-    writeMarkdown(path.join(root, "chapters", "chapter-04.md"), `
-title: Later
-number: 4
+    // The Chekhov gap counts chapter positions, so chapters 2-4 all exist.
+    for (const number of [2, 3, 4]) {
+      writeMarkdown(path.join(root, "chapters", `chapter-0${number}.md`), `
+title: Later ${number}
+number: ${number}
 status: outline
 word-count: 0
 `, "## Chapter Text\n");
+    }
     writeMarkdown(path.join(root, "continuity", "promises", "early-gun.md"), `
 title: Early Gun
 status: planted

@@ -18,6 +18,25 @@ export const DEFAULT_PASSES = [
   { pass: "proof", focus: "Typos and layout in the built book", checks: ["story build --format print", "story build --format html"] }
 ];
 
+// Check commands that take the project only as --path: their first argument
+// is something else (a diagram kind, a character id).
+const PATH_FLAG_CHECKS = new Set(["diagram", "knowledge"]);
+
+// A pass's check commands, pointed at the project `where` (a shell word) so
+// each one can be run as printed from the folder `story next` ran in.
+export function passChecks(entry, where = ".") {
+  return entry.checks.map((check) => {
+    if (where === ".") {
+      return check;
+    }
+    const [story, name, ...rest] = check.split(" ");
+    if (PATH_FLAG_CHECKS.has(name)) {
+      return `${check} --path ${where}`;
+    }
+    return [story, name, where, ...rest].join(" ");
+  });
+}
+
 const DEFAULTS = new Map(DEFAULT_PASSES.map((entry) => [entry.pass, entry]));
 
 export function readPasses(storyData) {

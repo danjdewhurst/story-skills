@@ -92,7 +92,11 @@ describe("init", () => {
   test("series reports duplicate book-number values", () => {
     const cwd = makeTempDir();
     createStoryProject({ cwd, title: "Book One", series: "saga", bookNumber: 1 });
-    createStoryProject({ cwd, title: "Book Two", follows: ["book-one"], bookNumber: 1 });
+    // init refuses a colliding --book-number, so the collision is hand-made.
+    expect(() => createStoryProject({ cwd, title: "Book Two", follows: ["book-one"], bookNumber: 1 })).toThrow("Book number 1 is already used by book-one");
+    createStoryProject({ cwd, title: "Book Two", follows: ["book-one"], bookNumber: 2 });
+    const twoStory = path.join(cwd, "book-two", "story.md");
+    fs.writeFileSync(twoStory, fs.readFileSync(twoStory, "utf8").replace("book-number: 2", "book-number: 1"), "utf8");
     const report = buildSeries(path.join(cwd, "book-one"), scanProject);
     expect(report.ok).toBe(false);
     expect(report.errors.join("\n")).toContain("share book-number 1");

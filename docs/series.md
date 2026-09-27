@@ -29,7 +29,7 @@ Each book is still an ordinary Story Skills project, with its own `story.md`, ch
 
 Chronology and publication order are separate on purpose. `follows` and `precedes` describe when the story happens; `book-number` describes the order readers get the books. A prequel written after the first book has `book-number: 2` and `precedes: [../book-one]`.
 
-Link paths are relative to the book's root folder. `story init` writes them with forward slashes, so `story.md` stays portable across operating systems. Keep the books side by side in one parent folder so the paths are short:
+Link paths are relative to the book's root folder. `story init` writes them with forward slashes, so `story.md` stays portable across operating systems. Keep the books side by side in one parent folder. `story series` only follows links between sibling book folders, and `story init` refuses a link to a book in another folder or a new book inside an existing one:
 
 ```text
 the-ember-cycle/
@@ -103,16 +103,18 @@ A companion book is set alongside another with no chronological relationship. Cr
 
 For each `--follows` or `--precedes` path, `init`:
 
-1. Checks that the path contains a `story.md`. If it does not, `init` stops before creating any files.
+1. Checks that the path contains a readable `story.md` in the same parent folder as the new book, that no book is named by both `--follows` and `--precedes`, and that the linked books and `--series` agree on one series id. If any check fails, `init` stops before creating any files or touching the linked books. A book named twice in one field (`--follows b1 --follows ./b1`) is linked once. Before creating anything, `init` also confirms each linked `story.md` it must update is writable.
 2. Writes the link into the new book's `story.md`, relative to the new book's root.
 3. Adds the backlink to the linked book's `story.md` (`precedes` for a `--follows` link, `follows` for a `--precedes` link) and prints `Updated series links in <path>/story.md`. If the linked book already lists the new book and has the series id, nothing is written and no line is printed. Only frontmatter changes; the linked book's comments and body text are left as they were. A link written as a single string by hand is kept and converted to a list. When the new book has a `series` id and the linked book has none, `init` writes that id into the linked book's `story.md` as well, even if the backlink was already there.
 4. Inherits `series` from the first linked book that has one, unless you pass `--series`.
 5. Inherits `genre`, `sub-genre`, `pov`, and `tense` from the first linked book, unless you pass `--genre`, `--sub-genre`, `--pov`, or `--tense`. `setting-era`, `themes`, and `form` are not inherited; pass `--form` if the new book has one.
-6. Sets `book-number` to one more than the highest `book-number` anywhere in the linked series, not just the directly linked books, so publication numbers never collide.
+6. Sets `book-number` to one more than the highest `book-number` anywhere in the linked series, not just the directly linked books, so publication numbers never collide. If part of the series cannot be read (a `story.md` that fails to parse, a broken link), `init` refuses rather than guess; fix the book or pass `--book-number`. An explicit `--book-number` already used in the series is refused.
 
 If no book in the series has a `book-number`, the new book is left unnumbered. A book created by a plain `story init` has no `book-number`, so when you link your first sequel to it, pass `--book-number 2` and add `book-number: 1` to the first book by hand. If the first book has no `series` yet, pass `--series <id>`: `init` adds the same `series` to the first book.
 
-`init --force` on an existing folder keeps the existing `story.md`. It only adds backlinks when the run actually wrote the new `story.md`, so a rerun never adds a backlink the new book does not mirror.
+`init` refuses to create a project inside another story project (a folder above the new one with a `story.md`), including `story init --follows .` run from inside a book: run it from the folder that contains the book instead. `rename`, `remove`, and `move` never rewrite files in a subfolder that has its own `story.md`.
+
+`init --force` on an existing folder keeps the existing `story.md`. It adds a backlink only when the new book's `story.md` has the matching forward link, so a rerun never adds a backlink the new book does not mirror, and a rerun after a failed backlink write finishes the job.
 
 ### Example: a sequel to The Last Ember
 
@@ -157,6 +159,14 @@ precedes:
 |---------|-------|
 | `--follows <path> points at the new story itself` | The link resolves to the folder `init` is about to create. |
 | `--precedes <path> is not a story project: missing story.md` | The linked folder has no `story.md`. |
+| `--follows <path>: <path>/story.md: <parse error>` | The linked book's `story.md` cannot be parsed. |
+| `--follows <path> is not in the same parent folder as the new book; ...` | The linked book is not a sibling of the new book. |
+| `--follows <a> and --precedes <b> name the same book; ...` | One book is linked as both earlier and later. |
+| `--series <id> conflicts with --follows <path>, which belongs to series <id>` | `--series` differs from a linked book's series. |
+| `Linked books belong to different series: <ids>` | The linked books set different series ids. |
+| `Book number <n> is already used by <path>; ...` | `--book-number` collides with a book in the series. |
+| `Cannot compute the next book-number: part of the series linked from ... could not be read (...)` | A book in the series cannot be read; fix it or pass `--book-number`. |
+| `Cannot create a story project inside another story project (<path>); ...` | A folder above the new book has a `story.md`. |
 | `Series id must be kebab-case: <id>` | The `--series` value, or the inherited one, is not a kebab-case id. |
 | `Book number must be a positive integer` | `--book-number` is zero, negative, or not a whole number. |
 
@@ -196,7 +206,7 @@ Each book line shows its title, its `book-number` (or `unnumbered`), its `status
 
 ### Ordering
 
-`follows` and `precedes` form a directed graph, and the books are listed in an order that respects every edge. When two books have no chronological constraint between them, the lower `book-number` comes first, unnumbered books come after numbered ones, and remaining ties are broken by title. The order is deterministic.
+`follows` and `precedes` form a directed graph, and the books are listed in an order that respects every edge. At each step, among the books whose earlier books are already listed, the one with the lowest `book-number` goes next; unnumbered books come after numbered ones, and remaining ties are broken by title, then by folder path. A book whose earlier books are not yet listed waits, so a low-numbered book set after a high-numbered one can appear after unrelated books with numbers in between. The order is deterministic and the same whichever book you start from.
 
 If the links contain a cycle, for example two books that each `precede` the other, the command reports an error, prints `Books (unordered):` instead of `Chronological order:`, and skips the canon checks.
 
@@ -266,7 +276,7 @@ The knowledge error reaches back two books: Kael knows `whisper-gate-route` in t
 
 ### Traversal limits
 
-`story series` only follows links that stay inside the parent folder of the book you run it on, which is why sibling folders are the recommended layout. A link that leaves that folder, directly or through a symlink, is reported as an error (`points outside the series directory`) and not followed. A book reached through a symlink and through its real path counts as one book. The book you pass is resolved to its real folder first, so `story series links/second`, where `links/second` links to `second-book`, checks `second-book` against its real siblings. A linked book whose `story.md` is itself a symlink is not read; the check reports `Refusing to read through symlink: <path>` against it.
+`story series` only follows links to sibling folders of the book you run it on, so it finds the same books from whichever book it starts at. A link that leaves the parent folder, directly or through a symlink, is reported as an error (`points outside the series directory`) and not followed; a link to a book nested deeper inside it is reported as `is not a sibling folder in the series directory`. `story links` reports either kind of link as `is not in the same parent folder as this book`. A linked book whose `story.md` fails to parse is reported once and left out of the chronology; its links are not followed. A book reached through a symlink and through its real path counts as one book. The book you pass is resolved to its real folder first, so `story series links/second`, where `links/second` links to `second-book`, checks `second-book` against its real siblings. A linked book whose `story.md` is itself a symlink is not read; the check reports `Refusing to read through symlink: <path>` against it.
 
 The traversal also stops at 100 books and at a link depth of 10 from the starting book, reporting an error when either limit is hit.
 
@@ -284,7 +294,8 @@ The checker compares ids, statuses, names, and fact ids. It cannot judge knowled
 | `story.md follows <path>: <parse error>` | The linked book's `story.md` cannot be parsed. |
 | `story.md follows <path> points at this book` | The link resolves to the book itself. |
 | `story.md follows <path> is missing backlink: add <path> to its precedes` | The linked book does not link back. |
-| `story.md follows <path> belongs to series <id>, not <id>` | Both books set `series` and the ids differ. |
+| `story.md follows <path> belongs to series <id>, not <id>` | Both books set `series` and the ids differ. A blank `series: ""` counts as no id. |
+| `story.md follows <path> is not in the same parent folder as this book; ...` | The linked book is not a sibling folder, so `story series` will not follow the link. |
 
 The same messages appear with `precedes` for links in that field. With the backlink removed from The Last Ember, `story links` in the sequel reports:
 
@@ -319,7 +330,7 @@ See the [CLI reference](cli-reference.md) for every command.
 - **Carry or prune every link.** Relationships, `locations`, `notable-characters`, location `routes`, faction `members`, and artifact `owner` and `location` must point at entities that exist in this book, with backlinks where the field needs one. Carry the linked entity too, or remove the reference. `story links` reports what you missed, for example `characters/lord-maren.md references missing location ashen-citadel`.
 - **Do not copy** chapters, scenes, arcs, questions, promises, clues, or `continuity/state.md`. Rebuild them:
   - Open questions or promises the new book continues become new files in its `continuity/` folders.
-  - Events from the other book become rows in the `## Backstory Events` table of `plot/timeline.md` (sequel), or `## Series Canon` notes (prequel). The Last Ember's timeline records the coup from the prequel this way.
+  - Events from the other book become rows in the `## Backstory Events` table of `plot/timeline.md` (sequel), or `## Series Canon` notes (prequel). The Last Ember's timeline records the coup from the prequel this way. To cite the other book's chapter, link to its file relative to `timeline.md`, such as `[the coup](../../the-fall-of-the-citadel/chapters/chapter-01.md)`: `story links` accepts an existing file in a book this one follows or precedes. Do not write another book's bare chapter id (`chapter-09`) in the table, since `story links` reads bare ids as this book's chapters. `story move` never rewrites ids inside link paths or URLs.
   - `continuity/state.md` starts at `current-chapter: 0` with the carried character and object state. An artifact destroyed or lost in an earlier book keeps `status: destroyed` (or `lost`) with no `since`, which marks it gone before this story: `story continuity` errors on any scene whose `state-changes` use it, and still allows `mentions`.
 
 Record the book's place in the series in a `## Series Notes` section of its `story.md` body: where it sits in the chronology, the time gap to the linked books, and the canon it must not contradict. The prequel example's notes:

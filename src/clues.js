@@ -90,7 +90,10 @@ export function formatClueMatrix(matrix) {
   }
 
   const width = Math.max(...matrix.rows.map((row) => row.id.length + (row.redHerring ? 2 : 0)), 4);
-  const header = matrix.chapters.map((chapter) => String(chapter.number).padStart(3)).join("");
+  // Each column is as wide as the longest chapter number, plus a space, so
+  // chapter 100 does not run into chapter 20.
+  const cellWidth = Math.max(2, ...matrix.chapters.map((chapter) => String(chapter.number).length)) + 1;
+  const header = matrix.chapters.map((chapter) => String(chapter.number).padStart(cellWidth)).join("");
   lines.push("", `${"Clue".padEnd(width)} ${header}`);
   for (const row of matrix.rows) {
     const name = row.redHerring ? `${row.id} ~` : row.id;
@@ -98,7 +101,7 @@ export function formatClueMatrix(matrix) {
     if (row.significanceDelayed) {
       flags.push("delayed");
     }
-    lines.push(`${name.padEnd(width)} ${row.cells.map((value) => value.padStart(3)).join("")}  ${flags.join(", ")}`);
+    lines.push(`${name.padEnd(width)} ${row.cells.map((value) => value.padStart(cellWidth)).join("")}  ${flags.join(", ")}`);
   }
   lines.push("", "P planted, R revealed, x both, ~ red herring");
   return `${lines.join("\n")}\n`;

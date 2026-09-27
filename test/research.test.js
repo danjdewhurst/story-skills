@@ -76,7 +76,7 @@ describe("research notes", () => {
     expect(errors).toContain("research/bad-note.md frontmatter field used-in must contain only non-empty strings");
     expect(warnings).toContain("research/lamp-oil.md is open but chapter-01 relies on it and is final");
     expect(warnings).toContain("research/signal-codes.md is verified but lists no sources");
-    expect(warnings).toContain("research/_index.md is missing registry link ](bad-note.md)");
+    expect(warnings).toContain("research/_index.md does not list research/bad-note.md; run story reindex");
 
     setChapterStatus(root, "draft");
     expect(validateProject(root).warnings.join("\n")).not.toContain("relies on it");

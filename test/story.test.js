@@ -356,7 +356,7 @@ word-count: 10
 
     const validation = validateProject(created.root);
     expect(validation.ok).toBe(true);
-    expect(validation.warnings.some((warning) => warning.includes("registry link"))).toBe(true);
+    expect(validation.warnings.some((warning) => warning.includes("does not list"))).toBe(true);
     expect(validation.warnings.some((warning) => warning.includes("declares 10 words"))).toBe(true);
 
     const links = validateLinks(created.root);
@@ -558,7 +558,7 @@ word-count: 1
 
     const validation = validateProject(created.root);
     expect(validation.ok).toBe(false);
-    expect(validation.errors.join("\n")).toContain(`story.md schema-version must be ${STORY_SCHEMA_VERSION}`);
+    expect(validation.errors.join("\n")).toContain(`story.md uses schema-version 99, newer than this CLI (${STORY_SCHEMA_VERSION}); upgrade story-skills`);
     expect(validation.errors.join("\n")).toContain("story.md frontmatter field genre must be a scalar");
     expect(validation.errors.join("\n")).toContain("story.md frontmatter field themes must be a list");
     expect(validation.errors.join("\n")).toContain("story.md frontmatter field status has unsupported value unknown-stage");
@@ -753,7 +753,7 @@ status: planned
 `, "# Orphan Clue\n");
 
     const validation = validateProject(root);
-    expect(validation.warnings).toContain("continuity/clues/_index.md is missing registry link ](orphan-clue.md)");
+    expect(validation.warnings).toContain("continuity/clues/_index.md does not list continuity/clues/orphan-clue.md; run story reindex");
   });
 
   test("remove scrubs references without rewriting untouched files", () => {
@@ -962,7 +962,7 @@ word-count: 0
     expect(chapterText).toContain("[tess](../characters/tess.md)");
   });
 
-  test("remove clears since and learned-in without dropping the rest of the row", () => {
+  test("remove refuses to clear since and learned-in, which would mean before the story (#163)", () => {
     const cwd = makeTempDir();
     const created = createStoryProject({ cwd, title: "Scrub Since", force: false });
     createEntity(created.root, { kind: "chapter", name: "One", number: 1 });
@@ -982,13 +982,10 @@ object-state:
     since: chapter-01
     location: vault`), "utf8");
 
-    removeEntity(created.root, { kind: "chapter", id: "chapter-01" });
-
-    const next = fs.readFileSync(statePath, "utf8");
-    expect(next).toContain("knows: the vault is open");
-    expect(next).toContain('learned-in: ""');
-    expect(next).toContain("artifact: key");
-    expect(next).toContain('since: ""');
+    const before = fs.readFileSync(statePath, "utf8");
+    expect(() => removeEntity(created.root, { kind: "chapter", id: "chapter-01" })).toThrow("chapter chapter-01 is still named by died-in, since, learned-in in continuity/state.md");
+    expect(fs.readFileSync(statePath, "utf8")).toBe(before);
+    expect(fs.existsSync(path.join(created.root, "chapters", "chapter-01.md"))).toBe(true);
   });
 
   test("rejects enum values and tenses that validate would reject", () => {
@@ -1653,12 +1650,12 @@ members:
       "utf8"
     );
     const arc = createEntity(created.root, { kind: "arc", name: "Lost Arc" });
-    fs.appendFileSync(arc.file, "\nThe trail ends in chapter-99. See [Lost](lost-thing.md).\n", "utf8");
+    fs.appendFileSync(arc.file, "\nThe trail ends in chapter-1, a typo for chapter-01. See [Lost](lost-thing.md).\n", "utf8");
     const links = validateLinks(created.root);
     const output = links.errors.join("\n");
     expect(output).toContain("links to missing file ghost-ship.md");
     expect(output).toContain("links to Bad Name.md which must be kebab-case");
-    expect(output).toContain("references missing chapter chapter-99");
+    expect(output).toContain("references missing chapter chapter-1");
     expect(output).toContain("links to missing file lost-thing.md");
     expect(output).toContain("links to missing file does-not-exist/harbor.md");
     expect(output).toContain("links to missing file notes.md");
@@ -1933,7 +1930,7 @@ status: alive
     expect(fs.readFileSync(path.join(dir, "note.md"), "utf8")).toContain("deep-char.md");
   });
 
-  test("rename refuses to scan past the file count cap", () => {
+  test("rename skips notes past the file count cap instead of refusing (#62)", () => {
     const cwd = makeTempDir();
     const root = createStoryProject({ title: "Many", cwd }).root;
     writeMarkdown(path.join(root, "characters", "many-char.md"), `
@@ -1946,7 +1943,7 @@ status: alive
     for (let i = 0; i < 5001; i++) {
       fs.writeFileSync(path.join(dir, `note-${i}.md`), "# Note\n", "utf8");
     }
-    expect(() => renameEntity(root, { kind: "character", id: "many-char", name: "Many Char Two" })).toThrow("exceeds the 5000 file limit");
+    expect(renameEntity(root, { kind: "character", id: "many-char", name: "Many Char Two" }).id).toBe("many-char-two");
   });
 
   test("scan tolerates size-stat failures during project scan", () => {

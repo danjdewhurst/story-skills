@@ -287,7 +287,7 @@ A failure prints `Coverage is below 100%:` followed by one line per gap, keyed b
 bun run test:examples
 ```
 
-`scripts/check-examples.js` walks every directory under `examples/` that has a `story.md` and runs `validateProject`, `validateLinks`, `seriesReport`, `checkProjectContinuity`, and the JSON schema check against it. Any error or warning fails the check, with one exception: [`examples/the-unraveled-thread`](../examples/the-unraveled-thread) is the showcase for `story continuity` and must produce exactly the findings listed in `EXPECTED_CONTINUITY` at the top of the script, no more and no fewer.
+`scripts/check-examples.js` walks every directory under `examples/` that has a `story.md` and runs `validateProject`, `validateLinks`, `seriesReport`, `checkProjectContinuity`, and the JSON schema check against it. It also runs `story reindex` on a scratch copy and fails if any registry would change, so an example never ships a stale registry. Any error or warning fails the check, with one exception: [`examples/the-unraveled-thread`](../examples/the-unraveled-thread) is the showcase for `story continuity` and must produce exactly the findings listed in `EXPECTED_CONTINUITY` at the top of the script, no more and no fewer.
 
 ```text
 Examples are valid:
@@ -369,10 +369,10 @@ bun run eval:selftest   # run the checker against the known-good drafts
 all eval fixture checks passed
 ```
 
-It warns when a banned phrase appears in the fixture's `input.md` or overlaps a required phrase, and a fixture acknowledges the collisions it means in `expected_overlaps` (see the check format in [`evals/README.md`](../evals/README.md)). The `anti-slop` input is deliberately seeded with the tells its brief asks the model to remove, and several traps have to contain a required name; those are recorded, so only a **new** collision warns:
+It warns when a banned phrase appears in the fixture's `input.md` or sits inside a required phrase (so keeping the canon trips the trap; a banned phrase that merely contains a required name is harmless and not reported), and a fixture acknowledges the collisions it means in `expected_overlaps` (see the check format in [`evals/README.md`](../evals/README.md)). The `anti-slop` input is deliberately seeded with the tells its brief asks the model to remove; those are recorded, so only a **new** collision warns:
 
 ```text
-WARN canon-keeping: banned "the Thursday boat" overlaps required "Thursday" — keeping the canon may trip the trap (acknowledge it in expected_overlaps.with_required if it is deliberate)
+WARN canon-keeping: banned "Thursday" overlaps required "the Thursday boat" — keeping the canon may trip the trap (acknowledge it in expected_overlaps.with_required if it is deliberate)
 all eval fixture checks passed
 ```
 

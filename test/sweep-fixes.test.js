@@ -251,8 +251,8 @@ describe("continuity ledger", () => {
     createEntity(root, { kind: "clue", name: "Locket", planted: "chapter-01", payoff: "chapter-05" });
     createEntity(root, { kind: "promise", name: "Duel", planted: "chapter-04", status: "planned" });
     expect(validateLinks(root).errors).toEqual([]);
-    createEntity(root, { kind: "clue", name: "Ring", planted: "chapter-04", status: "planted" });
-    expect(validateLinks(root).errors).toContain("continuity/clues/ring.md references missing chapter chapter-04");
+    // A planted status needs the chapter written, so add refuses it (#68).
+    expect(() => createEntity(root, { kind: "clue", name: "Ring", planted: "chapter-04", status: "planted" })).toThrow("--planted chapter-04 is not written yet");
   });
 
   test("planned status with a drafted planted chapter warns for clues and promises alike", () => {
@@ -592,7 +592,7 @@ describe("round two", () => {
     createEntity(root, { kind: "chapter", name: "One", number: 1 });
     appendProse(root, "chapters/chapter-01.md", "Type `<!-- x -->` here.\n\nZeta <!-- unterminated");
     const html = fs.readFileSync(buildBook(root, { format: "html" }).outFile, "utf8");
-    expect(html).toContain("`&lt;!-- x --&gt;`");
+    expect(html).toContain("Type &lt;!-- x --&gt; here.");
     expect(validateProject(root).warnings).toContain("chapters/chapter-01.md opens an HTML comment (<!--) that never closes, so the text after it shows in builds and word counts");
   });
 });
@@ -648,7 +648,7 @@ describe("round three", () => {
     const root = newProject();
     createEntity(root, { kind: "chapter", name: "One", number: 1 });
     appendProse(root, "chapters/chapter-01.md", "```\n<!-- literal\n```\n\nKept paragraph here.\n\n```\nend -->\n```");
-    expect(computeWordCounts(root).total).toBe(3);
+    expect(computeWordCounts(root).total).toBe(5);
     expect(validateProject(root).warnings.join("\n")).not.toContain("never closes");
     const started = performance.now();
     appendProse(root, "chapters/chapter-01.md", `${"[a](b ".repeat(20000)}${"<!--".repeat(20000)}`);
@@ -788,7 +788,7 @@ describe("round three", () => {
     const root = newProject();
     createEntity(root, { kind: "chapter", name: "One", number: 1 });
     fs.writeFileSync(path.join(root, "cover.png"), "");
-    fs.truncateSync(path.join(root, "cover.png"), 6 * 1024 * 1024);
+    fs.truncateSync(path.join(root, "cover.png"), 51 * 1024 * 1024);
     fs.writeFileSync(path.join(root, "story.md"), fs.readFileSync(path.join(root, "story.md"), "utf8").replace("---\ntitle:", "---\ncover: cover.png\ntitle:"));
     expect(() => buildBook(root, { format: "epub" })).toThrow("Refusing to read oversized file");
   });
@@ -823,7 +823,7 @@ describe("round four", () => {
     expect(html.match(/class="scene-break"/g)).toHaveLength(2);
     createEntity(root, { kind: "chapter", name: "Two", number: 2 });
     appendProse(root, "chapters/chapter-02.md", "Words outside.\n\n```\nclosed code here\n```");
-    expect(computeWordCounts(root).chapters[1].wordCount).toBe(2);
+    expect(computeWordCounts(root).chapters[1].wordCount).toBe(5);
   });
 
   test("writes keep file permissions and refuse read-only files", () => {
@@ -998,8 +998,8 @@ describe("round five", () => {
     createEntity(root, { kind: "question", name: "Who", introduced: "chapter-02" });
     expect(validateLinks(root).errors).toEqual([]);
     createEntity(root, { kind: "chapter", name: "One", number: 1 });
-    createEntity(root, { kind: "question", name: "Why", introduced: "chapter-01", resolved: "chapter-04" });
-    expect(validateLinks(root).errors).toContain("continuity/questions/why.md references missing chapter chapter-04");
+    // A resolved chapter must exist, so add refuses it (#68).
+    expect(() => createEntity(root, { kind: "question", name: "Why", introduced: "chapter-01", resolved: "chapter-04" })).toThrow("--resolved chapter-04 is not written yet");
   });
 
   test("add scene lists its location and cast on the chapter", () => {
@@ -1149,7 +1149,7 @@ describe("round six", () => {
     createEntity(root, { kind: "chapter", name: "One", number: 1 });
     appendProse(root, "chapters/chapter-01.md", "\u2018It\u2019s nothing,\u2019 she said, holding it the way Tam used to hold shells.");
     const report = invoke(path.dirname(root), ["voices", root]);
-    expect(report.out).toContain("Voices: 0 speaking characters, 1 unattributed lines");
+    expect(report.out).toContain("Voices: 0 speaking characters, 1 unattributed line\n");
   });
 
   test("init --follows gives the earlier book the series id", () => {
@@ -1187,7 +1187,7 @@ describe("round seven", () => {
       "\"The tide.\" Mara pointed. What she said next was lost to the wind.",
       "\"It is nothing,\" she said, and Mara looked away."
     ].join("\n\n"));
-    expect(invoke(path.dirname(root), ["voices", root]).out).toContain("Voices: 1 speaking characters, 1 unattributed lines");
+    expect(invoke(path.dirname(root), ["voices", root]).out).toContain("Voices: 1 speaking character, 1 unattributed line\n");
   });
 
   test("a plain _index.md outside the registries does not block rename", () => {
@@ -1434,7 +1434,7 @@ describe("round eight", () => {
     createEntity(root, { kind: "character", name: "Al Reed" });
     createEntity(root, { kind: "chapter", name: "One", number: 1 });
     appendProse(root, "chapters/chapter-01.md", "\"Hi,\" Al said.");
-    expect(invoke(path.dirname(root), ["voices", root]).out).toContain("al-reed: 1 lines");
+    expect(invoke(path.dirname(root), ["voices", root]).out).toContain("al-reed: 1 line,");
   });
 
   test("a code span on the last line keeps its comment", async () => {

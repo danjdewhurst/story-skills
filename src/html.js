@@ -2,6 +2,7 @@
 // terminal: every paragraph has a stable anchor (ch03-p12) they can cite.
 // The print interior is HTML with CSS paged media, rendered to PDF by a
 // paged-media engine such as Paged.js, WeasyPrint, or Prince.
+import { textDirection } from "./publishing.js";
 
 export const TRIM_SIZES = new Map([
   ["5x8", { width: "5in", height: "8in", wordsPerPage: 230 }],
@@ -15,6 +16,7 @@ export const DEFAULT_TRIM = "5.5x8.5";
 // Each part is { key, kind, title, heading, paragraphs } where paragraphs
 // are pre-rendered inline HTML strings, or null for a scene break.
 export function reviewHtml(book) {
+  const rtl = textDirection(book.language) === "rtl";
   const toc = [];
   const sections = [];
   for (const part of book.parts) {
@@ -39,7 +41,7 @@ export function reviewHtml(book) {
   }
   const byline = book.authors.length === 0 ? "" : `<p class="byline">${escapeHtml(book.authors.join(" and "))}</p>`;
   return `<!DOCTYPE html>
-<html lang="${escapeHtml(book.language)}">
+${htmlRoot(book.language)}
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -65,7 +67,11 @@ p:target { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .scene-break::after { content: "* * *"; color: var(--muted); }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 @media (max-width: 52rem) { .anchor { position: static; display: block; width: auto; text-align: left; line-height: 1.4; opacity: 0.6; } }
-</style>
+${rtl ? `[dir="rtl"] .note { border-left: 0; padding-left: 0; border-right: 3px solid var(--accent); padding-right: 0.75rem; }
+[dir="rtl"] nav ol { padding-left: 0; padding-right: 1.25rem; }
+[dir="rtl"] .anchor { left: auto; right: -5.5rem; text-align: left; }
+@media (max-width: 52rem) { [dir="rtl"] .anchor { text-align: right; } }
+` : ""}</style>
 </head>
 <body>
 <main>
@@ -92,6 +98,12 @@ export function printHtml(book, trimName = DEFAULT_TRIM) {
   const pages = estimatePages(book.words, trimName);
   const inside = insideMargin(pages);
   const author = book.authors.join(" and ");
+  // An RTL book opens from the other side: its recto pages are left-hand
+  // pages, so chapters start on the left and the running heads swap. The
+  // margins follow the physical page, so the spine side does not change.
+  const rtl = textDirection(book.language) === "rtl";
+  const recto = rtl ? "left" : "right";
+  const verso = rtl ? "right" : "left";
   const toc = [];
   const sections = [];
   for (const part of book.parts) {
@@ -109,15 +121,22 @@ export function printHtml(book, trimName = DEFAULT_TRIM) {
     if (part.kind === "chapter") {
       toc.push(`<li><a href="#${part.key}">${escapeHtml(part.title)}</a></li>`);
     }
-    const heading = part.heading ? `<h1>${escapeHtml(part.title)}</h1>` : "";
-    sections.push(`<section id="${part.key}" class="${part.kind}${part.kind === "chapter" ? "" : ` ${part.placement}`}">${heading}\n${paragraphs.join("\n")}\n</section>`);
+    // A back page without a heading still resets the running head, so it
+    // does not carry the previous section's title.
+    const heading = part.heading
+      ? `<h1>${escapeHtml(part.title)}</h1>`
+      : part.placement === "back" ? `<div class="running-head" aria-hidden="true"></div>` : "";
+    // Matter kinds already carry their placement (front, back copyright-page).
+    sections.push(`<section id="${part.key}" class="${part.kind}">${heading}\n${paragraphs.join("\n")}\n</section>`);
   }
+  // Only the copyright page moves ahead of the contents; other front matter
+  // keeps its order after it.
   const copyrightIndex = book.parts.findIndex((part) => part.copyright && part.placement === "front");
-  const beforeToc = copyrightIndex === -1 ? [] : sections.slice(0, copyrightIndex + 1);
-  const afterToc = copyrightIndex === -1 ? sections : sections.slice(copyrightIndex + 1);
+  const beforeToc = copyrightIndex === -1 ? [] : [sections[copyrightIndex]];
+  const afterToc = sections.filter((_, index) => index !== copyrightIndex);
 
   return `<!DOCTYPE html>
-<html lang="${escapeHtml(book.language)}">
+${htmlRoot(book.language)}
 <head>
 <meta charset="utf-8">
 <title>${escapeHtml(book.title)}</title>
@@ -129,16 +148,17 @@ export function printHtml(book, trimName = DEFAULT_TRIM) {
      Check the printer's current specs for margins, bleed, and fonts before upload. -->
 <style>
 @page { size: ${trim.width} ${trim.height}; margin: 0.75in 0.5in 0.75in ${inside}; }
-@page :left { margin-left: 0.5in; margin-right: ${inside};
+@page :left { margin-left: 0.5in; margin-right: ${inside}; }
+@page :${verso} {
   @top-center { content: "${cssString(author || book.title)}"; font: italic 9pt Georgia, serif; } }
-@page :right {
+@page :${recto} {
   @top-center { content: string(chapter-title, first-except); font: italic 9pt Georgia, serif; } }
 @page chapter { @bottom-center { content: counter(page); font: 9pt Georgia, serif; } }
 @page :blank { @top-center { content: none; } @bottom-center { content: none; } }
 @page front { @top-center { content: none; } @bottom-center { content: none; } }
 html { font: 11pt/1.4 Georgia, "Iowan Old Style", "Palatino Linotype", serif; }
 body { margin: 0; hyphens: auto; }
-.title-page, .toc, section.front { page: front; break-before: right; }
+.title-page, .toc, section.front { page: front; break-before: ${recto}; }
 section.front.copyright-page { break-before: page; font-size: 9pt; }
 .title-page { text-align: center; padding-top: 30%; }
 .title-page h1 { font-size: 26pt; font-weight: normal; margin: 0 0 1em; }
@@ -146,16 +166,17 @@ section.front.copyright-page { break-before: page; font-size: 9pt; }
 .toc h1 { font-size: 14pt; font-weight: normal; text-align: center; font-variant: small-caps; }
 .toc ol { list-style: none; padding: 0; }
 .toc a { color: inherit; text-decoration: none; }
-.toc a::after { content: " " target-counter(attr(href), page); float: right; }
-section.chapter, section.back { page: chapter; break-before: right; }
-section.chapter > h1, section.back > h1 { string-set: chapter-title content(text); }
+.toc a::after { content: " " target-counter(attr(href), page); float: ${rtl ? "left" : "right"}; }
+section.chapter, section.back { page: chapter; break-before: ${recto}; }
+section.chapter > h1, section.back > h1, section.back > .running-head { string-set: chapter-title content(text); }
+.running-head { height: 0; margin: 0; }
 h1 { font-size: 16pt; font-weight: normal; text-align: center; margin: 1.5in 0 0.5in; break-after: avoid; }
 p { margin: 0; text-indent: 1.5em; text-align: justify; widows: 2; orphans: 2; }
 p.first, p.scene-break + p { text-indent: 0; }
 /* A raised initial: floated drop caps render inconsistently across engines. */
 section.chapter > h1 + p.first::first-letter { font-size: 2.4em; line-height: 1; }
 p.scene-break { text-align: center; text-indent: 0; margin: 0.8em 0; break-after: avoid; }
-section.front p, section.back p { text-indent: 0; margin-bottom: 0.6em; text-align: left; }
+section.front p, section.back p { text-indent: 0; margin-bottom: 0.6em; text-align: ${rtl ? "right" : "left"}; }
 section.front:not(.copyright-page) p { text-align: center; }
 @media screen { body { max-width: ${trim.width}; margin: 2rem auto; padding: 0 1rem; } section { margin-top: 3rem; } }
 </style>
@@ -170,6 +191,13 @@ ${afterToc.join("\n")}
 </body>
 </html>
 `;
+}
+
+// The root element: `dir="rtl"` for a right-to-left language, since
+// browsers and paged-media engines do not infer direction from `lang`.
+function htmlRoot(language) {
+  const dir = textDirection(language) === "rtl" ? ` dir="rtl"` : "";
+  return `<html lang="${escapeHtml(language)}"${dir}>`;
 }
 
 export function estimatePages(words, trimName = DEFAULT_TRIM) {

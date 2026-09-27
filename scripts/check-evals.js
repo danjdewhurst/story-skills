@@ -52,8 +52,10 @@ const lowered = (s) => String(s).toLowerCase();
 
 /**
  * The two phrase collisions a fixture can carry: a banned phrase the input
- * already contains, and a banned phrase that contains (or sits inside) a
- * required one. Returns both as lists of `[phrase]` / `[phrase, fact]`
+ * already contains, and a banned phrase that sits inside a required one, so
+ * a draft that keeps the canon also trips the trap. The other direction (a
+ * banned "it was Ana" beside a required "Ana") is harmless: keeping "Ana"
+ * cannot produce the longer phrase. Returns both as lists of `[phrase]` / `[phrase, fact]`
  * entries, in fixture order.
  */
 export function findOverlaps(checks, inputText) {
@@ -68,7 +70,7 @@ export function findOverlaps(checks, inputText) {
       const required = trimmed(fact);
       const b = lowered(banned);
       const r = lowered(required);
-      if (b.includes(r) || r.includes(b)) found.with_required.push([banned, required]);
+      if (r.includes(b)) found.with_required.push([banned, required]);
     }
   }
   return found;

@@ -88,7 +88,9 @@ describe("rename and remove reference rewriting", () => {
   test("owner references are left alone when a character and faction share the id", () => {
     const root = project("Ambiguous Owner");
     createEntity(root, { kind: "faction", name: "Vale" });
-    createEntity(root, { kind: "character", name: "Vale" });
+    // add refuses the shared id (#176), but a hand-made project may have one.
+    expect(() => createEntity(root, { kind: "character", name: "Vale" })).toThrow("vale is already a faction id");
+    writeMarkdown(path.join(root, "characters", "vale.md"), "name: Vale\nrole: supporting\nstatus: alive", "\n# Vale\n");
     createEntity(root, { kind: "artifact", name: "Ring", owner: "vale" });
 
     renameEntity(root, { kind: "character", id: "vale", name: "Vale Two" });
@@ -128,7 +130,8 @@ knowledge-state:
     expect(state).toContain("  - character: mara\n    location: \"\"\n    physical: wounded shoulder");
     expect(state).toContain("  - artifact: lantern\n    owner: mara\n    location: \"\"");
 
-    removeEntity(root, { kind: "chapter", id: "chapter-01" });
+    // learned-in: "" would mean "before the story", so the remove is refused (#163).
+    expect(() => removeEntity(root, { kind: "chapter", id: "chapter-01" })).toThrow("still named by");
     state = read(root, "continuity", "state.md");
     expect(state).toContain("knows: the archive was active");
 
@@ -144,20 +147,18 @@ knowledge-state:
     expect(read(root, "continuity", "state.md")).toContain("object-state: []");
   });
 
-  test("rename and remove leave the project untouched when a markdown file cannot be parsed (finding 10)", () => {
+  test("rename and remove skip the frontmatter of a note outside the project model they cannot parse (finding 10, #62)", () => {
     const root = project("Parse Abort");
     createEntity(root, { kind: "character", name: "Lord Maren" });
     createEntity(root, { kind: "location", name: "Citadel", character: "lord-maren" });
     createEntity(root, { kind: "artifact", name: "Crown", owner: "lord-maren" });
     fs.mkdirSync(path.join(root, "notes"));
     fs.writeFileSync(path.join(root, "notes", "aaa.md"), "---\nmeta:\n  nested: yes\n---\n", "utf8");
-    const before = snapshot(root);
+    const note = read(root, "notes", "aaa.md");
 
-    expect(() => renameEntity(root, { kind: "character", id: "lord-maren", name: "Maren Two" })).toThrow("nothing was changed");
-    expect(snapshot(root)).toEqual(before);
-
-    expect(() => removeEntity(root, { kind: "character", id: "lord-maren" })).toThrow("nothing was changed");
-    expect(snapshot(root)).toEqual(before);
+    renameEntity(root, { kind: "character", id: "lord-maren", name: "Maren Two" });
+    removeEntity(root, { kind: "character", id: "maren-two" });
+    expect(read(root, "notes", "aaa.md")).toBe(note);
   });
 
   test("rename rewrites links in markdown files without frontmatter (finding 14)", () => {

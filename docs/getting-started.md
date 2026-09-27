@@ -521,7 +521,7 @@ story pacing .
 ```
 
 ```text
-Pacing: 1 scenes, 0 sequels, 1 of 1 chapters with hooks
+Pacing: 1 scene, 0 sequels, 1 of 1 chapter with hooks
 Outcomes: 100% of recorded outcomes are setbacks or complications
 Median chapter: 84 words
 

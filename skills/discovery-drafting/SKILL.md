@@ -38,7 +38,10 @@ start — arcs get built during reconciliation.
    draft the one-paragraph kernel with the user (character in a situation,
    a want, an obstacle, a tone signal). Store it in `story.md` under
    `## Story Kernel` and set `draft-mode: discovered` in frontmatter.
-2. **Draft forward.** Write the chapter from the kernel using the session
+2. **Draft forward.** Create the chapter with
+   `story add chapter "Title" --number N --mode discovered` so `story next`
+   flags it until it is reconciled (in a `draft-mode: discovered` project a
+   drafted chapter with no `mode` is flagged too). Write the chapter from the kernel using the session
    shape in `references/drafting-cadence.md` (re-read → write → close with
    a next-session note). Write forward only; park bible questions as
    `[TODO: check bible]` inline rather than stopping. Follow the prose

@@ -174,7 +174,7 @@ Every command, including `validate`, `next`, and `doctor`, reports that same lin
 - Positional arguments may start with a single dash, so `story add term "-ism"` works. A lone `--` ends the options: everything after it is positional, so `story init -- --Untitled` creates a story titled `--Untitled`. Put any options before the `--`.
 - Boolean flags (`--force`, `--write`, `--log`, `--shunn`, `--init`, `--actionable`, `--sequel`, `--significance-delayed`, `--red-herring`, `--heading`) are true when present. They also accept an explicit value, inline or as the next argument: `true`, `false`, `yes`, `no`, `on`, `off`, `1`, or `0`. So `--write false` turns writing off, while `--write=maybe` is an error.
 - Repeatable options collect every value, and list options also split on commas, so `--character ilse-marrow --character tobin-reyes` and `--characters ilse-marrow,tobin-reyes` produce the same list. `--source`, `--follows`, and `--precedes` keep each value whole.
-- Do not mix a singular flag with its plural alias in one `add` command: when both are given, the plural form wins and the singular values are dropped (except `add character --arc`, which is single-valued and has no plural alias). `init` and `import` are the exception: they combine `--theme` and `--themes`.
+- A singular flag and its plural alias combine, so `add chapter --character ivo-pell --characters mara-quill` lists both; `add` also drops repeated values from a list. `add character --arc` is single-valued and has no plural alias.
 - For options that are not repeatable, the last value wins: `--out a.md --out b.md` writes `b.md`.
 - Unknown options, missing values, extra positional arguments, and options the command does not read are errors. Each command accepts only its own options plus `--path`:
 
@@ -231,11 +231,11 @@ story export --out ../outside.md
 Refusing to access path outside project root: ~/stories/outside.md
 ```
 
-An absolute `--out` path is written where you say. Generated and rewritten files are written in place and keep their permissions, so a read-only file is refused (`Cannot open dist/manuscript.md: permission denied`). The exception is a target that is a hard link, such as an `--out` path linked to a chapter: it is replaced by a new file with the old file's permissions, so the linked file is left unchanged. If the new file cannot be written, for example in a read-only directory, the command fails with `Cannot replace <path>: permission denied`, naming the target rather than the temporary file. The CLI also refuses to write through symlinks or into symlinked project directories, and it never reads a project text file that is a symlink, a device or FIFO, or larger than 5 MiB (see [Scanning limits and safety](project-format.md#scanning-limits-and-safety)). Scans skip `dist/`, `node_modules/`, and dot-directories, so build output never feeds back into checks.
+An absolute `--out` path is written where you say. Generated and rewritten files are written whole or not at all: the new contents go to a hidden temporary file beside the target (`.chapter-01.md.story-<pid>.tmp`), which is flushed to disk and then renamed over it. A full disk, a failed write, or a killed process leaves the old file intact rather than truncated, and the error names the target, not the temporary file (`Cannot write to chapters/chapter-01.md: no space left on the device`). An existing file keeps its permissions and a read-only one is refused (`Cannot write to dist/manuscript.md: permission denied`), and the folder must be writable too. A target that is a hard link, such as an `--out` path linked to a chapter, is replaced rather than written through, so the linked file is left unchanged. If a process is killed before the rename, `story validate` warns about the leftover temporary file (`<path> was left by an interrupted write to <target>; delete it once the files beside it look right`). The CLI also refuses to write through symlinks or into symlinked project directories, and it never reads a project text file that is a symlink, a device or FIFO, or larger than 5 MiB (see [Scanning limits and safety](project-format.md#scanning-limits-and-safety)). Scans skip `dist/`, `node_modules/`, and dot-directories, so build output never feeds back into checks.
 
 Run write commands on a project one at a time. Two at once, such as two `story add` commands started together by a script or by parallel agents, can each rebuild a registry from what it read, so one can drop the other's row. If that may have happened, run `story reindex` afterwards.
 
-A file-system failure reads `Cannot <action> <path>: <reason>`, with the path relative to the current directory when it is inside it. The action is `open`, `list`, `check`, `replace`, `create the folder`, `delete`, `copy`, or `write to`, and the reason is `permission denied`, `no such file or folder`, `it is a folder, not a file`, `a part of the path is not a folder`, `the file system is read-only`, `no space left on the device`, or `the name is too long`.
+A file-system failure reads `Cannot <action> <path>: <reason>`, with the path relative to the current directory when it is inside it. The action is `open`, `list`, `check`, `replace`, `create the folder`, `delete`, `copy`, or `write to`, and the reason is `permission denied`, `no such file or folder`, `it is a folder, not a file`, `a part of the path is not a folder`, `the file system is read-only`, `no space left on the device`, `the disk quota is exceeded`, `the file is too large`, `an input/output error`, `the file is in use`, or `the name is too long`.
 
 `--out` on `export`, `build`, `synopsis`, and `diagram` never overwrites project source: `story.md`, `style-sheet.md`, `progress.md`, or anything under `characters/`, `chapters/`, `scenes/`, `worldbuilding/`, `plot/`, `continuity/`, `glossary/`, `matter/`, or `research/`. Folder names match in any letter case (`Chapters/x.md` is refused), and a path through a symlink is checked against the real folder it points to, so `lnk/x.md` is refused when `lnk` links to `chapters`. The real path is compared in any letter case as well, so an absolute path typed in another case on a case-insensitive disk (the macOS default) is caught. It must also name a file, not a directory; `--out dist` is refused even before `dist/` exists:
 
@@ -289,6 +289,8 @@ Scaffolds a new story project: `story.md`, `style-sheet.md`, `plot/timeline.md`,
 | `--precedes <path>` | This book is set before the story at `<path>`; repeatable | |
 | `--force` | Use an existing directory: add missing starter files, never overwrite existing ones | Off |
 
+An empty `--genre`, `--pov`, or `--tense` (such as `--tense=` from an unset shell variable) is refused with `--tense cannot be empty: leave it out to use the default`; `import` does the same.
+
 Without `--force`, `init` refuses an existing directory:
 
 ```shell
@@ -299,7 +301,9 @@ story init "The Salt Road"
 ~/stories/the-salt-road already exists. Use --force to add missing starter files; existing files are never overwritten.
 ```
 
-It also refuses a story id or target folder name that Windows reserves (`con`, `prn`, `aux`, `nul`, `com1` to `com9`, `lpt1` to `lpt9`), because the project could not be checked out there:
+With `--force` on a directory that already has a `story.md`, `init` keeps that `story.md`, prints `Updated story project: <dir>` instead of `Created`, and takes the story id for any new registry from the kept title. A title that differs from the kept one, and any `story.md` option you passed (`--genre`, `--form`, `--synopsis`, and so on), is named in a warning, since it was not applied: `warning: story.md already exists and was kept, so the title and --genre were not applied. Edit story.md to change them.`
+
+It also refuses a story id or target folder name that Windows reserves (`con`, `prn`, `aux`, `nul`, `com1` to `com9`, `lpt1` to `lpt9`, also with an extension such as `con.txt`), a folder name ending in a dot or space, and a folder name containing `< > : " | ? *`, because the project could not be checked out there:
 
 ```shell
 story init con
@@ -372,19 +376,21 @@ story import <source> --title <name> [options]
 
 Creates a new project from an existing manuscript. `<source>` is a single `.md`, `.markdown`, or `.txt` file, or a directory of them. `--title` is required. A directory that already has a `story.md` is refused, since it is a story project rather than a draft: `drafts/salt-road is already a story project (it has story.md); import reads manuscript files, so point it at the draft instead`.
 
-- A file with `Chapter` headings (any heading level, with arabic, roman, or spelled-out numerals up to ninety-nine, or none) is split at each heading, and `Prologue`, `Epilogue`, `Interlude`, and `Afterword` headings become chapters of their own. Text before the first chapter heading becomes a chapter titled `Opening`.
+- A source file must be UTF-8 text; a leading byte-order mark is dropped, and a zip file (such as a `.docx`), a binary file, or text in another encoding is refused (`it is not valid UTF-8 text. Save it as UTF-8 plain text or markdown first`). CRLF and bare CR line endings are read as line breaks.
+- A file with `Chapter` headings (ATX `#` headings of any level, or setext headings underlined with `===` or `---`, with arabic numbers including decimals such as `12.5`, roman numerals, spelled-out numbers up to nine hundred and ninety-nine, or none) is split at each heading, and `Prologue`, `Epilogue`, `Interlude`, and `Afterword` headings become chapters of their own. Text before the first chapter heading becomes a chapter titled `Opening`, unless it is only HTML comments, which move to the top of the first chapter (the `<!-- Generated by story export. -->` marker is dropped). Headings inside code fences and HTML comments never split, and a `# Part ...` heading just before a chapter heading opens that chapter.
+- A chapter file in Story Skills' own layout (frontmatter and a `## Chapter Text` section) imports as one chapter with its `title` and the prose under `## Chapter Text`.
 - A file without markdown chapter headings is split on plain-text chapter lines standing alone between blank lines, such as `Chapter 3`, `CHAPTER ONE: Arrival`, `Prologue`, or `Epilogue: After`. The number or word must stand alone or be followed by a separator (`:`, `.`, `-`, `–`, `—`), with or without a title (a bare `Prologue:` splits, and `Chapter 3:` is titled `Chapter N` with its new number and a plain `# Chapter N` heading), so `Chapter 12 was the worst.` and `Chapter Nine Lives of a Cat` do not split. A single short line before the first one is treated as the book title.
 - A file with neither becomes one chapter, titled by its first `#` heading or by its file name.
-- A directory is imported in natural file-name order (`chapter-2` before `chapter-10`). Files with no number in their name come after the numbered ones, except prologue, preface, foreword, introduction, and prelude files, which come first. Symlinks are never followed; a symlink to a document is refused.
-- Leading YAML frontmatter in source files is dropped, and a trailing Pandoc attribute block on a heading (`# Chapter 1: Arrival {#arrival .unnumbered}`) is dropped from the title.
-- In `.md` and `.markdown` sources, Pandoc's `---` becomes an em dash and `--` an en dash, except inside inline code, closed `` ``` `` code fences, HTML comments (everything after a `<!--` that never closes), link targets (`](...)`), autolinks (`<https://...>`), bare URLs, and `mailto:` addresses, and on lines made only of dashes (scene breaks), table separator rows (`|---|---|`), and indented code lines (four spaces or a tab). An indented line that continues a list item is prose and is converted. In `.txt` sources, leading tabs and spaces are removed from every line, so indented paragraphs do not become code blocks.
+- A directory is imported in natural file-name order (`chapter-2` before `chapter-10`). Files with no number in their name come after the numbered ones, except prologue, preface, foreword, introduction, and prelude files, which come first. Hidden files (`.name`), macOS AppleDouble files (`._name`), and Word lock files (`~$name`) are skipped. Symlinks are never followed; a symlink to a document is refused.
+- Leading YAML frontmatter in source files is dropped. A leading `---` block that starts with a blank line, or holds a line that is not YAML (such as `She said: go now.`), is a scene break and is kept. A trailing Pandoc attribute block on a heading (`# Chapter 1: Arrival {#arrival .unnumbered}`) and closing hashes (`## Title ##`) are dropped from the title.
+- In `.md` and `.markdown` sources, Pandoc's `---` becomes an em dash and `--` an en dash, except inside inline code, closed `` ``` `` code fences, HTML comments (everything after a `<!--` that never closes), link targets (`](...)`), autolinks (`<https://...>`), bare URLs, `www.` addresses, email and `mailto:` addresses, and HTML tags, and on lines made only of dashes (scene breaks), table separator rows (`|---|---|`), and indented code lines (four spaces or a tab). An indented line that continues a list item is prose and is converted. In `.txt` sources, leading tabs and spaces are removed from every line, so indented paragraphs do not become code blocks.
 
 Each chapter is written to `chapters/chapter-NN.md` with `status: draft` and its word count, and the registries are rebuilt. `import` then prints up to 25 capitalised names that appear three or more times, as candidates for `story add character` or `story add location`.
 
 `import` accepts `--dir`, `--genre`, `--sub-genre`, `--setting-era`, `--theme`, `--themes`, `--pov`, `--tense`, `--synopsis`, and `--force`, with the same meaning as for `init`. The series options (`--series`, `--book-number`, `--follows`, `--precedes`) and `--form` are errors (`--form does not apply to story import`); add `form` to `story.md` by hand after importing. Without `--synopsis`, the synopsis placeholder names the source file.
 
 > [!WARNING]
-> With `--force` on an existing directory, `import` deletes every `chapter-NN.md` in `chapters/` before writing the imported chapters, and the frontmatter you filled in on those chapters is lost. Commit or back up the project first.
+> With `--force` on an existing directory, `import` deletes every `chapter-NN.md` in `chapters/` before writing the imported chapters, and the frontmatter you filled in on those chapters is lost. Commit or back up the project first. It first checks that every other project file parses, and changes nothing if one does not. It keeps the existing `story.md` (warning about a `--title` or other `story.md` option it did not apply) and prints a note to run `story links`, since scenes and bible entries may point at chapters that are gone or changed.
 
 Given a draft with a `# The Lost Coast` title, a short note, and three `## Chapter` headings, the note becomes an `Opening` chapter, so four chapters are written:
 
@@ -407,7 +413,7 @@ See [Import, export, and builds](manuscripts.md) for the full import workflow.
 story migrate [path]
 ```
 
-Upgrades a project to the current schema (version 2). It creates every folder `story init` creates when it is missing, and any missing v2 starter files (`scenes/_index.md`, `continuity/state.md` and the question, promise, and clue ledgers, and `glossary/_index.md`), sets `schema-version: 2` in `story.md`, and runs `reindex`. Existing files are never overwritten. On a project that is already current it still runs `reindex`, so a stale registry is rebuilt and counted as a change.
+Upgrades a project to the current schema (version 2). It creates every folder `story init` creates when it is missing, and any missing v2 starter files (`plot/timeline.md`, `scenes/_index.md`, `continuity/state.md` and the question, promise, and clue ledgers, and `glossary/_index.md`), sets `schema-version: 2` in `story.md`, and runs `reindex`. Existing files are never overwritten. On a project that is already current it still runs `reindex`, so a stale registry is rebuilt and counted as a change. A `story.md` that fails to parse stops it with `Cannot migrate: fix this file first`, and a `schema-version` newer than 2 is refused rather than downgraded: `story.md uses schema-version 3, newer than this CLI (2); upgrade story-skills`.
 
 On a copy of a project with `schema-version: 1` and no clue ledger or glossary:
 
@@ -481,7 +487,7 @@ story validate
 Project validation failed: 1 errors, 2 warnings, 0 dismissed
 error: characters/old-bram.md frontmatter field locations must be a list
 warning: matter/acknowledgments.md has no text and is left out of export and build
-warning: characters/_index.md is missing registry link ](old-bram.md)
+warning: characters/_index.md does not list characters/old-bram.md; run story reindex
 ```
 
 A clean project:
@@ -654,7 +660,7 @@ Every rule, and how to write exemptions, is in [Continuity and analysis](continu
 story knowledge <character-id> --at <chapter-id> [--path <project>]
 ```
 
-Lists the `knowledge-state` entries in `continuity/state.md` that a character knew by a given chapter. An entry counts if its `learned-in` chapter is at or before `--at`; an entry with no `learned-in` is pre-existing knowledge and always counts.
+Lists the `knowledge-state` entries in `continuity/state.md` that a character knew by a given chapter. An entry counts if its `learned-in` chapter is at or before `--at`; an entry with no `learned-in` is pre-existing knowledge and always counts. It exits 1 with the parse error when a chapter file, the character file, or `continuity/state.md` fails to parse, and when one of the character's entries has no `knows`.
 
 | Option | Effect |
 |---|---|
@@ -704,10 +710,10 @@ Compares the current chapters with an earlier draft and reports word changes per
 
 | Option | Effect |
 |---|---|
-| `--ref <git-ref>` | Read the earlier chapters from a git branch, tag, or commit (with `~` and `^` suffixes). The project must be inside a git repository. It reads with `git show` and never writes to the repository |
+| `--ref <git-ref>` | Read the earlier chapters from a git branch, tag, or commit (with `~` and `^` suffixes); any name git accepts works, except one starting with `-`. The project must be inside a git repository, and its folder must exist at the ref. It reads with `git show` and never writes to the repository |
 | `--against <path>` | Read the earlier chapters from another copy of the project on disk, resolved against the current directory. It must be a story project with a `story.md` |
 
-Chapters are matched by id (`chapter-01`, `chapter-02`, and so on). With `--ref`, old drafts without frontmatter are still compared. With `--against`, every file in the other project must parse, or `compare` stops with an error.
+Chapters are matched by id (`chapter-01`, `chapter-02`, and so on). With `--ref`, old drafts without frontmatter are still compared. Every file in the current project, and with `--against` in the other project, must parse, or `compare` stops with an error. A chapter is `unchanged` only when its paragraphs are the same and in the same order; scene-break lines and code between closed fences are not compared.
 
 With `../thread-draft-1` a copy of the project taken before the chapter 3 edit shown under [wordcount](#wordcount):
 
@@ -750,6 +756,9 @@ compare needs exactly one of --ref <git-ref> or --against <project-path>
 
 $ story compare --ref main
 compare --ref needs the project inside a git repository
+
+$ story compare "renamed book" --ref v1
+renamed book/ does not exist at git ref v1
 
 $ story compare examples/the-last-ember --ref no-such-tag
 Unknown git ref: no-such-tag
@@ -851,7 +860,7 @@ story prose
 Prose report: 1 chapter, 993 words
 
 chapters/chapter-01.md: The Ember Wakes (993 words)
-  Sentences: 135, average 7.4 words, longest 28, spread 6.3
+  Sentences: 134, average 7.4 words, longest 28, spread 6.3
   Filter words: 7.0 per 1k narration words (felt 2, knew 2, saw 1)
   -ly adverbs: 9.8 per 1k narration words (barely 1, faintly 1, immediately 1, mechanically 1, sharply 1)
   Dialogue tags: said 4; said-bookisms: none
@@ -1167,10 +1176,10 @@ story voices
 ```
 
 ```text
-Voices: 1 speaking characters, 35 unattributed lines
+Voices: 1 speaking character, 35 unattributed lines
 
 kael-voss: 9 lines, 76 words
-  Sentence length 5.1, contractions 2.6 per 100 words, questions 7%, exclamations 0%
+  Sentence length 5.1, contractions 6.6 per 100 words, questions 7%, exclamations 0%
   Signature words: jumpy, good, looking, sera, soldiers
 Voice check complete: 0 errors, 2 warnings, 0 dismissed
 warning: kael-voss says "soldiers", which is in their voice-avoid list (chapter-01)
@@ -1265,9 +1274,9 @@ flowchart LR
   ilya_venn["Councillor Ilya Venn"]
   mara_quill["Mara Quill"]
   theo_quill["Theo Quill"]
-  ilya_venn -.-|adversary| mara_quill
-  ilya_venn -.-|former-supervisor| theo_quill
-  mara_quill ===|sibling| theo_quill
+  ilya_venn -.-|"adversary"| mara_quill
+  ilya_venn -.-|"former-supervisor"| theo_quill
+  mara_quill ===|"sibling"| theo_quill
   classDef deceased stroke-dasharray: 4 4,color:#888
   class theo_quill deceased
 ```
@@ -1436,7 +1445,11 @@ $ story add chapter "Low Tide" --id opening
 --id does not apply to a chapter: a chapter id comes from its number. Use --number for a chapter, or --chapter and --scene for a scene
 ```
 
-An `--id` that names an existing entity is refused the same way a derived one is (`characters/petr.md already exists`).
+An `--id` that names an existing entity is refused the same way a derived one is (`characters/petr.md already exists`). So is an id that a kind sharing a reference field already uses, since those references could no longer tell the two apart: characters and factions share `owner` and `controlled-by`, and characters and artifacts share `mentions` (`raven is already a character id, and controlled-by and owner references could not tell the faction from the character. Choose another name, or pass --id`).
+
+The name is every positional after the kind. A trailing `.` (or another project folder) is refused rather than written into the name, because `add` takes the project as `--path` (`"." looks like a project path: story add takes the project as --path .`). `rename` and `names` do the same.
+
+`add` writes the entity file, then its backlinks, then the registries. If it is interrupted after writing the file, run the same command again: when the file is exactly what `add` would write and its registry does not list it yet, the rerun applies the backlinks, reindexes, and prints `Finished an interrupted add of <kind> <id>: <file>`. For a chapter or scene without `--number` or `--scene`, the rerun reuses the number the interrupted run took instead of adding a second copy.
 
 For characters and locations, `add` also writes the backlink on the other side: adding a character with `--location gull-harbour` appends the character to that location's `notable-characters`, and adding a location with `--character` appends the location to each character's `locations`.
 
@@ -1499,7 +1512,7 @@ $ story add chapter "Two" --number 0
 chapter number must be a positive integer, got 0
 ```
 
-A chapter id in `--chapter`, `--planted`, `--payoff`, `--introduced`, `--resolved`, or `--used-in` may name a chapter not written yet, but not `chapter-00` or a different spelling of an existing chapter's number:
+A chapter id in `--chapter`, `--planted`, `--payoff`, `--introduced`, or `--used-in` may name a chapter not written yet, but not `chapter-00`, and only in the spelling `story add chapter` writes (`chapter-01`, not `chapter-1` or `chapter-001`):
 
 ```text
 $ story add promise "The Ledger" --payoff chapter-00
@@ -1509,11 +1522,13 @@ $ story add promise "The Ledger" --payoff chapter-1
 --payoff chapter-1: did you mean chapter-01?
 ```
 
+A status that says the chapter is on the page needs it written, as `story links` does: `--resolved` on a question, `--planted` with `--status planted` or `paid-off`, `--payoff` with `--status paid-off`, and `--introduced` on a question whose status is not `open` must name an existing chapter (`--resolved chapter-05 is not written yet: a question's resolved chapter must exist. Add --resolved once the answer is drafted`). Without `--status`, a promise or clue planted in an unwritten chapter is `planned`.
+
 `add scene` needs an existing chapter. With no chapters it fails with `No chapters yet: add one with story add chapter before adding a scene`, and a `--chapter` id with no chapter file fails with `chapter chapter-99 does not exist: add it with story add chapter, or pass --chapter with an existing chapter id`.
 
 `add scene` also adds its `location` to the chapter's `locations` and each of its `characters` to the chapter's `characters`, unless the chapter already lists that character in `mentions`. Only ids that have an entity file are copied; an unknown id stays on the scene, where `story links` reports it.
 
-Location and system `--type`, location `--status`, and system `--prevalence` are free text. `--date` must be a real `YYYY-MM-DD` day; `--time` is `HH:MM` or one of `dawn`, `morning`, `midday`, `afternoon`, `evening`, `night`; `--travel-hours` is a number zero or above; `--number` and `--scene` are positive integers; `--order` is a non-negative integer. Repeating `--location` on `add artifact` or `add scene`, or `--arc` on `add character`, writes a list that `story validate` rejects, because those flags are repeatable elsewhere. Other single-value flags keep the last value given.
+Location and system `--type`, location `--status`, and system `--prevalence` are free text; an empty `--type` is refused. `--date` must be a real `YYYY-MM-DD` day; `--time` is `HH:MM` or one of `dawn`, `morning`, `midday`, `afternoon`, `evening`, `night`; `--travel-hours` is a number zero or above; `--number` and `--scene` are positive integers; `--order` is a non-negative integer. Fields that hold one id refuse a repeated flag or a comma list: `--location` on `add artifact` and `add scene`, `--chapter` and `--pov` on `add scene`, `--owner`, `--controlled-by`, `--planted`, `--payoff`, `--introduced`, and `--resolved` (`--location takes one id for a scene, got port-kestrel, salt-market`). Repeating `--arc` on `add character` writes a list that `story validate` rejects. Other single-value flags keep the last value given.
 
 `--source` keeps each value whole, because citations contain commas. Repeat the flag for more sources. Other list options split on commas.
 
@@ -1609,7 +1624,7 @@ $ story rename character petr "Пётр Иванов" --id petr-ivanov
 Renamed character petr to petr-ivanov: ~/stories/the-salt-road/characters/petr-ivanov.md
 ```
 
-Every rewrite is planned before anything is written, so a file that fails to parse leaves the project unchanged. An entity file (a file directly in an entity folder), one of the registries the CLI writes (the `_index.md` in `characters/`, `worldbuilding/`, `plot/`, `chapters/`, `scenes/`, `continuity/questions/`, `continuity/promises/`, `continuity/clues/`, `glossary/`, `matter/`, and `research/`), or one of `story.md`, `style-sheet.md`, `progress.md`, `plot/timeline.md`, `continuity/state.md`, and `continuity/exemptions.md` with no YAML frontmatter stops it the same way, with `<file> is missing YAML frontmatter; nothing was changed`. Other markdown, such as `continuity/motifs.md`, `continuity/theme-audit.md`, a README, or an `_index.md` in a folder of your own such as `notes/`, may be plain. `rename` refuses if an entity with the new id already exists, or if the new id is one Windows reserves as a file name, as `add` does (`Cannot use character id aux: Windows reserves the file name aux.md. ...`).
+Every rewrite is planned before anything is written, so a file that fails to parse leaves the project unchanged. An entity file (a file directly in an entity folder), one of the registries the CLI writes (the `_index.md` in `characters/`, `worldbuilding/`, `plot/`, `chapters/`, `scenes/`, `continuity/questions/`, `continuity/promises/`, `continuity/clues/`, `glossary/`, `matter/`, and `research/`), or one of `story.md`, `style-sheet.md`, `progress.md`, `plot/timeline.md`, `continuity/state.md`, and `continuity/exemptions.md` with no YAML frontmatter stops it the same way, with `<file> is missing YAML frontmatter; nothing was changed`. Other markdown, such as `continuity/motifs.md`, `continuity/theme-audit.md`, a README, or an `_index.md` in a folder of your own such as `notes/`, may be plain; when its frontmatter uses YAML the CLI does not parse, only its body links are rewritten, and a note over 5 MiB, or past the first 5,000 such notes, is skipped. Reference-style link definitions (`[bo]: ../characters/bo.md`) are rewritten like inline links. `rename` refuses if an entity with the new id already exists, if another kind that shares a reference field uses it (see [add](#add)), or if the new id is one Windows reserves as a file name, as `add` does (`Cannot use character id aux: Windows reserves the file name aux.md. ...`).
 
 ```text
 $ story rename character ilse-marrow "Ilse Varrow"
@@ -1619,7 +1634,9 @@ $ story rename chapter chapter-01 "Slack Water"
 Renamed chapter chapter-01 to chapter-01: ~/stories/the-salt-road/chapters/chapter-01.md
 ```
 
-References are rewritten before the entity file is moved, so if the command is interrupted, run it again to finish. A rerun after the file has already moved (the old id is gone and the new file carries the new name) rewrites any references still using the old id and prints `Finished an interrupted rename of <kind> <old-id> to <new-id>: <file>`.
+When references to the new id already exist (a planned character in `mentions`, or a link `remove` left behind), they now name the renamed entity, so `rename` lists those files in a warning: `warning: bo was already referenced before this rename, and those references now point at the renamed character: chapters/chapter-04.md. Check them`.
+
+References are rewritten before the entity file is moved, so if the command is interrupted, run it again to finish. A rerun that finds the new file already written, exactly as this rename writes it, with no reference still naming the old id, deletes the old file. A rerun after the old file is gone, when the new file carries the new name and nothing still names the old id, reindexes and prints `Finished an interrupted rename of <kind> <old-id> to <new-id>: <file>`. An old id that is still referenced but has no file is reported as missing (`character ghost does not exist`), even when another entity already has the new name.
 
 ### move
 
@@ -1637,7 +1654,7 @@ Chapter and scene ids come from their numbers, so reordering the book changes id
 - `used-in` on research notes and `died-in` on characters
 - `since` and `learned-in` in `continuity/state.md`, and `current-chapter` when it held the moved chapter's number
 - markdown links to the moved chapter and scene files, anywhere in the project
-- bare chapter and scene ids in the bodies of `plot/timeline.md` and `plot/arcs/*.md`, the ones `story links` checks
+- bare chapter and scene ids in the bodies of `plot/timeline.md` and `plot/arcs/*.md`, the ones `story links` checks, and in `plot/_index.md` (the Theme Tracking table). An id is a whole token: `chapter-01-draft` and `pre-chapter-01` are left alone, by `move` and `links` alike
 
 `--number` is required, and the new number must be free. `move` never shifts other chapters to make room, so to insert a chapter, renumber the later chapters from the highest down, then `add` the new one. On a separate copy of The Salt Road with three chapters, a scene in chapter 2, and a clue planted in chapter 2 and paid off in chapter 3:
 
@@ -1655,9 +1672,11 @@ $ story add chapter "Dead Calm" --number 2 --pov ilse-marrow
 Created chapter chapter-02: ~/stories/the-salt-road/chapters/chapter-02.md
 ```
 
+References to a chapter number that has no file yet (a scheduled `payoff: chapter-05`, say) now name the moved chapter, so `move` lists those files in a warning (`warning: chapter-05 was already referenced before this move, ...`).
+
 The clue now reads `planted: chapter-03` and `payoff: chapter-04`, the old chapter 2 is `chapters/chapter-03.md` with the heading `# Chapter 3: The Crossing`, and its scene is `scenes/chapter-03-scene-01.md` with `chapter: chapter-03`.
 
-**`move scene`** moves a scene to another chapter, another position, or both. `--chapter` names the destination chapter, which must exist; without `--scene` the scene takes that chapter's next free number. `--scene` alone renumbers the scene within its own chapter. Give at least one of them. `move scene` sets the scene's `chapter` and `scene` fields, rewrites markdown links to the scene file and bare scene ids in the timeline and arc bodies, and adds the scene's `location` and `characters` to the destination chapter's `locations` and `characters` when those entities exist. The chapter it left keeps its lists; trim them by hand if the scene was the only reason for an entry. Continuing the example:
+**`move scene`** moves a scene to another chapter, another position, or both. `--chapter` names the destination chapter, which must exist; without `--scene` the scene takes that chapter's next free number, or keeps its number when `--chapter` is its own chapter. `--scene` alone renumbers the scene within its own chapter. Give at least one of them. `move scene` sets the scene's `chapter` and `scene` fields, rewrites markdown links to the scene file and bare scene ids in the timeline and arc bodies, and adds the scene's `location` and `characters` to the destination chapter's `locations` and `characters` when those entities exist. The chapter it left keeps its lists; trim them by hand if the scene was the only reason for an entry. Continuing the example:
 
 ```text
 $ story move scene chapter-03-scene-01 --chapter chapter-02
@@ -1673,7 +1692,7 @@ Moved scene chapter-02-scene-01 to chapter-02-scene-02: ~/stories/the-salt-road/
 
 | Situation | Message |
 |---|---|
-| The kind is not `chapter` or `scene` | `story move works on chapters and scenes, not locations; use story rename to change other ids` |
+| The kind is not `chapter` or `scene` | `story move works on chapters and scenes, not locations; use story rename to change other ids` (an unknown kind: `Unsupported entity kind: villain: expected one of chapter, scene`) |
 | No id | `move requires a chapter or scene id` |
 | The chapter or scene does not exist | `chapter chapter-09 does not exist`, `scene chapter-09-scene-01 does not exist` |
 | `move chapter` without `--number` | `move chapter requires --number <n>` |
@@ -1684,7 +1703,7 @@ Moved scene chapter-02-scene-01 to chapter-02-scene-02: ~/stories/the-salt-road/
 | The new scene id is taken | `chapter-02-scene-01 already exists: move it first` |
 | A scene file of the moved chapter would overwrite another file | `scenes/chapter-04-scene-01.md already exists; nothing was changed` |
 
-As with `rename`, every file is parsed before anything is written, so a file that fails to parse leaves the project unchanged (`Cannot move: fix this file first ...`). References are written first and the moved files last, so if a move is interrupted, run the same command again to finish it.
+As with `rename`, every file is parsed before anything is written, so a file that fails to parse leaves the project unchanged (`Cannot move: fix this file first ...`). References are written first and the moved files last (a chapter's scenes before the chapter, and a moved scene's cast added to its new chapter before the old scene is deleted), so if a move is interrupted, run the same command again to finish it. A file already at the new path is accepted only when it is exactly what this move writes and nothing but the moving files still names the old id; otherwise the number counts as taken, so a move onto a placeholder chapter or scene with the same title is refused. Without `--scene`, a rerun of an interrupted `move scene` reuses the number the first run took.
 
 ### remove
 
@@ -1700,6 +1719,8 @@ Deletes the entity file and scrubs its id from every reference field, searching 
 $ story remove chapter chapter-01
 chapter chapter-01 still has scenes: chapter-01-scene-01. Remove them first with story remove scene <id>
 ```
+
+It also refuses while a character's `died-in` or a `since` or `learned-in` in `continuity/state.md` names the chapter, because an empty value there means "before the story": `chapter chapter-05 is still named by died-in, since, learned-in in characters/bob.md; an empty value there means before the story, so point them at another chapter first`.
 
 Removing a chapter also walks back statuses that depended on it. A `planted` promise or clue whose `planted` chapter is cleared becomes `planned`; a `paid-off` one whose `payoff` is cleared becomes `planted`, or `planned` when its `planted` chapter is gone too; an `answered` or `resolved` question whose `resolved` chapter is cleared becomes `open`.
 
@@ -1759,7 +1780,7 @@ Builds a disposable book file in `dist/`. Builds are deterministic: the same sou
 |---|---|---|
 | `--format <name>` | `markdown` (or `md`), `epub`, `docx`, `shunn`, `html`, `print`, `narration`, or `metadata` | `markdown` |
 | `--shunn` | With `--format docx`, apply Shunn manuscript formatting. An error with any other format | Off |
-| `--trim <size>` | With `--format print`, the trim size: `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5`. An error with any other format | `5.5x8.5` |
+| `--trim <size>` | With `--format print`, the trim size: `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5` (case-insensitive). An error with any other format | `5.5x8.5` |
 | `--out <file>` | Output path, relative to the project root | `dist/<story-id>.<ext>` |
 
 | Format | Default output | Contents |

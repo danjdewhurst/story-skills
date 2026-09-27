@@ -1,5 +1,7 @@
 import { splitWords } from "./markdown.js";
 import { givenName } from "./names.js";
+import { plural } from "./plural.js";
+import { splitSentences } from "./sentences.js";
 
 // Dialogue voice fingerprints for `story voices`. Speech is attributed only
 // when the paragraph says who spoke: a tag naming the speaker next to a
@@ -15,7 +17,9 @@ const SPEECH_VERBS = [
   "began", "begins", "went on", "goes on"
 ];
 
-const CONTRACTION_PATTERN = /[\p{L}](?:n['’]t|['’](?:re|ll|ve|m|d))\b/giu;
+// 's is counted only after words where it cannot be a possessive (it's,
+// that's, let's), so "Tom's" is never a contraction.
+const CONTRACTION_PATTERN = /[\p{L}](?:n['’]t|['’](?:re|ll|ve|m|d))\b|(?<![\p{L}\p{N}])(?:it|that|let|what|there|here|where|who|he|she|how|when|why)['’]s(?![\p{L}\p{N}])/giu;
 
 // Common words that say nothing about a voice.
 const STOPWORDS = new Set([
@@ -41,20 +45,43 @@ export function buildVoices(project, chapters) {
   let unattributed = 0;
 
   for (const chapter of chapters) {
+    // Speech that runs over several paragraphs leaves its quote open at each
+    // paragraph end and reopens it at the next paragraph start. Its lines go
+    // to whoever the chain is attributed to, or count as unattributed.
+    let pending = [];
+    let chainSpeaker = null;
+    const credit = (speaker, texts) => {
+      if (speaker === null) {
+        unattributed += texts.length;
+      } else {
+        lines.get(speaker).push(...texts.map((text) => ({ chapter: chapter.id, text })));
+      }
+    };
     for (const paragraph of chapter.paragraphs) {
+      const continues = (pending.length > 0 || chainSpeaker !== null) && OPENS_WITH_QUOTE.test(paragraph);
+      if (!continues) {
+        credit(null, pending);
+        pending = [];
+        chainSpeaker = null;
+      }
       const quotes = quotedSpans(paragraph);
+      const open = splitOpenSpeech(paragraph).open;
+      if (open !== null) {
+        quotes.push(open);
+      }
       if (quotes.length === 0) {
         continue;
       }
-      const speaker = attribute(paragraph, speakers);
-      if (speaker === null) {
-        unattributed += quotes.length;
+      const speaker = attribute(paragraph, speakers) ?? chainSpeaker;
+      if (open !== null && speaker === null) {
+        pending.push(...quotes);
         continue;
       }
-      for (const text of quotes) {
-        lines.get(speaker).push({ chapter: chapter.id, text });
-      }
+      credit(speaker, [...pending, ...quotes]);
+      pending = [];
+      chainSpeaker = open === null ? null : speaker;
     }
+    credit(null, pending);
   }
 
   const profiles = project.characters
@@ -159,8 +186,10 @@ function speakerPatterns(characters) {
 
 const NON_WORD = /[^\p{L}\p{N}]+/u;
 
+const OPENS_WITH_QUOTE = /^["“‘']/;
+
 function attribute(paragraph, allSpeakers) {
-  const narration = stripQuotes(paragraph);
+  const narration = `${splitOpenSpeech(paragraph).narration} `;
   // Test only speakers whose name could appear, so the per-speaker patterns
   // run for a handful of speakers rather than the whole cast.
   const words = new Set(narration.split(NON_WORD));
@@ -186,16 +215,25 @@ function attribute(paragraph, allSpeakers) {
 }
 
 const LETTER = /[\p{L}\p{N}]/u;
+// Words that open with an apostrophe rather than a single quote.
+const ELISION = /^(?:em|tis|twas|cause|cos|til|till|bout|round|n|nuff)(?![\p{L}\p{N}])/iu;
+// Dialogue set with a leading dash (— Line, said Cy.) runs to a closing dash
+// or to a tag after a comma.
+const DASH_OPEN = /^[—―]\s*/;
+const DASH_TAG = new RegExp(`,\\s+(?:(?:${VERB_ALTERNATION})\\s+\\p{Lu}|(?:${PRONOUNS})\\s+(?:${VERB_ALTERNATION})(?![\\p{L}\\p{N}])|\\p{Lu}[\\p{L}'’-]*(?:\\s+\\p{Lu}[\\p{L}'’-]*){0,2}\\s+(?:${VERB_ALTERNATION})(?![\\p{L}\\p{N}]))`, "u");
 
 // Quoted speech in a paragraph, left to right: curly double quotes pair
-// explicitly and straight quotes pair in order. British single quotes open
-// after a non-letter and close before one, so an apostrophe inside a word
-// (don’t) never ends the quote. Returns { start, end, text } with `end`
-// just past the closing quote. Each search for a closer resumes where the
-// last one stopped, so the scan is linear however many quotes never close.
+// explicitly and straight quotes pair in order. Single quotes (curly or
+// straight) open after a non-letter and close before one, so an apostrophe
+// inside a word (don’t) never ends the quote, and a plural possessive
+// (the dogs’ bowls) does not end it when a later closer does. A paragraph
+// that opens with a dash is dialogue up to a closing dash or its tag.
+// Returns { start, end, text } with `end` just past the closing mark. Each
+// search for a closer resumes where the last one stopped, so the scan stays
+// close to linear however many quotes never close.
 export function quoteMatches(paragraph) {
   const matches = [];
-  const next = { "”": -1, "\"": -1, "‘": -1, closeSingle: -1 };
+  const next = { "”": -1, "\"": -1 };
   const find = (key, from) => {
     if (next[key] !== Infinity && next[key] < from) {
       const found = paragraph.indexOf(key, from);
@@ -203,17 +241,18 @@ export function quoteMatches(paragraph) {
     }
     return next[key];
   };
-  const findSingleClose = (from) => {
-    if (next.closeSingle !== Infinity && next.closeSingle < from) {
-      let index = paragraph.indexOf("’", from);
-      while (index !== -1 && LETTER.test(paragraph[index + 1] ?? "")) {
-        index = paragraph.indexOf("’", index + 1);
-      }
-      next.closeSingle = index === -1 ? Infinity : index;
-    }
-    return next.closeSingle;
-  };
+  const singles = singleQuoteMarks(paragraph);
   let index = 0;
+  const dash = DASH_OPEN.exec(paragraph);
+  if (dash) {
+    const body = paragraph.slice(dash[0].length);
+    const tag = DASH_TAG.exec(body);
+    const closing = /\s[—―]/.exec(body);
+    const stop = Math.min(tag ? tag.index : Infinity, closing ? closing.index + 1 : Infinity);
+    const close = stop === Infinity ? paragraph.length : dash[0].length + stop;
+    matches.push({ start: 0, end: Math.min(close + 1, paragraph.length), text: paragraph.slice(dash[0].length, close) });
+    index = close + 1;
+  }
   while (index < paragraph.length) {
     const char = paragraph[index];
     let close = Infinity;
@@ -221,9 +260,8 @@ export function quoteMatches(paragraph) {
       close = find("”", index + 1);
     } else if (char === "\"") {
       close = find("\"", index + 1);
-    } else if (char === "‘" && !LETTER.test(paragraph[index - 1] ?? "")) {
-      const candidate = findSingleClose(index + 1);
-      close = candidate < find("‘", index + 1) ? candidate : Infinity;
+    } else if (char === "‘" || char === "'") {
+      close = singleClose(singles[char], index);
     }
     if (close === Infinity) {
       index += 1;
@@ -233,6 +271,75 @@ export function quoteMatches(paragraph) {
     index = close + 1;
   }
   return matches;
+}
+
+// Opening and closing positions of single quotes, curly (‘’) and straight
+// ('), in order.
+function singleQuoteMarks(paragraph) {
+  const marks = { "‘": { open: [], close: [] }, "'": { open: [], close: [] } };
+  for (let index = 0; index < paragraph.length; index += 1) {
+    const char = paragraph[index];
+    const before = paragraph[index - 1] ?? "";
+    const after = paragraph[index + 1] ?? "";
+    if (char === "‘" && !LETTER.test(before)) {
+      marks["‘"].open.push(index);
+    } else if (char === "’" && !LETTER.test(after)) {
+      marks["‘"].close.push(index);
+    } else if (char === "'") {
+      if (!LETTER.test(before) && LETTER.test(after) && !ELISION.test(paragraph.slice(index + 1))) {
+        marks["'"].open.push(index);
+      } else if (!LETTER.test(after) && before !== "" && !/\s/.test(before)) {
+        marks["'"].close.push(index);
+      }
+    }
+  }
+  for (const key of Object.keys(marks)) {
+    marks[key].opens = new Set(marks[key].open);
+    marks[key].paragraph = paragraph;
+  }
+  return marks;
+}
+
+// The closer for the single quote opening at `index`, or Infinity when the
+// next opener comes first.
+function singleClose(marks, index) {
+  if (!marks.opens.has(index)) {
+    return Infinity;
+  }
+  const nextOpen = firstAfter(marks.open, index);
+  let position = firstIndexAfter(marks.close, index);
+  if (position === -1 || marks.close[position] > nextOpen) {
+    return Infinity;
+  }
+  // "dogs’ bowls": an s-possessive before a lower-case word is skipped when
+  // another closer follows before the next opener.
+  while (position + 1 < marks.close.length && marks.close[position + 1] < nextOpen && looksPossessive(marks.paragraph, marks.close[position])) {
+    position += 1;
+  }
+  return marks.close[position];
+}
+
+function looksPossessive(paragraph, index) {
+  return /[sS]/.test(paragraph[index - 1] ?? "") && /^\s+\p{Ll}/u.test(paragraph.slice(index + 1, index + 4));
+}
+
+function firstIndexAfter(sorted, value) {
+  let low = 0;
+  let high = sorted.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if (sorted[middle] <= value) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+  return low < sorted.length ? low : -1;
+}
+
+function firstAfter(sorted, value) {
+  const position = firstIndexAfter(sorted, value);
+  return position === -1 ? Infinity : sorted[position];
 }
 
 // The paragraph with each quote replaced by a space.
@@ -250,21 +357,46 @@ export function quotedSpans(paragraph) {
   return quoteMatches(paragraph).map((match) => match.text.trim()).filter((text) => text !== "");
 }
 
-function stripQuotes(paragraph) {
-  // Speech still open at the paragraph end runs to the end.
-  let text = replaceQuotes(paragraph);
+// The paragraph's narration, and the text of speech still open at its end
+// (or null). Open speech starts at the first opener with no closer after it,
+// found with index searches so a run of unclosed quotes stays linear; a
+// straight single quote counts only when it opens the paragraph.
+export function splitOpenSpeech(paragraph) {
+  const text = replaceQuotes(paragraph);
+  const cuts = [];
   const curly = text.indexOf("“", text.lastIndexOf("”") + 1);
   if (curly !== -1) {
-    text = `${text.slice(0, curly)} `;
+    cuts.push(curly);
   }
   const straight = text.indexOf("\"");
-  return straight === -1 ? text : `${text.slice(0, straight)} `;
+  if (straight !== -1) {
+    cuts.push(straight);
+  }
+  const lastSingleClose = text.lastIndexOf("’");
+  const single = /(?<![\p{L}\p{N}])‘/u.exec(text.slice(lastSingleClose + 1));
+  if (single) {
+    cuts.push(lastSingleClose + 1 + single.index);
+  }
+  if (/^'[\p{L}\p{N}]/u.test(text) && !ELISION.test(text.slice(1))) {
+    cuts.push(0);
+  }
+  if (cuts.length === 0) {
+    return { narration: text, open: null };
+  }
+  const cut = Math.min(...cuts);
+  const open = text.slice(cut + 1).trim();
+  return { narration: text.slice(0, cut), open: open === "" ? null : open };
+}
+
+// The paragraph without its quoted speech, for narration-only checks.
+export function narrationOnly(paragraph) {
+  return splitOpenSpeech(paragraph).narration;
 }
 
 function profile(character, said) {
   const text = said.map((line) => line.text).join(" ");
   const words = splitWords(text);
-  const sentences = said.flatMap((line) => line.text.split(/(?<=[.!?…])\s+/).filter((sentence) => splitWords(sentence).length > 0));
+  const sentences = said.flatMap((line) => splitSentences(line.text).filter((sentence) => splitWords(sentence).length > 0));
   const questions = sentences.filter((sentence) => /\?["'”’)]*$/.test(sentence.trim())).length;
   const exclamations = sentences.filter((sentence) => /!["'”’)]*$/.test(sentence.trim())).length;
   return {
@@ -323,16 +455,20 @@ function signatureWords(profiles) {
   }
 }
 
+// Each measure must differ by less than its limit. The small allowance
+// keeps floating-point error from deciding the boundary, so shares exactly
+// 10 points apart are never "close" (0.3 - 0.2 is 0.0999...).
 function similarVoices(left, right) {
   const limits = VOICE_THRESHOLDS;
-  return Math.abs(left.sentenceLength - right.sentenceLength) < limits.sentenceLength
-    && Math.abs(left.contractions - right.contractions) < limits.contractions
-    && Math.abs(left.questions - right.questions) < limits.questions
-    && Math.abs(left.exclamations - right.exclamations) < limits.exclamations;
+  const close = (a, b, limit) => Math.abs(a - b) < limit - 1e-9;
+  return close(left.sentenceLength, right.sentenceLength, limits.sentenceLength)
+    && close(left.contractions, right.contractions, limits.contractions)
+    && close(left.questions, right.questions, limits.questions)
+    && close(left.exclamations, right.exclamations, limits.exclamations);
 }
 
 function phrasePattern(phrase) {
-  return new RegExp(`(?<![\\p{L}\\p{N}])${escape(String(phrase).trim()).replace(/['’]/g, "['’]")}(?![\\p{L}\\p{N}])`, "iu");
+  return new RegExp(`(?<![\\p{L}\\p{M}\\p{N}])${escape(String(phrase).trim()).replace(/['’]/g, "['’]")}(?![\\p{L}\\p{M}\\p{N}])`, "iu");
 }
 
 function escape(value) {
@@ -344,7 +480,7 @@ function stringList(value) {
 }
 
 export function formatVoices(report) {
-  const lines = [`Voices: ${report.profiles.length} speaking characters, ${report.unattributed} unattributed lines`];
+  const lines = [`Voices: ${plural(report.profiles.length, "speaking character")}, ${plural(report.unattributed, "unattributed line")}`];
   if (report.profiles.length === 0) {
     lines.push("", "- None: tag dialogue with a character's name and a speech verb (\"...,\" Mara said)");
     return `${lines.join("\n")}\n`;
@@ -352,7 +488,7 @@ export function formatVoices(report) {
   for (const entry of report.profiles) {
     lines.push(
       "",
-      `${entry.id}: ${entry.lines} lines, ${entry.words} words`,
+      `${entry.id}: ${plural(entry.lines, "line")}, ${plural(entry.words, "word")}`,
       `  Sentence length ${entry.sentenceLength.toFixed(1)}, contractions ${entry.contractions.toFixed(1)} per 100 words, questions ${Math.round(entry.questions * 100)}%, exclamations ${Math.round(entry.exclamations * 100)}%`,
       `  Signature words: ${entry.signature.join(", ") || "none yet"}`
     );

@@ -84,9 +84,9 @@ describe("story diagram", () => {
   ada["Ada #quot;The Elder#quot;"]
   ben["Ben"]
   cy["Cy #124; Twin"]
-  ada ==>|parent| ben
-  ada -.-|rival| cy
-  ben ===|sibling| cy
+  ada ==>|"parent"| ben
+  ada -.-|"rival"| cy
+  ben ===|"sibling"| cy
   classDef deceased stroke-dasharray: 4 4,color:#888
   class ada deceased
 `);
@@ -98,9 +98,9 @@ describe("story diagram", () => {
   fort["Fort"]
   inn["Inn"]
   port["Port<br/>Coast"]
-  fort -->|2h| inn
-  inn -->|3h| fort
-  port ---|5h cart| fort
+  fort -->|"2h"| inn
+  inn -->|"3h"| fort
+  port ---|"5h cart"| fort
 `);
   });
 
@@ -119,8 +119,8 @@ describe("story diagram", () => {
     const { root } = diagramFixture();
     const text = diagramProject(root, { kind: "clues" }).text;
     expect(text).toContain("  chapter_01 ~~~ chapter_02\n");
-    expect(text).toContain("  chapter_01 -->|Ash| chapter_03\n");
-    expect(text).toContain("  chapter_02 -.->|Glove (red herring)| unrevealed((\"not yet revealed\"))\n");
+    expect(text).toContain("  chapter_01 -->|\"Ash\"| chapter_03\n");
+    expect(text).toContain("  chapter_02 -.->|\"Glove (red herring)\"| unrevealed((\"not yet revealed\"))\n");
     expect(text).not.toContain("Cut");
     expect(text).toContain("class unrevealed open");
   });
@@ -143,7 +143,7 @@ describe("story diagram", () => {
     const written = invoke(cwd, ["diagram", "locations", "--path", root, "--out", "dist/map.mmd"]);
     expect(written.code).toBe(0);
     expect(written.out).toContain("Wrote locations diagram to");
-    expect(fs.readFileSync(path.join(root, "dist", "map.mmd"), "utf8")).toContain("port ---|5h cart| fort");
+    expect(fs.readFileSync(path.join(root, "dist", "map.mmd"), "utf8")).toContain("port ---|\"5h cart\"| fort");
 
     const bad = invoke(cwd, ["diagram", "weather", "--path", root]);
     expect(bad.code).toBe(1);

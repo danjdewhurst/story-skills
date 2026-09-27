@@ -1,3 +1,4 @@
+import { usableRoutes } from "./continuity.js";
 import { buildTimeline } from "./timeline.js";
 
 // Mermaid diagram source generated from frontmatter. The output is text, so
@@ -58,11 +59,11 @@ function relationshipDiagram(project) {
       const from = nodeId(character.id);
       const to = nodeId(other);
       if (ELDER_TYPES.has(type)) {
-        lines.push(`  ${from} ==>|${label(type)}| ${to}`);
+        lines.push(`  ${from} ==>${edgeLabel(type)} ${to}`);
       } else if (FAMILY_TYPES.has(type)) {
-        lines.push(`  ${from} ===|${label(type)}| ${to}`);
+        lines.push(`  ${from} ===${edgeLabel(type)} ${to}`);
       } else {
-        lines.push(`  ${from} -.-|${label(type || "related")}| ${to}`);
+        lines.push(`  ${from} -.-${edgeLabel(type || "related")} ${to}`);
       }
     }
   }
@@ -81,21 +82,16 @@ function locationDiagram(project) {
     const region = location.region ? `<br/>${label(location.region)}` : "";
     lines.push(`  ${nodeId(location.id)}["${label(location.name)}${region}"]`);
   }
-  const routes = [];
-  for (const location of locations) {
-    for (const route of location.routes ?? []) {
-      if (route && typeof route === "object" && known.has(route.to) && route.to !== location.id && typeof route.hours === "number") {
-        routes.push({ from: location.id, to: route.to, hours: route.hours, mode: typeof route.mode === "string" ? route.mode : "" });
-      }
-    }
-  }
+  // The same routes the travel check uses: positive hours only, and the
+  // fastest when a location lists one destination twice.
+  const routes = usableRoutes(locations).filter((route) => known.has(route.from));
   const declared = new Set(routes.map((route) => `${route.from}>${route.to}`));
   for (const route of routes) {
-    const text = label([`${route.hours}h`, route.mode].filter(Boolean).join(" "));
+    const text = edgeLabel([`${route.hours}h`, route.mode].filter(Boolean).join(" "));
     if (declared.has(`${route.to}>${route.from}`)) {
-      lines.push(`  ${nodeId(route.from)} -->|${text}| ${nodeId(route.to)}`);
+      lines.push(`  ${nodeId(route.from)} -->${text} ${nodeId(route.to)}`);
     } else {
-      lines.push(`  ${nodeId(route.from)} ---|${text}| ${nodeId(route.to)}`);
+      lines.push(`  ${nodeId(route.from)} ---${text} ${nodeId(route.to)}`);
     }
   }
   return `${lines.join("\n")}\n`;
@@ -112,7 +108,9 @@ function timelineDiagram(project) {
     }
     const when = entry.time || "day";
     const note = entry.toldLate ? ` (told in chapter ${entry.chapterNumber})` : "";
-    lines.push(`    ${timelineText(when)} : ${timelineText(`${entry.title}${note}`)}`);
+    // An empty event after the colon does not parse; fall back to the id.
+    const title = String(entry.title ?? "").trim() || entry.id;
+    lines.push(`    ${timelineText(when)} : ${timelineText(`${title}${note}`)}`);
   }
   return `${lines.join("\n")}\n`;
 }
@@ -133,12 +131,14 @@ function clueDiagram(project) {
       continue;
     }
     const arrow = clue.redHerring ? "-.->" : "-->";
-    const text = label(clue.redHerring ? `${clue.title} (red herring)` : clue.title);
+    // An empty label (`-->||`) does not parse; fall back to the id.
+    const title = String(clue.title ?? "").trim() || clue.id;
+    const text = edgeLabel(clue.redHerring ? `${title} (red herring)` : title);
     if (known.has(clue.payoff)) {
-      lines.push(`  ${nodeId(clue.planted)} ${arrow}|${text}| ${nodeId(clue.payoff)}`);
+      lines.push(`  ${nodeId(clue.planted)} ${arrow}${text} ${nodeId(clue.payoff)}`);
     } else {
       unrevealed = true;
-      lines.push(`  ${nodeId(clue.planted)} ${arrow}|${text}| unrevealed(("not yet revealed"))`);
+      lines.push(`  ${nodeId(clue.planted)} ${arrow}${text} unrevealed(("not yet revealed"))`);
     }
   }
   if (unrevealed) {
@@ -203,6 +203,12 @@ function label(text) {
     .replace(/>/g, "&gt;")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+// Edge labels are quoted so brackets and parentheses in them ("(red
+// herring)", a route mode) are read as text, not node shapes.
+function edgeLabel(text) {
+  return `|"${label(text)}"|`;
 }
 
 // Mermaid timeline syntax splits on colons, so they become a similar mark.

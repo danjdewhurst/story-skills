@@ -170,7 +170,7 @@ Characters, locations, factions, artifacts, and glossary terms can also carry a 
 
 An entity's id is its filename without `.md`. Frontmatter never contains a separate `id` field. Everything that points at an entity (reference lists, registries, scene records, continuity state) uses that id.
 
-Ids are kebab-case: lowercase ASCII letters and digits separated by single hyphens. `story validate` reports an error for any entity filename that isn't. When `story add` creates a file, it derives the id from the name you give it. It drops accents and apostrophes (straight `'` and curly `’` alike) and turns every other run of punctuation or whitespace into a hyphen:
+Ids are kebab-case: lowercase ASCII letters and digits separated by single hyphens. `story validate` reports an error for any entity filename that isn't. When `story add` creates a file, it derives the id from the name you give it. It drops accents (spelling out letters such as `æ`, `ø`, and `ß` as `ae`, `o`, and `ss`) and apostrophes (straight `'` and curly `’` alike) and turns every other run of punctuation or whitespace into a hyphen:
 
 | Name passed to `story add` | Id |
 |----------------------------|----|
@@ -245,7 +245,7 @@ story validate .
 
 ```text
 Project is valid: 0 errors, 1 warnings, 0 dismissed
-warning: characters/_index.md is missing registry link ](orrin-hale.md)
+warning: characters/_index.md does not list characters/orrin-hale.md; run story reindex
 ```
 
 ```shell
@@ -293,10 +293,10 @@ Each chapter's `word-count` frontmatter field is a stored copy of a count the CL
 The count covers chapter prose only:
 
 - If the body has a `## Chapter Text` heading, only the text after it counts. The `chapter-writing` skill keeps the outline above that heading so the outline never inflates the count.
-- Otherwise, if the body has a `## Outline` heading, only the text after the first `---` line below the outline counts. If there is no `---` line, everything after the heading counts.
+- Otherwise, if the body has a `## Outline` heading, only the text after the `---` line directly below the outline counts. If there is no `---` line, everything after the heading counts.
 - Otherwise the whole body counts, minus a leading `# Heading` line.
 
-A word is a run of letters or digits in any script. Straight or curly apostrophes and hyphens join a word, so `don’t` and `well-known` each count once. HTML comments, code between `` ``` `` fences, inline code, images, and link targets are skipped; a link's visible text still counts, and a backslash escape counts as the character it escapes (`didn\'t` is one word). A comment or `` ``` `` fence that never closes hides nothing, and `story validate` warns about the comment. A `~~~` line is a scene break, not a code fence. [How words are counted](project-format.md#how-words-are-counted) has the exact rules.
+A word is a run of letters or digits in any script, with its combining marks. Straight or curly apostrophes and hyphens join a word, so `don’t` and `well-known` each count once, and `3.14`, `9:30`, a URL, or an email address is one word. HTML comments, images, and link targets are skipped; a link's visible text still counts, as does code, which every build prints, and a backslash escape counts as the character it escapes (`didn\'t` is one word). A comment or `` ``` `` fence that never closes hides nothing, and `story validate` warns about the comment. A `~~~` line is a scene break, not a code fence. [How words are counted](project-format.md#how-words-are-counted) has the exact rules.
 
 After adding a 12-word sentence to the example chapter:
 

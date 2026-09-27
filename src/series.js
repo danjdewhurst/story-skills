@@ -35,6 +35,30 @@ export function seriesLinks(root, data, field) {
     .map((value) => path.resolve(root, value));
 }
 
+// A blank `series: ""` counts as no series id, so it is reported as missing
+// rather than as a different series with an empty name.
+export function seriesId(data) {
+  const value = data?.series;
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  return String(value).trim() === "" ? undefined : value;
+}
+
+// Series books sit side by side in one parent folder. `story series` only
+// follows links between sibling folders, so the same series is found from
+// whichever book it starts at.
+export function areSiblingBooks(left, right) {
+  return path.dirname(canonicalPath(left)) === path.dirname(canonicalPath(right));
+}
+
+// True when `links` (resolved paths) name the book at `root`, comparing real
+// paths so a link written through a symlink counts as the same book.
+export function linksInclude(links, root) {
+  const key = canonicalPath(root);
+  return links.some((link) => link === root || canonicalPath(link) === key);
+}
+
 export function readBookFrontmatter(root) {
   const storyPath = path.join(root, "story.md");
   if (!fs.existsSync(storyPath)) {
@@ -47,7 +71,7 @@ export function validateSeriesLinks(root, data, errors) {
   for (const [field, inverse] of SERIES_LINK_INVERSES) {
     for (const target of seriesLinks(root, data, field)) {
       const label = `story.md ${field} ${seriesLinkPath(root, target)}`;
-      if (target === root) {
+      if (target === root || canonicalPath(target) === canonicalPath(root)) {
         errors.push(`${label} points at this book`);
         continue;
       }
@@ -64,11 +88,16 @@ export function validateSeriesLinks(root, data, errors) {
         continue;
       }
 
-      if (!seriesLinks(target, other, inverse).includes(root)) {
+      if (!areSiblingBooks(root, target)) {
+        errors.push(`${label} is not in the same parent folder as this book; story series only follows links between sibling book folders`);
+      }
+      if (!linksInclude(seriesLinks(target, other, inverse), root)) {
         errors.push(`${label} is missing backlink: add ${seriesLinkPath(target, root)} to its ${inverse}`);
       }
-      if (data.series !== undefined && other.series !== undefined && data.series !== other.series) {
-        errors.push(`${label} belongs to series ${other.series}, not ${data.series}`);
+      const ownSeries = seriesId(data);
+      const otherSeries = seriesId(other);
+      if (ownSeries !== undefined && otherSeries !== undefined && ownSeries !== otherSeries) {
+        errors.push(`${label} belongs to series ${otherSeries}, not ${ownSeries}`);
       }
     }
   }
@@ -78,7 +107,7 @@ export function validateSeriesLinks(root, data, errors) {
 // when the link is already present.
 // Also gives the existing book the new book's series id when it has none,
 // so both sides of the link agree.
-export function withSeriesBacklink(targetRoot, field, linkedRoot, seriesId) {
+export function withSeriesBacklink(targetRoot, field, linkedRoot, newSeriesId) {
   const storyPath = path.join(targetRoot, "story.md");
   const markdown = readTextFile(storyPath);
   const { data } = parseFrontmatter(markdown, storyPath);
@@ -86,14 +115,14 @@ export function withSeriesBacklink(targetRoot, field, linkedRoot, seriesId) {
   // dropped when the new link is added.
   const current = data[field];
   const existing = Array.isArray(current) ? current : typeof current === "string" && current.trim() !== "" ? [current] : [];
-  const linked = seriesLinks(targetRoot, { [field]: existing }, field).includes(linkedRoot);
-  const addSeries = data.series === undefined && seriesId !== undefined;
+  const linked = linksInclude(seriesLinks(targetRoot, { [field]: existing }, field), linkedRoot);
+  const addSeries = seriesId(data) === undefined && newSeriesId !== undefined;
   if (linked && !addSeries) {
     return null;
   }
   return replaceFrontmatter(markdown, {
     ...data,
-    ...(addSeries ? { series: seriesId } : {}),
+    ...(addSeries ? { series: newSeriesId } : {}),
     ...(linked ? {} : { [field]: existing.concat(seriesLinkPath(targetRoot, linkedRoot)) })
   });
 }
@@ -101,7 +130,7 @@ export function withSeriesBacklink(targetRoot, field, linkedRoot, seriesId) {
 export function buildSeries(startRoot, scan) {
   const errors = [];
   const warnings = [];
-  const books = discoverBooks(startRoot, scan, errors);
+  const books = discoverBooks(startRoot, scan, errors).books;
   if (books.length === 0) {
     return {
       root: startRoot,
@@ -213,8 +242,14 @@ function discoverBooks(startRoot, scan, errors) {
     }
 
     const label = seriesLinkPath(startRoot, root) || '.';
-    if (!isPathInside(scopeRoot, resolved) || !isPathInside(scopeReal, effective)) {
-      errors.push(label + ' points outside the series directory ' + scopeRoot + '; refusing to follow');
+    // Only sibling folders of the start book are followed. Every followed
+    // link then joins two siblings, so the same books are found (and the
+    // same links refused) from whichever book the check starts at.
+    if (path.dirname(resolved) !== scopeRoot || path.dirname(effective) !== scopeReal) {
+      const outside = !isPathInside(scopeRoot, resolved) || !isPathInside(scopeReal, effective);
+      errors.push(outside
+        ? label + ' points outside the series directory ' + scopeRoot + '; refusing to follow'
+        : label + ' is not a sibling folder in the series directory ' + scopeRoot + '; keep series books side by side, refusing to follow');
       visited.set(effective, null);
       continue;
     }
@@ -240,6 +275,12 @@ function discoverBooks(startRoot, scan, errors) {
     for (const scanError of project.fileErrors ?? []) {
       errors.push(`${label}: ${scanError}`);
     }
+    // An unparseable story.md has no series id, number, or links to trust,
+    // so the book is reported once and left out rather than read as empty.
+    if (project.story?.unreadable) {
+      visited.set(effective, null);
+      continue;
+    }
     const data = project.story.data;
     const book = {
       root,
@@ -249,7 +290,7 @@ function discoverBooks(startRoot, scan, errors) {
       label,
       project,
       title: String(data.title ?? path.basename(root)),
-      series: data.series,
+      series: seriesId(data),
       status: data.status,
       bookNumber: Number.isInteger(data["book-number"]) ? data["book-number"] : null,
       follows: seriesLinks(root, data, "follows"),
@@ -260,7 +301,16 @@ function discoverBooks(startRoot, scan, errors) {
       queue.push({ root: next, depth: depth + 1 });
     }
   }
-  return [...visited.values()].filter(Boolean);
+  const books = [...visited.values()].filter(Boolean);
+  return { books, complete: books.length === visited.size };
+}
+
+// The books reachable from `startRoot` without the canon checks, plus the
+// traversal errors. `complete` is false when a linked book could not be read.
+export function discoverSeriesBooks(startRoot, scan) {
+  const errors = [];
+  const { books, complete } = discoverBooks(startRoot, scan, errors);
+  return { books, complete, errors };
 }
 
 function isPathInside(root, target) {
@@ -327,10 +377,13 @@ function checkDuplicateBookNumbers(books, errors) {
   }
 }
 
-// Books with no chronological constraint between them fall back to
-// publication order, then title, so the report is deterministic.
+// Among books whose earlier books are already listed, the lowest
+// book-number goes next, then title, then canonical path, so the report is
+// the same whichever book it starts from.
 function compareBooks(left, right) {
-  return (left.bookNumber ?? Infinity) - (right.bookNumber ?? Infinity) || left.title.localeCompare(right.title, "en");
+  return (left.bookNumber ?? Infinity) - (right.bookNumber ?? Infinity)
+    || left.title.localeCompare(right.title, "en")
+    || (left.key < right.key ? -1 : left.key > right.key ? 1 : 0);
 }
 
 function checkSharedCanon({ order, later }, errors, warnings) {
@@ -367,11 +420,16 @@ function checkCanonNames(book, earlierBooks, warnings) {
     }
     for (const entity of book.project[key]) {
       const match = canon.get(entity.id);
-      if (match && entity[field] !== match.entity[field]) {
+      if (match && canonText(entity[field]) !== canonText(match.entity[field])) {
         warnings.push(`${bookFile(book, entity.file)} ${field} "${entity[field]}" differs from "${match.entity[field]}" in ${bookFile(match.book, match.entity.file)}`);
       }
     }
   }
+}
+
+// NFC and NFD spellings of one name (macOS files, pasted text) are the same.
+function canonText(value) {
+  return typeof value === "string" ? value.normalize("NFC") : value;
 }
 
 // A character who dies in an earlier book stays dead: the later book must mark

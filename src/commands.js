@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { formatClueMatrix } from "./clues.js";
 import { formatComparison } from "./compare.js";
@@ -92,7 +93,8 @@ export const COMMANDS = [
         precedes: parsed.options.precedes,
         force: isTruthy(parsed.options.force)
       });
-      io.stdout.write(`Created story project: ${result.root}\n`);
+      io.stdout.write(`${result.keptStory ? "Updated" : "Created"} story project: ${result.root}\n`);
+      reportKeptStory(io, result, "the title");
       for (const linkedBook of result.linkedBooks) {
         io.stdout.write(`Updated series links in ${path.join(linkedBook, "story.md")}\n`);
       }
@@ -121,7 +123,11 @@ export const COMMANDS = [
         synopsis: parsed.options.synopsis,
         force: isTruthy(parsed.options.force)
       });
-      io.stdout.write(`Imported ${result.chapters} chapters (${result.words} words) into ${result.root}\n`);
+      io.stdout.write(`Imported ${result.chapters} ${result.chapters === 1 ? "chapter" : "chapters"} (${result.words} ${result.words === 1 ? "word" : "words"}) into ${result.root}\n`);
+      reportKeptStory(io, result, "--title");
+      if (result.keptStory) {
+        io.stderr.write("note: the old chapter files were replaced, so scenes, bible entries, and continuity files may point at chapters that are gone or changed. Run story links to find them.\n");
+      }
       if (result.candidates.length > 0) {
         io.stdout.write("Entity candidates (review, then create with story add):\n");
         for (const candidate of result.candidates) {
@@ -304,8 +310,8 @@ export const COMMANDS = [
     ],
     project: "flag",
     args: Infinity,
-    run({ parsed, io, root }) {
-      const report = namesReport(root(), parsed.positionals.slice(1));
+    run({ parsed, io, cwd, root }) {
+      const report = namesReport(root(), nameWords(parsed, 1, cwd, "names"));
       io.stdout.write(formatNames(report));
       return reportResult(io, report, "Names checked", "Name check failed");
     }
@@ -444,13 +450,13 @@ export const COMMANDS = [
     project: "flag",
     args: Infinity,
     options: ADD_OPTIONS,
-    run({ parsed, io, root }) {
+    run({ parsed, io, cwd, root }) {
       const result = createEntity(root(), {
         ...parsed.options,
         kind: parsed.positionals[1],
-        name: parsed.positionals.slice(2).join(" ")
+        name: nameWords(parsed, 2, cwd, "add").join(" ")
       });
-      io.stdout.write(`Created ${result.kind} ${result.id}: ${result.file}\n`);
+      io.stdout.write(`${result.resumed ? "Finished an interrupted add of" : "Created"} ${result.kind} ${result.id}: ${result.file}\n`);
       return 0;
     }
   },
@@ -461,7 +467,7 @@ export const COMMANDS = [
     project: "flag",
     args: Infinity,
     options: ["id"],
-    run({ parsed, io, root }) {
+    run({ parsed, io, cwd, root }) {
       const result = renameEntity(root(), {
         ...parsed.options,
         kind: parsed.positionals[1],
@@ -469,9 +475,10 @@ export const COMMANDS = [
         // the id it moves to instead of one derived from the new name.
         id: parsed.positionals[2],
         newId: parsed.options.id,
-        name: parsed.positionals.slice(3).join(" ")
+        name: nameWords(parsed, 3, cwd, "rename").join(" ")
       });
       io.stdout.write(`${result.resumed ? "Finished an interrupted rename of" : "Renamed"} ${result.kind} ${result.oldId} to ${result.id}: ${result.file}\n`);
+      writeWarnings(io, result);
       return 0;
     }
   },
@@ -511,6 +518,7 @@ export const COMMANDS = [
         scene: parsed.options.scene
       });
       io.stdout.write(`Moved ${result.kind} ${result.oldId} to ${result.id}: ${result.file}${result.moved > 1 ? ` (with ${result.moved - 1} ${result.moved === 2 ? "scene" : "scenes"})` : ""}\n`);
+      writeWarnings(io, result);
       return 0;
     }
   },
@@ -567,10 +575,40 @@ export const COMMANDS = [
   }
 ];
 
+// The words of a name. Other commands take [path], so a trailing `.` (or
+// another project folder) is refused with a hint rather than written into
+// the name.
+function nameWords(parsed, from, cwd, command) {
+  const words = parsed.positionals.slice(from);
+  for (const word of words) {
+    if (word === "." || word === ".." || (/[\\/]/.test(word) && fs.existsSync(path.join(path.resolve(cwd, word), "story.md")))) {
+      throw new Error(`"${word}" looks like a project path: story ${command} takes the project as --path ${word}`);
+    }
+  }
+  return words;
+}
+
+function writeWarnings(io, result) {
+  for (const warning of result.warnings ?? []) {
+    io.stderr.write(`warning: ${warning}\n`);
+  }
+}
+
 // The project path as typed, for commands the reports suggest.
 function displayPath(parsed) {
   const flag = parsed.options.path;
   return parsed.positionals[1] ?? (Array.isArray(flag) ? flag[flag.length - 1] : flag) ?? ".";
+}
+
+// init and import --force keep an existing story.md, so name the options it
+// did not take rather than report them applied.
+function reportKeptStory(io, result, titleLabel) {
+  if (!result.keptStory || result.ignoredOptions.length === 0) {
+    return;
+  }
+  const names = result.ignoredOptions.map((name) => (name === "title" ? titleLabel : name));
+  const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  io.stderr.write(`warning: story.md already exists and was kept, so ${list} ${names.length === 1 ? "was" : "were"} not applied. Edit story.md to change ${names.length === 1 ? "it" : "them"}.\n`);
 }
 
 function collectThemes(options) {

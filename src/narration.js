@@ -1,4 +1,4 @@
-import { chapterHeading, isSceneBreak, wordCount } from "./markdown.js";
+import { chapterHeading, flattenHeadings, isSceneBreak, plainLinks, wordCount } from "./markdown.js";
 
 // Audiobook narration script: a pronunciation guide from the bible, opening
 // and closing credits, and each section with its estimated finished runtime.
@@ -31,9 +31,15 @@ export function narrationScript(manuscript, guide) {
       lines.push(`| ${cell(entry.name)} | ${cell(entry.pronunciation)} | ${entry.kind} |`);
     }
   }
-  lines.push("", "## Opening Credits", "", `${manuscript.title}.${authors === "" ? "" : ` Written by ${authors}.`} Narrated by [narrator].`);
+  lines.push("", "## Opening Credits", "", `${manuscript.title}${/[.!?…]["”’')\]]*$/.test(manuscript.title) ? "" : "."}${authors === "" ? "" : ` Written by ${authors}.`} Narrated by [narrator].`);
+  // Section times are cut from the running total, so they add up to the
+  // finished runtime instead of each rounding on its own.
+  let wordsSoFar = 0;
   for (const section of sections) {
-    lines.push("", `## ${section.title}`, "", `[${formatMinutes(section.words)}]`, "", narrationBody(section.body));
+    const before = Math.round(wordsSoFar / NARRATION_WORDS_PER_MINUTE);
+    wordsSoFar += section.words;
+    const minutes = Math.round(wordsSoFar / NARRATION_WORDS_PER_MINUTE) - before;
+    lines.push("", `## ${section.title}`, "", `[${minutes < 1 ? "under 1 min" : `about ${minutes} min`}]`, "", narrationBody(section.body));
   }
   lines.push("", "## Closing Credits", "", `The end. You have been listening to ${manuscript.title}${authors === "" ? "" : `, written by ${authors}`}, narrated by [narrator].`, "");
   return lines.join("\n");
@@ -55,8 +61,9 @@ export function pronunciationGuide(project) {
 }
 
 function narrationBody(body) {
-  return String(body)
-    .replace(/\r\n?/g, "\n")
+  // In-prose headings read as paragraphs, so each chapter stays one
+  // section, and links read as their text, as in every other build.
+  return flattenHeadings(plainLinks(String(body).replace(/\r\n?/g, "\n")))
     .replace(/\\\n/g, "\n")
     .split(/\n[ \t]*\n\s*/)
     .map((paragraph) => paragraph.trim())
@@ -68,11 +75,6 @@ function narrationBody(body) {
 export function formatRuntime(words) {
   const minutes = Math.round(words / NARRATION_WORDS_PER_MINUTE);
   return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
-}
-
-function formatMinutes(words) {
-  const minutes = words / NARRATION_WORDS_PER_MINUTE;
-  return minutes < 1 ? "under 1 min" : `about ${Math.round(minutes)} min`;
 }
 
 function cell(value) {

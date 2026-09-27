@@ -64,7 +64,16 @@ function phrasePattern(phrase, inflect = false) {
     // With inflect=true (required canon), a trailing inflection is allowed
     // so "logbook" matches "logbooks" while "key" still does not match
     // "turkey".
-    if (inflect) inner += "(?:s|es|ed|ing|d)?";
+    // A silent final e drops before -ing/-ed ("delve" -> "delving") and a
+    // consonant + y becomes -ies/-ied ("tapestry" -> "tapestries").
+    if (inflect) {
+      const word = parts[parts.length - 1];
+      const head = innerPieces.slice(0, -1).concat("").join(FLEX_SEP_SRC);
+      const stem = [...word.slice(0, -1)].map(escapeRegExp).join("");
+      if (/[^aeiouy]y$/i.test(word)) inner = `${head}${stem}(?:y|ys|ies|ied|ying)`;
+      else if (/[^e]e$/i.test(word)) inner = `${head}${stem}(?:e|es|ed|ing)`;
+      else inner += "(?:s|es|ed|ing|d)?";
+    }
     right = "(?!\\w)";
   } else right = "";
   return left + inner + right;

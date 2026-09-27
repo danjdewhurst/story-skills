@@ -21,7 +21,8 @@ export function checkContinuity(project) {
     latestChapter: project.chapters
       .filter((chapter) => chapter.status !== "outline")
       .reduce((max, chapter) => Math.max(max, chapter.number), 0),
-    highestChapter: project.chapters.reduce((max, chapter) => Math.max(max, chapter.number), 0)
+    highestChapter: project.chapters.reduce((max, chapter) => Math.max(max, chapter.number), 0),
+    chapterNumberList: project.chapters.map((chapter) => chapter.number)
   };
 
   checkCharacterDeaths(project, context, errors, warnings);
@@ -33,7 +34,7 @@ export function checkContinuity(project) {
   checkClues(project, context, errors, warnings);
   checkStoryCompletion(project, errors);
   checkContinuityState(project, context, errors, warnings);
-  checkPropCustody(project, context, errors, warnings);
+  checkPropCustody(project, context, errors);
   checkClock(project, errors, warnings);
 
   return withExemptions(project, { ok: errors.length === 0, errors, warnings });
@@ -156,6 +157,11 @@ function checkChapterSequence(project, warnings) {
     .filter((number) => Number.isInteger(number) && number > 0)
     .sort((left, right) => left - right);
 
+  // Chapters missing before the first usually mean a removed chapter or an
+  // unfinished move.
+  if (numbers.length > 0 && numbers[0] > 1) {
+    warnings.push(`Chapter numbering starts at ${numbers[0]}, not 1`);
+  }
   for (let index = 1; index < numbers.length; index += 1) {
     if (numbers[index] > numbers[index - 1] + 1) {
       warnings.push(`Chapter numbering skips from ${numbers[index - 1]} to ${numbers[index]}`);
@@ -170,9 +176,8 @@ function checkPromises(project, context, errors, warnings) {
     }
     const label = relative(project, promise.file);
     const plantedNumber = context.chapterNumbers.get(promise.planted);
-    const payoffNumber = context.chapterNumbers.get(promise.payoff);
 
-    if (plantedNumber !== undefined && payoffNumber !== undefined && payoffNumber < plantedNumber) {
+    if (scheduledOutOfOrder(context, promise.planted, promise.payoff)) {
       errors.push(`${label} pays off in ${promise.payoff} before it is planted in ${promise.planted}`);
     }
 
@@ -189,7 +194,7 @@ function checkPromises(project, context, errors, warnings) {
       warnings.push(stale);
     }
 
-    const chekhov = chekhovWarning(label, promise.planted, plantedNumber, promise.payoff, referencedChapterNumber(context.chapterNumbers, promise.payoff), context.latestChapter);
+    const chekhov = chekhovWarning(label, promise.planted, plantedNumber, promise.payoff, referencedChapterNumber(context.chapterNumbers, promise.payoff), context);
     if (promise.status === "planted" && chekhov) {
       warnings.push(chekhov);
     }
@@ -202,10 +207,7 @@ function checkQuestions(project, context, errors) {
       continue;
     }
     const label = relative(project, question.file);
-    const introducedNumber = context.chapterNumbers.get(question.introduced);
-    const resolvedNumber = context.chapterNumbers.get(question.resolved);
-
-    if (introducedNumber !== undefined && resolvedNumber !== undefined && resolvedNumber < introducedNumber) {
+    if (scheduledOutOfOrder(context, question.introduced, question.resolved)) {
       errors.push(`${label} resolves in ${question.resolved} before it is introduced in ${question.introduced}`);
     }
 
@@ -250,9 +252,8 @@ function checkClues(project, context, errors, warnings) {
     }
     const label = relative(project, clue.file);
     const plantedNumber = context.chapterNumbers.get(clue.planted);
-    const payoffNumber = context.chapterNumbers.get(clue.payoff);
 
-    if (plantedNumber !== undefined && payoffNumber !== undefined && payoffNumber < plantedNumber) {
+    if (scheduledOutOfOrder(context, clue.planted, clue.payoff)) {
       errors.push(`${label} pays off in ${clue.payoff} before it is planted in ${clue.planted}`);
     }
 
@@ -269,7 +270,7 @@ function checkClues(project, context, errors, warnings) {
       warnings.push(stale);
     }
 
-    const chekhov = chekhovWarning(label, clue.planted, plantedNumber, clue.payoff, referencedChapterNumber(context.chapterNumbers, clue.payoff), context.latestChapter);
+    const chekhov = chekhovWarning(label, clue.planted, plantedNumber, clue.payoff, referencedChapterNumber(context.chapterNumbers, clue.payoff), context);
     if (clue.status === "planted" && chekhov) {
       warnings.push(chekhov);
     }
@@ -285,6 +286,14 @@ function stalePlannedWarning(label, entry, plantedNumber, latestChapter) {
   return `${label} records planted chapter ${entry.planted} but status is still planned`;
 }
 
+// A setup and its payoff are ordered by chapter number, including a
+// scheduled `chapter-NN` that has no chapter file yet.
+function scheduledOutOfOrder(context, first, second) {
+  const firstNumber = referencedChapterNumber(context.chapterNumbers, first);
+  const secondNumber = referencedChapterNumber(context.chapterNumbers, second);
+  return firstNumber !== undefined && secondNumber !== undefined && secondNumber < firstNumber;
+}
+
 function referencedChapterNumber(chapterNumbers, id) {
   if (typeof id !== "string" || id === "") {
     return undefined;
@@ -296,22 +305,26 @@ function referencedChapterNumber(chapterNumbers, id) {
   return match ? Number.parseInt(match[1], 10) : undefined;
 }
 
-function chekhovWarning(label, planted, plantedNumber, payoff, payoffNumber, latestChapter) {
+// The gap since the plant counts chapter positions, not chapter numbers, so
+// gaps in the numbering do not inflate it.
+function chekhovWarning(label, planted, plantedNumber, payoff, payoffNumber, context) {
   if (plantedNumber === undefined) {
     return "";
   }
+  const latestChapter = context.latestChapter;
+  const since = context.chapterNumberList.filter((number) => number > plantedNumber && number <= latestChapter).length;
   // A recorded payoff chapter that has been drafted should have paid off,
   // however soon after the plant it came.
   if (payoff && payoffNumber !== undefined && payoffNumber <= latestChapter) {
     return `${label} payoff chapter ${payoff} has passed and status is still planted`;
   }
-  if (latestChapter - plantedNumber < CHEKHOV_CHAPTER_GAP) {
+  if (since < CHEKHOV_CHAPTER_GAP) {
     return "";
   }
   if (payoff && payoffNumber !== undefined && payoffNumber > latestChapter) {
     return "";
   }
-  return `${label} was planted in ${planted}, ${latestChapter - plantedNumber} chapters ago, and has no payoff yet`;
+  return `${label} was planted in ${planted}, ${since} chapters ago, and has no payoff yet`;
 }
 
 function checkContinuityState(project, context, errors, warnings) {
@@ -331,16 +344,26 @@ function checkContinuityState(project, context, errors, warnings) {
     }
   }
 
+  const seenCharacters = new Map();
   for (const [index, entry] of stateEntries(data["character-state"]).entries()) {
     const entryLabel = `${label} character-state[${index}]`;
     if (!requireMapping(entry, entryLabel, errors)) {
       continue;
     }
-    if (!entry.character || !context.characters.has(entry.character)) {
-      errors.push(`${entryLabel} references missing character ${entry.character || "(unset)"}`);
+    const character = idText(entry.character);
+    if (!character || !context.characters.has(character)) {
+      errors.push(`${entryLabel} references missing character ${character || "(unset)"}`);
     }
-    if (entry.location && !context.locations.has(entry.location)) {
-      errors.push(`${entryLabel} references missing location ${entry.location}`);
+    if (character) {
+      if (seenCharacters.has(character)) {
+        warnings.push(`${entryLabel} repeats character ${character} from character-state[${seenCharacters.get(character)}]; keep one entry per character`);
+      } else {
+        seenCharacters.set(character, index);
+      }
+    }
+    const location = idText(entry.location);
+    if (location && !context.locations.has(location)) {
+      errors.push(`${entryLabel} references missing location ${location}`);
     }
   }
 
@@ -350,51 +373,81 @@ function checkContinuityState(project, context, errors, warnings) {
     if (!requireMapping(entry, entryLabel, errors)) {
       continue;
     }
+    const character = idText(entry.character);
     // `fact` is an optional stable id so the same knowledge can be matched
     // across entries and across books in a series.
     if (entry.fact !== undefined) {
       const fact = String(entry.fact);
       if (!isKebabId(fact)) {
         errors.push(`${entryLabel} fact ${fact || "(empty)"} must be a kebab-case id`);
-      } else {
-        const key = `${entry.character}\u0000${fact}`;
+      } else if (character) {
+        // With no character the entry is already reported as missing one.
+        const key = `${character}\u0000${fact}`;
         if (knownFacts.has(key)) {
-          errors.push(`${entryLabel} repeats fact ${fact} for ${entry.character} from knowledge-state[${knownFacts.get(key)}]`);
+          errors.push(`${entryLabel} repeats fact ${fact} for ${character} from knowledge-state[${knownFacts.get(key)}]`);
         } else {
           knownFacts.set(key, index);
         }
       }
     }
-    if (!entry.character || !context.characters.has(entry.character)) {
-      errors.push(`${entryLabel} references missing character ${entry.character || "(unset)"}`);
+    if (!character || !context.characters.has(character)) {
+      errors.push(`${entryLabel} references missing character ${character || "(unset)"}`);
     }
     if (!entry.knows) {
       errors.push(`${entryLabel} is missing knows`);
     }
-    if (entry["learned-in"] && !context.chapterNumbers.has(entry["learned-in"])) {
-      errors.push(`${entryLabel} references missing chapter ${entry["learned-in"]}`);
+    const learnedIn = idText(entry["learned-in"]);
+    if (learnedIn && !context.chapterNumbers.has(learnedIn)) {
+      errors.push(`${entryLabel} references missing chapter ${learnedIn}`);
     }
   }
 
+  const seenArtifacts = new Map();
   for (const [index, entry] of stateEntries(data["object-state"]).entries()) {
     const entryLabel = `${label} object-state[${index}]`;
     if (!requireMapping(entry, entryLabel, errors)) {
       continue;
     }
-    const artifact = context.artifacts.get(entry.artifact);
-    if (!entry.artifact || !artifact) {
-      errors.push(`${entryLabel} references missing artifact ${entry.artifact || "(unset)"}`);
+    const artifactId = idText(entry.artifact);
+    const artifact = context.artifacts.get(artifactId);
+    if (!artifactId || !artifact) {
+      errors.push(`${entryLabel} references missing artifact ${artifactId || "(unset)"}`);
     }
-    if (entry.owner && !context.characters.has(entry.owner) && !context.factions.has(entry.owner)) {
-      errors.push(`${entryLabel} references missing owner ${entry.owner}`);
+    if (artifactId) {
+      if (seenArtifacts.has(artifactId)) {
+        warnings.push(`${entryLabel} repeats artifact ${artifactId} from object-state[${seenArtifacts.get(artifactId)}]; keep one entry per artifact`);
+      } else {
+        seenArtifacts.set(artifactId, index);
+      }
     }
-    if (entry.location && !context.locations.has(entry.location)) {
-      errors.push(`${entryLabel} references missing location ${entry.location}`);
+    const owner = idText(entry.owner);
+    if (owner && !context.characters.has(owner) && !context.factions.has(owner)) {
+      errors.push(`${entryLabel} references missing owner ${owner}`);
+    }
+    const location = idText(entry.location);
+    if (location && !context.locations.has(location)) {
+      errors.push(`${entryLabel} references missing location ${location}`);
+    }
+    const since = idText(entry.since);
+    if (since && !context.chapterNumbers.has(since)) {
+      errors.push(`${entryLabel} references missing since chapter ${since}`);
     }
     if (entry.status && artifact && artifact.status && entry.status !== artifact.status) {
       warnings.push(`${entryLabel} status ${entry.status} conflicts with ${relative(project, artifact.file)} status ${artifact.status}`);
     }
   }
+}
+
+// Hand-written ids such as `47` or `true` parse as numbers or booleans; they
+// name the same entity as the string id.
+export function idText(value) {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return "";
 }
 
 function castIncludes(record, characterId) {
@@ -428,35 +481,40 @@ function relative(project, file) {
 // are errors. An entry with no `since` was destroyed or lost before this book
 // (carried from an earlier one), so any scene that uses it is an error;
 // mentions stay allowed, since characters remember it.
-function checkPropCustody(project, context, errors, warnings) {
-  const destroyed = [];
+function checkPropCustody(project, context, errors) {
+  // One finding per artifact: when several entries mark it gone, the
+  // earliest one decides.
+  const gone = new Map();
   if (project.continuity) {
-    const label = path.join("continuity", "state.md");
-    for (const [index, entry] of stateEntries(project.continuity.data["object-state"]).entries()) {
+    for (const entry of stateEntries(project.continuity.data["object-state"])) {
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
         continue;
       }
-      const status = String(entry.status ?? "");
+      const status = String(entry.status ?? "").trim().toLowerCase();
       if (status !== "destroyed" && status !== "lost") {
         continue;
       }
-      const entryLabel = `${label} object-state[${index}]`;
-      const artifact = String(entry.artifact ?? "");
-      const since = entry.since === undefined || entry.since === null ? "" : String(entry.since);
+      const artifact = idText(entry.artifact);
+      const since = idText(entry.since);
+      let record;
       if (since === "") {
-        destroyed.push({ artifact, since: "", sinceNumber: -Infinity, beforeStory: true });
-        continue;
+        record = { artifact, since: "", sinceNumber: -Infinity, beforeStory: true };
+      } else {
+        // checkContinuityState reports a since chapter that does not exist.
+        const sinceNumber = context.chapterNumbers.get(since);
+        if (sinceNumber === undefined) {
+          continue;
+        }
+        record = { artifact, since, sinceNumber, beforeStory: false };
       }
-      const sinceNumber = context.chapterNumbers.get(since);
-      if (sinceNumber === undefined) {
-        errors.push(`${entryLabel} references missing since chapter ${since}`);
-        continue;
+      const known = gone.get(artifact);
+      if (!known || record.sinceNumber < known.sinceNumber) {
+        gone.set(artifact, record);
       }
-      destroyed.push({ artifact, since, sinceNumber });
     }
   }
 
-  for (const { artifact, since, sinceNumber, beforeStory } of destroyed) {
+  for (const { artifact, since, sinceNumber, beforeStory } of gone.values()) {
     if (artifact === "") {
       continue;
     }
@@ -488,13 +546,14 @@ function stateChangeTargets(change, artifact) {
   if (!change || typeof change !== "object" || Array.isArray(change)) {
     return false;
   }
-  return change.target === artifact;
+  return idText(change.target) === artifact;
 }
 
-// Clock/time plausibility. Only active when at least one scene carries a
-// date; with no scene dates there are no time findings. Scene timestamps run
-// backward when a dated scene is earlier than the preceding dated scene in
-// the same chapter, and scene travel-hours asserts a minimum travel time.
+// Clock/time plausibility. Malformed dates and times are always reported;
+// the ordering checks run over dated units in reading order (see
+// readingUnits). A unit runs backward when it is earlier than the latest
+// moment the story has reached, and scene travel-hours asserts a minimum
+// time since that moment.
 const TIME_RANKS = new Map([
   ["dawn", 300],
   ["morning", 420],
@@ -505,44 +564,163 @@ const TIME_RANKS = new Map([
 ]);
 
 function checkClock(project, errors, warnings) {
-  if (!project.scenes.some((scene) => scene.date !== "") && !project.chapters.some((chapter) => chapter.date !== "")) {
-    return;
-  }
-
-  const scenesByChapter = new Map();
   for (const scene of project.scenes) {
-    if (scene.date === "") {
-      continue;
-    }
     const label = relative(project, scene.file);
-    const parsed = parseClockDate(scene.date);
-    if (!parsed) {
+    if (scene.date !== "" && !parseClockDate(scene.date)) {
       warnings.push(`${label} has malformed date "${scene.date}"`);
-      continue;
     }
-    const minutes = parseClockTime(scene.time);
-    if (scene.time !== "" && minutes === undefined) {
+    if (scene.time !== "" && parseClockTime(scene.time) === undefined) {
       warnings.push(`${label} has malformed time "${scene.time}"`);
     }
     if (scene.travelHours < 0) {
       warnings.push(`${label} has negative travel-hours ${scene.travelHours}`);
     }
-    const dated = scenesByChapter.get(scene.chapter);
-    if (dated) {
-      dated.push({ scene, label, days: parsed.days, minutes });
-    } else {
-      scenesByChapter.set(scene.chapter, [{ scene, label, days: parsed.days, minutes }]);
+    if (scene.date === "" && scene.travelHours > 0) {
+      warnings.push(`${label} has travel-hours but no date, so the clock check skips it`);
+    }
+  }
+  for (const chapter of project.chapters) {
+    if (chapter.date !== "" && !parseClockDate(chapter.date)) {
+      warnings.push(`Chapter ${chapter.number} has malformed date "${chapter.date}"`);
+    }
+    if (chapter.time !== "" && parseClockTime(chapter.time) === undefined) {
+      warnings.push(`Chapter ${chapter.number} has malformed time "${chapter.time}"`);
     }
   }
 
-  for (const dated of scenesByChapter.values()) {
-    dated.sort((left, right) => left.scene.scene - right.scene.scene);
-    checkSceneSequence(dated, errors, warnings);
+  const stamps = [];
+  for (const { unit, isChapter } of readingUnits(project)) {
+    const parsed = unit.date === "" ? undefined : parseClockDate(unit.date);
+    if (!parsed) {
+      continue;
+    }
+    const minutes = parseClockTime(unit.time);
+    stamps.push({
+      label: isChapter ? `Chapter ${unit.number}` : relative(project, unit.file),
+      isChapter,
+      date: parsed.text,
+      time: minutes === undefined ? "" : unit.time.trim(),
+      days: parsed.days,
+      minutes,
+      travelHours: isChapter ? 0 : unit.travelHours,
+      flashback: !isChapter && unit.flashbackTo !== ""
+    });
   }
-
-  checkCrossChapterSceneClock(project, scenesByChapter, errors, warnings);
-  checkChapterDates(project, warnings);
+  checkClockOrder(stamps, errors, warnings);
   checkRouteTravel(project, errors);
+}
+
+// Story-order units shared by story timeline and the continuity clock: each
+// chapter's scenes in scene order, or the chapter itself when it has no scene
+// records. Scenes whose chapter matches no chapter file are kept, placed by
+// the number in their chapter id (chapter-07 after chapter 6), else last.
+export function readingUnits(project) {
+  const chapters = [...project.chapters].sort((left, right) => left.number - right.number || left.id.localeCompare(right.id, "en"));
+  const scenesByChapter = new Map();
+  for (const scene of project.scenes) {
+    const list = scenesByChapter.get(scene.chapter) ?? [];
+    list.push(scene);
+    scenesByChapter.set(scene.chapter, list);
+  }
+  const groups = chapters.map((chapter) => ({ chapter, orphan: false }));
+  const known = new Set(chapters.map((chapter) => chapter.id));
+  for (const chapterId of scenesByChapter.keys()) {
+    if (!known.has(chapterId)) {
+      const match = /^chapter-(\d+)$/.exec(chapterId);
+      const number = match ? Number.parseInt(match[1], 10) : Infinity;
+      groups.push({ chapter: { id: chapterId, number, title: chapterId, pov: "", locations: [] }, orphan: true });
+    }
+  }
+  // Infinity - Infinity is NaN, which falls through to the next key.
+  groups.sort((left, right) => (left.chapter.number - right.chapter.number || 0)
+    || Number(left.orphan) - Number(right.orphan)
+    || left.chapter.id.localeCompare(right.chapter.id, "en"));
+
+  const units = [];
+  for (const { chapter, orphan } of groups) {
+    const scenes = (scenesByChapter.get(chapter.id) ?? [])
+      .sort((left, right) => left.scene - right.scene || left.id.localeCompare(right.id, "en"));
+    if (scenes.length === 0) {
+      units.push({ unit: chapter, chapter, isChapter: true, orphan });
+    }
+    for (const scene of scenes) {
+      units.push({ unit: scene, chapter, isChapter: false, orphan });
+    }
+  }
+  return units;
+}
+
+// Walks dated units in reading order against a reference: the latest moment
+// reached so far, with the latest known time on that day. A unit that runs
+// backward (a flashback, or a misdated unit) is reported once and does not
+// become the reference, so later units are still checked against the main
+// line. When the reference itself was the outlier (a flash-forward prologue
+// that the next units all fall before), the story continues from the units
+// after it instead of reporting each of them.
+function checkClockOrder(stamps, errors, warnings) {
+  let reference = null;
+  let preceding = null;
+  let candidate = null;
+  for (const current of stamps) {
+    if (reference === null) {
+      reference = current;
+      continue;
+    }
+    if (!runsBackward(current, reference)) {
+      checkTravelHours(current, reference, errors);
+      const next = advanceClock(reference, current);
+      if (next !== reference) {
+        preceding = reference;
+        reference = next;
+      }
+      candidate = null;
+      continue;
+    }
+    if (candidate && !current.flashback && !runsBackward(current, candidate)
+      && (preceding === null || !runsBackward(candidate, preceding))) {
+      checkTravelHours(current, candidate, errors);
+      preceding = candidate;
+      reference = advanceClock(candidate, current);
+      candidate = null;
+      continue;
+    }
+    warnings.push(backwardFinding(current, reference));
+    if (!current.flashback) {
+      candidate = current;
+    }
+  }
+}
+
+function runsBackward(current, reference) {
+  if (current.days !== reference.days) {
+    return current.days < reference.days;
+  }
+  return current.minutes !== undefined && reference.minutes !== undefined && current.minutes < reference.minutes;
+}
+
+// An untimed unit on the reference's day could fall at any time that day, so
+// the reference keeps its known time.
+function advanceClock(reference, current) {
+  return current.days === reference.days && current.minutes === undefined ? reference : current;
+}
+
+function backwardFinding(current, reference) {
+  if (!current.isChapter) {
+    return `${current.label} timestamp runs backward`;
+  }
+  const sameDay = current.days === reference.days;
+  const when = (stamp) => (sameDay && stamp.time ? `${stamp.date} ${stamp.time}` : stamp.date);
+  return `${current.label} date ${when(current)} is earlier than ${reference.label} date ${when(reference)}`;
+}
+
+function checkTravelHours(current, reference, errors) {
+  if (!(current.travelHours > 0) || current.minutes === undefined || reference.minutes === undefined) {
+    return;
+  }
+  const elapsedHours = ((current.days - reference.days) * 1440 + current.minutes - reference.minutes) / 60;
+  if (elapsedHours < current.travelHours - 1e-9) {
+    errors.push(`${current.label} allows only ${formatHours(elapsedHours, Math.floor)} for travel of ${current.travelHours}h`);
+  }
 }
 
 // Named parts of the day cover a span of clock time, so a journey is judged
@@ -577,6 +755,9 @@ function checkRouteTravel(project, errors) {
   if (graph.size === 0) {
     return;
   }
+  // A scene with no pov of its own is told by its chapter's POV, as story
+  // timeline shows it.
+  const chapterPov = new Map(project.chapters.map((chapter) => [chapter.id, idText(chapter.pov)]));
   const sightings = new Map();
   for (const scene of project.scenes) {
     const parsed = parseClockDate(scene.date);
@@ -584,9 +765,10 @@ function checkRouteTravel(project, errors) {
       continue;
     }
     const window = sceneWindow(parsed.days, scene.time);
-    const present = new Set(scene.characters.filter((id) => typeof id === "string"));
-    if (typeof scene.pov === "string" && scene.pov !== "") {
-      present.add(scene.pov);
+    const present = new Set(scene.characters.map(idText).filter((id) => id !== ""));
+    const pov = idText(scene.pov) || chapterPov.get(scene.chapter) || "";
+    if (pov !== "") {
+      present.add(pov);
     }
     for (const characterId of present) {
       const list = sightings.get(characterId) ?? [];
@@ -631,7 +813,9 @@ function checkRouteTravel(project, errors) {
         // either order, so the gap is the larger of the two readings.
         const elapsed = Math.max(forwardGap, (previous.latest - current.earliest) / 60);
         const needed = previous.scene.location === current.scene.location ? undefined : distance(previous.scene.location, current.scene.location);
-        if (needed !== undefined && elapsed < needed) {
+        // Route legs are decimal hours, so their float sum can overshoot an
+        // exact fit (0.1h + 0.2h against 18 minutes) by a rounding error.
+        if (needed !== undefined && elapsed < needed - 1e-9) {
           // Round the gap down and the route up so a near miss (10.98h
           // against 11h) never reads as equal.
           const gap = previous.exact && current.exact ? formatHours(elapsed, Math.floor) : `at most ${formatHours(elapsed, Math.floor)}`;
@@ -643,10 +827,34 @@ function checkRouteTravel(project, errors) {
   }
 }
 
+// The routes the travel check uses, one per declared direction: routes to a
+// known other location with a positive number of hours, keeping the fastest
+// when a location lists the same destination twice. story diagram draws
+// these same routes.
+export function usableRoutes(locations) {
+  const known = new Set(locations.map((location) => location.id));
+  const fastest = new Map();
+  for (const location of locations) {
+    for (const route of location.routes ?? []) {
+      if (!route || typeof route !== "object" || Array.isArray(route)) {
+        continue;
+      }
+      const to = idText(route.to);
+      if (!known.has(to) || to === location.id || typeof route.hours !== "number" || !Number.isFinite(route.hours) || route.hours <= 0) {
+        continue;
+      }
+      const key = `${location.id}>${to}`;
+      if (!fastest.has(key) || fastest.get(key).hours > route.hours) {
+        fastest.set(key, { from: location.id, to, hours: route.hours, mode: typeof route.mode === "string" ? route.mode : "" });
+      }
+    }
+  }
+  return [...fastest.values()];
+}
+
 // Routes are two-way unless the destination declares its own route back.
 function routeGraph(locations) {
   const graph = new Map();
-  const declared = new Set();
   const addEdge = (from, to, hours) => {
     if (!graph.has(from)) {
       graph.set(from, new Map());
@@ -656,18 +864,9 @@ function routeGraph(locations) {
       edges.set(to, hours);
     }
   };
-  const valid = [];
-  const known = new Set(locations.map((location) => location.id));
-  for (const location of locations) {
-    for (const route of location.routes ?? []) {
-      if (route && typeof route === "object" && typeof route.to === "string" && known.has(route.to) && route.to !== location.id
-        && typeof route.hours === "number" && Number.isFinite(route.hours) && route.hours > 0) {
-        valid.push([location.id, route.to, route.hours]);
-        declared.add(`${location.id}>${route.to}`);
-      }
-    }
-  }
-  for (const [from, to, hours] of valid) {
+  const routes = usableRoutes(locations);
+  const declared = new Set(routes.map((route) => `${route.from}>${route.to}`));
+  for (const { from, to, hours } of routes) {
     addEdge(from, to, hours);
     if (!declared.has(`${to}>${from}`)) {
       addEdge(to, from, hours);
@@ -737,53 +936,6 @@ function formatHours(hours, round = Math.round) {
   return `${round(Math.round(hours * 1e6) / 1e5) / 10}h`;
 }
 
-function checkCrossChapterSceneClock(project, scenesByChapter, errors, warnings) {
-  const ordered = [...project.chapters].sort((left, right) => left.number - right.number);
-  let previous = null;
-  for (const chapter of ordered) {
-    const dated = scenesByChapter.get(chapter.id);
-    if (!dated || dated.length === 0) {
-      continue;
-    }
-    const sorted = [...dated].sort((left, right) => left.scene.scene - right.scene.scene);
-    if (previous) {
-      checkSceneSequence([previous, sorted[0]], errors, warnings);
-    }
-    previous = sorted[sorted.length - 1];
-  }
-}
-
-function checkSceneSequence(dated, errors, warnings) {
-  for (let index = 1; index < dated.length; index += 1) {
-    const previous = dated[index - 1];
-    const current = dated[index];
-    if (timestampBefore(current, previous)) {
-      warnings.push(`${current.label} timestamp runs backward`);
-      continue;
-    }
-    if (current.scene.travelHours > 0 && previous.minutes !== undefined && current.minutes !== undefined) {
-      const elapsedHours = (timestampMinutes(current) - timestampMinutes(previous)) / 60;
-      if (elapsedHours < current.scene.travelHours) {
-        errors.push(`${current.label} allows only ${elapsedHours}h for travel of ${current.scene.travelHours}h`);
-      }
-    }
-  }
-}
-
-function timestampBefore(current, previous) {
-  if (current.days !== previous.days) {
-    return current.days < previous.days;
-  }
-  if (current.minutes === undefined || previous.minutes === undefined) {
-    return false;
-  }
-  return current.minutes < previous.minutes;
-}
-
-function timestampMinutes(stamp) {
-  return stamp.days * 1440 + stamp.minutes;
-}
-
 export function storyDateError(value) {
   if (value === undefined || value === null || String(value).trim() === "") {
     return "";
@@ -842,31 +994,4 @@ export function parseClockTime(value) {
     return undefined;
   }
   return hours * 60 + minutes;
-}
-
-function checkChapterDates(project, warnings) {
-  let latestDate = "";
-  let latestNumber = 0;
-  for (const chapter of project.chapters) {
-    if (chapter.date === "") {
-      continue;
-    }
-    const parsed = parseClockDate(chapter.date);
-    if (!parsed) {
-      warnings.push(`Chapter ${chapter.number} has malformed date "${chapter.date}"`);
-      continue;
-    }
-    if (chapter.time !== "") {
-      if (parseClockTime(chapter.time) === undefined) {
-        warnings.push(`Chapter ${chapter.number} has malformed time "${chapter.time}"`);
-      }
-    }
-    if (latestDate !== "" && parsed.text < latestDate) {
-      warnings.push(`Chapter ${chapter.number} date ${parsed.text} is earlier than Chapter ${latestNumber} date ${latestDate}`);
-    }
-    if (parsed.text > latestDate) {
-      latestDate = parsed.text;
-      latestNumber = chapter.number;
-    }
-  }
 }

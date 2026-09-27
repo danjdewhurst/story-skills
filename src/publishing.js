@@ -9,9 +9,31 @@ const BISAC_PATTERN = /^[A-Z]{3}\d{6}$/;
 const LANGUAGE_PATTERN = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
 const SCALAR_FIELDS = ["author", "language", "isbn", "publisher", "publication-date", "description", "copyright", "cover-alt", "ai-disclosure"];
 
+// A `[TODO: author to supply]` marker, which the publishing skill leaves
+// rather than inventing a value. Builds and the readiness checklist treat it
+// as missing so it never reaches a retailer.
+export function isPlaceholder(value) {
+  return typeof value === "string" && /^\[TODO\b/i.test(value.trim());
+}
+
+// Languages written right to left, by primary subtag, and the scripts that
+// make any language right to left (az-Arab, pa-Arab). A Latin or other script
+// subtag makes a listed language left to right (ku-Latn).
+const RTL_LANGUAGES = new Set(["ar", "arc", "ckb", "dv", "fa", "he", "iw", "ji", "ks", "ku", "ps", "sd", "syr", "ug", "ur", "yi"]);
+const RTL_SCRIPTS = new Set(["adlm", "arab", "hebr", "mand", "nkoo", "rohg", "samr", "syrc", "thaa"]);
+
+export function textDirection(language) {
+  const [primary, ...subtags] = String(language ?? "").trim().toLowerCase().split("-");
+  const script = subtags.find((subtag) => /^[a-z]{4}$/.test(subtag));
+  if (script !== undefined) {
+    return RTL_SCRIPTS.has(script) ? "rtl" : "ltr";
+  }
+  return RTL_LANGUAGES.has(primary) ? "rtl" : "ltr";
+}
+
 export function publishingMeta(data) {
-  const text = (field) => (typeof data[field] === "string" ? data[field].trim() : "");
-  const list = (field) => (Array.isArray(data[field]) ? data[field].filter((item) => typeof item === "string" && item.trim() !== "").map((item) => item.trim()) : []);
+  const text = (field) => (typeof data[field] === "string" && !isPlaceholder(data[field]) ? data[field].trim() : "");
+  const list = (field) => (Array.isArray(data[field]) ? data[field].filter((item) => typeof item === "string" && item.trim() !== "" && !isPlaceholder(item)).map((item) => item.trim()) : []);
   const authors = list("authors");
   const author = text("author");
   return {
@@ -41,15 +63,15 @@ export function validatePublishing(data, errors, warnings) {
       errors.push(`story.md frontmatter field ${field} must be a list of text`);
     }
   }
-  if (typeof data.language === "string" && !LANGUAGE_PATTERN.test(data.language.trim())) {
+  if (typeof data.language === "string" && !isPlaceholder(data.language) && !LANGUAGE_PATTERN.test(data.language.trim())) {
     errors.push(`story.md language ${data.language} must be a BCP 47 tag such as en, en-GB, or fr`);
   }
   const isbn = typeof data.isbn === "number" ? String(data.isbn) : data.isbn;
-  if (typeof isbn === "string" && isbn.trim() !== "" && normalizeIsbn(isbn) === "") {
+  if (typeof isbn === "string" && isbn.trim() !== "" && !isPlaceholder(isbn) && normalizeIsbn(isbn) === "") {
     const hint = typeof data.isbn === "number" ? "; quote it so leading zeros survive" : "";
     errors.push(`story.md isbn ${isbn} is not a valid ISBN-13 or ISBN-10 (check the digits and checksum${hint})`);
   }
-  if (typeof data["publication-date"] === "string") {
+  if (typeof data["publication-date"] === "string" && !isPlaceholder(data["publication-date"])) {
     const dateError = storyDateError(data["publication-date"]);
     if (dateError !== "") {
       errors.push(`story.md publication-date ${dateError}`);
@@ -57,13 +79,19 @@ export function validatePublishing(data, errors, warnings) {
   }
   if (Array.isArray(data.subjects)) {
     for (const subject of data.subjects) {
-      if (typeof subject === "string" && !BISAC_PATTERN.test(subject.trim())) {
+      if (typeof subject === "string" && !isPlaceholder(subject) && !BISAC_PATTERN.test(subject.trim())) {
         errors.push(`story.md subject ${subject} must be a BISAC code such as FIC022000`);
       }
     }
   }
   if (Array.isArray(data.keywords) && data.keywords.length > MAX_KEYWORDS) {
     warnings.push(`story.md lists ${data.keywords.length} keywords; most retailers accept ${MAX_KEYWORDS}`);
+  }
+  for (const field of [...SCALAR_FIELDS, "authors", "keywords", "subjects"]) {
+    const values = Array.isArray(data[field]) ? data[field] : [data[field]];
+    if (values.some(isPlaceholder)) {
+      warnings.push(`story.md ${field} is still a [TODO] placeholder; builds leave it out`);
+    }
   }
   if (data.author !== undefined && data.authors !== undefined) {
     warnings.push("story.md sets both author and authors; builds use authors");
@@ -137,7 +165,8 @@ export function metadataSheet(input) {
     [`Keywords, up to ${MAX_KEYWORDS} (\`keywords\`)`, meta.keywords.length > 0 && meta.keywords.length <= MAX_KEYWORDS],
     ["BISAC subjects (`subjects`)", meta.subjects.length > 0],
     ["Copyright line (`copyright`) or copyright matter page", meta.copyright !== "" || input.hasCopyrightPage],
-    ["Cover image (`cover`)", typeof data.cover === "string" && data.cover !== ""],
+    // The build checks the file; a path alone is not a cover.
+    ["Cover image (`cover`)", Boolean(input.coverReady)],
     ["Cover alt text (`cover-alt`)", meta.coverAlt !== ""],
     ["AI-use statement decided (`ai-disclosure`)", meta.aiDisclosure !== ""],
     [`Permissions cleared for quoted matter (\`permission\`${(input.pendingPermissions ?? []).length > 0 ? `; pending: ${input.pendingPermissions.join(", ")}` : ""})`, (input.pendingPermissions ?? []).length === 0],

@@ -1,5 +1,6 @@
 import path from "node:path";
-import { parseClockDate, parseClockTime } from "./continuity.js";
+import { parseClockDate, parseClockTime, readingUnits } from "./continuity.js";
+import { roundedShares } from "./plural.js";
 
 // Read-only views over the project: story events in chronological order,
 // POV balance, and each character's presence across chapters. Nothing here
@@ -8,29 +9,12 @@ import { parseClockDate, parseClockTime } from "./continuity.js";
 export function buildTimeline(project) {
   const chapters = [...project.chapters].sort((left, right) => left.number - right.number || left.id.localeCompare(right.id, "en"));
   const chapterById = new Map(chapters.map((chapter) => [chapter.id, chapter]));
-  const entries = [];
+  // A chapter with no scene records stands in for its own scenes, and scenes
+  // whose chapter file is missing are kept, as story continuity reads them.
+  const entries = readingUnits(project).map((unit, reading) => timelineEntry(project, unit, reading));
 
-  for (const chapter of chapters) {
-    const scenes = project.scenes
-      .filter((scene) => scene.chapter === chapter.id)
-      .sort((left, right) => left.scene - right.scene || left.id.localeCompare(right.id, "en"));
-    // A chapter with no scene records stands in for its own scenes.
-    const units = scenes.length === 0 ? [{ ...chapter, isChapter: true }] : scenes;
-    for (const unit of units) {
-      entries.push(timelineEntry(project, unit, chapter, entries.length));
-    }
-  }
-
-  const dated = entries.filter((entry) => entry.days !== undefined)
-    .sort((left, right) => left.days - right.days || left.minutes - right.minutes || left.reading - right.reading);
-  // An entry is told out of order when something that happens after it in
-  // story time was read before it.
-  let earliestLaterReading = Infinity;
-  for (let index = dated.length - 1; index >= 0; index -= 1) {
-    const entry = dated[index];
-    entry.toldLate = entry.reading > earliestLaterReading;
-    earliestLaterReading = Math.min(earliestLaterReading, entry.reading);
-  }
+  const dated = orderByStoryTime(entries.filter((entry) => entry.days !== undefined));
+  markToldLate(dated);
 
   return {
     chronology: dated,
@@ -40,7 +24,87 @@ export function buildTimeline(project) {
   };
 }
 
-function timelineEntry(project, unit, chapter, reading) {
+// Within a day, timed entries run in time order. An untimed entry could fall
+// at any time that day, so it keeps its reading position: it follows the
+// timed entry read just before it, or opens the day when none was.
+function orderByStoryTime(dated) {
+  const days = new Map();
+  for (const entry of dated) {
+    const list = days.get(entry.days) ?? [];
+    list.push(entry);
+    days.set(entry.days, list);
+  }
+  const ordered = [];
+  for (const day of [...days.keys()].sort((left, right) => left - right)) {
+    const list = days.get(day);
+    const timed = list.filter((entry) => entry.minutes !== undefined)
+      .sort((left, right) => left.minutes - right.minutes || left.reading - right.reading);
+    const following = new Map();
+    const opening = [];
+    for (const entry of list.filter((item) => item.minutes === undefined)) {
+      let before = null;
+      for (const candidate of timed) {
+        if (candidate.reading < entry.reading && (before === null || candidate.reading > before.reading)) {
+          before = candidate;
+        }
+      }
+      if (before === null) {
+        opening.push(entry);
+      } else {
+        following.set(before, [...(following.get(before) ?? []), entry]);
+      }
+    }
+    ordered.push(...opening);
+    for (const entry of timed) {
+      ordered.push(entry, ...(following.get(entry) ?? []));
+    }
+  }
+  return ordered;
+}
+
+// An entry is told out of order when something that happens strictly after
+// it in story time was read before it: a later day, or a later time on the
+// same day when both entries have a time.
+function markToldLate(dated) {
+  let earliestLaterDay = Infinity;
+  let index = dated.length;
+  while (index > 0) {
+    let start = index - 1;
+    while (start > 0 && dated[start - 1].days === dated[index - 1].days) {
+      start -= 1;
+    }
+    const day = dated.slice(start, index);
+    const timed = day.filter((entry) => entry.minutes !== undefined)
+      .sort((left, right) => right.minutes - left.minutes);
+    let earliestLaterTime = Infinity;
+    let group = [];
+    let groupMinutes;
+    const flush = () => {
+      for (const entry of group) {
+        earliestLaterTime = Math.min(earliestLaterTime, entry.reading);
+      }
+      group = [];
+    };
+    const laterTime = new Map();
+    for (const entry of timed) {
+      if (entry.minutes !== groupMinutes) {
+        flush();
+        groupMinutes = entry.minutes;
+      }
+      laterTime.set(entry, earliestLaterTime);
+      group.push(entry);
+    }
+    for (const entry of day) {
+      entry.toldLate = entry.reading > earliestLaterDay || entry.reading > (laterTime.get(entry) ?? Infinity);
+    }
+    for (const entry of day) {
+      earliestLaterDay = Math.min(earliestLaterDay, entry.reading);
+    }
+    index = start;
+  }
+}
+
+function timelineEntry(project, { unit, chapter, isChapter, orphan }, reading) {
   // Scenes carry their own timestamps; a chapter's date and time only apply
   // to the chapter-level entry that stands in for a chapter with no scenes,
   // matching how story continuity reads them.
@@ -51,14 +115,17 @@ function timelineEntry(project, unit, chapter, reading) {
     id: unit.id,
     file: path.relative(project.root, unit.file),
     title: unit.title,
-    chapterNumber: chapter.number,
+    chapterNumber: Number.isFinite(chapter.number) ? chapter.number : chapter.id,
+    // Set when the scene's chapter has no chapter file.
+    orphanOf: orphan ? chapter.id : "",
     pov: unit.pov || chapter.pov || "",
-    location: unit.isChapter ? chapter.locations[0] ?? "" : unit.location,
+    location: isChapter ? chapter.locations[0] ?? "" : unit.location,
     date: parsedDate?.text ?? "",
     time: minutes === undefined ? "" : time.trim(),
     days: parsedDate?.days,
-    minutes: minutes ?? 0,
-    flashbackTo: unit.isChapter ? "" : unit.flashbackTo,
+    // Undefined when the entry has no time: it spans its whole day.
+    minutes,
+    flashbackTo: isChapter ? "" : unit.flashbackTo,
     reading
   };
 }
@@ -140,13 +207,17 @@ export function formatTimeline(timeline, totalChapters) {
     if (entry.flashbackTo) {
       notes.push(`flashback to ${entry.flashbackTo}`);
     }
+    if (entry.orphanOf) {
+      notes.push(`no chapter file for ${entry.orphanOf}`);
+    }
     lines.push(`- ${when}  ${entry.id}: ${entry.title}${describe(entry)}${notes.length === 0 ? "" : ` [${notes.join("; ")}]`}`);
   }
 
   if (timeline.undated.length > 0) {
     lines.push("", "Undated (reading order):");
     for (const entry of timeline.undated) {
-      lines.push(`- ${entry.id}: ${entry.title}${describe(entry)}`);
+      const orphan = entry.orphanOf ? ` [no chapter file for ${entry.orphanOf}]` : "";
+      lines.push(`- ${entry.id}: ${entry.title}${describe(entry)}${orphan}`);
     }
   }
 
@@ -154,8 +225,10 @@ export function formatTimeline(timeline, totalChapters) {
   if (timeline.pov.length === 0) {
     lines.push("- None");
   }
-  for (const entry of timeline.pov) {
-    lines.push(`- ${entry.pov}: ${plural(entry.chapters, "chapter")}, ${formatNumber(entry.words)} words (${Math.round(entry.share)}%)`);
+  // Rounded so the shares add up to 100.
+  const shares = roundedShares(timeline.pov.map((entry) => entry.words));
+  for (const [index, entry] of timeline.pov.entries()) {
+    lines.push(`- ${entry.pov}: ${plural(entry.chapters, "chapter")}, ${formatNumber(entry.words)} words (${shares[index]}%)`);
   }
 
   lines.push("", "Character presence:");

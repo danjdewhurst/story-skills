@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { checkProjectSchema } from "./check-schema.js";
-import { checkProjectContinuity, computeWordCounts, seriesReport, validateLinks, validateProject } from "../src/story.js";
+import { checkProjectContinuity, computeWordCounts, reindexProject, seriesReport, validateLinks, validateProject } from "../src/story.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const examplesRoot = path.join(repoRoot, "examples");
@@ -52,6 +53,19 @@ export function compareFindings(failures, exampleName, kind, expected, actual) {
   return failures;
 }
 
+// Registries the example ships out of date: reindexes a scratch copy and
+// returns the project-relative paths reindex would change.
+export function staleRegistries(root) {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "story-examples-"));
+  try {
+    const copy = path.join(scratch, path.basename(root));
+    fs.cpSync(root, copy, { recursive: true });
+    return reindexProject(copy).changed.map((file) => path.relative(copy, file));
+  } finally {
+    fs.rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
 function main() {
   const failures = [];
   const summaries = [];
@@ -73,6 +87,9 @@ function main() {
     collectResult(failures, name, "links", links);
     for (const error of checkProjectSchema(root)) {
       failures.push(`${name} schema error: ${error}`);
+    }
+    for (const registry of staleRegistries(root)) {
+      failures.push(`${name} registry is stale: ${registry} (run story reindex)`);
     }
     // Linked examples (the-last-ember and its prequel) must agree on shared canon.
     collectResult(failures, name, "series", seriesReport(root));

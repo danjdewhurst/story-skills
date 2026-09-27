@@ -607,11 +607,11 @@ describe("github workflows", () => {
 
   test("checkFixtureOverlaps stays quiet on acknowledged collisions", () => {
     const checks = {
-      required: ["Petra", "Thursday"],
-      banned: ["it was Petra", "delve"],
+      required: ["Petra's brass key", "Thursday"],
+      banned: ["brass key", "delve"],
       expected_overlaps: {
         in_input: [["delve"]],
-        with_required: [["it was Petra", "Petra"]]
+        with_required: [["brass key", "Petra's brass key"]]
       }
     };
     const warnings = [];
@@ -621,14 +621,14 @@ describe("github workflows", () => {
 
   test("checkFixtureOverlaps warns on a new collision", () => {
     const checks = {
-      required: ["Petra", "Thursday"],
-      banned: ["it was Petra", "the Thursday boat"],
-      expected_overlaps: { with_required: [["it was Petra", "Petra"]] }
+      required: ["Petra's brass key", "the Thursday boat"],
+      banned: ["brass key", "Thursday", "it was Petra"],
+      expected_overlaps: { with_required: [["brass key", "Petra's brass key"]] }
     };
     const warnings = [];
     expect(checkFixtureOverlaps([], warnings, "demo", checks, "Petra called.")).toEqual([]);
     expect(warnings).toEqual([
-      'demo: banned "the Thursday boat" overlaps required "Thursday" — keeping the canon may trip the trap ' +
+      'demo: banned "Thursday" overlaps required "the Thursday boat" — keeping the canon may trip the trap ' +
         "(acknowledge it in expected_overlaps.with_required if it is deliberate)"
     ]);
   });
@@ -636,7 +636,7 @@ describe("github workflows", () => {
   test("checkFixtureOverlaps fails on an acknowledgement that no longer collides", () => {
     const checks = {
       required: ["Petra"],
-      banned: ["it was Ana"],
+      banned: ["it was Ana", "it was Petra"],
       expected_overlaps: {
         in_input: [["delve"]],
         with_required: [["it was Petra", "Petra"]]
@@ -652,9 +652,9 @@ describe("github workflows", () => {
 
   test("checkFixtureOverlaps rejects a malformed acknowledgement and still warns", () => {
     const checks = {
-      required: ["Petra"],
-      banned: ["it was Petra"],
-      expected_overlaps: { with_required: ["it was Petra"], typo: [] }
+      required: ["Petra's brass key"],
+      banned: ["brass key"],
+      expected_overlaps: { with_required: ["brass key"], typo: [] }
     };
     const warnings = [];
     expect(checkFixtureOverlaps([], warnings, "demo", checks, "Petra called.")).toEqual([

@@ -143,7 +143,7 @@
         "name": { "type": "string" },
         "type": { "type": "string" },
         "region": { "type": "string" },
-        "population": { "type": "string" },
+        "population": { "type": ["string", "integer"] },
         "controlled-by": { "type": "string" },
         "notable-characters": { "$ref": "#/$defs/stringList" },
         "tags": { "$ref": "#/$defs/stringList" },

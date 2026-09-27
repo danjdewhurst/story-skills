@@ -1,4 +1,4 @@
-import { splitWords } from "./markdown.js";
+import { foldLatin, splitWords } from "./markdown.js";
 import { editDistance } from "./prose.js";
 
 // Collision check for candidate names before they enter the bible. An exact
@@ -132,7 +132,7 @@ function looksAlike(left, right) {
 }
 
 function normalize(value) {
-  return String(value).normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  return foldLatin(value).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 }
 
 export function formatNames(report) {

@@ -5,7 +5,7 @@ describe("markdown utilities", () => {
   test("normalizes labels and counts prose words", () => {
     expect(kebabCase(" Sera's Last Ember! ")).toBe("seras-last-ember");
     expect(titleCaseSlug("seras-last-ember")).toBe("Seras Last Ember");
-    expect(wordCount("# Title\n\nSera's [lost heir](x.md) `code` **returns**.")).toBe(5);
+    expect(wordCount("# Title\n\nSera's [lost heir](x.md) `code` **returns**.")).toBe(6);
   });
 
   test("omits a chapter title that is blank or only repeats the number", () => {

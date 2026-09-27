@@ -102,7 +102,7 @@ describe("story voices", () => {
 
     writeChapter(root, 1, ["\"Wait!\" Tom shouted."]);
     const result = invoke(cwd, ["voices", root]);
-    expect(result.out).toContain("tom-reed: 1 lines, 1 words");
+    expect(result.out).toContain("tom-reed: 1 line, 1 word");
     expect(result.out).toContain("exclamations 100%");
     expect(result.out).toContain("Signature words: none yet");
     expect(result.err).toContain("Voice check complete");

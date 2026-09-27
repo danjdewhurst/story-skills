@@ -123,7 +123,7 @@ Import fills in `word-count` and rebuilds the chapter registry, so you do not ne
 
 ### How chapters are split
 
-A chapter heading is a markdown heading of any level (`#` to `######`) whose text starts with the word `Chapter`, in any letter case (`CHAPTER 9 - Loud` counts too), or is a `Prologue`, `Epilogue`, `Interlude`, or `Afterword` heading:
+A chapter heading is a markdown heading of any level (`#` to `######`, or a one-line setext heading underlined with `===` or `---` after a blank line) whose text starts with the word `Chapter`, in any letter case (`CHAPTER 9 - Loud` counts too), or is a `Prologue`, `Epilogue`, `Interlude`, or `Afterword` heading:
 
 | Heading in the source | Chapter title |
 |-----------------------|---------------|
@@ -135,6 +135,9 @@ A chapter heading is a markdown heading of any level (`#` to `######`) whose tex
 | `## Chapter 5` | `Chapter N`, its new number |
 | `## Chapter 6:` | `Chapter N`, its new number |
 | `# Chapter 1: Arrival {#arrival .unnumbered}` | `Arrival` |
+| `## Chapter 2: Arrival ##` | `Arrival` |
+| `## Chapter 12.5: Half` | `Half` |
+| `## Chapter One Hundred` | `Chapter N`, its new number |
 | `# Chapter I Am Legend` | `I Am Legend` |
 | `# Prologue` | `Prologue` |
 | `## Epilogue` | `Epilogue` |
@@ -143,28 +146,31 @@ A chapter heading is a markdown heading of any level (`#` to `######`) whose tex
 
 The rules behind the table:
 
-- The number after `Chapter` is optional and can be arabic (`12`), roman (`IV`), or spelled out up to ninety-nine (`One`, `Twenty-One`). A `:`, `.`, `-`, en dash, or em dash may separate it from the title.
+- The number after `Chapter` is optional and can be arabic (`12`, or a decimal such as `12.5`), roman (`IV`), or spelled out up to nine hundred and ninety-nine (`One`, `Twenty-One`, `One Hundred and Five`). A `:`, `.`, `-`, en dash, or em dash may separate it from the title.
 - A `Prologue`, `Epilogue`, `Interlude`, or `Afterword` heading keeps its whole text as the title.
 - Because the number is optional, a heading such as `## Chapter Notes` also starts a chapter (titled `Notes`).
 - The source number is discarded. Chapters are renumbered 1, 2, 3, and so on in the order they appear.
 - When a `Chapter` heading has no title after the number (`Chapter 6`, `Chapter Six:`), the chapter is titled `Chapter N` with its new number, and its heading is a plain `# Chapter N` rather than `# Chapter N: Chapter N`. Export and build print such a chapter the same way. A bare `Prologue:` is titled `Prologue`.
-- A trailing Pandoc attribute block, such as `{#arrival .unnumbered}`, is dropped from the title.
+- A trailing Pandoc attribute block, such as `{#arrival .unnumbered}`, and closing hashes (`## Title ##`) are dropped from the title.
+- A heading inside a closed code fence or an HTML comment is not a heading, so a commented-out outline never splits the manuscript.
 
 Import processes each source document in six steps:
 
-1. Leading YAML frontmatter is removed, including frontmatter written by tools such as Pandoc or Obsidian that the CLI's own parser would reject. A leading `---` scene break is kept.
-2. The text is cleaned for its source type. In a markdown source (`.md` or `.markdown`), Pandoc's dash spellings become real dashes: `---` becomes an em dash (`—`) and `--` an en dash (`–`). Text inside inline code spans, closed `` ``` `` code fences, and HTML comments is left alone, and so is everything after a `<!--` that never closes. Link targets (`](...)`), autolinks (`<https://...>`), bare URLs such as `https://example.com/a--b`, and `mailto:` addresses keep their hyphens, and so do a line made only of dashes and spaces (a `---` or `- - -` scene break), a table separator row such as `|---|---|`, and an indented code line (four spaces or a tab). An indented line that continues a list item is prose, so its dashes are converted. In a plain-text source (`.txt`), leading tabs and spaces are removed from every line, so an indented paragraph from Scrivener or a word processor is not read as a markdown code block.
-3. If the document has chapter headings, each heading starts a chapter and everything up to the next chapter heading is its prose. Text before the first chapter heading becomes a chapter titled `Opening`, with a leading `# Title` line removed.
+1. Leading YAML frontmatter is removed, including frontmatter written by tools such as Pandoc or Obsidian that the CLI's own parser would reject. A leading `---` scene break is kept: a `---` block that starts with a blank line, or holds a line that is not YAML (a key with spaces, such as `She said: go now.`), is prose.
+2. The text is cleaned for its source type. In a markdown source (`.md` or `.markdown`), Pandoc's dash spellings become real dashes: `---` becomes an em dash (`—`) and `--` an en dash (`–`). Text inside inline code spans, closed `` ``` `` code fences, and HTML comments is left alone, and so is everything after a `<!--` that never closes. Link targets (`](...)`), autolinks (`<https://...>`), bare URLs such as `https://example.com/a--b` or `www.example.com/a--b`, email and `mailto:` addresses, and HTML tags (`<span class="x--y">`) keep their hyphens, and so do a line made only of dashes and spaces (a `---` or `- - -` scene break), a table separator row such as `|---|---|`, and an indented code line (four spaces or a tab). An indented line that continues a list item is prose, so its dashes are converted. In a plain-text source (`.txt`), leading tabs and spaces are removed from every line, so an indented paragraph from Scrivener or a word processor is not read as a markdown code block.
+3. If the document has chapter headings, each heading starts a chapter and everything up to the next chapter heading is its prose. Text before the first chapter heading becomes a chapter titled `Opening`, with a leading `# Title` line (or a setext title underlined with `===`) removed. If that text is only HTML comments, they go to the top of the first chapter instead, and the `<!-- Generated by story export. -->` marker is dropped, so an exported manuscript re-imports with the same chapters. A part heading (`# Part Two: Sea`) directly before a chapter heading opens that chapter's prose.
 4. If the document has no markdown chapter headings, as in a manuscript saved as plain text, it is split on chapter lines instead. A chapter line stands alone between blank lines, is at most 80 characters, and is either `Chapter` with a number (`Chapter 3`, `CHAPTER ONE: Arrival`) or one of `Prologue`, `Epilogue`, `Interlude`, and `Afterword`. The number, or the `Prologue`-style word, must end the line or be followed by a separator (`:`, `.`, `-`, `–`, `—`), with or without a title after it, so `Chapter 12 was the worst.`, `Chapter Nine Lives of a Cat`, and `Prologue of doom` do not split, while `Epilogue: After`, a bare `Prologue:`, and `Chapter 3:` (titled `Chapter N` with its new number) do. A single short line before the first chapter line is taken as the book title and dropped; longer text there becomes an `Opening` chapter.
-5. If the document has neither, the whole document becomes one chapter. Its title is the first `# ` heading in the document, and any text before that heading is kept in the prose. With no `# ` heading, the title comes from the file name: `02-smoke.txt` becomes `02 Smoke`.
+5. If the document has neither, the whole document becomes one chapter. Its title is the first `# ` heading in the document (a lone `#` is a scene break, not a heading), and any text before that heading is kept in the prose. With no `# ` heading, the title comes from the file name: `02-smoke.txt` becomes `02 Smoke`.
 6. Chapters whose prose is empty are dropped.
 
 > [!NOTE]
-> Only `Chapter`, `Prologue`, `Epilogue`, `Interlude`, and `Afterword` headings split a document. A `## Part Two` heading inside a single manuscript file stays in the prose of the chapter around it. If your draft uses other markers, rename them to `Chapter` headings before importing, or split the draft into one file per chapter and import the folder.
+> Only `Chapter`, `Prologue`, `Epilogue`, `Interlude`, and `Afterword` headings split a document. A `## Part Two` heading inside a single manuscript file stays in the prose: at the top of the chapter it comes just before, or otherwise in the chapter around it. If your draft uses other markers, rename them to `Chapter` headings before importing, or split the draft into one file per chapter and import the folder.
 
 ### Importing a folder of chapter files
 
-A single source file is read as plain UTF-8 text, whatever its extension. Pass a directory to import every `.md`, `.markdown`, and `.txt` file directly inside it. Subdirectories and other file types are ignored. Each file is split with the rules above, so a folder of one-chapter files gives one chapter per file.
+A single source file is read as UTF-8 text, whatever its extension, and CRLF or bare CR (classic Mac OS) line endings are read as line breaks. A leading byte-order mark is dropped. A zip file (such as a `.docx`; export it to markdown first), a binary file, or text in another encoding such as Windows-1252 is refused rather than imported with replacement characters. Pass a directory to import every `.md`, `.markdown`, and `.txt` file directly inside it. Subdirectories, other file types, hidden files (`.name`), macOS AppleDouble files (`._name`), and Word lock files (`~$name`) are ignored.
+
+A chapter file in Story Skills' own layout, such as one copied from another project, imports as one chapter: its `title` frontmatter is the title, and its prose is the text under `## Chapter Text`, without the outline. Each file is split with the rules above, so a folder of one-chapter files gives one chapter per file.
 
 Files are ordered by the numbers in their names, compared numerically, so `chapter-2` comes before `chapter-10`. Files without a number go last, except files whose names start with `prologue`, `preface`, `foreword`, `introduction`, or `prelude`, which go first. Take a folder `chaps/` with four files:
 
@@ -195,7 +201,7 @@ Remove stray files such as notes from the folder before importing, or delete the
 
 ### Entity candidates
 
-After importing, the CLI lists names that appear at least three times in the prose, most frequent first, up to 25 of them. It counts runs of capitalised words (`Mara Quill`, `The Long Pier` counted as `Long Pier`) and single capitalised words that follow a lowercase word mid-sentence, and it skips common words such as `The`, `He`, and `She`.
+After importing, the CLI lists names that appear at least three times in the prose, most frequent first, up to 25 of them. It counts runs of capitalised words (`Mara Quill`, `The Long Pier` counted as `Long Pier`) and single capitalised words that follow a lowercase word mid-sentence, in any script (`Élodie`), with straight or curly apostrophes and hyphens (`O’Brien`, `King’s Road`, `Anna-Maria`). A word with a capital inside it (`McAllister`, `O’Brien`) counts at the start of a sentence too, and a possessive `’s` counts toward the name. It skips common words such as `The`, `He`, and `She`, and days and months.
 
 The list is a prompt for you, not a set of facts. Nothing is created from it. Review it, then create the entries that matter with `story add`:
 
@@ -235,6 +241,8 @@ Without `--force`, import refuses a target directory that already exists:
 ```
 
 With `--force`, import adds any missing starter files and leaves other existing files alone, with one exception: it **deletes every `chapter-NN.md` file in `chapters/`** before writing the imported chapters.
+
+Before it changes anything, import checks that the project's other files parse, as `story reindex` would; if one does not, it names the file and leaves the project as it was. An existing `story.md` is kept, so a different `--title` or another `story.md` option is not applied, and import says so in a warning. It also prints a note to run `story links`, since scenes, bible entries, and continuity files may name chapters that are gone or changed.
 
 > [!WARNING]
 > Chapter frontmatter you filled in (POV, locations, characters, status) is lost with the old chapter files. Scene files, bible entries, and `matter/` pages are kept, but scenes may now point at chapters with different content. Commit or back up the project before a forced import. The `story-maintenance` skill asks you before it runs one.
@@ -278,7 +286,7 @@ Export and the book formats assemble the book from the same parts, in this order
 Only chapter prose goes in. Scene files, outlines, notes, and the bible do not. The CLI finds a chapter's prose this way:
 
 - If the chapter has a `## Chapter Text` heading, the prose is everything after it.
-- Otherwise, if it has a `## Outline` section, the prose is everything after the first `---` line following the outline. With no `---`, it is everything after `## Outline`.
+- Otherwise, if it has a `## Outline` section, the prose is everything after the `---` line directly below the outline's list. A `---` after prose is a scene break, not the divider. With no divider, it is everything after `## Outline`.
 - Otherwise, the prose is the whole body with a leading `# ` heading removed.
 
 HTML comments (`<!-- ... -->`) in the prose are left out of the word count and of every build format, so they are a safe place for notes to yourself. Close each one: `story validate` warns about a chapter whose `<!--` never closes, because the text after it then shows in builds. A `<!--` or `-->` inside a closed `` ``` `` code fence or an inline code span (`` `<!-- x -->` ``) is literal text: it neither opens nor closes a comment, and the validate warning ignores it.
@@ -366,7 +374,7 @@ Write matter text yourself. The `story-maintenance` skill will not invent acknow
 |-------|------|---------|
 | `author` | Text | The author in the EPUB (`dc:creator`), HTML, print, narration, and metadata builds, and the byline in both Shunn builds. The plain DOCX build does not use it. |
 | `authors` | List of text | Replaces `author` for co-authored books in every build, including the Shunn byline. `validate` warns when both are set. |
-| `language` | BCP 47 tag, such as `en`, `en-GB`, or `fr` | EPUB `dc:language` and the `lang` attribute of every EPUB document; the `lang` attribute of the HTML and print builds; the metadata sheet. Defaults to `en`. |
+| `language` | BCP 47 tag, such as `en`, `en-GB`, or `fr` | EPUB `dc:language` and the `lang` attribute of every EPUB document; the `lang` attribute of the HTML and print builds; the metadata sheet. Defaults to `en`. A right-to-left language (such as `he`, `ar`, `fa`, or `ur`, or any tag with an Arabic or Hebrew script subtag) also sets `dir="rtl"` on every EPUB, HTML, and print document and `page-progression-direction="rtl"` on the EPUB spine, and the print interior opens from the right: chapters start on left-hand pages and the running heads swap sides. |
 | `isbn` | ISBN-13 or ISBN-10, hyphens and spaces allowed | The EPUB identifier (`urn:isbn:...`) in place of the story id; the generated copyright page; the metadata sheet. `validate` checks the checksum. Quote it, so a leading zero survives. |
 | `publisher` | Text | EPUB `dc:publisher`, the generated copyright page, the metadata sheet. |
 | `publication-date` | Date, such as `2026-10-01` | EPUB `dc:date`, the metadata sheet. |
@@ -377,6 +385,8 @@ Write matter text yourself. The `story-maintenance` skill will not invent acknow
 | `cover-alt` | Text | The EPUB cover image's alt text, instead of `Cover of <title>`; the metadata sheet. |
 | `ai-disclosure` | Text | The generated copyright page and the metadata sheet. |
 | `form` | `flash`, `short-story`, `novelette`, `novella`, `novel`, `serial`, `picture-book`, or `chapter-book` | The metadata sheet. `story init --form` sets it along with a default `target-words`, and `validate` warns when `target-words`, or the finished manuscript, falls outside the form's usual range. |
+
+A value that starts with `[TODO`, such as the `[TODO: author to supply]` placeholder the publishing skill leaves, counts as missing: builds leave it out, the metadata sheet leaves its box unticked, and `validate` warns about it.
 
 A value that fails validation does not stop a build: builds never validate the project first. An ISBN with a bad checksum, for example, is dropped, and the EPUB falls back to the story id as its identifier. Run `story validate .` before building a copy to send out.
 
@@ -516,7 +526,7 @@ The confirmation always counts chapters, even for the metadata sheet.
 | `[path]` or `--path <path>` | Project root. Defaults to the current directory. |
 | `--format <name>` | `markdown` (or `md`), `epub`, `docx`, `shunn`, `html`, `print`, `narration`, or `metadata`. Case-insensitive. Defaults to `markdown`. |
 | `--shunn` | With `--format docx`, apply Shunn formatting. An error with every other format. |
-| `--trim <size>` | With `--format print`, the trim size: `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5`. Defaults to `5.5x8.5`. An error with every other format. |
+| `--trim <size>` | With `--format print`, the trim size: `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5`. Case-insensitive. Defaults to `5.5x8.5`. An error with every other format. |
 | `--out <file>` | Output file instead of the default in `dist/`. |
 
 Any other format is an error:
@@ -542,7 +552,7 @@ author: Ada Writer
 cover: art/cover.png
 ```
 
-The cover must be a `.gif`, `.jpeg`, `.jpg`, `.png`, or `.webp` file inside the project. `story validate` checks the path, and an EPUB build stops if it is wrong:
+The cover must be a `.gif`, `.jpeg`, `.jpg`, `.png`, or `.webp` file inside the project, no larger than 50 MiB, and not a symlink. `story validate` checks the path, and an EPUB build stops if it is wrong:
 
 ```text
 story.md cover art/cover.png does not exist
@@ -592,9 +602,10 @@ The DOCX build is a Word document with:
 
 - the book title in a centred `Title` style,
 - each chapter, and each matter page with `heading: true`, under a `Heading 1` style,
-- one Word paragraph per prose paragraph, with bold and italic carried over.
+- one Word paragraph per prose paragraph, with bold and italic carried over, in a `Normal` style of 12 pt Times New Roman at 1.5 line spacing with a half-inch first-line indent,
+- scene breaks centred in a `Scene Break` style.
 
-The `author` and `authors` fields are not used. For page layout, fonts, and headers, open the file in a word processor and apply your own styles.
+The `author` and `authors` fields are not used. For page layout, headers, and other fonts, open the file in a word processor and change the styles.
 
 ### Shunn standard manuscript format
 
@@ -620,7 +631,7 @@ contact:
   - ada@example.com
 ```
 
-The title page lists the title, `by`, the author, `Approximately N words`, and the contact lines. `N` is the exact word count of chapter prose, as `story wordcount` reports it; round it yourself if a market wants a rounded figure. Each chapter starts on a new page, and front and back matter are left out, as submissions expect.
+The title page lists the title, `by` and the author (both left out when no author is set), `Approximately N words`, and the contact lines. `N` is the word count of chapter prose, as `story wordcount` reports it, rounded as Shunn format asks: exact under 1,000 words, to the nearest 100 under 40,000, and to the nearest 1,000 above that. Each chapter starts on a new page, and front and back matter are left out, as submissions expect.
 
 The start of *The Last Ember* in `--format shunn`, with those fields set:
 
@@ -642,7 +653,7 @@ The grove was quieter than it should have been.
 
 In the `.shunn.md` file, a form-feed character (`\f`) on its own line before each chapter heading marks the page break, and each prose paragraph is joined onto one line with a blank line after it. Markdown emphasis such as `*italic*` is left as written.
 
-The DOCX version uses Courier New at 12 point and double line spacing throughout, centres the title page, starts each chapter with a page break and a bold chapter heading, and turns `**bold**` and `*italic*` into real bold and italic. It does not add a running header, page numbers, or custom margins. Add those in a word processor if a market requires them, and check each market's own guidelines.
+The DOCX version uses Courier New at 12 point and double line spacing throughout, indents each paragraph's first line half an inch, centres the title page and scene breaks, starts each chapter with a page break and a bold chapter heading, and turns `**bold**` and `*italic*` into real bold and italic. It does not add a running header, page numbers, or custom margins. Add those in a word processor if a market requires them, and check each market's own guidelines.
 
 The [`submission`](../skills/submission/SKILL.md) skill runs these builds as part of preparing a submission package.
 
@@ -726,7 +737,7 @@ The file opens with a comment that records the trim, the estimated page count, a
 The layout:
 
 - **Page order.** A title page with the title and author; the copyright page, if there is one, on the page after it; a contents page listing the chapters with page numbers; the other front matter; the chapters; the back matter. The title page, contents, other front matter pages, chapters, and back matter pages each start on a right-hand page.
-- **Running heads and page numbers.** Left-hand pages show the author at the top (the title when no author is set); right-hand pages show the current chapter title. Chapter and back matter pages have a centred page number at the foot. Front matter pages and blank pages have neither.
+- **Running heads and page numbers.** Left-hand pages show the author at the top (the title when no author is set); right-hand pages show the current chapter title, or nothing on a back matter page with `heading: false`. Chapter and back matter pages have a centred page number at the foot. Front matter pages and blank pages have neither.
 - **Margins.** 0.75 in top and bottom, 0.5 in on the outside edge. The inside (gutter) margin widens with the estimated page count so text does not disappear into the spine: 0.625 in up to 150 pages, 0.75 in up to 300, 0.875 in up to 500, and 1 in beyond.
 - **Text.** 11 pt Georgia, or a similar serif, at 1.4 line spacing, justified and hyphenated, with indented paragraphs. The first paragraph of a chapter, and the first after a scene break, is not indented, and a chapter's first letter is enlarged. Scene breaks are centred asterisks.
 - **Matter pages.** Paragraphs are not indented. Front matter pages are centred, apart from the copyright page, which is left-aligned at 9 pt.
@@ -837,7 +848,7 @@ Notes on the fields:
 - **Word count** is chapter prose only, as `story wordcount` counts it.
 - **Estimated print pages** uses the [print interior](#print-interior) estimate for the two most common trims.
 - **Description** shows its length against a 4,000-character limit; the full text follows under `## Description`.
-- **Cover** is the `cover` path as written. The sheet does not check that the file exists; `story validate` does.
+- **Cover** is the `cover` path as written. The readiness box is ticked only when that file is an image the EPUB build would accept.
 - The copyright item is ticked by either a `copyright` line or a copyright matter page.
 - The permissions item is ticked unless a matter page has `permission: pending`; it then reads ``Permissions cleared for quoted matter (`permission`; pending: <ids>)``, naming each pending page.
 
@@ -856,10 +867,12 @@ The markdown export copies prose as written, and the narration script nearly doe
 | A backslash before a markdown character, as in `\*literal\*` | The character itself, without the backslash |
 | `<!-- comment -->` | Left out, as it is from word counts and every other build format |
 | Three or more `-`, `*`, `_`, or `~` on a line of their own, optionally spaced (`---`, `***`, `* * *`, `~~~`) or backslash-escaped as Pandoc writes them (`\* \* \*`), or a lone `#` paragraph | Scene break, written as `* * *` |
-| `#` heading markers | Removed; the heading text becomes an ordinary paragraph |
+| `#` heading markers | Removed; the heading text becomes an ordinary paragraph, also in the narration script. A heading with no text (`## `) is dropped. |
+| `` `code` `` spans and `` ``` `` fenced code | The code as plain text, without backticks or fence lines, and with no emphasis inside a span (the `.shunn.md` build keeps the backticks) |
+| `[text](target)` links and `![alt](image)` images | The link's text only; images are left out |
 | `>` blockquote markers | Removed, so a quoted epigraph or letter reads as plain text |
 
-Links, images, lists, and other markdown are not converted and appear as their literal text. Keep book prose to paragraphs, emphasis, and scene breaks.
+Lists and other markdown are not converted and appear as their literal text. Keep book prose to paragraphs, emphasis, and scene breaks.
 
 ### Reproducible builds
 
@@ -946,7 +959,7 @@ The result is a draft, not submission copy. Literary agents expect present tense
 
 - An absolute path can point anywhere, such as `--out ~/Desktop/the-salt-road.epub`.
 - Missing parent folders are created. For a relative path, writing through a symlinked folder is refused. Writing onto a symlinked file is always refused.
-- The output is written in place, so an existing file keeps its permissions and a read-only one is refused (`Cannot open dist/manuscript.md: permission denied`). An `--out` file that is a hard link to another file is instead replaced by a new file with the same permissions, and the file it was linked to is left unchanged. When that replacement fails, the error reads `Cannot replace hard-linked <path>: <code>`.
+- The output is written to a temporary file beside the target and renamed over it, so a failed write leaves the old file intact. An existing file keeps its permissions and a read-only one is refused (`Cannot write to dist/manuscript.md: permission denied`). An `--out` file that is a hard link to another file is replaced by a new file with the same permissions, and the file it was linked to is left unchanged. When that replacement fails, the error reads `Cannot replace hard-linked <path>: <code>`.
 - An existing output file is overwritten without asking, but project source never is. `--out` naming `story.md`, `style-sheet.md`, `progress.md`, or a path under `characters/`, `chapters/`, `scenes/`, `worldbuilding/`, `plot/`, `continuity/`, `glossary/`, `matter/`, or `research/` is refused:
 
   ```text
@@ -954,7 +967,7 @@ The result is a draft, not submission copy. Literary agents expect present tense
   ```
 
   Folder names match in any letter case, so `Chapters/x.md` is refused too, and a path through a symlinked folder is checked against the real folder it points to: with `lnk` linked to `chapters`, `--out lnk/x.md` is refused. The real path is compared in any letter case too, on every system, so on a case-insensitive disk such as the macOS default an absolute path typed in another case (`/users/me/book/chapters/x.md` for a project at `/Users/me/Book`) is refused. On a case-sensitive disk this errs on the safe side: a sibling folder that differs from the project only in case is refused as well.
-- `--out` must name a file. `--out dist` is refused with `--out dist is a directory: give a file path`, whether or not `dist/` exists yet.
+- `--out` must name a file. `--out dist`, an existing folder, or any path ending in `/` is refused with `--out <path> is a directory: give a file path`, whether or not the folder exists yet; an empty `--out` is refused with `--out needs a file path`.
 
 Treat everything in `dist/` as disposable. It is regenerated from the markdown on every build, so never edit a built file to fix the book: change the chapter or matter file and build again. `story validate` and `story links` do not read `dist/`, and `story rename` and `story remove` never rewrite references inside it. The CLI does not create a `.gitignore`, so add `dist/` to your story repository's `.gitignore` unless you want to commit a particular build.
 
@@ -972,6 +985,7 @@ Treat everything in `dist/` as disposable. It is regenerated from the markdown o
 | `<source> is already a story project (it has story.md); ...` | The source folder is a Story Skills project, not a draft | Point `import` at the manuscript files. |
 | `No markdown or text files found in <dir>` | The folder has no `.md`, `.markdown`, or `.txt` files at its top level | Point at the folder that contains the chapter files. |
 | `No chapter content found in import source` | Every document was empty after frontmatter was removed | Check the source files. |
+| `Cannot import <file>: it is a zip archive ...`, `... not valid UTF-8 text ...` | The source is a `.docx` or other zip, a binary file, or text in another encoding | Save or export it as UTF-8 markdown or plain text. |
 | `<dir> already exists. Use --force ...` | The import target exists | Choose another `--dir`, or back up and use `--force`. |
 | `<path> is not a story project: missing story.md` | The project path is wrong | Pass the folder that contains `story.md`. |
 | `No chapters found to export` | The project has no chapter files | Add chapters first. |

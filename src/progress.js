@@ -7,19 +7,37 @@ import { parseClockDate } from "./continuity.js";
 export const PROGRESS_FILE = "progress.md";
 const PACE_SESSIONS = 7;
 
+// Projections further out than this are not a date anyone can plan by.
+const PROJECTION_HORIZON_DAYS = 100 * 366;
+
 // Adds or replaces the log entry for `date` and keeps entries in date order.
+// Existing entries are kept as written, extra fields and all; only the
+// entry for `date` changes its word count.
 export function withSession(sessions, date, words) {
-  const kept = sessions.filter((session) => session.date !== date);
-  kept.push({ date, words });
-  return kept.sort((left, right) => left.date.localeCompare(right.date, "en"));
+  let found = false;
+  const kept = (Array.isArray(sessions) ? sessions : []).map((session) => {
+    if (!found && session && typeof session === "object" && sessionDate(session) === date) {
+      found = true;
+      return { ...session, words };
+    }
+    return session;
+  });
+  if (!found) {
+    kept.push({ date, words });
+  }
+  return kept.sort((left, right) => sessionDate(left).localeCompare(sessionDate(right), "en"));
+}
+
+function sessionDate(session) {
+  return String(session?.date ?? "").trim();
 }
 
 // Valid sessions only, in date order; validate reports the malformed ones.
 export function cleanSessions(value) {
   const sessions = [];
   for (const entry of Array.isArray(value) ? value : []) {
-    if (entry && typeof entry === "object" && parseClockDate(String(entry.date ?? "")) && Number.isInteger(entry.words) && entry.words >= 0) {
-      sessions.push({ date: String(entry.date), words: entry.words });
+    if (entry && typeof entry === "object" && parseClockDate(sessionDate(entry)) && Number.isInteger(entry.words) && entry.words >= 0) {
+      sessions.push({ date: sessionDate(entry), words: entry.words });
     }
   }
   return sessions.sort((left, right) => left.date.localeCompare(right.date, "en"));
@@ -48,7 +66,8 @@ export function computeProgress({ words, target, deadline, today, chapters, sess
     result.deadline = {
       date: deadlineDate.text,
       daysLeft,
-      perDay: result.remaining !== null && daysLeft > 0 ? Math.ceil(result.remaining / daysLeft) : null
+      // On the deadline day everything left is needed today.
+      perDay: result.remaining !== null && daysLeft >= 0 ? Math.ceil(result.remaining / Math.max(daysLeft, 1)) : null
     };
   }
 
@@ -60,8 +79,11 @@ export function computeProgress({ words, target, deadline, today, chapters, sess
     const span = parseClockDate(recent[recent.length - 1].date).days - parseClockDate(recent[0].date).days;
     if (recent.length > 1 && span > 0) {
       result.pace = (recent[recent.length - 1].words - recent[0].words) / span;
-      if (result.remaining > 0 && result.pace > 0) {
-        result.projected = formatDate(todayDays + Math.ceil(result.remaining / result.pace));
+      // A pace that rounds to 0 words a day, or a finish past the horizon,
+      // projects nothing.
+      const daysNeeded = Math.ceil(result.remaining / result.pace);
+      if (result.remaining > 0 && Math.round(result.pace) > 0 && daysNeeded <= PROJECTION_HORIZON_DAYS) {
+        result.projected = formatDate(todayDays + daysNeeded);
       }
     }
   }
@@ -73,8 +95,8 @@ export function formatProgress(progress) {
   if (progress.target === null) {
     lines.push(`Progress: ${formatNumber(progress.words)} words (no target-words in story.md)`);
   } else {
-    lines.push(`Progress: ${formatNumber(progress.words)} of ${formatNumber(progress.target)} words (${progress.percent.toFixed(1)}%)`);
-    lines.push(`Remaining: ${formatNumber(progress.remaining)} words`);
+    lines.push(`Progress: ${formatNumber(progress.words)} of ${formatNumber(progress.target)} words (${formatPercent(progress.percent, 1)}%)`);
+    lines.push(`Remaining: ${plural(progress.remaining, "word", formatNumber)}`);
   }
 
   if (progress.deadline) {
@@ -82,7 +104,9 @@ export function formatProgress(progress) {
     if (daysLeft < 0) {
       lines.push(`Deadline: ${date} passed ${plural(-daysLeft, "day")} ago`);
     } else if (perDay === null) {
-      lines.push(`Deadline: ${date} (${plural(daysLeft, "day")} left)`);
+      lines.push(`Deadline: ${date} (${daysLeft === 0 ? "today" : `${plural(daysLeft, "day")} left`})`);
+    } else if (daysLeft === 0) {
+      lines.push(`Deadline: ${date} (today): ${plural(perDay, "word", formatNumber)} needed`);
     } else {
       lines.push(`Deadline: ${date} (${plural(daysLeft, "day")} left): ${formatNumber(perDay)} words a day needed`);
     }
@@ -104,7 +128,7 @@ export function formatProgress(progress) {
   if (progress.chapters.length > 0) {
     lines.push("", "Chapter targets:");
     for (const chapter of progress.chapters) {
-      lines.push(`- ${chapter.id}: ${formatNumber(chapter.words)} of ${formatNumber(chapter.target)} words (${Math.round(chapter.percent)}%)`);
+      lines.push(`- ${chapter.id}: ${formatNumber(chapter.words)} of ${formatNumber(chapter.target)} words (${formatPercent(chapter.percent, 0)}%)`);
     }
   }
   return `${lines.join("\n")}\n`;
@@ -119,8 +143,19 @@ function formatDate(days) {
   return new Date(days * 86400000).toISOString().slice(0, 10);
 }
 
-function plural(count, noun) {
-  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+function plural(count, noun, format = String) {
+  return `${format(count)} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+// Rounds a share of a target without claiming 100% (or 0%) before it is
+// reached: 99.8 prints as 99 at whole percents, not 100.
+export function formatPercent(percent, places) {
+  const scale = 10 ** places;
+  let value = Math.round(percent * scale) / scale;
+  if (value >= 100 && percent < 100) {
+    value = Math.floor(percent * scale) / scale;
+  }
+  return value.toFixed(places);
 }
 
 function formatNumber(value) {

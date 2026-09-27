@@ -84,8 +84,9 @@ To fix a finding:
    `mentions` if they are only referred to)
 
 Scene `travel-hours` is separate from routes: it asserts the minimum time
-since the previous dated scene in chapter order (both scenes need a
-`time`), not a journey inside the scene. `story timeline .` and `story diagram timeline` show dated scenes in
+since the latest moment the story has reached in reading order (both
+need a `time`; a flashback does not reset it), not a journey inside the
+scene. A scene with no `pov` counts its chapter's `pov` as present. `story timeline .` and `story diagram timeline` show dated scenes in
 story-time order, which helps when adjusting dates.
 
 After editing routes, run `story reindex .`, `story links .`,

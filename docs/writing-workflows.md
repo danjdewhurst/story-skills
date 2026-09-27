@@ -310,8 +310,8 @@ flowchart LR
   edwin_marsh["Edwin Marsh"]
   nell_carrow["Nell Carrow"]
   silas_carrow["Silas Carrow"]
-  edwin_marsh -.-|rival| silas_carrow
-  silas_carrow ==>|parent| nell_carrow
+  edwin_marsh -.-|"rival"| silas_carrow
+  silas_carrow ==>|"parent"| nell_carrow
 ```
 
 Family edges are drawn heavier than other relationships, so the family tree stands out. Add `--out dist/relationships.mmd` to save it, and regenerate it after changes rather than editing it.
@@ -345,7 +345,7 @@ A route is two-way unless the other location declares its own. Once scenes carry
 flowchart LR
   gannet_point_light["Gannet Point Light"]
   porthkennack_harbor["Porthkennack Harbor"]
-  gannet_point_light ---|1.5h on foot| porthkennack_harbor
+  gannet_point_light ---|"1.5h on foot"| porthkennack_harbor
 ```
 
 The skill's references also cover [calendars](../skills/worldbuilding/references/calendars.md), [naming languages](../skills/worldbuilding/references/naming-languages.md), and [economy and logistics](../skills/worldbuilding/references/economy-logistics.md), including a table of travel speeds by mode for setting plausible `hours`.

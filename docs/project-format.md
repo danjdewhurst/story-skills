@@ -139,14 +139,14 @@ An entity's id is its filename without `.md`. Frontmatter never carries a separa
 
 When `story add` or `story init` derives an id from a name, it:
 
-1. strips accents (`Élan` becomes `elan`),
+1. strips accents (`Élan` becomes `elan`) and spells out Latin letters that have none to strip (`Æthelred` becomes `aethelred`, `Søren` becomes `soren`, `Straße` becomes `strasse`, and likewise `ł`, `đ`, `ð`, `þ`, and `œ`),
 2. drops straight and curly apostrophes (`Sera's Reclamation` becomes `seras-reclamation`),
 3. lowercases, and
 4. replaces every run of other characters with one hyphen and trims hyphens from the ends.
 
 Names themselves are free text in any script, and ids stay ASCII so that filenames are portable. A name with no ASCII letters or digits at all (`Пётр`, `李明`) leaves nothing to slug, so `story add --id` and `story rename --id` give the id by hand: `story add character "Пётр" --id petr` writes `characters/petr.md` with `name: Пётр`. `story init --dir` does the same job for a story title. Chapter and scene ids come from their numbers, so they take `--number` or `--chapter`/`--scene` rather than `--id`.
 
-Windows reserves the file names `con`, `prn`, `aux`, `nul`, `com1` to `com9`, and `lpt1` to `lpt9` with any extension, so a project with `characters/con.md` cannot be checked out there. `story add` and `story rename` refuse those ids:
+Windows reserves the file names `con`, `prn`, `aux`, `nul`, `com1` to `com9`, and `lpt1` to `lpt9` with any extension, so a project with `characters/con.md` cannot be checked out there. `story init` and `story import` also refuse a project folder with such a name (`con.txt` included), a name ending in a dot or space, or a name containing `< > : " | ? *`. `story add` and `story rename` refuse those ids:
 
 ```text
 Cannot use character id con: Windows reserves the file name con.md. Choose a longer name, such as "con character"
@@ -205,6 +205,7 @@ Keep to these rules, because anything else is either an error or parses differen
 - Single-quoted strings are taken literally: `'it''s'` stays `it''s`. Use double quotes when you need escapes.
 - `null` and `~` are plain strings, not null.
 - Dates such as `2026-09-24` stay strings.
+- The frontmatter ends at the first line holding only `---` (trailing spaces allowed). `----` or `--- # end` does not close it, and a file whose block never closes fails with `has unclosed YAML frontmatter`.
 
 Fields the tools do not know are kept and ignored. The example character files carry an `age` field, for instance. Add your own fields freely, but stay within the syntax above.
 
@@ -212,11 +213,11 @@ Fields the tools do not know are kept and ignored. The example character files c
 
 Several commands edit frontmatter in place: `story wordcount --write`, `story add` (for backlinks), `story rename`, `story move`, `story remove`, `story reindex` (for the `story` field), `story migrate`, `story progress --log` (which rewrites `progress.md`), `story passes` with `--init`, `--start`, or `--done` (which rewrites `revision-passes` in `story.md`), and `story init --follows` or `--precedes` (which adds the backlink to the linked book's `story.md`). They rewrite only the entries whose values changed:
 
-- Comment lines, blank lines, unchanged entries (with their original quoting and number formatting), and unchanged list items keep their exact text.
-- The body is untouched, except that `story rename` and `story move` update links to a renamed file, and `story move` updates a moved chapter's `# Chapter N:` heading and bare chapter and scene ids in `plot/timeline.md` and arc bodies.
+- Comment lines, blank lines, unchanged entries (with their original quoting and number formatting), and unchanged list items keep their exact text, including their own line ending in a file that mixes LF and CRLF.
+- The body is untouched, except that `story rename` and `story move` update links to a renamed file, and `story move` updates a moved chapter's `# Chapter N:` heading and bare chapter and scene ids in `plot/timeline.md`, arc bodies, and `plot/_index.md`. When a rename changes one key of a list item, the item's other keys keep their text.
 - A file whose content does not change is not written at all.
 
-When the CLI writes a new value, it double-quotes strings that would otherwise be misread: empty strings, strings that look like numbers, booleans, `null`, or `[]`, strings with leading or trailing spaces, and strings containing `:`, `#`, a quote, or a newline.
+When the CLI writes a new value, it double-quotes strings that this parser or another YAML parser would otherwise misread: empty strings; strings that look like numbers (including `0x1F`, `1e3`, and `.inf`), booleans (`true`, `yes`, `off`, in any case), `null`, or `~`; strings that start with a YAML indicator such as `[`, `{`, `*`, `&`, `!`, `|`, `>`, `%`, `@`, a backtick, or `-`; strings with leading or trailing spaces; and strings containing `:`, `#`, a quote, or a control character. So `story add chapter "[Redacted]"` writes `title: "[Redacted]"`. Dates stay bare.
 
 ## Markdown bodies and word counts
 
@@ -238,8 +239,10 @@ Section lookups match a `## Heading` line without regard to case and run to the 
 `story wordcount`, `story export`, `story build`, and `story prose` all find the prose in a chapter body the same way:
 
 1. If the body has a `## Chapter Text` heading, the prose is everything after it.
-2. Otherwise, if it has a `## Outline` heading, the prose is everything after the first `---` line that follows the outline. With no such divider, everything after the `## Outline` heading counts.
-3. Otherwise the prose is the whole body, minus a leading `# Heading` line.
+2. Otherwise, if it has a `## Outline` heading, the prose is everything after a `---` line directly below the outline: only list items, their indented continuation lines, headings, and blank lines may come between. A `---` further down, after prose, is a scene break, not the divider. With no such divider, everything after the `## Outline` heading counts.
+3. Otherwise the prose is the whole body, minus a leading `# Heading` line (or a heading underlined with `===`).
+
+The headings may be indented up to three spaces and have extra spaces or closing hashes (`##  Chapter Text ##`). A heading or `---` inside an HTML comment or a closed `` ``` `` fence does not count.
 
 The chapter starter file from `story add chapter` uses the first layout:
 
@@ -260,7 +263,7 @@ The chapter starter file from `story add chapter` uses the first layout:
 
 ### How words are counted
 
-A word is a run of letters or digits in any script. Straight or curly apostrophes and hyphens join a word, so `don’t` and `well-known` each count once; `U.S.A` counts as three words. Before counting, the CLI removes HTML comments (`<!-- ... -->`), code blocks fenced with `` ``` ``, inline code, and images, keeps a link's visible text, reads a backslash escape as the character it escapes (`didn\'t` is one word), and treats the markdown characters `# > * _ ~ | :` as spaces. Only a `` ``` `` fence that closes counts as code: a `` ``` `` with no closing fence hides nothing, and a `~~~` line is a scene break, not a fence. A `<!--` or `-->` written inside a code block or an inline code span (`` `<!-- x -->` ``) is code: it neither opens nor closes a comment. A `<!--` with no closing `-->` removes nothing, so the text after it is counted and built; `story validate` warns, ignoring any `<!--` inside code:
+A word is a run of letters or digits in any script, with any combining marks (Indic vowel signs, Arabic harakat, decomposed accents) and zero-width joiners or soft hyphens inside it. Straight or curly apostrophes and hyphens (including U+2010 and U+2011) join a word, so `don’t` and `well-known` each count once; `U.S.A` counts as three words. A `.`, `,`, or `:` between digits joins too, so `$1,000`, `3.14`, and `9:30` are one word each, and so is a bare URL or email address. Code counts, because every build prints it: the words inside inline code and between `` ``` `` fences count, and only the fence lines do not. Before counting, the CLI removes HTML comments (`<!-- ... -->`) and images, keeps a link's visible text (builds print the same), reads a backslash escape as the character it escapes (`didn\'t` is one word), and treats the markdown characters `` # > * _ ~ | ` `` and `:` as spaces. Only a `` ``` `` fence that closes counts as code: a `` ``` `` with no closing fence is ordinary text, and a `~~~` line is a scene break, not a fence. A `<!--` or `-->` written inside a code block or an inline code span (`` `<!-- x -->` ``) is code: it neither opens nor closes a comment. A fence inside a comment is part of the comment, which runs to the first `-->`. A `<!--` with no closing `-->` removes nothing, so the text after it is counted and built; `story validate` warns, ignoring any `<!--` inside code:
 
 ```text
 warning: chapters/chapter-01.md opens an HTML comment (<!--) that never closes, so the text after it shows in builds and word counts
@@ -318,7 +321,7 @@ tense: past
 | `form` | enum | no | The story's form: `flash`, `short-story`, `novelette`, `novella`, `novel`, `serial`, `picture-book`, or `chapter-book`. `story init --form` sets it with a default `target-words`. See [Story form](#story-form). `story report` shows it. |
 | `target-words` | integer ≥ 1 | no | Word-count target for the book, used by `story progress` and `story report`. |
 | `deadline` | `YYYY-MM-DD` | no | Due date; `story progress` reports days left and words a day needed. Must be a real calendar day. |
-| `draft-mode` | string | no | `discovered` marks a discovery-drafted project. |
+| `draft-mode` | string | no | `discovered` marks a discovery-drafted project, `outlined` an outline-first one; any other value is a validate error. In a `discovered` project, `story next` treats a drafted chapter with no `mode` of its own as discovered. |
 | `revision-passes` | list of mappings | no | Named revision passes and their progress. See [Revision passes](#revision-passes). |
 | `cover` | path | no | Cover image inside the project: `.jpg`, `.jpeg`, `.png`, `.gif`, or `.webp`. `story build --format epub` embeds it. |
 | `authors`, `language`, `isbn`, `publisher`, `publication-date`, `description`, `keywords`, `subjects`, `copyright`, `cover-alt`, `ai-disclosure` | various | no | Publishing metadata read by `story build`. See [Publishing metadata](#publishing-metadata). |
@@ -584,7 +587,7 @@ Files: `plot/arcs/<arc-id>.md`. Created with `story add arc "Name"`.
 | `acts` | list of strings | no | Acts the arc spans, for example `act-1`. |
 | `mice-threads` | list of strings | no | MICE threads the arc carries: `milieu`, `inquiry`, `character`, `event`. Not read by the CLI. |
 
-The arc body's `## Setup`, `## Rising Action`, `## Climax`, and `## Resolution` sections feed `story synopsis`. Any `chapter-NN` token in the body must name an existing chapter, and any relative `.md` link must point at an existing entity file (one named by a kebab-case entity id) inside the project. Links to other files, such as `story.md` or `style-sheet.md`, are reported as missing; `_index.md` and `*` wildcard targets are skipped (see [References and backlinks](#references-and-backlinks)). The [plot-structure skill](../skills/plot-structure/SKILL.md) covers arc design and MICE threading.
+The arc body's `## Setup`, `## Rising Action`, `## Climax`, and `## Resolution` sections feed `story synopsis`. Any `chapter-NN` token in the body must name an existing chapter or a scheduled one with no file yet, and any `chapter-NN-scene-MM` token an existing scene (a token is a whole word: `chapter-01-draft` and `pre-chapter-01` are not ids; see [References and backlinks](#references-and-backlinks)). Any relative `.md` link must point at an existing entity file (one named by a kebab-case entity id) inside the project. Links to other files, such as `story.md` or `style-sheet.md`, are reported as missing; `_index.md` and `*` wildcard targets are skipped (see [References and backlinks](#references-and-backlinks)). The [plot-structure skill](../skills/plot-structure/SKILL.md) covers arc design and MICE threading.
 
 ### Plot registry and timeline
 
@@ -635,7 +638,7 @@ word-count: 1489
 | `arcs-advanced` | list of arc ids | no | Arcs the chapter moves forward. |
 | `word-count` | integer ≥ 0 | no | Prose word count, maintained by `story wordcount --write`. |
 | `target-words` | integer ≥ 1 | no | Word target for the chapter; `story progress` reports against it. |
-| `mode` | string | no | `discovered` marks a discovery-drafted chapter that must go through the [discovery-drafting](../skills/discovery-drafting/SKILL.md) reconcile loop. Set it with `story add chapter --mode discovered`. |
+| `mode` | string | no | `discovered` marks a discovery-drafted chapter that must go through the [discovery-drafting](../skills/discovery-drafting/SKILL.md) reconcile loop; `outlined` marks one written outline-first. Any other value is a validate error. Set it with `story add chapter --mode discovered`. `story next` counts the loop done only when `## Chapter Notes (post-hoc)` sits above `## Chapter Text`. |
 | `date` | `YYYY-MM-DD` | no | Story date; enables clock checks. |
 | `time` | string | no | Story time of day (see [Dates and times](#dates-and-times)). |
 | `episode-question` | string | no | The installment's dramatic question, for serial fiction. |
@@ -977,7 +980,7 @@ A registry is an `_index.md` file whose table lists the entities in its director
 Every registry has two frontmatter fields: `type` (fixed per file) and `story` (the story id). For the required registries, `story validate` errors when either is missing or wrong; for the optional matter and research registries it checks only `type`. It warns when a registry is missing the link to an entity file:
 
 ```text
-warning: characters/_index.md is missing registry link ](sera-voss.md)
+warning: characters/_index.md does not list characters/sera-voss.md; run story reindex
 ```
 
 | File | `type` | Table columns | Hand-written sections kept by reindex |
@@ -1051,22 +1054,23 @@ Fields that name another entity hold its id. `story links` checks that each id i
 | Question, promise, clue | `characters` | Character |
 | Promise, clue | `arcs` | Arc |
 | Research note | `used-in` | Chapter; may be a scheduled `chapter-NN` with no chapter file yet (see below) |
-| `plot/timeline.md`, arc bodies | any `chapter-NN` token | Chapter |
+| `plot/timeline.md` | any `chapter-NN` token | Chapter |
+| Arc bodies | any `chapter-NN` token | Chapter; may be a scheduled `chapter-NN` with no chapter file yet (see below) |
 | `plot/timeline.md`, arc bodies | relative links to `.md` files, except `_index.md` and `*` wildcard targets (links to non-entity files such as `story.md` are reported missing) | Existing entity file, named by its kebab-case id, inside the project |
 
-A promise or clue can schedule its setup and payoff ahead of the drafted book: `payoff`, and `planted` while `status: planned`, may name a `chapter-NN` that has no file yet. So may an `open` question's `introduced` and a research note's `used-in`, since research often comes before the chapter that needs it. The number must be 1 or more and must not belong to an existing chapter under another id: beside `chapter-01`, `chapter-1` is a typo and `chapter-00` is never a chapter, so both are reported as missing. Once the status is `planted` or `paid-off`, the `planted` chapter must exist, and once it is `paid-off`, so must the `payoff` chapter. A question's `resolved` chapter must always exist, as must its `introduced` chapter once it is no longer `open`.
+A promise or clue can schedule its setup and payoff ahead of the drafted book: `payoff`, and `planted` while `status: planned`, may name a `chapter-NN` that has no file yet. So may an `open` question's `introduced` and a research note's `used-in`, since research often comes before the chapter that needs it. So may any `chapter-NN` in an arc body, where Plot Points and Foreshadowing rows plan chapters not yet written. The number must be 1 or more and the id must use the spelling `story add chapter` writes: `chapter-1` and `chapter-003` are reported as missing, since they would never match `chapter-01` or `chapter-03` once that chapter is added, and `chapter-00` is never a chapter. Once the status is `planted` or `paid-off`, the `planted` chapter must exist, and once it is `paid-off`, so must the `payoff` chapter. A question's `resolved` chapter must always exist, as must its `introduced` chapter once it is no longer `open`.
 
 `story continuity`, not `story links`, checks the ids in `continuity/state.md`: `character`, `location`, `artifact`, `owner`, `learned-in`, and `since` must name existing entities, and `fact` must be kebab-case.
 
 When you add a character with `--location`, or a location with `--character`, `story add` writes the backlink into the other file.
 
-`story rename` and `story remove` keep ids consistent across every file's frontmatter (except `story.md`). They rewrite the entity-reference fields in the table above (including a location's `routes[].to`), plus `controlled-by`, the state-file fields (`character`, `location`, `artifact`, `owner`, `learned-in`, `since`), and any `character` key inside a scene's `state-changes`. A field that can name more than one kind (`owner`, `controlled-by`, `mentions`) is left alone when another kind has an entity with the same id. Beyond that:
+`story rename` and `story remove` keep ids consistent across every file's frontmatter (except `story.md`). They rewrite the entity-reference fields in the table above (including a location's `routes[].to`), plus `controlled-by`, the state-file fields (`character`, `location`, `artifact`, `owner`, `learned-in`, `since`), and the `character` and `target` (an artifact) keys inside a scene's `state-changes`. A field that can name more than one kind (`owner`, `controlled-by`, `mentions`) is left alone when another kind has an entity with the same id. Beyond that:
 
-- `story rename` also rewrites markdown links, in any project file, that point at the renamed file.
-- `story remove` clears a scalar reference, drops the id from a list, and drops a whole `relationships`, `character-state`, `knowledge-state`, `object-state`, or `routes` entry whose identifying `character`, `artifact`, or `to` was removed. It does not edit bodies, so bare `chapter-NN` tokens and links to a removed file remain. `story links` reports them only in `plot/timeline.md` and arc bodies; find leftovers elsewhere (hand-written registry sections, `style-sheet.md`, other entity bodies) by hand.
+- `story rename` also rewrites markdown links, inline or reference-style definitions, in any project file, that point at the renamed file. `rename` and `add` refuse an id that another kind sharing one of those fields already uses, since the references could not tell them apart.
+- `story remove` clears a scalar reference (except that `remove chapter` refuses while `died-in`, `since`, or `learned-in` names the chapter, since an empty value there means "before the story"), drops the id from a list, and drops a whole `relationships`, `character-state`, `knowledge-state`, `object-state`, or `routes` entry whose identifying `character`, `artifact`, or `to` was removed. It does not edit bodies, so bare `chapter-NN` tokens and links to a removed file remain. `story links` reports them only in `plot/timeline.md` and arc bodies; find leftovers elsewhere (hand-written registry sections, `style-sheet.md`, other entity bodies) by hand.
 - Neither command edits `follows` or `precedes`, which name other projects rather than entities.
 
-When `story move` renumbers a chapter or moves a scene, it rewrites the old chapter or scene id in these fields and in `current-chapter`, rewrites markdown links to the moved files, and updates bare chapter and scene ids in `plot/timeline.md` and arc bodies.
+When `story move` renumbers a chapter or moves a scene, it rewrites the old chapter or scene id in these fields and in `current-chapter`, rewrites markdown links to the moved files, and updates bare chapter and scene ids in `plot/timeline.md`, arc bodies, and `plot/_index.md`.
 
 The CLI reference covers [`rename`](cli-reference.md#rename), [`move`](cli-reference.md#move), and [`remove`](cli-reference.md#remove).
 
@@ -1140,7 +1144,7 @@ For each speaking character it reports lines, words, mean sentence length, contr
 
 ### Name checks
 
-`story names <name...>` checks candidate names before you use them, one name per argument (quote multi-word names). The existing names are character names, given names, and aliases (cut characters excepted); location, faction, artifact, and system names; and glossary terms and aliases. Names are compared ignoring case, accents, and punctuation.
+`story names <name...>` checks candidate names before you use them, one name per argument (quote multi-word names). The existing names are character names, given names, and aliases (cut characters excepted); location, faction, artifact, and system names; and glossary terms and aliases. Names are compared ignoring case, accents, and punctuation, and `Łukasz` matches `Lukasz` the same way `Zoë` matches `Zoe`.
 
 A character's given name is the first word of the name that is not a title or article (`the`, `a`, `lord`, `lady`, `sir`, `captain`, `king`, `queen`, `dr`, and similar), so `Lord Maren Vell` is known as Maren. The candidate's given name is found the same way and compared with each character's given name; everything else is compared as a whole name.
 
@@ -1264,10 +1268,12 @@ So `dropped` and `abandoned` differ only in how much checking remains: a dropped
 The CLI refuses to read or write project files outside the project root. The exceptions are deliberate: an absolute `--out` path for `story export`, `story build`, `story synopsis`, or `story diagram`, and the linked books that `follows` and `precedes` name. It applies these limits while scanning:
 
 - Every project text file the CLI reads, including `continuity/exemptions.md`, `plot/timeline.md`, and a linked book's `story.md`, must be a regular file of at most 5 MiB. A symlink (`Refusing to read through symlink: <path>`), a device or FIFO (`Refusing to read <path>: not a regular file`), or a larger file (`Refusing to read oversized file <path>: <size> bytes exceeds the 5242880 byte limit`) is refused with an error, so a cloned project cannot point a read at `/dev/zero` or at a file outside itself. `story continuity` reports a refused `continuity/exemptions.md` as an error; commands that only rebuild registries or assemble chapters are not blocked by it.
-- More than 5,000 entity files in one directory, or more than 5,000 markdown files found in one recursive scan, stops the command with an error. For `story rename` and `story remove` it reads `Too many markdown files in the project: the scan exceeds the 5000 file limit`.
+- Every project text file must be valid UTF-8. A file saved in another encoding, such as Windows-1252, is reported as an error (`chapters/chapter-01.md: is not valid UTF-8 (byte 0x93 at offset 9554): re-save it as UTF-8`), and commands that rewrite files refuse to run until it is fixed, so its characters are never replaced with `�`.
+- More than 5,000 entity files in one directory, or more than 5,000 markdown files found in one recursive scan, stops the command with an error. `story rename`, `story move`, and `story remove` instead skip notes outside the project model past the first 5,000, or over 5 MiB, and only rewrite the body links of a note whose frontmatter they cannot parse, so a stray notes folder never blocks them.
 - Recursive scans do not descend more than 10 directory levels. Deeper folders are skipped without an error or warning.
 - A symlinked entity directory, or any path that resolves outside the project, is refused with an error. A symlinked `.md` file inside an entity directory is not an entity: the scan skips it without a warning. The CLI never writes through a symlink, and `story init` refuses a symlinked project directory.
 - Recursive scans (stray-file checks, `story rename`, `story remove`) skip `dist/`, `node_modules/`, and directories whose names start with `.`.
+- Files whose names start with `.` are skipped everywhere, including entity folders, so the `._chapter-01.md` metadata files macOS writes on exFAT drives and network shares are ignored.
 
 A file that fails to parse is reported as an error against its path. The rest of the project is still checked.
 
@@ -1280,7 +1286,7 @@ A file that fails to parse is reported as an error against its path. The rest of
 - `continuity` also holds the `continuity/state.md` fields and the `exemptions` list.
 - `styleSheet` and `progressLog` hold the optional root files.
 
-The schema also lists values the CLI does not enforce, such as character `arc-type`. It is looser than the CLI elsewhere: it checks the shape of `isbn`, `publication-date`, and `language`, but not ISBN checksums, real calendar days, or whether a referenced id exists. In this repository, `bun run test:examples` builds that document for every project in [`examples/`](../examples/) and checks it against the schema with the dependency-free validator in [`scripts/check-schema.js`](../scripts/check-schema.js), so change the schema, the CLI, and the examples together. The [Development guide](development.md#schema) covers the checks.
+The schema also lists values the CLI does not enforce, such as character `arc-type`. It is looser than the CLI elsewhere: it checks the shape of `isbn`, `publication-date`, and `language`, but not ISBN checksums, real calendar days, or whether a referenced id exists. Both require text fields such as `title`, `name`, `term`, and `region` to be strings: an unquoted `title: 1984` parses as a number, so `story validate` reports `frontmatter field title must be text: quote it as title: "1984"`. A location's `population` may be a string or a whole number. In this repository, `bun run test:examples` builds that document for every project in [`examples/`](../examples/) and checks it against the schema with the dependency-free validator in [`scripts/check-schema.js`](../scripts/check-schema.js), so change the schema, the CLI, and the examples together. The [Development guide](development.md#schema) covers the checks.
 
 ## Migrating older projects
 
@@ -1295,8 +1301,8 @@ story validate .
 Migration:
 
 1. creates every folder `story init` creates (`characters`, the four `worldbuilding` entity folders, `plot/arcs`, `chapters`, `scenes`, the three `continuity` ledgers, and `glossary/terms`) when it is missing,
-2. creates `scenes/_index.md`, `continuity/state.md`, and the question, promise, clue, and glossary registries when they are missing,
-3. sets `schema-version: 2` in `story.md` when it is missing or has any other value, leaving the rest of the file as it was, and
+2. creates `plot/timeline.md`, `scenes/_index.md`, `continuity/state.md`, and the question, promise, clue, and glossary registries when they are missing,
+3. sets `schema-version: 2` in `story.md` when it is missing or has an older or unrecognised value, leaving the rest of the file as it was, and
 4. runs `story reindex`, which also rebuilds (or creates) the character, world, plot, and chapter registries.
 
 Apart from that `schema-version` edit and the reindex, it leaves existing files alone, and it never invents creative content. It reports the number of files and directories it created or changed. Running it again is safe:
@@ -1308,7 +1314,9 @@ $ story migrate .
 Project already uses the current schema
 ```
 
-Migration does not create `plot/timeline.md`. If `story validate` still reports a missing required path, fill the gaps with `story init --force`, which adds missing starter files and never overwrites existing ones (it also adds `style-sheet.md` if you have none). Use the book's exact title, then reindex:
+A `schema-version` above 2 comes from a newer story-skills, so migrate refuses it rather than downgrading the project: `story.md uses schema-version 3, newer than this CLI (2); upgrade story-skills`. `story validate` reports the same error.
+
+If `story validate` still reports a missing required path, fill the gaps with `story init --force`, which adds missing starter files and never overwrites existing ones (it also adds `style-sheet.md` if you have none). Use the book's exact title, then reindex:
 
 ```shell
 story init "Harbor of Second Light" --dir . --force

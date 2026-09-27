@@ -35,8 +35,29 @@ export function releasePushArgs(tag) {
   return ["push", "--atomic", "origin", RELEASE_BRANCH, tag];
 }
 
+// Semver forbids leading zeros: npm would publish 0.11.01 as 0.11.1 while the
+// tag, manifests, and `story --version` kept 0.11.01.
+const PLAIN_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+export const USAGE = "Usage: bun run release <patch|minor|major|MAJOR.MINOR.PATCH> [--dry-run]";
+
+// Exactly one bump and at most --dry-run. Anything else is refused before any
+// check runs, so a mistyped `--dryrun` can never fall through to a real
+// release (bump, tag, push, npm publish).
+export function parseReleaseArgs(argv) {
+  const flags = argv.filter((arg) => arg.startsWith("-"));
+  const positionals = argv.filter((arg) => !arg.startsWith("-"));
+  const unknown = flags.filter((arg) => arg !== "--dry-run");
+  if (unknown.length > 0) {
+    throw new Error(`Unknown option ${unknown.join(" ")}. ${USAGE}`);
+  }
+  if (positionals.length !== 1) {
+    throw new Error(`${positionals.length === 0 ? "Missing" : "Expected one"} version bump${positionals.length > 1 ? `, got ${positionals.join(" ")}` : ""}. ${USAGE}`);
+  }
+  return { bump: positionals[0], dryRun: flags.includes("--dry-run") };
+}
+
 export function bumpVersion(current, bump) {
-  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(current);
+  const match = PLAIN_VERSION.exec(current);
   if (!match) {
     throw new Error(`Current version "${current}" is not a plain MAJOR.MINOR.PATCH version.`);
   }
@@ -49,8 +70,8 @@ export function bumpVersion(current, bump) {
     case "patch":
       return `${major}.${minor}.${patch + 1}`;
     default:
-      if (!/^\d+\.\d+\.\d+$/.test(bump)) {
-        throw new Error(`Expected patch, minor, major, or an explicit MAJOR.MINOR.PATCH version, got "${bump}".`);
+      if (!PLAIN_VERSION.test(bump)) {
+        throw new Error(`Expected patch, minor, major, or an explicit MAJOR.MINOR.PATCH version without leading zeros, got "${bump}".`);
       }
       if (compareVersions(bump, current) <= 0) {
         throw new Error(`Version ${bump} is not greater than the current version ${current}.`);
@@ -212,15 +233,22 @@ function writeVersions(nextVersion) {
 }
 
 function main(argv) {
-  const dryRun = argv.includes("--dry-run");
-  const [bump] = argv.filter((arg) => !arg.startsWith("--"));
-  if (!bump) {
-    console.error("Usage: bun run release <patch|minor|major|MAJOR.MINOR.PATCH> [--dry-run]");
+  let bump;
+  let dryRun;
+  try {
+    ({ bump, dryRun } = parseReleaseArgs(argv));
+  } catch (error) {
+    console.error(error.message);
     process.exit(1);
   }
 
   const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf8"));
-  const nextVersion = bumpVersion(packageJson.version, bump);
+  let nextVersion;
+  try {
+    nextVersion = bumpVersion(packageJson.version, bump);
+  } catch (error) {
+    fail(error.message);
+  }
   const tag = `v${nextVersion}`;
   console.log(`Releasing ${packageJson.version} -> ${nextVersion} (${tag})`);
 

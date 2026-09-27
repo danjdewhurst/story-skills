@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { Buffer } from "node:buffer";
 
 export const MAX_READ_BYTES = 5 * 1024 * 1024;
 
@@ -17,31 +18,81 @@ export function readTextFile(filePath) {
   if (stats.size > MAX_READ_BYTES) {
     throw new Error(`Refusing to read oversized file ${filePath}: ${stats.size} bytes exceeds the ${MAX_READ_BYTES} byte limit`);
   }
-  return fs.readFileSync(filePath, "utf8");
+  return decodeUtf8(fs.readFileSync(filePath), filePath);
 }
 
+const UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+
+// Decodes strictly: a file saved in another encoding (Windows-1252, say) is
+// refused rather than read with U+FFFD in place of its bytes, so a command
+// that rewrites it cannot destroy the original characters.
+export function decodeUtf8(buffer, filePath) {
+  try {
+    return UTF8.decode(buffer);
+  } catch {
+    const offset = invalidUtf8Offset(buffer);
+    const byte = buffer[offset].toString(16).padStart(2, "0");
+    throw new Error(`${filePath} is not valid UTF-8 (byte 0x${byte} at offset ${offset}): re-save it as UTF-8`);
+  }
+}
+
+// The first offset whose byte does not start or continue a valid sequence.
+// Every character before it decoded cleanly, so the lossy decoding lines up
+// with the bytes up to the first replacement character that was not in the
+// file.
+function invalidUtf8Offset(buffer) {
+  let offset = 0;
+  for (const character of buffer.toString("utf8")) {
+    if (character === "\uFFFD" && !(buffer[offset] === 0xef && buffer[offset + 1] === 0xbf && buffer[offset + 2] === 0xbd)) {
+      break;
+    }
+    offset += Buffer.byteLength(character, "utf8");
+  }
+  return Math.max(0, Math.min(offset, buffer.length - 1));
+}
+
+// Writes a file whole or not at all: the contents go to a temporary file
+// beside the target, which is flushed to disk and then renamed over it. A
+// failed write (a full disk) or a killed process leaves the old file intact
+// rather than truncated. An existing file keeps its permissions, a read-only
+// one stays refused, and a hard link (to a chapter, say) is replaced rather
+// than written through.
 export function writeFile(filePath, contents, options = {}) {
   const target = prepareWriteTarget(filePath, options.root);
   const existing = lstatIfExists(target);
-  if (!existing || existing.nlink <= 1) {
-    // In place, so the file keeps its permissions and a read-only file
-    // stays refused.
-    fs.writeFileSync(target, contents, "utf8");
-    return;
+  if (existing) {
+    fs.accessSync(target, fs.constants.W_OK);
   }
-  // A hard link (to a chapter, say) is replaced with a new file rather than
-  // written through, keeping the old file's permissions.
-  fs.accessSync(target, fs.constants.W_OK);
-  const temporary = path.join(path.dirname(target), `.story-${process.pid}.tmp`);
+  const mode = existing ? existing.mode & 0o777 : 0o666;
+  const temporary = temporaryPath(target);
   try {
-    fs.writeFileSync(temporary, contents, { encoding: "utf8", mode: existing.mode & 0o777 });
-    fs.chmodSync(temporary, existing.mode & 0o777);
+    const descriptor = fs.openSync(temporary, "w", mode);
+    try {
+      fs.writeFileSync(descriptor, contents, "utf8");
+      fs.fsyncSync(descriptor);
+    } finally {
+      fs.closeSync(descriptor);
+    }
+    if (existing) {
+      fs.chmodSync(temporary, mode);
+    }
     fs.renameSync(temporary, target);
   } catch (error) {
     fs.rmSync(temporary, { force: true });
     // Name the file the user asked for, not the temporary one.
-    throw Object.assign(new Error(`Cannot replace hard-linked ${target}: ${error.code ?? error.message}`), { code: error.code, path: target, syscall: "rename" });
+    const action = existing?.nlink > 1 ? "replace hard-linked" : "write to";
+    throw Object.assign(new Error(`Cannot ${action} ${target}: ${error.code ?? error.message}`), { code: error.code, path: target, syscall: "write" });
   }
+}
+
+// `.chapter-01.md.story-1234.tmp`: hidden, never scanned as markdown, and
+// named after its target so validate can say what an interrupted write
+// left behind.
+export const TEMPORARY_FILE_PATTERN = /^\.(.+)\.story-\d+\.tmp$/;
+
+function temporaryPath(target) {
+  const name = path.basename(target).slice(0, 200);
+  return path.join(path.dirname(target), `.${name}.story-${process.pid}.tmp`);
 }
 
 function prepareWriteTarget(filePath, root) {

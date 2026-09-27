@@ -45,7 +45,7 @@ story init "{Title}" --follows {existing-book-dir} --synopsis "{synopsis}"
 story init "{Title}" --precedes {existing-book-dir} --synopsis "{synopsis}"
 ```
 
-`init` checks that the linked path is a story project, writes the relative link, adds the backlink (and the new book's `series`, when the existing book has none) to the existing book's `story.md`, and inherits `series`, `genre`, `sub-genre`, `pov`, and `tense`. When any book in the linked series has an integer `book-number`, it sets `book-number` to one more than the highest number used anywhere in the series, so publication numbers never collide. A normal `story init` book has none, so a series with no numbered books leaves the new book unnumbered. Pass `--book-number` (or write the field on both `story.md` files) in that case. Pass `--series`, `--genre`, `--pov`, or `--tense` to override the inherited values.
+Run `init` from the folder that contains the existing book, never from inside it: `init` refuses a new book inside another project, and a linked book outside the new book's parent folder. It also refuses a `--series` that differs from the linked book's, and a `--book-number` already used in the series. `init` checks that the linked path is a story project, writes the relative link, adds the backlink (and the new book's `series`, when the existing book has none) to the existing book's `story.md`, and inherits `series`, `genre`, `sub-genre`, `pov`, and `tense`. When any book in the linked series has an integer `book-number`, it sets `book-number` to one more than the highest number used anywhere in the series, so publication numbers never collide. A normal `story init` book has none, so a series with no numbered books leaves the new book unnumbered. Pass `--book-number` (or write the field on both `story.md` files) in that case. Pass `--series`, `--genre`, `--pov`, or `--tense` to override the inherited values.
 
 If the existing book has no `series` yet, pass `--series {series-id}`: `init` also writes that `series` into the existing book's `story.md`. Add matching `book-number` values to both `story.md` files yourself.
 
@@ -98,7 +98,7 @@ story series .
 
 ## What `story series` Checks
 
-`story series [path]` finds every book reachable through `follows` and `precedes`, then orders them by chronology. Books with no chronology constraint between them are ordered by `book-number`, then title. It lists shared canon and reports:
+`story series [path]` finds every book reachable through `follows` and `precedes`, then orders them by chronology. At each step, among the books whose earlier books are already listed, the lowest `book-number` goes next, then title, then folder path. It only follows links between sibling book folders. It lists shared canon and reports:
 
 - **Errors**
   - A linked path that is not a story project

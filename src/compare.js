@@ -1,7 +1,11 @@
+import { isSceneBreak, withoutFencedCode } from "./markdown.js";
+import { formatPercent } from "./progress.js";
+
 // Compares two versions of a manuscript chapter by chapter. Chapters match by
 // id (chapter-NN), so a renumbered chapter shows as changed, removed, or
 // added rather than moved. "Unchanged" is the share of the current chapter's
-// paragraphs that appear verbatim in the earlier version.
+// paragraphs that appear verbatim in the earlier version; a chapter is
+// "unchanged" only when its paragraphs are the same and in the same order.
 
 export function compareChapters(previous, current) {
   const before = new Map(previous.map((chapter) => [chapter.id, chapter]));
@@ -21,7 +25,7 @@ export function compareChapters(previous, current) {
     return {
       id,
       title: now.title,
-      status: unchanged === 1 && old.paragraphs.length === now.paragraphs.length ? "unchanged" : "changed",
+      status: sameParagraphs(old.paragraphs, now.paragraphs) ? "unchanged" : "changed",
       before: old.words,
       after: now.words,
       unchanged
@@ -38,11 +42,17 @@ export function compareChapters(previous, current) {
   };
 }
 
+// Prose paragraphs without code between closed fences or scene-break lines,
+// which are not prose that can match.
 export function proseParagraphs(prose) {
-  return String(prose)
+  return withoutFencedCode(String(prose))
     .split(/\r?\n\s*\r?\n/)
     .map((paragraph) => paragraph.replace(/\s+/g, " ").trim())
-    .filter(Boolean);
+    .filter((paragraph) => paragraph !== "" && !isSceneBreak(paragraph));
+}
+
+function sameParagraphs(left, right) {
+  return left.length === right.length && left.every((paragraph, index) => paragraph === right[index]);
 }
 
 function unchangedShare(oldParagraphs, newParagraphs) {
@@ -85,7 +95,7 @@ export function formatComparison(comparison, label) {
     } else if (chapter.status === "unchanged") {
       lines.push(`- ${name}: unchanged (${formatNumber(chapter.after)} words)`);
     } else {
-      lines.push(`- ${name}: ${formatNumber(chapter.before)} -> ${formatNumber(chapter.after)} words (${signed(chapter.after - chapter.before)}), ${Math.round(chapter.unchanged * 100)}% of paragraphs unchanged`);
+      lines.push(`- ${name}: ${formatNumber(chapter.before)} -> ${formatNumber(chapter.after)} words (${signed(chapter.after - chapter.before)}), ${formatPercent(chapter.unchanged * 100, 0)}% of paragraphs unchanged`);
     }
   }
   return `${lines.join("\n")}\n`;

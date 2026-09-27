@@ -1,5 +1,7 @@
-import { escapeRegExp, scanComments, splitWords, withoutFencedCode } from "./markdown.js";
-import { quoteMatches, replaceQuotes } from "./voices.js";
+import { escapeRegExp, scanComments, splitWords, withoutFenceMarkers } from "./markdown.js";
+import { givenName } from "./names.js";
+import { splitSentences } from "./sentences.js";
+import { narrationOnly, quoteMatches, replaceQuotes } from "./voices.js";
 
 // Deterministic prose checks for `story prose`. Everything here is counting:
 // no scoring, no rewriting. Thresholds only decide which counts are raised as
@@ -100,13 +102,17 @@ export const PROSE_THRESHOLDS = {
   phraseLimit: 10
 };
 
-export function proseRules(styleData, characterNames) {
+// `names` are every name and alias in the bible: their words are never
+// adverbs or echoes, and a capitalised name is never a dialect spelling.
+export function proseRules(styleData, names) {
   const data = styleData ?? {};
-  const allow = new Set(stringList(data["allow-words"]).map((word) => word.toLowerCase()));
+  const allow = new Set(stringList(data["allow-words"]).map(normalizeWord));
   const variants = [];
   for (const entry of Array.isArray(data.preferred) ? data.preferred : []) {
+    // validate rejects an entry whose use and avoid are the same word.
     if (entry && typeof entry.use === "string" && typeof entry.avoid === "string"
-      && entry.use.trim() !== "" && entry.avoid.trim() !== "") {
+      && entry.use.trim() !== "" && entry.avoid.trim() !== ""
+      && normalizeWord(entry.use.trim()) !== normalizeWord(entry.avoid.trim())) {
       variants.push({ use: entry.use.trim(), avoid: entry.avoid.trim(), source: "style sheet" });
     }
   }
@@ -114,7 +120,7 @@ export function proseRules(styleData, characterNames) {
   if (dialect === "british" || dialect === "american") {
     // A style-sheet entry or allow-word naming either spelling overrides the
     // built-in pair, so "use: toward" in a British book is not flagged twice.
-    const claimed = new Set(variants.flatMap((variant) => [variant.use.toLowerCase(), variant.avoid.toLowerCase()]).concat([...allow]));
+    const claimed = new Set(variants.flatMap((variant) => [normalizeWord(variant.use), normalizeWord(variant.avoid)]).concat([...allow]));
     for (const [british, american] of DIALECT_PAIRS) {
       const [use, avoid] = dialect === "british" ? [british, american] : [american, british];
       if (!claimed.has(use) && !claimed.has(avoid)) {
@@ -123,9 +129,9 @@ export function proseRules(styleData, characterNames) {
     }
   }
   const nameTokens = new Set();
-  for (const name of characterNames) {
-    for (const token of splitWords(name)) {
-      nameTokens.add(token.toLowerCase());
+  for (const name of names) {
+    for (const token of splitWords(String(name))) {
+      nameTokens.add(nameKey(token));
     }
   }
   return {
@@ -142,8 +148,9 @@ export function analyzeChapter(prose, rules) {
   const paragraphs = proseParagraphs(prose);
   const text = paragraphs.join("\n\n");
   const words = splitWords(text);
-  const narration = splitWords(paragraphs.map(stripDialogue).join("\n\n"));
-  const sentences = paragraphs.flatMap(splitSentences).map((sentence) => splitWords(sentence).length).filter((count) => count > 0);
+  const narration = splitWords(paragraphs.map(narrationOnly).join("\n\n"));
+  const sentenceList = paragraphs.flatMap((paragraph) => splitSentences(paragraph));
+  const sentences = sentenceList.map((sentence) => splitWords(sentence).length).filter((count) => count > 0);
 
   const filterWords = countMatching(narration, (word) => rules.filterWords.has(word));
   const adverbs = countMatching(narration, (word) => isAdverb(word, rules));
@@ -159,8 +166,8 @@ export function analyzeChapter(prose, rules) {
     bookisms: tags.bookisms,
     echoes: echoes(words, rules),
     watch: rules.watch.map(({ word, pattern }) => ({ word, count: countPattern(text, pattern) })).filter((entry) => entry.count > 0),
-    variants: rules.variants.map(({ use, avoid, source, pattern }) => ({ use, avoid, source, count: countPattern(text, pattern) })).filter((entry) => entry.count > 0),
-    phraseSentences: paragraphs.flatMap(splitSentences).map((sentence) => splitWords(sentence).map((word) => word.toLowerCase()))
+    variants: rules.variants.map(({ use, avoid, source, pattern }) => ({ use, avoid, source, count: countVariant(text, pattern, rules) })).filter((entry) => entry.count > 0),
+    phraseSentences: sentenceList.map((sentence) => splitWords(sentence).map(normalizeWord))
   };
 }
 
@@ -172,11 +179,11 @@ export function chapterFindings(label, analysis, thresholds = PROSE_THRESHOLDS) 
   const rated = analysis.narrationWords >= thresholds.minRateWords;
   const filterRate = perThousand(total(analysis.filterWords), analysis.narrationWords);
   if (rated && filterRate > thresholds.filterPerThousand) {
-    findings.push(`${label} has ${formatRate(filterRate)} filter words per 1,000 narration words (over ${thresholds.filterPerThousand}): ${formatCounts(analysis.filterWords, 5)}`);
+    findings.push(`${label} has ${formatAgainst(filterRate, thresholds.filterPerThousand, "over")} filter words per 1,000 narration words (over ${thresholds.filterPerThousand}): ${formatCounts(analysis.filterWords, 5)}`);
   }
   const adverbRate = perThousand(total(analysis.adverbs), analysis.narrationWords);
   if (rated && adverbRate > thresholds.adverbsPerThousand) {
-    findings.push(`${label} has ${formatRate(adverbRate)} -ly adverbs per 1,000 narration words (over ${thresholds.adverbsPerThousand}): ${formatCounts(analysis.adverbs, 5)}`);
+    findings.push(`${label} has ${formatAgainst(adverbRate, thresholds.adverbsPerThousand, "over")} -ly adverbs per 1,000 narration words (over ${thresholds.adverbsPerThousand}): ${formatCounts(analysis.adverbs, 5)}`);
   }
   const bookisms = total(analysis.bookisms);
   if (bookisms >= thresholds.bookismsPerChapter) {
@@ -184,7 +191,7 @@ export function chapterFindings(label, analysis, thresholds = PROSE_THRESHOLDS) 
   }
   const stats = analysis.sentences;
   if (stats.count >= thresholds.uniformMinSentences && stats.spread < thresholds.uniformSpread) {
-    findings.push(`${label} sentence lengths are uniform (spread ${formatRate(stats.spread)} words over ${stats.count} sentences); vary the rhythm`);
+    findings.push(`${label} sentence lengths are uniform (spread ${formatAgainst(stats.spread, thresholds.uniformSpread, "under")} words over ${stats.count} sentences); vary the rhythm`);
   }
   return findings;
 }
@@ -213,10 +220,11 @@ export function repeatedPhrases(analyses, thresholds = PROSE_THRESHOLDS) {
 }
 
 // Character first names that a reader could confuse: identical, sharing
-// their first three letters, or one or two edits apart.
+// their first three letters, or one or two edits apart. Titles are skipped,
+// so Captain Mara Dole is compared as Mara.
 export function similarNames(characters) {
   const firsts = characters
-    .map((character) => ({ id: character.id, name: String(character.name), first: (splitWords(character.name)[0] ?? "").toLowerCase() }))
+    .map((character) => ({ id: character.id, name: String(character.name), first: givenName(character.name).toLowerCase() }))
     .filter((entry) => entry.first.length >= 3)
     .sort((left, right) => left.id.localeCompare(right.id, "en"));
   const pairs = [];
@@ -263,8 +271,8 @@ export function formatProseReport(report) {
 
 // Prose paragraphs without headings, HTML comments, or scene-break rules.
 function proseParagraphs(prose) {
-  // Fenced code is dropped before paragraphs are joined, as word counts do.
-  return withoutFencedCode(scanComments(String(prose), " ").text)
+  // Fence lines are dropped and the code kept, as word counts and builds do.
+  return withoutFenceMarkers(scanComments(String(prose), " ").text)
     .split(/\r?\n\s*\r?\n/)
     // Drop heading lines, not the prose that follows one without a blank line.
     .map((paragraph) => paragraph.split(/\r?\n/).filter((line) => !/^\s{0,3}#/.test(line)).join(" "))
@@ -272,61 +280,26 @@ function proseParagraphs(prose) {
     .filter((paragraph) => paragraph !== "" && !/^([*_-])( ?\1){2,}$/.test(paragraph));
 }
 
-// Splits after . ! ? or … (and up to eight closing quotes, brackets, or
-// emphasis marks) before a capital or digit. The look-back is bounded, so
-// a run of quote marks stays linear.
-function splitSentences(paragraph) {
-  const sentences = [];
-  let start = 0;
-  for (const space of paragraph.matchAll(/\s+/g)) {
-    const before = paragraph.slice(Math.max(0, space.index - 9), space.index);
-    const after = paragraph.slice(space.index + space[0].length, space.index + space[0].length + 9);
-    if (/[.!?…]["'”’)\]*_]{0,8}$/.test(before) && /^["'“‘(*_]{0,8}[\p{Lu}\p{N}]/u.test(after)) {
-      sentences.push(paragraph.slice(start, space.index));
-      start = space.index + space[0].length;
-    }
-  }
-  sentences.push(paragraph.slice(start));
-  return sentences;
-}
-
-// Removes quoted speech so narration checks do not count a character's own
-// words. Quotes pair as in `story voices` (curly, straight, and British
-// single quotes); speech still open at the paragraph end runs to the end.
-function stripDialogue(paragraph) {
-  let text = replaceQuotes(paragraph);
-  // Cut at the first opener with no closer after it, found with index
-  // searches so a run of unclosed quotes stays linear.
-  const curly = text.indexOf("“", text.lastIndexOf("”") + 1);
-  if (curly !== -1) {
-    text = text.slice(0, curly);
-  }
-  const straight = text.indexOf("\"");
-  if (straight !== -1) {
-    text = text.slice(0, straight);
-  }
-  const lastSingleClose = text.lastIndexOf("’");
-  const single = /(?<![\p{L}\p{N}])‘/u.exec(text.slice(lastSingleClose + 1));
-  if (single) {
-    text = text.slice(0, lastSingleClose + 1 + single.index);
-  }
-  return text;
-}
+const BEAT_PRONOUNS = new Set(["he", "she", "they", "i", "we", "it", "you"]);
 
 function dialogueTags(paragraphs, rules) {
   const plain = new Map();
   const bookisms = new Map();
   for (const paragraph of paragraphs) {
-    for (const closing of closingQuoteIndexes(paragraph)) {
+    for (const match of quoteMatches(paragraph)) {
       // A tag sits within a few words of the closing quote.
-      const after = splitWords(paragraph.slice(closing + 1, closing + 200).split(/[.!?;:“"]/)[0]).slice(0, 3);
+      const after = splitWords(paragraph.slice(match.end, match.end + 200).split(/[.!?;:“"]/)[0]).slice(0, 3);
+      const tag = tagKind(match.text, after[0] ?? "");
+      if (tag === "none") {
+        continue;
+      }
       for (const raw of after) {
         const word = raw.toLowerCase();
         if (PLAIN_TAGS.includes(word)) {
           increment(plain, word);
           break;
         }
-        if (rules.bookisms.has(word)) {
+        if (tag === "any" && rules.bookisms.has(word)) {
           increment(bookisms, word);
           break;
         }
@@ -336,20 +309,62 @@ function dialogueTags(paragraphs, rules) {
   return { plain: sortCounts(plain), bookisms: sortCounts(bookisms) };
 }
 
-function closingQuoteIndexes(paragraph) {
-  return quoteMatches(paragraph).map((match) => match.end - 1);
+// Whether the words after a quote can be its tag. A quote ending in a full
+// stop is a finished sentence, so what follows is an action beat ("We leave
+// at dawn." She smiled.). After ? ! … or a dash, a lower-case word continues
+// the sentence as a tag; a capitalised pronoun starts a beat, and a
+// capitalised name counts only with a plain tag ("Now?" Mara asked.), since
+// "No!" Mara laughed. is a beat.
+function tagKind(quoted, nextWord) {
+  const end = quoted.trim().replace(/["'”’)\]*_]+$/, "").slice(-1);
+  if (end === ".") {
+    return "none";
+  }
+  if (/[?!…—–-]/.test(end) && /^\p{Lu}/u.test(nextWord)) {
+    return BEAT_PRONOUNS.has(nextWord.toLowerCase()) ? "none" : "plain";
+  }
+  return "any";
 }
 
 function isAdverb(word, rules) {
-  return word.length > 4 && word.endsWith("ly") && !NOT_ADVERBS.has(word) && !rules.allow.has(word) && !rules.nameTokens.has(word);
+  return word.length > 4 && word.endsWith("ly") && !NOT_ADVERBS.has(word) && !rules.allow.has(word) && !isName(word, rules);
+}
+
+// A name token, also in the possessive (Maren's, Maren’s).
+function isName(word, rules) {
+  return rules.nameTokens.has(word) || rules.nameTokens.has(nameKey(word));
+}
+
+// Lower case with curly apostrophes made straight, so style-sheet entries
+// typed with ' match manuscripts that use ’.
+function normalizeWord(word) {
+  return String(word).toLowerCase().replace(/’/g, "'");
+}
+
+function nameKey(word) {
+  return normalizeWord(word).replace(/'s$/, "");
+}
+
+// Uses of an avoided spelling, minus capitalised uses that are part of a
+// name in the bible (Dorian Gray, Center Point).
+function countVariant(text, pattern, rules) {
+  let count = 0;
+  for (const match of text.matchAll(pattern)) {
+    const first = splitWords(match[0])[0] ?? "";
+    if (/^\p{Lu}/u.test(first) && isName(first, rules)) {
+      continue;
+    }
+    count += 1;
+  }
+  return count;
 }
 
 function echoes(words, rules) {
   const lastSeen = new Map();
   const counts = new Map();
   words.forEach((raw, index) => {
-    const word = raw.toLowerCase();
-    if (word.length < PROSE_THRESHOLDS.echoMinLength || ECHO_STOPWORDS.has(word) || rules.nameTokens.has(word) || rules.allow.has(word) || /^\p{N}+$/u.test(word)) {
+    const word = normalizeWord(raw);
+    if (word.length < PROSE_THRESHOLDS.echoMinLength || ECHO_STOPWORDS.has(word) || isName(word, rules) || rules.allow.has(word) || /^\p{N}+$/u.test(word)) {
       return;
     }
     if (lastSeen.has(word) && index - lastSeen.get(word) <= PROSE_THRESHOLDS.echoWindow) {
@@ -372,7 +387,7 @@ function sentenceStats(lengths) {
 function countMatching(words, predicate) {
   const counts = new Map();
   for (const raw of words) {
-    const word = raw.toLowerCase();
+    const word = normalizeWord(raw);
     if (predicate(word)) {
       increment(counts, word);
     }
@@ -381,14 +396,26 @@ function countMatching(words, predicate) {
 }
 
 function phrasePattern(phrase) {
-  const body = phrase.trim().split(/\s+/).map(escapeRegExp).join("\\s+");
+  const body = phrase.trim().split(/\s+/).map((word) => escapeRegExp(word).replace(/['’]/g, "['’]")).join("\\s+");
   // Letter boundaries only, so compounds ("grey-haired") and possessives
   // still count as uses of the word.
-  return new RegExp(`(?<![\\p{L}\\p{N}])${body}(?![\\p{L}\\p{N}])`, "giu");
+  return new RegExp(`(?<![\\p{L}\\p{M}\\p{N}])${body}(?![\\p{L}\\p{M}\\p{N}])`, "giu");
 }
 
 function countPattern(text, pattern) {
   return (text.match(pattern) ?? []).length;
+}
+
+// A rate printed on the warned side of its threshold: 4.975 against "under
+// 5" prints 4.98, not 5.0.
+function formatAgainst(value, threshold, side) {
+  for (let places = 1; places < 6; places += 1) {
+    const shown = Number(value.toFixed(places));
+    if (side === "over" ? shown > threshold : shown < threshold) {
+      return value.toFixed(places);
+    }
+  }
+  return String(value);
 }
 
 export function editDistance(a, b) {

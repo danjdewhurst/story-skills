@@ -7,6 +7,7 @@ import {
   createStoryProject,
   formatActionReport,
   projectActions,
+  reindexProject,
   scanProject,
   validateLinks,
   validateProject
@@ -313,7 +314,7 @@ object-state:
 
     expect(result.ok).toBe(false);
     expect(result.errors).toHaveLength(20);
-    expect(result.warnings).toHaveLength(3);
+    expect(result.warnings).toHaveLength(6);
     expect(errors).toContain("continuity/promises/backwards-payoff.md pays off in chapter-02 before it is planted in chapter-03");
     expect(errors).toContain("continuity/promises/missing-payoff.md is paid-off but has no payoff chapter");
     expect(errors).toContain("continuity/promises/unrooted-plant.md is planted but has no planted chapter");
@@ -354,6 +355,10 @@ name: Lone Scribe
 role: protagonist
 status: alive
 `, "# Scribe\n");
+    // A hand-written file is missing from the registry until reindex, and
+    // that validate warning is an action of its own.
+    expect(formatActionReport(projectActions(created.root))).toContain("Review validation warnings");
+    reindexProject(created.root);
     expect(formatActionReport(projectActions(created.root))).toContain("Project is mechanically healthy");
 
     fs.rmSync(path.join(created.root, "continuity", "state.md"));

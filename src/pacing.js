@@ -3,6 +3,8 @@
 // hooks, and length, plus advisory findings about runs that go slack. Reads
 // frontmatter only; everything here is a warning.
 
+import { plural } from "./plural.js";
+
 export const SCENE_OUTCOMES = new Set(["yes", "no", "yes-but", "no-and"]);
 export const CHAPTER_HOOKS = new Set(["cliffhanger", "question", "revelation", "reversal", "decision", "emotional", "resolution"]);
 
@@ -79,9 +81,9 @@ export function buildPacing(project) {
   if (written.length >= 3) {
     for (const row of written) {
       if (row.words > median * 2) {
-        warnings.push(`${row.id} runs ${row.words} words, over twice the median chapter (${median}): consider splitting it`);
+        warnings.push(`${row.id} runs ${row.words} words, over twice the median chapter (${formatMedian(median)}): consider splitting it`);
       } else if (row.words < median / 2) {
-        warnings.push(`${row.id} runs ${row.words} words, under half the median chapter (${median}): check it earns its place`);
+        warnings.push(`${row.id} runs ${row.words} words, under half the median chapter (${formatMedian(median)}): check it earns its place`);
       }
     }
   }
@@ -89,7 +91,7 @@ export function buildPacing(project) {
   const recorded = units.filter((unit) => !unit.sequel && SCENE_OUTCOMES.has(unit.outcome));
   return {
     rows,
-    medianWords: median,
+    medianWords: formatMedian(median),
     totals: {
       scenes: units.filter((unit) => !unit.sequel).length,
       sequels: units.filter((unit) => unit.sequel).length,
@@ -113,20 +115,25 @@ function span(run) {
   return first === last ? first : `${first} to ${last}`;
 }
 
+// The median is compared exactly and rounded only for display.
+function formatMedian(median) {
+  return Math.round(median);
+}
+
 function medianOf(values) {
   if (values.length === 0) {
     return 0;
   }
   const sorted = [...values].sort((left, right) => left - right);
   const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 1 ? sorted[middle] : Math.round((sorted[middle - 1] + sorted[middle]) / 2);
+  return sorted.length % 2 === 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
 export function formatPacing(pacing) {
   const { totals } = pacing;
   const setbackShare = totals.outcomesRecorded === 0 ? "no outcomes recorded" : `${Math.round((totals.setbacks * 100) / totals.outcomesRecorded)}% of recorded outcomes are setbacks or complications`;
   const lines = [
-    `Pacing: ${totals.scenes} scenes, ${totals.sequels} sequels, ${totals.hooks} of ${pacing.rows.length} chapters with hooks`,
+    `Pacing: ${plural(totals.scenes, "scene")}, ${plural(totals.sequels, "sequel")}, ${totals.hooks} of ${plural(pacing.rows.length, "chapter")} with hooks`,
     `Outcomes: ${setbackShare}`,
     `Median chapter: ${pacing.medianWords} words`,
     ""
@@ -135,10 +142,20 @@ export function formatPacing(pacing) {
     lines.push("- None: add chapters with story add chapter");
     return `${lines.join("\n")}\n`;
   }
-  lines.push("Ch  Words  Scenes  Sequels  Outcomes (yes/no/yes-but/no-and)  Hook");
+  // Columns widen to their longest value, so a chapter 100 or a
+  // 100,000-word chapter keeps its row aligned.
+  const outcomesOf = (row) => `${row.outcomes.yes}/${row.outcomes.no}/${row.outcomes["yes-but"]}/${row.outcomes["no-and"]}`;
+  const columns = [
+    { title: "Ch", value: (row) => String(row.number) },
+    { title: "Words", value: (row) => String(row.words) },
+    { title: "Scenes", value: (row) => String(row.scenes) },
+    { title: "Sequels", value: (row) => String(row.sequels) },
+    { title: "Outcomes (yes/no/yes-but/no-and)", value: outcomesOf, left: true }
+  ].map((column) => ({ ...column, width: Math.max(column.title.length, ...pacing.rows.map((row) => column.value(row).length)) }));
+  const cellText = (column, text) => (column.left ? text.padEnd(column.width) : text.padStart(column.width));
+  lines.push(`${columns.map((column) => column.title.padEnd(column.width)).join("  ")}  Hook`);
   for (const row of pacing.rows) {
-    const outcomes = `${row.outcomes.yes}/${row.outcomes.no}/${row.outcomes["yes-but"]}/${row.outcomes["no-and"]}`;
-    lines.push(`${String(row.number).padStart(2)}  ${String(row.words).padStart(5)}  ${String(row.scenes).padStart(6)}  ${String(row.sequels).padStart(7)}  ${outcomes.padEnd(32)}  ${row.hook || "-"}`);
+    lines.push(`${columns.map((column) => cellText(column, column.value(row))).join("  ")}  ${row.hook || "-"}`);
   }
   return `${lines.join("\n")}\n`;
 }

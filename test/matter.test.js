@@ -83,7 +83,7 @@ describe("story add matter", () => {
     expect(fs.readFileSync(indexPath, "utf8")).toContain("*No matter pages yet*");
 
     writeMatter(root, "stray", "title: Stray\nplacement: back", "Text.\n");
-    expect(validateProject(root).warnings).toContain("matter/_index.md is missing registry link ](stray.md)");
+    expect(validateProject(root).warnings).toContain("matter/_index.md does not list matter/stray.md; run story reindex");
     writeMarkdown(indexPath, "type: notes\nstory: matter-story", "# Matter\n");
     expect(validateProject(root).errors).toContain("matter/_index.md type must be matter-registry");
   });

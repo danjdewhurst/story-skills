@@ -67,7 +67,9 @@ export function runCli(argv, io) {
 
     // `story help <command>` and `story <command> --help` show one
     // command; `story help` and `story --help` show everything.
-    const helpTopic = name === "help" ? parsed.positionals[1] : parsed.options.help ? name : undefined;
+    const topic = name === "help" ? parsed.positionals[1] : parsed.options.help ? name : undefined;
+    // `story help help` is the general usage, as `story help` is.
+    const helpTopic = topic === "help" ? undefined : topic;
     if (helpTopic !== undefined && COMMANDS_BY_NAME.has(helpTopic)) {
       io.stdout.write(formatCommandHelp(COMMANDS_BY_NAME.get(helpTopic)));
       return 0;
@@ -105,6 +107,26 @@ export function runCli(argv, io) {
   }
 }
 
+// Called for an 'error' event on stdout/stderr or an uncaught exception in
+// bin/story.js. A closed pipe (`story prose | head`) exits quietly, keeping
+// any exit code already set, like `ls | head`; any other write failure (a
+// full disk) gets one line on stderr instead of a stack trace. Anything that
+// is not an output error is reported with its stack, as Node would.
+export function handleOutputError(error, proc) {
+  if (error?.code === "EPIPE") {
+    proc.exit(proc.exitCode ?? 0);
+    return;
+  }
+  const reason = FILE_ERROR_REASONS[error?.code];
+  const message = error?.syscall === "write" && reason ? `Cannot write output: ${reason}` : error?.stack ?? String(error);
+  try {
+    proc.stderr.write(`${message}\n`);
+  } catch {
+    // stderr is gone too; the exit code still reports the failure.
+  }
+  proc.exit(1);
+}
+
 const FILE_ERROR_REASONS = {
   EACCES: "permission denied",
   EPERM: "permission denied",
@@ -113,9 +135,13 @@ const FILE_ERROR_REASONS = {
   ENOTDIR: "a part of the path is not a folder",
   EROFS: "the file system is read-only",
   ENOSPC: "no space left on the device",
-  ENAMETOOLONG: "the name is too long"
+  ENAMETOOLONG: "the name is too long",
+  EDQUOT: "the disk quota is exceeded",
+  EFBIG: "the file is too large",
+  EIO: "an input/output error",
+  EBUSY: "the file is in use"
 };
-const FILE_ERROR_ACTIONS = { open: "open", scandir: "list", stat: "check", statx: "check", lstat: "check", rename: "replace", mkdir: "create the folder", unlink: "delete", rmdir: "delete", copyfile: "copy", access: "write to" };
+const FILE_ERROR_ACTIONS = { open: "open", scandir: "list", stat: "check", statx: "check", lstat: "check", rename: "replace", mkdir: "create the folder", unlink: "delete", rmdir: "delete", copyfile: "copy", access: "write to", write: "write to", rm: "delete" };
 
 // A file-system error from Node names a syscall and an absolute path; say
 // what failed in plain words, with the path relative to where the user is.

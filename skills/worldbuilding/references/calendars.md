@@ -86,8 +86,8 @@ which makes a good rare event.
   dates do not feed the route check. A named time is a span (`morning` is
   05:00-11:59), an untimed scene spans its whole day, and only journeys
   impossible on every reading are errors. `travel-hours` on a scene is the
-  minimum time since the previous dated scene in chapter order, not a
-  journey within the scene.
+  minimum time since the latest moment the story has reached in reading
+  order (a flashback does not reset it), not a journey within the scene.
 
 After adding or changing the calendar system, run `story reindex .`,
 `story links .`, and `story validate .`.
