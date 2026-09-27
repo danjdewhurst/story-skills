@@ -91,7 +91,7 @@ publishing/*.md                   optional: skill-owned, not read by the CLI
 adaptations/                      optional: skill-owned, not read by the CLI
 dist/                             optional: disposable output of story build
 .github/                          optional: copied GitHub templates, not read by the CLI
-.gitignore                        optional: written by story init, not read by the CLI
+.gitignore                        optional: written by story init, only checked for a dist/ rule
 ```
 
 `story init` creates every directory and registry above except `matter/`, `research/`, `feedback/`, `submission/`, `publishing/`, `adaptations/`, and `.github/`, plus `story.md`, `style-sheet.md`, `plot/timeline.md`, `continuity/state.md`, and a `.gitignore` (see [init](cli-reference.md#init)). It creates no entity files, and none of `progress.md`, `continuity/exemptions.md`, `continuity/motifs.md`, `continuity/theme-audit.md`, or `dist/`.

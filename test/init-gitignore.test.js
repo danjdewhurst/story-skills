@@ -67,7 +67,7 @@ describe("init .gitignore", () => {
     }
   });
 
-  test("a symlinked or non-file .gitignore is left alone without reading it", () => {
+  test("a symlinked, unreadable, or non-file .gitignore is left alone", () => {
     const cwd = makeTempDir();
     const shared = path.join(cwd, "shared-ignore");
     fs.writeFileSync(shared, "*.log\n");
@@ -76,6 +76,11 @@ describe("init .gitignore", () => {
     fs.symlinkSync(shared, path.join(linked, ".gitignore"));
     expect(createStoryProject({ cwd, title: "Linked", force: true }).gitignore).toBe("kept");
     expect(fs.readFileSync(shared, "utf8")).toBe("*.log\n");
+
+    const binary = path.join(cwd, "binary");
+    fs.mkdirSync(binary);
+    fs.writeFileSync(path.join(binary, ".gitignore"), Buffer.from([0xff, 0xfe, 0x00, 0x80]));
+    expect(createStoryProject({ cwd, title: "Binary", force: true }).gitignore).toBe("kept");
 
     const odd = path.join(cwd, "odd");
     fs.mkdirSync(path.join(odd, ".gitignore"), { recursive: true });

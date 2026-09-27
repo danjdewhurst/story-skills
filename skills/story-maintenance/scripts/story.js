@@ -6523,7 +6523,13 @@ function writeStarterGitignore(root) {
   if (!existing.isFile()) {
     return "kept";
   }
-  const ignoresDist = readTextFile(filePath).split(/\r?\n/).some((line) => /^(?:\*\*\/|\/)?dist(?:\/(?:\*{1,2})?)?$/.test(line.trim()));
+  let text;
+  try {
+    text = readTextFile(filePath);
+  } catch {
+    return "kept";
+  }
+  const ignoresDist = text.split(/\r?\n/).some((line) => /^(?:\*\*\/|\/)?dist(?:\/(?:\*{1,2})?)?$/.test(line.trim()));
   return ignoresDist ? "kept" : "missing-dist";
 }
 function inheritedStoryFields(data) {

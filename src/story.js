@@ -321,7 +321,15 @@ function writeStarterGitignore(root) {
   if (!existing.isFile()) {
     return "kept";
   }
-  const ignoresDist = readTextFile(filePath)
+  let text;
+  try {
+    text = readTextFile(filePath);
+  } catch {
+    // One that is not UTF-8 text, or is oversized, is kept without a check
+    // rather than failing a run that has already written starter files.
+    return "kept";
+  }
+  const ignoresDist = text
     .split(/\r?\n/)
     .some((line) => /^(?:\*\*\/|\/)?dist(?:\/(?:\*{1,2})?)?$/.test(line.trim()));
   return ignoresDist ? "kept" : "missing-dist";
