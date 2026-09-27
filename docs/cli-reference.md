@@ -269,7 +269,7 @@ A parse error names the file by its path inside the project, never an absolute p
 story init <title> [options]
 ```
 
-Scaffolds a new story project: `story.md`, `style-sheet.md`, `plot/timeline.md`, `continuity/state.md`, every entity folder, and empty registries. The story id is the kebab-case form of the title (`The Salt Road` becomes `the-salt-road`), and the project goes in a directory of that name unless you pass `--dir`. A title with no ASCII letters or digits, such as `Война и мир`, has no kebab-case form, so it needs `--dir` with an ASCII folder name; the story id then comes from the folder name (`story init "Война и мир" --dir voina` gives the id `voina`).
+Scaffolds a new story project: `story.md`, `style-sheet.md`, `plot/timeline.md`, `continuity/state.md`, every entity folder, and empty registries. The story id is the kebab-case form of the title (`The Salt Road` becomes `the-salt-road`), and the project goes in a directory of that name unless you pass `--dir`. A title with no ASCII letters or digits, such as `Война и мир`, has no kebab-case form, so it needs `--dir` with an ASCII folder name; the story id then comes from the folder name (`story init "Война и мир" --dir voina` gives the id `voina`). The id follows the `story.md` title on every run, so after changing the title run `story reindex` to rewrite it in the registries, `plot/timeline.md`, and `continuity/state.md`; until then `story validate` fails with `story must be <new-id>`.
 
 | Option | Effect | Default |
 |---|---|---|

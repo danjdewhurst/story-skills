@@ -153,8 +153,11 @@ asks after seeing what was carried over.
 - `premise` in `story.md` is always the controlling idea (value + cause).
   The logline goes in the Synopsis section.
 - Titles and names are provisional until `story names` passes. Rename a
-  title freely before chapter one; after that, rename characters with
-  `story rename` so references follow.
+  title freely before chapter one, then run `story reindex .`: the story
+  id in every registry, `plot/timeline.md`, and `continuity/state.md`
+  follows the `story.md` title, so `story validate` fails until they are
+  rewritten. After chapter one, rename characters with `story rename` so
+  references follow.
 - Never present a comparable title, author, prize, or market fact as
   verified without a source.
 
@@ -170,12 +173,15 @@ and check names against the registries by reading them.
 After `story init` and the hand edits to `story.md`:
 
 ```shell
+story reindex .
 story validate .
 story report .
 ```
 
 `story validate` warns when `target-words` sits outside the chosen form's
 usual range; either adjust the target or confirm the choice with the user.
+`story reindex .` is needed only when the title changed, but it is safe to
+run every time.
 
 ## Reference Files
 

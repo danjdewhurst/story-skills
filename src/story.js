@@ -483,6 +483,12 @@ function deriveStoryId(title, root) {
   return kebabCase(String(title ?? "")) || kebabCase(path.basename(root));
 }
 
+// Every registry records the story id, which follows the story.md title, so
+// a retitled story leaves them all stale until `story reindex` rewrites them.
+function storyIdMismatch(label, project) {
+  return `${label} story must be ${project.storyId} (run story reindex after changing the story.md title)`;
+}
+
 export function scanProject(root) {
   const projectRoot = path.resolve(root);
   const scanErrors = [];
@@ -5182,7 +5188,7 @@ function validateIndexFrontmatter(project, errors) {
     }
 
     if (data.story !== undefined && data.story !== project.storyId && !storyIdIsFallback(project)) {
-      errors.push(`${label} story must be ${project.storyId}`);
+      errors.push(storyIdMismatch(label, project));
     }
 
     if (relativePath === path.join("plot", "_index.md")) {
@@ -5517,7 +5523,7 @@ function validateContinuityState(project, errors, warnings) {
     errors.push(`${label} type must be continuity-state`);
   }
   if (data.story !== undefined && data.story !== project.storyId && !storyIdIsFallback(project)) {
-    errors.push(`${label} story must be ${project.storyId}`);
+    errors.push(storyIdMismatch(label, project));
   }
 }
 
