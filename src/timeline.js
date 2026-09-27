@@ -178,8 +178,11 @@ function characterPresence(project, chapters, chapterById) {
         }
       }
       const trailing = seen.length === 0 ? 0 : chapters.length - 1 - seen[seen.length - 1];
-      // A death with no later revival explains the absence at the end.
-      const died = chapterById.has(character.diedIn) && !chapterById.has(character.revivedIn ?? "")
+      // A written death with no written revival explains the absence at the
+      // end. A death or revival in an outline chapter is planned, not yet
+      // written, as in continuity.
+      const written = (chapterId) => chapterById.has(chapterId ?? "") && chapterById.get(chapterId).status !== "outline";
+      const died = written(character.diedIn) && !written(character.revivedIn)
         ? chapterById.get(character.diedIn).number
         : null;
       return {

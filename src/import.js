@@ -357,7 +357,7 @@ function splitChapters(documents, warnings = []) {
 }
 
 // A chapter file in Story Skills' own layout, copied from another project,
-// keeps its title, and its prose is the text under `## Chapter Text` (the
+// keeps its title and `numbered: false`, and its prose is the text under `## Chapter Text` (the
 // outline above it is not book text).
 function storySkillsChapter(text) {
   const heading = /^## Chapter Text[ \t]*$/m.exec(text);
@@ -371,7 +371,7 @@ function storySkillsChapter(text) {
     return null;
   }
   const title = typeof data.title === "string" || typeof data.title === "number" ? String(data.title).trim() : "";
-  return { title, prose: text.slice(heading.index + heading[0].length).trim() };
+  return { title, prose: text.slice(heading.index + heading[0].length).trim(), unnumbered: data.numbered === false };
 }
 
 // Markdown from Pandoc spells an em dash `---` and an en dash `--`, so a

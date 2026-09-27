@@ -488,6 +488,7 @@ function checkContinuity(project) {
   checkClues(project, context, errors, warnings);
   checkStoryCompletion(project, errors);
   checkContinuityState(project, context, errors, warnings);
+  checkSceneLearning(project, context, errors, warnings);
   checkStateAgainstStory(project, context, warnings);
   checkPropCustody(project, context, errors);
   checkClock(project, errors, warnings);
@@ -886,6 +887,17 @@ function checkPosthumousLearning(character, learnedIn, entryLabel, context, erro
     errors.push(`${entryLabel} has ${character.id} learn something in ${learnedIn}, after they died in ${character.diedIn}`);
   }
 }
+function checkSceneLearning(project, context, errors, warnings) {
+  for (const scene of project.scenes) {
+    for (const change of scene.stateChanges) {
+      if (!change || typeof change !== "object" || Array.isArray(change) || change.knowledge === undefined) {
+        continue;
+      }
+      const character = context.characters.get(idText(change.character));
+      checkPosthumousLearning(character, scene.chapter, `${relative(project, scene.file)} state-change`, context, errors, warnings);
+    }
+  }
+}
 function checkStateAgainstStory(project, context, warnings) {
   if (!project.continuity) {
     return;
@@ -963,7 +975,7 @@ function checkStateAgainstStory(project, context, warnings) {
     const character = idText(entry.character);
     const entryLabel = `${label} character-state[${index}]`;
     const window = windows.get(character);
-    if (window && context.chapterNumbers.get(window.died) <= currentChapter && (window.revived === "" || context.chapterNumbers.get(window.revived) > currentChapter)) {
+    if (window && current && (current.id === window.died || window.deadIn(current.id))) {
       warnings.push(`${entryLabel} tracks ${character}, who died in ${window.died}; remove the entry once they are dead`);
       continue;
     }
@@ -1000,7 +1012,7 @@ function checkStateAgainstStory(project, context, warnings) {
       continue;
     }
     const since = idText(entry.since);
-    const newer = since !== "" && (context.chapterNumbers.get(since) ?? -Infinity) > context.chapterNumbers.get(scene.chapter);
+    const newer = since !== "" && context.chapterNumbers.has(since) && chronology.after(since, scene.chapter);
     const stated = idText(entry[field]);
     if (!newer && stated !== value) {
       const index = stateEntries(data["object-state"]).indexOf(entry);
@@ -1013,19 +1025,25 @@ function normalizeKnowledge(value) {
 }
 function latestObjectEntry(data, artifactId, context) {
   let latest = null;
-  let latestNumber = -Infinity;
+  let latestSince = "";
   for (const entry of stateEntries(data["object-state"])) {
     if (!entry || typeof entry !== "object" || Array.isArray(entry) || idText(entry.artifact) !== artifactId) {
       continue;
     }
-    const since = idText(entry.since);
-    const number = since === "" ? -Infinity : context.chapterNumbers.get(since) ?? -Infinity;
-    if (latest === null || number >= latestNumber) {
+    const since = context.chapterNumbers.has(idText(entry.since)) ? idText(entry.since) : "";
+    if (latest === null || compareSince(since, latestSince, context) >= 0) {
       latest = entry;
-      latestNumber = number;
+      latestSince = since;
     }
   }
   return latest;
+}
+function compareSince(left, right, context) {
+  if (left === "" || right === "") {
+    return (left === "" ? 0 : 1) - (right === "" ? 0 : 1);
+  }
+  const { after } = context.chronology;
+  return after(left, right) ? 1 : after(right, left) ? -1 : 0;
 }
 function idText(value) {
   if (typeof value === "string") {
@@ -1056,11 +1074,11 @@ function relative(project, file) {
   return path.relative(project.root, file);
 }
 function checkPropCustody(project, context, errors) {
-  for (const { artifact, since, sinceNumber, beforeStory, until } of goneWindows(project, context)) {
-    const inWindow = (number) => number > sinceNumber && number < until;
+  const { after } = context.chronology;
+  for (const { artifact, since, beforeStory, until } of goneWindows(project, context)) {
+    const inWindow = (chapterId) => context.chapterNumbers.has(chapterId) && (beforeStory || after(chapterId, since)) && (until === "" || after(until, chapterId));
     for (const scene of project.scenes) {
-      const sceneNumber = context.chapterNumbers.get(scene.chapter);
-      if (sceneNumber === undefined || !inWindow(sceneNumber)) {
+      if (!inWindow(scene.chapter)) {
         continue;
       }
       const sceneLabel = relative(project, scene.file);
@@ -1072,7 +1090,7 @@ function checkPropCustody(project, context, errors) {
       }
     }
     for (const chapter of project.chapters) {
-      if (beforeStory || !inWindow(chapter.number)) {
+      if (beforeStory || !inWindow(chapter.id)) {
         continue;
       }
       if (chapter.mentions.includes(artifact)) {
@@ -1089,25 +1107,26 @@ function goneWindows(project, context) {
     }
     const artifact = idText(entry.artifact);
     const since = idText(entry.since);
-    const sinceNumber = since === "" ? -Infinity : context.chapterNumbers.get(since);
-    if (artifact === "" || sinceNumber === undefined) {
+    if (artifact === "" || since !== "" && !context.chapterNumbers.has(since)) {
       continue;
     }
     const status = String(entry.status ?? "").trim().toLowerCase();
     const list = histories.get(artifact) ?? [];
-    list.push({ since, sinceNumber, gone: status === "destroyed" || status === "lost" });
+    list.push({ since, destroyed: status === "destroyed", gone: status === "destroyed" || status === "lost" });
     histories.set(artifact, list);
   }
   const windows = [];
   for (const [artifact, history] of histories) {
-    history.sort((left, right) => left.sinceNumber - right.sinceNumber);
+    history.sort((left, right) => compareSince(left.since, right.since, context));
     let open = null;
     for (const entry of history) {
       if (entry.gone && open === null) {
-        open = { artifact, since: entry.since, sinceNumber: entry.sinceNumber, beforeStory: entry.since === "", until: Infinity };
+        open = { artifact, since: entry.since, beforeStory: entry.since === "", until: "", destroyed: entry.destroyed };
         windows.push(open);
-      } else if (!entry.gone && open !== null && entry.sinceNumber > open.sinceNumber) {
-        open.until = entry.sinceNumber;
+      } else if (entry.gone) {
+        open.destroyed ||= entry.destroyed;
+      } else if (open !== null && !open.destroyed && compareSince(entry.since, open.since, context) > 0) {
+        open.until = entry.since;
         open = null;
       }
     }
@@ -4030,7 +4049,8 @@ function characterPresence(project, chapters, chapterById) {
       }
     }
     const trailing = seen.length === 0 ? 0 : chapters.length - 1 - seen[seen.length - 1];
-    const died = chapterById.has(character.diedIn) && !chapterById.has(character.revivedIn ?? "") ? chapterById.get(character.diedIn).number : null;
+    const written = (chapterId) => chapterById.has(chapterId ?? "") && chapterById.get(chapterId).status !== "outline";
+    const died = written(character.diedIn) && !written(character.revivedIn) ? chapterById.get(character.diedIn).number : null;
     return {
       id: character.id,
       chapters: seen.length,
@@ -4727,7 +4747,7 @@ function checkCanonDeaths(book, earlierBooks, errors) {
   }
   for (const record of book.project.chapters.concat(book.project.scenes)) {
     for (const [id, death] of deaths) {
-      if (record.pov === id || record.characters.includes(id)) {
+      if (record.characters.includes(id) || record.pov === id && !record.mentions.includes(id)) {
         errors.push(`${bookFile(book, record.file)} lists ${id}, who died in earlier book ${death.title}; move appearances to mentions`);
       }
     }
@@ -11934,7 +11954,7 @@ function storySkillsChapter(text) {
     return null;
   }
   const title = typeof data.title === "string" || typeof data.title === "number" ? String(data.title).trim() : "";
-  return { title, prose: text.slice(heading.index + heading[0].length).trim() };
+  return { title, prose: text.slice(heading.index + heading[0].length).trim(), unnumbered: data.numbered === false };
 }
 function normalizeSource(text, name) {
   if (/\.te?xt$/i.test(name)) {

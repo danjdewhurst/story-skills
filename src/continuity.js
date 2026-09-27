@@ -40,6 +40,7 @@ export function checkContinuity(project) {
   checkClues(project, context, errors, warnings);
   checkStoryCompletion(project, errors);
   checkContinuityState(project, context, errors, warnings);
+  checkSceneLearning(project, context, errors, warnings);
   checkStateAgainstStory(project, context, warnings);
   checkPropCustody(project, context, errors);
   checkClock(project, errors, warnings);
@@ -526,6 +527,20 @@ function checkPosthumousLearning(character, learnedIn, entryLabel, context, erro
   }
 }
 
+// A scene knowledge change is a learning event in the scene's chapter, so it
+// gets the same posthumous check as a knowledge-state entry, whether or not
+// an earlier entry already records the fact.
+function checkSceneLearning(project, context, errors, warnings) {
+  for (const scene of project.scenes) {
+    for (const change of scene.stateChanges) {
+      if (!change || typeof change !== "object" || Array.isArray(change) || change.knowledge === undefined) {
+        continue;
+      }
+      const character = context.characters.get(idText(change.character));
+      checkPosthumousLearning(character, scene.chapter, `${relative(project, scene.file)} state-change`, context, errors, warnings);
+    }
+  }
+}
 
 // Cross-checks continuity/state.md with the scene records and deaths it
 // summarises: scene knowledge changes need a knowledge-state entry, nobody
@@ -618,9 +633,10 @@ function checkStateAgainstStory(project, context, warnings) {
     }
     const character = idText(entry.character);
     const entryLabel = `${label} character-state[${index}]`;
+    // Dead at current-chapter in story time: from the death chapter itself
+    // until a revival.
     const window = windows.get(character);
-    if (window && context.chapterNumbers.get(window.died) <= currentChapter
-      && (window.revived === "" || context.chapterNumbers.get(window.revived) > currentChapter)) {
+    if (window && current && (current.id === window.died || window.deadIn(current.id))) {
       warnings.push(`${entryLabel} tracks ${character}, who died in ${window.died}; remove the entry once they are dead`);
       continue;
     }
@@ -663,7 +679,7 @@ function checkStateAgainstStory(project, context, warnings) {
     }
     // An entry recorded after the scene's chapter is newer than the scene.
     const since = idText(entry.since);
-    const newer = since !== "" && (context.chapterNumbers.get(since) ?? -Infinity) > context.chapterNumbers.get(scene.chapter);
+    const newer = since !== "" && context.chapterNumbers.has(since) && chronology.after(since, scene.chapter);
     const stated = idText(entry[field]);
     if (!newer && stated !== value) {
       const index = stateEntries(data["object-state"]).indexOf(entry);
@@ -676,23 +692,33 @@ function normalizeKnowledge(value) {
   return typeof value === "string" ? value.trim().toLowerCase().replace(/\s+/g, " ").replace(/[.!]+$/, "") : "";
 }
 
-// The object-state entry with the latest `since` for an artifact (no `since`
-// counts as before the story; ties go to the later entry in the file).
+// The object-state entry with the latest `since` in story time for an
+// artifact (no `since`, or a missing chapter, counts as before the story;
+// ties go to the later entry in the file).
 function latestObjectEntry(data, artifactId, context) {
   let latest = null;
-  let latestNumber = -Infinity;
+  let latestSince = "";
   for (const entry of stateEntries(data["object-state"])) {
     if (!entry || typeof entry !== "object" || Array.isArray(entry) || idText(entry.artifact) !== artifactId) {
       continue;
     }
-    const since = idText(entry.since);
-    const number = since === "" ? -Infinity : context.chapterNumbers.get(since) ?? -Infinity;
-    if (latest === null || number >= latestNumber) {
+    const since = context.chapterNumbers.has(idText(entry.since)) ? idText(entry.since) : "";
+    if (latest === null || compareSince(since, latestSince, context) >= 0) {
       latest = entry;
-      latestNumber = number;
+      latestSince = since;
     }
   }
   return latest;
+}
+
+// Orders two object-state `since` chapters in story time; "" (before the
+// story) comes first, and chapters neither before nor after tie at 0.
+function compareSince(left, right, context) {
+  if (left === "" || right === "") {
+    return (left === "" ? 0 : 1) - (right === "" ? 0 : 1);
+  }
+  const { after } = context.chronology;
+  return after(left, right) ? 1 : after(right, left) ? -1 : 0;
 }
 
 // Hand-written ids such as `47` or `true` parse as numbers or booleans; they
@@ -740,15 +766,18 @@ function relative(project, file) {
 // are errors. An entry with no `since` was destroyed or lost before this book
 // (carried from an earlier one), so any scene that uses it is an error;
 // mentions stay allowed, since characters remember it. Several entries for one
-// artifact with different `since` chapters are its history: a later entry
-// with another status (`active` since chapter-04) ends a loss, and the
-// recovery chapter itself may use the artifact again.
+// artifact with different `since` chapters are its history, ordered in story
+// time: a later entry with another status (`active` since chapter-04) ends a
+// loss, and the recovery chapter itself may use the artifact again. Nothing
+// ends a destruction. A destroyed artifact stays destroyed.
 function checkPropCustody(project, context, errors) {
-  for (const { artifact, since, sinceNumber, beforeStory, until } of goneWindows(project, context)) {
-    const inWindow = (number) => number > sinceNumber && number < until;
+  const { after } = context.chronology;
+  for (const { artifact, since, beforeStory, until } of goneWindows(project, context)) {
+    const inWindow = (chapterId) => context.chapterNumbers.has(chapterId)
+      && (beforeStory || after(chapterId, since))
+      && (until === "" || after(until, chapterId));
     for (const scene of project.scenes) {
-      const sceneNumber = context.chapterNumbers.get(scene.chapter);
-      if (sceneNumber === undefined || !inWindow(sceneNumber)) {
+      if (!inWindow(scene.chapter)) {
         continue;
       }
       const sceneLabel = relative(project, scene.file);
@@ -760,7 +789,7 @@ function checkPropCustody(project, context, errors) {
       }
     }
     for (const chapter of project.chapters) {
-      if (beforeStory || !inWindow(chapter.number)) {
+      if (beforeStory || !inWindow(chapter.id)) {
         continue;
       }
       if (chapter.mentions.includes(artifact)) {
@@ -770,10 +799,11 @@ function checkPropCustody(project, context, errors) {
   }
 }
 
-// Each artifact's object-state entries in `since` order (no `since` first),
-// as windows in which it is gone: from a destroyed/lost entry to the next
-// entry with another status. Consecutive gone entries form one window that
-// starts at the earliest, so each late reference is reported once.
+// Each artifact's object-state entries in story-time `since` order (no
+// `since` first), as windows in which it is gone: from a destroyed/lost entry
+// to the next entry with another status, or for good once it is destroyed.
+// Consecutive gone entries form one window that starts at the earliest, so
+// each late reference is reported once.
 function goneWindows(project, context) {
   const histories = new Map();
   for (const entry of project.continuity ? stateEntries(project.continuity.data["object-state"]) : []) {
@@ -783,26 +813,27 @@ function goneWindows(project, context) {
     const artifact = idText(entry.artifact);
     const since = idText(entry.since);
     // checkContinuityState reports a since chapter that does not exist.
-    const sinceNumber = since === "" ? -Infinity : context.chapterNumbers.get(since);
-    if (artifact === "" || sinceNumber === undefined) {
+    if (artifact === "" || (since !== "" && !context.chapterNumbers.has(since))) {
       continue;
     }
     const status = String(entry.status ?? "").trim().toLowerCase();
     const list = histories.get(artifact) ?? [];
-    list.push({ since, sinceNumber, gone: status === "destroyed" || status === "lost" });
+    list.push({ since, destroyed: status === "destroyed", gone: status === "destroyed" || status === "lost" });
     histories.set(artifact, list);
   }
 
   const windows = [];
   for (const [artifact, history] of histories) {
-    history.sort((left, right) => left.sinceNumber - right.sinceNumber);
+    history.sort((left, right) => compareSince(left.since, right.since, context));
     let open = null;
     for (const entry of history) {
       if (entry.gone && open === null) {
-        open = { artifact, since: entry.since, sinceNumber: entry.sinceNumber, beforeStory: entry.since === "", until: Infinity };
+        open = { artifact, since: entry.since, beforeStory: entry.since === "", until: "", destroyed: entry.destroyed };
         windows.push(open);
-      } else if (!entry.gone && open !== null && entry.sinceNumber > open.sinceNumber) {
-        open.until = entry.sinceNumber;
+      } else if (entry.gone) {
+        open.destroyed ||= entry.destroyed;
+      } else if (open !== null && !open.destroyed && compareSince(entry.since, open.since, context) > 0) {
+        open.until = entry.since;
         open = null;
       }
     }

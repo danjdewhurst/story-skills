@@ -172,7 +172,7 @@ When a numbered `Chapter` line (one that would match the step 4 pattern) did not
 
 A single source file is read as UTF-8 text, whatever its extension, and CRLF or bare CR (classic Mac OS) line endings are read as line breaks. A leading byte-order mark is dropped. A zip file (such as a `.docx`; export it to markdown first), a binary file, or text in another encoding such as Windows-1252 is refused rather than imported with replacement characters. Pass a directory to import every `.md`, `.markdown`, and `.txt` file directly inside it. Subdirectories, other file types, hidden files (`.name`), macOS AppleDouble files (`._name`), and Word lock files (`~$name`) are ignored.
 
-A chapter file in Story Skills' own layout, such as one copied from another project, imports as one chapter: its `title` frontmatter is the title, and its prose is the text under `## Chapter Text`, without the outline. Each file is split with the rules above, so a folder of one-chapter files gives one chapter per file.
+A chapter file in Story Skills' own layout, such as one copied from another project, imports as one chapter: its `title` frontmatter is the title, `numbered: false` is kept, and its prose is the text under `## Chapter Text`, without the outline. Each file is split with the rules above, so a folder of one-chapter files gives one chapter per file.
 
 Files are ordered by the numbers in their names, compared numerically, so `chapter-2` comes before `chapter-10`. Files without a number go last, except files whose names start with `prologue`, `preface`, `foreword`, `introduction`, or `prelude`, which go first. Take a folder `chaps/` with four files:
 

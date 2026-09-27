@@ -149,6 +149,16 @@ describe("#246 destroyed artifacts and dead characters in later books", () => {
     expect(errors).toContain("knowledge-state[0] has lord-maren learn something in chapter-01, but lord-maren died in earlier book The Last Ember");
   });
 
+  test("a dead character may narrate a later book as a ghost listed in mentions", () => {
+    const root = ashesRising();
+    setFields(path.join(root, "scenes", "chapter-01-scene-01.md"), { pov: "lord-maren", mentions: ["lord-maren"], "state-changes": [] });
+    setFields(path.join(root, "continuity", "state.md"), { "knowledge-state": [] });
+    expect(seriesReport(root).errors.join("\n")).not.toContain("lord-maren");
+
+    setFields(path.join(root, "scenes", "chapter-01-scene-01.md"), { mentions: [] });
+    expect(seriesReport(root).errors.join("\n")).toContain("scenes/chapter-01-scene-01.md lists lord-maren, who died in earlier book The Last Ember");
+  });
+
   test("continuity errors when a character learns something after their death chapter", () => {
     const cwd = makeTempDir();
     const root = book(cwd, "Solo");

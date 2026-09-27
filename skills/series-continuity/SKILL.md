@@ -107,7 +107,7 @@ story series .
   - Two books that share a `book-number`, or a `book-number` that is not a number 0 or more
   - A chronology cycle
   - A character who is `deceased` in an earlier book but not `deceased` in a later one
-  - A later book whose chapter or scene lists that character as `pov` or under `characters`. Move flashbacks, memories, and ghosts to `mentions`.
+  - A later book whose chapter or scene lists that character as `pov` or under `characters`. Move flashbacks, memories, and ghosts to `mentions`. A ghost narrator may stay the `pov` when also listed in `mentions`.
   - A later book where a character learns a `fact` (an entry with `learned-in`) that the same character already knows in an earlier book. In a prequel, the usual fix is to remove the knowledge from the prequel, or to change which book the discovery happens in.
   - A later book where a character who died in an earlier book learns something (a `knowledge-state` entry with `learned-in`)
   - A later book's scene whose `state-changes` target an artifact `destroyed` in an earlier book

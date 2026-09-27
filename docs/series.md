@@ -243,7 +243,7 @@ Each book is compared with every book set earlier in the chronology: every book 
 | warning | Some linked books set no `series` id while the others share one: `Linked books <titles> set no series id; add series: <id>`. | Add the named `series` to each listed book's `story.md`. |
 | error | The chronology has a cycle. | Check `follows` and `precedes` in the named books. |
 | error | A character is `deceased` in an earlier book but has another status (or none) in a later one. | Set `status: deceased` in the later book's character file. |
-| error | A later book's chapter or scene lists a character who died in an earlier book as `pov` or under `characters`. | Move flashbacks, memories, and ghosts to `mentions`. |
+| error | A later book's chapter or scene lists a character who died in an earlier book as `pov` or under `characters`. | Move flashbacks, memories, and ghosts to `mentions`. A ghost narrator may stay the `pov` when also listed in `mentions`. |
 | error | A later book's `knowledge-state` has a character who died in an earlier book learn something (an entry with `learned-in`). | Drop `learned-in`, or give the discovery to a living character. |
 | error | A later book's scene has a `state-changes` entry that targets an artifact `destroyed` in an earlier book. | Account for the artifact's return (and change its status), or remove the state change. `mentions` stay allowed. |
 | error | A later book's `knowledge-state` has a character learn a `fact` (an entry with `learned-in`) that the same character already knows in an earlier book. | Drop `learned-in` in the later book, or move the discovery. In a prequel, usually remove the knowledge from the prequel. |

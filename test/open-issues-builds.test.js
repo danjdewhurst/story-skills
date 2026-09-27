@@ -104,6 +104,19 @@ describe("unnumbered chapters (#244)", () => {
     expect(fs.readFileSync(buildBook(root, { format: "narration" }).outFile, "utf8")).toContain("## Epilogue\n");
   });
 
+  test("importing a Story Skills chapter keeps numbered: false", () => {
+    const cwd = makeTempDir();
+    const source = path.join(cwd, "source");
+    fs.mkdirSync(source);
+    fs.writeFileSync(path.join(source, "01-prologue.md"), "---\ntitle: Prologue\nnumber: 1\nnumbered: false\nstatus: draft\n---\n\n# Prologue\n\n## Chapter Text\n\nBefore it all.\n", "utf8");
+    fs.writeFileSync(path.join(source, "02-arrival.md"), "---\ntitle: Arrival\nnumber: 2\nstatus: draft\n---\n\n# Chapter 1: Arrival\n\n## Chapter Text\n\nFirst text.\n", "utf8");
+    const { root } = importManuscript({ source: "source", title: "Own Book", cwd });
+    const prologue = fs.readFileSync(path.join(root, "chapters", "chapter-01.md"), "utf8");
+    expect(prologue).toContain("title: Prologue\nnumber: 1\nnumbered: false");
+    expect(prologue).toContain("# Prologue\n");
+    expect(fs.readFileSync(path.join(root, "chapters", "chapter-02.md"), "utf8")).not.toContain("numbered:");
+  });
+
   test("an unnumbered chapter needs a title, and numbered must be a boolean", () => {
     const { root } = project();
     chapter(root, 1, `title: ""\nnumbered: false`, "Text.");

@@ -167,6 +167,7 @@ died-in: chapter-02
 | error | `<chapter or scene> lists <id>, who died in <chapter>; move posthumous appearances to mentions` | Move the id from `characters` to `mentions`. For a dead POV narrator, keep `pov` and add the id to `mentions`. If they really are alive, fix `died-in`, or add `revived-in`. |
 | warning | `<chapter or scene> lists <id>, who died before the story (deceased with no died-in); move appearances to mentions` | Move the id from `characters` (or `pov`) to `mentions`. If they die during the story, set `died-in`. |
 | error | `continuity/state.md knowledge-state[<n>] has <id> learn something in <chapter>, after they died in <chapter>` | Learning is on-page, like an appearance. Move `learned-in` to a chapter at or before the death, or give the knowledge to a living character. |
+| error | `<scene> state-change has <id> learn something in <chapter>, after they died in <chapter>` | A scene `state-changes` entry with `character` and `knowledge` is learning in that scene's chapter, even when an earlier `knowledge-state` entry already records the fact. Drop the state change, or give the knowledge to a living character. |
 | warning | `continuity/state.md knowledge-state[<n>] has <id> learn something in <chapter>, but <id> died before the story (deceased with no died-in)` | Drop `learned-in` (pre-existing knowledge), or set `died-in` if they die during the story. |
 
 ### Casts and locations
@@ -299,7 +300,7 @@ The checker also compares the state with the scene records and deaths it summari
 |---------|-----|
 | `<scene> state-changes record <character> learning "<text>" but continuity/state.md has no knowledge-state entry for it learned by <chapter>` | Each scene `state-changes` entry with `character` and `knowledge` needs a `knowledge-state` entry for that character, learned in that chapter or earlier. Entries match by an optional `fact` id on both, then by the same text (ignoring case and a final full stop), then one-to-one with an entry learned in the same chapter. Add the entry. |
 | `... knowledge-state[<i>] has <character> learn something in <chapter>, which does not list <character> in characters or pov` | Add the character to that chapter's or one of its scenes' cast, or correct `learned-in`. Outline chapters are skipped. |
-| `... character-state[<i>] tracks <character>, who died in <chapter>; remove the entry once they are dead` | The death is at or before `current-chapter` and drafted, so drop the entry. |
+| `... character-state[<i>] tracks <character>, who died in <chapter>; remove the entry once they are dead` | The death is drafted and the character is dead at `current-chapter` in story time (the death chapter itself counts, a revival ends it), so drop the entry. |
 | `... character-state[<i>] puts <character> at <location>, but their last scene in <chapter>, <scene>, is at <location> and the chapter does not list <location>` | Update the state location. The check uses the `current-chapter` scenes, and accepts any location the chapter lists, since the character can move on after their last scene. |
 | `... object-state[<i>] gives <artifact> owner <id>, but <scene> state-changes last set it to <id>` (or `location`) | A scene `state-changes` entry with `target: <artifact>` and `owner` or `location` changed the artifact after its latest `object-state` entry. Update the entry, or add a new one with a later `since`. |
 | `<scene> state-changes set <artifact> owner <id> but continuity/state.md has no object-state entry for <artifact>` | Add an `object-state` entry. |
@@ -341,7 +342,7 @@ state-changes:
 
 Only `object-state` entries with `status: destroyed` or `status: lost` are custody-checked. References in or before the `since` chapter are allowed.
 
-To record a loss that ends, add a second entry for the same artifact with a later `since` and another status. The loss window then runs from the first `since` to the second, and the recovery chapter itself may use the artifact:
+To record a loss that ends, add a second entry for the same artifact with a later `since` and another status. The loss window then runs from the first `since` to the second, and the recovery chapter itself may use the artifact. Only a loss ends this way: a destroyed artifact stays destroyed, so a later entry does not end a window that contains a `destroyed` entry:
 
 ```yaml
 object-state:
@@ -354,7 +355,7 @@ object-state:
     since: chapter-04
 ```
 
-Chapter 3 is still checked; chapters 4 on are not. Consecutive `lost` and `destroyed` entries form one window that starts at the earliest, so each late reference is reported once.
+Chapter 3 is still checked; chapters 4 on are not. Consecutive `lost` and `destroyed` entries form one window that starts at the earliest, so each late reference is reported once. "Later" means later in story time, as for [deaths](#deaths-and-posthumous-appearances): the history, the latest entry, and the windows all order `since` chapters by date when both are dated, and by chapter number otherwise.
 
 An entry with no `since` means the artifact was destroyed or lost before this story, for example in an earlier book of a series. Every scene whose `state-changes` target it is then an error, while `mentions` stay allowed, since characters can still remember it.
 
@@ -568,7 +569,7 @@ story timeline .
 
 **POV balance** totals chapter `pov` by chapter count and prose words, largest share first. Chapters with no `pov` are grouped as `unspecified`.
 
-**Character presence** counts the chapters in which each character appears in `characters` or as `pov` (on the chapter or on any of its scenes; `mentions` do not count). It shows the span from first to last appearance, the longest absence, and how many chapters at the end of the book they are missing from. For a character with `died-in` (and no `revived-in`), the trailing absence is expected, so the line reads `died in chapter <n>` instead. Absences are counted in chapter positions, so gaps in chapter numbering do not inflate them.
+**Character presence** counts the chapters in which each character appears in `characters` or as `pov` (on the chapter or on any of its scenes; `mentions` do not count). It shows the span from first to last appearance, the longest absence, and how many chapters at the end of the book they are missing from. For a character with `died-in` (and no `revived-in`), the trailing absence is expected, so the line reads `died in chapter <n>` instead. As in continuity, a death or revival in an `outline` chapter is planned, not written: a planned death leaves the ordinary trailing absence, and a planned revival still reads `died in chapter <n>`. Absences are counted in chapter positions, so gaps in chapter numbering do not inflate them.
 
 With the scene dates from [Clock and travel time](#clock-and-travel-time) on the repaired unraveled thread:
 

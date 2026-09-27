@@ -485,7 +485,9 @@ function checkCanonDeaths(book, earlierBooks, errors) {
 
   for (const record of book.project.chapters.concat(book.project.scenes)) {
     for (const [id, death] of deaths) {
-      if (record.pov === id || record.characters.includes(id)) {
+      // A pov also listed in mentions narrates without appearing (a ghost),
+      // as in single-book continuity.
+      if (record.characters.includes(id) || (record.pov === id && !record.mentions.includes(id))) {
         errors.push(`${bookFile(book, record.file)} lists ${id}, who died in earlier book ${death.title}; move appearances to mentions`);
       }
     }

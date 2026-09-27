@@ -186,6 +186,95 @@ object-state:
   });
 });
 
+describe("review follow-ups (#251)", () => {
+  test("a later entry does not end a destruction", () => {
+    const root = baseProject(5);
+    writeState(root, `
+object-state:
+  - artifact: ring
+    status: destroyed
+    since: chapter-02
+  - artifact: ring
+    status: active
+    since: chapter-04
+`);
+    writeScene(root, 5, 1, "state-changes:\n  - target: ring\n    change: used\nmentions:\n  - ring");
+    writeChapter(root, 5, "mentions:\n  - ring");
+    expect(continuity(root).errors).toEqual([
+      "scenes/chapter-05-scene-01.md uses ring, destroyed/lost since chapter-02",
+      "scenes/chapter-05-scene-01.md mentions ring, destroyed/lost since chapter-02",
+      "chapters/chapter-05.md mentions ring, destroyed/lost since chapter-02"
+    ]);
+  });
+
+  test("character-state deaths follow story time, not chapter numbers", () => {
+    const root = baseProject(4);
+    writeChapter(root, 1, "date: 2024-01-01");
+    writeChapter(root, 2, "date: 2024-01-05");
+    writeChapter(root, 3, "date: 2024-01-06");
+    writeChapter(root, 4, "date: 2024-01-02");
+    setCharacter(root, "bob", "deceased", "died-in: chapter-02");
+    writeState(root, "character-state:\n  - character: bob\n    location: alpha", 4);
+    expect(continuity(root).warnings.filter((warning) => warning.includes("tracks bob"))).toEqual([]);
+
+    // The death chapter itself already counts.
+    writeState(root, "character-state:\n  - character: bob\n    location: alpha", 2);
+    expect(continuity(root).warnings).toContain("continuity/state.md character-state[0] tracks bob, who died in chapter-02; remove the entry once they are dead");
+  });
+
+  test("a scene cannot have a dead character learn something, even a fact recorded earlier", () => {
+    const root = baseProject(4);
+    setCharacter(root, "bob", "deceased", "died-in: chapter-02");
+    writeChapter(root, 1, "characters:\n  - bob");
+    writeScene(root, 1, 1, "characters:\n  - bob\nstate-changes:\n  - character: bob\n    knowledge: the vault code");
+    writeScene(root, 3, 1, "state-changes:\n  - character: bob\n    knowledge: the vault code");
+    writeState(root, "knowledge-state:\n  - character: bob\n    knows: the vault code\n    learned-in: chapter-01", 4);
+    expect(continuity(root).errors).toEqual(["scenes/chapter-03-scene-01.md state-change has bob learn something in chapter-03, after they died in chapter-02"]);
+  });
+
+  test("object-state history follows story time", () => {
+    const root = baseProject(4);
+    writeChapter(root, 1, "strand: past\ndate: 1990-01-01");
+    writeChapter(root, 2, "strand: present\ndate: 2020-01-01");
+    writeChapter(root, 3, "strand: past\ndate: 1990-01-02");
+    writeChapter(root, 4, "strand: present\ndate: 2020-01-02");
+    writeState(root, `
+object-state:
+  - artifact: ring
+    owner: ann
+    status: lost
+    since: chapter-02
+  - artifact: ring
+    status: active
+    since: chapter-03
+`, 4);
+    writeScene(root, 3, 1, "state-changes:\n  - target: ring\n    owner: bob");
+    writeScene(root, 4, 1, "state-changes:\n  - target: ring\n    change: found in 2020");
+    const { errors, warnings } = continuity(root);
+    // The 2020 loss follows the 1990 entry, so it stays lost in chapter 4.
+    expect(errors).toEqual(["scenes/chapter-04-scene-01.md uses ring, destroyed/lost since chapter-02"]);
+    // The latest entry is the 2020 loss, which is newer than the 1990 scene.
+    expect(warnings).toContain("continuity/state.md object-state[0] status lost conflicts with worldbuilding/artifacts/ring.md status active");
+    expect(warnings.filter((warning) => warning.includes("last set it"))).toEqual([]);
+  });
+
+  test("timeline presence treats outline deaths and revivals as planned", () => {
+    const root = baseProject(4);
+    writeChapter(root, 1, "characters:\n  - bob");
+    writeChapter(root, 2, "characters:\n  - bob", "outline");
+    setCharacter(root, "bob", "alive", "died-in: chapter-02");
+    let timeline = storyTimeline(root);
+    expect(formatTimeline(timeline, timeline.totalChapters)).toContain("- bob: 2 of 4 chapters, chapters 1-2, absent from the last 2 chapters\n");
+
+    // A written death stays reported while its revival is only planned.
+    writeChapter(root, 2, "characters:\n  - bob");
+    writeChapter(root, 3, "", "outline");
+    setCharacter(root, "bob", "deceased", "died-in: chapter-02\nrevived-in: chapter-03");
+    timeline = storyTimeline(root);
+    expect(formatTimeline(timeline, timeline.totalChapters)).toContain("- bob: 2 of 4 chapters, chapters 1-2, died in chapter 2\n");
+  });
+});
+
 describe("non-linear chronology (#172)", () => {
   function prologueProject() {
     const root = baseProject(5);
