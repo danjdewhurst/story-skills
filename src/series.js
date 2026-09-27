@@ -119,7 +119,7 @@ export function validateSeriesLinks(root, data, errors) {
       const ownSeries = seriesId(data);
       const otherSeries = seriesId(other);
       if (ownSeries !== undefined && otherSeries !== undefined && ownSeries !== otherSeries) {
-        errors.push(err("series-mismatch", `${label} belongs to series ${otherSeries}, not ${ownSeries}`, "story.md"));
+        errors.push(err("series-link-other-series", `${label} belongs to series ${otherSeries}, not ${ownSeries}`, "story.md"));
       }
     }
   }
