@@ -2281,7 +2281,7 @@ export function proseReport(root, options = {}) {
   const phrases = repeatedPhrases(chapters.map((chapter) => chapter.analysis));
   const similar = similarNames(project.characters);
   for (const [left, right] of similar) {
-    warnings.push(`characters ${left.id} and ${right.id} have similar first names (${left.name} / ${right.name})`);
+    warnings.push(warn("prose-similar-names", `characters ${left.id} and ${right.id} have similar first names (${left.name} / ${right.name})`));
   }
   return {
     ok: errors.length === 0,

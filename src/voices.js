@@ -106,7 +106,7 @@ export function buildVoices(project, chapters) {
         if (!said.some((line) => pattern.test(line.text))) {
           // Only attributed lines count, so say so: the phrase may sit in dialogue
           // tagged with a pronoun.
-          warnings.push(`${character.id} does not say "${phrase}" from their voice-words list in ${said.length} attributed lines of dialogue`);
+          warnings.push(warn("voice-words-unused", `${character.id} does not say "${phrase}" from their voice-words list in ${said.length} attributed lines of dialogue`));
         }
       }
     }
@@ -116,7 +116,7 @@ export function buildVoices(project, chapters) {
   for (let left = 0; left < eligible.length; left += 1) {
     for (let right = left + 1; right < eligible.length; right += 1) {
       if (similarVoices(eligible[left], eligible[right])) {
-        warnings.push(`${eligible[left].id} and ${eligible[right].id} may sound alike: similar sentence length, contractions, questions, and exclamations`);
+        warnings.push(warn("voice-sound-alike", `${eligible[left].id} and ${eligible[right].id} may sound alike: similar sentence length, contractions, questions, and exclamations`));
       }
     }
   }

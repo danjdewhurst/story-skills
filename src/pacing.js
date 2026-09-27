@@ -51,7 +51,7 @@ export function buildPacing(project) {
   let withoutSequel = [];
   for (const unit of units) {
     if (unit.sequel) {
-      flushRun(withoutSequel, NO_SEQUEL_RUN, warnings, (run) => `${run.length} scene units in a row with no sequel (${span(run)}): give the POV character room to react and decide`);
+      flushRun(withoutSequel, NO_SEQUEL_RUN, warnings, (run) => warn("pacing-no-sequel", `${run.length} scene units in a row with no sequel (${span(run)}): give the POV character room to react and decide`));
       withoutSequel = [];
       continue;
     }
@@ -59,32 +59,32 @@ export function buildPacing(project) {
     if (unit.outcome === "yes") {
       easyWins.push(unit);
     } else {
-      flushRun(easyWins, EASY_WIN_RUN, warnings, (run) => `${run.length} scenes in a row end in an outright yes (${span(run)}): raise the cost with yes-but or no-and`);
+      flushRun(easyWins, EASY_WIN_RUN, warnings, (run) => warn("pacing-easy-wins", `${run.length} scenes in a row end in an outright yes (${span(run)}): raise the cost with yes-but or no-and`));
       easyWins = [];
     }
   }
-  flushRun(easyWins, EASY_WIN_RUN, warnings, (run) => `${run.length} scenes in a row end in an outright yes (${span(run)}): raise the cost with yes-but or no-and`);
-  flushRun(withoutSequel, NO_SEQUEL_RUN, warnings, (run) => `${run.length} scene units in a row with no sequel (${span(run)}): give the POV character room to react and decide`);
+  flushRun(easyWins, EASY_WIN_RUN, warnings, (run) => warn("pacing-easy-wins", `${run.length} scenes in a row end in an outright yes (${span(run)}): raise the cost with yes-but or no-and`));
+  flushRun(withoutSequel, NO_SEQUEL_RUN, warnings, (run) => warn("pacing-no-sequel", `${run.length} scene units in a row with no sequel (${span(run)}): give the POV character room to react and decide`));
 
   let resolutions = [];
   for (const row of rows) {
     if (row.hook === "resolution") {
       resolutions.push(row);
     } else {
-      flushRun(resolutions, RESOLUTION_RUN, warnings, (run) => `${run.length} chapters in a row end on resolution (${span(run)}): readers can put the book down`);
+      flushRun(resolutions, RESOLUTION_RUN, warnings, (run) => warn("pacing-resolution-run", `${run.length} chapters in a row end on resolution (${span(run)}): readers can put the book down`));
       resolutions = [];
     }
   }
-  flushRun(resolutions, RESOLUTION_RUN, warnings, (run) => `${run.length} chapters in a row end on resolution (${span(run)}): readers can put the book down`);
+  flushRun(resolutions, RESOLUTION_RUN, warnings, (run) => warn("pacing-resolution-run", `${run.length} chapters in a row end on resolution (${span(run)}): readers can put the book down`));
 
   const written = rows.filter((row) => row.words > 0);
   const median = medianOf(written.map((row) => row.words));
   if (written.length >= 3) {
     for (const row of written) {
       if (row.words > median * 2) {
-        warnings.push(`${row.id} runs ${row.words} words, over twice the median chapter (${formatMedian(median)}): consider splitting it`);
+        warnings.push(warn("pacing-long-chapter", `${row.id} runs ${row.words} words, over twice the median chapter (${formatMedian(median)}): consider splitting it`));
       } else if (row.words < median / 2) {
-        warnings.push(`${row.id} runs ${row.words} words, under half the median chapter (${formatMedian(median)}): check it earns its place`);
+        warnings.push(warn("pacing-short-chapter", `${row.id} runs ${row.words} words, under half the median chapter (${formatMedian(median)}): check it earns its place`));
       }
     }
   }

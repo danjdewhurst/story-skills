@@ -238,6 +238,7 @@ describe("config validation", () => {
     ["cli-defaults:\n  - command: validate\n    json: true", "story.md cli-defaults[0] sets json, which changes the output a script reads: pass --json on the command line"],
     ["severity:\n  - level: error", "story.md severity[0] must name a warning"],
     ["severity:\n  - warning: todo-marker\n    level: error", "story.md severity[0] names unknown warning todo-marker; did you mean todo-markers?"],
+    ["severity:\n  - warning: name-clash\n    level: off", "story.md severity[0] names name-clash, which is an error: severity changes only warnings"],
     ["severity:\n  - warning: todo-markers\n    level: fatal", "story.md severity[0] level must be one of error, warning, off"],
     ["severity:\n  - warning: todo-markers\n    level: error\n    note: ci", "story.md severity[0] has note: an entry takes only warning and level"],
     ["severity:\n  - warning: todo-markers\n    level: error\n  - warning: todo-markers\n    level: off", "story.md severity[1] repeats warning todo-markers"]

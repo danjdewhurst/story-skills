@@ -36,13 +36,29 @@ export const FINDING_CODES = {
   "prose-adverbs": "warning",
   "prose-bookisms": "warning",
   "prose-avoided-spelling": "warning",
+  "prose-uniform-sentences": "warning",
+  "prose-similar-names": "warning",
   // story pacing
   "pacing-no-hook": "warning",
+  "pacing-no-sequel": "warning",
+  "pacing-easy-wins": "warning",
+  "pacing-resolution-run": "warning",
+  "pacing-long-chapter": "warning",
+  "pacing-short-chapter": "warning",
   // story clues
   "clue-unplanted": "warning",
   "clue-late-plant": "warning",
+  "clue-no-characters": "warning",
+  "clue-herring-unresolved": "warning",
+  "clue-none-delayed": "warning",
   // story voices
-  "voice-avoid": "warning"
+  "voice-avoid": "warning",
+  "voice-words-unused": "warning",
+  "voice-sound-alike": "warning",
+  // story names
+  "name-clash": "error",
+  "name-look-alike": "warning",
+  "name-shared-initial": "warning"
 };
 
 export function codesAt(level) {

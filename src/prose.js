@@ -211,7 +211,7 @@ export function chapterFindings(label, analysis, thresholds = PROSE_THRESHOLDS) 
   }
   const stats = analysis.sentences;
   if (stats.count >= thresholds.uniformMinSentences && stats.spread < thresholds.uniformSpread) {
-    findings.push(`${label} sentence lengths are uniform (spread ${formatAgainst(stats.spread, thresholds.uniformSpread, "under")} words over ${stats.count} sentences); vary the rhythm`);
+    findings.push(warn("prose-uniform-sentences", `${label} sentence lengths are uniform (spread ${formatAgainst(stats.spread, thresholds.uniformSpread, "under")} words over ${stats.count} sentences); vary the rhythm`, label));
   }
   return findings;
 }

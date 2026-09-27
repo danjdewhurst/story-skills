@@ -4,7 +4,7 @@ import path from "node:path";
 // the import is circular. COMMANDS is only read inside functions, after every
 // module has finished loading.
 import { COMMANDS } from "./commands.js";
-import { asFinding, codesAt } from "./findings.js";
+import { FINDING_CODES, asFinding, codesAt } from "./findings.js";
 import { parseFrontmatter } from "./frontmatter.js";
 import { OPTIONS, normalizeBooleanValue, optionFamily, suggestion } from "./options.js";
 import { proseThresholds } from "./prose.js";
@@ -144,6 +144,12 @@ function parseSeverity(raw, errors) {
     const code = typeof item.warning === "string" ? item.warning.trim() : "";
     if (code === "") {
       errors.push(`${label} must name a warning`);
+      continue;
+    }
+    // An error means the project is broken, not a matter of house style, so
+    // severity cannot demote or silence one.
+    if (FINDING_CODES[code] === "error") {
+      errors.push(`${label} names ${code}, which is an error: severity changes only warnings`);
       continue;
     }
     if (!codes.includes(code)) {

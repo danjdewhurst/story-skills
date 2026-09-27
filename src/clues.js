@@ -43,17 +43,17 @@ export function buildClueMatrix(project) {
       warnings.push(warn("clue-late-plant", `${label} is planted in ${where} its reveal (${clue.planted} -> ${clue.payoff}): late plant gives readers no time to notice it`));
     }
     if (clue.characters.length === 0) {
-      warnings.push(`${label} lists no characters: record who could notice it`);
+      warnings.push(warn("clue-no-characters", `${label} lists no characters: record who could notice it`));
     }
     if (clue.redHerring && clue.payoff === "") {
-      warnings.push(`${label} is a red herring with no payoff: record the chapter that debunks it`);
+      warnings.push(warn("clue-herring-unresolved", `${label} is a red herring with no payoff: record the chapter that debunks it`));
     }
   }
 
   const live = project.clues.filter((clue) => LIVE_STATUSES.has(clue.status));
   const genuine = live.filter((clue) => !clue.redHerring);
   if (genuine.length >= 3 && !genuine.some((clue) => clue.significanceDelayed)) {
-    warnings.push("no clue is significance-delayed: every clue announces its meaning when planted");
+    warnings.push(warn("clue-none-delayed", "no clue is significance-delayed: every clue announces its meaning when planted"));
   }
 
   return {

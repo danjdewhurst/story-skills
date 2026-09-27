@@ -8,6 +8,9 @@ import fs9 from "node:fs";
 import path10 from "node:path";
 
 // src/findings.js
+function err(code, message, file = null) {
+  return { code, message, file };
+}
 function warn(code, message, file = null) {
   return { code, message, file };
 }
@@ -22,10 +25,25 @@ var FINDING_CODES = {
   "prose-adverbs": "warning",
   "prose-bookisms": "warning",
   "prose-avoided-spelling": "warning",
+  "prose-uniform-sentences": "warning",
+  "prose-similar-names": "warning",
   "pacing-no-hook": "warning",
+  "pacing-no-sequel": "warning",
+  "pacing-easy-wins": "warning",
+  "pacing-resolution-run": "warning",
+  "pacing-long-chapter": "warning",
+  "pacing-short-chapter": "warning",
   "clue-unplanted": "warning",
   "clue-late-plant": "warning",
-  "voice-avoid": "warning"
+  "clue-no-characters": "warning",
+  "clue-herring-unresolved": "warning",
+  "clue-none-delayed": "warning",
+  "voice-avoid": "warning",
+  "voice-words-unused": "warning",
+  "voice-sound-alike": "warning",
+  "name-clash": "error",
+  "name-look-alike": "warning",
+  "name-shared-initial": "warning"
 };
 function codesAt(level) {
   return Object.keys(FINDING_CODES).filter((code) => FINDING_CODES[code] === level);
@@ -66,16 +84,16 @@ function buildClueMatrix(project) {
       warnings.push(warn("clue-late-plant", `${label} is planted in ${where} its reveal (${clue.planted} -> ${clue.payoff}): late plant gives readers no time to notice it`));
     }
     if (clue.characters.length === 0) {
-      warnings.push(`${label} lists no characters: record who could notice it`);
+      warnings.push(warn("clue-no-characters", `${label} lists no characters: record who could notice it`));
     }
     if (clue.redHerring && clue.payoff === "") {
-      warnings.push(`${label} is a red herring with no payoff: record the chapter that debunks it`);
+      warnings.push(warn("clue-herring-unresolved", `${label} is a red herring with no payoff: record the chapter that debunks it`));
     }
   }
   const live = project.clues.filter((clue) => LIVE_STATUSES.has(clue.status));
   const genuine = live.filter((clue) => !clue.redHerring);
   if (genuine.length >= 3 && !genuine.some((clue) => clue.significanceDelayed)) {
-    warnings.push("no clue is significance-delayed: every clue announces its meaning when planted");
+    warnings.push(warn("clue-none-delayed", "no clue is significance-delayed: every clue announces its meaning when planted"));
   }
   return {
     chapters: chapters.map((chapter) => ({ id: chapter.id, number: chapter.number })),
@@ -4072,16 +4090,16 @@ function checkNames(candidates, names) {
       }
     }
     for (const entry of clashes) {
-      errors.push(`"${candidate}" clashes with ${entry.kind} ${entry.id} (${entry.name})`);
+      errors.push(err("name-clash", `"${candidate}" clashes with ${entry.kind} ${entry.id} (${entry.name})`));
     }
     for (const entry of lookalikes) {
       if (!clashes.some((clash) => clash.kind === entry.kind && clash.id === entry.id)) {
-        warnings.push(`"${candidate}" looks like ${entry.kind} ${entry.id} (${entry.full})`);
+        warnings.push(warn("name-look-alike", `"${candidate}" looks like ${entry.kind} ${entry.id} (${entry.full})`));
       }
     }
     for (const entry of initials) {
       if (!clashes.concat(lookalikes).some((other) => other.kind === "character" && other.id === entry.id)) {
-        warnings.push(`"${candidate}" shares an initial with ${entry.role} ${entry.id} (${entry.full})`);
+        warnings.push(warn("name-shared-initial", `"${candidate}" shares an initial with ${entry.role} ${entry.id} (${entry.full})`));
       }
     }
     results.push({ name: candidate, clashes: clashes.length, lookalikes: lookalikes.length, initials: initials.length });
@@ -4345,7 +4363,7 @@ function buildVoices(project, chapters) {
       for (const phrase of stringList(character.voiceWords)) {
         const pattern = phrasePattern(phrase);
         if (!said.some((line) => pattern.test(line.text))) {
-          warnings.push(`${character.id} does not say "${phrase}" from their voice-words list in ${said.length} attributed lines of dialogue`);
+          warnings.push(warn("voice-words-unused", `${character.id} does not say "${phrase}" from their voice-words list in ${said.length} attributed lines of dialogue`));
         }
       }
     }
@@ -4354,7 +4372,7 @@ function buildVoices(project, chapters) {
   for (let left = 0;left < eligible.length; left += 1) {
     for (let right = left + 1;right < eligible.length; right += 1) {
       if (similarVoices(eligible[left], eligible[right])) {
-        warnings.push(`${eligible[left].id} and ${eligible[right].id} may sound alike: similar sentence length, contractions, questions, and exclamations`);
+        warnings.push(warn("voice-sound-alike", `${eligible[left].id} and ${eligible[right].id} may sound alike: similar sentence length, contractions, questions, and exclamations`));
       }
     }
   }
@@ -5026,7 +5044,7 @@ function chapterFindings(label, analysis, thresholds = PROSE_THRESHOLDS) {
   }
   const stats = analysis.sentences;
   if (stats.count >= thresholds.uniformMinSentences && stats.spread < thresholds.uniformSpread) {
-    findings.push(`${label} sentence lengths are uniform (spread ${formatAgainst(stats.spread, thresholds.uniformSpread, "under")} words over ${stats.count} sentences); vary the rhythm`);
+    findings.push(warn("prose-uniform-sentences", `${label} sentence lengths are uniform (spread ${formatAgainst(stats.spread, thresholds.uniformSpread, "under")} words over ${stats.count} sentences); vary the rhythm`, label));
   }
   return findings;
 }
@@ -5596,6 +5614,10 @@ function parseSeverity(raw, errors) {
     const code = typeof item.warning === "string" ? item.warning.trim() : "";
     if (code === "") {
       errors.push(`${label} must name a warning`);
+      continue;
+    }
+    if (FINDING_CODES[code] === "error") {
+      errors.push(`${label} names ${code}, which is an error: severity changes only warnings`);
       continue;
     }
     if (!codes.includes(code)) {
@@ -7233,7 +7255,7 @@ function buildPacing(project) {
   let withoutSequel = [];
   for (const unit of units) {
     if (unit.sequel) {
-      flushRun(withoutSequel, NO_SEQUEL_RUN, warnings, (run) => `${run.length} scene units in a row with no sequel (${span(run)}): give the POV character room to react and decide`);
+      flushRun(withoutSequel, NO_SEQUEL_RUN, warnings, (run) => warn("pacing-no-sequel", `${run.length} scene units in a row with no sequel (${span(run)}): give the POV character room to react and decide`));
       withoutSequel = [];
       continue;
     }
@@ -7241,30 +7263,30 @@ function buildPacing(project) {
     if (unit.outcome === "yes") {
       easyWins.push(unit);
     } else {
-      flushRun(easyWins, EASY_WIN_RUN, warnings, (run) => `${run.length} scenes in a row end in an outright yes (${span(run)}): raise the cost with yes-but or no-and`);
+      flushRun(easyWins, EASY_WIN_RUN, warnings, (run) => warn("pacing-easy-wins", `${run.length} scenes in a row end in an outright yes (${span(run)}): raise the cost with yes-but or no-and`));
       easyWins = [];
     }
   }
-  flushRun(easyWins, EASY_WIN_RUN, warnings, (run) => `${run.length} scenes in a row end in an outright yes (${span(run)}): raise the cost with yes-but or no-and`);
-  flushRun(withoutSequel, NO_SEQUEL_RUN, warnings, (run) => `${run.length} scene units in a row with no sequel (${span(run)}): give the POV character room to react and decide`);
+  flushRun(easyWins, EASY_WIN_RUN, warnings, (run) => warn("pacing-easy-wins", `${run.length} scenes in a row end in an outright yes (${span(run)}): raise the cost with yes-but or no-and`));
+  flushRun(withoutSequel, NO_SEQUEL_RUN, warnings, (run) => warn("pacing-no-sequel", `${run.length} scene units in a row with no sequel (${span(run)}): give the POV character room to react and decide`));
   let resolutions = [];
   for (const row of rows) {
     if (row.hook === "resolution") {
       resolutions.push(row);
     } else {
-      flushRun(resolutions, RESOLUTION_RUN, warnings, (run) => `${run.length} chapters in a row end on resolution (${span(run)}): readers can put the book down`);
+      flushRun(resolutions, RESOLUTION_RUN, warnings, (run) => warn("pacing-resolution-run", `${run.length} chapters in a row end on resolution (${span(run)}): readers can put the book down`));
       resolutions = [];
     }
   }
-  flushRun(resolutions, RESOLUTION_RUN, warnings, (run) => `${run.length} chapters in a row end on resolution (${span(run)}): readers can put the book down`);
+  flushRun(resolutions, RESOLUTION_RUN, warnings, (run) => warn("pacing-resolution-run", `${run.length} chapters in a row end on resolution (${span(run)}): readers can put the book down`));
   const written = rows.filter((row) => row.words > 0);
   const median = medianOf(written.map((row) => row.words));
   if (written.length >= 3) {
     for (const row of written) {
       if (row.words > median * 2) {
-        warnings.push(`${row.id} runs ${row.words} words, over twice the median chapter (${formatMedian(median)}): consider splitting it`);
+        warnings.push(warn("pacing-long-chapter", `${row.id} runs ${row.words} words, over twice the median chapter (${formatMedian(median)}): consider splitting it`));
       } else if (row.words < median / 2) {
-        warnings.push(`${row.id} runs ${row.words} words, under half the median chapter (${formatMedian(median)}): check it earns its place`);
+        warnings.push(warn("pacing-short-chapter", `${row.id} runs ${row.words} words, under half the median chapter (${formatMedian(median)}): check it earns its place`));
       }
     }
   }
@@ -9203,7 +9225,7 @@ function proseReport(root, options = {}) {
   const phrases = repeatedPhrases(chapters.map((chapter) => chapter.analysis));
   const similar = similarNames(project.characters);
   for (const [left, right] of similar) {
-    warnings.push(`characters ${left.id} and ${right.id} have similar first names (${left.name} / ${right.name})`);
+    warnings.push(warn("prose-similar-names", `characters ${left.id} and ${right.id} have similar first names (${left.name} / ${right.name})`));
   }
   return {
     ok: errors.length === 0,

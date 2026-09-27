@@ -1,3 +1,4 @@
+import { err, warn } from "./findings.js";
 import { foldLatin, splitWords } from "./markdown.js";
 import { editDistance } from "./prose.js";
 
@@ -103,16 +104,16 @@ export function checkNames(candidates, names) {
       }
     }
     for (const entry of clashes) {
-      errors.push(`"${candidate}" clashes with ${entry.kind} ${entry.id} (${entry.name})`);
+      errors.push(err("name-clash", `"${candidate}" clashes with ${entry.kind} ${entry.id} (${entry.name})`));
     }
     for (const entry of lookalikes) {
       if (!clashes.some((clash) => clash.kind === entry.kind && clash.id === entry.id)) {
-        warnings.push(`"${candidate}" looks like ${entry.kind} ${entry.id} (${entry.full})`);
+        warnings.push(warn("name-look-alike", `"${candidate}" looks like ${entry.kind} ${entry.id} (${entry.full})`));
       }
     }
     for (const entry of initials) {
       if (!clashes.concat(lookalikes).some((other) => other.kind === "character" && other.id === entry.id)) {
-        warnings.push(`"${candidate}" shares an initial with ${entry.role} ${entry.id} (${entry.full})`);
+        warnings.push(warn("name-shared-initial", `"${candidate}" shares an initial with ${entry.role} ${entry.id} (${entry.full})`));
       }
     }
     results.push({ name: candidate, clashes: clashes.length, lookalikes: lookalikes.length, initials: initials.length });
