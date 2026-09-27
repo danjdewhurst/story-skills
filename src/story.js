@@ -1126,6 +1126,7 @@ export function validateLinksOf(project) {
   }
 
   validateTimelineAndArcBodyRefs(project, chapters, errors, hasScheduledChapter);
+  validateMatterBodyLinks(project, errors);
   validateSeriesLinks(project.root, project.story.data, errors);
 
   return { ok: errors.length === 0, errors, warnings };
@@ -1181,6 +1182,18 @@ function validateTimelineAndArcBodyRefs(project, chapters, errors, hasScheduledC
     checkTokens(label, body, hasScheduledChapter);
     for (const target of extractMarkdownLinkTargets(body)) {
       checkBodyLinkTarget(project, label, target, errors);
+    }
+  }
+}
+
+// Matter pages (an epigraph's credit, an also-by list) can link to project
+// files; builds print only the link text, so a broken target goes unseen.
+function validateMatterBodyLinks(project, errors) {
+  for (const matter of project.matter) {
+    // The scan already dropped any matter file that fails to parse.
+    const body = readMarkdown(matter.file, project.root).body ?? "";
+    for (const target of extractMarkdownLinkTargets(body)) {
+      checkBodyLinkTarget(project, relative(project, matter.file), target, errors);
     }
   }
 }

@@ -578,7 +578,7 @@ Checks that references between entities point at entities that exist and that tw
 - arc characters, faction members and locations, and artifact owners and locations
 - chapter and scene POV, `characters`, `mentions` (a character or an artifact), locations, and `arcs-advanced`, and each scene's chapter
 - the chapter, character, and arc ids in questions, promises, and clues, and the `used-in` chapters of research notes. A promise or clue `payoff`, its `planted` while `status: planned`, an `open` question's `introduced`, and a research note's `used-in` may name a scheduled `chapter-NN` that has no chapter file yet, unless its number is 0 or belongs to an existing chapter under another id (`chapter-1` beside `chapter-01`)
-- chapter ids and markdown links in the bodies of `plot/timeline.md` and arc files
+- chapter ids and markdown links in the bodies of `plot/timeline.md` and arc files, and markdown links in the bodies of `matter/` pages
 - the `follows` and `precedes` links in `story.md`, which must point at story projects that link back
 
 With `characters/old-bram.md` listing two locations, where `dock-nine` does not exist and `gull-harbour` does not list Bram back:

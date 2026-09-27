@@ -1669,6 +1669,22 @@ members:
     expect(output).not.toContain("_index.md");
   });
 
+  test("checks matter body links", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Matter Links", force: false });
+    createEntity(created.root, { kind: "chapter", name: "Arrival", number: 1 });
+    const epigraph = createEntity(created.root, { kind: "matter", name: "Epigraph" });
+    fs.appendFileSync(
+      epigraph.file,
+      "\nFrom [the ballad](../chapters/chapter-01.md), not [the lost song](../chapters/chapter-09.md) or [Web](https://example.com/x).\n",
+      "utf8"
+    );
+    const output = validateLinks(created.root).errors.join("\n");
+    expect(output).toContain("matter/epigraph.md links to missing file ../chapters/chapter-09.md");
+    expect(output).not.toContain("chapter-01.md");
+    expect(output).not.toContain("example.com");
+  });
+
   test("surfaces registry frontmatter errors instead of crashing", () => {
     const cwd = makeTempDir();
     const created = createStoryProject({ cwd, title: "Broken Index", force: false });
