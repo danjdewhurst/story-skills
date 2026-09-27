@@ -59,6 +59,20 @@ describe("publishing metadata", () => {
     expect(textDirection(undefined)).toBe("ltr");
   });
 
+  test("textDirection respects explicit 4-letter BCP 47 script subtags", () => {
+    expect(textDirection("ar-Latn")).toBe("ltr");
+    expect(textDirection("he-Latn")).toBe("ltr");
+    expect(textDirection("fa-Latn")).toBe("ltr");
+    expect(textDirection("ur-Latn")).toBe("ltr");
+    expect(textDirection("sd-Deva")).toBe("ltr");
+    expect(textDirection("ku-Latn")).toBe("ltr");
+    expect(textDirection("pa-Arab")).toBe("rtl");
+    expect(textDirection("az-Arab")).toBe("rtl");
+    expect(textDirection("ms-Arab")).toBe("rtl");
+    expect(textDirection("ku-Arab")).toBe("rtl");
+    expect(textDirection("lad-Hebr")).toBe("rtl");
+  });
+
   test("normalizeIsbn accepts valid ISBN-13 and ISBN-10 and rejects bad checksums", () => {
     expect(normalizeIsbn("978-0-306-40615-7")).toBe("9780306406157");
     expect(normalizeIsbn("0-306-40615-2")).toBe("0306406152");

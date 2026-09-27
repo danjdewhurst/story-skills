@@ -15,9 +15,20 @@ const RTL_LANGUAGES = new Set([
   "syc", "syr", "ug", "ur", "yi"
 ]);
 
+const RTL_SCRIPTS = new Set([
+  "arab", "cprt", "elym", "hatr", "hebr", "khar", "mand",
+  "mani", "mend", "nkoo", "orkh", "palm", "phli", "phlp",
+  "phnx", "prti", "rohg", "samr", "sogd", "sogo", "syrc",
+  "thaa", "yezi"
+]);
+
 export function textDirection(language) {
-  const primary = String(language ?? "").trim().toLowerCase().split("-")[0];
-  return RTL_LANGUAGES.has(primary) ? "rtl" : "ltr";
+  const subtags = String(language ?? "").trim().toLowerCase().split("-");
+  const script = subtags.slice(1).find((subtag) => /^[a-z]{4}$/.test(subtag));
+  if (script !== undefined) {
+    return RTL_SCRIPTS.has(script) ? "rtl" : "ltr";
+  }
+  return RTL_LANGUAGES.has(subtags[0]) ? "rtl" : "ltr";
 }
 
 export function publishingMeta(data) {
