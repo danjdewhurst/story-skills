@@ -255,6 +255,20 @@ describe("exit codes", () => {
     expect(fs.readFileSync(target, "utf8")).toBe("old\n");
   });
 
+  test.skipIf(isRoot)("an import source that cannot be read exits 2", () => {
+    const cwd = makeTempDir();
+    const draft = path.join(cwd, "draft.md");
+    fs.writeFileSync(draft, "# Chapter 1\n\nText.\n", "utf8");
+    fs.chmodSync(draft, 0o000);
+    try {
+      const result = invoke(cwd, ["import", draft, "--title", "Locked"]);
+      expect(result.err).toContain("permission denied");
+      expect(result.code).toBe(usage);
+    } finally {
+      fs.chmodSync(draft, 0o644);
+    }
+  });
+
   test("a project that cannot be built or updated exits 3", () => {
     const root = newProject();
     breakChapter(root);

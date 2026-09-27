@@ -6,7 +6,7 @@ import { chapterHeading, fencedLineIndexes, scanComments, splitFences, titleCase
 import { MAX_READ_BYTES } from "./files.js";
 import { STDIN_ARG, decodeUtf8 } from "./stdin.js";
 import { assertProjectParses, createStoryProject, reindexProject, scanProject, writeFile } from "./story.js";
-import { usageError } from "./exit-codes.js";
+import { EXIT_CODES, usageError, withDefaultExitCode } from "./exit-codes.js";
 
 // A lone "I" before a word is the pronoun ("Chapter I Am Legend"), not a numeral.
 const ROMAN_NUMERAL = "(?!i\\s+\\S)(?=[ivxlc])c{0,3}(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})";
@@ -84,7 +84,7 @@ export function importManuscript(options) {
   const warnings = [];
   const documents = fromStdin
     ? [{ name: "stdin", text: options.readStdin(), untitled: true }]
-    : readSourceDocuments(source);
+    : readImportSource(source);
   const chapters = splitChapters(documents, warnings);
   if (chapters.length === 0) {
     throw usageError("No chapter content found in import source");
@@ -225,6 +225,16 @@ function addCandidate(counts, name) {
 // no character is silently replaced.
 function readSourceText(filePath) {
   return decodeUtf8(fs.readFileSync(filePath), `Cannot import ${filePath}`, "Save it as UTF-8 plain text or markdown first");
+}
+
+// The source is an argument, so a source that cannot be read (permission
+// denied, say) is a usage error, not a broken story project.
+function readImportSource(source) {
+  try {
+    return readSourceDocuments(source);
+  } catch (error) {
+    throw withDefaultExitCode(error, EXIT_CODES.usage);
+  }
 }
 
 function readSourceDocuments(source) {

@@ -239,7 +239,7 @@ The examples on this page show stdout and stderr together, as a terminal does.
 |---|---|
 | `0` | The command succeeded. For checks, there were no errors. Warnings and dismissed findings do not change the exit code. |
 | `1` | Findings: a check reported at least one `error:` line. |
-| `2` | Usage error: an unknown command or option, a missing or invalid option value, an unexpected argument or option, a missing required argument (such as `knowledge` without `--at`), or an id that does not exist. |
+| `2` | Usage error: an unknown command or option, a missing or invalid option value, an unexpected argument or option, a missing required argument (such as `knowledge` without `--at`), an id that does not exist, or an `import` source that is missing or cannot be read. |
 | `3` | Not a usable story project: no `story.md`, a file the command needs cannot be read or parsed or is a symlink, a newer schema than this CLI knows, or nothing to build from. |
 | `4` | Refused or failed write: the target already exists, is project source or outside the project, is a symlink, is locked by another story command, changed on disk meanwhile, or the file system refused it. |
 

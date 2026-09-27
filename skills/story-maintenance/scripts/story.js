@@ -12012,7 +12012,7 @@ function importManuscript(options) {
     throw usageError(`${rawSource} is already a story project (it has story.md); import reads manuscript files, so point it at the draft instead`);
   }
   const warnings = [];
-  const chapters = splitChapters(readSourceDocuments(source), warnings);
+  const chapters = splitChapters(readImportSource(source), warnings);
   if (chapters.length === 0) {
     throw usageError("No chapter content found in import source");
   }
@@ -12120,6 +12120,13 @@ function readSourceText(filePath) {
     throw usageError(`Cannot import ${filePath}: it is not valid UTF-8 text. Save it as UTF-8 plain text or markdown first`);
   }
   return text.replace(/^\uFEFF/, "");
+}
+function readImportSource(source) {
+  try {
+    return readSourceDocuments(source);
+  } catch (error) {
+    throw withDefaultExitCode(error, EXIT_CODES.usage);
+  }
 }
 function readSourceDocuments(source) {
   rejectSymlinkedSource(source);
