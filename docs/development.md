@@ -141,7 +141,8 @@ flowchart LR
 | `src/html.js` | The single-file HTML review copy with paragraph anchors such as `ch03-p12` (`--format html`), the paged-media print interior (`--format print`), trim sizes, and page estimates. |
 | `src/narration.js` | The audiobook narration script for `--format narration`: pronunciation guide, credits, and runtime estimates at 155 words per minute. |
 | `src/fountain.js` | The screenplay scene skeleton for `--format fountain`: title page, chapter sections, scene headings from `setting`, location, and time, source notes, and the escaping that keeps record text from opening Fountain notes, boneyards, or emphasis. `story.js` resolves the scene records it reads. |
-| `src/twee.js` | The Twine story for `--format twee`: Twee 3 source from the chapter passages and their choices, and the IFID derived from the story id. `story.js` reads and checks chapter `choices` and builds the passage graph. |
+| `src/twee.js` | The Twine story for `--format twee`: Twee 3 source from the chapter passages and their choices, and the IFID derived from the story id. `story.js` reads and checks chapter `choices` and builds the passage graph, which the ink build shares. |
+| `src/ink.js` | The ink story for `--format ink`: global tags, one knot per chapter with its choices or diverts, knot names from chapter ids, and the escaping that keeps prose and choice text from reading as ink syntax. `test/ink.test.js` compiles and plays the builds when `INKLECATE` names an inklecate binary. |
 | `src/series.js` | Series links, backlinks, and shared-canon checks across books. |
 | `src/progress.js` | Pure progress arithmetic and the `progress.md` session log. |
 | `src/compare.js` | Chapter-by-chapter comparison with an earlier draft. |
@@ -155,7 +156,7 @@ Most commands follow the same pattern. A function in `src/story.js` takes the pr
 
 - `diagram` prints Mermaid source to stdout, or writes it with `--out` once the scan is clean. `passes` prints the pass list, rewrites only the `revision-passes` entry in `story.md` when asked to change it, and exits non-zero only when it refuses a change (2 for a pass name that is not kebab-case).
 
-Keep new analysis code in that shape: pure functions over the scanned project, with file I/O left to `story.js`. The output modules (`html.js`, `narration.js`, `fountain.js`, `twee.js`, `publishing.js`, `diagram.js`) follow the same rule: they return strings, and `story.js` writes them. `packaging.js` is the exception, because a ZIP is bytes rather than text: it takes the manuscript and writes the file itself, through the same `writeFile`.
+Keep new analysis code in that shape: pure functions over the scanned project, with file I/O left to `story.js`. The output modules (`html.js`, `narration.js`, `fountain.js`, `twee.js`, `ink.js`, `publishing.js`, `diagram.js`) follow the same rule: they return strings, and `story.js` writes them. `packaging.js` is the exception, because a ZIP is bytes rather than text: it takes the manuscript and writes the file itself, through the same `writeFile`.
 
 For what the commands do from a user's point of view, see the [CLI reference](cli-reference.md). For the files they read and write, see the [Project format reference](project-format.md).
 
@@ -315,7 +316,7 @@ A failure prints `Coverage is below 100%:` followed by one line per gap, keyed b
 bun run test:examples
 ```
 
-`scripts/check-examples.js` walks every directory under `examples/` that has a `story.md` and runs `validateProject`, `validateLinks`, `seriesReport`, `checkProjectContinuity`, and the JSON schema check against it. It also runs `story reindex` on a scratch copy and fails if any registry would change, so an example never ships a stale registry, and builds the example twice with `--format twee` outside the project, failing on a build error, on a build warning other than the one about a derived IFID, or on two builds that differ. Any error or warning fails the check, with one exception: [`examples/the-unraveled-thread`](../examples/the-unraveled-thread) is the showcase for `story continuity` and must produce exactly the findings listed in `EXPECTED_CONTINUITY` at the top of the script, no more and no fewer.
+`scripts/check-examples.js` walks every directory under `examples/` that has a `story.md` and runs `validateProject`, `validateLinks`, `seriesReport`, `checkProjectContinuity`, and the JSON schema check against it. It also runs `story reindex` on a scratch copy and fails if any registry would change, so an example never ships a stale registry, and builds the example twice each with `--format twee` and `--format ink` outside the project, failing on a build error, on a build warning other than the one about a derived IFID, or on two builds that differ. Any error or warning fails the check, with one exception: [`examples/the-unraveled-thread`](../examples/the-unraveled-thread) is the showcase for `story continuity` and must produce exactly the findings listed in `EXPECTED_CONTINUITY` at the top of the script, no more and no fewer.
 
 ```text
 Examples are valid:

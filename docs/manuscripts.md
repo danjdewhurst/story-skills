@@ -12,7 +12,7 @@ All output shown was captured by running the commands against copies of the exam
 - [Front and back matter](#front-and-back-matter)
 - [Publishing metadata in story.md](#publishing-metadata-in-storymd)
 - [Export a markdown manuscript](#export-a-markdown-manuscript)
-- [Build a book](#build-a-book): [EPUB](#epub), [DOCX](#docx), [Shunn](#shunn-standard-manuscript-format), [HTML review copy](#html-review-copy), [print interior](#print-interior), [narration script](#narration-script), [screenplay skeleton](#screenplay-skeleton-fountain), [retailer metadata sheet](#retailer-metadata-sheet), [Twine story](#twine-story)
+- [Build a book](#build-a-book): [EPUB](#epub), [DOCX](#docx), [Shunn](#shunn-standard-manuscript-format), [HTML review copy](#html-review-copy), [print interior](#print-interior), [narration script](#narration-script), [screenplay skeleton](#screenplay-skeleton-fountain), [retailer metadata sheet](#retailer-metadata-sheet), [Twine story](#twine-story), [ink story](#ink-story)
 - [Build a synopsis](#build-a-synopsis)
 - [Output paths and what is disposable](#output-paths-and-what-is-disposable)
 - [Common errors](#common-errors)
@@ -30,7 +30,7 @@ All output shown was captured by running the commands against copies of the exam
 flowchart LR
   draft["Existing draft<br/>(.md, .markdown, .txt)"] -->|story import| project["Story project<br/>story.md, chapters/, matter/, plot/arcs/"]
   project -->|story export| manuscript["dist/manuscript.md"]
-  project -->|story build| dist["dist/<br/>.md, .epub, .docx, .shunn.md,<br/>.html, .print.html, .narration.md, .metadata.md, .fountain, .twee"]
+  project -->|story build| dist["dist/<br/>.md, .epub, .docx, .shunn.md,<br/>.html, .print.html, .narration.md, .metadata.md, .fountain, .twee, .ink"]
   project -->|story synopsis| synopsis["Synopsis<br/>(stdout or --out)"]
 ```
 
@@ -515,6 +515,7 @@ The warning is harmless, and the default `dist/` path avoids it. `story build` w
 | `metadata` | Retailer metadata sheet with a readiness checklist | `dist/<story-id>.metadata.md` | No prose at all |
 | `fountain` | Screenplay scene skeleton in Fountain, from the scene records | `dist/<story-id>.fountain` | No prose at all |
 | `twee` | Twine story in Twee 3: one passage per chapter, linked by chapter `choices` | `dist/<story-id>.twee` | No |
+| `ink` | ink story for inkle's Inky and inklecate: one knot per chapter, with chapter `choices` as choices | `dist/<story-id>.ink` | No |
 
 The story id is the kebab-case title from `story.md`. Build every format of the example *The Last Ember* like this:
 
@@ -548,7 +549,7 @@ The confirmation always counts chapters, even for the metadata sheet and the scr
 | Option | Effect |
 |--------|--------|
 | `[path]` or `--path <path>` | Project root. Defaults to the current directory. |
-| `--format <name>` | `markdown` (or `md`), `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, or `twee`. Case-insensitive. Defaults to `markdown`. |
+| `--format <name>` | `markdown` (or `md`), `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, or `ink`. Case-insensitive. Defaults to `markdown`. |
 | `--shunn` | With `--format docx`, apply Shunn formatting. An error with every other format. |
 | `--trim <size>` | With `--format print`, the trim size: `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5`. Case-insensitive. Defaults to `5.5x8.5`. An error with every other format. |
 | `--out <file>` | Output file instead of the default in `dist/`. |
@@ -556,7 +557,7 @@ The confirmation always counts chapters, even for the metadata sheet and the scr
 Any other format is an error:
 
 ```text
-Unsupported build format: pdf. Supported formats: markdown, epub, docx, shunn, html, print, narration, metadata, fountain, twee
+Unsupported build format: pdf. Supported formats: markdown, epub, docx, shunn, html, print, narration, metadata, fountain, twee, ink
 ```
 
 For a book PDF, build the [print interior](#print-interior) and render it with a paged-media engine. For a quick PDF of a manuscript, open the DOCX in a word processor and export it.
@@ -971,7 +972,40 @@ The supply boat backs off the landing before your boots are dry. ...
 - The IFID, the id every Twine story carries, comes from `ifid` in `story.md`. Without one, the build derives it from the story id, so every rebuild writes the same one, and warns: `story.md has no ifid, so the build derived <IFID> from the story id; add ifid: <IFID> to story.md to keep it if the title changes`. Add that line: a new title means a new derived IFID, and two books with one title would share it. The example sets `ifid`.
 - The build stops, listing each problem, while a choice is malformed or leads to a chapter that does not exist yet, a chapter file name is not kebab-case, or `ifid` is not a version 4 UUID. It warns about chapters no choice path reaches.
 
-Compile the file with [Tweego](https://www.motoslave.net/tweego/) (`tweego -o gull-rock.html dist/the-gull-rock-light.twee`) or import it into Twine 2 with **Library > Import**. The [adaptation skill](../skills/adaptation/references/interactive-fiction.md) plans the branches; there is no ink output yet.
+Compile the file with [Tweego](https://www.motoslave.net/tweego/) (`tweego -o gull-rock.html dist/the-gull-rock-light.twee`) or import it into Twine 2 with **Library > Import**. The [adaptation skill](../skills/adaptation/references/interactive-fiction.md) plans the branches.
+
+### ink story
+
+`--format ink` writes the same branching book as [ink](https://www.inklestudios.com/ink/), inkle's narrative scripting language, for the Inky editor, the `inklecate` compiler, and game engines through inkjs or the Unity integration. It follows the same rules as the [Twine story](#twine-story): the same start, endings, linear fallback, IFID, checks, and refusals, with `Cannot build ink until these are fixed:` in place of `twee`.
+
+```shell
+story build . --format ink
+```
+
+```ink
+# title: The Gull Rock Light
+# ifid: 649C4AC9-78FE-4B32-B821-24D0802D1DD9
+
+-> chapter_01
+
+=== chapter_01 ===
+The supply boat backs off the landing before your boots are dry. ...
+
++ [Search the rocks for Tobias] -> chapter_02
++ [Climb the tower to the lamp] -> chapter_03
+
+=== chapter_05 ===
+...
+
+-> END
+```
+
+- The title, the author (`authors` or `author` in `story.md`, left out when neither is set), and the IFID are global tags at the top, which a game reads from `story.globalTags`. A divert to the first chapter's knot starts the story.
+- Each chapter is a knot named by its chapter id with `-` written as `_`, since ink names cannot contain hyphens: `chapter-03` becomes `chapter_03`. A name ink would reject, one that starts with a digit or is a reserved word such as `true` or `else`, gets a leading `_` (`01` becomes `_01`). Chapter ids never start with `-`, so no two chapters share a knot.
+- Each choice is a sticky choice, `+ [text] -> knot`, so a chapter the reader returns to on a loop offers every choice again, as a Twine link does. A chapter with no choices ends with `-> END`. With no choices anywhere, each chapter diverts straight to the next (`-> chapter_02`) and the last ends the story.
+- The prose is written as it is in the chapter, without the heading, and escaped so ink prints it as text: a backslash goes before `\`, `{`, `}`, `|`, `#`, `[`, `]`, `~`, the `-` of `->`, and the `<` of `<-` and `<>`, and between the slashes of `//` and `/*`, which would start a comment. A line starting with `*`, `+`, `-`, or `=`, or with `INCLUDE`, `VAR`, `CONST`, `LIST`, `EXTERNAL`, or `TODO`, gets a backslash in front. Choice text gets the same inline escapes. ink prints each non-blank line as its own line of text, drops leading and repeated spaces, and has no markdown, so `*emphasis*` shows as written.
+
+Open the file in [Inky](https://github.com/inkle/inky) to play it, or compile it with `inklecate -o gull-rock.json dist/the-gull-rock-light.ink`.
 
 ### How prose is converted for EPUB, DOCX, Shunn, HTML, and print
 
@@ -996,7 +1030,7 @@ Lists and other markdown are not converted and appear as their literal text. Kee
 
 ### Reproducible builds
 
-Builds are deterministic: the same sources produce byte-identical files. The HTML, print, narration, metadata, and twee builds contain no dates or timestamps (an HTML build prints a `--stamp` label only when you pass one), so a diff between two builds shows only what changed in the book. EPUB and DOCX packages date every ZIP entry 1980-01-01, and drop control characters that XML does not allow. Entries are deflated at a fixed level, which keeps repeat builds identical, and their names carry the ZIP UTF-8 name flag; the EPUB `mimetype` entry stays first and uncompressed as the OCF container format requires. The EPUB `dcterms:modified` date comes from the `SOURCE_DATE_EPOCH` environment variable (whole seconds since the Unix epoch) when it is set, and is `2000-01-01T00:00:00Z` otherwise, including when the value is not a whole number of seconds or falls after the year 9999:
+Builds are deterministic: the same sources produce byte-identical files. The HTML, print, narration, metadata, twee, and ink builds contain no dates or timestamps (an HTML build prints a `--stamp` label only when you pass one), so a diff between two builds shows only what changed in the book. EPUB and DOCX packages date every ZIP entry 1980-01-01, and drop control characters that XML does not allow. Entries are deflated at a fixed level, which keeps repeat builds identical, and their names carry the ZIP UTF-8 name flag; the EPUB `mimetype` entry stays first and uncompressed as the OCF container format requires. The EPUB `dcterms:modified` date comes from the `SOURCE_DATE_EPOCH` environment variable (whole seconds since the Unix epoch) when it is set, and is `2000-01-01T00:00:00Z` otherwise, including when the value is not a whole number of seconds or falls after the year 9999:
 
 ```shell
 SOURCE_DATE_EPOCH=1700000000 story build . --format epub
@@ -1117,8 +1151,8 @@ Treat everything in `dist/` as disposable. It is regenerated from the markdown o
 | `Duplicate chapter number N: ...` | Two chapters share a `number` | Renumber one of them, then run `story reindex .`. |
 | `... matter file names must be kebab-case to build` | A `matter/` file name is not kebab-case | Rename the file to a kebab-case name, such as `about-me.md`, then run `story reindex .`. |
 | `story.md cover <path> ...` | The cover path is missing, outside the project, or not a supported image | Fix `cover` in `story.md`, or remove it. |
-| `Unsupported build format: <name>. ...` | An unknown `--format` | Use `markdown`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, or `twee`. |
-| `Cannot build twee until these are fixed: ...` | A chapter's `choices` is malformed or leads to a missing chapter, a chapter file name is not kebab-case, or `ifid` is malformed | Fix each listed problem; `story validate` and `story links` report most of them too. |
+| `Unsupported build format: <name>. ...` | An unknown `--format` | Use `markdown`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, or `ink`. |
+| `Cannot build twee until these are fixed: ...` or `Cannot build ink ...` | A chapter's `choices` is malformed or leads to a missing chapter, a chapter file name is not kebab-case, or `ifid` is malformed | Fix each listed problem; `story validate` and `story links` report most of them too. |
 | `Unsupported trim size: <size>. ...` | An unknown `--trim` with `--format print` | Use `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5`. |
 | `Unsupported synopsis length: <n>. Supported pages: 1, 3` | An unsupported `--pages` value | Use `1` or `3`. |
 | `Refusing to access path outside project root: <path>` | A relative `--out` that leaves the project | Use a path inside the project, or an absolute path. |

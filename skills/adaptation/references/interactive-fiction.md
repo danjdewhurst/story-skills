@@ -2,9 +2,9 @@
 
 The story project is linear: one sequence of chapters and scenes. An
 interactive version keeps the project as its source and lives in
-`adaptations/interactive/`, written for a tool such as Ink or Twine. For
-Twine, the CLI can build it: give an interactive edition project chapter
-`choices` (see [Chapter Choices And The Twee Build](#chapter-choices-and-the-twee-build)).
+`adaptations/interactive/`, written for a tool such as Ink or Twine. The
+CLI can build both: give an interactive edition project chapter `choices`
+(see [Chapter Choices And The Twee Build](#chapter-choices-and-the-twee-build)).
 
 ## Branch Map From Scenes
 
@@ -173,6 +173,14 @@ choices:
 
 [`examples/the-gull-rock-light`](../../../examples/the-gull-rock-light/)
 is a small branch-and-bottleneck story built this way.
+
+`story build --format ink` builds the same project as ink, with the same
+checks: one knot per chapter (`chapter-03` becomes `chapter_03`), a sticky
+`+ [text] -> knot` choice for each entry in `choices`, `-> END` for an
+ending, and the title, author, and IFID as global tags. It escapes ink
+syntax in the prose, so a `{`, `~`, or `VAR` line written in a chapter
+comes out as text; add ink logic to the built file under
+`adaptations/interactive/`, not to the chapters.
 
 ## Checks
 

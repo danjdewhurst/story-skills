@@ -11,6 +11,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 ### Added
 
 - Every error and warning has a stable code, listed by command under Finding codes in `docs/cli-reference.md`. Text output ends each `warning:` line with its code in brackets, such as `[stale-word-count]`, so the name to put in `story.md` `severity` is on the line. `severity` now takes any warning code (the eleven codes it took before keep their names) and applies wherever that warning is reported: `links`, `continuity`, `names`, `series`, `timeline`, `progress`, `compare`, and `context` as well as the checks that had codes, the checks `report`, `next`, and `doctor` summarise, and the warnings `build`, `export`, `add`, `rename`, `move`, and `remove` print, which exit 1 when one is promoted. An entry naming an error code is rejected: errors cannot be demoted or turned off. ([#278](https://github.com/danjdewhurst/story-skills/issues/278))
+- `story build --format ink` writes a branching book as an ink story for Inky and inklecate: the title, author, and IFID as global tags, one knot per chapter (`chapter-03` becomes `chapter_03`), a sticky `+ [text] -> knot` choice for each chapter choice, `-> END` for an ending, and a divert to the next chapter in a linear book. Prose and choice text are escaped so ink prints them as text. It shares the Twee build's rules and checks, and `test:examples` builds every example as ink twice and checks the builds match. ([#281](https://github.com/danjdewhurst/story-skills/issues/281))
 
 ### Changed
 

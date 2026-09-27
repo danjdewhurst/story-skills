@@ -5478,7 +5478,7 @@ var OPTIONS = [
   { name: "anchor", value: "<label>", repeatable: true, help: ["Review-copy paragraph label (ch03-p12) to find", "in the current text for compare; repeatable"] },
   { name: "path", value: "<path>", help: ["Project root for every command except init and", "import"] },
   { name: "out", value: "<file>", help: ["Output path for export/build/synopsis/diagram"] },
-  { name: "format", value: "<name>", help: ["Output format for build (markdown, epub, docx,", "shunn, html, print, narration, metadata,", "fountain, twee)"] },
+  { name: "format", value: "<name>", help: ["Output format for build (markdown, epub, docx,", "shunn, html, print, narration, metadata,", "fountain, twee, ink)"] },
   { name: "trim", value: "<size>", help: ["Trim size for build --format print (5x8,", "5.25x8, 5.5x8.5, 6x9, a5; default 5.5x8.5)"] },
   { name: "stamp", value: "<label>", help: ["Build label printed in build --format html (a", "date, commit, or review round)"] },
   { name: "note-url", value: "<url>", help: ["Note form linked, prefilled, from every label in", "build --format html (a GitHub new-issue link)"] },
@@ -6683,6 +6683,50 @@ function inline(value) {
 }
 function sectionText(value) {
   return inline(value).replace(/^#+\s*/, "") || "Untitled";
+}
+
+// src/ink.js
+var INK_RESERVED = new Set(["true", "false", "not", "else", "return", "temp", "function"]);
+function inkKnotName(id) {
+  const name = id.replace(/-/g, "_");
+  return /^[0-9]/.test(name) || INK_RESERVED.has(name) ? `_${name}` : name;
+}
+function inkInline(text) {
+  return text.replace(/[\\{}|#[\]~]|-(?=>)|<(?=[>-])/g, "\\$&").replace(/\/(?=[/*])/g, "/\\");
+}
+function inkLine(line) {
+  const text = inkInline(line.trim());
+  return /^[*+\-=]|^(?:INCLUDE|VAR|CONST|LIST|EXTERNAL|TODO)\b/.test(text) ? `\\${text}` : text;
+}
+function inkTag(name, value) {
+  return `# ${name}: ${inkInline(value.replace(/\s+/g, " ").trim())}`;
+}
+function inkSource(story) {
+  const lines = [inkTag("title", story.title)];
+  if (story.author.trim() !== "") {
+    lines.push(inkTag("author", story.author));
+  }
+  lines.push(inkTag("ifid", story.ifid.toUpperCase()), "", `-> ${inkKnotName(story.passages[0].name)}`, "");
+  story.passages.forEach((passage, position) => {
+    lines.push(`=== ${inkKnotName(passage.name)} ===`);
+    if (passage.body !== "") {
+      lines.push(...passage.body.split(/\r?\n/).map(inkLine), "");
+    }
+    if (!story.branching) {
+      const next = story.passages[position + 1];
+      lines.push(`-> ${next ? inkKnotName(next.name) : "END"}`);
+    } else if (passage.links.length === 0) {
+      lines.push("-> END");
+    } else {
+      for (const link of passage.links) {
+        lines.push(`+ [${inkInline(link.text)}] -> ${inkKnotName(link.to)}`);
+      }
+    }
+    lines.push("");
+  });
+  return `${lines.join(`
+`).trimEnd()}
+`;
 }
 
 // src/twee.js
@@ -9530,30 +9574,10 @@ function buildBook(root, options = {}) {
       pendingPermissions: project.matter.filter((entry) => entry.permission === "pending").map((entry) => entry.id),
       todoChapters: project.chapters.filter((chapter) => chapter.todoMarkers > 0).map((chapter) => chapter.id)
     }), output.writeOptions);
-  } else if (format === "twee") {
-    const branches = branchGraph(project);
-    const pinned = project.story.data.ifid;
-    const problems = [
-      ...project.chapters.filter((chapter) => !isKebabId2(chapter.id)).map((chapter) => `${relative2(project, chapter.file)}: chapter file names must be kebab-case to name a passage`),
-      ...branches.problems.map((problem) => problem.message),
-      ...branches.missing.map((choice) => choice.finding.message),
-      ...pinned === undefined || isIfid(pinned) ? [] : ["story.md ifid must be a version 4 UUID, such as 3F2C9A61-7B1D-4E8A-9C3B-2A6D5E4F1B07"]
-    ];
-    if (problems.length > 0) {
-      throw projectError(`Cannot build twee until these are fixed:
-${problems.join(`
-`)}`);
-    }
-    const ifid = pinned ?? derivedIfid(project.storyId);
-    if (pinned === undefined) {
-      manuscript.warnings.push(warn("derived-ifid", `story.md has no ifid, so the build derived ${ifid} from the story id; add ifid: ${ifid} to story.md to keep it if the title changes`, "story.md"));
-    }
-    writeFile(output.outFile, tweeSource({
-      title: manuscript.title,
-      ifid,
-      start: branches.passages[0].chapter.id,
-      passages: branches.passages.map((passage, position) => ({ name: passage.chapter.id, body: manuscript.chapters[position].body, links: passage.links }))
-    }), output.writeOptions);
+  } else if (format === "twee" || format === "ink") {
+    const { branches, ifid } = interactiveStory(project, manuscript, format);
+    const passages = branches.passages.map((passage, position) => ({ name: passage.chapter.id, body: manuscript.chapters[position].body, links: passage.links }));
+    writeFile(output.outFile, format === "twee" ? tweeSource({ title: manuscript.title, ifid, start: passages[0].name, passages }) : inkSource({ title: manuscript.title, author: manuscript.author, ifid, branching: branches.branching, passages }), output.writeOptions);
     manuscript.warnings.push(...branches.warnings);
   } else if (format === "narration") {
     writeFile(output.outFile, narrationScript(manuscript, pronunciationGuide(project)), output.writeOptions);
@@ -9572,6 +9596,27 @@ ${problems.join(`
     writeDocx(output.outFile, manuscript, output.writeOptions);
   }
   return { outFile: output.outFile, chapters: manuscript.chapters.length, format, warnings: manuscript.warnings };
+}
+function interactiveStory(project, manuscript, format) {
+  const branches = branchGraph(project);
+  const pinned = project.story.data.ifid;
+  const node = format === "twee" ? "a passage" : "a knot";
+  const problems = [
+    ...project.chapters.filter((chapter) => !isKebabId2(chapter.id)).map((chapter) => `${relative2(project, chapter.file)}: chapter file names must be kebab-case to name ${node}`),
+    ...branches.problems.map((problem) => problem.message),
+    ...branches.missing.map((choice) => choice.finding.message),
+    ...pinned === undefined || isIfid(pinned) ? [] : ["story.md ifid must be a version 4 UUID, such as 3F2C9A61-7B1D-4E8A-9C3B-2A6D5E4F1B07"]
+  ];
+  if (problems.length > 0) {
+    throw projectError(`Cannot build ${format} until these are fixed:
+${problems.join(`
+`)}`);
+  }
+  const ifid = pinned ?? derivedIfid(project.storyId);
+  if (pinned === undefined) {
+    manuscript.warnings.push(warn("derived-ifid", `story.md has no ifid, so the build derived ${ifid} from the story id; add ifid: ${ifid} to story.md to keep it if the title changes`, "story.md"));
+  }
+  return { branches, ifid };
 }
 function screenplayOutline(project, book) {
   const warnings = [];
@@ -12539,7 +12584,8 @@ var BUILD_EXTENSIONS = {
   narration: "narration.md",
   metadata: "metadata.md",
   fountain: "fountain",
-  twee: "twee"
+  twee: "twee",
+  ink: "ink"
 };
 function normalizeBuildFormat(value) {
   const format = String(value).trim().toLowerCase();
@@ -14765,8 +14811,9 @@ var COMMANDS = [
       "epub, docx, shunn, html (review copy with paragraph",
       "anchors), print (paged-media interior),",
       "narration (audiobook script), metadata (retailer",
-      "sheet), fountain (screenplay scene skeleton), or",
-      "twee (Twine story from chapter choices)"
+      "sheet), fountain (screenplay scene skeleton),",
+      "twee (Twine story from chapter choices), or ink",
+      "(ink story from chapter choices)"
     ],
     project: "positional",
     options: ["out", "format", "shunn", "trim", "stamp", "note-url"],

@@ -21,6 +21,7 @@ import { copyrightPage, metadataSheet, publishingMeta, validatePublishing } from
 import { DEFAULT_TRIM, estimateBookPages, paragraphLabels, printHtml, reviewHtml, TRIM_SIZES } from "./html.js";
 import { narrationScript, pronunciationGuide } from "./narration.js";
 import { SCENE_SETTINGS, fountainScript } from "./fountain.js";
+import { inkSource } from "./ink.js";
 import { TWEE_LINK_UNSAFE, derivedIfid, isIfid, tweeSource } from "./twee.js";
 import { htmlBook, writeDocx, writeEpub, writeShunnDocx, writeShunnMarkdown } from "./packaging.js";
 import { applySeverity, validateCliConfig } from "./config.js";
@@ -2415,32 +2416,12 @@ export function buildBook(root, options = {}) {
       pendingPermissions: project.matter.filter((entry) => entry.permission === "pending").map((entry) => entry.id),
       todoChapters: project.chapters.filter((chapter) => chapter.todoMarkers > 0).map((chapter) => chapter.id)
     }), output.writeOptions);
-  } else if (format === "twee") {
-    const branches = branchGraph(project);
-    const pinned = project.story.data.ifid;
-    // Chapter ids name the passages, so they must be safe in a passage header
-    // and a link target.
-    const problems = [
-      ...project.chapters.filter((chapter) => !isKebabId(chapter.id)).map((chapter) => `${relative(project, chapter.file)}: chapter file names must be kebab-case to name a passage`),
-      ...branches.problems.map((problem) => problem.message),
-      ...branches.missing.map((choice) => choice.finding.message),
-      ...(pinned === undefined || isIfid(pinned) ? [] : ["story.md ifid must be a version 4 UUID, such as 3F2C9A61-7B1D-4E8A-9C3B-2A6D5E4F1B07"])
-    ];
-    if (problems.length > 0) {
-      throw projectError(`Cannot build twee until these are fixed:\n${problems.join("\n")}`);
-    }
-    // A derived IFID changes with the title, and two books with one title
-    // share it, so the build says how to pin it.
-    const ifid = pinned ?? derivedIfid(project.storyId);
-    if (pinned === undefined) {
-      manuscript.warnings.push(warn("derived-ifid", `story.md has no ifid, so the build derived ${ifid} from the story id; add ifid: ${ifid} to story.md to keep it if the title changes`, "story.md"));
-    }
-    writeFile(output.outFile, tweeSource({
-      title: manuscript.title,
-      ifid,
-      start: branches.passages[0].chapter.id,
-      passages: branches.passages.map((passage, position) => ({ name: passage.chapter.id, body: manuscript.chapters[position].body, links: passage.links }))
-    }), output.writeOptions);
+  } else if (format === "twee" || format === "ink") {
+    const { branches, ifid } = interactiveStory(project, manuscript, format);
+    const passages = branches.passages.map((passage, position) => ({ name: passage.chapter.id, body: manuscript.chapters[position].body, links: passage.links }));
+    writeFile(output.outFile, format === "twee"
+      ? tweeSource({ title: manuscript.title, ifid, start: passages[0].name, passages })
+      : inkSource({ title: manuscript.title, author: manuscript.author, ifid, branching: branches.branching, passages }), output.writeOptions);
     manuscript.warnings.push(...branches.warnings);
   } else if (format === "narration") {
     writeFile(output.outFile, narrationScript(manuscript, pronunciationGuide(project)), output.writeOptions);
@@ -2460,6 +2441,31 @@ export function buildBook(root, options = {}) {
   }
 
   return { outFile: output.outFile, chapters: manuscript.chapters.length, format, warnings: manuscript.warnings };
+}
+
+// The chapter graph and IFID behind the twee and ink builds, which refuse
+// to build while a choice is malformed or leads nowhere. Chapter ids name
+// the passages and knots, so they must be kebab-case.
+function interactiveStory(project, manuscript, format) {
+  const branches = branchGraph(project);
+  const pinned = project.story.data.ifid;
+  const node = format === "twee" ? "a passage" : "a knot";
+  const problems = [
+    ...project.chapters.filter((chapter) => !isKebabId(chapter.id)).map((chapter) => `${relative(project, chapter.file)}: chapter file names must be kebab-case to name ${node}`),
+    ...branches.problems.map((problem) => problem.message),
+    ...branches.missing.map((choice) => choice.finding.message),
+    ...(pinned === undefined || isIfid(pinned) ? [] : ["story.md ifid must be a version 4 UUID, such as 3F2C9A61-7B1D-4E8A-9C3B-2A6D5E4F1B07"])
+  ];
+  if (problems.length > 0) {
+    throw projectError(`Cannot build ${format} until these are fixed:\n${problems.join("\n")}`);
+  }
+  // A derived IFID changes with the title, and two books with one title
+  // share it, so the build says how to pin it.
+  const ifid = pinned ?? derivedIfid(project.storyId);
+  if (pinned === undefined) {
+    manuscript.warnings.push(warn("derived-ifid", `story.md has no ifid, so the build derived ${ifid} from the story id; add ifid: ${ifid} to story.md to keep it if the title changes`, "story.md"));
+  }
+  return { branches, ifid };
 }
 
 // The scene records behind `build --format fountain`, in reading order: each
@@ -6051,7 +6057,8 @@ const BUILD_EXTENSIONS = {
   narration: "narration.md",
   metadata: "metadata.md",
   fountain: "fountain",
-  twee: "twee"
+  twee: "twee",
+  ink: "ink"
 };
 
 function normalizeBuildFormat(value) {

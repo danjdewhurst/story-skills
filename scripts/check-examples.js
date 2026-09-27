@@ -67,18 +67,19 @@ export function staleRegistries(root) {
   }
 }
 
-// Builds the example as Twine source twice, outside the project, and returns
-// the build warnings plus a note if the two builds differ: the IFID and every
-// passage must come out the same on each rebuild. The linear examples set no
-// ifid, so the warning that the IFID was derived is expected there.
-export function tweeBuildFindings(root) {
-  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "story-twee-"));
+// Builds the example as Twine or ink source twice, outside the project, and
+// returns the build warnings plus a note if the two builds differ: the IFID
+// and every passage or knot must come out the same on each rebuild. The
+// linear examples set no ifid, so the warning that the IFID was derived is
+// expected there.
+export function interactiveBuildFindings(root, format) {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), `story-${format}-`));
   try {
-    const first = buildBook(root, { format: "twee", out: path.join(scratch, "first.twee") });
-    const second = buildBook(root, { format: "twee", out: path.join(scratch, "second.twee") });
+    const first = buildBook(root, { format, out: path.join(scratch, `first.${format}`) });
+    const second = buildBook(root, { format, out: path.join(scratch, `second.${format}`) });
     const same = fs.readFileSync(first.outFile, "utf8") === fs.readFileSync(second.outFile, "utf8");
     const warnings = first.warnings.filter((warning) => warning.code !== "derived-ifid").map((warning) => warning.message);
-    return [...warnings, ...(same ? [] : ["two twee builds differ"])];
+    return [...warnings, ...(same ? [] : [`two ${format} builds differ`])];
   } catch (error) {
     return [error.message];
   } finally {
@@ -108,8 +109,10 @@ function main() {
     for (const error of checkProjectSchema(root)) {
       failures.push(`${name} schema error: ${error}`);
     }
-    for (const finding of tweeBuildFindings(root)) {
-      failures.push(`${name} twee build: ${finding}`);
+    for (const format of ["twee", "ink"]) {
+      for (const finding of interactiveBuildFindings(root, format)) {
+        failures.push(`${name} ${format} build: ${finding}`);
+      }
     }
     for (const registry of staleRegistries(root)) {
       failures.push(`${name} registry is stale: ${registry} (run story reindex)`);

@@ -215,7 +215,7 @@ describe("twee on the command line", () => {
     expect(io.error()).toContain("Cannot build twee until these are fixed:");
     const unknown = memoryIo(root);
     expect(runCli(["build", root, "--format", "tweee"], unknown)).toBe(2);
-    expect(unknown.error()).toContain("Supported formats: markdown, epub, docx, shunn, html, print, narration, metadata, fountain, twee");
+    expect(unknown.error()).toContain("Supported formats: markdown, epub, docx, shunn, html, print, narration, metadata, fountain, twee, ink");
   });
 
   test("story.md cli-defaults can make twee the default build, and a given --format still wins", () => {

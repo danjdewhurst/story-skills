@@ -160,8 +160,16 @@ choose a branching structure with the author, and record the branch map in
   Fix every `links` warning about a chapter no choice path reaches.
   `--out` never replaces an existing file under `adaptations/`, so delete
   the old `.twee` before a rebuild.
-- **Ink:** the CLI has no ink output; write `adaptations/interactive/{story-id}.ink`
-  by hand from the branch map.
+- **Ink:** set up the interactive edition project the same way, check it
+  with the same commands, and build it:
+
+  ```shell
+  story build . --format ink --out adaptations/interactive/{story-id}.ink
+  ```
+
+  Open the `.ink` file in Inky, or compile it with `inklecate`. Add ink
+  state (`VAR`, `~`, `{ }`) by hand to the built copy under
+  `adaptations/`: the build escapes those in chapter prose as text.
 
 ### 6. Translation
 
@@ -222,7 +230,7 @@ story validate .
 
 After changing chapters in a picture-book, translated, or interactive
 project, also run `story wordcount . --write`. After adding, retargeting,
-or removing `choices`, run `story links .` and rebuild the Twee file.
+or removing `choices`, run `story links .` and rebuild the Twee or ink file.
 `story move` and `story remove` keep `choices` targets in step.
 
 ## Reference Files
@@ -231,5 +239,5 @@ or removing `choices`, run `story links .` and rebuild the Twee file.
 - **`references/fountain.md`** - Scene-list-from-scene-records method, novel-to-screen choices, and Fountain syntax
 - **`references/picture-book.md`** - 32-page and 14-spread pagination, page-turn beats, text and illustration interplay, spread brief template, and art notes
 - **`references/comics-script.md`** - Page and panel script format, pacing per page, balloon limits, and page-turn reveals
-- **`references/interactive-fiction.md`** - Branch maps from scenes, branching structures, state, chapter `choices` and the Twee build, and Ink and Twine syntax
+- **`references/interactive-fiction.md`** - Branch maps from scenes, branching structures, state, chapter `choices` and the Twee and ink builds, and Ink and Twine syntax
 - **`references/translation.md`** - Glossary as term base, per-language style sheets, name decisions, and continuity across language editions
