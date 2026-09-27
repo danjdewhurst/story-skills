@@ -1,0 +1,62 @@
+import { parseClockDate } from "./continuity.js";
+
+// Story-time order of chapters, shared by the death, knowledge, and state
+// checks. Two chapters that are both dated compare by date, so a 2034
+// prologue read first comes after a 2024 chapter 3, and a dual-timeline book
+// compares its 1990 and 2020 strands correctly. Otherwise, or on the same
+// day, they compare by chapter number (reading order). A chapter's date is
+// its own `date`, else the earliest dated scene in it.
+export function chapterChronology(project) {
+  const numbers = new Map(project.chapters.map((chapter) => [chapter.id, chapter.number]));
+  const days = new Map();
+  for (const chapter of project.chapters) {
+    const parsed = parseClockDate(String(chapter.date ?? ""));
+    if (parsed) {
+      days.set(chapter.id, parsed.days);
+    }
+  }
+  const sceneDays = new Map();
+  for (const scene of project.scenes) {
+    const parsed = parseClockDate(String(scene.date ?? ""));
+    if (parsed && numbers.has(scene.chapter) && !days.has(scene.chapter)) {
+      sceneDays.set(scene.chapter, Math.min(sceneDays.get(scene.chapter) ?? Infinity, parsed.days));
+    }
+  }
+  for (const [id, value] of sceneDays) {
+    days.set(id, value);
+  }
+  const outline = new Set(project.chapters.filter((chapter) => chapter.status === "outline").map((chapter) => chapter.id));
+
+  // True when chapter `later` happens strictly after chapter `earlier`.
+  const after = (later, earlier) => {
+    const laterDays = days.get(later);
+    const earlierDays = days.get(earlier);
+    if (laterDays !== undefined && earlierDays !== undefined && laterDays !== earlierDays) {
+      return laterDays > earlierDays;
+    }
+    return numbers.get(later) > numbers.get(earlier);
+  };
+
+  return { numbers, days, outline, after };
+}
+
+// A character's dead window: after `died-in` and, with `revived-in`, before
+// the revival chapter. Returns null for a character with no usable death.
+export function deathWindow(character, chronology) {
+  const died = character.diedIn;
+  if (!died || !chronology.numbers.has(died)) {
+    return null;
+  }
+  const revived = character.revivedIn && chronology.numbers.has(character.revivedIn) ? character.revivedIn : "";
+  return {
+    died,
+    revived,
+    // Whether the character is dead during chapter `chapterId`.
+    deadIn(chapterId) {
+      if (!chronology.numbers.has(chapterId) || !chronology.after(chapterId, died)) {
+        return false;
+      }
+      return revived === "" || chronology.after(revived, chapterId);
+    }
+  };
+}

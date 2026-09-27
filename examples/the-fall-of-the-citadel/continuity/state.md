@@ -20,6 +20,9 @@ knowledge-state:
   - character: kael-voss
     knows: The tunnel behind the musicians' gallery reaches the Whisper Gate
     fact: whisper-gate-route
+  - character: sera-voss
+    knows: A tunnel behind the gallery leads to the Whisper Gate
+    learned-in: chapter-01
 ---
 
 # Continuity State
@@ -32,7 +35,7 @@ Track facts that must carry forward between chapters.
 
 | Character | Location | Physical State | Emotional State | Knowledge |
 |-----------|----------|----------------|-----------------|-----------|
-| Sera Voss | Ashen Citadel | Unscarred | Uneasy after the throne room | Maren wants the well armed |
+| Sera Voss | Ashen Citadel | Unscarred | Uneasy after the throne room | Maren wants the well armed; the gallery tunnel |
 | Lord Maren | Ashen Citadel | Ember affinity intact | Out of patience with the king | — |
 
 ## Object State
@@ -47,3 +50,4 @@ Track facts that must carry forward between chapters.
 |-----------|-------|------------|
 | Sera Voss | Maren asked the king to arm the ember well (fact: `maren-asked-to-arm-the-well`) | Ch 1 |
 | Kael Voss | The gallery tunnel reaches the Whisper Gate (fact: `whisper-gate-route`) | Before the book |
+| Sera Voss | A tunnel behind the gallery leads to the Whisper Gate | Ch 1 |

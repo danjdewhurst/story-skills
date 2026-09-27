@@ -58,6 +58,14 @@ To kill a character off:
 2. In every later chapter and scene, move the id from `characters` (and `pov`) to `mentions` where they appear only in memory, letters, or flashback
 3. Run `story continuity .`: it reports any later chapter or scene that still lists them in its cast
 
+Variants:
+
+- **Planned death:** set `died-in` to an outline chapter and keep `status: alive`; set `status: deceased` when that chapter is drafted
+- **Dead narrator (ghost, posthumous POV):** keep them as `pov` and also list them in `mentions`; that is not a posthumous appearance
+- **Resurrection:** add `revived-in: chapter-NN`; casts from that chapter on are allowed again, and once it is drafted set `status: alive`
+- **Non-linear books:** give chapters a `date` so deaths compare by story time, and give a dual-timeline book's chapters a `strand` so each timeline keeps its own clock
+- Drop the character's `character-state` entry in `continuity/state.md` once the death is drafted and at or before `current-chapter`
+
 After either change, run `story reindex .`, `story links .`, and `story validate .`.
 
 ## Managing Relationships

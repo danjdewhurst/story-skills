@@ -574,7 +574,7 @@ Checks that references between entities point at entities that exist and that tw
 - character relationships, which need a backlink of the matching inverse type (`mentor` and `student`, `sibling` and `sibling`). The pairings allowed before 0.10.0, `former-supervisor` on both sides and `adversary` answered by `antagonist`, warn instead: `<file> relationship <type> to <target> has backlink <types>, a pairing from before story-skills 0.10.0; change the backlink to <expected>`
 - character `locations` and location `notable-characters`, which must list each other
 - location `routes`, whose `to` must name another existing location
-- a character's `died-in` chapter
+- a character's `died-in` and `revived-in` chapters
 - arc characters, faction members and locations, and artifact owners and locations
 - chapter and scene POV, `characters`, `mentions` (a character or an artifact), locations, and `arcs-advanced`, and each scene's chapter
 - the chapter, character, and arc ids in questions, promises, and clues, and the `used-in` chapters of research notes. A promise or clue `payoff`, its `planted` while `status: planned`, an `open` question's `introduced`, and a research note's `used-in` may name a scheduled `chapter-NN` that has no chapter file yet, unless its number is 0 or belongs to an existing chapter under another id (`chapter-1` beside `chapter-01`)
@@ -665,7 +665,7 @@ Every rule, and how to write exemptions, is in [Continuity and analysis](continu
 story knowledge <character-id> --at <chapter-id> [--path <project>]
 ```
 
-Lists the `knowledge-state` entries in `continuity/state.md` that a character knew by a given chapter. An entry counts if its `learned-in` chapter is at or before `--at`; an entry with no `learned-in` is pre-existing knowledge and always counts. It exits 1 with the parse error when a chapter file, the character file, or `continuity/state.md` fails to parse, and when one of the character's entries has no `knows`.
+Lists the `knowledge-state` entries in `continuity/state.md` that a character knew by a given chapter. An entry counts if its `learned-in` chapter is at or before `--at` (by story date when both chapters are dated, else by chapter number); an entry with no `learned-in` is pre-existing knowledge and always counts. It exits 1 with the parse error when a chapter file, the character file, or `continuity/state.md` fails to parse, and when one of the character's entries has no `knows`.
 
 | Option | Effect |
 |---|---|
@@ -1660,7 +1660,7 @@ Chapter and scene ids come from their numbers, so reordering the book changes id
 
 - `chapter` on each of the chapter's scenes
 - `planted` and `payoff` on promises and clues, and `introduced` and `resolved` on questions
-- `used-in` on research notes and `died-in` on characters
+- `used-in` on research notes and `died-in` and `revived-in` on characters
 - `since` and `learned-in` in `continuity/state.md`, and `current-chapter` when it held the moved chapter's number
 - markdown links to the moved chapter and scene files, anywhere in the project
 - bare chapter and scene ids in the bodies of `plot/timeline.md` and `plot/arcs/*.md`, the ones `story links` checks, and in `plot/_index.md` (the Theme Tracking table). An id is a whole token: `chapter-01-draft` and `pre-chapter-01` are left alone, by `move` and `links` alike

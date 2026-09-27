@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { checkContinuity, idText, storyDateError, storyTimeError } from "./continuity.js";
+import { chapterChronology } from "./chronology.js";
 import { FRONTMATTER_PATTERN, parseFrontmatter, replaceFrontmatter, stringifyFrontmatter } from "./frontmatter.js";
 import { assertExistingAncestorInsideRoot, assertLexicallyInsideRoot, assertSafeProjectDirectory, assertSafeProjectPath, isPathInside, lstatIfExists, readTextFile, TEMPORARY_FILE_PATTERN, writeFile } from "./files.js";
 import { isTruthy } from "./options.js";
@@ -554,6 +555,7 @@ export function scanProject(root) {
       status: data.status ?? "",
       arc: String(data.arc ?? ""),
       diedIn: String(data["died-in"] ?? ""),
+      revivedIn: String(data["revived-in"] ?? ""),
       relationships: asArray(data.relationships),
       locations: asArray(data.locations),
       aliases: asArray(data.aliases),
@@ -632,6 +634,7 @@ export function scanProject(root) {
       date: String(data.date ?? ""),
       time: String(data.time ?? ""),
       mode: String(data.mode ?? ""),
+      strand: String(data.strand ?? ""),
       hasPostHocNotes: hasPostHocNotes(markdown.body),
       hook: typeof data.hook === "string" ? data.hook : ""
     }), scanErrors).sort((left, right) => left.number - right.number || left.file.localeCompare(right.file, "en")),
@@ -963,6 +966,9 @@ export function validateLinksOf(project) {
     if (character.diedIn) {
       checkIdReference(errors, label, character.diedIn, "chapter", hasChapter);
     }
+    if (character.revivedIn) {
+      checkIdReference(errors, label, character.revivedIn, "chapter", hasChapter);
+    }
   }
 
   for (const location of project.locations) {
@@ -1260,8 +1266,9 @@ export function checkProjectContinuity(root) {
 
 // Returns knowledge-state entries for a character that the character knew at
 // (or before) a chapter: entries without learned-in are pre-existing
-// knowledge, the rest must be learned in a chapter numbered at or before the
-// target. File order is preserved.
+// knowledge, the rest must be learned in a chapter at or before the target in
+// story time (by date when both chapters are dated, else by number). File
+// order is preserved.
 export function knowledgeAtChapter(root, characterId, atChapterId) {
   const project = scanProject(root);
   const characters = new Map(project.characters.map((character) => [character.id, character]));
@@ -1278,9 +1285,9 @@ export function knowledgeAtChapter(root, characterId, atChapterId) {
     throw new Error(chapterError);
   }
 
-  const chapterNumbers = new Map(project.chapters.map((chapter) => [chapter.id, chapter.number]));
-  const atNumber = chapterNumbers.get(atChapterId);
-  if (atNumber === undefined) {
+  const chronology = chapterChronology(project);
+  const chapterNumbers = chronology.numbers;
+  if (!chapterNumbers.has(atChapterId)) {
     throw new Error(`Unknown chapter ${atChapterId}`);
   }
 
@@ -1308,8 +1315,9 @@ export function knowledgeAtChapter(root, characterId, atChapterId) {
       entries.push({ knows: String(entry.knows ?? ""), learnedIn: "" });
       continue;
     }
-    const learnedNumber = chapterNumbers.get(learnedIn);
-    if (learnedNumber !== undefined && learnedNumber <= atNumber) {
+    // Story time, not reading order: when both chapters are dated, a 2034
+    // prologue read first is learned after a 2024 chapter 2.
+    if (chapterNumbers.has(learnedIn) && !chronology.after(learnedIn, atChapterId)) {
       entries.push({ knows: String(entry.knows ?? ""), learnedIn });
     }
   }
@@ -4376,6 +4384,7 @@ const REFERENCE_FIELD_KINDS = {
   characters: ["character"],
   "controlled-by": ["faction", "character"],
   "died-in": ["chapter"],
+  "revived-in": ["chapter"],
   introduced: ["chapter"],
   "learned-in": ["chapter"],
   "used-in": ["chapter"],
@@ -5457,13 +5466,13 @@ function storyIdIsFallback(project) {
 // or `true` parses as a number or boolean, which other YAML tools read as
 // such, so validate asks for quotes.
 const TEXT_FIELDS = {
-  characters: ["pronunciation", "name", "died-in", "arc", "lie", "truth", "ghost-wound"],
+  characters: ["pronunciation", "name", "died-in", "revived-in", "arc", "lie", "truth", "ghost-wound"],
   locations: ["pronunciation", "name", "type", "region", "controlled-by", "status"],
   systems: ["pronunciation", "name", "type", "prevalence"],
   factions: ["pronunciation", "name"],
   artifacts: ["pronunciation", "name", "owner", "location"],
   arcs: ["name"],
-  chapters: ["title", "pov", "mode", "date", "time", "episode-question", "time-skip"],
+  chapters: ["title", "pov", "mode", "date", "time", "episode-question", "time-skip", "strand"],
   scenes: ["title", "chapter", "pov", "location", "date", "time", "dilemma", "flashback-to"],
   questions: ["title", "introduced", "resolved"],
   promises: ["title", "planted", "payoff"],
@@ -5631,6 +5640,9 @@ function validateCharacters(project, errors, warnings) {
     if (data["died-in"] !== undefined) {
       requireScalar(data, "died-in", label, errors);
     }
+    if (data["revived-in"] !== undefined) {
+      requireScalar(data, "revived-in", label, errors);
+    }
     if (data.arc !== undefined) {
       requireScalar(data, "arc", label, errors);
     }
@@ -5640,7 +5652,7 @@ function validateCharacters(project, errors, warnings) {
     validateStringArray(data, "voice-words", label, errors);
     validateStringArray(data, "voice-avoid", label, errors);
     validateRelationships(data, label, errors);
-    warnNearMissKeys(data, ["died-in"], label, warnings);
+    warnNearMissKeys(data, ["died-in", "revived-in"], label, warnings);
   }
 }
 

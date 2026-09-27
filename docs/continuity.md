@@ -120,11 +120,11 @@ The report itself (timeline sections, pacing and clue grids, prose counts, voice
 
 | File | Fields |
 |------|--------|
-| `characters/*.md` | `status`, `died-in`, `relationships` |
+| `characters/*.md` | `status`, `died-in`, `revived-in`, `relationships` |
 | `worldbuilding/locations/*.md` | `routes` |
 | `worldbuilding/factions/*.md` | the file itself: a faction id is accepted as an `object-state` `owner` |
 | `plot/arcs/*.md` | `characters` |
-| `chapters/chapter-NN.md` | `number`, `status`, `pov`, `characters`, `mentions`, `locations`, `date`, `time` |
+| `chapters/chapter-NN.md` | `number`, `status`, `pov`, `characters`, `mentions`, `locations`, `date`, `time`, `strand` |
 | `scenes/*.md` | `chapter`, `scene`, `pov`, `characters`, `mentions`, `location`, `state-changes`, `date`, `time`, `travel-hours` |
 | `continuity/promises/*.md` | `status`, `planted`, `payoff` |
 | `continuity/questions/*.md` | `status`, `introduced`, `resolved` |
@@ -142,6 +142,13 @@ A character with `died-in: chapter-NN` must have `status: deceased`, and must no
 
 A character with `status: deceased` and no `died-in` died before the story starts, so any appearance in a chapter or scene cast is a warning.
 
+Some story shapes need more than one death chapter:
+
+- **Posthumous narrator.** A chapter or scene whose `pov` is also in its `mentions` is narrated by someone who is not physically there, such as a ghost or a narrator looking back after their death. It is not a posthumous appearance, and the POV-not-in-characters warning is skipped.
+- **Planned death.** While the `died-in` chapter is still `status: outline`, the death is not written yet, so the character may stay `status: alive`. Set `status: deceased` when you draft that chapter.
+- **Resurrection.** `revived-in: chapter-NN` ends the dead window. Casts after `died-in` and before `revived-in` are still errors; from the revival chapter on, the character may appear again. Once the revival chapter is drafted, the status must no longer be `deceased`.
+- **Non-linear chronology.** "Later" means later in story time when both chapters are dated (a chapter's `date`, or else its earliest dated scene), and later by chapter number otherwise. A character who dies in a 2024 chapter 3 cannot appear in a 2034 prologue read as chapter 1, and in a dual-timeline book a death in the 2020 strand does not stop the character appearing in the 1990 strand.
+
 ```yaml
 # characters/edran-vale.md
 name: Edran Vale
@@ -153,7 +160,11 @@ died-in: chapter-02
 |----------|---------|-----|
 | error | `<character> has died-in <chapter> but status <status>; set status: deceased` | Set `status: deceased`, or remove `died-in` if the character survives. |
 | error | `<character> died-in references missing chapter <chapter>` | Point `died-in` at a chapter that exists. |
-| error | `<chapter or scene> lists <id>, who died in <chapter>; move posthumous appearances to mentions` | Move the id from `characters` (or `pov`) to `mentions`. If they really are alive, fix `died-in`. |
+| error | `<character> has revived-in <chapter> but no died-in; set died-in or remove revived-in` | Record the death the revival ends, or drop `revived-in`. |
+| error | `<character> revived-in references missing chapter <chapter>` | Point `revived-in` at a chapter that exists. |
+| error | `<character> is revived in <chapter>, not after dying in <chapter>` | The revival must come after the death in story time. |
+| error | `<character> has revived-in <chapter> but status deceased; set status: alive` | The revival chapter is drafted, so the character is alive again. |
+| error | `<chapter or scene> lists <id>, who died in <chapter>; move posthumous appearances to mentions` | Move the id from `characters` to `mentions`. For a dead POV narrator, keep `pov` and add the id to `mentions`. If they really are alive, fix `died-in`, or add `revived-in`. |
 | warning | `<chapter or scene> lists <id>, who died before the story (deceased with no died-in); move appearances to mentions` | Move the id from `characters` (or `pov`) to `mentions`. If they die during the story, set `died-in`. |
 | error | `continuity/state.md knowledge-state[<n>] has <id> learn something in <chapter>, after they died in <chapter>` | Learning is on-page, like an appearance. Move `learned-in` to a chapter at or before the death, or give the knowledge to a living character. |
 | warning | `continuity/state.md knowledge-state[<n>] has <id> learn something in <chapter>, but <id> died before the story (deceased with no died-in)` | Drop `learned-in` (pre-existing knowledge), or set `died-in` if they die during the story. |
@@ -268,7 +279,7 @@ object-state:
 | `knowledge-state` | `character` must exist; `knows` is required; `learned-in`, when set, must be a chapter id; `fact`, when set, must be a kebab-case id, unique per character | none |
 | `object-state` | `artifact` must be an artifact id; `owner` must be a character or faction id; `location` must be a location id; `status` must be an artifact status and match the artifact file; `since`, when set, must be a chapter id | anything else |
 
-Keep one `character-state` entry per character and one `object-state` entry per artifact; a repeat is a warning. `story validate` also warns about a key that looks like a misspelt checked key, such as `learned_in` or `since_chapter` in a state entry or `died_in` in a character file, because a missing `learned-in`, `since`, or `died-in` means "before the story".
+Keep one `character-state` entry per character and one `object-state` entry per artifact and `since` chapter; a repeat is a warning. Several `object-state` entries for one artifact with different `since` chapters are its history (see [Prop custody](#prop-custody)); only the latest is compared with the artifact file's `status`. `story validate` also warns about a key that looks like a misspelt checked key, such as `learned_in` or `since_chapter` in a state entry or `died_in` in a character file, because a missing `learned-in`, `since`, or `died-in` means "before the story".
 
 | Severity | Message | Fix |
 |----------|---------|-----|
@@ -279,8 +290,19 @@ Keep one `character-state` entry per character and one `object-state` entry per 
 | error | `... knowledge-state[<i>] fact <id> must be a kebab-case id` | Use lowercase words joined by hyphens. |
 | error | `... knowledge-state[<i>] repeats fact <id> for <character> from knowledge-state[<j>]` | Keep one entry per fact per character. |
 | warning | `... object-state[<i>] status <a> conflicts with <artifact file> status <b>` | Make the artifact file and the state entry agree. |
-| warning | `... character-state[<i>] repeats character <id> from character-state[<j>]` or `object-state[<i>] repeats artifact <id> ...` | Merge the entries into one. |
+| warning | `... character-state[<i>] repeats character <id> from character-state[<j>]` or `object-state[<i>] repeats artifact <id> ...` | Merge the entries into one, or give an artifact's entries different `since` chapters. |
 | error | `... <list>[<i>] must be a mapping` | Each list item must be a `key: value` block, not a bare string. |
+
+The checker also compares the state with the scene records and deaths it summarises. Scene checks cover scenes in chapters up to `current-chapter`. All of these are warnings (knowledge learned after a death is an error, listed under [Deaths and posthumous appearances](#deaths-and-posthumous-appearances)):
+
+| Message | Fix |
+|---------|-----|
+| `<scene> state-changes record <character> learning "<text>" but continuity/state.md has no knowledge-state entry for it learned by <chapter>` | Each scene `state-changes` entry with `character` and `knowledge` needs a `knowledge-state` entry for that character, learned in that chapter or earlier. Entries match by an optional `fact` id on both, then by the same text (ignoring case and a final full stop), then one-to-one with an entry learned in the same chapter. Add the entry. |
+| `... knowledge-state[<i>] has <character> learn something in <chapter>, which does not list <character> in characters or pov` | Add the character to that chapter's or one of its scenes' cast, or correct `learned-in`. Outline chapters are skipped. |
+| `... character-state[<i>] tracks <character>, who died in <chapter>; remove the entry once they are dead` | The death is at or before `current-chapter` and drafted, so drop the entry. |
+| `... character-state[<i>] puts <character> at <location>, but their last scene in <chapter>, <scene>, is at <location> and the chapter does not list <location>` | Update the state location. The check uses the `current-chapter` scenes, and accepts any location the chapter lists, since the character can move on after their last scene. |
+| `... object-state[<i>] gives <artifact> owner <id>, but <scene> state-changes last set it to <id>` (or `location`) | A scene `state-changes` entry with `target: <artifact>` and `owner` or `location` changed the artifact after its latest `object-state` entry. Update the entry, or add a new one with a later `since`. |
+| `<scene> state-changes set <artifact> owner <id> but continuity/state.md has no object-state entry for <artifact>` | Add an `object-state` entry. |
 
 The optional `fact` id lets `story series` match the same piece of knowledge across books; see [Series](series.md). To ask what a character knew at a given point, use [`story knowledge`](#story-knowledge).
 
@@ -318,6 +340,21 @@ state-changes:
 | error | `continuity/state.md object-state[<i>] references missing since chapter <chapter>` | Point `since` at an existing chapter. |
 
 Only `object-state` entries with `status: destroyed` or `status: lost` are custody-checked. References in or before the `since` chapter are allowed.
+
+To record a loss that ends, add a second entry for the same artifact with a later `since` and another status. The loss window then runs from the first `since` to the second, and the recovery chapter itself may use the artifact:
+
+```yaml
+object-state:
+  - artifact: vales-compass
+    status: lost
+    since: chapter-02
+  - artifact: vales-compass
+    owner: jonas-reed
+    status: active
+    since: chapter-04
+```
+
+Chapter 3 is still checked; chapters 4 on are not. Consecutive `lost` and `destroyed` entries form one window that starts at the earliest, so each late reference is reported once.
 
 An entry with no `since` means the artifact was destroyed or lost before this story, for example in an earlier book of a series. Every scene whose `state-changes` target it is then an error, while `mentions` stay allowed, since characters can still remember it.
 
@@ -367,6 +404,8 @@ warning: scenes/chapter-03-scene-01.md timestamp runs backward
 | warning | `<scene> has travel-hours but no date, so the clock check skips it` | Add a `date` (and `time`) so the journey can be checked. |
 | warning | `<scene> has malformed date "<value>"`, `has malformed time "<value>"`, `has negative travel-hours <n>` | Use `YYYY-MM-DD`, `HH:MM` or a named part of day, and a number of hours that is zero or more. A scene with a malformed date is left out of the clock checks. |
 | warning | `Chapter <n> has malformed date "<value>"` or `malformed time "<value>"` | As above. |
+
+A dual-timeline book can give each chapter a `strand`, such as `1990` or `2020`. Each strand keeps its own reference point, so switching from a 2020 chapter to a 1990 one is not a backward timestamp, while a 1990 chapter dated before an earlier 1990 chapter still is. Chapters without `strand`, and their scenes, share one strand. The route check does not read `strand`.
 
 Scenes with `flashback-to` are still checked. That field is a free-form note (for example `flashback-to: the night of the fire`) that `story timeline` displays; it does not suppress the backward-timestamp warning.
 
@@ -493,7 +532,7 @@ story knowledge <character-id> --at <chapter-id> [--path <project>]
 `story knowledge` answers "did she know this yet?" from the `knowledge-state` list in `continuity/state.md`. For the given character it lists, in file order:
 
 - every entry without `learned-in`, marked `pre-existing knowledge`, and
-- every entry whose `learned-in` chapter is numbered at or before the `--at` chapter, marked `learned in <chapter>`.
+- every entry whose `learned-in` chapter comes at or before the `--at` chapter, marked `learned in <chapter>`. When both chapters are dated (a chapter's `date`, or else its earliest dated scene), this compares story dates, so knowledge learned in a 2034 prologue read as chapter 1 is not known in a 2024 chapter 2. Otherwise it compares chapter numbers.
 
 From [`examples/the-last-ember`](../examples/the-last-ember/), where Kael's knowledge carries over from the previous book:
 
@@ -529,7 +568,7 @@ story timeline .
 
 **POV balance** totals chapter `pov` by chapter count and prose words, largest share first. Chapters with no `pov` are grouped as `unspecified`.
 
-**Character presence** counts the chapters in which each character appears in `characters` or as `pov` (on the chapter or on any of its scenes; `mentions` do not count). It shows the span from first to last appearance, the longest absence, and how many chapters at the end of the book they are missing from. Absences are counted in chapter positions, so gaps in chapter numbering do not inflate them.
+**Character presence** counts the chapters in which each character appears in `characters` or as `pov` (on the chapter or on any of its scenes; `mentions` do not count). It shows the span from first to last appearance, the longest absence, and how many chapters at the end of the book they are missing from. For a character with `died-in` (and no `revived-in`), the trailing absence is expected, so the line reads `died in chapter <n>` instead. Absences are counted in chapter positions, so gaps in chapter numbering do not inflate them.
 
 With the scene dates from [Clock and travel time](#clock-and-travel-time) on the repaired unraveled thread:
 
@@ -549,7 +588,7 @@ POV balance:
 
 Character presence:
 - jonas-reed: 4 of 4 chapters, chapters 1-4
-- edran-vale: 2 of 4 chapters, chapters 1-2, absent from the last 2 chapters
+- edran-vale: 2 of 4 chapters, chapters 1-2, died in chapter 2
 - nessa-thorn: 1 of 4 chapters, chapter 3, absent from the last 1 chapter
 Timeline built: 0 errors, 0 warnings, 0 dismissed
 ```
@@ -561,7 +600,7 @@ $ story timeline examples/the-unraveled-thread
 ...
 Character presence:
 - jonas-reed: 4 of 4 chapters, chapters 1-4
-- edran-vale: 3 of 4 chapters, chapters 1-4, longest absence 1 chapter after chapter 2
+- edran-vale: 3 of 4 chapters, chapters 1-4, longest absence 1 chapter after chapter 2, died in chapter 2
 - nessa-thorn: 1 of 4 chapters, chapter 3, absent from the last 1 chapter
 ```
 

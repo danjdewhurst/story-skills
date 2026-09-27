@@ -456,7 +456,8 @@ arc: redemption
 | `relationships` | list of mappings | no | Each entry has `character` (a character id) and `type` (free text). See below. |
 | `locations` | list of location ids | no | Places the character is tied to. Each location must list the character in `notable-characters`. |
 | `tags` | list of strings | no | Free labels. |
-| `died-in` | chapter id | no | Chapter in which the character dies on the page. Set it with `status: deceased`. |
+| `died-in` | chapter id | no | Chapter in which the character dies on the page. Set it with `status: deceased` once that chapter is drafted. |
+| `revived-in` | chapter id | no | Chapter in which a character who died in `died-in` comes back. It ends the dead window, so casts from this chapter on are allowed again. Set `status: alive` once that chapter is drafted. |
 | `arc` | string | no | Short theme label for the personal arc, such as `redemption`. Free text: `story links` does not check it as an arc id. Set it with `story add character --arc <theme>`. If the value happens to equal an arc id, `story rename arc` and `story remove arc` update or clear it. |
 | `arc-type` | enum | no | `change-positive`, `change-negative`, or `flat`. |
 | `lie` | string | no | The false belief that drives the character. |
@@ -468,7 +469,8 @@ arc: redemption
 
 Status notes:
 
-- `status: deceased` with `died-in` lets `story continuity` report the character in the cast of any later chapter or scene. `died-in` with any other status is an error. Characters who died before chapter 1 use `status: deceased` without `died-in`; `story continuity` warns when one is in a chapter or scene cast, since they can appear only in `mentions`.
+- `status: deceased` with `died-in` lets `story continuity` report the character in the cast of any later chapter or scene. `died-in` with any other status is an error, unless the `died-in` chapter is still an `outline` (a planned death) or a drafted `revived-in` chapter has brought the character back. Characters who died before chapter 1 use `status: deceased` without `died-in`; `story continuity` warns when one is in a chapter or scene cast, since they can appear only in `mentions`.
+- "Later" is story time when both chapters are dated: a chapter's `date`, or else its earliest dated scene. A 2034 prologue read first comes after a 2024 death. Otherwise chapters compare by number.
 - `status: cut` keeps the file for a character removed during discovery drafting, out of canon but on record.
 
 The arc-craft fields `arc-type`, `lie`, `truth`, and `ghost-wound` have no CLI flags and are not checked by the CLI. See the [character-management](../skills/character-management/SKILL.md) and [theme-craft](../skills/theme-craft/SKILL.md) skills.
@@ -646,11 +648,12 @@ word-count: 1489
 | `mode` | string | no | `discovered` marks a discovery-drafted chapter that must go through the [discovery-drafting](../skills/discovery-drafting/SKILL.md) reconcile loop; `outlined` marks one written outline-first. Any other value is a validate error. Set it with `story add chapter --mode discovered`. `story next` counts the loop done only when `## Chapter Notes (post-hoc)` sits above `## Chapter Text`. |
 | `date` | `YYYY-MM-DD` | no | Story date; enables clock checks. |
 | `time` | string | no | Story time of day (see [Dates and times](#dates-and-times)). |
+| `strand` | string | no | Timeline strand, such as `1990` and `2020` in a dual-timeline book. `story continuity` checks clock order within each strand, so switching strands never runs backward. Chapters without it share one strand. |
 | `episode-question` | string | no | The installment's dramatic question, for serial fiction. |
 | `time-skip` | string | no | Free-form `from → to` note of a skipped interval. Not checked. |
 | `hook` | enum | no | How the chapter ending pulls the reader on: `cliffhanger`, `question`, `revelation`, `reversal`, `decision`, `emotional`, or `resolution`. Set it with `story add chapter --hook <name>`. Read by [`story pacing`](#pacing). |
 
-`story continuity` treats `pov` and `characters` as the cast, so a deceased character who appears in a flashback or memory belongs in `mentions`, not `characters`. It also warns when the `pov` character is not listed in `characters`, and when chapter numbers skip. `story validate` warns when a chapter has no scene records in `scenes/`, and when a chapter has no prose while it is `revised`, `final`, or `complete`, or the story is `complete`, since it would build as a heading-only page. `story export` and `story build` warn about every chapter with no prose.
+`story continuity` treats `pov` and `characters` as the cast, so a deceased character who appears in a flashback or memory belongs in `mentions`, not `characters`. A `pov` also listed in `mentions` narrates without appearing, as a ghost or posthumous narrator does, so it is not a posthumous appearance. It also warns when the `pov` character is in neither `characters` nor `mentions`, and when chapter numbers skip. `story validate` warns when a chapter has no scene records in `scenes/`, and when a chapter has no prose while it is `revised`, `final`, or `complete`, or the story is `complete`, since it would build as a heading-only page. `story export` and `story build` warn about every chapter with no prose.
 
 ## Scenes
 
@@ -709,6 +712,17 @@ state-changes:
 
 The examples also record `character` with `knowledge`, `physical`, or `emotional`, mirroring `continuity/state.md`. Use `target` for artifacts: the prop custody check in `story continuity` looks for `target: <artifact-id>` in scenes after an artifact was destroyed or lost, and also flags the artifact in a later scene's or chapter's `mentions`.
 
+`story continuity` cross-checks these entries with `continuity/state.md` for scenes in chapters up to `current-chapter`. Each `character` + `knowledge` entry needs a `knowledge-state` entry for that character learned by that chapter (matched by an optional `fact` id, then by text, then paired with an entry learned in the same chapter). A `target: <artifact-id>` entry may also set `owner` or `location`; the last one in reading order should match the artifact's latest `object-state` entry.
+
+```yaml
+state-changes:
+  - character: sera-voss
+    knowledge: A tunnel behind the gallery leads to the Whisper Gate
+  - target: moon-blade
+    owner: kael-voss
+    change: Sera hands the blade over
+```
+
 `story continuity` warns when a scene's cast or location is missing from its chapter's `characters`, `mentions`, or `locations`, and when a POV character is not in `characters`. The [scene-craft skill](../skills/scene-craft/SKILL.md) covers scene and sequel units.
 
 ## Continuity
@@ -766,14 +780,14 @@ Entry fields:
 | `object-state` | `artifact` | Required. Artifact id. |
 | | `owner` | Character or faction id. |
 | | `location` | Location id. |
-| | `status` | Artifact status. A value that differs from the artifact file's `status` is a warning. |
-| | `since` | Chapter id in which the artifact was destroyed or lost. Leave it out when the artifact was destroyed or lost before this story (for example, in an earlier book); `story continuity` then errors on any scene whose `state-changes` use it, and still allows `mentions`. |
+| | `status` | Artifact status. A value on the artifact's latest entry that differs from the artifact file's `status` is a warning. |
+| | `since` | Chapter id in which the artifact reached this state, such as the chapter it was destroyed or lost in. Leave it out when that happened before this story (for example, in an earlier book); for a destroyed or lost artifact `story continuity` then errors on any scene whose `state-changes` use it, and still allows `mentions`. Several entries for one artifact with different `since` chapters record its history: a `lost` entry followed by an `active` one ends the loss. |
 | `knowledge-state` | `character` | Required. Character id. |
 | | `knows` | Required. The fact, as prose. |
 | | `learned-in` | Chapter id. Leave it out when the character knew the fact before the book began. |
 | | `fact` | Stable kebab-case id for the knowledge. A character may list each `fact` once. `story series` matches facts across books by this id. |
 
-`story knowledge <character-id> --at <chapter-id>` lists the `knowledge-state` entries a character knew at that chapter: entries learned at or before it, plus entries with no `learned-in`.
+`story knowledge <character-id> --at <chapter-id>` lists the `knowledge-state` entries a character knew at that chapter: entries learned at or before it, plus entries with no `learned-in`. When both chapters are dated, "at or before" is by date, so knowledge learned in a flash-forward prologue is not known in the chapters set before it.
 
 The body holds human-readable tables of the same state. `story reindex` never rewrites the body; it only corrects the `story` field.
 
@@ -1040,7 +1054,7 @@ Fields that name another entity hold its id. `story links` checks that each id i
 | `story.md` | `follows`, `precedes` | Another story project, with the matching backlink and `series` |
 | Character | `relationships[].character` | Character, with a backlink (see [Relationship types](#relationship-types)) |
 | Character | `locations` | Location that lists the character in `notable-characters` |
-| Character | `died-in` | Chapter |
+| Character | `died-in`, `revived-in` | Chapter |
 | Location | `notable-characters` | Character that lists the location in `locations` |
 | Location | `routes[].to` | Another location (not the location itself) |
 | Faction | `members` | Character |

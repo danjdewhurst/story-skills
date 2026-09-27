@@ -334,12 +334,12 @@ object-state:
     since: chapter-03
   - artifact: ring
     status: destroyed
-    since: chapter-04
+    since: chapter-03
 `);
     writeScene(root, 5, 1, "state-changes:\n  - target: ring\n    change: used again");
     const result = continuity(root);
     expect(result.warnings).toContain("continuity/state.md character-state[1] repeats character ann from character-state[0]; keep one entry per character");
-    expect(result.warnings).toContain("continuity/state.md object-state[1] repeats artifact ring from object-state[0]; keep one entry per artifact");
+    expect(result.warnings).toContain("continuity/state.md object-state[1] repeats artifact ring from object-state[0]; keep one entry per artifact per since chapter");
     expect(result.errors.filter((error) => error.includes("uses ring"))).toEqual([
       "scenes/chapter-05-scene-01.md uses ring, destroyed/lost since chapter-03"
     ]);

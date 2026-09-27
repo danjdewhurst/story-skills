@@ -175,9 +175,10 @@ current-chapter: 0
     expect(errors).toContain("characters/liv-marsh.md has died-in chapter-01 but status alive; set status: deceased");
     expect(errors).toContain("characters/ghost-orin.md died-in references missing chapter chapter-09");
     expect(errors).toContain("chapters/chapter-02.md lists edran-vale, who died in chapter-01");
-    expect(errors).toContain("chapters/chapter-03.md lists edran-vale, who died in chapter-01");
+    // Chapter 3 lists its dead POV in mentions: a posthumous narrator (#172).
+    expect(errors).not.toContain("chapters/chapter-03.md lists edran-vale");
     expect(errors).toContain("scenes/chapter-02-scene-01.md lists edran-vale, who died in chapter-01");
-    expect(warnings).toContain("chapters/chapter-03.md POV character edran-vale is not listed in characters");
+    expect(warnings).not.toContain("chapters/chapter-03.md POV character edran-vale is not listed in characters");
     expect(warnings).toContain("scenes/chapter-01-scene-01.md POV character mara-finn is not listed in characters");
     expect(warnings).toContain("scenes/chapter-05-scene-01.md lists stray-soul but chapters/chapter-05.md does not list them in characters or mentions");
     expect(warnings).toContain("scenes/chapter-02-scene-01.md is set in elsewhere-lane but chapters/chapter-02.md does not list that location");

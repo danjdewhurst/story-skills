@@ -86,7 +86,7 @@ describe("story timeline", () => {
     const byId = Object.fromEntries(storyTimeline(root).presence.map((entry) => [entry.id, entry]));
 
     // Chapter 5 has mara-quill only as its pov, which counts as present.
-    expect(byId["mara-quill"]).toEqual({ id: "mara-quill", chapters: 4, first: 1, last: 5, longestGap: 1, gapAfter: 1, trailing: 0 });
+    expect(byId["mara-quill"]).toEqual({ id: "mara-quill", chapters: 4, first: 1, last: 5, longestGap: 1, gapAfter: 1, trailing: 0, died: null });
     expect(byId["tom-reed"]).toMatchObject({ chapters: 2, first: 1, last: 2, longestGap: 0, trailing: 3 });
     expect(byId["ilya-venn"]).toMatchObject({ chapters: 0, first: null, last: null });
   });

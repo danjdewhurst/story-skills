@@ -1,5 +1,6 @@
 import path from "node:path";
 import { kebabCase } from "./markdown.js";
+import { chapterChronology, deathWindow } from "./chronology.js";
 
 const CHEKHOV_CHAPTER_GAP = 3;
 
@@ -25,7 +26,8 @@ export function checkContinuity(project) {
     chapterNumberList: project.chapters.map((chapter) => chapter.number),
     // Chapters with prose: a setup or payoff is on the page only once its
     // own chapter is past outline, even when later chapters are drafted.
-    draftedChapters: new Set(project.chapters.filter((chapter) => chapter.status !== "outline").map((chapter) => chapter.id))
+    draftedChapters: new Set(project.chapters.filter((chapter) => chapter.status !== "outline").map((chapter) => chapter.id)),
+    chronology: chapterChronology(project)
   };
 
   checkCharacterDeaths(project, context, errors, warnings);
@@ -38,6 +40,7 @@ export function checkContinuity(project) {
   checkClues(project, context, errors, warnings);
   checkStoryCompletion(project, errors);
   checkContinuityState(project, context, errors, warnings);
+  checkStateAgainstStory(project, context, warnings);
   checkPropCustody(project, context, errors);
   checkClock(project, errors, warnings);
 
@@ -77,6 +80,10 @@ function dismissFinding(finding, exemptions, kept, dismissed) {
 
 function checkCharacterDeaths(project, context, errors, warnings) {
   for (const character of project.characters) {
+    const label = relative(project, character.file);
+    if (character.revivedIn && !character.diedIn) {
+      errors.push(`${label} has revived-in ${character.revivedIn} but no died-in; set died-in or remove revived-in`);
+    }
     if (!character.diedIn) {
       // Deceased with no died-in means dead before the story starts, so any
       // appearance in a cast is a posthumous one.
@@ -90,26 +97,42 @@ function checkCharacterDeaths(project, context, errors, warnings) {
       continue;
     }
 
-    const label = relative(project, character.file);
-    if (character.status !== "deceased") {
-      errors.push(`${label} has died-in ${character.diedIn} but status ${character.status || "unset"}; set status: deceased`);
-    }
-
     const deathNumber = context.chapterNumbers.get(character.diedIn);
     if (deathNumber === undefined) {
       errors.push(`${label} died-in references missing chapter ${character.diedIn}`);
       continue;
     }
+    if (character.revivedIn) {
+      if (!context.chapterNumbers.has(character.revivedIn)) {
+        errors.push(`${label} revived-in references missing chapter ${character.revivedIn}`);
+        continue;
+      }
+      if (!context.chronology.after(character.revivedIn, character.diedIn)) {
+        errors.push(`${label} is revived in ${character.revivedIn}, not after dying in ${character.diedIn}`);
+        continue;
+      }
+    }
 
+    // A death or revival in an outline chapter is planned, not yet written,
+    // so the status keeps describing the character as drafted so far.
+    const deathWritten = !context.chronology.outline.has(character.diedIn);
+    const revivalWritten = character.revivedIn !== "" && !context.chronology.outline.has(character.revivedIn);
+    if (deathWritten && !revivalWritten && character.status !== "deceased") {
+      errors.push(`${label} has died-in ${character.diedIn} but status ${character.status || "unset"}; set status: deceased`);
+    }
+    if (revivalWritten && character.status === "deceased") {
+      errors.push(`${label} has revived-in ${character.revivedIn} but status deceased; set status: alive`);
+    }
+
+    const window = deathWindow(character, context.chronology);
     for (const chapter of project.chapters) {
-      if (chapter.number > deathNumber && castIncludes(chapter, character.id)) {
+      if (window.deadIn(chapter.id) && castIncludes(chapter, character.id)) {
         errors.push(`${relative(project, chapter.file)} lists ${character.id}, who died in ${character.diedIn}; move posthumous appearances to mentions`);
       }
     }
 
     for (const scene of project.scenes) {
-      const sceneChapterNumber = context.chapterNumbers.get(scene.chapter);
-      if (sceneChapterNumber !== undefined && sceneChapterNumber > deathNumber && castIncludes(scene, character.id)) {
+      if (window.deadIn(scene.chapter) && castIncludes(scene, character.id)) {
         errors.push(`${relative(project, scene.file)} lists ${character.id}, who died in ${character.diedIn}; move posthumous appearances to mentions`);
       }
     }
@@ -118,7 +141,7 @@ function checkCharacterDeaths(project, context, errors, warnings) {
 
 function checkChapterCasts(project, warnings) {
   for (const chapter of project.chapters) {
-    if (chapter.pov && !chapter.characters.includes(chapter.pov)) {
+    if (chapter.pov && !chapter.characters.includes(chapter.pov) && !chapter.mentions.includes(chapter.pov)) {
       warnings.push(`${relative(project, chapter.file)} POV character ${chapter.pov} is not listed in characters`);
     }
     // A chapter's POV should be the POV of at least one of its scenes.
@@ -134,7 +157,7 @@ function checkSceneCasts(project, warnings) {
 
   for (const scene of project.scenes) {
     const label = relative(project, scene.file);
-    if (scene.pov && !scene.characters.includes(scene.pov)) {
+    if (scene.pov && !scene.characters.includes(scene.pov) && !scene.mentions.includes(scene.pov)) {
       warnings.push(`${label} POV character ${scene.pov} is not listed in characters`);
     }
 
@@ -453,11 +476,15 @@ function checkContinuityState(project, context, errors, warnings) {
     if (!artifactId || !artifact) {
       errors.push(`${entryLabel} references missing artifact ${artifactId || "(unset)"}`);
     }
+    // Entries with different `since` chapters are the artifact's history;
+    // two for the same chapter contradict each other.
+    const since = idText(entry.since);
     if (artifactId) {
-      if (seenArtifacts.has(artifactId)) {
-        warnings.push(`${entryLabel} repeats artifact ${artifactId} from object-state[${seenArtifacts.get(artifactId)}]; keep one entry per artifact`);
+      const key = `${artifactId}\u0000${since}`;
+      if (seenArtifacts.has(key)) {
+        warnings.push(`${entryLabel} repeats artifact ${artifactId} from object-state[${seenArtifacts.get(key)}]; keep one entry per artifact${since ? ` per since chapter` : ""}`);
       } else {
-        seenArtifacts.set(artifactId, index);
+        seenArtifacts.set(key, index);
       }
     }
     const owner = idText(entry.owner);
@@ -468,11 +495,11 @@ function checkContinuityState(project, context, errors, warnings) {
     if (location && !context.locations.has(location)) {
       errors.push(`${entryLabel} references missing location ${location}`);
     }
-    const since = idText(entry.since);
     if (since && !context.chapterNumbers.has(since)) {
       errors.push(`${entryLabel} references missing since chapter ${since}`);
     }
-    if (entry.status && artifact && artifact.status && entry.status !== artifact.status) {
+    // Only the artifact's latest entry describes it now.
+    if (entry.status && artifact && artifact.status && entry.status !== artifact.status && latestObjectEntry(data, artifactId, context) === entry) {
       warnings.push(`${entryLabel} status ${entry.status} conflicts with ${relative(project, artifact.file)} status ${artifact.status}`);
     }
   }
@@ -482,18 +509,190 @@ function checkContinuityState(project, context, errors, warnings) {
 // their death chapter, and one dead before the story (deceased with no
 // died-in) cannot learn one at all.
 function checkPosthumousLearning(character, learnedIn, entryLabel, context, errors, warnings) {
-  const learnedNumber = context.chapterNumbers.get(learnedIn);
-  if (!character || character.status !== "deceased" || learnedNumber === undefined) {
+  if (!character || !context.chapterNumbers.has(learnedIn)) {
     return;
   }
   if (!character.diedIn) {
-    warnings.push(`${entryLabel} has ${character.id} learn something in ${learnedIn}, but ${character.id} died before the story (deceased with no died-in)`);
+    if (character.status === "deceased") {
+      warnings.push(`${entryLabel} has ${character.id} learn something in ${learnedIn}, but ${character.id} died before the story (deceased with no died-in)`);
+    }
     return;
   }
-  const deathNumber = context.chapterNumbers.get(character.diedIn);
-  if (deathNumber !== undefined && learnedNumber > deathNumber) {
+  // A planned death in an outline chapter has not happened on the page yet;
+  // a revival ends the dead window.
+  const window = context.chronology.outline.has(character.diedIn) ? null : deathWindow(character, context.chronology);
+  if (window && window.deadIn(learnedIn)) {
     errors.push(`${entryLabel} has ${character.id} learn something in ${learnedIn}, after they died in ${character.diedIn}`);
   }
+}
+
+
+// Cross-checks continuity/state.md with the scene records and deaths it
+// summarises: scene knowledge changes need a knowledge-state entry, nobody
+// learns or is tracked after dying, a learner is in the cast of the chapter
+// they learn in, and character and object locations and owners agree with
+// the scenes up to current-chapter. All are warnings, since state.md may
+// knowingly summarise differently.
+function checkStateAgainstStory(project, context, warnings) {
+  if (!project.continuity) {
+    return;
+  }
+  const label = path.join("continuity", "state.md");
+  const data = project.continuity.data;
+  const { chronology } = context;
+  const currentChapter = Number.isInteger(data["current-chapter"]) ? data["current-chapter"] : -Infinity;
+  const tracked = (chapterId) => (context.chapterNumbers.get(chapterId) ?? Infinity) <= currentChapter;
+  const windows = new Map();
+  for (const character of project.characters) {
+    const window = character.diedIn && !chronology.outline.has(character.diedIn) ? deathWindow(character, chronology) : null;
+    if (window) {
+      windows.set(character.id, window);
+    }
+  }
+  const chaptersById = new Map(project.chapters.map((chapter) => [chapter.id, chapter]));
+  const scenesOf = (chapterId) => project.scenes
+    .filter((scene) => scene.chapter === chapterId)
+    .sort((left, right) => left.scene - right.scene || left.id.localeCompare(right.id, "en"));
+  const inCast = (record, characterId) => record.characters.includes(characterId) || record.pov === characterId;
+
+  const knowledge = [];
+  for (const [index, entry] of stateEntries(data["knowledge-state"]).entries()) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      continue;
+    }
+    const character = idText(entry.character);
+    const learnedIn = idText(entry["learned-in"]);
+    knowledge.push({ index, character, learnedIn, fact: entry.fact === undefined ? "" : String(entry.fact), knows: normalizeKnowledge(entry.knows) });
+    if (!character || !chaptersById.has(learnedIn)) {
+      continue;
+    }
+    const entryLabel = `${label} knowledge-state[${index}]`;
+    const chapter = chaptersById.get(learnedIn);
+    if (chapter.status !== "outline" && !inCast(chapter, character) && !scenesOf(learnedIn).some((scene) => inCast(scene, character))) {
+      warnings.push(`${entryLabel} has ${character} learn something in ${learnedIn}, which does not list ${character} in characters or pov`);
+    }
+  }
+
+  // Each scene knowledge change needs its own knowledge-state entry learned
+  // by that chapter: matched by fact id or by text first, then paired with an
+  // entry learned in that same chapter that nothing else matched.
+  const unmatched = [];
+  const used = new Set();
+  for (const { unit: scene, isChapter } of readingUnits(project)) {
+    if (isChapter || !tracked(scene.chapter)) {
+      continue;
+    }
+    for (const change of scene.stateChanges) {
+      if (!change || typeof change !== "object" || Array.isArray(change) || change.knowledge === undefined) {
+        continue;
+      }
+      const character = idText(change.character);
+      if (!character) {
+        continue;
+      }
+      const known = knowledge.filter((entry) => entry.character === character
+        && (entry.learnedIn === "" || (context.chapterNumbers.has(entry.learnedIn) && !chronology.after(entry.learnedIn, scene.chapter))));
+      const fact = change.fact === undefined ? "" : String(change.fact);
+      const text = normalizeKnowledge(change.knowledge);
+      const matches = known.filter((entry) => (fact !== "" && entry.fact === fact) || (text !== "" && entry.knows === text));
+      if (matches.length > 0) {
+        matches.forEach((entry) => used.add(entry.index));
+        continue;
+      }
+      unmatched.push({ scene, change, character, known });
+    }
+  }
+  for (const { scene, change, character, known } of unmatched) {
+    const pair = known.find((entry) => entry.learnedIn === scene.chapter && !used.has(entry.index));
+    if (pair) {
+      used.add(pair.index);
+      continue;
+    }
+    warnings.push(`${relative(project, scene.file)} state-changes record ${character} learning "${String(change.knowledge).trim()}" but ${label} has no knowledge-state entry for it learned by ${scene.chapter}`);
+  }
+
+  const current = project.chapters.find((chapter) => chapter.number === currentChapter);
+  for (const [index, entry] of stateEntries(data["character-state"]).entries()) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      continue;
+    }
+    const character = idText(entry.character);
+    const entryLabel = `${label} character-state[${index}]`;
+    const window = windows.get(character);
+    if (window && context.chapterNumbers.get(window.died) <= currentChapter
+      && (window.revived === "" || context.chapterNumbers.get(window.revived) > currentChapter)) {
+      warnings.push(`${entryLabel} tracks ${character}, who died in ${window.died}; remove the entry once they are dead`);
+      continue;
+    }
+    const location = idText(entry.location);
+    if (!current || !location) {
+      continue;
+    }
+    // The chapter can move them on after their last scene, so any place the
+    // chapter lists will do; a place it never visits is drift.
+    const last = scenesOf(current.id).filter((scene) => inCast(scene, character) && scene.location).pop();
+    if (last && last.location !== location && !current.locations.includes(location)) {
+      warnings.push(`${entryLabel} puts ${character} at ${location}, but their last scene in ${current.id}, ${relative(project, last.file)}, is at ${last.location} and the chapter does not list ${location}`);
+    }
+  }
+
+  // The latest scene state change that sets an artifact's owner or location,
+  // up to current-chapter, should match the artifact's latest entry.
+  const lastSet = new Map();
+  for (const { unit: scene, isChapter } of readingUnits(project)) {
+    if (isChapter || !tracked(scene.chapter)) {
+      continue;
+    }
+    for (const change of scene.stateChanges) {
+      if (!change || typeof change !== "object" || Array.isArray(change)) {
+        continue;
+      }
+      const artifact = idText(change.target);
+      for (const field of ["owner", "location"]) {
+        if (artifact && context.artifacts.has(artifact) && idText(change[field]) !== "") {
+          lastSet.set(`${artifact}\u0000${field}`, { artifact, field, value: idText(change[field]), scene });
+        }
+      }
+    }
+  }
+  for (const { artifact, field, value, scene } of lastSet.values()) {
+    const entry = latestObjectEntry(data, artifact, context);
+    if (!entry) {
+      warnings.push(`${relative(project, scene.file)} state-changes set ${artifact} ${field} ${value} but ${label} has no object-state entry for ${artifact}`);
+      continue;
+    }
+    // An entry recorded after the scene's chapter is newer than the scene.
+    const since = idText(entry.since);
+    const newer = since !== "" && (context.chapterNumbers.get(since) ?? -Infinity) > context.chapterNumbers.get(scene.chapter);
+    const stated = idText(entry[field]);
+    if (!newer && stated !== value) {
+      const index = stateEntries(data["object-state"]).indexOf(entry);
+      warnings.push(`${label} object-state[${index}] gives ${artifact} ${field} ${stated || "(unset)"}, but ${relative(project, scene.file)} state-changes last set it to ${value}`);
+    }
+  }
+}
+
+function normalizeKnowledge(value) {
+  return typeof value === "string" ? value.trim().toLowerCase().replace(/\s+/g, " ").replace(/[.!]+$/, "") : "";
+}
+
+// The object-state entry with the latest `since` for an artifact (no `since`
+// counts as before the story; ties go to the later entry in the file).
+function latestObjectEntry(data, artifactId, context) {
+  let latest = null;
+  let latestNumber = -Infinity;
+  for (const entry of stateEntries(data["object-state"])) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry) || idText(entry.artifact) !== artifactId) {
+      continue;
+    }
+    const since = idText(entry.since);
+    const number = since === "" ? -Infinity : context.chapterNumbers.get(since) ?? -Infinity;
+    if (latest === null || number >= latestNumber) {
+      latest = entry;
+      latestNumber = number;
+    }
+  }
+  return latest;
 }
 
 // Hand-written ids such as `47` or `true` parse as numbers or booleans; they
@@ -508,8 +707,10 @@ export function idText(value) {
   return "";
 }
 
+// A pov also listed in mentions narrates without appearing, as a ghost or a
+// narrator looking back after their death does.
 function castIncludes(record, characterId) {
-  return record.pov === characterId || record.characters.includes(characterId);
+  return record.characters.includes(characterId) || (record.pov === characterId && !record.mentions.includes(characterId));
 }
 
 function stateEntries(value) {
@@ -538,47 +739,16 @@ function relative(project, file) {
 // are errors, and later chapters/scenes listing it in mentions or characters
 // are errors. An entry with no `since` was destroyed or lost before this book
 // (carried from an earlier one), so any scene that uses it is an error;
-// mentions stay allowed, since characters remember it.
+// mentions stay allowed, since characters remember it. Several entries for one
+// artifact with different `since` chapters are its history: a later entry
+// with another status (`active` since chapter-04) ends a loss, and the
+// recovery chapter itself may use the artifact again.
 function checkPropCustody(project, context, errors) {
-  // One finding per artifact: when several entries mark it gone, the
-  // earliest one decides.
-  const gone = new Map();
-  if (project.continuity) {
-    for (const entry of stateEntries(project.continuity.data["object-state"])) {
-      if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-        continue;
-      }
-      const status = String(entry.status ?? "").trim().toLowerCase();
-      if (status !== "destroyed" && status !== "lost") {
-        continue;
-      }
-      const artifact = idText(entry.artifact);
-      const since = idText(entry.since);
-      let record;
-      if (since === "") {
-        record = { artifact, since: "", sinceNumber: -Infinity, beforeStory: true };
-      } else {
-        // checkContinuityState reports a since chapter that does not exist.
-        const sinceNumber = context.chapterNumbers.get(since);
-        if (sinceNumber === undefined) {
-          continue;
-        }
-        record = { artifact, since, sinceNumber, beforeStory: false };
-      }
-      const known = gone.get(artifact);
-      if (!known || record.sinceNumber < known.sinceNumber) {
-        gone.set(artifact, record);
-      }
-    }
-  }
-
-  for (const { artifact, since, sinceNumber, beforeStory } of gone.values()) {
-    if (artifact === "") {
-      continue;
-    }
+  for (const { artifact, since, sinceNumber, beforeStory, until } of goneWindows(project, context)) {
+    const inWindow = (number) => number > sinceNumber && number < until;
     for (const scene of project.scenes) {
       const sceneNumber = context.chapterNumbers.get(scene.chapter);
-      if (sceneNumber === undefined || sceneNumber <= sinceNumber) {
+      if (sceneNumber === undefined || !inWindow(sceneNumber)) {
         continue;
       }
       const sceneLabel = relative(project, scene.file);
@@ -590,7 +760,7 @@ function checkPropCustody(project, context, errors) {
       }
     }
     for (const chapter of project.chapters) {
-      if (beforeStory || chapter.number <= sinceNumber) {
+      if (beforeStory || !inWindow(chapter.number)) {
         continue;
       }
       if (chapter.mentions.includes(artifact)) {
@@ -598,6 +768,46 @@ function checkPropCustody(project, context, errors) {
       }
     }
   }
+}
+
+// Each artifact's object-state entries in `since` order (no `since` first),
+// as windows in which it is gone: from a destroyed/lost entry to the next
+// entry with another status. Consecutive gone entries form one window that
+// starts at the earliest, so each late reference is reported once.
+function goneWindows(project, context) {
+  const histories = new Map();
+  for (const entry of project.continuity ? stateEntries(project.continuity.data["object-state"]) : []) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      continue;
+    }
+    const artifact = idText(entry.artifact);
+    const since = idText(entry.since);
+    // checkContinuityState reports a since chapter that does not exist.
+    const sinceNumber = since === "" ? -Infinity : context.chapterNumbers.get(since);
+    if (artifact === "" || sinceNumber === undefined) {
+      continue;
+    }
+    const status = String(entry.status ?? "").trim().toLowerCase();
+    const list = histories.get(artifact) ?? [];
+    list.push({ since, sinceNumber, gone: status === "destroyed" || status === "lost" });
+    histories.set(artifact, list);
+  }
+
+  const windows = [];
+  for (const [artifact, history] of histories) {
+    history.sort((left, right) => left.sinceNumber - right.sinceNumber);
+    let open = null;
+    for (const entry of history) {
+      if (entry.gone && open === null) {
+        open = { artifact, since: entry.since, sinceNumber: entry.sinceNumber, beforeStory: entry.since === "", until: Infinity };
+        windows.push(open);
+      } else if (!entry.gone && open !== null && entry.sinceNumber > open.sinceNumber) {
+        open.until = entry.sinceNumber;
+        open = null;
+      }
+    }
+  }
+  return windows;
 }
 
 function stateChangeTargets(change, artifact) {
@@ -647,8 +857,15 @@ function checkClock(project, errors, warnings) {
     }
   }
 
-  const stamps = [];
-  for (const { unit, isChapter } of readingUnits(project)) {
+  // Each chapter `strand` (a dual-timeline book's 1990 and 2020 threads)
+  // keeps its own clock, so switching strands does not run backward.
+  const strands = new Map();
+  for (const { unit, chapter, isChapter } of readingUnits(project)) {
+    const strand = String(chapter.strand ?? "");
+    if (!strands.has(strand)) {
+      strands.set(strand, []);
+    }
+    const stamps = strands.get(strand);
     const parsed = unit.date === "" ? undefined : parseClockDate(unit.date);
     if (!parsed) {
       continue;
@@ -666,7 +883,9 @@ function checkClock(project, errors, warnings) {
       flashback: !isChapter && unit.flashbackTo !== ""
     });
   }
-  checkClockOrder(stamps, errors, warnings);
+  for (const stamps of strands.values()) {
+    checkClockOrder(stamps, errors, warnings);
+  }
   checkRouteTravel(project, errors);
 }
 

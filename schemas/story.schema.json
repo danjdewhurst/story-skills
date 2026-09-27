@@ -114,6 +114,7 @@
         "role": { "enum": ["protagonist", "antagonist", "supporting", "minor", "narrator", "deuteragonist"] },
         "status": { "enum": ["alive", "deceased", "unknown", "missing", "cut"] },
         "died-in": { "type": "string" },
+        "revived-in": { "type": "string" },
         "aliases": { "$ref": "#/$defs/stringList" },
         "relationships": {
           "type": "array",
@@ -237,6 +238,7 @@
         "mode": { "type": "string" },
         "date": { "type": "string" },
         "time": { "type": "string" },
+        "strand": { "type": "string" },
         "episode-question": { "type": "string" },
         "hook": { "enum": ["cliffhanger", "question", "revelation", "reversal", "decision", "emotional", "resolution"] },
         "time-skip": { "type": "string" }

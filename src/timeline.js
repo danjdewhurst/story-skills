@@ -178,6 +178,10 @@ function characterPresence(project, chapters, chapterById) {
         }
       }
       const trailing = seen.length === 0 ? 0 : chapters.length - 1 - seen[seen.length - 1];
+      // A death with no later revival explains the absence at the end.
+      const died = chapterById.has(character.diedIn) && !chapterById.has(character.revivedIn ?? "")
+        ? chapterById.get(character.diedIn).number
+        : null;
       return {
         id: character.id,
         chapters: seen.length,
@@ -185,7 +189,8 @@ function characterPresence(project, chapters, chapterById) {
         last: seen.length === 0 ? null : chapters[seen[seen.length - 1]].number,
         longestGap,
         gapAfter,
-        trailing
+        trailing,
+        died
       };
     })
     .sort((left, right) => right.chapters - left.chapters || left.id.localeCompare(right.id, "en"));
@@ -245,7 +250,9 @@ export function formatTimeline(timeline, totalChapters) {
     if (entry.longestGap > 0) {
       details.push(`longest absence ${plural(entry.longestGap, "chapter")} after chapter ${entry.gapAfter}`);
     }
-    if (entry.trailing > 0) {
+    if (entry.died !== null && entry.died !== undefined) {
+      details.push(`died in chapter ${entry.died}`);
+    } else if (entry.trailing > 0) {
       details.push(`absent from the last ${plural(entry.trailing, "chapter")}`);
     }
     lines.push(`- ${entry.id}: ${details.join(", ")}`);
