@@ -1,0 +1,437 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/danjdewhurst/story-skills/schemas/result.schema.json",
+  "title": "Story Skills CLI result, apiVersion story/v1",
+  "$comment": "The object `story <command> --json` prints. The envelope is the same for every command; `data` depends on `command` and is described under $defs/data-<command>. A failure before the command produced a result (a usage error, a missing project) has data null. Fields may be added within story/v1; renaming, removing, or retyping one changes apiVersion.",
+  "type": "object",
+  "required": ["apiVersion", "command", "ok", "data", "diagnostics", "writes"],
+  "properties": {
+    "apiVersion": { "const": "story/v1" },
+    "command": {
+      "enum": ["validate", "links", "continuity", "series", "next", "doctor", "report", "knowledge", "timeline", "prose", "voices", "pacing", "clues", "progress"]
+    },
+    "ok": { "type": "boolean", "description": "True exactly when the command exits 0." },
+    "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/diagnostic" } },
+    "writes": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Absolute paths of the files the command wrote." }
+  },
+  "allOf": [
+    { "if": { "properties": { "command": { "enum": ["validate", "links", "continuity"] }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-check" } } } },
+    { "if": { "properties": { "command": { "const": "series" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-series" } } } },
+    { "if": { "properties": { "command": { "enum": ["next", "doctor"] }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-next" } } } },
+    { "if": { "properties": { "command": { "const": "report" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-report" } } } },
+    { "if": { "properties": { "command": { "const": "knowledge" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-knowledge" } } } },
+    { "if": { "properties": { "command": { "const": "timeline" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-timeline" } } } },
+    { "if": { "properties": { "command": { "const": "prose" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-prose" } } } },
+    { "if": { "properties": { "command": { "const": "voices" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-voices" } } } },
+    { "if": { "properties": { "command": { "const": "pacing" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-pacing" } } } },
+    { "if": { "properties": { "command": { "const": "clues" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-clues" } } } },
+    { "if": { "properties": { "command": { "const": "progress" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-progress" } } } },
+    { "if": { "properties": { "data": { "type": "null" } } }, "then": { "properties": { "ok": { "const": false } } } }
+  ],
+  "$defs": {
+    "diagnostic": {
+      "type": "object",
+      "required": ["severity", "file", "message", "code"],
+      "properties": {
+        "severity": { "enum": ["error", "warning", "dismissed"] },
+        "file": { "type": ["string", "null"], "description": "The project file the finding names first, relative to the project root, or null." },
+        "message": { "type": "string", "minLength": 1, "description": "The finding as the text output prints it." },
+        "code": { "type": "string", "minLength": 1, "description": "The check that raised the finding: validate, links, continuity, or the command name." },
+        "exemption": { "type": "string", "description": "For a dismissed finding, the reason from continuity/exemptions.md." }
+      }
+    },
+    "count": { "type": "integer", "minimum": 0 },
+    "check-summary": {
+      "type": "object",
+      "required": ["ok", "errors", "warnings", "dismissed"],
+      "properties": {
+        "ok": { "type": "boolean" },
+        "errors": { "$ref": "#/$defs/count" },
+        "warnings": { "$ref": "#/$defs/count" },
+        "dismissed": { "$ref": "#/$defs/count" }
+      }
+    },
+    "action": {
+      "type": "object",
+      "required": ["priority", "title", "detail"],
+      "properties": {
+        "priority": { "enum": ["P0", "P1", "P2", "P3"] },
+        "title": { "type": "string" },
+        "detail": { "type": "string" }
+      }
+    },
+    "word-count": {
+      "type": "object",
+      "required": ["word", "count"],
+      "properties": { "word": { "type": "string" }, "count": { "$ref": "#/$defs/count" } }
+    },
+    "data-check": {
+      "type": "object",
+      "required": ["errors", "warnings", "dismissed"],
+      "properties": {
+        "errors": { "$ref": "#/$defs/count" },
+        "warnings": { "$ref": "#/$defs/count" },
+        "dismissed": { "$ref": "#/$defs/count" }
+      }
+    },
+    "data-series": {
+      "type": "object",
+      "required": ["root", "series", "seriesTitle", "books", "ordered", "shared"],
+      "properties": {
+        "root": { "type": "string" },
+        "series": { "type": ["string", "null"] },
+        "seriesTitle": { "type": ["string", "null"] },
+        "books": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["title", "label", "bookNumber", "status"],
+            "properties": {
+              "title": { "type": "string" },
+              "label": { "type": "string" },
+              "bookNumber": { "type": ["number", "null"] },
+              "status": { "description": "The book's story.md status as written, or null when unset." }
+            }
+          }
+        },
+        "ordered": { "type": "boolean" },
+        "shared": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["label", "ids"],
+            "properties": { "label": { "type": "string" }, "ids": { "type": "array", "items": { "type": "string" } } }
+          }
+        }
+      }
+    },
+    "data-next": {
+      "type": "object",
+      "required": ["root", "title", "storyId", "actions", "checks"],
+      "properties": {
+        "root": { "type": "string" },
+        "title": { "type": "string" },
+        "storyId": { "type": "string" },
+        "actions": { "type": "array", "items": { "$ref": "#/$defs/action" } },
+        "checks": { "$ref": "#/$defs/checks" }
+      }
+    },
+    "checks": {
+      "type": "object",
+      "required": ["validate", "links", "continuity"],
+      "properties": {
+        "validate": { "$ref": "#/$defs/check-summary" },
+        "links": { "$ref": "#/$defs/check-summary" },
+        "continuity": { "$ref": "#/$defs/check-summary" }
+      }
+    },
+    "data-report": {
+      "type": "object",
+      "$comment": "series, bookNumber, genre, subGenre, status, pov, tense, and schemaVersion are copied from story.md frontmatter as written, or null when unset.",
+      "required": ["root", "title", "storyId", "schemaVersion", "series", "bookNumber", "genre", "subGenre", "form", "status", "pov", "tense", "targetWords", "counts", "chapters", "arcs", "checks", "actions"],
+      "properties": {
+        "root": { "type": "string" },
+        "title": { "type": "string" },
+        "storyId": { "type": "string" },
+        "form": { "type": "string" },
+        "targetWords": { "type": ["integer", "null"] },
+        "counts": {
+          "type": "object",
+          "required": ["characters", "locations", "systems", "factions", "artifacts", "arcs", "chapters", "scenes", "questions", "promises", "clues", "glossaryTerms", "research", "words"],
+          "properties": {
+            "characters": { "$ref": "#/$defs/count" },
+            "locations": { "$ref": "#/$defs/count" },
+            "systems": { "$ref": "#/$defs/count" },
+            "factions": { "$ref": "#/$defs/count" },
+            "artifacts": { "$ref": "#/$defs/count" },
+            "arcs": { "$ref": "#/$defs/count" },
+            "chapters": { "$ref": "#/$defs/count" },
+            "scenes": { "$ref": "#/$defs/count" },
+            "questions": { "$ref": "#/$defs/count" },
+            "promises": { "$ref": "#/$defs/count" },
+            "clues": { "$ref": "#/$defs/count" },
+            "glossaryTerms": { "$ref": "#/$defs/count" },
+            "research": { "$ref": "#/$defs/count" },
+            "words": { "$ref": "#/$defs/count" }
+          }
+        },
+        "chapters": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["number", "title", "status", "pov", "wordCount"],
+            "properties": { "wordCount": { "$ref": "#/$defs/count" } }
+          }
+        },
+        "arcs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "type", "status", "characters"],
+            "properties": { "characters": { "$ref": "#/$defs/count" } }
+          }
+        },
+        "checks": { "$ref": "#/$defs/checks" },
+        "actions": { "type": "array", "items": { "$ref": "#/$defs/action" } }
+      }
+    },
+    "data-knowledge": {
+      "type": "object",
+      "required": ["character", "at", "entries"],
+      "properties": {
+        "character": { "type": "string" },
+        "at": { "type": "string" },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["knows", "learnedIn"],
+            "properties": {
+              "knows": { "type": "string" },
+              "learnedIn": { "type": "string", "description": "The chapter id it was learned in, or empty for pre-existing knowledge." }
+            }
+          }
+        }
+      }
+    },
+    "data-timeline": {
+      "type": "object",
+      "required": ["totalChapters", "chronology", "undated", "pov", "presence"],
+      "properties": {
+        "totalChapters": { "$ref": "#/$defs/count" },
+        "chronology": { "type": "array", "items": { "$ref": "#/$defs/timeline-scene" } },
+        "undated": { "type": "array", "items": { "$ref": "#/$defs/timeline-scene" } },
+        "pov": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["pov", "chapters", "words", "share"],
+            "properties": {
+              "pov": { "type": "string" },
+              "chapters": { "$ref": "#/$defs/count" },
+              "words": { "$ref": "#/$defs/count" },
+              "share": { "type": "number", "minimum": 0 }
+            }
+          }
+        },
+        "presence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "chapters", "first", "last", "longestGap", "gapAfter", "trailing", "died"],
+            "properties": {
+              "id": { "type": "string" },
+              "chapters": { "$ref": "#/$defs/count" },
+              "first": { "type": ["integer", "null"] },
+              "last": { "type": ["integer", "null"] },
+              "longestGap": { "$ref": "#/$defs/count" },
+              "gapAfter": { "type": ["integer", "null"] },
+              "trailing": { "$ref": "#/$defs/count" },
+              "died": { "type": ["integer", "null"] }
+            }
+          }
+        }
+      }
+    },
+    "timeline-scene": {
+      "type": "object",
+      "required": ["id", "file", "title", "chapterNumber", "pov", "location", "date", "time", "reading"],
+      "properties": {
+        "id": { "type": "string" },
+        "file": { "type": "string" },
+        "title": { "type": "string" },
+        "pov": { "type": "string" },
+        "location": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "reading": { "$ref": "#/$defs/count" }
+      }
+    },
+    "data-prose": {
+      "type": "object",
+      "required": ["styleSheet", "words", "chapters", "phrases", "similarNames"],
+      "properties": {
+        "styleSheet": { "type": "boolean" },
+        "words": { "$ref": "#/$defs/count" },
+        "chapters": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["file", "title", "analysis"],
+            "properties": {
+              "file": { "type": "string" },
+              "title": { "type": "string" },
+              "analysis": {
+                "type": "object",
+                "required": ["words", "narrationWords", "sentences", "filterWords", "adverbs", "plainTags", "bookisms", "echoes", "watch", "variants"],
+                "properties": {
+                  "words": { "$ref": "#/$defs/count" },
+                  "narrationWords": { "$ref": "#/$defs/count" },
+                  "sentences": {
+                    "type": "object",
+                    "required": ["count", "mean", "longest", "spread"],
+                    "properties": {
+                      "count": { "$ref": "#/$defs/count" },
+                      "mean": { "type": "number" },
+                      "longest": { "$ref": "#/$defs/count" },
+                      "spread": { "type": "number" }
+                    }
+                  },
+                  "filterWords": { "type": "array", "items": { "$ref": "#/$defs/word-count" } },
+                  "adverbs": { "type": "array", "items": { "$ref": "#/$defs/word-count" } },
+                  "plainTags": { "type": "array", "items": { "$ref": "#/$defs/word-count" } },
+                  "bookisms": { "type": "array", "items": { "$ref": "#/$defs/word-count" } },
+                  "echoes": { "type": "array", "items": { "$ref": "#/$defs/word-count" } },
+                  "watch": { "type": "array", "items": { "$ref": "#/$defs/word-count" } },
+                  "variants": { "type": "array", "items": { "type": "object" } }
+                }
+              }
+            }
+          }
+        },
+        "phrases": { "type": "array", "items": { "type": "object" } },
+        "similarNames": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "data-voices": {
+      "type": "object",
+      "required": ["profiles", "unattributed"],
+      "properties": {
+        "profiles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "lines", "words", "sentenceLength", "contractions", "questions", "exclamations", "signature"],
+            "properties": {
+              "id": { "type": "string" },
+              "lines": { "$ref": "#/$defs/count" },
+              "words": { "$ref": "#/$defs/count" },
+              "sentenceLength": { "type": "number" },
+              "contractions": { "type": "number" },
+              "questions": { "type": "number" },
+              "exclamations": { "type": "number" },
+              "signature": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        },
+        "unattributed": { "$ref": "#/$defs/count" }
+      }
+    },
+    "data-pacing": {
+      "type": "object",
+      "required": ["rows", "medianWords", "totals"],
+      "properties": {
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "number", "words", "scenes", "sequels", "outcomes", "hook", "status"],
+            "properties": {
+              "id": { "type": "string" },
+              "words": { "$ref": "#/$defs/count" },
+              "scenes": { "$ref": "#/$defs/count" },
+              "sequels": { "$ref": "#/$defs/count" },
+              "outcomes": {
+                "type": "object",
+                "required": ["yes", "no", "yes-but", "no-and"],
+                "properties": {
+                  "yes": { "$ref": "#/$defs/count" },
+                  "no": { "$ref": "#/$defs/count" },
+                  "yes-but": { "$ref": "#/$defs/count" },
+                  "no-and": { "$ref": "#/$defs/count" }
+                }
+              },
+              "hook": { "type": "string" }
+            }
+          }
+        },
+        "medianWords": { "type": "number", "minimum": 0 },
+        "totals": {
+          "type": "object",
+          "required": ["scenes", "sequels", "outcomesRecorded", "setbacks", "hooks"],
+          "properties": {
+            "scenes": { "$ref": "#/$defs/count" },
+            "sequels": { "$ref": "#/$defs/count" },
+            "outcomesRecorded": { "$ref": "#/$defs/count" },
+            "setbacks": { "$ref": "#/$defs/count" },
+            "hooks": { "$ref": "#/$defs/count" }
+          }
+        }
+      }
+    },
+    "data-clues": {
+      "type": "object",
+      "required": ["chapters", "rows", "totals"],
+      "properties": {
+        "chapters": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "number"],
+            "properties": { "id": { "type": "string" } }
+          }
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "title", "status", "redHerring", "significanceDelayed", "cells"],
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "redHerring": { "type": "boolean" },
+              "significanceDelayed": { "type": "boolean" },
+              "cells": { "type": "array", "items": { "type": "string" }, "description": "One cell per entry in chapters, in the same order." }
+            }
+          }
+        },
+        "totals": {
+          "type": "object",
+          "required": ["clues", "redHerrings", "planted", "revealed"],
+          "properties": {
+            "clues": { "$ref": "#/$defs/count" },
+            "redHerrings": { "$ref": "#/$defs/count" },
+            "planted": { "$ref": "#/$defs/count" },
+            "revealed": { "$ref": "#/$defs/count" }
+          }
+        }
+      }
+    },
+    "data-progress": {
+      "type": "object",
+      "required": ["logged", "words", "target", "percent", "remaining", "deadline", "chapters", "sessions", "lastSession", "pace", "projected"],
+      "properties": {
+        "logged": {
+          "type": ["object", "null"],
+          "required": ["file", "date", "words"],
+          "properties": { "file": { "type": "string" }, "date": { "type": "string" }, "words": { "$ref": "#/$defs/count" } }
+        },
+        "words": { "$ref": "#/$defs/count" },
+        "target": { "type": ["integer", "null"] },
+        "percent": { "type": ["number", "null"] },
+        "remaining": { "type": ["integer", "null"] },
+        "deadline": {
+          "type": ["object", "null"],
+          "required": ["date", "daysLeft", "perDay"],
+          "properties": { "date": { "type": "string" }, "daysLeft": { "type": "integer" }, "perDay": { "type": ["integer", "null"] } }
+        },
+        "chapters": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "words", "target", "percent"],
+            "properties": { "id": { "type": "string" }, "words": { "$ref": "#/$defs/count" }, "target": { "type": "integer" }, "percent": { "type": "number" } }
+          }
+        },
+        "sessions": { "$ref": "#/$defs/count" },
+        "lastSession": {
+          "type": ["object", "null"],
+          "required": ["date", "words", "since"],
+          "properties": { "date": { "type": "string" }, "words": { "$ref": "#/$defs/count" }, "since": { "type": "integer" } }
+        },
+        "pace": { "type": ["number", "null"] },
+        "projected": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

@@ -6,6 +6,7 @@ import { parseFrontmatter } from "../src/frontmatter.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const SCHEMA_PATH = path.join(repoRoot, "schemas", "story.schema.json");
+export const RESULT_SCHEMA_PATH = path.join(repoRoot, "schemas", "result.schema.json");
 
 const ENTITY_DIRS = [
   ["characters", "characters"],
@@ -131,10 +132,12 @@ function resolveRef(schema, ref) {
 }
 
 // Dependency-free validator for the JSON Schema keywords story.schema.json
-// uses. Unknown keywords throw so the schema cannot quietly outgrow it.
+// and result.schema.json use. Unknown keywords throw so the schemas cannot
+// quietly outgrow it.
 const SUPPORTED = new Set([
   "$schema", "$id", "$comment", "$defs", "title", "description",
-  "$ref", "type", "required", "properties", "items", "enum", "const", "pattern", "minimum", "exclusiveMinimum", "minLength"
+  "$ref", "type", "required", "properties", "items", "enum", "const", "pattern", "minimum", "exclusiveMinimum", "minLength",
+  "allOf", "if", "then"
 ]);
 
 // Walks the whole schema up front, so an unsupported keyword fails even
@@ -155,6 +158,14 @@ export function assertSupportedSchema(schema, root = schema, at = "#") {
   }
   if (schema.items) {
     assertSupportedSchema(schema.items, root, `${at}/items`);
+  }
+  for (const [index, child] of (schema.allOf ?? []).entries()) {
+    assertSupportedSchema(child, root, `${at}/allOf/${index}`);
+  }
+  for (const keyword of ["if", "then"]) {
+    if (schema[keyword]) {
+      assertSupportedSchema(schema[keyword], root, `${at}/${keyword}`);
+    }
   }
 }
 
@@ -207,6 +218,13 @@ export function validateAgainstSchema(value, schema, root = schema, at = "$") {
         errors.push(...validateAgainstSchema(value[key], propertySchema, root, `${at}.${key}`));
       }
     }
+  }
+  for (const child of schema.allOf ?? []) {
+    errors.push(...validateAgainstSchema(value, child, root, at));
+  }
+  // `then` applies only when the value matches `if`.
+  if (schema.if && schema.then && validateAgainstSchema(value, schema.if, root, at).length === 0) {
+    errors.push(...validateAgainstSchema(value, schema.then, root, at));
   }
   return errors;
 }

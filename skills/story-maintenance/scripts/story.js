@@ -4731,6 +4731,7 @@ var OPTIONS = [
   { name: "done", value: "<pass>", help: ["Mark a revision pass done for passes"] },
   { name: "pages", value: "<n>", help: ["Synopsis length for synopsis (1 or 3)"] },
   { name: "actionable", help: ["Include next actions in report"] },
+  { name: "json", help: ["Print one JSON result object (apiVersion,", "command, ok, data, diagnostics, writes) instead", "of text, for the check and analysis commands"] },
   { name: "id", value: "<kebab-id>", help: ["Explicit id for add or rename, for a name with", "no ASCII letters or digits"] },
   { name: "number", value: "<n>", help: ["Chapter number for add chapter or move chapter"] },
   { name: "chapter", value: "<id>", help: ["Chapter id for add scene or move scene"] },
@@ -12594,6 +12595,40 @@ ${prose}
 `;
 }
 
+// src/json.js
+var API_VERSION = "story/v1";
+function exitCodeFor(ok) {
+  return ok ? 0 : 1;
+}
+function wantsJson(parsed) {
+  return isTruthy(parsed.options.json);
+}
+function writeJsonResult(io, { command, ok, data = null, diagnostics = [], writes = [] }) {
+  const envelope = { apiVersion: API_VERSION, command, ok: Boolean(ok), data, diagnostics, writes };
+  io.stdout.write(`${JSON.stringify(envelope, (key, value) => value === undefined ? null : value, 2)}
+`);
+  return exitCodeFor(envelope.ok);
+}
+function diagnosticsFrom(result, code) {
+  return [
+    ...(result.errors ?? []).map((message) => diagnostic("error", message, code)),
+    ...(result.warnings ?? []).map((message) => diagnostic("warning", message, code)),
+    ...(result.dismissed ?? []).map((entry) => ({ ...diagnostic("dismissed", entry.finding, code), exemption: entry.reason }))
+  ];
+}
+function diagnostic(severity, message, code) {
+  const text = String(message);
+  return { severity, file: messageFile(text), message: text, code };
+}
+function messageFile(message) {
+  const match = /^(\S+?\.(?:md|ya?ml|json))(?=[\s:[]|$)/u.exec(message);
+  return match ? match[1] : null;
+}
+function resultData(result) {
+  const { ok, errors, warnings, dismissed, ...data } = result;
+  return data;
+}
+
 // src/commands.js
 var ADD_OPTIONS = [
   "id",
@@ -12740,7 +12775,8 @@ var COMMANDS = [
     usage: "validate [path]",
     summary: ["Check project structure, frontmatter, and registries"],
     project: "positional",
-    run: ({ io, root }) => reportResult(io, validateProject(root()), "Project is valid", "Project validation failed")
+    options: ["json"],
+    run: ({ parsed, io, root }) => reportCheck(parsed, io, "validate", validateProject(root()), "Project is valid", "Project validation failed")
   },
   {
     name: "reindex",
@@ -12777,7 +12813,8 @@ var COMMANDS = [
     usage: "links [path]",
     summary: ["Check cross-reference targets and backlinks"],
     project: "positional",
-    run: ({ io, root }) => reportResult(io, validateLinks(root()), "Links are valid", "Link check failed")
+    options: ["json"],
+    run: ({ parsed, io, root }) => reportCheck(parsed, io, "links", validateLinks(root()), "Links are valid", "Link check failed")
   },
   {
     name: "continuity",
@@ -12791,7 +12828,8 @@ var COMMANDS = [
       "reported as dismissed"
     ],
     project: "positional",
-    run: ({ io, root }) => reportResult(io, checkProjectContinuity(root()), "Continuity is consistent", "Continuity check failed")
+    options: ["json"],
+    run: ({ parsed, io, root }) => reportCheck(parsed, io, "continuity", checkProjectContinuity(root()), "Continuity is consistent", "Continuity check failed")
   },
   {
     name: "knowledge",
@@ -12799,16 +12837,23 @@ var COMMANDS = [
     summary: ["List what a character knew at a chapter; requires --at"],
     project: "flag",
     args: 1,
-    options: ["at"],
+    options: ["at", "json"],
     run({ parsed, io, root }) {
       const characterId = parsed.positionals[1];
       const atChapterId = parsed.options.at;
       if (!characterId || typeof atChapterId !== "string") {
-        io.stderr.write(`Usage: story knowledge <character-id> --at <chapter-id> [--path <project>]
+        const usage = "Usage: story knowledge <character-id> --at <chapter-id> [--path <project>]";
+        if (wantsJson(parsed)) {
+          return writeJsonResult(io, { command: "knowledge", ok: false, diagnostics: [diagnostic("error", usage, "knowledge")] });
+        }
+        io.stderr.write(`${usage}
 `);
         return 1;
       }
       const entries = knowledgeAtChapter(root(), characterId, atChapterId);
+      if (wantsJson(parsed)) {
+        return writeJsonResult(io, { command: "knowledge", ok: true, data: { character: characterId, at: atChapterId, entries } });
+      }
       if (entries.length === 0) {
         io.stdout.write(`No recorded knowledge for ${characterId} at ${atChapterId}
 `);
@@ -12847,9 +12892,12 @@ var COMMANDS = [
       "targets, and logged sessions; --log records today"
     ],
     project: "positional",
-    options: ["log", "date"],
+    options: ["log", "date", "json"],
     run({ parsed, io, root }) {
       const progress = projectProgress(root(), { log: isTruthy(parsed.options.log), date: parsed.options.date });
+      if (wantsJson(parsed)) {
+        return reportJson(io, "progress", progress, { writes: progress.logged ? [progress.logged.file] : [] });
+      }
       if (progress.logged) {
         io.stdout.write(`Logged ${progress.logged.words} words for ${progress.logged.date} in ${progress.logged.file}
 `);
@@ -12866,8 +12914,12 @@ var COMMANDS = [
       "out of order), POV balance, and character presence"
     ],
     project: "positional",
-    run({ io, root }) {
+    options: ["json"],
+    run({ parsed, io, root }) {
       const timeline = storyTimeline(root());
+      if (wantsJson(parsed)) {
+        return reportJson(io, "timeline", timeline);
+      }
       io.stdout.write(formatTimeline(timeline, timeline.totalChapters));
       return reportResult(io, timeline, "Timeline built", "Timeline failed");
     }
@@ -12882,8 +12934,13 @@ var COMMANDS = [
       "- lints a passage from stdin"
     ],
     project: "positional",
+    options: ["json"],
     run({ parsed, io, cwd, root }) {
       const report = parsed.positionals[1] === STDIN_ARG ? proseReport(passageRoot(parsed, cwd, false), { passage: pipedText(io, "prose") }) : proseReport(root());
+      if (wantsJson(parsed)) {
+        const chapters = report.chapters.map(({ analysis: { phraseSentences, ...analysis }, ...chapter }) => ({ ...chapter, analysis }));
+        return reportJson(io, "prose", { ...report, chapters });
+      }
       io.stdout.write(formatProseReport(report));
       return reportResult(io, report, "Prose check complete", "Prose check failed");
     }
@@ -12934,8 +12991,12 @@ var COMMANDS = [
       "missing sequels, and length outliers"
     ],
     project: "positional",
-    run({ io, root }) {
+    options: ["json"],
+    run({ parsed, io, root }) {
       const report = pacingReport(root());
+      if (wantsJson(parsed)) {
+        return reportJson(io, "pacing", report);
+      }
       io.stdout.write(formatPacing(report));
       return reportResult(io, report, "Pacing check complete", "Pacing check failed");
     }
@@ -12949,8 +13010,12 @@ var COMMANDS = [
       "and red herrings never debunked"
     ],
     project: "positional",
-    run({ io, root }) {
+    options: ["json"],
+    run({ parsed, io, root }) {
       const report = clueReport(root());
+      if (wantsJson(parsed)) {
+        return reportJson(io, "clues", report);
+      }
       io.stdout.write(formatClueMatrix(report));
       return reportResult(io, report, "Clue check complete", "Clue check failed");
     }
@@ -12965,8 +13030,12 @@ var COMMANDS = [
       "from stdin"
     ],
     project: "positional",
+    options: ["json"],
     run({ parsed, io, cwd, root }) {
       const report = parsed.positionals[1] === STDIN_ARG ? voicesReport(passageRoot(parsed, cwd, true), { passage: pipedText(io, "voices") }) : voicesReport(root());
+      if (wantsJson(parsed)) {
+        return reportJson(io, "voices", report);
+      }
       io.stdout.write(formatVoices(report));
       return reportResult(io, report, "Voice check complete", "Voice check failed");
     }
@@ -12976,8 +13045,12 @@ var COMMANDS = [
     usage: "series [path]",
     summary: ["Order linked prequels and sequels and check shared", "canon across books"],
     project: "positional",
-    run({ io, root }) {
+    options: ["json"],
+    run({ parsed, io, root }) {
       const report = seriesReport(root());
+      if (wantsJson(parsed)) {
+        return reportJson(io, "series", report);
+      }
       io.stdout.write(formatSeriesReport(report));
       return reportResult(io, report, "Series is consistent", "Series check failed");
     }
@@ -13016,9 +13089,13 @@ var COMMANDS = [
     usage: "report [path]",
     summary: ["Summarize project inventory, progress, and checks"],
     project: "positional",
-    options: ["actionable"],
+    options: ["actionable", "json"],
     run({ parsed, io, root }) {
-      io.stdout.write(formatProjectReport(projectReport(root(), { displayPath: displayPath(parsed) }), { actionable: isTruthy(parsed.options.actionable) }));
+      const report = projectReport(root(), { displayPath: displayPath(parsed) });
+      if (wantsJson(parsed)) {
+        return reportProjectJson(io, "report", report);
+      }
+      io.stdout.write(formatProjectReport(report, { actionable: isTruthy(parsed.options.actionable) }));
       return 0;
     }
   },
@@ -13027,8 +13104,13 @@ var COMMANDS = [
     usage: "next [path]",
     summary: ["Recommend the next writing and maintenance actions"],
     project: "positional",
+    options: ["json"],
     run({ parsed, io, root }) {
-      io.stdout.write(formatActionReport(projectActions(root(), { displayPath: displayPath(parsed) })));
+      const report = projectActions(root(), { displayPath: displayPath(parsed) });
+      if (wantsJson(parsed)) {
+        return reportProjectJson(io, "next", report);
+      }
+      io.stdout.write(formatActionReport(report));
       return 0;
     }
   },
@@ -13037,8 +13119,13 @@ var COMMANDS = [
     usage: "doctor [path]",
     summary: ["Show health checks plus actionable repair steps"],
     project: "positional",
+    options: ["json"],
     run({ parsed, io, root }) {
-      io.stdout.write(formatDoctorReport(projectActions(root(), { displayPath: displayPath(parsed) })));
+      const report = projectActions(root(), { displayPath: displayPath(parsed) });
+      if (wantsJson(parsed)) {
+        return reportProjectJson(io, "doctor", report);
+      }
+      io.stdout.write(formatDoctorReport(report));
       return 0;
     }
   },
@@ -13244,6 +13331,38 @@ function reportGitignore(io, result) {
 function collectThemes(options) {
   return [].concat(options.theme ?? []).concat(options.themes ?? []).filter((value) => value !== undefined && value !== true);
 }
+function reportCheck(parsed, io, command, result, successMessage, failureMessage) {
+  if (wantsJson(parsed)) {
+    return writeJsonResult(io, {
+      command,
+      ok: result.ok,
+      data: { errors: result.errors.length, warnings: result.warnings.length, dismissed: (result.dismissed ?? []).length },
+      diagnostics: diagnosticsFrom(result, command)
+    });
+  }
+  return reportResult(io, result, successMessage, failureMessage);
+}
+function reportJson(io, command, result, { writes = [] } = {}) {
+  return writeJsonResult(io, { command, ok: result.ok, data: resultData(result), diagnostics: diagnosticsFrom(result, command), writes });
+}
+function reportProjectJson(io, command, report) {
+  const { validation, links, continuity, ...rest } = report;
+  const checks = { validate: validation, links, continuity };
+  return writeJsonResult(io, {
+    command,
+    ok: true,
+    data: {
+      ...rest,
+      checks: Object.fromEntries(Object.entries(checks).map(([name, check]) => [name, {
+        ok: check.ok,
+        errors: check.errors.length,
+        warnings: check.warnings.length,
+        dismissed: (check.dismissed ?? []).length
+      }]))
+    },
+    diagnostics: Object.entries(checks).flatMap(([name, check]) => diagnosticsFrom(check, name))
+  });
+}
 function reportResult(io, result, successMessage, failureMessage) {
   const dismissed = result.dismissed ?? [];
   io.stderr.write(`${result.ok ? successMessage : failureMessage}: ${result.errors.length} errors, ${result.warnings.length} warnings, ${dismissed.length} dismissed
@@ -13260,7 +13379,7 @@ function reportResult(io, result, successMessage, failureMessage) {
     io.stderr.write(`dismissed: ${entry.finding} (exemption: ${entry.reason})
 `);
   }
-  return result.ok ? 0 : 1;
+  return exitCodeFor(result.ok);
 }
 
 // src/version.js
@@ -13312,8 +13431,9 @@ function formatCommandsHelp() {
   return lines;
 }
 function runCli(argv, io) {
+  const named = COMMANDS_BY_NAME.get(argv[0]);
+  const failJson = named?.options?.includes("json") && jsonRequested(argv) ? (message) => writeJsonResult(io, { command: named.name, ok: false, diagnostics: [diagnostic("error", message, named.name)] }) : null;
   try {
-    const named = COMMANDS_BY_NAME.get(argv[0]);
     const parsed = parseArgs(argv, named ? [...named.options ?? [], ...named.project === "none" ? [] : ["path"]] : undefined);
     const cwd = io.cwd ?? process.cwd();
     const name = parsed.positionals[0];
@@ -13352,16 +13472,35 @@ Run story --help to list commands.
     }
     const usageError = commandUsageError(command, parsed);
     if (usageError) {
+      if (failJson) {
+        return failJson(usageError);
+      }
       io.stderr.write(`${usageError}
 `);
       return 1;
     }
     return command.run({ parsed, io, cwd, root: () => resolveRoot(cwd, parsed, name) });
   } catch (error) {
-    io.stderr.write(`${describeError(error, io.cwd ?? process.cwd())}
+    const message = describeError(error, io.cwd ?? process.cwd());
+    if (failJson) {
+      return failJson(message);
+    }
+    io.stderr.write(`${message}
 `);
     return 1;
   }
+}
+function jsonRequested(argv) {
+  let requested = false;
+  for (let index = 0;index < argv.length && argv[index] !== "--"; index += 1) {
+    const arg = argv[index];
+    if (arg === "--json") {
+      requested = !/^(false|0|no|off)$/i.test(argv[index + 1] ?? "");
+    } else if (arg.startsWith("--json=")) {
+      requested = !/^(false|0|no|off)$/i.test(arg.slice("--json=".length).trim());
+    }
+  }
+  return requested;
 }
 function handleOutputError(error, proc) {
   if (error?.code === "EPIPE") {

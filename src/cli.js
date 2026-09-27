@@ -1,5 +1,6 @@
 import path from "node:path";
 import { COMMANDS } from "./commands.js";
+import { diagnostic, writeJsonResult } from "./json.js";
 import { formatOptionsHelp, isTruthy, parseArgs, suggestion } from "./options.js";
 import { VERSION } from "./version.js";
 
@@ -54,8 +55,13 @@ function formatCommandsHelp() {
 }
 
 export function runCli(argv, io) {
+  const named = COMMANDS_BY_NAME.get(argv[0]);
+  // A command asked for --json reports a usage error or a failure as a JSON
+  // result too, so a script reading stdout always gets one object.
+  const failJson = named?.options?.includes("json") && jsonRequested(argv)
+    ? (message) => writeJsonResult(io, { command: named.name, ok: false, diagnostics: [diagnostic("error", message, named.name)] })
+    : null;
   try {
-    const named = COMMANDS_BY_NAME.get(argv[0]);
     const parsed = parseArgs(argv, named ? [...(named.options ?? []), ...(named.project === "none" ? [] : ["path"])] : undefined);
     const cwd = io.cwd ?? process.cwd();
     const name = parsed.positionals[0];
@@ -96,15 +102,38 @@ export function runCli(argv, io) {
 
     const usageError = commandUsageError(command, parsed);
     if (usageError) {
+      if (failJson) {
+        return failJson(usageError);
+      }
       io.stderr.write(`${usageError}\n`);
       return 1;
     }
 
     return command.run({ parsed, io, cwd, root: () => resolveRoot(cwd, parsed, name) });
   } catch (error) {
-    io.stderr.write(`${describeError(error, io.cwd ?? process.cwd())}\n`);
+    const message = describeError(error, io.cwd ?? process.cwd());
+    if (failJson) {
+      return failJson(message);
+    }
+    io.stderr.write(`${message}\n`);
     return 1;
   }
+}
+
+// Whether argv turns on --json, read from the raw arguments so a parse error
+// is still reported as JSON. The last --json wins, as parseArgs keeps it, and
+// `--` ends the options.
+function jsonRequested(argv) {
+  let requested = false;
+  for (let index = 0; index < argv.length && argv[index] !== "--"; index += 1) {
+    const arg = argv[index];
+    if (arg === "--json") {
+      requested = !/^(false|0|no|off)$/i.test(argv[index + 1] ?? "");
+    } else if (arg.startsWith("--json=")) {
+      requested = !/^(false|0|no|off)$/i.test(arg.slice("--json=".length).trim());
+    }
+  }
+  return requested;
 }
 
 // Called for an 'error' event on stdout/stderr or an uncaught exception in
