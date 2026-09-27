@@ -28,7 +28,7 @@ describe("knowledge CLI errors", () => {
   test("cli errors for an unknown chapter id", () => {
     const { root, cwd } = knowledgeProject();
     const unknown = invoke(cwd, ["knowledge", "mara-finn", "--at", "chapter-09", "--path", root]);
-    expect(unknown.code).toBe(1);
+    expect(unknown.code).toBe(2);
     expect(unknown.err).toContain("Unknown chapter chapter-09");
   });
 
@@ -37,7 +37,7 @@ describe("knowledge CLI errors", () => {
     writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft", "# One\n");
     fs.writeFileSync(path.join(root, "continuity", "state.md"), "not frontmatter\n", "utf8");
     const result = invoke(cwd, ["knowledge", "mara-finn", "--at", "chapter-01", "--path", root]);
-    expect(result.code).toBe(1);
+    expect(result.code).toBe(3);
     expect(result.err).toContain("continuity/state.md");
   });
 });

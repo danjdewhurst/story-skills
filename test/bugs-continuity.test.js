@@ -129,7 +129,7 @@ describe("story knowledge (#60)", () => {
     fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace(/^---\n/, ""), "utf8");
     expect(() => knowledgeAtChapter(root, "ann", "chapter-03")).toThrow(path.join("chapters", "chapter-02.md"));
     const result = invoke(root, ["knowledge", "ann", "--at", "chapter-02"]);
-    expect(result.code).toBe(1);
+    expect(result.code).toBe(3);
     expect(result.err).toContain(path.join("chapters", "chapter-02.md"));
   });
 

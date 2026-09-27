@@ -90,11 +90,11 @@ describe("cli", () => {
     expect(() => parseArgs(["add", "chapter", "Foo", "--number", "-h"])).toThrow("Missing value for --number");
     const cwd = makeTempDir();
     const missing = invoke(cwd, ["add", "chapter", "Foo", "--number"]);
-    expect(missing.code).toBe(1);
+    expect(missing.code).toBe(2);
     expect(missing.err).toContain("Missing value for --number");
     expect(() => parseArgs(["validate", "--path", "--bogus"])).toThrow("Missing value for --path");
     const badPath = invoke(cwd, ["validate", "--path", "--bogus"]);
-    expect(badPath.code).toBe(1);
+    expect(badPath.code).toBe(2);
     expect(badPath.err).toContain("Missing value for --path");
   });
 
@@ -104,7 +104,7 @@ describe("cli", () => {
     expect(() => parseArgs(["add", "chapter", "Foo", "--bogus"])).toThrow("Unknown option --bogus");
     const cwd = makeTempDir();
     const rejected = invoke(cwd, ["add", "chapter", "Foo", "--bogus", "value"]);
-    expect(rejected.code).toBe(1);
+    expect(rejected.code).toBe(2);
     expect(rejected.err).toContain("Unknown option --bogus");
   });
 
@@ -160,7 +160,7 @@ describe("cli", () => {
     expect(invoke(cwd, ["init", "Forced"]).code).toBe(0);
     const root = path.join(cwd, "forced");
     const retry = invoke(cwd, ["init", "Forced", "--force=false"]);
-    expect(retry.code).toBe(1);
+    expect(retry.code).toBe(4);
     expect(retry.err).toContain("already exists");
     expect(invoke(cwd, ["init", "Forced", "--force"]).code).toBe(0);
     expect(invoke(cwd, ["wordcount", root, "--write=false"]).out).toContain("Total:");
@@ -177,7 +177,7 @@ describe("cli", () => {
     const same = invoke(cwd, ["validate", root, "--path", root]);
     expect(same.code).toBe(0);
     const conflict = invoke(cwd, ["validate", root, "--path", cwd]);
-    expect(conflict.code).toBe(1);
+    expect(conflict.code).toBe(2);
     expect(conflict.err).toContain("Conflicting project paths");
     const added = invoke(cwd, ["add", "character", "Root Hero", "--path", root]);
     expect(added.code).toBe(0);
@@ -210,13 +210,13 @@ describe("cli", () => {
       expect(result.out).toContain("Created ");
     }
     const bad = invoke(cwd, ["add", "glass", "Pane", "--path", root]);
-    expect(bad.code).toBe(1);
+    expect(bad.code).toBe(2);
     expect(bad.err).toContain("Unsupported entity kind: glass");
   });
   test("names the missing story.md when a path is not a project", () => {
     const cwd = makeTempDir();
     const result = invoke(cwd, ["links", "nowhere"]);
-    expect(result.code).toBe(1);
+    expect(result.code).toBe(3);
     expect(result.err).toContain("is not a story project: missing story.md");
   });
 
@@ -246,13 +246,13 @@ describe("cli", () => {
     expect(help).toContain("--introduced <id>");
     expect(help).toContain("--category <name>");
     const initPath = invoke(cwd, ["init", "Nope", "--path", "somewhere"]);
-    expect(initPath.code).toBe(1);
+    expect(initPath.code).toBe(2);
     expect(initPath.err).toContain("init uses --dir");
     const importPath = invoke(cwd, ["import", "draft.md", "--path", "somewhere"]);
-    expect(importPath.code).toBe(1);
+    expect(importPath.code).toBe(2);
     expect(importPath.err).toContain("import uses --dir");
     const unknown = invoke(cwd, ["nope"]);
-    expect(unknown.code).toBe(1);
+    expect(unknown.code).toBe(2);
     expect(unknown.err).toContain("Unknown command: nope");
   });
 
@@ -360,11 +360,11 @@ describe("cli", () => {
   test("reports command failures", () => {
     const cwd = makeTempDir();
     const init = invoke(cwd, ["init"]);
-    expect(init.code).toBe(1);
+    expect(init.code).toBe(2);
     expect(init.err).toContain("A story title is required");
 
     const validate = invoke(cwd, ["validate"]);
-    expect(validate.code).toBe(1);
+    expect(validate.code).toBe(3);
     expect(validate.err).toContain("is not a story project: missing story.md");
 
     const created = invoke(cwd, ["init", "Broken"]);
@@ -385,7 +385,7 @@ word-count: 0
     expect(links.err).toContain("references missing location missing-place");
 
     const build = invoke(cwd, ["build", path.join(cwd, "broken"), "--format", "pdf"]);
-    expect(build.code).toBe(1);
+    expect(build.code).toBe(2);
     expect(build.err).toContain("Unsupported build format: pdf");
   });
 
@@ -451,7 +451,7 @@ payoff: ""
     expect(withCandidates.out).toContain("- Vex Marrow (3 mentions)");
 
     const failed = invoke(cwd, ["import"]);
-    expect(failed.code).toBe(1);
+    expect(failed.code).toBe(2);
     expect(failed.err).toContain("An import source file or directory is required");
   });
 
@@ -542,7 +542,7 @@ word-count: 9
       expect(copied.status).toBe(0);
 
       const missing = runBundle(["validate", path.join(scratch, "does-not-exist")]);
-      expect(missing.status).toBe(1);
+      expect(missing.status).toBe(3);
       expect(`${missing.stdout}${missing.stderr}`).toContain("is not a story project: missing story.md");
     } finally {
       fs.rmSync(scratch, { recursive: true, force: true });

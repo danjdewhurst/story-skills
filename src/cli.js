@@ -3,6 +3,7 @@ import { COMMANDS } from "./commands.js";
 import { diagnostic, writeJsonResult } from "./json.js";
 import { formatOptionsHelp, isBooleanLiteralToken, isTruthy, parseArgs, suggestion, takesValue } from "./options.js";
 import { VERSION } from "./version.js";
+import { EXIT_CODES, exitCodeFor, usageError } from "./exit-codes.js";
 
 export { isTruthy, parseArgs };
 
@@ -59,7 +60,7 @@ export function runCli(argv, io) {
   // result too, so a script reading stdout always gets one object.
   const jsonCommand = COMMANDS_BY_NAME.get(commandWord(argv));
   const failJson = jsonCommand?.options?.includes("json") && jsonRequested(argv)
-    ? (message) => writeJsonResult(io, { command: jsonCommand.name, ok: false, diagnostics: [diagnostic("error", message, jsonCommand.name)] })
+    ? (message, exitCode) => writeJsonResult(io, { command: jsonCommand.name, ok: false, exitCode, diagnostics: [diagnostic("error", message, jsonCommand.name)] })
     : null;
   try {
     const named = COMMANDS_BY_NAME.get(argv[0]);
@@ -69,7 +70,7 @@ export function runCli(argv, io) {
 
     if (parsed.options.version) {
       io.stdout.write(`${VERSION}\n`);
-      return 0;
+      return EXIT_CODES.ok;
     }
 
     // `story help <command>` and `story <command> --help` show one
@@ -79,45 +80,46 @@ export function runCli(argv, io) {
     const helpTopic = topic === "help" ? undefined : topic;
     if (helpTopic !== undefined && COMMANDS_BY_NAME.has(helpTopic)) {
       io.stdout.write(formatCommandHelp(COMMANDS_BY_NAME.get(helpTopic)));
-      return 0;
+      return EXIT_CODES.ok;
     }
     if (name === "help" && helpTopic !== undefined) {
       io.stderr.write(`Unknown command: ${helpTopic}${suggestion(helpTopic, [...COMMANDS_BY_NAME.keys()])}\nRun story --help to list commands.\n`);
-      return 1;
+      return EXIT_CODES.usage;
     }
     if (!name || name === "help" || parsed.options.help) {
       io.stdout.write(HELP);
-      return 0;
+      return EXIT_CODES.ok;
     }
 
     const command = COMMANDS_BY_NAME.get(name);
     if (!command) {
       io.stderr.write(`Unknown command: ${name}${suggestion(name, [...COMMANDS_BY_NAME.keys()])}\nRun story --help to list commands.\n`);
-      return 1;
+      return EXIT_CODES.usage;
     }
 
     if (command.project === "none" && parsed.options.path !== undefined) {
       io.stderr.write(`${name} uses --dir for the target directory. --path is the project root for other commands.\n`);
-      return 1;
+      return EXIT_CODES.usage;
     }
 
-    const usageError = commandUsageError(command, parsed);
-    if (usageError) {
+    const misuse = commandUsageError(command, parsed);
+    if (misuse) {
       if (failJson) {
-        return failJson(usageError);
+        return failJson(misuse, EXIT_CODES.usage);
       }
-      io.stderr.write(`${usageError}\n`);
-      return 1;
+      io.stderr.write(`${misuse}\n`);
+      return EXIT_CODES.usage;
     }
 
     return command.run({ parsed, io, cwd, root: () => resolveRoot(cwd, parsed, name) });
   } catch (error) {
     const message = describeError(error, io.cwd ?? process.cwd());
+    const exitCode = exitCodeFor(error);
     if (failJson) {
-      return failJson(message);
+      return failJson(message, exitCode);
     }
     io.stderr.write(`${message}\n`);
-    return 1;
+    return exitCode;
   }
 }
 
@@ -242,7 +244,7 @@ export function resolveRoot(cwd, parsed, name) {
     const resolvedPositional = path.resolve(cwd, positionalPath);
     const resolvedFlag = path.resolve(cwd, flagPath);
     if (resolvedPositional !== resolvedFlag) {
-      throw new Error(`Conflicting project paths: ${positionalPath} and --path ${flagPath}. Use either a positional path or --path, not both.`);
+      throw usageError(`Conflicting project paths: ${positionalPath} and --path ${flagPath}. Use either a positional path or --path, not both.`);
     }
     return resolvedFlag;
   }

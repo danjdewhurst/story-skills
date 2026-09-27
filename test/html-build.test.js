@@ -82,7 +82,7 @@ describe("html and print builds", () => {
     expect(print.code).toBe(0);
     expect(fs.readFileSync(path.join(root, "dist", "lamp-tide.print.html"), "utf8")).toContain("148mm 210mm");
     const bad = invoke(cwd, ["build", root, "--format", "pdf"]);
-    expect(bad.code).toBe(1);
+    expect(bad.code).toBe(2);
     expect(bad.err).toContain("Supported formats: markdown, epub, docx, shunn, html, print");
   });
 });

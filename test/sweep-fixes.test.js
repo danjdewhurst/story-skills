@@ -68,7 +68,7 @@ describe("project structure", () => {
 
   test("validate outside a project says so instead of listing every path", () => {
     const result = invoke(makeTempDir(), ["validate"]);
-    expect(result.code).toBe(1);
+    expect(result.code).toBe(3);
     expect(result.err).toContain("is not a story project: missing story.md");
     expect(result.err).not.toContain("Missing required path");
   });
@@ -85,7 +85,7 @@ describe("argument checking", () => {
     const root = newProject();
     const cwd = path.dirname(root);
     const result = invoke(cwd, ["continuity", root, root]);
-    expect(result.code).toBe(1);
+    expect(result.code).toBe(2);
     expect(result.err).toContain("Unexpected argument for story continuity [path]");
     expect(invoke(cwd, ["remove", "character", "x", "extra", "--path", root]).err).toContain("Unexpected argument");
     expect(invoke(cwd, ["diagram", "locations", "extra", "--path", root]).err).toContain("Unexpected argument");
@@ -94,7 +94,7 @@ describe("argument checking", () => {
   test("flags a command does not read are an error", () => {
     const root = newProject();
     const result = invoke(path.dirname(root), ["timeline", root, "--at", "chapter-01"]);
-    expect(result.code).toBe(1);
+    expect(result.code).toBe(2);
     expect(result.err).toContain("--at does not apply to story timeline");
   });
 
@@ -124,7 +124,7 @@ describe("files that fail to parse", () => {
     expect(() => exportManuscript(root)).toThrow("Cannot export");
     expect(() => buildBook(root, { format: "epub" })).toThrow("Cannot build");
     expect(fs.readFileSync(path.join(root, "chapters", "_index.md"), "utf8")).toBe(registry);
-    expect(invoke(path.dirname(root), ["wordcount", root]).code).toBe(1);
+    expect(invoke(path.dirname(root), ["wordcount", root]).code).toBe(3);
   });
 
   test("add and synopsis refuse before writing anything", () => {
@@ -554,7 +554,7 @@ describe("round two", () => {
     createEntity(root, { kind: "chapter", name: "One", number: 1 });
     fs.writeFileSync(path.join(root, "characters", "mara.md"), "# No frontmatter\n");
     const result = invoke(path.dirname(root), ["knowledge", "mara", "--at", "chapter-01", "--path", root]);
-    expect(result.code).toBe(1);
+    expect(result.code).toBe(3);
     expect(result.err).toContain("characters/mara.md: is missing YAML frontmatter");
   });
 
@@ -1218,7 +1218,7 @@ describe("round seven", () => {
     const outside = makeTempDir();
     fs.writeFileSync(path.join(outside, "afile"), "x");
     const result = invoke(outside, ["export", root, "--out", path.join(outside, "afile", "x.md")]);
-    expect(result.code).toBe(1);
+    expect(result.code).toBe(4);
     expect(result.err).toMatch(/^Cannot \w+( the folder)? afile(\/x\.md)?: a part of the path is not a folder\n$/);
   });
 
@@ -1259,7 +1259,7 @@ describe("round seven", () => {
     // Only build's own options are suggested.
     expect(invoke(cwd, ["build", "--formt", "x"]).err).toContain("Unknown option --formt; did you mean --format?");
     expect(invoke(cwd, ["init", "--formt", "x"]).err).toContain("Unknown option --formt; did you mean --form?");
-    expect(invoke(cwd, ["help", "nosuch"]).code).toBe(1);
+    expect(invoke(cwd, ["help", "nosuch"]).code).toBe(2);
     expect(invoke(cwd, ["validate", "-x"]).err).toContain("-x is not a story project: missing story.md; -x is not an option (run story help)");
     expect(invoke(cwd, ["build", "--format="]).err).toContain("Unsupported build format: (empty)");
   });

@@ -70,7 +70,7 @@ describe("project lock (#196)", () => {
     process.env.STORY_LOCK_WAIT_MS = "0";
     const before = snapshot(root);
     const result = invoke(root, ["rename", "character", "ilya-venn", "Zed Quill"]);
-    expect(result.code).toBe(1);
+    expect(result.code).toBe(4);
     expect(result.err).toContain(`another story command (process ${process.pid}) is modifying this project; nothing was changed`);
     expect(result.err).toContain(`delete ${LOCK_FILE}`);
     expect(snapshot(root)).toEqual(before);
@@ -136,7 +136,7 @@ describe("write preflight (#198)", () => {
     fs.chmodSync(arc, 0o444);
     const before = snapshot(root);
     const result = invoke(root, ["rename", "character", "ilya-venn", "Zed Quill"]);
-    expect(result.code).toBe(1);
+    expect(result.code).toBe(4);
     expect(result.err).toBe(`Cannot write to ${path.join("plot", "arcs", "the-drowned-witness.md")} (permission denied); nothing was changed. Fix it and run the command again\n`);
     expect(snapshot(root)).toEqual(before);
     fs.chmodSync(arc, 0o644);
@@ -174,7 +174,7 @@ describe("write preflight (#198)", () => {
     } finally {
       fs.renameSync = original;
     }
-    expect(result.code).toBe(1);
+    expect(result.code).toBe(4);
     expect(result.err).toContain("an input/output error. Some files were already updated: fix the problem and run the same command again to finish");
     expect(invoke(root, ["rename", "character", "ilya-venn", "Zed Quill"]).code).toBe(0);
     expect(validateLinks(root).errors).toEqual([]);

@@ -3,7 +3,7 @@ import path from "node:path";
 import { formatClueMatrix } from "./clues.js";
 import { formatComparison, formatLabelMapping } from "./compare.js";
 import { importManuscript } from "./import.js";
-import { diagnosticsFrom, exitCodeFor, resultData, wantsJson, writeJsonResult } from "./json.js";
+import { diagnosticsFrom, resultData, wantsJson, writeJsonResult } from "./json.js";
 import { isTruthy } from "./options.js";
 import { STDIN_ARG, readStdin, stdinText } from "./stdin.js";
 import { formatNames } from "./names.js";
@@ -48,6 +48,7 @@ import {
   validateProject,
   voicesReport
 } from "./story.js";
+import { EXIT_CODES, usageError } from "./exit-codes.js";
 
 // How --json names a piped passage in a diagnostic, as the text output does.
 const STDIN_LABEL = "stdin";
@@ -219,7 +220,7 @@ export const COMMANDS = [
       const atChapterId = parsed.options.at;
       if (!characterId || typeof atChapterId !== "string") {
         // Thrown, so runCli reports it as text or, with --json, as a result.
-        throw new Error("Usage: story knowledge <character-id> --at <chapter-id> [--path <project>]");
+        throw usageError("Usage: story knowledge <character-id> --at <chapter-id> [--path <project>]");
       }
       const entries = knowledgeAtChapter(root(), characterId, atChapterId);
       if (wantsJson(parsed)) {
@@ -660,7 +661,7 @@ function nameWords(parsed, from, cwd, command) {
   const words = parsed.positionals.slice(from);
   for (const word of words) {
     if (word === "." || word === ".." || (/[\\/]/.test(word) && fs.existsSync(path.join(path.resolve(cwd, word), "story.md")))) {
-      throw new Error(`"${word}" looks like a project path: story ${command} takes the project as --path ${word}`);
+      throw usageError(`"${word}" looks like a project path: story ${command} takes the project as --path ${word}`);
     }
   }
   return words;
@@ -787,5 +788,5 @@ function reportResult(io, result, successMessage, failureMessage) {
     io.stderr.write(`dismissed: ${entry.finding} (exemption: ${entry.reason})\n`);
   }
 
-  return exitCodeFor(result.ok);
+  return result.ok ? EXIT_CODES.ok : EXIT_CODES.findings;
 }

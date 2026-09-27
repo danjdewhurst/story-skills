@@ -6,6 +6,7 @@ import { chapterHeading, fencedLineIndexes, scanComments, splitFences, titleCase
 import { MAX_READ_BYTES } from "./files.js";
 import { STDIN_ARG, decodeUtf8 } from "./stdin.js";
 import { assertProjectParses, createStoryProject, reindexProject, scanProject, writeFile } from "./story.js";
+import { usageError } from "./exit-codes.js";
 
 // A lone "I" before a word is the pronoun ("Chapter I Am Legend"), not a numeral.
 const ROMAN_NUMERAL = "(?!i\\s+\\S)(?=[ivxlc])c{0,3}(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})";
@@ -49,21 +50,21 @@ const MAX_IMPORT_FILES = 500;
 
 function rejectSymlinkedSource(filePath) {
   if (fs.lstatSync(filePath).isSymbolicLink()) {
-    throw new Error('Refusing to import symlinked source: ' + filePath);
+    throw usageError('Refusing to import symlinked source: ' + filePath);
   }
 }
 
 function assertImportFileSize(filePath) {
   const size = fs.statSync(filePath).size;
   if (size > MAX_IMPORT_FILE_BYTES) {
-    throw new Error('Refusing to import oversized file ' + filePath + ': ' + size + ' bytes exceeds the ' + MAX_IMPORT_FILE_BYTES + ' byte limit');
+    throw usageError('Refusing to import oversized file ' + filePath + ': ' + size + ' bytes exceeds the ' + MAX_IMPORT_FILE_BYTES + ' byte limit');
   }
 }
 
 export function importManuscript(options) {
   const rawSource = String(options.source ?? "").trim();
   if (!rawSource) {
-    throw new Error("An import source file or directory is required");
+    throw usageError("An import source file or directory is required");
   }
 
   const cwd = options.cwd ?? process.cwd();
@@ -72,12 +73,12 @@ export function importManuscript(options) {
   const fromStdin = rawSource === STDIN_ARG;
   const source = fromStdin ? null : path.resolve(cwd, rawSource);
   if (!fromStdin && !fs.existsSync(source)) {
-    throw new Error(`Import source not found: ${source}`);
+    throw usageError(`Import source not found: ${source}`);
   }
   // A story project's bible is not manuscript prose; importing it would turn
   // story.md and the style sheet into chapters.
   if (!fromStdin && fs.statSync(source).isDirectory() && fs.existsSync(path.join(source, "story.md"))) {
-    throw new Error(`${rawSource} is already a story project (it has story.md); import reads manuscript files, so point it at the draft instead`);
+    throw usageError(`${rawSource} is already a story project (it has story.md); import reads manuscript files, so point it at the draft instead`);
   }
 
   const warnings = [];
@@ -86,7 +87,7 @@ export function importManuscript(options) {
     : readSourceDocuments(source);
   const chapters = splitChapters(documents, warnings);
   if (chapters.length === 0) {
-    throw new Error("No chapter content found in import source");
+    throw usageError("No chapter content found in import source");
   }
 
   // Build every chapter file before touching the disk: frontmatter and
@@ -104,7 +105,7 @@ export function importManuscript(options) {
     const text = chapterMarkdown(title, number, words, chapter.prose, chapter.unnumbered);
     const bytes = Buffer.byteLength(text, "utf8");
     if (bytes > MAX_READ_BYTES) {
-      throw new Error(`Cannot import: ${name} would be ${bytes} bytes, over the ${MAX_READ_BYTES} byte limit story reads. Split the manuscript with chapter headings first`);
+      throw usageError(`Cannot import: ${name} would be ${bytes} bytes, over the ${MAX_READ_BYTES} byte limit story reads. Split the manuscript with chapter headings first`);
     }
     return { name, text };
   });
@@ -260,7 +261,7 @@ function readSourceDocuments(source) {
   }
   names.sort(compareImportNames);
   if (names.length > MAX_IMPORT_FILES) {
-    throw new Error('Too many import files in ' + source + ': ' + names.length + ' exceeds the ' + MAX_IMPORT_FILES + ' file limit');
+    throw usageError('Too many import files in ' + source + ': ' + names.length + ' exceeds the ' + MAX_IMPORT_FILES + ' file limit');
   }
   const documents = names.map((name) => {
     const fullPath = path.join(source, name);
@@ -269,7 +270,7 @@ function readSourceDocuments(source) {
   });
 
   if (documents.length === 0) {
-    throw new Error(`No markdown or text files found in ${source}`);
+    throw usageError(`No markdown or text files found in ${source}`);
   }
 
   return documents;

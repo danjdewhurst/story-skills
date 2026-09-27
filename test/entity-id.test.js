@@ -121,7 +121,7 @@ describe("--id for names outside ASCII", () => {
     expect(added.out).toBe(`Created character petr: ${path.join(root, "characters", "petr.md")}\n`);
 
     const failed = invoke(root, ["add", "character", "李明"]);
-    expect(failed.code).toBe(1);
+    expect(failed.code).toBe(2);
     expect(failed.err).toContain("pass --id with a kebab-case id");
 
     const renamed = invoke(root, ["rename", "character", "petr", "Пётр Ильич", "--id", "petr-ilyich"]);
@@ -129,7 +129,7 @@ describe("--id for names outside ASCII", () => {
     expect(scanProject(root).characters.map((character) => character.id)).toEqual(["petr-ilyich"]);
 
     const wrongCommand = invoke(root, ["remove", "character", "petr-ilyich", "--id", "petr"]);
-    expect(wrongCommand.code).toBe(1);
+    expect(wrongCommand.code).toBe(2);
     expect(wrongCommand.err).toBe("--id does not apply to story remove\n");
   });
 });

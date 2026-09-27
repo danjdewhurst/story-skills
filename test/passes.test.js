@@ -125,7 +125,7 @@ describe("story passes", () => {
 
     fs.writeFileSync(path.join(root, "story.md"), "---\ntitle: Broken\n      - boat\n---\n", "utf8");
     const broken = invoke(cwd, ["passes", root, "--done", "proof"]);
-    expect(broken.code).toBe(1);
+    expect(broken.code).toBe(3);
     expect(broken.err).toContain("story.md cannot be parsed");
   });
 });

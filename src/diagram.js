@@ -1,5 +1,6 @@
 import { usableRoutes } from "./continuity.js";
 import { buildTimeline } from "./timeline.js";
+import { usageError } from "./exit-codes.js";
 
 // Mermaid diagram source generated from frontmatter. The output is text, so
 // it diffs cleanly, renders on GitHub and in most markdown editors, and is
@@ -29,7 +30,7 @@ export function buildDiagram(project, kind) {
     case "arcs":
       return arcDiagram(project);
     default:
-      throw new Error(`Unknown diagram kind: ${kind ?? "(none)"}. Supported kinds: ${DIAGRAM_KINDS.join(", ")}`);
+      throw usageError(`Unknown diagram kind: ${kind ?? "(none)"}. Supported kinds: ${DIAGRAM_KINDS.join(", ")}`);
   }
 }
 

@@ -1,3 +1,4 @@
+import { EXIT_CODES } from "./exit-codes.js";
 import { isTruthy } from "./options.js";
 
 // The version of the --json result envelope. Adding a field keeps it;
@@ -5,25 +6,21 @@ import { isTruthy } from "./options.js";
 // describes this version.
 export const API_VERSION = "story/v1";
 
-// The exit code for a finished command, from the same pass/fail decision the
-// --json envelope reports as `ok`, so the two cannot disagree.
-export function exitCodeFor(ok) {
-  return ok ? 0 : 1;
-}
-
 export function wantsJson(parsed) {
   return isTruthy(parsed.options.json);
 }
 
 // Prints one --json result object on stdout and returns the exit code that
-// matches its `ok`. Every command with --json output calls this, and nothing
-// else is printed, so stdout parses as a single JSON document.
-export function writeJsonResult(io, { command, ok, data = null, diagnostics = [], writes = [] }) {
+// matches its `ok`: 0 when it is true, else `exitCode` (a code from
+// exit-codes.js saying why the command failed), which defaults to findings.
+// Every command with --json output calls this, and nothing else is printed,
+// so stdout parses as a single JSON document.
+export function writeJsonResult(io, { command, ok, exitCode = EXIT_CODES.findings, data = null, diagnostics = [], writes = [] }) {
   const envelope = { apiVersion: API_VERSION, command, ok: Boolean(ok), data, diagnostics, writes };
   // A field a result leaves undefined prints as null, so every result of a
   // command has the same keys.
   io.stdout.write(`${JSON.stringify(envelope, (key, value) => (value === undefined ? null : value), 2)}\n`);
-  return exitCodeFor(envelope.ok);
+  return envelope.ok ? EXIT_CODES.ok : exitCode;
 }
 
 // A check result's errors, warnings, and dismissed findings as diagnostics.

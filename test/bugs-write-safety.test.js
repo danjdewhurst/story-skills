@@ -79,7 +79,7 @@ describe("atomic writes (#190, #197)", () => {
     expect(before.length).toBeGreaterThan(4096);
     // ulimit -f 4 makes any write past 4 KiB fail with EFBIG, as a full disk would.
     const result = spawnSync("bash", ["-c", `trap '' XFSZ; ulimit -f 4; "${process.execPath}" "${BIN}" wordcount --write`], { cwd: root, encoding: "utf8" });
-    expect(result.status).toBe(1);
+    expect(result.status).toBe(4);
     expect(result.stderr).toContain(`Cannot write to ${path.join("chapters", "chapter-01.md")}: the file is too large`);
     expect(fs.readFileSync(chapter, "utf8")).toBe(before);
     expect(listDir(root, "chapters")).toEqual(["_index.md", "chapter-01.md"]);
@@ -163,7 +163,7 @@ describe("interrupted rename (#181, #192)", () => {
     createEntity(root, { kind: "chapter", name: "Two", mention: "ghost" });
     const chapter = read(root, "chapters/chapter-01.md");
     const result = invoke(root, ["rename", "character", "ghost", "Bo"]);
-    expect(result.code).toBe(1);
+    expect(result.code).toBe(2);
     expect(result.err).toContain("character ghost does not exist");
     expect(read(root, "chapters/chapter-01.md")).toBe(chapter);
   });

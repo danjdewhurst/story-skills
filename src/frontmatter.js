@@ -1,3 +1,5 @@
+import { projectError } from "./exit-codes.js";
+
 // The closing delimiter is a line holding only `---` (and trailing spaces), so
 // `----` or `--- # end` never closes the block. The YAML source may be empty.
 export const FRONTMATTER_PATTERN = /^(?:\uFEFF)?---[ \t]*\r?\n(?:([\s\S]*?)\r?\n)?---[ \t]*(?:\r?\n|$)/;
@@ -8,9 +10,9 @@ export function parseFrontmatter(markdown, filePath = "markdown") {
   const match = FRONTMATTER_PATTERN.exec(markdown);
   if (!match) {
     if (OPENING_PATTERN.test(markdown)) {
-      throw new Error(`${filePath} has unclosed YAML frontmatter: add a line holding only --- after the last field`);
+      throw projectError(`${filePath} has unclosed YAML frontmatter: add a line holding only --- after the last field`);
     }
-    throw new Error(`${filePath} is missing YAML frontmatter`);
+    throw projectError(`${filePath} is missing YAML frontmatter`);
   }
 
   const raw = match[1] ?? "";
@@ -232,12 +234,12 @@ function parseYamlBlocks(source) {
 
     const pair = /^([A-Za-z0-9_-]+):(?:\s*(.*))?$/.exec(line);
     if (!pair) {
-      throw new Error(`Unsupported frontmatter line: ${line}`);
+      throw projectError(`Unsupported frontmatter line: ${line}`);
     }
 
     const [, key, rest = ""] = pair;
     if (Object.prototype.hasOwnProperty.call(data, key)) {
-      throw new Error(`Duplicate frontmatter key: ${key}`);
+      throw projectError(`Duplicate frontmatter key: ${key}`);
     }
     if (rest !== "") {
       data[key] = parseScalar(rest);
@@ -323,7 +325,7 @@ function parseArray(lines, startIndex) {
       }
 
       if (Object.prototype.hasOwnProperty.call(item, childMatch[1])) {
-        throw new Error(`Duplicate frontmatter key: ${childMatch[1]}`);
+        throw projectError(`Duplicate frontmatter key: ${childMatch[1]}`);
       }
       item[childMatch[1]] = parseScalar(childMatch[2]);
       index += 1;

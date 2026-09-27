@@ -124,17 +124,17 @@ status: alive
   test("cli requires --at and a character id", () => {
     const { cwd } = knowledgeProject();
     const missingAt = invoke(cwd, ["knowledge", "mara-finn"]);
-    expect(missingAt.code).toBe(1);
+    expect(missingAt.code).toBe(2);
     expect(missingAt.err).toContain("Usage: story knowledge");
 
     const missingCharacter = invoke(cwd, ["knowledge", "--at", "chapter-01"]);
-    expect(missingCharacter.code).toBe(1);
+    expect(missingCharacter.code).toBe(2);
   });
 
   test("cli errors for unknown characters and chapters", () => {
     const { root, cwd } = knowledgeProject();
     const unknown = invoke(cwd, ["knowledge", "nobody-here", "--at", "chapter-01", "--path", root]);
-    expect(unknown.code).toBe(1);
+    expect(unknown.code).toBe(2);
     expect(unknown.err).toContain("Unknown character nobody-here");
   });
 });

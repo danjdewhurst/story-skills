@@ -146,7 +146,7 @@ describe("story diagram", () => {
     expect(fs.readFileSync(path.join(root, "dist", "map.mmd"), "utf8")).toContain("port ---|\"5h cart\"| fort");
 
     const bad = invoke(cwd, ["diagram", "weather", "--path", root]);
-    expect(bad.code).toBe(1);
+    expect(bad.code).toBe(2);
     expect(bad.err).toContain("Unknown diagram kind: weather. Supported kinds: relationships, locations, timeline, clues, arcs");
   });
 });

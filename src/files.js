@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { Buffer } from "node:buffer";
+import { EXIT_CODES, projectError, withExitCode } from "./exit-codes.js";
 
 export const MAX_READ_BYTES = 5 * 1024 * 1024;
 
@@ -10,13 +11,13 @@ export const MAX_READ_BYTES = 5 * 1024 * 1024;
 export function readTextFile(filePath) {
   const stats = fs.lstatSync(filePath);
   if (stats.isSymbolicLink()) {
-    throw new Error(`Refusing to read through symlink: ${filePath}`);
+    throw projectError(`Refusing to read through symlink: ${filePath}`);
   }
   if (!stats.isFile()) {
-    throw new Error(`Refusing to read ${filePath}: not a regular file`);
+    throw projectError(`Refusing to read ${filePath}: not a regular file`);
   }
   if (stats.size > MAX_READ_BYTES) {
-    throw new Error(`Refusing to read oversized file ${filePath}: ${stats.size} bytes exceeds the ${MAX_READ_BYTES} byte limit`);
+    throw projectError(`Refusing to read oversized file ${filePath}: ${stats.size} bytes exceeds the ${MAX_READ_BYTES} byte limit`);
   }
   return decodeUtf8(fs.readFileSync(filePath), filePath);
 }
@@ -32,7 +33,7 @@ export function decodeUtf8(buffer, filePath) {
   } catch {
     const offset = invalidUtf8Offset(buffer);
     const byte = buffer[offset].toString(16).padStart(2, "0");
-    throw new Error(`${filePath} is not valid UTF-8 (byte 0x${byte} at offset ${offset}): re-save it as UTF-8`);
+    throw projectError(`${filePath} is not valid UTF-8 (byte 0x${byte} at offset ${offset}): re-save it as UTF-8`);
   }
 }
 
@@ -58,8 +59,17 @@ function invalidUtf8Offset(buffer) {
 // one stays refused, and a hard link (to a chapter, say) is replaced rather
 // than written through. With `unchangedFrom`, the write is refused when the
 // file no longer holds that text (an editor saved it after the command read
-// it), so the save is not overwritten.
+// it), so the save is not overwritten. Any failure, a refusal or the file
+// system's, exits as a refused write.
 export function writeFile(filePath, contents, options = {}) {
+  try {
+    writeWholeFile(filePath, contents, options);
+  } catch (error) {
+    throw withExitCode(error, EXIT_CODES.refused);
+  }
+}
+
+function writeWholeFile(filePath, contents, options) {
   const target = prepareWriteTarget(filePath, options.root);
   const existing = lstatIfExists(target);
   if (existing) {
@@ -144,18 +154,18 @@ export function assertSafeProjectDirectory(directory, root) {
 
   if (stats) {
     if (stats.isSymbolicLink()) {
-      throw new Error(`Refusing to use symlinked project directory: ${target}`);
+      throw projectError(`Refusing to use symlinked project directory: ${target}`);
     }
 
     if (!stats.isDirectory()) {
-      throw new Error(`Project path is not a directory: ${target}`);
+      throw projectError(`Project path is not a directory: ${target}`);
     }
   }
 
   const rootReal = fs.realpathSync(path.resolve(root));
   const directoryReal = fs.realpathSync(target);
   if (!isPathInside(rootReal, directoryReal)) {
-    throw new Error(`Refusing to use project directory outside root: ${target}`);
+    throw projectError(`Refusing to use project directory outside root: ${target}`);
   }
 }
 
@@ -163,7 +173,7 @@ function assertSafeProjectParent(filePath, root) {
   const rootReal = fs.realpathSync(path.resolve(root));
   const parentReal = fs.realpathSync(path.dirname(path.resolve(filePath)));
   if (!isPathInside(rootReal, parentReal)) {
-    throw new Error(`Refusing to access project path outside root: ${filePath}`);
+    throw projectError(`Refusing to access project path outside root: ${filePath}`);
   }
 }
 
@@ -185,10 +195,10 @@ export function assertExistingAncestorInsideRoot(target, root) {
     rootReal = fs.realpathSync(path.resolve(root));
     currentReal = fs.realpathSync(current);
   } catch {
-    throw new Error(`Refusing to access project path outside root: ${target}`);
+    throw projectError(`Refusing to access project path outside root: ${target}`);
   }
   if (!isPathInside(rootReal, currentReal)) {
-    throw new Error(`Refusing to access project path outside root: ${target}`);
+    throw projectError(`Refusing to access project path outside root: ${target}`);
   }
 }
 
@@ -196,13 +206,13 @@ export function assertLexicallyInsideRoot(filePath, root) {
   const rootPath = path.resolve(root);
   const target = path.resolve(filePath);
   if (!isPathInside(rootPath, target)) {
-    throw new Error(`Refusing to access path outside project root: ${target}`);
+    throw projectError(`Refusing to access path outside project root: ${target}`);
   }
 }
 
 function rejectSymlinkTarget(filePath, action) {
   if (lstatIfExists(filePath)?.isSymbolicLink()) {
-    throw new Error(`Refusing to ${action} through symlink: ${filePath}`);
+    throw projectError(`Refusing to ${action} through symlink: ${filePath}`);
   }
 }
 

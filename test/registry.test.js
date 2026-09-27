@@ -50,7 +50,7 @@ describe("command registry", () => {
     const cwd = makeTempDir();
     for (const command of COMMANDS.filter((entry) => entry.project === "none")) {
       const io = memoryIo(cwd);
-      expect(runCli([command.name, "x", "--path", "."], io)).toBe(1);
+      expect(runCli([command.name, "x", "--path", "."], io)).toBe(2);
       expect(io.error()).toBe(`${command.name} uses --dir for the target directory. --path is the project root for other commands.\n`);
     }
   });

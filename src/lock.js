@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { refusedError } from "./exit-codes.js";
 
 // The lock a write command holds on its project, so two commands (two agent
 // sessions, or an editor hook running reindex while the user runs rename)
@@ -61,7 +62,7 @@ function acquire(lockPath) {
     }
     if (Date.now() >= deadline) {
       const who = owner?.pid ? `another story command (process ${owner.pid}${owner.host && owner.host !== os.hostname() ? ` on ${owner.host}` : ""})` : "another story command";
-      throw new Error(`${who} is modifying this project; nothing was changed. Run write commands one at a time. If no story command is running, delete ${LOCK_FILE} in the project folder and try again`);
+      throw refusedError(`${who} is modifying this project; nothing was changed. Run write commands one at a time. If no story command is running, delete ${LOCK_FILE} in the project folder and try again`);
     }
     sleep(Math.min(POLL_MS, Math.max(1, deadline - Date.now())));
   }

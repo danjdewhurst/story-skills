@@ -58,7 +58,7 @@ describe("story names", () => {
   test("the CLI requires a name and exits 1 on a clash", () => {
     const { root, cwd } = namesProject();
     const missing = invoke(cwd, ["names", "--path", root]);
-    expect(missing.code).toBe(1);
+    expect(missing.code).toBe(2);
     expect(missing.err).toContain("Usage: story names <name...>");
 
     const clash = invoke(cwd, ["names", "Mara", "Wren", "--path", root]);

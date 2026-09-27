@@ -5,6 +5,7 @@
 // The print interior is HTML with CSS paged media, rendered to PDF by a
 // paged-media engine such as Paged.js, WeasyPrint, or Prince.
 import { textDirection } from "./publishing.js";
+import { usageError } from "./exit-codes.js";
 
 export const TRIM_SIZES = new Map([
   ["5x8", { width: "5in", height: "8in", wordsPerPage: 230 }],
@@ -151,7 +152,7 @@ ${sections.join("\n")}
 export function printHtml(book, trimName = DEFAULT_TRIM) {
   const trim = TRIM_SIZES.get(trimName);
   if (!trim) {
-    throw new Error(`Unsupported trim size: ${trimName}. Supported sizes: ${[...TRIM_SIZES.keys()].join(", ")}`);
+    throw usageError(`Unsupported trim size: ${trimName}. Supported sizes: ${[...TRIM_SIZES.keys()].join(", ")}`);
   }
   const pages = estimateBookPages(book, trimName);
   const inside = insideMargin(pages);

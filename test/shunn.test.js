@@ -131,7 +131,7 @@ describe("shunn manuscript format", () => {
   test("cli rejects unknown build formats", () => {
     const { root, cwd } = shunnProject();
     const result = invoke(cwd, ["build", root, "--format", "nope"]);
-    expect(result.code).toBe(1);
+    expect(result.code).toBe(2);
     expect(result.err).toContain("Unsupported build format: nope");
   });
 });

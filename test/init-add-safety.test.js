@@ -51,7 +51,7 @@ describe("init", () => {
     fs.rmSync(path.join(root, "glossary", "_index.md"));
 
     const retry = invoke(cwd, ["init", "Kept Work"]);
-    expect(retry.code).toBe(1);
+    expect(retry.code).toBe(4);
     expect(retry.err).toContain("never overwritten");
 
     expect(invoke(cwd, ["init", "Kept Work", "--force"]).code).toBe(0);

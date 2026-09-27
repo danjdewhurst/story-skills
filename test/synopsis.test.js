@@ -267,7 +267,7 @@ The valley keeps its secret.`;
   test("cli rejects unsupported page counts", () => {
     const { root, cwd } = synopsisProject();
     const result = invoke(cwd, ["synopsis", root, "--pages", "2"]);
-    expect(result.code).toBe(1);
+    expect(result.code).toBe(2);
     expect(result.err).toContain("Unsupported synopsis length: 2. Supported pages: 1, 3");
   });
 });

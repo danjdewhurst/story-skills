@@ -1,4 +1,5 @@
 import { editDistance } from "./prose.js";
+import { usageError } from "./exit-codes.js";
 
 // Every CLI option, in help order. `value` names the argument shown in help
 // (boolean flags have none), `repeatable` collects every value given, and
@@ -166,7 +167,7 @@ function normalizeBooleanValue(key, value) {
   if (lower === "true" || lower === "1" || lower === "yes" || lower === "on") {
     return true;
   }
-  throw new Error(`Unknown value "${value}" for --${key}: expected true or false`);
+  throw usageError(`Unknown value "${value}" for --${key}: expected true or false`);
 }
 
 // "; did you mean --format?" for a near miss (every candidate tied for
@@ -264,14 +265,14 @@ export function parseArgs(argv, suggestFrom = OPTIONS.map((option) => option.nam
       }
       const nextValue = argv[index + 1];
       if (nextValue === undefined || isKnownOptionToken(nextValue) || nextValue.startsWith("--")) {
-        throw new Error(`Missing value for --${key}: expected a value`);
+        throw usageError(`Missing value for --${key}: expected a value`);
       }
       addOption(options, key, nextValue);
       index += 1;
       continue;
     }
 
-    throw new Error(`Unknown option --${key}${suggestion(key, suggestFrom, "--")}`);
+    throw usageError(`Unknown option --${key}${suggestion(key, suggestFrom, "--")}`);
   }
 
   return { positionals, options };

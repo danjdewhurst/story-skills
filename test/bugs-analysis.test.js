@@ -130,7 +130,7 @@ describe("compare (#73, #74, #216, #218)", () => {
     git(repo, "mv", "book", "renamed book");
     git(repo, "commit", "-qm", "mv");
     const result = invoke(repo, ["compare", path.join(repo, "renamed book"), "--ref", "v1"]);
-    expect(result.code).toBe(1);
+    expect(result.code).toBe(3);
     expect(result.err).toContain("renamed book/ does not exist at git ref v1");
   });
 
@@ -164,7 +164,7 @@ describe("compare (#73, #74, #216, #218)", () => {
     const file = path.join(after, "chapters", "chapter-02.md");
     fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("---\n", "---\ntitle: dup\ntitle: dup2\n"), "utf8");
     const result = invoke(cwd, ["compare", after, "--against", before]);
-    expect(result.code).toBe(1);
+    expect(result.code).toBe(3);
     expect(result.out).not.toContain("removed");
     expect(result.err).toContain("Cannot compare");
   });

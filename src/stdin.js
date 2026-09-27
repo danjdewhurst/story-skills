@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer";
 import fs from "node:fs";
 import tty from "node:tty";
+import { usageError } from "./exit-codes.js";
 
 // `-` in place of a file or project path means "read standard input", as it
 // does for cat and git. A file really named `-` is reached as `./-`.
@@ -20,7 +21,7 @@ const RETRY_MS = 10;
 // `fd`, `isatty`, and `readSync` are for tests.
 export function readStdin(command, { fd = 0, isatty = tty.isatty, readSync = fs.readSync, maxBytes = MAX_STDIN_BYTES } = {}) {
   if (isatty(fd)) {
-    throw new Error(`story ${command} - reads from stdin, but stdin is a terminal: pipe the text in, such as story ${command} - < draft.md`);
+    throw usageError(`story ${command} - reads from stdin, but stdin is a terminal: pipe the text in, such as story ${command} - < draft.md`);
   }
   const chunks = [];
   const buffer = Buffer.alloc(CHUNK_BYTES);
@@ -39,16 +40,16 @@ export function readStdin(command, { fd = 0, isatty = tty.isatty, readSync = fs.
         break;
       }
       if (error.code === "EBADF") {
-        throw new Error(`story ${command} - reads from stdin, but stdin is closed: pipe the text in, such as story ${command} - < draft.md`);
+        throw usageError(`story ${command} - reads from stdin, but stdin is closed: pipe the text in, such as story ${command} - < draft.md`);
       }
-      throw new Error(`Cannot read stdin: ${error.message}`);
+      throw usageError(`Cannot read stdin: ${error.message}`);
     }
     if (read === 0) {
       break;
     }
     total += read;
     if (total > maxBytes) {
-      throw new Error(`Refusing to read more than ${maxBytes} bytes from stdin`);
+      throw usageError(`Refusing to read more than ${maxBytes} bytes from stdin`);
     }
     chunks.push(Buffer.from(buffer.subarray(0, read)));
   }
@@ -61,7 +62,7 @@ export function readStdin(command, { fd = 0, isatty = tty.isatty, readSync = fs.
 export function stdinText(command, bytes) {
   const text = decodeUtf8(bytes, "Cannot read stdin", "Pipe UTF-8 plain text or markdown instead");
   if (text.trim() === "") {
-    throw new Error(`story ${command} - read nothing from stdin: pipe the text in, such as story ${command} - < draft.md`);
+    throw usageError(`story ${command} - read nothing from stdin: pipe the text in, such as story ${command} - < draft.md`);
   }
   return text;
 }
@@ -70,16 +71,16 @@ export function stdinText(command, bytes) {
 // and ends with `advice`, so no character is silently replaced.
 export function decodeUtf8(bytes, subject, advice) {
   if (bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04) {
-    throw new Error(`${subject}: it is a zip archive (such as a .docx or .odt file). Save or export it as markdown or plain text first`);
+    throw usageError(`${subject}: it is a zip archive (such as a .docx or .odt file). Save or export it as markdown or plain text first`);
   }
   if (bytes.includes(0)) {
-    throw new Error(`${subject}: it is a binary or UTF-16 file, not UTF-8 text. ${advice}`);
+    throw usageError(`${subject}: it is a binary or UTF-16 file, not UTF-8 text. ${advice}`);
   }
   let text;
   try {
     text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   } catch {
-    throw new Error(`${subject}: it is not valid UTF-8 text. ${advice}`);
+    throw usageError(`${subject}: it is not valid UTF-8 text. ${advice}`);
   }
   return text.replace(/^\uFEFF/, "");
 }

@@ -1,4 +1,5 @@
 import { editDistance } from "./prose.js";
+import { usageError } from "./exit-codes.js";
 
 // Named revision passes kept in story.md `revision-passes`. A revision works
 // best as separate passes, each looking for one kind of problem, from the
@@ -95,7 +96,7 @@ export function updatePasses(passes, change) {
       continue;
     }
     if (typeof name !== "string" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name)) {
-      throw new Error(`Revision pass names must be kebab-case, got ${name}`);
+      throw usageError(`Revision pass names must be kebab-case, got ${name}`);
     }
     const existing = next.find((entry) => entry.pass === name);
     if (existing) {

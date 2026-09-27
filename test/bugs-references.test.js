@@ -105,7 +105,7 @@ describe("reference handling in add, rename, remove, and move", () => {
   test("#88 add, rename, and names refuse a trailing project path", () => {
     const root = newProject();
     const added = invoke(root, ["add", "character", "Ann", "Bee", "."]);
-    expect(added.code).toBe(1);
+    expect(added.code).toBe(2);
     expect(added.err).toContain('"." looks like a project path: story add takes the project as --path .');
     expect(fs.existsSync(path.join(root, "characters", "ann-bee.md"))).toBe(false);
     expect(invoke(root, ["names", "Zora", "."]).err).toContain("story names takes the project as --path");

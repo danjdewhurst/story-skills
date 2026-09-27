@@ -87,7 +87,7 @@ describe("#94 help parsing", () => {
     expect(invoke(cwd, ["--version=1"]).out).toMatch(/^\d+\.\d+\.\d+\n$/);
     expect(parseArgs(["--help=false", "--version=no"])).toEqual({ positionals: [], options: {} });
     const bad = invoke(cwd, ["--help=maybe"]);
-    expect(bad.code).toBe(1);
+    expect(bad.code).toBe(2);
     expect(bad.err).toContain('Unknown value "maybe" for --help');
   });
 });
@@ -96,14 +96,14 @@ describe("#78 project path errors", () => {
   test("pointing at story.md says to pass the folder", () => {
     const root = newProject();
     const result = invoke(root, ["validate", "story.md"]);
-    expect(result.code).toBe(1);
+    expect(result.code).toBe(3);
     expect(result.err).toBe(`${path.join(root, "story.md")} is a file; pass the folder that contains it\n`);
   });
 
   test("a project subfolder hints at the project root", () => {
     const root = newProject();
     const result = invoke(path.join(root, "chapters"), ["report"]);
-    expect(result.code).toBe(1);
+    expect(result.code).toBe(3);
     expect(result.err).toContain("is not a story project: missing story.md (the project root looks like ");
     expect(result.err).toContain("; pass that path instead)");
     const outside = invoke(makeTempDir(), ["report"]);
@@ -116,7 +116,7 @@ describe("#87 positive integer options", () => {
     const root = newProject();
     for (const value of ["0x10", "1e21", "99999999999999999999", "2.0", "0b11", "-3", "0"]) {
       const result = invoke(root, ["add", "chapter", "Bad", "--number", value]);
-      expect(result.code).toBe(1);
+      expect(result.code).toBe(2);
       expect(result.err).toContain("chapter number must be a positive integer");
     }
     expect(fs.readdirSync(path.join(root, "chapters")).filter((name) => name !== "_index.md")).toEqual([]);
