@@ -11,6 +11,8 @@ mentions: []
 arcs-advanced: []
 status: draft
 outcome: yes-but
+sequel: true
+dilemma: Ring the storm bell and leave the wick, or keep the lamp and let the ship take its chances
 state-changes: []
 ---
 

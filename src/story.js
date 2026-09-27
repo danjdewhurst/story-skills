@@ -3191,6 +3191,7 @@ function removeEntityUnlocked(root, options) {
   const choosers = kind === "chapter"
     ? project.chapters.filter((chapter) => chapter.id !== id && chapterChoices(chapter, "").choices.some((choice) => choice.to === id)).map((chapter) => relative(project, chapter.file))
     : [];
+  const wasBranching = choosers.length > 0 && branchGraph(project).branching;
   const plan = removeEntityReferences(project.root, kind, id, new Map([[file, null]]));
   assertWritable(project.root, [...plan.keys(), file]);
   // References first, the file last, so an interrupted remove can be rerun.
@@ -3201,7 +3202,11 @@ function removeEntityUnlocked(root, options) {
   const reindexed = reindexProject(project.root);
   const warnings = leftoverReferenceWarnings(project.root, kind, id);
   if (choosers.length > 0) {
-    warnings.push(`${choosers.join(", ")} had choices leading to ${id}, which remove dropped; a chapter left with no choices is an ending, so check where ${choosers.length === 1 ? "it leads" : "they lead"} now`);
+    // With the last choice gone the book is linear again: every chapter
+    // continues to the next, endings included.
+    warnings.push(branchGraph(scanProject(project.root)).branching || !wasBranching
+      ? `${choosers.join(", ")} had choices leading to ${id}, which remove dropped; a chapter left with no choices is an ending, so check where ${choosers.length === 1 ? "it leads" : "they lead"} now`
+      : `${choosers.join(", ")} had the last choices in the book, leading to ${id}, which remove dropped; with no choices left the book is linear again and each chapter continues to the next, so add choices back to keep it branching`);
   }
   return { kind, id, file, alreadyGone, changed: [file].concat(reindexed.changed), warnings };
 }
@@ -5381,16 +5386,18 @@ function chapterChoices(chapter, label) {
       return;
     }
     const text = typeof choice.text === "string" ? choice.text.trim() : "";
-    const to = typeof choice.to === "string" ? choice.to.trim() : "";
+    // Not trimmed: move and remove match the id exactly, so a padded
+    // `to: "chapter-03 "` would be left behind by them.
+    const to = typeof choice.to === "string" ? choice.to : "";
     const before = problems.length;
     if (text === "") {
       problems.push(`${at} needs text: the words the reader picks, quoted if they look like a number`);
     } else if (TWEE_LINK_UNSAFE.test(text)) {
       problems.push(`${at} text cannot contain [, ], |, ->, <-, or a line break, or end in <, which Twine reads as link syntax`);
     }
-    if (to === "") {
+    if (to.trim() === "") {
       problems.push(`${at} needs to: the id of the chapter it leads to, such as chapter-02`);
-    } else if (!isKebabId(to)) {
+    } else if (to !== kebabCase(to)) {
       problems.push(`${at} to ${to} must be a kebab-case chapter id`);
     }
     if (problems.length === before) {

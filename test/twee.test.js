@@ -167,9 +167,12 @@ describe("twee build", () => {
   - text: Search <
     to: chapter-02
   - text: Fine
-    to: chapter-02`);
+    to: chapter-02
+  - text: Padded
+    to: "chapter-02 "`);
     chapter(root, 2, "End.");
     const errors = validateProject(root).errors;
+    expect(errors).toContain("chapters/chapter-01.md choices[8] to chapter-02  must be a kebab-case chapter id");
     expect(errors).toEqual([
       "chapters/chapter-01.md choices[0] must have text and to, such as { text: Follow the light, to: chapter-02 }",
       "chapters/chapter-01.md choices[1] needs text: the words the reader picks, quoted if they look like a number",
@@ -179,7 +182,8 @@ describe("twee build", () => {
       "chapters/chapter-01.md choices[4] to Chapter Two must be a kebab-case chapter id",
       "chapters/chapter-01.md choices[5] needs text: the words the reader picks, quoted if they look like a number",
       "chapters/chapter-01.md choices[5] needs to: the id of the chapter it leads to, such as chapter-02",
-      "chapters/chapter-01.md choices[6] text cannot contain [, ], |, ->, <-, or a line break, or end in <, which Twine reads as link syntax"
+      "chapters/chapter-01.md choices[6] text cannot contain [, ], |, ->, <-, or a line break, or end in <, which Twine reads as link syntax",
+      "chapters/chapter-01.md choices[8] to chapter-02  must be a kebab-case chapter id"
     ]);
     const schemaErrors = validateAgainstSchema(buildSchemaDocument(root), schema);
     expect(schemaErrors.length).toBeGreaterThanOrEqual(7);
@@ -221,6 +225,15 @@ describe("choice targets follow move and remove", () => {
     chapter(root, 3, "Back.", choices(["Go up", "chapter-04"]));
     expect(removeEntity(root, { kind: "chapter", id: "chapter-04" }).warnings[0]).toStartWith("chapters/chapter-02.md, chapters/chapter-03.md had choices leading to chapter-04, which remove dropped; a chapter left with no choices is an ending, so check where they lead now");
     expect(validateLinks(root)).toMatchObject({ errors: [], warnings: ["chapters/chapter-03.md cannot be reached: no choice path from chapter-01 leads to it"] });
+  });
+
+  test("remove says when the last choice goes and the book turns linear", () => {
+    const root = project();
+    chapter(root, 1, "Start.", choices(["Go", "chapter-03"]));
+    chapter(root, 2, "Middle.");
+    chapter(root, 3, "End.");
+    expect(removeEntity(root, { kind: "chapter", id: "chapter-03" }).warnings).toEqual(["chapters/chapter-01.md had the last choices in the book, leading to chapter-03, which remove dropped; with no choices left the book is linear again and each chapter continues to the next, so add choices back to keep it branching"]);
+    expect(choiceTargets(root, "chapter-01")).toEqual([]);
   });
 
   test("a route's to still names a location, never a chapter", () => {
