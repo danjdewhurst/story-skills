@@ -631,7 +631,7 @@ function reportKeptStory(io, result, titleLabel) {
 // committed with it.
 function reportGitignore(io, result) {
   if (result.gitignore === "missing-dist") {
-    io.stderr.write("note: .gitignore was kept and does not list dist/, so builds would be committed. Add a dist/ line to keep them out.\n");
+    io.stderr.write("note: .gitignore was kept and does not ignore dist/, so builds would be committed. Add a dist/ line to keep them out.\n");
   }
 }
 

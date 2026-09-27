@@ -306,10 +306,10 @@ story init "The Salt Road"
 
 With `--force` on a directory that already has a `story.md`, `init` keeps that `story.md`, prints `Updated story project: <dir>` instead of `Created`, and takes the story id for any new registry from the kept title. A title that differs from the kept one, and any `story.md` option you passed (`--genre`, `--form`, `--synopsis`, and so on), is named in a warning, since it was not applied: `warning: story.md already exists and was kept, so the title and --genre were not applied. Edit story.md to change them.`
 
-The `.gitignore` lists `dist/`, so builds stay out of commits, plus `.story.lock` and the `.*.story-*.tmp` files an interrupted command can leave behind, and common OS and editor files (`.DS_Store`, `Thumbs.db`, `*.swp`, `*.swo`, `*~`). `init` writes it only when the project has none, `--force` included, and never edits an existing one; a symlinked `.gitignore` is left alone and not read, and one that is not UTF-8 text is kept without a check. When a kept `.gitignore` has no `dist/` rule (`dist`, `dist/`, `/dist/`, `dist/*`, `dist/**`, or `**/dist/`), `init` still succeeds and prints a note on stderr:
+The `.gitignore` lists `dist/`, so builds stay out of commits, plus `.story.lock` and the `.*.story-*.tmp` and `.story-*.tmp` files an interrupted command can leave behind, and common OS and editor files (`.DS_Store`, `Thumbs.db`, `*.swp`, `*.swo`, `*~`). `init` writes it only when the project has none, `--force` included, and never edits an existing one; a symlinked `.gitignore` is left alone and not read, and one that is not UTF-8 text is kept without a check. When a kept `.gitignore` has no `dist/` rule (`dist`, `dist/`, `/dist/`, `dist/*`, `dist/**`, or `**/dist/`), or a later negation such as `!dist/book.epub` re-includes part of it, `init` still succeeds and prints a note on stderr:
 
 ```text
-note: .gitignore was kept and does not list dist/, so builds would be committed. Add a dist/ line to keep them out.
+note: .gitignore was kept and does not ignore dist/, so builds would be committed. Add a dist/ line to keep them out.
 ```
 
 A `.gitignore` in an enclosing repository is not checked, so a book inside a larger repository gets its own `.gitignore` too; the two do not conflict.

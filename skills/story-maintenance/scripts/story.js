@@ -6505,6 +6505,7 @@ dist/
 # Left behind when a story command is interrupted
 .story.lock
 .*.story-*.tmp
+.story-*.tmp
 
 # OS and editor files
 .DS_Store
@@ -6529,7 +6530,14 @@ function writeStarterGitignore(root) {
   } catch {
     return "kept";
   }
-  const ignoresDist = text.split(/\r?\n/).some((line) => /^(?:\*\*\/|\/)?dist(?:\/(?:\*{1,2})?)?$/.test(line.trim()));
+  let ignoresDist = false;
+  for (const line of text.split(/\r?\n/).map((entry) => entry.trim())) {
+    if (/^(?:\*\*\/|\/)?dist(?:\/(?:\*{1,2})?)?$/.test(line)) {
+      ignoresDist = true;
+    } else if (/^!(?:\*\*\/|\/)?dist(?:\/|$)/.test(line)) {
+      ignoresDist = false;
+    }
+  }
   return ignoresDist ? "kept" : "missing-dist";
 }
 function inheritedStoryFields(data) {
@@ -13119,7 +13127,7 @@ function reportKeptStory(io, result, titleLabel) {
 }
 function reportGitignore(io, result) {
   if (result.gitignore === "missing-dist") {
-    io.stderr.write(`note: .gitignore was kept and does not list dist/, so builds would be committed. Add a dist/ line to keep them out.
+    io.stderr.write(`note: .gitignore was kept and does not ignore dist/, so builds would be committed. Add a dist/ line to keep them out.
 `);
   }
 }

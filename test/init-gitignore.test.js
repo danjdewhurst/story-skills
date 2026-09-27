@@ -12,7 +12,7 @@ function invoke(cwd, argv) {
   return { code, out: io.output(), err: io.error() };
 }
 
-const NOTE = "note: .gitignore was kept and does not list dist/";
+const NOTE = "note: .gitignore was kept and does not ignore dist/";
 
 describe("init .gitignore", () => {
   test("a new project ignores dist/, story leftovers, and OS and editor files", () => {
@@ -21,7 +21,7 @@ describe("init .gitignore", () => {
     expect(result.code).toBe(0);
     expect(result.err).toBe("");
     const lines = fs.readFileSync(path.join(cwd, "salt-road", ".gitignore"), "utf8").split("\n");
-    for (const entry of ["dist/", ".story.lock", ".*.story-*.tmp", ".DS_Store", "Thumbs.db", "*.swp", "*~"]) {
+    for (const entry of ["dist/", ".story.lock", ".*.story-*.tmp", ".story-*.tmp", ".DS_Store", "Thumbs.db", "*.swp", "*~"]) {
       expect(lines).toContain(entry);
     }
     expect(createStoryProject({ cwd, title: "Other Road" }).gitignore).toBe("created");
@@ -64,6 +64,16 @@ describe("init .gitignore", () => {
       const result = invoke(cwd, ["init", "Salt Road", "--force"]);
       expect(result.code).toBe(0);
       expect(result.err).toBe("");
+    }
+  });
+
+  test("a later negation that re-includes builds still prints the note", () => {
+    for (const [rules, noted] of [["dist/*\n!dist/book.epub\n", true], ["dist/\n!/dist/\n", true], ["!dist/book.epub\ndist/\n", false], ["dist/\n!notes.md\n", false]]) {
+      const cwd = makeTempDir();
+      const root = path.join(cwd, "salt-road");
+      fs.mkdirSync(root);
+      fs.writeFileSync(path.join(root, ".gitignore"), rules);
+      expect(createStoryProject({ cwd, title: "Salt Road", force: true }).gitignore).toBe(noted ? "missing-dist" : "kept");
     }
   });
 

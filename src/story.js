@@ -299,6 +299,7 @@ dist/
 # Left behind when a story command is interrupted
 .story.lock
 .*.story-*.tmp
+.story-*.tmp
 
 # OS and editor files
 .DS_Store
@@ -329,9 +330,16 @@ function writeStarterGitignore(root) {
     // rather than failing a run that has already written starter files.
     return "kept";
   }
-  const ignoresDist = text
-    .split(/\r?\n/)
-    .some((line) => /^(?:\*\*\/|\/)?dist(?:\/(?:\*{1,2})?)?$/.test(line.trim()));
+  // The last rule about dist wins, so a later negation such as
+  // `!dist/book.epub` counts as not ignoring the builds.
+  let ignoresDist = false;
+  for (const line of text.split(/\r?\n/).map((entry) => entry.trim())) {
+    if (/^(?:\*\*\/|\/)?dist(?:\/(?:\*{1,2})?)?$/.test(line)) {
+      ignoresDist = true;
+    } else if (/^!(?:\*\*\/|\/)?dist(?:\/|$)/.test(line)) {
+      ignoresDist = false;
+    }
+  }
   return ignoresDist ? "kept" : "missing-dist";
 }
 

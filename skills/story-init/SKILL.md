@@ -44,7 +44,7 @@ Publishing metadata (`isbn`, `publisher`, `publication-date`, `description`, `ke
 
 The story id recorded in every registry is the kebab-case form of the title (`--dir` sets only the directory). A title with no ASCII letters or digits, such as `Война и мир`, needs `--dir` with an ASCII folder name, and the story id then comes from the folder name. The id is recomputed from the title on every run, so it changes whenever the title does: after editing `title` in `story.md`, run `story reindex .` to rewrite the id in every registry, `plot/timeline.md`, and `continuity/state.md`, or `story validate` fails with `story must be <new-id>`. For a folder-name id, a new title that gains any ASCII letter or digit (`Война и мир — том 2`) takes over the id (`2`), so prefer titles without them or reindex afterwards. `init` refuses an existing directory unless you pass `--force`; with `--force` it only creates missing starter files and never overwrites an existing `story.md`, registry, timeline, or `continuity/state.md`.
 
-`init` also writes a `.gitignore` listing `dist/` (build output), `.story.lock`, leftover `.*.story-*.tmp` files, and OS and editor swap files, but only when the project has none. It never edits an existing `.gitignore`; if it prints `note: .gitignore was kept and does not list dist/`, tell the user and offer to add a `dist/` line.
+`init` also writes a `.gitignore` listing `dist/` (build output), `.story.lock`, leftover `.*.story-*.tmp` and `.story-*.tmp` files, and OS and editor swap files, but only when the project has none. It never edits an existing `.gitignore`; if it prints `note: .gitignore was kept and does not ignore dist/`, tell the user and offer to add a `dist/` line (or remove a `!dist/...` negation).
 
 If `story` is not installed, use `bun run story --` from the Story Skills repository checkout or the bundled fallback `node ../story-maintenance/scripts/story.js` with the same arguments, resolving the path relative to this skill folder:
 
@@ -90,7 +90,7 @@ If neither command is available, create the files manually using the steps below
     └── _index.md
 ```
 
-Write `.gitignore` only if the folder has none, with `dist/`, `.story.lock`, `.*.story-*.tmp`, `.DS_Store`, `Thumbs.db`, `*.swp`, `*.swo`, and `*~`, one per line.
+Write `.gitignore` only if the folder has none, with `dist/`, `.story.lock`, `.*.story-*.tmp`, `.story-*.tmp`, `.DS_Store`, `Thumbs.db`, `*.swp`, `*.swo`, and `*~`, one per line.
 
 3. Populate `story.md` with the story bible:
 
