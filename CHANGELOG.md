@@ -18,6 +18,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ### Changed
 
+- **Breaking:** failures now exit with distinct codes instead of always `1`: `1` for findings (a check's `error:` lines, unchanged), `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused or failed write. `--json` runs exit the same way, and `ok` is `true` only on exit `0`. `story validate || exit 1` and the CI templates still fail on any error; scripts that tested for exactly `1` on a bad flag, a missing project, or a refused write need the new code. ([#276](https://github.com/danjdewhurst/story-skills/pull/276))
 - `bun run release` refuses to run while `CHANGELOG.md` has no entries under `Unreleased`, and moves those entries into a dated section for the new version in the release commit.
 - `bun run check:metadata` fails when `CHANGELOG.md` has no section for the current package version.
 - The npm package now includes `CHANGELOG.md`.
