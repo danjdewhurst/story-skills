@@ -198,11 +198,37 @@ describe("twee build", () => {
     expect(runCli(["build", root, "--format", "twee", "--out", "adaptations/interactive/gull-rock.twee"], io)).toBe(0);
     expect(io.output()).toBe(`Built 4 chapters as twee to ${path.join(root, "adaptations", "interactive", "gull-rock.twee")}\n`);
     const again = memoryIo(cwd);
-    expect(runCli(["build", root, "--format", "twee", "--out", "adaptations/interactive/gull-rock.twee"], again)).toBe(1);
+    expect(runCli(["build", root, "--format", "twee", "--out", "adaptations/interactive/gull-rock.twee"], again)).toBe(4);
     expect(again.error()).toContain("Refusing to overwrite");
     const source = memoryIo(cwd);
-    expect(runCli(["build", root, "--format", "twee", "--out", "chapters/story.twee"], source)).toBe(1);
+    expect(runCli(["build", root, "--format", "twee", "--out", "chapters/story.twee"], source)).toBe(4);
     expect(source.error()).toContain("it is project source");
+  });
+});
+
+describe("twee on the command line", () => {
+  test("bad choices exit 3 like other unbuildable content, an unknown format 2", () => {
+    const root = branching();
+    chapter(root, 4, "End.", choices(["Try again", "chapter-09"]));
+    const io = memoryIo(root);
+    expect(runCli(["build", root, "--format", "twee"], io)).toBe(3);
+    expect(io.error()).toContain("Cannot build twee until these are fixed:");
+    const unknown = memoryIo(root);
+    expect(runCli(["build", root, "--format", "tweee"], unknown)).toBe(2);
+    expect(unknown.error()).toContain("Supported formats: markdown, epub, docx, shunn, html, print, narration, metadata, fountain, twee");
+  });
+
+  test("story.md cli-defaults can make twee the default build, and a given --format still wins", () => {
+    const root = branching();
+    const storyPath = path.join(root, "story.md");
+    fs.writeFileSync(storyPath, read(storyPath).replace("schema-version: 2\n", "schema-version: 2\ncli-defaults:\n  - command: build\n    format: twee\n"));
+    expect(validateProject(root).errors).toEqual([]);
+    const io = memoryIo(root);
+    expect(runCli(["build", root], io)).toBe(0);
+    expect(io.output()).toContain("as twee to");
+    const epub = memoryIo(root);
+    expect(runCli(["build", root, "--format", "markdown"], epub)).toBe(0);
+    expect(epub.output()).toContain("as markdown to");
   });
 });
 
@@ -234,6 +260,19 @@ describe("choice targets follow move and remove", () => {
     chapter(root, 3, "End.");
     expect(removeEntity(root, { kind: "chapter", id: "chapter-03" }).warnings).toEqual(["chapters/chapter-01.md had the last choices in the book, leading to chapter-03, which remove dropped; with no choices left the book is linear again and each chapter continues to the next, so add choices back to keep it branching"]);
     expect(choiceTargets(root, "chapter-01")).toEqual([]);
+  });
+
+  test("move rewrites a chapter named by both a progression and a choice; remove refuses and leaves both", () => {
+    const root = branching();
+    writeMarkdown(path.join(root, "characters", "ada-fenn.md"), "name: Ada Fenn\nrole: protagonist\nstatus: alive\nprogressions:\n  - from: chapter-03\n    field: status\n    value: missing", "# Ada Fenn\n");
+    moveEntity(root, { kind: "chapter", id: "chapter-03", number: 7 });
+    expect(choiceTargets(root, "chapter-01")[1]).toEqual({ text: "Climb the tower", to: "chapter-07" });
+    const progressions = () => parseFrontmatter(read(path.join(root, "characters", "ada-fenn.md"))).data.progressions;
+    expect(progressions()).toEqual([{ from: "chapter-07", field: "status", value: "missing" }]);
+
+    expect(() => removeEntity(root, { kind: "chapter", id: "chapter-07" })).toThrow("a progression's from in characters/ada-fenn.md");
+    expect(choiceTargets(root, "chapter-01")[1].to).toBe("chapter-07");
+    expect(progressions()[0].from).toBe("chapter-07");
   });
 
   test("a route's to still names a location, never a chapter", () => {

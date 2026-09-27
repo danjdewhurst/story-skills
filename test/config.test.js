@@ -202,7 +202,7 @@ describe("cli-defaults", () => {
     configure(root, "cli-defaults:\n  - command: build\n    format: scroll");
     const result = invoke(cwd, ["build", root]);
     expect(result.code).toBe(2);
-    expect(result.err).toContain("Unsupported build format: scroll. Supported formats: markdown, epub, docx, shunn, html, print, narration, metadata, fountain (story.md cli-defaults set --format scroll)");
+    expect(result.err).toContain("Unsupported build format: scroll. Supported formats: markdown, epub, docx, shunn, html, print, narration, metadata, fountain, twee (story.md cli-defaults set --format scroll)");
     expect(invoke(cwd, ["build", root, "--format", "scroll"]).err).not.toContain("cli-defaults");
   });
 

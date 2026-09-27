@@ -8901,7 +8901,7 @@ function buildBook(root, options = {}) {
       ...pinned === undefined || isIfid(pinned) ? [] : ["story.md ifid must be a version 4 UUID, such as 3F2C9A61-7B1D-4E8A-9C3B-2A6D5E4F1B07"]
     ];
     if (problems.length > 0) {
-      throw new Error(`Cannot build twee until these are fixed:
+      throw projectError(`Cannot build twee until these are fixed:
 ${problems.join(`
 `)}`);
     }
