@@ -1,4 +1,5 @@
 import { isSceneBreak, withoutFencedCode } from "./markdown.js";
+import { openingWords } from "./html.js";
 import { formatPercent } from "./progress.js";
 
 // Compares two versions of a manuscript chapter by chapter. Chapters match by
@@ -146,6 +147,89 @@ export function formatComparison(comparison, label) {
       lines.push(`- ${name}: ${formatNumber(chapter.before)} -> ${formatNumber(chapter.after)} words (${signed(chapter.after - chapter.before)}), ${formatPercent(chapter.unchanged * 100, 0)}% of paragraphs unchanged`);
     }
   }
+  return `${lines.join("\n")}\n`;
+}
+
+// A paragraph that changed counts as the same one when its words overlap
+// this much (Dice coefficient on word multisets).
+const SIMILAR_SHARE = 0.5;
+
+// Maps review-copy labels from an earlier version to the current one. Both
+// lists are paragraphLabels() output, { label, key, text }. For each
+// requested label: the same text (the nearest copy, preferring the same
+// chapter or matter page), else the most similar paragraph at SIMILAR_SHARE
+// or more, else not found. Returns one entry per label, in the order asked:
+// { label, status: "unchanged" | "edited" | "not-found" | "unknown", to,
+// similarity, excerpt }.
+export function mapLabels(previous, current, labels) {
+  const oldByLabel = new Map(previous.map((entry, index) => [entry.label, { ...entry, index }]));
+  const words = current.map((entry) => wordBag(entry.text));
+  return labels.map((label) => {
+    const old = oldByLabel.get(label);
+    if (!old) {
+      return { label, status: "unknown" };
+    }
+    const text = normalise(old.text);
+    const closer = (left, right) => (right.key === old.key) - (left.key === old.key) || Math.abs(left.index - old.index) - Math.abs(right.index - old.index);
+    const exact = current
+      .map((entry, index) => ({ ...entry, index }))
+      .filter((entry) => normalise(entry.text) === text)
+      .sort(closer)[0];
+    if (exact) {
+      return { label, status: "unchanged", to: exact.label, similarity: 1 };
+    }
+    const bag = wordBag(old.text);
+    const best = current
+      .map((entry, index) => ({ ...entry, index, similarity: dice(bag, words[index]) }))
+      .filter((entry) => entry.similarity >= SIMILAR_SHARE)
+      .sort((left, right) => right.similarity - left.similarity || closer(left, right))[0];
+    if (best) {
+      return { label, status: "edited", to: best.label, similarity: best.similarity };
+    }
+    return { label, status: "not-found", excerpt: openingWords(old.text) };
+  });
+}
+
+function normalise(text) {
+  return String(text).replace(/\s+/g, " ").trim();
+}
+
+// Lowercased words (letters, digits, and inner apostrophes) with counts.
+function wordBag(text) {
+  const bag = new Map();
+  for (const word of String(text).toLowerCase().match(/[\p{L}\p{N}]+(?:['\u2019][\p{L}\p{N}]+)*/gu) ?? []) {
+    bag.set(word, (bag.get(word) ?? 0) + 1);
+  }
+  return bag;
+}
+
+function dice(left, right) {
+  let shared = 0;
+  let total = 0;
+  for (const [word, count] of left) {
+    shared += Math.min(count, right.get(word) ?? 0);
+    total += count;
+  }
+  for (const count of right.values()) {
+    total += count;
+  }
+  return total === 0 ? 0 : (2 * shared) / total;
+}
+
+export function formatLabelMapping(mapping, label) {
+  const lines = mapping.map((entry) => {
+    if (entry.status === "unknown") {
+      return `${entry.label}: no such label in ${label}`;
+    }
+    if (entry.status === "not-found") {
+      return `${entry.label}: not found in the current text ("${entry.excerpt}")`;
+    }
+    if (entry.status === "unchanged") {
+      return `${entry.label} -> ${entry.to} (text unchanged)`;
+    }
+    // An edit that keeps every word (punctuation only) still is not 100%.
+    return `${entry.label} -> ${entry.to} (edited, ${Math.min(99, Math.round(entry.similarity * 100))}% similar)`;
+  });
   return `${lines.join("\n")}\n`;
 }
 

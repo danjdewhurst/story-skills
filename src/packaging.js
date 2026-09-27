@@ -151,9 +151,18 @@ function matterXhtml(entry, placement, root) {
 // chapter's title (prologue), or matter id (front-dedication), so they stay
 // stable while other chapters change.
 export function htmlBook(manuscript) {
-  const paragraphs = (body) => markdownParagraphs(body).map((paragraph) => (paragraph.sceneBreak
-    ? null
-    : { html: inlineRuns(paragraph.text).map((run) => runMarkup(run, escapeHtml, "<br>")).join(""), quote: paragraph.quote }));
+  const paragraphs = (body) => markdownParagraphs(body).map((paragraph) => {
+    if (paragraph.sceneBreak) {
+      return null;
+    }
+    const runs = inlineRuns(paragraph.text);
+    return {
+      html: runs.map((run) => runMarkup(run, escapeHtml, "<br>")).join(""),
+      // Plain text, one line, for matching labels and quoting in note links.
+      text: runs.map((run) => run.text).join("").split(LINE_BREAK).join(" ").replace(/\s+/g, " ").trim(),
+      quote: paragraph.quote
+    };
+  });
   const matter = (placement) => (entry) => ({
     key: `${placement}-${entry.id}`,
     kind: entry.copyright ? `${placement} copyright-page` : placement,

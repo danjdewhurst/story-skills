@@ -706,9 +706,23 @@ How the labels are made:
 
 Paragraphs are numbered from 1 within each chapter or page. A scene break is drawn as `* * *` and takes no number: in *Harbor of Second Light*, `ch01-p37` is the last paragraph before the break and `ch01-p38` the first after it. Prose is converted as in the [table below](#how-prose-is-converted-for-epub-docx-shunn-html-and-print), and all text is HTML-escaped. A matter page with `heading: false` gets a visually hidden heading, so screen readers still announce it. The label is faint until the reader hovers over or links to a paragraph; on a narrow screen it sits above the paragraph.
 
-A label depends only on its chapter's printed number and that chapter's own paragraphs, so editing chapter 5 never moves a label in chapter 3. A label is a position, not a permanent id: revising a chapter shifts the labels after the edit within that chapter, and `story move` changes the chapter part. Name the build with `--stamp` (`story build . --format html --stamp beta-round-1` prints `Review copy, build beta-round-1.` at the top), tag the commit you shared, and ask readers to quote the paragraph's first few words with the label. To find where an old label's paragraph is now, search the chapter for the first few words the reader quoted. If the note has no quote, rebuild the tagged commit in a separate worktree and read the label there: `git worktree add ../round-check <tag>`, then `story build ../round-check --format html --out ../round-check.html`, then search the current chapter for that paragraph's text and remove the worktree. `story compare . --ref <tag>` only says which chapters changed and by how much; it does not map labels. The [`editorial-review`](../skills/editorial-review/SKILL.md) skill runs review rounds this way, and [`line-editing`](../skills/line-editing/SKILL.md) cites its own notes with the same labels.
+A label depends only on its chapter's printed number and that chapter's own paragraphs, so editing chapter 5 never moves a label in chapter 3. A label is a position, not a permanent id: revising a chapter shifts the labels after the edit within that chapter, and `story move` changes the chapter part. Name the build with `--stamp` (`story build . --format html --stamp beta-round-1` prints `Review copy, build beta-round-1.` at the top), tag the commit you shared, and ask readers to quote the paragraph's first few words with the label. To find where an old label's paragraph is now, run `story compare . --ref <tag> --anchor <label>` (repeat `--anchor` for several notes). It labels the tagged version exactly as this build does and reports the paragraph's current label, whether its text is unchanged or edited, or its first few words when it is gone:
 
-For a project in a GitHub repository, the `review-copy.yml` workflow template rebuilds this file on every push and publishes it to GitHub Pages, and the `manuscript-note.yml` issue form asks readers for the label. See [Automation and CI](automation.md#review-copy-workflow).
+```text
+$ story compare . --ref beta-round-1 --anchor ch01-p3 --anchor ch01-p20 --anchor ch09-p3
+ch01-p3 -> ch01-p4 (text unchanged)
+ch01-p20 -> ch01-p21 (text unchanged)
+ch09-p3: no such label in git ref beta-round-1
+Comparison complete: 0 errors, 0 warnings, 0 dismissed
+```
+
+That is *Harbor of Second Light* after one new paragraph near the start of chapter 1.
+
+See [`compare`](cli-reference.md#mapping-review-copy-labels) for how paragraphs are matched. The [`editorial-review`](../skills/editorial-review/SKILL.md) skill runs review rounds this way, and [`line-editing`](../skills/line-editing/SKILL.md) cites its own notes with the same labels.
+
+`--note-url <url>` adds a faint **Note** link beside every label, to that address with the label, the `--stamp` build, and the paragraph's first six words as prefilled query parameters (`title`, `anchor`, `build`, `quote`). Pointed at a GitHub new-issue link for the `manuscript-note.yml` form, one click opens a note with those fields filled in. Builds without `--note-url` are unchanged.
+
+For a project in a GitHub repository, the `review-copy.yml` workflow template rebuilds this file on every push, links every label to the `manuscript-note.yml` issue form with `--note-url`, and publishes it to GitHub Pages. See [Automation and CI](automation.md#review-copy-workflow).
 
 ### Print interior
 

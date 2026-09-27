@@ -1111,6 +1111,8 @@ How to read it:
 - **% of paragraphs unchanged** is the share of the current chapter's paragraphs that appear word for word in the earlier version, ignoring whitespace. A chapter with 0% has had every paragraph touched, even if only lightly.
 - A chapter is `unchanged` only when its paragraphs are the same and in the same order. Scene-break lines are not counted as paragraphs.
 
+To place a reader's note from an older [review copy](manuscripts.md#html-review-copy), add `--anchor <label>` (repeatable): `story compare . --ref beta-round-1 --anchor ch03-p12` prints where that paragraph is now instead of the chapter comparison. See [`compare`](cli-reference.md#mapping-review-copy-labels).
+
 The [`revision-continuity`](../skills/revision-continuity/SKILL.md) skill takes a snapshot before any multi-chapter pass and runs `story compare` afterwards; see [Writing workflows](writing-workflows.md#revision-passes).
 
 ## Story passes

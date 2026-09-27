@@ -708,15 +708,16 @@ Unknown chapter chapter-09
 ### compare
 
 ```text
-story compare [path] (--ref <git-ref> | --against <path>)
+story compare [path] (--ref <git-ref> | --against <path>) [--anchor <label>...]
 ```
 
-Compares the current chapters with an earlier draft and reports word changes per chapter, chapters added and removed, and the share of each changed chapter's paragraphs that are unchanged. You must give exactly one source for the earlier draft.
+Compares the current chapters with an earlier draft and reports word changes per chapter, chapters added and removed, and the share of each changed chapter's paragraphs that are unchanged. With `--anchor`, it instead finds where paragraphs a reader cited in an earlier review copy are now. You must give exactly one source for the earlier draft.
 
 | Option | Effect |
 |---|---|
 | `--ref <git-ref>` | Read the earlier chapters from a git branch, tag, or commit (with `~` and `^` suffixes); any name git accepts works, except one starting with `-`. The project must be inside a git repository, and its folder must exist at the ref. It reads with `git show` and never writes to the repository |
 | `--against <path>` | Read the earlier chapters from another copy of the project on disk, resolved against the current directory. It must be a story project with a `story.md` |
+| `--anchor <label>` | A paragraph label from a review copy of the earlier draft, such as `ch03-p12` (repeatable). Prints where each paragraph is in the current text instead of the chapter comparison |
 
 Chapters are matched by id (`chapter-01`, `chapter-02`, and so on), except that a chapter whose paragraphs match a chapter under another id better is paired with it and listed as `chapter-03 Title (moved from chapter-02): ...`, and the summary line adds `N moved`. That is how chapters renumbered by [`move`](#move) show up. A pair under different ids needs at least half the paragraphs of the longer version to match word for word. With `--ref`, old drafts without frontmatter are still compared. Every file in the current project, and with `--against` in the other project, must parse, or `compare` stops with an error. A chapter is `unchanged` only when its paragraphs are the same and in the same order; scene-break lines and code between closed fences are not compared.
 
@@ -750,6 +751,25 @@ Chapters: 1 then, 1 now (0 added, 0 removed)
 Words: 993 then, 993 now (±0)
 
 - chapter-01 The Ember Wakes: unchanged (993 words)
+Comparison complete: 0 errors, 0 warnings, 0 dismissed
+```
+
+#### Mapping review-copy labels
+
+A [review copy](#build) label is the paragraph's position in that build, so edits earlier in the chapter move it. `--anchor` labels both versions exactly as `build --format html` does, finds each label's paragraph in the earlier draft, and looks for it in the current text: first the same text (the nearest copy, preferring the same chapter), then the most similar paragraph by shared words (at least half), else it reports the paragraph as not found with its first few words so you can search for it. With `--ref`, the project's markdown at that ref is copied to a temporary directory, read, and removed; nothing is written to the repository. It prints one line per label and exits 0 unless a version cannot be read; an unknown label is reported, not an error. Both versions must build, as `build` requires.
+
+After adding a sentence as a new paragraph early in chapter 1 of *Harbor of Second Light*, rewording one paragraph, and deleting another:
+
+```shell
+story compare . --ref beta-round-1 --anchor ch01-p1 --anchor ch01-p2 --anchor ch01-p3 --anchor ch01-p20 --anchor ch09-p3
+```
+
+```text
+ch01-p1 -> ch01-p1 (text unchanged)
+ch01-p2: not found in the current text ("Mara heard it through thirty feet…")
+ch01-p3 -> ch01-p3 (edited, 80% similar)
+ch01-p20 -> ch01-p20 (text unchanged)
+ch09-p3: no such label in git ref beta-round-1
 Comparison complete: 0 errors, 0 warnings, 0 dismissed
 ```
 
@@ -1785,7 +1805,7 @@ warning: manuscript.md is not part of the story project model and is ignored
 ### build
 
 ```text
-story build [path] [--format <name>] [--shunn] [--trim <size>] [--stamp <label>] [--out <file>]
+story build [path] [--format <name>] [--shunn] [--trim <size>] [--stamp <label>] [--note-url <url>] [--out <file>]
 ```
 
 Builds a disposable book file in `dist/`. Builds are deterministic: the same sources give byte-identical output. EPUB timestamps use `SOURCE_DATE_EPOCH` when it is set to whole seconds with a year no later than 9999, and a fixed date otherwise. Default file names cap the story id at 100 characters.
@@ -1796,6 +1816,7 @@ Builds a disposable book file in `dist/`. Builds are deterministic: the same sou
 | `--shunn` | With `--format docx`, apply Shunn manuscript formatting. An error with any other format | Off |
 | `--trim <size>` | With `--format print`, the trim size: `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5` (case-insensitive). An error with any other format | `5.5x8.5` |
 | `--stamp <label>` | With `--format html`, print this build label (a date, commit, or review round, such as `feedback-round-2`) at the top of the review copy, so readers can say which build a note refers to. An error with any other format or an empty label. Default builds carry no stamp and stay byte-identical | None |
+| `--note-url <url>` | With `--format html`, add a faint **Note** link beside every paragraph label, to this http or https address with `title=[<label>] `, `anchor=<label>`, `build=<stamp>` (with `--stamp`), and `quote=<first six words>` appended as URL-encoded query parameters. Pointed at `https://github.com/<owner>/<repo>/issues/new?template=manuscript-note.yml`, it opens the [manuscript-note form](../templates/github/ISSUE_TEMPLATE/manuscript-note.yml) already filled in. An error with any other format or another kind of address. Builds without it are unchanged | None |
 | `--out <file>` | Output path, relative to the project root | `dist/<story-id>.<ext>` |
 
 | Format | Default output | Contents |

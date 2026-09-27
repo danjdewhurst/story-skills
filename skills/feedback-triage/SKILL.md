@@ -53,7 +53,8 @@ readers have read. Verify `story.md` exists in the project root.
    paragraph's first few words with each note. For projects on GitHub, the
    `templates/github/review-copy.yml` workflow publishes the HTML copy to
    GitHub Pages on each push to main, stamped with the date and short
-   commit, and `templates/github/ISSUE_TEMPLATE/manuscript-note.yml` gives
+   commit, with a **Note** link beside every label (`--note-url`) that
+   opens the issue form prefilled with the label, build, and first words, and `templates/github/ISSUE_TEMPLATE/manuscript-note.yml` gives
    readers an issue form with label, build, first few words, note type
    (typo or wording, confusing, continuity, pacing, character, sensitivity
    or authenticity, loved this, other), how much it affected their reading,
@@ -81,18 +82,22 @@ readers have read. Verify `story.md` exists in the project root.
    blank. A `Typo or wording` note is a `nit` unless the reader says more.
 3. **Map old labels to the current text.** When a note's build is older
    than the manuscript, its label may point at a different paragraph now.
-   Find the paragraph by the quoted first words (search the chapter file).
-   If the note has no quote, rebuild the build it names and read the label
-   there, then search the current chapter for that paragraph's text:
+   Resolve every label from the round in one run against the tag (or the
+   short commit in the note's build stamp):
 
    ```shell
-   git worktree add ../round-check feedback-round-{N}   # or the build's commit
-   story build ../round-check --format html --out ../round-check.html
-   git worktree remove ../round-check
+   story compare . --ref feedback-round-{N} --anchor ch03-p12 --anchor ch07-p4
    ```
 
-   Record the current label (from a fresh `story build . --format html`) in
-   the **Where** line, keeping the reader's original label in brackets. Sensitivity and authenticity reads use the same file shape;
+   Each line gives the current label: `(text unchanged)`, or `(edited, NN%
+   similar)` when the paragraph was revised (check it is the one the
+   reader meant). `not found in the current text ("…")` means the
+   paragraph was cut or rewritten past recognition: search the chapter for
+   the reader's quoted words, or the words shown, and mark the note
+   ambiguous if nothing matches. `no such label` means the label never
+   existed in that build: check the note's build and the reader's typing.
+   Record the current label in the **Where** line, keeping the reader's
+   original label in brackets. Sensitivity and authenticity reads use the same file shape;
    see the `editorial-review` skill for commissioning them.
 4. Run the **canon check** on each problem note: verified against the bible,
    contradicts canon (usually a setup problem — note the canon file), or
@@ -140,8 +145,9 @@ Only when every expected reader file is collected:
 - Locations cite paragraph labels from `story build --format html`
   (`ch03-p12`) where available. Labels are paragraph positions in one
   build, so tag and stamp each round's build, rebuild and resend the review
-  copy between rounds, and map an old label to the current text by its
-  quoted words (step 2.3) rather than reusing it after a revision.
+  copy between rounds, and map an old label to the current text with
+  `story compare . --ref <round-tag> --anchor <label>` (step 2.3) rather
+  than reusing it after a revision.
 - Every feedback file and the synthesis carry YAML frontmatter
   (`reader`, `round`, `chapters-read`, `overall-verdict` / `readers`,
   `readiness`).

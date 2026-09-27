@@ -142,7 +142,9 @@ For beta readers, editors, or agents who never open a terminal:
    `.github/`, and warn that a public Pages site makes the manuscript
    public unless the repository and Pages are private.
 3. Collect issue notes into a feedback round and triage them with
-   `feedback-triage`.
+   `feedback-triage`. Resolve labels from an older build with
+   `story compare . --ref <round-tag> --anchor <label>` before acting on
+   them; see `references/editor-rounds.md`.
 
 ### 7. Collaboration and backups
 

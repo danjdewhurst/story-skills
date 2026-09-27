@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { checkContinuity, idText, storyDateError, storyTimeError } from "./continuity.js";
 import { chapterChronology } from "./chronology.js";
@@ -15,12 +16,12 @@ import { buildVoices } from "./voices.js";
 import { checkNames, existingNames } from "./names.js";
 import { STORY_FORMS, formRangeWarning } from "./forms.js";
 import { copyrightPage, metadataSheet, publishingMeta, validatePublishing } from "./publishing.js";
-import { DEFAULT_TRIM, estimateBookPages, printHtml, reviewHtml, TRIM_SIZES } from "./html.js";
+import { DEFAULT_TRIM, estimateBookPages, paragraphLabels, printHtml, reviewHtml, TRIM_SIZES } from "./html.js";
 import { narrationScript, pronunciationGuide } from "./narration.js";
 import { htmlBook, writeDocx, writeEpub, writeShunnDocx, writeShunnMarkdown } from "./packaging.js";
 import { DEFAULT_PASSES, addedPassNotes, nextPass, passChecks, readPasses, updatePasses, validatePasses } from "./passes.js";
 import { CHAPTER_HOOKS, SCENE_OUTCOMES, buildPacing } from "./pacing.js";
-import { compareChapters, proseParagraphs } from "./compare.js";
+import { compareChapters, mapLabels, proseParagraphs } from "./compare.js";
 import { PROGRESS_FILE, cleanSessions, computeProgress, formatPercent, localDate, withSession } from "./progress.js";
 import { plural } from "./plural.js";
 import { analyzeChapter, chapterFindings, proseRules, repeatedPhrases, similarNames } from "./prose.js";
@@ -1718,7 +1719,8 @@ function computeWordCountsUnlocked(root, options = {}) {
 
 // Compares the current chapters with an earlier draft: a git ref (read with
 // git show; nothing is written to the repository) or another copy of the
-// project on disk.
+// project on disk. With `anchors`, maps those review-copy labels from the
+// earlier draft to the current text instead.
 export function compareProject(root, options = {}) {
   const hasRef = typeof options.ref === "string" && options.ref !== "";
   const hasAgainst = typeof options.against === "string" && options.against !== "";
@@ -1728,6 +1730,10 @@ export function compareProject(root, options = {}) {
   const project = scanProject(root);
   // A chapter that fails to parse would be reported as removed.
   assertProjectParses(project, "compare");
+  const anchors = [].concat(options.anchors ?? []);
+  if (anchors.length > 0) {
+    return mapProjectLabels(project, anchors, { hasRef, ...options });
+  }
   const current = project.chapters.map((chapter) => comparableChapter(chapter.id, readMarkdown(chapter.file, project.root)));
   const warnings = [];
   let previous;
@@ -1751,6 +1757,89 @@ export function compareProject(root, options = {}) {
     label,
     ...compareChapters(previous, current)
   };
+}
+
+// Review-copy labels, as `story compare --anchor` reads them: "#CH03-P12"
+// and "ch03-p12" name the same paragraph.
+function normaliseAnchor(value) {
+  const anchor = String(value).trim().replace(/^#/, "").toLowerCase();
+  if (anchor === "") {
+    throw new Error("--anchor needs a paragraph label from the review copy, such as ch03-p12");
+  }
+  return anchor;
+}
+
+function mapProjectLabels(project, anchors, options) {
+  const labels = anchors.map(normaliseAnchor);
+  const current = paragraphLabels(htmlBook(manuscriptParts(project, "map labels")));
+  let previous;
+  let label;
+  if (options.hasRef) {
+    label = `git ref ${options.ref}`;
+    previous = withProjectAtGitRef(project.root, options.ref, (oldRoot) => labelsIn(oldRoot, label));
+  } else {
+    label = path.resolve(options.cwd ?? process.cwd(), options.against);
+    previous = labelsIn(label, label);
+  }
+  return { ok: true, errors: [], warnings: [], label, anchors: mapLabels(previous, current, labels) };
+}
+
+// The paragraph labels a review copy built from this project would carry.
+function labelsIn(root, label) {
+  // Checked here so the error names the ref, not the temporary copy.
+  if (!fs.existsSync(path.join(root, "story.md"))) {
+    throw new Error(`No story project (story.md) in ${label}`);
+  }
+  const project = scanProject(root);
+  return paragraphLabels(htmlBook(manuscriptParts(project, `read labels from ${label}`)));
+}
+
+// Runs `read` on the project's markdown as it was at `ref`, copied into a
+// temporary directory that is removed afterwards. Nothing is written to the
+// repository or its working tree.
+function withProjectAtGitRef(root, ref, read) {
+  const { git } = gitAtRef(root, ref);
+  // -z keeps names unquoted; each record is "<mode> <type> <hash>\t<path>",
+  // the path relative to the project folder (-C root).
+  const blobs = git(["ls-tree", "-r", "-z", ref, "--", "."])
+    .split("\0")
+    .filter((record) => record !== "")
+    .map((record) => {
+      const tab = record.indexOf("\t");
+      const [mode, type, hash] = record.slice(0, tab).split(" ");
+      return { mode, type, hash, name: record.slice(tab + 1) };
+    })
+    // Regular files only (not symlinks or submodules), and only markdown,
+    // which is all a manuscript is built from.
+    .filter((entry) => entry.type === "blob" && entry.mode.startsWith("100") && entry.name.endsWith(".md"));
+  const contents = catBlobs(root, blobs.map((entry) => entry.hash));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "story-compare-"));
+  try {
+    blobs.forEach((entry, index) => {
+      // Git refuses tree entries named "." or "..", so every path stays
+      // inside the temporary directory.
+      const target = path.join(dir, ...entry.name.split("/"));
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, contents[index]);
+    });
+    return read(dir);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// Blob contents for these hashes, read with one git cat-file process.
+function catBlobs(root, hashes) {
+  const output = execFileSync("git", ["-C", root, "cat-file", "--batch"], { input: `${hashes.join("\n")}\n`, stdio: ["pipe", "pipe", "pipe"], maxBuffer: 256 * 1024 * 1024 });
+  const contents = [];
+  let cursor = 0;
+  for (let index = 0; index < hashes.length; index += 1) {
+    const headerEnd = output.indexOf(10, cursor);
+    const size = Number(output.toString("utf8", cursor, headerEnd).split(" ")[2]);
+    contents.push(output.subarray(headerEnd + 1, headerEnd + 1 + size));
+    cursor = headerEnd + 1 + size + 1;
+  }
+  return contents;
 }
 
 function gitFailure(error) {
@@ -1780,7 +1869,9 @@ function comparableChapter(id, markdown) {
 // a path instead.
 const UNSAFE_GIT_REF = /^-|[\u0000-\u001f\u007f:]/u;
 
-function chaptersAtGitRef(root, ref, warnings) {
+// Checks that `ref` names a commit holding the project folder, and returns a
+// git runner for the project folder plus the folder's path in the repository.
+function gitAtRef(root, ref) {
   if (UNSAFE_GIT_REF.test(ref)) {
     throw new Error(`Unsupported git ref: ${ref}`);
   }
@@ -1805,6 +1896,11 @@ function chaptersAtGitRef(root, ref, warnings) {
       throw new Error(`${prefix} does not exist at git ref ${ref}`);
     }
   }
+  return { git, prefix };
+}
+
+function chaptersAtGitRef(root, ref, warnings) {
+  const { git, prefix } = gitAtRef(root, ref);
   if (git(["ls-tree", "--name-only", ref, "--", "story.md"]).trim() === "") {
     warnings.push(`story.md does not exist at git ref ${ref}: the project may not have existed then`);
   }
@@ -2060,6 +2156,15 @@ export function buildBook(root, options = {}) {
   if (options.stamp !== undefined && stamp === "") {
     throw new Error("--stamp needs a label, such as a date, commit, or round name");
   }
+  if (options.noteUrl !== undefined && format !== "html") {
+    throw new Error("--note-url applies only to --format html");
+  }
+  // The note form each paragraph label links to: an http(s) address, so a
+  // label can never carry a script.
+  const noteUrl = options.noteUrl === undefined ? "" : String(options.noteUrl).replace(/[\u0000-\u0020\u007f]+/g, "");
+  if (options.noteUrl !== undefined && !/^https?:\/\/[^/?#]/i.test(noteUrl)) {
+    throw new Error("--note-url needs an http or https address, such as a GitHub new-issue link");
+  }
   if (options.shunn && format !== "docx") {
     throw new Error("--shunn applies only to --format docx (use --format shunn for a Shunn markdown manuscript)");
   }
@@ -2095,7 +2200,7 @@ export function buildBook(root, options = {}) {
     writeFile(output.outFile, narrationScript(manuscript, pronunciationGuide(project)), output.writeOptions);
   } else if (format === "html" || format === "print") {
     const book = htmlBook(manuscript);
-    const text = format === "html" ? reviewHtml(book, { stamp }) : printHtml(book, trim);
+    const text = format === "html" ? reviewHtml(book, { stamp, noteUrl }) : printHtml(book, trim);
     writeFile(output.outFile, text, output.writeOptions);
   } else if (format === "shunn") {
     writeShunnMarkdown(output.outFile, manuscript, shunnMeta(project), output.writeOptions);

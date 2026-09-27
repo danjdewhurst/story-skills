@@ -15,10 +15,54 @@ export const TRIM_SIZES = new Map([
 ]);
 export const DEFAULT_TRIM = "5.5x8.5";
 
+// A part's paragraphs with their review-copy labels: `<key>-p<n>`, counting
+// prose paragraphs only, so a scene break (null) takes no number. The review
+// copy and `story compare --anchor` both label paragraphs with this, so the
+// two can never disagree.
+export function labelledParagraphs(part) {
+  let count = 0;
+  return part.paragraphs.map((paragraph) => {
+    if (paragraph === null) {
+      return null;
+    }
+    count += 1;
+    return { label: `${part.key}-p${count}`, paragraph };
+  });
+}
+
+// Every labelled paragraph in the book, in reading order, as
+// { label, key, text } with the paragraph's plain text.
+export function paragraphLabels(book) {
+  return book.parts.flatMap((part) => labelledParagraphs(part)
+    .filter((entry) => entry !== null)
+    .map((entry) => ({ label: entry.label, key: part.key, text: entry.paragraph.text })));
+}
+
+// The first few words of a paragraph, with an ellipsis when there are more:
+// enough for the author to search for it.
+export function openingWords(text, count = 6) {
+  const words = String(text).split(/\s+/).filter((word) => word !== "");
+  return words.length > count ? `${words.slice(0, count).join(" ")}\u2026` : words.join(" ");
+}
+
+// A prefilled link to the note form for one paragraph: the issue title and
+// the form's anchor, build, and quote fields.
+function noteHref(noteUrl, label, stamp, text) {
+  const params = [["title", `[${label}] `], ["anchor", label]];
+  if (stamp !== "") {
+    params.push(["build", stamp]);
+  }
+  params.push(["quote", openingWords(text)]);
+  const query = params.map(([name, value]) => `${name}=${encodeURIComponent(value)}`).join("&");
+  return `${noteUrl}${noteUrl.includes("?") ? "&" : "?"}${query}`;
+}
+
 // Each part is { key, kind, title, heading, words, paragraphs } where each
-// paragraph is { html, quote } with pre-rendered inline HTML, or null for a
-// scene break. Consecutive quoted paragraphs share one <blockquote>.
-export function reviewHtml(book, { stamp = "" } = {}) {
+// paragraph is { html, text, quote } with pre-rendered inline HTML and its
+// plain text, or null for a scene break. Consecutive quoted paragraphs share
+// one <blockquote>. With `noteUrl`, each label gets a "Note" link to that
+// form, prefilled with the label, the stamp, and the paragraph's first words.
+export function reviewHtml(book, { stamp = "", noteUrl = "" } = {}) {
   const contents = book.contentsLabel ?? "Contents";
   const rtl = textDirection(book.language) === "rtl";
   const toc = [];
@@ -30,15 +74,16 @@ export function reviewHtml(book, { stamp = "" } = {}) {
     const sectionId = part.kind === "chapter" ? part.key : `matter-${part.key}`;
     toc.push(`<li><a href="#${sectionId}">${escapeHtml(part.title)}</a></li>`);
     const body = [];
-    let count = 0;
-    for (const paragraph of part.paragraphs) {
-      if (paragraph === null) {
+    for (const entry of labelledParagraphs(part)) {
+      if (entry === null) {
         body.push({ quote: false, markup: `<hr class="scene-break" aria-label="Scene break">` });
         continue;
       }
-      count += 1;
-      const anchor = `${part.key}-p${count}`;
-      body.push({ quote: paragraph.quote, markup: `<p id="${anchor}"><a class="anchor" href="#${anchor}" title="Link to ${anchor}">${anchor}</a>${paragraph.html}</p>` });
+      const { label: anchor, paragraph } = entry;
+      const note = noteUrl === ""
+        ? ""
+        : `<a class="note-link" href="${escapeHtml(noteHref(noteUrl, anchor, stamp, paragraph.text))}" title="Write a note on ${anchor}" target="_blank" rel="noopener">Note</a>`;
+      body.push({ quote: paragraph.quote, markup: `<p id="${anchor}"><a class="anchor" href="#${anchor}" title="Link to ${anchor}">${anchor}</a>${note}${paragraph.html}</p>` });
     }
     const heading = part.heading ? `<h2>${escapeHtml(part.title)}</h2>` : `<h2 class="visually-hidden">${escapeHtml(part.title)}</h2>`;
     sections.push(`<section id="${sectionId}" class="${part.kind}">${heading}\n${withBlockquotes(body).join("\n")}\n</section>`);
@@ -72,18 +117,22 @@ blockquote { margin: 0 0 1rem; margin-inline-start: 1.5rem; }
 .scene-break::after { content: "* * *"; color: var(--muted); }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 @media (max-width: 52rem) { .anchor { position: static; display: block; width: auto; text-align: left; line-height: 1.4; opacity: 0.6; } }
-${rtl ? `[dir="rtl"] .note { border-left: 0; padding-left: 0; border-right: 3px solid var(--accent); padding-right: 0.75rem; }
+${noteUrl === "" ? "" : `.note-link { position: absolute; left: -5.5rem; top: 1.5rem; width: 5rem; text-align: right; font: 0.7rem/1.4 system-ui, sans-serif; color: var(--accent); text-decoration: none; opacity: 0.35; }
+p:hover .note-link, p:target .note-link, .note-link:focus { opacity: 1; }
+@media (max-width: 52rem) { .note-link { position: static; display: block; width: fit-content; margin-top: -1.4em; margin-inline-start: auto; opacity: 0.6; } }
+`}${rtl ? `[dir="rtl"] .note { border-left: 0; padding-left: 0; border-right: 3px solid var(--accent); padding-right: 0.75rem; }
 [dir="rtl"] nav ol { padding-left: 0; padding-right: 1.25rem; }
 [dir="rtl"] .anchor { left: auto; right: -5.5rem; text-align: left; }
 @media (max-width: 52rem) { [dir="rtl"] .anchor { text-align: right; } }
-` : ""}</style>
+${noteUrl === "" ? "" : `[dir="rtl"] .note-link { left: auto; right: -5.5rem; text-align: left; }
+`}` : ""}</style>
 </head>
 <body>
 <main>
 <header>
 <h1>${escapeHtml(book.title)}</h1>
 ${byline}
-<p class="note">Review copy${stamp === "" ? "" : `, build <code>${escapeHtml(stamp)}</code>`}. Every paragraph has a label such as <code>ch03-p12</code> (chapter 3, paragraph 12). Quote the label${stamp === "" ? "" : " and the build"} with each note, with the paragraph's first few words, so the author can find the exact spot after the text changes.</p>
+<p class="note">Review copy${stamp === "" ? "" : `, build <code>${escapeHtml(stamp)}</code>`}. Every paragraph has a label such as <code>ch03-p12</code> (chapter 3, paragraph 12). Quote the label${stamp === "" ? "" : " and the build"} with each note, with the paragraph's first few words, so the author can find the exact spot after the text changes.${noteUrl === "" ? "" : " The Note link beside each label opens a note with these filled in."}</p>
 </header>
 <nav aria-label="${escapeHtml(contents)}"><h2>${escapeHtml(contents)}</h2><ol>
 ${toc.join("\n")}

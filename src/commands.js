@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { formatClueMatrix } from "./clues.js";
-import { formatComparison } from "./compare.js";
+import { formatComparison, formatLabelMapping } from "./compare.js";
 import { importManuscript } from "./import.js";
 import { isTruthy } from "./options.js";
 import { formatNames } from "./names.js";
@@ -228,13 +228,14 @@ export const COMMANDS = [
     summary: [
       "Compare chapters with an earlier draft: word changes,",
       "added and removed chapters, and unchanged paragraphs;",
-      "requires --ref or --against"
+      "requires --ref or --against; --anchor maps old",
+      "review-copy labels to the current paragraphs"
     ],
     project: "positional",
-    options: ["ref", "against"],
+    options: ["ref", "against", "anchor"],
     run({ parsed, io, cwd, root }) {
-      const comparison = compareProject(root(), { ref: parsed.options.ref, against: parsed.options.against, cwd });
-      io.stdout.write(formatComparison(comparison, comparison.label));
+      const comparison = compareProject(root(), { ref: parsed.options.ref, against: parsed.options.against, anchors: parsed.options.anchor, cwd });
+      io.stdout.write(comparison.anchors ? formatLabelMapping(comparison.anchors, comparison.label) : formatComparison(comparison, comparison.label));
       return reportResult(io, comparison, "Comparison complete", "Comparison failed");
     }
   },
@@ -555,14 +556,15 @@ export const COMMANDS = [
       "(retailer sheet)"
     ],
     project: "positional",
-    options: ["out", "format", "shunn", "trim", "stamp"],
+    options: ["out", "format", "shunn", "trim", "stamp", "note-url"],
     run({ parsed, io, root }) {
       const result = buildBook(root(), {
         out: parsed.options.out,
         format: parsed.options.format,
         shunn: isTruthy(parsed.options.shunn),
         trim: parsed.options.trim,
-        stamp: parsed.options.stamp
+        stamp: parsed.options.stamp,
+        noteUrl: parsed.options["note-url"]
       });
       io.stdout.write(`Built ${result.chapters} chapters as ${result.format} to ${result.outFile}\n`);
       writeWarnings(io, result);

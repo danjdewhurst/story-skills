@@ -73,12 +73,12 @@ Anchors are paragraph positions counted in the built copy, not permanent
 ids. After a revision, paragraph numbers can shift. Tag the commit you
 share, build with `story build . --format html --stamp <tag>` so the copy
 names its build, and ask reviewers to quote the build and each paragraph's
-first few words. To place an old note, search the chapter for the quoted
-words; without a quote, rebuild the tag in a separate worktree
-(`git worktree add ../round-check <tag>`, then
-`story build ../round-check --format html --out ../round-check.html`) and
-read the label there. `story compare --ref <tag>` shows which chapters
-changed, not where a label moved.
+first few words. To place an old note, run
+`story compare . --ref <round-tag> --anchor <label>` (repeat `--anchor` for
+every label in the round): it prints each paragraph's current label, whether
+its text was edited, or its first few words when it is gone, so you can
+search for the reader's quote instead. Add `--note-url <issue-form link>` to
+the build to give every label a **Note** link that prefills the issue form.
 
 For GitHub-hosted projects, the Story Skills repository's
 `templates/github/review-copy.yml` workflow rebuilds the HTML copy on

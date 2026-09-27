@@ -8,8 +8,10 @@
 # issue form (ISSUE_TEMPLATE/manuscript-note.yml) asks for it. A label is a
 # position (chapter and paragraph number in that build), so the next push can
 # move it: the review copy prints a build stamp (date and short commit) that
-# readers quote too, and the author maps an old label back with the steps in
-# the feedback-triage skill.
+# readers quote too, and the author maps an old label to the current text with
+# `story compare . --ref <tag> --anchor <label>`. A "Note" link beside every
+# label opens the issue form with the label, build, and first few words
+# already filled in.
 #
 # One-time setup: in the repository's Settings > Pages, set Source to
 # "GitHub Actions". Pages sites are public unless your plan supports private
@@ -22,7 +24,8 @@
 # deploy steps are skipped (and the run passes) until the first chapter exists.
 #
 # The html build format ships in the first story-skills release after 0.8.2,
-# and build --stamp in the first release after 0.12.0; STORY_REF must point
+# build --stamp in the first release after 0.12.0, and build --note-url (and
+# compare --anchor) in the first release after 0.13.0; STORY_REF must point
 # at that release or later.
 #
 # The Story CLI runs straight from GitHub, pinned to the STORY_REF tag below;
@@ -90,7 +93,7 @@ jobs:
         if: steps.chapters.outputs.has-chapters == 'true'
         run: |
           mkdir -p review-site
-          npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story build "$STORY_DIR" --format html --stamp "$(date -u +%Y-%m-%d) ${GITHUB_SHA::7}" --out "$GITHUB_WORKSPACE/review-site/index.html"
+          npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story build "$STORY_DIR" --format html --stamp "$(date -u +%Y-%m-%d) ${GITHUB_SHA::7}" --note-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/issues/new?template=manuscript-note.yml" --out "$GITHUB_WORKSPACE/review-site/index.html"
 
       - name: Keep the review copy as a workflow artifact
         if: steps.chapters.outputs.has-chapters == 'true'
