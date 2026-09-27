@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { Buffer } from "node:buffer";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
@@ -10,11 +11,26 @@ import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 const { ok, findings, usage, project, refused } = EXIT_CODES;
 const isRoot = process.getuid?.() === 0;
 
-function invoke(cwd, argv) {
+function invoke(cwd, argv, stdin) {
   const io = memoryIo(cwd);
+  if (stdin !== undefined) {
+    io.readStdin = () => Buffer.from(stdin);
+  }
   const code = runCli(argv, io);
   return { code, out: io.output(), err: io.error() };
 }
+
+// A --json run: stdout must be one envelope whose `ok` is true exactly when
+// the exit code is 0, and nothing goes to stderr.
+function invokeJson(cwd, argv, stdin) {
+  const result = invoke(cwd, [...argv, "--json"], stdin);
+  expect(result.err).toBe("");
+  const envelope = JSON.parse(result.out);
+  expect(envelope.ok).toBe(result.code === ok);
+  return { ...result, envelope };
+}
+
+const JSON_COMMANDS = COMMANDS.filter((command) => command.options?.includes("json")).map((command) => command.name);
 
 // A small valid project: one chapter, one character.
 function newProject() {
@@ -296,6 +312,86 @@ describe("exit codes", () => {
     ]) {
       expect(invoke(root, args).code).toBe(usage);
     }
+  });
+});
+
+describe("exit codes with --json", () => {
+  test("the JSON commands are the ones the contract covers", () => {
+    expect(JSON_COMMANDS.length).toBeGreaterThan(0);
+    for (const name of JSON_COMMANDS) {
+      expect(Object.keys(OK_ARGS)).toContain(name);
+    }
+  });
+
+  for (const name of JSON_COMMANDS) {
+    test(`${name} --json exits as the text run does: 0, 2, and 3`, () => {
+      const root = newProject();
+      const success = invokeJson(root, OK_ARGS[name](root));
+      expect(success.code).toBe(ok);
+
+      const misuse = invokeJson(root, [name, "--no-such-flag"]);
+      expect(misuse.envelope.diagnostics[0].message).toContain("Unknown option --no-such-flag");
+      expect(misuse.code).toBe(usage);
+
+      const empty = makeTempDir();
+      const missing = invokeJson(empty, [...OK_ARGS[name](empty), "--path", empty]);
+      expect(missing.envelope.diagnostics[0].message).toContain("is not a story project");
+      expect(missing.code).toBe(project);
+    });
+  }
+
+  for (const [name, args] of Object.entries(FINDINGS_ARGS).filter(([command]) => JSON_COMMANDS.includes(command))) {
+    test(`${name} --json exits 1 on findings`, () => {
+      const root = newProject();
+      if (name !== "names") {
+        breakChapter(root);
+      }
+      const result = invokeJson(root, args);
+      expect(result.envelope.diagnostics.some((entry) => entry.severity === "error")).toBe(true);
+      expect(result.code).toBe(findings);
+    });
+  }
+
+  test.skipIf(isRoot)("progress --log --json exits 4 when the log cannot be written", () => {
+    const root = newProject();
+    const log = path.join(root, "progress.md");
+    if (!fs.existsSync(log)) {
+      writeMarkdown(log, "type: progress-log\nsessions: []");
+    }
+    fs.chmodSync(log, 0o444);
+    try {
+      const result = invokeJson(root, ["progress", "--log"]);
+      expect(result.envelope.diagnostics[0].message).toContain("permission denied");
+      expect(result.code).toBe(refused);
+    } finally {
+      fs.chmodSync(log, 0o644);
+    }
+  });
+});
+
+describe("exit codes for stdin", () => {
+  const bad = [
+    ["empty", ""],
+    ["blank", "  \n\n"],
+    ["binary", "a\u0000b"],
+    ["a zip archive", "PK\u0003\u0004rest"]
+  ];
+
+  for (const [label, stdin] of bad) {
+    test(`${label} stdin is a usage error for prose, voices, and import`, () => {
+      const root = newProject();
+      expect(invoke(root, ["prose", "-"], stdin).code).toBe(usage);
+      expect(invoke(root, ["voices", "-"], stdin).code).toBe(usage);
+      expect(invoke(path.dirname(root), ["import", "-", "--title", "Piped"], stdin).code).toBe(usage);
+      expect(invokeJson(root, ["prose", "-"], stdin).code).toBe(usage);
+      expect(invokeJson(root, ["voices", "-"], stdin).code).toBe(usage);
+    });
+  }
+
+  test("a passage on stdin succeeds", () => {
+    const root = newProject();
+    expect(invoke(root, ["prose", "-"], "The tide came in slowly.\n").code).toBe(ok);
+    expect(invokeJson(root, ["voices", "-"], "\"Go,\" Mara said.\n").code).toBe(ok);
   });
 });
 

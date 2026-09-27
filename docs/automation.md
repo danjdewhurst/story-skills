@@ -151,7 +151,7 @@ The check and analysis commands (`validate`, `links`, `continuity`, `series`, `r
 }
 ```
 
-`ok` is `true` exactly when the command exits `0`, so a job can read either. `diagnostics` holds every finding with its severity, file, message, and the check that raised it (`code`). A command that cannot run, such as one pointed at a folder without `story.md`, still prints an envelope, with `ok: false`, `data: null`, and the error as its diagnostic. [`schemas/result.schema.json`](../schemas/result.schema.json) describes the envelope and each command's `data`; `apiVersion` changes when a field is renamed, removed, or retyped. The [CLI reference](cli-reference.md#json-output) has the full rules.
+`ok` is `true` exactly when the command exits `0`, so a job can read either. `diagnostics` holds every finding with its severity, file, message, and the check that raised it (`code`). A command that cannot run, such as one pointed at a folder without `story.md`, still prints an envelope, with `ok: false`, `data: null`, and the error as its diagnostic, and exits with the same code as a text run (`2`, `3`, or `4`; see [Exit codes](#exit-codes)). [`schemas/result.schema.json`](../schemas/result.schema.json) describes the envelope and each command's `data`; `apiVersion` changes when a field is renamed, removed, or retyped. The [CLI reference](cli-reference.md#json-output) has the full rules.
 
 For example, to fail a job on any warning with [`jq`](https://jqlang.github.io/jq/):
 

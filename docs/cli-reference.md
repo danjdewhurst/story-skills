@@ -187,7 +187,7 @@ pandoc draft.docx -t markdown | story import - --title "The Lost Coast"
 ```
 
 - The input must be UTF-8 text of at most 5 MB. A leading byte-order mark is dropped, and a zip, a binary, or text in another encoding is refused as `import` refuses a file: `Cannot read stdin: it is not valid UTF-8 text. Pipe UTF-8 plain text or markdown instead`.
-- Empty input is an error (`story prose - read nothing from stdin: ...`), and so is a terminal, so the command never sits waiting for typing: `story prose - reads from stdin, but stdin is a terminal: pipe the text in, such as story prose - < draft.md`.
+- Empty input is an error (`story prose - read nothing from stdin: ...`), and so is a terminal, so the command never sits waiting for typing: `story prose - reads from stdin, but stdin is a terminal: pipe the text in, such as story prose - < draft.md`. A stdin error (empty, a terminal, binary, a zip archive, or not UTF-8) is a usage error and exits `2`.
 - A file literally named `-` is reached as `./-`.
 ### Option syntax
 
@@ -249,7 +249,7 @@ Findings keep `1`, so `story validate || exit 1` fails on errors as it always ha
 
 ### JSON output
 
-`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. It works on the check and analysis commands: `validate`, `links`, `continuity`, `series`, `report`, `next`, `doctor`, `knowledge`, `progress`, `timeline`, `prose`, `pacing`, `clues`, and `voices`. Other commands refuse it (`--json does not apply to story wordcount`). Nothing is written to stderr, and the exit code is the same as without `--json`.
+`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. It works on the check and analysis commands: `validate`, `links`, `continuity`, `series`, `report`, `next`, `doctor`, `knowledge`, `progress`, `timeline`, `prose`, `pacing`, `clues`, and `voices`. Other commands refuse it (`--json does not apply to story wordcount`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`.
 
 Every result has the same envelope:
 

@@ -174,7 +174,7 @@ describe("story prose -", () => {
   test("a --path that is not a project is an error, and a file error in the project fails the run", () => {
     const empty = makeTempDir();
     const missing = invoke(empty, ["prose", "-", "--path", empty], PASSAGE);
-    expect(missing.code).toBe(1);
+    expect(missing.code).toBe(3);
     expect(missing.err).toContain("is not a story project: missing story.md");
 
     const { root } = passageProject();
@@ -212,7 +212,7 @@ describe("story prose -", () => {
 
   test("an empty real pipe is an error", () => {
     const result = spawnStory(makeTempDir(), ["prose", "-"], "");
-    expect(result.code).toBe(1);
+    expect(result.code).toBe(2);
     expect(result.err).toBe("story prose - read nothing from stdin: pipe the text in, such as story prose - < draft.md\n");
   });
 });
@@ -233,7 +233,7 @@ describe("story voices -", () => {
     expect(invoke(elsewhere, ["voices", "-", "--path", root], PASSAGE).out).toContain("mara-quill: 1 line");
 
     const outside = invoke(elsewhere, ["voices", "-"], PASSAGE);
-    expect(outside.code).toBe(1);
+    expect(outside.code).toBe(3);
     expect(outside.err).toContain("is not a story project: missing story.md");
   });
 
@@ -273,7 +273,7 @@ describe("story import -", () => {
     const cwd = makeTempDir();
     const prose = `${"word ".repeat(Math.floor(MAX_STDIN_BYTES / 5) - 2)}\n`;
     const result = invoke(cwd, ["import", "-", "--title", "Huge"], prose);
-    expect(result.code).toBe(1);
+    expect(result.code).toBe(2);
     expect(result.err).toMatch(/^Cannot import: chapter-01\.md would be \d+ bytes, over the 5242880 byte limit story reads\. Split the manuscript with chapter headings first\n$/);
     expect(fs.readdirSync(cwd)).toEqual([]);
   });

@@ -3,7 +3,7 @@ import { Buffer } from "node:buffer";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
-import { API_VERSION, diagnostic, diagnosticsFrom, exitCodeFor, resultData } from "../src/json.js";
+import { API_VERSION, diagnostic, diagnosticsFrom, resultData, writeJsonResult } from "../src/json.js";
 import { createStoryProject } from "../src/story.js";
 import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
 import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
@@ -124,7 +124,7 @@ describe("--json result envelope", () => {
     expect(Array.isArray(envelope.data.entries)).toBe(true);
 
     const usage = invokeJson(root, ["knowledge", "sera-voss", "--json"]);
-    expect(usage.code).toBe(1);
+    expect(usage.code).toBe(2);
     expect(usage.envelope.data).toBeNull();
     expect(usage.envelope.diagnostics).toEqual([{ severity: "error", file: null, message: expect.stringContaining("Usage: story knowledge"), code: "knowledge" }]);
   });
@@ -132,7 +132,7 @@ describe("--json result envelope", () => {
   test("a failure after --json (unknown character, missing project) is a JSON result", () => {
     const root = path.join(examplesRoot, "the-last-ember");
     const unknown = invokeJson(root, ["knowledge", "nobody", "--at", "chapter-01", "--json"]);
-    expect(unknown.code).toBe(1);
+    expect(unknown.code).toBe(2);
     expect(unknown.envelope.diagnostics[0].message).toBe("Unknown character nobody");
 
     const missing = invokeJson(makeTempDir(), ["validate", "--json"]);
@@ -168,7 +168,7 @@ describe("--json result envelope", () => {
   test("usage and parse errors are JSON results when --json is on", () => {
     const root = path.join(examplesRoot, "the-last-ember");
     const extra = invokeJson(root, ["validate", ".", "extra", "--json"]);
-    expect(extra.code).toBe(1);
+    expect(extra.code).toBe(2);
     expect(extra.envelope.diagnostics[0].message).toContain("Unexpected argument");
 
     const unknownOption = invokeJson(root, ["prose", "--jsn", "--json=yes"]);
@@ -180,7 +180,7 @@ describe("--json result envelope", () => {
 
   test("knowledge without --at prints its usage as text without --json", () => {
     const result = invoke(path.join(examplesRoot, "the-last-ember"), ["knowledge", "sera-voss"]);
-    expect(result.code).toBe(1);
+    expect(result.code).toBe(2);
     expect(result.err).toBe("Usage: story knowledge <character-id> --at <chapter-id> [--path <project>]\n");
   });
 
@@ -199,7 +199,7 @@ describe("--json result envelope", () => {
 
   test("--json on a command without JSON output is refused", () => {
     const result = invoke(makeTempDir(), ["wordcount", "--json"]);
-    expect(result.code).toBe(1);
+    expect(result.code).toBe(2);
     expect(result.out).toBe("");
     expect(result.err).toBe("--json does not apply to story wordcount\n");
   });
@@ -254,7 +254,7 @@ describe("--json result envelope", () => {
   test("a stdin error under --json is the JSON error result", () => {
     for (const command of ["prose", "voices"]) {
       const { code, envelope } = invokeJson(makeTempDir(), [command, "-", "--json"], "");
-      expect(code).toBe(1);
+      expect(code).toBe(2);
       expect(envelope).toMatchObject({ command, ok: false, data: null });
       expect(envelope.diagnostics).toHaveLength(1);
       expect(envelope.diagnostics[0].severity).toBe("error");
@@ -275,9 +275,11 @@ describe("--json result envelope", () => {
 });
 
 describe("json helpers", () => {
-  test("exit codes follow ok", () => {
-    expect(exitCodeFor(true)).toBe(0);
-    expect(exitCodeFor(false)).toBe(1);
+  test("exit codes follow ok: 0 when it is true, else the failure's code", () => {
+    const io = memoryIo(makeTempDir());
+    expect(writeJsonResult(io, { command: "validate", ok: true, exitCode: 3 })).toBe(0);
+    expect(writeJsonResult(io, { command: "validate", ok: false })).toBe(1);
+    expect(writeJsonResult(io, { command: "validate", ok: false, exitCode: 4 })).toBe(4);
   });
 
   test("diagnostics name the leading project file, or null", () => {
