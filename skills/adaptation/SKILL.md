@@ -167,9 +167,13 @@ choose a branching structure with the author, and record the branch map in
   story build . --format ink --out adaptations/interactive/{story-id}.ink
   ```
 
-  Open the `.ink` file in Inky, or compile it with `inklecate`. Add ink
-  state (`VAR`, `~`, `{ }`) by hand to the built copy under
-  `adaptations/`: the build escapes those in chapter prose as text.
+  Open the `.ink` file in Inky, or compile it with `inklecate`. The build
+  escapes ink syntax in chapter prose, so write ink state (`VAR`, `~`,
+  `{ }`) by hand in the built file, and only once the branch structure is
+  settled: `--out` never replaces an existing file, and a rebuild after
+  changing `choices` means deleting the old `.ink` and carrying the
+  hand-written logic into the new one. Ask the author before deleting a
+  file that has hand-written logic in it.
 
 ### 6. Translation
 

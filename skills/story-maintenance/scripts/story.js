@@ -6698,6 +6698,25 @@ function inkLine(line) {
   const text = inkInline(line.trim());
   return /^[*+\-=]|^(?:INCLUDE|VAR|CONST|LIST|EXTERNAL|TODO)\b/.test(text) ? `\\${text}` : text;
 }
+var HARD_BREAK = /(?: {2,}|(?:^|[^\\])(?:\\\\)*\\)$/;
+function inkProse(body) {
+  const out = [];
+  for (const paragraph of body.split(/\r?\n[ \t]*(?:\r?\n[ \t]*)*\r?\n/)) {
+    const lines = paragraph.split(/\r?\n/);
+    let current = [];
+    lines.forEach((line, index) => {
+      const last = index === lines.length - 1;
+      const broken = !last && HARD_BREAK.test(line);
+      current.push((broken ? line.replace(/\\$/, "") : line).trim());
+      if (broken || last) {
+        out.push(inkLine(current.join(" ")));
+        current = [];
+      }
+    });
+    out.push("");
+  }
+  return out;
+}
 function inkTag(name, value) {
   return `# ${name}: ${inkInline(value.replace(/\s+/g, " ").trim())}`;
 }
@@ -6710,7 +6729,7 @@ function inkSource(story) {
   story.passages.forEach((passage, position) => {
     lines.push(`=== ${inkKnotName(passage.name)} ===`);
     if (passage.body !== "") {
-      lines.push(...passage.body.split(/\r?\n/).map(inkLine), "");
+      lines.push(...inkProse(passage.body));
     }
     if (!story.branching) {
       const next = story.passages[position + 1];

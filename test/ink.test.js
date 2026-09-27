@@ -155,6 +155,12 @@ describe("ink build", () => {
     expect(knot).toBe(`${PROSE_CASES.map(([, escaped]) => escaped).join("\n\n")}\n\n${CHOICE_CASES.map(([, escaped]) => `+ [${escaped}] -> chapter_02`).join("\n")}\n\n`);
   });
 
+  test("joins a wrapped paragraph into one line and keeps hard breaks", () => {
+    const body = "The lamp is dark,\nand the sun\n   is down.\n\n\n  \nRoses are red,  \nviolets\\\nblue.\\\\\nDone \\";
+    const text = inkSource({ title: "T", author: "", ifid: IFID, branching: false, passages: [{ name: "a", body, links: [] }] });
+    expect(text).toContain("=== a ===\nThe lamp is dark, and the sun is down.\n\nRoses are red,\nviolets\nblue.\\\\\\\\ Done \\\\\n\n-> END\n");
+  });
+
   test("escapes the title and author tags onto one line each", () => {
     const text = inkSource({ title: "Hash # and // slash", author: "Jo {Ann}\nSmith", ifid: IFID.toLowerCase(), branching: false, passages: [{ name: "a", body: "", links: [] }] });
     expect(text).toBe(`# title: Hash \\# and /\\/ slash\n# author: Jo \\{Ann\\} Smith\n# ifid: ${IFID}\n\n-> a\n\n=== a ===\n-> END\n`);

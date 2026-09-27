@@ -976,7 +976,7 @@ Compile the file with [Tweego](https://www.motoslave.net/tweego/) (`tweego -o gu
 
 ### ink story
 
-`--format ink` writes the same branching book as [ink](https://www.inklestudios.com/ink/), inkle's narrative scripting language, for the Inky editor, the `inklecate` compiler, and game engines through inkjs or the Unity integration. It follows the same rules as the [Twine story](#twine-story): the same start, endings, linear fallback, IFID, checks, and refusals, with `Cannot build ink until these are fixed:` in place of `twee`.
+`--format ink` writes the same branching book as [ink](https://www.inklestudios.com/ink/), inkle's narrative scripting language, for the Inky editor, the `inklecate` compiler, and game engines through inkjs or the Unity integration. It follows the same rules as the [Twine story](#twine-story): the same start, endings, IFID, checks, and refusals, with `Cannot build ink until these are fixed:` in place of `twee`.
 
 ```shell
 story build . --format ink
@@ -1003,7 +1003,7 @@ The supply boat backs off the landing before your boots are dry. ...
 - The title, the author (`authors` or `author` in `story.md`, left out when neither is set), and the IFID are global tags at the top, which a game reads from `story.globalTags`. A divert to the first chapter's knot starts the story.
 - Each chapter is a knot named by its chapter id with `-` written as `_`, since ink names cannot contain hyphens: `chapter-03` becomes `chapter_03`. A name ink would reject, one that starts with a digit or is a reserved word such as `true` or `else`, gets a leading `_` (`01` becomes `_01`). Chapter ids never start with `-`, so no two chapters share a knot.
 - Each choice is a sticky choice, `+ [text] -> knot`, so a chapter the reader returns to on a loop offers every choice again, as a Twine link does. A chapter with no choices ends with `-> END`. With no choices anywhere, each chapter diverts straight to the next (`-> chapter_02`) and the last ends the story.
-- The prose is written as it is in the chapter, without the heading, and escaped so ink prints it as text: a backslash goes before `\`, `{`, `}`, `|`, `#`, `[`, `]`, `~`, the `-` of `->`, and the `<` of `<-` and `<>`, and between the slashes of `//` and `/*`, which would start a comment. A line starting with `*`, `+`, `-`, or `=`, or with `INCLUDE`, `VAR`, `CONST`, `LIST`, `EXTERNAL`, or `TODO`, gets a backslash in front. Choice text gets the same inline escapes. ink prints each non-blank line as its own line of text, drops leading and repeated spaces, and has no markdown, so `*emphasis*` shows as written.
+- The prose is the chapter's, without the heading. ink prints each source line as its own line, so the lines of each paragraph are joined with spaces, as the other builds read them; a line ending in two spaces or a backslash keeps its break, as in verse. The text is escaped so ink prints it as text: a backslash goes before `\`, `{`, `}`, `|`, `#`, `[`, `]`, `~`, the `-` of `->`, and the `<` of `<-` and `<>`, and between the slashes of `//` and `/*`, which would start a comment. A line starting with `*`, `+`, `-`, or `=`, or with `INCLUDE`, `VAR`, `CONST`, `LIST`, `EXTERNAL`, or `TODO`, gets a backslash in front. Choice text gets the same inline escapes. ink drops leading and repeated spaces and has no markdown, so `*emphasis*` shows as written.
 
 Open the file in [Inky](https://github.com/inkle/inky) to play it, or compile it with `inklecate -o gull-rock.json dist/the-gull-rock-light.ink`.
 
