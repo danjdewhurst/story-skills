@@ -206,6 +206,19 @@ describe("#111 validation warnings in next", () => {
     expect(lines).toContain("Add scene records");
     expect(lines).not.toContain("Review validation warnings");
   });
+
+  test("a chapter declaring one word, or none, is a word-count action only", () => {
+    for (const edit of [(text) => text.replace(/^word-count: .*\n/m, ""), (text) => text.replace(/^word-count: .*$/m, "word-count: 1")]) {
+      const root = newProject();
+      createEntity(root, { kind: "chapter", name: "One", number: 1 });
+      const chapter = path.join(root, "chapters", "chapter-01.md");
+      fs.writeFileSync(chapter, `${edit(fs.readFileSync(chapter, "utf8"))}\nShe climbed the steps.\n`);
+      expect(messages(validateProject(root).warnings).some((warning) => /has no word-count|declares 1 word but/.test(warning))).toBe(true);
+      const lines = actionLines(root);
+      expect(lines).toContain("Refresh word counts");
+      expect(lines).not.toContain("Review validation warnings");
+    }
+  });
 });
 
 describe("#112 scheduled chapters in arc bodies", () => {
