@@ -82,7 +82,7 @@ export function tweeBuildFindings(root) {
     const first = buildBook(root, { format: "twee", out: path.join(scratch, "first.twee") });
     const second = buildBook(root, { format: "twee", out: path.join(scratch, "second.twee") });
     const same = fs.readFileSync(first.outFile, "utf8") === fs.readFileSync(second.outFile, "utf8");
-    const warnings = first.warnings.map(text).filter((warning) => !warning.startsWith("story.md has no ifid"));
+    const warnings = first.warnings.filter((warning) => warning.code !== "derived-ifid").map(text);
     return [...warnings, ...(same ? [] : ["two twee builds differ"])];
   } catch (error) {
     return [error.message];
