@@ -238,9 +238,10 @@ Add a plot point: in chapter 6 Nell finds the lamp log has been altered.
 Track foreshadowing for the altered log. Plant it in chapter 2.
 Which MICE threads does this arc open, and in what order should they close?
 How far should I outline before drafting?
+Walk me through the Snowflake Method for this book.
 ```
 
-The last one uses the [outlining ladder](../skills/plot-structure/references/outlining-ladder.md): premise, beat sheet, step outline, full outline, each with an exit criterion. Most novels stop at the step outline.
+The fourth uses the [outlining ladder](../skills/plot-structure/references/outlining-ladder.md): premise, beat sheet, step outline, full outline, each with an exit criterion. Most novels stop at the step outline. The last uses the [Snowflake Method reference](../skills/plot-structure/references/snowflake.md), which grows the logline in `story.md` into character sheets, arc synopses, and scene files in ten steps, running `story reindex`, `story links`, and `story validate` as each step adds entities.
 
 When a plot point creates a mystery or a setup that needs a payoff, the skill records it in the continuity ledgers, not only in the arc:
 
