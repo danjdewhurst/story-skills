@@ -6,6 +6,7 @@ import { checkContinuity, idText, storyDateError, storyTimeError } from "./conti
 import { chapterChronology, renumberedChronology } from "./chronology.js";
 import { PROGRESSION_KINDS, entityStateAt, sortProgressions, validateProgressions } from "./progressions.js";
 import { FRONTMATTER_PATTERN, parseFrontmatter, replaceFrontmatter, stringifyFrontmatter, withoutLeadingFrontmatter } from "./frontmatter.js";
+import { buildContext, DEFAULT_CONTEXT_BUDGET, DEFAULT_CONTEXT_SCENES } from "./context.js";
 import { assertExistingAncestorInsideRoot, assertLexicallyInsideRoot, assertSafeProjectDirectory, assertSafeProjectPath, isPathInside, lstatIfExists, readTextFile, TEMPORARY_FILE_PATTERN, writeFile } from "./files.js";
 import { isTruthy } from "./options.js";
 import { withProjectLock } from "./lock.js";
@@ -1449,6 +1450,27 @@ export function entityStateAtChapter(root, kind, id, atChapterId, project = scan
     throw projectError(chapterError);
   }
   return entityStateAt(entity.frontmatter, atChapterId, chapterChronology(project));
+}
+
+// `story context`: the drafting context for one chapter or scene, packed to a
+// token budget. Knowledge and thread dating depend on the chapters and the
+// state file, so an unreadable one stops the command rather than risk a
+// spoiler; other unreadable files are reported as warnings.
+export function draftingContext(root, targetId, options = {}) {
+  const budget = options.budget === undefined ? DEFAULT_CONTEXT_BUDGET : requirePositiveInteger(options.budget, "Budget");
+  const scenes = options.scenes === undefined ? DEFAULT_CONTEXT_SCENES : parseDecimalInteger(options.scenes);
+  if (scenes === null) {
+    throw usageError(`Scenes must be 0 or a positive integer, got ${options.scenes}`);
+  }
+  const project = scanProject(root);
+  // A target scene that fails to parse reports why, not "Unknown scene".
+  const blocking = project.fileErrors.find((error) => error.startsWith(`chapters${path.sep}`)
+    || error.startsWith(`${path.join("continuity", "state.md")}:`)
+    || error.startsWith(`${path.join("scenes", `${targetId}.md`)}:`));
+  if (blocking) {
+    throw projectError(blocking);
+  }
+  return buildContext(project, targetId, (file) => readMarkdown(file, project.root).body, { budget, scenes });
 }
 
 export function seriesReport(root) {

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { formatClueMatrix } from "./clues.js";
+import { formatContext } from "./context.js";
 import { formatComparison, formatLabelMapping } from "./compare.js";
 import { applySeverity } from "./config.js";
 import { importManuscript } from "./import.js";
@@ -26,6 +27,7 @@ import {
   createStoryProject,
   diagramProject,
   entityStateAtChapter,
+  draftingContext,
   exportManuscript,
   formatActionReport,
   formatDoctorReport,
@@ -247,6 +249,30 @@ export const COMMANDS = [
         io.stdout.write(`- ${entry.knows} (${source})\n`);
       }
       io.stdout.write(formatStateChanges(changes, atChapterId));
+      return 0;
+    }
+  },
+  {
+    name: "context",
+    usage: "context <id>",
+    summary: [
+      "Pack drafting context for a chapter or scene within",
+      "a token budget, with nothing from later chapters"
+    ],
+    project: "flag",
+    args: 1,
+    options: ["budget", "scenes"],
+    run({ parsed, io, root }) {
+      const targetId = parsed.positionals[1];
+      if (!targetId) {
+        io.stderr.write("Usage: story context <chapter-or-scene-id> [--budget <tokens>] [--scenes <n>] [--path <project>]\n");
+        return 1;
+      }
+      const context = draftingContext(root(), targetId, { budget: parsed.options.budget, scenes: parsed.options.scenes });
+      io.stdout.write(formatContext(context));
+      for (const warning of context.warnings) {
+        io.stderr.write(`warning: ${warning}\n`);
+      }
       return 0;
     }
   },

@@ -11,7 +11,7 @@ The CLI never writes story content for you. It scaffolds files, rebuilds registr
 - [How the CLI behaves](#how-the-cli-behaves)
 - [Setup commands](#setup-commands): `init`, `import`, `migrate`
 - [Maintenance commands](#maintenance-commands): `validate`, `reindex`, `wordcount`, `links`
-- [Analysis commands](#analysis-commands): `continuity`, `knowledge`, `compare`, `progress`, `timeline`, `prose`, `series`, `report`, `next`, `doctor`
+- [Analysis commands](#analysis-commands): `continuity`, `knowledge`, `context`, `compare`, `progress`, `timeline`, `prose`, `series`, `report`, `next`, `doctor`
 - [Craft and revision commands](#craft-and-revision-commands): `pacing`, `clues`, `voices`, `names`, `diagram`, `passes`
 - [Entity commands](#entity-commands): `add`, `rename`, `move`, `remove`
 - [Output commands](#output-commands): `export`, `build`, `synopsis`
@@ -51,6 +51,7 @@ Absolute paths in output are shortened to `~/stories/...`.
 | | [`links [path]`](#links) | Check cross-references and backlinks | No |
 | Analysis | [`continuity [path]`](#continuity) | Check deaths, casts, promises, questions, clues, prop custody, clock and travel time, routes, and state | No |
 | | [`knowledge <id>`](#knowledge) | List what a character knew at a chapter, and how their progressions had changed them | No |
+| | [`context <id>`](#context) | Pack drafting context for a chapter or scene within a token budget, with no spoilers | No |
 | | [`compare [path]`](#compare) | Compare chapters with an earlier draft | No |
 | | [`progress [path]`](#progress) | Show words against targets and deadline | With `--log` |
 | | [`timeline [path]`](#timeline) | Show scenes in story-time order, POV balance, presence | No |
@@ -124,7 +125,7 @@ Every command except `init` and `import` works on one story project: a directory
 | Commands | How to give the project | Default |
 |---|---|---|
 | `validate`, `reindex`, `wordcount`, `links`, `continuity`, `compare`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `series`, `passes`, `report`, `next`, `doctor`, `migrate`, `export`, `build`, `synopsis` | A positional `[path]` **or** `--path <path>` | Current directory |
-| `knowledge`, `names`, `diagram`, `add`, `rename`, `move`, `remove` | `--path <path>` only, because their positionals are ids, names, or a diagram kind | Current directory |
+| `knowledge`, `context`, `names`, `diagram`, `add`, `rename`, `move`, `remove` | `--path <path>` only, because their positionals are ids, names, or a diagram kind | Current directory |
 | `init`, `import` | Neither. They create a new project; use `--dir` to choose where | A directory named after the story id |
 
 Relative paths resolve against the current working directory. These are equivalent:
@@ -827,6 +828,96 @@ Unknown character nobody
 $ story knowledge kael-voss --at chapter-09
 Unknown chapter chapter-09
 ```
+
+### context
+
+```text
+story context <chapter-or-scene-id> [--budget <tokens>] [--scenes <n>] [--path <project>]
+```
+
+Prints, as markdown, the slice of the project an agent needs to draft one chapter or scene, packed into a token budget. It reads files and writes nothing. Items are added in this priority order:
+
+1. **Target**: the chapter or scene's POV, cast, mentions, locations, arcs, date, outcome, hook, and `target-words`, the chapter's `## Outline` (up to the `---` rule above the prose), and the chapter's planned scenes or, for a scene, its `## Purpose`.
+2. **Story essentials**: `story.md` genre, setting era, POV, tense, form, themes, and `premise`, plus its `## Tone & Style`, `## Setting`, and `## Central Conflict` sections; then `style-sheet.md`, when present: `dialect`, `preferred`, `watch-words`, and its body.
+3. **POV knowledge and state**: the POV character's `knowledge-state` entries known at the target, the `character-state` entry from `continuity/state.md` when its `current-chapter` is before the target, and the `state-changes` of earlier scenes whose `character` is the POV character or whose `owner` hands them an artifact.
+4. **Characters on the page**: a card for the POV character and each character in the target's `characters`: role, status at the target, aliases, `voice-words`, `voice-avoid`, and the `## Appearance`, `## Personality & Traits`, `## Motivations & Goals`, and `## Voice & Speech Patterns` sections.
+5. **Open promises, clues, and questions**: each one planted or introduced by the target chapter and not paid off or resolved before it, with its `## Setup`, `## Clue`, or `## Question` section. Those planted, raised, paid off, or answered in the target chapter itself say so; `dropped` and `abandoned` ones are left out.
+6. **Previous scenes**: the `--scenes` scene records just before the target, each with its POV, location, outcome, and `## Purpose`.
+
+It includes nothing from a chapter after the target in reading order (chapter number), so the context never spoils what comes later. A thread, knowledge entry, or scene is dated by its chapter, and one whose chapter is later or unknown is left out. Knowledge is also checked in story time, as [`knowledge`](#knowledge) does, so a fact learned in a flash-forward read earlier is not known yet. The sections that tend to describe the future are never read: the `story.md` synopsis and notes, a character's backstory, arc, and timeline, and the payoff, evidence, and resolution plans of promises, clues, and questions. A character's status is the one at the target: one who dies in the target chapter shows `dies in this chapter`, and one who died earlier shows `deceased (died in <chapter>)`. A character whose `died-in` chapter comes later, or does not exist yet, shows as `alive`; in a flash-forward set after that death the status is left out. Sections still holding the starter text `story add` and `story init` write, including the starter outline and style sheet, are skipped. For a scene target, knowledge, threads, and deaths dated to the target chapter are marked as happening in this chapter, since the project does not record which scene; knowledge reads `learned in this chapter, possibly in a later scene`.
+
+The budget is an estimate, not a tokenizer count: each item costs `ceil(words × 4 ÷ 3)` tokens, where words are whitespace-separated runs of its text, and the headings between sections are not counted. Items are packed whole in the order above. One that does not fit is left out, a later, smaller one may still fit, and every item left out is listed at the end with the file to read instead. Previous scenes are packed nearest first and printed in reading order.
+
+| Option | Effect |
+|---|---|
+| `--budget <tokens>` | Token budget, a positive integer (default `6000`) |
+| `--scenes <n>` | How many earlier scenes to summarise, `0` or more (default `5`) |
+| `--path <path>` | Project root (default: current directory) |
+
+In [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/), with a small budget:
+
+```shell
+story context chapter-02 --budget 200
+```
+
+```text
+# Drafting context: chapter-02
+
+Chapter 2: The Millpond. About 183 of 200 tokens
+(estimated at 4 tokens per 3 words). Nothing from later chapters is included.
+
+## Target
+
+### Chapter 2: The Millpond
+- POV: Jonas Reed (jonas-reed)
+- On the page: Jonas Reed (jonas-reed), Edran Vale (edran-vale)
+- Locations: the-mill-row
+- Arcs advanced: the-ledger-trail
+- Hook: decision
+
+Scenes planned:
+
+1. The Millpond (outcome: no-and)
+
+## Story essentials
+
+### The Unraveled Thread
+- Genre: mystery / village-noir
+- Setting era: 1920s
+- POV: third-person-limited
+- Tense: past
+- Form: novel
+- Themes: guilt, small-town secrets
+
+## Characters on the page
+
+### Jonas Reed (POV)
+- Id: jonas-reed
+- Role: protagonist
+- Status: alive
+
+### Edran Vale
+- Id: edran-vale
+- Role: supporting
+- Status: dies in this chapter
+
+## Open promises, clues, and questions
+
+- **The Sealed Letter** (promise; planted in chapter-01)
+- **Edran's Margin Notes** (clue; planted in chapter-01)
+  Edran's handwriting fills every margin of the ledger. Read as bookkeeping, it is only a dead partner's habit; read against the mill's delivery dates, it is a schedule.
+
+## Left out to fit the budget
+
+Read these files directly if you need them:
+
+- Clue: The Constable's Silence: continuity/clues/the-constables-silence.md (about 34 tokens)
+- Scene: The Ash and the Ledger: scenes/chapter-01-scene-01.md (about 20 tokens)
+```
+
+The chapter's outline is still the starter text `story add` writes, so it is skipped. The Burned Page, The Broken Compass, and Who Burned The Mill are left out because they are planted or raised in chapter 3, and Jonas's knowledge of the firestarter's page because its `learned-in` chapter does not exist.
+
+It exits 1 with `Unknown chapter or scene <id>` for an id that is neither, prints the usage line when the id is missing, and refuses a `--budget` that is not a positive integer or a `--scenes` that is not a whole number. A chapter file, `continuity/state.md`, or the target scene's file that fails to parse stops it with the parse error, because the spoiler filter depends on them; any other file that fails to parse is left out with a `warning:` line on stderr.
 
 ### compare
 
@@ -2144,6 +2235,8 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--stamp` | `<label>` | `build` | Only with `--format html`: a build label printed in the review copy |
 | `--shunn` | | `build` | Boolean; only with `--format docx` |
 | `--at` | `<chapter-id>` | `knowledge` | Required for `knowledge` |
+| `--budget` | `<tokens>` | `context` | Positive integer; default `6000` |
+| `--scenes` | `<n>` | `context` | `0` or more earlier scenes to summarise; default `5` |
 | `--init` | | `passes` | Boolean; adds the missing default passes |
 | `--start` | `<pass>` | `passes` | Kebab-case pass name; marks it `in-progress` |
 | `--done` | `<pass>` | `passes` | Kebab-case pass name; marks it `done` |

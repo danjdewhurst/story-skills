@@ -38,6 +38,7 @@ For flags and exit codes of every command, see the [CLI reference](cli-reference
 |---------|---------|
 | [`story continuity [path]`](#story-continuity) | Does the recorded story contradict itself? |
 | [`story knowledge <id> --at <chapter-id>`](#story-knowledge) | What did this character know by this chapter? |
+| [`story context <id>`](cli-reference.md#context) | What does an agent need to draft this chapter or scene, without spoilers from later chapters? |
 | [`story timeline [path]`](#story-timeline) | What order do events happen in story time? Whose book is it? Who disappears? |
 | [`story pacing [path]`](#story-pacing) | Do scenes cost the characters enough, do chapters end with a pull, and are any chapters out of proportion? |
 | [`story clues [path]`](#story-clues) | Where is each clue planted and revealed, and does the mystery play fair? |
@@ -1346,6 +1347,7 @@ Work down from P0. P0 and P1 items are mechanical and have a command to run. P2 
 | Start of a session | `story next .` |
 | Before naming a character, place, or term | `story names "<candidate>" --path .` |
 | After drafting or revising a chapter | `story wordcount . --write`, `story reindex .`, `story links .`, `story validate .`, `story continuity .`, `story pacing .` |
+| Before drafting a chapter or scene | `story context <chapter-or-scene-id> --path .` |
 | Before writing a scene that turns on a secret | `story knowledge <id> --at <chapter-id>` |
 | Planning structure or pacing | `story timeline .`, `story pacing .`, `story diagram arcs` |
 | Inserting, reordering, splitting, or merging chapters and scenes | `story move chapter <id> --number <n>` (highest chapter first), `story move scene <id> --chapter <chapter-id>`, then `story wordcount . --write`, `story validate .`, `story links .`, `story continuity .` |

@@ -82,6 +82,7 @@ story build . --format metadata
 story build . --format twee
 story knowledge sera-voss --at chapter-04
 story continuity . --json
+story context chapter-04 --budget 6000
 story add clue "The silver locket" --planted chapter-02 --payoff chapter-05
 story synopsis --pages 1
 story synopsis --pages 3 --out dist/synopsis.md
@@ -126,6 +127,7 @@ Use:
 - `build --format epub` also writes EPUB 3 accessibility metadata, language, semantic chapter and matter markup, and a landmarks nav, and uses the optional `story.md` publishing fields (`cover-alt`, `isbn`, `publisher`, `publication-date`, `description`, `subjects`, `language`, and `copyright`, which generates a copyright page when no copyright matter page exists)
 - `build --format shunn` when the user wants Shunn manuscript-format markdown: title page, contact block, word count, chapter breaks, and double-spaced prose; `story build . --format docx --shunn` applies the same Shunn formatting to the DOCX output
 - `knowledge` when the user asks what a character knew at a given chapter: `story knowledge <character-id> --at <chapter-id>` lists knowledge-state entries whose `learned-in` chapter is at or before that chapter, plus entries without `learned-in` as pre-existing knowledge
+- `context` before drafting a chapter or scene: `story context <chapter-or-scene-id> [--budget <tokens>] [--scenes <n>]` prints, as markdown and in priority order until the estimated budget (default 6000 tokens, at 4 tokens per 3 words) runs out, the target's outline and cast, the `story.md` essentials and `style-sheet.md` rules, the POV character's knowledge and state at that point, cards for the characters on the page, open promises, clues, and questions, and summaries of the previous `--scenes` scenes (default 5). It includes nothing from later chapters; items left out for the budget are listed with the file to read instead
 - `add clue` when the user plants a new clue: `story add clue "Name" --planted chapter-02 --payoff chapter-05` creates the clue ledger entity in `continuity/clues/` with `status: planted` (`planned` when `--planted` is omitted or names a chapter not written yet; pass `--status planned` if the clue is not on the page yet); omit `--payoff` when the payoff is not yet known, and pass `--red-herring` for a clue meant to mislead
 - `synopsis` when the user wants a mechanical synopsis: the first sentence of `story.md`'s `## Synopsis` section, then each arc's Setup, Rising Action, Climax, and Resolution. One page is 500 words and three pages is 1500. `story synopsis [--pages 1|3] [--out file]`. The output is a scaffold; the `submission` skill rewrites it into an agent-ready synopsis
 

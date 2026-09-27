@@ -44,6 +44,8 @@ export const OPTIONS = [
   { name: "note-url", value: "<url>", help: ["Note form linked, prefilled, from every label in", "build --format html (a GitHub new-issue link)"] },
   { name: "shunn", help: ["Apply Shunn manuscript formatting (with --format", "docx)"] },
   { name: "at", value: "<chapter-id>", help: ["Chapter id for knowledge: what the character knew", "and how their progressions had changed them"] },
+  { name: "budget", value: "<tokens>", help: ["Token budget for context (default 6000)"] },
+  { name: "scenes", value: "<n>", help: ["Earlier scenes to summarise for context", "(default 5)"] },
   { name: "init", help: ["Add the default revision passes for passes"] },
   { name: "start", value: "<pass>", help: ["Mark a revision pass in progress for passes"] },
   { name: "done", value: "<pass>", help: ["Mark a revision pass done for passes"] },
