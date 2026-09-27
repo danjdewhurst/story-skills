@@ -63,7 +63,7 @@ progressions:
 ```
 
 - `from` is the first chapter where the new value holds. It may be a planned `chapter-NN` with no file yet
-- `field` is kebab-case. It can be an existing single-value field (`status`, `role`, `arc`) or a new one (`scar`, `title`). List fields (`aliases`, `relationships`, `locations`, `tags`, voice lists) cannot change this way; record a shifted relationship as its own field, such as `standing-with-kael: estranged`
+- `field` is kebab-case. It can be an existing single-value field (`status`, `role`, `arc`) or a new one (`scar`, `title`). List fields (`aliases`, `relationships`, `locations`, `tags`, voice lists) cannot change this way; record a shifted relationship as a progression on its own field, such as `field: standing-with-kael` with `value: estranged` under `progressions`, never as a top-level field (that would show from chapter 1)
 - `value` is one value. `role` and `status` values must be ones the character file allows
 - Keep entries in story order. Do not use a progression for a death: set `died-in` (see below)
 - Before drafting or revising a chapter, run `story knowledge {id} --at chapter-NN` to see what the character knows and which changes already apply there, and write to that state rather than the opening frontmatter alone

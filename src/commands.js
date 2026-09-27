@@ -44,6 +44,7 @@ import {
   removeEntity,
   shellWord,
   renameEntity,
+  scanProject,
   seriesReport,
   storyTimeline,
   synopsisBook,
@@ -230,8 +231,11 @@ export const COMMANDS = [
         // Thrown, so runCli reports it as text or, with --json, as a result.
         throw usageError("Usage: story knowledge <character-id> --at <chapter-id> [--path <project>]");
       }
-      const entries = knowledgeAtChapter(root(), characterId, atChapterId);
-      const { state, changes } = entityStateAtChapter(root(), "character", characterId, atChapterId);
+      const projectRoot = root();
+      // One scan serves both lookups.
+      const project = scanProject(projectRoot);
+      const entries = knowledgeAtChapter(projectRoot, characterId, atChapterId, project);
+      const { state, changes } = entityStateAtChapter(projectRoot, "character", characterId, atChapterId, project);
       if (wantsJson(parsed)) {
         return writeJsonResult(io, { command: "knowledge", ok: true, data: { character: characterId, at: atChapterId, entries, state, changes } });
       }

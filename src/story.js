@@ -3,8 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { checkContinuity, idText, storyDateError, storyTimeError } from "./continuity.js";
-import { chapterChronology } from "./chronology.js";
-import { PROGRESSION_KINDS, entityStateAt, validateProgressions } from "./progressions.js";
+import { chapterChronology, renumberedChronology } from "./chronology.js";
+import { PROGRESSION_KINDS, entityStateAt, sortProgressions, validateProgressions } from "./progressions.js";
 import { FRONTMATTER_PATTERN, parseFrontmatter, replaceFrontmatter, stringifyFrontmatter, withoutLeadingFrontmatter } from "./frontmatter.js";
 import { assertExistingAncestorInsideRoot, assertLexicallyInsideRoot, assertSafeProjectDirectory, assertSafeProjectPath, isPathInside, lstatIfExists, readTextFile, TEMPORARY_FILE_PATTERN, writeFile } from "./files.js";
 import { isTruthy } from "./options.js";
@@ -1360,9 +1360,8 @@ export function checkProjectContinuity(root) {
 // (or before) a chapter: entries without learned-in are pre-existing
 // knowledge, the rest must be learned in a chapter at or before the target in
 // story time (by date when both chapters are dated, else by number). File
-// order is preserved.
-export function knowledgeAtChapter(root, characterId, atChapterId) {
-  const project = scanProject(root);
+// order is preserved. `project` skips the scan for a command that has one.
+export function knowledgeAtChapter(root, characterId, atChapterId, project = scanProject(root)) {
   const characters = new Map(project.characters.map((character) => [character.id, character]));
   if (!characters.has(characterId)) {
     // A character whose file fails to parse exists; say why it cannot be read.
@@ -1418,9 +1417,8 @@ export function knowledgeAtChapter(root, characterId, atChapterId) {
 
 // Resolves a character, location, or faction at a chapter by applying its
 // progressions (see progressions.js): { state, changes }. A project already
-// scanned can call entityStateAt directly with chapterChronology(project).
-export function entityStateAtChapter(root, kind, id, atChapterId) {
-  const project = scanProject(root);
+// scanned is passed as `project`, so a command reads the files once.
+export function entityStateAtChapter(root, kind, id, atChapterId, project = scanProject(root)) {
   const entityKind = normalizeKind(kind);
   if (!PROGRESSION_KINDS.includes(entityKind)) {
     throw new Error(`Only ${PROGRESSION_KINDS.join(", ")} records carry progressions, not ${entityKind}`);
@@ -3234,6 +3232,7 @@ function moveChapter(project, oldId, options) {
     }
   }
   followExemptionPatterns(project.root, plan, oldId, newId);
+  reorderProgressions(project, plan, renumberedChronology(chapterChronology(project), oldId, newId, number));
   const moves = [{ oldFile: chapter.file, newFile }, ...sceneMoves];
   // The number is taken, unless an earlier run of this move was interrupted
   // after writing the chapter there.
@@ -3244,6 +3243,26 @@ function moveChapter(project, oldId, options) {
   commitMoves(project.root, plan, moves);
   const reindexed = reindexProject(project.root);
   return { kind: "chapter", oldId, id: newId, file: newFile, moved: moves.length, changed: moves.map((move) => move.newFile).concat(reindexed.changed), warnings };
+}
+
+// A renumbered chapter can move past another progression's chapter, so the
+// progressions of every character, location, and faction the move rewrote
+// are put back in story order, which validate requires.
+function reorderProgressions(project, plan, chronology) {
+  const dirs = PROGRESSION_KINDS.map((kind) => entityConfig(kind).dir);
+  for (const [file, text] of plan) {
+    if (!dirs.includes(path.relative(project.root, path.dirname(file)))) {
+      continue;
+    }
+    const data = parseFrontmatter(text, file).data;
+    if (!Array.isArray(data.progressions)) {
+      continue;
+    }
+    const sorted = sortProgressions(data.progressions, chronology);
+    if (sorted.some((item, index) => item !== data.progressions[index])) {
+      plan.set(file, replaceFrontmatter(text, { ...data, progressions: sorted }));
+    }
+  }
 }
 
 function moveScene(project, oldId, options) {

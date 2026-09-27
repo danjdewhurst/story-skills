@@ -62,6 +62,21 @@ function happensAfter(chronology, later, earlier) {
   return chapterPosition(chronology, later) > chapterPosition(chronology, earlier);
 }
 
+// A `progressions` list in story order, stable, so entries from the same
+// chapter keep their file order. Entries with no known chapter keep their
+// place relative to each other at the end. Used by `story move chapter`,
+// which can move a chapter past another entry's.
+export function sortProgressions(list, chronology) {
+  const known = [];
+  const unknown = [];
+  for (const item of list) {
+    const from = item && typeof item === "object" && !Array.isArray(item) ? idText(item.from) : "";
+    (Number.isNaN(chapterPosition(chronology, from)) ? unknown : known).push({ item, from });
+  }
+  known.sort((left, right) => (happensAfter(chronology, left.from, right.from) ? 1 : happensAfter(chronology, right.from, left.from) ? -1 : 0));
+  return [...known, ...unknown].map((entry) => entry.item);
+}
+
 // Resolves an entity's state at a chapter. `data` is the entity's frontmatter;
 // `chronology` is chapterChronology(project). `atChapterId` is a written
 // chapter or a planned `chapter-NN`. Every progression taking effect at or

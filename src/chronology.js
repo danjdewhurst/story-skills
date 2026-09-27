@@ -26,8 +26,13 @@ export function chapterChronology(project) {
     days.set(id, value);
   }
   const outline = new Set(project.chapters.filter((chapter) => chapter.status === "outline").map((chapter) => chapter.id));
+  return { ...chronologyFrom(numbers, days), outline };
+}
 
-  // True when chapter `later` happens strictly after chapter `earlier`.
+// The story-time order over chapter numbers and days, as { numbers, days,
+// after }. `after(later, earlier)` is true when chapter `later` happens
+// strictly after chapter `earlier`.
+export function chronologyFrom(numbers, days) {
   const after = (later, earlier) => {
     const laterDays = days.get(later);
     const earlierDays = days.get(earlier);
@@ -36,8 +41,21 @@ export function chapterChronology(project) {
     }
     return numbers.get(later) > numbers.get(earlier);
   };
+  return { numbers, days, after };
+}
 
-  return { numbers, days, outline, after };
+// The chronology after chapter `oldId` is renumbered to `newId`: the chapter
+// keeps its date and takes the new number.
+export function renumberedChronology(chronology, oldId, newId, number) {
+  const numbers = new Map(chronology.numbers);
+  const days = new Map(chronology.days);
+  numbers.delete(oldId);
+  numbers.set(newId, number);
+  if (days.has(oldId)) {
+    days.set(newId, days.get(oldId));
+    days.delete(oldId);
+  }
+  return chronologyFrom(numbers, days);
 }
 
 // A character's dead window: after `died-in` and, with `revived-in`, before

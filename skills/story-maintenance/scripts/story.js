@@ -430,6 +430,9 @@ function chapterChronology(project) {
     days.set(id, value);
   }
   const outline = new Set(project.chapters.filter((chapter) => chapter.status === "outline").map((chapter) => chapter.id));
+  return { ...chronologyFrom(numbers, days), outline };
+}
+function chronologyFrom(numbers, days) {
   const after = (later, earlier) => {
     const laterDays = days.get(later);
     const earlierDays = days.get(earlier);
@@ -438,7 +441,18 @@ function chapterChronology(project) {
     }
     return numbers.get(later) > numbers.get(earlier);
   };
-  return { numbers, days, outline, after };
+  return { numbers, days, after };
+}
+function renumberedChronology(chronology, oldId, newId, number) {
+  const numbers = new Map(chronology.numbers);
+  const days = new Map(chronology.days);
+  numbers.delete(oldId);
+  numbers.set(newId, number);
+  if (days.has(oldId)) {
+    days.set(newId, days.get(oldId));
+    days.delete(oldId);
+  }
+  return chronologyFrom(numbers, days);
 }
 function deathWindow(character, chronology) {
   const died = character.diedIn;
@@ -5223,6 +5237,16 @@ function happensAfter(chronology, later, earlier) {
   }
   return chapterPosition(chronology, later) > chapterPosition(chronology, earlier);
 }
+function sortProgressions(list, chronology) {
+  const known = [];
+  const unknown = [];
+  for (const item of list) {
+    const from = item && typeof item === "object" && !Array.isArray(item) ? idText(item.from) : "";
+    (Number.isNaN(chapterPosition(chronology, from)) ? unknown : known).push({ item, from });
+  }
+  known.sort((left, right) => happensAfter(chronology, left.from, right.from) ? 1 : happensAfter(chronology, right.from, left.from) ? -1 : 0);
+  return [...known, ...unknown].map((entry) => entry.item);
+}
 function entityStateAt(data, atChapterId, chronology) {
   if (Number.isNaN(chapterPosition(chronology, atChapterId))) {
     throw new Error(`Unknown chapter ${atChapterId}`);
@@ -7895,8 +7919,7 @@ function checkBodyLinkTarget(project, label, target, errors) {
 function checkProjectContinuity(root) {
   return checkContinuity(scanProject(root));
 }
-function knowledgeAtChapter(root, characterId, atChapterId) {
-  const project = scanProject(root);
+function knowledgeAtChapter(root, characterId, atChapterId, project = scanProject(root)) {
   const characters = new Map(project.characters.map((character) => [character.id, character]));
   if (!characters.has(characterId)) {
     const parseError = project.fileErrors.find((error) => error.startsWith(`${path7.join("characters", `${characterId}.md`)}:`));
@@ -7940,8 +7963,7 @@ function knowledgeAtChapter(root, characterId, atChapterId) {
   }
   return entries;
 }
-function entityStateAtChapter(root, kind, id, atChapterId) {
-  const project = scanProject(root);
+function entityStateAtChapter(root, kind, id, atChapterId, project = scanProject(root)) {
   const entityKind = normalizeKind(kind);
   if (!PROGRESSION_KINDS.includes(entityKind)) {
     throw new Error(`Only ${PROGRESSION_KINDS.join(", ")} records carry progressions, not ${entityKind}`);
@@ -9458,6 +9480,7 @@ function moveChapter(project, oldId, options) {
     }
   }
   followExemptionPatterns(project.root, plan, oldId, newId);
+  reorderProgressions(project, plan, renumberedChronology(chapterChronology(project), oldId, newId, number));
   const moves = [{ oldFile: chapter.file, newFile }, ...sceneMoves];
   if (taken && !interruptedMove(plan, moves)) {
     throw refusedError(`${newId} already exists: move it first. To make room, renumber from the highest chapter down`);
@@ -9466,6 +9489,22 @@ function moveChapter(project, oldId, options) {
   commitMoves(project.root, plan, moves);
   const reindexed = reindexProject(project.root);
   return { kind: "chapter", oldId, id: newId, file: newFile, moved: moves.length, changed: moves.map((move) => move.newFile).concat(reindexed.changed), warnings };
+}
+function reorderProgressions(project, plan, chronology) {
+  const dirs = PROGRESSION_KINDS.map((kind) => entityConfig(kind).dir);
+  for (const [file, text] of plan) {
+    if (!dirs.includes(path7.relative(project.root, path7.dirname(file)))) {
+      continue;
+    }
+    const data = parseFrontmatter(text, file).data;
+    if (!Array.isArray(data.progressions)) {
+      continue;
+    }
+    const sorted = sortProgressions(data.progressions, chronology);
+    if (sorted.some((item, index) => item !== data.progressions[index])) {
+      plan.set(file, replaceFrontmatter(text, { ...data, progressions: sorted }));
+    }
+  }
 }
 function moveScene(project, oldId, options) {
   const scene = project.scenes.find((entry) => entry.id === oldId);
@@ -13311,8 +13350,10 @@ var COMMANDS = [
       if (!characterId || typeof atChapterId !== "string") {
         throw usageError("Usage: story knowledge <character-id> --at <chapter-id> [--path <project>]");
       }
-      const entries = knowledgeAtChapter(root(), characterId, atChapterId);
-      const { state, changes } = entityStateAtChapter(root(), "character", characterId, atChapterId);
+      const projectRoot = root();
+      const project = scanProject(projectRoot);
+      const entries = knowledgeAtChapter(projectRoot, characterId, atChapterId, project);
+      const { state, changes } = entityStateAtChapter(projectRoot, "character", characterId, atChapterId, project);
       if (wantsJson(parsed)) {
         return writeJsonResult(io, { command: "knowledge", ok: true, data: { character: characterId, at: atChapterId, entries, state, changes } });
       }

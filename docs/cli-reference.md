@@ -1835,7 +1835,7 @@ Chapter and scene ids come from their numbers, so reordering the book changes id
 - `chapter` on each of the chapter's scenes
 - `planted` and `payoff` on promises and clues, and `introduced` and `resolved` on questions
 - `used-in` on research notes and `died-in` and `revived-in` on characters
-- `from` in the `progressions` of characters, locations, and factions
+- `from` in the `progressions` of characters, locations, and factions, re-sorting each list into story order when the move takes a chapter past another entry's
 - `since` and `learned-in` in `continuity/state.md`, and `current-chapter` when it held the moved chapter's number
 - markdown links to the moved chapter and scene files, anywhere in the project
 - bare chapter and scene ids in the bodies of `plot/timeline.md` and `plot/arcs/*.md`, the ones `story links` checks, and in `plot/_index.md` (the Theme Tracking table). An id is a whole token: `chapter-01-draft` and `pre-chapter-01` are left alone, by `move` and `links` alike

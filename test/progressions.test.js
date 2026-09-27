@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { chapterChronology } from "../src/chronology.js";
-import { entityStateAt, formatStateChanges, validateProgressions } from "../src/progressions.js";
+import { entityStateAt, formatStateChanges, sortProgressions, validateProgressions } from "../src/progressions.js";
 import {
   createStoryProject,
   entityStateAtChapter,
@@ -350,6 +350,47 @@ describe("progressions follow reference rewrites", () => {
     expect(read(root, "characters", "mara-finn.md")).toContain("  - from: chapter-02\n    field: status\n");
     expect(validateLinks(root).errors).toEqual([]);
     expect(validateProject(root).errors).toEqual([]);
+  });
+
+  test("move chapter puts progressions back in story order", () => {
+    const { root } = progressionProject();
+    moveEntity(root, { kind: "chapter", id: "chapter-02", number: 5 });
+    const mara = read(root, "characters", "mara-finn.md");
+    expect(mara.indexOf("from: chapter-03")).toBeLessThan(mara.indexOf("from: chapter-05"));
+    expect(mara).toContain("  - from: chapter-05\n    field: status\n    value: missing\n");
+    expect(validateProject(root).errors).toEqual([]);
+    expect(entityStateAtChapter(root, "character", "mara-finn", "chapter-03").state.status).toBe("alive");
+  });
+
+  test("move chapter keeps a dated chapter's place in story time", () => {
+    const { root } = progressionProject();
+    // chapter-02 is a flash-forward dated after chapter-03, so moving it to
+    // number 1 does not move it before chapter-03 in the story.
+    writeChapter(root, 2, "date: 1901-05-01\n");
+    writeChapter(root, 3, "date: 1900-05-01\n");
+    writeMarkdown(path.join(root, "characters", "mara-finn.md"), `
+name: Mara Finn
+role: protagonist
+status: alive
+progressions:
+  - from: chapter-03
+    field: role
+    value: antagonist
+  - from: chapter-02
+    field: status
+    value: missing
+`, "# Mara\n");
+    moveEntity(root, { kind: "chapter", id: "chapter-01", number: 9 });
+    moveEntity(root, { kind: "chapter", id: "chapter-02", number: 1 });
+    const mara = read(root, "characters", "mara-finn.md");
+    expect(mara.indexOf("from: chapter-03")).toBeLessThan(mara.indexOf("from: chapter-01"));
+    expect(validateProject(root).errors.filter((error) => error.includes("progressions"))).toEqual([]);
+  });
+
+  test("sortProgressions orders by story time and keeps unknown chapters last", () => {
+    const chronology = { numbers: new Map([["chapter-01", 1], ["chapter-02", 2]]), after: (later, earlier) => chronology.numbers.get(later) > chronology.numbers.get(earlier) };
+    const list = [{ from: "typo" }, { from: "chapter-02", field: "a" }, "junk", { from: "chapter-01" }, { from: "chapter-02", field: "b" }];
+    expect(sortProgressions(list, chronology)).toEqual([{ from: "chapter-01" }, { from: "chapter-02", field: "a" }, { from: "chapter-02", field: "b" }, { from: "typo" }, "junk"]);
   });
 
   test("move chapter warns when a planned progression now names the moved chapter", () => {
