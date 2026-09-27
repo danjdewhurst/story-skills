@@ -518,9 +518,9 @@ function checkPosthumousLearning(character, learnedIn, entryLabel, context, erro
     }
     return;
   }
-  // A planned death in an outline chapter has not happened on the page yet;
-  // a revival ends the dead window.
-  const window = context.chronology.outline.has(character.diedIn) ? null : deathWindow(character, context.chronology);
+  // Like a cast appearance, learning is checked against the dead window, which
+  // a revival ends.
+  const window = deathWindow(character, context.chronology);
   if (window && window.deadIn(learnedIn)) {
     errors.push(`${entryLabel} has ${character.id} learn something in ${learnedIn}, after they died in ${character.diedIn}`);
   }

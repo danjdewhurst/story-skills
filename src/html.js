@@ -226,10 +226,7 @@ export function estimateBookPages(book, trimName = DEFAULT_TRIM) {
   const trim = TRIM_SIZES.get(trimName) ?? TRIM_SIZES.get(DEFAULT_TRIM);
   const chapters = book.parts.filter((part) => part.kind === "chapter").length;
   let pages = 2 + Math.max(1, Math.ceil(chapters / CONTENTS_ENTRIES_PER_PAGE)) + 0.5;
-  for (const part of book.parts) {
-    if (part.copyright && part.placement === "front") {
-      continue;
-    }
+  for (const part of book.parts.filter((entry) => !(entry.copyright && entry.placement === "front"))) {
     const sink = part.heading ? OPENING_SINK_PAGES : 0;
     pages += Math.max(1, Math.ceil((part.words ?? 0) / trim.wordsPerPage + sink)) + 0.5;
   }

@@ -34,6 +34,13 @@ function invoke(cwd, argv) {
 const SONG = "The old song went:\n\n*Ember given, fire kept,\\\nEmber taken, mountain wept,  \nWhat the Vale has lent.*\n\n> Dear Mara,\n>\n> Come home.\\\n> Your father\n\nShe hummed it anyway.";
 
 describe("hard breaks and blockquotes (#245)", () => {
+  test("a quoted line directly after a plain line starts its own paragraph", () => {
+    const { root } = project();
+    chapter(root, 1, "title: One", "She read the note.\n> Come home.");
+    const html = fs.readFileSync(buildBook(root, { format: "html" }).outFile, "utf8");
+    expect(html).toMatch(/<p id="ch01-p1">.*She read the note\.<\/p>\n<blockquote>\n<p id="ch01-p2">.*Come home\.<\/p>\n<\/blockquote>/);
+  });
+
   test("every paragraph build keeps hard breaks and sets quotes as blockquotes", () => {
     const { root } = project();
     chapter(root, 1, "title: Song", SONG);
@@ -156,6 +163,13 @@ describe("print page estimate (#222)", () => {
     const html = printHtml(book, "6x9");
     expect(html).toContain(`about ${pages} pages`);
     expect(html).toContain("@page { size: 6in 9in; margin: 0.75in 0.5in 0.75in 0.875in; }");
+  });
+
+  test("a front copyright page shares the title page's verso", () => {
+    const chapterPart = { key: "ch1", kind: "chapter", title: "One", heading: true, words: 300, paragraphs: [] };
+    const copyright = { key: "copyright", kind: "matter", title: "Copyright", heading: false, words: 50, paragraphs: [], copyright: true, placement: "front" };
+    const book = { title: "PG", authors: [], language: "en", words: 350, parts: [chapterPart] };
+    expect(estimateBookPages({ ...book, parts: [copyright, chapterPart] })).toBe(estimateBookPages(book));
   });
 
   test("the metadata sheet quotes the same estimate as the print build", () => {

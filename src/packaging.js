@@ -575,10 +575,9 @@ function markdownParagraphs(markdown) {
       .replace(new RegExp(` *${LINE_BREAK} *`, "g"), LINE_BREAK)
       .replace(new RegExp(`^${LINE_BREAK}+|${LINE_BREAK}+$`, "g"), "")
       .trim();
+    // The last line is never blank (a blank line flushes), so text is never
+    // empty here.
     lines = [];
-    if (text === "") {
-      return;
-    }
     paragraphs.push(!text.includes(LINE_BREAK) && isSceneBreak(text) ? { sceneBreak: true } : { text, quote });
   };
   const source = flattenHeadings(plainLinks(withoutFenceMarkers(markdown.replace(/\r\n?/g, "\n"))));
