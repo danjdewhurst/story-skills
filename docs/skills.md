@@ -620,7 +620,7 @@ story compare . --ref draft-1
 story compare . --against ../the-tide-room-draft-1
 ```
 
-`story compare` reports per-chapter word changes, added and removed chapters, and the share of paragraphs left unchanged. Chapters are matched by id, so a renumbered chapter shows as one removed and one added. It only reads git; it never commits or tags.
+`story compare` reports per-chapter word changes, added and removed chapters, and the share of paragraphs left unchanged. Chapters are matched by id, except that a chapter whose paragraphs match another id's better, as after `story move`, is reported as `moved from` its old id. It only reads git; it never commits or tags.
 
 **References.** None. It draws on the references of [scene-craft](#scene-craft), [theme-craft](#theme-craft), [voice-style](#voice-style), [genre-craft](#genre-craft), and [line-editing](#line-editing).
 

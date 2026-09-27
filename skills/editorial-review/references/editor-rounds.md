@@ -69,9 +69,16 @@ chapter 3, paragraph 12. Reviewers cite the anchor in an email, comment,
 or issue, and the note points at an exact paragraph whatever format the
 reader happens to be reading.
 
-Anchors are counted in the built copy. After a revision, paragraph
-numbers can shift; tell reviewers which build date their notes refer to,
-and resolve notes against the matching tag with `story compare`.
+Anchors are paragraph positions counted in the built copy, not permanent
+ids. After a revision, paragraph numbers can shift. Tag the commit you
+share, build with `story build . --format html --stamp <tag>` so the copy
+names its build, and ask reviewers to quote the build and each paragraph's
+first few words. To place an old note, search the chapter for the quoted
+words; without a quote, rebuild the tag in a separate worktree
+(`git worktree add ../round-check <tag>`, then
+`story build ../round-check --format html --out ../round-check.html`) and
+read the label there. `story compare --ref <tag>` shows which chapters
+changed, not where a label moved.
 
 For GitHub-hosted projects, the Story Skills repository's
 `templates/github/review-copy.yml` workflow rebuilds the HTML copy on

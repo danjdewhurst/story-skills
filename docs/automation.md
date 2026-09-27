@@ -296,7 +296,7 @@ The `build` job:
 1. Checks out the repository without persisting the token (`persist-credentials: false`) and sets up Node 24.
 2. Runs `story validate`, `story links`, and `story continuity`. If any of them fails, nothing is built or published, so readers never get a copy with broken references or a contradicted continuity contract. Readers keep the last good copy.
 3. Looks for a chapter file in `$STORY_DIR/chapters`. With none, the remaining steps and the `deploy` job are skipped.
-4. Builds the review copy with `story build "$STORY_DIR" --format html --out "$GITHUB_WORKSPACE/review-site/index.html"`. The `--out` path is absolute because a relative `--out` is resolved against the project root and may not leave it; see [Output paths](manuscripts.md#output-paths-and-what-is-disposable).
+4. Builds the review copy with `story build "$STORY_DIR" --format html --stamp "$(date -u +%Y-%m-%d) ${GITHUB_SHA::7}" --out "$GITHUB_WORKSPACE/review-site/index.html"`. The stamp prints the build date and short commit at the top of the copy, so readers can say which build a note refers to. The `--out` path is absolute because a relative `--out` is resolved against the project root and may not leave it; see [Output paths](manuscripts.md#output-paths-and-what-is-disposable).
 5. Uploads `index.html` as a workflow artifact named `review-copy`, which you can download from the run page.
 6. Uploads the `review-site` folder as the Pages site.
 
@@ -315,7 +315,7 @@ The [`editorial-review`](../skills/editorial-review/SKILL.md) skill asks before 
 
 ### Review rounds and changing labels
 
-A paragraph label is the paragraph's position in its chapter, so it changes when you add or remove paragraphs earlier in that chapter. Because this workflow republishes on every push, a note made last week may point at a paragraph that has since moved. Tag the commit when you send readers the link for a round, for example `beta-round-1`, and resolve notes against that tag; `story compare . --ref beta-round-1` shows which chapters have changed since. See [Import, export, and builds](manuscripts.md#html-review-copy) for how labels are numbered.
+A paragraph label is the paragraph's position in its chapter, so it changes when you add or remove paragraphs earlier in that chapter. Because this workflow republishes on every push, a note made last week may point at a paragraph that has since moved. Readers therefore quote the build stamp printed at the top of the copy and the paragraph's first few words along with the label; the issue form asks for both. Tag the commit when you send readers the link for a round, for example `beta-round-1`. To find where an old label's paragraph is now, search the chapter for the first few words the reader quoted. If the note has no quote, rebuild the tagged commit in a separate worktree and read the label there: `git worktree add ../round-1 beta-round-1`, then `story build ../round-1 --format html --out ../round-1.html`, then search the current chapter for that paragraph's text and remove the worktree. `story compare . --ref beta-round-1` only says which chapters changed and by how much; it does not map labels. See [Import, export, and builds](manuscripts.md#html-review-copy) for how labels are numbered.
 
 ## Manuscript note issue form
 
@@ -335,13 +335,15 @@ Give readers a direct link to the form alongside the review copy: `https://githu
 |---|---|---|---|
 | Issue title | Text, starting `[ch00-p0] ` | Yes | Readers replace `ch00-p0` with the paragraph label and add a short summary. |
 | Paragraph label | Short text | Yes | One label, such as `ch03-p12`, or the first and last of a passage, such as `ch03-p12 to ch03-p15`. |
+| Build | Short text | No | The build stamp at the top of the review copy, such as `2026-09-27 abc1234`. |
+| First few words of the paragraph | Short text | Yes | The paragraph's opening words, so the note still finds its paragraph after later edits renumber the labels. |
 | What kind of note is this? | Dropdown | Yes | Typo or wording; Confusing; Continuity (contradicts something earlier); Pacing (slow or rushed); Character (feels off); Sensitivity or authenticity; Loved this; Other. |
 | Your note | Long text | Yes | What the reader noticed and how it made them feel. The form tells them they need not suggest a fix. |
 | How much did it affect your reading? | Dropdown | No | Barely noticed; Pulled me out for a moment; Made me want to stop reading. |
 
 ### From issues to revisions
 
-The notes are raw reader reactions, not decisions. The [`feedback-triage`](../skills/feedback-triage/SKILL.md) skill records them in one file per reader under `feedback/round-<N>/`, keeps each note's paragraph label in its **Where** line, and weighs them against your intent before anything changes in the manuscript. See [Skills catalogue](skills.md#feedback-triage) and [Writing workflows](writing-workflows.md).
+The notes are raw reader reactions, not decisions. The [`feedback-triage`](../skills/feedback-triage/SKILL.md) skill records them in one file per reader under `feedback/round-<N>/`, fetches the issues with `gh issue list --label manuscript-note`, maps each old label to the current text, keeps each note's paragraph label in its **Where** line, and weighs them against your intent before anything changes in the manuscript. See [Skills catalogue](skills.md#feedback-triage) and [Writing workflows](writing-workflows.md).
 
 ## Customising the workflows
 

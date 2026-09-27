@@ -381,6 +381,7 @@ Creates a new project from an existing manuscript. `<source>` is a single `.md`,
 - A chapter file in Story Skills' own layout (frontmatter and a `## Chapter Text` section) imports as one chapter with its `title` and the prose under `## Chapter Text`.
 - A file without markdown chapter headings is split on plain-text chapter lines standing alone between blank lines, such as `Chapter 3`, `CHAPTER ONE: Arrival`, `Prologue`, or `Epilogue: After`. The number or word must stand alone or be followed by a separator (`:`, `.`, `-`, `–`, `—`), with or without a title (a bare `Prologue:` splits, and `Chapter 3:` is titled `Chapter N` with its new number and a plain `# Chapter N` heading), so `Chapter 12 was the worst.` and `Chapter Nine Lives of a Cat` do not split. A single short line before the first one is treated as the book title.
 - A file with neither becomes one chapter, titled by its first `#` heading or by its file name.
+- When numbered plain `Chapter N` lines did not split a file, because it also has markdown chapter headings or because a line is not between blank lines, `import` warns with the count and the first one: `warning: t.txt: 2 plain-text chapter lines were not used to split chapters (first "Chapter 1" at line 1): ...`.
 - A directory is imported in natural file-name order (`chapter-2` before `chapter-10`). Files with no number in their name come after the numbered ones, except prologue, preface, foreword, introduction, and prelude files, which come first. Hidden files (`.name`), macOS AppleDouble files (`._name`), and Word lock files (`~$name`) are skipped. Symlinks are never followed; a symlink to a document is refused.
 - Leading YAML frontmatter in source files is dropped. A leading `---` block that starts with a blank line, or holds a line that is not YAML (such as `She said: go now.`), is a scene break and is kept. A trailing Pandoc attribute block on a heading (`# Chapter 1: Arrival {#arrival .unnumbered}`) and closing hashes (`## Title ##`) are dropped from the title.
 - In `.md` and `.markdown` sources, Pandoc's `---` becomes an em dash and `--` an en dash, except inside inline code, closed `` ``` `` code fences, HTML comments (everything after a `<!--` that never closes), link targets (`](...)`), autolinks (`<https://...>`), bare URLs, `www.` addresses, email and `mailto:` addresses, and HTML tags, and on lines made only of dashes (scene breaks), table separator rows (`|---|---|`), and indented code lines (four spaces or a tab). An indented line that continues a list item is prose and is converted. In `.txt` sources, leading tabs and spaces are removed from every line, so indented paragraphs do not become code blocks.
@@ -466,6 +467,7 @@ Checks that the project is structurally sound:
 - each registry `_index.md` links every entity file (warning)
 - declared chapter `word-count` values match the prose (warning)
 - no chapter opens an HTML comment (`<!--`) without closing it, which would leave the text after it in builds and word counts; a `<!--` inside a closed `` ``` `` code fence or an inline code span does not count (warning)
+- no chapter's prose holds a `[TODO` marker (`[TODO: check bible]`), which every build would print; a marker inside an HTML comment does not count (warning: `chapters/chapter-01.md has 1 [TODO marker in its prose, which every build prints: resolve it or move it into an HTML comment`)
 - each chapter has at least one scene record (warning)
 - chapter `hook`, scene `outcome`, clue `red-herring`, location `routes`, character `voice-words` and `voice-avoid`, `pronunciation` fields, and research `accuracy`, `confidence`, `method`, and `risk` use allowed values and types
 - matter pages have text; research marked `verified` lists sources; research that is still `open` or `disputed` is not relied on by a `final` or `complete` chapter; research with a `risk` and no `reviewed-by` is not relied on by a `final` or `complete` chapter; research with `accuracy: invented` is exempt from the source checks; no stray `.md` files sit at the project root or nested inside entity directories (warnings)
@@ -713,7 +715,7 @@ Compares the current chapters with an earlier draft and reports word changes per
 | `--ref <git-ref>` | Read the earlier chapters from a git branch, tag, or commit (with `~` and `^` suffixes); any name git accepts works, except one starting with `-`. The project must be inside a git repository, and its folder must exist at the ref. It reads with `git show` and never writes to the repository |
 | `--against <path>` | Read the earlier chapters from another copy of the project on disk, resolved against the current directory. It must be a story project with a `story.md` |
 
-Chapters are matched by id (`chapter-01`, `chapter-02`, and so on). With `--ref`, old drafts without frontmatter are still compared. Every file in the current project, and with `--against` in the other project, must parse, or `compare` stops with an error. A chapter is `unchanged` only when its paragraphs are the same and in the same order; scene-break lines and code between closed fences are not compared.
+Chapters are matched by id (`chapter-01`, `chapter-02`, and so on), except that a chapter whose paragraphs match a chapter under another id better is paired with it and listed as `chapter-03 Title (moved from chapter-02): ...`, and the summary line adds `N moved`. That is how chapters renumbered by [`move`](#move) show up. A pair under different ids needs at least half the paragraphs of the longer version to match word for word. With `--ref`, old drafts without frontmatter are still compared. Every file in the current project, and with `--against` in the other project, must parse, or `compare` stops with an error. A chapter is `unchanged` only when its paragraphs are the same and in the same order; scene-break lines and code between closed fences are not compared.
 
 With `../thread-draft-1` a copy of the project taken before the chapter 3 edit shown under [wordcount](#wordcount):
 
@@ -999,7 +1001,7 @@ Runs `validate`, `links`, and `continuity`, then lists prioritised actions:
 | `P2` | Track open questions, review pending promises and open clues, draft the next chapter, create a first character |
 | `P3` | Nothing is blocking the next writing pass |
 
-Actions are sorted by priority, P0 first; actions with the same priority keep the order the checks produce them. The draft-next-chapter action is left out when `story.md` has `status: revising`, `status: complete`, or `status: abandoned`, or when every arc is `resolved`. A discovered chapter without post-hoc notes gets `[P1] Reconcile discovered chapters: Run the discovery-drafting reconcile loop and add ## Chapter Notes (post-hoc) for <ids>.`
+Actions are sorted by priority, P0 first; actions with the same priority keep the order the checks produce them. The draft-next-chapter action names the first chapter that exists but has no prose yet (0 words, such as a fresh outline), `[P2] Draft chapter 1: chapters/chapter-01.md has no prose yet (status outline): draft it under ## Chapter Text to ...`, and only when every chapter has prose does it suggest adding the next number with `story add chapter`. It is left out when `story.md` has `status: revising`, `status: complete`, or `status: abandoned`, or when every arc is `resolved`. A discovered chapter without post-hoc notes gets `[P1] Reconcile discovered chapters: Run the discovery-drafting reconcile loop and add ## Chapter Notes (post-hoc) for <ids>.`
 
 Suggested commands use the project path as you typed it, or `.` when you gave none: `story next drafts/salt-road` suggests `Run story continuity drafts/salt-road and ...` and `story passes drafts/salt-road --init`.
 
@@ -1674,6 +1676,8 @@ $ story add chapter "Dead Calm" --number 2 --pov ilse-marrow
 Created chapter chapter-02: ~/stories/the-salt-road/chapters/chapter-02.md
 ```
 
+[`compare`](#compare) against a draft from before the move pairs moved chapters by content and lists them as `(moved from chapter-02)`, so the old chapter 2 is not reported as rewritten or the new chapter 2 as a rewrite of it.
+
 References to a chapter number that has no file yet (a scheduled `payoff: chapter-05`, say) now name the moved chapter, so `move` lists those files in a warning (`warning: chapter-05 was already referenced before this move, ...`).
 
 The clue now reads `planted: chapter-03` and `payoff: chapter-04`, the old chapter 2 is `chapters/chapter-03.md` with the heading `# Chapter 3: The Crossing`, and its scene is `scenes/chapter-03-scene-01.md` with `chapter: chapter-03`.
@@ -1773,7 +1777,7 @@ warning: manuscript.md is not part of the story project model and is ignored
 ### build
 
 ```text
-story build [path] [--format <name>] [--shunn] [--trim <size>] [--out <file>]
+story build [path] [--format <name>] [--shunn] [--trim <size>] [--stamp <label>] [--out <file>]
 ```
 
 Builds a disposable book file in `dist/`. Builds are deterministic: the same sources give byte-identical output. EPUB timestamps use `SOURCE_DATE_EPOCH` when it is set to whole seconds with a year no later than 9999, and a fixed date otherwise. Default file names cap the story id at 100 characters.
@@ -1783,6 +1787,7 @@ Builds a disposable book file in `dist/`. Builds are deterministic: the same sou
 | `--format <name>` | `markdown` (or `md`), `epub`, `docx`, `shunn`, `html`, `print`, `narration`, or `metadata` | `markdown` |
 | `--shunn` | With `--format docx`, apply Shunn manuscript formatting. An error with any other format | Off |
 | `--trim <size>` | With `--format print`, the trim size: `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5` (case-insensitive). An error with any other format | `5.5x8.5` |
+| `--stamp <label>` | With `--format html`, print this build label (a date, commit, or review round, such as `feedback-round-2`) at the top of the review copy, so readers can say which build a note refers to. An error with any other format or an empty label. Default builds carry no stamp and stay byte-identical | None |
 | `--out <file>` | Output path, relative to the project root | `dist/<story-id>.<ext>` |
 
 | Format | Default output | Contents |
@@ -1792,7 +1797,7 @@ Builds a disposable book file in `dist/`. Builds are deterministic: the same sou
 | `docx` | `dist/<story-id>.docx` | Word document with headings and paragraphs |
 | `docx` with `--shunn` | `dist/<story-id>.docx` | Shunn format: Courier New 12pt, double-spaced, title page |
 | `shunn` | `dist/<story-id>.shunn.md` | Shunn manuscript markdown: title, byline, approximate word count, `contact` lines, page breaks between chapters; no matter pages |
-| `html` | `dist/<story-id>.html` | A single-file review copy for readers: contents list, and a stable label on every paragraph (`ch03-p12` is chapter 3, paragraph 12) that readers quote with their notes |
+| `html` | `dist/<story-id>.html` | A single-file review copy for readers: contents list, and a label on every paragraph (`ch03-p12` is chapter 3, paragraph 12) that readers quote with their notes. A label is the paragraph's chapter and position in this build, so an earlier edit in the chapter renumbers it and `move` changes its chapter part; readers should quote the `--stamp` build label and the paragraph's first few words too |
 | `print` | `dist/<story-id>.print.html` | A print interior as HTML with CSS paged media, sized to `--trim`, with a title page, contents, and page numbers. Render it to PDF with a paged-media engine such as Paged.js, WeasyPrint, or Prince |
 | `narration` | `dist/<story-id>.narration.md` | An audiobook script: estimated runtime at 155 words a minute, a pronunciation guide from `pronunciation` fields in the bible, opening and closing credits, and each section with its estimated minutes |
 | `metadata` | `dist/<story-id>.metadata.md` | A retailer metadata sheet from `story.md`: title, authors, ISBN, language, word count, estimated print pages, description, keywords, BISAC subjects, and a readiness checklist of what is missing |
@@ -1938,6 +1943,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--out` | `<file>` | `export`, `build`, `synopsis`, `diagram` | Relative to the project root |
 | `--format` | `<name>` | `build` | `markdown`, `md`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata` |
 | `--trim` | `<size>` | `build` | Only with `--format print`: `5x8`, `5.25x8`, `5.5x8.5` (default), `6x9`, `a5` |
+| `--stamp` | `<label>` | `build` | Only with `--format html`: a build label printed in the review copy |
 | `--shunn` | | `build` | Boolean; only with `--format docx` |
 | `--at` | `<chapter-id>` | `knowledge` | Required for `knowledge` |
 | `--init` | | `passes` | Boolean; adds the missing default passes |

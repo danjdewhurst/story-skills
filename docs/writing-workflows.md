@@ -531,7 +531,7 @@ Each session has three parts, described in the [drafting cadence reference](../s
 2. **Write forward.** When the agent needs a fact it has not settled, it leaves `[TODO: check bible]` inline and keeps going. When stuck, it goes back a few hundred words and tries a different choice.
 3. **Close** with a `[TODO]` note above `## Chapter Text` saying where the next session starts.
 
-The inline `[TODO: check bible]` markers sit in the prose until the reconcile loop clears them, and they count towards the chapter's words in the meantime. Only the end-of-session note goes above `## Chapter Text`: anything below that heading is counted by `story wordcount` and shipped by `story export`, so a stray TODO left in the prose ends up in the book.
+The inline `[TODO: check bible]` markers sit in the prose until the reconcile loop clears them, and they count towards the chapter's words in the meantime. Only the end-of-session note goes above `## Chapter Text`: anything below that heading is counted by `story wordcount` and shipped by `story export`, so a stray TODO left in the prose ends up in the book. `story validate` warns about every chapter whose prose still holds a `[TODO` marker, and the metadata sheet's readiness checklist names those chapters.
 
 Discovery changes the planning order, not the prose standard: the skill still reads `style-sheet.md` and uses the `scene-craft` tools.
 
@@ -1562,6 +1562,7 @@ The sheet ends in a readiness checklist of every missing field. For *The Gannet 
 - [ ] Cover alt text (`cover-alt`)
 - [ ] AI-use statement decided (`ai-disclosure`)
 - [ ] Permissions cleared for quoted matter (`permission`; pending: epigraph)
+- [x] No `[TODO` markers in chapter prose
 - [ ] Story status is complete
 ```
 

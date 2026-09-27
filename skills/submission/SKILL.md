@@ -78,7 +78,8 @@ Then check what the CLI cannot:
    state the number and the range, and ask the user to confirm current
    norms for their market. Never pad or cut to hit a number without the
    user's direction.
-5. No `[TODO` markers remain in chapter prose.
+5. No `[TODO` markers remain in chapter prose. `story validate` warns about
+   each chapter that still has one.
 6. Open questions and planted promises are resolved, or deliberately left
    for a sequel (check `story.md` `precedes`). Once `story.md` is
    `status: complete`, every open question and planned or planted promise

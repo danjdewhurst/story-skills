@@ -68,8 +68,10 @@ story build . --format metadata
 
 The metadata sheet lists every missing field in its readiness checklist,
 including a `Permissions cleared for quoted matter` row that names each
-matter page still at `permission: pending`, whatever the story status.
-Report it with the validate findings. `validate` warns about
+matter page still at `permission: pending`, whatever the story status,
+and a `No [TODO markers in chapter prose` row that names each chapter still
+holding a `[TODO` marker, which every build would print. Report it with the
+validate findings. `validate` warns about
 `permission: pending` only once the story `status` is `complete`, and
 about a research note with a `risk` but no `reviewed-by` only when a final
 or complete chapter uses it, so also search the files directly before

@@ -3,7 +3,10 @@
 # Copy this file to .github/ISSUE_TEMPLATE/manuscript-note.yml in the
 # repository that holds your story project. Readers of the review copy
 # (review-copy.yml) open an issue per note, quoting the paragraph label shown
-# beside each paragraph, so every note points at an exact place in the book.
+# beside each paragraph, the build stamp at the top of the review copy, and
+# the paragraph's first few words. Labels are positions in one build, so the
+# build and the quoted words let the author find the paragraph after the text
+# changes.
 # The feedback-triage skill reads these issues into a feedback round.
 #
 # GitHub only applies labels that already exist, so create a
@@ -17,13 +20,29 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reading. Each paragraph in the review copy has a small label such as `ch03-p12` (chapter 3, paragraph 12). Put it in the title and below so the author can find the spot.
+        Thanks for reading. Each paragraph in the review copy has a small label such as `ch03-p12` (chapter 3, paragraph 12). Put it in the title and below, with the build shown at the top of the review copy and the paragraph's first few words, so the author can find the spot even after the text changes.
   - type: input
     id: anchor
     attributes:
       label: Paragraph label
       description: The label shown beside the paragraph, or the first and last labels of a passage.
       placeholder: ch03-p12 or ch03-p12 to ch03-p15
+    validations:
+      required: true
+  - type: input
+    id: build
+    attributes:
+      label: Build
+      description: The build shown at the top of the review copy, such as 2026-09-27 abc1234.
+      placeholder: 2026-09-27 abc1234
+    validations:
+      required: false
+  - type: input
+    id: quote
+    attributes:
+      label: First few words of the paragraph
+      description: Copy the first five or six words, so the note still finds its paragraph after later edits renumber the labels.
+      placeholder: She had been diving the reef
     validations:
       required: true
   - type: dropdown

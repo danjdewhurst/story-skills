@@ -60,8 +60,11 @@ export function buildClueMatrix(project) {
     totals: {
       clues: live.length,
       redHerrings: live.filter((clue) => clue.redHerring).length,
-      planted: live.filter((clue) => clue.planted !== "").length,
-      revealed: live.filter((clue) => clue.payoff !== "").length
+      // Count what the manuscript has done, not what is scheduled: a clue is
+      // planted once its status says so and its planted chapter exists, and
+      // revealed once it is paid off in a chapter that exists.
+      planted: live.filter((clue) => clue.status !== "planned" && position.has(clue.planted)).length,
+      revealed: live.filter((clue) => clue.status === "paid-off" && position.has(clue.payoff)).length
     },
     warnings
   };

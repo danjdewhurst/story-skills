@@ -116,7 +116,8 @@ jobs:
             3. If the next actions include no "Draft chapter" line (the story is
                revising or complete, or every arc is resolved), stop without
                drafting or opening a pull request.
-            4. Otherwise draft the next chapter following the chapter-writing
+            4. Otherwise draft the chapter that line names (an existing chapter
+               with no prose yet, or a new one to add) following the chapter-writing
                skill: outline first, then prose under "## Chapter Text", with
                accurate frontmatter (pov, status, word-count, locations, characters, mentions, arcs-advanced).
                Add matching scene records and update continuity/state.md,

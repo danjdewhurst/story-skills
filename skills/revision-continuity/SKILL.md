@@ -120,7 +120,7 @@ story compare . --ref draft-1
 story compare . --against ../the-tide-room-draft-1
 ```
 
-`story compare` lists each chapter's word change, added and removed chapters, and the share of paragraphs left unchanged, so the user can see how deep the pass went. Chapters are matched by id, so after a renumber the same id holds different prose, and a chapter whose prose did not change can read as rewritten. In that case, compare the moved chapters by content (read the old and new text side by side) rather than trusting the per-chapter figures. It only reads git; it never commits or tags.
+`story compare` lists each chapter's word change, added and removed chapters, and the share of paragraphs left unchanged, so the user can see how deep the pass went. Chapters are matched by id, but a chapter renumbered by `story move` whose paragraphs still mostly match is paired with its old id and shown as `(moved from chapter-NN)`. A chapter that was renumbered and also heavily rewritten (under half its paragraphs unchanged) shows as one removed and one added; compare those by content (read the old and new text side by side). It only reads git; it never commits or tags.
 
 ## Structural Edits
 

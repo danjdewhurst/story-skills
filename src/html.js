@@ -1,5 +1,7 @@
 // Single-file HTML builds. The review copy is for readers who never open a
-// terminal: every paragraph has a stable anchor (ch03-p12) they can cite.
+// terminal: every paragraph has a label (ch03-p12) they can cite. A label is
+// the chapter and the paragraph's position in this build, so an earlier edit
+// renumbers it; `stamp` names the build so a note can say which one it means.
 // The print interior is HTML with CSS paged media, rendered to PDF by a
 // paged-media engine such as Paged.js, WeasyPrint, or Prince.
 import { textDirection } from "./publishing.js";
@@ -15,7 +17,7 @@ export const DEFAULT_TRIM = "5.5x8.5";
 
 // Each part is { key, kind, title, heading, paragraphs } where paragraphs
 // are pre-rendered inline HTML strings, or null for a scene break.
-export function reviewHtml(book) {
+export function reviewHtml(book, { stamp = "" } = {}) {
   const rtl = textDirection(book.language) === "rtl";
   const toc = [];
   const sections = [];
@@ -78,7 +80,7 @@ ${rtl ? `[dir="rtl"] .note { border-left: 0; padding-left: 0; border-right: 3px 
 <header>
 <h1>${escapeHtml(book.title)}</h1>
 ${byline}
-<p class="note">Review copy. Every paragraph has a label such as <code>ch03-p12</code> (chapter 3, paragraph 12). Quote the label with each note so the author can find the exact spot.</p>
+<p class="note">Review copy${stamp === "" ? "" : `, build <code>${escapeHtml(stamp)}</code>`}. Every paragraph has a label such as <code>ch03-p12</code> (chapter 3, paragraph 12). Quote the label${stamp === "" ? "" : " and the build"} with each note, with the paragraph's first few words, so the author can find the exact spot after the text changes.</p>
 </header>
 <nav aria-label="Contents"><h2>Contents</h2><ol>
 ${toc.join("\n")}

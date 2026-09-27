@@ -629,7 +629,8 @@ word-count: 1
     expect(fs.existsSync(path.join(created.root, "continuity", "promises", "the-key-opens-the-reef-vault.md"))).toBe(false);
 
     const actions = projectActions(created.root);
-    expect(formatActionReport(actions)).toContain("Draft chapter 2");
+    // Chapter 1 is still an empty outline, so it is drafted before a chapter 2 is added.
+    expect(formatActionReport(actions)).toContain("Draft chapter 1: chapters/chapter-01.md has no prose yet");
     expect(formatActionReport({
       title: "Empty",
       validation: { ok: true, errors: [], warnings: [] },

@@ -5,7 +5,7 @@ import { checkContinuity, idText, storyDateError, storyTimeError } from "./conti
 import { FRONTMATTER_PATTERN, parseFrontmatter, replaceFrontmatter, stringifyFrontmatter } from "./frontmatter.js";
 import { assertExistingAncestorInsideRoot, assertLexicallyInsideRoot, assertSafeProjectDirectory, assertSafeProjectPath, isPathInside, lstatIfExists, readTextFile, TEMPORARY_FILE_PATTERN, writeFile } from "./files.js";
 import { isTruthy } from "./options.js";
-import { chapterHeading, chapterProse, escapeRegExp, extractSection, fencedLineIndexes, hasUnclosedComment, kebabCase, scanComments, titleCaseSlug, wordCount } from "./markdown.js";
+import { chapterHeading, chapterProse, countTodoMarkers, escapeRegExp, extractSection, fencedLineIndexes, hasUnclosedComment, kebabCase, scanComments, titleCaseSlug, wordCount } from "./markdown.js";
 import { buildTimeline } from "./timeline.js";
 import { buildClueMatrix } from "./clues.js";
 import { buildDiagram } from "./diagram.js";
@@ -626,6 +626,7 @@ export function scanProject(root) {
       targetWords: Number.isInteger(data["target-words"]) && data["target-words"] > 0 ? data["target-words"] : 0,
       wordCount: wordCount(chapterProse(markdown.body)),
       unclosedComment: hasUnclosedComment(chapterProse(markdown.body)),
+      todoMarkers: countTodoMarkers(chapterProse(markdown.body)),
       date: String(data.date ?? ""),
       time: String(data.time ?? ""),
       mode: String(data.mode ?? ""),
@@ -842,6 +843,10 @@ export function validateProjectOf(project) {
       warnings.push(chapter.wordCountMissing
         ? `${path.relative(projectRoot, chapter.file)} has no word-count (contains ${chapter.wordCount})`
         : `${path.relative(projectRoot, chapter.file)} declares ${plural(chapter.declaredWordCount, "word")} but contains ${chapter.wordCount}`);
+    }
+
+    if (chapter.todoMarkers > 0) {
+      warnings.push(`${path.relative(projectRoot, chapter.file)} has ${plural(chapter.todoMarkers, "[TODO marker")} in its prose, which every build prints: resolve ${chapter.todoMarkers === 1 ? "it" : "them"} or move ${chapter.todoMarkers === 1 ? "it" : "them"} into an HTML comment`);
     }
 
     if (chapter.unclosedComment) {
@@ -2028,6 +2033,14 @@ export function buildBook(root, options = {}) {
   if (!TRIM_SIZES.has(trim)) {
     throw new Error(`Unsupported trim size: ${options.trim}. Supported sizes: ${[...TRIM_SIZES.keys()].join(", ")}`);
   }
+  if (options.stamp !== undefined && format !== "html") {
+    throw new Error("--stamp applies only to --format html");
+  }
+  // A build label printed in the review copy: one line, no control characters.
+  const stamp = options.stamp === undefined ? "" : String(options.stamp).replace(/[\u0000-\u001f\u007f]+/g, " ").trim();
+  if (options.stamp !== undefined && stamp === "") {
+    throw new Error("--stamp needs a label, such as a date, commit, or round name");
+  }
   if (options.shunn && format !== "docx") {
     throw new Error("--shunn applies only to --format docx (use --format shunn for a Shunn markdown manuscript)");
   }
@@ -2055,13 +2068,14 @@ export function buildBook(root, options = {}) {
       pages: { "5.5x8.5": estimatePages(words, "5.5x8.5"), "6x9": estimatePages(words, "6x9") },
       hasCopyrightPage: manuscript.front.concat(manuscript.back).some((entry) => entry.copyright),
       coverReady: coverIsReady(project),
-      pendingPermissions: project.matter.filter((entry) => entry.permission === "pending").map((entry) => entry.id)
+      pendingPermissions: project.matter.filter((entry) => entry.permission === "pending").map((entry) => entry.id),
+      todoChapters: project.chapters.filter((chapter) => chapter.todoMarkers > 0).map((chapter) => chapter.id)
     }), output.writeOptions);
   } else if (format === "narration") {
     writeFile(output.outFile, narrationScript(manuscript, pronunciationGuide(project)), output.writeOptions);
   } else if (format === "html" || format === "print") {
     const book = htmlBook(manuscript);
-    const text = format === "html" ? reviewHtml(book) : printHtml(book, trim);
+    const text = format === "html" ? reviewHtml(book, { stamp }) : printHtml(book, trim);
     writeFile(output.outFile, text, output.writeOptions);
   } else if (format === "shunn") {
     writeShunnMarkdown(output.outFile, manuscript, shunnMeta(project), output.writeOptions);
@@ -3408,7 +3422,12 @@ function buildProjectActions(project, validation, links, continuity, displayPath
   const storyStatus = project.story.data.status;
   const drafting = !["revising", "complete", "abandoned"].includes(storyStatus)
     && !(project.arcs.length > 0 && project.arcs.every((arc) => arc.status === "resolved"));
-  if (drafting) {
+  // A chapter that exists but has no prose yet (an outline) comes before a
+  // new one.
+  const undrafted = project.chapters.find((chapter) => chapter.wordCount === 0 && Number.isInteger(chapter.number) && chapter.number > 0);
+  if (drafting && undrafted) {
+    actions.push(action("P2", `Draft chapter ${undrafted.number}`, `${path.relative(project.root, undrafted.file)} has no prose yet${undrafted.status === "" ? "" : ` (status ${undrafted.status})`}: draft it under ## Chapter Text to ${nextLabel}, then run story wordcount ${where} --write.`));
+  } else if (drafting) {
     actions.push(action("P2", `Draft chapter ${nextNumber}`, `Use story add chapter "Chapter ${nextNumber}" --number ${nextNumber}${where === "." ? "" : ` --path ${where}`}, then outline scenes to ${nextLabel}.`));
   }
   if (project.characters.length === 0) {

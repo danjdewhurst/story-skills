@@ -11,7 +11,9 @@ const CONTEXT_ABBREVIATIONS = /(?:^|[\s(“"‘'])(?:No|vs|etc|a\.m|p\.m)$/;
 const CALENDAR_WORD = /^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|January|February|March|April|May|June|July|August|September|October|November|December)(?![\p{L}\p{N}])/u;
 // A sentence ends at a run of . ! ? or … plus any closing quotes, brackets,
 // or emphasis marks, before a space or the end of the text.
-const SENTENCE_END = /[.!?…]+["”’')\]*_]*(?= |$)/g;
+// A Chinese or Japanese full stop, exclamation, or question mark (。！？)
+// always ends one: that writing puts no space after it and has no capitals.
+const SENTENCE_END = /[.!?…]+["”’')\]*_]*(?= |$)|[。！？]+[」』）”’"')\]*_]*/g;
 // How many characters either side of a stop decide whether it ends a
 // sentence.
 const CONTEXT_WINDOW = 64;
@@ -31,6 +33,11 @@ export function splitSentences(text, { capitalStart = true } = {}) {
   let start = 0;
   for (const match of normalized.matchAll(SENTENCE_END)) {
     const end = match.index + match[0].length;
+    if (/^[。！？]/.test(match[0])) {
+      sentences.push(normalized.slice(start, end).trim());
+      start = end;
+      continue;
+    }
     // Only the words either side of the stop decide, so test short windows:
     // slicing the whole text each time would make long passages quadratic.
     const next = normalized.slice(end + 1, end + 1 + CONTEXT_WINDOW);
@@ -53,7 +60,7 @@ export function splitSentences(text, { capitalStart = true } = {}) {
   }
   const tail = normalized.slice(start).trim();
   if (tail !== "") {
-    sentences.push(/[.!?…]["”’')\]]*$/.test(tail) ? tail : `${tail}.`);
+    sentences.push(/[.!?…。！？]["”’')\]」』）]*$/.test(tail) ? tail : `${tail}.`);
   }
   return sentences.filter((sentence) => sentence !== "");
 }

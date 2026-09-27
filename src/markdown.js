@@ -52,6 +52,9 @@ const WORD_PATTERN = new RegExp(
   `${URL_PLACEHOLDER}|[\\p{L}\\p{N}][${WORD_CHARS}]*(?:(?:['\u2019\u2010\u2011-]|(?<=\\p{N})[.,:](?=\\p{N}))[\\p{L}\\p{N}][${WORD_CHARS}]*)*`,
   "gu"
 );
+// One Han, Hiragana, or Katakana character, or the Katakana long-vowel mark,
+// which Unicode files under no single script.
+const CJK_CHARACTER = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\u30FC]/gu;
 // A bare URL or email address counts as one word. The lookbehinds start a
 // match only at the start of a token, so scanning stays linear.
 const URL_OR_EMAIL = /(?<![a-z0-9+.-])(?:[a-z][a-z0-9+.-]*:\/\/|www\.)[^\s<>()[\]`]*[^\s<>()[\]`.,;:!?'"\u2019\u201d*_~]|(?<![\p{L}\p{N}._%+-])[\p{L}\p{N}][\p{L}\p{N}._%+-]*@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/giu;
@@ -90,7 +93,10 @@ export function splitWords(markdown) {
     // A backslash escape (`didn\'t`) is the character it escapes.
     .replace(/\\([!-/:-@[-`{-~])/g, "$1")
     .replace(/[#>*_~|`]/g, " ")
-    .replace(/(?<!\p{N}):|:(?!\p{N})/gu, " ");
+    .replace(/(?<!\p{N}):|:(?!\p{N})/gu, " ")
+    // Chinese and Japanese put no spaces between words, so each Han, Hiragana,
+    // or Katakana character counts as one word, as Word and Scrivener count.
+    .replace(CJK_CHARACTER, " $& ");
 
   // Letters and digits in any script; apostrophes (straight or curly) and
   // hyphens join a word rather than split it, so "don\u2019t" and "well-known"
@@ -122,6 +128,12 @@ export function chapterProse(markdownBody, commentReplacement = "") {
 // text after it would show in the book.
 export function hasUnclosedComment(prose) {
   return scanComments(String(prose)).unclosed;
+}
+
+// How many `[TODO` markers (`[TODO: check bible]`) prose holds. Pass prose
+// with comments removed: a marker inside a comment never reaches a build.
+export function countTodoMarkers(prose) {
+  return (String(prose).match(/\[TODO\b/gi) ?? []).length;
 }
 
 

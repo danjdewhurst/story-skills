@@ -675,7 +675,7 @@ warning: clue the-constables-silence is a red herring with no payoff: record the
 warning: clue the-burned-page is planted in the chapter before its reveal (chapter-03 -> chapter-04): late plant gives readers no time to notice it
 ```
 
-The columns are chapter numbers, in order. Rows are sorted by the chapter that plants them; clues with no `planted` chapter come last. `x` means planted and revealed in the same chapter. After each row come the clue's status and `delayed` if the flag is set. The header counts live clues (`planned`, `planted`, or `paid-off`) and how many of them record a `planted` and a `payoff` chapter.
+The columns are chapter numbers, in order. Rows are sorted by the chapter that plants them; clues with no `planted` chapter come last. `x` means planted and revealed in the same chapter. After each row come the clue's status and `delayed` if the flag is set. The header counts live clues (`planned`, `planted`, or `paid-off`), how many are planted (status `planted` or `paid-off`, with a `planted` chapter that exists), and how many are revealed (status `paid-off`, with a `payoff` chapter that exists). A `planned` clue that only schedules its chapters counts as neither.
 
 ### Fair-play findings
 
@@ -1067,7 +1067,7 @@ The first line names the source: the absolute path of the `--against` folder, or
 
 How to read it:
 
-- Chapters are matched by id (`chapter-04`), not by title or content. A chapter renumbered into a free slot shows as one removed and one added; two chapters that swap numbers both show as changed.
+- Chapters are matched by id (`chapter-04`), unless a chapter's paragraphs match a chapter under another id better. Then the two are paired and the line reads `chapter-03 The Millpond (moved from chapter-02): ...`, so chapters renumbered by `story move` show as moved rather than as rewritten, added, or removed. A pair under different ids needs at least half the paragraphs of the longer version to match word for word, so a renumbered chapter that was also heavily rewritten still shows as one removed and one added.
 - **% of paragraphs unchanged** is the share of the current chapter's paragraphs that appear word for word in the earlier version, ignoring whitespace. A chapter with 0% has had every paragraph touched, even if only lightly.
 - A chapter is `unchanged` only when its paragraphs are the same and in the same order. Scene-break lines are not counted as paragraphs.
 

@@ -78,7 +78,8 @@ export function importManuscript(options) {
     throw new Error(`${rawSource} is already a story project (it has story.md); import reads manuscript files, so point it at the draft instead`);
   }
 
-  const chapters = splitChapters(readSourceDocuments(source));
+  const warnings = [];
+  const chapters = splitChapters(readSourceDocuments(source), warnings);
   if (chapters.length === 0) {
     throw new Error("No chapter content found in import source");
   }
@@ -144,6 +145,7 @@ export function importManuscript(options) {
     ignoredOptions: created.ignoredOptions,
     chapters: chapters.length,
     words: totalWords,
+    warnings,
     candidates: extractNameCandidates(chapters.map((chapter) => chapter.prose).join("\n\n"))
   };
 }
@@ -320,7 +322,7 @@ function withoutLeadingFrontmatter(text) {
   return text.slice(match[0].length);
 }
 
-function splitChapters(documents) {
+function splitChapters(documents, warnings = []) {
   const chapters = [];
 
   for (const document of documents) {
@@ -331,8 +333,19 @@ function splitChapters(documents) {
       chapters.push(own);
       continue;
     }
-    const text = normalizeSource(withoutLeadingFrontmatter(source), document.name);
-    const sections = splitByChapterHeadings(text);
+    const body = withoutLeadingFrontmatter(source);
+    // Line numbers in warnings count from the top of the file, frontmatter
+    // included.
+    const offset = source.slice(0, source.length - body.length).split("\n").length - 1;
+    const text = normalizeSource(body, document.name);
+    const { sections, unused, markdown } = splitByChapterHeadings(text);
+    if (unused.length > 0) {
+      const count = unused.length === 1 ? "1 plain-text chapter line was" : `${unused.length} plain-text chapter lines were`;
+      const why = markdown
+        ? "the file has markdown chapter headings, which take precedence, so make these headings too (## Chapter 1)"
+        : "a chapter line splits only when it stands alone between blank lines, so add a blank line after each";
+      warnings.push(`${document.name}: ${count} not used to split chapters (first "${unused[0].text}" at line ${unused[0].index + 1 + offset}): ${why}. See "How chapters are split" in docs/manuscripts.md`);
+    }
     if (sections.length > 0) {
       chapters.push(...sections);
     } else {
@@ -458,6 +471,7 @@ function splitByChapterHeadings(text) {
   const titles = markdown
     ? markdownTitles
     : lines.map((line, index) => (hidden.has(index) ? null : plainChapterTitle(lines, index)));
+  const unused = unusedChapterLines(lines, hidden, titles, underlines);
   const sections = [];
   let current = null;
   const preamble = [];
@@ -482,7 +496,7 @@ function splitByChapterHeadings(text) {
   }
 
   if (!current) {
-    return [];
+    return { sections: [], unused, markdown };
   }
 
   sections.push(finishChapter(current));
@@ -501,7 +515,24 @@ function splitByChapterHeadings(text) {
     sections.unshift({ title: "Opening", prose: opening });
   }
 
-  return sections;
+  return { sections, unused, markdown };
+}
+
+// Numbered plain-text chapter lines (`Chapter 3`) that did not split, because
+// the file has markdown chapter headings or the line does not stand alone
+// between blank lines, so import can say the split did not happen.
+function unusedChapterLines(lines, hidden, titles, underlines) {
+  const unused = [];
+  for (const [index, line] of lines.entries()) {
+    const text = line.trim();
+    if (titles[index] !== null || hidden.has(index) || underlines.has(index) || text.length > PLAIN_LINE_MAX_LENGTH) {
+      continue;
+    }
+    if (PLAIN_CHAPTER_PATTERN.test(text)) {
+      unused.push({ index, text });
+    }
+  }
+  return unused;
 }
 
 // Removes a part heading (`# Part Two: Sea`), and the blank lines after it,

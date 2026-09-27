@@ -125,6 +125,9 @@ export const COMMANDS = [
       });
       io.stdout.write(`Imported ${result.chapters} ${result.chapters === 1 ? "chapter" : "chapters"} (${result.words} ${result.words === 1 ? "word" : "words"}) into ${result.root}\n`);
       reportKeptStory(io, result, "--title");
+      for (const warning of result.warnings) {
+        io.stderr.write(`warning: ${warning}\n`);
+      }
       if (result.keptStory) {
         io.stderr.write("note: the old chapter files were replaced, so scenes, bible entries, and continuity files may point at chapters that are gone or changed. Run story links to find them.\n");
       }
@@ -547,13 +550,14 @@ export const COMMANDS = [
       "(retailer sheet)"
     ],
     project: "positional",
-    options: ["out", "format", "shunn", "trim"],
+    options: ["out", "format", "shunn", "trim", "stamp"],
     run({ parsed, io, root }) {
       const result = buildBook(root(), {
         out: parsed.options.out,
         format: parsed.options.format,
         shunn: isTruthy(parsed.options.shunn),
-        trim: parsed.options.trim
+        trim: parsed.options.trim,
+        stamp: parsed.options.stamp
       });
       io.stdout.write(`Built ${result.chapters} chapters as ${result.format} to ${result.outFile}\n`);
       return 0;

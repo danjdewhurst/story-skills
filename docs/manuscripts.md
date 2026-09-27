@@ -163,6 +163,8 @@ Import processes each source document in six steps:
 5. If the document has neither, the whole document becomes one chapter. Its title is the first `# ` heading in the document (a lone `#` is a scene break, not a heading), and any text before that heading is kept in the prose. With no `# ` heading, the title comes from the file name: `02-smoke.txt` becomes `02 Smoke`.
 6. Chapters whose prose is empty are dropped.
 
+When a numbered `Chapter` line (one that would match the step 4 pattern) did not split the document, import prints a warning with the count and the first such line, for example `warning: mix.md: 3 plain-text chapter lines were not used to split chapters (first "Chapter 1" at line 5): the file has markdown chapter headings, ...`. That happens when a file mixes a markdown chapter heading (`# Prologue`) with plain `Chapter N` lines, since markdown headings take precedence for the whole file, or when a `Chapter N` line is followed directly by text with no blank line. Make the lines markdown headings, or add the blank lines, and import again with `--force`.
+
 > [!NOTE]
 > Only `Chapter`, `Prologue`, `Epilogue`, `Interlude`, and `Afterword` headings split a document. A `## Part Two` heading inside a single manuscript file stays in the prose: at the top of the chapter it comes just before, or otherwise in the chapter around it. If your draft uses other markers, rename them to `Chapter` headings before importing, or split the draft into one file per chapter and import the folder.
 
@@ -677,7 +679,7 @@ The body of the file starts:
 <header>
 <h1>Harbor of Second Light</h1>
 <p class="byline">Morgan Hale</p>
-<p class="note">Review copy. Every paragraph has a label such as <code>ch03-p12</code> (chapter 3, paragraph 12). Quote the label with each note so the author can find the exact spot.</p>
+<p class="note">Review copy. Every paragraph has a label such as <code>ch03-p12</code> (chapter 3, paragraph 12). Quote the label with each note, with the paragraph's first few words, so the author can find the exact spot after the text changes.</p>
 </header>
 <nav aria-label="Contents"><h2>Contents</h2><ol>
 <li><a href="#ch01">Chapter 1: The Bell Under the Reef</a></li>
@@ -697,7 +699,7 @@ How the labels are made:
 
 Paragraphs are numbered from 1 within each chapter or page. A scene break is drawn as `* * *` and takes no number: in *Harbor of Second Light*, `ch01-p37` is the last paragraph before the break and `ch01-p38` the first after it. Prose is converted as in the [table below](#how-prose-is-converted-for-epub-docx-shunn-html-and-print), and all text is HTML-escaped. A matter page with `heading: false` gets a visually hidden heading, so screen readers still announce it. The label is faint until the reader hovers over or links to a paragraph; on a narrow screen it sits above the paragraph.
 
-A label depends only on its chapter's `number` and that chapter's own paragraphs, so editing chapter 5 never moves a label in chapter 3. Revising a chapter does shift the labels after the edit within that chapter. When notes come back, match them to the build they were made against: tag the commit you shared, then run `story compare . --ref <tag>` to see what has moved since. The [`editorial-review`](../skills/editorial-review/SKILL.md) skill runs review rounds this way, and [`line-editing`](../skills/line-editing/SKILL.md) cites its own notes with the same labels.
+A label depends only on its chapter's `number` and that chapter's own paragraphs, so editing chapter 5 never moves a label in chapter 3. A label is a position, not a permanent id: revising a chapter shifts the labels after the edit within that chapter, and `story move` changes the chapter part. Name the build with `--stamp` (`story build . --format html --stamp beta-round-1` prints `Review copy, build beta-round-1.` at the top), tag the commit you shared, and ask readers to quote the paragraph's first few words with the label. To find where an old label's paragraph is now, search the chapter for the first few words the reader quoted. If the note has no quote, rebuild the tagged commit in a separate worktree and read the label there: `git worktree add ../round-check <tag>`, then `story build ../round-check --format html --out ../round-check.html`, then search the current chapter for that paragraph's text and remove the worktree. `story compare . --ref <tag>` only says which chapters changed and by how much; it does not map labels. The [`editorial-review`](../skills/editorial-review/SKILL.md) skill runs review rounds this way, and [`line-editing`](../skills/line-editing/SKILL.md) cites its own notes with the same labels.
 
 For a project in a GitHub repository, the `review-copy.yml` workflow template rebuilds this file on every push and publishes it to GitHub Pages, and the `manuscript-note.yml` issue form asks readers for the label. See [Automation and CI](automation.md#review-copy-workflow).
 
@@ -839,6 +841,7 @@ When a storm exposes an illegal memory archive beneath a floating harbor, salvag
 - [ ] Cover alt text (`cover-alt`)
 - [ ] AI-use statement decided (`ai-disclosure`)
 - [x] Permissions cleared for quoted matter (`permission`)
+- [x] No `[TODO` markers in chapter prose
 - [ ] Story status is complete
 ```
 
@@ -876,7 +879,7 @@ Lists and other markdown are not converted and appear as their literal text. Kee
 
 ### Reproducible builds
 
-Builds are deterministic: the same sources produce byte-identical files. The HTML, print, narration, and metadata builds contain no dates or timestamps, so a diff between two builds shows only what changed in the book. EPUB and DOCX packages date every ZIP entry 1980-01-01, and drop control characters that XML does not allow. Entries are deflated at a fixed level, which keeps repeat builds identical, and their names carry the ZIP UTF-8 name flag; the EPUB `mimetype` entry stays first and uncompressed as the OCF container format requires. The EPUB `dcterms:modified` date comes from the `SOURCE_DATE_EPOCH` environment variable (whole seconds since the Unix epoch) when it is set, and is `2000-01-01T00:00:00Z` otherwise, including when the value is not a whole number of seconds or falls after the year 9999:
+Builds are deterministic: the same sources produce byte-identical files. The HTML, print, narration, and metadata builds contain no dates or timestamps (an HTML build prints a `--stamp` label only when you pass one), so a diff between two builds shows only what changed in the book. EPUB and DOCX packages date every ZIP entry 1980-01-01, and drop control characters that XML does not allow. Entries are deflated at a fixed level, which keeps repeat builds identical, and their names carry the ZIP UTF-8 name flag; the EPUB `mimetype` entry stays first and uncompressed as the OCF container format requires. The EPUB `dcterms:modified` date comes from the `SOURCE_DATE_EPOCH` environment variable (whole seconds since the Unix epoch) when it is set, and is `2000-01-01T00:00:00Z` otherwise, including when the value is not a whole number of seconds or falls after the year 9999:
 
 ```shell
 SOURCE_DATE_EPOCH=1700000000 story build . --format epub
