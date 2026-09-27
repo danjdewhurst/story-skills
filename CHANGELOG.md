@@ -14,6 +14,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - `plot-structure` Snowflake Method reference: the ten steps from a one-sentence summary to a first draft, each mapped to `story.md`, character, arc, and scene files and the `story` commands that scaffold and check them. ([#267](https://github.com/danjdewhurst/story-skills/pull/267))
 - `story init` and `story import` write a `.gitignore` listing `dist/`, story's leftover lock and temporary files, and OS and editor files when the project has none, and print a note when a kept `.gitignore` does not ignore `dist/`. ([#271](https://github.com/danjdewhurst/story-skills/pull/271))
 - `story prose -` and `story voices -` check a passage piped to stdin against the project's style sheet and characters, and `story import -` splits a manuscript piped to stdin; import also refuses a chapter that would come out over the 5 MiB read limit. ([#270](https://github.com/danjdewhurst/story-skills/pull/270))
+- `--json` on `validate`, `links`, `continuity`, `series`, `report`, `next`, `doctor`, `knowledge`, `progress`, `timeline`, `prose`, `pacing`, `clues`, and `voices` prints one versioned result object (`apiVersion`, `command`, `ok`, `data`, `diagnostics`, `writes`) described by `schemas/result.schema.json`. ([#269](https://github.com/danjdewhurst/story-skills/pull/269))
 
 ### Changed
 
