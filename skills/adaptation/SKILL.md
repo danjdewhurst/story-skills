@@ -143,9 +143,25 @@ panels, captions, balloons, and SFX in
 ### 5. Interactive fiction
 
 Follow `references/interactive-fiction.md`. Map the linear scenes to nodes,
-choose a branching structure with the author, record the branch map in
-`adaptations/interactive/branch-map.md`, and write the source for the
-chosen tool (Ink `.ink` or Twine `.twee`) in `adaptations/interactive/`.
+choose a branching structure with the author, and record the branch map in
+`adaptations/interactive/branch-map.md`.
+
+- **Twine:** make the interactive edition its own project (copy the
+  source project without `dist/`, as for a translation), one chapter per
+  passage, with `choices` frontmatter (`text` and `to`) on each chapter
+  that branches. Check and build it:
+
+  ```shell
+  story validate .
+  story links .
+  story build . --format twee --out adaptations/interactive/{story-id}.twee
+  ```
+
+  Fix every `links` warning about a chapter no choice path reaches.
+  `--out` never replaces an existing file under `adaptations/`, so delete
+  the old `.twee` before a rebuild.
+- **Ink:** the CLI has no ink output; write `adaptations/interactive/{story-id}.ink`
+  by hand from the branch map.
 
 ### 6. Translation
 
@@ -204,8 +220,10 @@ story links .
 story validate .
 ```
 
-After changing chapters in a picture-book or translated project, also run
-`story wordcount . --write`.
+After changing chapters in a picture-book, translated, or interactive
+project, also run `story wordcount . --write`. After adding, retargeting,
+or removing `choices`, run `story links .` and rebuild the Twee file.
+`story move` and `story remove` keep `choices` targets in step.
 
 ## Reference Files
 
@@ -213,5 +231,5 @@ After changing chapters in a picture-book or translated project, also run
 - **`references/fountain.md`** - Scene-list-from-scene-records method, novel-to-screen choices, and Fountain syntax
 - **`references/picture-book.md`** - 32-page and 14-spread pagination, page-turn beats, text and illustration interplay, spread brief template, and art notes
 - **`references/comics-script.md`** - Page and panel script format, pacing per page, balloon limits, and page-turn reveals
-- **`references/interactive-fiction.md`** - Branch maps from scenes, branching structures, state, and Ink and Twine syntax
+- **`references/interactive-fiction.md`** - Branch maps from scenes, branching structures, state, chapter `choices` and the Twee build, and Ink and Twine syntax
 - **`references/translation.md`** - Glossary as term base, per-language style sheets, name decisions, and continuity across language editions

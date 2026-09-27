@@ -70,7 +70,7 @@ Absolute paths in output are shortened to `~/stories/...`.
 | | [`move <kind> <id>`](#move) | Renumber a chapter or move a scene and update references | Yes |
 | | [`remove <kind> <id>`](#remove) | Delete an entity and scrub references | Yes |
 | Output | [`export [path]`](#export) | Write a combined manuscript markdown file | Yes |
-| | [`build [path]`](#build) | Build markdown, EPUB, DOCX, Shunn, HTML, print, narration, metadata, or Fountain output in `dist/` | Yes |
+| | [`build [path]`](#build) | Build markdown, EPUB, DOCX, Shunn, HTML, print, narration, metadata, Fountain, or Twine output in `dist/` | Yes |
 | | [`synopsis [path]`](#synopsis) | Print or write a 1- or 3-page synopsis from arcs | With `--out` |
 
 ## How the CLI behaves
@@ -581,7 +581,7 @@ Checks that the project is structurally sound:
 - no chapter opens an HTML comment (`<!--`) without closing it, which would leave the text after it in builds and word counts; a `<!--` inside a closed `` ``` `` code fence or an inline code span does not count (warning)
 - no chapter's prose holds a `[TODO` marker (`[TODO: check bible]`), which every build would print; a marker inside an HTML comment does not count (warning: `chapters/chapter-01.md has 1 [TODO marker in its prose, which every build prints: resolve it or move it into an HTML comment`)
 - each chapter has at least one scene record (warning)
-- chapter `hook`, scene `outcome`, clue `red-herring`, location `routes`, character `voice-words` and `voice-avoid`, `pronunciation` fields, and research `accuracy`, `confidence`, `method`, and `risk` use allowed values and types
+- chapter `hook` and `choices` (each a `text` with no Twine link syntax and a kebab-case `to`), the `story.md` `ifid` (a version 4 UUID), scene `outcome`, clue `red-herring`, location `routes`, character `voice-words` and `voice-avoid`, `pronunciation` fields, and research `accuracy`, `confidence`, `method`, and `risk` use allowed values and types
 - matter pages have text; research marked `verified` lists sources; research that is still `open` or `disputed` is not relied on by a `final` or `complete` chapter; research with a `risk` and no `reviewed-by` is not relied on by a `final` or `complete` chapter; research with `accuracy: invented` is exempt from the source checks; no stray `.md` files sit at the project root or nested inside entity directories (warnings)
 - matter `permission` is `not-needed`, `pending`, `granted`, or `public-domain`; a `pending` permission on a complete story, or a `granted` one with no `rights-holder`, is a warning
 - `target-words`, and the manuscript length of a complete story, fall inside the usual range for the `form` in `story.md` (warning)
@@ -684,6 +684,7 @@ Checks that references between entities point at entities that exist and that tw
 - character relationships, which need a backlink of the matching inverse type (`mentor` and `student`, `sibling` and `sibling`). The pairings allowed before 0.10.0, `former-supervisor` on both sides and `adversary` answered by `antagonist`, warn instead: `<file> relationship <type> to <target> has backlink <types>, a pairing from before story-skills 0.10.0; change the backlink to <expected>`
 - character `locations` and location `notable-characters`, which must list each other
 - location `routes`, whose `to` must name another existing location
+- chapter `choices`, whose `to` must name an existing chapter or a scheduled `chapter-NN` not written yet. In a branching book (one where any chapter has choices), a chapter that no path of choices from the first chapter reaches is a warning: `chapters/chapter-05.md cannot be reached: no choice path from chapter-01 leads to it`
 - a character's `died-in` and `revived-in` chapters
 - the `from` chapter of each progression on a character, location, or faction, which may be a scheduled `chapter-NN` with no chapter file yet
 - arc characters, faction members and locations, and artifact owners and locations
@@ -1838,6 +1839,7 @@ Chapter and scene ids come from their numbers, so reordering the book changes id
 - `planted` and `payoff` on promises and clues, and `introduced` and `resolved` on questions
 - `used-in` on research notes and `died-in` and `revived-in` on characters
 - `from` in the `progressions` of characters, locations, and factions, re-sorting each list into story order when the move takes a chapter past another entry's
+- the `to` of every chapter `choices` entry that leads to it, the moved chapter's own included
 - `since` and `learned-in` in `continuity/state.md`, and `current-chapter` when it held the moved chapter's number
 - markdown links to the moved chapter and scene files, anywhere in the project
 - bare chapter and scene ids in the bodies of `plot/timeline.md` and `plot/arcs/*.md`, the ones `story links` checks, and in `plot/_index.md` (the Theme Tracking table). An id is a whole token: `chapter-01-draft` and `pre-chapter-01` are left alone, by `move` and `links` alike
@@ -1900,7 +1902,7 @@ As with `rename`, every file is parsed before anything is written, so a file tha
 story remove <kind> <id> [--path <project>]
 ```
 
-Deletes the entity file and scrubs its id from every reference field, searching the same markdown files as `rename`. List entries are removed, single-value fields are cleared, and whole entries in `relationships`, `character-state`, `knowledge-state`, `object-state`, and location `routes` are dropped when they are about the removed entity. A `progressions` entry whose `value` was the removed id keeps its chapter and field, with the value cleared. Prose and markdown links in file bodies are never changed, so `remove` lists the files that still link to the removed file (a registry's own sections included) or, for a chapter or scene, still name its id in `plot/timeline.md`, `plot/_index.md`, or an arc, and any `continuity/exemptions.md` patterns naming the id, which no longer match anything (`warning: characters/_index.md, plot/arcs/main.md still mention character bo in links in the text, which remove does not change: edit them, then run story links`). Names in prose are not listed; find them by hand, for example with `grep -rn brass-sounding-line .`. As with `rename`, every file is parsed before anything is deleted, so a file that fails to parse, or an entity file, registry, or fixed project file with no frontmatter, leaves the project unchanged. References are scrubbed before the entity file is deleted, so an interrupted `remove` can simply be run again.
+Deletes the entity file and scrubs its id from every reference field, searching the same markdown files as `rename`. List entries are removed, single-value fields are cleared, and whole entries in `relationships`, `character-state`, `knowledge-state`, `object-state`, location `routes`, and chapter `choices` are dropped when they are about the removed entity. Removing a chapter that `choices` lead to also warns, naming the chapters that lost a choice, since one left with none becomes an ending, or, when those were the last choices in the book, that the book is linear again. A `progressions` entry whose `value` was the removed id keeps its chapter and field, with the value cleared. Prose and markdown links in file bodies are never changed, so `remove` lists the files that still link to the removed file (a registry's own sections included) or, for a chapter or scene, still name its id in `plot/timeline.md`, `plot/_index.md`, or an arc, and any `continuity/exemptions.md` patterns naming the id, which no longer match anything (`warning: characters/_index.md, plot/arcs/main.md still mention character bo in links in the text, which remove does not change: edit them, then run story links`). Names in prose are not listed; find them by hand, for example with `grep -rn brass-sounding-line .`. As with `rename`, every file is parsed before anything is deleted, so a file that fails to parse, or an entity file, registry, or fixed project file with no frontmatter, leaves the project unchanged. References are scrubbed before the entity file is deleted, so an interrupted `remove` can simply be run again.
 
 `remove chapter` refuses while scenes still point at the chapter, so remove those first:
 
@@ -1969,7 +1971,7 @@ Builds a disposable book file in `dist/`. Builds are deterministic: the same sou
 
 | Option | Effect | Default |
 |---|---|---|
-| `--format <name>` | `markdown` (or `md`), `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, or `fountain` | `markdown` |
+| `--format <name>` | `markdown` (or `md`), `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, or `twee` | `markdown` |
 | `--shunn` | With `--format docx`, apply Shunn manuscript formatting. An error with any other format | Off |
 | `--trim <size>` | With `--format print`, the trim size: `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5` (case-insensitive). An error with any other format | `5.5x8.5` |
 | `--stamp <label>` | With `--format html`, print this build label (a date, commit, or review round, such as `feedback-round-2`) at the top of the review copy, so readers can say which build a note refers to. An error with any other format or an empty label. Default builds carry no stamp and stay byte-identical | None |
@@ -1988,6 +1990,7 @@ Builds a disposable book file in `dist/`. Builds are deterministic: the same sou
 | `narration` | `dist/<story-id>.narration.md` | An audiobook script: estimated runtime at 155 words a minute, a pronunciation guide from `pronunciation` fields in the bible, opening and closing credits, and each section with its estimated minutes |
 | `metadata` | `dist/<story-id>.metadata.md` | A retailer metadata sheet from `story.md`: title, authors, ISBN, language, word count, estimated print pages, description, keywords, BISAC subjects, and a readiness checklist of what is missing |
 | `fountain` | `dist/<story-id>.fountain` | A screenplay scene skeleton in Fountain, not a conversion of the prose: a title page, a `##` section per chapter, and one scene heading per scene record (`INT. LAMP ROOM - DUSK`, from the `setting`, location name, and time), with the scene title as a synopsis and the source scene id, cast, and scene notes as unprinted notes. A scene with no `setting` on it or its location gets a forced heading (`.LAMP ROOM - DUSK`) and a warning. See [Screenplay skeleton](manuscripts.md#screenplay-skeleton-fountain) |
+| `twee` | `dist/<story-id>.twee` | A Twine story in Twee 3: `StoryTitle`, `StoryData` with the IFID (`ifid` in `story.md`, or one derived from the story id, with a warning giving the line to pin it) and the first chapter as the start, then one passage per chapter, named by its id, ending in a `[[text->chapter-NN]]` link for each of its [`choices`](project-format.md#branching-chapters). With no choices anywhere, each chapter links to the next. No matter pages. Refuses to build while a choice is malformed or leads to a missing chapter, a chapter file name is not kebab-case, or `ifid` is malformed, and warns about chapters no choice path reaches. See [Twine story](manuscripts.md#twine-story) |
 
 `export` and `build` print `warning: chapters/chapter-02.md has no prose yet and is built as a heading-only page` for each chapter with no prose, such as one still at `status: outline`, and build anyway.
 
@@ -2023,11 +2026,15 @@ Built 1 chapters as narration to ~/stories/the-last-ember/dist/the-last-ember.na
 $ story build --format metadata
 Built 1 chapters as metadata to ~/stories/the-last-ember/dist/the-last-ember.metadata.md
 
+$ story build --format twee
+Built 1 chapters as twee to ~/stories/the-last-ember/dist/the-last-ember.twee
+warning: story.md has no ifid, so the build derived 1E3BB0E5-139A-4964-98B4-217D50BEB2A4 from the story id; add ifid: 1E3BB0E5-139A-4964-98B4-217D50BEB2A4 to story.md to keep it if the title changes
+
 $ story build --format print --trim 7x10
 Unsupported trim size: 7x10. Supported sizes: 5x8, 5.25x8, 5.5x8.5, 6x9, a5
 
 $ story build --format pdf
-Unsupported build format: pdf. Supported formats: markdown, epub, docx, shunn, html, print, narration, metadata, fountain
+Unsupported build format: pdf. Supported formats: markdown, epub, docx, shunn, html, print, narration, metadata, fountain, twee
 ```
 
 An empty value (`--format=`) reads `Unsupported build format: (empty). ...`.
@@ -2132,7 +2139,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--against` | `<path>` | `compare` | Exclusive with `--ref` |
 | `--path` | `<path>` | Every command except `init` and `import` | Project root |
 | `--out` | `<file>` | `export`, `build`, `synopsis`, `diagram` | Relative to the project root |
-| `--format` | `<name>` | `build` | `markdown`, `md`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain` |
+| `--format` | `<name>` | `build` | `markdown`, `md`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee` |
 | `--trim` | `<size>` | `build` | Only with `--format print`: `5x8`, `5.25x8`, `5.5x8.5` (default), `6x9`, `a5` |
 | `--stamp` | `<label>` | `build` | Only with `--format html`: a build label printed in the review copy |
 | `--shunn` | | `build` | Boolean; only with `--format docx` |

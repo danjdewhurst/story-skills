@@ -38,6 +38,7 @@
         "keywords": { "$ref": "#/$defs/stringList" },
         "subjects": { "type": "array", "items": { "type": "string", "pattern": "^[A-Z]{3}\\d{6}$" } },
         "copyright": { "type": "string" },
+        "ifid": { "type": "string", "pattern": "^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-4[0-9A-Fa-f]{3}-[89ABab][0-9A-Fa-f]{3}-[0-9A-Fa-f]{12}$", "description": "Interactive fiction id (a version 4 UUID) for build --format twee; without it the build derives a stable one from the story id." },
         "cover-alt": { "type": "string" },
         "ai-disclosure": { "type": "string" },
         "chapter-label": { "type": "string", "description": "Word for generated chapter headings, such as Kapitel; {n} places the number. Defaults to Chapter." },
@@ -268,7 +269,19 @@
         "strand": { "type": "string" },
         "episode-question": { "type": "string" },
         "hook": { "enum": ["cliffhanger", "question", "revelation", "reversal", "decision", "emotional", "resolution"] },
-        "time-skip": { "type": "string" }
+        "time-skip": { "type": "string" },
+        "choices": {
+          "type": "array",
+          "description": "Branching: the choices that end this chapter, each leading to another chapter. Once any chapter has choices, a chapter without them is an ending. build --format twee turns them into Twine links.",
+          "items": {
+            "type": "object",
+            "required": ["text", "to"],
+            "properties": {
+              "text": { "type": "string", "pattern": "^(?=.*\\S)(?!.*(?:->|<-))(?!.*<\\s*$)[^\\[\\]|\\r\\n]+$", "description": "The words the reader picks; no [, ], |, ->, <-, or line break, and no final <, which Twine reads as link syntax." },
+              "to": { "$ref": "#/$defs/id" }
+            }
+          }
+        }
       }
     },
     "scene": {

@@ -1,6 +1,6 @@
 # Import, export, and builds
 
-This page is for writers who want to bring an existing draft into Story Skills or get a finished book out of it. It covers `story import`, front and back matter, the publishing fields in `story.md`, `story export`, `story build` (markdown, EPUB, DOCX, Shunn manuscript format, an HTML review copy, a print interior, an audiobook narration script, a retailer metadata sheet, and a Fountain screenplay skeleton), and `story synopsis`.
+This page is for writers who want to bring an existing draft into Story Skills or get a finished book out of it. It covers `story import`, front and back matter, the publishing fields in `story.md`, `story export`, `story build` (markdown, EPUB, DOCX, Shunn manuscript format, an HTML review copy, a print interior, an audiobook narration script, a retailer metadata sheet, a Fountain screenplay skeleton, and a Twine story), and `story synopsis`.
 
 All output shown was captured by running the commands against copies of the examples, with absolute paths shortened to `~/stories`.
 
@@ -12,7 +12,7 @@ All output shown was captured by running the commands against copies of the exam
 - [Front and back matter](#front-and-back-matter)
 - [Publishing metadata in story.md](#publishing-metadata-in-storymd)
 - [Export a markdown manuscript](#export-a-markdown-manuscript)
-- [Build a book](#build-a-book): [EPUB](#epub), [DOCX](#docx), [Shunn](#shunn-standard-manuscript-format), [HTML review copy](#html-review-copy), [print interior](#print-interior), [narration script](#narration-script), [screenplay skeleton](#screenplay-skeleton-fountain), [retailer metadata sheet](#retailer-metadata-sheet)
+- [Build a book](#build-a-book): [EPUB](#epub), [DOCX](#docx), [Shunn](#shunn-standard-manuscript-format), [HTML review copy](#html-review-copy), [print interior](#print-interior), [narration script](#narration-script), [screenplay skeleton](#screenplay-skeleton-fountain), [retailer metadata sheet](#retailer-metadata-sheet), [Twine story](#twine-story)
 - [Build a synopsis](#build-a-synopsis)
 - [Output paths and what is disposable](#output-paths-and-what-is-disposable)
 - [Common errors](#common-errors)
@@ -30,7 +30,7 @@ All output shown was captured by running the commands against copies of the exam
 flowchart LR
   draft["Existing draft<br/>(.md, .markdown, .txt)"] -->|story import| project["Story project<br/>story.md, chapters/, matter/, plot/arcs/"]
   project -->|story export| manuscript["dist/manuscript.md"]
-  project -->|story build| dist["dist/<br/>.md, .epub, .docx, .shunn.md,<br/>.html, .print.html, .narration.md, .metadata.md, .fountain"]
+  project -->|story build| dist["dist/<br/>.md, .epub, .docx, .shunn.md,<br/>.html, .print.html, .narration.md, .metadata.md, .fountain, .twee"]
   project -->|story synopsis| synopsis["Synopsis<br/>(stdout or --out)"]
 ```
 
@@ -40,7 +40,7 @@ Several skills drive these commands:
 - [`submission`](../skills/submission/SKILL.md) builds Shunn manuscripts and rewrites the synopsis scaffold into submission copy.
 - [`publishing`](../skills/publishing/SKILL.md) fills the publishing fields in `story.md`, then works through the metadata sheet, the EPUB, and the print interior.
 - [`editorial-review`](../skills/editorial-review/SKILL.md) builds DOCX and HTML review copies for editors and beta readers, and tracks permissions for quoted matter.
-- [`adaptation`](../skills/adaptation/SKILL.md) builds the narration script for an audiobook and the scene skeleton for a screenplay.
+- [`adaptation`](../skills/adaptation/SKILL.md) builds the narration script for an audiobook, the scene skeleton for a screenplay, and the Twine source for an interactive version.
 
 See the [Skills catalogue](skills.md) for all of them, and the [CLI reference](cli-reference.md) for installing and running the CLI.
 
@@ -514,6 +514,7 @@ The warning is harmless, and the default `dist/` path avoids it. `story build` w
 | `narration` | Audiobook narration script with a pronunciation guide and runtimes | `dist/<story-id>.narration.md` | Yes, except the copyright page |
 | `metadata` | Retailer metadata sheet with a readiness checklist | `dist/<story-id>.metadata.md` | No prose at all |
 | `fountain` | Screenplay scene skeleton in Fountain, from the scene records | `dist/<story-id>.fountain` | No prose at all |
+| `twee` | Twine story in Twee 3: one passage per chapter, linked by chapter `choices` | `dist/<story-id>.twee` | No |
 
 The story id is the kebab-case title from `story.md`. Build every format of the example *The Last Ember* like this:
 
@@ -547,7 +548,7 @@ The confirmation always counts chapters, even for the metadata sheet and the scr
 | Option | Effect |
 |--------|--------|
 | `[path]` or `--path <path>` | Project root. Defaults to the current directory. |
-| `--format <name>` | `markdown` (or `md`), `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, or `fountain`. Case-insensitive. Defaults to `markdown`. |
+| `--format <name>` | `markdown` (or `md`), `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, or `twee`. Case-insensitive. Defaults to `markdown`. |
 | `--shunn` | With `--format docx`, apply Shunn formatting. An error with every other format. |
 | `--trim <size>` | With `--format print`, the trim size: `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5`. Case-insensitive. Defaults to `5.5x8.5`. An error with every other format. |
 | `--out <file>` | Output file instead of the default in `dist/`. |
@@ -555,7 +556,7 @@ The confirmation always counts chapters, even for the metadata sheet and the scr
 Any other format is an error:
 
 ```text
-Unsupported build format: pdf. Supported formats: markdown, epub, docx, shunn, html, print, narration, metadata, fountain
+Unsupported build format: pdf. Supported formats: markdown, epub, docx, shunn, html, print, narration, metadata, fountain, twee
 ```
 
 For a book PDF, build the [print interior](#print-interior) and render it with a paged-media engine. For a quick PDF of a manuscript, open the DOCX in a word processor and export it.
@@ -932,6 +933,46 @@ Notes on the fields:
 
 The limits are common defaults, not any one retailer's rules. The [`publishing`](../skills/publishing/SKILL.md) skill fills the missing fields with you, rebuilds the sheet until the checklist is clean, and checks each field against the retailer's current requirements.
 
+### Twine story
+
+`--format twee` writes the book as [Twee 3](https://github.com/iftechfoundation/twine-specs/blob/master/twee-3-specification.md), the text format of the [Twine](https://twinery.org) interactive fiction editor. Each chapter becomes a passage named by its chapter id, and the [`choices`](project-format.md#branching-chapters) in its frontmatter become links. [`examples/the-gull-rock-light`](../examples/the-gull-rock-light/) is a branching story built this way:
+
+```shell
+story build . --format twee
+```
+
+```text
+Built 6 chapters as twee to ~/stories/the-gull-rock-light/dist/the-gull-rock-light.twee
+```
+
+```twee
+:: StoryTitle
+The Gull Rock Light
+
+:: StoryData
+{
+  "ifid": "649C4AC9-78FE-4B32-B821-24D0802D1DD9",
+  "start": "chapter-01"
+}
+
+:: chapter-01
+The supply boat backs off the landing before your boots are dry. ...
+
+[[Search the rocks for Tobias->chapter-02]]
+[[Climb the tower to the lamp->chapter-03]]
+
+:: chapter-02
+...
+```
+
+- The story starts at the first chapter. A chapter with no choices is an ending, unless no chapter has choices at all: then each chapter links to the next with `[[Continue->chapter-NN]]`, so a linear book still plays through.
+- The passage text is the chapter prose as written, without the chapter heading. A line that starts with `::` is escaped as `\::` so it cannot open a new passage. Front and back matter are left out.
+- `StoryData` names no story format, so Twine uses its default (Harlowe) and Tweego its own or the one you pass with `-f`. Story formats read markup differently: Chapbook reads markdown, Harlowe reads `*` and `**` emphasis, SugarCube uses its own. Pick one and check how the prose looks in it.
+- The IFID, the id every Twine story carries, comes from `ifid` in `story.md`. Without one, the build derives it from the story id, so every rebuild writes the same one, and warns: `story.md has no ifid, so the build derived <IFID> from the story id; add ifid: <IFID> to story.md to keep it if the title changes`. Add that line: a new title means a new derived IFID, and two books with one title would share it. The example sets `ifid`.
+- The build stops, listing each problem, while a choice is malformed or leads to a chapter that does not exist yet, a chapter file name is not kebab-case, or `ifid` is not a version 4 UUID. It warns about chapters no choice path reaches.
+
+Compile the file with [Tweego](https://www.motoslave.net/tweego/) (`tweego -o gull-rock.html dist/the-gull-rock-light.twee`) or import it into Twine 2 with **Library > Import**. The [adaptation skill](../skills/adaptation/references/interactive-fiction.md) plans the branches; there is no ink output yet.
+
 ### How prose is converted for EPUB, DOCX, Shunn, HTML, and print
 
 The markdown export copies prose as written, and the narration script nearly does (see [Narration script](#narration-script)). The EPUB, DOCX, Shunn, HTML, and print builds convert it to paragraphs:
@@ -955,7 +996,7 @@ Lists and other markdown are not converted and appear as their literal text. Kee
 
 ### Reproducible builds
 
-Builds are deterministic: the same sources produce byte-identical files. The HTML, print, narration, and metadata builds contain no dates or timestamps (an HTML build prints a `--stamp` label only when you pass one), so a diff between two builds shows only what changed in the book. EPUB and DOCX packages date every ZIP entry 1980-01-01, and drop control characters that XML does not allow. Entries are deflated at a fixed level, which keeps repeat builds identical, and their names carry the ZIP UTF-8 name flag; the EPUB `mimetype` entry stays first and uncompressed as the OCF container format requires. The EPUB `dcterms:modified` date comes from the `SOURCE_DATE_EPOCH` environment variable (whole seconds since the Unix epoch) when it is set, and is `2000-01-01T00:00:00Z` otherwise, including when the value is not a whole number of seconds or falls after the year 9999:
+Builds are deterministic: the same sources produce byte-identical files. The HTML, print, narration, metadata, and twee builds contain no dates or timestamps (an HTML build prints a `--stamp` label only when you pass one), so a diff between two builds shows only what changed in the book. EPUB and DOCX packages date every ZIP entry 1980-01-01, and drop control characters that XML does not allow. Entries are deflated at a fixed level, which keeps repeat builds identical, and their names carry the ZIP UTF-8 name flag; the EPUB `mimetype` entry stays first and uncompressed as the OCF container format requires. The EPUB `dcterms:modified` date comes from the `SOURCE_DATE_EPOCH` environment variable (whole seconds since the Unix epoch) when it is set, and is `2000-01-01T00:00:00Z` otherwise, including when the value is not a whole number of seconds or falls after the year 9999:
 
 ```shell
 SOURCE_DATE_EPOCH=1700000000 story build . --format epub
@@ -1076,7 +1117,8 @@ Treat everything in `dist/` as disposable. It is regenerated from the markdown o
 | `Duplicate chapter number N: ...` | Two chapters share a `number` | Renumber one of them, then run `story reindex .`. |
 | `... matter file names must be kebab-case to build` | A `matter/` file name is not kebab-case | Rename the file to a kebab-case name, such as `about-me.md`, then run `story reindex .`. |
 | `story.md cover <path> ...` | The cover path is missing, outside the project, or not a supported image | Fix `cover` in `story.md`, or remove it. |
-| `Unsupported build format: <name>. ...` | An unknown `--format` | Use `markdown`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, or `fountain`. |
+| `Unsupported build format: <name>. ...` | An unknown `--format` | Use `markdown`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, or `twee`. |
+| `Cannot build twee until these are fixed: ...` | A chapter's `choices` is malformed or leads to a missing chapter, a chapter file name is not kebab-case, or `ifid` is malformed | Fix each listed problem; `story validate` and `story links` report most of them too. |
 | `Unsupported trim size: <size>. ...` | An unknown `--trim` with `--format print` | Use `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5`. |
 | `Unsupported synopsis length: <n>. Supported pages: 1, 3` | An unsupported `--pages` value | Use `1` or `3`. |
 | `Refusing to access path outside project root: <path>` | A relative `--out` that leaves the project | Use a path inside the project, or an absolute path. |

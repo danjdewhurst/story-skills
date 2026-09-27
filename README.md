@@ -294,6 +294,7 @@ Examples in this repository:
 - [`examples/the-last-ember/`](examples/the-last-ember/): a fantasy with three characters, two locations, a magic system, a plot arc with foreshadowing, and a drafted first chapter.
 - [`examples/the-fall-of-the-citadel/`](examples/the-fall-of-the-citadel/): a prequel to The Last Ember, linked with `series`, `book-number`, and `precedes`, that shares characters and places with the first book. Run `story series examples/the-last-ember` to see the chronology.
 - [`examples/harbor-of-second-light/`](examples/harbor-of-second-light/): a near-future coastal mystery with memory technology, a posthumous witness arc, populated continuity state, and a drafted first chapter.
+- [`examples/the-gull-rock-light/`](examples/the-gull-rock-light/): a short branching story whose chapters carry `choices`; `story build --format twee` turns it into a Twine story.
 - [`examples/the-unraveled-thread/`](examples/the-unraveled-thread/): a deliberately broken project that demonstrates the main kinds of finding the continuity engine reports.
 
 ## More install options

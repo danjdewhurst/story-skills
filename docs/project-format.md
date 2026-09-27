@@ -328,6 +328,7 @@ tense: past
 | `cli-defaults` | list of mappings | no | Default flags for `story` commands. See [CLI defaults and severity](#cli-defaults-and-severity). |
 | `severity` | list of mappings | no | Named warnings promoted to errors or turned off. See [CLI defaults and severity](#cli-defaults-and-severity). |
 | `cover` | path | no | Cover image inside the project: `.jpg`, `.jpeg`, `.png`, `.gif`, or `.webp`. `story build --format epub` embeds it. |
+| `ifid` | UUID | no | The interactive fiction id `story build --format twee` writes, a version 4 UUID such as `3F2C9A61-7B1D-4E8A-9C3B-2A6D5E4F1B07`. Without it the build derives one from the story id, the same on every build, and warns with the line to add: a title change changes the derived IFID, and two books with the same title share it. `story validate` and the build error on a value that is not a version 4 UUID. See [Branching chapters](#branching-chapters). |
 | `authors`, `language`, `isbn`, `publisher`, `publication-date`, `description`, `keywords`, `subjects`, `copyright`, `cover-alt`, `ai-disclosure`, `chapter-label`, `contents-label` | various | no | Publishing metadata read by `story build`. See [Publishing metadata](#publishing-metadata). |
 
 `story validate` errors when `cover` names a missing file, a file outside the project, or an unsupported extension. The craft fields `premise`, `counter-premise`, and `season-goal` have no CLI flags: edit `story.md` directly. See the [theme-craft](../skills/theme-craft/SKILL.md), [genre-craft](../skills/genre-craft/SKILL.md), and [discovery-drafting](../skills/discovery-drafting/SKILL.md) skills for how they are used.
@@ -750,8 +751,37 @@ word-count: 1489
 | `episode-question` | string | no | The installment's dramatic question, for serial fiction. |
 | `time-skip` | string | no | Free-form `from → to` note of a skipped interval. Not checked. |
 | `hook` | enum | no | How the chapter ending pulls the reader on: `cliffhanger`, `question`, `revelation`, `reversal`, `decision`, `emotional`, or `resolution`. Set it with `story add chapter --hook <name>`. Read by [`story pacing`](#pacing). |
+| `choices` | list of mappings | no | For a branching story: the choices that end the chapter, each `text` (what the reader picks) and `to` (the chapter it leads to). See [Branching chapters](#branching-chapters). |
 
 `story continuity` treats `pov` and `characters` as the cast, so a deceased character who appears in a flashback or memory belongs in `mentions`, not `characters`. A `pov` also listed in `mentions` narrates without appearing, as a ghost or posthumous narrator does, so it is not a posthumous appearance. It also warns when the `pov` character is in neither `characters` nor `mentions`, and when chapter numbers skip. `story validate` warns when a chapter has no scene records in `scenes/`, and when a chapter has no prose while it is `revised`, `final`, or `complete`, or the story is `complete`, since it would build as a heading-only page. `story export` and `story build` warn about every chapter with no prose.
+
+### Branching chapters
+
+An interactive story, such as a choose-your-own-adventure book or a Twine game, is a set of chapters joined by choices. Each chapter is a passage, and its `choices` say where the reader can go next:
+
+```yaml
+---
+title: The Landing
+number: 1
+status: draft
+choices:
+  - text: Search the rocks for Tobias
+    to: chapter-02
+  - text: Climb the tower to the lamp
+    to: chapter-03
+---
+```
+
+| Field | Type | Required | Meaning |
+|-------|------|----------|---------|
+| `choices[].text` | string | yes | The words the reader picks. It becomes a Twine link, so it cannot contain `[`, `]`, `|`, `->`, `<-`, or a line break, or end in `<`. Quote it if it looks like a number. |
+| `choices[].to` | chapter id | yes | The chapter the choice leads to. It may be the chapter itself, for a loop, or, while drafting, a `chapter-NN` not written yet. |
+
+The first chapter in reading order is where the story starts. A book where no chapter has choices is linear: each chapter continues to the next. Once any chapter has choices, the links are exactly the choices, so a chapter with none is an ending, and a chapter that only leads on to one place needs a single choice (`text: Continue`). Branches that rejoin point at the same chapter.
+
+`story validate` errors when `choices` is not a list, or an entry has no `text`, text with link syntax in it, or a `to` that is not a kebab-case id. `story links` errors when `to` names a missing chapter (a scheduled `chapter-NN` with no file yet is allowed, as for a promise's payoff, though the Twine build needs it), and warns about every chapter no path of choices from the first chapter reaches. `story move` rewrites `to`, and `story remove chapter` drops the choices that led to the removed chapter and warns, since a chapter left without choices becomes an ending. [`story build --format twee`](manuscripts.md#twine-story) writes the chapters and choices as a Twine story.
+
+The continuity checks still read chapters in number order, as one path through the book, so a fact set on one branch counts as known on the others. Record a branch that changes character state in its scene records and check it by hand; the [adaptation skill](../skills/adaptation/references/interactive-fiction.md) has a checklist.
 
 ## Scenes
 
@@ -1157,6 +1187,7 @@ Fields that name another entity hold its id. `story links` checks that each id i
 | Character, location, faction | `progressions[].from` | Chapter; may be a scheduled `chapter-NN` with no chapter file yet (see [Progressions](#progressions)) |
 | Location | `notable-characters` | Character that lists the location in `locations` |
 | Location | `routes[].to` | Another location (not the location itself) |
+| Chapter | `choices[].to` | Chapter (the chapter itself is allowed); may be a scheduled `chapter-NN` with no chapter file yet |
 | Faction | `members` | Character |
 | Faction | `locations` | Location |
 | Artifact | `owner` | Character or faction |
@@ -1183,10 +1214,10 @@ A promise or clue can schedule its setup and payoff ahead of the drafted book: `
 
 When you add a character with `--location`, or a location with `--character`, `story add` writes the backlink into the other file.
 
-`story rename` and `story remove` keep ids consistent across every file's frontmatter (except `story.md`). They rewrite the entity-reference fields in the table above (including a location's `routes[].to`), plus `controlled-by`, the state-file fields (`character`, `location`, `artifact`, `owner`, `learned-in`, `since`), the `character` and `target` (an artifact) keys inside a scene's `state-changes`, and a progression's `value` when its `field` is one of these reference fields. A field that can name more than one kind (`owner`, `controlled-by`, `mentions`) is left alone when another kind has an entity with the same id. Beyond that:
+`story rename` and `story remove` keep ids consistent across every file's frontmatter (except `story.md`). They rewrite the entity-reference fields in the table above (including a location's `routes[].to` and a chapter's `choices[].to`), plus `controlled-by`, the state-file fields (`character`, `location`, `artifact`, `owner`, `learned-in`, `since`), the `character` and `target` (an artifact) keys inside a scene's `state-changes`, and a progression's `value` when its `field` is one of these reference fields. A field that can name more than one kind (`owner`, `controlled-by`, `mentions`) is left alone when another kind has an entity with the same id. Beyond that:
 
 - `story rename` also rewrites markdown links, inline or reference-style definitions, in any project file, that point at the renamed file. `rename` and `add` refuse an id that another kind sharing one of those fields already uses, since the references could not tell them apart.
-- `story remove` clears a scalar reference (except that `remove chapter` refuses while `died-in`, `since`, `learned-in`, or a progression's `from` names the chapter, since an empty value there means "before the story" and a progression needs its chapter), drops the id from a list, and drops a whole `relationships`, `character-state`, `knowledge-state`, `object-state`, or `routes` entry whose identifying `character`, `artifact`, or `to` was removed. A progression's `value` that named the removed entity is cleared like any other scalar reference. It does not edit bodies, so bare `chapter-NN` tokens and links to a removed file remain. `story links` reports them only in `plot/timeline.md` and arc bodies; find leftovers elsewhere (hand-written registry sections, `style-sheet.md`, other entity bodies) by hand.
+- `story remove` clears a scalar reference (except that `remove chapter` refuses while `died-in`, `since`, `learned-in`, or a progression's `from` names the chapter, since an empty value there means "before the story" and a progression needs its chapter), drops the id from a list, and drops a whole `relationships`, `character-state`, `knowledge-state`, `object-state`, `routes`, or `choices` entry whose identifying `character`, `artifact`, or `to` was removed. A progression's `value` that named the removed entity is cleared like any other scalar reference. It does not edit bodies, so bare `chapter-NN` tokens and links to a removed file remain. `story links` reports them only in `plot/timeline.md` and arc bodies; find leftovers elsewhere (hand-written registry sections, `style-sheet.md`, other entity bodies) by hand.
 - Neither command edits `follows` or `precedes`, which name other projects rather than entities.
 
 When `story move` renumbers a chapter or moves a scene, it rewrites the old chapter or scene id in these fields, in `progressions[].from`, and in `current-chapter`, rewrites markdown links to the moved files, and updates bare chapter and scene ids in `plot/timeline.md`, arc bodies, and `plot/_index.md`.

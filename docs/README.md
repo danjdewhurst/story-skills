@@ -109,13 +109,14 @@ Pick the route that matches what you came to do. Each one takes four pages; read
 
 ## Example projects
 
-The repository includes four sample projects in [`examples/`](../examples/). The pages above use them for their sample output.
+The repository includes five sample projects in [`examples/`](../examples/). The pages above use them for their sample output.
 
 | Example | Shows |
 |---------|-------|
 | [`the-last-ember`](../examples/the-last-ember/) | A fantasy project with a style sheet, front matter, and an arc. Book 1 of a two-book series. |
 | [`the-fall-of-the-citadel`](../examples/the-fall-of-the-citadel/) | The prequel to *The Last Ember*, linked with `precedes` and shared `fact` ids |
 | [`harbor-of-second-light`](../examples/harbor-of-second-light/) | A science-fiction coastal mystery with populated continuity state, knowledge entries, publishing metadata, a location route, and a pronunciation |
+| [`the-gull-rock-light`](../examples/the-gull-rock-light/) | A short second-person branching story: chapter `choices` for `story build --format twee` |
 | [`the-unraveled-thread`](../examples/the-unraveled-thread/) | A village mystery that is broken on purpose to show the main kinds of continuity finding, plus clues (one a red herring) for `story clues` and scene outcomes and chapter hooks for `story pacing` |
 
 ## Other resources

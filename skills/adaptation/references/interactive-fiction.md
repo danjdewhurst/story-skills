@@ -2,7 +2,9 @@
 
 The story project is linear: one sequence of chapters and scenes. An
 interactive version keeps the project as its source and lives in
-`adaptations/interactive/`, written for a tool such as Ink or Twine.
+`adaptations/interactive/`, written for a tool such as Ink or Twine. For
+Twine, the CLI can build it: give an interactive edition project chapter
+`choices` (see [Chapter Choices And The Twee Build](#chapter-choices-and-the-twee-build)).
 
 ## Branch Map From Scenes
 
@@ -132,6 +134,45 @@ Venn is still awake.
 
 (The macro line is Harlowe; SugarCube writes `<<set $trustedVenn to
 true>>`.) Save as `adaptations/interactive/{story-id}.twee`.
+
+## Chapter Choices And The Twee Build
+
+`story build --format twee` writes Twee 3 from a project whose chapters are
+the passages. Keep the interactive edition as its own project, copied from
+the source book the way a translation is, so the novel's builds and
+continuity stay linear. In it, each chapter is one node of the branch map,
+and a chapter that branches lists its choices:
+
+```yaml
+choices:
+  - text: Follow the light
+    to: chapter-02
+  - text: Fetch Venn
+    to: chapter-03
+```
+
+- The first chapter is the start. Once any chapter has choices, a chapter
+  without them is an ending, so a chapter on a branch that rejoins needs a
+  single choice (`text: Go on`, `to` the bottleneck chapter).
+- `text` becomes the link text: no `[`, `]`, `|`, `->`, `<-`, or line
+  break, and no final `<`. Quote it if it looks like a number.
+- Passages are named by chapter id (`chapter-02`) and hold the chapter
+  prose without its heading. Write macros for state (`(set:)`, `<<set>>`)
+  in the prose only once the author has picked a story format; the build
+  names none, so Twine uses its default, Harlowe.
+- `story links` errors on a choice to a missing chapter and warns about a
+  chapter no choice path reaches; the build refuses the first and warns
+  about the second. `story move` and `story remove chapter` rewrite and
+  drop choice targets.
+- Without `ifid:` in `story.md` the build derives the IFID from the story
+  id and warns with the line to add. Add it before sharing the story, so
+  a retitle keeps the same IFID.
+- `story continuity` still reads the chapters in number order, as one
+  path, so it cannot tell that two branches never meet. Check branch state
+  by hand against the State table in the branch map.
+
+[`examples/the-gull-rock-light`](../../../examples/the-gull-rock-light/)
+is a small branch-and-bottleneck story built this way.
 
 ## Checks
 

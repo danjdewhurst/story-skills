@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { checkProjectSchema } from "./check-schema.js";
-import { checkProjectContinuity, computeWordCounts, reindexProject, seriesReport, validateLinks, validateProject } from "../src/story.js";
+import { buildBook, checkProjectContinuity, computeWordCounts, reindexProject, seriesReport, validateLinks, validateProject } from "../src/story.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const examplesRoot = path.join(repoRoot, "examples");
@@ -66,6 +66,25 @@ export function staleRegistries(root) {
   }
 }
 
+// Builds the example as Twine source twice, outside the project, and returns
+// the build warnings plus a note if the two builds differ: the IFID and every
+// passage must come out the same on each rebuild. The linear examples set no
+// ifid, so the warning that the IFID was derived is expected there.
+export function tweeBuildFindings(root) {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "story-twee-"));
+  try {
+    const first = buildBook(root, { format: "twee", out: path.join(scratch, "first.twee") });
+    const second = buildBook(root, { format: "twee", out: path.join(scratch, "second.twee") });
+    const same = fs.readFileSync(first.outFile, "utf8") === fs.readFileSync(second.outFile, "utf8");
+    const warnings = first.warnings.filter((warning) => !warning.startsWith("story.md has no ifid"));
+    return [...warnings, ...(same ? [] : ["two twee builds differ"])];
+  } catch (error) {
+    return [error.message];
+  } finally {
+    fs.rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
 function main() {
   const failures = [];
   const summaries = [];
@@ -87,6 +106,9 @@ function main() {
     collectResult(failures, name, "links", links);
     for (const error of checkProjectSchema(root)) {
       failures.push(`${name} schema error: ${error}`);
+    }
+    for (const finding of tweeBuildFindings(root)) {
+      failures.push(`${name} twee build: ${finding}`);
     }
     for (const registry of staleRegistries(root)) {
       failures.push(`${name} registry is stale: ${registry} (run story reindex)`);

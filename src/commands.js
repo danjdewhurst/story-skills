@@ -631,7 +631,8 @@ export const COMMANDS = [
       "epub, docx, shunn, html (review copy with paragraph",
       "anchors), print (paged-media interior),",
       "narration (audiobook script), metadata (retailer",
-      "sheet), or fountain (screenplay scene skeleton)"
+      "sheet), fountain (screenplay scene skeleton), or",
+      "twee (Twine story from chapter choices)"
     ],
     project: "positional",
     options: ["out", "format", "shunn", "trim", "stamp", "note-url"],

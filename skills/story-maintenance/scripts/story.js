@@ -4724,7 +4724,7 @@ var OPTIONS = [
   { name: "anchor", value: "<label>", repeatable: true, help: ["Review-copy paragraph label (ch03-p12) to find", "in the current text for compare; repeatable"] },
   { name: "path", value: "<path>", help: ["Project root for every command except init and", "import"] },
   { name: "out", value: "<file>", help: ["Output path for export/build/synopsis/diagram"] },
-  { name: "format", value: "<name>", help: ["Output format for build (markdown, epub, docx,", "shunn, html, print, narration, metadata,", "fountain)"] },
+  { name: "format", value: "<name>", help: ["Output format for build (markdown, epub, docx,", "shunn, html, print, narration, metadata,", "fountain, twee)"] },
   { name: "trim", value: "<size>", help: ["Trim size for build --format print (5x8,", "5.25x8, 5.5x8.5, 6x9, a5; default 5.5x8.5)"] },
   { name: "stamp", value: "<label>", help: ["Build label printed in build --format html (a", "date, commit, or review round)"] },
   { name: "note-url", value: "<url>", help: ["Note form linked, prefilled, from every label in", "build --format html (a GitHub new-issue link)"] },
@@ -6058,6 +6058,44 @@ function inline(value) {
 }
 function sectionText(value) {
   return inline(value).replace(/^#+\s*/, "") || "Untitled";
+}
+
+// src/twee.js
+import crypto from "node:crypto";
+var TWEE_LINK_UNSAFE = /[[\]|\r\n]|->|<-|<$/;
+var UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function isIfid(value) {
+  return typeof value === "string" && UUID_V4.test(value);
+}
+function derivedIfid(storyId) {
+  const hex = crypto.createHash("sha256").update(`story-skills-ifid:${storyId}`).digest("hex").slice(0, 32).split("");
+  hex[12] = "4";
+  hex[16] = (Number.parseInt(hex[16], 16) & 3 | 8).toString(16);
+  const text = hex.join("");
+  return `${text.slice(0, 8)}-${text.slice(8, 12)}-${text.slice(12, 16)}-${text.slice(16, 20)}-${text.slice(20)}`.toUpperCase();
+}
+function passageText(text) {
+  return text.replace(/^::/gm, "\\::");
+}
+function tweeSource(story) {
+  const data = JSON.stringify({ ifid: story.ifid.toUpperCase(), start: story.start }, null, 2);
+  const lines = [":: StoryTitle", passageText(story.title), "", ":: StoryData", data, ""];
+  for (const passage of story.passages) {
+    lines.push(`:: ${passage.name}`);
+    if (passage.body !== "") {
+      lines.push(passageText(passage.body));
+    }
+    if (passage.body !== "" && passage.links.length > 0) {
+      lines.push("");
+    }
+    for (const link of passage.links) {
+      lines.push(`[[${link.text}->${link.to}]]`);
+    }
+    lines.push("");
+  }
+  return `${lines.join(`
+`).trimEnd()}
+`;
 }
 
 // src/packaging.js
@@ -7445,7 +7483,8 @@ function scanProject(root) {
       mode: String(data.mode ?? ""),
       strand: String(data.strand ?? ""),
       hasPostHocNotes: hasPostHocNotes(markdown.body),
-      hook: typeof data.hook === "string" ? data.hook : ""
+      hook: typeof data.hook === "string" ? data.hook : "",
+      choices: data.choices
     }), scanErrors).sort((left, right) => left.number - right.number || left.file.localeCompare(right.file, "en")),
     scenes: readEntityFiles(projectRoot, "scenes", (id, file, data) => ({
       id,
@@ -7877,6 +7916,9 @@ function validateLinksOf(project) {
       checkIdReference(errors, label, characterId, "character", hasCharacter);
     }
   }
+  const branches = branchGraph(project);
+  errors.push(...branches.missing.filter((choice) => !hasScheduledChapter(choice.to)).map((choice) => choice.message));
+  warnings.push(...branches.warnings);
   validateTimelineAndArcBodyRefs(project, chapters, errors, hasScheduledChapter);
   validateMatterBodyLinks(project, errors);
   validateSeriesLinks(project.root, project.story.data, errors);
@@ -8849,6 +8891,31 @@ function buildBook(root, options = {}) {
       pendingPermissions: project.matter.filter((entry) => entry.permission === "pending").map((entry) => entry.id),
       todoChapters: project.chapters.filter((chapter) => chapter.todoMarkers > 0).map((chapter) => chapter.id)
     }), output.writeOptions);
+  } else if (format === "twee") {
+    const branches = branchGraph(project);
+    const pinned = project.story.data.ifid;
+    const problems = [
+      ...project.chapters.filter((chapter) => !isKebabId2(chapter.id)).map((chapter) => `${relative2(project, chapter.file)}: chapter file names must be kebab-case to name a passage`),
+      ...branches.problems,
+      ...branches.missing.map((choice) => choice.message),
+      ...pinned === undefined || isIfid(pinned) ? [] : ["story.md ifid must be a version 4 UUID, such as 3F2C9A61-7B1D-4E8A-9C3B-2A6D5E4F1B07"]
+    ];
+    if (problems.length > 0) {
+      throw new Error(`Cannot build twee until these are fixed:
+${problems.join(`
+`)}`);
+    }
+    const ifid = pinned ?? derivedIfid(project.storyId);
+    if (pinned === undefined) {
+      manuscript.warnings.push(`story.md has no ifid, so the build derived ${ifid} from the story id; add ifid: ${ifid} to story.md to keep it if the title changes`);
+    }
+    writeFile(output.outFile, tweeSource({
+      title: manuscript.title,
+      ifid,
+      start: branches.passages[0].chapter.id,
+      passages: branches.passages.map((passage, position) => ({ name: passage.chapter.id, body: manuscript.chapters[position].body, links: passage.links }))
+    }), output.writeOptions);
+    manuscript.warnings.push(...branches.warnings);
   } else if (format === "narration") {
     writeFile(output.outFile, narrationScript(manuscript, pronunciationGuide(project)), output.writeOptions);
   } else if (format === "html" || format === "print") {
@@ -9506,6 +9573,7 @@ function removeEntityUnlocked(root, options) {
       throw refusedError(`chapter ${id} is still named by ${BEFORE_STORY_FIELDS.join(", ")}, or a progression's from in ${named.map((entry) => path7.relative(project.root, entry)).join(", ")}; an empty value there means before the story, and a progression needs the chapter it starts in, so point them at another chapter first`);
     }
   }
+  const choosers = kind === "chapter" ? project.chapters.filter((chapter) => chapter.id !== id && chapterChoices(chapter, "").choices.some((choice) => choice.to === id)).map((chapter) => relative2(project, chapter.file)) : [];
   const plan = removeEntityReferences(project.root, kind, id, new Map([[file, null]]));
   assertWritable(project.root, [...plan.keys(), file]);
   commitWrites(() => {
@@ -9513,7 +9581,11 @@ function removeEntityUnlocked(root, options) {
     fs7.rmSync(file, { force: true });
   });
   const reindexed = reindexProject(project.root);
-  return { kind, id, file, alreadyGone, changed: [file].concat(reindexed.changed), warnings: leftoverReferenceWarnings(project.root, kind, id) };
+  const warnings = leftoverReferenceWarnings(project.root, kind, id);
+  if (choosers.length > 0) {
+    warnings.push(`${choosers.join(", ")} had choices leading to ${id}, which remove dropped; a chapter left with no choices is an ending, so check where ${choosers.length === 1 ? "it leads" : "they lead"} now`);
+  }
+  return { kind, id, file, alreadyGone, changed: [file].concat(reindexed.changed), warnings };
 }
 function leftoverReferenceWarnings(root, kind, id) {
   const warnings = [];
@@ -10925,8 +10997,10 @@ var ENTRY_IDENTITY_FIELDS = {
   "knowledge-state": "character",
   "object-state": "artifact",
   progressions: "from",
-  routes: "to"
+  routes: "to",
+  choices: "to"
 };
+var NESTED_TO_KINDS = { routes: "location", choices: "chapter" };
 function entityReferenceContext(root, kind, id) {
   const otherExists = new Map;
   const existsAs = (other) => {
@@ -10939,7 +11013,10 @@ function entityReferenceContext(root, kind, id) {
     id,
     kind,
     entityFile: path7.resolve(root, entityConfig(kind).dir, `${id}.md`),
-    isReferenceKey: (key) => {
+    isReferenceKey: (key, listKey = null) => {
+      if (key === "to") {
+        return listKey !== null && Object.hasOwn(NESTED_TO_KINDS, listKey) && NESTED_TO_KINDS[listKey] === kind;
+      }
       const kinds = Object.hasOwn(REFERENCE_FIELD_KINDS, key) ? REFERENCE_FIELD_KINDS[key] : [];
       return kinds.includes(kind) && !kinds.some((other) => other !== kind && existsAs(other));
     }
@@ -11117,18 +11194,18 @@ function commitWrites(write) {
     throw Object.assign(error, { hint: "Some files were already updated: fix the problem and run the same command again to finish" });
   }
 }
-function transformReferences(data, transform, context, identityKey = null) {
+function transformReferences(data, transform, context, identityKey = null, listKey = null) {
   const next = {};
   const set = (key, value) => Object.defineProperty(next, key, { value, enumerable: true, configurable: true, writable: true });
   const progression = identityKey === "from";
-  const isReference = (key) => (progression && key === "value" ? typeof data.field === "string" && context.isReferenceKey(data.field) : context.isReferenceKey(key)) || key === "to" && identityKey === "to" && context.kind === "location" || key === "from" && progression && context.kind === "chapter";
+  const isReference = (key) => (progression && key === "value" ? typeof data.field === "string" && context.isReferenceKey(data.field) : context.isReferenceKey(key, listKey)) || key === "from" && progression && context.kind === "chapter";
   for (const [key, value] of Object.entries(data)) {
     if (Array.isArray(value)) {
       const items = [];
       const childIdentity = Object.hasOwn(ENTRY_IDENTITY_FIELDS, key) ? ENTRY_IDENTITY_FIELDS[key] : null;
       for (const item of value) {
         if (item && typeof item === "object" && !Array.isArray(item)) {
-          const mapped = transformReferences(item, transform, context, childIdentity);
+          const mapped = transformReferences(item, transform, context, childIdentity, key);
           if (mapped !== null) {
             items.push(mapped);
           }
@@ -11304,6 +11381,84 @@ function manuscriptParts(project, action = "build") {
     back,
     warnings
   };
+}
+function chapterChoices(chapter, label) {
+  const choices = [];
+  const problems = [];
+  if (chapter.choices === undefined) {
+    return { choices, problems };
+  }
+  if (!Array.isArray(chapter.choices)) {
+    problems.push(`${label} frontmatter field choices must be a list of { text, to } entries`);
+    return { choices, problems };
+  }
+  chapter.choices.forEach((choice, index) => {
+    const at = `${label} choices[${index}]`;
+    if (!choice || typeof choice !== "object" || Array.isArray(choice)) {
+      problems.push(`${at} must have text and to, such as { text: Follow the light, to: chapter-02 }`);
+      return;
+    }
+    const text = typeof choice.text === "string" ? choice.text.trim() : "";
+    const to = typeof choice.to === "string" ? choice.to.trim() : "";
+    const before = problems.length;
+    if (text === "") {
+      problems.push(`${at} needs text: the words the reader picks, quoted if they look like a number`);
+    } else if (TWEE_LINK_UNSAFE.test(text)) {
+      problems.push(`${at} text cannot contain [, ], |, ->, <-, or a line break, or end in <, which Twine reads as link syntax`);
+    }
+    if (to === "") {
+      problems.push(`${at} needs to: the id of the chapter it leads to, such as chapter-02`);
+    } else if (!isKebabId2(to)) {
+      problems.push(`${at} to ${to} must be a kebab-case chapter id`);
+    }
+    if (problems.length === before) {
+      choices.push({ text, to, index });
+    }
+  });
+  return { choices, problems };
+}
+function branchGraph(project) {
+  const ids = new Set(project.chapters.map((chapter) => chapter.id));
+  const parsed = project.chapters.map((chapter) => {
+    const label = relative2(project, chapter.file);
+    return { chapter, label, ...chapterChoices(chapter, label) };
+  });
+  const branching = parsed.some((entry) => entry.choices.length > 0);
+  const problems = parsed.flatMap((entry) => entry.problems);
+  const missing = [];
+  const warnings = [];
+  const passages = parsed.map((entry, position) => {
+    if (!branching) {
+      const next = project.chapters[position + 1];
+      return { chapter: entry.chapter, links: next ? [{ text: "Continue", to: next.id }] : [] };
+    }
+    for (const choice of entry.choices) {
+      if (!ids.has(choice.to)) {
+        missing.push({ to: choice.to, message: `${entry.label} choices[${choice.index}] references missing chapter ${choice.to}` });
+      }
+    }
+    return { chapter: entry.chapter, links: entry.choices.filter((choice) => ids.has(choice.to)).map(({ text, to }) => ({ text, to })) };
+  });
+  if (branching) {
+    const byId = new Map(passages.map((passage) => [passage.chapter.id, passage]));
+    const start = passages[0].chapter.id;
+    const reached = new Set([start]);
+    const queue = [start];
+    while (queue.length > 0) {
+      for (const link of byId.get(queue.shift()).links) {
+        if (!reached.has(link.to)) {
+          reached.add(link.to);
+          queue.push(link.to);
+        }
+      }
+    }
+    for (const passage of passages) {
+      if (!reached.has(passage.chapter.id)) {
+        warnings.push(`${relative2(project, passage.chapter.file)} cannot be reached: no choice path from ${start} leads to it`);
+      }
+    }
+  }
+  return { branching, passages, problems, missing, warnings };
 }
 function chapterKey(chapter, keys) {
   if (chapter.numbered) {
@@ -11740,7 +11895,8 @@ var BUILD_EXTENSIONS = {
   print: "print.html",
   narration: "narration.md",
   metadata: "metadata.md",
-  fountain: "fountain"
+  fountain: "fountain",
+  twee: "twee"
 };
 function normalizeBuildFormat(value) {
   const format = String(value).trim().toLowerCase();
@@ -11828,6 +11984,9 @@ function validateStoryFrontmatter(project, errors) {
   validatePasses(data, "story.md", errors);
   validateCliConfig(data, errors);
   validateDeadline(data, errors);
+  if (data.ifid !== undefined && !isIfid(data.ifid)) {
+    errors.push("story.md ifid must be a version 4 UUID, such as 3F2C9A61-7B1D-4E8A-9C3B-2A6D5E4F1B07");
+  }
   if (newerSchemaVersion(data["schema-version"]) !== null) {
     errors.push(newerSchemaMessage(newerSchemaVersion(data["schema-version"])));
   } else if (data["schema-version"] !== undefined && data["schema-version"] !== STORY_SCHEMA_VERSION) {
@@ -12108,6 +12267,7 @@ function validateChapters(project, errors, warnings) {
       requireScalar(data, "time-skip", label, errors);
     }
     validateEnum(data, "hook", CHAPTER_HOOKS, label, errors);
+    errors.push(...chapterChoices(chapter, label).problems);
     if (data.numbered !== undefined && typeof data.numbered !== "boolean") {
       errors.push(`${label} numbered must be true or false`);
     } else if (data.numbered === false && (typeof data.title !== "string" || data.title.trim() === "")) {
@@ -13932,7 +14092,8 @@ var COMMANDS = [
       "epub, docx, shunn, html (review copy with paragraph",
       "anchors), print (paged-media interior),",
       "narration (audiobook script), metadata (retailer",
-      "sheet), or fountain (screenplay scene skeleton)"
+      "sheet), fountain (screenplay scene skeleton), or",
+      "twee (Twine story from chapter choices)"
     ],
     project: "positional",
     options: ["out", "format", "shunn", "trim", "stamp", "note-url"],

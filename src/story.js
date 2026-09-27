@@ -20,6 +20,7 @@ import { copyrightPage, metadataSheet, publishingMeta, validatePublishing } from
 import { DEFAULT_TRIM, estimateBookPages, paragraphLabels, printHtml, reviewHtml, TRIM_SIZES } from "./html.js";
 import { narrationScript, pronunciationGuide } from "./narration.js";
 import { SCENE_SETTINGS, fountainScript } from "./fountain.js";
+import { TWEE_LINK_UNSAFE, derivedIfid, isIfid, tweeSource } from "./twee.js";
 import { htmlBook, writeDocx, writeEpub, writeShunnDocx, writeShunnMarkdown } from "./packaging.js";
 import { validateCliConfig } from "./config.js";
 import { DEFAULT_PASSES, addedPassNotes, nextPass, passChecks, readPasses, updatePasses, validatePasses } from "./passes.js";
@@ -697,7 +698,10 @@ export function scanProject(root) {
       mode: String(data.mode ?? ""),
       strand: String(data.strand ?? ""),
       hasPostHocNotes: hasPostHocNotes(markdown.body),
-      hook: typeof data.hook === "string" ? data.hook : ""
+      hook: typeof data.hook === "string" ? data.hook : "",
+      // Raw: validate reports a malformed list, and chapterChoices keeps
+      // only the usable entries.
+      choices: data.choices
     }), scanErrors).sort((left, right) => left.number - right.number || left.file.localeCompare(right.file, "en")),
     scenes: readEntityFiles(projectRoot, "scenes", (id, file, data) => ({
       id,
@@ -1196,6 +1200,11 @@ export function validateLinksOf(project) {
     }
   }
 
+  // Like a promise's payoff, a choice may lead to a chapter not written yet;
+  // the Twee build still needs it.
+  const branches = branchGraph(project);
+  errors.push(...branches.missing.filter((choice) => !hasScheduledChapter(choice.to)).map((choice) => choice.message));
+  warnings.push(...branches.warnings);
   validateTimelineAndArcBodyRefs(project, chapters, errors, hasScheduledChapter);
   validateMatterBodyLinks(project, errors);
   validateSeriesLinks(project.root, project.story.data, errors);
@@ -2381,6 +2390,33 @@ export function buildBook(root, options = {}) {
       pendingPermissions: project.matter.filter((entry) => entry.permission === "pending").map((entry) => entry.id),
       todoChapters: project.chapters.filter((chapter) => chapter.todoMarkers > 0).map((chapter) => chapter.id)
     }), output.writeOptions);
+  } else if (format === "twee") {
+    const branches = branchGraph(project);
+    const pinned = project.story.data.ifid;
+    // Chapter ids name the passages, so they must be safe in a passage header
+    // and a link target.
+    const problems = [
+      ...project.chapters.filter((chapter) => !isKebabId(chapter.id)).map((chapter) => `${relative(project, chapter.file)}: chapter file names must be kebab-case to name a passage`),
+      ...branches.problems,
+      ...branches.missing.map((choice) => choice.message),
+      ...(pinned === undefined || isIfid(pinned) ? [] : ["story.md ifid must be a version 4 UUID, such as 3F2C9A61-7B1D-4E8A-9C3B-2A6D5E4F1B07"])
+    ];
+    if (problems.length > 0) {
+      throw new Error(`Cannot build twee until these are fixed:\n${problems.join("\n")}`);
+    }
+    // A derived IFID changes with the title, and two books with one title
+    // share it, so the build says how to pin it.
+    const ifid = pinned ?? derivedIfid(project.storyId);
+    if (pinned === undefined) {
+      manuscript.warnings.push(`story.md has no ifid, so the build derived ${ifid} from the story id; add ifid: ${ifid} to story.md to keep it if the title changes`);
+    }
+    writeFile(output.outFile, tweeSource({
+      title: manuscript.title,
+      ifid,
+      start: branches.passages[0].chapter.id,
+      passages: branches.passages.map((passage, position) => ({ name: passage.chapter.id, body: manuscript.chapters[position].body, links: passage.links }))
+    }), output.writeOptions);
+    manuscript.warnings.push(...branches.warnings);
   } else if (format === "narration") {
     writeFile(output.outFile, narrationScript(manuscript, pronunciationGuide(project)), output.writeOptions);
   } else if (format === "html" || format === "print") {
@@ -3150,6 +3186,11 @@ function removeEntityUnlocked(root, options) {
     }
   }
 
+  // Dropping the choices that led here can leave a chapter with none, which
+  // makes it an ending, so remove says which chapters lost one.
+  const choosers = kind === "chapter"
+    ? project.chapters.filter((chapter) => chapter.id !== id && chapterChoices(chapter, "").choices.some((choice) => choice.to === id)).map((chapter) => relative(project, chapter.file))
+    : [];
   const plan = removeEntityReferences(project.root, kind, id, new Map([[file, null]]));
   assertWritable(project.root, [...plan.keys(), file]);
   // References first, the file last, so an interrupted remove can be rerun.
@@ -3158,7 +3199,11 @@ function removeEntityUnlocked(root, options) {
     fs.rmSync(file, { force: true });
   });
   const reindexed = reindexProject(project.root);
-  return { kind, id, file, alreadyGone, changed: [file].concat(reindexed.changed), warnings: leftoverReferenceWarnings(project.root, kind, id) };
+  const warnings = leftoverReferenceWarnings(project.root, kind, id);
+  if (choosers.length > 0) {
+    warnings.push(`${choosers.join(", ")} had choices leading to ${id}, which remove dropped; a chapter left with no choices is an ending, so check where ${choosers.length === 1 ? "it leads" : "they lead"} now`);
+  }
+  return { kind, id, file, alreadyGone, changed: [file].concat(reindexed.changed), warnings };
 }
 
 // What remove leaves for the author: body links and bare chapter or scene ids
@@ -4811,8 +4856,13 @@ const ENTRY_IDENTITY_FIELDS = {
   "object-state": "artifact",
   // A progression takes effect from a chapter; see transformReferences.
   progressions: "from",
-  routes: "to"
+  routes: "to",
+  choices: "to"
 };
+
+// The kind a nested `to` names, by the list it sits in: a location's route
+// leads to a location, a chapter's choice to a chapter.
+const NESTED_TO_KINDS = { routes: "location", choices: "chapter" };
 
 // Describes the entity being renamed or removed. A frontmatter key counts as
 // a reference to it only when the key can point at its kind. A key that may
@@ -4831,7 +4881,10 @@ function entityReferenceContext(root, kind, id) {
     id,
     kind,
     entityFile: path.resolve(root, entityConfig(kind).dir, `${id}.md`),
-    isReferenceKey: (key) => {
+    isReferenceKey: (key, listKey = null) => {
+      if (key === "to") {
+        return listKey !== null && Object.hasOwn(NESTED_TO_KINDS, listKey) && NESTED_TO_KINDS[listKey] === kind;
+      }
       const kinds = Object.hasOwn(REFERENCE_FIELD_KINDS, key) ? REFERENCE_FIELD_KINDS[key] : [];
       return kinds.includes(kind) && !kinds.some((other) => other !== kind && existsAs(other));
     }
@@ -5070,17 +5123,16 @@ function commitWrites(write) {
   }
 }
 
-function transformReferences(data, transform, context, identityKey = null) {
+function transformReferences(data, transform, context, identityKey = null, listKey = null) {
   const next = {};
   // A `__proto__:` key is kept as an own property, as the parser keeps it.
   const set = (key, value) => Object.defineProperty(next, key, { value, enumerable: true, configurable: true, writable: true });
-  // A route's `to` names a location; `to` anywhere else is left alone. A
-  // progression's `from` names a chapter, and its `value` is a reference
-  // when the field it changes is one (a character's arc, a location's
-  // controlled-by).
+  // A route's `to` names a location and a choice's `to` a chapter; `to`
+  // anywhere else is left alone. A progression's `from` names a chapter, and
+  // its `value` is a reference when the field it changes is one (a
+  // character's arc, a location's controlled-by).
   const progression = identityKey === "from";
-  const isReference = (key) => (progression && key === "value" ? typeof data.field === "string" && context.isReferenceKey(data.field) : context.isReferenceKey(key))
-    || (key === "to" && identityKey === "to" && context.kind === "location")
+  const isReference = (key) => (progression && key === "value" ? typeof data.field === "string" && context.isReferenceKey(data.field) : context.isReferenceKey(key, listKey))
     || (key === "from" && progression && context.kind === "chapter");
   for (const [key, value] of Object.entries(data)) {
     if (Array.isArray(value)) {
@@ -5088,7 +5140,7 @@ function transformReferences(data, transform, context, identityKey = null) {
       const childIdentity = Object.hasOwn(ENTRY_IDENTITY_FIELDS, key) ? ENTRY_IDENTITY_FIELDS[key] : null;
       for (const item of value) {
         if (item && typeof item === "object" && !Array.isArray(item)) {
-          const mapped = transformReferences(item, transform, context, childIdentity);
+          const mapped = transformReferences(item, transform, context, childIdentity, key);
           if (mapped !== null) {
             items.push(mapped);
           }
@@ -5307,6 +5359,96 @@ function manuscriptParts(project, action = "build") {
     back,
     warnings
   };
+}
+
+// A chapter's usable `choices` as { text, to } pairs, and the problems
+// validate reports for the rest. The text becomes a Twine link, so it may not
+// hold link syntax; `to` names the chapter the choice leads to.
+function chapterChoices(chapter, label) {
+  const choices = [];
+  const problems = [];
+  if (chapter.choices === undefined) {
+    return { choices, problems };
+  }
+  if (!Array.isArray(chapter.choices)) {
+    problems.push(`${label} frontmatter field choices must be a list of { text, to } entries`);
+    return { choices, problems };
+  }
+  chapter.choices.forEach((choice, index) => {
+    const at = `${label} choices[${index}]`;
+    if (!choice || typeof choice !== "object" || Array.isArray(choice)) {
+      problems.push(`${at} must have text and to, such as { text: Follow the light, to: chapter-02 }`);
+      return;
+    }
+    const text = typeof choice.text === "string" ? choice.text.trim() : "";
+    const to = typeof choice.to === "string" ? choice.to.trim() : "";
+    const before = problems.length;
+    if (text === "") {
+      problems.push(`${at} needs text: the words the reader picks, quoted if they look like a number`);
+    } else if (TWEE_LINK_UNSAFE.test(text)) {
+      problems.push(`${at} text cannot contain [, ], |, ->, <-, or a line break, or end in <, which Twine reads as link syntax`);
+    }
+    if (to === "") {
+      problems.push(`${at} needs to: the id of the chapter it leads to, such as chapter-02`);
+    } else if (!isKebabId(to)) {
+      problems.push(`${at} to ${to} must be a kebab-case chapter id`);
+    }
+    if (problems.length === before) {
+      choices.push({ text, to, index });
+    }
+  });
+  return { choices, problems };
+}
+
+// The chapters as passages of a branching story. With no choices anywhere
+// the book is linear and each chapter continues to the next; once any
+// chapter has choices, a chapter's links are exactly its choices and one
+// without them is an ending. Errors name choices that lead nowhere; warnings
+// name chapters no path from the first chapter reaches. `problems` are the
+// malformed choices validate reports, and `missing` the choices whose chapter
+// does not exist.
+function branchGraph(project) {
+  const ids = new Set(project.chapters.map((chapter) => chapter.id));
+  const parsed = project.chapters.map((chapter) => {
+    const label = relative(project, chapter.file);
+    return { chapter, label, ...chapterChoices(chapter, label) };
+  });
+  const branching = parsed.some((entry) => entry.choices.length > 0);
+  const problems = parsed.flatMap((entry) => entry.problems);
+  const missing = [];
+  const warnings = [];
+  const passages = parsed.map((entry, position) => {
+    if (!branching) {
+      const next = project.chapters[position + 1];
+      return { chapter: entry.chapter, links: next ? [{ text: "Continue", to: next.id }] : [] };
+    }
+    for (const choice of entry.choices) {
+      if (!ids.has(choice.to)) {
+        missing.push({ to: choice.to, message: `${entry.label} choices[${choice.index}] references missing chapter ${choice.to}` });
+      }
+    }
+    return { chapter: entry.chapter, links: entry.choices.filter((choice) => ids.has(choice.to)).map(({ text, to }) => ({ text, to })) };
+  });
+  if (branching) {
+    const byId = new Map(passages.map((passage) => [passage.chapter.id, passage]));
+    const start = passages[0].chapter.id;
+    const reached = new Set([start]);
+    const queue = [start];
+    while (queue.length > 0) {
+      for (const link of byId.get(queue.shift()).links) {
+        if (!reached.has(link.to)) {
+          reached.add(link.to);
+          queue.push(link.to);
+        }
+      }
+    }
+    for (const passage of passages) {
+      if (!reached.has(passage.chapter.id)) {
+        warnings.push(`${relative(project, passage.chapter.file)} cannot be reached: no choice path from ${start} leads to it`);
+      }
+    }
+  }
+  return { branching, passages, problems, missing, warnings };
 }
 
 // The review copy's paragraph-label prefix: ch03 for Chapter 3, or the
@@ -5866,7 +6008,8 @@ const BUILD_EXTENSIONS = {
   print: "print.html",
   narration: "narration.md",
   metadata: "metadata.md",
-  fountain: "fountain"
+  fountain: "fountain",
+  twee: "twee"
 };
 
 function normalizeBuildFormat(value) {
@@ -5969,6 +6112,9 @@ function validateStoryFrontmatter(project, errors) {
   validatePasses(data, "story.md", errors);
   validateCliConfig(data, errors);
   validateDeadline(data, errors);
+  if (data.ifid !== undefined && !isIfid(data.ifid)) {
+    errors.push("story.md ifid must be a version 4 UUID, such as 3F2C9A61-7B1D-4E8A-9C3B-2A6D5E4F1B07");
+  }
 
   if (newerSchemaVersion(data["schema-version"]) !== null) {
     errors.push(newerSchemaMessage(newerSchemaVersion(data["schema-version"])));
@@ -6275,6 +6421,7 @@ function validateChapters(project, errors, warnings) {
       requireScalar(data, "time-skip", label, errors);
     }
     validateEnum(data, "hook", CHAPTER_HOOKS, label, errors);
+    errors.push(...chapterChoices(chapter, label).problems);
     if (data.numbered !== undefined && typeof data.numbered !== "boolean") {
       errors.push(`${label} numbered must be true or false`);
     } else if (data.numbered === false && (typeof data.title !== "string" || data.title.trim() === "")) {
