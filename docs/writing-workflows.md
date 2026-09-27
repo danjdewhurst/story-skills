@@ -398,7 +398,7 @@ Write the next chapter.
 
 [`chapter-writing`](../skills/chapter-writing/SKILL.md) follows the same five steps every time:
 
-1. **Gather context.** It reads `story.md`, `style-sheet.md`, the chapter, plot, and scene registries, `plot/timeline.md`, `continuity/state.md`, the open questions and promises, the previous chapter, and the active arcs.
+1. **Gather context.** It runs [`story context chapter-NN`](cli-reference.md#context), which packs the style rules, the POV character's knowledge and state, cards for the cast, open threads, and recent scene summaries into a token budget with nothing from later chapters. It then reads what that leaves out as needed: `story.md`, `style-sheet.md`, the chapter, plot, and scene registries, `plot/timeline.md`, `continuity/state.md`, the open questions and promises, the previous chapter, and the active arcs.
 2. **Scope the chapter.** It asks what the chapter covers, whose POV, and which locations, and suggests the next beats from the arcs.
 3. **Outline.** It proposes a beat-by-beat outline: what each beat accomplishes, POV and location, which plot points advance, what to plant or pay off, which state changes to record, each scene's intended `outcome` (`yes`, `no`, `yes-but`, `no-and`), and how the chapter ends. You approve or revise it before any prose is written.
 4. **Draft.** It writes the prose in the POV character's voice and the tense from `story.md`, into `chapters/chapter-NN.md`, with the approved outline kept above `## Chapter Text`. Word counts start at that heading, so the outline never inflates them. Each speaker uses the `voice-words` and avoids the `voice-avoid` words in their character file. It also creates a `scenes/chapter-NN-scene-NN.md` record for each scene.

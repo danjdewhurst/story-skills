@@ -33,7 +33,15 @@ ls -d ~/.claude/skills/better-writing .claude/skills/better-writing ~/.agents/sk
 
 ### 1. Gather Context
 
-Read these files to understand the current story state:
+If the chapter you are drafting already has a file with its `pov` and `characters` set (for example a planned chapter that `story next` names), start with its packed context:
+
+```shell
+story context chapter-{NN} --path .
+```
+
+It prints, within a token budget (`--budget`, default 6000), the chapter's outline and cast, the `story.md` essentials and `style-sheet.md` rules, the POV character's knowledge and state at that point, cards for the characters on the page, open promises, clues, and questions, and summaries of the previous scenes. It includes nothing from later chapters, so it is safe to draft from. Read the files it lists under "Left out to fit the budget" when you need them. For a new chapter, run it after step 2 instead.
+
+Read what the packed context leaves out, as needed:
 
 - `story.md` - genre, themes, POV, tense
 - `style-sheet.md`, when present - voice, house spellings, dialogue punctuation, character voices, and watch words. If it is missing, draft normally and suggest the `voice-style` skill once a chapter exists
@@ -56,6 +64,8 @@ Ask the user:
 - Which location(s)?
 
 If plot arcs exist, suggest the next logical beats to advance.
+
+Once the scope is agreed, give the chapter its POV and cast so the packed context can include them: create a new chapter with `story add chapter "Title" --pov <character-id> --character <character-id> --location <location-id>`, or set `pov`, `characters`, and `locations` in an existing chapter's frontmatter. Then run `story context chapter-{NN} --path .` (or pass a scene id, `chapter-{NN}-scene-{NN}`, to draft one scene) and build the outline and prose from it.
 
 ### 3. Build the Outline
 

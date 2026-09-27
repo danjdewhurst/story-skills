@@ -118,7 +118,11 @@ jobs:
                drafting or opening a pull request.
             4. Otherwise draft the chapter that line names (an existing chapter
                with no prose yet, or a new one to add) following the chapter-writing
-               skill: outline first, then prose under "## Chapter Text", with
+               skill. Once the chapter file exists with its pov and characters, run
+               `npx --yes --package github:danjdewhurst/story-skills#${{ env.STORY_REF }} story context chapter-<number> --path ${{ env.STORY_DIR }}`
+               and draft from the context it prints (it holds nothing from
+               later chapters; if this STORY_REF has no context command, read
+               the files the skill lists instead). Outline first, then prose under "## Chapter Text", with
                accurate frontmatter (pov, status, word-count, locations, characters, mentions, arcs-advanced).
                Add matching scene records and update continuity/state.md,
                promises, questions, and the timeline.
