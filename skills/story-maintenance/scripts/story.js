@@ -7282,9 +7282,19 @@ function validateTimelineAndArcBodyRefs(project, chapters, errors, hasScheduledC
 }
 function validateMatterBodyLinks(project, errors) {
   for (const matter of project.matter) {
-    const body = readMarkdown(matter.file, project.root).body ?? "";
+    const label = relative2(project, matter.file);
+    let body = "";
+    try {
+      body = readMarkdown(matter.file, project.root).body ?? "";
+    } catch (error) {
+      const message = `${label}: ${error.message}`;
+      if (!errors.includes(message)) {
+        errors.push(message);
+      }
+      continue;
+    }
     for (const target of extractMarkdownLinkTargets(body)) {
-      checkBodyLinkTarget(project, relative2(project, matter.file), target, errors);
+      checkBodyLinkTarget(project, label, target, errors);
     }
   }
 }
@@ -10799,7 +10809,9 @@ function extractMarkdownLinkTargets(body) {
   const pattern = /\]\(([^)]+)\)/g;
   let match;
   while ((match = pattern.exec(body)) !== null) {
-    const target = match[1].trim();
+    const inner = match[1].trim();
+    const bracketed = /^<([^>]*)>/.exec(inner);
+    const target = (bracketed ? bracketed[1] : inner.replace(/\s+(?:"[^"]*"|'[^']*')$/, "")).trim();
     if (target && !/^(https?:|mailto:|#)/i.test(target)) {
       targets.push(target.split("#")[0].split("?")[0]);
     }

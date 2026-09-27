@@ -1676,13 +1676,20 @@ members:
     const epigraph = createEntity(created.root, { kind: "matter", name: "Epigraph" });
     fs.appendFileSync(
       epigraph.file,
-      "\nFrom [the ballad](../chapters/chapter-01.md), not [the lost song](../chapters/chapter-09.md) or [Web](https://example.com/x).\n",
+      "\nFrom [the ballad](../chapters/chapter-01.md \"Ballad\"), not [the lost song](../chapters/chapter-09.md), [the titled one](../chapters/chapter-08.md \"Lost\"), [the bracketed one](<../chapters/chapter-07.md>), or [Web](https://example.com/x).\n",
       "utf8"
     );
-    const output = validateLinks(created.root).errors.join("\n");
+    const project = scanProject(created.root);
+    const output = validateLinksOf(project).errors.join("\n");
     expect(output).toContain("matter/epigraph.md links to missing file ../chapters/chapter-09.md");
+    expect(output).toContain("matter/epigraph.md links to missing file ../chapters/chapter-08.md");
+    expect(output).toContain("matter/epigraph.md links to missing file ../chapters/chapter-07.md");
     expect(output).not.toContain("chapter-01.md");
     expect(output).not.toContain("example.com");
+
+    // A matter file removed after the scan is reported, not thrown.
+    fs.rmSync(epigraph.file);
+    expect(validateLinksOf(project).errors.join("\n")).toContain("matter/epigraph.md: ");
   });
 
   test("surfaces registry frontmatter errors instead of crashing", () => {

@@ -1190,10 +1190,20 @@ function validateTimelineAndArcBodyRefs(project, chapters, errors, hasScheduledC
 // files; builds print only the link text, so a broken target goes unseen.
 function validateMatterBodyLinks(project, errors) {
   for (const matter of project.matter) {
-    // The scan already dropped any matter file that fails to parse.
-    const body = readMarkdown(matter.file, project.root).body ?? "";
+    const label = relative(project, matter.file);
+    let body = "";
+    try {
+      body = readMarkdown(matter.file, project.root).body ?? "";
+    } catch (error) {
+      // The file changed or went missing after the scan.
+      const message = `${label}: ${error.message}`;
+      if (!errors.includes(message)) {
+        errors.push(message);
+      }
+      continue;
+    }
     for (const target of extractMarkdownLinkTargets(body)) {
-      checkBodyLinkTarget(project, relative(project, matter.file), target, errors);
+      checkBodyLinkTarget(project, label, target, errors);
     }
   }
 }
@@ -5408,7 +5418,11 @@ function extractMarkdownLinkTargets(body) {
   const pattern = /\]\(([^)]+)\)/g;
   let match;
   while ((match = pattern.exec(body)) !== null) {
-    const target = match[1].trim();
+    // `[x](<a.md>)` and `[x](a.md "Title")` both link to a.md. An unquoted
+    // space stays in the target so `(Bad Name.md)` is still reported.
+    const inner = match[1].trim();
+    const bracketed = /^<([^>]*)>/.exec(inner);
+    const target = (bracketed ? bracketed[1] : inner.replace(/\s+(?:"[^"]*"|'[^']*')$/, "")).trim();
     if (target && !/^(https?:|mailto:|#)/i.test(target)) {
       targets.push(target.split("#")[0].split("?")[0]);
     }
