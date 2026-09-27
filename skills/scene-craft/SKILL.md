@@ -57,6 +57,12 @@ outline-first drafting workflow.
       validated as a scalar by `story validate` but not used by continuity
       checks) and move flashback-only characters to `mentions`
       (see `references/flashbacks-time.md`)
+   - Set `date:` (`YYYY-MM-DD`) and `time:` (`"HH:MM"` or `dawn`,
+     `morning`, `midday`, `afternoon`, `evening`, `night`) once the
+     scene's moment is settled, and `travel-hours:` (a number) when the
+     POV character had to travel since the previous scene. Undated scenes
+     switch off the clock and route checks in `story continuity` without
+     a warning; `story timeline` shows what is still undated
    - Keep `state-changes` current for every change the scene makes
    - When the scene ends its chapter, set the chapter's `hook:` to how the
      chapter ends: `cliffhanger`, `question`, `revelation`, `reversal`,
