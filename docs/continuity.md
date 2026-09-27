@@ -98,9 +98,9 @@ error: chapters/chapter-04.md lists edran-vale, who died in chapter-02; move pos
 error: continuity/promises/the-broken-compass.md pays off in chapter-02 before it is planted in chapter-03
 error: continuity/questions/who-burned-the-mill.md resolves in chapter-02 before it is introduced in chapter-03
 error: continuity/state.md knowledge-state[0] references missing chapter chapter-05
-warning: chapters/chapter-03.md POV character nessa-thorn is not listed in characters
-warning: continuity/promises/the-sealed-letter.md was planted in chapter-01, 3 chapters ago, and has no payoff yet
-warning: continuity/state.md object-state[0] status active conflicts with worldbuilding/artifacts/vales-compass.md status destroyed
+warning: chapters/chapter-03.md POV character nessa-thorn is not listed in characters [pov-not-in-cast]
+warning: continuity/promises/the-sealed-letter.md was planted in chapter-01, 3 chapters ago, and has no payoff yet [promise-unpaid]
+warning: continuity/state.md object-state[0] status active conflicts with worldbuilding/artifacts/vales-compass.md status destroyed [state-status-conflict]
 ```
 
 [Fixing the unraveled thread](#worked-example-fixing-the-unraveled-thread) walks through repairing each of these.
@@ -394,7 +394,7 @@ Chapter 3's scene runs backward, so it gets a warning, no travel check, and does
 
 ```text
 error: scenes/chapter-04-scene-01.md allows at most 18.5h for travel of 30h
-warning: scenes/chapter-03-scene-01.md timestamp runs backward
+warning: scenes/chapter-03-scene-01.md timestamp runs backward [clock-backward]
 ```
 
 | Severity | Message | Fix |
@@ -653,7 +653,7 @@ Ch  Words  Scenes  Sequels  Outcomes (yes/no/yes-but/no-and)  Hook
  3     24       1        0  1/0/0/0                           revelation
  4     22       1        0  0/0/1/0                           cliffhanger
 Pacing check complete: 0 errors, 1 warnings, 0 dismissed
-warning: 4 scene units in a row with no sequel (chapter-01-scene-01 to chapter-04-scene-01): give the POV character room to react and decide
+warning: 4 scene units in a row with no sequel (chapter-01-scene-01 to chapter-04-scene-01): give the POV character room to react and decide [pacing-no-sequel]
 ```
 
 How to read it:
@@ -682,8 +682,8 @@ Ch  Words  Scenes  Sequels  Outcomes (yes/no/yes-but/no-and)  Hook
  3     24       1        0  1/0/0/0                           resolution
  4     22       1        0  1/0/0/0                           resolution
 Pacing check complete: 0 errors, 2 warnings, 0 dismissed
-warning: 3 scenes in a row end in an outright yes (chapter-02-scene-01 to chapter-04-scene-01): raise the cost with yes-but or no-and
-warning: 3 chapters in a row end on resolution (chapter-02 to chapter-04): readers can put the book down
+warning: 3 scenes in a row end in an outright yes (chapter-02-scene-01 to chapter-04-scene-01): raise the cost with yes-but or no-and [pacing-easy-wins]
+warning: 3 chapters in a row end on resolution (chapter-02 to chapter-04): readers can put the book down [pacing-resolution-run]
 ```
 
 The thresholds are rules of thumb, not rules. The [`scene-craft`](../skills/scene-craft/SKILL.md) and [`plot-structure`](../skills/plot-structure/SKILL.md) skills explain the scene and sequel pattern, and the `chapter-writing` skill runs `story pacing` after each chapter.
@@ -719,8 +719,8 @@ the-burned-page            .  .  P  R  paid-off
 
 P planted, R revealed, x both, ~ red herring
 Clue check complete: 0 errors, 2 warnings, 0 dismissed
-warning: clue the-constables-silence is a red herring with no payoff: record the chapter that debunks it
-warning: clue the-burned-page is planted in the chapter before its reveal (chapter-03 -> chapter-04): late plant gives readers no time to notice it
+warning: clue the-constables-silence is a red herring with no payoff: record the chapter that debunks it [clue-herring-unresolved]
+warning: clue the-burned-page is planted in the chapter before its reveal (chapter-03 -> chapter-04): late plant gives readers no time to notice it [clue-late-plant]
 ```
 
 The columns are chapter numbers, in order. Rows are sorted by the chapter that plants them; clues with no `planted` chapter come last. `x` means planted and revealed in the same chapter. After each row come the clue's status and `delayed` if the flag is set. The header counts live clues (`planned`, `planted`, or `paid-off`), how many are planted (status `planted` or `paid-off`, with a `planted` chapter that exists), and how many are revealed (status `paid-off`, with a `payoff` chapter that exists). A `planned` clue that only schedules its chapters counts as neither.
@@ -773,10 +773,10 @@ In a copy with three more lines of dialogue (using `hissed`, `snapped`, `growled
   ...
   Similar character names: Sera Voss / Seren Hale
 Prose check complete: 0 errors, 4 warnings, 0 dismissed
-warning: chapters/chapter-01.md uses "towards" once; style sheet prefers "toward"
-warning: chapters/chapter-01.md uses "gray" once; british dialect prefers "grey"
-warning: chapters/chapter-01.md has 3 said-bookism dialogue tags: growled 1, hissed 1, snapped 1
-warning: characters sera-voss and seren-hale have similar first names (Sera Voss / Seren Hale)
+warning: chapters/chapter-01.md uses "towards" once; style sheet prefers "toward" [prose-avoided-spelling]
+warning: chapters/chapter-01.md uses "gray" once; british dialect prefers "grey" [prose-avoided-spelling]
+warning: chapters/chapter-01.md has 3 said-bookism dialogue tags: growled 1, hissed 1, snapped 1 [prose-bookisms]
+warning: characters sera-voss and seren-hale have similar first names (Sera Voss / Seren Hale) [prose-similar-names]
 ```
 
 ### What each line measures
@@ -904,8 +904,8 @@ sera-voss: 6 lines, 28 words
   Sentence length 4.7, contractions 0.0 per 100 words, questions 0%, exclamations 0%
   Signature words: none yet
 Voice check complete: 0 errors, 2 warnings, 0 dismissed
-warning: kael-voss says "good", which is in their voice-avoid list (chapter-01)
-warning: kael-voss does not say "aye" from their voice-words list in 9 attributed lines of dialogue
+warning: kael-voss says "good", which is in their voice-avoid list (chapter-01) [voice-avoid]
+warning: kael-voss does not say "aye" from their voice-words list in 9 attributed lines of dialogue [voice-words-unused]
 ```
 
 | Message | Appears when | Fix |
@@ -936,9 +936,9 @@ Ivo: check
 Wren Calder: clear
 Name check failed: 1 errors, 3 warnings, 0 dismissed
 error: "Mara" clashes with character mara-quill (Mara)
-warning: "Marra Quinn" looks like character mara-quill (Mara Quill)
-warning: "Ilse Varn" shares an initial with antagonist ilya-venn (Councillor Ilya Venn)
-warning: "Ivo" shares an initial with antagonist ilya-venn (Councillor Ilya Venn)
+warning: "Marra Quinn" looks like character mara-quill (Mara Quill) [name-look-alike]
+warning: "Ilse Varn" shares an initial with antagonist ilya-venn (Councillor Ilya Venn) [name-shared-initial]
+warning: "Ivo" shares an initial with antagonist ilya-venn (Councillor Ilya Venn) [name-shared-initial]
 ```
 
 Each candidate gets one verdict on stdout: `taken` (an error), `check` (a warning), or `clear`. Names are compared ignoring case, accents, and punctuation.

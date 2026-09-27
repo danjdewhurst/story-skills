@@ -120,8 +120,8 @@ The CLI reads only the files described on this page. Two kinds of extra file pro
 - A `.md` file in a subdirectory of an entity directory, such as `characters/minor/old-nell.md`. Entity directories are flat.
 
 ```text
-warning: notes.md is not part of the story project model and is ignored
-warning: characters/minor/old-nell.md is nested inside an entity directory and is ignored
+warning: notes.md is not part of the story project model and is ignored [stray-file]
+warning: characters/minor/old-nell.md is nested inside an entity directory and is ignored [nested-file]
 ```
 
 Some skills keep their own working files in the project. The CLI ignores these without a warning:
@@ -162,7 +162,7 @@ Cannot use story id con: Windows reserves the file name con. Choose a longer nam
 `story validate` warns about an entity file that already has one:
 
 ```text
-warning: characters/nul.md uses a file name Windows reserves, so the project cannot be checked out on Windows; rename the entity
+warning: characters/nul.md uses a file name Windows reserves, so the project cannot be checked out on Windows; rename the entity [windows-reserved-name]
 ```
 
 The story id is derived the same way from the `title` in `story.md` (`The Last Ember` becomes `the-last-ember`), or from the project directory name when the title has no ASCII letters or digits. Registries and state files record it in their `story` field.
@@ -267,13 +267,13 @@ The chapter starter file from `story add chapter` uses the first layout:
 A word is a run of letters or digits in any script, with any combining marks (Indic vowel signs, Arabic harakat, decomposed accents) and zero-width joiners or soft hyphens inside it. Chinese and Japanese are the exception: they put no spaces between words, so each Han, Hiragana, or Katakana character (and the Katakana long-vowel mark `ー`) counts as one word, as Word and Scrivener count them, and `。`, `！`, and `？` end a sentence for `story prose`. Straight or curly apostrophes and hyphens (including U+2010 and U+2011) join a word, so `don’t` and `well-known` each count once; `U.S.A` counts as three words. A `.`, `,`, or `:` between digits joins too, so `$1,000`, `3.14`, and `9:30` are one word each, and so is a bare URL or email address. Code counts, because every build prints it: the words inside inline code and between `` ``` `` fences count, and only the fence lines do not. Before counting, the CLI removes HTML comments (`<!-- ... -->`) and images, keeps a link's visible text (builds print the same), reads a backslash escape as the character it escapes (`didn\'t` is one word), and treats the markdown characters `` # > * _ ~ | ` `` and `:` as spaces. Only a `` ``` `` fence that closes counts as code: a `` ``` `` with no closing fence is ordinary text, and a `~~~` line is a scene break, not a fence. A `<!--` or `-->` written inside a code block or an inline code span (`` `<!-- x -->` ``) is code: it neither opens nor closes a comment. A fence inside a comment is part of the comment, which runs to the first `-->`. A `<!--` with no closing `-->` removes nothing, so the text after it is counted and built; `story validate` warns, ignoring any `<!--` inside code:
 
 ```text
-warning: chapters/chapter-01.md opens an HTML comment (<!--) that never closes, so the text after it shows in builds and word counts
+warning: chapters/chapter-01.md opens an HTML comment (<!--) that never closes, so the text after it shows in builds and word counts [unclosed-comment]
 ```
 
 `story wordcount . --write` stores the result in each chapter's `word-count`. `story validate` warns when the stored value differs from the prose:
 
 ```text
-warning: chapters/chapter-01.md declares 1200 words but contains 993
+warning: chapters/chapter-01.md declares 1200 words but contains 993 [stale-word-count]
 ```
 
 A `word-count` that is not an integer, such as `lots`, is an error instead (`frontmatter field word-count must be an integer`), and is not compared with the prose.
@@ -351,7 +351,7 @@ tense: past
 The ranges are advisory. `story validate` warns when `target-words` falls outside the form's range, and, when the story `status` is `complete`, when the manuscript's prose does:
 
 ```text
-warning: story.md target-words 30000 is outside the usual novel range of 40000-200000 words
+warning: story.md target-words 30000 is outside the usual novel range of 40000-200000 words [form-length-range]
 ```
 
 The [premise-workshop skill](../skills/premise-workshop/SKILL.md) helps choose a form.
@@ -425,28 +425,16 @@ A flag given on the command line always wins, so with the entry above `story bui
 
 | Field | Type | Required | Meaning |
 |-------|------|----------|---------|
-| `severity[].warning` | warning code | yes | One of the codes below. Give each code once. |
+| `severity[].warning` | warning code | yes | A warning code from the [CLI reference](cli-reference.md#finding-codes). Give each code once. |
 | `severity[].level` | enum | yes | `error` reports the warning as an error, with its code in brackets, so the command exits 1; with `--json` it is a diagnostic with `severity: "error"` and `ok` is false. `off` reports it as `dismissed`, with the note `severity <code> is off in story.md` (the `exemption` of its `--json` diagnostic). `warning` keeps the default. |
 
-Only these warnings have codes. Each belongs to one command, and an override changes that command's findings only; the check counts that `report`, `next`, and `doctor` print are not affected:
+Every warning has a code, printed in brackets at the end of its `warning:` line; the [CLI reference](cli-reference.md#finding-codes) lists them all, by command. An override applies wherever its warning is reported: in the command that checks it, in the checks `report`, `next`, and `doctor` summarise, and in the warnings `build`, `export`, `context`, `add`, `rename`, `move`, and `remove` print after their output (a promoted one makes them exit 1). Errors cannot be overridden: an error means the project is broken or a check failed, not a matter of house style, so an entry naming an error code is rejected. `init` and `import` run before there is a `story.md` to read, so their warnings take no override.
 
-| Code | Command | Warning |
-|------|---------|---------|
-| `todo-markers` | `validate` | `<chapter> has N [TODO markers in its prose, which every build prints...` |
-| `stale-registry` | `validate` | `<registry> does not list <file>; run story reindex` |
-| `stale-word-count` | `validate` | `<chapter> declares N words but contains M`, or `has no word-count` |
-| `prose-filter-words` | `prose` | `<chapter> has N filter words per 1,000 narration words (over T)...` |
-| `prose-adverbs` | `prose` | `<chapter> has N -ly adverbs per 1,000 narration words (over T)...` |
-| `prose-bookisms` | `prose` | `<chapter> has N said-bookism dialogue tags...` |
-| `prose-avoided-spelling` | `prose` | `<chapter> uses "gray" N times; style sheet prefers "grey"` |
-| `pacing-no-hook` | `pacing` | `<chapter> has no hook: record how the chapter ending pulls the reader on` |
-| `clue-unplanted` | `clues` | `clue <id> is revealed in <chapter> but never planted...` |
-| `clue-late-plant` | `clues` | `clue <id> is planted in the same chapter as its reveal...` |
-| `voice-avoid` | `voices` | `<character> says "<word>", which is in their voice-avoid list...` |
+The eleven codes `severity` accepted before every warning had one keep their names: `todo-markers`, `stale-registry`, and `stale-word-count` (`validate`), `prose-filter-words`, `prose-adverbs`, `prose-bookisms`, and `prose-avoided-spelling` (`prose`), `pacing-no-hook` (`pacing`), `clue-unplanted` and `clue-late-plant` (`clues`), and `voice-avoid` (`voices`).
 
 The `prose` thresholds are flags (`--max-filter-words`, `--max-adverbs`, `--max-bookisms`), so `cli-defaults` sets them too. See [`story prose`](cli-reference.md#prose).
 
-`story validate` errors on a field that is not a list of mappings, an unknown or repeated command, a command or flag that cannot take defaults (including `json`), a flag the command does not accept (with a suggestion for a near miss), a boolean flag with a value other than true or false, a value flag with no value, a `prose` threshold that is not a number 0 or more, an unknown or repeated warning code, a level other than `error`, `warning`, or `off`, and any other key in a `severity` entry. While either field is invalid, every command except `validate`, `report`, `next`, and `doctor` refuses to run, lists the problems, and exits 3 (an unusable project; with `--json`, as the JSON error object), so a typo cannot silently drop a severity a CI job relies on; those four ignore both fields and report the problems through validation.
+`story validate` errors on a field that is not a list of mappings, an unknown or repeated command, a command or flag that cannot take defaults (including `json`), a flag the command does not accept (with a suggestion for a near miss), a boolean flag with a value other than true or false, a value flag with no value, a `prose` threshold that is not a number 0 or more, an unknown or repeated warning code, an error code, a level other than `error`, `warning`, or `off`, and any other key in a `severity` entry. While either field is invalid, every command except `validate`, `report`, `next`, and `doctor` refuses to run, lists the problems, and exits 3 (an unusable project; with `--json`, as the JSON error object), so a typo cannot silently drop a severity a CI job relies on; those four ignore both fields and report the problems through validation.
 
 ### Publishing metadata
 
@@ -474,7 +462,7 @@ The scalar fields must be text (an unquoted ISBN-13 is also accepted), and `auth
 ```text
 error: story.md language english must be a BCP 47 tag such as en, en-GB, or fr
 error: story.md subject fiction must be a BISAC code such as FIC022000
-warning: story.md lists 8 keywords; most retailers accept 7
+warning: story.md lists 8 keywords; most retailers accept 7 [too-many-keywords]
 ```
 
 When `copyright` is set and no matter page is a copyright page (one with id `copyright` or a title containing "Copyright"), the markdown export and the DOCX, EPUB, HTML, and print builds add a copyright page as the first front matter page. The Shunn builds and the narration script leave it out, and the metadata sheet only notes whether one exists. It holds the copyright line, "All rights reserved.", and the publisher, ISBN, and `ai-disclosure` when they are set.
@@ -1096,7 +1084,7 @@ used-in:
 Notes with `accuracy: invented` need no sources and never raise the open-research warning. See the [research skill](../skills/research/SKILL.md).
 
 ```text
-warning: research/tides.md carries legal, medical risk but has no reviewed-by, and chapter-07 relies on it
+warning: research/tides.md carries legal, medical risk but has no reviewed-by, and chapter-07 relies on it [research-unreviewed]
 ```
 
 ### Progress log
@@ -1128,7 +1116,7 @@ A registry is an `_index.md` file whose table lists the entities in its director
 Every registry has two frontmatter fields: `type` (fixed per file) and `story` (the story id). For the required registries, `story validate` errors when either is missing or wrong; for the optional matter and research registries it checks only `type`. It warns when a registry is missing the link to an entity file:
 
 ```text
-warning: characters/_index.md does not list characters/sera-voss.md; run story reindex
+warning: characters/_index.md does not list characters/sera-voss.md; run story reindex [stale-registry]
 ```
 
 | File | `type` | Table columns | Hand-written sections kept by reindex |
@@ -1316,7 +1304,7 @@ Kaela: check
 Orrin: clear
 Name check failed: 1 errors, 1 warnings, 0 dismissed
 error: "Sera Blythe" clashes with character sera-voss (Sera)
-warning: "Kaela" looks like character kael-voss (Kael Voss)
+warning: "Kaela" looks like character kael-voss (Kael Voss) [name-look-alike]
 ```
 
 ### Diagrams

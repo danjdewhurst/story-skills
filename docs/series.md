@@ -277,7 +277,7 @@ Series check failed: 3 errors, 1 warnings, 0 dismissed
 error: characters/lord-maren.md has status alive, but lord-maren is deceased in earlier book The Last Ember; set status: deceased
 error: chapters/chapter-01.md lists lord-maren, who died in earlier book The Last Ember; move appearances to mentions
 error: continuity/state.md knowledge-state[0] has kael-voss learn whisper-gate-route in chapter-01, but they already know it in earlier book The Fall of the Citadel (../the-fall-of-the-citadel/continuity/state.md knowledge-state[1])
-warning: characters/sera-voss.md name "Queen Sera" differs from "Sera Voss" in ../the-last-ember/characters/sera-voss.md
+warning: characters/sera-voss.md name "Queen Sera" differs from "Sera Voss" in ../the-last-ember/characters/sera-voss.md [canon-name-mismatch]
 ```
 
 The knowledge error reaches back two books: Kael knows `whisper-gate-route` in the prequel, so no later book can have him learn it on the page.

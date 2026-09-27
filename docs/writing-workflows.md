@@ -168,7 +168,7 @@ story report .
 `story report` shows the form beside the genre, and `story validate` warns when `target-words` sits outside the form's usual range. Raise a short story's target to 40,000 by hand, for example, and it reports:
 
 ```text
-warning: story.md target-words 40000 is outside the usual short-story range of 1000-7500 words
+warning: story.md target-words 40000 is outside the usual short-story range of 1000-7500 words [form-length-range]
 ```
 
 Once `status` is `complete`, it gives the same warning for the manuscript's actual length. Either adjust the target or confirm the choice.
@@ -281,8 +281,8 @@ Silas: taken
 Tamsin: clear
 Name check failed: 1 errors, 2 warnings, 0 dismissed
 error: "Silas" clashes with character silas-carrow (Silas)
-warning: "Nora Pike" shares an initial with protagonist nell-carrow (Nell Carrow)
-warning: "Neil" looks like character nell-carrow (Nell Carrow)
+warning: "Nora Pike" shares an initial with protagonist nell-carrow (Nell Carrow) [name-shared-initial]
+warning: "Neil" looks like character nell-carrow (Nell Carrow) [name-look-alike]
 ```
 
 An exact clash is an error and the command exits 1. Look-alikes and a shared initial with a major character are warnings for you to weigh.
@@ -379,11 +379,11 @@ the-harbormasters-boots ~   .  P  .  planted
 
 P planted, R revealed, x both, ~ red herring
 Clue check complete: 0 errors, 5 warnings, 0 dismissed
-warning: clue the-wet-footprints lists no characters: record who could notice it
-warning: clue the-altered-lamp-log is planted in the chapter before its reveal (chapter-02 -> chapter-03): late plant gives readers no time to notice it
-warning: clue the-altered-lamp-log lists no characters: record who could notice it
-warning: clue the-harbormasters-boots lists no characters: record who could notice it
-warning: clue the-harbormasters-boots is a red herring with no payoff: record the chapter that debunks it
+warning: clue the-wet-footprints lists no characters: record who could notice it [clue-no-characters]
+warning: clue the-altered-lamp-log is planted in the chapter before its reveal (chapter-02 -> chapter-03): late plant gives readers no time to notice it [clue-late-plant]
+warning: clue the-altered-lamp-log lists no characters: record who could notice it [clue-no-characters]
+warning: clue the-harbormasters-boots lists no characters: record who could notice it [clue-no-characters]
+warning: clue the-harbormasters-boots is a red herring with no payoff: record the chapter that debunks it [clue-herring-unresolved]
 ```
 
 The late-plant warning is the one to act on: move the lamp log earlier, or the reveal in chapter 3 isn't fair. `story diagram clues` draws the same ledger as a plant-to-reveal flow. [Continuity and analysis](continuity.md) explains each warning.
@@ -439,8 +439,8 @@ Ch  Words  Scenes  Sequels  Outcomes (yes/no/yes-but/no-and)  Hook
  2    113       2        0  2/0/0/0                           question
  3     89       2        0  2/0/0/0                           resolution
 Pacing check complete: 0 errors, 2 warnings, 0 dismissed
-warning: 4 scenes in a row end in an outright yes (chapter-02-scene-01 to chapter-03-scene-02): raise the cost with yes-but or no-and
-warning: 6 scene units in a row with no sequel (chapter-01-scene-01 to chapter-03-scene-02): give the POV character room to react and decide
+warning: 4 scenes in a row end in an outright yes (chapter-02-scene-01 to chapter-03-scene-02): raise the cost with yes-but or no-and [pacing-easy-wins]
+warning: 6 scene units in a row with no sequel (chapter-01-scene-01 to chapter-03-scene-02): give the POV character room to react and decide [pacing-no-sequel]
 ```
 
 Nell has been getting what she wants too easily since chapter 2, and she never stops to react. The warnings are prompts to reread, not rules; [Scene-level craft](#scene-level-craft) is where they get fixed.
@@ -449,7 +449,7 @@ Nell has been getting what she wants too easily since chapter 2, and she never s
 
 ```text
 Continuity is consistent: 0 errors, 1 warnings, 0 dismissed
-warning: scenes/chapter-01-scene-01.md is set in gannet-point-light but chapters/chapter-01.md does not list that location
+warning: scenes/chapter-01-scene-01.md is set in gannet-point-light but chapters/chapter-01.md does not list that location [scene-location-not-in-chapter]
 ```
 
 `--pov` already put `nell-carrow` in both `characters` lists, so only the location is missing. Adding `gannet-point-light` to the chapter's `locations` clears it. `story continuity` also warns when `current-chapter` in `continuity/state.md` falls behind the latest drafted chapter, but it cannot tell whether the state entries themselves are complete, so bringing the state forward stays part of step 5.
@@ -586,7 +586,7 @@ story continuity .
 Log each session with `story progress . --log`. `story validate` warns about chapters that have no scene records yet, which in a discovery project usually means the reverse outline has not been done:
 
 ```text
-warning: chapters/chapter-02.md has no machine-readable scene records
+warning: chapters/chapter-02.md has no machine-readable scene records [no-scene-records]
 ```
 
 ### Result
@@ -808,7 +808,7 @@ Manuscript:
   Repeated 4-word phrases: none
   Similar character names: none
 Prose check complete: 0 errors, 1 warnings, 0 dismissed
-warning: chapters/chapter-01.md uses "grey" once; american dialect prefers "gray"
+warning: chapters/chapter-01.md uses "grey" once; american dialect prefers "gray" [prose-avoided-spelling]
 ```
 
 The chapter opens with "The tide had gone out slowly", but `slowly` is in `allow-words`, so it is not counted as an adverb.
@@ -836,7 +836,7 @@ edwin-marsh: 3 lines, 10 words
   Sentence length 2.5, contractions 10.0 per 100 words, questions 0%, exclamations 0%
   Signature words: terrible
 Voice check complete: 0 errors, 1 warnings, 0 dismissed
-warning: nell-carrow does not say "reckon" from their voice-words list in 13 attributed lines of dialogue
+warning: nell-carrow does not say "reckon" from their voice-words list in 13 attributed lines of dialogue [voice-words-unused]
 ```
 
 It also warns when a character says one of their `voice-avoid` words, and when two characters with five or more lines each have near-identical fingerprints ("X and Y may sound alike"). A line counts only when the narration names the speaker beside a speech verb (`"...," Nell said`, `said Silas`), or when the paragraph's narration names exactly one character. Pronoun tags (`she said`) are never attributed, so in close third person the POV character is often under-counted.
@@ -940,8 +940,8 @@ story validate .
 
 ```text
 Project is valid: 0 errors, 2 warnings, 0 dismissed
-warning: research/drowning-and-cold-water.md is open but chapter-01 relies on it and is final
-warning: research/drowning-and-cold-water.md carries medical risk but has no reviewed-by, and chapter-01 relies on it
+warning: research/drowning-and-cold-water.md is open but chapter-01 relies on it and is final [research-unsettled]
+warning: research/drowning-and-cold-water.md carries medical risk but has no reviewed-by, and chapter-01 relies on it [research-unreviewed]
 ```
 
 It also warns about a `verified` note with no sources.
@@ -1340,7 +1340,7 @@ credit: ""
 `permission` is `not-needed`, `pending`, `granted`, or `public-domain`, and `credit` is the exact line the rights-holder requires. Song lyrics almost always need permission, fair use is a narrow and uncertain defence, and public-domain status depends on country and date. The skill never sets `granted` or `public-domain` without your confirmation, or `granted` without a rights-holder. Once the book is `complete`, `story validate` catches anything left open:
 
 ```text
-warning: matter/epigraph.md permission is still pending and the story is complete
+warning: matter/epigraph.md permission is still pending and the story is complete [permission-pending]
 ```
 
 It also warns about `granted` with no `rights-holder`.

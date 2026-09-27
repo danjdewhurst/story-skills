@@ -575,7 +575,7 @@ story continuity .
 
 ```text
 Continuity is consistent: 0 errors, 1 warnings, 0 dismissed
-warning: continuity/state.md current-chapter 0 is behind the latest chapter 1; update continuity state after drafting
+warning: continuity/state.md current-chapter 0 is behind the latest chapter 1; update continuity state after drafting [current-chapter-behind]
 ```
 
 To fix both, create the character and set `current-chapter: 1` in `continuity/state.md`:

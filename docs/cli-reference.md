@@ -15,6 +15,7 @@ The CLI never writes story content for you. It scaffolds files, rebuilds registr
 - [Craft and revision commands](#craft-and-revision-commands): `pacing`, `clues`, `voices`, `names`, `diagram`, `passes`
 - [Entity commands](#entity-commands): `add`, `rename`, `move`, `remove`
 - [Output commands](#output-commands): `export`, `build`, `synopsis`
+- [Finding codes](#finding-codes): every error and warning code, by command
 - [Option index](#option-index)
 - [The bundled fallback](#the-bundled-fallback)
 
@@ -225,7 +226,7 @@ $ story timeline --trim 6x9
 
 ### Defaults and severity from story.md
 
-A project can set default flags per command and change how some warnings are reported, in the optional `cli-defaults` and `severity` fields of `story.md`:
+A project can set default flags per command and change how warnings are reported, in the optional `cli-defaults` and `severity` fields of `story.md`:
 
 ```yaml
 cli-defaults:
@@ -246,13 +247,13 @@ Project validation failed: 1 errors, 0 warnings, 0 dismissed
 error: chapters/chapter-03.md has 1 [TODO marker in its prose, which every build prints: resolve it or move it into an HTML comment [todo-markers]
 ```
 
-Defaults apply with `--json` too, and to `prose -` and `voices -` inside a project; `--json` itself cannot be a default. With `--json`, a promoted warning is a diagnostic with `severity` `"error"` and makes `ok` false, and an `off` warning is a `dismissed` diagnostic. `story prose --json` reports the limits it used in `data.thresholds`. A flag on the command line always wins over a default: `story build --format epub` still builds an EPUB, and it also drops any default `--trim`, `--stamp`, `--note-url`, or `--shunn`, which belong with a particular format. Likewise `--ref` or `--against` on `compare` drops a default for the other. `level: off` reports a warning as `dismissed:` instead. Only the eleven warnings with codes can be overridden, and `story validate` rejects unknown commands, flags, codes, and levels; while either field is invalid, other commands refuse to run until it is fixed and exit 3. The [Project format reference](project-format.md#cli-defaults-and-severity) lists the codes and every rule.
+Defaults apply with `--json` too, and to `prose -` and `voices -` inside a project; `--json` itself cannot be a default. With `--json`, a promoted warning is a diagnostic with `severity` `"error"` and makes `ok` false, and an `off` warning is a `dismissed` diagnostic. `story prose --json` reports the limits it used in `data.thresholds`. A flag on the command line always wins over a default: `story build --format epub` still builds an EPUB, and it also drops any default `--trim`, `--stamp`, `--note-url`, or `--shunn`, which belong with a particular format. Likewise `--ref` or `--against` on `compare` drops a default for the other. `level: off` reports a warning as `dismissed:` instead. A `severity` entry names any warning by the code its line ends with (see [Finding codes](#finding-codes)), and applies wherever that warning is reported: in the check that raises it, in the checks `report`, `next`, and `doctor` summarise, and in the warnings `build`, `export`, `context`, `add`, `rename`, `move`, and `remove` print after their output, which then exit 1 when a promoted warning is among them. Errors cannot be demoted or turned off, so an entry naming an error code is rejected. `story validate` rejects unknown commands, flags, codes, and levels; while either field is invalid, other commands refuse to run until it is fixed and exit 3. The [Project format reference](project-format.md#cli-defaults-and-severity) lists every rule.
 
 ### Output streams and exit codes
 
 The CLI prints results to stdout and diagnostics to stderr.
 
-- `validate`, `links`, and `continuity` write everything to **stderr**: a summary line, then one line per `error:`, `warning:`, and `dismissed:` finding. Nothing goes to stdout.
+- `validate`, `links`, and `continuity` write everything to **stderr**: a summary line, then one line per `error:`, `warning:`, and `dismissed:` finding. Nothing goes to stdout. A `warning:` line ends with the warning's [code](#finding-codes) in brackets, as does an `error:` line for a warning `severity` promoted.
 - `compare`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `names`, and `series` write their report to stdout, then the same summary and finding lines to stderr.
 - `diagram` writes the Mermaid source (or, with `--out`, a confirmation) to stdout. If the project has a file that fails to parse, it writes the summary and error lines to stderr instead.
 - All other commands write a short confirmation or report to stdout.
@@ -285,12 +286,12 @@ Every result has the same envelope:
 | `command` | The command that ran, such as `"continuity"`. |
 | `ok` | `true` exactly when the command exits `0`. |
 | `data` | The command's result: counts for `validate`, `links`, and `continuity`; the report, grid, or profile for the others. `null` when the command stopped before producing one. Fields a project does not set are `null`, not missing. |
-| `diagnostics` | One entry per finding, in the order the text output prints them: `severity` (`error`, `warning`, or `dismissed`), `file` (the project file the finding names first, `stdin` for a finding about a passage piped to `prose -` or `voices -`, or `null`), `message` (the line the text output prints after `error:` or `warning:`), and `code` (the check that raised it: `validate`, `links`, `continuity`, or the command's own name). A dismissed finding also has `exemption`, the reason from `continuity/exemptions.md`. |
+| `diagnostics` | One entry per finding, in the order the text output prints them: `severity` (`error`, `warning`, or `dismissed`), `file` (the project file the finding is about, `stdin` for a finding about a passage piped to `prose -` or `voices -`, or `null` when it is about no one file), `message` (the line the text output prints after `error:` or `warning:`, without the trailing `[code]`), `code` (the finding's rule, from [Finding codes](#finding-codes)), and `check` (the check that raised it: `validate`, `links`, `continuity`, or the command's own name). A dismissed finding also has `exemption`, the reason from `continuity/exemptions.md`, or `severity <code> is off in story.md`. |
 | `writes` | Absolute paths of the files the command wrote. Only `progress --log` writes. |
 
 `report`, `next`, and `doctor` put a `checks` summary in `data` (`ok` and error, warning, and dismissed counts for `validate`, `links`, and `continuity`) and list each check's findings in `diagnostics`. They still exit `0`, so their `ok` is `true` even when a check fails: read `data.checks` to gate on them. `report --json` always includes `actions`.
 
-A command that cannot run (an unknown option, a missing argument, a missing project, an unknown id) also prints an envelope when `--json` is on, with `ok: false`, `data: null`, and the error as its one diagnostic. `prose - --json` and `voices - --json` report a piped passage as one chapter with `file` `stdin`, and a stdin error, such as empty input, is the error envelope. `--json false` and `--json=off` keep the text output. `--help` and `--version` print their usual text even with `--json`.
+A command that cannot run (an unknown option, a missing argument, a missing project, an unknown id) also prints an envelope when `--json` is on, with `ok: false`, `data: null`, and the error as its one diagnostic, coded `usage-error`, `unusable-project`, `write-refused`, or `command-failed` to match the exit code. `prose - --json` and `voices - --json` report a piped passage as one chapter with `file` `stdin`, and a stdin error, such as empty input, is the error envelope. `--json false` and `--json=off` keep the text output. `--help` and `--version` print their usual text even with `--json`.
 
 ```shell
 story continuity examples/the-unraveled-thread --json
@@ -311,7 +312,8 @@ story continuity examples/the-unraveled-thread --json
       "severity": "error",
       "file": "chapters/chapter-04.md",
       "message": "chapters/chapter-04.md lists edran-vale, who died in chapter-02; move posthumous appearances to mentions",
-      "code": "continuity"
+      "code": "posthumous-appearance",
+      "check": "continuity"
     },
     ...
   ],
@@ -603,8 +605,8 @@ story validate
 ```text
 Project validation failed: 1 errors, 2 warnings, 0 dismissed
 error: characters/old-bram.md frontmatter field locations must be a list
-warning: matter/acknowledgments.md has no text and is left out of export and build
-warning: characters/_index.md does not list characters/old-bram.md; run story reindex
+warning: matter/acknowledgments.md has no text and is left out of export and build [empty-matter]
+warning: characters/_index.md does not list characters/old-bram.md; run story reindex [stale-registry]
 ```
 
 A clean project:
@@ -662,7 +664,7 @@ On a copy of [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/
 ```text
 $ story validate
 Project is valid: 0 errors, 1 warnings, 0 dismissed
-warning: chapters/chapter-03.md declares 24 words but contains 44
+warning: chapters/chapter-03.md declares 24 words but contains 44 [stale-word-count]
 
 $ story wordcount --write
 chapters/chapter-01.md: 34
@@ -746,9 +748,9 @@ error: chapters/chapter-04.md lists edran-vale, who died in chapter-02; move pos
 error: continuity/promises/the-broken-compass.md pays off in chapter-02 before it is planted in chapter-03
 error: continuity/questions/who-burned-the-mill.md resolves in chapter-02 before it is introduced in chapter-03
 error: continuity/state.md knowledge-state[0] references missing chapter chapter-05
-warning: chapters/chapter-03.md POV character nessa-thorn is not listed in characters
-warning: continuity/promises/the-sealed-letter.md was planted in chapter-01, 3 chapters ago, and has no payoff yet
-warning: continuity/state.md object-state[0] status active conflicts with worldbuilding/artifacts/vales-compass.md status destroyed
+warning: chapters/chapter-03.md POV character nessa-thorn is not listed in characters [pov-not-in-cast]
+warning: continuity/promises/the-sealed-letter.md was planted in chapter-01, 3 chapters ago, and has no payoff yet [promise-unpaid]
+warning: continuity/state.md object-state[0] status active conflicts with worldbuilding/artifacts/vales-compass.md status destroyed [state-status-conflict]
 ```
 
 Routes are declared on locations, with the fastest journey time in hours. A route is two-way unless the destination declares its own route back. In The Salt Road, with this on `gull-harbour`:
@@ -1394,7 +1396,7 @@ Ch  Words  Scenes  Sequels  Outcomes (yes/no/yes-but/no-and)  Hook
  3     24       1        0  1/0/0/0                           revelation
  4     22       1        0  0/0/1/0                           cliffhanger
 Pacing check complete: 0 errors, 1 warnings, 0 dismissed
-warning: 4 scene units in a row with no sequel (chapter-01-scene-01 to chapter-04-scene-01): give the POV character room to react and decide
+warning: 4 scene units in a row with no sequel (chapter-01-scene-01 to chapter-04-scene-01): give the POV character room to react and decide [pacing-no-sequel]
 ```
 
 ### clues
@@ -1431,8 +1433,8 @@ the-burned-page            .  .  P  R  paid-off
 
 P planted, R revealed, x both, ~ red herring
 Clue check complete: 0 errors, 2 warnings, 0 dismissed
-warning: clue the-constables-silence is a red herring with no payoff: record the chapter that debunks it
-warning: clue the-burned-page is planted in the chapter before its reveal (chapter-03 -> chapter-04): late plant gives readers no time to notice it
+warning: clue the-constables-silence is a red herring with no payoff: record the chapter that debunks it [clue-herring-unresolved]
+warning: clue the-burned-page is planted in the chapter before its reveal (chapter-03 -> chapter-04): late plant gives readers no time to notice it [clue-late-plant]
 ```
 
 With no clues it prints `- None: add clues with story add clue "Name" --planted chapter-02 --payoff chapter-09`.
@@ -1468,8 +1470,8 @@ kael-voss: 9 lines, 76 words
   Sentence length 5.1, contractions 6.6 per 100 words, questions 7%, exclamations 0%
   Signature words: jumpy, good, looking, sera, soldiers
 Voice check complete: 0 errors, 2 warnings, 0 dismissed
-warning: kael-voss says "soldiers", which is in their voice-avoid list (chapter-01)
-warning: kael-voss does not say "reckon" from their voice-words list in 9 attributed lines of dialogue
+warning: kael-voss says "soldiers", which is in their voice-avoid list (chapter-01) [voice-avoid]
+warning: kael-voss does not say "reckon" from their voice-words list in 9 attributed lines of dialogue [voice-words-unused]
 ```
 
 With no attributed dialogue it prints `- None: tag dialogue with a character's name and a speech verb ("...," Mara said)`.
@@ -1501,7 +1503,7 @@ Ilsa: check
 Gull Haven: clear
 Brannoc: clear
 Names checked: 0 errors, 1 warnings, 0 dismissed
-warning: "Ilsa" looks like character ilse-varrow (Ilse Varrow)
+warning: "Ilsa" looks like character ilse-varrow (Ilse Varrow) [name-look-alike]
 ```
 
 In [`examples/the-last-ember`](../examples/the-last-ember/):
@@ -1517,8 +1519,8 @@ Marek: check
 Tamsin: clear
 Name check failed: 1 errors, 2 warnings, 0 dismissed
 error: "Sera" clashes with character sera-voss (Sera)
-warning: "Kaelan" looks like character kael-voss (Kael Voss)
-warning: "Marek" looks like character lord-maren (Lord Maren)
+warning: "Kaelan" looks like character kael-voss (Kael Voss) [name-look-alike]
+warning: "Marek" looks like character lord-maren (Lord Maren) [name-look-alike]
 ```
 
 ### diagram
@@ -2058,7 +2060,7 @@ Exported 1 chapters to ~/stories/the-last-ember/drafts/manuscript.md
 A manuscript written to the project root with `--out manuscript.md` is not part of the project model, so `validate` warns about it:
 
 ```text
-warning: manuscript.md is not part of the story project model and is ignored
+warning: manuscript.md is not part of the story project model and is ignored [stray-file]
 ```
 
 `export` fails with `No chapters found to export` on a project without chapters, and, like `build`, refuses two chapters with the same number or a matter file whose name is not kebab-case.
@@ -2132,7 +2134,7 @@ Built 1 chapters as metadata to ~/stories/the-last-ember/dist/the-last-ember.met
 
 $ story build --format twee
 Built 1 chapters as twee to ~/stories/the-last-ember/dist/the-last-ember.twee
-warning: story.md has no ifid, so the build derived 1E3BB0E5-139A-4964-98B4-217D50BEB2A4 from the story id; add ifid: 1E3BB0E5-139A-4964-98B4-217D50BEB2A4 to story.md to keep it if the title changes
+warning: story.md has no ifid, so the build derived 1E3BB0E5-139A-4964-98B4-217D50BEB2A4 from the story id; add ifid: 1E3BB0E5-139A-4964-98B4-217D50BEB2A4 to story.md to keep it if the title changes [derived-ifid]
 
 $ story build --format print --trim 7x10
 Unsupported trim size: 7x10. Supported sizes: 5x8, 5.25x8, 5.5x8.5, 6x9, a5
@@ -2214,6 +2216,315 @@ Unsupported synopsis length: 2. Supported pages: 1, 3
 ```
 
 The output is a scaffold. The [submission skill](../skills/submission/SKILL.md) turns it into a synopsis ready to send to agents.
+
+## Finding codes
+
+Every error and warning has a stable kebab-case code. Text output ends each warning line with it, `warning: chapters/chapter-01.md has 1 [TODO marker in its prose, ... [todo-markers]`, and `--json` gives it as each diagnostic's `code`. A [`severity`](#defaults-and-severity-from-storymd) entry in `story.md` names a warning by its code. Codes never change once released: a reworded message keeps its code, and a code is never reused for another rule.
+
+An error means the project is broken or a check failed, so it cannot be turned down: `severity` accepts only warning codes. A code can appear under more than one command, such as `unreachable-chapter`, which `links` reports and a Twee `build` repeats; an override applies wherever it is reported. `report`, `next`, and `doctor` run `validate`, `links`, and `continuity`, so they report those commands' codes.
+
+**Codes by command**
+
+- [Any command](#codes-any-command) · [validate](#codes-validate) · [links](#codes-links) · [continuity](#codes-continuity) · [series](#codes-series)
+- [prose](#codes-prose) · [pacing](#codes-pacing) · [clues](#codes-clues) · [voices](#codes-voices) · [names](#codes-names)
+- [context](#codes-context) · [compare](#codes-compare) · [build and export](#codes-build-and-export) · [add, rename, move, and remove](#codes-add-rename-move-and-remove) · [init and import](#codes-init-and-import) · [JSON failures](#codes-json-failures)
+
+### Codes: any command
+
+| Code | Level | Reported when |
+|---|---|---|
+| `unreadable-file` | error | A project file cannot be read or its frontmatter does not parse (and, under `series`, a linked book's file, named with the book's folder). Commands that need the file stop instead; `context` reports it as `context-file-skipped`. |
+
+### Codes: validate
+
+| Code | Level | Reported when |
+|---|---|---|
+| `missing-required-path` | error | A registry or folder every project has is missing. `story migrate` adds it. |
+| `windows-reserved-name` | warning | An entity file name (such as `con.md`) is reserved on Windows. |
+| `stray-file` | warning | A markdown file at the project root is not part of the project model. |
+| `nested-file` | warning | A markdown file sits in a subfolder of an entity folder, which the scan ignores. |
+| `symlinked-file` | warning | An entity file is a symlink, which the scan ignores. |
+| `interrupted-write` | warning | A temporary file from an interrupted write is left in the project. |
+| `stale-registry` | warning | A registry (`_index.md`) does not list a file. Run `story reindex`. |
+| `stale-word-count` | warning | A chapter's `word-count` is missing or differs from its prose. Run `story wordcount --write`. |
+| `todo-markers` | warning | Chapter prose has `[TODO` markers, which every build prints. |
+| `unclosed-comment` | warning | Chapter prose opens an HTML comment that never closes. |
+| `no-scene-records` | warning | A chapter has no scene records. |
+| `empty-chapter` | warning | A chapter has no prose yet, and the book is complete or the chapter claims to be written. |
+| `missing-field` | error | A required field, or a required key of a list entry, is missing or empty. |
+| `field-not-scalar` | error | A field that takes one value holds a list or mapping. |
+| `field-not-list` | error | A field that takes a list holds something else. |
+| `field-invalid-items` | error | A list holds items of the wrong shape, such as an empty string or a non-mapping. |
+| `field-not-integer` | error | A field that takes a whole number holds something else. |
+| `field-not-number` | error | A field that takes a number, such as `travel-hours`, holds something else. |
+| `field-not-boolean` | error | A field that takes `true` or `false` holds something else. |
+| `field-not-text` | error | A text field holds a number or boolean; quote it. |
+| `field-below-minimum` | error | A number is below its minimum, such as chapter `number: 0`. |
+| `unsupported-value` | error | A field holds a value outside its allowed set. |
+| `id-not-kebab` | error | A file name, id, or id reference is not kebab-case. |
+| `near-miss-key` | warning | A key is a near miss for a known one, such as `died_in` for `died-in`. |
+| `wrong-type` | error | A registry or project file has the wrong `type`. |
+| `story-id-mismatch` | error | A registry's `story` does not match the project's story id. |
+| `entry-not-mapping` | error | A list entry that must be a mapping (an exemption, a progression, a state entry) is not. |
+| `schema-too-new` | error | `story.md` uses a newer schema than this CLI knows. |
+| `schema-version-mismatch` | error | `story.md` `schema-version` is not the current version. Run `story migrate`. |
+| `invalid-book-number` | error | `story.md` `book-number` is not a number 0 or more. |
+| `invalid-ifid` | error | `story.md` `ifid` is not a version 4 UUID. |
+| `invalid-cover` | error | `story.md` `cover` is not an image inside the project. |
+| `invalid-date` | error | A date (`deadline`, `publication-date`, a progress session) is not a real `YYYY-MM-DD` day. |
+| `invalid-cli-config` | error | `story.md` `cli-defaults` or `severity` is invalid. See [Defaults and severity](#defaults-and-severity-from-storymd). |
+| `invalid-filename` | error | A chapter or scene file name does not follow `chapter-NN.md` or `{chapter}-scene-NN.md`. |
+| `filename-number-mismatch` | error | A chapter or scene number does not match its file name. |
+| `duplicate-chapter-number` | error | Two chapters share a number. |
+| `duplicate-scene-number` | error | Two scenes share a chapter and scene number. |
+| `unnumbered-without-title` | error | A chapter with `numbered: false` has no title to print. |
+| `invalid-choice` | error | A chapter `choices` entry has no text, bad text, or no target. |
+| `invalid-route-hours` | error | A location route's `hours` is not a positive number. |
+| `duplicate-route` | warning | A location lists more than one route to the same place. |
+| `deceased-without-died-in` | warning | A progression makes a character deceased without a matching `died-in`. |
+| `progression-fixed-field` | error | A progression changes a field that cannot change by chapter, such as `died-in`. |
+| `progression-list-field` | error | A progression changes a list field. |
+| `progression-duplicate` | error | Two progressions change the same field from the same chapter. |
+| `progression-out-of-order` | error | Progressions are not listed in story order. |
+| `duplicate-pass` | error | `revision-passes` lists a pass twice. |
+| `exemption-pattern-too-short` | error | A continuity exemption pattern is under 4 characters. |
+| `style-use-equals-avoid` | error | A style-sheet `preferred` entry uses and avoids the same word. |
+| `duplicate-session-date` | error | `progress.md` logs the same date twice. |
+| `research-no-sources` | warning | A verified research note lists no sources. |
+| `research-unsettled` | warning | A settled chapter relies on open or disputed research. |
+| `research-unreviewed` | warning | A research note carries risk, has no `reviewed-by`, and a settled chapter relies on it. |
+| `empty-matter` | warning | A matter page has no text and is left out of builds. |
+| `permission-pending` | warning | A matter page's permission is pending and the story is complete. |
+| `permission-no-rights-holder` | warning | A matter page's permission is granted but names no rights holder. |
+| `backslash-path` | warning | A `story.md` path (`follows`, `precedes`, `cover`) uses a backslash. |
+| `form-length-range` | warning | The target or finished length is outside the usual range for the story's `form`. |
+| `invalid-language` | error | `story.md` `language` is not a BCP 47 tag. |
+| `invalid-isbn` | error | `story.md` `isbn` is not a valid ISBN. |
+| `invalid-subject` | error | A `story.md` `subjects` entry is not a BISAC code. |
+| `too-many-keywords` | warning | `story.md` lists more keywords than most retailers accept. |
+| `todo-placeholder` | warning | A publishing field is still a `[TODO]` placeholder. |
+| `author-and-authors` | warning | `story.md` sets both `author` and `authors`. |
+
+### Codes: links
+
+`links` also reports `id-not-kebab` for an id reference that is not kebab-case.
+
+| Code | Level | Reported when |
+|---|---|---|
+| `missing-reference` | error | An id reference names a character, chapter, scene, or other entity that does not exist. |
+| `missing-backlink` | error | A relationship, location, or notable character has no matching link back. |
+| `backlink-type-mismatch` | error | A relationship's backlink has the wrong type. |
+| `legacy-backlink-type` | warning | A relationship's backlink uses a pairing from before story-skills 0.10.0. |
+| `route-to-self` | error | A location route points at the location itself. |
+| `broken-link` | error | A markdown link points at a file that does not exist. |
+| `link-backslash` | error | A markdown link uses a backslash. |
+| `link-not-kebab` | error | A markdown link's file name is not kebab-case. |
+| `link-outside-project` | error | A markdown link resolves outside the project. |
+| `unreachable-chapter` | warning | In a branching book, no choice path from the first chapter reaches a chapter. |
+| `series-link-backslash` | error | A `follows` or `precedes` link uses a backslash. |
+| `series-link-self` | error | A series link points at this book. |
+| `series-link-unreadable` | error | A linked book's `story.md` cannot be read. |
+| `series-link-not-project` | error | A linked folder has no `story.md`. |
+| `series-link-not-sibling` | error | A linked book is not a sibling folder of this one. |
+| `series-missing-backlink` | error | A linked book does not link back. |
+| `series-link-other-series` | error | A linked book belongs to another series. |
+
+### Codes: continuity
+
+| Code | Level | Reported when |
+|---|---|---|
+| `revived-without-death` | error | A character has `revived-in` but no `died-in`. |
+| `died-in-missing-chapter` | error | `died-in` names a chapter that does not exist. |
+| `revived-in-missing-chapter` | error | `revived-in` names a chapter that does not exist. |
+| `revival-before-death` | error | A character is revived no later than they die. |
+| `death-status-mismatch` | error | A character has a written `died-in` but is not `status: deceased`. |
+| `revival-status-mismatch` | error | A revived character is still `status: deceased`. |
+| `posthumous-appearance` | error | A chapter or scene lists a character after their death. |
+| `deceased-in-cast` | warning | A chapter or scene lists a character who died before the story. |
+| `pov-not-in-cast` | warning | A POV character is not in the chapter or scene's `characters`. |
+| `pov-scene-mismatch` | warning | A chapter's POV tells none of its scenes. |
+| `scene-cast-not-in-chapter` | warning | A scene lists a character its chapter does not. |
+| `scene-location-not-in-chapter` | warning | A scene is set somewhere its chapter does not list. |
+| `cut-character-in-cast` | warning | A chapter or scene lists a character with `status: cut`. |
+| `cut-character-in-arc` | warning | An arc lists a character with `status: cut`. |
+| `cut-character-relationship` | warning | A relationship joins a cut character to one who is not cut. |
+| `chapter-numbering-start` | warning | Chapter numbering does not start at 1. |
+| `chapter-numbering-gap` | warning | Chapter numbering skips a number. |
+| `promise-payoff-before-plant` | error | A promise pays off before it is planted. |
+| `promise-payoff-missing` | error | A paid-off promise has no payoff chapter. |
+| `promise-plant-missing` | error | A planted promise has no planted chapter. |
+| `promise-stale-planned` | warning | A promise is still `planned` though its planted chapter has prose. |
+| `promise-payoff-passed` | warning | A planted promise's payoff chapter has prose and the promise is still `planted`. |
+| `promise-unpaid` | warning | A promise was planted three or more chapters ago and has no payoff yet. |
+| `question-resolved-before-introduced` | error | A question resolves before it is introduced. |
+| `question-resolution-missing` | error | An answered or resolved question has no resolved chapter. |
+| `question-open-but-resolved` | error | An open question records a resolved chapter. |
+| `clue-payoff-before-plant` | error | A clue pays off before it is planted. |
+| `clue-payoff-missing` | error | A paid-off clue has no payoff chapter. |
+| `clue-plant-missing` | error | A planted clue has no plant chapter. |
+| `clue-stale-planned` | warning | A clue is still `planned` though its planted chapter has prose. |
+| `clue-payoff-passed` | warning | A planted clue's payoff chapter has prose and the clue is still `planted`. |
+| `clue-unpaid` | warning | A clue was planted three or more chapters ago and has no payoff yet. |
+| `complete-with-open-promise` | error | The story is complete but a promise is still planned or planted. |
+| `complete-with-open-question` | error | The story is complete but a question is still open. |
+| `complete-with-open-clue` | error | The story is complete but a clue is still planned or planted. |
+| `current-chapter-ahead` | error | `continuity/state.md` `current-chapter` is past the last chapter. |
+| `current-chapter-behind` | warning | `current-chapter` is behind the latest drafted chapter. |
+| `state-missing-character` | error | A state entry names a character that does not exist. |
+| `state-missing-location` | error | A state entry names a location that does not exist. |
+| `state-missing-artifact` | error | An `object-state` entry names an artifact that does not exist. |
+| `state-missing-owner` | error | An `object-state` owner is neither a character nor a faction. |
+| `state-missing-chapter` | error | A `learned-in` or `since` chapter does not exist. |
+| `state-missing-knows` | error | A `knowledge-state` entry has no `knows`. |
+| `state-fact-not-kebab` | error | A `knowledge-state` `fact` id is not kebab-case. |
+| `state-duplicate-fact` | error | A character learns the same `fact` twice. |
+| `state-duplicate-character` | warning | `character-state` repeats a character. |
+| `state-duplicate-artifact` | warning | `object-state` repeats an artifact for the same `since` chapter. |
+| `state-status-conflict` | warning | An artifact's latest `object-state` status differs from its file. |
+| `posthumous-learning` | error | A character learns something after their death. |
+| `deceased-learning` | warning | A character who died before the story learns something. |
+| `learner-not-in-cast` | warning | A character learns something in a chapter that does not list them. |
+| `knowledge-not-recorded` | warning | A scene records learning that `knowledge-state` does not. |
+| `state-tracks-dead-character` | warning | `character-state` tracks a character who is dead at `current-chapter`. |
+| `state-location-drift` | warning | `character-state` puts a character somewhere their last scene does not. |
+| `object-not-recorded` | warning | A scene changes an artifact that has no `object-state` entry. |
+| `state-object-drift` | warning | An artifact's `object-state` differs from the last scene that changed it. |
+| `gone-artifact-used` | error | A scene uses an artifact after it was destroyed or lost. |
+| `gone-artifact-mentioned` | error | A chapter or scene mentions an artifact after it was destroyed or lost. |
+| `malformed-date` | warning | A chapter or scene `date` is not a real date. |
+| `malformed-time` | warning | A chapter or scene `time` is not a time or named part of the day. |
+| `negative-travel-hours` | warning | A scene's `travel-hours` is negative. |
+| `travel-hours-undated` | warning | A scene has `travel-hours` but no date. |
+| `clock-backward` | warning | A chapter or scene is dated before the story's latest moment so far. |
+| `travel-too-fast` | error | Less time passes than a scene's `travel-hours` needs. |
+| `route-same-time` | error | A character is at two places at the same moment. |
+| `route-too-fast` | error | A character moves between places faster than the fastest route allows. |
+
+### Codes: series
+
+`series` also reports `invalid-book-number`, `series-link-unreadable`, `series-link-not-project`, and `series-link-not-sibling`.
+
+| Code | Level | Reported when |
+|---|---|---|
+| `series-link-outside` | error | A series link points outside the folder that holds the books. |
+| `series-too-many-books` | error | Series links reach more books than the limit. |
+| `series-conflict` | error | Linked books name different series. |
+| `series-id-missing` | warning | Some linked books set no `series` id. |
+| `series-title-mismatch` | warning | Linked books set different `series-title` values. |
+| `series-cycle` | error | `follows` and `precedes` make a cycle. |
+| `duplicate-book-number` | error | Two books share a `book-number`. |
+| `canon-name-mismatch` | warning | A shared entity's name differs from an earlier book. |
+| `canon-pronunciation-mismatch` | warning | A shared entity's pronunciation differs from an earlier book. |
+| `canon-death-status` | error | A character who died in an earlier book is not deceased. |
+| `canon-posthumous-appearance` | error | A chapter or scene lists a character who died in an earlier book. |
+| `canon-posthumous-learning` | error | A character who died in an earlier book learns something. |
+| `canon-destroyed-status` | warning | An artifact destroyed in an earlier book has another status. |
+| `canon-destroyed-artifact-used` | error | A scene uses an artifact destroyed in an earlier book. |
+| `canon-fact-relearned` | error | A character learns a fact they knew in an earlier book. |
+
+### Codes: prose
+
+| Code | Level | Reported when |
+|---|---|---|
+| `prose-filter-words` | warning | Filter words per 1,000 narration words exceed `--max-filter-words`. |
+| `prose-adverbs` | warning | `-ly` adverbs per 1,000 narration words exceed `--max-adverbs`. |
+| `prose-bookisms` | warning | Said-bookism dialogue tags exceed `--max-bookisms`. |
+| `prose-avoided-spelling` | warning | A chapter uses a spelling `style-sheet.md` avoids. |
+| `prose-uniform-sentences` | warning | Sentence lengths barely vary. |
+| `prose-similar-names` | warning | Two characters have similar first names. |
+
+### Codes: pacing
+
+| Code | Level | Reported when |
+|---|---|---|
+| `pacing-no-hook` | warning | A drafted chapter records no `hook`. |
+| `pacing-no-sequel` | warning | Four or more scene units run with no sequel. |
+| `pacing-easy-wins` | warning | Three or more scenes in a row end in an outright yes. |
+| `pacing-resolution-run` | warning | Three or more chapters in a row end on resolution. |
+| `pacing-long-chapter` | warning | A chapter runs over twice the median chapter length. |
+| `pacing-short-chapter` | warning | A chapter runs under half the median chapter length. |
+
+### Codes: clues
+
+| Code | Level | Reported when |
+|---|---|---|
+| `clue-unplanted` | warning | A clue is revealed but never planted. |
+| `clue-late-plant` | warning | A clue is planted in the same chapter as its reveal, or the one before. |
+| `clue-no-characters` | warning | A clue lists no characters who could notice it. |
+| `clue-herring-unresolved` | warning | A red herring has no payoff chapter that debunks it. |
+| `clue-none-delayed` | warning | Three or more genuine clues and none is `significance-delayed`. |
+
+### Codes: voices
+
+| Code | Level | Reported when |
+|---|---|---|
+| `voice-avoid` | warning | A character says a phrase from their `voice-avoid` list. |
+| `voice-words-unused` | warning | A character never says a phrase from their `voice-words` list. |
+| `voice-sound-alike` | warning | Two characters' dialogue fingerprints are close. |
+
+### Codes: names
+
+| Code | Level | Reported when |
+|---|---|---|
+| `name-clash` | error | A candidate name is already an existing name or alias. |
+| `name-look-alike` | warning | A candidate name looks like an existing one. |
+| `name-shared-initial` | warning | A candidate shares a first initial with a major character. |
+
+### Codes: context
+
+| Code | Level | Reported when |
+|---|---|---|
+| `context-file-skipped` | warning | A file the context would draw on fails to parse and is left out. |
+
+### Codes: compare
+
+| Code | Level | Reported when |
+|---|---|---|
+| `story-missing-at-ref` | warning | `story.md` does not exist at the `--ref` compared against. |
+
+### Codes: build and export
+
+`build` and `export` also report `empty-chapter`, and a Twee build `unreachable-chapter`.
+
+| Code | Level | Reported when |
+|---|---|---|
+| `derived-ifid` | warning | A Twee build derives the IFID because `story.md` sets none. |
+| `scene-outside-book` | warning | A Fountain build leaves out a scene whose chapter is not in the book. |
+| `scene-no-location` | warning | A Fountain scene has no location. |
+| `scene-unknown-location` | warning | A Fountain scene names a location with no record. |
+| `chapter-no-scenes` | warning | A Fountain build has chapters with no scene records. |
+| `scene-no-setting` | warning | A Fountain build has locations with no interior or exterior setting. |
+
+### Codes: add, rename, move, and remove
+
+| Code | Level | Reported when |
+|---|---|---|
+| `unknown-reference` | warning | `add` records an id that does not exist yet. |
+| `adopted-references` | warning | `rename` or `move` gives an entity an id the project already referenced. |
+| `linked-book-id` | warning | `rename` changes an id a linked book also defines. |
+| `choices-dropped` | warning | `remove` dropped chapter choices that led to the removed chapter. |
+| `leftover-references` | warning | `remove` left mentions of the removed entity in prose links or ids. |
+| `stale-exemption` | warning | `remove` left continuity exemption patterns that name the removed entity. |
+
+### Codes: init and import
+
+These commands create a project, so no `severity` entry applies to them.
+
+| Code | Level | Reported when |
+|---|---|---|
+| `kept-story-options` | warning | `--force` kept an existing `story.md`, so some options were not applied. |
+| `unsplit-chapter-lines` | warning | `import` found chapter lines it did not split on. |
+
+### Codes: JSON failures
+
+With `--json`, a command that stops before producing a result reports one error diagnostic coded by why it stopped, matching the [exit code](#output-streams-and-exit-codes).
+
+| Code | Level | Reported when |
+|---|---|---|
+| `usage-error` | error | The command line was wrong (exit `2`). |
+| `unusable-project` | error | The folder is not a usable story project (exit `3`). |
+| `write-refused` | error | A write was refused or failed (exit `4`). |
+| `command-failed` | error | Any other failure (exit `1`). |
 
 ## Option index
 

@@ -105,9 +105,9 @@ error: chapters/chapter-04.md lists edran-vale, who died in chapter-02; move pos
 error: continuity/promises/the-broken-compass.md pays off in chapter-02 before it is planted in chapter-03
 error: continuity/questions/who-burned-the-mill.md resolves in chapter-02 before it is introduced in chapter-03
 error: continuity/state.md knowledge-state[0] references missing chapter chapter-05
-warning: chapters/chapter-03.md POV character nessa-thorn is not listed in characters
-warning: continuity/promises/the-sealed-letter.md was planted in chapter-01, 3 chapters ago, and has no payoff yet
-warning: continuity/state.md object-state[0] status active conflicts with worldbuilding/artifacts/vales-compass.md status destroyed
+warning: chapters/chapter-03.md POV character nessa-thorn is not listed in characters [pov-not-in-cast]
+warning: continuity/promises/the-sealed-letter.md was planted in chapter-01, 3 chapters ago, and has no payoff yet [promise-unpaid]
+warning: continuity/state.md object-state[0] status active conflicts with worldbuilding/artifacts/vales-compass.md status destroyed [state-status-conflict]
 exit=1
 ```
 
@@ -143,15 +143,16 @@ The check and analysis commands (`validate`, `links`, `continuity`, `series`, `r
     {
       "severity": "warning",
       "file": "chapters/chapter-01.md",
-      "message": "chapters/chapter-01.md declares 1 words but contains 993",
-      "code": "validate"
+      "message": "chapters/chapter-01.md declares 900 words but contains 993",
+      "code": "stale-word-count",
+      "check": "validate"
     }
   ],
   "writes": []
 }
 ```
 
-`ok` is `true` exactly when the command exits `0`, so a job can read either. `diagnostics` holds every finding with its severity, file, message, and the check that raised it (`code`). A command that cannot run, such as one pointed at a folder without `story.md`, still prints an envelope, with `ok: false`, `data: null`, and the error as its diagnostic, and exits with the same code as a text run (`2`, `3`, or `4`; see [Exit codes](#exit-codes)). [`schemas/result.schema.json`](../schemas/result.schema.json) describes the envelope and each command's `data`; `apiVersion` changes when a field is renamed, removed, or retyped. The [CLI reference](cli-reference.md#json-output) has the full rules.
+`ok` is `true` exactly when the command exits `0`, so a job can read either. `diagnostics` holds every finding with its severity, file, message, rule (`code`, from [Finding codes](cli-reference.md#finding-codes)), and the check that raised it (`check`). A command that cannot run, such as one pointed at a folder without `story.md`, still prints an envelope, with `ok: false`, `data: null`, and the error as its diagnostic, and exits with the same code as a text run (`2`, `3`, or `4`; see [Exit codes](#exit-codes)). [`schemas/result.schema.json`](../schemas/result.schema.json) describes the envelope and each command's `data`; `apiVersion` changes when a field is renamed, removed, or retyped. The [CLI reference](cli-reference.md#json-output) has the full rules.
 
 For example, to fail a job on any warning with [`jq`](https://jqlang.github.io/jq/):
 
@@ -160,7 +161,7 @@ story validate . --json > validate.json
 jq -e '[.diagnostics[] | select(.severity == "warning")] | length == 0' validate.json
 ```
 
-`jq -e` exits 1 when the expression is false, and `story validate` has already exited 1 if there were errors.
+`jq -e` exits 1 when the expression is false, and `story validate` has already exited 1 if there were errors. Filter on `code` to fail on one kind of warning, such as `select(.code == "todo-markers")`, or promote it in `story.md` as below.
 
 ### Failing on warnings
 
@@ -168,7 +169,7 @@ Warnings are advisory, so a project can pass with stale data. For example, a cha
 
 ```text
 Project is valid: 0 errors, 1 warnings, 0 dismissed
-warning: chapters/chapter-01.md declares 1 words but contains 993
+warning: chapters/chapter-01.md declares 900 words but contains 993 [stale-word-count]
 ```
 
 To fail on particular warnings, promote them to errors in `story.md`. The setting lives with the manuscript, so a local run and CI fail the same way:
@@ -190,7 +191,7 @@ error: chapters/chapter-01.md declares 900 words but contains 993 [stale-word-co
 exit=1
 ```
 
-A promoted warning ends with its code in brackets. `level: off` does the opposite and reports a warning as `dismissed:`. Only the warnings listed under [CLI defaults and severity](project-format.md#cli-defaults-and-severity) have codes: word counts, registries, and `[TODO` markers from `validate`, and the thresholds and style-sheet spellings from `prose`, plus a few from `pacing`, `clues`, and `voices`.
+Every warning line ends with its code in brackets, so the name to put in `severity` is on the line you want to change. `level: off` does the opposite and reports a warning as `dismissed:`. Any warning can be overridden, in whichever command reports it; errors cannot. The [CLI reference](cli-reference.md#finding-codes) lists every code, by command.
 
 The same place holds default flags, such as stricter `prose` thresholds for every run, local or in CI. A flag on the command line still wins:
 

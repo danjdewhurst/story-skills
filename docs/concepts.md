@@ -89,8 +89,8 @@ The files fall into three groups:
 
 ```text
 Project is valid: 0 errors, 2 warnings, 0 dismissed
-warning: notes.md is not part of the story project model and is ignored
-warning: characters/drafts/old-kael.md is nested inside an entity directory and is ignored
+warning: notes.md is not part of the story project model and is ignored [stray-file]
+warning: characters/drafts/old-kael.md is nested inside an entity directory and is ignored [nested-file]
 ```
 
 Some skills keep working notes in their own folders, such as `feedback/`, `submission/`, `publishing/`, and `adaptations/`. The CLI ignores those folders without a warning; see [Files the tools ignore](project-format.md#files-the-tools-ignore).
@@ -245,7 +245,7 @@ story validate .
 
 ```text
 Project is valid: 0 errors, 1 warnings, 0 dismissed
-warning: characters/_index.md does not list characters/orrin-hale.md; run story reindex
+warning: characters/_index.md does not list characters/orrin-hale.md; run story reindex [stale-registry]
 ```
 
 ```shell
@@ -306,7 +306,7 @@ story validate .
 
 ```text
 Project is valid: 0 errors, 1 warnings, 0 dismissed
-warning: chapters/chapter-01.md declares 993 words but contains 1005
+warning: chapters/chapter-01.md declares 993 words but contains 1005 [stale-word-count]
 ```
 
 ```shell

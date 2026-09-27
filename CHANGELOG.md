@@ -22,6 +22,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - `story build --format fountain` writes a Fountain screenplay scene skeleton from the scene records (title page, a section per chapter, and one `INT./EXT.` scene heading per scene with source and cast notes, no prose), and an optional `setting` field (`interior`, `exterior`, or `both`) on locations and scenes supplies the `INT.` or `EXT.`. ([#272](https://github.com/danjdewhurst/story-skills/pull/272))
 - Branching stories: optional `choices` (`text`, `to`) on chapters and `ifid` in `story.md`, checked by `story validate` and `story links` (choices to missing chapters, chapters no choice path reaches) and kept current by `story move` and `remove`, and `story build --format twee` writes them as a Twine story in Twee 3 with a stable IFID. ([#277](https://github.com/danjdewhurst/story-skills/pull/277))
 - `story context <chapter-or-scene-id>` packs the drafting context for a chapter or scene (outline and cast, `story.md` essentials and style-sheet rules, the POV character's knowledge, state, and progressions, character cards, locations, open promises, clues, and questions, and recent scene summaries) into an estimated token budget (`--budget`, `--scenes`, `--json`), with nothing from later chapters. `chapter-writing` and the draft-next-chapter workflow use it. ([#275](https://github.com/danjdewhurst/story-skills/pull/275))
+- Every error and warning has a stable code, listed by command under Finding codes in `docs/cli-reference.md`. Text output ends each `warning:` line with its code in brackets, such as `[stale-word-count]`, so the name to put in `story.md` `severity` is on the line. `severity` now takes any warning code (the eleven codes it took before keep their names) and applies wherever that warning is reported: `links`, `continuity`, `names`, `series`, `timeline`, `progress`, `compare`, and `context` as well as the checks that had codes, the checks `report`, `next`, and `doctor` summarise, and the warnings `build`, `export`, `add`, `rename`, `move`, and `remove` print, which exit 1 when one is promoted. An entry naming an error code is rejected: errors cannot be demoted or turned off. ([#278](https://github.com/danjdewhurst/story-skills/issues/278))
 
 ### Changed
 
@@ -29,9 +30,11 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - `bun run release` refuses to run while `CHANGELOG.md` has no entries under `Unreleased`, and moves those entries into a dated section for the new version in the release commit.
 - `bun run check:metadata` fails when `CHANGELOG.md` has no section for the current package version.
 - The npm package now includes `CHANGELOG.md`.
+- `--json` diagnostics: `code` is now the finding's rule code (such as `missing-reference`) instead of the check that raised it, which moves to a new `check` field; `file` comes from the finding rather than the start of its message; and a command that fails before producing a result is coded `usage-error`, `unusable-project`, `write-refused`, or `command-failed`. `--json` has not been in a release, so `apiVersion` stays `story/v1`; a script written against an unreleased build that read `code` as the check name should read `check`. ([#278](https://github.com/danjdewhurst/story-skills/issues/278))
 
 ### Fixed
 
+- `story next` counts a chapter with no `word-count`, or one declaring `1 word`, only under its word-count action, not also as a validation warning to review. ([#278](https://github.com/danjdewhurst/story-skills/issues/278))
 - `story build --out` and `story init --dir` pointing at a folder the file system will not create (one under `/proc`) exit `4` naming that folder instead of hanging at 100% CPU. ([#279](https://github.com/danjdewhurst/story-skills/issues/279))
 
 ## [0.15.0] - 2026-09-27

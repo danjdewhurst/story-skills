@@ -8,7 +8,7 @@ If you want to use Story Skills rather than change it, start with [Getting start
 
 - [Setting up](#setting-up)
 - [Repository layout](#repository-layout)
-- [CLI architecture](#cli-architecture), including [adding a command](#adding-a-command) and [adding a flag](#adding-a-flag)
+- [CLI architecture](#cli-architecture), including [raising a finding](#raising-a-finding), [adding a command](#adding-a-command), and [adding a flag](#adding-a-flag)
 - [The bundled fallback](#the-bundled-fallback)
 - [Tests](#tests) and the [coverage gate](#coverage-gate)
 - [Examples check](#examples-check), [Schema](#schema), and [Metadata check](#metadata-check)
@@ -113,9 +113,10 @@ flowchart LR
 | --- | --- |
 | `bin/story.js` | Entry point. Passes `process.argv`, `cwd`, `stdout`, and `stderr` to `runCli` and sets `process.exitCode`. |
 | `src/cli.js` | Builds `HELP` and per-command help from the registries, handles `--help` and `--version`, looks up the command (suggesting a near miss for an unknown one), rejects `--path` on commands that create projects, resolves the project root, and turns thrown errors into a message on stderr and the exit code `exitCodeFor` picks, rewording Node file-system errors as `Cannot <action> <path>: <reason>`. |
-| `src/commands.js` | The `COMMANDS` registry: every command's name, usage, help summary, project-path mode, and `run` function, in help order (the analysis commands `diagram`, `names`, `pacing`, `clues`, and `voices` sit after `prose`; `passes` sits after `series`). Also the internal `reportResult` helper, which writes the standard `N errors, N warnings, N dismissed` summary and each finding to stderr and returns the exit code. Commands with coded warnings pass their result through `applySeverity` first, so text and `--json` output agree. |
-| `src/config.js` | The optional `cli-defaults` and `severity` fields of `story.md`: parsing and validation (called from `validate` and from `runCli`), `applyDefaults` (fills in flags the command line did not give), `applySeverity`, and `FINDING_CODES`, the warning codes `severity` can name, each tied to one command and matched against the finding text. Imports `COMMANDS`, which makes a module cycle through `story.js`, so it reads `COMMANDS` only inside functions. |
-| `src/json.js` | The `--json` result envelope: `writeJsonResult(io, { command, ok, data, diagnostics, writes })` prints it and returns the exit code: `0` when `ok` is true, else the `exitCode` it was given from `EXIT_CODES` (default `findings`), and `diagnosticsFrom(result, code)` turns a result's errors, warnings, and dismissed findings into diagnostics. `src/cli.js` uses it to report a usage error or thrown error as JSON when `--json` is on, passing the same code a text run would exit with. |
+| `src/commands.js` | The `COMMANDS` registry: every command's name, usage, help summary, project-path mode, and `run` function, in help order (the analysis commands `diagram`, `names`, `pacing`, `clues`, and `voices` sit after `prose`; `passes` sits after `series`). Also the internal `reportResult` helper, which writes the standard `N errors, N warnings, N dismissed` summary and each finding to stderr (a warning with its code in brackets) and returns the exit code, and `writeFindings`, which does the same without the summary for the warnings `build`, `export`, `context`, and the entity commands print after their output. Every command that reports findings passes them through `applySeverity` first, so text and `--json` output agree. |
+| `src/config.js` | The optional `cli-defaults` and `severity` fields of `story.md`: parsing and validation (called from `validate` and from `runCli`), `applyDefaults` (fills in flags the command line did not give), and `applySeverity`, which moves the warnings a `severity` entry names by code. `severity` accepts any warning code in `FINDING_CODES` and rejects an error code. Imports `COMMANDS`, which makes a module cycle through `story.js`, so it reads `COMMANDS` only inside functions. |
+| `src/findings.js` | `err(code, message, file)` and `warn(...)`, which build the `{ code, message, file }` finding every check raises, and `FINDING_CODES`, every code with its level. See [Raising a finding](#raising-a-finding). |
+| `src/json.js` | The `--json` result envelope: `writeJsonResult(io, { command, ok, data, diagnostics, writes })` prints it and returns the exit code: `0` when `ok` is true, else the `exitCode` it was given from `EXIT_CODES` (default `findings`), and `diagnosticsFrom(result, check)` turns a result's errors, warnings, and dismissed findings into diagnostics, taking `code` and `file` from each finding. `src/cli.js` uses `failureDiagnostic` to report a usage error or thrown error as JSON when `--json` is on, coded by the exit code a text run would give. |
 | `src/options.js` | The `OPTIONS` registry, `parseArgs`, `formatOptionsHelp`, and `isTruthy`. Includes the flags for `init --form`, `build --trim`, `passes --init` / `--start` / `--done`, `add scene --outcome`, `add chapter --hook`, `add clue --red-herring`, and `add research --accuracy` / `--confidence` / `--method` / `--risk`. |
 | `src/exit-codes.js` | `EXIT_CODES` (`ok` 0, `findings` 1, `usage` 2, `project` 3, `refused` 4) and the error constructors that carry them: `usageError`, `projectError`, and `refusedError`. Throw one of these rather than a plain `Error` so the CLI exits with the right code; `withExitCode` and `withDefaultExitCode` tag an error raised during a write, and `exitCodeFor` maps any error to a code (a raw file-system error from a write is `refused`, from a read `project`, and anything untagged `findings`). |
 | `src/story.js` | The bulk of the CLI: `scanProject`, validation, link checks, reindexing, word counts, `add` / `rename` / `move` / `remove`, migration, reports, export, and synopsis. It also holds the file-reading wrappers for the newer commands (`clueReport`, `diagramProject`, `namesReport`, `pacingReport`, `projectPasses`, `voicesReport`) and `buildBook`, which assembles the manuscript with `manuscriptParts` and hands each format to the output modules below. |
@@ -149,7 +150,7 @@ flowchart LR
 
 Most commands follow the same pattern. A function in `src/story.js` takes the project root, calls `scanProject(root)` to read every entity file into one in-memory project object, and passes that object to a pure function in a feature module. For example, `checkProjectContinuity(root)` is `checkContinuity(scanProject(root))`. What happens next depends on the kind of command:
 
-- Check commands such as `validate`, `links`, and `continuity` get back `{ ok, errors, warnings }` (plus `dismissed` for continuity) and hand it to `reportResult`.
+- Check commands such as `validate`, `links`, and `continuity` get back `{ ok, errors, warnings }` (plus `dismissed` for continuity), where each error and warning is a finding (see [Raising a finding](#raising-a-finding)), and hand it to `reportResult`.
 - Report commands (`compare`, `progress`, `timeline`, `prose`, `voices`, `pacing`, `clues`, `names`, and `series`) pass their result to a `format*` function from the feature module and write the text to stdout, then hand the same result to `reportResult` for the stderr summary and exit code.
 
 - `diagram` prints Mermaid source to stdout, or writes it with `--out` once the scan is clean. `passes` prints the pass list, rewrites only the `revision-passes` entry in `story.md` when asked to change it, and exits non-zero only when it refuses a change (2 for a pass name that is not kebab-case).
@@ -157,6 +158,20 @@ Most commands follow the same pattern. A function in `src/story.js` takes the pr
 Keep new analysis code in that shape: pure functions over the scanned project, with file I/O left to `story.js`. The output modules (`html.js`, `narration.js`, `fountain.js`, `twee.js`, `publishing.js`, `diagram.js`) follow the same rule: they return strings, and `story.js` writes them. `packaging.js` is the exception, because a ZIP is bytes rather than text: it takes the manuscript and writes the file itself, through the same `writeFile`.
 
 For what the commands do from a user's point of view, see the [CLI reference](cli-reference.md). For the files they read and write, see the [Project format reference](project-format.md).
+
+### Raising a finding
+
+Every error and warning is a finding, `{ code, message, file }`, built where the rule is checked with `err` or `warn` from [`src/findings.js`](../src/findings.js):
+
+```js
+errors.push(err("missing-reference", `${label} references missing chapter ${id}`, label));
+```
+
+- `code` is a stable kebab-case name. `story.md` `severity` entries and `--json` consumers name it, so a code is never renamed or reused for another rule; reword the message freely instead. Pass it as a string literal (a condition choosing between two literals is fine), so the codes can be found in the source.
+- `message` is the text printed after `error:` or `warning:`. Text output adds ` [code]` after a warning.
+- `file` is the project file the finding is about, relative to the project root, or `null`. Never parse it back out of the message.
+
+A new code needs an entry in `FINDING_CODES` with its level, a row in the command's table under [Finding codes](cli-reference.md#finding-codes), and the schemas' code lists: `$defs/diagnostic` `code` in `schemas/result.schema.json`, and, for a warning, the `severity` `warning` enum in `schemas/story.schema.json`. `test/finding-codes.test.js` fails when a code is raised but not listed or documented, listed but never raised, documented at the wrong level, or missing from a schema. Reuse an existing code when the rule is the same (`missing-field`, `id-not-kebab`, `unreadable-file`).
 
 ### Writes stay inside the project
 

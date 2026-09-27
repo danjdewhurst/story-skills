@@ -81,9 +81,9 @@ error: chapters/chapter-04.md lists edran-vale, who died in chapter-02; move pos
 error: continuity/promises/the-broken-compass.md pays off in chapter-02 before it is planted in chapter-03
 error: continuity/questions/who-burned-the-mill.md resolves in chapter-02 before it is introduced in chapter-03
 error: continuity/state.md knowledge-state[0] references missing chapter chapter-05
-warning: chapters/chapter-03.md POV character nessa-thorn is not listed in characters
-warning: continuity/promises/the-sealed-letter.md was planted in chapter-01, 3 chapters ago, and has no payoff yet
-warning: continuity/state.md object-state[0] status active conflicts with worldbuilding/artifacts/vales-compass.md status destroyed
+warning: chapters/chapter-03.md POV character nessa-thorn is not listed in characters [pov-not-in-cast]
+warning: continuity/promises/the-sealed-letter.md was planted in chapter-01, 3 chapters ago, and has no payoff yet [promise-unpaid]
+warning: continuity/state.md object-state[0] status active conflicts with worldbuilding/artifacts/vales-compass.md status destroyed [state-status-conflict]
 ```
 
 Every finding is exact, file-addressed, and reproducible, and CI asserts this output on every commit. Intentional flashbacks and posthumous appearances stay legal through the chapter `mentions` field, and findings listed in `continuity/exemptions.md` are reported as dismissed. `story doctor` and `story next` fold the same checks into prioritized repair actions.
