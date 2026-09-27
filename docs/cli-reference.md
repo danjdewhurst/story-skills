@@ -734,7 +734,7 @@ These commands read the project and never change story files. The one exception 
 story continuity [path]
 ```
 
-Runs the deterministic continuity engine over frontmatter: characters appearing after they die, promises and clues paid off before they are planted, questions resolved before they are introduced, planted setups with no payoff, POV characters missing from a chapter's cast or from all of its scenes, `status: cut` characters still listed in a cast, arc, or relationship, destroyed or lost artifacts used later, impossible clock and travel times (including journeys faster than the shortest path through location `routes`, and a character at two different places at the same exact time), and references in `continuity/state.md`. Findings matching an entry in `continuity/exemptions.md` are reported as `dismissed` and do not fail the run.
+Runs the deterministic continuity engine over frontmatter: characters appearing after they die (by `died-in`, or by a status [progression](project-format.md#progressions) to `deceased`, resolved in story order), status progressions that contradict `died-in` or `revived-in`, promises and clues paid off before they are planted, questions resolved before they are introduced, planted setups with no payoff, POV characters missing from a chapter's cast or from all of its scenes, `status: cut` characters still listed in a cast, arc, or relationship, destroyed or lost artifacts used later, impossible clock and travel times (including journeys faster than the shortest path through location `routes`, and a character at two different places at the same exact time), and references in `continuity/state.md`. Findings matching an entry in `continuity/exemptions.md` are reported as `dismissed` and do not fail the run.
 
 Using a copy of [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/), which is broken on purpose:
 
@@ -2342,6 +2342,8 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `revival-status-mismatch` | error | A revived character is still `status: deceased`. |
 | `posthumous-appearance` | error | A chapter or scene lists a character after their death. |
 | `deceased-in-cast` | warning | A chapter or scene lists a character who died before the story. |
+| `progression-deceased-in-cast` | warning | A chapter or scene lists a character, with no `died-in`, after a progression makes them `deceased`. |
+| `progression-death-conflict` | warning | A status progression contradicts `died-in` or `revived-in`: it sets another status while the character is dead, or leaves them `deceased` at the revival. |
 | `pov-not-in-cast` | warning | A POV character is not in the chapter or scene's `characters`. |
 | `pov-scene-mismatch` | warning | A chapter's POV tells none of its scenes. |
 | `scene-cast-not-in-chapter` | warning | A scene lists a character its chapter does not. |
@@ -2384,6 +2386,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `state-status-conflict` | warning | An artifact's latest `object-state` status differs from its file. |
 | `posthumous-learning` | error | A character learns something after their death. |
 | `deceased-learning` | warning | A character who died before the story learns something. |
+| `progression-deceased-learning` | warning | A character, with no `died-in`, learns something after a progression makes them `deceased`. |
 | `learner-not-in-cast` | warning | A character learns something in a chapter that does not list them. |
 | `knowledge-not-recorded` | warning | A scene records learning that `knowledge-state` does not. |
 | `state-tracks-dead-character` | warning | `character-state` tracks a character who is dead at `current-chapter`. |

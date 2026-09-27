@@ -16,7 +16,7 @@ For flags and exit codes of every command, see the [CLI reference](cli-reference
 
 - [At a glance](#at-a-glance)
 - [Find your message](#find-your-message)
-- [Story continuity](#story-continuity): [how findings are reported](#how-findings-are-reported), [deaths](#deaths-and-posthumous-appearances), [casts](#casts-and-locations), [promises, questions, and clues](#promises-questions-and-clues), [state](#continuity-state), [prop custody](#prop-custody), [clock](#clock-and-travel-time), [route travel](#route-travel), [worked example](#worked-example-fixing-the-unraveled-thread)
+- [Story continuity](#story-continuity): [how findings are reported](#how-findings-are-reported), [deaths](#deaths-and-posthumous-appearances), [status progressions](#status-progressions), [casts](#casts-and-locations), [promises, questions, and clues](#promises-questions-and-clues), [state](#continuity-state), [prop custody](#prop-custody), [clock](#clock-and-travel-time), [route travel](#route-travel), [worked example](#worked-example-fixing-the-unraveled-thread)
 - [Exemptions](#exemptions)
 - [Story knowledge](#story-knowledge)
 - [Story timeline](#story-timeline)
@@ -64,6 +64,7 @@ Every finding starts with a severity and, usually, a file path. Match the rest o
 | The finding contains | Command | Explained in |
 |----------------------|---------|--------------|
 | `lists <id>, who died in`, `who died before the story`, `has died-in`, `died-in references missing chapter`, `learn something in` | `continuity` | [Deaths and posthumous appearances](#deaths-and-posthumous-appearances) |
+| `whose progressions make them deceased`, `sets status … while <id> is dead`, `which still holds when they are revived` | `continuity` | [Status progressions](#status-progressions) |
 | `POV character <id> is not listed in characters`, `but its scenes are told by`, `does not list them in characters or mentions`, `does not list that location`, `who has status: cut`, `Chapter numbering skips` | `continuity` | [Casts and locations](#casts-and-locations) |
 | `pays off in … before it is planted`, `resolves in … before it is introduced`, `no payoff chapter`, `no planted chapter`, `no plant chapter`, `has no resolved chapter`, `status is still open`, `status is still planned` | `continuity` | [Promises, questions, and clues](#promises-questions-and-clues) |
 | `has no payoff yet`, `payoff chapter … has passed` | `continuity` | [Unfired setups](#unfired-setups-the-chekhov-warning) |
@@ -121,7 +122,7 @@ The report itself (timeline sections, pacing and clue grids, prose counts, voice
 
 | File | Fields |
 |------|--------|
-| `characters/*.md` | `status`, `died-in`, `revived-in`, `relationships` |
+| `characters/*.md` | `status`, `died-in`, `revived-in`, `relationships`, and `status` entries in `progressions` |
 | `worldbuilding/locations/*.md` | `routes` |
 | `worldbuilding/factions/*.md` | the file itself: a faction id is accepted as an `object-state` `owner` |
 | `plot/arcs/*.md` | `characters` |
@@ -170,6 +171,34 @@ died-in: chapter-02
 | error | `continuity/state.md knowledge-state[<n>] has <id> learn something in <chapter>, after they died in <chapter>` | Learning is on-page, like an appearance. Move `learned-in` to a chapter at or before the death, or give the knowledge to a living character. |
 | error | `<scene> state-change has <id> learn something in <chapter>, after they died in <chapter>` | A scene `state-changes` entry with `character` and `knowledge` is learning in that scene's chapter, even when an earlier `knowledge-state` entry already records the fact. Drop the state change, or give the knowledge to a living character. |
 | warning | `continuity/state.md knowledge-state[<n>] has <id> learn something in <chapter>, but <id> died before the story (deceased with no died-in)` | Drop `learned-in` (pre-existing knowledge), or set `died-in` if they die during the story. |
+
+### Status progressions
+
+A character's [progressions](project-format.md#progressions) can change `status` partway through the story. The checker resolves the status at each chapter with the progressions that take effect by then, in the same story order as `died-in`: by date when both chapters are dated, else by chapter number. A progression from a planned `chapter-NN` with no file yet compares by its number, so it affects nothing until that chapter exists and comes later. A scene whose chapter does not exist keeps the frontmatter status.
+
+- **A progression to `deceased`, with no `died-in`,** works like `died-in`: the chapter it takes effect in is the death chapter, and a later chapter or scene that lists the character in `characters` or `pov` is a posthumous appearance, as is learning something in a later chapter. `mentions` and a POV also in `mentions` are fine, as for `died-in`. A later status progression (to `alive`, say) ends the dead window. `story validate` still asks for `died-in` alongside the progression (`deceased-without-died-in`); once `died-in` is set, the death checks above take over and these warnings stop, so nothing is reported twice.
+- **A character dead before the story** (`status: deceased`, no `died-in`) may appear from the chapter a status progression brings them back.
+- **With `died-in`,** status progressions must agree with it. A progression that sets another status (`alive`, `missing`) after the death chapter and before `revived-in` contradicts the death, and so does a progression to `deceased` that still holds when the character is revived. A progression to `deceased` in another chapter than `died-in` is reported by `story validate`.
+
+```yaml
+# characters/ada-fenn.md
+status: alive
+progressions:
+  - from: chapter-03
+    field: status
+    value: deceased
+```
+
+All of these are warnings, so a `severity` entry in `story.md` can promote or silence each code (see [Finding codes](cli-reference.md#finding-codes)).
+
+| Severity | Message | Fix |
+|----------|---------|-----|
+| warning | `<chapter or scene> lists <id>, whose progressions make them deceased from <chapter>; move appearances after the death to mentions` | Move the id from `characters` (or `pov`) to `mentions`, add a status progression if they come back, or set `died-in` to the progression's chapter. Code `progression-deceased-in-cast`. |
+| warning | `<file> has <id> learn something in <chapter>, but their progressions make them deceased from <chapter>` | Move `learned-in` to the death chapter or earlier, or give the knowledge to a living character. Code `progression-deceased-learning`. |
+| warning | `<character> progressions[<n>] sets status <status> from <chapter>, while <id> is dead after dying in <chapter>; …` | Set `revived-in` to that chapter if they come back, move the progression to the `revived-in` chapter, or drop it. Code `progression-death-conflict`. |
+| warning | `<character> progressions[<n>] makes <id> deceased from <chapter>, which still holds when they are revived in <chapter>; add a status progression from <chapter>` | Add a progression setting `status` (usually `alive`) from the revival chapter. Code `progression-death-conflict`. |
+
+Other statuses are not checked against casts. A `missing` character can still be on the page: in their own point of view, or with whoever holds them. `imprisoned` is not a `status` value; record it as a progression on its own field (`field: whereabouts`), which the checker does not read. Location `controlled-by` progressions are not checked either, since no scene or chapter field records who controls a place, and matching a faction's name in scene outlines would flag every scene that talks about the old rulers.
 
 ### Casts and locations
 

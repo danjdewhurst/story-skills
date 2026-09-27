@@ -109,6 +109,8 @@ var FINDING_CODES = {
   "revival-status-mismatch": "error",
   "posthumous-appearance": "error",
   "deceased-in-cast": "warning",
+  "progression-deceased-in-cast": "warning",
+  "progression-death-conflict": "warning",
   "pov-not-in-cast": "warning",
   "pov-scene-mismatch": "warning",
   "scene-cast-not-in-chapter": "warning",
@@ -151,6 +153,7 @@ var FINDING_CODES = {
   "state-status-conflict": "warning",
   "posthumous-learning": "error",
   "deceased-learning": "warning",
+  "progression-deceased-learning": "warning",
   "learner-not-in-cast": "warning",
   "knowledge-not-recorded": "warning",
   "state-tracks-dead-character": "warning",
@@ -636,6 +639,182 @@ function leadingHeadingLength(masked) {
   return match ? match[0].length : 0;
 }
 
+// src/exit-codes.js
+var EXIT_CODES = Object.freeze({
+  ok: 0,
+  findings: 1,
+  usage: 2,
+  project: 3,
+  refused: 4
+});
+function withCode(message, exitCode) {
+  return Object.assign(new Error(message), { exitCode });
+}
+function usageError(message) {
+  return withCode(message, EXIT_CODES.usage);
+}
+function projectError(message) {
+  return withCode(message, EXIT_CODES.project);
+}
+function refusedError(message) {
+  return withCode(message, EXIT_CODES.refused);
+}
+function withExitCode(error, exitCode) {
+  if (error !== null && typeof error === "object") {
+    error.exitCode = exitCode;
+  }
+  return error;
+}
+function withDefaultExitCode(error, exitCode) {
+  if (error !== null && typeof error === "object" && !Number.isInteger(error.exitCode)) {
+    error.exitCode = exitCode;
+  }
+  return error;
+}
+var WRITE_SYSCALLS = new Set(["write", "rename", "mkdir", "mkdtemp", "unlink", "rmdir", "copyfile", "rm", "access", "chmod", "fsync"]);
+var WRITE_ERROR_CODES = new Set(["EROFS", "ENOSPC", "EDQUOT", "EFBIG"]);
+function exitCodeFor(error) {
+  if (Number.isInteger(error?.exitCode)) {
+    return error.exitCode;
+  }
+  if (typeof error?.code === "string" && /^E[A-Z]+$/.test(error.code)) {
+    return WRITE_SYSCALLS.has(error.syscall) || WRITE_ERROR_CODES.has(error.code) ? EXIT_CODES.refused : EXIT_CODES.project;
+  }
+  return EXIT_CODES.findings;
+}
+
+// src/progressions.js
+var PROGRESSION_KINDS = ["character", "location", "faction"];
+var RESERVED_FIELDS = new Set(["progressions", "id", "died-in", "revived-in"]);
+function progressionEntry(item) {
+  if (!item || typeof item !== "object" || Array.isArray(item)) {
+    return null;
+  }
+  const from = idText(item.from);
+  const field = typeof item.field === "string" ? item.field : "";
+  if (from === "" || field === "" || item.value === undefined || item.value === null) {
+    return null;
+  }
+  return { from, field, value: item.value };
+}
+function setOwn(target, key, value) {
+  Object.defineProperty(target, key, { value, enumerable: true, configurable: true, writable: true });
+}
+function chapterPosition(chronology, id) {
+  if (chronology.numbers.has(id)) {
+    return chronology.numbers.get(id);
+  }
+  const match = /^chapter-(\d+)$/.exec(id);
+  return match && Number(match[1]) > 0 ? Number(match[1]) : Number.NaN;
+}
+function happensAfter(chronology, later, earlier) {
+  if (chronology.numbers.has(later) && chronology.numbers.has(earlier)) {
+    return chronology.after(later, earlier);
+  }
+  return chapterPosition(chronology, later) > chapterPosition(chronology, earlier);
+}
+function sortProgressions(list, chronology) {
+  const known = [];
+  const unknown = [];
+  for (const item of list) {
+    const from = item && typeof item === "object" && !Array.isArray(item) ? idText(item.from) : "";
+    (Number.isNaN(chapterPosition(chronology, from)) ? unknown : known).push({ item, from });
+  }
+  known.sort((left, right) => happensAfter(chronology, left.from, right.from) ? 1 : happensAfter(chronology, right.from, left.from) ? -1 : 0);
+  return [...known, ...unknown].map((entry) => entry.item);
+}
+function entityStateAt(data, atChapterId, chronology) {
+  if (Number.isNaN(chapterPosition(chronology, atChapterId))) {
+    throw usageError(`Unknown chapter ${atChapterId}`);
+  }
+  const state = {};
+  for (const [key, value] of Object.entries(data ?? {})) {
+    if (key !== "progressions") {
+      setOwn(state, key, value);
+    }
+  }
+  const entries = (Array.isArray(data?.progressions) ? data.progressions : []).map(progressionEntry).filter((entry) => entry !== null && !Number.isNaN(chapterPosition(chronology, entry.from)) && !happensAfter(chronology, entry.from, atChapterId));
+  entries.sort((left, right) => happensAfter(chronology, left.from, right.from) ? 1 : happensAfter(chronology, right.from, left.from) ? -1 : 0);
+  const changes = [];
+  for (const entry of entries) {
+    changes.push({ field: entry.field, value: entry.value, from: entry.from, previous: Object.hasOwn(state, entry.field) ? state[entry.field] : undefined });
+    setOwn(state, entry.field, entry.value);
+  }
+  return { state, changes };
+}
+function validateProgressions(data, label, rules, chronology, errors) {
+  if (data.progressions === undefined) {
+    return;
+  }
+  if (!Array.isArray(data.progressions)) {
+    errors.push(err("field-not-list", `${label} frontmatter field progressions must be a list`, label));
+    return;
+  }
+  const seen = new Map;
+  let latest = null;
+  for (const [index, item] of data.progressions.entries()) {
+    const entryLabel = `${label} progressions[${index}]`;
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      errors.push(err("entry-not-mapping", `${entryLabel} must be a mapping with from, field, and value`, label));
+      continue;
+    }
+    const from = idText(item.from);
+    if (from === "") {
+      errors.push(err("missing-field", `${entryLabel} is missing from (the chapter the change takes effect)`, label));
+    }
+    const field = item.field;
+    let fieldOk = false;
+    if (typeof field !== "string" || field.trim() === "") {
+      errors.push(err("missing-field", `${entryLabel} is missing field`, label));
+    } else if (field !== kebabCase(field)) {
+      errors.push(err("id-not-kebab", `${entryLabel} field ${field} must be kebab-case`, label));
+    } else if (RESERVED_FIELDS.has(field)) {
+      errors.push(err("progression-fixed-field", `${entryLabel} cannot change ${field}${field === "died-in" || field === "revived-in" ? "; set it on the character and story continuity reads it by chapter" : ""}`, label));
+    } else if (rules.lists.has(field)) {
+      errors.push(err("progression-list-field", `${entryLabel} cannot change ${field}, which is a list; a progression holds a single value`, label));
+    } else {
+      fieldOk = true;
+    }
+    const value = item.value;
+    if (value === undefined || value === null) {
+      errors.push(err("missing-field", `${entryLabel} is missing value`, label));
+    } else if (typeof value === "object") {
+      errors.push(err("field-not-scalar", `${entryLabel} value must be a single value, not a list or mapping`, label));
+    } else if (fieldOk && rules.enums.has(field) && !rules.enums.get(field).has(value)) {
+      errors.push(err("unsupported-value", `${entryLabel} ${field} has unsupported value ${value}`, label));
+    }
+    if (from !== "" && fieldOk) {
+      const key = `${from}\x00${field}`;
+      if (seen.has(key)) {
+        errors.push(err("progression-duplicate", `${entryLabel} repeats ${field} from ${from} (progressions[${seen.get(key)}])`, label));
+      } else {
+        seen.set(key, index);
+      }
+    }
+    if (Number.isNaN(chapterPosition(chronology, from))) {
+      continue;
+    }
+    if (latest && happensAfter(chronology, latest.from, from)) {
+      errors.push(err("progression-out-of-order", `${entryLabel} from ${from} comes before progressions[${latest.index}] from ${latest.from} in the story; list progressions in story order`, label));
+      continue;
+    }
+    latest = { from, index };
+  }
+}
+function formatStateChanges(changes, atChapterId) {
+  if (changes.length === 0) {
+    return "";
+  }
+  const lines = [`State at ${atChapterId}:`];
+  for (const change of changes) {
+    const previous = change.previous === undefined ? "" : `, was ${change.previous}`;
+    lines.push(`- ${change.field}: ${change.value === "" ? "(cleared)" : change.value} (from ${change.from}${previous})`);
+  }
+  return `${lines.join(`
+`)}
+`;
+}
+
 // src/continuity.js
 var CHEKHOV_CHAPTER_GAP = 3;
 function checkContinuity(project) {
@@ -701,11 +880,20 @@ function checkCharacterDeaths(project, context, errors, warnings) {
       errors.push(err("revived-without-death", `${label} has revived-in ${character.revivedIn} but no died-in; set died-in or remove revived-in`, label));
     }
     if (!character.diedIn) {
-      if (character.status === "deceased") {
-        for (const entry of [...project.chapters, ...project.scenes]) {
-          if (castIncludes(entry, character.id)) {
-            warnings.push(warn("deceased-in-cast", `${relative(project, entry.file)} lists ${character.id}, who died before the story (deceased with no died-in); move appearances to mentions`, relative(project, entry.file)));
-          }
+      for (const entry of [...project.chapters, ...project.scenes]) {
+        if (!castIncludes(entry, character.id)) {
+          continue;
+        }
+        const entryLabel = relative(project, entry.file);
+        const chapterId = entry.chapter ?? entry.id;
+        const { status, from } = statusAt(character, chapterId, context.chronology);
+        if (status !== "deceased") {
+          continue;
+        }
+        if (from === "") {
+          warnings.push(warn("deceased-in-cast", `${entryLabel} lists ${character.id}, who died before the story (deceased with no died-in); move appearances to mentions`, entryLabel));
+        } else if (happensAfter(context.chronology, chapterId, from)) {
+          warnings.push(warn("progression-deceased-in-cast", `${entryLabel} lists ${character.id}, whose progressions make them deceased from ${from}; move appearances after the death to mentions`, entryLabel));
         }
       }
       continue;
@@ -733,6 +921,7 @@ function checkCharacterDeaths(project, context, errors, warnings) {
     if (revivalWritten && character.status === "deceased") {
       errors.push(err("revival-status-mismatch", `${label} has revived-in ${character.revivedIn} but status deceased; set status: alive`, label));
     }
+    checkProgressionDeath(character, label, context.chronology, warnings);
     const window = deathWindow(character, context.chronology);
     for (const chapter of project.chapters) {
       if (window.deadIn(chapter.id) && castIncludes(chapter, character.id)) {
@@ -744,6 +933,36 @@ function checkCharacterDeaths(project, context, errors, warnings) {
         errors.push(err("posthumous-appearance", `${relative(project, scene.file)} lists ${character.id}, who died in ${character.diedIn}; move posthumous appearances to mentions`, relative(project, scene.file)));
       }
     }
+  }
+}
+function statusProgressions(character) {
+  const list = Array.isArray(character.frontmatter.progressions) ? character.frontmatter.progressions : [];
+  return list.flatMap((item, index) => item && typeof item === "object" && item.field === "status" && idText(item.from) !== "" && item.value !== undefined && item.value !== null ? [{ index, from: idText(item.from), value: String(item.value) }] : []);
+}
+function statusAt(character, chapterId, chronology) {
+  if (!chronology.numbers.has(chapterId) || statusProgressions(character).length === 0) {
+    return { status: character.status, from: "" };
+  }
+  const set = entityStateAt(character.frontmatter, chapterId, chronology).changes.filter((change) => change.field === "status").pop();
+  return set ? { status: String(set.value), from: set.from } : { status: character.status, from: "" };
+}
+function checkProgressionDeath(character, label, chronology, warnings) {
+  const died = character.diedIn;
+  const revived = character.revivedIn;
+  const progressions = statusProgressions(character);
+  for (const { index, from, value } of progressions) {
+    if (value !== "deceased" && happensAfter(chronology, from, died) && (revived === "" || happensAfter(chronology, revived, from))) {
+      const fix = revived === "" ? `set revived-in: ${from} if they come back` : `move it to ${revived}, when they are revived`;
+      warnings.push(warn("progression-death-conflict", `${label} progressions[${index}] sets status ${value} from ${from}, while ${character.id} is dead after dying in ${died}; ${fix}`, label));
+    }
+  }
+  if (revived === "") {
+    return;
+  }
+  const { status, from } = statusAt(character, revived, chronology);
+  if (status === "deceased" && from !== "") {
+    const index = progressions.filter((entry) => entry.from === from).pop().index;
+    warnings.push(warn("progression-death-conflict", `${label} progressions[${index}] makes ${character.id} deceased from ${from}, which still holds when they are revived in ${revived}; add a status progression from ${revived}`, label));
   }
 }
 function checkChapterCasts(project, warnings) {
@@ -1055,8 +1274,11 @@ function checkPosthumousLearning(character, learnedIn, entryLabel, file, context
     return;
   }
   if (!character.diedIn) {
-    if (character.status === "deceased") {
+    const { status, from } = statusAt(character, learnedIn, context.chronology);
+    if (status === "deceased" && from === "") {
       warnings.push(warn("deceased-learning", `${entryLabel} has ${character.id} learn something in ${learnedIn}, but ${character.id} died before the story (deceased with no died-in)`, file));
+    } else if (status === "deceased" && happensAfter(context.chronology, learnedIn, from)) {
+      warnings.push(warn("progression-deceased-learning", `${entryLabel} has ${character.id} learn something in ${learnedIn}, but their progressions make them deceased from ${from}`, file));
     }
     return;
   }
@@ -1761,182 +1983,6 @@ function deathWindow(character, chronology) {
   };
 }
 
-// src/exit-codes.js
-var EXIT_CODES = Object.freeze({
-  ok: 0,
-  findings: 1,
-  usage: 2,
-  project: 3,
-  refused: 4
-});
-function withCode(message, exitCode) {
-  return Object.assign(new Error(message), { exitCode });
-}
-function usageError(message) {
-  return withCode(message, EXIT_CODES.usage);
-}
-function projectError(message) {
-  return withCode(message, EXIT_CODES.project);
-}
-function refusedError(message) {
-  return withCode(message, EXIT_CODES.refused);
-}
-function withExitCode(error, exitCode) {
-  if (error !== null && typeof error === "object") {
-    error.exitCode = exitCode;
-  }
-  return error;
-}
-function withDefaultExitCode(error, exitCode) {
-  if (error !== null && typeof error === "object" && !Number.isInteger(error.exitCode)) {
-    error.exitCode = exitCode;
-  }
-  return error;
-}
-var WRITE_SYSCALLS = new Set(["write", "rename", "mkdir", "mkdtemp", "unlink", "rmdir", "copyfile", "rm", "access", "chmod", "fsync"]);
-var WRITE_ERROR_CODES = new Set(["EROFS", "ENOSPC", "EDQUOT", "EFBIG"]);
-function exitCodeFor(error) {
-  if (Number.isInteger(error?.exitCode)) {
-    return error.exitCode;
-  }
-  if (typeof error?.code === "string" && /^E[A-Z]+$/.test(error.code)) {
-    return WRITE_SYSCALLS.has(error.syscall) || WRITE_ERROR_CODES.has(error.code) ? EXIT_CODES.refused : EXIT_CODES.project;
-  }
-  return EXIT_CODES.findings;
-}
-
-// src/progressions.js
-var PROGRESSION_KINDS = ["character", "location", "faction"];
-var RESERVED_FIELDS = new Set(["progressions", "id", "died-in", "revived-in"]);
-function progressionEntry(item) {
-  if (!item || typeof item !== "object" || Array.isArray(item)) {
-    return null;
-  }
-  const from = idText(item.from);
-  const field = typeof item.field === "string" ? item.field : "";
-  if (from === "" || field === "" || item.value === undefined || item.value === null) {
-    return null;
-  }
-  return { from, field, value: item.value };
-}
-function setOwn(target, key, value) {
-  Object.defineProperty(target, key, { value, enumerable: true, configurable: true, writable: true });
-}
-function chapterPosition(chronology, id) {
-  if (chronology.numbers.has(id)) {
-    return chronology.numbers.get(id);
-  }
-  const match = /^chapter-(\d+)$/.exec(id);
-  return match && Number(match[1]) > 0 ? Number(match[1]) : Number.NaN;
-}
-function happensAfter(chronology, later, earlier) {
-  if (chronology.numbers.has(later) && chronology.numbers.has(earlier)) {
-    return chronology.after(later, earlier);
-  }
-  return chapterPosition(chronology, later) > chapterPosition(chronology, earlier);
-}
-function sortProgressions(list, chronology) {
-  const known = [];
-  const unknown = [];
-  for (const item of list) {
-    const from = item && typeof item === "object" && !Array.isArray(item) ? idText(item.from) : "";
-    (Number.isNaN(chapterPosition(chronology, from)) ? unknown : known).push({ item, from });
-  }
-  known.sort((left, right) => happensAfter(chronology, left.from, right.from) ? 1 : happensAfter(chronology, right.from, left.from) ? -1 : 0);
-  return [...known, ...unknown].map((entry) => entry.item);
-}
-function entityStateAt(data, atChapterId, chronology) {
-  if (Number.isNaN(chapterPosition(chronology, atChapterId))) {
-    throw usageError(`Unknown chapter ${atChapterId}`);
-  }
-  const state = {};
-  for (const [key, value] of Object.entries(data ?? {})) {
-    if (key !== "progressions") {
-      setOwn(state, key, value);
-    }
-  }
-  const entries = (Array.isArray(data?.progressions) ? data.progressions : []).map(progressionEntry).filter((entry) => entry !== null && !Number.isNaN(chapterPosition(chronology, entry.from)) && !happensAfter(chronology, entry.from, atChapterId));
-  entries.sort((left, right) => happensAfter(chronology, left.from, right.from) ? 1 : happensAfter(chronology, right.from, left.from) ? -1 : 0);
-  const changes = [];
-  for (const entry of entries) {
-    changes.push({ field: entry.field, value: entry.value, from: entry.from, previous: Object.hasOwn(state, entry.field) ? state[entry.field] : undefined });
-    setOwn(state, entry.field, entry.value);
-  }
-  return { state, changes };
-}
-function validateProgressions(data, label, rules, chronology, errors) {
-  if (data.progressions === undefined) {
-    return;
-  }
-  if (!Array.isArray(data.progressions)) {
-    errors.push(err("field-not-list", `${label} frontmatter field progressions must be a list`, label));
-    return;
-  }
-  const seen = new Map;
-  let latest = null;
-  for (const [index, item] of data.progressions.entries()) {
-    const entryLabel = `${label} progressions[${index}]`;
-    if (!item || typeof item !== "object" || Array.isArray(item)) {
-      errors.push(err("entry-not-mapping", `${entryLabel} must be a mapping with from, field, and value`, label));
-      continue;
-    }
-    const from = idText(item.from);
-    if (from === "") {
-      errors.push(err("missing-field", `${entryLabel} is missing from (the chapter the change takes effect)`, label));
-    }
-    const field = item.field;
-    let fieldOk = false;
-    if (typeof field !== "string" || field.trim() === "") {
-      errors.push(err("missing-field", `${entryLabel} is missing field`, label));
-    } else if (field !== kebabCase(field)) {
-      errors.push(err("id-not-kebab", `${entryLabel} field ${field} must be kebab-case`, label));
-    } else if (RESERVED_FIELDS.has(field)) {
-      errors.push(err("progression-fixed-field", `${entryLabel} cannot change ${field}${field === "died-in" || field === "revived-in" ? "; set it on the character and story continuity reads it by chapter" : ""}`, label));
-    } else if (rules.lists.has(field)) {
-      errors.push(err("progression-list-field", `${entryLabel} cannot change ${field}, which is a list; a progression holds a single value`, label));
-    } else {
-      fieldOk = true;
-    }
-    const value = item.value;
-    if (value === undefined || value === null) {
-      errors.push(err("missing-field", `${entryLabel} is missing value`, label));
-    } else if (typeof value === "object") {
-      errors.push(err("field-not-scalar", `${entryLabel} value must be a single value, not a list or mapping`, label));
-    } else if (fieldOk && rules.enums.has(field) && !rules.enums.get(field).has(value)) {
-      errors.push(err("unsupported-value", `${entryLabel} ${field} has unsupported value ${value}`, label));
-    }
-    if (from !== "" && fieldOk) {
-      const key = `${from}\x00${field}`;
-      if (seen.has(key)) {
-        errors.push(err("progression-duplicate", `${entryLabel} repeats ${field} from ${from} (progressions[${seen.get(key)}])`, label));
-      } else {
-        seen.set(key, index);
-      }
-    }
-    if (Number.isNaN(chapterPosition(chronology, from))) {
-      continue;
-    }
-    if (latest && happensAfter(chronology, latest.from, from)) {
-      errors.push(err("progression-out-of-order", `${entryLabel} from ${from} comes before progressions[${latest.index}] from ${latest.from} in the story; list progressions in story order`, label));
-      continue;
-    }
-    latest = { from, index };
-  }
-}
-function formatStateChanges(changes, atChapterId) {
-  if (changes.length === 0) {
-    return "";
-  }
-  const lines = [`State at ${atChapterId}:`];
-  for (const change of changes) {
-    const previous = change.previous === undefined ? "" : `, was ${change.previous}`;
-    lines.push(`- ${change.field}: ${change.value === "" ? "(cleared)" : change.value} (from ${change.from}${previous})`);
-  }
-  return `${lines.join(`
-`)}
-`;
-}
-
 // src/context.js
 var DEFAULT_CONTEXT_BUDGET = 6000;
 var DEFAULT_CONTEXT_SCENES = 5;
@@ -2043,9 +2089,9 @@ function entityStateAtTarget(frontmatter, chronology, chapterId) {
 }
 function characterStateAt(character, chronology, chapterId) {
   const { state, changes } = entityStateAtTarget(character.frontmatter, chronology, chapterId);
-  return { status: statusAt(character, state, changes, chronology, chapterId), state, changes };
+  return { status: statusAt2(character, state, changes, chronology, chapterId), state, changes };
 }
-function statusAt(character, state, changes, chronology, chapterId) {
+function statusAt2(character, state, changes, chronology, chapterId) {
   const died = String(character.diedIn ?? "");
   const status = String(state.status ?? character.status ?? "");
   if (died === "") {

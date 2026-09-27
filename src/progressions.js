@@ -57,7 +57,7 @@ function chapterPosition(chronology, id) {
 // Two written chapters use the chronology (dates first, then numbers); a
 // planned chapter compares by number, as an undated chapter does, so a change
 // planned for chapter 20 stays out of chapter 5 before chapter 20 exists.
-function happensAfter(chronology, later, earlier) {
+export function happensAfter(chronology, later, earlier) {
   if (chronology.numbers.has(later) && chronology.numbers.has(earlier)) {
     return chronology.after(later, earlier);
   }

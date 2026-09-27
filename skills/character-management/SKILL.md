@@ -65,10 +65,10 @@ progressions:
 - `from` is the first chapter where the new value holds. It may be a planned `chapter-NN` with no file yet
 - `field` is kebab-case. It can be an existing single-value field (`status`, `role`, `arc`) or a new one (`scar`, `title`). List fields (`aliases`, `relationships`, `locations`, `tags`, voice lists) cannot change this way; record a shifted relationship as a progression on its own field, such as `field: standing-with-kael` with `value: estranged` under `progressions`, never as a top-level field (that would show from chapter 1)
 - `value` is one value. `role` and `status` values must be ones the character file allows
-- Keep entries in story order. Do not use a progression for a death: set `died-in` (see below)
+- Keep entries in story order. Do not use a progression alone for a death: set `died-in` (see below). A `status` progression is still checked against the story: `story continuity` warns when a progression to `deceased` with no `died-in` is followed by the character in a cast or learning something, when a status progression brings them back between `died-in` and `revived-in`, and when a progression to `deceased` still holds at `revived-in`
 - Before drafting or revising a chapter, run `story knowledge {id} --at chapter-NN` to see what the character knows and which changes already apply there, and write to that state rather than the opening frontmatter alone
 
-After adding or editing progressions, run `story validate .` and `story links .`.
+After adding or editing progressions, run `story validate .`, `story links .`, and `story continuity .`.
 
 ## Renaming or Killing Off a Character
 
@@ -84,7 +84,7 @@ Variants:
 
 - **Planned death:** set `died-in` to an outline chapter and keep `status: alive`; set `status: deceased` when that chapter is drafted
 - **Dead narrator (ghost, posthumous POV):** keep them as `pov` and also list them in `mentions`; that is not a posthumous appearance
-- **Resurrection:** add `revived-in: chapter-NN`; casts from that chapter on are allowed again, and once it is drafted set `status: alive`
+- **Resurrection:** add `revived-in: chapter-NN`; casts from that chapter on are allowed again, and once it is drafted set `status: alive`. If a progression made them `deceased`, add a `status` progression from the revival chapter too
 - **Non-linear books:** give chapters a `date` so deaths compare by story time, and give a dual-timeline book's chapters a `strand` so each timeline keeps its own clock
 - Drop the character's `character-state` entry in `continuity/state.md` once the death is drafted and at or before `current-chapter`
 

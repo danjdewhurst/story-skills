@@ -2,6 +2,7 @@ import path from "node:path";
 import { err, warn } from "./findings.js";
 import { kebabCase } from "./markdown.js";
 import { chapterChronology, deathWindow } from "./chronology.js";
+import { entityStateAt, happensAfter } from "./progressions.js";
 
 const CHEKHOV_CHAPTER_GAP = 3;
 
@@ -88,12 +89,24 @@ function checkCharacterDeaths(project, context, errors, warnings) {
     }
     if (!character.diedIn) {
       // Deceased with no died-in means dead before the story starts, so any
-      // appearance in a cast is a posthumous one.
-      if (character.status === "deceased") {
-        for (const entry of [...project.chapters, ...project.scenes]) {
-          if (castIncludes(entry, character.id)) {
-            warnings.push(warn("deceased-in-cast", `${relative(project, entry.file)} lists ${character.id}, who died before the story (deceased with no died-in); move appearances to mentions`, relative(project, entry.file)));
-          }
+      // appearance in a cast is a posthumous one, until a status progression
+      // brings the character back. A progression to deceased works like
+      // died-in: the chapter it takes effect in is the death chapter, and
+      // appearances after it are posthumous.
+      for (const entry of [...project.chapters, ...project.scenes]) {
+        if (!castIncludes(entry, character.id)) {
+          continue;
+        }
+        const entryLabel = relative(project, entry.file);
+        const chapterId = entry.chapter ?? entry.id;
+        const { status, from } = statusAt(character, chapterId, context.chronology);
+        if (status !== "deceased") {
+          continue;
+        }
+        if (from === "") {
+          warnings.push(warn("deceased-in-cast", `${entryLabel} lists ${character.id}, who died before the story (deceased with no died-in); move appearances to mentions`, entryLabel));
+        } else if (happensAfter(context.chronology, chapterId, from)) {
+          warnings.push(warn("progression-deceased-in-cast", `${entryLabel} lists ${character.id}, whose progressions make them deceased from ${from}; move appearances after the death to mentions`, entryLabel));
         }
       }
       continue;
@@ -126,6 +139,8 @@ function checkCharacterDeaths(project, context, errors, warnings) {
       errors.push(err("revival-status-mismatch", `${label} has revived-in ${character.revivedIn} but status deceased; set status: alive`, label));
     }
 
+    checkProgressionDeath(character, label, context.chronology, warnings);
+
     const window = deathWindow(character, context.chronology);
     for (const chapter of project.chapters) {
       if (window.deadIn(chapter.id) && castIncludes(chapter, character.id)) {
@@ -138,6 +153,53 @@ function checkCharacterDeaths(project, context, errors, warnings) {
         errors.push(err("posthumous-appearance", `${relative(project, scene.file)} lists ${character.id}, who died in ${character.diedIn}; move posthumous appearances to mentions`, relative(project, scene.file)));
       }
     }
+  }
+}
+
+// A character's status progressions (see progressions.js) that name a chapter
+// and a value, with their place in the list.
+function statusProgressions(character) {
+  const list = Array.isArray(character.frontmatter.progressions) ? character.frontmatter.progressions : [];
+  return list.flatMap((item, index) => (item && typeof item === "object" && item.field === "status" && idText(item.from) !== "" && item.value !== undefined && item.value !== null
+    ? [{ index, from: idText(item.from), value: String(item.value) }]
+    : []));
+}
+
+// A character's status during chapter `chapterId` with its status
+// progressions applied, in story time, and `from`, the chapter of the
+// progression that set it, or "" while the frontmatter status still holds. A
+// record in a chapter that is not written keeps the frontmatter status, as
+// the died-in window does.
+function statusAt(character, chapterId, chronology) {
+  if (!chronology.numbers.has(chapterId) || statusProgressions(character).length === 0) {
+    return { status: character.status, from: "" };
+  }
+  const set = entityStateAt(character.frontmatter, chapterId, chronology).changes.filter((change) => change.field === "status").pop();
+  return set ? { status: String(set.value), from: set.from } : { status: character.status, from: "" };
+}
+
+// Status progressions checked against died-in and revived-in, in story time:
+// a status other than deceased that takes effect while the character is dead,
+// and a progression to deceased that still holds at the revival. A
+// progression to deceased from another chapter than died-in is left to story
+// validate (deceased-without-died-in), which needs no chronology.
+function checkProgressionDeath(character, label, chronology, warnings) {
+  const died = character.diedIn;
+  const revived = character.revivedIn;
+  const progressions = statusProgressions(character);
+  for (const { index, from, value } of progressions) {
+    if (value !== "deceased" && happensAfter(chronology, from, died) && (revived === "" || happensAfter(chronology, revived, from))) {
+      const fix = revived === "" ? `set revived-in: ${from} if they come back` : `move it to ${revived}, when they are revived`;
+      warnings.push(warn("progression-death-conflict", `${label} progressions[${index}] sets status ${value} from ${from}, while ${character.id} is dead after dying in ${died}; ${fix}`, label));
+    }
+  }
+  if (revived === "") {
+    return;
+  }
+  const { status, from } = statusAt(character, revived, chronology);
+  if (status === "deceased" && from !== "") {
+    const index = progressions.filter((entry) => entry.from === from).pop().index;
+    warnings.push(warn("progression-death-conflict", `${label} progressions[${index}] makes ${character.id} deceased from ${from}, which still holds when they are revived in ${revived}; add a status progression from ${revived}`, label));
   }
 }
 
@@ -515,8 +577,12 @@ function checkPosthumousLearning(character, learnedIn, entryLabel, file, context
     return;
   }
   if (!character.diedIn) {
-    if (character.status === "deceased") {
+    // Status progressions apply as they do to cast appearances.
+    const { status, from } = statusAt(character, learnedIn, context.chronology);
+    if (status === "deceased" && from === "") {
       warnings.push(warn("deceased-learning", `${entryLabel} has ${character.id} learn something in ${learnedIn}, but ${character.id} died before the story (deceased with no died-in)`, file));
+    } else if (status === "deceased" && happensAfter(context.chronology, learnedIn, from)) {
+      warnings.push(warn("progression-deceased-learning", `${entryLabel} has ${character.id} learn something in ${learnedIn}, but their progressions make them deceased from ${from}`, file));
     }
     return;
   }
