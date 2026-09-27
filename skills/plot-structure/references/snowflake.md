@@ -48,7 +48,7 @@ Fill out every major character in full: appearance, history, voice, relationship
 
 Break the long synopsis into a list of scenes, one line each: POV character, what happens, and a rough length. Reorder and cut here, where it is cheap.
 
-**Where it lives:** `story add chapter "{Title}" --number {N} --pov {id} --arc {arc-id}` for each chapter, then `story add scene "{Title}" --chapter chapter-{NN} --scene {M} --pov {id} --location {id} --arc {arc-id}` for each scene, with the one-line summary under the scene's `## Purpose`. Set `--outcome` and `--hook` where the list already knows them. Fill the `Chapter` column of each arc's Plot Points table and `plot/timeline.md` as scenes are placed. Run `story pacing .` to see the list's shape: runs of `yes` outcomes, missing sequels, length outliers.
+**Where it lives:** `story add chapter "{Title}" --number {N} --pov {id} --arc {arc-id}` for each chapter, then `story add scene "{Title}" --chapter chapter-{NN} --scene {M} --pov {id} --location {id} --arc {arc-id}` for each scene, with the one-line summary under the scene's `## Purpose`. Where the list already knows them, pass `--hook {hook}` to `story add chapter` for how the chapter ends and `--outcome {outcome}` to `story add scene` for whether the POV character gets what they want. Fill the `Chapter` column of each arc's Plot Points table and `plot/timeline.md` as scenes are placed. Run `story pacing .` to see the list's shape: runs of `yes` outcomes, missing sequels, length outliers.
 
 ## Step 9: Scene Descriptions
 
