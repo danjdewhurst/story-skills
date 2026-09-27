@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { checkContinuity, idText, storyDateError, storyTimeError } from "./continuity.js";
 import { chapterChronology } from "./chronology.js";
+import { PROGRESSION_KINDS, entityStateAt, validateProgressions } from "./progressions.js";
 import { FRONTMATTER_PATTERN, parseFrontmatter, replaceFrontmatter, stringifyFrontmatter, withoutLeadingFrontmatter } from "./frontmatter.js";
 import { assertExistingAncestorInsideRoot, assertLexicallyInsideRoot, assertSafeProjectDirectory, assertSafeProjectPath, isPathInside, lstatIfExists, readTextFile, TEMPORARY_FILE_PATTERN, writeFile } from "./files.js";
 import { isTruthy } from "./options.js";
@@ -1029,6 +1030,16 @@ export function validateLinksOf(project) {
     }
   }
 
+  // A progression takes effect from a chapter, which may be one planned but
+  // not written yet (`chapter-20` while drafting chapter 5).
+  for (const entity of [...project.characters, ...project.locations, ...project.factions]) {
+    for (const [index, item] of asArray(entity.frontmatter.progressions).entries()) {
+      if (item && typeof item === "object" && !Array.isArray(item)) {
+        checkIdReference(errors, `${relative(project, entity.file)} progressions[${index}]`, idText(item.from), "chapter", hasScheduledChapter);
+      }
+    }
+  }
+
   for (const location of project.locations) {
     const label = relative(project, location.file);
     for (const route of location.routes) {
@@ -1403,6 +1414,31 @@ export function knowledgeAtChapter(root, characterId, atChapterId) {
     }
   }
   return entries;
+}
+
+// Resolves a character, location, or faction at a chapter by applying its
+// progressions (see progressions.js): { state, changes }. A project already
+// scanned can call entityStateAt directly with chapterChronology(project).
+export function entityStateAtChapter(root, kind, id, atChapterId) {
+  const project = scanProject(root);
+  const entityKind = normalizeKind(kind);
+  if (!PROGRESSION_KINDS.includes(entityKind)) {
+    throw new Error(`Only ${PROGRESSION_KINDS.join(", ")} records carry progressions, not ${entityKind}`);
+  }
+  const collection = { character: project.characters, location: project.locations, faction: project.factions }[entityKind];
+  const entity = collection.find((entry) => entry.id === id);
+  if (!entity) {
+    const entityFile = path.join(entityConfig(entityKind).dir, `${id}.md`);
+    const parseError = project.fileErrors.find((error) => error.startsWith(`${entityFile}:`));
+    throw new Error(parseError ?? `Unknown ${entityKind} ${id}`);
+  }
+  // Progressions are ordered by chapter, so a chapter that fails to parse
+  // would silently misplace them.
+  const chapterError = project.fileErrors.find((error) => error.startsWith(`chapters${path.sep}`));
+  if (chapterError) {
+    throw new Error(chapterError);
+  }
+  return entityStateAt(entity.frontmatter, atChapterId, chapterChronology(project));
 }
 
 export function seriesReport(root) {
@@ -3011,11 +3047,13 @@ function removeEntityUnlocked(root, options) {
   if (kind === "chapter") {
     // An empty died-in, since, or learned-in means "before the story", so
     // clearing them would move a death, a loss, or a discovery to before
-    // chapter 1.
+    // chapter 1. A progression's `from` is matched too (transformReferences
+    // reads it for any chapter context): dropping the entry would lose the
+    // change it records.
     const context = { ...entityReferenceContext(project.root, "chapter", id), isReferenceKey: (key) => BEFORE_STORY_FIELDS.includes(key) };
     const named = [...planReferenceRewrites(project.root, context, new Map([[file, null]]), idRenamer(id, `${id}-removed`), (body) => body).keys()];
     if (named.length > 0) {
-      throw refusedError(`chapter ${id} is still named by ${BEFORE_STORY_FIELDS.join(", ")} in ${named.map((entry) => path.relative(project.root, entry)).join(", ")}; an empty value there means before the story, so point them at another chapter first`);
+      throw refusedError(`chapter ${id} is still named by ${BEFORE_STORY_FIELDS.join(", ")}, or a progression's from in ${named.map((entry) => path.relative(project.root, entry)).join(", ")}; an empty value there means before the story, and a progression needs the chapter it starts in, so point them at another chapter first`);
     }
   }
 
@@ -4657,6 +4695,8 @@ const ENTRY_IDENTITY_FIELDS = {
   "character-state": "character",
   "knowledge-state": "character",
   "object-state": "artifact",
+  // A progression takes effect from a chapter; see transformReferences.
+  progressions: "from",
   routes: "to"
 };
 
@@ -4920,8 +4960,14 @@ function transformReferences(data, transform, context, identityKey = null) {
   const next = {};
   // A `__proto__:` key is kept as an own property, as the parser keeps it.
   const set = (key, value) => Object.defineProperty(next, key, { value, enumerable: true, configurable: true, writable: true });
-  // A route's `to` names a location; `to` anywhere else is left alone.
-  const isReference = (key) => context.isReferenceKey(key) || (key === "to" && identityKey === "to" && context.kind === "location");
+  // A route's `to` names a location; `to` anywhere else is left alone. A
+  // progression's `from` names a chapter, and its `value` is a reference
+  // when the field it changes is one (a character's arc, a location's
+  // controlled-by).
+  const progression = identityKey === "from";
+  const isReference = (key) => (progression && key === "value" ? typeof data.field === "string" && context.isReferenceKey(data.field) : context.isReferenceKey(key))
+    || (key === "to" && identityKey === "to" && context.kind === "location")
+    || (key === "from" && progression && context.kind === "chapter");
   for (const [key, value] of Object.entries(data)) {
     if (Array.isArray(value)) {
       const items = [];
@@ -4950,7 +4996,8 @@ function transformReferences(data, transform, context, identityKey = null) {
       if (mapped === null) {
         // A removed id that identifies a nested entry (a relationship's
         // character, a state entry's character or artifact) drops the whole
-        // entry; any other reference field is cleared in place.
+        // entry; any other reference field is cleared in place, a
+        // progression's value included, so the change stays on record.
         if (identityKey !== null && key === identityKey) {
           return null;
         }
@@ -5880,7 +5927,25 @@ function validateIndexFrontmatter(project, errors) {
   }
 }
 
+// Per kind, the fields a progression may not change because they hold lists,
+// and the fields whose values are checked against an allowed set.
+const PROGRESSION_RULES = {
+  character: {
+    lists: new Set(["aliases", "relationships", "locations", "tags", "voice-words", "voice-avoid"]),
+    enums: new Map([["role", CHARACTER_ROLES], ["status", CHARACTER_STATUSES]])
+  },
+  location: {
+    lists: new Set(["notable-characters", "tags", "routes"]),
+    enums: new Map()
+  },
+  faction: {
+    lists: new Set(["members", "locations", "tags"]),
+    enums: new Map([["type", FACTION_TYPES], ["status", FACTION_STATUSES]])
+  }
+};
+
 function validateCharacters(project, errors, warnings) {
+  const chronology = chapterChronology(project);
   for (const character of project.characters) {
     const label = relative(project, character.file);
     const data = readValidationData(character.file, project.root, label, errors);
@@ -5910,10 +5975,18 @@ function validateCharacters(project, errors, warnings) {
     validateStringArray(data, "voice-avoid", label, errors);
     validateRelationships(data, label, errors);
     warnNearMissKeys(data, ["died-in", "revived-in"], label, warnings);
+    validateProgressions(data, label, PROGRESSION_RULES.character, chronology, errors);
+    // Continuity reads a death from died-in, not from status.
+    for (const [index, item] of asArray(data.progressions).entries()) {
+      if (item && typeof item === "object" && item.field === "status" && item.value === "deceased" && idText(item.from) !== character.diedIn) {
+        warnings.push(`${label} progressions[${index}] makes ${character.id} deceased from ${idText(item.from) || "?"}; set died-in: ${idText(item.from) || "<chapter>"} too so story continuity checks appearances after the death`);
+      }
+    }
   }
 }
 
 function validateLocations(project, errors, warnings) {
+  const chronology = chapterChronology(project);
   for (const location of project.locations) {
     const label = relative(project, location.file);
     const data = readValidationData(location.file, project.root, label, errors);
@@ -5945,6 +6018,7 @@ function validateLocations(project, errors, warnings) {
       }
       requireScalar(route, "mode", `${label} route to ${route.to ?? "?"}`, errors);
     }
+    validateProgressions(data, label, PROGRESSION_RULES.location, chronology, errors);
   }
 }
 
@@ -5966,6 +6040,7 @@ function validateSystems(project, errors) {
 }
 
 function validateFactions(project, errors) {
+  const chronology = chapterChronology(project);
   for (const faction of project.factions) {
     const label = relative(project, faction.file);
     const data = readValidationData(faction.file, project.root, label, errors);
@@ -5982,6 +6057,7 @@ function validateFactions(project, errors) {
     validateStringArray(data, "members", label, errors);
     validateStringArray(data, "locations", label, errors);
     validateStringArray(data, "tags", label, errors);
+    validateProgressions(data, label, PROGRESSION_RULES.faction, chronology, errors);
   }
 }
 

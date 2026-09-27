@@ -43,7 +43,7 @@ export const OPTIONS = [
   { name: "stamp", value: "<label>", help: ["Build label printed in build --format html (a", "date, commit, or review round)"] },
   { name: "note-url", value: "<url>", help: ["Note form linked, prefilled, from every label in", "build --format html (a GitHub new-issue link)"] },
   { name: "shunn", help: ["Apply Shunn manuscript formatting (with --format", "docx)"] },
-  { name: "at", value: "<chapter-id>", help: ["Chapter id for knowledge"] },
+  { name: "at", value: "<chapter-id>", help: ["Chapter id for knowledge: what the character knew", "and how their progressions had changed them"] },
   { name: "init", help: ["Add the default revision passes for passes"] },
   { name: "start", value: "<pass>", help: ["Mark a revision pass in progress for passes"] },
   { name: "done", value: "<pass>", help: ["Mark a revision pass done for passes"] },

@@ -13,6 +13,16 @@ tags:
   - magical-nexus
   - seat-of-power
 status: thriving
+progressions:
+  - from: chapter-10
+    field: status
+    value: occupied
+  - from: chapter-10
+    field: controlled-by
+    value: lord-maren
+  - from: chapter-11
+    field: status
+    value: "sealed and cooling"
 ---
 
 # The Ashen Citadel
@@ -29,4 +39,4 @@ The same fortress-city as in The Last Ember, but twelve years younger and still 
 
 ## Series Canon
 
-By the end of this book, the ember well is sealed and Maren holds the High Keep. The Last Ember opens with the city in decline.
+By the end of this book, the ember well is sealed and Maren holds the High Keep. The Last Ember opens with the city in decline. The frontmatter `progressions` date the change: occupied under Maren from Festival night (chapter 10), sealed and cooling from chapter 11.

@@ -11,6 +11,7 @@ import { formatNames } from "./names.js";
 import { formatPacing } from "./pacing.js";
 import { formatPasses } from "./passes.js";
 import { formatProgress } from "./progress.js";
+import { formatStateChanges } from "./progressions.js";
 import { formatProseReport } from "./prose.js";
 import { formatSeriesReport } from "./series.js";
 import { formatTimeline } from "./timeline.js";
@@ -24,6 +25,7 @@ import {
   createEntity,
   createStoryProject,
   diagramProject,
+  entityStateAtChapter,
   exportManuscript,
   formatActionReport,
   formatDoctorReport,
@@ -214,7 +216,10 @@ export const COMMANDS = [
   {
     name: "knowledge",
     usage: "knowledge <id>",
-    summary: ["List what a character knew at a chapter; requires --at"],
+    summary: [
+      "List what a character knew at a chapter, and the",
+      "changes its progressions made by then; requires --at"
+    ],
     project: "flag",
     args: 1,
     options: ["at", "json"],
@@ -226,17 +231,18 @@ export const COMMANDS = [
         throw usageError("Usage: story knowledge <character-id> --at <chapter-id> [--path <project>]");
       }
       const entries = knowledgeAtChapter(root(), characterId, atChapterId);
+      const { state, changes } = entityStateAtChapter(root(), "character", characterId, atChapterId);
       if (wantsJson(parsed)) {
-        return writeJsonResult(io, { command: "knowledge", ok: true, data: { character: characterId, at: atChapterId, entries } });
+        return writeJsonResult(io, { command: "knowledge", ok: true, data: { character: characterId, at: atChapterId, entries, state, changes } });
       }
       if (entries.length === 0) {
         io.stdout.write(`No recorded knowledge for ${characterId} at ${atChapterId}\n`);
-        return 0;
       }
       for (const entry of entries) {
         const source = entry.learnedIn === "" ? "pre-existing knowledge" : `learned in ${entry.learnedIn}`;
         io.stdout.write(`- ${entry.knows} (${source})\n`);
       }
+      io.stdout.write(formatStateChanges(changes, atChapterId));
       return 0;
     }
   },

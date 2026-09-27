@@ -4715,7 +4715,7 @@ var OPTIONS = [
   { name: "stamp", value: "<label>", help: ["Build label printed in build --format html (a", "date, commit, or review round)"] },
   { name: "note-url", value: "<url>", help: ["Note form linked, prefilled, from every label in", "build --format html (a GitHub new-issue link)"] },
   { name: "shunn", help: ["Apply Shunn manuscript formatting (with --format", "docx)"] },
-  { name: "at", value: "<chapter-id>", help: ["Chapter id for knowledge"] },
+  { name: "at", value: "<chapter-id>", help: ["Chapter id for knowledge: what the character knew", "and how their progressions had changed them"] },
   { name: "init", help: ["Add the default revision passes for passes"] },
   { name: "start", value: "<pass>", help: ["Mark a revision pass in progress for passes"] },
   { name: "done", value: "<pass>", help: ["Mark a revision pass done for passes"] },
@@ -5192,6 +5192,128 @@ import { execFileSync } from "node:child_process";
 import fs7 from "node:fs";
 import os2 from "node:os";
 import path7 from "node:path";
+
+// src/progressions.js
+var PROGRESSION_KINDS = ["character", "location", "faction"];
+var RESERVED_FIELDS = new Set(["progressions", "id", "died-in", "revived-in"]);
+function progressionEntry(item) {
+  if (!item || typeof item !== "object" || Array.isArray(item)) {
+    return null;
+  }
+  const from = idText(item.from);
+  const field = typeof item.field === "string" ? item.field : "";
+  if (from === "" || field === "" || item.value === undefined || item.value === null) {
+    return null;
+  }
+  return { from, field, value: item.value };
+}
+function setOwn(target, key, value) {
+  Object.defineProperty(target, key, { value, enumerable: true, configurable: true, writable: true });
+}
+function chapterPosition(chronology, id) {
+  if (chronology.numbers.has(id)) {
+    return chronology.numbers.get(id);
+  }
+  const match = /^chapter-(\d+)$/.exec(id);
+  return match && Number(match[1]) > 0 ? Number(match[1]) : Number.NaN;
+}
+function happensAfter(chronology, later, earlier) {
+  if (chronology.numbers.has(later) && chronology.numbers.has(earlier)) {
+    return chronology.after(later, earlier);
+  }
+  return chapterPosition(chronology, later) > chapterPosition(chronology, earlier);
+}
+function entityStateAt(data, atChapterId, chronology) {
+  if (Number.isNaN(chapterPosition(chronology, atChapterId))) {
+    throw new Error(`Unknown chapter ${atChapterId}`);
+  }
+  const state = {};
+  for (const [key, value] of Object.entries(data ?? {})) {
+    if (key !== "progressions") {
+      setOwn(state, key, value);
+    }
+  }
+  const entries = (Array.isArray(data?.progressions) ? data.progressions : []).map(progressionEntry).filter((entry) => entry !== null && !Number.isNaN(chapterPosition(chronology, entry.from)) && !happensAfter(chronology, entry.from, atChapterId));
+  entries.sort((left, right) => happensAfter(chronology, left.from, right.from) ? 1 : happensAfter(chronology, right.from, left.from) ? -1 : 0);
+  const changes = [];
+  for (const entry of entries) {
+    changes.push({ field: entry.field, value: entry.value, from: entry.from, previous: Object.hasOwn(state, entry.field) ? state[entry.field] : undefined });
+    setOwn(state, entry.field, entry.value);
+  }
+  return { state, changes };
+}
+function validateProgressions(data, label, rules, chronology, errors) {
+  if (data.progressions === undefined) {
+    return;
+  }
+  if (!Array.isArray(data.progressions)) {
+    errors.push(`${label} frontmatter field progressions must be a list`);
+    return;
+  }
+  const seen = new Map;
+  let latest = null;
+  for (const [index, item] of data.progressions.entries()) {
+    const entryLabel = `${label} progressions[${index}]`;
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      errors.push(`${entryLabel} must be a mapping with from, field, and value`);
+      continue;
+    }
+    const from = idText(item.from);
+    if (from === "") {
+      errors.push(`${entryLabel} is missing from (the chapter the change takes effect)`);
+    }
+    const field = item.field;
+    let fieldOk = false;
+    if (typeof field !== "string" || field.trim() === "") {
+      errors.push(`${entryLabel} is missing field`);
+    } else if (field !== kebabCase(field)) {
+      errors.push(`${entryLabel} field ${field} must be kebab-case`);
+    } else if (RESERVED_FIELDS.has(field)) {
+      errors.push(`${entryLabel} cannot change ${field}${field === "died-in" || field === "revived-in" ? "; set it on the character and story continuity reads it by chapter" : ""}`);
+    } else if (rules.lists.has(field)) {
+      errors.push(`${entryLabel} cannot change ${field}, which is a list; a progression holds a single value`);
+    } else {
+      fieldOk = true;
+    }
+    const value = item.value;
+    if (value === undefined || value === null) {
+      errors.push(`${entryLabel} is missing value`);
+    } else if (typeof value === "object") {
+      errors.push(`${entryLabel} value must be a single value, not a list or mapping`);
+    } else if (fieldOk && rules.enums.has(field) && !rules.enums.get(field).has(value)) {
+      errors.push(`${entryLabel} ${field} has unsupported value ${value}`);
+    }
+    if (from !== "" && fieldOk) {
+      const key = `${from}\x00${field}`;
+      if (seen.has(key)) {
+        errors.push(`${entryLabel} repeats ${field} from ${from} (progressions[${seen.get(key)}])`);
+      } else {
+        seen.set(key, index);
+      }
+    }
+    if (Number.isNaN(chapterPosition(chronology, from))) {
+      continue;
+    }
+    if (latest && happensAfter(chronology, latest.from, from)) {
+      errors.push(`${entryLabel} from ${from} comes before progressions[${latest.index}] from ${latest.from} in the story; list progressions in story order`);
+      continue;
+    }
+    latest = { from, index };
+  }
+}
+function formatStateChanges(changes, atChapterId) {
+  if (changes.length === 0) {
+    return "";
+  }
+  const lines = [`State at ${atChapterId}:`];
+  for (const change of changes) {
+    const previous = change.previous === undefined ? "" : `, was ${change.previous}`;
+    lines.push(`- ${change.field}: ${change.value === "" ? "(cleared)" : change.value} (from ${change.from}${previous})`);
+  }
+  return `${lines.join(`
+`)}
+`;
+}
 
 // src/lock.js
 import fs5 from "node:fs";
@@ -7488,6 +7610,13 @@ function validateLinksOf(project) {
       checkIdReference(errors, label, character.revivedIn, "chapter", hasChapter);
     }
   }
+  for (const entity of [...project.characters, ...project.locations, ...project.factions]) {
+    for (const [index, item] of asArray(entity.frontmatter.progressions).entries()) {
+      if (item && typeof item === "object" && !Array.isArray(item)) {
+        checkIdReference(errors, `${relative2(project, entity.file)} progressions[${index}]`, idText(item.from), "chapter", hasScheduledChapter);
+      }
+    }
+  }
   for (const location of project.locations) {
     const label = relative2(project, location.file);
     for (const route of location.routes) {
@@ -7810,6 +7939,25 @@ function knowledgeAtChapter(root, characterId, atChapterId) {
     }
   }
   return entries;
+}
+function entityStateAtChapter(root, kind, id, atChapterId) {
+  const project = scanProject(root);
+  const entityKind = normalizeKind(kind);
+  if (!PROGRESSION_KINDS.includes(entityKind)) {
+    throw new Error(`Only ${PROGRESSION_KINDS.join(", ")} records carry progressions, not ${entityKind}`);
+  }
+  const collection = { character: project.characters, location: project.locations, faction: project.factions }[entityKind];
+  const entity = collection.find((entry) => entry.id === id);
+  if (!entity) {
+    const entityFile = path7.join(entityConfig(entityKind).dir, `${id}.md`);
+    const parseError = project.fileErrors.find((error) => error.startsWith(`${entityFile}:`));
+    throw new Error(parseError ?? `Unknown ${entityKind} ${id}`);
+  }
+  const chapterError = project.fileErrors.find((error) => error.startsWith(`chapters${path7.sep}`));
+  if (chapterError) {
+    throw new Error(chapterError);
+  }
+  return entityStateAt(entity.frontmatter, atChapterId, chapterChronology(project));
 }
 function seriesReport(root) {
   const projectRoot = path7.resolve(root);
@@ -9159,7 +9307,7 @@ function removeEntityUnlocked(root, options) {
     const context = { ...entityReferenceContext(project.root, "chapter", id), isReferenceKey: (key) => BEFORE_STORY_FIELDS.includes(key) };
     const named = [...planReferenceRewrites(project.root, context, new Map([[file, null]]), idRenamer(id, `${id}-removed`), (body) => body).keys()];
     if (named.length > 0) {
-      throw refusedError(`chapter ${id} is still named by ${BEFORE_STORY_FIELDS.join(", ")} in ${named.map((entry) => path7.relative(project.root, entry)).join(", ")}; an empty value there means before the story, so point them at another chapter first`);
+      throw refusedError(`chapter ${id} is still named by ${BEFORE_STORY_FIELDS.join(", ")}, or a progression's from in ${named.map((entry) => path7.relative(project.root, entry)).join(", ")}; an empty value there means before the story, and a progression needs the chapter it starts in, so point them at another chapter first`);
     }
   }
   const plan = removeEntityReferences(project.root, kind, id, new Map([[file, null]]));
@@ -10563,6 +10711,7 @@ var ENTRY_IDENTITY_FIELDS = {
   "character-state": "character",
   "knowledge-state": "character",
   "object-state": "artifact",
+  progressions: "from",
   routes: "to"
 };
 function entityReferenceContext(root, kind, id) {
@@ -10758,7 +10907,8 @@ function commitWrites(write) {
 function transformReferences(data, transform, context, identityKey = null) {
   const next = {};
   const set = (key, value) => Object.defineProperty(next, key, { value, enumerable: true, configurable: true, writable: true });
-  const isReference = (key) => context.isReferenceKey(key) || key === "to" && identityKey === "to" && context.kind === "location";
+  const progression = identityKey === "from";
+  const isReference = (key) => (progression && key === "value" ? typeof data.field === "string" && context.isReferenceKey(data.field) : context.isReferenceKey(key)) || key === "to" && identityKey === "to" && context.kind === "location" || key === "from" && progression && context.kind === "chapter";
   for (const [key, value] of Object.entries(data)) {
     if (Array.isArray(value)) {
       const items = [];
@@ -11528,7 +11678,22 @@ function validateIndexFrontmatter(project, errors) {
     }
   }
 }
+var PROGRESSION_RULES = {
+  character: {
+    lists: new Set(["aliases", "relationships", "locations", "tags", "voice-words", "voice-avoid"]),
+    enums: new Map([["role", CHARACTER_ROLES], ["status", CHARACTER_STATUSES]])
+  },
+  location: {
+    lists: new Set(["notable-characters", "tags", "routes"]),
+    enums: new Map
+  },
+  faction: {
+    lists: new Set(["members", "locations", "tags"]),
+    enums: new Map([["type", FACTION_TYPES], ["status", FACTION_STATUSES]])
+  }
+};
 function validateCharacters(project, errors, warnings) {
+  const chronology = chapterChronology(project);
   for (const character of project.characters) {
     const label = relative2(project, character.file);
     const data = readValidationData(character.file, project.root, label, errors);
@@ -11558,9 +11723,16 @@ function validateCharacters(project, errors, warnings) {
     validateStringArray(data, "voice-avoid", label, errors);
     validateRelationships(data, label, errors);
     warnNearMissKeys(data, ["died-in", "revived-in"], label, warnings);
+    validateProgressions(data, label, PROGRESSION_RULES.character, chronology, errors);
+    for (const [index, item] of asArray(data.progressions).entries()) {
+      if (item && typeof item === "object" && item.field === "status" && item.value === "deceased" && idText(item.from) !== character.diedIn) {
+        warnings.push(`${label} progressions[${index}] makes ${character.id} deceased from ${idText(item.from) || "?"}; set died-in: ${idText(item.from) || "<chapter>"} too so story continuity checks appearances after the death`);
+      }
+    }
   }
 }
 function validateLocations(project, errors, warnings) {
+  const chronology = chapterChronology(project);
   for (const location of project.locations) {
     const label = relative2(project, location.file);
     const data = readValidationData(location.file, project.root, label, errors);
@@ -11592,6 +11764,7 @@ function validateLocations(project, errors, warnings) {
       }
       requireScalar(route, "mode", `${label} route to ${route.to ?? "?"}`, errors);
     }
+    validateProgressions(data, label, PROGRESSION_RULES.location, chronology, errors);
   }
 }
 function validateSystems(project, errors) {
@@ -11611,6 +11784,7 @@ function validateSystems(project, errors) {
   }
 }
 function validateFactions(project, errors) {
+  const chronology = chapterChronology(project);
   for (const faction of project.factions) {
     const label = relative2(project, faction.file);
     const data = readValidationData(faction.file, project.root, label, errors);
@@ -11627,6 +11801,7 @@ function validateFactions(project, errors) {
     validateStringArray(data, "members", label, errors);
     validateStringArray(data, "locations", label, errors);
     validateStringArray(data, "tags", label, errors);
+    validateProgressions(data, label, PROGRESSION_RULES.faction, chronology, errors);
   }
 }
 function validateArtifacts(project, errors) {
@@ -13123,7 +13298,10 @@ var COMMANDS = [
   {
     name: "knowledge",
     usage: "knowledge <id>",
-    summary: ["List what a character knew at a chapter; requires --at"],
+    summary: [
+      "List what a character knew at a chapter, and the",
+      "changes its progressions made by then; requires --at"
+    ],
     project: "flag",
     args: 1,
     options: ["at", "json"],
@@ -13134,19 +13312,20 @@ var COMMANDS = [
         throw usageError("Usage: story knowledge <character-id> --at <chapter-id> [--path <project>]");
       }
       const entries = knowledgeAtChapter(root(), characterId, atChapterId);
+      const { state, changes } = entityStateAtChapter(root(), "character", characterId, atChapterId);
       if (wantsJson(parsed)) {
-        return writeJsonResult(io, { command: "knowledge", ok: true, data: { character: characterId, at: atChapterId, entries } });
+        return writeJsonResult(io, { command: "knowledge", ok: true, data: { character: characterId, at: atChapterId, entries, state, changes } });
       }
       if (entries.length === 0) {
         io.stdout.write(`No recorded knowledge for ${characterId} at ${atChapterId}
 `);
-        return 0;
       }
       for (const entry of entries) {
         const source = entry.learnedIn === "" ? "pre-existing knowledge" : `learned in ${entry.learnedIn}`;
         io.stdout.write(`- ${entry.knows} (${source})
 `);
       }
+      io.stdout.write(formatStateChanges(changes, atChapterId));
       return 0;
     }
   },

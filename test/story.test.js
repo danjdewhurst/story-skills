@@ -985,7 +985,7 @@ object-state:
     location: vault`), "utf8");
 
     const before = fs.readFileSync(statePath, "utf8");
-    expect(() => removeEntity(created.root, { kind: "chapter", id: "chapter-01" })).toThrow("chapter chapter-01 is still named by died-in, since, learned-in in continuity/state.md");
+    expect(() => removeEntity(created.root, { kind: "chapter", id: "chapter-01" })).toThrow("chapter chapter-01 is still named by died-in, since, learned-in, or a progression's from in continuity/state.md");
     expect(fs.readFileSync(statePath, "utf8")).toBe(before);
     expect(fs.existsSync(path.join(created.root, "chapters", "chapter-01.md"))).toBe(true);
   });

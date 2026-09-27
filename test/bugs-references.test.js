@@ -172,7 +172,7 @@ describe("reference handling in add, rename, remove, and move", () => {
     createEntity(root, { kind: "chapter", name: "Two" });
     createEntity(root, { kind: "character", name: "Bob" });
     edit(root, path.join("characters", "bob.md"), "status: alive", "status: deceased\ndied-in: chapter-02");
-    expect(() => removeEntity(root, { kind: "chapter", id: "chapter-02" })).toThrow("chapter chapter-02 is still named by died-in, since, learned-in in characters/bob.md");
+    expect(() => removeEntity(root, { kind: "chapter", id: "chapter-02" })).toThrow("chapter chapter-02 is still named by died-in, since, learned-in, or a progression's from in characters/bob.md");
     expect(read(root, "characters", "bob.md")).toContain("died-in: chapter-02");
     edit(root, path.join("characters", "bob.md"), "died-in: chapter-02", "died-in: chapter-01");
     removeEntity(root, { kind: "chapter", id: "chapter-02" });

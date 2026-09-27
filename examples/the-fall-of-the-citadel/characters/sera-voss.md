@@ -17,6 +17,13 @@ tags:
   - royal-bloodline
   - ember-bearer
 arc: loss-of-innocence
+progressions:
+  - from: chapter-10
+    field: scar
+    value: "Jaw to collarbone, taken holding a door on Festival night"
+  - from: chapter-11
+    field: whereabouts
+    value: "The Whispering Vale, in hiding with Kael"
 ---
 
 # Sera Voss
@@ -51,7 +58,7 @@ Quick, sharp, more words than she will use at twenty-eight. Her dry humour is al
 
 ## Series Canon
 
-Must end this book alive, scarred from jaw to collarbone, and in the Whispering Vale with Kael.
+Must end this book alive, scarred from jaw to collarbone, and in the Whispering Vale with Kael. The `progressions` in the frontmatter hold the scar (chapter 10, Festival night) and the flight (chapter 11), so drafting the early chapters never sees them.
 
 ## Timeline
 

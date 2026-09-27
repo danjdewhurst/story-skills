@@ -158,7 +158,8 @@
         "truth": { "type": "string" },
         "ghost-wound": { "type": "string" },
         "voice-words": { "$ref": "#/$defs/stringList" },
-        "voice-avoid": { "$ref": "#/$defs/stringList" }
+        "voice-avoid": { "$ref": "#/$defs/stringList" },
+        "progressions": { "$ref": "#/$defs/progressions" }
       }
     },
     "location": {
@@ -186,7 +187,8 @@
               "mode": { "type": "string" }
             }
           }
-        }
+        },
+        "progressions": { "$ref": "#/$defs/progressions" }
       }
     },
     "system": {
@@ -211,7 +213,8 @@
         "status": { "enum": ["active", "hidden", "declining", "defeated", "disbanded", "unknown"] },
         "members": { "$ref": "#/$defs/stringList" },
         "locations": { "$ref": "#/$defs/stringList" },
-        "tags": { "$ref": "#/$defs/stringList" }
+        "tags": { "$ref": "#/$defs/stringList" },
+        "progressions": { "$ref": "#/$defs/progressions" }
       }
     },
     "artifact": {
@@ -343,6 +346,19 @@
         "term": { "type": "string" },
         "category": { "enum": ["person", "place", "faction", "artifact", "concept", "term", "other"] },
         "aliases": { "$ref": "#/$defs/stringList" }
+      }
+    },
+    "progressions": {
+      "type": "array",
+      "description": "Timeline-scoped changes to a character, location, or faction. The frontmatter describes the entity as the story opens; from the chapter in from onward (in story time), field holds value instead. Entries are listed in story order, and field names a single-value field, never a list field, id, progressions, died-in, or revived-in.",
+      "items": {
+        "type": "object",
+        "required": ["from", "field", "value"],
+        "properties": {
+          "from": { "$ref": "#/$defs/id" },
+          "field": { "$ref": "#/$defs/id" },
+          "value": { "type": ["string", "number", "boolean"] }
+        }
       }
     },
     "characterState": {
