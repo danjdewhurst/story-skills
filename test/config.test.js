@@ -153,7 +153,7 @@ describe("severity", () => {
   test("an override applies wherever its warning is reported: links, a build, and report", () => {
     const { root, cwd } = branchingProject();
     const unreachable = `${path.join("chapters", "chapter-03.md")} cannot be reached: no choice path from chapter-01 leads to it`;
-    expect(invoke(cwd, ["links", root]).err).toContain(`warning: ${unreachable}\n`);
+    expect(invoke(cwd, ["links", root]).err).toContain(`warning: ${unreachable} [unreachable-chapter]\n`);
 
     configure(root, "severity:\n  - warning: unreachable-chapter\n    level: error");
     const links = invoke(cwd, ["links", root]);

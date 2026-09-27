@@ -4,7 +4,7 @@ import { formatClueMatrix } from "./clues.js";
 import { formatContext } from "./context.js";
 import { formatComparison, formatLabelMapping } from "./compare.js";
 import { applySeverity } from "./config.js";
-import { FINDING_CODES } from "./findings.js";
+import { FINDING_CODES, warn } from "./findings.js";
 import { importManuscript } from "./import.js";
 import { diagnosticsFrom, resultData, wantsJson, writeJsonResult } from "./json.js";
 import { isTruthy } from "./options.js";
@@ -144,7 +144,7 @@ export const COMMANDS = [
       reportKeptStory(io, result, "--title");
       reportGitignore(io, result);
       for (const warning of result.warnings) {
-        io.stderr.write(`warning: ${warning.message}\n`);
+        io.stderr.write(`warning: ${findingLine(warning)}\n`);
       }
       if (result.keptStory) {
         io.stderr.write("note: the old chapter files were replaced, so scenes, bible entries, and continuity files may point at chapters that are gone or changed. Run story links to find them.\n");
@@ -736,7 +736,7 @@ function writeFindings(io, result) {
     io.stderr.write(`error: ${findingLine(error)}\n`);
   }
   for (const warning of result.warnings) {
-    io.stderr.write(`warning: ${warning.message}\n`);
+    io.stderr.write(`warning: ${findingLine(warning)}\n`);
   }
   for (const entry of result.dismissed ?? []) {
     io.stderr.write(`dismissed: ${entry.finding.message} (${entry.note})\n`);
@@ -758,7 +758,7 @@ function reportKeptStory(io, result, titleLabel) {
   }
   const names = result.ignoredOptions.map((name) => (name === "title" ? titleLabel : name));
   const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
-  io.stderr.write(`warning: story.md already exists and was kept, so ${list} ${names.length === 1 ? "was" : "were"} not applied. Edit story.md to change ${names.length === 1 ? "it" : "them"}.\n`);
+  io.stderr.write(`warning: ${findingLine(warn("kept-story-options", `story.md already exists and was kept, so ${list} ${names.length === 1 ? "was" : "were"} not applied. Edit story.md to change ${names.length === 1 ? "it" : "them"}.`, "story.md"))}\n`);
 }
 
 // An existing .gitignore is never edited, so say when builds would be
@@ -834,7 +834,7 @@ function reportResult(io, result, successMessage, failureMessage) {
   }
 
   for (const warning of result.warnings) {
-    io.stderr.write(`warning: ${warning.message}\n`);
+    io.stderr.write(`warning: ${findingLine(warning)}\n`);
   }
 
   for (const entry of dismissed) {
@@ -844,8 +844,9 @@ function reportResult(io, result, successMessage, failureMessage) {
   return result.ok ? EXIT_CODES.ok : EXIT_CODES.findings;
 }
 
-// An error as the text output prints it: a warning that severity promoted
-// names its code, so the entry in story.md is easy to find.
+// A finding as the text output prints it. A warning, or a warning that
+// severity promoted to an error, ends with its code, the name a story.md
+// severity entry takes; errors cannot be overridden, so they print without.
 function findingLine(finding) {
   return FINDING_CODES[finding.code] === "warning" ? `${finding.message} [${finding.code}]` : finding.message;
 }

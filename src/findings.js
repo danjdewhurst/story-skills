@@ -236,7 +236,9 @@ export const FINDING_CODES = {
   "usage-error": "error",
   "unusable-project": "error",
   "write-refused": "error",
-  "command-failed": "error"
+  "command-failed": "error",
+  // story init and story import
+  "kept-story-options": "warning"
 };
 
 export function codesAt(level) {

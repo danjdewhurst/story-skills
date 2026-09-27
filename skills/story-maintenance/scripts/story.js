@@ -220,7 +220,8 @@ var FINDING_CODES = {
   "usage-error": "error",
   "unusable-project": "error",
   "write-refused": "error",
-  "command-failed": "error"
+  "command-failed": "error",
+  "kept-story-options": "warning"
 };
 function codesAt(level) {
   return Object.keys(FINDING_CODES).filter((code) => FINDING_CODES[code] === level);
@@ -14230,7 +14231,7 @@ var COMMANDS = [
       reportKeptStory(io, result, "--title");
       reportGitignore(io, result);
       for (const warning of result.warnings) {
-        io.stderr.write(`warning: ${warning.message}
+        io.stderr.write(`warning: ${findingLine(warning)}
 `);
       }
       if (result.keptStory) {
@@ -14809,7 +14810,7 @@ function writeFindings(io, result) {
 `);
   }
   for (const warning of result.warnings) {
-    io.stderr.write(`warning: ${warning.message}
+    io.stderr.write(`warning: ${findingLine(warning)}
 `);
   }
   for (const entry of result.dismissed ?? []) {
@@ -14828,7 +14829,7 @@ function reportKeptStory(io, result, titleLabel) {
   }
   const names = result.ignoredOptions.map((name) => name === "title" ? titleLabel : name);
   const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
-  io.stderr.write(`warning: story.md already exists and was kept, so ${list} ${names.length === 1 ? "was" : "were"} not applied. Edit story.md to change ${names.length === 1 ? "it" : "them"}.
+  io.stderr.write(`warning: ${findingLine(warn("kept-story-options", `story.md already exists and was kept, so ${list} ${names.length === 1 ? "was" : "were"} not applied. Edit story.md to change ${names.length === 1 ? "it" : "them"}.`, "story.md"))}
 `);
 }
 function reportGitignore(io, result) {
@@ -14883,7 +14884,7 @@ function reportResult(io, result, successMessage, failureMessage) {
 `);
   }
   for (const warning of result.warnings) {
-    io.stderr.write(`warning: ${warning.message}
+    io.stderr.write(`warning: ${findingLine(warning)}
 `);
   }
   for (const entry of dismissed) {

@@ -229,7 +229,7 @@ describe("add warns about references to missing entities (#186)", () => {
     createEntity(root, { kind: "location", name: "Gull Harbour" });
     const character = invoke(root, ["add", "character", "Ilse", "--location", "gul-harbour", "--arc", "redemption"]);
     expect(character.code).toBe(0);
-    expect(character.err).toBe("warning: location gul-harbour (locations) does not exist, so no backlink was written; story links reports it until you add it\n");
+    expect(character.err).toBe("warning: location gul-harbour (locations) does not exist, so no backlink was written; story links reports it until you add it [unknown-reference]\n");
     expect(invoke(root, ["add", "location", "X", "--character", "ghost-id"]).err).toContain("character ghost-id (notable-characters) does not exist, so no backlink was written");
     expect(invoke(root, ["add", "faction", "F", "--member", "ghost"]).err).toContain("character ghost (members) does not exist; story links reports it");
     expect(invoke(root, ["add", "artifact", "A", "--owner", "ghost"]).err).toContain("character or faction ghost (owner) does not exist");

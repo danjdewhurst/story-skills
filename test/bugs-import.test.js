@@ -80,6 +80,7 @@ describe("init and import --force on an existing project (#125, #153)", () => {
     expect(run.out).toContain("Updated story project:");
     expect(run.out).not.toContain("Created");
     expect(run.err).toContain("story.md already exists and was kept, so the title, --genre and --form were not applied");
+    expect(run.err).toContain("Edit story.md to change them. [kept-story-options]\n");
     expect(fs.readFileSync(path.join(cwd, "alpha", "story.md"), "utf8")).toContain("title: Alpha");
   });
 
