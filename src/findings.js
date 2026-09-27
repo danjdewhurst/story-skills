@@ -222,7 +222,22 @@ export const FINDING_CODES = {
   "author-and-authors": "warning",
   "context-file-skipped": "warning",
   "invalid-cli-config": "error",
-  "duplicate-pass": "error"
+  "duplicate-pass": "error",
+  // story build, story export, story compare, and the commands that write
+  "story-missing-at-ref": "warning",
+  "derived-ifid": "warning",
+  "scene-outside-book": "warning",
+  "scene-no-location": "warning",
+  "scene-unknown-location": "warning",
+  "chapter-no-scenes": "warning",
+  "scene-no-setting": "warning",
+  "unknown-reference": "warning",
+  "linked-book-id": "warning",
+  "choices-dropped": "warning",
+  "leftover-references": "warning",
+  "stale-exemption": "warning",
+  "adopted-references": "warning",
+  "unsplit-chapter-lines": "warning"
 };
 
 export function codesAt(level) {

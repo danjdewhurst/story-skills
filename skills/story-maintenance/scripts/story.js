@@ -205,7 +205,21 @@ var FINDING_CODES = {
   "author-and-authors": "warning",
   "context-file-skipped": "warning",
   "invalid-cli-config": "error",
-  "duplicate-pass": "error"
+  "duplicate-pass": "error",
+  "story-missing-at-ref": "warning",
+  "derived-ifid": "warning",
+  "scene-outside-book": "warning",
+  "scene-no-location": "warning",
+  "scene-unknown-location": "warning",
+  "chapter-no-scenes": "warning",
+  "scene-no-setting": "warning",
+  "unknown-reference": "warning",
+  "linked-book-id": "warning",
+  "choices-dropped": "warning",
+  "leftover-references": "warning",
+  "stale-exemption": "warning",
+  "adopted-references": "warning",
+  "unsplit-chapter-lines": "warning"
 };
 function codesAt(level) {
   return Object.keys(FINDING_CODES).filter((code) => FINDING_CODES[code] === level);
@@ -9212,7 +9226,7 @@ function gitAtRef(root, ref) {
 function chaptersAtGitRef(root, ref, warnings) {
   const { git, prefix } = gitAtRef(root, ref);
   if (git(["ls-tree", "--name-only", ref, "--", "story.md"]).trim() === "") {
-    warnings.push(`story.md does not exist at git ref ${ref}: the project may not have existed then`);
+    warnings.push(warn("story-missing-at-ref", `story.md does not exist at git ref ${ref}: the project may not have existed then`, "story.md"));
   }
   const names = git(["ls-tree", "--name-only", ref, "--", "chapters/"]).split(`
 `).map((name) => path8.posix.basename(name.trim())).filter((name) => CHAPTER_FILENAME_PATTERN.test(name)).sort();
@@ -9513,7 +9527,7 @@ ${problems.join(`
     }
     const ifid = pinned ?? derivedIfid(project.storyId);
     if (pinned === undefined) {
-      manuscript.warnings.push(`story.md has no ifid, so the build derived ${ifid} from the story id; add ifid: ${ifid} to story.md to keep it if the title changes`);
+      manuscript.warnings.push(warn("derived-ifid", `story.md has no ifid, so the build derived ${ifid} from the story id; add ifid: ${ifid} to story.md to keep it if the title changes`, "story.md"));
     }
     writeFile(output.outFile, tweeSource({
       title: manuscript.title,
@@ -9550,7 +9564,7 @@ function screenplayOutline(project, book) {
   const chronology = chapterChronology(project);
   for (const scene of project.scenes) {
     if (!bookChapters.has(scene.chapter)) {
-      warnings.push(`${relative2(project, scene.file)} names chapter ${scene.chapter || "(none)"}, which is not in the book, and is left out of the screenplay`);
+      warnings.push(warn("scene-outside-book", `${relative2(project, scene.file)} names chapter ${scene.chapter || "(none)"}, which is not in the book, and is left out of the screenplay`, relative2(project, scene.file)));
     }
   }
   const chapters = project.chapters.map((chapter, index) => {
@@ -9561,10 +9575,10 @@ function screenplayOutline(project, book) {
       const notes = [];
       if (scene.location === "") {
         notes.push("No location on the scene record: set location for the heading.");
-        warnings.push(`${relative2(project, scene.file)} has no location; its screenplay heading reads LOCATION TBD`);
+        warnings.push(warn("scene-no-location", `${relative2(project, scene.file)} has no location; its screenplay heading reads LOCATION TBD`, relative2(project, scene.file)));
       } else if (location === undefined) {
         notes.push(`No location record for ${scene.location}: fix the scene's location or add the location.`);
-        warnings.push(`${relative2(project, scene.file)} names location ${scene.location}, which has no record; run story links`);
+        warnings.push(warn("scene-unknown-location", `${relative2(project, scene.file)} names location ${scene.location}, which has no record; run story links`, relative2(project, scene.file)));
       }
       if (scene.location !== "" && !SCENE_SETTINGS.has(setting)) {
         notes.push(`No setting: add setting (interior, exterior, or both) to ${location ? `${relative2(project, location.file)} or the scene` : "the scene"} for INT. or EXT.`);
@@ -9599,10 +9613,10 @@ function screenplayOutline(project, book) {
     return { id: chapter.id, heading: book.chapters[index].heading, scenes };
   });
   if (noScenes.length > 0) {
-    warnings.push(`No scene records for ${noScenes.join(", ")}: the screenplay has no headings for ${noScenes.length === 1 ? "that chapter" : "those chapters"}`);
+    warnings.push(warn("chapter-no-scenes", `No scene records for ${noScenes.join(", ")}: the screenplay has no headings for ${noScenes.length === 1 ? "that chapter" : "those chapters"}`));
   }
   if (unset.size > 0) {
-    warnings.push(`No setting (interior, exterior, or both) for ${[...unset].sort().join(", ")}: their scene headings are forced without INT. or EXT.`);
+    warnings.push(warn("scene-no-setting", `No setting (interior, exterior, or both) for ${[...unset].sort().join(", ")}: their scene headings are forced without INT. or EXT.`));
   }
   return {
     title: project.title,
@@ -10040,7 +10054,7 @@ function missingReferenceWarnings(root, kind, data) {
         continue;
       }
       const backlink = BACKLINKED_FIELDS[kind]?.includes(key) ? ", so no backlink was written" : "";
-      warnings.push(`${kinds.join(" or ")} ${id} (${key}) does not exist${backlink}; story links reports it until you add it`);
+      warnings.push(warn("unknown-reference", `${kinds.join(" or ")} ${id} (${key}) does not exist${backlink}; story links reports it until you add it`));
     }
   }
   return warnings;
@@ -10137,7 +10151,7 @@ function linkedBookIdWarnings(project, kind, oldId, newId) {
   }
   const own = canonicalPath(project.root);
   const { books } = discoverSeriesBooks(project.root, scanProject);
-  return books.filter((book) => book.key !== own && book.project[collection].some((entity) => entity.id === oldId)).map((book) => `${kind} ${oldId} is also defined in linked book ${book.title} (${seriesLinkPath(project.root, book.root)}); story series matches shared canon by id, so rename it there to ${newId} too, or keep the old id`);
+  return books.filter((book) => book.key !== own && book.project[collection].some((entity) => entity.id === oldId)).map((book) => warn("linked-book-id", `${kind} ${oldId} is also defined in linked book ${book.title} (${seriesLinkPath(project.root, book.root)}); story series matches shared canon by id, so rename it there to ${newId} too, or keep the old id`));
 }
 function retitleHeading(markdown, oldName, newName) {
   const oldText = String(oldName ?? "").trim();
@@ -10190,7 +10204,7 @@ function removeEntityUnlocked(root, options) {
   const reindexed = reindexProject(project.root);
   const warnings = leftoverReferenceWarnings(project.root, kind, id);
   if (choosers.length > 0) {
-    warnings.push(branchGraph(scanProject(project.root)).branching || !wasBranching ? `${choosers.join(", ")} had choices leading to ${id}, which remove dropped; a chapter left with no choices is an ending, so check where ${choosers.length === 1 ? "it leads" : "they lead"} now` : `${choosers.join(", ")} had the last choices in the book, leading to ${id}, which remove dropped; with no choices left the book is linear again and each chapter continues to the next, so add choices back to keep it branching`);
+    warnings.push(warn("choices-dropped", branchGraph(scanProject(project.root)).branching || !wasBranching ? `${choosers.join(", ")} had choices leading to ${id}, which remove dropped; a chapter left with no choices is an ending, so check where ${choosers.length === 1 ? "it leads" : "they lead"} now` : `${choosers.join(", ")} had the last choices in the book, leading to ${id}, which remove dropped; with no choices left the book is linear again and each chapter continues to the next, so add choices back to keep it branching`, choosers.length === 1 ? choosers[0] : null));
   }
   return { kind, id, file, alreadyGone, changed: [file].concat(reindexed.changed), warnings };
 }
@@ -10207,11 +10221,11 @@ function leftoverReferenceWarnings(root, kind, id) {
     }).keys()].map((file) => path8.relative(root, file)).sort();
   } catch {}
   if (files.length > 0) {
-    warnings.push(`${files.join(", ")} still ${files.length === 1 ? "mentions" : "mention"} ${kind} ${id} in ${numbered ? "links or ids" : "links"} in the text, which remove does not change: edit ${files.length === 1 ? "it" : "them"}, then run story links`);
+    warnings.push(warn("leftover-references", `${files.join(", ")} still ${files.length === 1 ? "mentions" : "mention"} ${kind} ${id} in ${numbered ? "links or ids" : "links"} in the text, which remove does not change: edit ${files.length === 1 ? "it" : "them"}, then run story links`, files.length === 1 ? files[0] : null));
   }
   const patterns = exemptionPatterns(root).filter((pattern) => renameIdText(pattern, id, probe) !== pattern);
   if (patterns.length > 0) {
-    warnings.push(`continuity/exemptions.md has ${patterns.length === 1 ? "a pattern" : `${patterns.length} patterns`} naming ${id}, which ${patterns.length === 1 ? "no longer matches" : "no longer match"} anything: ${patterns.map((pattern) => JSON.stringify(pattern)).join(", ")}. Delete or update ${patterns.length === 1 ? "it" : "them"}`);
+    warnings.push(warn("stale-exemption", `continuity/exemptions.md has ${patterns.length === 1 ? "a pattern" : `${patterns.length} patterns`} naming ${id}, which ${patterns.length === 1 ? "no longer matches" : "no longer match"} anything: ${patterns.map((pattern) => JSON.stringify(pattern)).join(", ")}. Delete or update ${patterns.length === 1 ? "it" : "them"}`, path8.join("continuity", "exemptions.md")));
   }
   return warnings;
 }
@@ -10412,7 +10426,7 @@ function adoptedReferenceWarnings(root, kind, id, excludedFile, action) {
     return [];
   }
   const files = [...plan.keys()].map((file) => path8.relative(root, file)).sort();
-  return [`${id} was already referenced before this ${action}, and those references now point at the ${action === "move" ? "moved" : "renamed"} ${kind}: ${files.join(", ")}. Check them`];
+  return [warn("adopted-references", `${id} was already referenced before this ${action}, and those references now point at the ${action === "move" ? "moved" : "renamed"} ${kind}: ${files.join(", ")}. Check them`)];
 }
 function idRenamer(oldId, newId) {
   return (value) => value === oldId ? newId : value;
@@ -11953,7 +11967,7 @@ function bookChapters(project, action = "build") {
     };
     chapters.push({ ...entry, key: chapterKey(entry, keys) });
     if (wordCount(entry.body) === 0) {
-      warnings.push(`${relative2(project, chapter.file)} has no prose yet and is built as a heading-only page`);
+      warnings.push(warn("empty-chapter", `${relative2(project, chapter.file)} has no prose yet and is built as a heading-only page`, relative2(project, chapter.file)));
     }
   }
   return { meta, chapters, warnings };
@@ -13760,7 +13774,7 @@ function splitChapters(documents, warnings = []) {
     if (unused.length > 0) {
       const count = unused.length === 1 ? "1 plain-text chapter line was" : `${unused.length} plain-text chapter lines were`;
       const why = markdown ? "the file has markdown chapter headings, which take precedence, so make these headings too (## Chapter 1)" : "a chapter line splits only when it stands alone between blank lines, so add a blank line after each";
-      warnings.push(`${document.name}: ${count} not used to split chapters (first "${unused[0].text}" at line ${unused[0].index + 1 + offset}): ${why}. See "How chapters are split" in docs/manuscripts.md`);
+      warnings.push(warn("unsplit-chapter-lines", `${document.name}: ${count} not used to split chapters (first "${unused[0].text}" at line ${unused[0].index + 1 + offset}): ${why}. See "How chapters are split" in docs/manuscripts.md`, document.name));
     }
     if (sections.length > 0) {
       chapters.push(...sections);

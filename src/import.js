@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer";
 import fs from "node:fs";
 import path from "node:path";
+import { warn } from "./findings.js";
 import { parseFrontmatter, stringifyFrontmatter, withoutLeadingFrontmatter } from "./frontmatter.js";
 import { chapterHeading, fencedLineIndexes, scanComments, splitFences, titleCaseSlug, wordCount } from "./markdown.js";
 import { MAX_READ_BYTES } from "./files.js";
@@ -344,7 +345,7 @@ function splitChapters(documents, warnings = []) {
       const why = markdown
         ? "the file has markdown chapter headings, which take precedence, so make these headings too (## Chapter 1)"
         : "a chapter line splits only when it stands alone between blank lines, so add a blank line after each";
-      warnings.push(`${document.name}: ${count} not used to split chapters (first "${unused[0].text}" at line ${unused[0].index + 1 + offset}): ${why}. See "How chapters are split" in docs/manuscripts.md`);
+      warnings.push(warn("unsplit-chapter-lines", `${document.name}: ${count} not used to split chapters (first "${unused[0].text}" at line ${unused[0].index + 1 + offset}): ${why}. See "How chapters are split" in docs/manuscripts.md`, document.name));
     }
     if (sections.length > 0) {
       chapters.push(...sections);

@@ -2051,7 +2051,7 @@ function gitAtRef(root, ref) {
 function chaptersAtGitRef(root, ref, warnings) {
   const { git, prefix } = gitAtRef(root, ref);
   if (git(["ls-tree", "--name-only", ref, "--", "story.md"]).trim() === "") {
-    warnings.push(`story.md does not exist at git ref ${ref}: the project may not have existed then`);
+    warnings.push(warn("story-missing-at-ref", `story.md does not exist at git ref ${ref}: the project may not have existed then`, "story.md"));
   }
   // ls-tree paths are relative to the working directory (-C root); git show
   // paths are relative to the repository root, hence the prefix there.
@@ -2427,7 +2427,7 @@ export function buildBook(root, options = {}) {
     // share it, so the build says how to pin it.
     const ifid = pinned ?? derivedIfid(project.storyId);
     if (pinned === undefined) {
-      manuscript.warnings.push(`story.md has no ifid, so the build derived ${ifid} from the story id; add ifid: ${ifid} to story.md to keep it if the title changes`);
+      manuscript.warnings.push(warn("derived-ifid", `story.md has no ifid, so the build derived ${ifid} from the story id; add ifid: ${ifid} to story.md to keep it if the title changes`, "story.md"));
     }
     writeFile(output.outFile, tweeSource({
       title: manuscript.title,
@@ -2472,7 +2472,7 @@ function screenplayOutline(project, book) {
   const chronology = chapterChronology(project);
   for (const scene of project.scenes) {
     if (!bookChapters.has(scene.chapter)) {
-      warnings.push(`${relative(project, scene.file)} names chapter ${scene.chapter || "(none)"}, which is not in the book, and is left out of the screenplay`);
+      warnings.push(warn("scene-outside-book", `${relative(project, scene.file)} names chapter ${scene.chapter || "(none)"}, which is not in the book, and is left out of the screenplay`, relative(project, scene.file)));
     }
   }
   const chapters = project.chapters.map((chapter, index) => {
@@ -2488,10 +2488,10 @@ function screenplayOutline(project, book) {
         const notes = [];
         if (scene.location === "") {
           notes.push("No location on the scene record: set location for the heading.");
-          warnings.push(`${relative(project, scene.file)} has no location; its screenplay heading reads LOCATION TBD`);
+          warnings.push(warn("scene-no-location", `${relative(project, scene.file)} has no location; its screenplay heading reads LOCATION TBD`, relative(project, scene.file)));
         } else if (location === undefined) {
           notes.push(`No location record for ${scene.location}: fix the scene's location or add the location.`);
-          warnings.push(`${relative(project, scene.file)} names location ${scene.location}, which has no record; run story links`);
+          warnings.push(warn("scene-unknown-location", `${relative(project, scene.file)} names location ${scene.location}, which has no record; run story links`, relative(project, scene.file)));
         }
         if (scene.location !== "" && !SCENE_SETTINGS.has(setting)) {
           notes.push(`No setting: add setting (interior, exterior, or both) to ${location ? `${relative(project, location.file)} or the scene` : "the scene"} for INT. or EXT.`);
@@ -2526,10 +2526,10 @@ function screenplayOutline(project, book) {
     return { id: chapter.id, heading: book.chapters[index].heading, scenes };
   });
   if (noScenes.length > 0) {
-    warnings.push(`No scene records for ${noScenes.join(", ")}: the screenplay has no headings for ${noScenes.length === 1 ? "that chapter" : "those chapters"}`);
+    warnings.push(warn("chapter-no-scenes", `No scene records for ${noScenes.join(", ")}: the screenplay has no headings for ${noScenes.length === 1 ? "that chapter" : "those chapters"}`));
   }
   if (unset.size > 0) {
-    warnings.push(`No setting (interior, exterior, or both) for ${[...unset].sort().join(", ")}: their scene headings are forced without INT. or EXT.`);
+    warnings.push(warn("scene-no-setting", `No setting (interior, exterior, or both) for ${[...unset].sort().join(", ")}: their scene headings are forced without INT. or EXT.`));
   }
   return {
     title: project.title,
@@ -3014,7 +3014,7 @@ function missingReferenceWarnings(root, kind, data) {
         continue;
       }
       const backlink = BACKLINKED_FIELDS[kind]?.includes(key) ? ", so no backlink was written" : "";
-      warnings.push(`${kinds.join(" or ")} ${id} (${key}) does not exist${backlink}; story links reports it until you add it`);
+      warnings.push(warn("unknown-reference", `${kinds.join(" or ")} ${id} (${key}) does not exist${backlink}; story links reports it until you add it`));
     }
   }
   return warnings;
@@ -3143,7 +3143,7 @@ function linkedBookIdWarnings(project, kind, oldId, newId) {
   const { books } = discoverSeriesBooks(project.root, scanProject);
   return books
     .filter((book) => book.key !== own && book.project[collection].some((entity) => entity.id === oldId))
-    .map((book) => `${kind} ${oldId} is also defined in linked book ${book.title} (${seriesLinkPath(project.root, book.root)}); story series matches shared canon by id, so rename it there to ${newId} too, or keep the old id`);
+    .map((book) => warn("linked-book-id", `${kind} ${oldId} is also defined in linked book ${book.title} (${seriesLinkPath(project.root, book.root)}); story series matches shared canon by id, so rename it there to ${newId} too, or keep the old id`));
 }
 
 // Updates the first heading that shows the old name (`# Old Name`, or
@@ -3223,9 +3223,9 @@ function removeEntityUnlocked(root, options) {
   if (choosers.length > 0) {
     // With the last choice gone the book is linear again: every chapter
     // continues to the next, endings included.
-    warnings.push(branchGraph(scanProject(project.root)).branching || !wasBranching
+    warnings.push(warn("choices-dropped", branchGraph(scanProject(project.root)).branching || !wasBranching
       ? `${choosers.join(", ")} had choices leading to ${id}, which remove dropped; a chapter left with no choices is an ending, so check where ${choosers.length === 1 ? "it leads" : "they lead"} now`
-      : `${choosers.join(", ")} had the last choices in the book, leading to ${id}, which remove dropped; with no choices left the book is linear again and each chapter continues to the next, so add choices back to keep it branching`);
+      : `${choosers.join(", ")} had the last choices in the book, leading to ${id}, which remove dropped; with no choices left the book is linear again and each chapter continues to the next, so add choices back to keep it branching`, choosers.length === 1 ? choosers[0] : null));
   }
   return { kind, id, file, alreadyGone, changed: [file].concat(reindexed.changed), warnings };
 }
@@ -3250,11 +3250,11 @@ function leftoverReferenceWarnings(root, kind, id) {
     // by validate.
   }
   if (files.length > 0) {
-    warnings.push(`${files.join(", ")} still ${files.length === 1 ? "mentions" : "mention"} ${kind} ${id} in ${numbered ? "links or ids" : "links"} in the text, which remove does not change: edit ${files.length === 1 ? "it" : "them"}, then run story links`);
+    warnings.push(warn("leftover-references", `${files.join(", ")} still ${files.length === 1 ? "mentions" : "mention"} ${kind} ${id} in ${numbered ? "links or ids" : "links"} in the text, which remove does not change: edit ${files.length === 1 ? "it" : "them"}, then run story links`, files.length === 1 ? files[0] : null));
   }
   const patterns = exemptionPatterns(root).filter((pattern) => renameIdText(pattern, id, probe) !== pattern);
   if (patterns.length > 0) {
-    warnings.push(`continuity/exemptions.md has ${patterns.length === 1 ? "a pattern" : `${patterns.length} patterns`} naming ${id}, which ${patterns.length === 1 ? "no longer matches" : "no longer match"} anything: ${patterns.map((pattern) => JSON.stringify(pattern)).join(", ")}. Delete or update ${patterns.length === 1 ? "it" : "them"}`);
+    warnings.push(warn("stale-exemption", `continuity/exemptions.md has ${patterns.length === 1 ? "a pattern" : `${patterns.length} patterns`} naming ${id}, which ${patterns.length === 1 ? "no longer matches" : "no longer match"} anything: ${patterns.map((pattern) => JSON.stringify(pattern)).join(", ")}. Delete or update ${patterns.length === 1 ? "it" : "them"}`, path.join("continuity", "exemptions.md")));
   }
   return warnings;
 }
@@ -3503,7 +3503,7 @@ function adoptedReferenceWarnings(root, kind, id, excludedFile, action) {
     return [];
   }
   const files = [...plan.keys()].map((file) => path.relative(root, file)).sort();
-  return [`${id} was already referenced before this ${action}, and those references now point at the ${action === "move" ? "moved" : "renamed"} ${kind}: ${files.join(", ")}. Check them`];
+  return [warn("adopted-references", `${id} was already referenced before this ${action}, and those references now point at the ${action === "move" ? "moved" : "renamed"} ${kind}: ${files.join(", ")}. Check them`)];
 }
 
 function idRenamer(oldId, newId) {
@@ -5339,7 +5339,7 @@ function bookChapters(project, action = "build") {
     };
     chapters.push({ ...entry, key: chapterKey(entry, keys) });
     if (wordCount(entry.body) === 0) {
-      warnings.push(`${relative(project, chapter.file)} has no prose yet and is built as a heading-only page`);
+      warnings.push(warn("empty-chapter", `${relative(project, chapter.file)} has no prose yet and is built as a heading-only page`, relative(project, chapter.file)));
     }
   }
   return { meta, chapters, warnings };
