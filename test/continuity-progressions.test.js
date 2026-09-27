@@ -77,8 +77,8 @@ describe("continuity with status progressions", () => {
     const found = findings(root, "progression-deceased-in-cast");
     // The death chapter itself and the earlier chapter are fine.
     expect(found).toEqual([
-      { code: "progression-deceased-in-cast", message: `${path.join("chapters", "chapter-04.md")} lists ada-fenn, whose progressions make them deceased from chapter-03; move appearances after the death to mentions`, file: path.join("chapters", "chapter-04.md") },
-      { code: "progression-deceased-in-cast", message: `${path.join("scenes", "chapter-04-scene-01.md")} lists ada-fenn, whose progressions make them deceased from chapter-03; move appearances after the death to mentions`, file: path.join("scenes", "chapter-04-scene-01.md") }
+      { code: "progression-deceased-in-cast", message: `${path.join("chapters", "chapter-04.md")} lists ada-fenn, whose progressions make them deceased from chapter-03; move appearances after the death to mentions`, file: path.join("chapters", "chapter-04.md"), chapter: "chapter-04" },
+      { code: "progression-deceased-in-cast", message: `${path.join("scenes", "chapter-04-scene-01.md")} lists ada-fenn, whose progressions make them deceased from chapter-03; move appearances after the death to mentions`, file: path.join("scenes", "chapter-04-scene-01.md"), chapter: "chapter-04" }
     ]);
     expect(codes(root)).not.toContain("posthumous-appearance");
     expect(codes(root)).not.toContain("deceased-in-cast");

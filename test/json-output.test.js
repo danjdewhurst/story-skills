@@ -127,7 +127,7 @@ describe("--json result envelope", () => {
     const usage = invokeJson(root, ["knowledge", "sera-voss", "--json"]);
     expect(usage.code).toBe(2);
     expect(usage.envelope.data).toBeNull();
-    expect(usage.envelope.diagnostics).toEqual([{ severity: "error", file: null, message: expect.stringContaining("Usage: story knowledge"), code: "usage-error", check: "knowledge" }]);
+    expect(usage.envelope.diagnostics).toEqual([{ severity: "error", file: null, chapter: null, message: expect.stringContaining("Usage: story knowledge"), code: "usage-error", check: "knowledge" }]);
   });
 
   test("a failure after --json (unknown character, missing project) is a JSON result", () => {
@@ -298,21 +298,27 @@ describe("json helpers", () => {
 
   test("a diagnostic takes its code, file, and message from the finding", () => {
     expect(diagnostic("warning", warn("chapter-numbering-start", "Chapter numbering starts at 2, not 1"), "continuity"))
-      .toEqual({ severity: "warning", file: null, message: "Chapter numbering starts at 2, not 1", code: "chapter-numbering-start", check: "continuity" });
+      .toEqual({ severity: "warning", file: null, chapter: null, message: "Chapter numbering starts at 2, not 1", code: "chapter-numbering-start", check: "continuity" });
+    expect(diagnostic("warning", warn("clock-backward", "late", "a.md", "chapter-02"), "continuity").chapter).toBe("chapter-02");
     expect(diagnostic("error", err("unreadable-file", "story.md: bad yaml", "story.md"), "validate").file).toBe("story.md");
   });
 
   test("a failure is coded by its exit code", () => {
     expect([2, 3, 4, 1].map((exitCode) => failureDiagnostic("broke", exitCode, "links").code))
       .toEqual(["usage-error", "unusable-project", "write-refused", "command-failed"]);
-    expect(failureDiagnostic("broke", 2, "links")).toEqual({ severity: "error", file: null, message: "broke", code: "usage-error", check: "links" });
+    expect(failureDiagnostic("broke", 2, "links")).toEqual({ severity: "error", file: null, chapter: null, message: "broke", code: "usage-error", check: "links" });
   });
 
   test("diagnosticsFrom and resultData split a result", () => {
     const result = { ok: false, errors: [err("unreadable-file", "a.md broke", "a.md")], warnings: [warn("clock-backward", "b")], extra: 1 };
     expect(diagnosticsFrom(result, "x")).toEqual([
-      { severity: "error", file: "a.md", message: "a.md broke", code: "unreadable-file", check: "x" },
-      { severity: "warning", file: null, message: "b", code: "clock-backward", check: "x" }
+      { severity: "error", file: "a.md", chapter: null, message: "a.md broke", code: "unreadable-file", check: "x" },
+      { severity: "warning", file: null, chapter: null, message: "b", code: "clock-backward", check: "x" }
+    ]);
+    const dismissed = { ok: true, errors: [], warnings: [], dismissed: [{ finding: warn("clock-backward", "c"), reason: "why", index: 2 }, { finding: warn("todo-markers", "d"), reason: "off", note: "off" }] };
+    expect(diagnosticsFrom(dismissed, "x").map(({ exemption, exemptionIndex }) => ({ exemption, exemptionIndex }))).toEqual([
+      { exemption: "why", exemptionIndex: 2 },
+      { exemption: "off", exemptionIndex: null }
     ]);
     expect(diagnosticsFrom({}, "x")).toEqual([]);
     expect(resultData(result)).toEqual({ extra: 1 });

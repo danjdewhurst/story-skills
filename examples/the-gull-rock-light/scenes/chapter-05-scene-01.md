@@ -4,6 +4,8 @@ chapter: chapter-05
 scene: 1
 pov: ada-fenn
 location: gull-rock
+date: 1893-11-15
+time: "07:40"
 characters:
   - ada-fenn
   - tobias-wren
@@ -22,4 +24,4 @@ Dawn, the lamp guttered out but the ship safe.
 
 ## Continuity Notes
 
-Night of the relief landing on Gull Rock.
+Dawn after the relief landing, once the bell has rung all night.

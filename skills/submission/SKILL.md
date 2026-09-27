@@ -92,7 +92,8 @@ Then check what the CLI cannot:
    ---
    type: exemption-log
    exemptions:
-     - pattern: "continuity/promises/the-sealed-letter.md is still planted"
+     - code: complete-with-open-promise
+       pattern: "continuity/promises/the-sealed-letter.md is still planted"
        reason: "Pays off in book two."
    ---
    ```

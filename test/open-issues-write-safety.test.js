@@ -207,7 +207,7 @@ describe("remove (#206, #103)", () => {
     const chapter = invoke(root, ["remove", "chapter", "chapter-02"]);
     expect(chapter.code).toBe(0);
     expect(chapter.err).toContain(`warning: ${path.join("plot", "arcs", "main.md")}, ${path.join("plot", "timeline.md")} still mention chapter chapter-02 in links or ids in the text, which remove does not change: edit them, then run story links`);
-    expect(chapter.err).toContain(`warning: continuity/exemptions.md has a pattern naming chapter-02, which no longer matches anything: "chapters/chapter-02.md has POV bo". Delete or update it`);
+    expect(chapter.err).toContain(`warning: continuity/exemptions.md has an entry naming chapter-02 (exemptions[0]), which no longer matches anything: pattern "chapters/chapter-02.md has POV bo". Delete or update it`);
 
     const character = invoke(root, ["remove", "character", "bo"]);
     expect(character.code).toBe(0);

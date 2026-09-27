@@ -1,8 +1,10 @@
 // Every error and warning a command reports is a finding: `code` is its
 // stable kebab-case rule name, `message` the line the text output prints
-// after `error:` or `warning:`, and `file` the project file it is about, as
-// the message spells it, or null. Build findings with err and warn where the
-// rule is checked, passing the code as a string literal.
+// after `error:` or `warning:`, `file` the project file it is about, as the
+// message spells it, or null, and `chapter` the id of the chapter the
+// problem shows up in, when the rule knows it (see CHAPTER_CODES), or null.
+// Build findings with err and warn where the rule is checked, passing the
+// code as a string literal.
 //
 // Codes are part of the CLI's interface: story.md `severity` entries and
 // --json consumers name them, so a code is never renamed or reused for a
@@ -10,14 +12,14 @@
 // docs/cli-reference.md documents it; test/finding-codes.test.js fails when a
 // code is raised but not listed or documented, or listed but never raised.
 
-export function err(code, message, file = null) {
-  return { code, message, file };
+export function err(code, message, file = null, chapter = null) {
+  return { code, message, file, chapter };
 }
 
 // The same shape as err: the level is where the finding is pushed. The two
 // names let the finding-codes test check each code's level in the source.
-export function warn(code, message, file = null) {
-  return { code, message, file };
+export function warn(code, message, file = null, chapter = null) {
+  return { code, message, file, chapter };
 }
 
 export const FINDING_CODES = {
@@ -73,6 +75,10 @@ export const FINDING_CODES = {
   "progression-out-of-order": "error",
   "duplicate-pass": "error",
   "exemption-pattern-too-short": "error",
+  "exemption-unknown-code": "error",
+  "exemption-code-not-dismissible": "error",
+  "exemption-file-not-relative": "error",
+  "exemption-too-broad": "error",
   "style-use-equals-avoid": "error",
   "duplicate-session-date": "error",
   "research-no-sources": "warning",
@@ -252,3 +258,95 @@ export const FINDING_CODES = {
 export function codesAt(level) {
   return Object.keys(FINDING_CODES).filter((code) => FINDING_CODES[code] === level);
 }
+
+// Warnings that story init and story import report while making a project,
+// before any story.md or exemption log is read, so neither can change them.
+export const PROJECTLESS_CODES = ["kept-story-options", "unsplit-chapter-lines"];
+
+// The warning codes a story.md severity entry can name.
+export function severityCodes() {
+  return codesAt("warning").filter((code) => !PROJECTLESS_CODES.includes(code));
+}
+
+// The errors story continuity reports: an exemption can dismiss these, where
+// every other error means the project is broken and stays an error.
+// test/finding-codes.test.js checks the list against src/continuity.js.
+export const CONTINUITY_ERROR_CODES = [
+  "unreadable-file",
+  "entry-not-mapping",
+  "revived-without-death",
+  "died-in-missing-chapter",
+  "revived-in-missing-chapter",
+  "revival-before-death",
+  "death-status-mismatch",
+  "revival-status-mismatch",
+  "posthumous-appearance",
+  "promise-payoff-before-plant",
+  "promise-payoff-missing",
+  "promise-plant-missing",
+  "question-resolved-before-introduced",
+  "question-resolution-missing",
+  "question-open-but-resolved",
+  "clue-payoff-before-plant",
+  "clue-payoff-missing",
+  "clue-plant-missing",
+  "complete-with-open-promise",
+  "complete-with-open-question",
+  "complete-with-open-clue",
+  "current-chapter-ahead",
+  "state-missing-character",
+  "state-missing-location",
+  "state-missing-artifact",
+  "state-missing-owner",
+  "state-missing-chapter",
+  "state-missing-knows",
+  "state-fact-not-kebab",
+  "state-duplicate-fact",
+  "posthumous-learning",
+  "gone-artifact-used",
+  "gone-artifact-mentioned",
+  "travel-too-fast",
+  "route-same-time",
+  "route-too-fast"
+];
+
+// The codes a continuity/exemptions.md entry can name: any warning a
+// severity entry can name, and the errors story continuity reports.
+export function exemptionCodes() {
+  return [...severityCodes(), ...CONTINUITY_ERROR_CODES];
+}
+
+// The continuity findings that carry a `chapter`: each is about something
+// placed in one chapter (a cast, a scene, a learning event, a dated unit), so
+// an exemption's `chapter` key can match it. docs/continuity.md lists them,
+// and test/finding-codes.test.js checks the list against the source.
+export const CHAPTER_CODES = [
+  "posthumous-appearance",
+  "deceased-in-cast",
+  "progression-deceased-in-cast",
+  "progression-death-conflict",
+  "pov-not-in-cast",
+  "pov-scene-mismatch",
+  "scene-cast-not-in-chapter",
+  "scene-location-not-in-chapter",
+  "cut-character-in-cast",
+  "posthumous-learning",
+  "deceased-learning",
+  "progression-deceased-learning",
+  "learner-not-in-cast",
+  "knowledge-not-recorded",
+  "state-tracks-dead-character",
+  "state-location-drift",
+  "object-not-recorded",
+  "state-object-drift",
+  "gone-artifact-used",
+  "gone-artifact-mentioned",
+  "malformed-date",
+  "malformed-time",
+  "negative-travel-hours",
+  "travel-hours-undated",
+  "clock-backward",
+  "travel-too-fast",
+  "route-same-time",
+  "route-too-fast"
+];

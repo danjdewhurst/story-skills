@@ -65,7 +65,7 @@ describe("continuity exemptions", () => {
     expect(after.ok).toBe(true);
     expect(messages(after.errors)).toEqual([]);
     expect(after.dismissed).toEqual([
-      { finding: before.errors[0], reason: "Flashback approved by editor" }
+      { finding: before.errors[0], reason: "Flashback approved by editor", index: 0 }
     ]);
   });
 
@@ -246,7 +246,7 @@ exemptions:
   - pattern: "has-a-pattern-but-no-reason"
 `, "# Bad\n");
     const errors = messages(validateProject(root).errors);
-    expect(errors).toContain("continuity/exemptions.md exemptions[0] is missing a non-empty pattern");
+    expect(errors).toContain("continuity/exemptions.md exemptions[0] sets none of pattern, code, file, chapter: set at least one to say which findings it dismisses");
     expect(errors).toContain("continuity/exemptions.md exemptions[1] is missing a non-empty reason");
   });
 

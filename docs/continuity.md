@@ -73,7 +73,7 @@ Every finding starts with a severity and, usually, a file path. Match the rest o
 | `uses <artifact>, destroyed/lost since`, `mentions <artifact>, destroyed/lost since`, `destroyed/lost before the story`, `references missing since chapter` | `continuity` | [Prop custody](#prop-custody) |
 | `timestamp runs backward`, `allows only …h for travel` (or `allows at most …h`), `is earlier than Chapter`, `malformed date`, `malformed time`, `negative travel-hours` | `continuity` | [Clock and travel time](#clock-and-travel-time) |
 | `puts <character> at <location> …, but the fastest route takes`, `at the same time as` | `continuity` | [Route travel](#route-travel) |
-| `dismissed:` | `continuity` | [Exemptions](#exemptions) |
+| `dismissed:` | `continuity`, and any command reporting a warning an exemption names by code | [Exemptions](#exemptions) |
 | `has no hook`, `end in an outright yes`, `with no sequel`, `end on resolution`, `the median chapter` | `pacing` | [Pacing findings](#pacing-findings) |
 | `never planted: readers cannot play fair`, `late plant`, `lists no characters`, `red herring with no payoff`, `no clue is significance-delayed` | `clues` | [Fair-play findings](#fair-play-findings) |
 | `filter words per 1,000`, `-ly adverbs per 1,000`, `said-bookism dialogue tags`, `sentence lengths are uniform`, `have similar first names` | `prose` | [What each line measures](#what-each-line-measures) |
@@ -114,7 +114,7 @@ Chapter order is always the chapter's `number`. Chapter references such as `died
 
 - **error** lines are contradictions. They make the command exit 1.
 - **warning** lines are things that are probably wrong or stale. They never change the exit code.
-- **dismissed** lines are findings that match an entry in `continuity/exemptions.md`. They are shown so nothing is hidden, but they do not count as errors or warnings. Only `continuity` applies exemptions. See [Exemptions](#exemptions).
+- **dismissed** lines are findings that match an entry in `continuity/exemptions.md`, or warnings a `story.md` [`severity`](cli-reference.md#defaults-and-severity-from-storymd) entry turned off. They are shown so nothing is hidden, but they do not count as errors or warnings. `continuity` applies every exemption; an entry that names a warning's `code` also applies wherever that warning is reported. See [Exemptions](#exemptions).
 
 The report itself (timeline sections, pacing and clue grids, prose counts, voice profiles, progress figures) goes to stdout, so you can redirect it to a file without the findings. File paths in findings are relative to the project root, so you can open them directly.
 
@@ -514,7 +514,7 @@ Each finding in the [example output](#story-continuity) has a direct fix:
 | `knowledge-state[0] references missing chapter chapter-05` | Jonas learns it in chapter 4: `learned-in: chapter-04`. |
 | `POV character nessa-thorn is not listed in characters` | Add `nessa-thorn` to chapter 3's `characters`. |
 | `object-state[0] status active conflicts with ... status destroyed` | The compass was destroyed in chapter 2: set `status: destroyed` and `since: chapter-02`. |
-| `the-sealed-letter.md was planted in chapter-01, 3 chapters ago` | Deliberate: the letter pays off in book two. Record an exemption. |
+| `the-sealed-letter.md was planted in chapter-01, 3 chapters ago` | Deliberate: the letter pays off in book two. Record an [exemption](#exemptions) for `promise-unpaid` in `continuity/promises/the-sealed-letter.md`. |
 
 After those edits, in a copy of the project:
 
@@ -534,8 +534,12 @@ Some findings are intentional: a flashback that runs the clock backward, a setup
 ---
 type: exemption-log
 exemptions:
-  - pattern: "the-sealed-letter.md was planted in chapter-01"
+  - code: promise-unpaid
+    file: continuity/promises/the-sealed-letter.md
     reason: "The letter pays off in book two; the gap is deliberate."
+  - code: clock-backward
+    chapter: chapter-06
+    reason: "Chapter 6 is a flashback to the night of the fire."
 ---
 
 # Continuity Exemptions
@@ -543,19 +547,33 @@ exemptions:
 Findings from `story continuity` that are intentional. Each entry needs a reason.
 ```
 
+Each entry sets a `reason` and at least one of these keys. It dismisses a finding when every key it sets matches:
+
+| Key | Matches a finding when |
+|---|---|
+| `code` | The finding has this [code](cli-reference.md#finding-codes): the name in brackets at the end of a `warning:` line, or `code` in `--json`. |
+| `file` | The finding is about this file, written relative to the project root as the finding names it (`chapters/chapter-03.md`). A `/` or `\` matches either separator. The whole path must match; a folder does not match the files in it. |
+| `chapter` | The finding carries this chapter id. Only the findings listed below carry a chapter; an entry with `chapter` never matches any other finding. |
+| `pattern` | The finding's text contains `pattern` as a plain, case-sensitive substring. There are no wildcards or regular expressions. Paths in the pattern match either separator. |
+
+Prefer `code` with `file` (or `chapter`): the code names the rule and the file names the one place, so rewording a message never stops the entry from matching or makes it match something new. A `pattern` still works, alone or with the other keys, and every log written before `code`, `file`, and `chapter` existed behaves as it did. Copy the code and file from the finding, or from `story continuity --json`, where each diagnostic has `code`, `file`, and `chapter`.
+
+These findings carry a chapter: `posthumous-appearance`, `deceased-in-cast`, `progression-deceased-in-cast`, `progression-death-conflict`, `pov-not-in-cast`, `pov-scene-mismatch`, `scene-cast-not-in-chapter`, `scene-location-not-in-chapter`, `cut-character-in-cast`, `posthumous-learning`, `deceased-learning`, `progression-deceased-learning`, `learner-not-in-cast`, `knowledge-not-recorded`, `state-tracks-dead-character`, `state-location-drift`, `object-not-recorded`, `state-object-drift`, `gone-artifact-used`, `gone-artifact-mentioned`, `malformed-date`, `malformed-time`, `negative-travel-hours`, `travel-hours-undated`, `clock-backward`, `travel-too-fast`, `route-same-time`, and `route-too-fast`.
+
+Their chapter is where the problem shows up: the chapter of the chapter or scene file the finding is about (a scene's `chapter` field), the `learned-in` chapter of a learning event, `current-chapter` for the `continuity/state.md` checks against it, and for `progression-death-conflict` the chapter of the death, the progression, or the revival it names. Findings about a whole character, promise, question, or clue, or about `story.md`, carry no chapter: match those with `file`. A scene with no `chapter` field gives its findings no chapter.
+
 How matching works:
 
-- A finding is dismissed when its full text contains `pattern` as a plain, case-sensitive substring. There are no wildcards or regular expressions. Paths match whichever separator they were written with, so `continuity\promises\oath.md` in a pattern matches `continuity/promises/oath.md` in a finding, and the reverse, and one exemption log works on Windows, macOS, and Linux.
-- The first matching entry wins, and its `reason` is printed after the dismissed finding.
-- Both errors and warnings can be dismissed. The exit code depends only on the errors that remain.
+- The first matching entry wins, and its `reason` is printed after the dismissed finding. With `--json`, a dismissed diagnostic has `exemption` (the reason) and `exemptionIndex`, the entry's position in the list, as `story validate` numbers it (`exemptions[0]` is the first).
+- In `story continuity`, both errors and warnings can be dismissed. The exit code depends only on the errors that remain.
+- An entry that names a `code` also applies outside `continuity`: to that warning wherever it is reported, as a `story.md` [`severity`](cli-reference.md#defaults-and-severity-from-storymd) entry does. That includes `validate`, `links`, `prose`, `pacing`, `clues`, `voices`, `names`, `series`, `timeline`, `progress`, `compare`, the checks `report`, `next`, and `doctor` summarise, and the warnings `build`, `export`, `context`, `add`, `rename`, `move`, and `remove` print. Outside `continuity` an exemption dismisses only warnings: the errors other commands report mean the project is broken. An entry with no `code` applies only in `continuity`, as exemptions always have.
+- An exemption applies before `severity`. A finding an entry matches is dismissed with the entry's reason even when `severity` promotes the rest of its code to an error or turns it off, so one deliberate case can stay dismissed while every other one fails the build.
 - The pattern matches as written, including leading or trailing spaces, so `" ann, who died"` does not also dismiss the same finding for `joann`.
-- A `pattern` shorter than 4 characters (after trimming whitespace) is ignored, so a pattern like `ch` cannot dismiss everything. An entry with no `reason` is ignored too.
+- An entry `story validate` rejects never dismisses anything, so a typo in one key cannot widen the entry to everything its other keys match.
 
-Copy the pattern from the finding itself, and keep it specific: include the file name and the chapter, so a new finding of the same kind in another file still shows up. `story report`, `story next`, and `story doctor` count continuity findings after exemptions.
+`story validate` checks the file: `type` must be `exemption-log` and `exemptions` a list of mappings, and each entry needs a non-empty `reason` and at least one of `pattern`, `code`, `file`, and `chapter`. A `pattern` must be at least 4 characters after trimming whitespace (`exemption-pattern-too-short`). A `code` must be a finding code (`exemption-unknown-code`) that an exemption can dismiss: a warning a `severity` entry can name, or an error `continuity` reports (`exemption-code-not-dismissible`). A `file` must be relative to the project root, with no `..` segment (`exemption-file-not-relative`), and a `chapter` a kebab-case id. An entry with only a `code` is rejected as too broad (`exemption-too-broad`): it would dismiss every finding of that rule, so add a `file`, `chapter`, or `pattern`, or, for a warning, set its `severity` to `off` in `story.md`. `story validate` warns (`stale-exemption`) when a `file` does not exist or a `chapter` is not a chapter in `chapters/`, since the entry then matches nothing, and (`near-miss-key`) when a key looks like a misspelled one, such as `File`.
 
-`story validate` checks the file: `type` must be `exemption-log`, `exemptions` must be a list, and each entry needs a non-empty `pattern` of at least 4 characters and a non-empty `reason`. If the file is missing or does not parse, `story continuity` applies no exemptions. If it is refused as a symlink, a device, or a file over 5 MiB, `story continuity` reports that as an error rather than silently applying none.
-
-Exemptions apply only to `story continuity`. They do not affect `validate`, `links`, `pacing`, `clues`, `prose`, `voices`, `names`, or `series`.
+If the file is missing or does not parse, no exemptions apply. If it is refused as a symlink, a device, or a file over 5 MiB, `story continuity` reports that as an error rather than silently applying none. `story report`, `story next`, and `story doctor` count findings after exemptions. `rename` and `move` update the ids and paths in `pattern`, `file`, and `chapter`, so an entry stays with its finding; `remove` warns about entries that name the removed entity.
 
 ## Story knowledge
 

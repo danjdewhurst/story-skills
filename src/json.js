@@ -6,7 +6,8 @@ import { isTruthy } from "./options.js";
 // renaming, removing, or retyping one bumps it. schemas/result.schema.json
 // describes this version. story/v2 made diagnostics[].code the finding's
 // rule code, where story/v1 (0.16.0) had the check name, and added
-// diagnostics[].check.
+// diagnostics[].check; diagnostics[].chapter and a dismissed diagnostic's
+// exemptionIndex were added within it.
 export const API_VERSION = "story/v2";
 
 export function wantsJson(parsed) {
@@ -33,12 +34,12 @@ export function diagnosticsFrom(result, check) {
   return [
     ...(result.errors ?? []).map((finding) => diagnostic("error", finding, check)),
     ...(result.warnings ?? []).map((finding) => diagnostic("warning", finding, check)),
-    ...(result.dismissed ?? []).map((entry) => ({ ...diagnostic("dismissed", entry.finding, check), exemption: entry.reason }))
+    ...(result.dismissed ?? []).map((entry) => ({ ...diagnostic("dismissed", entry.finding, check), exemption: entry.reason, exemptionIndex: entry.index ?? null }))
   ];
 }
 
 export function diagnostic(severity, finding, check) {
-  return { severity, file: finding.file, message: finding.message, code: finding.code, check };
+  return { severity, file: finding.file, chapter: finding.chapter ?? null, message: finding.message, code: finding.code, check };
 }
 
 // A command that failed before it produced a result (a usage error, a

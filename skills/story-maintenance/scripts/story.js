@@ -1,21 +1,21 @@
 #!/usr/bin/env node
 
 // src/cli.js
-import path13 from "node:path";
+import path14 from "node:path";
 
 // src/commands.js
 import fs9 from "node:fs";
-import path12 from "node:path";
+import path13 from "node:path";
 
 // src/clues.js
 import path from "node:path";
 
 // src/findings.js
-function err(code, message, file = null) {
-  return { code, message, file };
+function err(code, message, file = null, chapter = null) {
+  return { code, message, file, chapter };
 }
-function warn(code, message, file = null) {
-  return { code, message, file };
+function warn(code, message, file = null, chapter = null) {
+  return { code, message, file, chapter };
 }
 var FINDING_CODES = {
   "unreadable-file": "error",
@@ -68,6 +68,10 @@ var FINDING_CODES = {
   "progression-out-of-order": "error",
   "duplicate-pass": "error",
   "exemption-pattern-too-short": "error",
+  "exemption-unknown-code": "error",
+  "exemption-code-not-dismissible": "error",
+  "exemption-file-not-relative": "error",
+  "exemption-too-broad": "error",
   "style-use-equals-avoid": "error",
   "duplicate-session-date": "error",
   "research-no-sources": "warning",
@@ -232,6 +236,51 @@ var FINDING_CODES = {
 function codesAt(level) {
   return Object.keys(FINDING_CODES).filter((code) => FINDING_CODES[code] === level);
 }
+var PROJECTLESS_CODES = ["kept-story-options", "unsplit-chapter-lines"];
+function severityCodes() {
+  return codesAt("warning").filter((code) => !PROJECTLESS_CODES.includes(code));
+}
+var CONTINUITY_ERROR_CODES = [
+  "unreadable-file",
+  "entry-not-mapping",
+  "revived-without-death",
+  "died-in-missing-chapter",
+  "revived-in-missing-chapter",
+  "revival-before-death",
+  "death-status-mismatch",
+  "revival-status-mismatch",
+  "posthumous-appearance",
+  "promise-payoff-before-plant",
+  "promise-payoff-missing",
+  "promise-plant-missing",
+  "question-resolved-before-introduced",
+  "question-resolution-missing",
+  "question-open-but-resolved",
+  "clue-payoff-before-plant",
+  "clue-payoff-missing",
+  "clue-plant-missing",
+  "complete-with-open-promise",
+  "complete-with-open-question",
+  "complete-with-open-clue",
+  "current-chapter-ahead",
+  "state-missing-character",
+  "state-missing-location",
+  "state-missing-artifact",
+  "state-missing-owner",
+  "state-missing-chapter",
+  "state-missing-knows",
+  "state-fact-not-kebab",
+  "state-duplicate-fact",
+  "posthumous-learning",
+  "gone-artifact-used",
+  "gone-artifact-mentioned",
+  "travel-too-fast",
+  "route-same-time",
+  "route-too-fast"
+];
+function exemptionCodes() {
+  return [...severityCodes(), ...CONTINUITY_ERROR_CODES];
+}
 
 // src/clues.js
 var LIVE_STATUSES = new Set(["planned", "planted", "paid-off"]);
@@ -333,10 +382,605 @@ function formatClueMatrix(matrix) {
 }
 
 // src/context.js
-import path3 from "node:path";
+import path5 from "node:path";
 
 // src/continuity.js
+import path4 from "node:path";
+
+// src/exemptions.js
+import path3 from "node:path";
+
+// src/files.js
+import fs from "node:fs";
 import path2 from "node:path";
+import { Buffer } from "node:buffer";
+
+// src/exit-codes.js
+var EXIT_CODES = Object.freeze({
+  ok: 0,
+  findings: 1,
+  usage: 2,
+  project: 3,
+  refused: 4
+});
+function withCode(message, exitCode) {
+  return Object.assign(new Error(message), { exitCode });
+}
+function usageError(message) {
+  return withCode(message, EXIT_CODES.usage);
+}
+function projectError(message) {
+  return withCode(message, EXIT_CODES.project);
+}
+function refusedError(message) {
+  return withCode(message, EXIT_CODES.refused);
+}
+function withExitCode(error, exitCode) {
+  if (error !== null && typeof error === "object") {
+    error.exitCode = exitCode;
+  }
+  return error;
+}
+function withDefaultExitCode(error, exitCode) {
+  if (error !== null && typeof error === "object" && !Number.isInteger(error.exitCode)) {
+    error.exitCode = exitCode;
+  }
+  return error;
+}
+var WRITE_SYSCALLS = new Set(["write", "rename", "mkdir", "mkdtemp", "unlink", "rmdir", "copyfile", "rm", "access", "chmod", "fsync"]);
+var WRITE_ERROR_CODES = new Set(["EROFS", "ENOSPC", "EDQUOT", "EFBIG"]);
+function exitCodeFor(error) {
+  if (Number.isInteger(error?.exitCode)) {
+    return error.exitCode;
+  }
+  if (typeof error?.code === "string" && /^E[A-Z]+$/.test(error.code)) {
+    return WRITE_SYSCALLS.has(error.syscall) || WRITE_ERROR_CODES.has(error.code) ? EXIT_CODES.refused : EXIT_CODES.project;
+  }
+  return EXIT_CODES.findings;
+}
+
+// src/files.js
+var MAX_READ_BYTES = 5 * 1024 * 1024;
+function readTextFile(filePath) {
+  const stats = fs.lstatSync(filePath);
+  if (stats.isSymbolicLink()) {
+    throw projectError(`Refusing to read through symlink: ${filePath}`);
+  }
+  if (!stats.isFile()) {
+    throw projectError(`Refusing to read ${filePath}: not a regular file`);
+  }
+  if (stats.size > MAX_READ_BYTES) {
+    throw projectError(`Refusing to read oversized file ${filePath}: ${stats.size} bytes exceeds the ${MAX_READ_BYTES} byte limit`);
+  }
+  return decodeUtf8(fs.readFileSync(filePath), filePath);
+}
+var UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+function decodeUtf8(buffer, filePath) {
+  try {
+    return UTF8.decode(buffer);
+  } catch {
+    const offset = invalidUtf8Offset(buffer);
+    const byte = buffer[offset].toString(16).padStart(2, "0");
+    throw projectError(`${filePath} is not valid UTF-8 (byte 0x${byte} at offset ${offset}): re-save it as UTF-8`);
+  }
+}
+function invalidUtf8Offset(buffer) {
+  let offset = 0;
+  for (const character of buffer.toString("utf8")) {
+    if (character === "�" && !(buffer[offset] === 239 && buffer[offset + 1] === 191 && buffer[offset + 2] === 189)) {
+      break;
+    }
+    offset += Buffer.byteLength(character, "utf8");
+  }
+  return Math.max(0, Math.min(offset, buffer.length - 1));
+}
+function writeFile(filePath, contents, options = {}) {
+  try {
+    writeWholeFile(filePath, contents, options);
+  } catch (error) {
+    throw withExitCode(error, EXIT_CODES.refused);
+  }
+}
+function writeWholeFile(filePath, contents, options) {
+  const target = prepareWriteTarget(filePath, options.root);
+  const existing = lstatIfExists(target);
+  if (existing) {
+    fs.accessSync(target, fs.constants.W_OK);
+  }
+  const mode = existing ? existing.mode & 511 : 438;
+  const temporary = temporaryPath(target);
+  try {
+    const descriptor = fs.openSync(temporary, "w", mode);
+    try {
+      fs.writeFileSync(descriptor, contents, "utf8");
+      fs.fsyncSync(descriptor);
+    } finally {
+      fs.closeSync(descriptor);
+    }
+    if (existing) {
+      fs.chmodSync(temporary, mode);
+    }
+    if (options.unchangedFrom !== undefined && currentText(target) !== options.unchangedFrom) {
+      fs.rmSync(temporary, { force: true });
+      throw Object.assign(new Error(`${options.root ? path2.relative(path2.resolve(options.root), target) : target} changed on disk while story was updating it, so it was left as it is. Run the command again`), { changedOnDisk: true });
+    }
+    fs.renameSync(temporary, target);
+  } catch (error) {
+    fs.rmSync(temporary, { force: true });
+    if (error.changedOnDisk) {
+      throw error;
+    }
+    const action = existing?.nlink > 1 ? "replace hard-linked" : "write to";
+    throw Object.assign(new Error(`Cannot ${action} ${target}: ${error.code ?? error.message}`), { code: error.code, path: target, syscall: "write" });
+  }
+}
+function currentText(target) {
+  try {
+    return fs.readFileSync(target, "utf8");
+  } catch {
+    return null;
+  }
+}
+var TEMPORARY_FILE_PATTERN = /^\.(.+)\.story-\d+\.tmp$/;
+function temporaryPath(target) {
+  const name = path2.basename(target).slice(0, 200);
+  return path2.join(path2.dirname(target), `.${name}.story-${process.pid}.tmp`);
+}
+function prepareWriteTarget(filePath, root) {
+  const target = path2.resolve(filePath);
+  if (root) {
+    assertLexicallyInsideRoot(target, root);
+    assertExistingAncestorInsideRoot(path2.dirname(target), root);
+  }
+  makeDirectories(path2.dirname(target));
+  if (root) {
+    assertSafeProjectParent(target, root);
+  }
+  rejectSymlinkTarget(target, "write");
+  return target;
+}
+function assertSafeProjectPath(filePath, root) {
+  const target = path2.resolve(filePath);
+  assertLexicallyInsideRoot(target, root);
+  assertSafeProjectParent(target, root);
+  rejectSymlinkTarget(target, "read");
+}
+function assertSafeProjectDirectory(directory, root) {
+  const target = path2.resolve(directory);
+  assertLexicallyInsideRoot(target, root);
+  const stats = lstatIfExists(target);
+  if (stats) {
+    if (stats.isSymbolicLink()) {
+      throw projectError(`Refusing to use symlinked project directory: ${target}`);
+    }
+    if (!stats.isDirectory()) {
+      throw projectError(`Project path is not a directory: ${target}`);
+    }
+  }
+  const rootReal = fs.realpathSync(path2.resolve(root));
+  const directoryReal = fs.realpathSync(target);
+  if (!isPathInside(rootReal, directoryReal)) {
+    throw projectError(`Refusing to use project directory outside root: ${target}`);
+  }
+}
+function assertSafeProjectParent(filePath, root) {
+  const rootReal = fs.realpathSync(path2.resolve(root));
+  const parentReal = fs.realpathSync(path2.dirname(path2.resolve(filePath)));
+  if (!isPathInside(rootReal, parentReal)) {
+    throw projectError(`Refusing to access project path outside root: ${filePath}`);
+  }
+}
+function assertExistingAncestorInsideRoot(target, root) {
+  const { ancestor: current } = nearestExistingAncestor(target);
+  let rootReal;
+  let currentReal;
+  try {
+    rootReal = fs.realpathSync(path2.resolve(root));
+    currentReal = fs.realpathSync(current);
+  } catch {
+    throw projectError(`Refusing to access project path outside root: ${target}`);
+  }
+  if (!isPathInside(rootReal, currentReal)) {
+    throw projectError(`Refusing to access project path outside root: ${target}`);
+  }
+}
+function nearestExistingAncestor(target, exists = lstatIfExists) {
+  const missing = [];
+  let current = path2.resolve(target);
+  while (!exists(current)) {
+    const parent = path2.dirname(current);
+    if (parent === current) {
+      break;
+    }
+    missing.unshift(path2.basename(current));
+    current = parent;
+  }
+  return { ancestor: current, missing };
+}
+function makeDirectories(directory) {
+  const { ancestor, missing } = nearestExistingAncestor(directory);
+  if (missing.length === 0 && fs.statSync(ancestor, { throwIfNoEntry: false })?.isDirectory() !== true) {
+    throw directoryError(ancestor, "ENOTDIR");
+  }
+  let current = ancestor;
+  for (const name of missing) {
+    current = path2.join(current, name);
+    try {
+      fs.mkdirSync(current);
+    } catch (error) {
+      if (error.code !== "EEXIST" || lstatIfExists(current)?.isDirectory() !== true) {
+        throw directoryError(current, error.code ?? error.message);
+      }
+    }
+  }
+}
+function directoryError(directory, code) {
+  return Object.assign(new Error(`Cannot create directory ${directory}: ${code}`), { code, path: directory, syscall: "mkdir", exitCode: EXIT_CODES.refused });
+}
+function assertLexicallyInsideRoot(filePath, root) {
+  const rootPath = path2.resolve(root);
+  const target = path2.resolve(filePath);
+  if (!isPathInside(rootPath, target)) {
+    throw projectError(`Refusing to access path outside project root: ${target}`);
+  }
+}
+function rejectSymlinkTarget(filePath, action) {
+  if (lstatIfExists(filePath)?.isSymbolicLink()) {
+    throw projectError(`Refusing to ${action} through symlink: ${filePath}`);
+  }
+}
+function lstatIfExists(filePath) {
+  return fs.lstatSync(filePath, { throwIfNoEntry: false }) ?? null;
+}
+function isPathInside(root, target) {
+  const relativePath = path2.relative(root, target);
+  return !path2.isAbsolute(relativePath) && (relativePath === "" || !relativePath.split(path2.sep).includes(".."));
+}
+
+// src/frontmatter.js
+var FRONTMATTER_PATTERN = /^(?:\uFEFF)?---[ \t]*\r?\n(?:([\s\S]*?)\r?\n)?---[ \t]*(?:\r?\n|$)/;
+var OPENING_PATTERN = /^(?:\uFEFF)?---[ \t]*\r?\n/;
+function parseFrontmatter(markdown, filePath = "markdown") {
+  const match = FRONTMATTER_PATTERN.exec(markdown);
+  if (!match) {
+    if (OPENING_PATTERN.test(markdown)) {
+      throw projectError(`${filePath} has unclosed YAML frontmatter: add a line holding only --- after the last field`);
+    }
+    throw projectError(`${filePath} is missing YAML frontmatter`);
+  }
+  const raw = match[1] ?? "";
+  return {
+    data: parseYaml(raw),
+    body: markdown.slice(match[0].length),
+    raw
+  };
+}
+function stringifyFrontmatter(data) {
+  const lines = ["---"];
+  for (const [key, value] of Object.entries(data)) {
+    if (Array.isArray(value)) {
+      if (value.length === 0) {
+        lines.push(`${key}: []`);
+        continue;
+      }
+      lines.push(`${key}:`);
+      for (const item of value) {
+        lines.push(...stringifyItem(key, item));
+      }
+    } else {
+      lines.push(`${key}: ${formatScalar(value)}`);
+    }
+  }
+  lines.push("---", "", "");
+  return lines.join(`
+`);
+}
+function replaceFrontmatter(markdown, data, bodyOverride) {
+  const match = FRONTMATTER_PARTS_PATTERN.exec(markdown);
+  if (!match) {
+    throw new Error("Cannot replace missing YAML frontmatter");
+  }
+  const [whole, opening, raw = "", separator, closingLine] = match;
+  const eol = opening.endsWith(`\r
+`) ? `\r
+` : `
+`;
+  const closing = `${separator ?? eol}${closingLine}`;
+  const crlfClose = closing.startsWith("\r");
+  const { data: original, blocks } = parseYamlBlocks(raw !== "" && crlfClose ? `${raw}\r` : raw);
+  const generatedEnd = eol === `\r
+` ? "\r" : "";
+  const lines = [];
+  const written = new Set;
+  for (const block of blocks) {
+    if (block.key === undefined) {
+      lines.push(block.line);
+      continue;
+    }
+    if (!Object.prototype.hasOwnProperty.call(data, block.key)) {
+      continue;
+    }
+    written.add(block.key);
+    const value = data[block.key];
+    if (isDeepEqual(original[block.key], value)) {
+      lines.push(...block.lines);
+    } else {
+      lines.push(...stringifyEntry(block.key, value, block.items, generatedEnd));
+    }
+  }
+  for (const [key, value] of Object.entries(data)) {
+    if (!written.has(key)) {
+      lines.push(...stringifyEntry(key, value, [], generatedEnd));
+    }
+  }
+  const rest = bodyOverride === undefined ? markdown.slice(whole.length) : String(bodyOverride);
+  if (lines.length === 0) {
+    return `${opening}${separator ?? ""}${closingLine}${rest}`;
+  }
+  let body = lines.join(`
+`);
+  if (crlfClose && body.endsWith("\r")) {
+    body = body.slice(0, -1);
+  }
+  return `${opening}${body}${closing}${rest}`;
+}
+var FRONTMATTER_PARTS_PATTERN = /^((?:\uFEFF)?---[ \t]*\r?\n)(?:([\s\S]*?)(\r?\n))?(---[ \t]*(?:\r?\n|$))/;
+function stringifyEntry(key, value, originalItems = [], lineEnd = "") {
+  if (!Array.isArray(value)) {
+    return [`${key}: ${formatScalar(value)}${lineEnd}`];
+  }
+  if (value.length === 0) {
+    return [`${key}: []${lineEnd}`];
+  }
+  const lines = [`${key}:${lineEnd}`];
+  const unused = new Map;
+  for (const candidate of originalItems) {
+    const itemKey = valueKey(candidate.value);
+    if (!unused.has(itemKey)) {
+      unused.set(itemKey, { items: [], next: 0 });
+    }
+    unused.get(itemKey).items.push(candidate);
+  }
+  const reused = new Set;
+  const matches = value.map((item) => {
+    const queue = unused.get(valueKey(item));
+    const reuse = queue?.items[queue.next];
+    if (reuse && isDeepEqual(reuse.value, item)) {
+      queue.next += 1;
+      reused.add(reuse);
+      return reuse;
+    }
+    return null;
+  });
+  value.forEach((item, index) => {
+    if (matches[index]) {
+      lines.push(...matches[index].lines);
+      return;
+    }
+    const original = isPlainObject(item) ? originalItems.find((candidate) => !reused.has(candidate) && isPlainObject(candidate.value) && sameKeys(candidate.value, item) && candidate.lines.length === Object.keys(item).length) : undefined;
+    const fresh = stringifyItem(key, item).map((line) => `${line}${lineEnd}`);
+    if (!original) {
+      lines.push(...fresh);
+      return;
+    }
+    reused.add(original);
+    Object.keys(item).forEach((childKey, childIndex) => {
+      lines.push(isDeepEqual(original.value[childKey], item[childKey]) ? original.lines[childIndex] : fresh[childIndex]);
+    });
+  });
+  return lines;
+}
+function sameKeys(left, right) {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  return leftKeys.length === rightKeys.length && leftKeys.every((childKey, index) => childKey === rightKeys[index]);
+}
+function stringifyItem(key, item) {
+  if (!isPlainObject(item)) {
+    return [`  - ${formatScalar(item)}`];
+  }
+  const entries = Object.entries(item);
+  if (entries.length === 0) {
+    throw new Error("Cannot stringify empty mapping in " + key);
+  }
+  const [firstKey, firstValue] = entries[0];
+  const lines = [`  - ${firstKey}: ${formatScalar(firstValue)}`];
+  for (const [childKey, childValue] of entries.slice(1)) {
+    lines.push(`    ${childKey}: ${formatScalar(childValue)}`);
+  }
+  return lines;
+}
+function valueKey(value) {
+  return JSON.stringify(value) ?? String(value);
+}
+function isDeepEqual(left, right) {
+  if (left === right) {
+    return true;
+  }
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left) && Array.isArray(right) && left.length === right.length && left.every((entry, index) => isDeepEqual(entry, right[index]));
+  }
+  if (isPlainObject(left) && isPlainObject(right)) {
+    const leftKeys = Object.keys(left);
+    const rightKeys = Object.keys(right);
+    return leftKeys.length === rightKeys.length && leftKeys.every((key, index) => key === rightKeys[index] && isDeepEqual(left[key], right[key]));
+  }
+  return false;
+}
+function parseYaml(source) {
+  return parseYamlBlocks(source).data;
+}
+function parseYamlBlocks(source) {
+  const rawLines = source === "" ? [] : source.split(`
+`);
+  const lines = rawLines.map((line) => line.replace(/\r$/, ""));
+  const data = Object.create(null);
+  const blocks = [];
+  for (let index = 0;index < lines.length; ) {
+    const line = lines[index];
+    if (!line.trim() || line.trimStart().startsWith("#")) {
+      blocks.push({ line: rawLines[index] });
+      index += 1;
+      continue;
+    }
+    const pair = /^([A-Za-z0-9_-]+):(?:\s*(.*))?$/.exec(line);
+    if (!pair) {
+      throw projectError(`Unsupported frontmatter line: ${line}`);
+    }
+    const [, key, rest = ""] = pair;
+    if (Object.prototype.hasOwnProperty.call(data, key)) {
+      throw projectError(`Duplicate frontmatter key: ${key}`);
+    }
+    if (rest !== "") {
+      data[key] = parseScalar(rest);
+      blocks.push({ key, lines: [rawLines[index]], items: [] });
+      index += 1;
+      continue;
+    }
+    const parsed = parseArray(lines, index + 1);
+    if (parsed.nextIndex === index + 1) {
+      data[key] = "";
+      blocks.push({ key, lines: [rawLines[index]], items: [] });
+      index += 1;
+      continue;
+    }
+    data[key] = parsed.items;
+    blocks.push({
+      key,
+      lines: rawLines.slice(index, parsed.nextIndex),
+      items: parsed.items.map((item, itemIndex) => ({
+        value: toPlainObject(item),
+        lines: rawLines.slice(parsed.starts[itemIndex], parsed.starts[itemIndex + 1] ?? parsed.nextIndex)
+      }))
+    });
+    index = parsed.nextIndex;
+  }
+  return { data: toPlainObject(data), blocks };
+}
+function toPlainObject(value) {
+  if (Array.isArray(value)) {
+    return value.map(toPlainObject);
+  }
+  if (value !== null && typeof value === "object") {
+    const out = {};
+    for (const [key, entry] of Object.entries(value)) {
+      if (key === "__proto__") {
+        Object.defineProperty(out, key, {
+          value: toPlainObject(entry),
+          enumerable: true,
+          configurable: true,
+          writable: true
+        });
+      } else {
+        out[key] = toPlainObject(entry);
+      }
+    }
+    return out;
+  }
+  return value;
+}
+function parseArray(lines, startIndex) {
+  const items = [];
+  const starts = [];
+  let index = startIndex;
+  while (index < lines.length) {
+    const itemMatch = /^  -(?:\s+(.*))?$/.exec(lines[index]);
+    if (!itemMatch) {
+      break;
+    }
+    starts.push(index);
+    const itemText = itemMatch[1] ?? "";
+    const objectMatch = /^([A-Za-z0-9_-]+):\s*(.*)$/.exec(itemText);
+    if (!objectMatch) {
+      items.push(parseScalar(itemText));
+      index += 1;
+      continue;
+    }
+    const item = Object.create(null);
+    item[objectMatch[1]] = parseScalar(objectMatch[2]);
+    index += 1;
+    while (index < lines.length) {
+      const childMatch = /^    ([A-Za-z0-9_-]+):\s*(.*)$/.exec(lines[index]);
+      if (!childMatch) {
+        break;
+      }
+      if (Object.prototype.hasOwnProperty.call(item, childMatch[1])) {
+        throw projectError(`Duplicate frontmatter key: ${childMatch[1]}`);
+      }
+      item[childMatch[1]] = parseScalar(childMatch[2]);
+      index += 1;
+    }
+    items.push(item);
+  }
+  return { items, starts, nextIndex: index };
+}
+function parseScalar(value) {
+  const trimmed = value.trim();
+  if (trimmed === "[]") {
+    return [];
+  }
+  if (trimmed === "true") {
+    return true;
+  }
+  if (trimmed === "false") {
+    return false;
+  }
+  if (/^-?\d+$/.test(trimmed)) {
+    return Number.parseInt(trimmed, 10);
+  }
+  if (/^-?\d+\.\d+$/.test(trimmed)) {
+    return Number.parseFloat(trimmed);
+  }
+  if (trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return trimmed.slice(1, -1);
+    }
+  }
+  if (trimmed.length >= 2 && trimmed.startsWith("'") && trimmed.endsWith("'")) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+function formatScalar(value) {
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return "[]";
+    }
+    throw new Error("Cannot stringify a nested non-empty list");
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (value === null || value === undefined) {
+    return "";
+  }
+  const text = String(value);
+  if (needsQuotes(text)) {
+    return JSON.stringify(text);
+  }
+  return text;
+}
+function needsQuotes(text) {
+  return text === "" || /^\s|\s$/.test(text) || /[:#"'\u0000-\u001f\u007f]/.test(text) || /^[-?,[\]{}&*!|>%@`]/.test(text) || /^(true|false|null|yes|no|on|off|~)$/i.test(text) || /^[-+]?(\d[\d_]*(\.[\d_]*)?|\.\d[\d_]*)([eE][-+]?\d+)?$/.test(text) || /^[-+]?0[xob][0-9a-f_]+$/i.test(text) || /^[-+]?\.(inf|nan)$/i.test(text);
+}
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+var FRONTMATTER_BLOCK_PATTERN = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
+var YAML_LINE_PATTERN = /^(?:\s*$|\s*#|\s*-\s|\s*-$|\s+\S|(?:[A-Za-z0-9_][A-Za-z0-9_.-]*|"[^"\n]*"|'[^'\n]*')[ \t]*:(?:\s|$))/;
+function withoutLeadingFrontmatter(text) {
+  const match = FRONTMATTER_BLOCK_PATTERN.exec(text);
+  if (!match) {
+    return text;
+  }
+  const lines = match[1].split(/\r?\n/);
+  if (lines[0].trim() === "" || !lines.every((line) => YAML_LINE_PATTERN.test(line))) {
+    return text;
+  }
+  return text.slice(match[0].length);
+}
 
 // src/markdown.js
 var LATIN_FOLDS = {
@@ -639,48 +1283,1673 @@ function leadingHeadingLength(masked) {
   return match ? match[0].length : 0;
 }
 
-// src/exit-codes.js
-var EXIT_CODES = Object.freeze({
-  ok: 0,
-  findings: 1,
-  usage: 2,
-  project: 3,
-  refused: 4
-});
-function withCode(message, exitCode) {
-  return Object.assign(new Error(message), { exitCode });
+// src/names.js
+var MAJOR_ROLES = new Set(["protagonist", "antagonist", "deuteragonist", "narrator"]);
+var TITLE_WORDS = new Set([
+  "the",
+  "a",
+  "an",
+  "lord",
+  "lady",
+  "sir",
+  "dame",
+  "dr",
+  "doctor",
+  "mr",
+  "mrs",
+  "ms",
+  "miss",
+  "master",
+  "mistress",
+  "captain",
+  "capt",
+  "king",
+  "queen",
+  "prince",
+  "princess",
+  "duke",
+  "duchess",
+  "count",
+  "countess",
+  "baron",
+  "baroness",
+  "father",
+  "mother",
+  "sister",
+  "brother",
+  "uncle",
+  "aunt",
+  "councillor",
+  "councilor",
+  "general",
+  "colonel",
+  "major",
+  "sergeant",
+  "lieutenant",
+  "commander",
+  "professor",
+  "prof",
+  "saint",
+  "st",
+  "old",
+  "young",
+  "little"
+]);
+function givenName(name) {
+  const words = splitWords(String(name));
+  const index = words.findIndex((word) => !TITLE_WORDS.has(word.toLowerCase().replace(/[.’']/g, "")));
+  return index === -1 ? "" : words[index];
 }
-function usageError(message) {
-  return withCode(message, EXIT_CODES.usage);
-}
-function projectError(message) {
-  return withCode(message, EXIT_CODES.project);
-}
-function refusedError(message) {
-  return withCode(message, EXIT_CODES.refused);
-}
-function withExitCode(error, exitCode) {
-  if (error !== null && typeof error === "object") {
-    error.exitCode = exitCode;
+function existingNames(project) {
+  const names = [];
+  const add = (kind, id, name, role = "", given = false, full = name) => {
+    if (typeof name === "string" && name.trim() !== "") {
+      names.push({ kind, id, name: name.trim(), full: String(full).trim(), role, given });
+    }
+  };
+  for (const character of project.characters) {
+    if (character.status === "cut") {
+      continue;
+    }
+    const first = givenName(character.name);
+    const single = first !== "" && first === String(character.name).trim();
+    add("character", character.id, String(character.name), character.role, single);
+    if (first !== "" && !single) {
+      add("character", character.id, first, character.role, true, character.name);
+    }
+    for (const alias of character.aliases ?? []) {
+      add("character", character.id, alias, character.role);
+    }
   }
-  return error;
+  for (const [kind, list] of [["location", project.locations], ["faction", project.factions], ["artifact", project.artifacts], ["system", project.systems]]) {
+    for (const entity of list) {
+      add(kind, entity.id, String(entity.name));
+    }
+  }
+  for (const term of project.glossaryTerms) {
+    add("term", term.id, String(term.term));
+    for (const alias of term.aliases ?? []) {
+      add("term", term.id, alias);
+    }
+  }
+  return names;
 }
-function withDefaultExitCode(error, exitCode) {
-  if (error !== null && typeof error === "object" && !Number.isInteger(error.exitCode)) {
-    error.exitCode = exitCode;
+function checkNames(candidates, names) {
+  const errors = [];
+  const warnings = [];
+  const results = [];
+  for (const raw of candidates) {
+    const candidate = String(raw).trim();
+    if (candidate === "") {
+      continue;
+    }
+    const key = normalize(candidate);
+    const first = normalize(givenName(candidate));
+    const clashes = [];
+    const lookalikes = [];
+    const initials = [];
+    const seen = new Set;
+    for (const entry of names) {
+      const tag = `${entry.kind} ${entry.id}`;
+      const existing = normalize(entry.name);
+      if (existing === key || entry.given && existing === first) {
+        if (!seen.has(`clash ${tag}`)) {
+          clashes.push(entry);
+          seen.add(`clash ${tag}`);
+        }
+        continue;
+      }
+      const alike = entry.given ? looksAlike(first, existing) : !existing.includes(" ") && !key.includes(" ") && looksAlike(key, existing);
+      if (alike && !seen.has(`like ${tag}`)) {
+        lookalikes.push(entry);
+        seen.add(`like ${tag}`);
+      } else if (entry.given && MAJOR_ROLES.has(entry.role) && first !== "" && first[0] === existing[0] && !seen.has(`initial ${entry.id}`)) {
+        initials.push(entry);
+        seen.add(`initial ${entry.id}`);
+      }
+    }
+    for (const entry of clashes) {
+      errors.push(err("name-clash", `"${candidate}" clashes with ${entry.kind} ${entry.id} (${entry.name})`));
+    }
+    for (const entry of lookalikes) {
+      if (!clashes.some((clash) => clash.kind === entry.kind && clash.id === entry.id)) {
+        warnings.push(warn("name-look-alike", `"${candidate}" looks like ${entry.kind} ${entry.id} (${entry.full})`));
+      }
+    }
+    for (const entry of initials) {
+      if (!clashes.concat(lookalikes).some((other) => other.kind === "character" && other.id === entry.id)) {
+        warnings.push(warn("name-shared-initial", `"${candidate}" shares an initial with ${entry.role} ${entry.id} (${entry.full})`));
+      }
+    }
+    results.push({ name: candidate, clashes: clashes.length, lookalikes: lookalikes.length, initials: initials.length });
   }
-  return error;
+  return { results, errors, warnings };
 }
-var WRITE_SYSCALLS = new Set(["write", "rename", "mkdir", "mkdtemp", "unlink", "rmdir", "copyfile", "rm", "access", "chmod", "fsync"]);
-var WRITE_ERROR_CODES = new Set(["EROFS", "ENOSPC", "EDQUOT", "EFBIG"]);
-function exitCodeFor(error) {
-  if (Number.isInteger(error?.exitCode)) {
-    return error.exitCode;
+function looksAlike(left, right) {
+  if (left.length < 3 || right.length < 3) {
+    return false;
   }
-  if (typeof error?.code === "string" && /^E[A-Z]+$/.test(error.code)) {
-    return WRITE_SYSCALLS.has(error.syscall) || WRITE_ERROR_CODES.has(error.code) ? EXIT_CODES.refused : EXIT_CODES.project;
+  if (left.slice(0, 4) === right.slice(0, 4) && Math.min(left.length, right.length) >= 4) {
+    return true;
   }
-  return EXIT_CODES.findings;
+  const limit = Math.min(left.length, right.length) >= 5 ? 2 : 1;
+  return left[0] === right[0] && editDistance(left, right) <= limit;
+}
+function normalize(value) {
+  return foldLatin(value).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+}
+function formatNames(report) {
+  const lines = [];
+  for (const result of report.results) {
+    const status = result.clashes > 0 ? "taken" : result.lookalikes + result.initials > 0 ? "check" : "clear";
+    lines.push(`${result.name}: ${status}`);
+  }
+  return `${lines.join(`
+`)}
+`;
+}
+
+// src/sentences.js
+var TITLE_ABBREVIATIONS = /(?:^|[\s(“"‘'])(?:Dr|Mr|Mrs|Ms|St|Mt|Jr|Sr|Prof|Capt|Gen|Col|Lt|Sgt|Rev|Fr|e\.g|i\.e|(?:[A-Za-z]\.)*[A-Za-z])$/;
+var CONTEXT_ABBREVIATIONS = /(?:^|[\s(“"‘'])(?:No|vs|etc|a\.m|p\.m)$/;
+var CALENDAR_WORD = /^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|January|February|March|April|May|June|July|August|September|October|November|December)(?![\p{L}\p{N}])/u;
+var SENTENCE_END = /[.!?…]+["”’')\]*_]*(?= |$)|[。！？]+[」』）”’"')\]*_]*/g;
+var CONTEXT_WINDOW = 64;
+var SENTENCE_START = /^["'“‘(\[*_]*[\p{Lu}\p{N}]/u;
+function splitSentences(text, { capitalStart = true } = {}) {
+  const normalized = String(text).replace(/\s+/g, " ").trim();
+  if (normalized === "") {
+    return [];
+  }
+  const sentences = [];
+  let start = 0;
+  for (const match of normalized.matchAll(SENTENCE_END)) {
+    const end = match.index + match[0].length;
+    if (/^[。！？]/.test(match[0])) {
+      sentences.push(normalized.slice(start, end).trim());
+      start = end;
+      continue;
+    }
+    const next = normalized.slice(end + 1, end + 1 + CONTEXT_WINDOW);
+    if (capitalStart && next !== "" && !SENTENCE_START.test(next)) {
+      continue;
+    }
+    const from = Math.max(start, match.index - CONTEXT_WINDOW);
+    const before = `${from > start ? "x" : ""}${normalized.slice(from, match.index)}`;
+    const abbreviation = match[0] === "." && (CONTEXT_ABBREVIATIONS.test(before) ? /^[\p{Ll}\p{N}]/u.test(next) || CALENDAR_WORD.test(next) : TITLE_ABBREVIATIONS.test(before));
+    const stammer = /^(?:…|\.\.\.)/.test(match[0]) && isStammer(before, next);
+    if (abbreviation || stammer) {
+      continue;
+    }
+    sentences.push(normalized.slice(start, end).trim());
+    start = end;
+  }
+  const tail = normalized.slice(start).trim();
+  if (tail !== "") {
+    sentences.push(/[.!?…。！？]["”’')\]」』）]*$/.test(tail) ? tail : `${tail}.`);
+  }
+  return sentences.filter((sentence) => sentence !== "");
+}
+function isStammer(before, next) {
+  const last = /([\p{L}\p{N}'’]+)$/u.exec(before);
+  const first = /^["'“‘(\[*_]*([\p{L}\p{N}'’]+)/u.exec(next);
+  return Boolean(last && first) && last[1].toLowerCase() === first[1].toLowerCase();
+}
+
+// src/plural.js
+function plural(count, singular, pluralForm = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : pluralForm}`;
+}
+function roundedShares(values) {
+  const total = values.reduce((sum, value) => sum + value, 0);
+  if (total <= 0) {
+    return values.map(() => 0);
+  }
+  const exact = values.map((value) => value * 100 / total);
+  const shares = exact.map(Math.floor);
+  let left = 100 - shares.reduce((sum, value) => sum + value, 0);
+  const order = exact.map((value, index) => ({ index, remainder: value - Math.floor(value) })).sort((a, b) => b.remainder - a.remainder || a.index - b.index);
+  for (const { index } of order) {
+    if (left <= 0) {
+      break;
+    }
+    shares[index] += 1;
+    left -= 1;
+  }
+  return shares;
+}
+
+// src/voices.js
+var SPEECH_VERBS = [
+  "said",
+  "says",
+  "asked",
+  "asks",
+  "replied",
+  "replies",
+  "answered",
+  "answers",
+  "whispered",
+  "whispers",
+  "shouted",
+  "shouts",
+  "called",
+  "calls",
+  "muttered",
+  "mutters",
+  "murmured",
+  "murmurs",
+  "cried",
+  "cries",
+  "yelled",
+  "yells",
+  "added",
+  "adds",
+  "told",
+  "tells",
+  "snapped",
+  "snaps",
+  "admitted",
+  "admits",
+  "insisted",
+  "insists",
+  "demanded",
+  "demands",
+  "continued",
+  "continues",
+  "began",
+  "begins",
+  "went on",
+  "goes on"
+];
+var CONTRACTION_PATTERN = /[\p{L}](?:n['’]t|['’](?:re|ll|ve|m|d))\b|(?<![\p{L}\p{N}])(?:it|that|let|what|there|here|where|who|he|she|how|when|why)['’]s(?![\p{L}\p{N}])/giu;
+var STOPWORDS = new Set([
+  "that",
+  "this",
+  "with",
+  "have",
+  "what",
+  "from",
+  "they",
+  "there",
+  "their",
+  "them",
+  "then",
+  "than",
+  "were",
+  "would",
+  "could",
+  "should",
+  "your",
+  "yours",
+  "just",
+  "know",
+  "been",
+  "will",
+  "when",
+  "where",
+  "which",
+  "about",
+  "into",
+  "some",
+  "because",
+  "want",
+  "like",
+  "only",
+  "here",
+  "does",
+  "didn't",
+  "don't",
+  "it's",
+  "can't",
+  "won't",
+  "i'm",
+  "you're",
+  "we're",
+  "that's",
+  "there's",
+  "what's",
+  "going",
+  "come",
+  "back",
+  "over",
+  "tell",
+  "said",
+  "more",
+  "very",
+  "also"
+]);
+var VOICE_THRESHOLDS = {
+  minLines: 5,
+  sentenceLength: 1.5,
+  contractions: 1.5,
+  questions: 0.1,
+  exclamations: 0.1
+};
+function buildVoices(project, chapters) {
+  const speakers = speakerPatterns(project.characters);
+  const lines = new Map(project.characters.map((character) => [character.id, []]));
+  let unattributed = 0;
+  for (const chapter of chapters) {
+    let pending = [];
+    let chainSpeaker = null;
+    const credit = (speaker, texts) => {
+      if (speaker === null) {
+        unattributed += texts.length;
+      } else {
+        lines.get(speaker).push(...texts.map((text) => ({ chapter: chapter.id, text })));
+      }
+    };
+    for (const paragraph of chapter.paragraphs) {
+      const continues = (pending.length > 0 || chainSpeaker !== null) && OPENS_WITH_QUOTE.test(paragraph);
+      if (!continues) {
+        credit(null, pending);
+        pending = [];
+        chainSpeaker = null;
+      }
+      const quotes = quotedSpans(paragraph);
+      const open = splitOpenSpeech(paragraph).open;
+      if (open !== null) {
+        quotes.push(open);
+      }
+      if (quotes.length === 0) {
+        continue;
+      }
+      const speaker = attribute(paragraph, speakers) ?? chainSpeaker;
+      if (open !== null && speaker === null) {
+        pending.push(...quotes);
+        continue;
+      }
+      credit(speaker, [...pending, ...quotes]);
+      pending = [];
+      chainSpeaker = open === null ? null : speaker;
+    }
+    credit(null, pending);
+  }
+  const profiles = project.characters.map((character) => profile(character, lines.get(character.id))).filter((entry) => entry.lines > 0);
+  signatureWords(profiles);
+  const warnings = [];
+  for (const character of project.characters) {
+    const said = lines.get(character.id);
+    for (const phrase of stringList(character.voiceAvoid)) {
+      const pattern = phrasePattern(phrase);
+      const chaptersUsing = [...new Set(said.filter((line) => pattern.test(line.text)).map((line) => line.chapter))];
+      if (chaptersUsing.length > 0) {
+        warnings.push(warn("voice-avoid", `${character.id} says "${phrase}", which is in their voice-avoid list (${chaptersUsing.join(", ")})`));
+      }
+    }
+    if (said.length >= VOICE_THRESHOLDS.minLines) {
+      for (const phrase of stringList(character.voiceWords)) {
+        const pattern = phrasePattern(phrase);
+        if (!said.some((line) => pattern.test(line.text))) {
+          warnings.push(warn("voice-words-unused", `${character.id} does not say "${phrase}" from their voice-words list in ${said.length} attributed lines of dialogue`));
+        }
+      }
+    }
+  }
+  const eligible = profiles.filter((entry) => entry.lines >= VOICE_THRESHOLDS.minLines);
+  for (let left = 0;left < eligible.length; left += 1) {
+    for (let right = left + 1;right < eligible.length; right += 1) {
+      if (similarVoices(eligible[left], eligible[right])) {
+        warnings.push(warn("voice-sound-alike", `${eligible[left].id} and ${eligible[right].id} may sound alike: similar sentence length, contractions, questions, and exclamations`));
+      }
+    }
+  }
+  return {
+    profiles: profiles.sort((left, right) => right.words - left.words || left.id.localeCompare(right.id, "en")),
+    unattributed,
+    warnings
+  };
+}
+var PRONOUNS = "he|she|they|i|we";
+var VERB_ALTERNATION = SPEECH_VERBS.map((verb) => verb.replace(/ /g, "\\s+")).join("|");
+var PRONOUN_TAG_SOURCE = `(?:(?:${PRONOUNS})\\s+(?:${VERB_ALTERNATION})|(?:${VERB_ALTERNATION})\\s+(?:${PRONOUNS}))(?![\\p{L}\\p{N}])`;
+var TAG_AFTER_QUOTE = new RegExp(`^[\\s,.;:!?…()—–-]*${PRONOUN_TAG_SOURCE}`, "iu");
+var TAG_BEFORE_QUOTE = new RegExp(`(?<![\\p{L}\\p{N}])${PRONOUN_TAG_SOURCE}[\\s,:…()—–-]*$`, "iu");
+var TAG_WINDOW = 40;
+function hasPronounTag(paragraph) {
+  return quoteMatches(paragraph).some((match) => TAG_AFTER_QUOTE.test(paragraph.slice(match.end, match.end + TAG_WINDOW)) || TAG_BEFORE_QUOTE.test(paragraph.slice(Math.max(0, match.start - TAG_WINDOW), match.start)));
+}
+function speakerPatterns(characters) {
+  const verbs = SPEECH_VERBS.flatMap((verb) => [verb, `${verb[0].toUpperCase()}${verb.slice(1)}`]).map((verb) => verb.replace(/ /g, "\\s+")).join("|");
+  return characters.filter((character) => character.status !== "cut").map((character) => {
+    const names = new Set;
+    const full = String(character.name ?? "").trim();
+    if (full !== "") {
+      names.add(full);
+      const first = givenName(full);
+      if (first.length >= 2) {
+        names.add(first);
+      }
+    }
+    for (const alias of stringList(character.aliases)) {
+      names.add(alias);
+    }
+    const alternatives = [...names].sort((left, right) => right.length - left.length).map(escape).join("|");
+    if (alternatives === "") {
+      return null;
+    }
+    const keys = new Set([...names].map((entry) => entry.split(NON_WORD)[0]));
+    return {
+      id: character.id,
+      keys,
+      name: new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternatives})(?![\\p{L}\\p{N}])`, "u"),
+      subject: new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternatives})\\s+(?:${verbs})(?![\\p{L}\\p{N}])`, "u"),
+      inverted: new RegExp(`(?<![\\p{L}\\p{N}])(?:${verbs})\\s+(?:${alternatives})(?![\\p{L}\\p{N}])`, "u")
+    };
+  }).filter(Boolean);
+}
+var NON_WORD = /[^\p{L}\p{N}]+/u;
+var OPENS_WITH_QUOTE = /^["“‘']/;
+function attribute(paragraph, allSpeakers) {
+  const narration = `${splitOpenSpeech(paragraph).narration} `;
+  const words = new Set(narration.split(NON_WORD));
+  const speakers = allSpeakers.filter((speaker) => [...speaker.keys].some((key) => key === "" || words.has(key)));
+  for (const form of ["subject", "inverted"]) {
+    const tagged = speakers.filter((speaker) => speaker[form].test(narration));
+    if (tagged.length === 1) {
+      return tagged[0].id;
+    }
+    if (tagged.length > 1) {
+      return null;
+    }
+  }
+  if (hasPronounTag(paragraph)) {
+    return null;
+  }
+  const named = speakers.filter((speaker) => speaker.name.test(narration));
+  return named.length === 1 ? named[0].id : null;
+}
+var LETTER = /[\p{L}\p{N}]/u;
+var ELISION = /^(?:em|tis|twas|cause|cos|til|till|bout|round|n|nuff)(?![\p{L}\p{N}])/iu;
+var DASH_OPEN = /^[—―]\s*/;
+var DASH_TAG = new RegExp(`,\\s+(?:(?:${VERB_ALTERNATION})\\s+\\p{Lu}|(?:${PRONOUNS})\\s+(?:${VERB_ALTERNATION})(?![\\p{L}\\p{N}])|\\p{Lu}[\\p{L}'’-]*(?:\\s+\\p{Lu}[\\p{L}'’-]*){0,2}\\s+(?:${VERB_ALTERNATION})(?![\\p{L}\\p{N}]))`, "u");
+function quoteMatches(paragraph) {
+  const matches = [];
+  const next = { "”": -1, '"': -1 };
+  const find = (key, from) => {
+    if (next[key] !== Infinity && next[key] < from) {
+      const found = paragraph.indexOf(key, from);
+      next[key] = found === -1 ? Infinity : found;
+    }
+    return next[key];
+  };
+  const singles = singleQuoteMarks(paragraph);
+  let index = 0;
+  const dash = DASH_OPEN.exec(paragraph);
+  if (dash) {
+    const body = paragraph.slice(dash[0].length);
+    const tag = DASH_TAG.exec(body);
+    const closing = /\s[—―]/.exec(body);
+    const stop = Math.min(tag ? tag.index : Infinity, closing ? closing.index + 1 : Infinity);
+    const close = stop === Infinity ? paragraph.length : dash[0].length + stop;
+    matches.push({ start: 0, end: Math.min(close + 1, paragraph.length), text: paragraph.slice(dash[0].length, close) });
+    index = close + 1;
+  }
+  while (index < paragraph.length) {
+    const char = paragraph[index];
+    let close = Infinity;
+    if (char === "“") {
+      close = find("”", index + 1);
+    } else if (char === '"') {
+      close = find('"', index + 1);
+    } else if (char === "‘" || char === "'") {
+      close = singleClose(singles[char], index);
+    }
+    if (close === Infinity) {
+      index += 1;
+      continue;
+    }
+    matches.push({ start: index, end: close + 1, text: paragraph.slice(index + 1, close) });
+    index = close + 1;
+  }
+  return matches;
+}
+function singleQuoteMarks(paragraph) {
+  const marks = { "‘": { open: [], close: [] }, "'": { open: [], close: [] } };
+  for (let index = 0;index < paragraph.length; index += 1) {
+    const char = paragraph[index];
+    const before = paragraph[index - 1] ?? "";
+    const after = paragraph[index + 1] ?? "";
+    if (char === "‘" && !LETTER.test(before)) {
+      marks["‘"].open.push(index);
+    } else if (char === "’" && !LETTER.test(after)) {
+      marks["‘"].close.push(index);
+    } else if (char === "'") {
+      if (!LETTER.test(before) && LETTER.test(after) && !ELISION.test(paragraph.slice(index + 1))) {
+        marks["'"].open.push(index);
+      } else if (!LETTER.test(after) && before !== "" && !/\s/.test(before)) {
+        marks["'"].close.push(index);
+      }
+    }
+  }
+  for (const key of Object.keys(marks)) {
+    marks[key].opens = new Set(marks[key].open);
+    marks[key].paragraph = paragraph;
+  }
+  return marks;
+}
+function singleClose(marks, index) {
+  if (!marks.opens.has(index)) {
+    return Infinity;
+  }
+  const nextOpen = firstAfter(marks.open, index);
+  let position = firstIndexAfter(marks.close, index);
+  if (position === -1 || marks.close[position] > nextOpen) {
+    return Infinity;
+  }
+  while (position + 1 < marks.close.length && marks.close[position + 1] < nextOpen && looksPossessive(marks.paragraph, marks.close[position])) {
+    position += 1;
+  }
+  return marks.close[position];
+}
+function looksPossessive(paragraph, index) {
+  return /[sS]/.test(paragraph[index - 1] ?? "") && /^\s+\p{Ll}/u.test(paragraph.slice(index + 1, index + 4));
+}
+function firstIndexAfter(sorted, value) {
+  let low = 0;
+  let high = sorted.length;
+  while (low < high) {
+    const middle = low + high >> 1;
+    if (sorted[middle] <= value) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+  return low < sorted.length ? low : -1;
+}
+function firstAfter(sorted, value) {
+  const position = firstIndexAfter(sorted, value);
+  return position === -1 ? Infinity : sorted[position];
+}
+function replaceQuotes(paragraph) {
+  let result = "";
+  let position = 0;
+  for (const match of quoteMatches(paragraph)) {
+    result += `${paragraph.slice(position, match.start)} `;
+    position = match.end;
+  }
+  return result + paragraph.slice(position);
+}
+function quotedSpans(paragraph) {
+  return quoteMatches(paragraph).map((match) => match.text.trim()).filter((text) => text !== "");
+}
+function splitOpenSpeech(paragraph) {
+  const text = replaceQuotes(paragraph);
+  const cuts = [];
+  const curly = text.indexOf("“", text.lastIndexOf("”") + 1);
+  if (curly !== -1) {
+    cuts.push(curly);
+  }
+  const straight = text.indexOf('"');
+  if (straight !== -1) {
+    cuts.push(straight);
+  }
+  const lastSingleClose = text.lastIndexOf("’");
+  const single = /(?<![\p{L}\p{N}])‘/u.exec(text.slice(lastSingleClose + 1));
+  if (single) {
+    cuts.push(lastSingleClose + 1 + single.index);
+  }
+  if (/^'[\p{L}\p{N}]/u.test(text) && !ELISION.test(text.slice(1))) {
+    cuts.push(0);
+  }
+  if (cuts.length === 0) {
+    return { narration: text, open: null };
+  }
+  const cut = Math.min(...cuts);
+  const open = text.slice(cut + 1).trim();
+  return { narration: text.slice(0, cut), open: open === "" ? null : open };
+}
+function narrationOnly(paragraph) {
+  return splitOpenSpeech(paragraph).narration;
+}
+function profile(character, said) {
+  const text = said.map((line) => line.text).join(" ");
+  const words = splitWords(text);
+  const sentences = said.flatMap((line) => splitSentences(line.text).filter((sentence) => splitWords(sentence).length > 0));
+  const questions = sentences.filter((sentence) => /\?["'”’)]*$/.test(sentence.trim())).length;
+  const exclamations = sentences.filter((sentence) => /!["'”’)]*$/.test(sentence.trim())).length;
+  return {
+    id: character.id,
+    lines: said.length,
+    words: words.length,
+    sentenceLength: sentences.length === 0 ? 0 : words.length / sentences.length,
+    contractions: words.length === 0 ? 0 : (text.match(CONTRACTION_PATTERN) ?? []).length * 100 / words.length,
+    questions: sentences.length === 0 ? 0 : questions / sentences.length,
+    exclamations: sentences.length === 0 ? 0 : exclamations / sentences.length,
+    counts: wordCounts(words),
+    signature: []
+  };
+}
+function wordCounts(words) {
+  const counts = new Map;
+  for (const raw of words) {
+    const word = raw.toLowerCase().replace(/’/g, "'");
+    if (word.length >= 4 && !STOPWORDS.has(word) && !/^\d+$/.test(word)) {
+      counts.set(word, (counts.get(word) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+function signatureWords(profiles) {
+  const totals = new Map;
+  let allWords = 0;
+  for (const entry of profiles) {
+    allWords += entry.words;
+    for (const [word, count] of entry.counts) {
+      totals.set(word, (totals.get(word) ?? 0) + count);
+    }
+  }
+  for (const entry of profiles) {
+    const otherWords = allWords - entry.words;
+    const scored = [];
+    for (const [word, count] of entry.counts) {
+      if (count < 2) {
+        continue;
+      }
+      const own = count / entry.words;
+      const others = otherWords === 0 ? 0 : (totals.get(word) - count) / otherWords;
+      if (own > others * 2) {
+        scored.push({ word, count, score: own - others });
+      }
+    }
+    entry.signature = scored.sort((left, right) => right.score - left.score || right.count - left.count || left.word.localeCompare(right.word, "en")).slice(0, 5).map((item) => item.word);
+    delete entry.counts;
+  }
+}
+function similarVoices(left, right) {
+  const limits = VOICE_THRESHOLDS;
+  const close = (a, b, limit) => Math.abs(a - b) < limit - 0.000000001;
+  return close(left.sentenceLength, right.sentenceLength, limits.sentenceLength) && close(left.contractions, right.contractions, limits.contractions) && close(left.questions, right.questions, limits.questions) && close(left.exclamations, right.exclamations, limits.exclamations);
+}
+function phrasePattern(phrase) {
+  return new RegExp(`(?<![\\p{L}\\p{M}\\p{N}])${escape(String(phrase).trim()).replace(/['’]/g, "['’]")}(?![\\p{L}\\p{M}\\p{N}])`, "iu");
+}
+function escape(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function stringList(value) {
+  return (Array.isArray(value) ? value : []).filter((item) => typeof item === "string" && item.trim() !== "");
+}
+function formatVoices(report) {
+  const lines = [`Voices: ${plural(report.profiles.length, "speaking character")}, ${plural(report.unattributed, "unattributed line")}`];
+  if (report.profiles.length === 0) {
+    lines.push("", `- None: tag dialogue with a character's name and a speech verb ("...," Mara said)`);
+    return `${lines.join(`
+`)}
+`;
+  }
+  for (const entry of report.profiles) {
+    lines.push("", `${entry.id}: ${plural(entry.lines, "line")}, ${plural(entry.words, "word")}`, `  Sentence length ${entry.sentenceLength.toFixed(1)}, contractions ${entry.contractions.toFixed(1)} per 100 words, questions ${Math.round(entry.questions * 100)}%, exclamations ${Math.round(entry.exclamations * 100)}%`, `  Signature words: ${entry.signature.join(", ") || "none yet"}`);
+  }
+  return `${lines.join(`
+`)}
+`;
+}
+
+// src/prose.js
+var FILTER_WORDS = [
+  "felt",
+  "saw",
+  "heard",
+  "noticed",
+  "realized",
+  "realised",
+  "wondered",
+  "seemed",
+  "watched",
+  "knew",
+  "decided",
+  "thought",
+  "sensed"
+];
+var SAID_BOOKISMS = [
+  "barked",
+  "bellowed",
+  "breathed",
+  "chuckled",
+  "cooed",
+  "declared",
+  "exclaimed",
+  "gasped",
+  "grinned",
+  "groaned",
+  "growled",
+  "grunted",
+  "hissed",
+  "inquired",
+  "interjected",
+  "intoned",
+  "laughed",
+  "opined",
+  "purred",
+  "queried",
+  "quipped",
+  "retorted",
+  "shrieked",
+  "sighed",
+  "smiled",
+  "smirked",
+  "snapped",
+  "snarled",
+  "sneered",
+  "spat",
+  "stated"
+];
+var PLAIN_TAGS = ["said", "asked", "says", "asks"];
+var NOT_ADVERBS = new Set([
+  "ally",
+  "anomaly",
+  "apply",
+  "assembly",
+  "belly",
+  "bully",
+  "burly",
+  "butterfly",
+  "chilly",
+  "comply",
+  "costly",
+  "curly",
+  "daily",
+  "deadly",
+  "dolly",
+  "dragonfly",
+  "early",
+  "elderly",
+  "family",
+  "fly",
+  "folly",
+  "friendly",
+  "ghastly",
+  "ghostly",
+  "gully",
+  "holly",
+  "holy",
+  "homely",
+  "hourly",
+  "imply",
+  "italy",
+  "jelly",
+  "jolly",
+  "july",
+  "lily",
+  "likely",
+  "lively",
+  "lonely",
+  "lovely",
+  "melancholy",
+  "monopoly",
+  "monthly",
+  "multiply",
+  "oily",
+  "only",
+  "orderly",
+  "prickly",
+  "rally",
+  "rely",
+  "reply",
+  "sickly",
+  "silly",
+  "sly",
+  "smelly",
+  "stately",
+  "supply",
+  "surly",
+  "tally",
+  "ugly",
+  "unlikely",
+  "weekly",
+  "wobbly",
+  "woolly",
+  "yearly"
+]);
+var ECHO_STOPWORDS = new Set([
+  "about",
+  "above",
+  "after",
+  "again",
+  "against",
+  "along",
+  "always",
+  "among",
+  "another",
+  "around",
+  "because",
+  "before",
+  "behind",
+  "being",
+  "below",
+  "between",
+  "could",
+  "couldn't",
+  "didn't",
+  "doesn't",
+  "don't",
+  "every",
+  "first",
+  "hadn't",
+  "haven't",
+  "isn't",
+  "might",
+  "never",
+  "other",
+  "right",
+  "should",
+  "since",
+  "something",
+  "still",
+  "their",
+  "there",
+  "these",
+  "thing",
+  "things",
+  "those",
+  "though",
+  "three",
+  "through",
+  "until",
+  "wasn't",
+  "where",
+  "which",
+  "while",
+  "without",
+  "would",
+  "wouldn't",
+  "you're",
+  "they're",
+  "we're"
+]);
+var PHRASE_STOPWORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "as",
+  "at",
+  "be",
+  "but",
+  "by",
+  "for",
+  "from",
+  "had",
+  "has",
+  "have",
+  "he",
+  "her",
+  "his",
+  "i",
+  "in",
+  "into",
+  "is",
+  "it",
+  "its",
+  "me",
+  "my",
+  "not",
+  "of",
+  "on",
+  "or",
+  "she",
+  "so",
+  "that",
+  "the",
+  "their",
+  "them",
+  "then",
+  "they",
+  "this",
+  "to",
+  "was",
+  "we",
+  "were",
+  "with",
+  "you"
+]);
+var DIALECT_PAIRS = [
+  ["armour", "armor"],
+  ["armoured", "armored"],
+  ["centre", "center"],
+  ["centres", "centers"],
+  ["centred", "centered"],
+  ["colour", "color"],
+  ["colours", "colors"],
+  ["coloured", "colored"],
+  ["colourful", "colorful"],
+  ["defence", "defense"],
+  ["defences", "defenses"],
+  ["favour", "favor"],
+  ["favours", "favors"],
+  ["favoured", "favored"],
+  ["favourite", "favorite"],
+  ["grey", "gray"],
+  ["greying", "graying"],
+  ["harbour", "harbor"],
+  ["harbours", "harbors"],
+  ["honour", "honor"],
+  ["honours", "honors"],
+  ["honoured", "honored"],
+  ["honourable", "honorable"],
+  ["jewellery", "jewelry"],
+  ["labour", "labor"],
+  ["mould", "mold"],
+  ["mouldy", "moldy"],
+  ["neighbour", "neighbor"],
+  ["neighbours", "neighbors"],
+  ["odour", "odor"],
+  ["offence", "offense"],
+  ["plough", "plow"],
+  ["rumour", "rumor"],
+  ["rumours", "rumors"],
+  ["sceptic", "skeptic"],
+  ["sceptical", "skeptical"],
+  ["smoulder", "smolder"],
+  ["smouldering", "smoldering"],
+  ["theatre", "theater"],
+  ["towards", "toward"],
+  ["travelled", "traveled"],
+  ["travelling", "traveling"],
+  ["traveller", "traveler"],
+  ["cancelled", "canceled"],
+  ["vapour", "vapor"],
+  ["whisky", "whiskey"]
+];
+var PROSE_THRESHOLDS = {
+  filterPerThousand: 10,
+  adverbsPerThousand: 12,
+  minRateWords: 300,
+  maxBookisms: 2,
+  echoWindow: 30,
+  echoMinLength: 5,
+  uniformMinSentences: 20,
+  uniformSpread: 5,
+  phraseLength: 4,
+  phraseMinCount: 3,
+  phraseLimit: 10
+};
+function proseThresholds(options = {}) {
+  const thresholds = { ...PROSE_THRESHOLDS };
+  for (const [flag, key, whole] of [["max-filter-words", "filterPerThousand", false], ["max-adverbs", "adverbsPerThousand", false], ["max-bookisms", "maxBookisms", true]]) {
+    const raw = options[flag];
+    if (raw === undefined) {
+      continue;
+    }
+    const text = String(raw).trim();
+    if (!(whole ? /^\d+$/ : /^\d+(?:\.\d+)?$/).test(text) || !Number.isFinite(Number(text))) {
+      throw usageError(`--${flag} must be ${whole ? "a whole number" : "a number"} 0 or more, such as ${PROSE_THRESHOLDS[key]}`);
+    }
+    thresholds[key] = Number(text);
+  }
+  return thresholds;
+}
+function proseRules(styleData, names) {
+  const data = styleData ?? {};
+  const allow = new Set(stringList2(data["allow-words"]).map(normalizeWord));
+  const variants = [];
+  for (const entry of Array.isArray(data.preferred) ? data.preferred : []) {
+    if (entry && typeof entry.use === "string" && typeof entry.avoid === "string" && entry.use.trim() !== "" && entry.avoid.trim() !== "" && normalizeWord(entry.use.trim()) !== normalizeWord(entry.avoid.trim())) {
+      variants.push({ use: entry.use.trim(), avoid: entry.avoid.trim(), source: "style sheet" });
+    }
+  }
+  const dialect = typeof data.dialect === "string" ? data.dialect : "unspecified";
+  if (dialect === "british" || dialect === "american") {
+    const claimed = new Set(variants.flatMap((variant) => [normalizeWord(variant.use), normalizeWord(variant.avoid)]).concat([...allow]));
+    for (const [british, american] of DIALECT_PAIRS) {
+      const [use, avoid] = dialect === "british" ? [british, american] : [american, british];
+      if (!claimed.has(use) && !claimed.has(avoid)) {
+        variants.push({ use, avoid, source: `${dialect} dialect` });
+      }
+    }
+  }
+  const nameTokens = new Set;
+  for (const name of names) {
+    for (const token of splitWords(String(name))) {
+      nameTokens.add(nameKey(token));
+    }
+  }
+  return {
+    allow,
+    variants: variants.map((variant) => ({ ...variant, pattern: phrasePattern2(variant.avoid) })),
+    watch: stringList2(data["watch-words"]).map((word) => ({ word, pattern: phrasePattern2(word) })),
+    filterWords: new Set(FILTER_WORDS.filter((word) => !allow.has(word))),
+    bookisms: new Set(SAID_BOOKISMS.filter((word) => !allow.has(word))),
+    nameTokens
+  };
+}
+function analyzeChapter(prose, rules) {
+  const paragraphs = proseParagraphs(prose);
+  const text = paragraphs.join(`
+
+`);
+  const words = splitWords(text);
+  const narration = splitWords(paragraphs.map(narrationOnly).join(`
+
+`));
+  const sentenceList = paragraphs.flatMap((paragraph) => splitSentences(paragraph));
+  const sentences = sentenceList.map((sentence) => splitWords(sentence).length).filter((count) => count > 0);
+  const filterWords = countMatching(narration, (word) => rules.filterWords.has(word));
+  const adverbs = countMatching(narration, (word) => isAdverb(word, rules));
+  const tags = dialogueTags(paragraphs, rules);
+  return {
+    words: words.length,
+    narrationWords: narration.length,
+    sentences: sentenceStats(sentences),
+    filterWords,
+    adverbs,
+    plainTags: tags.plain,
+    bookisms: tags.bookisms,
+    echoes: echoes(words, rules),
+    watch: rules.watch.map(({ word, pattern }) => ({ word, count: countPattern(text, pattern) })).filter((entry) => entry.count > 0),
+    variants: rules.variants.map(({ use, avoid, source, pattern }) => ({ use, avoid, source, count: countVariant(text, pattern, rules) })).filter((entry) => entry.count > 0),
+    phraseSentences: sentenceList.map((sentence) => splitWords(sentence).map(normalizeWord))
+  };
+}
+function chapterFindings(label, analysis, thresholds = PROSE_THRESHOLDS) {
+  const findings = [];
+  for (const variant of analysis.variants) {
+    findings.push(warn("prose-avoided-spelling", `${label} uses "${variant.avoid}" ${times(variant.count)}; ${variant.source} prefers "${variant.use}"`, label));
+  }
+  const rated = analysis.narrationWords >= thresholds.minRateWords;
+  const filterRate = perThousand(total(analysis.filterWords), analysis.narrationWords);
+  if (rated && filterRate > thresholds.filterPerThousand) {
+    findings.push(warn("prose-filter-words", `${label} has ${formatAgainst(filterRate, thresholds.filterPerThousand, "over")} filter words per 1,000 narration words (over ${thresholds.filterPerThousand}): ${formatCounts(analysis.filterWords, 5)}`, label));
+  }
+  const adverbRate = perThousand(total(analysis.adverbs), analysis.narrationWords);
+  if (rated && adverbRate > thresholds.adverbsPerThousand) {
+    findings.push(warn("prose-adverbs", `${label} has ${formatAgainst(adverbRate, thresholds.adverbsPerThousand, "over")} -ly adverbs per 1,000 narration words (over ${thresholds.adverbsPerThousand}): ${formatCounts(analysis.adverbs, 5)}`, label));
+  }
+  const bookisms = total(analysis.bookisms);
+  if (bookisms > thresholds.maxBookisms) {
+    findings.push(warn("prose-bookisms", `${label} has ${bookisms} said-bookism dialogue tags: ${formatCounts(analysis.bookisms, 5)}`, label));
+  }
+  const stats = analysis.sentences;
+  if (stats.count >= thresholds.uniformMinSentences && stats.spread < thresholds.uniformSpread) {
+    findings.push(warn("prose-uniform-sentences", `${label} sentence lengths are uniform (spread ${formatAgainst(stats.spread, thresholds.uniformSpread, "under")} words over ${stats.count} sentences); vary the rhythm`, label));
+  }
+  return findings;
+}
+function repeatedPhrases(analyses, thresholds = PROSE_THRESHOLDS) {
+  const counts = new Map;
+  const size = thresholds.phraseLength;
+  for (const analysis of analyses) {
+    for (const sentence of analysis.phraseSentences) {
+      for (let index = 0;index + size <= sentence.length; index += 1) {
+        const gram = sentence.slice(index, index + size);
+        if (gram.every((word) => PHRASE_STOPWORDS.has(word))) {
+          continue;
+        }
+        const key = gram.join(" ");
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+    }
+  }
+  const repeated = new Map([...counts].filter(([, count]) => count >= thresholds.phraseMinCount));
+  return sortCounts(repeated).slice(0, thresholds.phraseLimit).map((entry) => ({ phrase: entry.word, count: entry.count }));
+}
+function similarNames(characters) {
+  const firsts = characters.map((character) => ({ id: character.id, name: String(character.name), first: givenName(character.name).toLowerCase() })).filter((entry) => entry.first.length >= 3).sort((left, right) => left.id.localeCompare(right.id, "en"));
+  const pairs = [];
+  for (let left = 0;left < firsts.length; left += 1) {
+    for (let right = left + 1;right < firsts.length; right += 1) {
+      const a = firsts[left].first;
+      const b = firsts[right].first;
+      const limit = Math.min(a.length, b.length) >= 5 ? 2 : 1;
+      if (a === b || a.slice(0, 3) === b.slice(0, 3) || editDistance(a, b) <= limit) {
+        pairs.push([firsts[left], firsts[right]]);
+      }
+    }
+  }
+  return pairs;
+}
+function formatProseReport(report) {
+  const chapterCount = `${report.chapters.length} ${report.chapters.length === 1 ? "chapter" : "chapters"}`;
+  const lines = [`Prose report: ${report.passage ? "passage from stdin" : chapterCount}, ${report.words} words`];
+  if (!report.styleSheet) {
+    lines.push("No style-sheet.md: spelling and watch-word checks are off");
+  }
+  for (const chapter of report.chapters) {
+    const analysis = chapter.analysis;
+    const stats = analysis.sentences;
+    lines.push("", `${chapter.file}: ${chapter.title} (${analysis.words} words)`);
+    lines.push(`  Sentences: ${stats.count}, average ${formatRate(stats.mean)} words, longest ${stats.longest}, spread ${formatRate(stats.spread)}`);
+    lines.push(`  Filter words: ${formatRate(perThousand(total(analysis.filterWords), analysis.narrationWords))} per 1k narration words${countSuffix(analysis.filterWords)}`);
+    lines.push(`  -ly adverbs: ${formatRate(perThousand(total(analysis.adverbs), analysis.narrationWords))} per 1k narration words${countSuffix(analysis.adverbs)}`);
+    lines.push(`  Dialogue tags: ${formatCounts(analysis.plainTags, 4) || "none plain"}; said-bookisms: ${formatCounts(analysis.bookisms, 5) || "none"}`);
+    lines.push(`  Echoes within ${PROSE_THRESHOLDS.echoWindow} words: ${formatCounts(analysis.echoes, 5) || "none"}`);
+    if (analysis.watch.length > 0) {
+      lines.push(`  Watch words: ${analysis.watch.map((entry) => `${entry.word} ${entry.count}`).join(", ")}`);
+    }
+    if (analysis.variants.length > 0) {
+      lines.push(`  Spelling: ${analysis.variants.map((entry) => `${entry.avoid} ${entry.count} (use ${entry.use})`).join(", ")}`);
+    }
+  }
+  lines.push("", report.passage ? "Passage:" : "Manuscript:");
+  lines.push(`  Repeated ${PROSE_THRESHOLDS.phraseLength}-word phrases: ${report.phrases.map((entry) => `"${entry.phrase}" ${entry.count}`).join(", ") || "none"}`);
+  if (!report.passage) {
+    lines.push(`  Similar character names: ${report.similarNames.map(([a, b]) => `${a.name} / ${b.name}`).join(", ") || "none"}`);
+  }
+  return `${lines.join(`
+`)}
+`;
+}
+function proseParagraphs(prose) {
+  return withoutFenceMarkers(scanComments(String(prose), " ").text).split(/\r?\n\s*\r?\n/).map((paragraph) => paragraph.split(/\r?\n/).filter((line) => !/^\s{0,3}#/.test(line)).join(" ")).map((paragraph) => paragraph.replace(/\s+/g, " ").trim()).filter((paragraph) => paragraph !== "" && !/^([*_-])( ?\1){2,}$/.test(paragraph));
+}
+var BEAT_PRONOUNS = new Set(["he", "she", "they", "i", "we", "it", "you"]);
+function dialogueTags(paragraphs, rules) {
+  const plain = new Map;
+  const bookisms = new Map;
+  for (const paragraph of paragraphs) {
+    for (const match of quoteMatches(paragraph)) {
+      const after = splitWords(paragraph.slice(match.end, match.end + 200).split(/[.!?;:“"]/)[0]).slice(0, 3);
+      const tag = tagKind(match.text, after[0] ?? "");
+      if (tag === "none") {
+        continue;
+      }
+      for (const raw of after) {
+        const word = raw.toLowerCase();
+        if (PLAIN_TAGS.includes(word)) {
+          increment(plain, word);
+          break;
+        }
+        if (tag === "any" && rules.bookisms.has(word)) {
+          increment(bookisms, word);
+          break;
+        }
+      }
+    }
+  }
+  return { plain: sortCounts(plain), bookisms: sortCounts(bookisms) };
+}
+function tagKind(quoted, nextWord) {
+  const end = quoted.trim().replace(/["'”’)\]*_]+$/, "").slice(-1);
+  if (end === ".") {
+    return "none";
+  }
+  if (/[?!…—–-]/.test(end) && /^\p{Lu}/u.test(nextWord)) {
+    return BEAT_PRONOUNS.has(nextWord.toLowerCase()) ? "none" : "plain";
+  }
+  return "any";
+}
+function isAdverb(word, rules) {
+  return word.length > 4 && word.endsWith("ly") && !NOT_ADVERBS.has(word) && !rules.allow.has(word) && !isName(word, rules);
+}
+function isName(word, rules) {
+  return rules.nameTokens.has(word) || rules.nameTokens.has(nameKey(word));
+}
+function normalizeWord(word) {
+  return String(word).toLowerCase().replace(/’/g, "'");
+}
+function nameKey(word) {
+  return normalizeWord(word).replace(/'s$/, "");
+}
+function countVariant(text, pattern, rules) {
+  let count = 0;
+  for (const match of text.matchAll(pattern)) {
+    const first = splitWords(match[0])[0] ?? "";
+    if (/^\p{Lu}/u.test(first) && isName(first, rules)) {
+      continue;
+    }
+    count += 1;
+  }
+  return count;
+}
+function echoes(words, rules) {
+  const lastSeen = new Map;
+  const counts = new Map;
+  words.forEach((raw, index) => {
+    const word = normalizeWord(raw);
+    if (word.length < PROSE_THRESHOLDS.echoMinLength || ECHO_STOPWORDS.has(word) || isName(word, rules) || rules.allow.has(word) || /^\p{N}+$/u.test(word)) {
+      return;
+    }
+    if (lastSeen.has(word) && index - lastSeen.get(word) <= PROSE_THRESHOLDS.echoWindow) {
+      increment(counts, word);
+    }
+    lastSeen.set(word, index);
+  });
+  return sortCounts(counts);
+}
+function sentenceStats(lengths) {
+  if (lengths.length === 0) {
+    return { count: 0, mean: 0, longest: 0, spread: 0 };
+  }
+  const mean = lengths.reduce((sum, value) => sum + value, 0) / lengths.length;
+  const variance = lengths.reduce((sum, value) => sum + (value - mean) ** 2, 0) / lengths.length;
+  return { count: lengths.length, mean, longest: Math.max(...lengths), spread: Math.sqrt(variance) };
+}
+function countMatching(words, predicate) {
+  const counts = new Map;
+  for (const raw of words) {
+    const word = normalizeWord(raw);
+    if (predicate(word)) {
+      increment(counts, word);
+    }
+  }
+  return sortCounts(counts);
+}
+function phrasePattern2(phrase) {
+  const body = phrase.trim().split(/\s+/).map((word) => escapeRegExp(word).replace(/['’]/g, "['’]")).join("\\s+");
+  return new RegExp(`(?<![\\p{L}\\p{M}\\p{N}])${body}(?![\\p{L}\\p{M}\\p{N}])`, "giu");
+}
+function countPattern(text, pattern) {
+  return (text.match(pattern) ?? []).length;
+}
+function formatAgainst(value, threshold, side) {
+  for (let places = 1;places < 6; places += 1) {
+    const shown = Number(value.toFixed(places));
+    if (side === "over" ? shown > threshold : shown < threshold) {
+      return value.toFixed(places);
+    }
+  }
+  return String(value);
+}
+function editDistance(a, b) {
+  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1;i <= a.length; i += 1) {
+    const current = [i];
+    for (let j = 1;j <= b.length; j += 1) {
+      current[j] = Math.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    previous = current;
+  }
+  return previous[b.length];
+}
+function increment(counts, key) {
+  counts.set(key, (counts.get(key) ?? 0) + 1);
+}
+var COLLATOR = new Intl.Collator("en");
+function sortCounts(counts) {
+  return [...counts.entries()].map(([word, count]) => ({ word, count })).sort((left, right) => right.count - left.count || COLLATOR.compare(left.word, right.word));
+}
+function stringList2(value) {
+  return Array.isArray(value) ? value.filter((item) => typeof item === "string" && item.trim() !== "").map((item) => item.trim()) : [];
+}
+function total(counts) {
+  return counts.reduce((sum, entry) => sum + entry.count, 0);
+}
+function perThousand(count, words) {
+  return words === 0 ? 0 : count * 1000 / words;
+}
+function formatRate(value) {
+  return value.toFixed(1);
+}
+function formatCounts(counts, limit) {
+  return counts.slice(0, limit).map((entry) => `${entry.word} ${entry.count}`).join(", ");
+}
+function countSuffix(counts) {
+  return counts.length === 0 ? "" : ` (${formatCounts(counts, 5)})`;
+}
+function times(count) {
+  return count === 1 ? "once" : `${count} times`;
+}
+
+// src/options.js
+var OPTIONS = [
+  { name: "title", value: "<name>", help: ["Story title for import"] },
+  { name: "dir", value: "<path>", help: ["Target directory for init or import"] },
+  { name: "genre", value: "<name>", help: ["Story genre for init or import"] },
+  { name: "sub-genre", value: "<name>", help: ["Story sub-genre for init or import"] },
+  { name: "setting-era", value: "<name>", help: ["Setting era for init or import"] },
+  { name: "theme", value: "<name>", repeatable: true, help: ["Theme for init, import, or add arc; repeatable"] },
+  { name: "themes", value: "<a,b>", repeatable: true, aliasOf: "theme", help: ["Comma-separated themes for init, import, or add arc"] },
+  { name: "pov", value: "<style|id>", help: ["POV style for init or import; POV character id", "for add chapter/scene (also added to characters)"] },
+  { name: "tense", value: "<tense>", help: ["Narrative tense for init or import"] },
+  { name: "form", value: "<form>", help: ["Story form for init (novel, novella, novelette,", "short-story, flash, serial, picture-book,", "chapter-book); sets a default target-words"] },
+  { name: "synopsis", value: "<text>", help: ["Starter synopsis for init or import"] },
+  { name: "series", value: "<id>", help: ["Series id for init"] },
+  { name: "book-number", value: "<n>", help: ["Publication order for init"] },
+  { name: "follows", value: "<path>", repeatable: true, help: ["Init a sequel set after this story project;", "repeatable"] },
+  { name: "precedes", value: "<path>", repeatable: true, help: ["Init a prequel set before this story project;", "repeatable"] },
+  {
+    name: "force",
+    help: [
+      "Let init/import use an existing directory: add",
+      "missing starter files, never overwrite existing",
+      "ones; import also replaces every chapter-NN.md file"
+    ]
+  },
+  { name: "write", help: ["Update chapter word-count frontmatter"] },
+  { name: "log", help: ["Record today's word count in progress.md"] },
+  { name: "ref", value: "<git-ref>", help: ["Earlier draft as a git branch, tag, or commit", "for compare"] },
+  { name: "against", value: "<path>", help: ["Earlier draft as another project folder for compare"] },
+  { name: "anchor", value: "<label>", repeatable: true, help: ["Review-copy paragraph label (ch03-p12) to find", "in the current text for compare; repeatable"] },
+  { name: "path", value: "<path>", help: ["Project root for every command except init and", "import"] },
+  { name: "out", value: "<file>", help: ["Output path for export/build/synopsis/diagram"] },
+  { name: "format", value: "<name>", help: ["Output format for build (markdown, epub, docx,", "shunn, html, print, narration, metadata,", "fountain, twee, ink)"] },
+  { name: "trim", value: "<size>", help: ["Trim size for build --format print (5x8,", "5.25x8, 5.5x8.5, 6x9, a5; default 5.5x8.5)"] },
+  { name: "stamp", value: "<label>", help: ["Build label printed in build --format html (a", "date, commit, or review round)"] },
+  { name: "note-url", value: "<url>", help: ["Note form linked, prefilled, from every label in", "build --format html (a GitHub new-issue link)"] },
+  { name: "shunn", help: ["Apply Shunn manuscript formatting (with --format", "docx)"] },
+  { name: "at", value: "<chapter-id>", help: ["Chapter id for knowledge: what the character knew", "and how their progressions had changed them"] },
+  { name: "budget", value: "<tokens>", help: ["Token budget for context (default 6000)"] },
+  { name: "scenes", value: "<n>", help: ["Earlier scenes to summarise for context", "(default 5)"] },
+  { name: "init", help: ["Add the default revision passes for passes"] },
+  { name: "start", value: "<pass>", help: ["Mark a revision pass in progress for passes"] },
+  { name: "done", value: "<pass>", help: ["Mark a revision pass done for passes"] },
+  { name: "max-filter-words", value: "<n>", help: ["Warn above n filter words per 1,000 narration", "words for prose (default 10)"] },
+  { name: "max-adverbs", value: "<n>", help: ["Warn above n -ly adverbs per 1,000 narration", "words for prose (default 12)"] },
+  { name: "max-bookisms", value: "<n>", help: ["Warn above n said-bookism tags in a chapter for", "prose (default 2)"] },
+  { name: "pages", value: "<n>", help: ["Synopsis length for synopsis (1 or 3)"] },
+  { name: "actionable", help: ["Include next actions in report"] },
+  { name: "json", help: ["Print one JSON result object (apiVersion,", "command, ok, data, diagnostics, writes) instead", "of text, for the check and analysis commands"] },
+  { name: "id", value: "<kebab-id>", help: ["Explicit id for add or rename, for a name with", "no ASCII letters or digits"] },
+  { name: "number", value: "<n>", help: ["Chapter number for add chapter or move chapter"] },
+  { name: "chapter", value: "<id>", help: ["Chapter id for add scene or move scene"] },
+  { name: "scene", value: "<n>", help: ["Scene number for add scene or move scene"] },
+  { name: "type", value: "<name>", help: ["Entity type for add"] },
+  { name: "role", value: "<name>", help: ["Character role for add character"] },
+  { name: "status", value: "<name>", help: ["Entity status for add"] },
+  { name: "mode", value: "<name>", help: ["Mode for add chapter (e.g. discovered)"] },
+  { name: "date", value: "<date>", help: ["Story date (YYYY-MM-DD) for add chapter/scene;", "the session date for progress (default today)"] },
+  { name: "time", value: "<time>", help: ["Story time (HH:MM or dawn, morning, midday,", "afternoon, evening, night) for add chapter/scene"] },
+  { name: "travel-hours", value: "<n>", help: ["Travel hours for add scene"] },
+  { name: "dilemma", value: "<text>", help: ["Dilemma for add scene sequel unit"] },
+  { name: "sequel", help: ["Mark scene as sequel unit for add scene"] },
+  { name: "outcome", value: "<name>", help: ["Scene outcome for add scene (yes, no, yes-but,", "no-and)"] },
+  { name: "hook", value: "<name>", help: ["Chapter-ending hook for add chapter (cliffhanger,", "question, revelation, reversal, decision,", "emotional, resolution)"] },
+  { name: "location", value: "<id>", repeatable: true, help: ["Location reference for add"] },
+  { name: "locations", value: "<ids>", repeatable: true, aliasOf: "location" },
+  { name: "character", value: "<id>", repeatable: true, help: ["Character reference for add; repeatable"] },
+  { name: "characters", value: "<ids>", repeatable: true, aliasOf: "character" },
+  { name: "mention", value: "<id>", repeatable: true, help: ["Mentioned character for add chapter/scene;", "repeatable"] },
+  { name: "mentions", value: "<ids>", repeatable: true, aliasOf: "mention" },
+  { name: "member", value: "<id>", repeatable: true, help: ["Faction member reference for add faction; repeatable"] },
+  { name: "members", value: "<ids>", repeatable: true, aliasOf: "member" },
+  { name: "owner", value: "<id>", help: ["Owner reference for add artifact"] },
+  { name: "arc", value: "<id>", repeatable: true, help: ["Arc reference for add (arc theme for add", "character); repeatable"] },
+  { name: "arcs", value: "<ids>", repeatable: true, aliasOf: "arc" },
+  { name: "introduced", value: "<id>", help: ["Chapter id for add question"] },
+  { name: "resolved", value: "<id>", help: ["Chapter id for add question"] },
+  { name: "planted", value: "<id>", help: ["Chapter id for add promise/clue"] },
+  { name: "payoff", value: "<id>", help: ["Chapter id for add promise/clue"] },
+  { name: "significance-delayed", help: ["Significance is delayed for add clue"] },
+  { name: "red-herring", help: ["Mark add clue as a red herring"] },
+  { name: "category", value: "<name>", help: ["Category for add term"] },
+  { name: "alias", value: "<name>", repeatable: true, help: ["Alias for add term; repeatable"] },
+  { name: "aliases", value: "<names>", repeatable: true, aliasOf: "alias" },
+  { name: "region", value: "<name>", help: ["Region for add location"] },
+  { name: "population", value: "<name>", help: ["Population for add location"] },
+  { name: "controlled-by", value: "<id>", help: ["Controlling faction for add location"] },
+  { name: "prevalence", value: "<name>", help: ["Prevalence for add system"] },
+  { name: "acts", value: "<a,b>", repeatable: true, help: ["Comma-separated acts for add arc; repeatable"] },
+  { name: "act", value: "<name>", repeatable: true, aliasOf: "acts" },
+  { name: "placement", value: "<front|back>", help: ["Placement for add matter (default front)"] },
+  { name: "order", value: "<n>", help: ["Order within its placement for add matter"] },
+  { name: "heading", help: ["Print the page title for add matter; --heading", "false for a dedication or epigraph"] },
+  { name: "source", value: "<text>", repeatable: true, help: ["Source for add research; repeatable"] },
+  { name: "sources", value: "<texts>", repeatable: true, aliasOf: "source" },
+  { name: "used-in", value: "<chapter-id>", repeatable: true, help: ["Chapter that relies on add research; repeatable"] },
+  { name: "accuracy", value: "<level>", help: ["Accuracy for add research (must-be-accurate,", "blended, invented)"] },
+  { name: "confidence", value: "<level>", help: ["Confidence for add research (high, medium, low)"] },
+  { name: "method", value: "<name>", help: ["Research method for add research (fact, interview,", "site-visit, expert-review, reading)"] },
+  { name: "risk", value: "<name>", repeatable: true, help: ["Risk area for add research (legal, medical,", "weapons, safety, cultural, defamation,", "technical); repeatable"] }
+];
+var BOOLEAN_OPTIONS = new Set(OPTIONS.filter((option) => option.value === undefined).map((option) => option.name));
+var VALUE_OPTIONS = new Set(OPTIONS.filter((option) => option.value !== undefined).map((option) => option.name));
+var REPEATABLE_OPTIONS = new Set(OPTIONS.filter((option) => option.repeatable).map((option) => option.name));
+function takesValue(name) {
+  return VALUE_OPTIONS.has(name);
+}
+var OPTION_COLUMN = 28;
+function formatOptionsHelp(names = null) {
+  const rows = OPTIONS.filter((option) => option.help && (names === null || names.includes(option.name))).map((option) => ({ flag: `--${option.name}${option.value ? ` ${option.value}` : ""}`, help: option.help })).concat([
+    { flag: "-h, --help", help: ["Show this help"] },
+    { flag: "-v, --version", help: ["Show the story CLI version"] }
+  ]);
+  const lines = [];
+  for (const row of rows) {
+    const head = `  ${row.flag}`;
+    const [first, ...rest] = row.help;
+    lines.push(head.length < OPTION_COLUMN ? `${head.padEnd(OPTION_COLUMN)}${first}` : `${head}  ${first}`);
+    for (const line of rest) {
+      lines.push(`${" ".repeat(OPTION_COLUMN)}${line}`);
+    }
+  }
+  return lines;
+}
+function isKnownOptionToken(token) {
+  if (token === "-h" || token === "-v") {
+    return true;
+  }
+  if (!token.startsWith("--")) {
+    return false;
+  }
+  const equalIndex = token.indexOf("=");
+  const key = token.slice(2, equalIndex === -1 ? undefined : equalIndex);
+  return key === "help" || key === "version" || BOOLEAN_OPTIONS.has(key) || VALUE_OPTIONS.has(key);
+}
+function addOption(options, key, value) {
+  const stored = BOOLEAN_OPTIONS.has(key) ? normalizeBooleanValue(key, value) : value;
+  if (options[key] === undefined || !REPEATABLE_OPTIONS.has(key)) {
+    options[key] = stored;
+  } else {
+    options[key] = Array.isArray(options[key]) ? options[key].concat(stored) : [options[key], stored];
+  }
+}
+function normalizeBooleanValue(key, value) {
+  if (typeof value !== "string") {
+    return Boolean(value);
+  }
+  const lower = value.trim().toLowerCase();
+  if (lower === "false" || lower === "0" || lower === "no" || lower === "off") {
+    return false;
+  }
+  if (lower === "true" || lower === "1" || lower === "yes" || lower === "on") {
+    return true;
+  }
+  throw usageError(`Unknown value "${value}" for --${key}: expected true or false`);
+}
+function suggestion(input, candidates, prefix = "") {
+  const scored = candidates.map((candidate) => ({ candidate, distance: editDistance(input.toLowerCase(), candidate) }));
+  const best = Math.min(...scored.map((entry) => entry.distance));
+  if (best > Math.max(1, Math.floor(input.length / 3))) {
+    return "";
+  }
+  const names = scored.filter((entry) => entry.distance === best).slice(0, 3).map((entry) => `${prefix}${entry.candidate}`);
+  return `; did you mean ${names.join(" or ")}?`;
+}
+function isTruthy(value) {
+  const current = Array.isArray(value) ? value[value.length - 1] : value;
+  if (typeof current === "string") {
+    const lower = current.trim().toLowerCase();
+    if (lower === "false" || lower === "0" || lower === "no" || lower === "off" || lower === "") {
+      return false;
+    }
+    return true;
+  }
+  return Boolean(current);
+}
+function optionFamily(name) {
+  const canonical = OPTIONS.find((option) => option.name === name)?.aliasOf ?? name;
+  return [canonical, ...OPTIONS.filter((option) => option.aliasOf === canonical).map((option) => option.name)];
+}
+function isBooleanLiteralToken(token) {
+  return typeof token === "string" && /^(true|false|0|1|yes|no|on|off)$/i.test(token);
+}
+function parseArgs(argv, suggestFrom = OPTIONS.map((option) => option.name)) {
+  const positionals = [];
+  const options = {};
+  for (let index = 0;index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === "-h" || arg === "--help") {
+      options.help = true;
+      continue;
+    }
+    if (arg === "-v" || arg === "--version") {
+      options.version = true;
+      continue;
+    }
+    if (arg === "--") {
+      positionals.push(...argv.slice(index + 1));
+      break;
+    }
+    if (!arg.startsWith("--")) {
+      positionals.push(arg);
+      continue;
+    }
+    const equalIndex = arg.indexOf("=");
+    const key = arg.slice(2, equalIndex === -1 ? undefined : equalIndex);
+    const inlineValue = equalIndex === -1 ? undefined : arg.slice(equalIndex + 1);
+    if ((key === "help" || key === "version") && inlineValue !== undefined) {
+      if (normalizeBooleanValue(key, inlineValue)) {
+        options[key] = true;
+      }
+      continue;
+    }
+    if (BOOLEAN_OPTIONS.has(key)) {
+      if (inlineValue !== undefined) {
+        addOption(options, key, inlineValue);
+        continue;
+      }
+      const nextToken = argv[index + 1];
+      if (isBooleanLiteralToken(nextToken)) {
+        addOption(options, key, nextToken);
+        index += 1;
+        continue;
+      }
+      addOption(options, key, true);
+      continue;
+    }
+    if (VALUE_OPTIONS.has(key)) {
+      if (inlineValue !== undefined) {
+        addOption(options, key, inlineValue);
+        continue;
+      }
+      const nextValue = argv[index + 1];
+      if (nextValue === undefined || isKnownOptionToken(nextValue) || nextValue.startsWith("--")) {
+        throw usageError(`Missing value for --${key}: expected a value`);
+      }
+      addOption(options, key, nextValue);
+      index += 1;
+      continue;
+    }
+    throw usageError(`Unknown option --${key}${suggestion(key, suggestFrom, "--")}`);
+  }
+  return { positionals, options };
+}
+
+// src/exemptions.js
+var EXEMPTIONS_FILE = path3.join("continuity", "exemptions.md");
+var MATCH_KEYS = ["pattern", "code", "file", "chapter"];
+var MIN_PATTERN_LENGTH = 4;
+function portable(text) {
+  return text.replace(/\\/g, "/");
+}
+function exemptionFile(value) {
+  const text = portable(value);
+  if (text.startsWith("/") || /^[A-Za-z]:/.test(text) || text.split("/").includes("..")) {
+    return null;
+  }
+  const normalized = path3.posix.normalize(text).replace(/\/$/, "");
+  return normalized === "." ? null : normalized;
+}
+function exemptionProblems(entry, label = "exemption") {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    return [err("entry-not-mapping", `${label} must be a mapping`, EXEMPTIONS_FILE)];
+  }
+  const problems = [];
+  if (MATCH_KEYS.every((key) => entry[key] === undefined)) {
+    problems.push(err("missing-field", `${label} sets none of ${MATCH_KEYS.join(", ")}: set at least one to say which findings it dismisses`, EXEMPTIONS_FILE));
+  }
+  if (entry.pattern !== undefined) {
+    if (typeof entry.pattern !== "string" || entry.pattern.trim() === "") {
+      problems.push(err("missing-field", `${label} is missing a non-empty pattern`, EXEMPTIONS_FILE));
+    } else if (entry.pattern.trim().length < MIN_PATTERN_LENGTH) {
+      problems.push(err("exemption-pattern-too-short", `${label} pattern must be at least ${MIN_PATTERN_LENGTH} characters to avoid blanket exemptions`, EXEMPTIONS_FILE));
+    }
+  }
+  const codeProblem = entry.code === undefined ? null : codeError(entry.code, label);
+  if (codeProblem) {
+    problems.push(codeProblem);
+  }
+  if (entry.file !== undefined) {
+    if (typeof entry.file !== "string" || entry.file.trim() === "") {
+      problems.push(err("field-not-text", `${label} file must be a project file path, such as chapters/chapter-03.md`, EXEMPTIONS_FILE));
+    } else if (exemptionFile(entry.file) === null) {
+      problems.push(err("exemption-file-not-relative", `${label} file ${entry.file} must be a path inside the project, relative to story.md, such as chapters/chapter-03.md`, EXEMPTIONS_FILE));
+    }
+  }
+  if (entry.chapter !== undefined && !isChapterId(entry.chapter)) {
+    problems.push(err("id-not-kebab", `${label} chapter must be a kebab-case chapter id, such as chapter-03, got ${JSON.stringify(entry.chapter)}`, EXEMPTIONS_FILE));
+  }
+  if (entry.code !== undefined && codeProblem === null && ["pattern", "file", "chapter"].every((key) => entry[key] === undefined)) {
+    const severity = FINDING_CODES[entry.code] === "warning" ? `, or set severity ${entry.code} to off in story.md` : "";
+    problems.push(err("exemption-too-broad", `${label} sets only code, which would dismiss every ${entry.code} finding: add file, chapter, or pattern to narrow it${severity}`, EXEMPTIONS_FILE));
+  }
+  if (typeof entry.reason !== "string" || entry.reason.trim() === "") {
+    problems.push(err("missing-field", `${label} is missing a non-empty reason`, EXEMPTIONS_FILE));
+  }
+  return problems;
+}
+function isChapterId(value) {
+  return typeof value === "string" && value !== "" && kebabCase(value) === value;
+}
+function codeError(code, label) {
+  if (typeof code !== "string" || code.trim() === "") {
+    return err("field-not-text", `${label} code must be a finding code, such as clock-backward`, EXEMPTIONS_FILE);
+  }
+  if (!Object.hasOwn(FINDING_CODES, code)) {
+    return err("exemption-unknown-code", `${label} code ${code} is not a finding code${suggestion(code, Object.keys(FINDING_CODES))}`, EXEMPTIONS_FILE);
+  }
+  if (!exemptionCodes().includes(code)) {
+    const why = PROJECTLESS_CODES.includes(code) ? "story init or story import reports it before there is an exemption log to read" : "it is an error outside story continuity, which means the project is broken: only continuity errors and warnings can be exempted";
+    return err("exemption-code-not-dismissible", `${label} code ${code} cannot be exempted: ${why}`, EXEMPTIONS_FILE);
+  }
+  return null;
+}
+function parseExemptions(entries) {
+  if (!Array.isArray(entries)) {
+    return [];
+  }
+  const exemptions = [];
+  entries.forEach((entry, index) => {
+    if (exemptionProblems(entry).length > 0) {
+      return;
+    }
+    const exemption = { index, reason: entry.reason.trim() };
+    if (entry.pattern !== undefined) {
+      exemption.pattern = entry.pattern;
+    }
+    if (entry.code !== undefined) {
+      exemption.code = entry.code;
+    }
+    if (entry.file !== undefined) {
+      exemption.file = exemptionFile(entry.file);
+    }
+    if (entry.chapter !== undefined) {
+      exemption.chapter = entry.chapter;
+    }
+    exemptions.push(exemption);
+  });
+  return exemptions;
+}
+function readExemptionLog(root) {
+  try {
+    return parseExemptions(parseFrontmatter(readTextFile(path3.join(root, EXEMPTIONS_FILE))).data.exemptions);
+  } catch {
+    return [];
+  }
+}
+function exemptionMatches(exemption, finding) {
+  return (exemption.pattern === undefined || portable(finding.message).includes(portable(exemption.pattern))) && (exemption.code === undefined || finding.code === exemption.code) && (exemption.file === undefined || typeof finding.file === "string" && portable(finding.file) === exemption.file) && (exemption.chapter === undefined || finding.chapter === exemption.chapter);
+}
+function dismissByExemptions(result, exemptions, { errors: withErrors }) {
+  if (exemptions.length === 0) {
+    return result;
+  }
+  const dismissed = [...result.dismissed ?? []];
+  const keep = (findings) => findings.filter((finding) => {
+    const match = exemptions.find((exemption) => exemptionMatches(exemption, finding));
+    if (match) {
+      dismissed.push({ finding, reason: match.reason, index: match.index });
+    }
+    return !match;
+  });
+  const errors = withErrors ? keep(result.errors) : result.errors;
+  const warnings = keep(result.warnings);
+  if (dismissed.length === (result.dismissed ?? []).length) {
+    return result;
+  }
+  return { ...result, ok: withErrors ? errors.length === 0 : result.ok, errors, warnings, dismissed };
 }
 
 // src/progressions.js
@@ -852,26 +3121,7 @@ function checkContinuity(project) {
   return withExemptions(project, { ok: errors.length === 0, errors, warnings });
 }
 function withExemptions(project, result) {
-  const exemptions = project.exemptions ?? [];
-  const keptErrors = [];
-  const keptWarnings = [];
-  const dismissed = [];
-  for (const error of result.errors) {
-    dismissFinding(error, exemptions, keptErrors, dismissed);
-  }
-  for (const warning of result.warnings) {
-    dismissFinding(warning, exemptions, keptWarnings, dismissed);
-  }
-  return { ok: keptErrors.length === 0, errors: keptErrors, warnings: keptWarnings, dismissed };
-}
-function dismissFinding(finding, exemptions, kept, dismissed) {
-  const portable = (text) => text.replace(/\\/g, "/");
-  const match = exemptions.find((exemption) => portable(finding.message).includes(portable(exemption.pattern)));
-  if (match) {
-    dismissed.push({ finding, reason: match.reason });
-  } else {
-    kept.push(finding);
-  }
+  return dismissByExemptions({ ...result, dismissed: [] }, project.exemptions ?? [], { errors: true });
 }
 function checkCharacterDeaths(project, context, errors, warnings) {
   for (const character of project.characters) {
@@ -911,12 +3161,12 @@ function checkCharacterDeaths(project, context, errors, warnings) {
     const window = deathWindow(character, context.chronology);
     for (const chapter of project.chapters) {
       if (window.deadIn(chapter.id) && castIncludes(chapter, character.id)) {
-        errors.push(err("posthumous-appearance", `${relative(project, chapter.file)} lists ${character.id}, who died in ${character.diedIn}; move posthumous appearances to mentions`, relative(project, chapter.file)));
+        errors.push(err("posthumous-appearance", `${relative(project, chapter.file)} lists ${character.id}, who died in ${character.diedIn}; move posthumous appearances to mentions`, relative(project, chapter.file), chapter.id));
       }
     }
     for (const scene of project.scenes) {
       if (window.deadIn(scene.chapter) && castIncludes(scene, character.id)) {
-        errors.push(err("posthumous-appearance", `${relative(project, scene.file)} lists ${character.id}, who died in ${character.diedIn}; move posthumous appearances to mentions`, relative(project, scene.file)));
+        errors.push(err("posthumous-appearance", `${relative(project, scene.file)} lists ${character.id}, who died in ${character.diedIn}; move posthumous appearances to mentions`, relative(project, scene.file), chapterOf(scene)));
       }
     }
   }
@@ -929,12 +3179,13 @@ function checkStatusAppearances(project, character, chronology, warnings) {
     if (!castIncludes(entry, character.id)) {
       continue;
     }
-    const death = progressionDeathAt(character, entry.chapter ?? entry.id, chronology);
+    const chapterId = entry.chapter ?? entry.id;
+    const death = progressionDeathAt(character, chapterId, chronology);
     const entryLabel = relative(project, entry.file);
     if (death?.from === "") {
-      warnings.push(warn("deceased-in-cast", `${entryLabel} lists ${character.id}, who died before the story (deceased with no died-in); move appearances to mentions`, entryLabel));
+      warnings.push(warn("deceased-in-cast", `${entryLabel} lists ${character.id}, who died before the story (deceased with no died-in); move appearances to mentions`, entryLabel, chapterOf(entry)));
     } else if (death) {
-      warnings.push(warn("progression-deceased-in-cast", `${entryLabel} lists ${character.id}, whose progressions make them deceased from ${death.from}; move appearances after the death to mentions`, entryLabel));
+      warnings.push(warn("progression-deceased-in-cast", `${entryLabel} lists ${character.id}, whose progressions make them deceased from ${death.from}; move appearances after the death to mentions`, entryLabel, chapterOf(entry)));
     }
   }
 }
@@ -990,12 +3241,12 @@ function checkProgressionDeath(character, label, chronology, warnings) {
   const revived = character.revivedIn;
   const atDeath = progressionStatusAt(character, died, chronology);
   if (atDeath.status !== "deceased" && atDeath.from !== "") {
-    warnings.push(warn("progression-death-conflict", `${label} progressions[${progressionIndex(character, atDeath.from)}] leaves ${character.id} ${atDeath.status} when they die in ${died}; add a status progression to deceased from ${died}`, label));
+    warnings.push(warn("progression-death-conflict", `${label} progressions[${progressionIndex(character, atDeath.from)}] leaves ${character.id} ${atDeath.status} when they die in ${died}; add a status progression to deceased from ${died}`, label, died));
   }
   for (const { index, from, value } of statusProgressions(character)) {
     if (value !== "deceased" && happensAfter(chronology, from, died) && (revived === "" || happensAfter(chronology, revived, from))) {
       const fix = revived === "" ? `set revived-in: ${from} if they come back` : `move it to ${revived}, when they are revived`;
-      warnings.push(warn("progression-death-conflict", `${label} progressions[${index}] sets status ${value} from ${from}, while ${character.id} is dead after dying in ${died}; ${fix}`, label));
+      warnings.push(warn("progression-death-conflict", `${label} progressions[${index}] sets status ${value} from ${from}, while ${character.id} is dead after dying in ${died}; ${fix}`, label, from));
     }
   }
   if (revived === "") {
@@ -1003,17 +3254,17 @@ function checkProgressionDeath(character, label, chronology, warnings) {
   }
   const atRevival = progressionStatusAt(character, revived, chronology);
   if (atRevival.status === "deceased" && atRevival.from !== "") {
-    warnings.push(warn("progression-death-conflict", `${label} progressions[${progressionIndex(character, atRevival.from)}] makes ${character.id} deceased from ${atRevival.from}, which still holds when they are revived in ${revived}; add a status progression from ${revived}`, label));
+    warnings.push(warn("progression-death-conflict", `${label} progressions[${progressionIndex(character, atRevival.from)}] makes ${character.id} deceased from ${atRevival.from}, which still holds when they are revived in ${revived}; add a status progression from ${revived}`, label, revived));
   }
 }
 function checkChapterCasts(project, warnings) {
   for (const chapter of project.chapters) {
     if (chapter.pov && !chapter.characters.includes(chapter.pov) && !chapter.mentions.includes(chapter.pov)) {
-      warnings.push(warn("pov-not-in-cast", `${relative(project, chapter.file)} POV character ${chapter.pov} is not listed in characters`, relative(project, chapter.file)));
+      warnings.push(warn("pov-not-in-cast", `${relative(project, chapter.file)} POV character ${chapter.pov} is not listed in characters`, relative(project, chapter.file), chapter.id));
     }
     const scenePovs = [...new Set(project.scenes.filter((scene) => scene.chapter === chapter.id && scene.pov).map((scene) => scene.pov))];
     if (chapter.pov && scenePovs.length > 0 && !scenePovs.includes(chapter.pov)) {
-      warnings.push(warn("pov-scene-mismatch", `${relative(project, chapter.file)} has POV ${chapter.pov} but its scenes are told by ${scenePovs.join(", ")}`, relative(project, chapter.file)));
+      warnings.push(warn("pov-scene-mismatch", `${relative(project, chapter.file)} has POV ${chapter.pov} but its scenes are told by ${scenePovs.join(", ")}`, relative(project, chapter.file), chapter.id));
     }
   }
 }
@@ -1022,7 +3273,7 @@ function checkSceneCasts(project, warnings) {
   for (const scene of project.scenes) {
     const label = relative(project, scene.file);
     if (scene.pov && !scene.characters.includes(scene.pov) && !scene.mentions.includes(scene.pov)) {
-      warnings.push(warn("pov-not-in-cast", `${label} POV character ${scene.pov} is not listed in characters`, label));
+      warnings.push(warn("pov-not-in-cast", `${label} POV character ${scene.pov} is not listed in characters`, label, chapterOf(scene)));
     }
     const chapter = chapters.get(scene.chapter);
     if (!chapter) {
@@ -1030,11 +3281,11 @@ function checkSceneCasts(project, warnings) {
     }
     for (const characterId of scene.characters) {
       if (!chapter.characters.includes(characterId) && !chapter.mentions.includes(characterId)) {
-        warnings.push(warn("scene-cast-not-in-chapter", `${label} lists ${characterId} but ${relative(project, chapter.file)} does not list them in characters or mentions`, label));
+        warnings.push(warn("scene-cast-not-in-chapter", `${label} lists ${characterId} but ${relative(project, chapter.file)} does not list them in characters or mentions`, label, chapterOf(scene)));
       }
     }
     if (scene.location && !chapter.locations.includes(scene.location)) {
-      warnings.push(warn("scene-location-not-in-chapter", `${label} is set in ${scene.location} but ${relative(project, chapter.file)} does not list that location`, label));
+      warnings.push(warn("scene-location-not-in-chapter", `${label} is set in ${scene.location} but ${relative(project, chapter.file)} does not list that location`, label, chapterOf(scene)));
     }
   }
 }
@@ -1046,7 +3297,7 @@ function checkCutCharacters(project, warnings) {
   for (const entry of [...project.chapters, ...project.scenes]) {
     const listed = [...new Set([idText(entry.pov), ...entry.characters.map(idText)])].filter((id) => cut.has(id));
     for (const id of listed) {
-      warnings.push(warn("cut-character-in-cast", `${relative(project, entry.file)} lists ${id}, who has status: cut; drop them from pov and characters`, relative(project, entry.file)));
+      warnings.push(warn("cut-character-in-cast", `${relative(project, entry.file)} lists ${id}, who has status: cut; drop them from pov and characters`, relative(project, entry.file), chapterOf(entry)));
     }
   }
   for (const arc of project.arcs) {
@@ -1210,7 +3461,7 @@ function checkContinuityState(project, context, errors, warnings) {
   if (!project.continuity) {
     return;
   }
-  const label = path2.join("continuity", "state.md");
+  const label = path4.join("continuity", "state.md");
   const data = project.continuity.data;
   const currentChapter = data["current-chapter"];
   if (Number.isInteger(currentChapter)) {
@@ -1316,16 +3567,16 @@ function checkPosthumousLearning(character, learnedIn, entryLabel, file, context
   }
   const death = progressionDeathAt(character, learnedIn, context.chronology);
   if (death?.from === "") {
-    warnings.push(warn("deceased-learning", `${entryLabel} has ${character.id} learn something in ${learnedIn}, but ${character.id} died before the story (deceased with no died-in)`, file));
+    warnings.push(warn("deceased-learning", `${entryLabel} has ${character.id} learn something in ${learnedIn}, but ${character.id} died before the story (deceased with no died-in)`, file, learnedIn));
   } else if (death) {
-    warnings.push(warn("progression-deceased-learning", `${entryLabel} has ${character.id} learn something in ${learnedIn}, but their progressions make them deceased from ${death.from}`, file));
+    warnings.push(warn("progression-deceased-learning", `${entryLabel} has ${character.id} learn something in ${learnedIn}, but their progressions make them deceased from ${death.from}`, file, learnedIn));
   }
   if (!character.diedIn) {
     return;
   }
   const window = deathWindow(character, context.chronology);
   if (window && window.deadIn(learnedIn)) {
-    errors.push(err("posthumous-learning", `${entryLabel} has ${character.id} learn something in ${learnedIn}, after they died in ${character.diedIn}`, file));
+    errors.push(err("posthumous-learning", `${entryLabel} has ${character.id} learn something in ${learnedIn}, after they died in ${character.diedIn}`, file, learnedIn));
   }
 }
 function checkSceneLearning(project, context, errors, warnings) {
@@ -1343,7 +3594,7 @@ function checkStateAgainstStory(project, context, warnings) {
   if (!project.continuity) {
     return;
   }
-  const label = path2.join("continuity", "state.md");
+  const label = path4.join("continuity", "state.md");
   const data = project.continuity.data;
   const { chronology } = context;
   const currentChapter = Number.isInteger(data["current-chapter"]) ? data["current-chapter"] : -Infinity;
@@ -1372,7 +3623,7 @@ function checkStateAgainstStory(project, context, warnings) {
     const entryLabel = `${label} knowledge-state[${index}]`;
     const chapter = chaptersById.get(learnedIn);
     if (chapter.status !== "outline" && !inCast(chapter, character) && !scenesOf(learnedIn).some((scene) => inCast(scene, character))) {
-      warnings.push(warn("learner-not-in-cast", `${entryLabel} has ${character} learn something in ${learnedIn}, which does not list ${character} in characters or pov`, label));
+      warnings.push(warn("learner-not-in-cast", `${entryLabel} has ${character} learn something in ${learnedIn}, which does not list ${character} in characters or pov`, label, learnedIn));
     }
   }
   const unmatched = [];
@@ -1406,7 +3657,7 @@ function checkStateAgainstStory(project, context, warnings) {
       used.add(pair.index);
       continue;
     }
-    warnings.push(warn("knowledge-not-recorded", `${relative(project, scene.file)} state-changes record ${character} learning "${String(change.knowledge).trim()}" but ${label} has no knowledge-state entry for it learned by ${scene.chapter}`, relative(project, scene.file)));
+    warnings.push(warn("knowledge-not-recorded", `${relative(project, scene.file)} state-changes record ${character} learning "${String(change.knowledge).trim()}" but ${label} has no knowledge-state entry for it learned by ${scene.chapter}`, relative(project, scene.file), chapterOf(scene)));
   }
   const current = project.chapters.find((chapter) => chapter.number === currentChapter);
   for (const [index, entry] of stateEntries(data["character-state"]).entries()) {
@@ -1417,12 +3668,12 @@ function checkStateAgainstStory(project, context, warnings) {
     const entryLabel = `${label} character-state[${index}]`;
     const window = windows.get(character);
     if (window && current && (current.id === window.died || window.deadIn(current.id))) {
-      warnings.push(warn("state-tracks-dead-character", `${entryLabel} tracks ${character}, who died in ${window.died}; remove the entry once they are dead`, label));
+      warnings.push(warn("state-tracks-dead-character", `${entryLabel} tracks ${character}, who died in ${window.died}; remove the entry once they are dead`, label, current.id));
       continue;
     }
     const deadFrom = context.characters.has(character) && current ? progressionDeathFrom(context.characters.get(character), current.id, chronology) : null;
     if (deadFrom && !chronology.outline.has(deadFrom) && chronology.numbers.has(deadFrom)) {
-      warnings.push(warn("state-tracks-dead-character", `${entryLabel} tracks ${character}, whose progressions make them deceased from ${deadFrom}; remove the entry once they are dead`, label));
+      warnings.push(warn("state-tracks-dead-character", `${entryLabel} tracks ${character}, whose progressions make them deceased from ${deadFrom}; remove the entry once they are dead`, label, current.id));
       continue;
     }
     const location = idText(entry.location);
@@ -1431,7 +3682,7 @@ function checkStateAgainstStory(project, context, warnings) {
     }
     const last = scenesOf(current.id).filter((scene) => inCast(scene, character) && scene.location).pop();
     if (last && last.location !== location && !current.locations.includes(location)) {
-      warnings.push(warn("state-location-drift", `${entryLabel} puts ${character} at ${location}, but their last scene in ${current.id}, ${relative(project, last.file)}, is at ${last.location} and the chapter does not list ${location}`, label));
+      warnings.push(warn("state-location-drift", `${entryLabel} puts ${character} at ${location}, but their last scene in ${current.id}, ${relative(project, last.file)}, is at ${last.location} and the chapter does not list ${location}`, label, current.id));
     }
   }
   const lastSet = new Map;
@@ -1454,7 +3705,7 @@ function checkStateAgainstStory(project, context, warnings) {
   for (const { artifact, field, value, scene } of lastSet.values()) {
     const entry = latestObjectEntry(data, artifact, context);
     if (!entry) {
-      warnings.push(warn("object-not-recorded", `${relative(project, scene.file)} state-changes set ${artifact} ${field} ${value} but ${label} has no object-state entry for ${artifact}`, relative(project, scene.file)));
+      warnings.push(warn("object-not-recorded", `${relative(project, scene.file)} state-changes set ${artifact} ${field} ${value} but ${label} has no object-state entry for ${artifact}`, relative(project, scene.file), chapterOf(scene)));
       continue;
     }
     const since = idText(entry.since);
@@ -1462,7 +3713,7 @@ function checkStateAgainstStory(project, context, warnings) {
     const stated = idText(entry[field]);
     if (!newer && stated !== value) {
       const index = stateEntries(data["object-state"]).indexOf(entry);
-      warnings.push(warn("state-object-drift", `${label} object-state[${index}] gives ${artifact} ${field} ${stated || "(unset)"}, but ${relative(project, scene.file)} state-changes last set it to ${value}`, label));
+      warnings.push(warn("state-object-drift", `${label} object-state[${index}] gives ${artifact} ${field} ${stated || "(unset)"}, but ${relative(project, scene.file)} state-changes last set it to ${value}`, label, chapterOf(scene)));
     }
   }
 }
@@ -1517,7 +3768,11 @@ function requireMapping(entry, entryLabel, file, errors) {
   return true;
 }
 function relative(project, file) {
-  return path2.relative(project.root, file);
+  return path4.relative(project.root, file);
+}
+function chapterOf(record) {
+  const id = record.chapter !== undefined ? idText(record.chapter) : record.id;
+  return id === "" ? null : id;
 }
 function checkPropCustody(project, context, errors) {
   const { after } = context.chronology;
@@ -1529,10 +3784,10 @@ function checkPropCustody(project, context, errors) {
       }
       const sceneLabel = relative(project, scene.file);
       if (scene.stateChanges.some((change) => stateChangeTargets(change, artifact))) {
-        errors.push(err("gone-artifact-used", `${sceneLabel} uses ${artifact}, destroyed/lost ${beforeStory ? "before the story" : `since ${since}`}`, sceneLabel));
+        errors.push(err("gone-artifact-used", `${sceneLabel} uses ${artifact}, destroyed/lost ${beforeStory ? "before the story" : `since ${since}`}`, sceneLabel, chapterOf(scene)));
       }
       if (!beforeStory && scene.mentions.includes(artifact)) {
-        errors.push(err("gone-artifact-mentioned", `${sceneLabel} mentions ${artifact}, destroyed/lost since ${since}`, sceneLabel));
+        errors.push(err("gone-artifact-mentioned", `${sceneLabel} mentions ${artifact}, destroyed/lost since ${since}`, sceneLabel, chapterOf(scene)));
       }
     }
     for (const chapter of project.chapters) {
@@ -1540,7 +3795,7 @@ function checkPropCustody(project, context, errors) {
         continue;
       }
       if (chapter.mentions.includes(artifact)) {
-        errors.push(err("gone-artifact-mentioned", `${relative(project, chapter.file)} mentions ${artifact}, destroyed/lost since ${since}`, relative(project, chapter.file)));
+        errors.push(err("gone-artifact-mentioned", `${relative(project, chapter.file)} mentions ${artifact}, destroyed/lost since ${since}`, relative(project, chapter.file), chapter.id));
       }
     }
   }
@@ -1597,24 +3852,24 @@ function checkClock(project, errors, warnings) {
   for (const scene of project.scenes) {
     const label = relative(project, scene.file);
     if (scene.date !== "" && !parseClockDate(scene.date)) {
-      warnings.push(warn("malformed-date", `${label} has malformed date "${scene.date}"`, label));
+      warnings.push(warn("malformed-date", `${label} has malformed date "${scene.date}"`, label, chapterOf(scene)));
     }
     if (scene.time !== "" && parseClockTime(scene.time) === undefined) {
-      warnings.push(warn("malformed-time", `${label} has malformed time "${scene.time}"`, label));
+      warnings.push(warn("malformed-time", `${label} has malformed time "${scene.time}"`, label, chapterOf(scene)));
     }
     if (scene.travelHours < 0) {
-      warnings.push(warn("negative-travel-hours", `${label} has negative travel-hours ${scene.travelHours}`, label));
+      warnings.push(warn("negative-travel-hours", `${label} has negative travel-hours ${scene.travelHours}`, label, chapterOf(scene)));
     }
     if (scene.date === "" && scene.travelHours > 0) {
-      warnings.push(warn("travel-hours-undated", `${label} has travel-hours but no date, so the clock check skips it`, label));
+      warnings.push(warn("travel-hours-undated", `${label} has travel-hours but no date, so the clock check skips it`, label, chapterOf(scene)));
     }
   }
   for (const chapter of project.chapters) {
     if (chapter.date !== "" && !parseClockDate(chapter.date)) {
-      warnings.push(warn("malformed-date", `Chapter ${chapter.number} has malformed date "${chapter.date}"`, relative(project, chapter.file)));
+      warnings.push(warn("malformed-date", `Chapter ${chapter.number} has malformed date "${chapter.date}"`, relative(project, chapter.file), chapter.id));
     }
     if (chapter.time !== "" && parseClockTime(chapter.time) === undefined) {
-      warnings.push(warn("malformed-time", `Chapter ${chapter.number} has malformed time "${chapter.time}"`, relative(project, chapter.file)));
+      warnings.push(warn("malformed-time", `Chapter ${chapter.number} has malformed time "${chapter.time}"`, relative(project, chapter.file), chapter.id));
     }
   }
   const strands = new Map;
@@ -1632,6 +3887,7 @@ function checkClock(project, errors, warnings) {
     stamps.push({
       label: isChapter ? `Chapter ${unit.number}` : relative(project, unit.file),
       file: relative(project, unit.file),
+      chapter: chapter.id || null,
       isChapter,
       date: parsed.text,
       time: minutes === undefined ? "" : unit.time.trim(),
@@ -1717,11 +3973,11 @@ function advanceClock(reference, current) {
 }
 function backwardFinding(current, reference) {
   if (!current.isChapter) {
-    return warn("clock-backward", `${current.label} timestamp runs backward`, current.file);
+    return warn("clock-backward", `${current.label} timestamp runs backward`, current.file, current.chapter);
   }
   const sameDay = current.days === reference.days;
   const when = (stamp) => sameDay && stamp.time ? `${stamp.date} ${stamp.time}` : stamp.date;
-  return warn("clock-backward", `${current.label} date ${when(current)} is earlier than ${reference.label} date ${when(reference)}`, current.file);
+  return warn("clock-backward", `${current.label} date ${when(current)} is earlier than ${reference.label} date ${when(reference)}`, current.file, current.chapter);
 }
 function checkTravelHours(current, reference, errors) {
   if (!(current.travelHours > 0) || current.minutes === undefined || reference.minutes === undefined) {
@@ -1730,7 +3986,7 @@ function checkTravelHours(current, reference, errors) {
   const elapsedHours = (current.latest - reference.earliest) / 60;
   if (elapsedHours < current.travelHours - 0.000000001) {
     const gap = current.exact && reference.exact ? `only ${formatHours(elapsedHours, Math.floor)}` : `at most ${formatHours(elapsedHours, Math.floor)}`;
-    errors.push(err("travel-too-fast", `${current.label} allows ${gap} for travel of ${current.travelHours}h`, current.file));
+    errors.push(err("travel-too-fast", `${current.label} allows ${gap} for travel of ${current.travelHours}h`, current.file, current.chapter));
   }
 }
 var TIME_RANGES = new Map([
@@ -1800,12 +4056,12 @@ function checkRouteTravel(project, errors) {
         const elapsed = Math.max(forwardGap, (previous.latest - current.earliest) / 60);
         const needed = graph.has(from) && graph.has(to) ? distance(from, to) : undefined;
         if (needed === undefined && elapsed === 0 && previous.exact && current.exact) {
-          errors.push(err("route-same-time", `${current.label} puts ${characterId} at ${to} at the same time as ${previous.label} at ${from}`, current.label));
+          errors.push(err("route-same-time", `${current.label} puts ${characterId} at ${to} at the same time as ${previous.label} at ${from}`, current.label, chapterOf(current.scene)));
           break;
         }
         if (needed !== undefined && elapsed < needed - 0.000000001) {
           const gap = previous.exact && current.exact ? formatHours(elapsed, Math.floor) : `at most ${formatHours(elapsed, Math.floor)}`;
-          errors.push(err("route-too-fast", `${current.label} puts ${characterId} at ${to} ${gap} after ${previous.label} at ${from}, but the fastest route takes ${formatHours(needed, Math.ceil)}`, current.label));
+          errors.push(err("route-too-fast", `${current.label} puts ${characterId} at ${to} ${gap} after ${previous.label} at ${from}, but the fastest route takes ${formatHours(needed, Math.ceil)}`, current.label, chapterOf(current.scene)));
           break;
         }
       }
@@ -2179,8 +4435,8 @@ function buildContext(project, targetId, readBody, options = {}) {
   const unit = target.scene ?? target.chapter;
   const pov = idText(unit.pov) || idText(target.chapter.pov);
   const cast = [...new Set([pov, ...unit.characters.map(idText)].filter(Boolean))];
-  const relative = (file) => path3.relative(project.root, file);
-  const statePath = path3.join("continuity", "state.md");
+  const relative = (file) => path5.relative(project.root, file);
+  const statePath = path5.join("continuity", "state.md");
   const sections = [];
   const chapterBody = readBody(target.chapter.file);
   const chapterScenes = project.scenes.filter((scene) => scene.chapter === target.chapter.id);
@@ -2399,555 +4655,7 @@ function formatContext(context) {
 
 // src/series.js
 import fs2 from "node:fs";
-import path5 from "node:path";
-
-// src/frontmatter.js
-var FRONTMATTER_PATTERN = /^(?:\uFEFF)?---[ \t]*\r?\n(?:([\s\S]*?)\r?\n)?---[ \t]*(?:\r?\n|$)/;
-var OPENING_PATTERN = /^(?:\uFEFF)?---[ \t]*\r?\n/;
-function parseFrontmatter(markdown, filePath = "markdown") {
-  const match = FRONTMATTER_PATTERN.exec(markdown);
-  if (!match) {
-    if (OPENING_PATTERN.test(markdown)) {
-      throw projectError(`${filePath} has unclosed YAML frontmatter: add a line holding only --- after the last field`);
-    }
-    throw projectError(`${filePath} is missing YAML frontmatter`);
-  }
-  const raw = match[1] ?? "";
-  return {
-    data: parseYaml(raw),
-    body: markdown.slice(match[0].length),
-    raw
-  };
-}
-function stringifyFrontmatter(data) {
-  const lines = ["---"];
-  for (const [key, value] of Object.entries(data)) {
-    if (Array.isArray(value)) {
-      if (value.length === 0) {
-        lines.push(`${key}: []`);
-        continue;
-      }
-      lines.push(`${key}:`);
-      for (const item of value) {
-        lines.push(...stringifyItem(key, item));
-      }
-    } else {
-      lines.push(`${key}: ${formatScalar(value)}`);
-    }
-  }
-  lines.push("---", "", "");
-  return lines.join(`
-`);
-}
-function replaceFrontmatter(markdown, data, bodyOverride) {
-  const match = FRONTMATTER_PARTS_PATTERN.exec(markdown);
-  if (!match) {
-    throw new Error("Cannot replace missing YAML frontmatter");
-  }
-  const [whole, opening, raw = "", separator, closingLine] = match;
-  const eol = opening.endsWith(`\r
-`) ? `\r
-` : `
-`;
-  const closing = `${separator ?? eol}${closingLine}`;
-  const crlfClose = closing.startsWith("\r");
-  const { data: original, blocks } = parseYamlBlocks(raw !== "" && crlfClose ? `${raw}\r` : raw);
-  const generatedEnd = eol === `\r
-` ? "\r" : "";
-  const lines = [];
-  const written = new Set;
-  for (const block of blocks) {
-    if (block.key === undefined) {
-      lines.push(block.line);
-      continue;
-    }
-    if (!Object.prototype.hasOwnProperty.call(data, block.key)) {
-      continue;
-    }
-    written.add(block.key);
-    const value = data[block.key];
-    if (isDeepEqual(original[block.key], value)) {
-      lines.push(...block.lines);
-    } else {
-      lines.push(...stringifyEntry(block.key, value, block.items, generatedEnd));
-    }
-  }
-  for (const [key, value] of Object.entries(data)) {
-    if (!written.has(key)) {
-      lines.push(...stringifyEntry(key, value, [], generatedEnd));
-    }
-  }
-  const rest = bodyOverride === undefined ? markdown.slice(whole.length) : String(bodyOverride);
-  if (lines.length === 0) {
-    return `${opening}${separator ?? ""}${closingLine}${rest}`;
-  }
-  let body = lines.join(`
-`);
-  if (crlfClose && body.endsWith("\r")) {
-    body = body.slice(0, -1);
-  }
-  return `${opening}${body}${closing}${rest}`;
-}
-var FRONTMATTER_PARTS_PATTERN = /^((?:\uFEFF)?---[ \t]*\r?\n)(?:([\s\S]*?)(\r?\n))?(---[ \t]*(?:\r?\n|$))/;
-function stringifyEntry(key, value, originalItems = [], lineEnd = "") {
-  if (!Array.isArray(value)) {
-    return [`${key}: ${formatScalar(value)}${lineEnd}`];
-  }
-  if (value.length === 0) {
-    return [`${key}: []${lineEnd}`];
-  }
-  const lines = [`${key}:${lineEnd}`];
-  const unused = new Map;
-  for (const candidate of originalItems) {
-    const itemKey = valueKey(candidate.value);
-    if (!unused.has(itemKey)) {
-      unused.set(itemKey, { items: [], next: 0 });
-    }
-    unused.get(itemKey).items.push(candidate);
-  }
-  const reused = new Set;
-  const matches = value.map((item) => {
-    const queue = unused.get(valueKey(item));
-    const reuse = queue?.items[queue.next];
-    if (reuse && isDeepEqual(reuse.value, item)) {
-      queue.next += 1;
-      reused.add(reuse);
-      return reuse;
-    }
-    return null;
-  });
-  value.forEach((item, index) => {
-    if (matches[index]) {
-      lines.push(...matches[index].lines);
-      return;
-    }
-    const original = isPlainObject(item) ? originalItems.find((candidate) => !reused.has(candidate) && isPlainObject(candidate.value) && sameKeys(candidate.value, item) && candidate.lines.length === Object.keys(item).length) : undefined;
-    const fresh = stringifyItem(key, item).map((line) => `${line}${lineEnd}`);
-    if (!original) {
-      lines.push(...fresh);
-      return;
-    }
-    reused.add(original);
-    Object.keys(item).forEach((childKey, childIndex) => {
-      lines.push(isDeepEqual(original.value[childKey], item[childKey]) ? original.lines[childIndex] : fresh[childIndex]);
-    });
-  });
-  return lines;
-}
-function sameKeys(left, right) {
-  const leftKeys = Object.keys(left);
-  const rightKeys = Object.keys(right);
-  return leftKeys.length === rightKeys.length && leftKeys.every((childKey, index) => childKey === rightKeys[index]);
-}
-function stringifyItem(key, item) {
-  if (!isPlainObject(item)) {
-    return [`  - ${formatScalar(item)}`];
-  }
-  const entries = Object.entries(item);
-  if (entries.length === 0) {
-    throw new Error("Cannot stringify empty mapping in " + key);
-  }
-  const [firstKey, firstValue] = entries[0];
-  const lines = [`  - ${firstKey}: ${formatScalar(firstValue)}`];
-  for (const [childKey, childValue] of entries.slice(1)) {
-    lines.push(`    ${childKey}: ${formatScalar(childValue)}`);
-  }
-  return lines;
-}
-function valueKey(value) {
-  return JSON.stringify(value) ?? String(value);
-}
-function isDeepEqual(left, right) {
-  if (left === right) {
-    return true;
-  }
-  if (Array.isArray(left) || Array.isArray(right)) {
-    return Array.isArray(left) && Array.isArray(right) && left.length === right.length && left.every((entry, index) => isDeepEqual(entry, right[index]));
-  }
-  if (isPlainObject(left) && isPlainObject(right)) {
-    const leftKeys = Object.keys(left);
-    const rightKeys = Object.keys(right);
-    return leftKeys.length === rightKeys.length && leftKeys.every((key, index) => key === rightKeys[index] && isDeepEqual(left[key], right[key]));
-  }
-  return false;
-}
-function parseYaml(source) {
-  return parseYamlBlocks(source).data;
-}
-function parseYamlBlocks(source) {
-  const rawLines = source === "" ? [] : source.split(`
-`);
-  const lines = rawLines.map((line) => line.replace(/\r$/, ""));
-  const data = Object.create(null);
-  const blocks = [];
-  for (let index = 0;index < lines.length; ) {
-    const line = lines[index];
-    if (!line.trim() || line.trimStart().startsWith("#")) {
-      blocks.push({ line: rawLines[index] });
-      index += 1;
-      continue;
-    }
-    const pair = /^([A-Za-z0-9_-]+):(?:\s*(.*))?$/.exec(line);
-    if (!pair) {
-      throw projectError(`Unsupported frontmatter line: ${line}`);
-    }
-    const [, key, rest = ""] = pair;
-    if (Object.prototype.hasOwnProperty.call(data, key)) {
-      throw projectError(`Duplicate frontmatter key: ${key}`);
-    }
-    if (rest !== "") {
-      data[key] = parseScalar(rest);
-      blocks.push({ key, lines: [rawLines[index]], items: [] });
-      index += 1;
-      continue;
-    }
-    const parsed = parseArray(lines, index + 1);
-    if (parsed.nextIndex === index + 1) {
-      data[key] = "";
-      blocks.push({ key, lines: [rawLines[index]], items: [] });
-      index += 1;
-      continue;
-    }
-    data[key] = parsed.items;
-    blocks.push({
-      key,
-      lines: rawLines.slice(index, parsed.nextIndex),
-      items: parsed.items.map((item, itemIndex) => ({
-        value: toPlainObject(item),
-        lines: rawLines.slice(parsed.starts[itemIndex], parsed.starts[itemIndex + 1] ?? parsed.nextIndex)
-      }))
-    });
-    index = parsed.nextIndex;
-  }
-  return { data: toPlainObject(data), blocks };
-}
-function toPlainObject(value) {
-  if (Array.isArray(value)) {
-    return value.map(toPlainObject);
-  }
-  if (value !== null && typeof value === "object") {
-    const out = {};
-    for (const [key, entry] of Object.entries(value)) {
-      if (key === "__proto__") {
-        Object.defineProperty(out, key, {
-          value: toPlainObject(entry),
-          enumerable: true,
-          configurable: true,
-          writable: true
-        });
-      } else {
-        out[key] = toPlainObject(entry);
-      }
-    }
-    return out;
-  }
-  return value;
-}
-function parseArray(lines, startIndex) {
-  const items = [];
-  const starts = [];
-  let index = startIndex;
-  while (index < lines.length) {
-    const itemMatch = /^  -(?:\s+(.*))?$/.exec(lines[index]);
-    if (!itemMatch) {
-      break;
-    }
-    starts.push(index);
-    const itemText = itemMatch[1] ?? "";
-    const objectMatch = /^([A-Za-z0-9_-]+):\s*(.*)$/.exec(itemText);
-    if (!objectMatch) {
-      items.push(parseScalar(itemText));
-      index += 1;
-      continue;
-    }
-    const item = Object.create(null);
-    item[objectMatch[1]] = parseScalar(objectMatch[2]);
-    index += 1;
-    while (index < lines.length) {
-      const childMatch = /^    ([A-Za-z0-9_-]+):\s*(.*)$/.exec(lines[index]);
-      if (!childMatch) {
-        break;
-      }
-      if (Object.prototype.hasOwnProperty.call(item, childMatch[1])) {
-        throw projectError(`Duplicate frontmatter key: ${childMatch[1]}`);
-      }
-      item[childMatch[1]] = parseScalar(childMatch[2]);
-      index += 1;
-    }
-    items.push(item);
-  }
-  return { items, starts, nextIndex: index };
-}
-function parseScalar(value) {
-  const trimmed = value.trim();
-  if (trimmed === "[]") {
-    return [];
-  }
-  if (trimmed === "true") {
-    return true;
-  }
-  if (trimmed === "false") {
-    return false;
-  }
-  if (/^-?\d+$/.test(trimmed)) {
-    return Number.parseInt(trimmed, 10);
-  }
-  if (/^-?\d+\.\d+$/.test(trimmed)) {
-    return Number.parseFloat(trimmed);
-  }
-  if (trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')) {
-    try {
-      return JSON.parse(trimmed);
-    } catch {
-      return trimmed.slice(1, -1);
-    }
-  }
-  if (trimmed.length >= 2 && trimmed.startsWith("'") && trimmed.endsWith("'")) {
-    return trimmed.slice(1, -1);
-  }
-  return trimmed;
-}
-function formatScalar(value) {
-  if (Array.isArray(value)) {
-    if (value.length === 0) {
-      return "[]";
-    }
-    throw new Error("Cannot stringify a nested non-empty list");
-  }
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-  if (value === null || value === undefined) {
-    return "";
-  }
-  const text = String(value);
-  if (needsQuotes(text)) {
-    return JSON.stringify(text);
-  }
-  return text;
-}
-function needsQuotes(text) {
-  return text === "" || /^\s|\s$/.test(text) || /[:#"'\u0000-\u001f\u007f]/.test(text) || /^[-?,[\]{}&*!|>%@`]/.test(text) || /^(true|false|null|yes|no|on|off|~)$/i.test(text) || /^[-+]?(\d[\d_]*(\.[\d_]*)?|\.\d[\d_]*)([eE][-+]?\d+)?$/.test(text) || /^[-+]?0[xob][0-9a-f_]+$/i.test(text) || /^[-+]?\.(inf|nan)$/i.test(text);
-}
-function isPlainObject(value) {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-var FRONTMATTER_BLOCK_PATTERN = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
-var YAML_LINE_PATTERN = /^(?:\s*$|\s*#|\s*-\s|\s*-$|\s+\S|(?:[A-Za-z0-9_][A-Za-z0-9_.-]*|"[^"\n]*"|'[^'\n]*')[ \t]*:(?:\s|$))/;
-function withoutLeadingFrontmatter(text) {
-  const match = FRONTMATTER_BLOCK_PATTERN.exec(text);
-  if (!match) {
-    return text;
-  }
-  const lines = match[1].split(/\r?\n/);
-  if (lines[0].trim() === "" || !lines.every((line) => YAML_LINE_PATTERN.test(line))) {
-    return text;
-  }
-  return text.slice(match[0].length);
-}
-
-// src/files.js
-import fs from "node:fs";
-import path4 from "node:path";
-import { Buffer } from "node:buffer";
-var MAX_READ_BYTES = 5 * 1024 * 1024;
-function readTextFile(filePath) {
-  const stats = fs.lstatSync(filePath);
-  if (stats.isSymbolicLink()) {
-    throw projectError(`Refusing to read through symlink: ${filePath}`);
-  }
-  if (!stats.isFile()) {
-    throw projectError(`Refusing to read ${filePath}: not a regular file`);
-  }
-  if (stats.size > MAX_READ_BYTES) {
-    throw projectError(`Refusing to read oversized file ${filePath}: ${stats.size} bytes exceeds the ${MAX_READ_BYTES} byte limit`);
-  }
-  return decodeUtf8(fs.readFileSync(filePath), filePath);
-}
-var UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
-function decodeUtf8(buffer, filePath) {
-  try {
-    return UTF8.decode(buffer);
-  } catch {
-    const offset = invalidUtf8Offset(buffer);
-    const byte = buffer[offset].toString(16).padStart(2, "0");
-    throw projectError(`${filePath} is not valid UTF-8 (byte 0x${byte} at offset ${offset}): re-save it as UTF-8`);
-  }
-}
-function invalidUtf8Offset(buffer) {
-  let offset = 0;
-  for (const character of buffer.toString("utf8")) {
-    if (character === "�" && !(buffer[offset] === 239 && buffer[offset + 1] === 191 && buffer[offset + 2] === 189)) {
-      break;
-    }
-    offset += Buffer.byteLength(character, "utf8");
-  }
-  return Math.max(0, Math.min(offset, buffer.length - 1));
-}
-function writeFile(filePath, contents, options = {}) {
-  try {
-    writeWholeFile(filePath, contents, options);
-  } catch (error) {
-    throw withExitCode(error, EXIT_CODES.refused);
-  }
-}
-function writeWholeFile(filePath, contents, options) {
-  const target = prepareWriteTarget(filePath, options.root);
-  const existing = lstatIfExists(target);
-  if (existing) {
-    fs.accessSync(target, fs.constants.W_OK);
-  }
-  const mode = existing ? existing.mode & 511 : 438;
-  const temporary = temporaryPath(target);
-  try {
-    const descriptor = fs.openSync(temporary, "w", mode);
-    try {
-      fs.writeFileSync(descriptor, contents, "utf8");
-      fs.fsyncSync(descriptor);
-    } finally {
-      fs.closeSync(descriptor);
-    }
-    if (existing) {
-      fs.chmodSync(temporary, mode);
-    }
-    if (options.unchangedFrom !== undefined && currentText(target) !== options.unchangedFrom) {
-      fs.rmSync(temporary, { force: true });
-      throw Object.assign(new Error(`${options.root ? path4.relative(path4.resolve(options.root), target) : target} changed on disk while story was updating it, so it was left as it is. Run the command again`), { changedOnDisk: true });
-    }
-    fs.renameSync(temporary, target);
-  } catch (error) {
-    fs.rmSync(temporary, { force: true });
-    if (error.changedOnDisk) {
-      throw error;
-    }
-    const action = existing?.nlink > 1 ? "replace hard-linked" : "write to";
-    throw Object.assign(new Error(`Cannot ${action} ${target}: ${error.code ?? error.message}`), { code: error.code, path: target, syscall: "write" });
-  }
-}
-function currentText(target) {
-  try {
-    return fs.readFileSync(target, "utf8");
-  } catch {
-    return null;
-  }
-}
-var TEMPORARY_FILE_PATTERN = /^\.(.+)\.story-\d+\.tmp$/;
-function temporaryPath(target) {
-  const name = path4.basename(target).slice(0, 200);
-  return path4.join(path4.dirname(target), `.${name}.story-${process.pid}.tmp`);
-}
-function prepareWriteTarget(filePath, root) {
-  const target = path4.resolve(filePath);
-  if (root) {
-    assertLexicallyInsideRoot(target, root);
-    assertExistingAncestorInsideRoot(path4.dirname(target), root);
-  }
-  makeDirectories(path4.dirname(target));
-  if (root) {
-    assertSafeProjectParent(target, root);
-  }
-  rejectSymlinkTarget(target, "write");
-  return target;
-}
-function assertSafeProjectPath(filePath, root) {
-  const target = path4.resolve(filePath);
-  assertLexicallyInsideRoot(target, root);
-  assertSafeProjectParent(target, root);
-  rejectSymlinkTarget(target, "read");
-}
-function assertSafeProjectDirectory(directory, root) {
-  const target = path4.resolve(directory);
-  assertLexicallyInsideRoot(target, root);
-  const stats = lstatIfExists(target);
-  if (stats) {
-    if (stats.isSymbolicLink()) {
-      throw projectError(`Refusing to use symlinked project directory: ${target}`);
-    }
-    if (!stats.isDirectory()) {
-      throw projectError(`Project path is not a directory: ${target}`);
-    }
-  }
-  const rootReal = fs.realpathSync(path4.resolve(root));
-  const directoryReal = fs.realpathSync(target);
-  if (!isPathInside(rootReal, directoryReal)) {
-    throw projectError(`Refusing to use project directory outside root: ${target}`);
-  }
-}
-function assertSafeProjectParent(filePath, root) {
-  const rootReal = fs.realpathSync(path4.resolve(root));
-  const parentReal = fs.realpathSync(path4.dirname(path4.resolve(filePath)));
-  if (!isPathInside(rootReal, parentReal)) {
-    throw projectError(`Refusing to access project path outside root: ${filePath}`);
-  }
-}
-function assertExistingAncestorInsideRoot(target, root) {
-  const { ancestor: current } = nearestExistingAncestor(target);
-  let rootReal;
-  let currentReal;
-  try {
-    rootReal = fs.realpathSync(path4.resolve(root));
-    currentReal = fs.realpathSync(current);
-  } catch {
-    throw projectError(`Refusing to access project path outside root: ${target}`);
-  }
-  if (!isPathInside(rootReal, currentReal)) {
-    throw projectError(`Refusing to access project path outside root: ${target}`);
-  }
-}
-function nearestExistingAncestor(target, exists = lstatIfExists) {
-  const missing = [];
-  let current = path4.resolve(target);
-  while (!exists(current)) {
-    const parent = path4.dirname(current);
-    if (parent === current) {
-      break;
-    }
-    missing.unshift(path4.basename(current));
-    current = parent;
-  }
-  return { ancestor: current, missing };
-}
-function makeDirectories(directory) {
-  const { ancestor, missing } = nearestExistingAncestor(directory);
-  if (missing.length === 0 && fs.statSync(ancestor, { throwIfNoEntry: false })?.isDirectory() !== true) {
-    throw directoryError(ancestor, "ENOTDIR");
-  }
-  let current = ancestor;
-  for (const name of missing) {
-    current = path4.join(current, name);
-    try {
-      fs.mkdirSync(current);
-    } catch (error) {
-      if (error.code !== "EEXIST" || lstatIfExists(current)?.isDirectory() !== true) {
-        throw directoryError(current, error.code ?? error.message);
-      }
-    }
-  }
-}
-function directoryError(directory, code) {
-  return Object.assign(new Error(`Cannot create directory ${directory}: ${code}`), { code, path: directory, syscall: "mkdir", exitCode: EXIT_CODES.refused });
-}
-function assertLexicallyInsideRoot(filePath, root) {
-  const rootPath = path4.resolve(root);
-  const target = path4.resolve(filePath);
-  if (!isPathInside(rootPath, target)) {
-    throw projectError(`Refusing to access path outside project root: ${target}`);
-  }
-}
-function rejectSymlinkTarget(filePath, action) {
-  if (lstatIfExists(filePath)?.isSymbolicLink()) {
-    throw projectError(`Refusing to ${action} through symlink: ${filePath}`);
-  }
-}
-function lstatIfExists(filePath) {
-  return fs.lstatSync(filePath, { throwIfNoEntry: false }) ?? null;
-}
-function isPathInside(root, target) {
-  const relativePath = path4.relative(root, target);
-  return !path4.isAbsolute(relativePath) && (relativePath === "" || !relativePath.split(path4.sep).includes(".."));
-}
-
-// src/series.js
+import path6 from "node:path";
 var SERIES_LINK_INVERSES = [["follows", "precedes"], ["precedes", "follows"]];
 var MAX_SERIES_BOOKS = 100;
 var SHARED_CANON = [
@@ -2966,12 +4674,12 @@ function seriesDisplayName(data) {
   return typeof title === "string" && title.trim() !== "" ? title.trim() : seriesId(data);
 }
 function seriesLinkPath(fromRoot, toRoot) {
-  return path5.relative(fromRoot, toRoot).split(path5.sep).join("/");
+  return path6.relative(fromRoot, toRoot).split(path6.sep).join("/");
 }
 function seriesLinks(root, data, field) {
   const raw = data[field];
   const values = Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : [];
-  return values.filter((value) => typeof value === "string" && value.trim() !== "").map((value) => path5.resolve(root, value));
+  return values.filter((value) => typeof value === "string" && value.trim() !== "").map((value) => path6.resolve(root, value));
 }
 function seriesId(data) {
   const value = data?.series;
@@ -2981,14 +4689,14 @@ function seriesId(data) {
   return String(value).trim() === "" ? undefined : value;
 }
 function areSiblingBooks(left, right) {
-  return path5.dirname(canonicalPath(left)) === path5.dirname(canonicalPath(right));
+  return path6.dirname(canonicalPath(left)) === path6.dirname(canonicalPath(right));
 }
 function linksInclude(links, root) {
   const key = canonicalPath(root);
   return links.some((link) => link === root || canonicalPath(link) === key);
 }
 function readBookFrontmatter(root) {
-  const storyPath = path5.join(root, "story.md");
+  const storyPath = path6.join(root, "story.md");
   if (!fs2.existsSync(storyPath)) {
     return null;
   }
@@ -3033,7 +4741,7 @@ function validateSeriesLinks(root, data, errors) {
   }
 }
 function withSeriesBacklink(targetRoot, field, linkedRoot, newSeriesId) {
-  const storyPath = path5.join(targetRoot, "story.md");
+  const storyPath = path6.join(targetRoot, "story.md");
   const markdown = readTextFile(storyPath);
   const { data } = parseFrontmatter(markdown, storyPath);
   const current = data[field];
@@ -3074,7 +4782,7 @@ function buildSeries(startRoot, scan) {
     warnings.push(warn("series-id-missing", `Linked books ${unnamed.map((book) => book.title).join(", ")} set no series id; add series: ${seriesIds[0]}`));
   }
   for (const book of books.filter((candidate) => candidate.invalidBookNumber)) {
-    errors.push(err("invalid-book-number", `${book.label}: story.md book-number ${JSON.stringify(book.project.story.data["book-number"])} is not a number 0 or more; the book is listed as unnumbered`, path5.join(book.label, "story.md")));
+    errors.push(err("invalid-book-number", `${book.label}: story.md book-number ${JSON.stringify(book.project.story.data["book-number"])} is not a number 0 or more; the book is listed as unnumbered`, path6.join(book.label, "story.md")));
   }
   const seriesTitles = [...new Set(books.map((book) => book.seriesTitle).filter((title) => title !== undefined))].sort();
   if (seriesTitles.length > 1) {
@@ -3125,33 +4833,33 @@ function formatSeriesReport(report) {
 `;
 }
 function canonicalPath(target) {
-  const resolved = path5.resolve(target);
+  const resolved = path6.resolve(target);
   const tail = [];
   let current = resolved;
-  while (current !== path5.dirname(current)) {
+  while (current !== path6.dirname(current)) {
     try {
       const real = fs2.realpathSync(current);
-      return tail.length === 0 ? real : path5.join(real, ...tail.reverse());
+      return tail.length === 0 ? real : path6.join(real, ...tail.reverse());
     } catch {
-      tail.push(path5.basename(current));
-      current = path5.dirname(current);
+      tail.push(path6.basename(current));
+      current = path6.dirname(current);
     }
   }
   try {
-    return path5.join(fs2.realpathSync(current), ...tail.reverse());
+    return path6.join(fs2.realpathSync(current), ...tail.reverse());
   } catch {
-    return path5.join(current, ...tail.reverse());
+    return path6.join(current, ...tail.reverse());
   }
 }
 function discoverBooks(startRoot, scan, errors) {
-  const startResolved = path5.resolve(startRoot);
-  const scopeRoot = path5.dirname(startResolved);
+  const startResolved = path6.resolve(startRoot);
+  const scopeRoot = path6.dirname(startResolved);
   const scopeReal = canonicalPath(scopeRoot);
   const visited = new Map;
   const queue = [startResolved];
   while (queue.length > 0) {
     const root = queue.shift();
-    const resolved = path5.resolve(root);
+    const resolved = path6.resolve(root);
     const effective = canonicalPath(resolved);
     if (visited.has(effective)) {
       continue;
@@ -3161,13 +4869,13 @@ function discoverBooks(startRoot, scan, errors) {
       break;
     }
     const label = seriesLinkPath(startRoot, root) || ".";
-    if (path5.dirname(resolved) !== scopeRoot || path5.dirname(effective) !== scopeReal) {
+    if (path6.dirname(resolved) !== scopeRoot || path6.dirname(effective) !== scopeReal) {
       const outside = !isPathInside2(scopeRoot, resolved) || !isPathInside2(scopeReal, effective);
       errors.push(outside ? err("series-link-outside", label + " points outside the series directory " + scopeRoot + "; refusing to follow") : err("series-link-not-sibling", label + " is not a sibling folder in the series directory " + scopeRoot + "; keep series books side by side, refusing to follow"));
       visited.set(effective, null);
       continue;
     }
-    if (!fs2.existsSync(path5.join(root, "story.md"))) {
+    if (!fs2.existsSync(path6.join(root, "story.md"))) {
       errors.push(err("series-link-not-project", `${label} is not a story project: missing story.md`));
       visited.set(effective, null);
       continue;
@@ -3181,7 +4889,7 @@ function discoverBooks(startRoot, scan, errors) {
       continue;
     }
     for (const scanError of project.fileErrors ?? []) {
-      errors.push({ ...scanError, message: `${label}: ${scanError.message}`, file: path5.join(label, scanError.file) });
+      errors.push({ ...scanError, message: `${label}: ${scanError.message}`, file: path6.join(label, scanError.file) });
     }
     if (project.story?.unreadable) {
       visited.set(effective, null);
@@ -3193,7 +4901,7 @@ function discoverBooks(startRoot, scan, errors) {
       key: effective,
       label,
       project,
-      title: String(data.title ?? path5.basename(root)),
+      title: String(data.title ?? path6.basename(root)),
       series: seriesId(data),
       status: data.status,
       bookNumber: isBookNumber(data["book-number"]) ? data["book-number"] : null,
@@ -3216,8 +4924,8 @@ function discoverSeriesBooks(startRoot, scan) {
   return { books, complete, errors };
 }
 function isPathInside2(root, target) {
-  const relativePath = path5.relative(root, target);
-  return !path5.isAbsolute(relativePath) && (relativePath === "" || !relativePath.split(path5.sep).includes(".."));
+  const relativePath = path6.relative(root, target);
+  return !path6.isAbsolute(relativePath) && (relativePath === "" || !relativePath.split(path6.sep).includes(".."));
 }
 function chronologicalOrder(books, errors) {
   const byKey = new Map(books.map((book) => [book.key, book]));
@@ -3382,13 +5090,13 @@ function checkKnownFacts(book, earlierBooks, errors) {
 function knowledgeEntries(book) {
   const continuity = book.project.continuity;
   const entries = continuity && Array.isArray(continuity.data["knowledge-state"]) ? continuity.data["knowledge-state"] : [];
-  const file = path5.join(book.root, "continuity", "state.md");
+  const file = path6.join(book.root, "continuity", "state.md");
   return entries.flatMap((entry, index) => entry && typeof entry === "object" && typeof entry.character === "string" ? [{ index, file, character: entry.character, learnedIn: entry["learned-in"] ? String(entry["learned-in"]) : "" }] : []);
 }
 function knowledgeFacts(book) {
   const continuity = book.project.continuity;
   const entries = continuity && Array.isArray(continuity.data["knowledge-state"]) ? continuity.data["knowledge-state"] : [];
-  const file = path5.join(book.root, "continuity", "state.md");
+  const file = path6.join(book.root, "continuity", "state.md");
   const facts = [];
   entries.forEach((entry, index) => {
     const fact = entry && typeof entry === "object" ? String(entry.fact ?? "") : "";
@@ -3443,7 +5151,7 @@ function sharedCanon(books) {
   return shared;
 }
 function bookFile(book, file) {
-  return path5.join(book.label, path5.relative(book.root, file));
+  return path6.join(book.label, path6.relative(book.root, file));
 }
 
 // src/publishing.js
@@ -3965,18 +5673,18 @@ function formatProgress(progress) {
     lines.push(`Progress: ${formatNumber(progress.words)} words (no target-words in story.md)`);
   } else {
     lines.push(`Progress: ${formatNumber(progress.words)} of ${formatNumber(progress.target)} words (${formatPercent(progress.percent, 1)}%)`);
-    lines.push(`Remaining: ${plural(progress.remaining, "word", formatNumber)}`);
+    lines.push(`Remaining: ${plural2(progress.remaining, "word", formatNumber)}`);
   }
   if (progress.deadline) {
     const { date, daysLeft, perDay } = progress.deadline;
     if (daysLeft < 0) {
-      lines.push(`Deadline: ${date} passed ${plural(-daysLeft, "day")} ago`);
+      lines.push(`Deadline: ${date} passed ${plural2(-daysLeft, "day")} ago`);
     } else if (perDay === null) {
-      lines.push(`Deadline: ${date} (${daysLeft === 0 ? "today" : `${plural(daysLeft, "day")} left`})`);
+      lines.push(`Deadline: ${date} (${daysLeft === 0 ? "today" : `${plural2(daysLeft, "day")} left`})`);
     } else if (daysLeft === 0) {
-      lines.push(`Deadline: ${date} (today): ${plural(perDay, "word", formatNumber)} needed`);
+      lines.push(`Deadline: ${date} (today): ${plural2(perDay, "word", formatNumber)} needed`);
     } else {
-      lines.push(`Deadline: ${date} (${plural(daysLeft, "day")} left): ${formatNumber(perDay)} words a day needed`);
+      lines.push(`Deadline: ${date} (${plural2(daysLeft, "day")} left): ${formatNumber(perDay)} words a day needed`);
     }
   }
   if (progress.lastSession) {
@@ -4008,7 +5716,7 @@ function localDate(now = new Date) {
 function formatDate(days) {
   return new Date(days * 86400000).toISOString().slice(0, 10);
 }
-function plural(count, noun, format = String) {
+function plural2(count, noun, format = String) {
   return `${format(count)} ${noun}${count === 1 ? "" : "s"}`;
 }
 function formatPercent(percent, places) {
@@ -4053,7 +5761,7 @@ function compareChapters(previous, current) {
     afterWords: total(current)
   };
 }
-function proseParagraphs(prose) {
+function proseParagraphs2(prose) {
   return withoutFencedCode(String(prose)).split(/\r?\n\s*\r?\n/).map((paragraph) => paragraph.replace(/\s+/g, " ").trim()).filter((paragraph) => paragraph !== "" && !isSceneBreak(paragraph));
 }
 function pairChapters(previous, current) {
@@ -4237,1573 +5945,23 @@ function formatNumber2(value) {
 
 // src/config.js
 import fs3 from "node:fs";
-import path6 from "node:path";
-
-// src/names.js
-var MAJOR_ROLES = new Set(["protagonist", "antagonist", "deuteragonist", "narrator"]);
-var TITLE_WORDS = new Set([
-  "the",
-  "a",
-  "an",
-  "lord",
-  "lady",
-  "sir",
-  "dame",
-  "dr",
-  "doctor",
-  "mr",
-  "mrs",
-  "ms",
-  "miss",
-  "master",
-  "mistress",
-  "captain",
-  "capt",
-  "king",
-  "queen",
-  "prince",
-  "princess",
-  "duke",
-  "duchess",
-  "count",
-  "countess",
-  "baron",
-  "baroness",
-  "father",
-  "mother",
-  "sister",
-  "brother",
-  "uncle",
-  "aunt",
-  "councillor",
-  "councilor",
-  "general",
-  "colonel",
-  "major",
-  "sergeant",
-  "lieutenant",
-  "commander",
-  "professor",
-  "prof",
-  "saint",
-  "st",
-  "old",
-  "young",
-  "little"
-]);
-function givenName(name) {
-  const words = splitWords(String(name));
-  const index = words.findIndex((word) => !TITLE_WORDS.has(word.toLowerCase().replace(/[.’']/g, "")));
-  return index === -1 ? "" : words[index];
-}
-function existingNames(project) {
-  const names = [];
-  const add = (kind, id, name, role = "", given = false, full = name) => {
-    if (typeof name === "string" && name.trim() !== "") {
-      names.push({ kind, id, name: name.trim(), full: String(full).trim(), role, given });
-    }
-  };
-  for (const character of project.characters) {
-    if (character.status === "cut") {
-      continue;
-    }
-    const first = givenName(character.name);
-    const single = first !== "" && first === String(character.name).trim();
-    add("character", character.id, String(character.name), character.role, single);
-    if (first !== "" && !single) {
-      add("character", character.id, first, character.role, true, character.name);
-    }
-    for (const alias of character.aliases ?? []) {
-      add("character", character.id, alias, character.role);
-    }
-  }
-  for (const [kind, list] of [["location", project.locations], ["faction", project.factions], ["artifact", project.artifacts], ["system", project.systems]]) {
-    for (const entity of list) {
-      add(kind, entity.id, String(entity.name));
-    }
-  }
-  for (const term of project.glossaryTerms) {
-    add("term", term.id, String(term.term));
-    for (const alias of term.aliases ?? []) {
-      add("term", term.id, alias);
-    }
-  }
-  return names;
-}
-function checkNames(candidates, names) {
-  const errors = [];
-  const warnings = [];
-  const results = [];
-  for (const raw of candidates) {
-    const candidate = String(raw).trim();
-    if (candidate === "") {
-      continue;
-    }
-    const key = normalize(candidate);
-    const first = normalize(givenName(candidate));
-    const clashes = [];
-    const lookalikes = [];
-    const initials = [];
-    const seen = new Set;
-    for (const entry of names) {
-      const tag = `${entry.kind} ${entry.id}`;
-      const existing = normalize(entry.name);
-      if (existing === key || entry.given && existing === first) {
-        if (!seen.has(`clash ${tag}`)) {
-          clashes.push(entry);
-          seen.add(`clash ${tag}`);
-        }
-        continue;
-      }
-      const alike = entry.given ? looksAlike(first, existing) : !existing.includes(" ") && !key.includes(" ") && looksAlike(key, existing);
-      if (alike && !seen.has(`like ${tag}`)) {
-        lookalikes.push(entry);
-        seen.add(`like ${tag}`);
-      } else if (entry.given && MAJOR_ROLES.has(entry.role) && first !== "" && first[0] === existing[0] && !seen.has(`initial ${entry.id}`)) {
-        initials.push(entry);
-        seen.add(`initial ${entry.id}`);
-      }
-    }
-    for (const entry of clashes) {
-      errors.push(err("name-clash", `"${candidate}" clashes with ${entry.kind} ${entry.id} (${entry.name})`));
-    }
-    for (const entry of lookalikes) {
-      if (!clashes.some((clash) => clash.kind === entry.kind && clash.id === entry.id)) {
-        warnings.push(warn("name-look-alike", `"${candidate}" looks like ${entry.kind} ${entry.id} (${entry.full})`));
-      }
-    }
-    for (const entry of initials) {
-      if (!clashes.concat(lookalikes).some((other) => other.kind === "character" && other.id === entry.id)) {
-        warnings.push(warn("name-shared-initial", `"${candidate}" shares an initial with ${entry.role} ${entry.id} (${entry.full})`));
-      }
-    }
-    results.push({ name: candidate, clashes: clashes.length, lookalikes: lookalikes.length, initials: initials.length });
-  }
-  return { results, errors, warnings };
-}
-function looksAlike(left, right) {
-  if (left.length < 3 || right.length < 3) {
-    return false;
-  }
-  if (left.slice(0, 4) === right.slice(0, 4) && Math.min(left.length, right.length) >= 4) {
-    return true;
-  }
-  const limit = Math.min(left.length, right.length) >= 5 ? 2 : 1;
-  return left[0] === right[0] && editDistance(left, right) <= limit;
-}
-function normalize(value) {
-  return foldLatin(value).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
-}
-function formatNames(report) {
-  const lines = [];
-  for (const result of report.results) {
-    const status = result.clashes > 0 ? "taken" : result.lookalikes + result.initials > 0 ? "check" : "clear";
-    lines.push(`${result.name}: ${status}`);
-  }
-  return `${lines.join(`
-`)}
-`;
-}
-
-// src/sentences.js
-var TITLE_ABBREVIATIONS = /(?:^|[\s(“"‘'])(?:Dr|Mr|Mrs|Ms|St|Mt|Jr|Sr|Prof|Capt|Gen|Col|Lt|Sgt|Rev|Fr|e\.g|i\.e|(?:[A-Za-z]\.)*[A-Za-z])$/;
-var CONTEXT_ABBREVIATIONS = /(?:^|[\s(“"‘'])(?:No|vs|etc|a\.m|p\.m)$/;
-var CALENDAR_WORD = /^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|January|February|March|April|May|June|July|August|September|October|November|December)(?![\p{L}\p{N}])/u;
-var SENTENCE_END = /[.!?…]+["”’')\]*_]*(?= |$)|[。！？]+[」』）”’"')\]*_]*/g;
-var CONTEXT_WINDOW = 64;
-var SENTENCE_START = /^["'“‘(\[*_]*[\p{Lu}\p{N}]/u;
-function splitSentences(text, { capitalStart = true } = {}) {
-  const normalized = String(text).replace(/\s+/g, " ").trim();
-  if (normalized === "") {
-    return [];
-  }
-  const sentences = [];
-  let start = 0;
-  for (const match of normalized.matchAll(SENTENCE_END)) {
-    const end = match.index + match[0].length;
-    if (/^[。！？]/.test(match[0])) {
-      sentences.push(normalized.slice(start, end).trim());
-      start = end;
-      continue;
-    }
-    const next = normalized.slice(end + 1, end + 1 + CONTEXT_WINDOW);
-    if (capitalStart && next !== "" && !SENTENCE_START.test(next)) {
-      continue;
-    }
-    const from = Math.max(start, match.index - CONTEXT_WINDOW);
-    const before = `${from > start ? "x" : ""}${normalized.slice(from, match.index)}`;
-    const abbreviation = match[0] === "." && (CONTEXT_ABBREVIATIONS.test(before) ? /^[\p{Ll}\p{N}]/u.test(next) || CALENDAR_WORD.test(next) : TITLE_ABBREVIATIONS.test(before));
-    const stammer = /^(?:…|\.\.\.)/.test(match[0]) && isStammer(before, next);
-    if (abbreviation || stammer) {
-      continue;
-    }
-    sentences.push(normalized.slice(start, end).trim());
-    start = end;
-  }
-  const tail = normalized.slice(start).trim();
-  if (tail !== "") {
-    sentences.push(/[.!?…。！？]["”’')\]」』）]*$/.test(tail) ? tail : `${tail}.`);
-  }
-  return sentences.filter((sentence) => sentence !== "");
-}
-function isStammer(before, next) {
-  const last = /([\p{L}\p{N}'’]+)$/u.exec(before);
-  const first = /^["'“‘(\[*_]*([\p{L}\p{N}'’]+)/u.exec(next);
-  return Boolean(last && first) && last[1].toLowerCase() === first[1].toLowerCase();
-}
-
-// src/plural.js
-function plural2(count, singular, pluralForm = `${singular}s`) {
-  return `${count} ${count === 1 ? singular : pluralForm}`;
-}
-function roundedShares(values) {
-  const total = values.reduce((sum, value) => sum + value, 0);
-  if (total <= 0) {
-    return values.map(() => 0);
-  }
-  const exact = values.map((value) => value * 100 / total);
-  const shares = exact.map(Math.floor);
-  let left = 100 - shares.reduce((sum, value) => sum + value, 0);
-  const order = exact.map((value, index) => ({ index, remainder: value - Math.floor(value) })).sort((a, b) => b.remainder - a.remainder || a.index - b.index);
-  for (const { index } of order) {
-    if (left <= 0) {
-      break;
-    }
-    shares[index] += 1;
-    left -= 1;
-  }
-  return shares;
-}
-
-// src/voices.js
-var SPEECH_VERBS = [
-  "said",
-  "says",
-  "asked",
-  "asks",
-  "replied",
-  "replies",
-  "answered",
-  "answers",
-  "whispered",
-  "whispers",
-  "shouted",
-  "shouts",
-  "called",
-  "calls",
-  "muttered",
-  "mutters",
-  "murmured",
-  "murmurs",
-  "cried",
-  "cries",
-  "yelled",
-  "yells",
-  "added",
-  "adds",
-  "told",
-  "tells",
-  "snapped",
-  "snaps",
-  "admitted",
-  "admits",
-  "insisted",
-  "insists",
-  "demanded",
-  "demands",
-  "continued",
-  "continues",
-  "began",
-  "begins",
-  "went on",
-  "goes on"
-];
-var CONTRACTION_PATTERN = /[\p{L}](?:n['’]t|['’](?:re|ll|ve|m|d))\b|(?<![\p{L}\p{N}])(?:it|that|let|what|there|here|where|who|he|she|how|when|why)['’]s(?![\p{L}\p{N}])/giu;
-var STOPWORDS = new Set([
-  "that",
-  "this",
-  "with",
-  "have",
-  "what",
-  "from",
-  "they",
-  "there",
-  "their",
-  "them",
-  "then",
-  "than",
-  "were",
-  "would",
-  "could",
-  "should",
-  "your",
-  "yours",
-  "just",
-  "know",
-  "been",
-  "will",
-  "when",
-  "where",
-  "which",
-  "about",
-  "into",
-  "some",
-  "because",
-  "want",
-  "like",
-  "only",
-  "here",
-  "does",
-  "didn't",
-  "don't",
-  "it's",
-  "can't",
-  "won't",
-  "i'm",
-  "you're",
-  "we're",
-  "that's",
-  "there's",
-  "what's",
-  "going",
-  "come",
-  "back",
-  "over",
-  "tell",
-  "said",
-  "more",
-  "very",
-  "also"
-]);
-var VOICE_THRESHOLDS = {
-  minLines: 5,
-  sentenceLength: 1.5,
-  contractions: 1.5,
-  questions: 0.1,
-  exclamations: 0.1
-};
-function buildVoices(project, chapters) {
-  const speakers = speakerPatterns(project.characters);
-  const lines = new Map(project.characters.map((character) => [character.id, []]));
-  let unattributed = 0;
-  for (const chapter of chapters) {
-    let pending = [];
-    let chainSpeaker = null;
-    const credit = (speaker, texts) => {
-      if (speaker === null) {
-        unattributed += texts.length;
-      } else {
-        lines.get(speaker).push(...texts.map((text) => ({ chapter: chapter.id, text })));
-      }
-    };
-    for (const paragraph of chapter.paragraphs) {
-      const continues = (pending.length > 0 || chainSpeaker !== null) && OPENS_WITH_QUOTE.test(paragraph);
-      if (!continues) {
-        credit(null, pending);
-        pending = [];
-        chainSpeaker = null;
-      }
-      const quotes = quotedSpans(paragraph);
-      const open = splitOpenSpeech(paragraph).open;
-      if (open !== null) {
-        quotes.push(open);
-      }
-      if (quotes.length === 0) {
-        continue;
-      }
-      const speaker = attribute(paragraph, speakers) ?? chainSpeaker;
-      if (open !== null && speaker === null) {
-        pending.push(...quotes);
-        continue;
-      }
-      credit(speaker, [...pending, ...quotes]);
-      pending = [];
-      chainSpeaker = open === null ? null : speaker;
-    }
-    credit(null, pending);
-  }
-  const profiles = project.characters.map((character) => profile(character, lines.get(character.id))).filter((entry) => entry.lines > 0);
-  signatureWords(profiles);
-  const warnings = [];
-  for (const character of project.characters) {
-    const said = lines.get(character.id);
-    for (const phrase of stringList(character.voiceAvoid)) {
-      const pattern = phrasePattern(phrase);
-      const chaptersUsing = [...new Set(said.filter((line) => pattern.test(line.text)).map((line) => line.chapter))];
-      if (chaptersUsing.length > 0) {
-        warnings.push(warn("voice-avoid", `${character.id} says "${phrase}", which is in their voice-avoid list (${chaptersUsing.join(", ")})`));
-      }
-    }
-    if (said.length >= VOICE_THRESHOLDS.minLines) {
-      for (const phrase of stringList(character.voiceWords)) {
-        const pattern = phrasePattern(phrase);
-        if (!said.some((line) => pattern.test(line.text))) {
-          warnings.push(warn("voice-words-unused", `${character.id} does not say "${phrase}" from their voice-words list in ${said.length} attributed lines of dialogue`));
-        }
-      }
-    }
-  }
-  const eligible = profiles.filter((entry) => entry.lines >= VOICE_THRESHOLDS.minLines);
-  for (let left = 0;left < eligible.length; left += 1) {
-    for (let right = left + 1;right < eligible.length; right += 1) {
-      if (similarVoices(eligible[left], eligible[right])) {
-        warnings.push(warn("voice-sound-alike", `${eligible[left].id} and ${eligible[right].id} may sound alike: similar sentence length, contractions, questions, and exclamations`));
-      }
-    }
-  }
-  return {
-    profiles: profiles.sort((left, right) => right.words - left.words || left.id.localeCompare(right.id, "en")),
-    unattributed,
-    warnings
-  };
-}
-var PRONOUNS = "he|she|they|i|we";
-var VERB_ALTERNATION = SPEECH_VERBS.map((verb) => verb.replace(/ /g, "\\s+")).join("|");
-var PRONOUN_TAG_SOURCE = `(?:(?:${PRONOUNS})\\s+(?:${VERB_ALTERNATION})|(?:${VERB_ALTERNATION})\\s+(?:${PRONOUNS}))(?![\\p{L}\\p{N}])`;
-var TAG_AFTER_QUOTE = new RegExp(`^[\\s,.;:!?…()—–-]*${PRONOUN_TAG_SOURCE}`, "iu");
-var TAG_BEFORE_QUOTE = new RegExp(`(?<![\\p{L}\\p{N}])${PRONOUN_TAG_SOURCE}[\\s,:…()—–-]*$`, "iu");
-var TAG_WINDOW = 40;
-function hasPronounTag(paragraph) {
-  return quoteMatches(paragraph).some((match) => TAG_AFTER_QUOTE.test(paragraph.slice(match.end, match.end + TAG_WINDOW)) || TAG_BEFORE_QUOTE.test(paragraph.slice(Math.max(0, match.start - TAG_WINDOW), match.start)));
-}
-function speakerPatterns(characters) {
-  const verbs = SPEECH_VERBS.flatMap((verb) => [verb, `${verb[0].toUpperCase()}${verb.slice(1)}`]).map((verb) => verb.replace(/ /g, "\\s+")).join("|");
-  return characters.filter((character) => character.status !== "cut").map((character) => {
-    const names = new Set;
-    const full = String(character.name ?? "").trim();
-    if (full !== "") {
-      names.add(full);
-      const first = givenName(full);
-      if (first.length >= 2) {
-        names.add(first);
-      }
-    }
-    for (const alias of stringList(character.aliases)) {
-      names.add(alias);
-    }
-    const alternatives = [...names].sort((left, right) => right.length - left.length).map(escape).join("|");
-    if (alternatives === "") {
-      return null;
-    }
-    const keys = new Set([...names].map((entry) => entry.split(NON_WORD)[0]));
-    return {
-      id: character.id,
-      keys,
-      name: new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternatives})(?![\\p{L}\\p{N}])`, "u"),
-      subject: new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternatives})\\s+(?:${verbs})(?![\\p{L}\\p{N}])`, "u"),
-      inverted: new RegExp(`(?<![\\p{L}\\p{N}])(?:${verbs})\\s+(?:${alternatives})(?![\\p{L}\\p{N}])`, "u")
-    };
-  }).filter(Boolean);
-}
-var NON_WORD = /[^\p{L}\p{N}]+/u;
-var OPENS_WITH_QUOTE = /^["“‘']/;
-function attribute(paragraph, allSpeakers) {
-  const narration = `${splitOpenSpeech(paragraph).narration} `;
-  const words = new Set(narration.split(NON_WORD));
-  const speakers = allSpeakers.filter((speaker) => [...speaker.keys].some((key) => key === "" || words.has(key)));
-  for (const form of ["subject", "inverted"]) {
-    const tagged = speakers.filter((speaker) => speaker[form].test(narration));
-    if (tagged.length === 1) {
-      return tagged[0].id;
-    }
-    if (tagged.length > 1) {
-      return null;
-    }
-  }
-  if (hasPronounTag(paragraph)) {
-    return null;
-  }
-  const named = speakers.filter((speaker) => speaker.name.test(narration));
-  return named.length === 1 ? named[0].id : null;
-}
-var LETTER = /[\p{L}\p{N}]/u;
-var ELISION = /^(?:em|tis|twas|cause|cos|til|till|bout|round|n|nuff)(?![\p{L}\p{N}])/iu;
-var DASH_OPEN = /^[—―]\s*/;
-var DASH_TAG = new RegExp(`,\\s+(?:(?:${VERB_ALTERNATION})\\s+\\p{Lu}|(?:${PRONOUNS})\\s+(?:${VERB_ALTERNATION})(?![\\p{L}\\p{N}])|\\p{Lu}[\\p{L}'’-]*(?:\\s+\\p{Lu}[\\p{L}'’-]*){0,2}\\s+(?:${VERB_ALTERNATION})(?![\\p{L}\\p{N}]))`, "u");
-function quoteMatches(paragraph) {
-  const matches = [];
-  const next = { "”": -1, '"': -1 };
-  const find = (key, from) => {
-    if (next[key] !== Infinity && next[key] < from) {
-      const found = paragraph.indexOf(key, from);
-      next[key] = found === -1 ? Infinity : found;
-    }
-    return next[key];
-  };
-  const singles = singleQuoteMarks(paragraph);
-  let index = 0;
-  const dash = DASH_OPEN.exec(paragraph);
-  if (dash) {
-    const body = paragraph.slice(dash[0].length);
-    const tag = DASH_TAG.exec(body);
-    const closing = /\s[—―]/.exec(body);
-    const stop = Math.min(tag ? tag.index : Infinity, closing ? closing.index + 1 : Infinity);
-    const close = stop === Infinity ? paragraph.length : dash[0].length + stop;
-    matches.push({ start: 0, end: Math.min(close + 1, paragraph.length), text: paragraph.slice(dash[0].length, close) });
-    index = close + 1;
-  }
-  while (index < paragraph.length) {
-    const char = paragraph[index];
-    let close = Infinity;
-    if (char === "“") {
-      close = find("”", index + 1);
-    } else if (char === '"') {
-      close = find('"', index + 1);
-    } else if (char === "‘" || char === "'") {
-      close = singleClose(singles[char], index);
-    }
-    if (close === Infinity) {
-      index += 1;
-      continue;
-    }
-    matches.push({ start: index, end: close + 1, text: paragraph.slice(index + 1, close) });
-    index = close + 1;
-  }
-  return matches;
-}
-function singleQuoteMarks(paragraph) {
-  const marks = { "‘": { open: [], close: [] }, "'": { open: [], close: [] } };
-  for (let index = 0;index < paragraph.length; index += 1) {
-    const char = paragraph[index];
-    const before = paragraph[index - 1] ?? "";
-    const after = paragraph[index + 1] ?? "";
-    if (char === "‘" && !LETTER.test(before)) {
-      marks["‘"].open.push(index);
-    } else if (char === "’" && !LETTER.test(after)) {
-      marks["‘"].close.push(index);
-    } else if (char === "'") {
-      if (!LETTER.test(before) && LETTER.test(after) && !ELISION.test(paragraph.slice(index + 1))) {
-        marks["'"].open.push(index);
-      } else if (!LETTER.test(after) && before !== "" && !/\s/.test(before)) {
-        marks["'"].close.push(index);
-      }
-    }
-  }
-  for (const key of Object.keys(marks)) {
-    marks[key].opens = new Set(marks[key].open);
-    marks[key].paragraph = paragraph;
-  }
-  return marks;
-}
-function singleClose(marks, index) {
-  if (!marks.opens.has(index)) {
-    return Infinity;
-  }
-  const nextOpen = firstAfter(marks.open, index);
-  let position = firstIndexAfter(marks.close, index);
-  if (position === -1 || marks.close[position] > nextOpen) {
-    return Infinity;
-  }
-  while (position + 1 < marks.close.length && marks.close[position + 1] < nextOpen && looksPossessive(marks.paragraph, marks.close[position])) {
-    position += 1;
-  }
-  return marks.close[position];
-}
-function looksPossessive(paragraph, index) {
-  return /[sS]/.test(paragraph[index - 1] ?? "") && /^\s+\p{Ll}/u.test(paragraph.slice(index + 1, index + 4));
-}
-function firstIndexAfter(sorted, value) {
-  let low = 0;
-  let high = sorted.length;
-  while (low < high) {
-    const middle = low + high >> 1;
-    if (sorted[middle] <= value) {
-      low = middle + 1;
-    } else {
-      high = middle;
-    }
-  }
-  return low < sorted.length ? low : -1;
-}
-function firstAfter(sorted, value) {
-  const position = firstIndexAfter(sorted, value);
-  return position === -1 ? Infinity : sorted[position];
-}
-function replaceQuotes(paragraph) {
-  let result = "";
-  let position = 0;
-  for (const match of quoteMatches(paragraph)) {
-    result += `${paragraph.slice(position, match.start)} `;
-    position = match.end;
-  }
-  return result + paragraph.slice(position);
-}
-function quotedSpans(paragraph) {
-  return quoteMatches(paragraph).map((match) => match.text.trim()).filter((text) => text !== "");
-}
-function splitOpenSpeech(paragraph) {
-  const text = replaceQuotes(paragraph);
-  const cuts = [];
-  const curly = text.indexOf("“", text.lastIndexOf("”") + 1);
-  if (curly !== -1) {
-    cuts.push(curly);
-  }
-  const straight = text.indexOf('"');
-  if (straight !== -1) {
-    cuts.push(straight);
-  }
-  const lastSingleClose = text.lastIndexOf("’");
-  const single = /(?<![\p{L}\p{N}])‘/u.exec(text.slice(lastSingleClose + 1));
-  if (single) {
-    cuts.push(lastSingleClose + 1 + single.index);
-  }
-  if (/^'[\p{L}\p{N}]/u.test(text) && !ELISION.test(text.slice(1))) {
-    cuts.push(0);
-  }
-  if (cuts.length === 0) {
-    return { narration: text, open: null };
-  }
-  const cut = Math.min(...cuts);
-  const open = text.slice(cut + 1).trim();
-  return { narration: text.slice(0, cut), open: open === "" ? null : open };
-}
-function narrationOnly(paragraph) {
-  return splitOpenSpeech(paragraph).narration;
-}
-function profile(character, said) {
-  const text = said.map((line) => line.text).join(" ");
-  const words = splitWords(text);
-  const sentences = said.flatMap((line) => splitSentences(line.text).filter((sentence) => splitWords(sentence).length > 0));
-  const questions = sentences.filter((sentence) => /\?["'”’)]*$/.test(sentence.trim())).length;
-  const exclamations = sentences.filter((sentence) => /!["'”’)]*$/.test(sentence.trim())).length;
-  return {
-    id: character.id,
-    lines: said.length,
-    words: words.length,
-    sentenceLength: sentences.length === 0 ? 0 : words.length / sentences.length,
-    contractions: words.length === 0 ? 0 : (text.match(CONTRACTION_PATTERN) ?? []).length * 100 / words.length,
-    questions: sentences.length === 0 ? 0 : questions / sentences.length,
-    exclamations: sentences.length === 0 ? 0 : exclamations / sentences.length,
-    counts: wordCounts(words),
-    signature: []
-  };
-}
-function wordCounts(words) {
-  const counts = new Map;
-  for (const raw of words) {
-    const word = raw.toLowerCase().replace(/’/g, "'");
-    if (word.length >= 4 && !STOPWORDS.has(word) && !/^\d+$/.test(word)) {
-      counts.set(word, (counts.get(word) ?? 0) + 1);
-    }
-  }
-  return counts;
-}
-function signatureWords(profiles) {
-  const totals = new Map;
-  let allWords = 0;
-  for (const entry of profiles) {
-    allWords += entry.words;
-    for (const [word, count] of entry.counts) {
-      totals.set(word, (totals.get(word) ?? 0) + count);
-    }
-  }
-  for (const entry of profiles) {
-    const otherWords = allWords - entry.words;
-    const scored = [];
-    for (const [word, count] of entry.counts) {
-      if (count < 2) {
-        continue;
-      }
-      const own = count / entry.words;
-      const others = otherWords === 0 ? 0 : (totals.get(word) - count) / otherWords;
-      if (own > others * 2) {
-        scored.push({ word, count, score: own - others });
-      }
-    }
-    entry.signature = scored.sort((left, right) => right.score - left.score || right.count - left.count || left.word.localeCompare(right.word, "en")).slice(0, 5).map((item) => item.word);
-    delete entry.counts;
-  }
-}
-function similarVoices(left, right) {
-  const limits = VOICE_THRESHOLDS;
-  const close = (a, b, limit) => Math.abs(a - b) < limit - 0.000000001;
-  return close(left.sentenceLength, right.sentenceLength, limits.sentenceLength) && close(left.contractions, right.contractions, limits.contractions) && close(left.questions, right.questions, limits.questions) && close(left.exclamations, right.exclamations, limits.exclamations);
-}
-function phrasePattern(phrase) {
-  return new RegExp(`(?<![\\p{L}\\p{M}\\p{N}])${escape(String(phrase).trim()).replace(/['’]/g, "['’]")}(?![\\p{L}\\p{M}\\p{N}])`, "iu");
-}
-function escape(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-function stringList(value) {
-  return (Array.isArray(value) ? value : []).filter((item) => typeof item === "string" && item.trim() !== "");
-}
-function formatVoices(report) {
-  const lines = [`Voices: ${plural2(report.profiles.length, "speaking character")}, ${plural2(report.unattributed, "unattributed line")}`];
-  if (report.profiles.length === 0) {
-    lines.push("", `- None: tag dialogue with a character's name and a speech verb ("...," Mara said)`);
-    return `${lines.join(`
-`)}
-`;
-  }
-  for (const entry of report.profiles) {
-    lines.push("", `${entry.id}: ${plural2(entry.lines, "line")}, ${plural2(entry.words, "word")}`, `  Sentence length ${entry.sentenceLength.toFixed(1)}, contractions ${entry.contractions.toFixed(1)} per 100 words, questions ${Math.round(entry.questions * 100)}%, exclamations ${Math.round(entry.exclamations * 100)}%`, `  Signature words: ${entry.signature.join(", ") || "none yet"}`);
-  }
-  return `${lines.join(`
-`)}
-`;
-}
-
-// src/prose.js
-var FILTER_WORDS = [
-  "felt",
-  "saw",
-  "heard",
-  "noticed",
-  "realized",
-  "realised",
-  "wondered",
-  "seemed",
-  "watched",
-  "knew",
-  "decided",
-  "thought",
-  "sensed"
-];
-var SAID_BOOKISMS = [
-  "barked",
-  "bellowed",
-  "breathed",
-  "chuckled",
-  "cooed",
-  "declared",
-  "exclaimed",
-  "gasped",
-  "grinned",
-  "groaned",
-  "growled",
-  "grunted",
-  "hissed",
-  "inquired",
-  "interjected",
-  "intoned",
-  "laughed",
-  "opined",
-  "purred",
-  "queried",
-  "quipped",
-  "retorted",
-  "shrieked",
-  "sighed",
-  "smiled",
-  "smirked",
-  "snapped",
-  "snarled",
-  "sneered",
-  "spat",
-  "stated"
-];
-var PLAIN_TAGS = ["said", "asked", "says", "asks"];
-var NOT_ADVERBS = new Set([
-  "ally",
-  "anomaly",
-  "apply",
-  "assembly",
-  "belly",
-  "bully",
-  "burly",
-  "butterfly",
-  "chilly",
-  "comply",
-  "costly",
-  "curly",
-  "daily",
-  "deadly",
-  "dolly",
-  "dragonfly",
-  "early",
-  "elderly",
-  "family",
-  "fly",
-  "folly",
-  "friendly",
-  "ghastly",
-  "ghostly",
-  "gully",
-  "holly",
-  "holy",
-  "homely",
-  "hourly",
-  "imply",
-  "italy",
-  "jelly",
-  "jolly",
-  "july",
-  "lily",
-  "likely",
-  "lively",
-  "lonely",
-  "lovely",
-  "melancholy",
-  "monopoly",
-  "monthly",
-  "multiply",
-  "oily",
-  "only",
-  "orderly",
-  "prickly",
-  "rally",
-  "rely",
-  "reply",
-  "sickly",
-  "silly",
-  "sly",
-  "smelly",
-  "stately",
-  "supply",
-  "surly",
-  "tally",
-  "ugly",
-  "unlikely",
-  "weekly",
-  "wobbly",
-  "woolly",
-  "yearly"
-]);
-var ECHO_STOPWORDS = new Set([
-  "about",
-  "above",
-  "after",
-  "again",
-  "against",
-  "along",
-  "always",
-  "among",
-  "another",
-  "around",
-  "because",
-  "before",
-  "behind",
-  "being",
-  "below",
-  "between",
-  "could",
-  "couldn't",
-  "didn't",
-  "doesn't",
-  "don't",
-  "every",
-  "first",
-  "hadn't",
-  "haven't",
-  "isn't",
-  "might",
-  "never",
-  "other",
-  "right",
-  "should",
-  "since",
-  "something",
-  "still",
-  "their",
-  "there",
-  "these",
-  "thing",
-  "things",
-  "those",
-  "though",
-  "three",
-  "through",
-  "until",
-  "wasn't",
-  "where",
-  "which",
-  "while",
-  "without",
-  "would",
-  "wouldn't",
-  "you're",
-  "they're",
-  "we're"
-]);
-var PHRASE_STOPWORDS = new Set([
-  "a",
-  "an",
-  "and",
-  "as",
-  "at",
-  "be",
-  "but",
-  "by",
-  "for",
-  "from",
-  "had",
-  "has",
-  "have",
-  "he",
-  "her",
-  "his",
-  "i",
-  "in",
-  "into",
-  "is",
-  "it",
-  "its",
-  "me",
-  "my",
-  "not",
-  "of",
-  "on",
-  "or",
-  "she",
-  "so",
-  "that",
-  "the",
-  "their",
-  "them",
-  "then",
-  "they",
-  "this",
-  "to",
-  "was",
-  "we",
-  "were",
-  "with",
-  "you"
-]);
-var DIALECT_PAIRS = [
-  ["armour", "armor"],
-  ["armoured", "armored"],
-  ["centre", "center"],
-  ["centres", "centers"],
-  ["centred", "centered"],
-  ["colour", "color"],
-  ["colours", "colors"],
-  ["coloured", "colored"],
-  ["colourful", "colorful"],
-  ["defence", "defense"],
-  ["defences", "defenses"],
-  ["favour", "favor"],
-  ["favours", "favors"],
-  ["favoured", "favored"],
-  ["favourite", "favorite"],
-  ["grey", "gray"],
-  ["greying", "graying"],
-  ["harbour", "harbor"],
-  ["harbours", "harbors"],
-  ["honour", "honor"],
-  ["honours", "honors"],
-  ["honoured", "honored"],
-  ["honourable", "honorable"],
-  ["jewellery", "jewelry"],
-  ["labour", "labor"],
-  ["mould", "mold"],
-  ["mouldy", "moldy"],
-  ["neighbour", "neighbor"],
-  ["neighbours", "neighbors"],
-  ["odour", "odor"],
-  ["offence", "offense"],
-  ["plough", "plow"],
-  ["rumour", "rumor"],
-  ["rumours", "rumors"],
-  ["sceptic", "skeptic"],
-  ["sceptical", "skeptical"],
-  ["smoulder", "smolder"],
-  ["smouldering", "smoldering"],
-  ["theatre", "theater"],
-  ["towards", "toward"],
-  ["travelled", "traveled"],
-  ["travelling", "traveling"],
-  ["traveller", "traveler"],
-  ["cancelled", "canceled"],
-  ["vapour", "vapor"],
-  ["whisky", "whiskey"]
-];
-var PROSE_THRESHOLDS = {
-  filterPerThousand: 10,
-  adverbsPerThousand: 12,
-  minRateWords: 300,
-  maxBookisms: 2,
-  echoWindow: 30,
-  echoMinLength: 5,
-  uniformMinSentences: 20,
-  uniformSpread: 5,
-  phraseLength: 4,
-  phraseMinCount: 3,
-  phraseLimit: 10
-};
-function proseThresholds(options = {}) {
-  const thresholds = { ...PROSE_THRESHOLDS };
-  for (const [flag, key, whole] of [["max-filter-words", "filterPerThousand", false], ["max-adverbs", "adverbsPerThousand", false], ["max-bookisms", "maxBookisms", true]]) {
-    const raw = options[flag];
-    if (raw === undefined) {
-      continue;
-    }
-    const text = String(raw).trim();
-    if (!(whole ? /^\d+$/ : /^\d+(?:\.\d+)?$/).test(text) || !Number.isFinite(Number(text))) {
-      throw usageError(`--${flag} must be ${whole ? "a whole number" : "a number"} 0 or more, such as ${PROSE_THRESHOLDS[key]}`);
-    }
-    thresholds[key] = Number(text);
-  }
-  return thresholds;
-}
-function proseRules(styleData, names) {
-  const data = styleData ?? {};
-  const allow = new Set(stringList2(data["allow-words"]).map(normalizeWord));
-  const variants = [];
-  for (const entry of Array.isArray(data.preferred) ? data.preferred : []) {
-    if (entry && typeof entry.use === "string" && typeof entry.avoid === "string" && entry.use.trim() !== "" && entry.avoid.trim() !== "" && normalizeWord(entry.use.trim()) !== normalizeWord(entry.avoid.trim())) {
-      variants.push({ use: entry.use.trim(), avoid: entry.avoid.trim(), source: "style sheet" });
-    }
-  }
-  const dialect = typeof data.dialect === "string" ? data.dialect : "unspecified";
-  if (dialect === "british" || dialect === "american") {
-    const claimed = new Set(variants.flatMap((variant) => [normalizeWord(variant.use), normalizeWord(variant.avoid)]).concat([...allow]));
-    for (const [british, american] of DIALECT_PAIRS) {
-      const [use, avoid] = dialect === "british" ? [british, american] : [american, british];
-      if (!claimed.has(use) && !claimed.has(avoid)) {
-        variants.push({ use, avoid, source: `${dialect} dialect` });
-      }
-    }
-  }
-  const nameTokens = new Set;
-  for (const name of names) {
-    for (const token of splitWords(String(name))) {
-      nameTokens.add(nameKey(token));
-    }
-  }
-  return {
-    allow,
-    variants: variants.map((variant) => ({ ...variant, pattern: phrasePattern2(variant.avoid) })),
-    watch: stringList2(data["watch-words"]).map((word) => ({ word, pattern: phrasePattern2(word) })),
-    filterWords: new Set(FILTER_WORDS.filter((word) => !allow.has(word))),
-    bookisms: new Set(SAID_BOOKISMS.filter((word) => !allow.has(word))),
-    nameTokens
-  };
-}
-function analyzeChapter(prose, rules) {
-  const paragraphs = proseParagraphs2(prose);
-  const text = paragraphs.join(`
-
-`);
-  const words = splitWords(text);
-  const narration = splitWords(paragraphs.map(narrationOnly).join(`
-
-`));
-  const sentenceList = paragraphs.flatMap((paragraph) => splitSentences(paragraph));
-  const sentences = sentenceList.map((sentence) => splitWords(sentence).length).filter((count) => count > 0);
-  const filterWords = countMatching(narration, (word) => rules.filterWords.has(word));
-  const adverbs = countMatching(narration, (word) => isAdverb(word, rules));
-  const tags = dialogueTags(paragraphs, rules);
-  return {
-    words: words.length,
-    narrationWords: narration.length,
-    sentences: sentenceStats(sentences),
-    filterWords,
-    adverbs,
-    plainTags: tags.plain,
-    bookisms: tags.bookisms,
-    echoes: echoes(words, rules),
-    watch: rules.watch.map(({ word, pattern }) => ({ word, count: countPattern(text, pattern) })).filter((entry) => entry.count > 0),
-    variants: rules.variants.map(({ use, avoid, source, pattern }) => ({ use, avoid, source, count: countVariant(text, pattern, rules) })).filter((entry) => entry.count > 0),
-    phraseSentences: sentenceList.map((sentence) => splitWords(sentence).map(normalizeWord))
-  };
-}
-function chapterFindings(label, analysis, thresholds = PROSE_THRESHOLDS) {
-  const findings = [];
-  for (const variant of analysis.variants) {
-    findings.push(warn("prose-avoided-spelling", `${label} uses "${variant.avoid}" ${times(variant.count)}; ${variant.source} prefers "${variant.use}"`, label));
-  }
-  const rated = analysis.narrationWords >= thresholds.minRateWords;
-  const filterRate = perThousand(total(analysis.filterWords), analysis.narrationWords);
-  if (rated && filterRate > thresholds.filterPerThousand) {
-    findings.push(warn("prose-filter-words", `${label} has ${formatAgainst(filterRate, thresholds.filterPerThousand, "over")} filter words per 1,000 narration words (over ${thresholds.filterPerThousand}): ${formatCounts(analysis.filterWords, 5)}`, label));
-  }
-  const adverbRate = perThousand(total(analysis.adverbs), analysis.narrationWords);
-  if (rated && adverbRate > thresholds.adverbsPerThousand) {
-    findings.push(warn("prose-adverbs", `${label} has ${formatAgainst(adverbRate, thresholds.adverbsPerThousand, "over")} -ly adverbs per 1,000 narration words (over ${thresholds.adverbsPerThousand}): ${formatCounts(analysis.adverbs, 5)}`, label));
-  }
-  const bookisms = total(analysis.bookisms);
-  if (bookisms > thresholds.maxBookisms) {
-    findings.push(warn("prose-bookisms", `${label} has ${bookisms} said-bookism dialogue tags: ${formatCounts(analysis.bookisms, 5)}`, label));
-  }
-  const stats = analysis.sentences;
-  if (stats.count >= thresholds.uniformMinSentences && stats.spread < thresholds.uniformSpread) {
-    findings.push(warn("prose-uniform-sentences", `${label} sentence lengths are uniform (spread ${formatAgainst(stats.spread, thresholds.uniformSpread, "under")} words over ${stats.count} sentences); vary the rhythm`, label));
-  }
-  return findings;
-}
-function repeatedPhrases(analyses, thresholds = PROSE_THRESHOLDS) {
-  const counts = new Map;
-  const size = thresholds.phraseLength;
-  for (const analysis of analyses) {
-    for (const sentence of analysis.phraseSentences) {
-      for (let index = 0;index + size <= sentence.length; index += 1) {
-        const gram = sentence.slice(index, index + size);
-        if (gram.every((word) => PHRASE_STOPWORDS.has(word))) {
-          continue;
-        }
-        const key = gram.join(" ");
-        counts.set(key, (counts.get(key) ?? 0) + 1);
-      }
-    }
-  }
-  const repeated = new Map([...counts].filter(([, count]) => count >= thresholds.phraseMinCount));
-  return sortCounts(repeated).slice(0, thresholds.phraseLimit).map((entry) => ({ phrase: entry.word, count: entry.count }));
-}
-function similarNames(characters) {
-  const firsts = characters.map((character) => ({ id: character.id, name: String(character.name), first: givenName(character.name).toLowerCase() })).filter((entry) => entry.first.length >= 3).sort((left, right) => left.id.localeCompare(right.id, "en"));
-  const pairs = [];
-  for (let left = 0;left < firsts.length; left += 1) {
-    for (let right = left + 1;right < firsts.length; right += 1) {
-      const a = firsts[left].first;
-      const b = firsts[right].first;
-      const limit = Math.min(a.length, b.length) >= 5 ? 2 : 1;
-      if (a === b || a.slice(0, 3) === b.slice(0, 3) || editDistance(a, b) <= limit) {
-        pairs.push([firsts[left], firsts[right]]);
-      }
-    }
-  }
-  return pairs;
-}
-function formatProseReport(report) {
-  const chapterCount = `${report.chapters.length} ${report.chapters.length === 1 ? "chapter" : "chapters"}`;
-  const lines = [`Prose report: ${report.passage ? "passage from stdin" : chapterCount}, ${report.words} words`];
-  if (!report.styleSheet) {
-    lines.push("No style-sheet.md: spelling and watch-word checks are off");
-  }
-  for (const chapter of report.chapters) {
-    const analysis = chapter.analysis;
-    const stats = analysis.sentences;
-    lines.push("", `${chapter.file}: ${chapter.title} (${analysis.words} words)`);
-    lines.push(`  Sentences: ${stats.count}, average ${formatRate(stats.mean)} words, longest ${stats.longest}, spread ${formatRate(stats.spread)}`);
-    lines.push(`  Filter words: ${formatRate(perThousand(total(analysis.filterWords), analysis.narrationWords))} per 1k narration words${countSuffix(analysis.filterWords)}`);
-    lines.push(`  -ly adverbs: ${formatRate(perThousand(total(analysis.adverbs), analysis.narrationWords))} per 1k narration words${countSuffix(analysis.adverbs)}`);
-    lines.push(`  Dialogue tags: ${formatCounts(analysis.plainTags, 4) || "none plain"}; said-bookisms: ${formatCounts(analysis.bookisms, 5) || "none"}`);
-    lines.push(`  Echoes within ${PROSE_THRESHOLDS.echoWindow} words: ${formatCounts(analysis.echoes, 5) || "none"}`);
-    if (analysis.watch.length > 0) {
-      lines.push(`  Watch words: ${analysis.watch.map((entry) => `${entry.word} ${entry.count}`).join(", ")}`);
-    }
-    if (analysis.variants.length > 0) {
-      lines.push(`  Spelling: ${analysis.variants.map((entry) => `${entry.avoid} ${entry.count} (use ${entry.use})`).join(", ")}`);
-    }
-  }
-  lines.push("", report.passage ? "Passage:" : "Manuscript:");
-  lines.push(`  Repeated ${PROSE_THRESHOLDS.phraseLength}-word phrases: ${report.phrases.map((entry) => `"${entry.phrase}" ${entry.count}`).join(", ") || "none"}`);
-  if (!report.passage) {
-    lines.push(`  Similar character names: ${report.similarNames.map(([a, b]) => `${a.name} / ${b.name}`).join(", ") || "none"}`);
-  }
-  return `${lines.join(`
-`)}
-`;
-}
-function proseParagraphs2(prose) {
-  return withoutFenceMarkers(scanComments(String(prose), " ").text).split(/\r?\n\s*\r?\n/).map((paragraph) => paragraph.split(/\r?\n/).filter((line) => !/^\s{0,3}#/.test(line)).join(" ")).map((paragraph) => paragraph.replace(/\s+/g, " ").trim()).filter((paragraph) => paragraph !== "" && !/^([*_-])( ?\1){2,}$/.test(paragraph));
-}
-var BEAT_PRONOUNS = new Set(["he", "she", "they", "i", "we", "it", "you"]);
-function dialogueTags(paragraphs, rules) {
-  const plain = new Map;
-  const bookisms = new Map;
-  for (const paragraph of paragraphs) {
-    for (const match of quoteMatches(paragraph)) {
-      const after = splitWords(paragraph.slice(match.end, match.end + 200).split(/[.!?;:“"]/)[0]).slice(0, 3);
-      const tag = tagKind(match.text, after[0] ?? "");
-      if (tag === "none") {
-        continue;
-      }
-      for (const raw of after) {
-        const word = raw.toLowerCase();
-        if (PLAIN_TAGS.includes(word)) {
-          increment(plain, word);
-          break;
-        }
-        if (tag === "any" && rules.bookisms.has(word)) {
-          increment(bookisms, word);
-          break;
-        }
-      }
-    }
-  }
-  return { plain: sortCounts(plain), bookisms: sortCounts(bookisms) };
-}
-function tagKind(quoted, nextWord) {
-  const end = quoted.trim().replace(/["'”’)\]*_]+$/, "").slice(-1);
-  if (end === ".") {
-    return "none";
-  }
-  if (/[?!…—–-]/.test(end) && /^\p{Lu}/u.test(nextWord)) {
-    return BEAT_PRONOUNS.has(nextWord.toLowerCase()) ? "none" : "plain";
-  }
-  return "any";
-}
-function isAdverb(word, rules) {
-  return word.length > 4 && word.endsWith("ly") && !NOT_ADVERBS.has(word) && !rules.allow.has(word) && !isName(word, rules);
-}
-function isName(word, rules) {
-  return rules.nameTokens.has(word) || rules.nameTokens.has(nameKey(word));
-}
-function normalizeWord(word) {
-  return String(word).toLowerCase().replace(/’/g, "'");
-}
-function nameKey(word) {
-  return normalizeWord(word).replace(/'s$/, "");
-}
-function countVariant(text, pattern, rules) {
-  let count = 0;
-  for (const match of text.matchAll(pattern)) {
-    const first = splitWords(match[0])[0] ?? "";
-    if (/^\p{Lu}/u.test(first) && isName(first, rules)) {
-      continue;
-    }
-    count += 1;
-  }
-  return count;
-}
-function echoes(words, rules) {
-  const lastSeen = new Map;
-  const counts = new Map;
-  words.forEach((raw, index) => {
-    const word = normalizeWord(raw);
-    if (word.length < PROSE_THRESHOLDS.echoMinLength || ECHO_STOPWORDS.has(word) || isName(word, rules) || rules.allow.has(word) || /^\p{N}+$/u.test(word)) {
-      return;
-    }
-    if (lastSeen.has(word) && index - lastSeen.get(word) <= PROSE_THRESHOLDS.echoWindow) {
-      increment(counts, word);
-    }
-    lastSeen.set(word, index);
-  });
-  return sortCounts(counts);
-}
-function sentenceStats(lengths) {
-  if (lengths.length === 0) {
-    return { count: 0, mean: 0, longest: 0, spread: 0 };
-  }
-  const mean = lengths.reduce((sum, value) => sum + value, 0) / lengths.length;
-  const variance = lengths.reduce((sum, value) => sum + (value - mean) ** 2, 0) / lengths.length;
-  return { count: lengths.length, mean, longest: Math.max(...lengths), spread: Math.sqrt(variance) };
-}
-function countMatching(words, predicate) {
-  const counts = new Map;
-  for (const raw of words) {
-    const word = normalizeWord(raw);
-    if (predicate(word)) {
-      increment(counts, word);
-    }
-  }
-  return sortCounts(counts);
-}
-function phrasePattern2(phrase) {
-  const body = phrase.trim().split(/\s+/).map((word) => escapeRegExp(word).replace(/['’]/g, "['’]")).join("\\s+");
-  return new RegExp(`(?<![\\p{L}\\p{M}\\p{N}])${body}(?![\\p{L}\\p{M}\\p{N}])`, "giu");
-}
-function countPattern(text, pattern) {
-  return (text.match(pattern) ?? []).length;
-}
-function formatAgainst(value, threshold, side) {
-  for (let places = 1;places < 6; places += 1) {
-    const shown = Number(value.toFixed(places));
-    if (side === "over" ? shown > threshold : shown < threshold) {
-      return value.toFixed(places);
-    }
-  }
-  return String(value);
-}
-function editDistance(a, b) {
-  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
-  for (let i = 1;i <= a.length; i += 1) {
-    const current = [i];
-    for (let j = 1;j <= b.length; j += 1) {
-      current[j] = Math.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-    }
-    previous = current;
-  }
-  return previous[b.length];
-}
-function increment(counts, key) {
-  counts.set(key, (counts.get(key) ?? 0) + 1);
-}
-var COLLATOR = new Intl.Collator("en");
-function sortCounts(counts) {
-  return [...counts.entries()].map(([word, count]) => ({ word, count })).sort((left, right) => right.count - left.count || COLLATOR.compare(left.word, right.word));
-}
-function stringList2(value) {
-  return Array.isArray(value) ? value.filter((item) => typeof item === "string" && item.trim() !== "").map((item) => item.trim()) : [];
-}
-function total(counts) {
-  return counts.reduce((sum, entry) => sum + entry.count, 0);
-}
-function perThousand(count, words) {
-  return words === 0 ? 0 : count * 1000 / words;
-}
-function formatRate(value) {
-  return value.toFixed(1);
-}
-function formatCounts(counts, limit) {
-  return counts.slice(0, limit).map((entry) => `${entry.word} ${entry.count}`).join(", ");
-}
-function countSuffix(counts) {
-  return counts.length === 0 ? "" : ` (${formatCounts(counts, 5)})`;
-}
-function times(count) {
-  return count === 1 ? "once" : `${count} times`;
-}
-
-// src/options.js
-var OPTIONS = [
-  { name: "title", value: "<name>", help: ["Story title for import"] },
-  { name: "dir", value: "<path>", help: ["Target directory for init or import"] },
-  { name: "genre", value: "<name>", help: ["Story genre for init or import"] },
-  { name: "sub-genre", value: "<name>", help: ["Story sub-genre for init or import"] },
-  { name: "setting-era", value: "<name>", help: ["Setting era for init or import"] },
-  { name: "theme", value: "<name>", repeatable: true, help: ["Theme for init, import, or add arc; repeatable"] },
-  { name: "themes", value: "<a,b>", repeatable: true, aliasOf: "theme", help: ["Comma-separated themes for init, import, or add arc"] },
-  { name: "pov", value: "<style|id>", help: ["POV style for init or import; POV character id", "for add chapter/scene (also added to characters)"] },
-  { name: "tense", value: "<tense>", help: ["Narrative tense for init or import"] },
-  { name: "form", value: "<form>", help: ["Story form for init (novel, novella, novelette,", "short-story, flash, serial, picture-book,", "chapter-book); sets a default target-words"] },
-  { name: "synopsis", value: "<text>", help: ["Starter synopsis for init or import"] },
-  { name: "series", value: "<id>", help: ["Series id for init"] },
-  { name: "book-number", value: "<n>", help: ["Publication order for init"] },
-  { name: "follows", value: "<path>", repeatable: true, help: ["Init a sequel set after this story project;", "repeatable"] },
-  { name: "precedes", value: "<path>", repeatable: true, help: ["Init a prequel set before this story project;", "repeatable"] },
-  {
-    name: "force",
-    help: [
-      "Let init/import use an existing directory: add",
-      "missing starter files, never overwrite existing",
-      "ones; import also replaces every chapter-NN.md file"
-    ]
-  },
-  { name: "write", help: ["Update chapter word-count frontmatter"] },
-  { name: "log", help: ["Record today's word count in progress.md"] },
-  { name: "ref", value: "<git-ref>", help: ["Earlier draft as a git branch, tag, or commit", "for compare"] },
-  { name: "against", value: "<path>", help: ["Earlier draft as another project folder for compare"] },
-  { name: "anchor", value: "<label>", repeatable: true, help: ["Review-copy paragraph label (ch03-p12) to find", "in the current text for compare; repeatable"] },
-  { name: "path", value: "<path>", help: ["Project root for every command except init and", "import"] },
-  { name: "out", value: "<file>", help: ["Output path for export/build/synopsis/diagram"] },
-  { name: "format", value: "<name>", help: ["Output format for build (markdown, epub, docx,", "shunn, html, print, narration, metadata,", "fountain, twee, ink)"] },
-  { name: "trim", value: "<size>", help: ["Trim size for build --format print (5x8,", "5.25x8, 5.5x8.5, 6x9, a5; default 5.5x8.5)"] },
-  { name: "stamp", value: "<label>", help: ["Build label printed in build --format html (a", "date, commit, or review round)"] },
-  { name: "note-url", value: "<url>", help: ["Note form linked, prefilled, from every label in", "build --format html (a GitHub new-issue link)"] },
-  { name: "shunn", help: ["Apply Shunn manuscript formatting (with --format", "docx)"] },
-  { name: "at", value: "<chapter-id>", help: ["Chapter id for knowledge: what the character knew", "and how their progressions had changed them"] },
-  { name: "budget", value: "<tokens>", help: ["Token budget for context (default 6000)"] },
-  { name: "scenes", value: "<n>", help: ["Earlier scenes to summarise for context", "(default 5)"] },
-  { name: "init", help: ["Add the default revision passes for passes"] },
-  { name: "start", value: "<pass>", help: ["Mark a revision pass in progress for passes"] },
-  { name: "done", value: "<pass>", help: ["Mark a revision pass done for passes"] },
-  { name: "max-filter-words", value: "<n>", help: ["Warn above n filter words per 1,000 narration", "words for prose (default 10)"] },
-  { name: "max-adverbs", value: "<n>", help: ["Warn above n -ly adverbs per 1,000 narration", "words for prose (default 12)"] },
-  { name: "max-bookisms", value: "<n>", help: ["Warn above n said-bookism tags in a chapter for", "prose (default 2)"] },
-  { name: "pages", value: "<n>", help: ["Synopsis length for synopsis (1 or 3)"] },
-  { name: "actionable", help: ["Include next actions in report"] },
-  { name: "json", help: ["Print one JSON result object (apiVersion,", "command, ok, data, diagnostics, writes) instead", "of text, for the check and analysis commands"] },
-  { name: "id", value: "<kebab-id>", help: ["Explicit id for add or rename, for a name with", "no ASCII letters or digits"] },
-  { name: "number", value: "<n>", help: ["Chapter number for add chapter or move chapter"] },
-  { name: "chapter", value: "<id>", help: ["Chapter id for add scene or move scene"] },
-  { name: "scene", value: "<n>", help: ["Scene number for add scene or move scene"] },
-  { name: "type", value: "<name>", help: ["Entity type for add"] },
-  { name: "role", value: "<name>", help: ["Character role for add character"] },
-  { name: "status", value: "<name>", help: ["Entity status for add"] },
-  { name: "mode", value: "<name>", help: ["Mode for add chapter (e.g. discovered)"] },
-  { name: "date", value: "<date>", help: ["Story date (YYYY-MM-DD) for add chapter/scene;", "the session date for progress (default today)"] },
-  { name: "time", value: "<time>", help: ["Story time (HH:MM or dawn, morning, midday,", "afternoon, evening, night) for add chapter/scene"] },
-  { name: "travel-hours", value: "<n>", help: ["Travel hours for add scene"] },
-  { name: "dilemma", value: "<text>", help: ["Dilemma for add scene sequel unit"] },
-  { name: "sequel", help: ["Mark scene as sequel unit for add scene"] },
-  { name: "outcome", value: "<name>", help: ["Scene outcome for add scene (yes, no, yes-but,", "no-and)"] },
-  { name: "hook", value: "<name>", help: ["Chapter-ending hook for add chapter (cliffhanger,", "question, revelation, reversal, decision,", "emotional, resolution)"] },
-  { name: "location", value: "<id>", repeatable: true, help: ["Location reference for add"] },
-  { name: "locations", value: "<ids>", repeatable: true, aliasOf: "location" },
-  { name: "character", value: "<id>", repeatable: true, help: ["Character reference for add; repeatable"] },
-  { name: "characters", value: "<ids>", repeatable: true, aliasOf: "character" },
-  { name: "mention", value: "<id>", repeatable: true, help: ["Mentioned character for add chapter/scene;", "repeatable"] },
-  { name: "mentions", value: "<ids>", repeatable: true, aliasOf: "mention" },
-  { name: "member", value: "<id>", repeatable: true, help: ["Faction member reference for add faction; repeatable"] },
-  { name: "members", value: "<ids>", repeatable: true, aliasOf: "member" },
-  { name: "owner", value: "<id>", help: ["Owner reference for add artifact"] },
-  { name: "arc", value: "<id>", repeatable: true, help: ["Arc reference for add (arc theme for add", "character); repeatable"] },
-  { name: "arcs", value: "<ids>", repeatable: true, aliasOf: "arc" },
-  { name: "introduced", value: "<id>", help: ["Chapter id for add question"] },
-  { name: "resolved", value: "<id>", help: ["Chapter id for add question"] },
-  { name: "planted", value: "<id>", help: ["Chapter id for add promise/clue"] },
-  { name: "payoff", value: "<id>", help: ["Chapter id for add promise/clue"] },
-  { name: "significance-delayed", help: ["Significance is delayed for add clue"] },
-  { name: "red-herring", help: ["Mark add clue as a red herring"] },
-  { name: "category", value: "<name>", help: ["Category for add term"] },
-  { name: "alias", value: "<name>", repeatable: true, help: ["Alias for add term; repeatable"] },
-  { name: "aliases", value: "<names>", repeatable: true, aliasOf: "alias" },
-  { name: "region", value: "<name>", help: ["Region for add location"] },
-  { name: "population", value: "<name>", help: ["Population for add location"] },
-  { name: "controlled-by", value: "<id>", help: ["Controlling faction for add location"] },
-  { name: "prevalence", value: "<name>", help: ["Prevalence for add system"] },
-  { name: "acts", value: "<a,b>", repeatable: true, help: ["Comma-separated acts for add arc; repeatable"] },
-  { name: "act", value: "<name>", repeatable: true, aliasOf: "acts" },
-  { name: "placement", value: "<front|back>", help: ["Placement for add matter (default front)"] },
-  { name: "order", value: "<n>", help: ["Order within its placement for add matter"] },
-  { name: "heading", help: ["Print the page title for add matter; --heading", "false for a dedication or epigraph"] },
-  { name: "source", value: "<text>", repeatable: true, help: ["Source for add research; repeatable"] },
-  { name: "sources", value: "<texts>", repeatable: true, aliasOf: "source" },
-  { name: "used-in", value: "<chapter-id>", repeatable: true, help: ["Chapter that relies on add research; repeatable"] },
-  { name: "accuracy", value: "<level>", help: ["Accuracy for add research (must-be-accurate,", "blended, invented)"] },
-  { name: "confidence", value: "<level>", help: ["Confidence for add research (high, medium, low)"] },
-  { name: "method", value: "<name>", help: ["Research method for add research (fact, interview,", "site-visit, expert-review, reading)"] },
-  { name: "risk", value: "<name>", repeatable: true, help: ["Risk area for add research (legal, medical,", "weapons, safety, cultural, defamation,", "technical); repeatable"] }
-];
-var BOOLEAN_OPTIONS = new Set(OPTIONS.filter((option) => option.value === undefined).map((option) => option.name));
-var VALUE_OPTIONS = new Set(OPTIONS.filter((option) => option.value !== undefined).map((option) => option.name));
-var REPEATABLE_OPTIONS = new Set(OPTIONS.filter((option) => option.repeatable).map((option) => option.name));
-function takesValue(name) {
-  return VALUE_OPTIONS.has(name);
-}
-var OPTION_COLUMN = 28;
-function formatOptionsHelp(names = null) {
-  const rows = OPTIONS.filter((option) => option.help && (names === null || names.includes(option.name))).map((option) => ({ flag: `--${option.name}${option.value ? ` ${option.value}` : ""}`, help: option.help })).concat([
-    { flag: "-h, --help", help: ["Show this help"] },
-    { flag: "-v, --version", help: ["Show the story CLI version"] }
-  ]);
-  const lines = [];
-  for (const row of rows) {
-    const head = `  ${row.flag}`;
-    const [first, ...rest] = row.help;
-    lines.push(head.length < OPTION_COLUMN ? `${head.padEnd(OPTION_COLUMN)}${first}` : `${head}  ${first}`);
-    for (const line of rest) {
-      lines.push(`${" ".repeat(OPTION_COLUMN)}${line}`);
-    }
-  }
-  return lines;
-}
-function isKnownOptionToken(token) {
-  if (token === "-h" || token === "-v") {
-    return true;
-  }
-  if (!token.startsWith("--")) {
-    return false;
-  }
-  const equalIndex = token.indexOf("=");
-  const key = token.slice(2, equalIndex === -1 ? undefined : equalIndex);
-  return key === "help" || key === "version" || BOOLEAN_OPTIONS.has(key) || VALUE_OPTIONS.has(key);
-}
-function addOption(options, key, value) {
-  const stored = BOOLEAN_OPTIONS.has(key) ? normalizeBooleanValue(key, value) : value;
-  if (options[key] === undefined || !REPEATABLE_OPTIONS.has(key)) {
-    options[key] = stored;
-  } else {
-    options[key] = Array.isArray(options[key]) ? options[key].concat(stored) : [options[key], stored];
-  }
-}
-function normalizeBooleanValue(key, value) {
-  if (typeof value !== "string") {
-    return Boolean(value);
-  }
-  const lower = value.trim().toLowerCase();
-  if (lower === "false" || lower === "0" || lower === "no" || lower === "off") {
-    return false;
-  }
-  if (lower === "true" || lower === "1" || lower === "yes" || lower === "on") {
-    return true;
-  }
-  throw usageError(`Unknown value "${value}" for --${key}: expected true or false`);
-}
-function suggestion(input, candidates, prefix = "") {
-  const scored = candidates.map((candidate) => ({ candidate, distance: editDistance(input.toLowerCase(), candidate) }));
-  const best = Math.min(...scored.map((entry) => entry.distance));
-  if (best > Math.max(1, Math.floor(input.length / 3))) {
-    return "";
-  }
-  const names = scored.filter((entry) => entry.distance === best).slice(0, 3).map((entry) => `${prefix}${entry.candidate}`);
-  return `; did you mean ${names.join(" or ")}?`;
-}
-function isTruthy(value) {
-  const current = Array.isArray(value) ? value[value.length - 1] : value;
-  if (typeof current === "string") {
-    const lower = current.trim().toLowerCase();
-    if (lower === "false" || lower === "0" || lower === "no" || lower === "off" || lower === "") {
-      return false;
-    }
-    return true;
-  }
-  return Boolean(current);
-}
-function optionFamily(name) {
-  const canonical = OPTIONS.find((option) => option.name === name)?.aliasOf ?? name;
-  return [canonical, ...OPTIONS.filter((option) => option.aliasOf === canonical).map((option) => option.name)];
-}
-function isBooleanLiteralToken(token) {
-  return typeof token === "string" && /^(true|false|0|1|yes|no|on|off)$/i.test(token);
-}
-function parseArgs(argv, suggestFrom = OPTIONS.map((option) => option.name)) {
-  const positionals = [];
-  const options = {};
-  for (let index = 0;index < argv.length; index += 1) {
-    const arg = argv[index];
-    if (arg === "-h" || arg === "--help") {
-      options.help = true;
-      continue;
-    }
-    if (arg === "-v" || arg === "--version") {
-      options.version = true;
-      continue;
-    }
-    if (arg === "--") {
-      positionals.push(...argv.slice(index + 1));
-      break;
-    }
-    if (!arg.startsWith("--")) {
-      positionals.push(arg);
-      continue;
-    }
-    const equalIndex = arg.indexOf("=");
-    const key = arg.slice(2, equalIndex === -1 ? undefined : equalIndex);
-    const inlineValue = equalIndex === -1 ? undefined : arg.slice(equalIndex + 1);
-    if ((key === "help" || key === "version") && inlineValue !== undefined) {
-      if (normalizeBooleanValue(key, inlineValue)) {
-        options[key] = true;
-      }
-      continue;
-    }
-    if (BOOLEAN_OPTIONS.has(key)) {
-      if (inlineValue !== undefined) {
-        addOption(options, key, inlineValue);
-        continue;
-      }
-      const nextToken = argv[index + 1];
-      if (isBooleanLiteralToken(nextToken)) {
-        addOption(options, key, nextToken);
-        index += 1;
-        continue;
-      }
-      addOption(options, key, true);
-      continue;
-    }
-    if (VALUE_OPTIONS.has(key)) {
-      if (inlineValue !== undefined) {
-        addOption(options, key, inlineValue);
-        continue;
-      }
-      const nextValue = argv[index + 1];
-      if (nextValue === undefined || isKnownOptionToken(nextValue) || nextValue.startsWith("--")) {
-        throw usageError(`Missing value for --${key}: expected a value`);
-      }
-      addOption(options, key, nextValue);
-      index += 1;
-      continue;
-    }
-    throw usageError(`Unknown option --${key}${suggestion(key, suggestFrom, "--")}`);
-  }
-  return { positionals, options };
-}
-
-// src/config.js
+import path7 from "node:path";
 var SEVERITY_LEVELS = ["error", "warning", "off"];
-var PROJECTLESS_CODES = ["kept-story-options", "unsplit-chapter-lines"];
-function severityCodes() {
-  return codesAt("warning").filter((code) => !PROJECTLESS_CODES.includes(code));
-}
 var TARGETED_COMMANDS = new Set(["knowledge", "add", "rename", "move", "remove"]);
 var TARGETED_FLAGS = { passes: ["start", "done"], progress: ["date"] };
 var LINKED_FLAGS = {
   build: [["format", "shunn", "trim", "stamp", "note-url"]],
   compare: [["ref", "against"]]
 };
-var EMPTY_CONFIG = Object.freeze({ defaults: {}, severity: {}, errors: [] });
+var EMPTY_CONFIG = Object.freeze({ defaults: {}, severity: {}, exemptions: [], errors: [] });
 function readCliConfig(root) {
   let data;
   try {
-    data = parseFrontmatter(fs3.readFileSync(path6.join(root, "story.md"), "utf8")).data;
+    data = parseFrontmatter(fs3.readFileSync(path7.join(root, "story.md"), "utf8")).data;
   } catch {
     return EMPTY_CONFIG;
   }
-  return parseCliConfig(data);
+  return { ...parseCliConfig(data), exemptions: readExemptionLog(root) };
 }
 function validateCliConfig(data, errors) {
   errors.push(...parseCliConfig(data).errors.map((message) => err("invalid-cli-config", message, "story.md")));
@@ -5949,18 +6107,23 @@ function applyDefaults(config, commandName, options) {
   }
   return filled;
 }
-function severityFor(config) {
-  return Object.entries(config.severity);
+var NO_OVERRIDES = Object.freeze({ severity: [], exemptions: [] });
+function findingOverrides(config) {
+  return {
+    severity: Object.entries(config.severity),
+    exemptions: (config.exemptions ?? []).filter((exemption) => exemption.code !== undefined)
+  };
 }
-function applySeverity(result, overrides) {
-  if (overrides.length === 0) {
-    return result;
+function applySeverity(result, overrides = NO_OVERRIDES) {
+  const exempted = dismissByExemptions(result, overrides.exemptions, { errors: false });
+  if (overrides.severity.length === 0) {
+    return exempted;
   }
-  const levels = new Map(overrides);
-  const errors = [...result.errors];
+  const levels = new Map(overrides.severity);
+  const errors = [...exempted.errors];
   const warnings = [];
-  const dismissed = [...result.dismissed ?? []];
-  for (const warning of result.warnings) {
+  const dismissed = [...exempted.dismissed ?? []];
+  for (const warning of exempted.warnings) {
     const code = warning.code;
     const level = levels.get(code) ?? "warning";
     if (level === "warning") {
@@ -5972,14 +6135,14 @@ function applySeverity(result, overrides) {
       dismissed.push({ finding: warning, reason: note, note });
     }
   }
-  const promoted = errors.length > result.errors.length;
-  return { ...result, ok: result.ok && !promoted, errors, warnings, dismissed };
+  const promoted = errors.length > exempted.errors.length;
+  return { ...exempted, ok: exempted.ok && !promoted, errors, warnings, dismissed };
 }
 
 // src/import.js
 import { Buffer as Buffer4 } from "node:buffer";
 import fs8 from "node:fs";
-import path11 from "node:path";
+import path12 from "node:path";
 
 // src/stdin.js
 import { Buffer as Buffer2 } from "node:buffer";
@@ -6054,18 +6217,18 @@ function pause(ms) {
 import { execFileSync } from "node:child_process";
 import fs7 from "node:fs";
 import os2 from "node:os";
-import path10 from "node:path";
+import path11 from "node:path";
 
 // src/lock.js
 import fs5 from "node:fs";
 import os from "node:os";
-import path7 from "node:path";
+import path8 from "node:path";
 var LOCK_FILE = ".story.lock";
 var DEFAULT_WAIT_MS = 1e4;
 var POLL_MS = 50;
 var held = new Map;
 function withProjectLock(root, run) {
-  const projectRoot = path7.resolve(root);
+  const projectRoot = path8.resolve(root);
   const key = realPath(projectRoot);
   if (held.has(key)) {
     held.set(key, held.get(key) + 1);
@@ -6075,8 +6238,8 @@ function withProjectLock(root, run) {
       held.set(key, held.get(key) - 1);
     }
   }
-  const lockPath = path7.join(projectRoot, LOCK_FILE);
-  if (!fs5.existsSync(path7.join(projectRoot, "story.md")) || !acquire(lockPath)) {
+  const lockPath = path8.join(projectRoot, LOCK_FILE);
+  if (!fs5.existsSync(path8.join(projectRoot, "story.md")) || !acquire(lockPath)) {
     return run();
   }
   held.set(key, 1);
@@ -6163,7 +6326,7 @@ function realPath(target) {
 }
 
 // src/timeline.js
-import path8 from "node:path";
+import path9 from "node:path";
 function buildTimeline(project) {
   const chapters = [...project.chapters].sort((left, right) => left.number - right.number || left.id.localeCompare(right.id, "en"));
   const chapterById = new Map(chapters.map((chapter) => [chapter.id, chapter]));
@@ -6253,7 +6416,7 @@ function timelineEntry(project, { unit, chapter, isChapter, orphan }, reading) {
   const minutes = parseClockTime(time || "");
   return {
     id: unit.id,
-    file: path8.relative(project.root, unit.file),
+    file: path9.relative(project.root, unit.file),
     title: unit.title,
     chapterNumber: Number.isFinite(chapter.number) ? chapter.number : chapter.id,
     orphanOf: orphan ? chapter.id : "",
@@ -7563,7 +7726,7 @@ function formatPasses(passes, command = "story passes") {
 }
 
 // src/pacing.js
-import path9 from "node:path";
+import path10 from "node:path";
 var SCENE_OUTCOMES = new Set(["yes", "no", "yes-but", "no-and"]);
 var CHAPTER_HOOKS = new Set(["cliffhanger", "question", "revelation", "reversal", "decision", "emotional", "resolution"]);
 var DRAFTED_STATUSES = new Set(["draft", "revised", "final", "complete"]);
@@ -7572,7 +7735,7 @@ var NO_SEQUEL_RUN = 4;
 var RESOLUTION_RUN = 3;
 function buildPacing(project) {
   const chapters = [...project.chapters].sort((left, right) => left.number - right.number || left.id.localeCompare(right.id, "en"));
-  const files = new Map(chapters.map((chapter) => [chapter.id, project.root === undefined ? null : path9.relative(project.root, chapter.file)]));
+  const files = new Map(chapters.map((chapter) => [chapter.id, project.root === undefined ? null : path10.relative(project.root, chapter.file)]));
   const warnings = [];
   const rows = [];
   const units = [];
@@ -7677,7 +7840,7 @@ function formatPacing(pacing) {
   const { totals } = pacing;
   const setbackShare = totals.outcomesRecorded === 0 ? "no outcomes recorded" : `${Math.round(totals.setbacks * 100 / totals.outcomesRecorded)}% of recorded outcomes are setbacks or complications`;
   const lines = [
-    `Pacing: ${plural2(totals.scenes, "scene")}, ${plural2(totals.sequels, "sequel")}, ${totals.hooks} of ${plural2(pacing.rows.length, "chapter")} with hooks`,
+    `Pacing: ${plural(totals.scenes, "scene")}, ${plural(totals.sequels, "sequel")}, ${totals.hooks} of ${plural(pacing.rows.length, "chapter")} with hooks`,
     `Outcomes: ${setbackShare}`,
     `Median chapter: ${pacing.medianWords} words`,
     ""
@@ -7724,29 +7887,29 @@ var REQUIRED_PATHS = [
 ];
 var PROJECT_DIRECTORIES = [
   "characters",
-  path10.join("worldbuilding", "locations"),
-  path10.join("worldbuilding", "systems"),
-  path10.join("worldbuilding", "factions"),
-  path10.join("worldbuilding", "artifacts"),
-  path10.join("plot", "arcs"),
+  path11.join("worldbuilding", "locations"),
+  path11.join("worldbuilding", "systems"),
+  path11.join("worldbuilding", "factions"),
+  path11.join("worldbuilding", "artifacts"),
+  path11.join("plot", "arcs"),
   "chapters",
   "scenes",
-  path10.join("continuity", "questions"),
-  path10.join("continuity", "promises"),
-  path10.join("continuity", "clues"),
-  path10.join("glossary", "terms")
+  path11.join("continuity", "questions"),
+  path11.join("continuity", "promises"),
+  path11.join("continuity", "clues"),
+  path11.join("glossary", "terms")
 ];
 var INDEX_SCHEMAS = [
-  [path10.join("characters", "_index.md"), "character-registry"],
-  [path10.join("worldbuilding", "_index.md"), "world-registry"],
-  [path10.join("plot", "_index.md"), "plot-registry"],
-  [path10.join("plot", "timeline.md"), "timeline"],
-  [path10.join("chapters", "_index.md"), "chapter-registry"],
-  [path10.join("scenes", "_index.md"), "scene-registry"],
-  [path10.join("continuity", "questions", "_index.md"), "question-registry"],
-  [path10.join("continuity", "promises", "_index.md"), "promise-registry"],
-  [path10.join("continuity", "clues", "_index.md"), "clue-registry"],
-  [path10.join("glossary", "_index.md"), "glossary-registry"]
+  [path11.join("characters", "_index.md"), "character-registry"],
+  [path11.join("worldbuilding", "_index.md"), "world-registry"],
+  [path11.join("plot", "_index.md"), "plot-registry"],
+  [path11.join("plot", "timeline.md"), "timeline"],
+  [path11.join("chapters", "_index.md"), "chapter-registry"],
+  [path11.join("scenes", "_index.md"), "scene-registry"],
+  [path11.join("continuity", "questions", "_index.md"), "question-registry"],
+  [path11.join("continuity", "promises", "_index.md"), "promise-registry"],
+  [path11.join("continuity", "clues", "_index.md"), "clue-registry"],
+  [path11.join("glossary", "_index.md"), "glossary-registry"]
 ];
 var STORY_STATUSES = new Set(["planning", "drafting", "in-progress", "revising", "complete", "abandoned"]);
 var STORY_TENSES = new Set(["past", "present", "future", "mixed"]);
@@ -7831,13 +7994,13 @@ function createStoryProject(options) {
   if (!titleId && options.dir === undefined) {
     throw usageError('Cannot derive a story id from title "' + title + '": pass --dir with an ASCII folder name, or use a title containing ASCII letters or digits');
   }
-  const root = path10.resolve(cwd, options.dir ?? titleId);
+  const root = path11.resolve(cwd, options.dir ?? titleId);
   const existingStory = existingStoryData(root);
   const storyId = deriveStoryId(existingStory ? existingStory.title : title, root);
   assertPortableId(storyId, "story");
-  assertPortableFolderName(path10.basename(root));
+  assertPortableFolderName(path11.basename(root));
   if (!storyId) {
-    throw usageError('Cannot derive a story id from title "' + title + '" or folder "' + path10.basename(root) + '": use an ASCII folder name with --dir');
+    throw usageError('Cannot derive a story id from title "' + title + '" or folder "' + path11.basename(root) + '": use an ASCII folder name with --dir');
   }
   if (lstatIfExists(root)?.isSymbolicLink()) {
     throw refusedError(`Refusing to use symlinked project directory: ${root}`);
@@ -7867,9 +8030,9 @@ function createStoryProject(options) {
   const themes = normalizeList(options.themes, ["change"]);
   options.beforeWrite?.(root, existingStory !== null);
   for (const directory of PROJECT_DIRECTORIES) {
-    makeDirectories(path10.join(root, directory));
+    makeDirectories(path11.join(root, directory));
   }
-  const storyWritten = writeStarterFile(path10.join(root, "story.md"), storyBible({
+  const storyWritten = writeStarterFile(path11.join(root, "story.md"), storyBible({
     title,
     storyId,
     series: series.series,
@@ -7886,18 +8049,18 @@ function createStoryProject(options) {
     inherited: inheritedStoryFields(inherited),
     synopsis: options.synopsis ?? options.defaultSynopsis ?? "Add a 2-3 sentence synopsis here."
   }), { root });
-  writeStarterFile(path10.join(root, "characters", "_index.md"), characterIndex(storyId, [], "", ""), { root });
-  writeStarterFile(path10.join(root, "worldbuilding", "_index.md"), worldIndex(storyId, [], [], [], [], ""), { root });
-  writeStarterFile(path10.join(root, "plot", "_index.md"), plotIndex(storyId, "three-act", [], "", ""), { root });
-  writeStarterFile(path10.join(root, "plot", "timeline.md"), timeline(storyId), { root });
-  writeStarterFile(path10.join(root, "chapters", "_index.md"), chapterIndex(storyId, []), { root });
-  writeStarterFile(path10.join(root, "scenes", "_index.md"), sceneIndex(storyId, []), { root });
-  writeStarterFile(path10.join(root, "continuity", "state.md"), continuityState(storyId), { root });
-  writeStarterFile(path10.join(root, "continuity", "questions", "_index.md"), questionIndex(storyId, []), { root });
-  writeStarterFile(path10.join(root, "continuity", "promises", "_index.md"), promiseIndex(storyId, []), { root });
-  writeStarterFile(path10.join(root, "continuity", "clues", "_index.md"), clueIndex(storyId, []), { root });
-  writeStarterFile(path10.join(root, "glossary", "_index.md"), glossaryIndex(storyId, []), { root });
-  writeStarterFile(path10.join(root, STYLE_SHEET_FILE), styleSheet(), { root });
+  writeStarterFile(path11.join(root, "characters", "_index.md"), characterIndex(storyId, [], "", ""), { root });
+  writeStarterFile(path11.join(root, "worldbuilding", "_index.md"), worldIndex(storyId, [], [], [], [], ""), { root });
+  writeStarterFile(path11.join(root, "plot", "_index.md"), plotIndex(storyId, "three-act", [], "", ""), { root });
+  writeStarterFile(path11.join(root, "plot", "timeline.md"), timeline(storyId), { root });
+  writeStarterFile(path11.join(root, "chapters", "_index.md"), chapterIndex(storyId, []), { root });
+  writeStarterFile(path11.join(root, "scenes", "_index.md"), sceneIndex(storyId, []), { root });
+  writeStarterFile(path11.join(root, "continuity", "state.md"), continuityState(storyId), { root });
+  writeStarterFile(path11.join(root, "continuity", "questions", "_index.md"), questionIndex(storyId, []), { root });
+  writeStarterFile(path11.join(root, "continuity", "promises", "_index.md"), promiseIndex(storyId, []), { root });
+  writeStarterFile(path11.join(root, "continuity", "clues", "_index.md"), clueIndex(storyId, []), { root });
+  writeStarterFile(path11.join(root, "glossary", "_index.md"), glossaryIndex(storyId, []), { root });
+  writeStarterFile(path11.join(root, STYLE_SHEET_FILE), styleSheet(), { root });
   const gitignore = writeStarterGitignore(root);
   const linkedBooks = [];
   const existingLinks = storyWritten ? null : existingSeriesLinks(root);
@@ -7905,7 +8068,7 @@ function createStoryProject(options) {
     if (existingLinks && !linksInclude(existingLinks[book.field], book.root)) {
       continue;
     }
-    writeFile(path10.join(book.root, "story.md"), updated, { root: book.root });
+    writeFile(path11.join(book.root, "story.md"), updated, { root: book.root });
     linkedBooks.push(book.root);
   }
   return {
@@ -7934,7 +8097,7 @@ Thumbs.db
 *~
 `;
 function writeStarterGitignore(root) {
-  const filePath = path10.join(root, ".gitignore");
+  const filePath = path11.join(root, ".gitignore");
   const existing = lstatIfExists(filePath);
   if (!existing) {
     writeFile(filePath, STARTER_GITIGNORE, { root });
@@ -7977,7 +8140,7 @@ function inheritedStoryFields(data) {
   return fields;
 }
 function existingStoryData(root) {
-  if (!lstatIfExists(path10.join(root, "story.md"))) {
+  if (!lstatIfExists(path11.join(root, "story.md"))) {
     return null;
   }
   try {
@@ -8027,7 +8190,7 @@ function resolveSeriesOptions(root, cwd, options) {
   const rootKey = canonicalPath(root);
   for (const [field, inverse] of [["follows", "precedes"], ["precedes", "follows"]]) {
     for (const value of asArray(options[field]).filter((item) => typeof item === "string" && item.trim() !== "")) {
-      const bookRoot = path10.resolve(cwd, value);
+      const bookRoot = path11.resolve(cwd, value);
       const key = canonicalPath(bookRoot);
       if (bookRoot === root || key === rootKey) {
         throw usageError(`--${field} ${value} points at the new story itself`);
@@ -8043,7 +8206,7 @@ function resolveSeriesOptions(root, cwd, options) {
       try {
         data = readBookFrontmatter(bookRoot);
       } catch (error) {
-        throw projectError(`--${field} ${value}: ${path10.join(value, "story.md")}: ${error.message}`);
+        throw projectError(`--${field} ${value}: ${path11.join(value, "story.md")}: ${error.message}`);
       }
       if (!data) {
         throw projectError(`--${field} ${value} is not a story project: missing story.md`);
@@ -8102,7 +8265,7 @@ function seriesBookNumbers(linked, requireComplete = false) {
 function planSeriesBacklinks(root, series) {
   const planned = [];
   for (const book of series.linked) {
-    const storyPath = path10.join(book.root, "story.md");
+    const storyPath = path11.join(book.root, "story.md");
     const updated = withSeriesBacklink(book.root, book.inverse, root, series.series);
     if (updated === null) {
       continue;
@@ -8126,10 +8289,10 @@ function existingSeriesLinks(root) {
   return { follows: seriesLinks(root, data, "follows"), precedes: seriesLinks(root, data, "precedes") };
 }
 function enclosingStoryProject(root) {
-  let current = path10.dirname(path10.resolve(root));
+  let current = path11.dirname(path11.resolve(root));
   let previous = null;
   while (current !== previous) {
-    const storyPath = path10.join(current, "story.md");
+    const storyPath = path11.join(current, "story.md");
     let isProject = false;
     try {
       isProject = fs7.statSync(storyPath).isFile() && /^﻿?---\r?\n/.test(readTextFile(storyPath).slice(0, 8));
@@ -8140,18 +8303,18 @@ function enclosingStoryProject(root) {
       return current;
     }
     previous = current;
-    current = path10.dirname(current);
+    current = path11.dirname(current);
   }
   return null;
 }
 function deriveStoryId(title, root) {
-  return kebabCase(String(title ?? "")) || kebabCase(path10.basename(root));
+  return kebabCase(String(title ?? "")) || kebabCase(path11.basename(root));
 }
 function storyIdMismatch(label, project) {
   return err("story-id-mismatch", `${label} story must be ${project.storyId} (run story reindex after changing the story.md title)`, label);
 }
 function scanProject(root) {
-  const projectRoot = path10.resolve(root);
+  const projectRoot = path11.resolve(root);
   const scanErrors = [];
   const storyPath = requireStoryFile(projectRoot);
   let story;
@@ -8159,17 +8322,17 @@ function scanProject(root) {
     story = readMarkdown(storyPath, projectRoot);
   } catch (error) {
     scanErrors.push(err("unreadable-file", `story.md: ${error.message}`, "story.md"));
-    story = { data: { title: path10.basename(projectRoot) }, body: "", rawMarkdown: "", unreadable: true };
+    story = { data: { title: path11.basename(projectRoot) }, body: "", rawMarkdown: "", unreadable: true };
   }
   const storyId = deriveStoryId(story.data.title, projectRoot);
   const titleText = typeof story.data.title === "string" || typeof story.data.title === "number" ? String(story.data.title).trim() : "";
   let continuity = null;
-  const continuityPath = path10.join(projectRoot, "continuity", "state.md");
+  const continuityPath = path11.join(projectRoot, "continuity", "state.md");
   if (fs7.existsSync(continuityPath)) {
     try {
       continuity = readMarkdown(continuityPath, projectRoot);
     } catch (error) {
-      scanErrors.push(err("unreadable-file", `${path10.join("continuity", "state.md")}: ${error.message}`, path10.join("continuity", "state.md")));
+      scanErrors.push(err("unreadable-file", `${path11.join("continuity", "state.md")}: ${error.message}`, path11.join("continuity", "state.md")));
       continuity = null;
     }
   }
@@ -8177,7 +8340,7 @@ function scanProject(root) {
     root: projectRoot,
     story,
     storyId,
-    title: titleText || path10.basename(projectRoot),
+    title: titleText || path11.basename(projectRoot),
     fileErrors: scanErrors,
     characters: readEntityFiles(projectRoot, "characters", (id, file, data) => ({
       id,
@@ -8195,7 +8358,7 @@ function scanProject(root) {
       voiceAvoid: asArray(data["voice-avoid"]),
       pronunciation: data.pronunciation
     }), scanErrors),
-    locations: readEntityFiles(projectRoot, path10.join("worldbuilding", "locations"), (id, file, data) => ({
+    locations: readEntityFiles(projectRoot, path11.join("worldbuilding", "locations"), (id, file, data) => ({
       id,
       file,
       name: data.name ?? titleCaseSlug(id),
@@ -8206,14 +8369,14 @@ function scanProject(root) {
       setting: typeof data.setting === "string" ? data.setting : "",
       pronunciation: data.pronunciation
     }), scanErrors),
-    systems: readEntityFiles(projectRoot, path10.join("worldbuilding", "systems"), (id, file, data) => ({
+    systems: readEntityFiles(projectRoot, path11.join("worldbuilding", "systems"), (id, file, data) => ({
       id,
       file,
       name: data.name ?? titleCaseSlug(id),
       type: data.type ?? "",
       pronunciation: data.pronunciation
     }), scanErrors),
-    factions: readEntityFiles(projectRoot, path10.join("worldbuilding", "factions"), (id, file, data) => ({
+    factions: readEntityFiles(projectRoot, path11.join("worldbuilding", "factions"), (id, file, data) => ({
       id,
       file,
       name: data.name ?? titleCaseSlug(id),
@@ -8223,7 +8386,7 @@ function scanProject(root) {
       locations: asArray(data.locations),
       pronunciation: data.pronunciation
     }), scanErrors),
-    artifacts: readEntityFiles(projectRoot, path10.join("worldbuilding", "artifacts"), (id, file, data) => ({
+    artifacts: readEntityFiles(projectRoot, path11.join("worldbuilding", "artifacts"), (id, file, data) => ({
       id,
       file,
       name: data.name ?? titleCaseSlug(id),
@@ -8233,7 +8396,7 @@ function scanProject(root) {
       location: data.location ?? "",
       pronunciation: data.pronunciation
     }), scanErrors),
-    arcs: readEntityFiles(projectRoot, path10.join("plot", "arcs"), (id, file, data) => ({
+    arcs: readEntityFiles(projectRoot, path11.join("plot", "arcs"), (id, file, data) => ({
       id,
       file,
       name: data.name ?? titleCaseSlug(id),
@@ -8290,7 +8453,7 @@ function scanProject(root) {
       flashbackTo: String(data["flashback-to"] ?? ""),
       setting: typeof data.setting === "string" ? data.setting : ""
     }), scanErrors),
-    questions: readEntityFiles(projectRoot, path10.join("continuity", "questions"), (id, file, data) => ({
+    questions: readEntityFiles(projectRoot, path11.join("continuity", "questions"), (id, file, data) => ({
       id,
       file,
       title: data.title ?? titleCaseSlug(id),
@@ -8299,7 +8462,7 @@ function scanProject(root) {
       resolved: String(data.resolved ?? ""),
       characters: asArray(data.characters)
     }), scanErrors),
-    promises: readEntityFiles(projectRoot, path10.join("continuity", "promises"), (id, file, data) => ({
+    promises: readEntityFiles(projectRoot, path11.join("continuity", "promises"), (id, file, data) => ({
       id,
       file,
       title: data.title ?? titleCaseSlug(id),
@@ -8309,7 +8472,7 @@ function scanProject(root) {
       arcs: asArray(data.arcs),
       characters: asArray(data.characters)
     }), scanErrors),
-    clues: readEntityFiles(projectRoot, path10.join("continuity", "clues"), (id, file, data) => ({
+    clues: readEntityFiles(projectRoot, path11.join("continuity", "clues"), (id, file, data) => ({
       id,
       file,
       title: data.title ?? titleCaseSlug(id),
@@ -8321,7 +8484,7 @@ function scanProject(root) {
       characters: asArray(data.characters),
       arcs: asArray(data.arcs)
     }), scanErrors),
-    glossaryTerms: readEntityFiles(projectRoot, path10.join("glossary", "terms"), (id, file, data) => ({
+    glossaryTerms: readEntityFiles(projectRoot, path11.join("glossary", "terms"), (id, file, data) => ({
       id,
       file,
       term: data.term ?? titleCaseSlug(id),
@@ -8382,7 +8545,7 @@ function validateProjectOf(project) {
   const warnings = [];
   const projectRoot = project.root;
   for (const requiredPath of REQUIRED_PATHS) {
-    if (!fs7.existsSync(path10.join(projectRoot, requiredPath))) {
+    if (!fs7.existsSync(path11.join(projectRoot, requiredPath))) {
       errors.push(err("missing-required-path", `Missing required path: ${requiredPath} (story migrate adds missing registries)`));
     }
   }
@@ -8403,7 +8566,7 @@ function validateProjectOf(project) {
   validateQuestions(project, errors);
   validatePromises(project, errors);
   validateClues(project, errors);
-  validateExemptions(project, errors);
+  validateExemptions(project, errors, warnings);
   validateGlossaryTerms(project, errors);
   validateStyleSheet(project, errors);
   validateMatter(project, errors, warnings);
@@ -8416,28 +8579,28 @@ function validateProjectOf(project) {
   validatePortablePaths(project, warnings);
   collectStrayFileWarnings(project, warnings);
   for (const file of ENTITY_SCAN_DIRS.flatMap((dir) => entityFileNames(projectRoot, dir))) {
-    if (WINDOWS_RESERVED_ID.test(path10.basename(file, ".md").toLowerCase())) {
+    if (WINDOWS_RESERVED_ID.test(path11.basename(file, ".md").toLowerCase())) {
       warnings.push(warn("windows-reserved-name", `${file} uses a file name Windows reserves, so the project cannot be checked out on Windows; rename the entity`, file));
     }
   }
-  const linksFor = (items, prefix = "") => items.map((item) => [`](${prefix}${path10.basename(item.file)})`, path10.relative(projectRoot, item.file)]);
+  const linksFor = (items, prefix = "") => items.map((item) => [`](${prefix}${path11.basename(item.file)})`, path11.relative(projectRoot, item.file)]);
   const indexChecks = [
-    [path10.join("characters", "_index.md"), linksFor(project.characters)],
-    [path10.join("worldbuilding", "_index.md"), linksFor(project.locations, "locations/").concat(linksFor(project.systems, "systems/")).concat(linksFor(project.factions, "factions/")).concat(linksFor(project.artifacts, "artifacts/"))],
-    [path10.join("plot", "_index.md"), linksFor(project.arcs, "arcs/")],
-    [path10.join("chapters", "_index.md"), linksFor(project.chapters)],
-    [path10.join("scenes", "_index.md"), linksFor(project.scenes)],
-    [path10.join("continuity", "questions", "_index.md"), linksFor(project.questions)],
-    [path10.join("continuity", "promises", "_index.md"), linksFor(project.promises)],
-    [path10.join("continuity", "clues", "_index.md"), linksFor(project.clues)],
-    [path10.join("glossary", "_index.md"), linksFor(project.glossaryTerms, "terms/")],
-    ...fs7.existsSync(path10.join(projectRoot, MATTER_DIR, "_index.md")) ? [[path10.join(MATTER_DIR, "_index.md"), linksFor(project.matter)]] : [],
-    ...fs7.existsSync(path10.join(projectRoot, RESEARCH_DIR, "_index.md")) ? [[path10.join(RESEARCH_DIR, "_index.md"), linksFor(project.research)]] : []
+    [path11.join("characters", "_index.md"), linksFor(project.characters)],
+    [path11.join("worldbuilding", "_index.md"), linksFor(project.locations, "locations/").concat(linksFor(project.systems, "systems/")).concat(linksFor(project.factions, "factions/")).concat(linksFor(project.artifacts, "artifacts/"))],
+    [path11.join("plot", "_index.md"), linksFor(project.arcs, "arcs/")],
+    [path11.join("chapters", "_index.md"), linksFor(project.chapters)],
+    [path11.join("scenes", "_index.md"), linksFor(project.scenes)],
+    [path11.join("continuity", "questions", "_index.md"), linksFor(project.questions)],
+    [path11.join("continuity", "promises", "_index.md"), linksFor(project.promises)],
+    [path11.join("continuity", "clues", "_index.md"), linksFor(project.clues)],
+    [path11.join("glossary", "_index.md"), linksFor(project.glossaryTerms, "terms/")],
+    ...fs7.existsSync(path11.join(projectRoot, MATTER_DIR, "_index.md")) ? [[path11.join(MATTER_DIR, "_index.md"), linksFor(project.matter)]] : [],
+    ...fs7.existsSync(path11.join(projectRoot, RESEARCH_DIR, "_index.md")) ? [[path11.join(RESEARCH_DIR, "_index.md"), linksFor(project.research)]] : []
   ];
   for (const [indexPath, links] of indexChecks) {
     let markdown;
     try {
-      markdown = safeRead(path10.join(projectRoot, indexPath), projectRoot);
+      markdown = safeRead(path11.join(projectRoot, indexPath), projectRoot);
     } catch (error) {
       errors.push(err("unreadable-file", `${indexPath}: ${error.message}`, indexPath));
       continue;
@@ -8449,12 +8612,12 @@ function validateProjectOf(project) {
     }
   }
   for (const chapter of project.chapters) {
-    const file = path10.relative(projectRoot, chapter.file);
+    const file = path11.relative(projectRoot, chapter.file);
     if (chapter.declaredWordCount !== null && chapter.declaredWordCount !== chapter.wordCount) {
-      warnings.push(warn("stale-word-count", chapter.wordCountMissing ? `${file} has no word-count (contains ${chapter.wordCount})` : `${file} declares ${plural2(chapter.declaredWordCount, "word")} but contains ${chapter.wordCount}`, file));
+      warnings.push(warn("stale-word-count", chapter.wordCountMissing ? `${file} has no word-count (contains ${chapter.wordCount})` : `${file} declares ${plural(chapter.declaredWordCount, "word")} but contains ${chapter.wordCount}`, file));
     }
     if (chapter.todoMarkers > 0) {
-      warnings.push(warn("todo-markers", `${file} has ${plural2(chapter.todoMarkers, "[TODO marker")} in its prose, which every build prints: resolve ${chapter.todoMarkers === 1 ? "it" : "them"} or move ${chapter.todoMarkers === 1 ? "it" : "them"} into an HTML comment`, file));
+      warnings.push(warn("todo-markers", `${file} has ${plural(chapter.todoMarkers, "[TODO marker")} in its prose, which every build prints: resolve ${chapter.todoMarkers === 1 ? "it" : "them"} or move ${chapter.todoMarkers === 1 ? "it" : "them"} into an HTML comment`, file));
     }
     if (chapter.unclosedComment) {
       warnings.push(warn("unclosed-comment", `${file} opens an HTML comment (<!--) that never closes, so the text after it shows in builds and word counts`, file));
@@ -8722,19 +8885,19 @@ function validateTimelineAndArcBodyRefs(project, chapters, errors, hasScheduledC
       }
     }
   };
-  const timelinePath = path10.join(project.root, "plot", "timeline.md");
+  const timelinePath = path11.join(project.root, "plot", "timeline.md");
   if (fs7.existsSync(timelinePath)) {
     try {
       const raw = readTextFile(timelinePath);
       const body = parseFrontmatter(raw, timelinePath).body ?? raw;
-      checkTokens(path10.join("plot", "timeline.md"), body);
+      checkTokens(path11.join("plot", "timeline.md"), body);
       for (const target of extractMarkdownLinkTargets(body)) {
-        checkBodyLinkTarget(project, path10.join("plot", "timeline.md"), target, errors);
+        checkBodyLinkTarget(project, path11.join("plot", "timeline.md"), target, errors);
       }
     } catch (error) {
-      const message = `${path10.join("plot", "timeline.md")}: ${error.message}`;
+      const message = `${path11.join("plot", "timeline.md")}: ${error.message}`;
       if (!hasMessage(errors, message)) {
-        errors.push(err("unreadable-file", message, path10.join("plot", "timeline.md")));
+        errors.push(err("unreadable-file", message, path11.join("plot", "timeline.md")));
       }
     }
   }
@@ -8784,7 +8947,7 @@ function checkBodyLinkTarget(project, label, target, errors) {
     errors.push(err("link-backslash", `${label} links to ${cleaned} with a backslash; write ${portableSlashes(cleaned)} so the link works on every system`, label));
     return;
   }
-  const base = path10.basename(pathOnly);
+  const base = path11.basename(pathOnly);
   if (!base.endsWith(".md")) {
     return;
   }
@@ -8796,8 +8959,8 @@ function checkBodyLinkTarget(project, label, target, errors) {
     errors.push(err("link-not-kebab", `${label} links to ${cleaned} which must be kebab-case`, label));
     return;
   }
-  const resolved = path10.resolve(path10.dirname(path10.join(project.root, label)), pathOnly);
-  if (!isPathInside(path10.resolve(project.root), resolved)) {
+  const resolved = path11.resolve(path11.dirname(path11.join(project.root, label)), pathOnly);
+  if (!isPathInside(path11.resolve(project.root), resolved)) {
     const linkedBook = ["follows", "precedes"].flatMap((field) => seriesLinks(project.root, project.story.data, field)).find((bookRoot) => isPathInside(bookRoot, resolved));
     if (linkedBook && fs7.existsSync(resolved) && fs7.statSync(resolved).isFile() && isPathInside(canonicalPath(linkedBook), canonicalPath(resolved))) {
       return;
@@ -8844,10 +9007,10 @@ function checkProjectContinuity(root) {
 function knowledgeAtChapter(root, characterId, atChapterId, project = scanProject(root)) {
   const characters = new Map(project.characters.map((character) => [character.id, character]));
   if (!characters.has(characterId)) {
-    const parseError = project.fileErrors.find((error) => error.file === path10.join("characters", `${characterId}.md`));
+    const parseError = project.fileErrors.find((error) => error.file === path11.join("characters", `${characterId}.md`));
     throw parseError ? projectError(parseError.message) : usageError(`Unknown character ${characterId}`);
   }
-  const chapterError = project.fileErrors.find((error) => error.file.startsWith(`chapters${path10.sep}`));
+  const chapterError = project.fileErrors.find((error) => error.file.startsWith(`chapters${path11.sep}`));
   if (chapterError) {
     throw projectError(chapterError.message);
   }
@@ -8856,7 +9019,7 @@ function knowledgeAtChapter(root, characterId, atChapterId, project = scanProjec
   if (!chapterNumbers.has(atChapterId)) {
     throw usageError(`Unknown chapter ${atChapterId}`);
   }
-  const stateError = project.fileErrors.find((error) => error.file === path10.join("continuity", "state.md"));
+  const stateError = project.fileErrors.find((error) => error.file === path11.join("continuity", "state.md"));
   if (stateError) {
     throw projectError(stateError.message);
   }
@@ -8867,7 +9030,7 @@ function knowledgeAtChapter(root, characterId, atChapterId, project = scanProjec
       continue;
     }
     if (entry.knows === undefined || entry.knows === null || String(entry.knows).trim() === "") {
-      throw projectError(`${path10.join("continuity", "state.md")} knowledge-state[${index}] is missing knows`);
+      throw projectError(`${path11.join("continuity", "state.md")} knowledge-state[${index}] is missing knows`);
     }
     const learnedIn = idText(entry["learned-in"]);
     if (learnedIn === "") {
@@ -8888,11 +9051,11 @@ function entityStateAtChapter(root, kind, id, atChapterId, project = scanProject
   const collection = { character: project.characters, location: project.locations, faction: project.factions }[entityKind];
   const entity = collection.find((entry) => entry.id === id);
   if (!entity) {
-    const entityFile = path10.join(entityConfig(entityKind).dir, `${id}.md`);
+    const entityFile = path11.join(entityConfig(entityKind).dir, `${id}.md`);
     const parseError = project.fileErrors.find((error) => error.file === entityFile);
     throw parseError ? projectError(parseError.message) : usageError(`Unknown ${entityKind} ${id}`);
   }
-  const chapterError = project.fileErrors.find((error) => error.file.startsWith(`chapters${path10.sep}`));
+  const chapterError = project.fileErrors.find((error) => error.file.startsWith(`chapters${path11.sep}`));
   if (chapterError) {
     throw projectError(chapterError.message);
   }
@@ -8905,27 +9068,27 @@ function draftingContext(root, targetId, options = {}) {
     throw usageError(`Scenes must be 0 or a positive integer, got ${options.scenes}`);
   }
   const project = scanProject(root);
-  const blocking = project.fileErrors.find((error) => error.file.startsWith(`chapters${path10.sep}`) || error.file === path10.join("continuity", "state.md") || error.file === path10.join("scenes", `${targetId}.md`));
+  const blocking = project.fileErrors.find((error) => error.file.startsWith(`chapters${path11.sep}`) || error.file === path11.join("continuity", "state.md") || error.file === path11.join("scenes", `${targetId}.md`));
   if (blocking) {
     throw projectError(blocking.message);
   }
   return buildContext(project, targetId, (file) => readMarkdown(file, project.root).body, { budget, scenes });
 }
 function seriesReport(root) {
-  const projectRoot = path10.resolve(root);
+  const projectRoot = path11.resolve(root);
   requireStoryFile(projectRoot);
   return buildSeries(fs7.realpathSync(projectRoot), scanProject);
 }
-function projectChecks(project, severity = []) {
+function projectChecks(project, overrides) {
   return {
-    validation: applySeverity(validateProjectOf(project), severity),
-    links: applySeverity(validateLinksOf(project), severity),
-    continuity: applySeverity(checkContinuity(project), severity)
+    validation: applySeverity(validateProjectOf(project), overrides),
+    links: applySeverity(validateLinksOf(project), overrides),
+    continuity: applySeverity(checkContinuity(project), overrides)
   };
 }
 function projectReport(root, options = {}) {
   const project = scanProject(root);
-  const { validation, links, continuity } = projectChecks(project, options.severity);
+  const { validation, links, continuity } = projectChecks(project, options.overrides);
   const totalWords = project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
   return {
     root: project.root,
@@ -9033,7 +9196,7 @@ function formatProjectReport(report, options = {}) {
 }
 function projectActions(root, options = {}) {
   const project = scanProject(root);
-  const { validation, links, continuity } = projectChecks(project, options.severity);
+  const { validation, links, continuity } = projectChecks(project, options.overrides);
   return {
     root: project.root,
     title: project.title,
@@ -9082,7 +9245,7 @@ function reindexProjectUnlocked(root) {
   const project = scanProject(root);
   assertProjectParses(project, "reindex");
   const changed = [];
-  const at = (...parts) => path10.join(project.root, ...parts);
+  const at = (...parts) => path11.join(project.root, ...parts);
   const existingPlot = readRegistrySource(at("plot", "_index.md"), project.root);
   let plotStructure = "three-act";
   if (fs7.existsSync(at("plot", "_index.md"))) {
@@ -9108,7 +9271,7 @@ function reindexProjectUnlocked(root) {
   return { changed };
 }
 function assertProjectParses(project, action, ignore = () => false) {
-  const ignored = [STYLE_SHEET_FILE, PROGRESS_FILE, path10.join("continuity", "exemptions.md")];
+  const ignored = [STYLE_SHEET_FILE, PROGRESS_FILE, path11.join("continuity", "exemptions.md")];
   const errors = (project.fileErrors ?? []).filter((error) => !ignored.includes(error.file) && !ignore(error));
   if (errors.length > 0) {
     throw projectError(`Cannot ${action}: fix ${errors.length === 1 ? "this file first (story validate reports it)" : "these files first (story validate reports them)"}:
@@ -9232,7 +9395,7 @@ function computeWordCountsUnlocked(root, options = {}) {
     chapters.push({
       number: chapter.number,
       title: chapter.title,
-      file: path10.relative(project.root, chapter.file),
+      file: path11.relative(project.root, chapter.file),
       wordCount: chapter.wordCount
     });
     if (options.write && chapter.declaredWordCount !== chapter.wordCount) {
@@ -9271,7 +9434,7 @@ function compareProject(root, options = {}) {
     previous = chaptersAtGitRef(project.root, options.ref, warnings);
     label = `git ref ${options.ref}`;
   } else {
-    const otherRoot = path10.resolve(options.cwd ?? process.cwd(), options.against);
+    const otherRoot = path11.resolve(options.cwd ?? process.cwd(), options.against);
     const other = scanProject(otherRoot);
     if (other.fileErrors.length > 0) {
       throw projectError(`Cannot read ${otherRoot}: ${other.fileErrors[0].message}`);
@@ -9303,13 +9466,13 @@ function mapProjectLabels(project, anchors, options) {
     label = `git ref ${options.ref}`;
     previous = withProjectAtGitRef(project.root, options.ref, (oldRoot) => labelsIn(oldRoot, label));
   } else {
-    label = path10.resolve(options.cwd ?? process.cwd(), options.against);
+    label = path11.resolve(options.cwd ?? process.cwd(), options.against);
     previous = labelsIn(label, label);
   }
   return { ok: true, errors: [], warnings: [], label, anchors: mapLabels(previous, current, labels) };
 }
 function labelsIn(root, label) {
-  if (!fs7.existsSync(path10.join(root, "story.md"))) {
+  if (!fs7.existsSync(path11.join(root, "story.md"))) {
     throw projectError(`No story project (story.md) in ${label}`);
   }
   const project = scanProject(root);
@@ -9323,14 +9486,14 @@ function withProjectAtGitRef(root, ref, read) {
     return { mode, type, hash, name: record.slice(tab + 1) };
   }).filter((entry) => entry.type === "blob" && entry.mode.startsWith("100") && entry.name.endsWith(".md"));
   const contents = catBlobs(root, blobs.map((entry) => entry.hash));
-  const dir = fs7.mkdtempSync(path10.join(os2.tmpdir(), "story-compare-"));
+  const dir = fs7.mkdtempSync(path11.join(os2.tmpdir(), "story-compare-"));
   try {
     blobs.forEach((entry, index) => {
-      const target = path10.join(dir, ...entry.name.split("/"));
+      const target = path11.join(dir, ...entry.name.split("/"));
       if (/[\\:]/.test(entry.name) || !isPathInside(dir, target)) {
         return;
       }
-      makeDirectories(path10.dirname(target));
+      makeDirectories(path11.dirname(target));
       fs7.writeFileSync(target, contents[index]);
     });
     return read(dir);
@@ -9368,7 +9531,7 @@ function comparableChapter(id, markdown) {
     id,
     title: String(markdown.data.title ?? titleCaseSlug(id)),
     words: wordCount(prose),
-    paragraphs: proseParagraphs(prose)
+    paragraphs: proseParagraphs2(prose)
   };
 }
 var UNSAFE_GIT_REF = /^-|[\u0000-\u001f\u007f:]/u;
@@ -9403,9 +9566,9 @@ function chaptersAtGitRef(root, ref, warnings) {
     warnings.push(warn("story-missing-at-ref", `story.md does not exist at git ref ${ref}: the project may not have existed then`, "story.md"));
   }
   const names = git(["ls-tree", "--name-only", ref, "--", "chapters/"]).split(`
-`).map((name) => path10.posix.basename(name.trim())).filter((name) => CHAPTER_FILENAME_PATTERN.test(name)).sort();
+`).map((name) => path11.posix.basename(name.trim())).filter((name) => CHAPTER_FILENAME_PATTERN.test(name)).sort();
   return names.map((name) => {
-    const id = path10.basename(name, ".md");
+    const id = path11.basename(name, ".md");
     const raw = git(["show", `${ref}:${prefix}chapters/${name}`]);
     try {
       return comparableChapter(id, parseFrontmatter(raw, name));
@@ -9433,7 +9596,7 @@ function projectProgress(root, options = {}) {
     if (logErrors.length > 0) {
       throw projectError(`Cannot log progress until ${PROGRESS_FILE} is fixed: ${logErrors.map((error) => error.message).join("; ")}`);
     }
-    const filePath = path10.join(project.root, PROGRESS_FILE);
+    const filePath = path11.join(project.root, PROGRESS_FILE);
     const existing = project.progressLog;
     const sessions = withSession(asArray(existing?.data.sessions), today, words);
     const contents = existing === null ? progressLogFile(sessions) : replaceFrontmatter(existing.rawMarkdown, { ...existing.data, sessions });
@@ -9496,7 +9659,7 @@ function diagramProject(root, options = {}) {
 }
 function projectPasses(root, change = {}) {
   const project = scanProject(root);
-  const storyPath = path10.join(project.root, "story.md");
+  const storyPath = path11.join(project.root, "story.md");
   const passes = readPasses(project.story.data);
   const wantsChange = Boolean(change.init) || change.start !== undefined || change.done !== undefined;
   if (!wantsChange) {
@@ -9534,8 +9697,8 @@ function voicesReport(root, options = {}) {
   const project = scanProject(root);
   const chapters = options.passage === undefined ? project.chapters.map((chapter) => ({
     id: chapter.id,
-    paragraphs: proseParagraphs(chapterProse(readMarkdown(chapter.file, project.root).body, " "))
-  })) : [{ id: PASSAGE_LABEL, paragraphs: proseParagraphs(passageProse(options.passage)) }];
+    paragraphs: proseParagraphs2(chapterProse(readMarkdown(chapter.file, project.root).body, " "))
+  })) : [{ id: PASSAGE_LABEL, paragraphs: proseParagraphs2(passageProse(options.passage)) }];
   const errors = options.passage === undefined ? [...project.fileErrors] : passageErrors(project);
   return { ok: errors.length === 0, errors, ...buildVoices(project, chapters) };
 }
@@ -9609,7 +9772,7 @@ function prosePassageReport(root, passage, thresholds) {
 function exportManuscript(root, options = {}) {
   const project = scanProject(root);
   const manuscript = manuscriptParts(project, options.generatedBy === undefined ? "export" : "build");
-  const output = resolveOutputPath(project, options.out, path10.join("dist", "manuscript.md"), options.enforceRoot);
+  const output = resolveOutputPath(project, options.out, path11.join("dist", "manuscript.md"), options.enforceRoot);
   const generatedBy = options.generatedBy ?? "story export";
   const lines = [`# ${manuscript.title}`, "", `<!-- Generated by ${generatedBy}. -->`, ""];
   const pushMatter = (entry) => {
@@ -9656,7 +9819,7 @@ function buildBook(root, options = {}) {
   }
   const project = scanProject(root);
   const extension = BUILD_EXTENSIONS[format];
-  const output = resolveOutputPath(project, options.out, path10.join("dist", `${fileStem(project.storyId)}.${extension}`));
+  const output = resolveOutputPath(project, options.out, path11.join("dist", `${fileStem(project.storyId)}.${extension}`));
   if (format === "markdown") {
     const result = exportManuscript(project.root, {
       out: output.outFile,
@@ -9825,7 +9988,7 @@ function synopsisBook(root, options = {}) {
   if (options.out === undefined) {
     return { text };
   }
-  const output = resolveOutputPath(project, options.out, path10.join("dist", `${fileStem(project.storyId)}.synopsis.md`));
+  const output = resolveOutputPath(project, options.out, path11.join("dist", `${fileStem(project.storyId)}.synopsis.md`));
   writeFile(output.outFile, text, output.writeOptions);
   return { text, outFile: output.outFile };
 }
@@ -9977,7 +10140,7 @@ function migrateProject(root) {
   return withProjectLock(root, () => migrateProjectUnlocked(root));
 }
 function migrateProjectUnlocked(root) {
-  const projectRoot = path10.resolve(root);
+  const projectRoot = path11.resolve(root);
   const storyPath = requireStoryFile(projectRoot);
   assertProjectParses(scanProject(projectRoot), "migrate");
   const story = readMarkdown(storyPath, projectRoot);
@@ -9988,15 +10151,15 @@ function migrateProjectUnlocked(root) {
   const storyId = deriveStoryId(story.data.title, projectRoot);
   const changed = [];
   for (const directory of PROJECT_DIRECTORIES) {
-    ensureDirectory(path10.join(projectRoot, directory), changed, projectRoot);
+    ensureDirectory(path11.join(projectRoot, directory), changed, projectRoot);
   }
-  ensureFile(path10.join(projectRoot, "plot", "timeline.md"), timeline(storyId), changed, projectRoot);
-  ensureFile(path10.join(projectRoot, "scenes", "_index.md"), sceneIndex(storyId, []), changed, projectRoot);
-  ensureFile(path10.join(projectRoot, "continuity", "state.md"), continuityState(storyId), changed, projectRoot);
-  ensureFile(path10.join(projectRoot, "continuity", "questions", "_index.md"), questionIndex(storyId, []), changed, projectRoot);
-  ensureFile(path10.join(projectRoot, "continuity", "promises", "_index.md"), promiseIndex(storyId, []), changed, projectRoot);
-  ensureFile(path10.join(projectRoot, "continuity", "clues", "_index.md"), clueIndex(storyId, []), changed, projectRoot);
-  ensureFile(path10.join(projectRoot, "glossary", "_index.md"), glossaryIndex(storyId, []), changed, projectRoot);
+  ensureFile(path11.join(projectRoot, "plot", "timeline.md"), timeline(storyId), changed, projectRoot);
+  ensureFile(path11.join(projectRoot, "scenes", "_index.md"), sceneIndex(storyId, []), changed, projectRoot);
+  ensureFile(path11.join(projectRoot, "continuity", "state.md"), continuityState(storyId), changed, projectRoot);
+  ensureFile(path11.join(projectRoot, "continuity", "questions", "_index.md"), questionIndex(storyId, []), changed, projectRoot);
+  ensureFile(path11.join(projectRoot, "continuity", "promises", "_index.md"), promiseIndex(storyId, []), changed, projectRoot);
+  ensureFile(path11.join(projectRoot, "continuity", "clues", "_index.md"), clueIndex(storyId, []), changed, projectRoot);
+  ensureFile(path11.join(projectRoot, "glossary", "_index.md"), glossaryIndex(storyId, []), changed, projectRoot);
   if (story.data["schema-version"] !== STORY_SCHEMA_VERSION) {
     writeFile(storyPath, replaceFrontmatter(story.rawMarkdown, {
       ...story.data,
@@ -10105,7 +10268,7 @@ function kindsSharingFields(kind) {
 }
 function assertUnambiguousId(root, kind, id) {
   for (const [other, fields] of kindsSharingFields(kind)) {
-    if (fs7.existsSync(path10.join(root, entityConfig(other).dir, `${id}.md`))) {
+    if (fs7.existsSync(path11.join(root, entityConfig(other).dir, `${id}.md`))) {
       throw usageError(`${id} is already a ${other} id, and ${fields.join(" and ")} references could not tell the ${kind} from the ${other}. Choose another name, or pass --id`);
     }
   }
@@ -10225,7 +10388,7 @@ function missingReferenceWarnings(root, kind, data) {
     }
     for (const item of asArray(value)) {
       const id = typeof item === "string" ? item.trim() : "";
-      if (!isKebabId2(id) || kinds.some((other) => fs7.existsSync(path10.join(root, entityConfig(other).dir, `${id}.md`)))) {
+      if (!isKebabId2(id) || kinds.some((other) => fs7.existsSync(path11.join(root, entityConfig(other).dir, `${id}.md`)))) {
         continue;
       }
       const backlink = BACKLINKED_FIELDS[kind]?.includes(key) ? ", so no backlink was written" : "";
@@ -10236,12 +10399,12 @@ function missingReferenceWarnings(root, kind, data) {
 }
 function registryLists(root, kind, file) {
   const dir = entityConfig(kind).dir;
-  const registry = [dir, path10.dirname(dir)].map((entry) => path10.join(entry, "_index.md")).find((entry) => REGISTRY_FILES.has(entry));
-  const registryPath = registry && path10.join(root, registry);
+  const registry = [dir, path11.dirname(dir)].map((entry) => path11.join(entry, "_index.md")).find((entry) => REGISTRY_FILES.has(entry));
+  const registryPath = registry && path11.join(root, registry);
   if (!registryPath || !fs7.existsSync(registryPath)) {
     return false;
   }
-  const link = path10.relative(path10.dirname(registryPath), file).split(path10.sep).join("/");
+  const link = path11.relative(path11.dirname(registryPath), file).split(path11.sep).join("/");
   return safeRead(registryPath, root).includes(`](${link})`);
 }
 function renameEntity(root, options) {
@@ -10259,7 +10422,7 @@ function renameEntityUnlocked(root, options) {
   requireSingleLineName(name, kind);
   const requestedId = requestedEntityId(kind, options.newId);
   const config = entityConfig(kind);
-  const oldFile = path10.join(project.root, config.dir, `${oldId}.md`);
+  const oldFile = path11.join(project.root, config.dir, `${oldId}.md`);
   requireKebabId(oldId, `${kind} id`);
   assertSafeProjectPath(oldFile, project.root);
   const newId = kind === "chapter" || kind === "scene" ? oldId : requestedId ?? kebabCase(name);
@@ -10267,7 +10430,7 @@ function renameEntityUnlocked(root, options) {
     throw usageError(undeducibleIdMessage(kind, name));
   }
   assertPortableId(newId, kind);
-  const newFile = path10.join(project.root, config.dir, `${newId}.md`);
+  const newFile = path11.join(project.root, config.dir, `${newId}.md`);
   assertSafeProjectPath(newFile, project.root);
   if (!fs7.existsSync(oldFile)) {
     if (newFile !== oldFile && fs7.existsSync(newFile) && readMarkdown(newFile, project.root).data[config.titleField] === name && replaceEntityReferences(project.root, kind, oldId, newId, new Map).size === 0) {
@@ -10348,7 +10511,7 @@ function removeEntityUnlocked(root, options) {
     throw usageError("remove requires an entity id");
   }
   const config = entityConfig(kind);
-  const file = path10.join(project.root, config.dir, `${id}.md`);
+  const file = path11.join(project.root, config.dir, `${id}.md`);
   requireKebabId(id, `${kind} id`);
   assertSafeProjectPath(file, project.root);
   const alreadyGone = !fs7.existsSync(file);
@@ -10365,7 +10528,7 @@ function removeEntityUnlocked(root, options) {
     const context = { ...entityReferenceContext(project.root, "chapter", id), isReferenceKey: (key) => BEFORE_STORY_FIELDS.includes(key) };
     const named = [...planReferenceRewrites(project.root, context, new Map([[file, null]]), idRenamer(id, `${id}-removed`), (body) => body).keys()];
     if (named.length > 0) {
-      throw refusedError(`chapter ${id} is still named by ${BEFORE_STORY_FIELDS.join(", ")}, or a progression's from in ${named.map((entry) => path10.relative(project.root, entry)).join(", ")}; an empty value there means before the story, and a progression needs the chapter it starts in, so point them at another chapter first`);
+      throw refusedError(`chapter ${id} is still named by ${BEFORE_STORY_FIELDS.join(", ")}, or a progression's from in ${named.map((entry) => path11.relative(project.root, entry)).join(", ")}; an empty value there means before the story, and a progression needs the chapter it starts in, so point them at another chapter first`);
     }
   }
   const choosers = kind === "chapter" ? project.chapters.filter((chapter) => chapter.id !== id && chapterChoices(chapter, "").choices.some((choice) => choice.to === id)).map((chapter) => relative2(project, chapter.file)) : [];
@@ -10393,29 +10556,30 @@ function leftoverReferenceWarnings(root, kind, id) {
     files = [...planReferenceRewrites(root, context, new Map, (value) => value, (body, file) => {
       const relinked = renameLinkTargets(root, file, body, context, probe);
       return numbered ? renameIdTokens(root, file, relinked, id, probe) : relinked;
-    }).keys()].map((file) => path10.relative(root, file)).sort();
+    }).keys()].map((file) => path11.relative(root, file)).sort();
   } catch {}
   if (files.length > 0) {
     warnings.push(warn("leftover-references", `${files.join(", ")} still ${files.length === 1 ? "mentions" : "mention"} ${kind} ${id} in ${numbered ? "links or ids" : "links"} in the text, which remove does not change: edit ${files.length === 1 ? "it" : "them"}, then run story links`, files.length === 1 ? files[0] : null));
   }
-  const patterns = exemptionPatterns(root).filter((pattern) => renameIdText(pattern, id, probe) !== pattern);
-  if (patterns.length > 0) {
-    warnings.push(warn("stale-exemption", `continuity/exemptions.md has ${patterns.length === 1 ? "a pattern" : `${patterns.length} patterns`} naming ${id}, which ${patterns.length === 1 ? "no longer matches" : "no longer match"} anything: ${patterns.map((pattern) => JSON.stringify(pattern)).join(", ")}. Delete or update ${patterns.length === 1 ? "it" : "them"}`, path10.join("continuity", "exemptions.md")));
+  const stale = exemptionEntries(root).filter(({ entry }) => EXEMPTION_TEXT_KEYS.some((key) => typeof entry[key] === "string" && renameIdText(entry[key], id, probe) !== entry[key]));
+  if (stale.length > 0) {
+    const values = stale.flatMap(({ entry }) => EXEMPTION_TEXT_KEYS.filter((key) => typeof entry[key] === "string" && renameIdText(entry[key], id, probe) !== entry[key]).map((key) => `${key} ${JSON.stringify(entry[key])}`));
+    warnings.push(warn("stale-exemption", `continuity/exemptions.md has ${stale.length === 1 ? "an entry" : `${stale.length} entries`} naming ${id} (${stale.map(({ index }) => `exemptions[${index}]`).join(", ")}), which ${stale.length === 1 ? "no longer matches" : "no longer match"} anything: ${values.join(", ")}. Delete or update ${stale.length === 1 ? "it" : "them"}`, EXEMPTIONS_FILE));
   }
   return warnings;
 }
-var EXEMPTIONS_FILE = path10.join("continuity", "exemptions.md");
-function exemptionPatterns(root) {
-  const filePath = path10.join(root, EXEMPTIONS_FILE);
+var EXEMPTION_TEXT_KEYS = ["pattern", "file", "chapter"];
+function exemptionEntries(root) {
+  const filePath = path11.join(root, EXEMPTIONS_FILE);
   try {
     const entries = readMarkdown(filePath, root).data.exemptions;
-    return Array.isArray(entries) ? entries.filter((entry) => entry && typeof entry.pattern === "string").map((entry) => entry.pattern) : [];
+    return Array.isArray(entries) ? entries.map((entry, index) => ({ entry, index })).filter(({ entry }) => entry && typeof entry === "object" && !Array.isArray(entry)) : [];
   } catch {
     return [];
   }
 }
 function followExemptionPatterns(root, plan, oldId, newId) {
-  const filePath = path10.join(root, EXEMPTIONS_FILE);
+  const filePath = path11.join(root, EXEMPTIONS_FILE);
   if (!plan.has(filePath) && !lstatIfExists(filePath)) {
     return;
   }
@@ -10426,15 +10590,17 @@ function followExemptionPatterns(root, plan, oldId, newId) {
   }
   let changed = false;
   const exemptions = data.exemptions.map((entry) => {
-    if (!entry || typeof entry !== "object" || Array.isArray(entry) || typeof entry.pattern !== "string") {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
       return entry;
     }
-    const pattern = renameIdText(entry.pattern, oldId, newId);
-    if (pattern === entry.pattern) {
-      return entry;
+    const renamed = { ...entry };
+    for (const key of EXEMPTION_TEXT_KEYS) {
+      if (typeof entry[key] === "string") {
+        renamed[key] = renameIdText(entry[key], oldId, newId);
+        changed ||= renamed[key] !== entry[key];
+      }
     }
-    changed = true;
-    return { ...entry, pattern };
+    return renamed;
   });
   if (changed) {
     if (!plan.has(filePath)) {
@@ -10495,7 +10661,7 @@ function moveChapter(project, oldId, options) {
   }
   const number = requirePositiveInteger(options.number, "chapter number");
   const newId = `chapter-${String(number).padStart(2, "0")}`;
-  const newFile = path10.join(project.root, "chapters", `${newId}.md`);
+  const newFile = path11.join(project.root, "chapters", `${newId}.md`);
   if (newId === oldId) {
     throw usageError(`${oldId} is already chapter ${number}`);
   }
@@ -10505,12 +10671,12 @@ function moveChapter(project, oldId, options) {
   const scenes = project.scenes.filter((scene) => scene.chapter === oldId);
   const sceneMoves = scenes.map((scene) => ({
     oldFile: scene.file,
-    newFile: path10.join(project.root, "scenes", `${newId}-scene-${String(scene.scene).padStart(2, "0")}.md`)
+    newFile: path11.join(project.root, "scenes", `${newId}-scene-${String(scene.scene).padStart(2, "0")}.md`)
   }));
   const context = entityReferenceContext(project.root, "chapter", oldId);
   const sceneContexts = scenes.map((scene) => ({ context: entityReferenceContext(project.root, "scene", scene.id), newId: `${newId}-scene-${String(scene.scene).padStart(2, "0")}` }));
   const plan = planReferenceRewrites(project.root, context, new Map([[chapter.file, renumbered]]), idRenamer(oldId, newId), (body, file) => renameIdTokens(project.root, file, sceneContexts.reduce((text, entry) => renameLinkTargets(project.root, file, text, entry.context, entry.newId), renameLinkTargets(project.root, file, body, context, newId)), oldId, newId));
-  const statePath = path10.join(project.root, "continuity", "state.md");
+  const statePath = path11.join(project.root, "continuity", "state.md");
   if (fs7.existsSync(statePath)) {
     const stateText = plan.get(statePath) ?? readTextFile(statePath);
     const stateData = parseFrontmatter(stateText, statePath).data;
@@ -10535,7 +10701,7 @@ function moveChapter(project, oldId, options) {
 function reorderProgressions(project, plan, chronology) {
   const dirs = PROGRESSION_KINDS.map((kind) => entityConfig(kind).dir);
   for (const [file, text] of plan) {
-    if (!dirs.includes(path10.relative(project.root, path10.dirname(file)))) {
+    if (!dirs.includes(path11.relative(project.root, path11.dirname(file)))) {
       continue;
     }
     const data = parseFrontmatter(text, file).data;
@@ -10568,7 +10734,7 @@ function moveScene(project, oldId, options) {
     const moved = replaceFrontmatter(markdown.rawMarkdown, { ...markdown.data, chapter: chapterId, scene: number });
     const plan = planReferenceRewrites(project.root, context, new Map([[scene.file, moved]]), idRenamer(oldId, newId), (body, file) => renameIdTokens(project.root, file, renameLinkTargets(project.root, file, body, context, newId), oldId, newId));
     followExemptionPatterns(project.root, plan, oldId, newId);
-    return { number, newId, plan, moves: [{ oldFile: scene.file, newFile: path10.join(project.root, "scenes", `${newId}.md`) }] };
+    return { number, newId, plan, moves: [{ oldFile: scene.file, newFile: path11.join(project.root, "scenes", `${newId}.md`) }] };
   };
   let target;
   if (options.scene === undefined) {
@@ -10584,7 +10750,7 @@ function moveScene(project, oldId, options) {
     throw refusedError(`${newId} already exists: move it first`);
   }
   const warnings = project.scenes.some((entry) => entry.id === newId) ? [] : adoptedReferenceWarnings(project.root, "scene", newId, scene.file, "move");
-  commitMoves(project.root, plan, moves, () => applyEntityBacklinks(project.root, "scene", newId, readMarkdown(newFile, project.root).data), [path10.join(project.root, "chapters", `${chapterId}.md`)]);
+  commitMoves(project.root, plan, moves, () => applyEntityBacklinks(project.root, "scene", newId, readMarkdown(newFile, project.root).data), [path11.join(project.root, "chapters", `${chapterId}.md`)]);
   const reindexed = reindexProject(project.root);
   return { kind: "scene", oldId, id: newId, file: newFile, moved: 1, changed: [newFile].concat(reindexed.changed), warnings };
 }
@@ -10600,15 +10766,15 @@ function adoptedReferenceWarnings(root, kind, id, excludedFile, action) {
   if (plan.size === 0) {
     return [];
   }
-  const files = [...plan.keys()].map((file) => path10.relative(root, file)).sort();
+  const files = [...plan.keys()].map((file) => path11.relative(root, file)).sort();
   return [warn("adopted-references", `${id} was already referenced before this ${action}, and those references now point at the ${action === "move" ? "moved" : "renamed"} ${kind}: ${files.join(", ")}. Check them`)];
 }
 function idRenamer(oldId, newId) {
   return (value) => value === oldId ? newId : value;
 }
 function renameIdTokens(root, file, body, oldId, newId) {
-  const relativePath = path10.relative(root, file);
-  if (relativePath !== path10.join("plot", "timeline.md") && relativePath !== path10.join("plot", "_index.md") && path10.dirname(relativePath) !== path10.join("plot", "arcs")) {
+  const relativePath = path11.relative(root, file);
+  if (relativePath !== path11.join("plot", "timeline.md") && relativePath !== path11.join("plot", "_index.md") && path11.dirname(relativePath) !== path11.join("plot", "arcs")) {
     return body;
   }
   return mapOutsideLinks(body, (text) => renameIdText(text, oldId, newId));
@@ -10625,7 +10791,7 @@ function commitMoves(root, plan, moves, beforeDelete = () => {}, alsoChanged = [
   const interrupted = interruptedMove(plan, moves);
   moves.forEach((move) => {
     if (fs7.existsSync(move.newFile) && !interrupted) {
-      throw refusedError(`${path10.relative(root, move.newFile)} already exists; nothing was changed`);
+      throw refusedError(`${path11.relative(root, move.newFile)} already exists; nothing was changed`);
     }
   });
   for (const move of moves) {
@@ -10788,7 +10954,7 @@ ${themeTracking || `| Theme | Arcs | Chapters |
 `;
 }
 function chapterIndex(storyId, chapters) {
-  const rows = chapters.length === 0 ? ["| *No chapters yet* | | | | | |"] : chapters.map((chapter) => `| ${cell3(chapter.number)} | ${cell3(chapter.title)} | ${cell3(chapter.pov)} | ${cell3(chapter.status)} | ${cell3(chapter.wordCount)} | [${chapter.id}](${path10.basename(chapter.file)}) |`);
+  const rows = chapters.length === 0 ? ["| *No chapters yet* | | | | | |"] : chapters.map((chapter) => `| ${cell3(chapter.number)} | ${cell3(chapter.title)} | ${cell3(chapter.pov)} | ${cell3(chapter.status)} | ${cell3(chapter.wordCount)} | [${chapter.id}](${path11.basename(chapter.file)}) |`);
   const total = chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
   return `${stringifyFrontmatter({ type: "chapter-registry", story: storyId })}# Chapters
 
@@ -10989,7 +11155,7 @@ function buildProjectActions(project, validation, links, continuity, displayPath
     actions.push(action("P1", "Review validation warnings", `Run story validate ${where} and review ${otherWarnings.length} warning${otherWarnings.length === 1 ? "" : "s"}.`));
   }
   if (continuity.warnings.length > 0) {
-    actions.push(action("P1", "Review continuity warnings", `Run story continuity ${where} and review ${plural2(continuity.warnings.length, "continuity warning")}.`));
+    actions.push(action("P1", "Review continuity warnings", `Run story continuity ${where} and review ${plural(continuity.warnings.length, "continuity warning")}.`));
   }
   const staleChapters = [];
   const chaptersWithoutScenes = [];
@@ -11016,7 +11182,7 @@ function buildProjectActions(project, validation, links, continuity, displayPath
     }
   }
   if (staleChapters.length > 0) {
-    actions.push(action("P1", "Refresh word counts", `Run story wordcount ${where} --write for ${plural2(staleChapters.length, "chapter")} with stale counts.`));
+    actions.push(action("P1", "Refresh word counts", `Run story wordcount ${where} --write for ${plural(staleChapters.length, "chapter")} with stale counts.`));
   }
   if (chaptersWithoutScenes.length > 0) {
     actions.push(action("P1", "Add scene records", `Create machine-readable scene files for ${chaptersWithoutScenes.length} chapters so continuity has durable state.`));
@@ -11076,7 +11242,7 @@ function buildProjectActions(project, validation, links, continuity, displayPath
   const drafting = !["revising", "complete", "abandoned"].includes(storyStatus) && !(project.arcs.length > 0 && project.arcs.every((arc) => arc.status === "resolved"));
   const undrafted = project.chapters.find((chapter) => chapter.wordCount === 0 && Number.isInteger(chapter.number) && chapter.number > 0);
   if (drafting && undrafted) {
-    actions.push(action("P2", `Draft chapter ${undrafted.number}`, `${path10.relative(project.root, undrafted.file)} has no prose yet${undrafted.status === "" ? "" : ` (status ${undrafted.status})`}: draft it under ## Chapter Text to ${nextLabel}, then run story wordcount ${where} --write.`));
+    actions.push(action("P2", `Draft chapter ${undrafted.number}`, `${path11.relative(project.root, undrafted.file)} has no prose yet${undrafted.status === "" ? "" : ` (status ${undrafted.status})`}: draft it under ## Chapter Text to ${nextLabel}, then run story wordcount ${where} --write.`));
   } else if (drafting) {
     actions.push(action("P2", `Draft chapter ${nextNumber}`, `Use story add chapter "Chapter ${nextNumber}" --number ${nextNumber}${where === "." ? "" : ` --path ${where}`}, then outline scenes to ${nextLabel}.`));
   }
@@ -11163,22 +11329,22 @@ function buildEntity(project, kind, name, options) {
 }
 function entityResult(project, kind, id, markdown) {
   const config = entityConfig(kind);
-  return { id, markdown, file: path10.join(project.root, config.dir, `${id}.md`) };
+  return { id, markdown, file: path11.join(project.root, config.dir, `${id}.md`) };
 }
 function entityConfig(kind) {
   const configs = {
     character: { dir: "characters", titleField: "name" },
-    location: { dir: path10.join("worldbuilding", "locations"), titleField: "name" },
-    system: { dir: path10.join("worldbuilding", "systems"), titleField: "name" },
-    faction: { dir: path10.join("worldbuilding", "factions"), titleField: "name" },
-    artifact: { dir: path10.join("worldbuilding", "artifacts"), titleField: "name" },
-    arc: { dir: path10.join("plot", "arcs"), titleField: "name" },
+    location: { dir: path11.join("worldbuilding", "locations"), titleField: "name" },
+    system: { dir: path11.join("worldbuilding", "systems"), titleField: "name" },
+    faction: { dir: path11.join("worldbuilding", "factions"), titleField: "name" },
+    artifact: { dir: path11.join("worldbuilding", "artifacts"), titleField: "name" },
+    arc: { dir: path11.join("plot", "arcs"), titleField: "name" },
     chapter: { dir: "chapters", titleField: "title" },
     scene: { dir: "scenes", titleField: "title" },
-    question: { dir: path10.join("continuity", "questions"), titleField: "title" },
-    promise: { dir: path10.join("continuity", "promises"), titleField: "title" },
-    clue: { dir: path10.join("continuity", "clues"), titleField: "title" },
-    term: { dir: path10.join("glossary", "terms"), titleField: "term" },
+    question: { dir: path11.join("continuity", "questions"), titleField: "title" },
+    promise: { dir: path11.join("continuity", "promises"), titleField: "title" },
+    clue: { dir: path11.join("continuity", "clues"), titleField: "title" },
+    term: { dir: path11.join("glossary", "terms"), titleField: "term" },
     matter: { dir: MATTER_DIR, titleField: "title" },
     research: { dir: RESEARCH_DIR, titleField: "title" }
   };
@@ -11805,14 +11971,14 @@ function entityReferenceContext(root, kind, id) {
   const otherExists = new Map;
   const existsAs = (other) => {
     if (!otherExists.has(other)) {
-      otherExists.set(other, fs7.existsSync(path10.join(root, entityConfig(other).dir, `${id}.md`)));
+      otherExists.set(other, fs7.existsSync(path11.join(root, entityConfig(other).dir, `${id}.md`)));
     }
     return otherExists.get(other);
   };
   return {
     id,
     kind,
-    entityFile: path10.resolve(root, entityConfig(kind).dir, `${id}.md`),
+    entityFile: path11.resolve(root, entityConfig(kind).dir, `${id}.md`),
     isReferenceKey: (key, listKey = null) => {
       if (key === "to") {
         return listKey !== null && Object.hasOwn(NESTED_TO_KINDS, listKey) && NESTED_TO_KINDS[listKey] === kind;
@@ -11833,7 +11999,7 @@ function resolveLinkTarget(root, file, target) {
   } catch {
     decoded = cleaned;
   }
-  return decoded.startsWith("/") ? path10.resolve(root, `.${decoded}`) : path10.resolve(path10.dirname(file), decoded);
+  return decoded.startsWith("/") ? path11.resolve(root, `.${decoded}`) : path11.resolve(path11.dirname(file), decoded);
 }
 var LINK_DEFINITION_PATTERN = /^( {0,3}\[)([^\]\n]+)\]:[ \t]*(<[^>\n]*>|[^\s]+)/gm;
 function renameLinkTargets(root, file, body, context, newId) {
@@ -11862,7 +12028,7 @@ function removeEntityReferences(root, kind, id, overrides) {
 function planReferenceRewrites(root, context, overrides, transform, transformBody) {
   const plan = new Map;
   plan.originals = new Map;
-  const storyFile = path10.join(root, "story.md");
+  const storyFile = path11.join(root, "story.md");
   let otherFiles = 0;
   for (const file of markdownFiles(root, { maxFiles: Infinity })) {
     const override = overrides?.has(file) ? overrides.get(file) : undefined;
@@ -11884,7 +12050,7 @@ function planReferenceRewrites(root, context, overrides, transform, transformBod
     }
     const match = FRONTMATTER_PATTERN.exec(text);
     if (!match && sourceFile) {
-      throw projectError(`${path10.relative(root, file)} is missing YAML frontmatter${registryHint(root, file)}; nothing was changed`);
+      throw projectError(`${path11.relative(root, file)} is missing YAML frontmatter${registryHint(root, file)}; nothing was changed`);
     }
     let header = "";
     let body = text;
@@ -11897,7 +12063,7 @@ function planReferenceRewrites(root, context, overrides, transform, transformBod
           data = parseFrontmatter(text, file).data;
         } catch (error) {
           if (sourceFile) {
-            throw projectError(`${path10.relative(root, file)}: ${error.message}${registryHint(root, file)}; nothing was changed`);
+            throw projectError(`${path11.relative(root, file)}: ${error.message}${registryHint(root, file)}; nothing was changed`);
           }
         }
         if (data !== null) {
@@ -11919,22 +12085,22 @@ function planReferenceRewrites(root, context, overrides, transform, transformBod
   return plan;
 }
 var FRONTMATTER_FILES = new Set([
-  path10.join("plot", "timeline.md"),
-  path10.join("continuity", "state.md"),
-  path10.join("continuity", "exemptions.md")
+  path11.join("plot", "timeline.md"),
+  path11.join("continuity", "state.md"),
+  path11.join("continuity", "exemptions.md")
 ]);
 var REGISTRY_FILES = new Set([
   ...INDEX_SCHEMAS.map(([relativePath]) => relativePath),
-  path10.join(MATTER_DIR, "_index.md"),
-  path10.join(RESEARCH_DIR, "_index.md")
+  path11.join(MATTER_DIR, "_index.md"),
+  path11.join(RESEARCH_DIR, "_index.md")
 ]);
 function registryHint(root, file) {
-  return REGISTRY_FILES.has(path10.relative(root, file)) ? REGISTRY_HINT : "";
+  return REGISTRY_FILES.has(path11.relative(root, file)) ? REGISTRY_HINT : "";
 }
 var REGISTRY_HINT = " (it is a registry: run story reindex to rebuild it)";
 function isProjectSourceFile(root, file) {
-  const relativePath = path10.relative(root, file);
-  return SOURCE_ROOT_FILES.has(relativePath) || FRONTMATTER_FILES.has(relativePath) || REGISTRY_FILES.has(relativePath) || ENTITY_SCAN_DIRS.includes(path10.dirname(relativePath));
+  const relativePath = path11.relative(root, file);
+  return SOURCE_ROOT_FILES.has(relativePath) || FRONTMATTER_FILES.has(relativePath) || REGISTRY_FILES.has(relativePath) || ENTITY_SCAN_DIRS.includes(path11.dirname(relativePath));
 }
 function reconcileChapterStatuses(before, after) {
   const next = { ...after };
@@ -11967,15 +12133,15 @@ function assertWritable(root, changed, created = []) {
     }
   };
   const folder = (file) => {
-    const directory = path10.dirname(file);
-    const shown = path10.relative(root, directory);
+    const directory = path11.dirname(file);
+    const shown = path11.relative(root, directory);
     if (fs7.existsSync(directory)) {
       check(directory, shown === "" ? "the project folder" : `${shown}/`);
     }
   };
   for (const file of changed) {
     if (fs7.existsSync(file)) {
-      check(file, path10.relative(root, file));
+      check(file, path11.relative(root, file));
     }
     folder(file);
   }
@@ -12041,17 +12207,17 @@ function applyEntityBacklinks(root, kind, id, data) {
   if (kind === "location") {
     for (const characterId of asArray(data["notable-characters"])) {
       if (isKebabId2(characterId)) {
-        addFrontmatterListValue(root, path10.join("characters", `${characterId}.md`), "locations", id);
+        addFrontmatterListValue(root, path11.join("characters", `${characterId}.md`), "locations", id);
       }
     }
   }
   if (kind === "scene" && isKebabId2(data.chapter)) {
-    const chapterFile = path10.join("chapters", `${data.chapter}.md`);
-    const exists = (dir, id) => fs7.existsSync(path10.join(root, dir, `${id}.md`));
-    if (isKebabId2(data.location) && exists(path10.join("worldbuilding", "locations"), data.location)) {
+    const chapterFile = path11.join("chapters", `${data.chapter}.md`);
+    const exists = (dir, id) => fs7.existsSync(path11.join(root, dir, `${id}.md`));
+    if (isKebabId2(data.location) && exists(path11.join("worldbuilding", "locations"), data.location)) {
       addFrontmatterListValue(root, chapterFile, "locations", data.location);
     }
-    const chapterPath = path10.join(root, chapterFile);
+    const chapterPath = path11.join(root, chapterFile);
     const mentions = fs7.existsSync(chapterPath) ? asArray(readMarkdown(chapterPath, root).data.mentions) : [];
     for (const characterId of asArray(data.characters)) {
       if (isKebabId2(characterId) && exists("characters", characterId) && !mentions.includes(characterId)) {
@@ -12062,13 +12228,13 @@ function applyEntityBacklinks(root, kind, id, data) {
   if (kind === "character") {
     for (const locationId of asArray(data.locations)) {
       if (isKebabId2(locationId)) {
-        addFrontmatterListValue(root, path10.join("worldbuilding", "locations", `${locationId}.md`), "notable-characters", id);
+        addFrontmatterListValue(root, path11.join("worldbuilding", "locations", `${locationId}.md`), "notable-characters", id);
       }
     }
   }
 }
 function addFrontmatterListValue(root, relativePath, field, value) {
-  const filePath = path10.join(root, relativePath);
+  const filePath = path11.join(root, relativePath);
   if (!fs7.existsSync(filePath) || !value) {
     return;
   }
@@ -12086,9 +12252,9 @@ var SKIPPED_SCAN_DIRECTORIES = new Set(["dist", "node_modules"]);
 function markdownFiles(root, { maxFiles = MAX_SCAN_FILES } = {}, depth = 0, collected = null) {
   const files = collected ?? [];
   for (const entry of fs7.readdirSync(root, { withFileTypes: true })) {
-    const fullPath = path10.join(root, entry.name);
+    const fullPath = path11.join(root, entry.name);
     if (entry.isDirectory() && !SKIPPED_SCAN_DIRECTORIES.has(entry.name) && !entry.name.startsWith(".")) {
-      if (depth < MAX_SCAN_DEPTH && !fs7.existsSync(path10.join(fullPath, "story.md"))) {
+      if (depth < MAX_SCAN_DEPTH && !fs7.existsSync(path11.join(fullPath, "story.md"))) {
         markdownFiles(fullPath, { maxFiles }, depth + 1, files);
       }
     } else if (entry.isFile() && entry.name.endsWith(".md") && !entry.name.startsWith(".")) {
@@ -12285,7 +12451,7 @@ function assertFileSizeWithinLimit(filePath, limit = MAX_SCAN_FILE_BYTES) {
   }
 }
 function readEntityFiles(root, relativeDir, mapEntity, scanErrors) {
-  const directory = path10.join(root, relativeDir);
+  const directory = path11.join(root, relativeDir);
   if (!fs7.existsSync(directory)) {
     return [];
   }
@@ -12296,11 +12462,11 @@ function readEntityFiles(root, relativeDir, mapEntity, scanErrors) {
     throw projectError("Too many files in " + relativeDir + ": " + files.length + " exceeds the " + MAX_SCAN_FILES + " file limit");
   }
   for (const file of files) {
-    const fullPath = path10.join(directory, file);
-    const label = path10.join(relativeDir, file);
+    const fullPath = path11.join(directory, file);
+    const label = path11.join(relativeDir, file);
     try {
       const markdown = readMarkdown(fullPath, root);
-      const entity = mapEntity(path10.basename(file, ".md"), fullPath, markdown.data, markdown);
+      const entity = mapEntity(path11.basename(file, ".md"), fullPath, markdown.data, markdown);
       Object.defineProperty(entity, "frontmatter", { value: markdown.data, enumerable: false });
       entities.push(entity);
     } catch (error) {
@@ -12315,30 +12481,30 @@ function hasPostHocNotes(body) {
   return chapterText !== null && /^## Chapter Notes \(post-hoc\)\s*$/m.test(body.slice(0, chapterText.index));
 }
 function parentProjectHint(projectRoot) {
-  let current = path10.dirname(projectRoot);
-  while (!fs7.existsSync(path10.join(current, "story.md"))) {
-    if (path10.dirname(current) === current) {
+  let current = path11.dirname(projectRoot);
+  while (!fs7.existsSync(path11.join(current, "story.md"))) {
+    if (path11.dirname(current) === current) {
       return "";
     }
-    current = path10.dirname(current);
+    current = path11.dirname(current);
   }
-  const relative = path10.relative(process.cwd(), current) || ".";
+  const relative = path11.relative(process.cwd(), current) || ".";
   const shown = relative.length < current.length ? relative : current;
   return ` (the project root looks like ${shown}; pass that path instead)`;
 }
 function requireStoryFile(projectRoot) {
-  const storyPath = path10.join(projectRoot, "story.md");
+  const storyPath = path11.join(projectRoot, "story.md");
   if (!fs7.existsSync(storyPath)) {
     if (fs7.statSync(projectRoot, { throwIfNoEntry: false })?.isFile()) {
       throw projectError(`${projectRoot} is a file; pass the folder that contains it`);
     }
-    const hint = path10.basename(projectRoot).startsWith("-") ? `; ${path10.basename(projectRoot)} is not an option (run story help)` : parentProjectHint(projectRoot);
+    const hint = path11.basename(projectRoot).startsWith("-") ? `; ${path11.basename(projectRoot)} is not an option (run story help)` : parentProjectHint(projectRoot);
     throw projectError(`${projectRoot} is not a story project: missing story.md${hint}`);
   }
   return storyPath;
 }
 function readExemptions(root, scanErrors) {
-  const exemptionsPath = path10.join(root, "continuity", "exemptions.md");
+  const exemptionsPath = path11.join(root, "continuity", "exemptions.md");
   if (!lstatIfExists(exemptionsPath)) {
     return [];
   }
@@ -12346,7 +12512,7 @@ function readExemptions(root, scanErrors) {
   try {
     raw = readTextFile(exemptionsPath);
   } catch (error) {
-    scanErrors.push(err("unreadable-file", `${path10.join("continuity", "exemptions.md")}: ${relativePathError(error, exemptionsPath, root).message}`, path10.join("continuity", "exemptions.md")));
+    scanErrors.push(err("unreadable-file", `${path11.join("continuity", "exemptions.md")}: ${relativePathError(error, exemptionsPath, root).message}`, path11.join("continuity", "exemptions.md")));
     return [];
   }
   let data;
@@ -12355,25 +12521,10 @@ function readExemptions(root, scanErrors) {
   } catch {
     return [];
   }
-  if (!Array.isArray(data.exemptions)) {
-    return [];
-  }
-  const exemptions = [];
-  for (const entry of data.exemptions) {
-    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-      continue;
-    }
-    const pattern = String(entry.pattern ?? "");
-    const reason = typeof entry.reason === "string" ? entry.reason.trim() : "";
-    if (pattern.trim().length < 4 || reason === "") {
-      continue;
-    }
-    exemptions.push({ pattern, reason });
-  }
-  return exemptions;
+  return parseExemptions(data.exemptions);
 }
 function readOptionalRootFile(root, name, scanErrors) {
-  const filePath = path10.join(root, name);
+  const filePath = path11.join(root, name);
   if (!lstatIfExists(filePath)) {
     return null;
   }
@@ -12386,7 +12537,7 @@ function readOptionalRootFile(root, name, scanErrors) {
   }
 }
 function readStyleSheet(root, scanErrors) {
-  const filePath = path10.join(root, STYLE_SHEET_FILE);
+  const filePath = path11.join(root, STYLE_SHEET_FILE);
   if (!lstatIfExists(filePath)) {
     return null;
   }
@@ -12415,8 +12566,8 @@ function readMarkdown(filePath, root) {
   }
 }
 function relativePathError(error, filePath, root) {
-  const relativePath = path10.relative(root, filePath);
-  return projectError(error.message.split(filePath).join(relativePath).split(path10.resolve(root, relativePath)).join(relativePath));
+  const relativePath = path11.relative(root, filePath);
+  return projectError(error.message.split(filePath).join(relativePath).split(path11.resolve(root, relativePath)).join(relativePath));
 }
 function writeChanged(filePath, contents, changed, root) {
   if (safeRead(filePath, root) !== contents) {
@@ -12460,24 +12611,24 @@ var ENTITY_SCAN_DIRS = [
   "characters",
   "chapters",
   "scenes",
-  path10.join("worldbuilding", "locations"),
-  path10.join("worldbuilding", "systems"),
-  path10.join("worldbuilding", "factions"),
-  path10.join("worldbuilding", "artifacts"),
-  path10.join("plot", "arcs"),
-  path10.join("continuity", "questions"),
-  path10.join("continuity", "promises"),
-  path10.join("continuity", "clues"),
-  path10.join("glossary", "terms"),
+  path11.join("worldbuilding", "locations"),
+  path11.join("worldbuilding", "systems"),
+  path11.join("worldbuilding", "factions"),
+  path11.join("worldbuilding", "artifacts"),
+  path11.join("plot", "arcs"),
+  path11.join("continuity", "questions"),
+  path11.join("continuity", "promises"),
+  path11.join("continuity", "clues"),
+  path11.join("glossary", "terms"),
   MATTER_DIR,
   RESEARCH_DIR
 ];
 function entityFileNames(root, relativeDir) {
-  const directory = path10.join(root, relativeDir);
+  const directory = path11.join(root, relativeDir);
   if (!fs7.existsSync(directory)) {
     return [];
   }
-  return fs7.readdirSync(directory).filter((name) => name.endsWith(".md") && !name.startsWith(".") && name !== "_index.md").sort().map((name) => path10.join(relativeDir, name));
+  return fs7.readdirSync(directory).filter((name) => name.endsWith(".md") && !name.startsWith(".") && name !== "_index.md").sort().map((name) => path11.join(relativeDir, name));
 }
 function collectStrayFileWarnings(project, warnings) {
   const root = project.root;
@@ -12494,14 +12645,14 @@ function collectStrayFileWarnings(project, warnings) {
   }
   const nested = [];
   for (const relativeDir of ENTITY_SCAN_DIRS) {
-    const directory = path10.join(root, relativeDir);
+    const directory = path11.join(root, relativeDir);
     if (!fs7.existsSync(directory)) {
       continue;
     }
     for (const file of markdownFiles(directory)) {
-      const relativePath = path10.relative(directory, file);
-      if (relativePath.includes(path10.sep) || path10.dirname(relativePath) !== ".") {
-        nested.push(path10.join(relativeDir, relativePath));
+      const relativePath = path11.relative(directory, file);
+      if (relativePath.includes(path11.sep) || path11.dirname(relativePath) !== ".") {
+        nested.push(path11.join(relativeDir, relativePath));
       }
     }
   }
@@ -12510,25 +12661,25 @@ function collectStrayFileWarnings(project, warnings) {
     warnings.push(warn("nested-file", `${nestedPath} is nested inside an entity directory and is ignored`, nestedPath));
   }
   for (const relativeDir of ENTITY_SCAN_DIRS) {
-    const directory = path10.join(root, relativeDir);
+    const directory = path11.join(root, relativeDir);
     if (!lstatIfExists(directory)?.isDirectory()) {
       continue;
     }
-    const linked = fs7.readdirSync(directory, { withFileTypes: true }).filter((entry) => entry.isSymbolicLink() && entry.name.endsWith(".md") && !entry.name.startsWith(".") && entry.name !== "_index.md").map((entry) => path10.join(relativeDir, entry.name)).sort();
+    const linked = fs7.readdirSync(directory, { withFileTypes: true }).filter((entry) => entry.isSymbolicLink() && entry.name.endsWith(".md") && !entry.name.startsWith(".") && entry.name !== "_index.md").map((entry) => path11.join(relativeDir, entry.name)).sort();
     for (const linkPath of linked) {
       warnings.push(warn("symlinked-file", `${linkPath} is a symlink and is ignored: replace it with the file itself`, linkPath));
     }
   }
   for (const leftover of temporaryFiles(root).sort()) {
-    const name = TEMPORARY_FILE_PATTERN.exec(path10.basename(leftover))?.[1];
-    const target = name ? ` to ${path10.join(path10.dirname(leftover), name)}` : "";
+    const name = TEMPORARY_FILE_PATTERN.exec(path11.basename(leftover))?.[1];
+    const target = name ? ` to ${path11.join(path11.dirname(leftover), name)}` : "";
     warnings.push(warn("interrupted-write", `${leftover} was left by an interrupted write${target}; delete it once the files beside it look right`, leftover));
   }
 }
 function temporaryFiles(root, depth = 0, relativeDir = "") {
   const found = [];
-  for (const entry of fs7.readdirSync(path10.join(root, relativeDir), { withFileTypes: true })) {
-    const relativePath = path10.join(relativeDir, entry.name);
+  for (const entry of fs7.readdirSync(path11.join(root, relativeDir), { withFileTypes: true })) {
+    const relativePath = path11.join(relativeDir, entry.name);
     if (entry.isDirectory() && !SKIPPED_SCAN_DIRECTORIES.has(entry.name) && !entry.name.startsWith(".")) {
       if (depth < MAX_SCAN_DEPTH) {
         found.push(...temporaryFiles(root, depth + 1, relativePath));
@@ -12601,31 +12752,31 @@ function assertNotProjectSource(project, outFile) {
   const realTarget = realPathThroughAncestors(outFile);
   const candidates = [[project.root, outFile], [realRoot, realTarget], [realRoot.toLowerCase(), realTarget.toLowerCase()]];
   for (const [root, target] of candidates) {
-    const relativePath = path10.relative(root, target);
-    if (relativePath === "" || relativePath.startsWith("..") || path10.isAbsolute(relativePath)) {
+    const relativePath = path11.relative(root, target);
+    if (relativePath === "" || relativePath.startsWith("..") || path11.isAbsolute(relativePath)) {
       continue;
     }
     const lower = relativePath.toLowerCase();
-    const [first] = lower.split(path10.sep);
+    const [first] = lower.split(path11.sep);
     if (SOURCE_ROOT_FILES.has(lower) || SOURCE_DIRECTORIES.includes(first)) {
-      throw refusedError(`Refusing to write generated output to ${path10.relative(project.root, outFile)}: it is project source. Use a path such as dist/ instead`);
+      throw refusedError(`Refusing to write generated output to ${path11.relative(project.root, outFile)}: it is project source. Use a path such as dist/ instead`);
     }
-    if (HAND_EDITED_DIRECTORIES.includes(first) && relativePath.includes(path10.sep) && lstatIfExists(outFile) !== null) {
-      throw refusedError(`Refusing to overwrite ${path10.relative(project.root, outFile)}: files in ${HAND_EDITED_DIRECTORIES.map((dir) => `${dir}/`).join(", ")} may hold hand-written work. Delete it first to regenerate it, or use a path such as dist/ instead`);
+    if (HAND_EDITED_DIRECTORIES.includes(first) && relativePath.includes(path11.sep) && lstatIfExists(outFile) !== null) {
+      throw refusedError(`Refusing to overwrite ${path11.relative(project.root, outFile)}: files in ${HAND_EDITED_DIRECTORIES.map((dir) => `${dir}/`).join(", ")} may hold hand-written work. Delete it first to regenerate it, or use a path such as dist/ instead`);
     }
   }
 }
 function realPathThroughAncestors(target) {
   const { ancestor, missing } = nearestExistingAncestor(target, fs7.existsSync);
-  return path10.join(fs7.realpathSync.native(ancestor), ...missing);
+  return path11.join(fs7.realpathSync.native(ancestor), ...missing);
 }
 function resolveOutputPath(project, out, defaultRelativePath, enforceRoot) {
   const rawOut = out ?? defaultRelativePath;
   if (String(rawOut).trim() === "") {
     throw usageError("--out needs a file path");
   }
-  const outFile = path10.resolve(project.root, rawOut);
-  const shouldEnforceRoot = enforceRoot ?? !path10.isAbsolute(String(rawOut));
+  const outFile = path11.resolve(project.root, rawOut);
+  const shouldEnforceRoot = enforceRoot ?? !path11.isAbsolute(String(rawOut));
   let stats;
   try {
     assertNotProjectSource(project, outFile);
@@ -12633,7 +12784,7 @@ function resolveOutputPath(project, out, defaultRelativePath, enforceRoot) {
   } catch (error) {
     throw withDefaultExitCode(error, EXIT_CODES.refused);
   }
-  const isDist = outFile === path10.join(project.root, "dist");
+  const isDist = outFile === path11.join(project.root, "dist");
   if (stats?.isDirectory() || /[\\/]$/.test(String(rawOut)) || isDist && !stats) {
     throw usageError(`--out ${rawOut} is a directory: give a file path`);
   }
@@ -12833,10 +12984,10 @@ function validateFormRange(project, warnings) {
 function validateIndexFrontmatter(project, errors) {
   for (const [relativePath, expectedType] of INDEX_SCHEMAS) {
     const label = relativePath;
-    if (!fs7.existsSync(path10.join(project.root, relativePath))) {
+    if (!fs7.existsSync(path11.join(project.root, relativePath))) {
       continue;
     }
-    const data = readRegistryValidationData(path10.join(project.root, relativePath), project.root, label, errors);
+    const data = readRegistryValidationData(path11.join(project.root, relativePath), project.root, label, errors);
     if (!data) {
       continue;
     }
@@ -12849,7 +13000,7 @@ function validateIndexFrontmatter(project, errors) {
     if (data.story !== undefined && data.story !== project.storyId && !storyIdIsFallback(project)) {
       errors.push(storyIdMismatch(label, project));
     }
-    if (relativePath === path10.join("plot", "_index.md")) {
+    if (relativePath === path11.join("plot", "_index.md")) {
       requireFields(data, ["structure"], label, errors);
       requireScalar(data, "structure", label, errors);
     }
@@ -13142,7 +13293,7 @@ function validateScenes(project, errors) {
     if (Number.isInteger(data.scene) && data.scene <= 0) {
       errors.push(err("field-below-minimum", `${label} scene must be greater than 0`, label));
     }
-    const filenameMatch = SCENE_FILENAME_PATTERN.exec(path10.basename(scene.file));
+    const filenameMatch = SCENE_FILENAME_PATTERN.exec(path11.basename(scene.file));
     if (!filenameMatch) {
       errors.push(err("invalid-filename", `${label} filename must match {chapter}-scene-{NN}.md`, label));
     } else {
@@ -13172,7 +13323,7 @@ var STATE_ENTRY_KEYS = {
   "knowledge-state": ["character", "knows", "learned-in", "fact"]
 };
 function validateContinuityState(project, errors, warnings) {
-  const label = path10.join("continuity", "state.md");
+  const label = path11.join("continuity", "state.md");
   if (!project.continuity) {
     return;
   }
@@ -13260,12 +13411,12 @@ function validateClues(project, errors) {
     }
   }
 }
-function validateExemptions(project, errors) {
-  const exemptionsPath = path10.join(project.root, "continuity", "exemptions.md");
+function validateExemptions(project, errors, warnings) {
+  const exemptionsPath = path11.join(project.root, EXEMPTIONS_FILE);
   if (!fs7.existsSync(exemptionsPath)) {
     return;
   }
-  const label = path10.join("continuity", "exemptions.md");
+  const label = EXEMPTIONS_FILE;
   const data = readValidationData(exemptionsPath, project.root, label, errors);
   if (!data) {
     return;
@@ -13282,19 +13433,20 @@ function validateExemptions(project, errors) {
     errors.push(err("field-not-list", `${label} frontmatter field exemptions must be a list`, label));
     return;
   }
+  const chapters = new Set(project.chapters.map((chapter) => chapter.id));
   for (const [index, entry] of entries.entries()) {
     const entryLabel = `${label} exemptions[${index}]`;
+    errors.push(...exemptionProblems(entry, entryLabel));
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-      errors.push(err("entry-not-mapping", `${entryLabel} must be a mapping`, label));
       continue;
     }
-    if (typeof entry.pattern !== "string" || entry.pattern.trim() === "") {
-      errors.push(err("missing-field", `${entryLabel} is missing a non-empty pattern`, label));
-    } else if (entry.pattern.trim().length < 4) {
-      errors.push(err("exemption-pattern-too-short", `${entryLabel} pattern must be at least 4 characters to avoid blanket exemptions`, label));
+    warnNearMissKeys(entry, [...MATCH_KEYS, "reason"], entryLabel, warnings, label);
+    const file = typeof entry.file === "string" ? exemptionFile(entry.file) : null;
+    if (file !== null && !lstatIfExists(path11.join(project.root, file))) {
+      warnings.push(warn("stale-exemption", `${entryLabel} file ${entry.file} does not exist, so the entry matches nothing`, label));
     }
-    if (typeof entry.reason !== "string" || entry.reason.trim() === "") {
-      errors.push(err("missing-field", `${entryLabel} is missing a non-empty reason`, label));
+    if (isChapterId(entry.chapter) && !chapters.has(entry.chapter)) {
+      warnings.push(warn("stale-exemption", `${entryLabel} chapter ${entry.chapter} is not a chapter in chapters/, so the entry matches nothing`, label));
     }
   }
 }
@@ -13379,9 +13531,9 @@ function validateProgressLog(project, errors) {
   });
 }
 function validateOptionalRegistry(project, directory, expectedType, errors) {
-  const indexPath = path10.join(project.root, directory, "_index.md");
+  const indexPath = path11.join(project.root, directory, "_index.md");
   if (fs7.existsSync(indexPath)) {
-    const label = path10.join(directory, "_index.md");
+    const label = path11.join(directory, "_index.md");
     const data = readRegistryValidationData(indexPath, project.root, label, errors);
     if (data && data.type !== expectedType) {
       errors.push(err("wrong-type", `${label} type must be ${expectedType}`, label));
@@ -13488,11 +13640,11 @@ function coverIsReady(project) {
 }
 function coverImage(project) {
   const cover = String(project.story.data.cover).trim();
-  const mediaType = COVER_MEDIA_TYPES[path10.extname(cover).toLowerCase()];
+  const mediaType = COVER_MEDIA_TYPES[path11.extname(cover).toLowerCase()];
   if (mediaType === undefined) {
     throw projectError(`story.md cover ${cover} must be a ${Object.keys(COVER_MEDIA_TYPES).join(", ")} image`);
   }
-  const filePath = path10.resolve(project.root, cover);
+  const filePath = path11.resolve(project.root, cover);
   if (!isPathInside(project.root, filePath)) {
     throw projectError(`story.md cover ${cover} must be inside the project`);
   }
@@ -13505,7 +13657,7 @@ function coverImage(project) {
     throw projectError(`story.md cover ${cover} is not a file`);
   }
   assertFileSizeWithinLimit(filePath, MAX_COVER_BYTES);
-  return { filePath, mediaType, extension: mediaType === "image/jpeg" ? "jpg" : path10.extname(cover).slice(1).toLowerCase() };
+  return { filePath, mediaType, extension: mediaType === "image/jpeg" ? "jpg" : path11.extname(cover).slice(1).toLowerCase() };
 }
 function validateEntityId(id, label, errors) {
   if (id !== kebabCase(id)) {
@@ -13633,19 +13785,19 @@ function chapterNumber(value, file) {
   return value !== undefined && isPositiveIntegerValue(value) ? Number(value) : chapterNumberFromFile(file);
 }
 function chapterNumberFromFile(file) {
-  const match = CHAPTER_FILENAME_PATTERN.exec(path10.basename(file));
+  const match = CHAPTER_FILENAME_PATTERN.exec(path11.basename(file));
   return match ? Number.parseInt(match[1], 10) : 0;
 }
 function sceneNumberFromFile(file) {
-  const match = SCENE_FILENAME_PATTERN.exec(path10.basename(file));
+  const match = SCENE_FILENAME_PATTERN.exec(path11.basename(file));
   return match ? Number.parseInt(match[2], 10) : 0;
 }
 function sceneChapterFromFile(file) {
-  const match = SCENE_FILENAME_PATTERN.exec(path10.basename(file));
+  const match = SCENE_FILENAME_PATTERN.exec(path11.basename(file));
   return match ? match[1] : "";
 }
 function relative2(project, file) {
-  return path10.relative(project.root, file);
+  return path11.relative(project.root, file);
 }
 
 // src/import.js
@@ -13744,11 +13896,11 @@ function importManuscript(options) {
   }
   const cwd = options.cwd ?? process.cwd();
   const fromStdin = rawSource === STDIN_ARG;
-  const source = fromStdin ? null : path11.resolve(cwd, rawSource);
+  const source = fromStdin ? null : path12.resolve(cwd, rawSource);
   if (!fromStdin && !fs8.existsSync(source)) {
     throw usageError(`Import source not found: ${source}`);
   }
-  if (!fromStdin && fs8.statSync(source).isDirectory() && fs8.existsSync(path11.join(source, "story.md"))) {
+  if (!fromStdin && fs8.statSync(source).isDirectory() && fs8.existsSync(path12.join(source, "story.md"))) {
     throw usageError(`${rawSource} is already a story project (it has story.md); import reads manuscript files, so point it at the draft instead`);
   }
   const warnings = [];
@@ -13782,7 +13934,7 @@ function importManuscript(options) {
     pov: options.pov,
     tense: options.tense,
     synopsis: options.synopsis,
-    defaultSynopsis: `Imported from ${fromStdin ? "stdin" : path11.basename(source)}. Replace with a 2-3 sentence synopsis.`,
+    defaultSynopsis: `Imported from ${fromStdin ? "stdin" : path12.basename(source)}. Replace with a 2-3 sentence synopsis.`,
     force: options.force,
     beforeWrite(root, hasStory) {
       if (!hasStory) {
@@ -13797,15 +13949,15 @@ function importManuscript(options) {
       assertProjectParses(project, "import", (error) => /^chapters[\\/]chapter-\d+\.md$/i.test(error.file));
     }
   });
-  const chaptersDir = path11.join(created.root, "chapters");
+  const chaptersDir = path12.join(created.root, "chapters");
   for (const name of fs8.readdirSync(chaptersDir)) {
     if (!/^chapter-\d+\.md$/i.test(name)) {
       continue;
     }
-    fs8.unlinkSync(path11.join(chaptersDir, name));
+    fs8.unlinkSync(path12.join(chaptersDir, name));
   }
   for (const chapter of chapterFiles) {
-    writeFile(path11.join(chaptersDir, chapter.name), chapter.text, { root: created.root });
+    writeFile(path12.join(chaptersDir, chapter.name), chapter.text, { root: created.root });
   }
   reindexProject(created.root);
   return {
@@ -13869,11 +14021,11 @@ function readSourceDocuments(source) {
   rejectSymlinkedSource(source);
   if (fs8.statSync(source).isFile()) {
     assertImportFileSize(source);
-    return [{ name: path11.basename(source), text: readSourceText(source) }];
+    return [{ name: path12.basename(source), text: readSourceText(source) }];
   }
   const names = [];
   for (const entry of fs8.readdirSync(source, { withFileTypes: true })) {
-    const fullPath = path11.join(source, entry.name);
+    const fullPath = path12.join(source, entry.name);
     if (fs8.lstatSync(fullPath).isSymbolicLink()) {
       let targetIsDocument = false;
       try {
@@ -13895,7 +14047,7 @@ function readSourceDocuments(source) {
     throw usageError("Too many import files in " + source + ": " + names.length + " exceeds the " + MAX_IMPORT_FILES + " file limit");
   }
   const documents = names.map((name) => {
-    const fullPath = path11.join(source, name);
+    const fullPath = path12.join(source, name);
     assertImportFileSize(fullPath);
     return { name, text: readSourceText(fullPath) };
   });
@@ -14200,7 +14352,7 @@ function singleChapter(text, document) {
     };
   }
   return {
-    title: document.untitled ? "" : titleCaseSlug(path11.basename(document.name, path11.extname(document.name))),
+    title: document.untitled ? "" : titleCaseSlug(path12.basename(document.name, path12.extname(document.name))),
     prose: text.trim()
   };
 }
@@ -14256,11 +14408,11 @@ function diagnosticsFrom(result, check) {
   return [
     ...(result.errors ?? []).map((finding) => diagnostic("error", finding, check)),
     ...(result.warnings ?? []).map((finding) => diagnostic("warning", finding, check)),
-    ...(result.dismissed ?? []).map((entry) => ({ ...diagnostic("dismissed", entry.finding, check), exemption: entry.reason }))
+    ...(result.dismissed ?? []).map((entry) => ({ ...diagnostic("dismissed", entry.finding, check), exemption: entry.reason, exemptionIndex: entry.index ?? null }))
   ];
 }
 function diagnostic(severity, finding, check) {
-  return { severity, file: finding.file, message: finding.message, code: finding.code, check };
+  return { severity, file: finding.file, chapter: finding.chapter ?? null, message: finding.message, code: finding.code, check };
 }
 function failureDiagnostic(message, exitCode, check) {
   return diagnostic("error", failure(message, exitCode), check);
@@ -14372,7 +14524,7 @@ var COMMANDS = [
       reportKeptStory(io, result, "the title");
       reportGitignore(io, result);
       for (const linkedBook of result.linkedBooks) {
-        io.stdout.write(`Updated series links in ${path12.join(linkedBook, "story.md")}
+        io.stdout.write(`Updated series links in ${path13.join(linkedBook, "story.md")}
 `);
       }
       return 0;
@@ -14430,7 +14582,7 @@ var COMMANDS = [
     summary: ["Check project structure, frontmatter, and registries"],
     project: "positional",
     options: ["json"],
-    run: ({ parsed, io, root, severity }) => reportCheck(parsed, io, "validate", applySeverity(validateProject(root()), severity), "Project is valid", "Project validation failed")
+    run: ({ parsed, io, root, overrides }) => reportCheck(parsed, io, "validate", applySeverity(validateProject(root()), overrides), "Project is valid", "Project validation failed")
   },
   {
     name: "reindex",
@@ -14468,7 +14620,7 @@ var COMMANDS = [
     summary: ["Check cross-reference targets and backlinks"],
     project: "positional",
     options: ["json"],
-    run: ({ parsed, io, root, severity }) => reportCheck(parsed, io, "links", applySeverity(validateLinks(root()), severity), "Links are valid", "Link check failed")
+    run: ({ parsed, io, root, overrides }) => reportCheck(parsed, io, "links", applySeverity(validateLinks(root()), overrides), "Links are valid", "Link check failed")
   },
   {
     name: "continuity",
@@ -14483,7 +14635,7 @@ var COMMANDS = [
     ],
     project: "positional",
     options: ["json"],
-    run: ({ parsed, io, root, severity }) => reportCheck(parsed, io, "continuity", applySeverity(checkProjectContinuity(root()), severity), "Continuity is consistent", "Continuity check failed")
+    run: ({ parsed, io, root, overrides }) => reportCheck(parsed, io, "continuity", applySeverity(checkProjectContinuity(root()), overrides), "Continuity is consistent", "Continuity check failed")
   },
   {
     name: "knowledge",
@@ -14531,13 +14683,13 @@ var COMMANDS = [
     project: "flag",
     args: 1,
     options: ["budget", "scenes", "json"],
-    run({ parsed, io, root, severity }) {
+    run({ parsed, io, root, overrides }) {
       const targetId = parsed.positionals[1];
       if (!targetId) {
         throw usageError("Usage: story context <chapter-or-scene-id> [--budget <tokens>] [--scenes <n>] [--path <project>]");
       }
       const context = draftingContext(root(), targetId, { budget: parsed.options.budget, scenes: parsed.options.scenes });
-      const checked = checkedWarnings(context.warnings, severity);
+      const checked = checkedWarnings(context.warnings, overrides);
       if (wantsJson(parsed)) {
         const skipped = [...checked.errors, ...checked.warnings].map((finding) => finding.message);
         return writeJsonResult(io, { command: "context", ok: checked.ok, data: { ...context, warnings: skipped }, diagnostics: diagnosticsFrom(checked, "context") });
@@ -14557,8 +14709,8 @@ var COMMANDS = [
     ],
     project: "positional",
     options: ["ref", "against", "anchor"],
-    run({ parsed, io, cwd, root, severity }) {
-      const comparison = applySeverity(compareProject(root(), { ref: parsed.options.ref, against: parsed.options.against, anchors: parsed.options.anchor, cwd }), severity);
+    run({ parsed, io, cwd, root, overrides }) {
+      const comparison = applySeverity(compareProject(root(), { ref: parsed.options.ref, against: parsed.options.against, anchors: parsed.options.anchor, cwd }), overrides);
       io.stdout.write(comparison.anchors ? formatLabelMapping(comparison.anchors, comparison.label) : formatComparison(comparison, comparison.label));
       return reportResult(io, comparison, "Comparison complete", "Comparison failed");
     }
@@ -14572,8 +14724,8 @@ var COMMANDS = [
     ],
     project: "positional",
     options: ["log", "date", "json"],
-    run({ parsed, io, root, severity }) {
-      const progress = applySeverity(projectProgress(root(), { log: isTruthy(parsed.options.log), date: parsed.options.date }), severity);
+    run({ parsed, io, root, overrides }) {
+      const progress = applySeverity(projectProgress(root(), { log: isTruthy(parsed.options.log), date: parsed.options.date }), overrides);
       if (wantsJson(parsed)) {
         return reportJson(io, "progress", progress, { writes: progress.logged ? [progress.logged.file] : [] });
       }
@@ -14594,8 +14746,8 @@ var COMMANDS = [
     ],
     project: "positional",
     options: ["json"],
-    run({ parsed, io, root, severity }) {
-      const timeline = applySeverity(storyTimeline(root()), severity);
+    run({ parsed, io, root, overrides }) {
+      const timeline = applySeverity(storyTimeline(root()), overrides);
       if (wantsJson(parsed)) {
         return reportJson(io, "timeline", timeline);
       }
@@ -14614,8 +14766,8 @@ var COMMANDS = [
     ],
     project: "positional",
     options: ["json", "max-filter-words", "max-adverbs", "max-bookisms"],
-    run({ parsed, io, cwd, root, severity }) {
-      const report = applySeverity(parsed.positionals[1] === STDIN_ARG ? proseReport(passageRoot(parsed, cwd, false), { ...parsed.options, passage: pipedText(io, "prose") }) : proseReport(root(), parsed.options), severity);
+    run({ parsed, io, cwd, root, overrides }) {
+      const report = applySeverity(parsed.positionals[1] === STDIN_ARG ? proseReport(passageRoot(parsed, cwd, false), { ...parsed.options, passage: pipedText(io, "prose") }) : proseReport(root(), parsed.options), overrides);
       if (wantsJson(parsed)) {
         const chapters = report.chapters.map(({ analysis: { phraseSentences, ...analysis }, ...chapter }) => ({ ...chapter, analysis }));
         return reportJson(io, "prose", { ...report, chapters }, { passage: parsed.positionals[1] === STDIN_ARG });
@@ -14655,8 +14807,8 @@ var COMMANDS = [
     ],
     project: "flag",
     args: Infinity,
-    run({ parsed, io, cwd, root, severity }) {
-      const report = applySeverity(namesReport(root(), nameWords(parsed, 1, cwd, "names")), severity);
+    run({ parsed, io, cwd, root, overrides }) {
+      const report = applySeverity(namesReport(root(), nameWords(parsed, 1, cwd, "names")), overrides);
       io.stdout.write(formatNames(report));
       return reportResult(io, report, "Names checked", "Name check failed");
     }
@@ -14671,8 +14823,8 @@ var COMMANDS = [
     ],
     project: "positional",
     options: ["json"],
-    run({ parsed, io, root, severity }) {
-      const report = applySeverity(pacingReport(root()), severity);
+    run({ parsed, io, root, overrides }) {
+      const report = applySeverity(pacingReport(root()), overrides);
       if (wantsJson(parsed)) {
         return reportJson(io, "pacing", report);
       }
@@ -14690,8 +14842,8 @@ var COMMANDS = [
     ],
     project: "positional",
     options: ["json"],
-    run({ parsed, io, root, severity }) {
-      const report = applySeverity(clueReport(root()), severity);
+    run({ parsed, io, root, overrides }) {
+      const report = applySeverity(clueReport(root()), overrides);
       if (wantsJson(parsed)) {
         return reportJson(io, "clues", report);
       }
@@ -14710,8 +14862,8 @@ var COMMANDS = [
     ],
     project: "positional",
     options: ["json"],
-    run({ parsed, io, cwd, root, severity }) {
-      const report = applySeverity(parsed.positionals[1] === STDIN_ARG ? voicesReport(passageRoot(parsed, cwd, true), { passage: pipedText(io, "voices") }) : voicesReport(root()), severity);
+    run({ parsed, io, cwd, root, overrides }) {
+      const report = applySeverity(parsed.positionals[1] === STDIN_ARG ? voicesReport(passageRoot(parsed, cwd, true), { passage: pipedText(io, "voices") }) : voicesReport(root()), overrides);
       if (wantsJson(parsed)) {
         return reportJson(io, "voices", report, { passage: parsed.positionals[1] === STDIN_ARG });
       }
@@ -14725,8 +14877,8 @@ var COMMANDS = [
     summary: ["Order linked prequels and sequels and check shared", "canon across books"],
     project: "positional",
     options: ["json"],
-    run({ parsed, io, root, severity }) {
-      const report = applySeverity(seriesReport(root()), severity);
+    run({ parsed, io, root, overrides }) {
+      const report = applySeverity(seriesReport(root()), overrides);
       if (wantsJson(parsed)) {
         return reportJson(io, "series", report);
       }
@@ -14769,8 +14921,8 @@ var COMMANDS = [
     summary: ["Summarize project inventory, progress, and checks"],
     project: "positional",
     options: ["actionable", "json"],
-    run({ parsed, io, root, severity }) {
-      const report = projectReport(root(), { displayPath: displayPath(parsed), severity });
+    run({ parsed, io, root, overrides }) {
+      const report = projectReport(root(), { displayPath: displayPath(parsed), overrides });
       if (wantsJson(parsed)) {
         return reportProjectJson(io, "report", report);
       }
@@ -14784,8 +14936,8 @@ var COMMANDS = [
     summary: ["Recommend the next writing and maintenance actions"],
     project: "positional",
     options: ["json"],
-    run({ parsed, io, root, severity }) {
-      const report = projectActions(root(), { displayPath: displayPath(parsed), severity });
+    run({ parsed, io, root, overrides }) {
+      const report = projectActions(root(), { displayPath: displayPath(parsed), overrides });
       if (wantsJson(parsed)) {
         return reportProjectJson(io, "next", report);
       }
@@ -14799,8 +14951,8 @@ var COMMANDS = [
     summary: ["Show health checks plus actionable repair steps"],
     project: "positional",
     options: ["json"],
-    run({ parsed, io, root, severity }) {
-      const report = projectActions(root(), { displayPath: displayPath(parsed), severity });
+    run({ parsed, io, root, overrides }) {
+      const report = projectActions(root(), { displayPath: displayPath(parsed), overrides });
       if (wantsJson(parsed)) {
         return reportProjectJson(io, "doctor", report);
       }
@@ -14828,7 +14980,7 @@ var COMMANDS = [
     project: "flag",
     args: Infinity,
     options: ADD_OPTIONS,
-    run({ parsed, io, cwd, root, severity }) {
+    run({ parsed, io, cwd, root, overrides }) {
       const result = createEntity(root(), {
         ...parsed.options,
         kind: parsed.positionals[1],
@@ -14836,7 +14988,7 @@ var COMMANDS = [
       });
       io.stdout.write(`${result.resumed ? "Finished an interrupted add of" : "Created"} ${result.kind} ${result.id}: ${result.file}
 `);
-      return writeFindings(io, checkedWarnings(result.warnings, severity));
+      return writeFindings(io, checkedWarnings(result.warnings, overrides));
     }
   },
   {
@@ -14846,7 +14998,7 @@ var COMMANDS = [
     project: "flag",
     args: Infinity,
     options: ["id"],
-    run({ parsed, io, cwd, root, severity }) {
+    run({ parsed, io, cwd, root, overrides }) {
       const result = renameEntity(root(), {
         ...parsed.options,
         kind: parsed.positionals[1],
@@ -14856,7 +15008,7 @@ var COMMANDS = [
       });
       io.stdout.write(`${result.resumed ? "Finished an interrupted rename of" : "Renamed"} ${result.kind} ${result.oldId} to ${result.id}: ${result.file}
 `);
-      return writeFindings(io, checkedWarnings(result.warnings, severity));
+      return writeFindings(io, checkedWarnings(result.warnings, overrides));
     }
   },
   {
@@ -14865,7 +15017,7 @@ var COMMANDS = [
     summary: ["Remove an entity and scrub id references"],
     project: "flag",
     args: 2,
-    run({ parsed, io, root, severity }) {
+    run({ parsed, io, root, overrides }) {
       const result = removeEntity(root(), {
         ...parsed.options,
         kind: parsed.positionals[1],
@@ -14874,7 +15026,7 @@ var COMMANDS = [
       io.stdout.write(result.alreadyGone ? `Removed references to ${result.kind} ${result.id}: its file was already gone
 ` : `Removed ${result.kind} ${result.id}: ${result.file}
 `);
-      return writeFindings(io, checkedWarnings(result.warnings, severity));
+      return writeFindings(io, checkedWarnings(result.warnings, overrides));
     }
   },
   {
@@ -14888,7 +15040,7 @@ var COMMANDS = [
     project: "flag",
     args: 2,
     options: ["number", "chapter", "scene"],
-    run({ parsed, io, root, severity }) {
+    run({ parsed, io, root, overrides }) {
       const result = moveEntity(root(), {
         kind: parsed.positionals[1],
         id: parsed.positionals[2],
@@ -14898,7 +15050,7 @@ var COMMANDS = [
       });
       io.stdout.write(`Moved ${result.kind} ${result.oldId} to ${result.id}: ${result.file}${result.moved > 1 ? ` (with ${result.moved - 1} ${result.moved === 2 ? "scene" : "scenes"})` : ""}
 `);
-      return writeFindings(io, checkedWarnings(result.warnings, severity));
+      return writeFindings(io, checkedWarnings(result.warnings, overrides));
     }
   },
   {
@@ -14907,11 +15059,11 @@ var COMMANDS = [
     summary: ["Combine front matter, chapters, and back matter into a", "manuscript markdown file"],
     project: "positional",
     options: ["out"],
-    run({ parsed, io, root, severity }) {
+    run({ parsed, io, root, overrides }) {
       const result = exportManuscript(root(), { out: parsed.options.out });
       io.stdout.write(`Exported ${result.chapters} chapters to ${result.outFile}
 `);
-      return writeFindings(io, checkedWarnings(result.warnings, severity));
+      return writeFindings(io, checkedWarnings(result.warnings, overrides));
     }
   },
   {
@@ -14928,7 +15080,7 @@ var COMMANDS = [
     ],
     project: "positional",
     options: ["out", "format", "shunn", "trim", "stamp", "note-url"],
-    run({ parsed, io, root, severity }) {
+    run({ parsed, io, root, overrides }) {
       const result = buildBook(root(), {
         out: parsed.options.out,
         format: parsed.options.format,
@@ -14939,7 +15091,7 @@ var COMMANDS = [
       });
       io.stdout.write(`Built ${result.chapters} chapters as ${result.format} to ${result.outFile}
 `);
-      return writeFindings(io, checkedWarnings(result.warnings, severity));
+      return writeFindings(io, checkedWarnings(result.warnings, overrides));
     }
   },
   {
@@ -14963,7 +15115,7 @@ var COMMANDS = [
 function nameWords(parsed, from, cwd, command) {
   const words = parsed.positionals.slice(from);
   for (const word of words) {
-    if (word === "." || word === ".." || /[\\/]/.test(word) && fs9.existsSync(path12.join(path12.resolve(cwd, word), "story.md"))) {
+    if (word === "." || word === ".." || /[\\/]/.test(word) && fs9.existsSync(path13.join(path13.resolve(cwd, word), "story.md"))) {
       throw usageError(`"${word}" looks like a project path: story ${command} takes the project as --path ${word}`);
     }
   }
@@ -14974,12 +15126,12 @@ function pipedText(io, command) {
 }
 function passageRoot(parsed, cwd, required) {
   if (parsed.options.path !== undefined) {
-    return path12.resolve(cwd, parsed.options.path);
+    return path13.resolve(cwd, parsed.options.path);
   }
-  return required || fs9.existsSync(path12.join(cwd, "story.md")) ? path12.resolve(cwd) : null;
+  return required || fs9.existsSync(path13.join(cwd, "story.md")) ? path13.resolve(cwd) : null;
 }
-function checkedWarnings(warnings = [], severity) {
-  return applySeverity({ ok: true, errors: [], warnings }, severity);
+function checkedWarnings(warnings = [], overrides) {
+  return applySeverity({ ok: true, errors: [], warnings }, overrides);
 }
 function writeFindings(io, result) {
   printFindings(io, result);
@@ -15169,8 +15321,8 @@ Run story --help to list commands.
     const root = () => resolveRoot(cwd, parsed, name);
     const config = command.project === "none" ? null : projectConfig(command, configRoot(cwd, parsed, root));
     configured = config === null ? [] : applyDefaults(config, name, parsed.options).map((key) => [key, parsed.options[key]]);
-    const severity = config === null ? [] : severityFor(config);
-    return command.run({ parsed, io, cwd, root, severity });
+    const overrides = config === null ? NO_OVERRIDES : findingOverrides(config);
+    return command.run({ parsed, io, cwd, root, overrides });
   } catch (error) {
     const message = `${describeError(error, io.cwd ?? process.cwd())}${configuredHint(error, configured)}`;
     const exitCode = exitCodeFor(error);
@@ -15183,7 +15335,7 @@ Run story --help to list commands.
   }
 }
 function configRoot(cwd, parsed, root) {
-  return parsed.positionals[1] === "-" ? path13.resolve(cwd, lastOptionValue(parsed.options.path) ?? ".") : root();
+  return parsed.positionals[1] === "-" ? path14.resolve(cwd, lastOptionValue(parsed.options.path) ?? ".") : root();
 }
 function projectConfig(command, root) {
   const config = readCliConfig(root);
@@ -15191,7 +15343,7 @@ function projectConfig(command, root) {
     return config;
   }
   if (CONFIG_REPAIR_COMMANDS.has(command.name)) {
-    return null;
+    return { defaults: {}, severity: {}, exemptions: config.exemptions, errors: config.errors };
   }
   throw projectError(`Fix cli-defaults or severity in story.md before running story ${command.name} (story validate lists every problem): ${config.errors.join("; ")}`);
 }
@@ -15262,8 +15414,8 @@ function describeError(error, cwd) {
   if (!reason || typeof error.path !== "string") {
     return `${error.message}${hint}`;
   }
-  const relativePath = path13.relative(cwd, error.path);
-  const shown = relativePath !== "" && !relativePath.startsWith("..") && !path13.isAbsolute(relativePath) ? relativePath : error.path;
+  const relativePath = path14.relative(cwd, error.path);
+  const shown = relativePath !== "" && !relativePath.startsWith("..") && !path14.isAbsolute(relativePath) ? relativePath : error.path;
   return `Cannot ${FILE_ERROR_ACTIONS[error.syscall] ?? "use"} ${shown}: ${reason}${hint}`;
 }
 function commandUsageError(command, parsed) {
@@ -15290,18 +15442,18 @@ function lastOptionValue(value) {
 function resolveRoot(cwd, parsed, name) {
   const flagPath = lastOptionValue(parsed.options.path);
   if (COMMANDS_BY_NAME.get(name)?.project !== "positional") {
-    return path13.resolve(cwd, flagPath ?? ".");
+    return path14.resolve(cwd, flagPath ?? ".");
   }
   const positionalPath = parsed.positionals[1];
   if (positionalPath !== undefined && flagPath !== undefined) {
-    const resolvedPositional = path13.resolve(cwd, positionalPath);
-    const resolvedFlag = path13.resolve(cwd, flagPath);
+    const resolvedPositional = path14.resolve(cwd, positionalPath);
+    const resolvedFlag = path14.resolve(cwd, flagPath);
     if (resolvedPositional !== resolvedFlag) {
       throw usageError(`Conflicting project paths: ${positionalPath} and --path ${flagPath}. Use either a positional path or --path, not both.`);
     }
     return resolvedFlag;
   }
-  return path13.resolve(cwd, flagPath ?? positionalPath ?? ".");
+  return path14.resolve(cwd, flagPath ?? positionalPath ?? ".");
 }
 
 // bin/story.js

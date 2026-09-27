@@ -34,6 +34,7 @@ import { analyzeChapter, chapterFindings, proseRules, proseThresholds, repeatedP
 import { splitSentences } from "./sentences.js";
 import { areSiblingBooks, buildSeries, canonicalPath, discoverSeriesBooks, isBookNumber, linksInclude, readBookFrontmatter, seriesId, seriesLinkPath, seriesLinks, validateSeriesLinks, withSeriesBacklink } from "./series.js";
 import { err, warn } from "./findings.js";
+import { EXEMPTIONS_FILE, MATCH_KEYS, exemptionFile, exemptionProblems, isChapterId, parseExemptions } from "./exemptions.js";
 import { EXIT_CODES, projectError, refusedError, usageError, withDefaultExitCode } from "./exit-codes.js";
 
 // writeFile moved to files.js with the rest of the write path guards; it is
@@ -853,7 +854,7 @@ export function validateProjectOf(project) {
   validateQuestions(project, errors);
   validatePromises(project, errors);
   validateClues(project, errors);
-  validateExemptions(project, errors);
+  validateExemptions(project, errors, warnings);
   validateGlossaryTerms(project, errors);
   validateStyleSheet(project, errors);
   validateMatter(project, errors, warnings);
@@ -1480,18 +1481,18 @@ export function seriesReport(root) {
 }
 
 // validate, links, and continuity over one scan, with the story.md severity
-// overrides applied as those commands apply them.
-function projectChecks(project, severity = []) {
+// overrides and code exemptions applied as those commands apply them.
+function projectChecks(project, overrides) {
   return {
-    validation: applySeverity(validateProjectOf(project), severity),
-    links: applySeverity(validateLinksOf(project), severity),
-    continuity: applySeverity(checkContinuity(project), severity)
+    validation: applySeverity(validateProjectOf(project), overrides),
+    links: applySeverity(validateLinksOf(project), overrides),
+    continuity: applySeverity(checkContinuity(project), overrides)
   };
 }
 
 export function projectReport(root, options = {}) {
   const project = scanProject(root);
-  const { validation, links, continuity } = projectChecks(project, options.severity);
+  const { validation, links, continuity } = projectChecks(project, options.overrides);
   const totalWords = project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
 
   return {
@@ -1611,7 +1612,7 @@ export function formatProjectReport(report, options = {}) {
 
 export function projectActions(root, options = {}) {
   const project = scanProject(root);
-  const { validation, links, continuity } = projectChecks(project, options.severity);
+  const { validation, links, continuity } = projectChecks(project, options.overrides);
   return {
     root: project.root,
     title: project.title,
@@ -3264,29 +3265,36 @@ function leftoverReferenceWarnings(root, kind, id) {
   if (files.length > 0) {
     warnings.push(warn("leftover-references", `${files.join(", ")} still ${files.length === 1 ? "mentions" : "mention"} ${kind} ${id} in ${numbered ? "links or ids" : "links"} in the text, which remove does not change: edit ${files.length === 1 ? "it" : "them"}, then run story links`, files.length === 1 ? files[0] : null));
   }
-  const patterns = exemptionPatterns(root).filter((pattern) => renameIdText(pattern, id, probe) !== pattern);
-  if (patterns.length > 0) {
-    warnings.push(warn("stale-exemption", `continuity/exemptions.md has ${patterns.length === 1 ? "a pattern" : `${patterns.length} patterns`} naming ${id}, which ${patterns.length === 1 ? "no longer matches" : "no longer match"} anything: ${patterns.map((pattern) => JSON.stringify(pattern)).join(", ")}. Delete or update ${patterns.length === 1 ? "it" : "them"}`, path.join("continuity", "exemptions.md")));
+  const stale = exemptionEntries(root).filter(({ entry }) => EXEMPTION_TEXT_KEYS.some((key) => typeof entry[key] === "string" && renameIdText(entry[key], id, probe) !== entry[key]));
+  if (stale.length > 0) {
+    const values = stale.flatMap(({ entry }) => EXEMPTION_TEXT_KEYS.filter((key) => typeof entry[key] === "string" && renameIdText(entry[key], id, probe) !== entry[key]).map((key) => `${key} ${JSON.stringify(entry[key])}`));
+    warnings.push(warn("stale-exemption", `continuity/exemptions.md has ${stale.length === 1 ? "an entry" : `${stale.length} entries`} naming ${id} (${stale.map(({ index }) => `exemptions[${index}]`).join(", ")}), which ${stale.length === 1 ? "no longer matches" : "no longer match"} anything: ${values.join(", ")}. Delete or update ${stale.length === 1 ? "it" : "them"}`, EXEMPTIONS_FILE));
   }
   return warnings;
 }
 
-const EXEMPTIONS_FILE = path.join("continuity", "exemptions.md");
+// The exemption keys that name ids and paths as text: a pattern quotes
+// finding text, file is a path, and chapter is a chapter id.
+const EXEMPTION_TEXT_KEYS = ["pattern", "file", "chapter"];
 
-function exemptionPatterns(root) {
+// The mapping entries of the exemptions log, with their indexes.
+function exemptionEntries(root) {
   const filePath = path.join(root, EXEMPTIONS_FILE);
   try {
     const entries = readMarkdown(filePath, root).data.exemptions;
-    return Array.isArray(entries) ? entries.filter((entry) => entry && typeof entry.pattern === "string").map((entry) => entry.pattern) : [];
+    return Array.isArray(entries)
+      ? entries.map((entry, index) => ({ entry, index })).filter(({ entry }) => entry && typeof entry === "object" && !Array.isArray(entry))
+      : [];
   } catch {
     return [];
   }
 }
 
 // Exemption patterns quote finding text, which names ids and file paths
-// (`chapters/chapter-01.md has POV ann`). When rename or move changes an id,
-// the patterns naming it follow, so a dismissal stays with its finding
-// instead of resurfacing, or later dismissing whatever takes the old id.
+// (`chapters/chapter-01.md has POV ann`), and file and chapter keys name
+// them outright. When rename or move changes an id, the entries naming it
+// follow, so a dismissal stays with its finding instead of resurfacing, or
+// later dismissing whatever takes the old id.
 function followExemptionPatterns(root, plan, oldId, newId) {
   const filePath = path.join(root, EXEMPTIONS_FILE);
   if (!plan.has(filePath) && !lstatIfExists(filePath)) {
@@ -3300,15 +3308,17 @@ function followExemptionPatterns(root, plan, oldId, newId) {
   }
   let changed = false;
   const exemptions = data.exemptions.map((entry) => {
-    if (!entry || typeof entry !== "object" || Array.isArray(entry) || typeof entry.pattern !== "string") {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
       return entry;
     }
-    const pattern = renameIdText(entry.pattern, oldId, newId);
-    if (pattern === entry.pattern) {
-      return entry;
+    const renamed = { ...entry };
+    for (const key of EXEMPTION_TEXT_KEYS) {
+      if (typeof entry[key] === "string") {
+        renamed[key] = renameIdText(entry[key], oldId, newId);
+        changed ||= renamed[key] !== entry[key];
+      }
     }
-    changed = true;
-    return { ...entry, pattern };
+    return renamed;
   });
   if (changed) {
     if (!plan.has(filePath)) {
@@ -5630,27 +5640,9 @@ function readExemptions(root, scanErrors) {
     return [];
   }
 
-  if (!Array.isArray(data.exemptions)) {
-    return [];
-  }
-
-  const exemptions = [];
-  for (const entry of data.exemptions) {
-    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-      continue;
-    }
-    // The pattern matches as written, so a leading space can mark a word
-    // boundary; trimming only measures it. Mirror the validate rules: an
-    // entry with a sub-minimum pattern or no reason never takes effect, so it
-    // cannot blanket-exempt findings. validate still reports it as an error.
-    const pattern = String(entry.pattern ?? "");
-    const reason = typeof entry.reason === "string" ? entry.reason.trim() : "";
-    if (pattern.trim().length < 4 || reason === "") {
-      continue;
-    }
-    exemptions.push({ pattern, reason });
-  }
-  return exemptions;
+  // Entries story validate rejects never take effect, so a bad entry
+  // cannot blanket-exempt findings.
+  return parseExemptions(data.exemptions);
 }
 
 // Reads an optional project-root markdown file such as progress.md. A
@@ -6682,13 +6674,13 @@ function validateClues(project, errors) {
   }
 }
 
-function validateExemptions(project, errors) {
-  const exemptionsPath = path.join(project.root, "continuity", "exemptions.md");
+function validateExemptions(project, errors, warnings) {
+  const exemptionsPath = path.join(project.root, EXEMPTIONS_FILE);
   if (!fs.existsSync(exemptionsPath)) {
     return;
   }
 
-  const label = path.join("continuity", "exemptions.md");
+  const label = EXEMPTIONS_FILE;
   const data = readValidationData(exemptionsPath, project.root, label, errors);
   if (!data) {
     return;
@@ -6708,19 +6700,22 @@ function validateExemptions(project, errors) {
     return;
   }
 
+  const chapters = new Set(project.chapters.map((chapter) => chapter.id));
   for (const [index, entry] of entries.entries()) {
     const entryLabel = `${label} exemptions[${index}]`;
+    errors.push(...exemptionProblems(entry, entryLabel));
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-      errors.push(err("entry-not-mapping", `${entryLabel} must be a mapping`, label));
       continue;
     }
-    if (typeof entry.pattern !== "string" || entry.pattern.trim() === "") {
-      errors.push(err("missing-field", `${entryLabel} is missing a non-empty pattern`, label));
-    } else if (entry.pattern.trim().length < 4) {
-      errors.push(err("exemption-pattern-too-short", `${entryLabel} pattern must be at least 4 characters to avoid blanket exemptions`, label));
+    warnNearMissKeys(entry, [...MATCH_KEYS, "reason"], entryLabel, warnings, label);
+    // A file or chapter that is gone can match nothing: usually a leftover
+    // from a remove, or a typo.
+    const file = typeof entry.file === "string" ? exemptionFile(entry.file) : null;
+    if (file !== null && !lstatIfExists(path.join(project.root, file))) {
+      warnings.push(warn("stale-exemption", `${entryLabel} file ${entry.file} does not exist, so the entry matches nothing`, label));
     }
-    if (typeof entry.reason !== "string" || entry.reason.trim() === "") {
-      errors.push(err("missing-field", `${entryLabel} is missing a non-empty reason`, label));
+    if (isChapterId(entry.chapter) && !chapters.has(entry.chapter)) {
+      warnings.push(warn("stale-exemption", `${entryLabel} chapter ${entry.chapter} is not a chapter in chapters/, so the entry matches nothing`, label));
     }
   }
 }

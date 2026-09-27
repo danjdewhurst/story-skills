@@ -4,6 +4,8 @@ chapter: chapter-03
 scene: 1
 pov: ada-fenn
 location: gull-rock
+date: 1893-11-14
+time: night
 characters:
   - ada-fenn
   - tobias-wren

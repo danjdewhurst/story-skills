@@ -1,4 +1,5 @@
 import path from "node:path";
+import { dismissByExemptions } from "./exemptions.js";
 import { err, warn } from "./findings.js";
 import { kebabCase } from "./markdown.js";
 import { chapterChronology, deathWindow } from "./chronology.js";
@@ -50,35 +51,11 @@ export function checkContinuity(project) {
   return withExemptions(project, { ok: errors.length === 0, errors, warnings });
 }
 
-// Applies continuity/exemptions.md: findings whose text contains an exemption
-// pattern are moved out of errors/warnings and reported as dismissed. `ok`
-// reflects only the errors that remain.
+// Applies continuity/exemptions.md: findings an entry matches are moved out
+// of errors/warnings and reported as dismissed. `ok` reflects only the
+// errors that remain.
 function withExemptions(project, result) {
-  const exemptions = project.exemptions ?? [];
-  const keptErrors = [];
-  const keptWarnings = [];
-  const dismissed = [];
-
-  for (const error of result.errors) {
-    dismissFinding(error, exemptions, keptErrors, dismissed);
-  }
-  for (const warning of result.warnings) {
-    dismissFinding(warning, exemptions, keptWarnings, dismissed);
-  }
-
-  return { ok: keptErrors.length === 0, errors: keptErrors, warnings: keptWarnings, dismissed };
-}
-
-// Paths in findings use the platform separator, so a pattern written on
-// one system (`continuity/promises/x.md`) matches on another.
-function dismissFinding(finding, exemptions, kept, dismissed) {
-  const portable = (text) => text.replace(/\\/g, "/");
-  const match = exemptions.find((exemption) => portable(finding.message).includes(portable(exemption.pattern)));
-  if (match) {
-    dismissed.push({ finding, reason: match.reason });
-  } else {
-    kept.push(finding);
-  }
+  return dismissByExemptions({ ...result, dismissed: [] }, project.exemptions ?? [], { errors: true });
 }
 
 function checkCharacterDeaths(project, context, errors, warnings) {
@@ -125,13 +102,13 @@ function checkCharacterDeaths(project, context, errors, warnings) {
     const window = deathWindow(character, context.chronology);
     for (const chapter of project.chapters) {
       if (window.deadIn(chapter.id) && castIncludes(chapter, character.id)) {
-        errors.push(err("posthumous-appearance", `${relative(project, chapter.file)} lists ${character.id}, who died in ${character.diedIn}; move posthumous appearances to mentions`, relative(project, chapter.file)));
+        errors.push(err("posthumous-appearance", `${relative(project, chapter.file)} lists ${character.id}, who died in ${character.diedIn}; move posthumous appearances to mentions`, relative(project, chapter.file), chapter.id));
       }
     }
 
     for (const scene of project.scenes) {
       if (window.deadIn(scene.chapter) && castIncludes(scene, character.id)) {
-        errors.push(err("posthumous-appearance", `${relative(project, scene.file)} lists ${character.id}, who died in ${character.diedIn}; move posthumous appearances to mentions`, relative(project, scene.file)));
+        errors.push(err("posthumous-appearance", `${relative(project, scene.file)} lists ${character.id}, who died in ${character.diedIn}; move posthumous appearances to mentions`, relative(project, scene.file), chapterOf(scene)));
       }
     }
   }
@@ -152,12 +129,13 @@ function checkStatusAppearances(project, character, chronology, warnings) {
     if (!castIncludes(entry, character.id)) {
       continue;
     }
-    const death = progressionDeathAt(character, entry.chapter ?? entry.id, chronology);
+    const chapterId = entry.chapter ?? entry.id;
+    const death = progressionDeathAt(character, chapterId, chronology);
     const entryLabel = relative(project, entry.file);
     if (death?.from === "") {
-      warnings.push(warn("deceased-in-cast", `${entryLabel} lists ${character.id}, who died before the story (deceased with no died-in); move appearances to mentions`, entryLabel));
+      warnings.push(warn("deceased-in-cast", `${entryLabel} lists ${character.id}, who died before the story (deceased with no died-in); move appearances to mentions`, entryLabel, chapterOf(entry)));
     } else if (death) {
-      warnings.push(warn("progression-deceased-in-cast", `${entryLabel} lists ${character.id}, whose progressions make them deceased from ${death.from}; move appearances after the death to mentions`, entryLabel));
+      warnings.push(warn("progression-deceased-in-cast", `${entryLabel} lists ${character.id}, whose progressions make them deceased from ${death.from}; move appearances after the death to mentions`, entryLabel, chapterOf(entry)));
     }
   }
 }
@@ -248,12 +226,12 @@ function checkProgressionDeath(character, label, chronology, warnings) {
   const revived = character.revivedIn;
   const atDeath = progressionStatusAt(character, died, chronology);
   if (atDeath.status !== "deceased" && atDeath.from !== "") {
-    warnings.push(warn("progression-death-conflict", `${label} progressions[${progressionIndex(character, atDeath.from)}] leaves ${character.id} ${atDeath.status} when they die in ${died}; add a status progression to deceased from ${died}`, label));
+    warnings.push(warn("progression-death-conflict", `${label} progressions[${progressionIndex(character, atDeath.from)}] leaves ${character.id} ${atDeath.status} when they die in ${died}; add a status progression to deceased from ${died}`, label, died));
   }
   for (const { index, from, value } of statusProgressions(character)) {
     if (value !== "deceased" && happensAfter(chronology, from, died) && (revived === "" || happensAfter(chronology, revived, from))) {
       const fix = revived === "" ? `set revived-in: ${from} if they come back` : `move it to ${revived}, when they are revived`;
-      warnings.push(warn("progression-death-conflict", `${label} progressions[${index}] sets status ${value} from ${from}, while ${character.id} is dead after dying in ${died}; ${fix}`, label));
+      warnings.push(warn("progression-death-conflict", `${label} progressions[${index}] sets status ${value} from ${from}, while ${character.id} is dead after dying in ${died}; ${fix}`, label, from));
     }
   }
   if (revived === "") {
@@ -261,19 +239,19 @@ function checkProgressionDeath(character, label, chronology, warnings) {
   }
   const atRevival = progressionStatusAt(character, revived, chronology);
   if (atRevival.status === "deceased" && atRevival.from !== "") {
-    warnings.push(warn("progression-death-conflict", `${label} progressions[${progressionIndex(character, atRevival.from)}] makes ${character.id} deceased from ${atRevival.from}, which still holds when they are revived in ${revived}; add a status progression from ${revived}`, label));
+    warnings.push(warn("progression-death-conflict", `${label} progressions[${progressionIndex(character, atRevival.from)}] makes ${character.id} deceased from ${atRevival.from}, which still holds when they are revived in ${revived}; add a status progression from ${revived}`, label, revived));
   }
 }
 
 function checkChapterCasts(project, warnings) {
   for (const chapter of project.chapters) {
     if (chapter.pov && !chapter.characters.includes(chapter.pov) && !chapter.mentions.includes(chapter.pov)) {
-      warnings.push(warn("pov-not-in-cast", `${relative(project, chapter.file)} POV character ${chapter.pov} is not listed in characters`, relative(project, chapter.file)));
+      warnings.push(warn("pov-not-in-cast", `${relative(project, chapter.file)} POV character ${chapter.pov} is not listed in characters`, relative(project, chapter.file), chapter.id));
     }
     // A chapter's POV should be the POV of at least one of its scenes.
     const scenePovs = [...new Set(project.scenes.filter((scene) => scene.chapter === chapter.id && scene.pov).map((scene) => scene.pov))];
     if (chapter.pov && scenePovs.length > 0 && !scenePovs.includes(chapter.pov)) {
-      warnings.push(warn("pov-scene-mismatch", `${relative(project, chapter.file)} has POV ${chapter.pov} but its scenes are told by ${scenePovs.join(", ")}`, relative(project, chapter.file)));
+      warnings.push(warn("pov-scene-mismatch", `${relative(project, chapter.file)} has POV ${chapter.pov} but its scenes are told by ${scenePovs.join(", ")}`, relative(project, chapter.file), chapter.id));
     }
   }
 }
@@ -284,7 +262,7 @@ function checkSceneCasts(project, warnings) {
   for (const scene of project.scenes) {
     const label = relative(project, scene.file);
     if (scene.pov && !scene.characters.includes(scene.pov) && !scene.mentions.includes(scene.pov)) {
-      warnings.push(warn("pov-not-in-cast", `${label} POV character ${scene.pov} is not listed in characters`, label));
+      warnings.push(warn("pov-not-in-cast", `${label} POV character ${scene.pov} is not listed in characters`, label, chapterOf(scene)));
     }
 
     const chapter = chapters.get(scene.chapter);
@@ -294,12 +272,12 @@ function checkSceneCasts(project, warnings) {
 
     for (const characterId of scene.characters) {
       if (!chapter.characters.includes(characterId) && !chapter.mentions.includes(characterId)) {
-        warnings.push(warn("scene-cast-not-in-chapter", `${label} lists ${characterId} but ${relative(project, chapter.file)} does not list them in characters or mentions`, label));
+        warnings.push(warn("scene-cast-not-in-chapter", `${label} lists ${characterId} but ${relative(project, chapter.file)} does not list them in characters or mentions`, label, chapterOf(scene)));
       }
     }
 
     if (scene.location && !chapter.locations.includes(scene.location)) {
-      warnings.push(warn("scene-location-not-in-chapter", `${label} is set in ${scene.location} but ${relative(project, chapter.file)} does not list that location`, label));
+      warnings.push(warn("scene-location-not-in-chapter", `${label} is set in ${scene.location} but ${relative(project, chapter.file)} does not list that location`, label, chapterOf(scene)));
     }
   }
 }
@@ -314,7 +292,7 @@ function checkCutCharacters(project, warnings) {
   for (const entry of [...project.chapters, ...project.scenes]) {
     const listed = [...new Set([idText(entry.pov), ...entry.characters.map(idText)])].filter((id) => cut.has(id));
     for (const id of listed) {
-      warnings.push(warn("cut-character-in-cast", `${relative(project, entry.file)} lists ${id}, who has status: cut; drop them from pov and characters`, relative(project, entry.file)));
+      warnings.push(warn("cut-character-in-cast", `${relative(project, entry.file)} lists ${id}, who has status: cut; drop them from pov and characters`, relative(project, entry.file), chapterOf(entry)));
     }
   }
   for (const arc of project.arcs) {
@@ -641,9 +619,9 @@ function checkPosthumousLearning(character, learnedIn, entryLabel, file, context
   // Status progressions apply as they do to cast appearances.
   const death = progressionDeathAt(character, learnedIn, context.chronology);
   if (death?.from === "") {
-    warnings.push(warn("deceased-learning", `${entryLabel} has ${character.id} learn something in ${learnedIn}, but ${character.id} died before the story (deceased with no died-in)`, file));
+    warnings.push(warn("deceased-learning", `${entryLabel} has ${character.id} learn something in ${learnedIn}, but ${character.id} died before the story (deceased with no died-in)`, file, learnedIn));
   } else if (death) {
-    warnings.push(warn("progression-deceased-learning", `${entryLabel} has ${character.id} learn something in ${learnedIn}, but their progressions make them deceased from ${death.from}`, file));
+    warnings.push(warn("progression-deceased-learning", `${entryLabel} has ${character.id} learn something in ${learnedIn}, but their progressions make them deceased from ${death.from}`, file, learnedIn));
   }
   if (!character.diedIn) {
     return;
@@ -652,7 +630,7 @@ function checkPosthumousLearning(character, learnedIn, entryLabel, file, context
   // a revival ends.
   const window = deathWindow(character, context.chronology);
   if (window && window.deadIn(learnedIn)) {
-    errors.push(err("posthumous-learning", `${entryLabel} has ${character.id} learn something in ${learnedIn}, after they died in ${character.diedIn}`, file));
+    errors.push(err("posthumous-learning", `${entryLabel} has ${character.id} learn something in ${learnedIn}, after they died in ${character.diedIn}`, file, learnedIn));
   }
 }
 
@@ -713,7 +691,7 @@ function checkStateAgainstStory(project, context, warnings) {
     const entryLabel = `${label} knowledge-state[${index}]`;
     const chapter = chaptersById.get(learnedIn);
     if (chapter.status !== "outline" && !inCast(chapter, character) && !scenesOf(learnedIn).some((scene) => inCast(scene, character))) {
-      warnings.push(warn("learner-not-in-cast", `${entryLabel} has ${character} learn something in ${learnedIn}, which does not list ${character} in characters or pov`, label));
+      warnings.push(warn("learner-not-in-cast", `${entryLabel} has ${character} learn something in ${learnedIn}, which does not list ${character} in characters or pov`, label, learnedIn));
     }
   }
 
@@ -752,7 +730,7 @@ function checkStateAgainstStory(project, context, warnings) {
       used.add(pair.index);
       continue;
     }
-    warnings.push(warn("knowledge-not-recorded", `${relative(project, scene.file)} state-changes record ${character} learning "${String(change.knowledge).trim()}" but ${label} has no knowledge-state entry for it learned by ${scene.chapter}`, relative(project, scene.file)));
+    warnings.push(warn("knowledge-not-recorded", `${relative(project, scene.file)} state-changes record ${character} learning "${String(change.knowledge).trim()}" but ${label} has no knowledge-state entry for it learned by ${scene.chapter}`, relative(project, scene.file), chapterOf(scene)));
   }
 
   const current = project.chapters.find((chapter) => chapter.number === currentChapter);
@@ -766,14 +744,14 @@ function checkStateAgainstStory(project, context, warnings) {
     // until a revival.
     const window = windows.get(character);
     if (window && current && (current.id === window.died || window.deadIn(current.id))) {
-      warnings.push(warn("state-tracks-dead-character", `${entryLabel} tracks ${character}, who died in ${window.died}; remove the entry once they are dead`, label));
+      warnings.push(warn("state-tracks-dead-character", `${entryLabel} tracks ${character}, who died in ${window.died}; remove the entry once they are dead`, label, current.id));
       continue;
     }
     // The same for a death by status progression, once its chapter is
     // written; a character dead since before the story is left alone.
     const deadFrom = context.characters.has(character) && current ? progressionDeathFrom(context.characters.get(character), current.id, chronology) : null;
     if (deadFrom && !chronology.outline.has(deadFrom) && chronology.numbers.has(deadFrom)) {
-      warnings.push(warn("state-tracks-dead-character", `${entryLabel} tracks ${character}, whose progressions make them deceased from ${deadFrom}; remove the entry once they are dead`, label));
+      warnings.push(warn("state-tracks-dead-character", `${entryLabel} tracks ${character}, whose progressions make them deceased from ${deadFrom}; remove the entry once they are dead`, label, current.id));
       continue;
     }
     const location = idText(entry.location);
@@ -784,7 +762,7 @@ function checkStateAgainstStory(project, context, warnings) {
     // chapter lists will do; a place it never visits is drift.
     const last = scenesOf(current.id).filter((scene) => inCast(scene, character) && scene.location).pop();
     if (last && last.location !== location && !current.locations.includes(location)) {
-      warnings.push(warn("state-location-drift", `${entryLabel} puts ${character} at ${location}, but their last scene in ${current.id}, ${relative(project, last.file)}, is at ${last.location} and the chapter does not list ${location}`, label));
+      warnings.push(warn("state-location-drift", `${entryLabel} puts ${character} at ${location}, but their last scene in ${current.id}, ${relative(project, last.file)}, is at ${last.location} and the chapter does not list ${location}`, label, current.id));
     }
   }
 
@@ -810,7 +788,7 @@ function checkStateAgainstStory(project, context, warnings) {
   for (const { artifact, field, value, scene } of lastSet.values()) {
     const entry = latestObjectEntry(data, artifact, context);
     if (!entry) {
-      warnings.push(warn("object-not-recorded", `${relative(project, scene.file)} state-changes set ${artifact} ${field} ${value} but ${label} has no object-state entry for ${artifact}`, relative(project, scene.file)));
+      warnings.push(warn("object-not-recorded", `${relative(project, scene.file)} state-changes set ${artifact} ${field} ${value} but ${label} has no object-state entry for ${artifact}`, relative(project, scene.file), chapterOf(scene)));
       continue;
     }
     // An entry recorded after the scene's chapter is newer than the scene.
@@ -819,7 +797,7 @@ function checkStateAgainstStory(project, context, warnings) {
     const stated = idText(entry[field]);
     if (!newer && stated !== value) {
       const index = stateEntries(data["object-state"]).indexOf(entry);
-      warnings.push(warn("state-object-drift", `${label} object-state[${index}] gives ${artifact} ${field} ${stated || "(unset)"}, but ${relative(project, scene.file)} state-changes last set it to ${value}`, label));
+      warnings.push(warn("state-object-drift", `${label} object-state[${index}] gives ${artifact} ${field} ${stated || "(unset)"}, but ${relative(project, scene.file)} state-changes last set it to ${value}`, label, chapterOf(scene)));
     }
   }
 }
@@ -895,6 +873,14 @@ function relative(project, file) {
   return path.relative(project.root, file);
 }
 
+// The chapter a chapter or scene record is in, for a finding's `chapter`: a
+// scene's `chapter` field, or a chapter's own id. A scene with no chapter
+// gives null.
+function chapterOf(record) {
+  const id = record.chapter !== undefined ? idText(record.chapter) : record.id;
+  return id === "" ? null : id;
+}
+
 // Prop custody: artifacts with destroyed/lost object-state must not appear in
 // later chapters or scenes. The destruction chapter is recorded in
 // object-state `since`; later scenes whose state-changes target the artifact
@@ -918,10 +904,10 @@ function checkPropCustody(project, context, errors) {
       }
       const sceneLabel = relative(project, scene.file);
       if (scene.stateChanges.some((change) => stateChangeTargets(change, artifact))) {
-        errors.push(err("gone-artifact-used", `${sceneLabel} uses ${artifact}, destroyed/lost ${beforeStory ? "before the story" : `since ${since}`}`, sceneLabel));
+        errors.push(err("gone-artifact-used", `${sceneLabel} uses ${artifact}, destroyed/lost ${beforeStory ? "before the story" : `since ${since}`}`, sceneLabel, chapterOf(scene)));
       }
       if (!beforeStory && scene.mentions.includes(artifact)) {
-        errors.push(err("gone-artifact-mentioned", `${sceneLabel} mentions ${artifact}, destroyed/lost since ${since}`, sceneLabel));
+        errors.push(err("gone-artifact-mentioned", `${sceneLabel} mentions ${artifact}, destroyed/lost since ${since}`, sceneLabel, chapterOf(scene)));
       }
     }
     for (const chapter of project.chapters) {
@@ -929,7 +915,7 @@ function checkPropCustody(project, context, errors) {
         continue;
       }
       if (chapter.mentions.includes(artifact)) {
-        errors.push(err("gone-artifact-mentioned", `${relative(project, chapter.file)} mentions ${artifact}, destroyed/lost since ${since}`, relative(project, chapter.file)));
+        errors.push(err("gone-artifact-mentioned", `${relative(project, chapter.file)} mentions ${artifact}, destroyed/lost since ${since}`, relative(project, chapter.file), chapter.id));
       }
     }
   }
@@ -1003,24 +989,24 @@ function checkClock(project, errors, warnings) {
   for (const scene of project.scenes) {
     const label = relative(project, scene.file);
     if (scene.date !== "" && !parseClockDate(scene.date)) {
-      warnings.push(warn("malformed-date", `${label} has malformed date "${scene.date}"`, label));
+      warnings.push(warn("malformed-date", `${label} has malformed date "${scene.date}"`, label, chapterOf(scene)));
     }
     if (scene.time !== "" && parseClockTime(scene.time) === undefined) {
-      warnings.push(warn("malformed-time", `${label} has malformed time "${scene.time}"`, label));
+      warnings.push(warn("malformed-time", `${label} has malformed time "${scene.time}"`, label, chapterOf(scene)));
     }
     if (scene.travelHours < 0) {
-      warnings.push(warn("negative-travel-hours", `${label} has negative travel-hours ${scene.travelHours}`, label));
+      warnings.push(warn("negative-travel-hours", `${label} has negative travel-hours ${scene.travelHours}`, label, chapterOf(scene)));
     }
     if (scene.date === "" && scene.travelHours > 0) {
-      warnings.push(warn("travel-hours-undated", `${label} has travel-hours but no date, so the clock check skips it`, label));
+      warnings.push(warn("travel-hours-undated", `${label} has travel-hours but no date, so the clock check skips it`, label, chapterOf(scene)));
     }
   }
   for (const chapter of project.chapters) {
     if (chapter.date !== "" && !parseClockDate(chapter.date)) {
-      warnings.push(warn("malformed-date", `Chapter ${chapter.number} has malformed date "${chapter.date}"`, relative(project, chapter.file)));
+      warnings.push(warn("malformed-date", `Chapter ${chapter.number} has malformed date "${chapter.date}"`, relative(project, chapter.file), chapter.id));
     }
     if (chapter.time !== "" && parseClockTime(chapter.time) === undefined) {
-      warnings.push(warn("malformed-time", `Chapter ${chapter.number} has malformed time "${chapter.time}"`, relative(project, chapter.file)));
+      warnings.push(warn("malformed-time", `Chapter ${chapter.number} has malformed time "${chapter.time}"`, relative(project, chapter.file), chapter.id));
     }
   }
 
@@ -1041,6 +1027,7 @@ function checkClock(project, errors, warnings) {
     stamps.push({
       label: isChapter ? `Chapter ${unit.number}` : relative(project, unit.file),
       file: relative(project, unit.file),
+      chapter: chapter.id || null,
       isChapter,
       date: parsed.text,
       time: minutes === undefined ? "" : unit.time.trim(),
@@ -1153,11 +1140,11 @@ function advanceClock(reference, current) {
 
 function backwardFinding(current, reference) {
   if (!current.isChapter) {
-    return warn("clock-backward", `${current.label} timestamp runs backward`, current.file);
+    return warn("clock-backward", `${current.label} timestamp runs backward`, current.file, current.chapter);
   }
   const sameDay = current.days === reference.days;
   const when = (stamp) => (sameDay && stamp.time ? `${stamp.date} ${stamp.time}` : stamp.date);
-  return warn("clock-backward", `${current.label} date ${when(current)} is earlier than ${reference.label} date ${when(reference)}`, current.file);
+  return warn("clock-backward", `${current.label} date ${when(current)} is earlier than ${reference.label} date ${when(reference)}`, current.file, current.chapter);
 }
 
 // The gap is taken at its most generous reading: the latest this unit can
@@ -1169,7 +1156,7 @@ function checkTravelHours(current, reference, errors) {
   const elapsedHours = (current.latest - reference.earliest) / 60;
   if (elapsedHours < current.travelHours - 1e-9) {
     const gap = current.exact && reference.exact ? `only ${formatHours(elapsedHours, Math.floor)}` : `at most ${formatHours(elapsedHours, Math.floor)}`;
-    errors.push(err("travel-too-fast", `${current.label} allows ${gap} for travel of ${current.travelHours}h`, current.file));
+    errors.push(err("travel-too-fast", `${current.label} allows ${gap} for travel of ${current.travelHours}h`, current.file, current.chapter));
   }
 }
 
@@ -1267,7 +1254,7 @@ function checkRouteTravel(project, errors) {
         const elapsed = Math.max(forwardGap, (previous.latest - current.earliest) / 60);
         const needed = graph.has(from) && graph.has(to) ? distance(from, to) : undefined;
         if (needed === undefined && elapsed === 0 && previous.exact && current.exact) {
-          errors.push(err("route-same-time", `${current.label} puts ${characterId} at ${to} at the same time as ${previous.label} at ${from}`, current.label));
+          errors.push(err("route-same-time", `${current.label} puts ${characterId} at ${to} at the same time as ${previous.label} at ${from}`, current.label, chapterOf(current.scene)));
           break;
         }
         // Route legs are decimal hours, so their float sum can overshoot an
@@ -1276,7 +1263,7 @@ function checkRouteTravel(project, errors) {
           // Round the gap down and the route up so a near miss (10.98h
           // against 11h) never reads as equal.
           const gap = previous.exact && current.exact ? formatHours(elapsed, Math.floor) : `at most ${formatHours(elapsed, Math.floor)}`;
-          errors.push(err("route-too-fast", `${current.label} puts ${characterId} at ${to} ${gap} after ${previous.label} at ${from}, but the fastest route takes ${formatHours(needed, Math.ceil)}`, current.label));
+          errors.push(err("route-too-fast", `${current.label} puts ${characterId} at ${to} ${gap} after ${previous.label} at ${from}, but the fastest route takes ${formatHours(needed, Math.ceil)}`, current.label, chapterOf(current.scene)));
           break;
         }
       }

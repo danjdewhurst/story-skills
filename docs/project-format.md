@@ -66,7 +66,7 @@ scenes/
   chapter-01-scene-01.md
 continuity/
   state.md                        durable character, object, and knowledge state
-  exemptions.md                   optional: dismissed continuity findings
+  exemptions.md                   optional: dismissed findings
   motifs.md                       optional: skill-owned, not read by the CLI
   theme-audit.md                  optional: skill-owned, not read by the CLI
   questions/_index.md
@@ -428,7 +428,7 @@ A flag given on the command line always wins, so with the entry above `story bui
 | `severity[].warning` | warning code | yes | A warning code from the [CLI reference](cli-reference.md#finding-codes). Give each code once. |
 | `severity[].level` | enum | yes | `error` reports the warning as an error, with its code in brackets, so the command exits 1; with `--json` it is a diagnostic with `severity: "error"` and `ok` is false. `off` reports it as `dismissed`, with the note `severity <code> is off in story.md` (the `exemption` of its `--json` diagnostic). `warning` keeps the default. |
 
-Every warning has a code, printed in brackets at the end of its `warning:` line; the [CLI reference](cli-reference.md#finding-codes) lists them all, by command. An override applies wherever its warning is reported: in the command that checks it, in the checks `report`, `next`, and `doctor` summarise, and in the warnings `build`, `export`, `context`, `add`, `rename`, `move`, and `remove` print after their output (a promoted one makes them exit 1). Errors cannot be overridden: an error means the project is broken or a check failed, not a matter of house style, so an entry naming an error code is rejected. `init` and `import` run before there is a `story.md` to read, so an entry naming one of their warnings (`kept-story-options`, `unsplit-chapter-lines`) is rejected.
+Every warning has a code, printed in brackets at the end of its `warning:` line; the [CLI reference](cli-reference.md#finding-codes) lists them all, by command. An override applies wherever its warning is reported: in the command that checks it, in the checks `report`, `next`, and `doctor` summarise, and in the warnings `build`, `export`, `context`, `add`, `rename`, `move`, and `remove` print after their output (a promoted one makes them exit 1). Errors cannot be overridden: an error means the project is broken or a check failed, not a matter of house style, so an entry naming an error code is rejected. `init` and `import` run before there is a `story.md` to read, so an entry naming one of their warnings (`kept-story-options`, `unsplit-chapter-lines`) is rejected. To dismiss one finding rather than every warning of a code, add a [continuity exemption](#exemptions) with the `code` and the finding's `file` or `chapter`; exemptions apply before `severity`, so an exempted finding stays dismissed when its code is promoted.
 
 The eleven codes `severity` accepted before every warning had one keep their names: `todo-markers`, `stale-registry`, and `stale-word-count` (`validate`), `prose-filter-words`, `prose-adverbs`, `prose-bookisms`, and `prose-avoided-spelling` (`prose`), `pacing-no-hook` (`pacing`), `clue-unplanted` and `clue-late-plant` (`clues`), and `voice-avoid` (`voices`).
 
@@ -958,23 +958,31 @@ For promises and clues, `story continuity` errors when `payoff` comes before `pl
 
 ### Exemptions
 
-`continuity/exemptions.md` is optional. It records continuity findings you have decided are intentional, so `story continuity` reports them as dismissed rather than as errors or warnings.
+`continuity/exemptions.md` is optional. It records findings you have decided are intentional, so `story continuity` reports them as dismissed rather than as errors or warnings. An entry that names a warning's `code` also dismisses it wherever another command reports it.
 
 ```yaml
 ---
 type: exemption-log
 exemptions:
-  - pattern: "lists theo-quill, who died in chapter-02"
+  - code: posthumous-appearance
+    file: chapters/chapter-05.md
     reason: "Chapter 5 is a dream sequence; Theo appears on purpose."
+  - pattern: "the-sealed-letter.md was planted in chapter-01"
+    reason: "The letter pays off in book two. A pattern matches the finding's text."
 ---
 ```
 
 | Field | Type | Required | Meaning |
 |-------|------|----------|---------|
 | `type` | string | yes | Must be `exemption-log`. |
-| `exemptions` | list of mappings | yes | One entry per dismissed finding. |
-| `exemptions[].pattern` | string, at least 4 characters | yes | Matched as a substring of the finding text; a `/` or `\` in a path matches either separator. The minimum length stops a short pattern from dismissing whole classes of findings. |
+| `exemptions` | list of mappings | yes | One entry per dismissed finding. An entry matches a finding when every one of `pattern`, `code`, `file`, and `chapter` it sets matches, and must set at least one. |
+| `exemptions[].code` | finding code | no | The finding's [code](cli-reference.md#finding-codes): a warning a `severity` entry can name, or an error `story continuity` reports. An entry with only a `code` is rejected as too broad. |
+| `exemptions[].file` | project-relative path | no | The file the finding is about, as the finding names it (`chapters/chapter-05.md`); either separator matches. No absolute path or `..` segment. |
+| `exemptions[].chapter` | chapter id | no | The chapter the finding shows up in. Only some continuity findings carry one; [Exemptions](continuity.md#exemptions) lists them. |
+| `exemptions[].pattern` | string, at least 4 characters | no | Matched as a substring of the finding text; a `/` or `\` in a path matches either separator. The minimum length stops a short pattern from dismissing whole classes of findings. |
 | `exemptions[].reason` | string | yes | Why the finding is intentional. |
+
+`story validate` rejects an entry with none of the matching keys, an unknown or non-exemptable `code`, a `file` outside the project, or a `chapter` that is not a kebab-case id, and an entry it rejects never takes effect. It warns when a `file` or `chapter` names nothing in the project. [Exemptions](continuity.md#exemptions) has the full rules.
 
 ## Glossary
 

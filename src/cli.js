@@ -1,6 +1,6 @@
 import path from "node:path";
 import { COMMANDS } from "./commands.js";
-import { applyDefaults, readCliConfig, severityFor } from "./config.js";
+import { NO_OVERRIDES, applyDefaults, findingOverrides, readCliConfig } from "./config.js";
 import { failureDiagnostic, writeJsonResult } from "./json.js";
 import { formatOptionsHelp, isBooleanLiteralToken, isTruthy, parseArgs, suggestion, takesValue } from "./options.js";
 import { VERSION } from "./version.js";
@@ -121,8 +121,8 @@ export function runCli(argv, io) {
     const root = () => resolveRoot(cwd, parsed, name);
     const config = command.project === "none" ? null : projectConfig(command, configRoot(cwd, parsed, root));
     configured = config === null ? [] : applyDefaults(config, name, parsed.options).map((key) => [key, parsed.options[key]]);
-    const severity = config === null ? [] : severityFor(config);
-    return command.run({ parsed, io, cwd, root, severity });
+    const overrides = config === null ? NO_OVERRIDES : findingOverrides(config);
+    return command.run({ parsed, io, cwd, root, overrides });
   } catch (error) {
     const message = `${describeError(error, io.cwd ?? process.cwd())}${configuredHint(error, configured)}`;
     const exitCode = exitCodeFor(error);
@@ -150,7 +150,8 @@ function projectConfig(command, root) {
     return config;
   }
   if (CONFIG_REPAIR_COMMANDS.has(command.name)) {
-    return null;
+    // The exemptions log is its own file, so it still applies.
+    return { defaults: {}, severity: {}, exemptions: config.exemptions, errors: config.errors };
   }
   throw projectError(`Fix cli-defaults or severity in story.md before running story ${command.name} (story validate lists every problem): ${config.errors.join("; ")}`);
 }

@@ -4,7 +4,8 @@ import path from "node:path";
 // the import is circular. COMMANDS is only read inside functions, after every
 // module has finished loading.
 import { COMMANDS } from "./commands.js";
-import { FINDING_CODES, codesAt, err } from "./findings.js";
+import { dismissByExemptions, readExemptionLog } from "./exemptions.js";
+import { FINDING_CODES, PROJECTLESS_CODES, err, severityCodes } from "./findings.js";
 import { parseFrontmatter } from "./frontmatter.js";
 import { OPTIONS, normalizeBooleanValue, optionFamily, suggestion } from "./options.js";
 import { proseThresholds } from "./prose.js";
@@ -20,14 +21,8 @@ import { proseThresholds } from "./prose.js";
 
 export const SEVERITY_LEVELS = ["error", "warning", "off"];
 
-// Warnings that story init and story import report while making a project,
-// before any story.md is read, so no severity entry can apply to them.
-const PROJECTLESS_CODES = ["kept-story-options", "unsplit-chapter-lines"];
-
 // The warning codes a severity entry can name.
-export function severityCodes() {
-  return codesAt("warning").filter((code) => !PROJECTLESS_CODES.includes(code));
-}
+export { severityCodes };
 
 // Commands that act on one named entity: a default would send every run to
 // the same target, so cli-defaults refuses them.
@@ -45,10 +40,11 @@ const LINKED_FLAGS = {
   compare: [["ref", "against"]]
 };
 
-const EMPTY_CONFIG = Object.freeze({ defaults: {}, severity: {}, errors: [] });
+const EMPTY_CONFIG = Object.freeze({ defaults: {}, severity: {}, exemptions: [], errors: [] });
 
-// The config for a project, read from its story.md. A missing or unreadable
-// story.md gives an empty config: the command reports that problem itself.
+// The config for a project, read from its story.md, with the usable entries
+// of continuity/exemptions.md. A missing or unreadable story.md gives an
+// empty config: the command reports that problem itself.
 export function readCliConfig(root) {
   let data;
   try {
@@ -56,7 +52,7 @@ export function readCliConfig(root) {
   } catch {
     return EMPTY_CONFIG;
   }
-  return parseCliConfig(data);
+  return { ...parseCliConfig(data), exemptions: readExemptionLog(root) };
 }
 
 export function validateCliConfig(data, errors) {
@@ -219,24 +215,35 @@ export function applyDefaults(config, commandName, options) {
   return filled;
 }
 
-// The severity overrides, as [code, level] pairs. A code names one rule
-// wherever it is checked, so an override applies to every command that
-// reports that warning.
-export function severityFor(config) {
-  return Object.entries(config.severity);
+export const NO_OVERRIDES = Object.freeze({ severity: [], exemptions: [] });
+
+// What a project changes about the warnings every command reports: the
+// story.md severity overrides, as [code, level] pairs, and the exemptions
+// that name a code. A code names one rule wherever it is checked, so both
+// apply to every command that reports that warning. Exemptions with no code
+// apply only in story continuity, which dismisses with every entry.
+export function findingOverrides(config) {
+  return {
+    severity: Object.entries(config.severity),
+    exemptions: (config.exemptions ?? []).filter((exemption) => exemption.code !== undefined)
+  };
 }
 
-// Moves warnings a severity override names: `error` makes them errors (so the
-// command exits 1) and `off` reports them as dismissed.
-export function applySeverity(result, overrides) {
-  if (overrides.length === 0) {
-    return result;
+// Applies a project's overrides to a result's warnings. An exemption that
+// matches a warning dismisses it first, so one finding a writer exempted
+// stays dismissed even when severity promotes the rest of its code. Then a
+// severity override moves the warnings it names: `error` makes them errors
+// (so the command exits 1) and `off` reports them as dismissed.
+export function applySeverity(result, overrides = NO_OVERRIDES) {
+  const exempted = dismissByExemptions(result, overrides.exemptions, { errors: false });
+  if (overrides.severity.length === 0) {
+    return exempted;
   }
-  const levels = new Map(overrides);
-  const errors = [...result.errors];
+  const levels = new Map(overrides.severity);
+  const errors = [...exempted.errors];
   const warnings = [];
-  const dismissed = [...(result.dismissed ?? [])];
-  for (const warning of result.warnings) {
+  const dismissed = [...(exempted.dismissed ?? [])];
+  for (const warning of exempted.warnings) {
     const code = warning.code;
     const level = levels.get(code) ?? "warning";
     if (level === "warning") {
@@ -249,6 +256,6 @@ export function applySeverity(result, overrides) {
       dismissed.push({ finding: warning, reason: note, note });
     }
   }
-  const promoted = errors.length > result.errors.length;
-  return { ...result, ok: result.ok && !promoted, errors, warnings, dismissed };
+  const promoted = errors.length > exempted.errors.length;
+  return { ...exempted, ok: exempted.ok && !promoted, errors, warnings, dismissed };
 }

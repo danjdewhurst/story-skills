@@ -77,10 +77,11 @@ const ADD_OPTIONS = [
 // the command name (default: 1 for "positional", 0 otherwise) and `options`
 // lists the flags the command reads besides --path, so a stray argument or
 // flag is an error rather than silently ignored. `run` receives
-// { parsed, io, cwd, root, severity }, where root() resolves the project
-// path and severity lists the story.md severity overrides, [code, level]
-// pairs passed to applySeverity, and returns the exit code. story.md
-// cli-defaults are already merged into parsed.options.
+// { parsed, io, cwd, root, overrides }, where root() resolves the project
+// path and overrides holds the story.md severity overrides and the
+// exemptions that name a code (see findingOverrides), passed to
+// applySeverity, and returns the exit code. story.md cli-defaults are
+// already merged into parsed.options.
 export const COMMANDS = [
   {
     name: "init",
@@ -164,7 +165,7 @@ export const COMMANDS = [
     summary: ["Check project structure, frontmatter, and registries"],
     project: "positional",
     options: ["json"],
-    run: ({ parsed, io, root, severity }) => reportCheck(parsed, io, "validate", applySeverity(validateProject(root()), severity), "Project is valid", "Project validation failed")
+    run: ({ parsed, io, root, overrides }) => reportCheck(parsed, io, "validate", applySeverity(validateProject(root()), overrides), "Project is valid", "Project validation failed")
   },
   {
     name: "reindex",
@@ -200,7 +201,7 @@ export const COMMANDS = [
     summary: ["Check cross-reference targets and backlinks"],
     project: "positional",
     options: ["json"],
-    run: ({ parsed, io, root, severity }) => reportCheck(parsed, io, "links", applySeverity(validateLinks(root()), severity), "Links are valid", "Link check failed")
+    run: ({ parsed, io, root, overrides }) => reportCheck(parsed, io, "links", applySeverity(validateLinks(root()), overrides), "Links are valid", "Link check failed")
   },
   {
     name: "continuity",
@@ -215,7 +216,7 @@ export const COMMANDS = [
     ],
     project: "positional",
     options: ["json"],
-    run: ({ parsed, io, root, severity }) => reportCheck(parsed, io, "continuity", applySeverity(checkProjectContinuity(root()), severity), "Continuity is consistent", "Continuity check failed")
+    run: ({ parsed, io, root, overrides }) => reportCheck(parsed, io, "continuity", applySeverity(checkProjectContinuity(root()), overrides), "Continuity is consistent", "Continuity check failed")
   },
   {
     name: "knowledge",
@@ -263,14 +264,14 @@ export const COMMANDS = [
     project: "flag",
     args: 1,
     options: ["budget", "scenes", "json"],
-    run({ parsed, io, root, severity }) {
+    run({ parsed, io, root, overrides }) {
       const targetId = parsed.positionals[1];
       if (!targetId) {
         // Thrown, so runCli reports it as text or, with --json, as a result.
         throw usageError("Usage: story context <chapter-or-scene-id> [--budget <tokens>] [--scenes <n>] [--path <project>]");
       }
       const context = draftingContext(root(), targetId, { budget: parsed.options.budget, scenes: parsed.options.scenes });
-      const checked = checkedWarnings(context.warnings, severity);
+      const checked = checkedWarnings(context.warnings, overrides);
       if (wantsJson(parsed)) {
         // data.warnings stays the plain text the result schema describes,
         // and leaves out a warning story.md severity turned off.
@@ -292,8 +293,8 @@ export const COMMANDS = [
     ],
     project: "positional",
     options: ["ref", "against", "anchor"],
-    run({ parsed, io, cwd, root, severity }) {
-      const comparison = applySeverity(compareProject(root(), { ref: parsed.options.ref, against: parsed.options.against, anchors: parsed.options.anchor, cwd }), severity);
+    run({ parsed, io, cwd, root, overrides }) {
+      const comparison = applySeverity(compareProject(root(), { ref: parsed.options.ref, against: parsed.options.against, anchors: parsed.options.anchor, cwd }), overrides);
       io.stdout.write(comparison.anchors ? formatLabelMapping(comparison.anchors, comparison.label) : formatComparison(comparison, comparison.label));
       return reportResult(io, comparison, "Comparison complete", "Comparison failed");
     }
@@ -307,8 +308,8 @@ export const COMMANDS = [
     ],
     project: "positional",
     options: ["log", "date", "json"],
-    run({ parsed, io, root, severity }) {
-      const progress = applySeverity(projectProgress(root(), { log: isTruthy(parsed.options.log), date: parsed.options.date }), severity);
+    run({ parsed, io, root, overrides }) {
+      const progress = applySeverity(projectProgress(root(), { log: isTruthy(parsed.options.log), date: parsed.options.date }), overrides);
       if (wantsJson(parsed)) {
         return reportJson(io, "progress", progress, { writes: progress.logged ? [progress.logged.file] : [] });
       }
@@ -328,8 +329,8 @@ export const COMMANDS = [
     ],
     project: "positional",
     options: ["json"],
-    run({ parsed, io, root, severity }) {
-      const timeline = applySeverity(storyTimeline(root()), severity);
+    run({ parsed, io, root, overrides }) {
+      const timeline = applySeverity(storyTimeline(root()), overrides);
       if (wantsJson(parsed)) {
         return reportJson(io, "timeline", timeline);
       }
@@ -348,10 +349,10 @@ export const COMMANDS = [
     ],
     project: "positional",
     options: ["json", "max-filter-words", "max-adverbs", "max-bookisms"],
-    run({ parsed, io, cwd, root, severity }) {
+    run({ parsed, io, cwd, root, overrides }) {
       const report = applySeverity(parsed.positionals[1] === STDIN_ARG
         ? proseReport(passageRoot(parsed, cwd, false), { ...parsed.options, passage: pipedText(io, "prose") })
-        : proseReport(root(), parsed.options), severity);
+        : proseReport(root(), parsed.options), overrides);
       if (wantsJson(parsed)) {
         // Each chapter's tokenized sentences feed the repeated-phrase check;
         // they are the whole chapter again, so --json leaves them out.
@@ -392,8 +393,8 @@ export const COMMANDS = [
     ],
     project: "flag",
     args: Infinity,
-    run({ parsed, io, cwd, root, severity }) {
-      const report = applySeverity(namesReport(root(), nameWords(parsed, 1, cwd, "names")), severity);
+    run({ parsed, io, cwd, root, overrides }) {
+      const report = applySeverity(namesReport(root(), nameWords(parsed, 1, cwd, "names")), overrides);
       io.stdout.write(formatNames(report));
       return reportResult(io, report, "Names checked", "Name check failed");
     }
@@ -408,8 +409,8 @@ export const COMMANDS = [
     ],
     project: "positional",
     options: ["json"],
-    run({ parsed, io, root, severity }) {
-      const report = applySeverity(pacingReport(root()), severity);
+    run({ parsed, io, root, overrides }) {
+      const report = applySeverity(pacingReport(root()), overrides);
       if (wantsJson(parsed)) {
         return reportJson(io, "pacing", report);
       }
@@ -427,8 +428,8 @@ export const COMMANDS = [
     ],
     project: "positional",
     options: ["json"],
-    run({ parsed, io, root, severity }) {
-      const report = applySeverity(clueReport(root()), severity);
+    run({ parsed, io, root, overrides }) {
+      const report = applySeverity(clueReport(root()), overrides);
       if (wantsJson(parsed)) {
         return reportJson(io, "clues", report);
       }
@@ -447,10 +448,10 @@ export const COMMANDS = [
     ],
     project: "positional",
     options: ["json"],
-    run({ parsed, io, cwd, root, severity }) {
+    run({ parsed, io, cwd, root, overrides }) {
       const report = applySeverity(parsed.positionals[1] === STDIN_ARG
         ? voicesReport(passageRoot(parsed, cwd, true), { passage: pipedText(io, "voices") })
-        : voicesReport(root()), severity);
+        : voicesReport(root()), overrides);
       if (wantsJson(parsed)) {
         return reportJson(io, "voices", report, { passage: parsed.positionals[1] === STDIN_ARG });
       }
@@ -464,8 +465,8 @@ export const COMMANDS = [
     summary: ["Order linked prequels and sequels and check shared", "canon across books"],
     project: "positional",
     options: ["json"],
-    run({ parsed, io, root, severity }) {
-      const report = applySeverity(seriesReport(root()), severity);
+    run({ parsed, io, root, overrides }) {
+      const report = applySeverity(seriesReport(root()), overrides);
       if (wantsJson(parsed)) {
         return reportJson(io, "series", report);
       }
@@ -506,8 +507,8 @@ export const COMMANDS = [
     summary: ["Summarize project inventory, progress, and checks"],
     project: "positional",
     options: ["actionable", "json"],
-    run({ parsed, io, root, severity }) {
-      const report = projectReport(root(), { displayPath: displayPath(parsed), severity });
+    run({ parsed, io, root, overrides }) {
+      const report = projectReport(root(), { displayPath: displayPath(parsed), overrides });
       if (wantsJson(parsed)) {
         return reportProjectJson(io, "report", report);
       }
@@ -521,8 +522,8 @@ export const COMMANDS = [
     summary: ["Recommend the next writing and maintenance actions"],
     project: "positional",
     options: ["json"],
-    run({ parsed, io, root, severity }) {
-      const report = projectActions(root(), { displayPath: displayPath(parsed), severity });
+    run({ parsed, io, root, overrides }) {
+      const report = projectActions(root(), { displayPath: displayPath(parsed), overrides });
       if (wantsJson(parsed)) {
         return reportProjectJson(io, "next", report);
       }
@@ -536,8 +537,8 @@ export const COMMANDS = [
     summary: ["Show health checks plus actionable repair steps"],
     project: "positional",
     options: ["json"],
-    run({ parsed, io, root, severity }) {
-      const report = projectActions(root(), { displayPath: displayPath(parsed), severity });
+    run({ parsed, io, root, overrides }) {
+      const report = projectActions(root(), { displayPath: displayPath(parsed), overrides });
       if (wantsJson(parsed)) {
         return reportProjectJson(io, "doctor", report);
       }
@@ -565,14 +566,14 @@ export const COMMANDS = [
     project: "flag",
     args: Infinity,
     options: ADD_OPTIONS,
-    run({ parsed, io, cwd, root, severity }) {
+    run({ parsed, io, cwd, root, overrides }) {
       const result = createEntity(root(), {
         ...parsed.options,
         kind: parsed.positionals[1],
         name: nameWords(parsed, 2, cwd, "add").join(" ")
       });
       io.stdout.write(`${result.resumed ? "Finished an interrupted add of" : "Created"} ${result.kind} ${result.id}: ${result.file}\n`);
-      return writeFindings(io, checkedWarnings(result.warnings, severity));
+      return writeFindings(io, checkedWarnings(result.warnings, overrides));
     }
   },
   {
@@ -582,7 +583,7 @@ export const COMMANDS = [
     project: "flag",
     args: Infinity,
     options: ["id"],
-    run({ parsed, io, cwd, root, severity }) {
+    run({ parsed, io, cwd, root, overrides }) {
       const result = renameEntity(root(), {
         ...parsed.options,
         kind: parsed.positionals[1],
@@ -593,7 +594,7 @@ export const COMMANDS = [
         name: nameWords(parsed, 3, cwd, "rename").join(" ")
       });
       io.stdout.write(`${result.resumed ? "Finished an interrupted rename of" : "Renamed"} ${result.kind} ${result.oldId} to ${result.id}: ${result.file}\n`);
-      return writeFindings(io, checkedWarnings(result.warnings, severity));
+      return writeFindings(io, checkedWarnings(result.warnings, overrides));
     }
   },
   {
@@ -602,7 +603,7 @@ export const COMMANDS = [
     summary: ["Remove an entity and scrub id references"],
     project: "flag",
     args: 2,
-    run({ parsed, io, root, severity }) {
+    run({ parsed, io, root, overrides }) {
       const result = removeEntity(root(), {
         ...parsed.options,
         kind: parsed.positionals[1],
@@ -611,7 +612,7 @@ export const COMMANDS = [
       io.stdout.write(result.alreadyGone
         ? `Removed references to ${result.kind} ${result.id}: its file was already gone\n`
         : `Removed ${result.kind} ${result.id}: ${result.file}\n`);
-      return writeFindings(io, checkedWarnings(result.warnings, severity));
+      return writeFindings(io, checkedWarnings(result.warnings, overrides));
     }
   },
   {
@@ -625,7 +626,7 @@ export const COMMANDS = [
     project: "flag",
     args: 2,
     options: ["number", "chapter", "scene"],
-    run({ parsed, io, root, severity }) {
+    run({ parsed, io, root, overrides }) {
       const result = moveEntity(root(), {
         kind: parsed.positionals[1],
         id: parsed.positionals[2],
@@ -634,7 +635,7 @@ export const COMMANDS = [
         scene: parsed.options.scene
       });
       io.stdout.write(`Moved ${result.kind} ${result.oldId} to ${result.id}: ${result.file}${result.moved > 1 ? ` (with ${result.moved - 1} ${result.moved === 2 ? "scene" : "scenes"})` : ""}\n`);
-      return writeFindings(io, checkedWarnings(result.warnings, severity));
+      return writeFindings(io, checkedWarnings(result.warnings, overrides));
     }
   },
   {
@@ -643,10 +644,10 @@ export const COMMANDS = [
     summary: ["Combine front matter, chapters, and back matter into a", "manuscript markdown file"],
     project: "positional",
     options: ["out"],
-    run({ parsed, io, root, severity }) {
+    run({ parsed, io, root, overrides }) {
       const result = exportManuscript(root(), { out: parsed.options.out });
       io.stdout.write(`Exported ${result.chapters} chapters to ${result.outFile}\n`);
-      return writeFindings(io, checkedWarnings(result.warnings, severity));
+      return writeFindings(io, checkedWarnings(result.warnings, overrides));
     }
   },
   {
@@ -663,7 +664,7 @@ export const COMMANDS = [
     ],
     project: "positional",
     options: ["out", "format", "shunn", "trim", "stamp", "note-url"],
-    run({ parsed, io, root, severity }) {
+    run({ parsed, io, root, overrides }) {
       const result = buildBook(root(), {
         out: parsed.options.out,
         format: parsed.options.format,
@@ -673,7 +674,7 @@ export const COMMANDS = [
         noteUrl: parsed.options["note-url"]
       });
       io.stdout.write(`Built ${result.chapters} chapters as ${result.format} to ${result.outFile}\n`);
-      return writeFindings(io, checkedWarnings(result.warnings, severity));
+      return writeFindings(io, checkedWarnings(result.warnings, overrides));
     }
   },
   {
@@ -726,9 +727,9 @@ function passageRoot(parsed, cwd, required) {
 }
 
 // Warnings a command reports after its own output, with the story.md
-// severity overrides applied.
-function checkedWarnings(warnings = [], severity) {
-  return applySeverity({ ok: true, errors: [], warnings }, severity);
+// severity overrides and code exemptions applied.
+function checkedWarnings(warnings = [], overrides) {
+  return applySeverity({ ok: true, errors: [], warnings }, overrides);
 }
 
 // The findings of a command that reports them after its own output (a

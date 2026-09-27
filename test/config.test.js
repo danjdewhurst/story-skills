@@ -251,9 +251,10 @@ describe("severity", () => {
     const hook = warn("pacing-no-hook", "chapter-01 has no hook: record how the chapter ending pulls the reader on");
     const other = warn("voice-avoid", "other");
     const result = { ok: false, errors: ["broken"], warnings: [hook, other], dismissed: [{ finding: "x", reason: "y" }] };
-    const applied = applySeverity(result, [["pacing-no-hook", "off"]]);
+    const applied = applySeverity(result, { severity: [["pacing-no-hook", "off"]], exemptions: [] });
     expect(applied).toEqual({ ok: false, errors: ["broken"], warnings: [other], dismissed: [{ finding: "x", reason: "y" }, { finding: hook, reason: "severity pacing-no-hook is off in story.md", note: "severity pacing-no-hook is off in story.md" }] });
-    expect(applySeverity(result, [])).toBe(result);
+    expect(applySeverity(result, { severity: [], exemptions: [] })).toBe(result);
+    expect(applySeverity(result)).toBe(result);
   });
 });
 
@@ -317,7 +318,7 @@ describe("cli-defaults", () => {
 
   test("commands that make a project, and projects without a readable story.md, read no config", () => {
     const cwd = makeTempDir();
-    expect(readCliConfig(cwd)).toEqual({ defaults: {}, severity: {}, errors: [] });
+    expect(readCliConfig(cwd)).toEqual({ defaults: {}, severity: {}, exemptions: [], errors: [] });
     expect(invoke(cwd, ["init", "Fresh", "--dir", "fresh"]).code).toBe(0);
     fs.writeFileSync(path.join(cwd, "fresh", "story.md"), "no frontmatter\n", "utf8");
     expect(messages(readCliConfig(path.join(cwd, "fresh")).errors)).toEqual([]);

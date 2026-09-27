@@ -253,7 +253,7 @@ Each book is compared with every book set earlier in the chronology: every book 
 
 The name check compares each book with the most recent earlier book that defines the entity, so a rename carried consistently through a trilogy is reported once, not once per book.
 
-`story series` findings are not affected by `continuity/exemptions.md`; the `dismissed` count is always 0.
+`story series` applies the exemptions in this book's `continuity/exemptions.md` that name a warning's `code`, as it applies `severity` from this book's `story.md`; its errors cannot be exempted. Other exemptions apply only to `story continuity`.
 
 ### Example failure
 

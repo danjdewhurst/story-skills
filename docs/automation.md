@@ -144,6 +144,7 @@ The check and analysis commands (`validate`, `links`, `continuity`, `series`, `r
     {
       "severity": "warning",
       "file": "chapters/chapter-01.md",
+      "chapter": null,
       "message": "chapters/chapter-01.md declares 900 words but contains 993",
       "code": "stale-word-count",
       "check": "validate"

@@ -286,7 +286,7 @@ Every result has the same envelope:
 | `command` | The command that ran, such as `"continuity"`. |
 | `ok` | `true` exactly when the command exits `0`. |
 | `data` | The command's result: counts for `validate`, `links`, and `continuity`; the report, grid, or profile for the others. `null` when the command stopped before producing one. Fields a project does not set are `null`, not missing. |
-| `diagnostics` | One entry per finding, in the order the text output prints them: `severity` (`error`, `warning`, or `dismissed`), `file` (the project file the finding is about, `stdin` for a finding about a passage piped to `prose -` or `voices -`, or `null` when it is about no one file), `message` (the line the text output prints after `error:` or `warning:`, without the trailing `[code]`), `code` (the finding's rule, from [Finding codes](#finding-codes)), and `check` (the check that raised it: `validate`, `links`, `continuity`, or the command's own name). A dismissed finding also has `exemption`, the reason from `continuity/exemptions.md`, or `severity <code> is off in story.md`. |
+| `diagnostics` | One entry per finding, in the order the text output prints them: `severity` (`error`, `warning`, or `dismissed`), `file` (the project file the finding is about, `stdin` for a finding about a passage piped to `prose -` or `voices -`, or `null` when it is about no one file), `message` (the line the text output prints after `error:` or `warning:`, without the trailing `[code]`), `code` (the finding's rule, from [Finding codes](#finding-codes)), and `check` (the check that raised it: `validate`, `links`, `continuity`, or the command's own name). A dismissed finding also has `exemption`, the reason from `continuity/exemptions.md`, or `severity <code> is off in story.md`, and `exemptionIndex`, the position of the matching entry in the `exemptions` list (`0` for the first), or `null` for a `severity` entry. Every diagnostic has `chapter`, the chapter id for the `continuity` findings that [carry one](continuity.md#exemptions), else `null`. |
 | `writes` | Absolute paths of the files the command wrote. Only `progress --log` writes. |
 
 `report`, `next`, and `doctor` put a `checks` summary in `data` (`ok` and error, warning, and dismissed counts for `validate`, `links`, and `continuity`) and list each check's findings in `diagnostics`. They still exit `0`, so their `ok` is `true` even when a check fails: read `data.checks` to gate on them. `report --json` always includes `actions`.
@@ -311,6 +311,7 @@ story continuity examples/the-unraveled-thread --json
     {
       "severity": "error",
       "file": "chapters/chapter-04.md",
+      "chapter": "chapter-04",
       "message": "chapters/chapter-04.md lists edran-vale, who died in chapter-02; move posthumous appearances to mentions",
       "code": "posthumous-appearance",
       "check": "continuity"
@@ -734,7 +735,7 @@ These commands read the project and never change story files. The one exception 
 story continuity [path]
 ```
 
-Runs the deterministic continuity engine over frontmatter: characters appearing after they die (by `died-in`, or by a status [progression](project-format.md#progressions) to `deceased`, resolved in story order), status progressions that contradict `died-in` or `revived-in`, promises and clues paid off before they are planted, questions resolved before they are introduced, planted setups with no payoff, POV characters missing from a chapter's cast or from all of its scenes, `status: cut` characters still listed in a cast, arc, or relationship, destroyed or lost artifacts used later, impossible clock and travel times (including journeys faster than the shortest path through location `routes`, and a character at two different places at the same exact time), and references in `continuity/state.md`. Findings matching an entry in `continuity/exemptions.md` are reported as `dismissed` and do not fail the run.
+Runs the deterministic continuity engine over frontmatter: characters appearing after they die (by `died-in`, or by a status [progression](project-format.md#progressions) to `deceased`, resolved in story order), status progressions that contradict `died-in` or `revived-in`, promises and clues paid off before they are planted, questions resolved before they are introduced, planted setups with no payoff, POV characters missing from a chapter's cast or from all of its scenes, `status: cut` characters still listed in a cast, arc, or relationship, destroyed or lost artifacts used later, impossible clock and travel times (including journeys faster than the shortest path through location `routes`, and a character at two different places at the same exact time), and references in `continuity/state.md`. Findings matching an entry in `continuity/exemptions.md` are reported as `dismissed` and do not fail the run; an entry matches by the finding's `code`, `file`, `chapter`, or text.
 
 Using a copy of [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/), which is broken on purpose:
 
@@ -1900,7 +1901,7 @@ Fill in the body sections by hand, or ask an agent to, after `add`. For what eac
 story rename <kind> <id> <new name> [--id <kebab-id>] [--path <project>]
 ```
 
-Sets the entity's name or title and, when the new name gives a different id, renames the file and rewrites every reference to the old id. References are the id-valued frontmatter fields (such as `characters`, `pov`, `locations`, `owner`, `planted`, `learned-in`, a location route's `to`, and the entries in `continuity/state.md`) and markdown links that resolve to the entity's file. It looks for them in every markdown file in the project except under `dist/`, `node_modules/`, dot-folders, and folders nested more than 10 levels deep, which are skipped silently. Prose is never changed, so update names in the chapter text yourself. Patterns in `continuity/exemptions.md` that name the old id as a whole token (`chapters/chapter-02.md has POV ann`) are updated to the new id, so each dismissal stays with its finding; `move` does the same.
+Sets the entity's name or title and, when the new name gives a different id, renames the file and rewrites every reference to the old id. References are the id-valued frontmatter fields (such as `characters`, `pov`, `locations`, `owner`, `planted`, `learned-in`, a location route's `to`, and the entries in `continuity/state.md`) and markdown links that resolve to the entity's file. It looks for them in every markdown file in the project except under `dist/`, `node_modules/`, dot-folders, and folders nested more than 10 levels deep, which are skipped silently. Prose is never changed, so update names in the chapter text yourself. A `pattern`, `file`, or `chapter` in `continuity/exemptions.md` that names the old id as a whole token (`chapters/chapter-02.md has POV ann`, `characters/ann.md`) is updated to the new id, so each dismissal stays with its finding; `move` does the same.
 
 Chapter and scene ids come from their numbers, so renaming one changes only its title; to change the number, use [`move`](#move). `rename` also updates the entity's first heading when it shows the old name, such as `# Ilse Marrow` or `# Chapter 1: Low Tide`.
 
@@ -1949,7 +1950,7 @@ Chapter and scene ids come from their numbers, so reordering the book changes id
 - `since` and `learned-in` in `continuity/state.md`, and `current-chapter` when it held the moved chapter's number
 - markdown links to the moved chapter and scene files, anywhere in the project
 - bare chapter and scene ids in the bodies of `plot/timeline.md` and `plot/arcs/*.md`, the ones `story links` checks, and in `plot/_index.md` (the Theme Tracking table). An id is a whole token: `chapter-01-draft` and `pre-chapter-01` are left alone, by `move` and `links` alike
-- the chapter and scene ids and file paths in `continuity/exemptions.md` patterns, so a dismissed finding stays dismissed after renumbering and never dismisses the finding for whichever chapter takes the old number
+- the chapter and scene ids and file paths in `continuity/exemptions.md` `pattern`, `file`, and `chapter` keys, so a dismissed finding stays dismissed after renumbering and never dismisses the finding for whichever chapter takes the old number
 
 `--number` is required, and the new number must be free. `move` never shifts other chapters to make room, so to insert a chapter, renumber the later chapters from the highest down, then `add` the new one. On a separate copy of The Salt Road with three chapters, a scene in chapter 2, and a clue planted in chapter 2 and paid off in chapter 3:
 
@@ -2008,7 +2009,7 @@ As with `rename`, every file is parsed before anything is written, so a file tha
 story remove <kind> <id> [--path <project>]
 ```
 
-Deletes the entity file and scrubs its id from every reference field, searching the same markdown files as `rename`. List entries are removed, single-value fields are cleared, and whole entries in `relationships`, `character-state`, `knowledge-state`, `object-state`, location `routes`, and chapter `choices` are dropped when they are about the removed entity. Removing a chapter that `choices` lead to also warns, naming the chapters that lost a choice, since one left with none becomes an ending, or, when those were the last choices in the book, that the book is linear again. A `progressions` entry whose `value` was the removed id keeps its chapter and field, with the value cleared. Prose and markdown links in file bodies are never changed, so `remove` lists the files that still link to the removed file (a registry's own sections included) or, for a chapter or scene, still name its id in `plot/timeline.md`, `plot/_index.md`, or an arc, and any `continuity/exemptions.md` patterns naming the id, which no longer match anything (`warning: characters/_index.md, plot/arcs/main.md still mention character bo in links in the text, which remove does not change: edit them, then run story links`). Names in prose are not listed; find them by hand, for example with `grep -rn brass-sounding-line .`. As with `rename`, every file is parsed before anything is deleted, so a file that fails to parse, or an entity file, registry, or fixed project file with no frontmatter, leaves the project unchanged. References are scrubbed before the entity file is deleted, so an interrupted `remove` can simply be run again.
+Deletes the entity file and scrubs its id from every reference field, searching the same markdown files as `rename`. List entries are removed, single-value fields are cleared, and whole entries in `relationships`, `character-state`, `knowledge-state`, `object-state`, location `routes`, and chapter `choices` are dropped when they are about the removed entity. Removing a chapter that `choices` lead to also warns, naming the chapters that lost a choice, since one left with none becomes an ending, or, when those were the last choices in the book, that the book is linear again. A `progressions` entry whose `value` was the removed id keeps its chapter and field, with the value cleared. Prose and markdown links in file bodies are never changed, so `remove` lists the files that still link to the removed file (a registry's own sections included) or, for a chapter or scene, still name its id in `plot/timeline.md`, `plot/_index.md`, or an arc, and any `continuity/exemptions.md` entries whose `pattern`, `file`, or `chapter` names the id, which no longer match anything (`warning: characters/_index.md, plot/arcs/main.md still mention character bo in links in the text, which remove does not change: edit them, then run story links`). Names in prose are not listed; find them by hand, for example with `grep -rn brass-sounding-line .`. As with `rename`, every file is parsed before anything is deleted, so a file that fails to parse, or an entity file, registry, or fixed project file with no frontmatter, leaves the project unchanged. References are scrubbed before the entity file is deleted, so an interrupted `remove` can simply be run again.
 
 `remove chapter` refuses while scenes still point at the chapter, so remove those first:
 
@@ -2222,7 +2223,7 @@ The output is a scaffold. The [submission skill](../skills/submission/SKILL.md) 
 
 Every error and warning has a stable kebab-case code. Text output ends each warning line with it, `warning: chapters/chapter-01.md has 1 [TODO marker in its prose, ... [todo-markers]`, and `--json` gives it as each diagnostic's `code`. A [`severity`](#defaults-and-severity-from-storymd) entry in `story.md` names a warning by its code. Codes never change once released: a reworded message keeps its code, and a code is never reused for another rule.
 
-An error means the project is broken or a check failed, so it cannot be turned down: `severity` accepts only warning codes. A code can appear under more than one command, such as `unreachable-chapter`, which `links` reports and a Twee `build` repeats; an override applies wherever it is reported. `report`, `next`, and `doctor` run `validate`, `links`, and `continuity`, so they report those commands' codes.
+An error means the project is broken or a check failed, so it cannot be turned down: `severity` accepts only warning codes. A [continuity exemption](continuity.md#exemptions) can name a code too, with a `file`, `chapter`, or `pattern` to narrow it to one finding; it can dismiss any warning code `severity` accepts and the errors `continuity` reports. A code can appear under more than one command, such as `unreachable-chapter`, which `links` reports and a Twee `build` repeats; an override applies wherever it is reported. `report`, `next`, and `doctor` run `validate`, `links`, and `continuity`, so they report those commands' codes.
 
 **Codes by command**
 
@@ -2289,6 +2290,11 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `progression-out-of-order` | error | Progressions are not listed in story order. |
 | `duplicate-pass` | error | `revision-passes` lists a pass twice. |
 | `exemption-pattern-too-short` | error | A continuity exemption pattern is under 4 characters. |
+| `exemption-unknown-code` | error | A continuity exemption's `code` is not a finding code. |
+| `exemption-code-not-dismissible` | error | A continuity exemption's `code` names an error that `continuity` does not report, or a warning `init` or `import` reports: neither can be exempted. |
+| `exemption-file-not-relative` | error | A continuity exemption's `file` is absolute or has a `..` segment. |
+| `exemption-too-broad` | error | A continuity exemption sets only `code`, which would dismiss every finding of that rule. |
+| `stale-exemption` | warning | A continuity exemption's `file` does not exist, or its `chapter` is not a chapter, so it matches nothing. |
 | `style-use-equals-avoid` | error | A style-sheet `preferred` entry uses and avoids the same word. |
 | `duplicate-session-date` | error | `progress.md` logs the same date twice. |
 | `research-no-sources` | warning | A verified research note lists no sources. |
@@ -2508,7 +2514,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `linked-book-id` | warning | `rename` changes an id a linked book also defines. |
 | `choices-dropped` | warning | `remove` dropped chapter choices that led to the removed chapter. |
 | `leftover-references` | warning | `remove` left mentions of the removed entity in prose links or ids. |
-| `stale-exemption` | warning | `remove` left continuity exemption patterns that name the removed entity. |
+| `stale-exemption` | warning | `remove` left continuity exemption entries whose `pattern`, `file`, or `chapter` names the removed entity. |
 
 ### Codes: init and import
 
