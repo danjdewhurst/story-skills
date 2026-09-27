@@ -19,6 +19,7 @@
     "skills",
     "templates",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {

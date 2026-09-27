@@ -68,7 +68,10 @@ Pick the route that matches what you came to do. Each one takes four pages; read
 
 | Page | What it covers |
 |------|----------------|
+| [Contributing](../CONTRIBUTING.md) | The short version: adding a skill or a CLI command, the checks to run, commit style, and changelog entries |
 | [Development guide](development.md) | Repository layout, CLI architecture, tests, the bundled fallback, schema and metadata checks, evals, skill authoring, CI, and releases |
+| [Changelog](../CHANGELOG.md) | User-visible changes in each release, including project format and CLI behaviour changes |
+| [Code of Conduct](../CODE_OF_CONDUCT.md) | The Contributor Covenant 2.1, which applies to everyone taking part |
 
 ## Find it by task
 
@@ -101,7 +104,8 @@ Pick the route that matches what you came to do. Each one takes four pages; read
 | Run the checks on every pull request | [Automation and CI](automation.md) |
 | Share a review copy that readers can annotate by paragraph | [Automation and CI](automation.md) (`review-copy.yml` and the manuscript-note issue form) |
 | Upgrade an older project | [Project format reference](project-format.md#migrating-older-projects) |
-| Change the CLI or a skill | [Development guide](development.md) |
+| Change the CLI or a skill | [Contributing](../CONTRIBUTING.md), then the [Development guide](development.md) |
+| See what changed in a release | [Changelog](../CHANGELOG.md) |
 
 ## Example projects
 

@@ -70,6 +70,9 @@ story-skills/
 ├── templates/github/             # workflows and an issue form users copy into story repositories (shipped in the npm package)
 ├── docs/                         # this documentation (shipped in the npm package)
 ├── assets/                       # logo, screenshot, social preview, demo GIF + VHS tape
+├── CHANGELOG.md                  # user-visible changes per release (Keep a Changelog)
+├── CONTRIBUTING.md               # short contributor guide that points here
+├── CODE_OF_CONDUCT.md            # Contributor Covenant 2.1
 ├── .github/                      # CI, publish workflow, Dependabot
 ├── .claude-plugin/               # Claude Code plugin and marketplace manifests
 ├── .codex-plugin/                # Codex plugin manifest
@@ -81,7 +84,7 @@ Notes on specific paths:
 
 - `plugins/story-skills` is a symlink to the repository root. Codex marketplace entries must point at a child plugin directory, so `.agents/plugins/marketplace.json` points at `./plugins/story-skills`. Keep it a symlink; a copy would duplicate `skills/` and drift. `check:metadata` fails if the path is missing or the marketplace entry points anywhere else.
 - `evals/` is tooling for this repository. Agents using the skills never load it. `evals/outputs/` and `evals/baseline/` are gitignored.
-- `docs/`, `bin/`, `src/`, `skills/`, `schemas/`, `examples/`, `templates/`, `README.md`, and `LICENSE` (the `files` list in `package.json`), plus `package.json` itself, which npm always includes, are the only paths published to npm.
+- `docs/`, `bin/`, `src/`, `skills/`, `schemas/`, `examples/`, `templates/`, `README.md`, `CHANGELOG.md`, and `LICENSE` (the `files` list in `package.json`), plus `package.json` itself, which npm always includes, are the only paths published to npm.
 - `assets/demo.gif` is generated from `assets/demo.tape` with `vhs assets/demo.tape`.
 - `CLAUDE.md` is a symlink to `AGENTS.md`. Edit `AGENTS.md` and leave the symlink alone.
 
@@ -488,6 +491,7 @@ node skills/story-maintenance/scripts/story.js --help
 - Use [Conventional Commits](https://www.conventionalcommits.org/): `feat: add chapter export option`, `fix: repair registry validation`, `docs: update skill instructions`.
 - Keep each commit to one logical change.
 - Update a branch by rebasing onto `main`, not by merging `main` in. Force-push a rebased branch only with `--force-with-lease`.
+- Add an entry under `## [Unreleased]` in [`CHANGELOG.md`](../CHANGELOG.md) for any change a user would notice, and always for a change to the project format or CLI behaviour. [`CONTRIBUTING.md`](../CONTRIBUTING.md#changelog) says what needs one.
 - Before you finish, check that `story --help` and the skill docs still agree on command and option names, that the fallback is current, and that registries, backlinks, and word counts stay deterministic for the examples.
 
 Report security issues privately through GitHub Security Advisories, as described in [`SECURITY.md`](../SECURITY.md).
@@ -509,9 +513,9 @@ Usage: bun run release <patch|minor|major|MAJOR.MINOR.PATCH> [--dry-run]
 
 [`scripts/release.js`](../scripts/release.js) does the following.
 
-1. **Preflight.** Aborts unless the current branch is `main`, the working tree is clean, local `main` matches `origin/main` after fetching `main` and tags, the tag does not already exist, `gh` is installed and logged in, no GitHub release exists for the tag, and `npm view story-skills@<version>` shows the version is unpublished. It then runs `check:metadata`, `check:evals`, `eval:selftest`, `test:coverage`, `test:examples`, and `check:node-help`. With `--dry-run` it stops here and prints the plan.
-2. **Bump.** Writes the new version into `package.json`, `.codex-plugin/plugin.json`, `.claude-plugin/plugin.json`, and `src/version.js`, and sets `STORY_REF` to `v<version>` in the three workflow templates in `templates/github/`, and bumps the version examples in `README.md` and `docs/` that name the old version. It then runs `build:fallback` (the fallback inlines the version) and `check:metadata`.
-3. **Commit and tag.** Commits those files and the fallback as `chore: release X.Y.Z` and creates an annotated tag `vX.Y.Z`.
+1. **Preflight.** Aborts unless the current branch is `main`, the working tree is clean, local `main` matches `origin/main` after fetching `main` and tags, `CHANGELOG.md` has at least one entry under `## [Unreleased]`, the tag does not already exist, `gh` is installed and logged in, no GitHub release exists for the tag, and `npm view story-skills@<version>` shows the version is unpublished. It then runs `check:metadata`, `check:evals`, `eval:selftest`, `test:coverage`, `test:examples`, and `check:node-help`. With `--dry-run` it stops here and prints the plan.
+2. **Bump.** Writes the new version into `package.json`, `.codex-plugin/plugin.json`, `.claude-plugin/plugin.json`, and `src/version.js`, and sets `STORY_REF` to `v<version>` in the three workflow templates in `templates/github/`, and bumps the version examples in `README.md` and `docs/` that name the old version. It moves the `Unreleased` entries in `CHANGELOG.md` under a new `## [X.Y.Z] - YYYY-MM-DD` heading (UTC date), leaves an empty `Unreleased` section above it, and updates the compare links at the foot. It then runs `build:fallback` (the fallback inlines the version) and `check:metadata`.
+3. **Commit and tag.** Commits those files, `CHANGELOG.md`, and the fallback as `chore: release X.Y.Z` and creates an annotated tag `vX.Y.Z`.
 4. **Push.** Runs `git push --atomic origin main vX.Y.Z`, so the remote accepts both refs or neither. A published tag can never point at a commit that is not on `main`.
 5. **GitHub release.** Runs `gh release create vX.Y.Z --title vX.Y.Z --generate-notes --verify-tag`, then prints the release URL and a link to the Publish workflow.
 
