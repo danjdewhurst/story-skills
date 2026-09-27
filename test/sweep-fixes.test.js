@@ -153,7 +153,7 @@ describe("files that fail to parse", () => {
     fs.writeFileSync(location, locationText);
     const registry = path.join(root, "worldbuilding", "_index.md");
     fs.writeFileSync(registry, fs.readFileSync(registry, "utf8").replace(/^---\n[\s\S]*?\n---\n/, ""));
-    expect(() => renameEntity(root, { kind: "character", id: "mara-quill", name: "Mara Q" })).toThrow("worldbuilding/_index.md is missing YAML frontmatter; nothing was changed");
+    expect(() => renameEntity(root, { kind: "character", id: "mara-quill", name: "Mara Q" })).toThrow("worldbuilding/_index.md is missing YAML frontmatter (it is a registry: run story reindex to rebuild it); nothing was changed");
     expect(fs.existsSync(path.join(root, "characters", "mara-quill.md"))).toBe(true);
   });
 });

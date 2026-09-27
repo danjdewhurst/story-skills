@@ -5,6 +5,7 @@ import { checkContinuity, idText, storyDateError, storyTimeError } from "./conti
 import { FRONTMATTER_PATTERN, parseFrontmatter, replaceFrontmatter, stringifyFrontmatter } from "./frontmatter.js";
 import { assertExistingAncestorInsideRoot, assertLexicallyInsideRoot, assertSafeProjectDirectory, assertSafeProjectPath, isPathInside, lstatIfExists, readTextFile, TEMPORARY_FILE_PATTERN, writeFile } from "./files.js";
 import { isTruthy } from "./options.js";
+import { withProjectLock } from "./lock.js";
 import { chapterHeading, chapterProse, countTodoMarkers, escapeRegExp, extractSection, fencedLineIndexes, hasUnclosedComment, kebabCase, scanComments, titleCaseSlug, wordCount } from "./markdown.js";
 import { buildTimeline } from "./timeline.js";
 import { buildClueMatrix } from "./clues.js";
@@ -1490,6 +1491,10 @@ export function formatDoctorReport(report) {
 }
 
 export function reindexProject(root) {
+  return withProjectLock(root, () => reindexProjectUnlocked(root));
+}
+
+function reindexProjectUnlocked(root) {
   const project = scanProject(root);
   assertProjectParses(project, "reindex");
   const changed = [];
@@ -1666,6 +1671,10 @@ function refreshStoryField(filePath, storyId, changed, root) {
 }
 
 export function computeWordCounts(root, options = {}) {
+  return options.write ? withProjectLock(root, () => computeWordCountsUnlocked(root, options)) : computeWordCountsUnlocked(root, options);
+}
+
+function computeWordCountsUnlocked(root, options = {}) {
   const project = scanProject(root);
   assertProjectParses(project, "count words");
   const chapters = [];
@@ -1680,10 +1689,11 @@ export function computeWordCounts(root, options = {}) {
 
     if (options.write && chapter.declaredWordCount !== chapter.wordCount) {
       const markdown = readMarkdown(chapter.file, project.root);
+      // An editor saving the chapter meanwhile keeps its save.
       writeFile(chapter.file, replaceFrontmatter(markdown.rawMarkdown, {
         ...markdown.data,
-        "word-count": chapter.wordCount
-      }), { root: project.root });
+        "word-count": wordCount(chapterProse(markdown.body))
+      }), { root: project.root, unchangedFrom: markdown.rawMarkdown });
     }
   }
 
@@ -2254,6 +2264,10 @@ function shunnMeta(project) {
 }
 
 export function migrateProject(root) {
+  return withProjectLock(root, () => migrateProjectUnlocked(root));
+}
+
+function migrateProjectUnlocked(root) {
   const projectRoot = path.resolve(root);
   const storyPath = requireStoryFile(projectRoot);
   // Scan first, so an unparseable story.md is reported by name like any other
@@ -2467,6 +2481,10 @@ function assertStatusChapters(project, kind, options) {
 }
 
 export function createEntity(root, options) {
+  return withProjectLock(root, () => createEntityUnlocked(root, options));
+}
+
+function createEntityUnlocked(root, options) {
   const project = scanProject(root);
   assertProjectParses(project, "add");
   const kind = normalizeKind(options.kind);
@@ -2524,9 +2542,40 @@ export function createEntity(root, options) {
   if (!resumed) {
     writeFile(entity.file, entity.markdown, { root: project.root });
   }
-  applyEntityBacklinks(project.root, kind, entity.id, readMarkdown(entity.file, project.root).data);
+  const data = readMarkdown(entity.file, project.root).data;
+  applyEntityBacklinks(project.root, kind, entity.id, data);
   const reindexed = reindexProject(project.root);
-  return { kind, id: entity.id, file: entity.file, changed: [entity.file].concat(reindexed.changed), resumed };
+  return { kind, id: entity.id, file: entity.file, changed: [entity.file].concat(reindexed.changed), resumed, warnings: missingReferenceWarnings(project.root, kind, data) };
+}
+
+// Fields whose references add writes a backlink for, by kind.
+const BACKLINKED_FIELDS = { character: ["locations"], location: ["notable-characters"], scene: ["location", "characters"] };
+
+// An id in a reference option that names no entity may be a forward
+// reference for planning, so add keeps it, but says so: story links reports
+// it, and no backlink was written. Chapter fields are left out: a promise
+// planted in a chapter not written yet is normal, and scenes check theirs.
+function missingReferenceWarnings(root, kind, data) {
+  const warnings = [];
+  for (const [key, value] of Object.entries(data)) {
+    // A character's arc is a free-text theme label, not an arc id.
+    if (!Object.hasOwn(REFERENCE_FIELD_KINDS, key) || (kind === "character" && key === "arc")) {
+      continue;
+    }
+    const kinds = REFERENCE_FIELD_KINDS[key].filter((other) => other !== "chapter");
+    if (kinds.length === 0) {
+      continue;
+    }
+    for (const item of asArray(value)) {
+      const id = typeof item === "string" ? item.trim() : "";
+      if (!isKebabId(id) || kinds.some((other) => fs.existsSync(path.join(root, entityConfig(other).dir, `${id}.md`)))) {
+        continue;
+      }
+      const backlink = BACKLINKED_FIELDS[kind]?.includes(key) ? ", so no backlink was written" : "";
+      warnings.push(`${kinds.join(" or ")} ${id} (${key}) does not exist${backlink}; story links reports it until you add it`);
+    }
+  }
+  return warnings;
 }
 
 // Whether the registry for this kind links the file (reindex writes the
@@ -2543,6 +2592,10 @@ function registryLists(root, kind, file) {
 }
 
 export function renameEntity(root, options) {
+  return withProjectLock(root, () => renameEntityUnlocked(root, options));
+}
+
+function renameEntityUnlocked(root, options) {
   const project = scanProject(root);
   assertProjectParses(project, "rename");
   const kind = normalizeKind(options.kind);
@@ -2587,11 +2640,12 @@ export function renameEntity(root, options) {
   const data = { ...markdown.data, [config.titleField]: name };
   const retitled = retitleHeading(replaceFrontmatter(markdown.rawMarkdown, data), markdown.data[config.titleField], name);
   if (newFile === oldFile) {
-    writeFile(oldFile, retitled, { root: project.root });
+    writeFile(oldFile, retitled, { root: project.root, unchangedFrom: markdown.rawMarkdown });
   } else {
     // Plan every rewrite before touching disk so a parse failure leaves the
     // project unchanged.
     const plan = replaceEntityReferences(project.root, kind, oldId, newId, new Map([[oldFile, retitled]]));
+    followExemptionPatterns(project.root, plan, oldId, newId);
     const renamedContents = plan.get(oldFile);
     plan.delete(oldFile);
     // The new id is taken, unless an earlier run was killed after writing
@@ -2607,13 +2661,16 @@ export function renameEntity(root, options) {
       warnings = adoptedReferenceWarnings(project.root, kind, newId, oldFile, "rename");
     }
 
+    assertWritable(project.root, [...plan.keys(), oldFile], interrupted ? [] : [newFile]);
     // References first, the entity file last: if the command is killed
     // partway, the old file still exists and a rerun finishes the job.
-    writeReferencePlan(project.root, plan);
-    if (!interrupted) {
-      writeFile(newFile, renamedContents, { root: project.root });
-    }
-    fs.rmSync(oldFile);
+    commitWrites(() => {
+      writeReferencePlan(project.root, plan);
+      if (!interrupted) {
+        writeFile(newFile, renamedContents, { root: project.root });
+      }
+      fs.rmSync(oldFile);
+    });
   }
 
   if (newFile !== oldFile) {
@@ -2659,6 +2716,10 @@ function retitleHeading(markdown, oldName, newName) {
 }
 
 export function removeEntity(root, options) {
+  return withProjectLock(root, () => removeEntityUnlocked(root, options));
+}
+
+function removeEntityUnlocked(root, options) {
   const project = scanProject(root);
   assertProjectParses(project, "remove");
   const kind = normalizeKind(options.kind);
@@ -2671,7 +2732,12 @@ export function removeEntity(root, options) {
   const file = path.join(project.root, config.dir, `${id}.md`);
   requireKebabId(id, `${kind} id`);
   assertSafeProjectPath(file, project.root);
-  if (!fs.existsSync(file)) {
+  // A file already deleted by hand (or lost in a merge) can leave references
+  // behind; remove still scrubs them, so a later entity with this id does
+  // not silently adopt them. With no file and no references, the id is
+  // simply unknown.
+  const alreadyGone = !fs.existsSync(file);
+  if (alreadyGone && removeEntityReferences(project.root, kind, id, new Map()).size === 0) {
     throw new Error(`${kind} ${id} does not exist`);
   }
 
@@ -2696,11 +2762,90 @@ export function removeEntity(root, options) {
   }
 
   const plan = removeEntityReferences(project.root, kind, id, new Map([[file, null]]));
+  assertWritable(project.root, [...plan.keys(), file]);
   // References first, the file last, so an interrupted remove can be rerun.
-  writeReferencePlan(project.root, plan);
-  fs.rmSync(file);
+  commitWrites(() => {
+    writeReferencePlan(project.root, plan);
+    fs.rmSync(file, { force: true });
+  });
   const reindexed = reindexProject(project.root);
-  return { kind, id, file, changed: [file].concat(reindexed.changed) };
+  return { kind, id, file, alreadyGone, changed: [file].concat(reindexed.changed), warnings: leftoverReferenceWarnings(project.root, kind, id) };
+}
+
+// What remove leaves for the author: body links and bare chapter or scene ids
+// (the ones `story links` checks, plus links in a registry's own sections),
+// which it never edits, and exemption patterns naming the id, which no longer
+// match anything.
+function leftoverReferenceWarnings(root, kind, id) {
+  const warnings = [];
+  const context = entityReferenceContext(root, kind, id);
+  const probe = `${id}-leftover-probe`;
+  const numbered = kind === "chapter" || kind === "scene";
+  let files = [];
+  try {
+    files = [...planReferenceRewrites(root, context, new Map(), (value) => value, (body, file) => {
+      const relinked = renameLinkTargets(root, file, body, context, probe);
+      return numbered ? renameIdTokens(root, file, relinked, id, probe) : relinked;
+    }).keys()].map((file) => path.relative(root, file)).sort();
+  } catch {
+    // Every file parsed before the remove; a file broken since is reported
+    // by validate.
+  }
+  if (files.length > 0) {
+    warnings.push(`${files.join(", ")} still ${files.length === 1 ? "mentions" : "mention"} ${kind} ${id} in ${numbered ? "links or ids" : "links"} in the text, which remove does not change: edit ${files.length === 1 ? "it" : "them"}, then run story links`);
+  }
+  const patterns = exemptionPatterns(root).filter((pattern) => renameIdText(pattern, id, probe) !== pattern);
+  if (patterns.length > 0) {
+    warnings.push(`continuity/exemptions.md has ${patterns.length === 1 ? "a pattern" : `${patterns.length} patterns`} naming ${id}, which ${patterns.length === 1 ? "no longer matches" : "no longer match"} anything: ${patterns.map((pattern) => JSON.stringify(pattern)).join(", ")}. Delete or update ${patterns.length === 1 ? "it" : "them"}`);
+  }
+  return warnings;
+}
+
+const EXEMPTIONS_FILE = path.join("continuity", "exemptions.md");
+
+function exemptionPatterns(root) {
+  const filePath = path.join(root, EXEMPTIONS_FILE);
+  try {
+    const entries = readMarkdown(filePath, root).data.exemptions;
+    return Array.isArray(entries) ? entries.filter((entry) => entry && typeof entry.pattern === "string").map((entry) => entry.pattern) : [];
+  } catch {
+    return [];
+  }
+}
+
+// Exemption patterns quote finding text, which names ids and file paths
+// (`chapters/chapter-01.md has POV ann`). When rename or move changes an id,
+// the patterns naming it follow, so a dismissal stays with its finding
+// instead of resurfacing, or later dismissing whatever takes the old id.
+function followExemptionPatterns(root, plan, oldId, newId) {
+  const filePath = path.join(root, EXEMPTIONS_FILE);
+  if (!plan.has(filePath) && !lstatIfExists(filePath)) {
+    return;
+  }
+  const text = plan.get(filePath) ?? readTextFile(filePath);
+  // The plan already parsed it: a broken exemptions file stops the command.
+  const data = parseFrontmatter(text, filePath).data;
+  if (!Array.isArray(data.exemptions)) {
+    return;
+  }
+  let changed = false;
+  const exemptions = data.exemptions.map((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry) || typeof entry.pattern !== "string") {
+      return entry;
+    }
+    const pattern = renameIdText(entry.pattern, oldId, newId);
+    if (pattern === entry.pattern) {
+      return entry;
+    }
+    changed = true;
+    return { ...entry, pattern };
+  });
+  if (changed) {
+    if (!plan.has(filePath)) {
+      plan.originals?.set(filePath, text);
+    }
+    plan.set(filePath, replaceFrontmatter(text, { ...data, exemptions }));
+  }
 }
 
 // Moves a chapter to another number, or a scene to another chapter or
@@ -2710,6 +2855,10 @@ export function removeEntity(root, options) {
 // bare ids in plot/timeline.md and arc files. References are written first
 // and the moved files last, so an interrupted move can be rerun.
 export function moveEntity(root, options) {
+  return withProjectLock(root, () => moveEntityUnlocked(root, options));
+}
+
+function moveEntityUnlocked(root, options) {
   const project = scanProject(root);
   assertProjectParses(project, "move");
   const kind = normalizeMoveKind(options.kind);
@@ -2782,9 +2931,13 @@ function moveChapter(project, oldId, options) {
     const stateText = plan.get(statePath) ?? readTextFile(statePath);
     const stateData = parseFrontmatter(stateText, statePath).data;
     if (stateData["current-chapter"] === chapter.number) {
+      if (!plan.has(statePath)) {
+        plan.originals.set(statePath, stateText);
+      }
       plan.set(statePath, replaceFrontmatter(stateText, { ...stateData, "current-chapter": number }));
     }
   }
+  followExemptionPatterns(project.root, plan, oldId, newId);
   const moves = [{ oldFile: chapter.file, newFile }, ...sceneMoves];
   // The number is taken, unless an earlier run of this move was interrupted
   // after writing the chapter there.
@@ -2819,6 +2972,7 @@ function moveScene(project, oldId, options) {
     const plan = planReferenceRewrites(project.root, context, new Map([[scene.file, moved]]),
       idRenamer(oldId, newId),
       (body, file) => renameIdTokens(project.root, file, renameLinkTargets(project.root, file, body, context, newId), oldId, newId));
+    followExemptionPatterns(project.root, plan, oldId, newId);
     return { number, newId, plan, moves: [{ oldFile: scene.file, newFile: path.join(project.root, "scenes", `${newId}.md`) }] };
   };
   let target;
@@ -2846,7 +3000,8 @@ function moveScene(project, oldId, options) {
   const warnings = project.scenes.some((entry) => entry.id === newId) ? [] : adoptedReferenceWarnings(project.root, "scene", newId, scene.file, "move");
   // The chapter gains the scene's cast before the old scene is deleted, so a
   // move interrupted at that step can still be rerun.
-  commitMoves(project.root, plan, moves, () => applyEntityBacklinks(project.root, "scene", newId, readMarkdown(newFile, project.root).data));
+  commitMoves(project.root, plan, moves, () => applyEntityBacklinks(project.root, "scene", newId, readMarkdown(newFile, project.root).data),
+    [path.join(project.root, "chapters", `${chapterId}.md`)]);
   const reindexed = reindexProject(project.root);
   return { kind: "scene", oldId, id: newId, file: newFile, moved: 1, changed: [newFile].concat(reindexed.changed), warnings };
 }
@@ -2887,9 +3042,14 @@ function renameIdTokens(root, file, body, oldId, newId) {
   }
   // Link destinations were already handled by renameLinkTargets, and a URL
   // or a path into another book is not this book's id.
-  return mapOutsideLinks(body, (text) => text
+  return mapOutsideLinks(body, (text) => renameIdText(text, oldId, newId));
+}
+
+// Replaces whole-token `oldId` in text, and the scene ids of a chapter id.
+function renameIdText(text, oldId, newId) {
+  return text
     .replace(new RegExp(`(?<![\\w-])${escapeRegExp(oldId)}-scene-(\\d+)(?![\\w-])`, "g"), `${newId}-scene-$1`)
-    .replace(new RegExp(`(?<![\\w-])${escapeRegExp(oldId)}(?![\\w-])`, "g"), newId));
+    .replace(new RegExp(`(?<![\\w-])${escapeRegExp(oldId)}(?![\\w-])`, "g"), newId);
 }
 
 // Markdown link destinations, autolinks, and bare URLs: text where a bare id
@@ -2906,7 +3066,7 @@ function mapOutsideLinks(body, transform) {
 // then deletes the old paths. A file already at a new path is refused unless
 // it is byte for byte what this move writes there: then an earlier run was
 // interrupted after writing it, and this run finishes the job.
-function commitMoves(root, plan, moves, beforeDelete = () => {}) {
+function commitMoves(root, plan, moves, beforeDelete = () => {}, alsoChanged = []) {
   const contents = moves.map((move) => plan.get(move.oldFile) ?? readTextFile(move.oldFile));
   const interrupted = interruptedMove(plan, moves);
   moves.forEach((move) => {
@@ -2917,14 +3077,17 @@ function commitMoves(root, plan, moves, beforeDelete = () => {}) {
   for (const move of moves) {
     plan.delete(move.oldFile);
   }
-  writeReferencePlan(root, plan);
-  moves.forEach((move, index) => writeFile(move.newFile, contents[index], { root }));
-  beforeDelete();
-  // A chapter's scenes go before the chapter, so a rerun still finds the
-  // chapter and its remaining scenes.
-  for (const move of [...moves].reverse()) {
-    fs.rmSync(move.oldFile);
-  }
+  assertWritable(root, [...plan.keys(), ...moves.map((move) => move.oldFile), ...alsoChanged], moves.map((move) => move.newFile));
+  commitWrites(() => {
+    writeReferencePlan(root, plan);
+    moves.forEach((move, index) => writeFile(move.newFile, contents[index], { root }));
+    beforeDelete();
+    // A chapter's scenes go before the chapter, so a rerun still finds the
+    // chapter and its remaining scenes.
+    for (const move of [...moves].reverse()) {
+      fs.rmSync(move.oldFile);
+    }
+  });
 }
 
 // An earlier run of this move was killed after writing the new files when
@@ -4318,6 +4481,9 @@ function removeEntityReferences(root, kind, id, overrides) {
 // for files that are about to change (or null for files about to be deleted).
 function planReferenceRewrites(root, context, overrides, transform, transformBody) {
   const plan = new Map();
+  // The text each rewrite was planned from, so a file saved meanwhile is not
+  // overwritten.
+  plan.originals = new Map();
   const storyFile = path.join(root, "story.md");
   let otherFiles = 0;
   for (const file of markdownFiles(root, { maxFiles: Infinity })) {
@@ -4338,10 +4504,11 @@ function planReferenceRewrites(root, context, overrides, transform, transformBod
         }
       }
       text = readTextFile(file);
+      plan.originals.set(file, text);
     }
     const match = FRONTMATTER_PATTERN.exec(text);
     if (!match && sourceFile) {
-      throw new Error(`${path.relative(root, file)} is missing YAML frontmatter; nothing was changed`);
+      throw new Error(`${path.relative(root, file)} is missing YAML frontmatter${registryHint(root, file)}; nothing was changed`);
     }
     let header = "";
     let body = text;
@@ -4357,7 +4524,7 @@ function planReferenceRewrites(root, context, overrides, transform, transformBod
           // A note outside the project model may use YAML the CLI does not
           // parse; only its body links are rewritten.
           if (sourceFile) {
-            throw new Error(`${path.relative(root, file)}: ${error.message}; nothing was changed`);
+            throw new Error(`${path.relative(root, file)}: ${error.message}${registryHint(root, file)}; nothing was changed`);
           }
         }
         if (data !== null) {
@@ -4399,6 +4566,13 @@ const REGISTRY_FILES = new Set([
   path.join(RESEARCH_DIR, "_index.md")
 ]);
 
+// Registries are generated, so a damaged one is rebuilt rather than fixed.
+function registryHint(root, file) {
+  return REGISTRY_FILES.has(path.relative(root, file)) ? REGISTRY_HINT : "";
+}
+
+const REGISTRY_HINT = " (it is a registry: run story reindex to rebuild it)";
+
 function isProjectSourceFile(root, file) {
   const relativePath = path.relative(root, file);
   return SOURCE_ROOT_FILES.has(relativePath)
@@ -4425,7 +4599,61 @@ function reconcileChapterStatuses(before, after) {
 
 function writeReferencePlan(root, plan) {
   for (const [file, contents] of plan) {
-    writeFile(file, contents, { root });
+    writeFile(file, contents, { root, unchangedFrom: plan.originals?.get(file) });
+  }
+}
+
+const UNWRITABLE_REASONS = { EACCES: "permission denied", EPERM: "permission denied", EROFS: "the file system is read-only" };
+
+// Before a rename, remove, or move writes anything, checks that every file it
+// will rewrite or delete, and every folder it writes into, can be written, so
+// a read-only file stops the command with the project unchanged instead of
+// half renamed. `changed` lists files rewritten or deleted, `created` new
+// files. Writes replace files through a temporary file in the same folder,
+// so the folder must be writable too.
+function assertWritable(root, changed, created = []) {
+  const problems = new Map();
+  const check = (target, label) => {
+    try {
+      fs.accessSync(target, fs.constants.W_OK);
+    } catch (error) {
+      if (!problems.has(label)) {
+        problems.set(label, UNWRITABLE_REASONS[error.code] ?? error.code ?? error.message);
+      }
+    }
+  };
+  // A folder that does not exist yet is made by the write itself.
+  const folder = (file) => {
+    const directory = path.dirname(file);
+    const shown = path.relative(root, directory);
+    if (fs.existsSync(directory)) {
+      check(directory, shown === "" ? "the project folder" : `${shown}/`);
+    }
+  };
+  for (const file of changed) {
+    if (fs.existsSync(file)) {
+      check(file, path.relative(root, file));
+    }
+    folder(file);
+  }
+  for (const file of created) {
+    folder(file);
+  }
+  if (problems.size > 0) {
+    const list = [...problems].map(([label, reason]) => `${label} (${reason})`).join(", ");
+    throw new Error(`Cannot write to ${list}; nothing was changed. Fix ${problems.size === 1 ? "it" : "them"} and run the command again`);
+  }
+}
+
+// Runs the writes of a rename, remove, or move. The preflight catches
+// unwritable files, but a write can still fail partway (a full disk, a file
+// an editor saved meanwhile): then some references already name the new id,
+// so the error says to rerun, which finishes the job.
+function commitWrites(write) {
+  try {
+    return write();
+  } catch (error) {
+    throw Object.assign(error, { hint: "Some files were already updated: fix the problem and run the same command again to finish" });
   }
 }
 
@@ -4849,6 +5077,15 @@ function safeRead(filePath, root) {
   return readTextFile(filePath);
 }
 
+function readRegistryValidationData(file, root, label, errors) {
+  const count = errors.length;
+  const data = readValidationData(file, root, label, errors);
+  if (data === null && errors.length > count) {
+    errors[errors.length - 1] += REGISTRY_HINT;
+  }
+  return data;
+}
+
 function readValidationData(file, root, label, errors) {
   try {
     return readMarkdown(file, root).data;
@@ -4917,6 +5154,22 @@ function collectStrayFileWarnings(project, warnings) {
   nested.sort();
   for (const nestedPath of nested) {
     warnings.push(`${nestedPath} is nested inside an entity directory and is ignored`);
+  }
+
+  // The scan never reads through a symlink, so a linked chapter would drop
+  // out of registries, counts, and builds without a word.
+  for (const relativeDir of ENTITY_SCAN_DIRS) {
+    const directory = path.join(root, relativeDir);
+    if (!lstatIfExists(directory)?.isDirectory()) {
+      continue;
+    }
+    const linked = fs.readdirSync(directory, { withFileTypes: true })
+      .filter((entry) => entry.isSymbolicLink() && entry.name.endsWith(".md") && !entry.name.startsWith(".") && entry.name !== "_index.md")
+      .map((entry) => path.join(relativeDir, entry.name))
+      .sort();
+    for (const linkPath of linked) {
+      warnings.push(`${linkPath} is a symlink and is ignored: replace it with the file itself`);
+    }
   }
 
   for (const leftover of temporaryFiles(root).sort()) {
@@ -5289,7 +5542,7 @@ function validateIndexFrontmatter(project, errors) {
     if (!fs.existsSync(path.join(project.root, relativePath))) {
       continue;
     }
-    const data = readValidationData(path.join(project.root, relativePath), project.root, label, errors);
+    const data = readRegistryValidationData(path.join(project.root, relativePath), project.root, label, errors);
     if (!data) {
       continue;
     }
@@ -5836,7 +6089,7 @@ function validateOptionalRegistry(project, directory, expectedType, errors) {
   const indexPath = path.join(project.root, directory, "_index.md");
   if (fs.existsSync(indexPath)) {
     const label = path.join(directory, "_index.md");
-    const data = readValidationData(indexPath, project.root, label, errors);
+    const data = readRegistryValidationData(indexPath, project.root, label, errors);
     if (data && data.type !== expectedType) {
       errors.push(`${label} type must be ${expectedType}`);
     }

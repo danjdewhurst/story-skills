@@ -462,6 +462,7 @@ export const COMMANDS = [
         name: nameWords(parsed, 2, cwd, "add").join(" ")
       });
       io.stdout.write(`${result.resumed ? "Finished an interrupted add of" : "Created"} ${result.kind} ${result.id}: ${result.file}\n`);
+      writeWarnings(io, result);
       return 0;
     }
   },
@@ -499,7 +500,10 @@ export const COMMANDS = [
         kind: parsed.positionals[1],
         id: parsed.positionals[2]
       });
-      io.stdout.write(`Removed ${result.kind} ${result.id}: ${result.file}\n`);
+      io.stdout.write(result.alreadyGone
+        ? `Removed references to ${result.kind} ${result.id}: its file was already gone\n`
+        : `Removed ${result.kind} ${result.id}: ${result.file}\n`);
+      writeWarnings(io, result);
       return 0;
     }
   },

@@ -145,14 +145,16 @@ const FILE_ERROR_ACTIONS = { open: "open", scandir: "list", stat: "check", statx
 
 // A file-system error from Node names a syscall and an absolute path; say
 // what failed in plain words, with the path relative to where the user is.
+// A `hint` on the error (a rename stopped partway) follows the message.
 function describeError(error, cwd) {
+  const hint = typeof error.hint === "string" ? `. ${error.hint}` : "";
   const reason = FILE_ERROR_REASONS[error.code];
   if (!reason || typeof error.path !== "string") {
-    return error.message;
+    return `${error.message}${hint}`;
   }
   const relativePath = path.relative(cwd, error.path);
   const shown = relativePath !== "" && !relativePath.startsWith("..") && !path.isAbsolute(relativePath) ? relativePath : error.path;
-  return `Cannot ${FILE_ERROR_ACTIONS[error.syscall] ?? "use"} ${shown}: ${reason}`;
+  return `Cannot ${FILE_ERROR_ACTIONS[error.syscall] ?? "use"} ${shown}: ${reason}${hint}`;
 }
 
 function commandUsageError(command, parsed) {

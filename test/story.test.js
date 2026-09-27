@@ -1089,7 +1089,7 @@ relationships:
     createEntity(created.root, { kind: "character", name: "Other Person" });
     expect(() => renameEntity(created.root, { kind: "character", id: "branch-person", name: "Other Person" })).toThrow("already exists");
     expect(() => removeEntity(created.root, { kind: "character", id: "" })).toThrow("remove requires");
-    expect(() => removeEntity(created.root, { kind: "character", id: "missing-person" })).toThrow("does not exist");
+    expect(() => removeEntity(created.root, { kind: "character", id: "nobody-at-all" })).toThrow("does not exist");
     expect(() => buildBook(created.root, { format: "epub" })).toThrow("No chapters found to export");
     writeMarkdown(path.join(created.root, "chapters", "chapter-01.md"), `
 title: Stale

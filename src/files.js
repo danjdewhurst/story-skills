@@ -56,7 +56,9 @@ function invalidUtf8Offset(buffer) {
 // failed write (a full disk) or a killed process leaves the old file intact
 // rather than truncated. An existing file keeps its permissions, a read-only
 // one stays refused, and a hard link (to a chapter, say) is replaced rather
-// than written through.
+// than written through. With `unchangedFrom`, the write is refused when the
+// file no longer holds that text (an editor saved it after the command read
+// it), so the save is not overwritten.
 export function writeFile(filePath, contents, options = {}) {
   const target = prepareWriteTarget(filePath, options.root);
   const existing = lstatIfExists(target);
@@ -76,12 +78,28 @@ export function writeFile(filePath, contents, options = {}) {
     if (existing) {
       fs.chmodSync(temporary, mode);
     }
+    if (options.unchangedFrom !== undefined && currentText(target) !== options.unchangedFrom) {
+      fs.rmSync(temporary, { force: true });
+      throw Object.assign(new Error(`${options.root ? path.relative(path.resolve(options.root), target) : target} changed on disk while story was updating it, so it was left as it is. Run the command again`), { changedOnDisk: true });
+    }
     fs.renameSync(temporary, target);
   } catch (error) {
     fs.rmSync(temporary, { force: true });
+    if (error.changedOnDisk) {
+      throw error;
+    }
     // Name the file the user asked for, not the temporary one.
     const action = existing?.nlink > 1 ? "replace hard-linked" : "write to";
     throw Object.assign(new Error(`Cannot ${action} ${target}: ${error.code ?? error.message}`), { code: error.code, path: target, syscall: "write" });
+  }
+}
+
+// The file's text now, or null when it is gone or unreadable.
+function currentText(target) {
+  try {
+    return fs.readFileSync(target, "utf8");
+  } catch {
+    return null;
   }
 }
 
