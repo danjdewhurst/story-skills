@@ -130,10 +130,11 @@ hand before/after skill changes, with results recorded below.
 | `deep-pov` | Filter words and thought-tags struck from a mild-interiority passage ("I noticed the key" becomes the key in the pocket) with the canon intact. Evaluates the `scene-craft` skill. |
 | `motif-restraint` | The motif carries the chapter's idea through what Tomas does; naming the theme or explaining what the motif means fails. Evaluates the `theme-craft` skill. |
 | `screenplay-fountain` | A passage adapted into one Fountain scene: slugline, source note, and nothing on the page a camera could not photograph. Voiceover, camera directions, and kept first-person narration fail. Evaluates the `adaptation` skill. |
+| `verse-limerick` | One limerick in a character's voice: it names Tomas and the paraffin, stays in one stanza under 60 words, and keeps the key secret. Archaic filler (*o'er*, *nigh*, *did come*), a preface, and a scansion table in the output fail. The checker cannot hear meter, so read the draft. Evaluates the `verse-craft` skill. |
 
-Twelve fixtures cover eight skills: `chapter-writing` (six), `line-editing`,
+Thirteen fixtures cover nine skills: `chapter-writing` (six), `line-editing`,
 `revision-continuity`, `series-continuity`, `genre-craft`, `scene-craft`,
-`theme-craft`, and `adaptation`. The other thirteen skills have no
+`theme-craft`, `adaptation`, and `verse-craft`. The other thirteen skills have no
 behavioural regression net and rely on human review. A skill is worth a
 fixture when a substring checker can tell a good output from a bad one; a
 fixture that passes whatever the skill does is worse than an honest gap.

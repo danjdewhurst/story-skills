@@ -353,7 +353,7 @@ The `evals/` directory regression-tests the writing skills. It is described in f
 
 Each fixture in `evals/fixtures/<name>/` has an `input.md` (the context passage) and a `checks.json` naming the skill under test, the drafting `brief`, the canon phrases that must survive (`required`), the traps a lazy draft would spring (`banned`, `banned_regex`), optional length, structure, and voice-drift bounds, and the phrase collisions the fixture means (`expected_overlaps`). Each fixture also has a known-good draft in `evals/examples/<name>.md`.
 
-Twelve fixtures cover eight of the 21 skills. The rest have no behavioural regression net; a fixture is worth adding for a skill whose output a substring checker can actually judge.
+Thirteen fixtures cover nine of the 22 skills. The rest have no behavioural regression net; a fixture is worth adding for a skill whose output a substring checker can actually judge.
 
 The harness has two halves: deterministic checks that run in CI, and model-backed runs you start by hand.
 

@@ -78,7 +78,8 @@ reveals:
   emotion. Two spreads in a row with the same scene and pose is a
   problem.
 - Read aloud: rhythm, repetition, and refrains matter because adults read
-  these books to children. Rhyme only if every line scans perfectly.
+  these books to children. Rhyme only if every line scans perfectly;
+  write and scan rhyming text with the `verse-craft` skill.
 - The child character solves the problem; adults do not rescue them.
 
 ## Pagination Plan Template

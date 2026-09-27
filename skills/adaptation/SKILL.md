@@ -34,9 +34,12 @@ redoing the adaptation; say so if `status` is not `revising` or `complete`.
   `publishing`); audio and film rights one-sheets live there
 - NOT for query letters or agent submission (use `submission`)
 - NOT for new prose in the source book (use `chapter-writing`)
-- Nonfiction and poetry are outside the story project model. The CLI
-  checks fiction entities (characters, chapters, scenes, continuity); do
-  not force a poetry collection or nonfiction book into it.
+- NOT for writing or scanning verse, including rhyming picture-book text
+  (use `verse-craft`)
+- Nonfiction and poetry collections are outside the story project model.
+  The CLI checks fiction entities (characters, chapters, scenes,
+  continuity); do not force a poetry collection or nonfiction book into
+  it.
 
 ## Hard Rules
 

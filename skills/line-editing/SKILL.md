@@ -33,6 +33,8 @@ it.
 - NOT for setting house style or the voice description (use `voice-style`; this skill applies it)
 - NOT for scene-level craft such as deep POV, subtext, or exposition strategy (use `scene-craft`)
 - NOT for acting on external reader notes (use `feedback-triage`)
+- NOT for writing or scanning verse (use `verse-craft`); this skill only
+  flags rhymes that slipped into prose by accident
 
 ## Workflow
 

@@ -1,6 +1,6 @@
 # Skills catalogue
 
-This page is for writers and agent operators who want to know what each of the 21 Story Skills does and which one to reach for. For every skill it covers when an agent picks it up, which files it reads and writes, which `story` commands it runs, and the reference files it loads.
+This page is for writers and agent operators who want to know what each of the 22 Story Skills does and which one to reach for. For every skill it covers when an agent picks it up, which files it reads and writes, which `story` commands it runs, and the reference files it loads.
 
 **On this page**
 
@@ -62,6 +62,7 @@ If none of the three is available, skills fall back to doing the registry, backl
 | Draft without an outline and tidy the bible afterwards | [discovery-drafting](#discovery-drafting) | "I want to discovery-write" |
 | Fix a flat scene, an info dump, an opening, or a chapter ending | [scene-craft](#scene-craft) | "Fix the info dump in chapter 2" |
 | Keep spelling, voice, and house style consistent, or lint prose | [voice-style](#voice-style) | "Set up a style sheet for this book" |
+| Write a poem, limerick, or song, or check that verse scans | [verse-craft](#verse-craft) | "Does this limerick scan?" |
 | Revise or continuity-check existing chapters, or work through revision passes | [revision-continuity](#revision-continuity) | "Continuity-check chapter 3" |
 | Line edit, copyedit, proofread, or make the voices distinct | [line-editing](#line-editing) | "Line edit chapter 3" |
 | Process notes from alpha or beta readers, or send them a review copy | [feedback-triage](#feedback-triage) | "Triage the beta feedback" |
@@ -75,7 +76,7 @@ If none of the three is available, skills fall back to doing the registry, backl
 
 ## How the skills fit together
 
-Most books move through the skills roughly in this order. `story-maintenance` runs underneath all of them, and `scene-craft`, `voice-style`, `research`, and `editorial-review` are used whenever they are needed rather than at one fixed point.
+Most books move through the skills roughly in this order. `story-maintenance` runs underneath all of them, and `scene-craft`, `voice-style`, `verse-craft`, `research`, and `editorial-review` are used whenever they are needed rather than at one fixed point.
 
 ```mermaid
 flowchart LR
@@ -133,6 +134,7 @@ The main handoffs:
 | [discovery-drafting](#discovery-drafting) | Chapters, post-hoc notes, reconciled bible files | `wordcount --write`, `reindex`, `links`, `validate`, `continuity`, `progress --log` |
 | [scene-craft](#scene-craft) | `scenes/*.md` planning fields and sections, chapter `hook` | `reindex`, `links`, `validate`, `continuity`, `pacing` |
 | [voice-style](#voice-style) | `style-sheet.md`, character `voice-words`/`voice-avoid`, chapter prose | `prose`, `voices`, `names`, `validate`, `wordcount --write`, `links`, `rename character` |
+| [verse-craft](#verse-craft) | Standalone poem files, or verse in chapter prose and `matter/` | `add matter`, `wordcount --write`, `links`, `validate` (story verse only) |
 | [revision-continuity](#revision-continuity) | Chapters and every dependent record, `story.md` `revision-passes` | `report`, `passes`, `next`, `move`, `wordcount --write`, `reindex`, `links`, `validate`, `continuity`, `doctor`, `pacing`, `clues`, `voices`, `prose`, `timeline`, `diagram`, `compare`, `series` |
 | [line-editing](#line-editing) | Chapter prose, `style-sheet.md`, character voice fields | `passes`, `prose`, `voices`, `build --format narration`/`html`/`print`, `wordcount --write`, `links`, `validate` |
 | [feedback-triage](#feedback-triage) | `feedback/round-N/*.md` | `build --format html`, `reindex`, `links`, `validate`, `continuity` |
@@ -565,6 +567,37 @@ When `story.md` links other books, reveals the series depends on get a stable `f
 - [`style-sheet-guide.md`](../skills/voice-style/references/style-sheet-guide.md): each style-sheet section, the frontmatter format, and how to extract a voice description from sample prose.
 - [`prose-checks.md`](../skills/voice-style/references/prose-checks.md): what each `story prose` count measures, its warning threshold, and when to keep the flagged text.
 
+### verse-craft
+
+**Purpose.** Writes, scans, and revises verse: fixed forms such as the limerick, sonnet, haiku, and villanelle; ballads and song lyrics; rhyming picture-book text; and verse inside a story, such as a character's song or a prophecy. Every claim that a line scans is shown: the agent marks the stresses, counts the syllables, and labels the rhyme scheme so you can check the work.
+
+**Triggers.** "Write a poem", "write a limerick", "write a sonnet", "haiku", "villanelle", "ballad", "song lyrics", "a song for my character", "a rhyme", "rhyming couplets", "does this scan", "check the meter", "fix the rhythm of this poem", "rhyme scheme", "iambic pentameter", "a prophecy in verse", "a nursery rhyme", "rhyming picture book".
+
+**Not for.** Accidental rhymes in prose ([line-editing](#line-editing)), permissions for quoting another writer's poem or lyrics ([editorial-review](#editorial-review)), or a poetry collection as a story project: the CLI checks fiction entities, so a collection stays as plain files.
+
+**Hard rules.** It never says a line scans without showing its stresses. It never pads a line with filler ("did go", "so very") or inverts word order to land a rhyme, unless your style does so on purpose. It never reproduces copyrighted lyrics or poems, and never rewrites your poem wholesale without permission. Verse a character writes sounds like that character, so a clumsy character's poem can stay clumsy.
+
+**Workflow.**
+
+1. **Mode and constraints.** Works out whether to write, critique, fix, or place verse in a story, then pins the form, meter, rhyme scheme, line count, and refrain. For story verse it reads `story.md` and the speaker's character file, and invents no new canon. It asks which accent the verse is scanned in when a word's stress depends on it.
+2. **Draft.** Drafts for sense first, then fits the meter, building each line toward a rhyme that carries meaning.
+3. **Scan.** Shows a scansion table for every line: stresses, syllables, beats, rhyme letter, and a verdict of ok, deliberate variation, or fault. When you ask for the poem only, it scans privately and offers the table afterwards.
+4. **Check rhyme and form.** Labels the rhyme scheme, marks slant and eye rhymes, checks the form's other rules (refrains, the sonnet's turn, the limerick's punchline), and offers a read-aloud with the system's text-to-speech.
+5. **Revise.** Proposes fixes in line-editing's before/after format, with the verse line as the location, and rescans every changed line.
+6. **Place story verse.** Puts the verse in the chapter or a `matter/` file, ends each line of a stanza except the last with a backslash so builds keep the line breaks, then runs `story wordcount --write`, `story links`, and `story validate`.
+
+**Reads.** For story verse, `story.md`, the speaker's character file, and the chapter the verse goes in. Nothing for a standalone poem.
+
+**Writes.** A standalone poem file where you ask for it, or verse in chapter prose and `matter/` files.
+
+**CLI.** None for a standalone poem. For story verse, `story add matter` for an epigraph page, then `story wordcount --write`, `story links`, and `story validate`.
+
+**References.**
+
+- [`forms.md`](../skills/verse-craft/references/forms.md): rules, an original example, and common faults for the limerick, sonnets, haiku, villanelle, ballad, clerihew, couplets, free verse, song lyrics, and rhyming picture-book text.
+- [`meter-and-scansion.md`](../skills/verse-craft/references/meter-and-scansion.md): feet and meters, finding a word's stress, the scansion table format, and which departures are allowed.
+- [`rhyme.md`](../skills/verse-craft/references/rhyme.md): kinds of rhyme, scheme notation, forced-rhyme tells, and rhymes readers have seen too often.
+
 ## Revising and reviewing
 
 ### revision-continuity
@@ -804,7 +837,7 @@ One `story.md` holds one edition's metadata. When the ebook and print ISBNs diff
 
 **Triggers.** "Make an audiobook", "narration script", "narrator", "ACX", "Findaway", "pronunciation guide", "how long is the audiobook", "adapt to a screenplay", "Fountain", "screenplay", "picture book", "spreads", "illustration notes", "art notes", "comic script", "comics script", "graphic novel", "panels", "interactive fiction", "Ink", "Twine", "choose your own adventure", "translate the book", "translation", "foreign edition", "glossary for translators".
 
-**Not for.** Publishing metadata, print, ebook, launch, or rights deals ([publishing](#publishing); audio and film rights one-sheets live there), agent submission ([submission](#submission)), or new prose in the source book ([chapter-writing](#chapter-writing)). Nonfiction and poetry are outside the story project model.
+**Not for.** Publishing metadata, print, ebook, launch, or rights deals ([publishing](#publishing); audio and film rights one-sheets live there), agent submission ([submission](#submission)), or new prose in the source book ([chapter-writing](#chapter-writing)). Verse goes to [verse-craft](#verse-craft); nonfiction and poetry collections are outside the story project model.
 
 **Hard rules.** It never changes the source manuscript to suit an adaptation without your approval. It never puts adaptation `.md` files in the project root, where `story validate` reports them as stray files; they go in `adaptations/` or use another extension such as `.fountain`. It never invents a pronunciation for a real place, person, or language. It gives working figures for audio-platform specs and tells you to check the current spec, and treats narrator, illustrator, and translator contracts as matters for publishing's contract checklist and a professional.
 
