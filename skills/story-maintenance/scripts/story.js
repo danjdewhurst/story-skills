@@ -72,6 +72,8 @@ var FINDING_CODES = {
   "exemption-code-not-dismissible": "error",
   "exemption-file-not-relative": "error",
   "exemption-too-broad": "error",
+  "exemption-misspelled-key": "error",
+  "exemption-chapter-not-carried": "error",
   "style-use-equals-avoid": "error",
   "duplicate-session-date": "error",
   "research-no-sources": "warning",
@@ -281,6 +283,36 @@ var CONTINUITY_ERROR_CODES = [
 function exemptionCodes() {
   return [...severityCodes(), ...CONTINUITY_ERROR_CODES];
 }
+var CHAPTER_CODES = [
+  "posthumous-appearance",
+  "deceased-in-cast",
+  "progression-deceased-in-cast",
+  "progression-death-conflict",
+  "pov-not-in-cast",
+  "pov-scene-mismatch",
+  "scene-cast-not-in-chapter",
+  "scene-location-not-in-chapter",
+  "cut-character-in-cast",
+  "posthumous-learning",
+  "deceased-learning",
+  "progression-deceased-learning",
+  "learner-not-in-cast",
+  "knowledge-not-recorded",
+  "state-tracks-dead-character",
+  "state-location-drift",
+  "object-not-recorded",
+  "state-object-drift",
+  "gone-artifact-used",
+  "gone-artifact-mentioned",
+  "malformed-date",
+  "malformed-time",
+  "negative-travel-hours",
+  "travel-hours-undated",
+  "clock-backward",
+  "travel-too-fast",
+  "route-same-time",
+  "route-too-fast"
+];
 
 // src/clues.js
 var LIVE_STATUSES = new Set(["planned", "planted", "paid-off"]);
@@ -2836,7 +2868,7 @@ function portable(text) {
 }
 function exemptionFile(value) {
   const text = portable(value);
-  if (text.startsWith("/") || /^[A-Za-z]:/.test(text) || text.split("/").includes("..")) {
+  if (text.startsWith("/") || /^[A-Za-z]:/.test(text) || text.split("/").includes("..") || text.includes("\x00")) {
     return null;
   }
   const normalized = path3.posix.normalize(text).replace(/\/$/, "");
@@ -2847,6 +2879,15 @@ function exemptionProblems(entry, label = "exemption") {
     return [err("entry-not-mapping", `${label} must be a mapping`, EXEMPTIONS_FILE)];
   }
   const problems = [];
+  for (const key of Object.keys(entry)) {
+    const intended = [...MATCH_KEYS, "reason"].find((known) => {
+      const normalized = key.trim().toLowerCase().replace(/[\s_]+/g, "-");
+      return key !== known && (normalized === known || normalized === `${known}s`);
+    });
+    if (intended !== undefined) {
+      problems.push(err("exemption-misspelled-key", `${label} has ${key}; did you mean ${intended}?`, EXEMPTIONS_FILE));
+    }
+  }
   if (MATCH_KEYS.every((key) => entry[key] === undefined)) {
     problems.push(err("missing-field", `${label} sets none of ${MATCH_KEYS.join(", ")}: set at least one to say which findings it dismisses`, EXEMPTIONS_FILE));
   }
@@ -2870,10 +2911,15 @@ function exemptionProblems(entry, label = "exemption") {
   }
   if (entry.chapter !== undefined && !isChapterId(entry.chapter)) {
     problems.push(err("id-not-kebab", `${label} chapter must be a kebab-case chapter id, such as chapter-03, got ${JSON.stringify(entry.chapter)}`, EXEMPTIONS_FILE));
+  } else if (entry.chapter !== undefined && codeProblem === null && entry.code !== undefined && !CHAPTER_CODES.includes(entry.code)) {
+    problems.push(err("exemption-chapter-not-carried", `${label} sets chapter, but ${entry.code} findings carry no chapter, so it would never match: use file instead`, EXEMPTIONS_FILE));
   }
-  if (entry.code !== undefined && codeProblem === null && ["pattern", "file", "chapter"].every((key) => entry[key] === undefined)) {
+  const narrowed = ["pattern", "file", "chapter"].some((key) => entry[key] !== undefined);
+  if (entry.code !== undefined && codeProblem === null && !narrowed) {
     const severity = FINDING_CODES[entry.code] === "warning" ? `, or set severity ${entry.code} to off in story.md` : "";
     problems.push(err("exemption-too-broad", `${label} sets only code, which would dismiss every ${entry.code} finding: add file, chapter, or pattern to narrow it${severity}`, EXEMPTIONS_FILE));
+  } else if (entry.code === undefined && entry.pattern === undefined && narrowed) {
+    problems.push(err("exemption-too-broad", `${label} sets ${entry.file === undefined ? "chapter" : entry.chapter === undefined ? "file" : "file and chapter"} without code or pattern, which would dismiss every finding about it: add the finding's code`, EXEMPTIONS_FILE));
   }
   if (typeof entry.reason !== "string" || entry.reason.trim() === "") {
     problems.push(err("missing-field", `${label} is missing a non-empty reason`, EXEMPTIONS_FILE));
@@ -10447,7 +10493,7 @@ function renameEntityUnlocked(root, options) {
     writeFile(oldFile, retitled, { root: project.root, unchangedFrom: markdown.rawMarkdown });
   } else {
     const plan = replaceEntityReferences(project.root, kind, oldId, newId, new Map([[oldFile, retitled]]));
-    followExemptionPatterns(project.root, plan, oldId, newId);
+    followExemptionPatterns(project.root, plan, kind, oldId, newId);
     const renamedContents = plan.get(oldFile);
     plan.delete(oldFile);
     const interrupted = fs7.existsSync(newFile) && plan.size === 0 && readTextFile(newFile) === renamedContents;
@@ -10561,9 +10607,12 @@ function leftoverReferenceWarnings(root, kind, id) {
   if (files.length > 0) {
     warnings.push(warn("leftover-references", `${files.join(", ")} still ${files.length === 1 ? "mentions" : "mention"} ${kind} ${id} in ${numbered ? "links or ids" : "links"} in the text, which remove does not change: edit ${files.length === 1 ? "it" : "them"}, then run story links`, files.length === 1 ? files[0] : null));
   }
-  const stale = exemptionEntries(root).filter(({ entry }) => EXEMPTION_TEXT_KEYS.some((key) => typeof entry[key] === "string" && renameIdText(entry[key], id, probe) !== entry[key]));
+  const stale = exemptionEntries(root).map(({ entry, index }) => {
+    const followed = followExemptionEntry(entry, kind, id, probe);
+    return { index, keys: EXEMPTION_TEXT_KEYS.filter((key) => followed[key] !== entry[key]).map((key) => `${key} ${JSON.stringify(entry[key])}`) };
+  }).filter(({ keys }) => keys.length > 0);
   if (stale.length > 0) {
-    const values = stale.flatMap(({ entry }) => EXEMPTION_TEXT_KEYS.filter((key) => typeof entry[key] === "string" && renameIdText(entry[key], id, probe) !== entry[key]).map((key) => `${key} ${JSON.stringify(entry[key])}`));
+    const values = stale.flatMap(({ keys }) => keys);
     warnings.push(warn("stale-exemption", `continuity/exemptions.md has ${stale.length === 1 ? "an entry" : `${stale.length} entries`} naming ${id} (${stale.map(({ index }) => `exemptions[${index}]`).join(", ")}), which ${stale.length === 1 ? "no longer matches" : "no longer match"} anything: ${values.join(", ")}. Delete or update ${stale.length === 1 ? "it" : "them"}`, EXEMPTIONS_FILE));
   }
   return warnings;
@@ -10578,7 +10627,24 @@ function exemptionEntries(root) {
     return [];
   }
 }
-function followExemptionPatterns(root, plan, oldId, newId) {
+function followExemptionEntry(entry, kind, oldId, newId) {
+  const renamed = { ...entry };
+  if (typeof entry.pattern === "string") {
+    renamed.pattern = renameIdText(entry.pattern, oldId, newId);
+  }
+  const file = typeof entry.file === "string" ? exemptionFile(entry.file) : null;
+  const dir = entityConfig(kind).dir.replace(/\\/g, "/");
+  const ownScene = kind === "chapter" && file !== null && new RegExp(`^scenes/${escapeRegExp(oldId)}-scene-\\d+\\.md$`).test(file);
+  if (file !== null && (file === `${dir}/${oldId}.md` || ownScene)) {
+    renamed.file = renameIdText(file, oldId, newId);
+  }
+  const sceneChapter = (id) => /^(.+)-scene-\d+$/.exec(id)?.[1];
+  if (kind === "scene" && renamed.file !== entry.file && entry.chapter === sceneChapter(oldId) && sceneChapter(newId) !== undefined) {
+    renamed.chapter = sceneChapter(newId);
+  }
+  return renamed;
+}
+function followExemptionPatterns(root, plan, kind, oldId, newId) {
   const filePath = path11.join(root, EXEMPTIONS_FILE);
   if (!plan.has(filePath) && !lstatIfExists(filePath)) {
     return;
@@ -10593,13 +10659,8 @@ function followExemptionPatterns(root, plan, oldId, newId) {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
       return entry;
     }
-    const renamed = { ...entry };
-    for (const key of EXEMPTION_TEXT_KEYS) {
-      if (typeof entry[key] === "string") {
-        renamed[key] = renameIdText(entry[key], oldId, newId);
-        changed ||= renamed[key] !== entry[key];
-      }
-    }
+    const renamed = followExemptionEntry(entry, kind, oldId, newId);
+    changed ||= EXEMPTION_TEXT_KEYS.some((key) => renamed[key] !== entry[key]);
     return renamed;
   });
   if (changed) {
@@ -10687,7 +10748,7 @@ function moveChapter(project, oldId, options) {
       plan.set(statePath, replaceFrontmatter(stateText, { ...stateData, "current-chapter": number }));
     }
   }
-  followExemptionPatterns(project.root, plan, oldId, newId);
+  followExemptionPatterns(project.root, plan, "chapter", oldId, newId);
   reorderProgressions(project, plan, renumberedChronology(chapterChronology(project), oldId, newId, number));
   const moves = [{ oldFile: chapter.file, newFile }, ...sceneMoves];
   if (taken && !interruptedMove(plan, moves)) {
@@ -10733,7 +10794,7 @@ function moveScene(project, oldId, options) {
     const newId = `${chapterId}-scene-${String(number).padStart(2, "0")}`;
     const moved = replaceFrontmatter(markdown.rawMarkdown, { ...markdown.data, chapter: chapterId, scene: number });
     const plan = planReferenceRewrites(project.root, context, new Map([[scene.file, moved]]), idRenamer(oldId, newId), (body, file) => renameIdTokens(project.root, file, renameLinkTargets(project.root, file, body, context, newId), oldId, newId));
-    followExemptionPatterns(project.root, plan, oldId, newId);
+    followExemptionPatterns(project.root, plan, "scene", oldId, newId);
     return { number, newId, plan, moves: [{ oldFile: scene.file, newFile: path11.join(project.root, "scenes", `${newId}.md`) }] };
   };
   let target;
@@ -13440,10 +13501,9 @@ function validateExemptions(project, errors, warnings) {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
       continue;
     }
-    warnNearMissKeys(entry, [...MATCH_KEYS, "reason"], entryLabel, warnings, label);
     const file = typeof entry.file === "string" ? exemptionFile(entry.file) : null;
-    if (file !== null && !lstatIfExists(path11.join(project.root, file))) {
-      warnings.push(warn("stale-exemption", `${entryLabel} file ${entry.file} does not exist, so the entry matches nothing`, label));
+    if (file !== null && !lstatIfExists(path11.join(project.root, file))?.isFile()) {
+      warnings.push(warn("stale-exemption", `${entryLabel} file ${entry.file} is not a file in the project, so the entry matches nothing`, label));
     }
     if (isChapterId(entry.chapter) && !chapters.has(entry.chapter)) {
       warnings.push(warn("stale-exemption", `${entryLabel} chapter ${entry.chapter} is not a chapter in chapters/, so the entry matches nothing`, label));

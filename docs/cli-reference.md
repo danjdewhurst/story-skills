@@ -2009,7 +2009,7 @@ As with `rename`, every file is parsed before anything is written, so a file tha
 story remove <kind> <id> [--path <project>]
 ```
 
-Deletes the entity file and scrubs its id from every reference field, searching the same markdown files as `rename`. List entries are removed, single-value fields are cleared, and whole entries in `relationships`, `character-state`, `knowledge-state`, `object-state`, location `routes`, and chapter `choices` are dropped when they are about the removed entity. Removing a chapter that `choices` lead to also warns, naming the chapters that lost a choice, since one left with none becomes an ending, or, when those were the last choices in the book, that the book is linear again. A `progressions` entry whose `value` was the removed id keeps its chapter and field, with the value cleared. Prose and markdown links in file bodies are never changed, so `remove` lists the files that still link to the removed file (a registry's own sections included) or, for a chapter or scene, still name its id in `plot/timeline.md`, `plot/_index.md`, or an arc, and any `continuity/exemptions.md` entries whose `pattern`, `file`, or `chapter` names the id, which no longer match anything (`warning: characters/_index.md, plot/arcs/main.md still mention character bo in links in the text, which remove does not change: edit them, then run story links`). Names in prose are not listed; find them by hand, for example with `grep -rn brass-sounding-line .`. As with `rename`, every file is parsed before anything is deleted, so a file that fails to parse, or an entity file, registry, or fixed project file with no frontmatter, leaves the project unchanged. References are scrubbed before the entity file is deleted, so an interrupted `remove` can simply be run again.
+Deletes the entity file and scrubs its id from every reference field, searching the same markdown files as `rename`. List entries are removed, single-value fields are cleared, and whole entries in `relationships`, `character-state`, `knowledge-state`, `object-state`, location `routes`, and chapter `choices` are dropped when they are about the removed entity. Removing a chapter that `choices` lead to also warns, naming the chapters that lost a choice, since one left with none becomes an ending, or, when those were the last choices in the book, that the book is linear again. A `progressions` entry whose `value` was the removed id keeps its chapter and field, with the value cleared. Prose and markdown links in file bodies are never changed, so `remove` lists the files that still link to the removed file (a registry's own sections included) or, for a chapter or scene, still name its id in `plot/timeline.md`, `plot/_index.md`, or an arc, and any `continuity/exemptions.md` entries whose `pattern` or `file` names the id, which no longer match anything (`warning: characters/_index.md, plot/arcs/main.md still mention character bo in links in the text, which remove does not change: edit them, then run story links`). Names in prose are not listed; find them by hand, for example with `grep -rn brass-sounding-line .`. As with `rename`, every file is parsed before anything is deleted, so a file that fails to parse, or an entity file, registry, or fixed project file with no frontmatter, leaves the project unchanged. References are scrubbed before the entity file is deleted, so an interrupted `remove` can simply be run again.
 
 `remove chapter` refuses while scenes still point at the chapter, so remove those first:
 
@@ -2293,8 +2293,10 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `exemption-unknown-code` | error | A continuity exemption's `code` is not a finding code. |
 | `exemption-code-not-dismissible` | error | A continuity exemption's `code` names an error that `continuity` does not report, or a warning `init` or `import` reports: neither can be exempted. |
 | `exemption-file-not-relative` | error | A continuity exemption's `file` is absolute or has a `..` segment. |
-| `exemption-too-broad` | error | A continuity exemption sets only `code`, which would dismiss every finding of that rule. |
-| `stale-exemption` | warning | A continuity exemption's `file` does not exist, or its `chapter` is not a chapter, so it matches nothing. |
+| `exemption-too-broad` | error | A continuity exemption sets only `code`, which would dismiss every finding of that rule, or sets `file` or `chapter` with neither `code` nor `pattern`, which would dismiss every finding about that file or chapter. |
+| `exemption-misspelled-key` | error | A continuity exemption has a key that looks like a misspelled one, such as `Code` or `files`. |
+| `exemption-chapter-not-carried` | error | A continuity exemption sets `chapter` with a `code` whose findings carry no chapter, so it could never match. |
+| `stale-exemption` | warning | A continuity exemption's `file` is not a file in the project, or its `chapter` is not a chapter, so it matches nothing. |
 | `style-use-equals-avoid` | error | A style-sheet `preferred` entry uses and avoids the same word. |
 | `duplicate-session-date` | error | `progress.md` logs the same date twice. |
 | `research-no-sources` | warning | A verified research note lists no sources. |
@@ -2514,7 +2516,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `linked-book-id` | warning | `rename` changes an id a linked book also defines. |
 | `choices-dropped` | warning | `remove` dropped chapter choices that led to the removed chapter. |
 | `leftover-references` | warning | `remove` left mentions of the removed entity in prose links or ids. |
-| `stale-exemption` | warning | `remove` left continuity exemption entries whose `pattern`, `file`, or `chapter` names the removed entity. |
+| `stale-exemption` | warning | `remove` left continuity exemption entries whose `pattern` or `file` names the removed entity. |
 
 ### Codes: init and import
 

@@ -975,14 +975,14 @@ exemptions:
 | Field | Type | Required | Meaning |
 |-------|------|----------|---------|
 | `type` | string | yes | Must be `exemption-log`. |
-| `exemptions` | list of mappings | yes | One entry per dismissed finding. An entry matches a finding when every one of `pattern`, `code`, `file`, and `chapter` it sets matches, and must set at least one. |
-| `exemptions[].code` | finding code | no | The finding's [code](cli-reference.md#finding-codes): a warning a `severity` entry can name, or an error `story continuity` reports. An entry with only a `code` is rejected as too broad. |
+| `exemptions` | list of mappings | yes | One entry per dismissed finding. An entry matches a finding when every one of `pattern`, `code`, `file`, and `chapter` it sets matches. It needs a `pattern`, or a `code` with a `file`, `chapter`, or `pattern`. |
+| `exemptions[].code` | finding code | no | The finding's [code](cli-reference.md#finding-codes): a warning a `severity` entry can name, or an error `story continuity` reports. An entry with only a `code`, or with a `file` or `chapter` and no `code` or `pattern`, is rejected as too broad. |
 | `exemptions[].file` | project-relative path | no | The file the finding is about, as the finding names it (`chapters/chapter-05.md`); either separator matches. No absolute path or `..` segment. |
-| `exemptions[].chapter` | chapter id | no | The chapter the finding shows up in. Only some continuity findings carry one; [Exemptions](continuity.md#exemptions) lists them. |
+| `exemptions[].chapter` | chapter id | no | The chapter the finding shows up in. Only some continuity findings carry one; [Exemptions](continuity.md#exemptions) lists them, and a `chapter` with any other `code` is rejected. |
 | `exemptions[].pattern` | string, at least 4 characters | no | Matched as a substring of the finding text; a `/` or `\` in a path matches either separator. The minimum length stops a short pattern from dismissing whole classes of findings. |
 | `exemptions[].reason` | string | yes | Why the finding is intentional. |
 
-`story validate` rejects an entry with none of the matching keys, an unknown or non-exemptable `code`, a `file` outside the project, or a `chapter` that is not a kebab-case id, and an entry it rejects never takes effect. It warns when a `file` or `chapter` names nothing in the project. [Exemptions](continuity.md#exemptions) has the full rules.
+`story validate` rejects an entry with none of the matching keys, one that is too broad, an unknown or non-exemptable `code`, a `file` outside the project, a `chapter` that is not a kebab-case id or that its `code` never carries, or a misspelled key, and an entry it rejects never takes effect. It warns when a `file` or `chapter` names nothing in the project. [Exemptions](continuity.md#exemptions) has the full rules.
 
 ## Glossary
 

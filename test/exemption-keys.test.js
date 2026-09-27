@@ -96,7 +96,7 @@ describe("exemption keys (#284)", () => {
     expect(checkContinuity(scanProject(root)).dismissed.map((entry) => entry.finding.file)).toEqual([CH1]);
     expect(exemptionFile("./chapters/./chapter-01.md")).toBe("chapters/chapter-01.md");
     expect(exemptionFile("chapters/")).toBe("chapters");
-    for (const outside of ["/etc/passwd", "C:\\story\\a.md", "../other/story.md", "a/../../b.md", ".", "./"]) {
+    for (const outside of ["a\0b.md", "/etc/passwd", "C:\\story\\a.md", "../other/story.md", "a/../../b.md", ".", "./"]) {
       expect(exemptionFile(outside)).toBeNull();
     }
   });
@@ -220,17 +220,54 @@ describe("exemption keys (#284)", () => {
     ]);
   });
 
-  test("validate warns about a file or chapter that names nothing, and a misspelled key", () => {
+  test("validate warns about a file or chapter that names nothing", () => {
     const { root } = povProject();
-    writeLog(root, "  - code: pov-not-in-cast\n    file: chapters/chapter-09.md\n    reason: gone\n  - code: pov-not-in-cast\n    chapter: chapter-09\n    reason: gone\n  - code: pov-not-in-cast\n    File: chapters/chapter-01.md\n    chapter: chapter-01\n    reason: typo");
+    writeLog(root, "  - code: pov-not-in-cast\n    file: chapters/chapter-09.md\n    reason: gone\n  - code: pov-not-in-cast\n    chapter: chapter-09\n    reason: gone\n  - code: pov-not-in-cast\n    file: chapters/\n    reason: a folder");
     const result = validateProject(root);
     expect(result.errors).toEqual([]);
     const label = "continuity/exemptions.md exemptions";
     expect(result.warnings.filter((warning) => warning.file === path.join("continuity", "exemptions.md")).map((warning) => [warning.code, warning.message])).toEqual([
-      ["stale-exemption", `${label}[0] file chapters/chapter-09.md does not exist, so the entry matches nothing`],
+      ["stale-exemption", `${label}[0] file chapters/chapter-09.md is not a file in the project, so the entry matches nothing`],
       ["stale-exemption", `${label}[1] chapter chapter-09 is not a chapter in chapters/, so the entry matches nothing`],
-      ["near-miss-key", `${label}[2] has File; did you mean file?`]
+      ["stale-exemption", `${label}[2] file chapters/ is not a file in the project, so the entry matches nothing`]
     ]);
+  });
+
+  test("a misspelled key, a file or chapter with no code or pattern, and a chapter a code never carries stop an entry", () => {
+    const { root } = povProject();
+    writeLog(root, [
+      "  - Code: pov-not-in-cast\n    file: chapters/chapter-01.md\n    reason: capital C",
+      "  - code: pov-not-in-cast\n    files: chapters/chapter-01.md\n    chapter: chapter-01\n    reason: plural",
+      "  - file: chapters/chapter-01.md\n    reason: file alone",
+      "  - chapter: chapter-01\n    reason: chapter alone",
+      "  - file: chapters/chapter-01.md\n    chapter: chapter-01\n    reason: both",
+      "  - code: promise-unpaid\n    file: chapters/chapter-01.md\n    chapter: chapter-01\n    reason: never carried",
+      "  - pattern: \"POV character ann\"\n    file: chapters/chapter-02.md\n    reason: a pattern narrows a file"
+    ].join("\n"));
+    const label = "continuity/exemptions.md exemptions";
+    expect(messages(validateProject(root).errors)).toEqual([
+      `${label}[0] has Code; did you mean code?`,
+      `${label}[0] sets file without code or pattern, which would dismiss every finding about it: add the finding's code`,
+      `${label}[1] has files; did you mean file?`,
+      `${label}[2] sets file without code or pattern, which would dismiss every finding about it: add the finding's code`,
+      `${label}[3] sets chapter without code or pattern, which would dismiss every finding about it: add the finding's code`,
+      `${label}[4] sets file and chapter without code or pattern, which would dismiss every finding about it: add the finding's code`,
+      `${label}[5] sets chapter, but promise-unpaid findings carry no chapter, so it would never match: use file instead`
+    ]);
+    expect(checkContinuity(scanProject(root)).dismissed.map((entry) => [entry.index, entry.finding.file])).toEqual([[6, CH2]]);
+  });
+
+  test("a file key follows only the renamed entity's own file, and a moved scene takes its chapter", () => {
+    const { root } = povProject();
+    writeMarkdown(path.join(root, "worldbuilding", "locations", "ann.md"), "name: Ann\ntype: town", "# Ann\n");
+    writeMarkdown(path.join(root, "scenes", "chapter-01-scene-01.md"), "title: S\nchapter: chapter-01\nscene: 1\npov: ann\ncharacters: []\nstatus: draft\nstate-changes: []", "# S\n");
+    writeLog(root, "  - code: pov-not-in-cast\n    file: worldbuilding/locations/ann.md\n    reason: the town\n  - code: pov-not-in-cast\n    file: scenes/chapter-01-scene-01.md\n    chapter: chapter-01\n    reason: the scene");
+    const log = path.join(root, "continuity", "exemptions.md");
+    renameEntity(root, { kind: "character", id: "ann", name: "Anna" });
+    expect(fs.readFileSync(log, "utf8")).toContain("file: worldbuilding/locations/ann.md");
+    moveEntity(root, { kind: "scene", id: "chapter-01-scene-01", chapter: "chapter-02" });
+    const text = fs.readFileSync(log, "utf8");
+    expect(text).toContain("file: scenes/chapter-02-scene-01.md\n    chapter: chapter-02");
   });
 
   test("rename and move carry file and chapter keys, and remove warns about them", () => {
@@ -256,7 +293,7 @@ describe("exemption keys (#284)", () => {
   test("the schema checks the keys as validate does", () => {
     const schema = JSON.parse(fs.readFileSync(path.join(import.meta.dir, "..", "schemas", "story.schema.json"), "utf8")).$defs.exemption.properties;
     const filePattern = new RegExp(schema.file.pattern, "u");
-    for (const file of ["chapters/chapter-01.md", "./chapters/chapter-01.md", "chapters\\chapter-01.md", "a/./b.md", "chapters/", "/etc/passwd", "\\server\\x.md", "C:/x.md", "../x.md", "a/../b.md", "a/..", ".", "./", "  "]) {
+    for (const file of ["a\0b.md", "chapters/chapter-01.md", "./chapters/chapter-01.md", "chapters\\chapter-01.md", "a/./b.md", "chapters/", "/etc/passwd", "\\server\\x.md", "C:/x.md", "../x.md", "a/../b.md", "a/..", ".", "./", "  "]) {
       expect({ file, schema: filePattern.test(file) }).toEqual({ file, schema: file.trim() !== "" && exemptionFile(file) !== null });
     }
 

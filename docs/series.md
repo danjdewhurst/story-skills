@@ -253,7 +253,7 @@ Each book is compared with every book set earlier in the chronology: every book 
 
 The name check compares each book with the most recent earlier book that defines the entity, so a rename carried consistently through a trilogy is reported once, not once per book.
 
-`story series` applies the exemptions in this book's `continuity/exemptions.md` that name a warning's `code`, as it applies `severity` from this book's `story.md`; its errors cannot be exempted. Other exemptions apply only to `story continuity`.
+`story series` applies the exemptions in this book's `continuity/exemptions.md` that name a warning's `code`, as it applies `severity` from this book's `story.md`; its errors cannot be exempted. Other exemptions apply only to `story continuity`. A finding about a linked book names its file from this book's folder (`../book-two/characters/ann.md`), which a `file` key cannot name, so narrow such an entry with `code` and a `pattern` instead, and run `story series` from the book that holds the log.
 
 ### Example failure
 

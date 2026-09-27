@@ -34,7 +34,7 @@ import { analyzeChapter, chapterFindings, proseRules, proseThresholds, repeatedP
 import { splitSentences } from "./sentences.js";
 import { areSiblingBooks, buildSeries, canonicalPath, discoverSeriesBooks, isBookNumber, linksInclude, readBookFrontmatter, seriesId, seriesLinkPath, seriesLinks, validateSeriesLinks, withSeriesBacklink } from "./series.js";
 import { err, warn } from "./findings.js";
-import { EXEMPTIONS_FILE, MATCH_KEYS, exemptionFile, exemptionProblems, isChapterId, parseExemptions } from "./exemptions.js";
+import { EXEMPTIONS_FILE, exemptionFile, exemptionProblems, isChapterId, parseExemptions } from "./exemptions.js";
 import { EXIT_CODES, projectError, refusedError, usageError, withDefaultExitCode } from "./exit-codes.js";
 
 // writeFile moved to files.js with the rest of the write path guards; it is
@@ -3100,7 +3100,7 @@ function renameEntityUnlocked(root, options) {
     // Plan every rewrite before touching disk so a parse failure leaves the
     // project unchanged.
     const plan = replaceEntityReferences(project.root, kind, oldId, newId, new Map([[oldFile, retitled]]));
-    followExemptionPatterns(project.root, plan, oldId, newId);
+    followExemptionPatterns(project.root, plan, kind, oldId, newId);
     const renamedContents = plan.get(oldFile);
     plan.delete(oldFile);
     // The new id is taken, unless an earlier run was killed after writing
@@ -3265,9 +3265,14 @@ function leftoverReferenceWarnings(root, kind, id) {
   if (files.length > 0) {
     warnings.push(warn("leftover-references", `${files.join(", ")} still ${files.length === 1 ? "mentions" : "mention"} ${kind} ${id} in ${numbered ? "links or ids" : "links"} in the text, which remove does not change: edit ${files.length === 1 ? "it" : "them"}, then run story links`, files.length === 1 ? files[0] : null));
   }
-  const stale = exemptionEntries(root).filter(({ entry }) => EXEMPTION_TEXT_KEYS.some((key) => typeof entry[key] === "string" && renameIdText(entry[key], id, probe) !== entry[key]));
+  const stale = exemptionEntries(root)
+    .map(({ entry, index }) => {
+      const followed = followExemptionEntry(entry, kind, id, probe);
+      return { index, keys: EXEMPTION_TEXT_KEYS.filter((key) => followed[key] !== entry[key]).map((key) => `${key} ${JSON.stringify(entry[key])}`) };
+    })
+    .filter(({ keys }) => keys.length > 0);
   if (stale.length > 0) {
-    const values = stale.flatMap(({ entry }) => EXEMPTION_TEXT_KEYS.filter((key) => typeof entry[key] === "string" && renameIdText(entry[key], id, probe) !== entry[key]).map((key) => `${key} ${JSON.stringify(entry[key])}`));
+    const values = stale.flatMap(({ keys }) => keys);
     warnings.push(warn("stale-exemption", `continuity/exemptions.md has ${stale.length === 1 ? "an entry" : `${stale.length} entries`} naming ${id} (${stale.map(({ index }) => `exemptions[${index}]`).join(", ")}), which ${stale.length === 1 ? "no longer matches" : "no longer match"} anything: ${values.join(", ")}. Delete or update ${stale.length === 1 ? "it" : "them"}`, EXEMPTIONS_FILE));
   }
   return warnings;
@@ -3290,12 +3295,37 @@ function exemptionEntries(root) {
   }
 }
 
+// An exemption entry with the ids of a renamed or moved `kind` entity
+// changed. A pattern changes wherever it names the id as a whole token, as
+// it quotes finding text. A file changes only when it is that entity's own
+// file (or, for a chapter, one of its scene files), so a location sharing a
+// character's id keeps its path. `chapter` is a reference field, so the
+// reference rewrites already follow a moved chapter and scrub a removed
+// one; here it follows a scene the entry names to its new chapter.
+function followExemptionEntry(entry, kind, oldId, newId) {
+  const renamed = { ...entry };
+  if (typeof entry.pattern === "string") {
+    renamed.pattern = renameIdText(entry.pattern, oldId, newId);
+  }
+  const file = typeof entry.file === "string" ? exemptionFile(entry.file) : null;
+  const dir = entityConfig(kind).dir.replace(/\\/g, "/");
+  const ownScene = kind === "chapter" && file !== null && new RegExp(`^scenes/${escapeRegExp(oldId)}-scene-\\d+\\.md$`).test(file);
+  if (file !== null && (file === `${dir}/${oldId}.md` || ownScene)) {
+    renamed.file = renameIdText(file, oldId, newId);
+  }
+  const sceneChapter = (id) => /^(.+)-scene-\d+$/.exec(id)?.[1];
+  if (kind === "scene" && renamed.file !== entry.file && entry.chapter === sceneChapter(oldId) && sceneChapter(newId) !== undefined) {
+    renamed.chapter = sceneChapter(newId);
+  }
+  return renamed;
+}
+
 // Exemption patterns quote finding text, which names ids and file paths
 // (`chapters/chapter-01.md has POV ann`), and file and chapter keys name
 // them outright. When rename or move changes an id, the entries naming it
 // follow, so a dismissal stays with its finding instead of resurfacing, or
 // later dismissing whatever takes the old id.
-function followExemptionPatterns(root, plan, oldId, newId) {
+function followExemptionPatterns(root, plan, kind, oldId, newId) {
   const filePath = path.join(root, EXEMPTIONS_FILE);
   if (!plan.has(filePath) && !lstatIfExists(filePath)) {
     return;
@@ -3311,13 +3341,8 @@ function followExemptionPatterns(root, plan, oldId, newId) {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
       return entry;
     }
-    const renamed = { ...entry };
-    for (const key of EXEMPTION_TEXT_KEYS) {
-      if (typeof entry[key] === "string") {
-        renamed[key] = renameIdText(entry[key], oldId, newId);
-        changed ||= renamed[key] !== entry[key];
-      }
-    }
+    const renamed = followExemptionEntry(entry, kind, oldId, newId);
+    changed ||= EXEMPTION_TEXT_KEYS.some((key) => renamed[key] !== entry[key]);
     return renamed;
   });
   if (changed) {
@@ -3417,7 +3442,7 @@ function moveChapter(project, oldId, options) {
       plan.set(statePath, replaceFrontmatter(stateText, { ...stateData, "current-chapter": number }));
     }
   }
-  followExemptionPatterns(project.root, plan, oldId, newId);
+  followExemptionPatterns(project.root, plan, "chapter", oldId, newId);
   reorderProgressions(project, plan, renumberedChronology(chapterChronology(project), oldId, newId, number));
   const moves = [{ oldFile: chapter.file, newFile }, ...sceneMoves];
   // The number is taken, unless an earlier run of this move was interrupted
@@ -3473,7 +3498,7 @@ function moveScene(project, oldId, options) {
     const plan = planReferenceRewrites(project.root, context, new Map([[scene.file, moved]]),
       idRenamer(oldId, newId),
       (body, file) => renameIdTokens(project.root, file, renameLinkTargets(project.root, file, body, context, newId), oldId, newId));
-    followExemptionPatterns(project.root, plan, oldId, newId);
+    followExemptionPatterns(project.root, plan, "scene", oldId, newId);
     return { number, newId, plan, moves: [{ oldFile: scene.file, newFile: path.join(project.root, "scenes", `${newId}.md`) }] };
   };
   let target;
@@ -6707,12 +6732,11 @@ function validateExemptions(project, errors, warnings) {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
       continue;
     }
-    warnNearMissKeys(entry, [...MATCH_KEYS, "reason"], entryLabel, warnings, label);
     // A file or chapter that is gone can match nothing: usually a leftover
     // from a remove, or a typo.
     const file = typeof entry.file === "string" ? exemptionFile(entry.file) : null;
-    if (file !== null && !lstatIfExists(path.join(project.root, file))) {
-      warnings.push(warn("stale-exemption", `${entryLabel} file ${entry.file} does not exist, so the entry matches nothing`, label));
+    if (file !== null && !lstatIfExists(path.join(project.root, file))?.isFile()) {
+      warnings.push(warn("stale-exemption", `${entryLabel} file ${entry.file} is not a file in the project, so the entry matches nothing`, label));
     }
     if (isChapterId(entry.chapter) && !chapters.has(entry.chapter)) {
       warnings.push(warn("stale-exemption", `${entryLabel} chapter ${entry.chapter} is not a chapter in chapters/, so the entry matches nothing`, label));

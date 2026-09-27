@@ -79,6 +79,8 @@ export const FINDING_CODES = {
   "exemption-code-not-dismissible": "error",
   "exemption-file-not-relative": "error",
   "exemption-too-broad": "error",
+  "exemption-misspelled-key": "error",
+  "exemption-chapter-not-carried": "error",
   "style-use-equals-avoid": "error",
   "duplicate-session-date": "error",
   "research-no-sources": "warning",

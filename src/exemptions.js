@@ -1,6 +1,6 @@
 import path from "node:path";
 import { readTextFile } from "./files.js";
-import { FINDING_CODES, PROJECTLESS_CODES, err, exemptionCodes } from "./findings.js";
+import { CHAPTER_CODES, FINDING_CODES, PROJECTLESS_CODES, err, exemptionCodes } from "./findings.js";
 import { parseFrontmatter } from "./frontmatter.js";
 import { kebabCase } from "./markdown.js";
 import { suggestion } from "./options.js";
@@ -35,11 +35,12 @@ function portable(text) {
 
 // An entry's file as findings name it, or null when it is not a relative
 // path that stays inside the project: `./a/b.md` and `a\b.md` both give
-// `a/b.md`, and an absolute path or one with a `..` segment is refused.
+// `a/b.md`, and an absolute path, one with a `..` segment, or one with a
+// NUL (which no file system takes) is refused.
 // schemas/story.schema.json spells the same rule as a pattern.
 export function exemptionFile(value) {
   const text = portable(value);
-  if (text.startsWith("/") || /^[A-Za-z]:/.test(text) || text.split("/").includes("..")) {
+  if (text.startsWith("/") || /^[A-Za-z]:/.test(text) || text.split("/").includes("..") || text.includes("\0")) {
     return null;
   }
   const normalized = path.posix.normalize(text).replace(/\/$/, "");
@@ -55,6 +56,17 @@ export function exemptionProblems(entry, label = "exemption") {
     return [err("entry-not-mapping", `${label} must be a mapping`, EXEMPTIONS_FILE)];
   }
   const problems = [];
+  // A misspelled key (`Code`, `files`) would be ignored, widening the entry
+  // to whatever its other keys match, so it stops the entry.
+  for (const key of Object.keys(entry)) {
+    const intended = [...MATCH_KEYS, "reason"].find((known) => {
+      const normalized = key.trim().toLowerCase().replace(/[\s_]+/g, "-");
+      return key !== known && (normalized === known || normalized === `${known}s`);
+    });
+    if (intended !== undefined) {
+      problems.push(err("exemption-misspelled-key", `${label} has ${key}; did you mean ${intended}?`, EXEMPTIONS_FILE));
+    }
+  }
   if (MATCH_KEYS.every((key) => entry[key] === undefined)) {
     problems.push(err("missing-field", `${label} sets none of ${MATCH_KEYS.join(", ")}: set at least one to say which findings it dismisses`, EXEMPTIONS_FILE));
   }
@@ -80,13 +92,21 @@ export function exemptionProblems(entry, label = "exemption") {
   }
   if (entry.chapter !== undefined && !isChapterId(entry.chapter)) {
     problems.push(err("id-not-kebab", `${label} chapter must be a kebab-case chapter id, such as chapter-03, got ${JSON.stringify(entry.chapter)}`, EXEMPTIONS_FILE));
+  } else if (entry.chapter !== undefined && codeProblem === null && entry.code !== undefined && !CHAPTER_CODES.includes(entry.code)) {
+    problems.push(err("exemption-chapter-not-carried", `${label} sets chapter, but ${entry.code} findings carry no chapter, so it would never match: use file instead`, EXEMPTIONS_FILE));
   }
-  // A code alone dismisses every finding of that rule: for a warning that is
+  // An entry must say which rule it dismisses, by code or by the text of
+  // the finding, and a code needs a file, chapter, or pattern with it. A
+  // code alone dismisses every finding of that rule (for a warning that is
   // what severity off in story.md is for, and for an error it would hide
-  // every later contradiction of its kind.
-  if (entry.code !== undefined && codeProblem === null && ["pattern", "file", "chapter"].every((key) => entry[key] === undefined)) {
+  // every later contradiction of its kind); a file or chapter alone
+  // dismisses every error and warning about that file or chapter.
+  const narrowed = ["pattern", "file", "chapter"].some((key) => entry[key] !== undefined);
+  if (entry.code !== undefined && codeProblem === null && !narrowed) {
     const severity = FINDING_CODES[entry.code] === "warning" ? `, or set severity ${entry.code} to off in story.md` : "";
     problems.push(err("exemption-too-broad", `${label} sets only code, which would dismiss every ${entry.code} finding: add file, chapter, or pattern to narrow it${severity}`, EXEMPTIONS_FILE));
+  } else if (entry.code === undefined && entry.pattern === undefined && narrowed) {
+    problems.push(err("exemption-too-broad", `${label} sets ${entry.file === undefined ? "chapter" : entry.chapter === undefined ? "file" : "file and chapter"} without code or pattern, which would dismiss every finding about it: add the finding's code`, EXEMPTIONS_FILE));
   }
   if (typeof entry.reason !== "string" || entry.reason.trim() === "") {
     problems.push(err("missing-field", `${label} is missing a non-empty reason`, EXEMPTIONS_FILE));
