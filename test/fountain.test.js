@@ -131,6 +131,13 @@ describe("fountain build", () => {
     expect(() => buildBook(root, { format: "fountain", out: "scenes/script.fountain" })).toThrow("it is project source");
   });
 
+  test("matter the skeleton does not read cannot stop it", () => {
+    const root = lighthouse();
+    writeMarkdown(path.join(root, "matter", "Bad Name.md"), "title: Dedication\nplacement: front", "For Ana.\n");
+    expect(() => buildBook(root, { format: "markdown" })).toThrow("matter file names must be kebab-case");
+    expect(fs.readFileSync(buildBook(root, { format: "fountain" }).outFile, "utf8")).toContain("INT. LAMP ROOM - DUSK");
+  });
+
   test("warns about scenes without a location and scenes outside the book", () => {
     const root = lighthouse("");
     writeMarkdown(path.join(root, "scenes", "chapter-03-scene-01.md"), "title: Nowhere\nchapter: chapter-03\nscene: 1\nstatus: draft\npov: ghost\nmentions:\n  - ghost\ncharacters:\n  - stranger-one", "# Nowhere\n");

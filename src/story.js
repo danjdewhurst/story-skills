@@ -2358,6 +2358,14 @@ export function buildBook(root, options = {}) {
     return { ...result, format };
   }
 
+  // The screenplay skeleton reads chapters and scene records, not matter
+  // or prose, so a matter problem cannot stop it.
+  if (format === "fountain") {
+    const screenplay = screenplayOutline(project, bookChapters(project));
+    writeFile(output.outFile, fountainScript(screenplay), output.writeOptions);
+    return { outFile: output.outFile, chapters: project.chapters.length, format, warnings: screenplay.warnings };
+  }
+
   const manuscript = manuscriptParts(project);
   if (format === "metadata") {
     const book = htmlBook(manuscript);
@@ -2375,10 +2383,6 @@ export function buildBook(root, options = {}) {
     }), output.writeOptions);
   } else if (format === "narration") {
     writeFile(output.outFile, narrationScript(manuscript, pronunciationGuide(project)), output.writeOptions);
-  } else if (format === "fountain") {
-    const screenplay = screenplayOutline(project, manuscript);
-    writeFile(output.outFile, fountainScript(screenplay), output.writeOptions);
-    return { outFile: output.outFile, chapters: manuscript.chapters.length, format, warnings: screenplay.warnings };
   } else if (format === "html" || format === "print") {
     const book = htmlBook(manuscript);
     const text = format === "html" ? reviewHtml(book, { stamp, noteUrl }) : printHtml(book, trim);
@@ -2403,7 +2407,7 @@ export function buildBook(root, options = {}) {
 // scene's, else its chapter's), and cast (the pov unless only mentioned,
 // then characters), by character name. Missing records are warnings, since
 // the script still builds with forced headings and notes in their place.
-function screenplayOutline(project, manuscript) {
+function screenplayOutline(project, book) {
   const warnings = [];
   const locations = new Map(project.locations.map((location) => [location.id, location]));
   const characters = new Map(project.characters.map((character) => [character.id, character]));
@@ -2460,7 +2464,7 @@ function screenplayOutline(project, manuscript) {
     if (scenes.length === 0) {
       noScenes.push(chapter.id);
     }
-    return { id: chapter.id, heading: manuscript.chapters[index].heading, scenes };
+    return { id: chapter.id, heading: book.chapters[index].heading, scenes };
   });
   if (noScenes.length > 0) {
     warnings.push(`No scene records for ${noScenes.join(", ")}: the screenplay has no headings for ${noScenes.length === 1 ? "that chapter" : "those chapters"}`);
@@ -2469,8 +2473,8 @@ function screenplayOutline(project, manuscript) {
     warnings.push(`No setting (interior, exterior, or both) for ${[...unset].sort().join(", ")}: their scene headings are forced without INT. or EXT.`);
   }
   return {
-    title: manuscript.title,
-    authors: manuscript.meta.authors,
+    title: project.title,
+    authors: book.meta.authors,
     form: typeof project.story.data.form === "string" ? project.story.data.form : "",
     chapters,
     warnings
@@ -5201,7 +5205,10 @@ function markdownFiles(root, { maxFiles = MAX_SCAN_FILES } = {}, depth = 0, coll
   return files;
 }
 
-function manuscriptParts(project, action = "build") {
+// The book's chapters in order, with their headings and prose, and the
+// publishing metadata: the part of the manuscript every build shares,
+// including the screenplay skeleton, which reads no matter.
+function bookChapters(project, action = "build") {
   assertProjectParses(project, action);
   if (project.chapters.length === 0) {
     throw projectError("No chapters found to export");
@@ -5255,6 +5262,11 @@ function manuscriptParts(project, action = "build") {
       warnings.push(`${relative(project, chapter.file)} has no prose yet and is built as a heading-only page`);
     }
   }
+  return { meta, chapters, warnings };
+}
+
+function manuscriptParts(project, action = "build") {
+  const { meta, chapters, warnings } = bookChapters(project, action);
 
   // Matter ids become EPUB manifest ids and file names, so they must be safe.
   for (const entry of project.matter) {
