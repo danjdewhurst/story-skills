@@ -72,7 +72,9 @@ speaks or sings it.
    does not already hold: no new names, history, or world rules, and no
    small facts either (how long something has gone on, what goods come
    in, who signs for what). Comic verse reaches for these to fill a line
-   or land a rhyme; build the joke from facts the project states.
+   or land a rhyme. Before drafting, list the facts the verse may use
+   (names, objects, habits, running jokes the project states) and take
+   every detail from that list.
 4. Ask which accent the verse is scanned in when it matters (British and
    American stress differ on words such as *address*, *garage*,
    *cigarette*), and which dialect the rhymes must work in.
@@ -96,8 +98,10 @@ each departure from the meter as **deliberate** (a trochee at the line
 start, a feminine ending) or a **fault** (a stress that falls on a weak
 syllable, a missing or extra beat).
 
-When the user asks for the poem only, scan privately and return just the
-verse; offer the table afterwards.
+When the user asks for the poem only, still scan every line and check
+the rhyme scheme before answering, then return just the verse and offer
+the table afterwards. Never return a line whose end word breaks the
+scheme or whose beat count breaks the form: fix it first.
 
 ### 4. Check rhyme and form
 

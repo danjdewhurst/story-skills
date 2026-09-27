@@ -112,7 +112,7 @@ hand before/after skill changes, with results recorded below.
 
 | Date | Model | Skill(s) | Fixtures | Result | Notes |
 | --- | --- | --- | --- | --- | --- |
-| _none yet_ | | | | | Fill this in after each hand-run `node evals/run-skill.js` pass. |
+| 2026-09-27 | claude-opus-5 | verse-craft | verse-limerick | PASS (checker 32/32, 0 invented claims) | Two earlier runs passed the checker but the judge caught invented details ("last year", "a drum", a debt); the second also broke AABBA. Fixed by listing usable facts before drafting and checking rhyme and beats even when only the poem is returned. |
 
 ## What each fixture tests
 
