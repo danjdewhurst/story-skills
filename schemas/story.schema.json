@@ -13,7 +13,8 @@
         "title": { "type": "string" },
         "schema-version": { "const": 2 },
         "series": { "$ref": "#/$defs/id" },
-        "book-number": { "type": "integer", "minimum": 1 },
+        "series-title": { "type": "string" },
+        "book-number": { "type": "number", "minimum": 0 },
         "follows": { "type": "array", "items": { "type": "string", "minLength": 1 } },
         "precedes": { "type": "array", "items": { "type": "string", "minLength": 1 } },
         "genre": { "type": "string" },
@@ -169,7 +170,8 @@
         "id": { "$ref": "#/$defs/id" },
         "name": { "type": "string" },
         "type": { "type": "string" },
-        "prevalence": { "type": "string" }
+        "prevalence": { "type": "string" },
+        "pronunciation": { "type": "string" }
       }
     },
     "faction": {

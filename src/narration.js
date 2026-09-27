@@ -24,7 +24,7 @@ export function narrationScript(manuscript, guide) {
     ""
   ];
   if (guide.length === 0) {
-    lines.push("No pronunciations recorded. Add `pronunciation:` to character, location, faction, artifact, and glossary term files.");
+    lines.push("No pronunciations recorded. Add `pronunciation:` to character, location, system, faction, artifact, and glossary term files.");
   } else {
     lines.push("| Name | Say it | Kind |", "| --- | --- | --- |");
     for (const entry of guide) {
@@ -54,6 +54,7 @@ export function pronunciationGuide(project) {
   };
   project.characters.filter((character) => character.status !== "cut").forEach((character) => add("character", character.name, character.pronunciation));
   project.locations.forEach((location) => add("location", location.name, location.pronunciation));
+  project.systems.forEach((system) => add("system", system.name, system.pronunciation));
   project.factions.forEach((faction) => add("faction", faction.name, faction.pronunciation));
   project.artifacts.forEach((artifact) => add("artifact", artifact.name, artifact.pronunciation));
   project.glossaryTerms.forEach((term) => add("term", term.term, term.pronunciation));

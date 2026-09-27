@@ -114,7 +114,7 @@ Then:
 - Artifacts reference an owner character or faction and a current location
 - Systems reference practitioners via character tags
 - Location `routes` reference other locations by id
-- Invented names across characters, locations, factions, artifacts, and glossary terms may carry a `pronunciation`; `story build --format narration` gathers them into a pronunciation guide for audiobook narrators
+- Invented names across characters, locations, systems, factions, artifacts, and glossary terms may carry a `pronunciation`; `story build --format narration` gathers them into a pronunciation guide for audiobook narrators
 - When a location is used in a chapter, the chapter's frontmatter `locations` field links back
 - Keep the `worldbuilding/_index.md` world overview section current as elements are added
 

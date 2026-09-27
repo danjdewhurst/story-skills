@@ -1,4 +1,5 @@
 import { storyDateError } from "./continuity.js";
+import { isBookNumber, seriesDisplayName } from "./series.js";
 
 // Publishing metadata kept in story.md: what retailers, distributors, and the
 // EPUB package need. Every field is optional; validate checks the shape and
@@ -135,7 +136,8 @@ export const DESCRIPTION_LIMIT = 4000;
 // readiness checklist of what is still missing.
 export function metadataSheet(input) {
   const { title, data, meta, words, pages } = input;
-  const series = typeof data.series === "string" ? `${data.series}${Number.isInteger(data["book-number"]) ? `, book ${data["book-number"]}` : ""}` : "";
+  const seriesName = seriesDisplayName(data);
+  const series = typeof seriesName === "string" ? `${seriesName}${isBookNumber(data["book-number"]) ? `, book ${data["book-number"]}` : ""}` : "";
   const rows = [
     ["Title", title],
     ["Series", series],

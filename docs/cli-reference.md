@@ -284,7 +284,7 @@ Scaffolds a new story project: `story.md`, `style-sheet.md`, `plot/timeline.md`,
 | `--form <form>` | `form`, and a starting `target-words` for that form (see below) | Unset |
 | `--synopsis <text>` | Text of the `## Synopsis` section | `Add a 2-3 sentence synopsis here.` |
 | `--series <id>` | Kebab-case series id | Inherited from a linked book |
-| `--book-number <n>` | Publication order, a positive integer | With `--follows` or `--precedes`, one more than the highest number in the linked series; otherwise unset |
+| `--book-number <n>` | Publication order: `0` or a positive number, such as `2`, `0` for a prequel, or `1.5` for a novella | With `--follows` or `--precedes`, one more than the highest number in the linked series; otherwise unset |
 | `--follows <path>` | This book is set after the story at `<path>`; repeatable | |
 | `--precedes <path>` | This book is set before the story at `<path>`; repeatable | |
 | `--force` | Use an existing directory: add missing starter files, never overwrite existing ones | Off |
@@ -474,6 +474,7 @@ Checks that the project is structurally sound:
 - publishing fields in `story.md` are well formed: `language` is a BCP 47 tag, `isbn` a valid ISBN-10 or ISBN-13, `publication-date` a real date, `subjects` BISAC codes; more than seven `keywords` is a warning
 - `revision-passes` in `story.md` is a list of kebab-case passes with a `pending`, `in-progress`, or `done` status
 - `style-sheet.md`, `progress.md`, `continuity/exemptions.md`, and the `story.md` `cover` image are well formed, when present
+- `follows`, `precedes`, and `cover` in `story.md` use `/`, not a Windows `\`, which resolves on Windows but not on Linux or macOS CI (warning: `story.md follows ..\ser1 uses a backslash; write ../ser1 so the path works on every system`); `story links` reports the same in series links, and in markdown links in `plot/timeline.md` and arc bodies, as errors
 
 Errors exit 1; warnings alone exit 0.
 
@@ -1634,6 +1635,8 @@ Renamed chapter chapter-01 to chapter-01: ~/stories/the-salt-road/chapters/chapt
 ```
 
 When references to the new id already exist (a planned character in `mentions`, or a link `remove` left behind), they now name the renamed entity, so `rename` lists those files in a warning: `warning: bo was already referenced before this rename, and those references now point at the renamed character: chapters/chapter-04.md. Check them`.
+
+In a series book (one with `follows` or `precedes`), renaming a character, location, system, faction, artifact, or glossary term whose old id a linked book also defines warns, since [`story series`](series.md) matches shared canon by id: `warning: character ann-lee is also defined in linked book Book Two (../b2); story series matches shared canon by id, so rename it there to anne-lee too, or keep the old id`. Only this book is changed.
 
 References are rewritten before the entity file is moved, so if the command is interrupted, run it again to finish. A rerun that finds the new file already written, exactly as this rename writes it, with no reference still naming the old id, deletes the old file. A rerun after the old file is gone, when the new file carries the new name and nothing still names the old id, reindexes and prints `Finished an interrupted rename of <kind> <old-id> to <new-id>: <file>`. An old id that is still referenced but has no file is reported as missing (`character ghost does not exist`), even when another entity already has the new name.
 

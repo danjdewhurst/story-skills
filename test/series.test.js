@@ -162,7 +162,7 @@ describe("series init", () => {
     expect(() => book(cwd, "Loop", { follows: "loop" })).toThrow("--follows loop points at the new story itself");
     expect(() => book(cwd, "Lost", { precedes: "nowhere" })).toThrow("--precedes nowhere is not a story project: missing story.md");
     expect(() => book(cwd, "Bad Series", { series: "Bad Series" })).toThrow("Series id must be kebab-case: Bad Series");
-    expect(() => book(cwd, "Bad Number", { bookNumber: "0" })).toThrow("Book number must be a positive integer");
+    expect(() => book(cwd, "Bad Number", { bookNumber: "-1" })).toThrow("Book number must be 0 or a positive number");
     expect(fs.existsSync(path.join(cwd, "lost"))).toBe(false);
   });
 });
@@ -171,16 +171,16 @@ describe("series validation and reporting", () => {
   test("validates series fields in story.md", () => {
     const cwd = makeTempDir();
     const root = book(cwd, "Book One");
-    setStory(root, { series: "Not Kebab", "book-number": 0, follows: "../x" });
+    setStory(root, { series: "Not Kebab", "book-number": -1, follows: "../x" });
     expect(validateProject(root).errors).toEqual(expect.arrayContaining([
       "story.md series must be a kebab-case id",
-      "story.md book-number must be a positive integer",
+      "story.md book-number must be a number 0 or more, such as 2, 0 for a prequel, or 1.5 for a novella",
       "story.md frontmatter field follows must be a list"
     ]));
-    setStory(root, { series: ["a"], "book-number": 1.5, follows: undefined, precedes: [""] });
+    setStory(root, { series: ["a"], "book-number": "two", follows: undefined, precedes: [""] });
     expect(validateProject(root).errors).toEqual(expect.arrayContaining([
       "story.md frontmatter field series must be a scalar",
-      "story.md book-number must be a positive integer",
+      "story.md book-number must be a number 0 or more, such as 2, 0 for a prequel, or 1.5 for a novella",
       "story.md frontmatter field precedes must contain only non-empty strings"
     ]));
     setStory(root, { series: "saga", "book-number": 2, precedes: undefined });
@@ -525,7 +525,7 @@ describe("series traversal limits", () => {
     expect(report.errors.join("\n")).not.toContain("book limit");
   });
 
-  test("caps traversal depth on long chains", () => {
+  test("follows a long linear chain to its end", () => {
     const cwd = makeTempDir();
     let previous = null;
     const chain = [];
@@ -538,7 +538,8 @@ describe("series traversal limits", () => {
       previous = root;
     }
     const report = seriesReport(chain[chain.length - 1]);
-    expect(report.errors.join("\n")).toContain("traversal depth");
+    expect(report.errors).toEqual([]);
+    expect(report.books).toHaveLength(13);
   });
 
   test("caps the total number of traversed books", () => {

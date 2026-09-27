@@ -39,7 +39,7 @@ pattern.
 ## Pronunciation
 
 Give invented names a `pronunciation` field on characters, locations,
-factions, artifacts, and glossary terms:
+systems, factions, artifacts, and glossary terms:
 
 ```yaml
 pronunciation: "SEER-sha"

@@ -780,7 +780,7 @@ The script ends with closing credits: `The end. You have been listening to Harbo
 
 What goes in:
 
-- **Pronunciation guide.** Every `pronunciation` field on a character, location, faction, artifact, or glossary term, sorted by name. Characters with `status: cut` are left out. When there are none, the section says how to add them. Use plain respelling, such as `pronunciation: "SEER-ah VOSS"`; `story validate` rejects a value that is not text.
+- **Pronunciation guide.** Every `pronunciation` field on a character, location, system, faction, artifact, or glossary term, sorted by name. Characters with `status: cut` are left out. When there are none, the section says how to add them. Use plain respelling, such as `pronunciation: "SEER-ah VOSS"`; `story validate` rejects a value that is not text.
 - **Sections.** Every front matter page except the copyright page, every chapter as `Chapter N: Title`, then every back matter page. Each opens with its estimated runtime, `[about N min]` or `[under 1 min]`.
 - **Text.** Paragraphs as written, with markdown emphasis kept so the narrator can see where the stress falls. A scene break, in any of the forms the [table below](#how-prose-is-converted-for-epub-docx-shunn-html-and-print) lists (including `\* \* \*` and a lone `#`), becomes `[pause]`, and a backslash at the end of a line is dropped. Blockquote markers are kept as well, so an epigraph reads `> An ember given is a fire kept.`
 - **Runtime.** Every word in those sections, matter included, at 155 words per minute, rounded to the minute. Pace varies by narrator and genre, so time a sample chapter and rescale.
@@ -844,7 +844,7 @@ When a storm exposes an illegal memory archive beneath a floating harbor, salvag
 
 Notes on the fields:
 
-- **Series** is the `series` id, with `, book N` when `book-number` is set, such as `the-ember-cycle, book 1`.
+- **Series** is the `series-title` (or the `series` id when there is none), with `, book N` when `book-number` is set, such as `the-ember-cycle, book 1` or `The Ember Cycle, book 1`.
 - **Word count** is chapter prose only, as `story wordcount` counts it.
 - **Estimated print pages** uses the [print interior](#print-interior) estimate for the two most common trims.
 - **Description** shows its length against a 4,000-character limit; the full text follows under `## Description`.

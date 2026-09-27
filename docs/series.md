@@ -16,12 +16,13 @@ This page is for writers working on more than one book in the same world: sequel
 
 ## How a series is modelled
 
-Each book is still an ordinary Story Skills project, with its own `story.md`, characters, worldbuilding, chapters, and continuity files. There is no series-level folder or shared database. Books are linked through four optional fields in `story.md`:
+Each book is still an ordinary Story Skills project, with its own `story.md`, characters, worldbuilding, chapters, and continuity files. There is no series-level folder or shared database. Books are linked through these optional fields in `story.md`:
 
 | Field | Type | Meaning |
 |-------|------|---------|
 | `series` | kebab-case id | The series this book belongs to, such as `the-ember-cycle`. Every book in the series uses the same id. |
-| `book-number` | positive integer | Publication order: 1, 2, 3. Must be unique within the series. |
+| `series-title` | string | The retail series name, such as `The Ember Cycle`, printed by the metadata sheet and the `story series` header in place of the id. |
+| `book-number` | number ≥ 0 | Publication order: 1, 2, 3. `0` suits a prequel published later (often a reader magnet), and a decimal such as `1.5` a between-books novella. Must be unique within the series. |
 | `follows` | list of paths | Books set **earlier** in the story's chronology. |
 | `precedes` | list of paths | Books set **later** in the story's chronology. |
 
@@ -43,7 +44,7 @@ Every linked book must be on disk at that path whenever you run `story links` or
 
 Every link needs a backlink. If book two `follows: [../book-one]`, book one must list `precedes: [../book-two]`. `story links` reports a missing backlink as an error (see [Checking series links](#checking-series-links)).
 
-`story validate` checks the field shapes: `series` must be a single kebab-case id, `book-number` must be a positive integer, and `follows` and `precedes` must be lists of non-empty strings. A single string such as `follows: ../book-one` fails validation with `story.md frontmatter field follows must be a list`. The full field reference is in [Project format reference](project-format.md).
+`story validate` checks the field shapes: `series` must be a single kebab-case id, `book-number` must be a number 0 or more, and `follows` and `precedes` must be lists of non-empty strings. A single string such as `follows: ../book-one` fails validation with `story.md frontmatter field follows must be a list`. The full field reference is in [Project format reference](project-format.md).
 
 ## The example series
 
@@ -95,7 +96,7 @@ A companion book is set alongside another with no chronological relationship. Cr
 | Option | Effect |
 |--------|--------|
 | `--series <id>` | Sets `series`. Must be kebab-case. Overrides the id inherited from a linked book. |
-| `--book-number <n>` | Sets `book-number`. Must be a positive integer. Overrides the computed number. |
+| `--book-number <n>` | Sets `book-number`. Must be `0` or a positive number: `0` for a prequel published later, a decimal such as `1.5` for a between-books novella. Overrides the computed number. |
 | `--follows <path>` | Links a book set earlier in the chronology. Repeatable. |
 | `--precedes <path>` | Links a book set later in the chronology. Repeatable. |
 
@@ -109,8 +110,8 @@ For each `--follows` or `--precedes` path, `init`:
 2. Writes the link into the new book's `story.md`, relative to the new book's root.
 3. Adds the backlink to the linked book's `story.md` (`precedes` for a `--follows` link, `follows` for a `--precedes` link) and prints `Updated series links in <path>/story.md`. If the linked book already lists the new book and has the series id, nothing is written and no line is printed. Only frontmatter changes; the linked book's comments and body text are left as they were. A link written as a single string by hand is kept and converted to a list. When the new book has a `series` id and the linked book has none, `init` writes that id into the linked book's `story.md` as well, even if the backlink was already there.
 4. Inherits `series` from the first linked book that has one, unless you pass `--series`.
-5. Inherits `genre`, `sub-genre`, `pov`, and `tense` from the first linked book, unless you pass `--genre`, `--sub-genre`, `--pov`, or `--tense`. `setting-era`, `themes`, and `form` are not inherited; pass `--form` if the new book has one.
-6. Sets `book-number` to one more than the highest `book-number` anywhere in the linked series, not just the directly linked books, so publication numbers never collide. If part of the series cannot be read (a `story.md` that fails to parse, a broken link), `init` refuses rather than guess; fix the book or pass `--book-number`. An explicit `--book-number` already used in the series is refused.
+5. Inherits `genre`, `sub-genre`, `pov`, and `tense` from the first linked book, unless you pass `--genre`, `--sub-genre`, `--pov`, or `--tense`, and copies its `series-title`, `author` or `authors`, and `language` when set. `setting-era`, `themes`, `form`, and the publishing fields that belong to one edition (`isbn`, `publication-date`, `description`, `keywords`, `cover`, and the rest) are not inherited; pass `--form` if the new book has one.
+6. Sets `book-number` to one more than the highest whole `book-number` anywhere in the linked series (after a `2.5` novella, the next book is `3`), not just the directly linked books, so publication numbers never collide. If part of the series cannot be read (a `story.md` that fails to parse, a broken link), `init` refuses rather than guess; fix the book or pass `--book-number`. An explicit `--book-number` already used in the series is refused.
 
 If no book in the series has a `book-number`, the new book is left unnumbered. A book created by a plain `story init` has no `book-number`, so when you link your first sequel to it, pass `--book-number 2` and add `book-number: 1` to the first book by hand. If the first book has no `series` yet, pass `--series <id>`: `init` adds the same `series` to the first book.
 
@@ -170,7 +171,7 @@ precedes:
 | `Cannot compute the next book-number: part of the series linked from ... could not be read (...)` | A book in the series cannot be read; fix it or pass `--book-number`. |
 | `Cannot create a story project inside another story project (<path>); ...` | A folder above the new book has a `story.md`. |
 | `Series id must be kebab-case: <id>` | The `--series` value, or the inherited one, is not a kebab-case id. |
-| `Book number must be a positive integer` | `--book-number` is zero, negative, or not a whole number. |
+| `Book number must be 0 or a positive number, ...` | `--book-number` is negative or not a number. |
 
 ## The `story series` command
 
@@ -202,7 +203,7 @@ Shared canon:
 Series is consistent: 0 errors, 0 warnings, 0 dismissed
 ```
 
-Each book line shows its title, its `book-number` (or `unnumbered`), its `status` (or `no status`), and its path relative to the book you ran the command on. `.` is that book. Running it on The Fall of the Citadel lists the same books in the same order; only the paths change, since they are relative to the book you start from. The report goes to standard output, and the summary line plus any `error:` and `warning:` lines go to standard error.
+The header shows the `series-title` when a book sets one, otherwise the `series` id. Each book line shows its title, its `book-number` (or `unnumbered`), its `status` (or `no status`), and its path relative to the book you ran the command on. `.` is that book. Running it on The Fall of the Citadel lists the same books in the same order; only the paths change, since they are relative to the book you start from. The report goes to standard output, and the summary line plus any `error:` and `warning:` lines go to standard error.
 
 `story series` works on a standalone book too. It reports a one-book `Unnamed series` with `- None` under `Shared canon:` and exits `0`. A path with no `story.md` fails with `<absolute path> is not a story project: missing story.md` and exit code `1`.
 
@@ -237,12 +238,17 @@ Each book is compared with every book set earlier in the chronology: every book 
 | error | A linked path is not a story project (`missing story.md`), or a linked book fails to parse. | Correct the path, or fix the linked book's frontmatter. |
 | error | Linked books declare different `series` ids. | Use one id in every book. |
 | error | Two books share a `book-number`. | Give each book a unique publication number. |
+| error | A book's `book-number` is not a number 0 or more (the book is listed as unnumbered). | Use a number such as `2`, `0`, or `1.5`. |
+| warning | Linked books set different `series-title` values. | Keep the retail series name identical in every book. |
 | warning | Some linked books set no `series` id while the others share one: `Linked books <titles> set no series id; add series: <id>`. | Add the named `series` to each listed book's `story.md`. |
 | error | The chronology has a cycle. | Check `follows` and `precedes` in the named books. |
 | error | A character is `deceased` in an earlier book but has another status (or none) in a later one. | Set `status: deceased` in the later book's character file. |
 | error | A later book's chapter or scene lists a character who died in an earlier book as `pov` or under `characters`. | Move flashbacks, memories, and ghosts to `mentions`. |
+| error | A later book's `knowledge-state` has a character who died in an earlier book learn something (an entry with `learned-in`). | Drop `learned-in`, or give the discovery to a living character. |
+| error | A later book's scene has a `state-changes` entry that targets an artifact `destroyed` in an earlier book. | Account for the artifact's return (and change its status), or remove the state change. `mentions` stay allowed. |
 | error | A later book's `knowledge-state` has a character learn a `fact` (an entry with `learned-in`) that the same character already knows in an earlier book. | Drop `learned-in` in the later book, or move the discovery. In a prequel, usually remove the knowledge from the prequel. |
 | warning | A shared entity's `name` (or a glossary term's `term`) differs from the most recent earlier book that defines it. | Keep `name` identical and put the variant in `aliases`. |
+| warning | A shared entity's `pronunciation` differs from the most recent earlier book that defines it, when both set one. | Use one respelling, so the narrator says the name the same way in every book. |
 | warning | An artifact is `destroyed` in an earlier book but has another status in a later one. | Set `status: destroyed`, or account for the artifact's return in the text. |
 
 The name check compares each book with the most recent earlier book that defines the entity, so a rename carried consistently through a trilogy is reported once, not once per book.
@@ -280,11 +286,11 @@ The knowledge error reaches back two books: Kael knows `whisper-gate-route` in t
 
 `story series` only follows links to sibling folders of the book you run it on, so it finds the same books from whichever book it starts at. A link that leaves the parent folder, directly or through a symlink, is reported as an error (`points outside the series directory`) and not followed; a link to a book nested deeper inside it is reported as `is not a sibling folder in the series directory`. `story links` reports either kind of link as `is not in the same parent folder as this book`. A linked book whose `story.md` fails to parse is reported once and left out of the chronology; its links are not followed. A book reached through a symlink and through its real path counts as one book. The book you pass is resolved to its real folder first, so `story series links/second`, where `links/second` links to `second-book`, checks `second-book` against its real siblings. A linked book whose `story.md` is itself a symlink is not read; the check reports `Refusing to read through symlink: <path>` against it.
 
-The traversal also stops at 100 books and at a link depth of 10 from the starting book, reporting an error when either limit is hit.
+The traversal also stops at 100 books, reporting an error when the limit is hit. There is no link-depth limit, so a long linear series is checked from either end.
 
 ### What it cannot check
 
-The checker compares ids, statuses, names, and fact ids. It cannot judge knowledge that has no `fact` id, ages, dates, travel time, or tone. Check those by reading both books' `plot/timeline.md` files and their `Series Notes` and `Series Canon` sections.
+The checker compares ids, statuses, names, pronunciations, and fact ids. It cannot judge knowledge that has no `fact` id, ages, dates, travel time, or tone. Check those by reading both books' `plot/timeline.md` files and their `Series Notes` and `Series Canon` sections.
 
 ## Checking series links
 
@@ -298,6 +304,7 @@ The checker compares ids, statuses, names, and fact ids. It cannot judge knowled
 | `story.md follows <path> is missing backlink: add <path> to its precedes` | The linked book does not link back. |
 | `story.md follows <path> belongs to series <id>, not <id>` | Both books set `series` and the ids differ. A blank `series: ""` counts as no id. |
 | `story.md follows <path> is not in the same parent folder as this book; ...` | The linked book is not a sibling folder, so `story series` will not follow the link. |
+| `story.md follows <path> uses a backslash; write <path> so the link works on every system` | The path uses a Windows `\` separator, which resolves on Windows only. Reported on every platform; `story validate` warns about it too. |
 
 The same messages appear with `precedes` for links in that field. With the backlink removed from The Last Ember, `story links` in the sequel reports:
 
@@ -324,7 +331,7 @@ See the [CLI reference](cli-reference.md) for every command.
 
 `init` links the books but copies nothing else. You carry characters and places across yourself, or with the [series-continuity skill](#the-series-continuity-skill). Carry only the entities the new book uses. For each one, copy the file from the other book, then adjust it:
 
-- **Keep the filename id identical.** `story series` matches entities by id. A renamed file is a new entity to the checker.
+- **Keep the filename id identical.** `story series` matches entities by id. A renamed file is a new entity to the checker. `story rename` warns when the old id is also defined in a linked book; rename it there too, or keep the old id.
 - **Keep `name` identical.** Put new titles and epithets in `aliases`. In the example, the prequel's `lord-maren.md` keeps `name: "Lord Maren"` and lists `General Maren` as an alias.
 - **Keep the voice and sound fields.** `voice-words`, `voice-avoid`, and `pronunciation` travel with the file, so `story voices` checks the character against the same voice in every book, and an audiobook narrator says the name the same way.
 - **Set state for this book's starting point.** For a sequel, start from the earlier book's final `status`, relationships, ownership, and knowledge. For a prequel, start from the earlier situation and record the later book's facts as fixed endpoints in a `## Series Canon` section of the entity file.

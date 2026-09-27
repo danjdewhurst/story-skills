@@ -439,6 +439,7 @@ function checkContinuityState(project, context, errors, warnings) {
     if (learnedIn && !context.chapterNumbers.has(learnedIn)) {
       errors.push(`${entryLabel} references missing chapter ${learnedIn}`);
     }
+    checkPosthumousLearning(context.characters.get(character), learnedIn, entryLabel, context, errors, warnings);
   }
 
   const seenArtifacts = new Map();
@@ -474,6 +475,24 @@ function checkContinuityState(project, context, errors, warnings) {
     if (entry.status && artifact && artifact.status && entry.status !== artifact.status) {
       warnings.push(`${entryLabel} status ${entry.status} conflicts with ${relative(project, artifact.file)} status ${artifact.status}`);
     }
+  }
+}
+
+// Learning a fact is an on-page event: a character cannot learn one after
+// their death chapter, and one dead before the story (deceased with no
+// died-in) cannot learn one at all.
+function checkPosthumousLearning(character, learnedIn, entryLabel, context, errors, warnings) {
+  const learnedNumber = context.chapterNumbers.get(learnedIn);
+  if (!character || character.status !== "deceased" || learnedNumber === undefined) {
+    return;
+  }
+  if (!character.diedIn) {
+    warnings.push(`${entryLabel} has ${character.id} learn something in ${learnedIn}, but ${character.id} died before the story (deceased with no died-in)`);
+    return;
+  }
+  const deathNumber = context.chapterNumbers.get(character.diedIn);
+  if (deathNumber !== undefined && learnedNumber > deathNumber) {
+    errors.push(`${entryLabel} has ${character.id} learn something in ${learnedIn}, after they died in ${character.diedIn}`);
   }
 }
 

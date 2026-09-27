@@ -309,8 +309,9 @@ tense: past
 | `tense` | enum | yes | `past`, `present`, `future`, or `mixed`. `story init --tense` defaults to `past`. |
 | `sub-genre` | string | no | Free text; `story init --sub-genre` sets it (default `general`). `story report` shows `Genre: <genre> / <sub-genre>`. |
 | `setting-era` | string | no | Free text; `story init --setting-era` sets it (default `unspecified`). |
-| `series` | kebab-case id | no | Series id, identical in every linked book. `story init --series` sets it. |
-| `book-number` | integer ≥ 1 | no | Publication order within the series. `story series` errors when two linked books share a number. |
+| `series` | kebab-case id | no | Series id, identical in every linked book. `story init --series` sets it. It is an id, not the retail series name. |
+| `series-title` | string | no | The retail series name, such as `The Ember Cycle`. The metadata sheet and the `story series` header print it in place of the `series` id. Keep it identical in every linked book; `story series` warns when books differ. |
+| `book-number` | number ≥ 0 | no | Publication order within the series. `0` suits a prequel published later (often a reader magnet) and a decimal such as `1.5` a between-books novella. `story series` errors when two linked books share a number. |
 | `follows` | list of paths | no | Paths, relative to this project's root, to books set earlier in the chronology. |
 | `precedes` | list of paths | no | Paths to books set later in the chronology. |
 | `premise` | string | no | Controlling idea: one sentence of value plus cause. |
@@ -418,7 +419,7 @@ When `copyright` is set and no matter page is a copyright page (one with id `cop
 
 EPUB builds also write EPUB Accessibility discovery metadata (access modes, features such as `tableOfContents` and `readingOrder`, no hazards, and a summary), mark each document with `epub:type` (`bodymatter chapter`, `frontmatter`, `backmatter`, or `copyright-page`), and add a landmarks navigation list. `story build --format metadata` writes a retailer metadata sheet from these fields, with `(missing)` for each field not set. [Import, export, and builds](manuscripts.md) describes every build format.
 
-Series links need a backlink: a book that lists another in `follows` must appear in that book's `precedes`, and the reverse. `story links` checks that each path is a story project, carries the backlink, and uses the same `series` id. `story init --follows <path>` or `--precedes <path>` writes both sides for you and inherits the linked book's `series` id. [Series](series.md) covers linked books and the canon checks of `story series`.
+Series links need a backlink: a book that lists another in `follows` must appear in that book's `precedes`, and the reverse. `story links` checks that each path is a story project, carries the backlink, and uses the same `series` id. `story init --follows <path>` or `--precedes <path>` writes both sides for you and inherits the linked book's `series` id, `series-title`, `author` or `authors`, and `language`. [Series](series.md) covers linked books and the canon checks of `story series`.
 
 ## Characters
 
@@ -472,7 +473,7 @@ The arc-craft fields `arc-type`, `lie`, `truth`, and `ghost-wound` have no CLI f
 
 `voice-words` and `voice-avoid` have no flags either. `story validate` errors when either is not a list of strings, and [`story voices`](#dialogue-voices) reads both. The [line-editing](../skills/line-editing/SKILL.md) and [voice-style](../skills/voice-style/SKILL.md) skills propose them.
 
-`pronunciation` is also accepted on locations, factions, artifacts, and glossary terms. `story validate` errors when it is not text. `story build --format narration` gathers every `pronunciation` into the script's pronunciation guide, leaving out cut characters. See the [adaptation skill](../skills/adaptation/SKILL.md).
+`pronunciation` is also accepted on locations, systems, factions, artifacts, and glossary terms. `story validate` errors when it is not text. `story build --format narration` gathers every `pronunciation` into the script's pronunciation guide, leaving out cut characters. See the [adaptation skill](../skills/adaptation/SKILL.md).
 
 ### Relationship types
 
@@ -540,6 +541,7 @@ Files: `worldbuilding/systems/<system-id>.md`, for magic, technology, religion, 
 | `name` | string | yes | Display name. |
 | `type` | string | yes | Free text, for example `magic` (default `other`). |
 | `prevalence` | string | no | How common it is (default `uncommon`). |
+| `pronunciation` | string | no | Respelling for the narration build, for an invented magic or technology name. |
 
 ### Factions
 

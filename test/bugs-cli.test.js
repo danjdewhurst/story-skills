@@ -124,7 +124,7 @@ describe("#87 positive integer options", () => {
     expect(invoke(root, ["add", "scene", "Hex", "--chapter", "chapter-02", "--scene", "0x2"]).err).toContain("scene number must be a positive integer");
     expect(invoke(root, ["synopsis", "--pages", "0x3"]).err).toContain("Unsupported synopsis length: 0x3");
     expect(invoke(root, ["add", "matter", "Dedication", "--order", "1e1"]).err).toContain("matter order must be a non-negative integer");
-    expect(invoke(makeTempDir(), ["init", "N", "--book-number", "1e3"]).err).toContain("Book number must be a positive integer");
+    expect(invoke(makeTempDir(), ["init", "N", "--book-number", "1e3"]).err).toContain("Book number must be 0 or a positive number");
   });
 });
 

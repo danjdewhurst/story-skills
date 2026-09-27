@@ -8,8 +8,9 @@ import { readTextFile } from "./files.js";
 // `precedes` names books set later. Publication order lives in `book-number`.
 const SERIES_LINK_INVERSES = [["follows", "precedes"], ["precedes", "follows"]];
 
+// The book cap and the visited set bound the traversal, so a long linear
+// series is followed to its end from either book.
 const MAX_SERIES_BOOKS = 100;
-const MAX_SERIES_DEPTH = 10;
 
 // Entity collections compared across books, with the field that names them.
 const SHARED_CANON = [
@@ -20,6 +21,19 @@ const SHARED_CANON = [
   ["artifacts", "Artifacts", "name"],
   ["glossaryTerms", "Glossary terms", "term"]
 ];
+
+// Publication order. 0 is a prequel published after book 1 (often a reader
+// magnet) and a decimal such as 1.5 is a between-books novella, as retailer
+// series fields allow.
+export function isBookNumber(value) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+// The retail series name: `series-title` when set, else the series id.
+export function seriesDisplayName(data) {
+  const title = data?.["series-title"];
+  return typeof title === "string" && title.trim() !== "" ? title.trim() : seriesId(data);
+}
 
 // Stored link paths are relative to the book root and use forward slashes so
 // story.md stays portable between operating systems.
@@ -69,7 +83,14 @@ export function readBookFrontmatter(root) {
 
 export function validateSeriesLinks(root, data, errors) {
   for (const [field, inverse] of SERIES_LINK_INVERSES) {
-    for (const target of seriesLinks(root, data, field)) {
+    // A Windows separator resolves on Windows and nowhere else, so it is
+    // reported by name on every platform instead of as a missing book.
+    const raw = Array.isArray(data[field]) ? data[field] : [data[field]];
+    const backslashed = raw.filter((value) => typeof value === "string" && value.includes("\\"));
+    for (const value of backslashed) {
+      errors.push(`story.md ${field} ${value} uses a backslash; write ${value.replace(/\\/g, "/")} so the link works on every system`);
+    }
+    for (const target of seriesLinks(root, { [field]: raw.filter((value) => !backslashed.includes(value)) }, field)) {
       const label = `story.md ${field} ${seriesLinkPath(root, target)}`;
       if (target === root || canonicalPath(target) === canonicalPath(root)) {
         errors.push(`${label} points at this book`);
@@ -152,6 +173,13 @@ export function buildSeries(startRoot, scan) {
   if (seriesIds.length === 1 && unnamed.length > 0) {
     warnings.push(`Linked books ${unnamed.map((book) => book.title).join(", ")} set no series id; add series: ${seriesIds[0]}`);
   }
+  for (const book of books.filter((candidate) => candidate.invalidBookNumber)) {
+    errors.push(`${book.label}: story.md book-number ${JSON.stringify(book.project.story.data["book-number"])} is not a number 0 or more; the book is listed as unnumbered`);
+  }
+  const seriesTitles = [...new Set(books.map((book) => book.seriesTitle).filter((title) => title !== undefined))].sort();
+  if (seriesTitles.length > 1) {
+    warnings.push(`Linked books set different series-title values: ${seriesTitles.map((title) => `"${title}"`).join(", ")}; keep the series name identical everywhere`);
+  }
   checkDuplicateBookNumbers(books, errors);
 
   const chronology = chronologicalOrder(books, errors);
@@ -162,6 +190,7 @@ export function buildSeries(startRoot, scan) {
   return {
     root: startRoot,
     series: books[0]?.series ?? seriesIds[0] ?? null,
+    seriesTitle: books[0]?.seriesTitle ?? seriesTitles[0] ?? null,
     books: (chronology ? chronology.order : books).map((book) => ({
       title: book.title,
       label: book.label,
@@ -178,7 +207,7 @@ export function buildSeries(startRoot, scan) {
 
 export function formatSeriesReport(report) {
   const lines = [
-    `# Series: ${report.series ?? "Unnamed series"}`,
+    `# Series: ${report.seriesTitle ?? report.series ?? "Unnamed series"}`,
     "",
     report.ordered ? "Chronological order:" : "Books (unordered):"
   ];
@@ -224,9 +253,9 @@ function discoverBooks(startRoot, scan, errors) {
   const scopeRoot = path.dirname(startResolved);
   const scopeReal = canonicalPath(scopeRoot);
   const visited = new Map();
-  const queue = [{ root: startResolved, depth: 0 }];
+  const queue = [startResolved];
   while (queue.length > 0) {
-    const { root, depth } = queue.shift();
+    const root = queue.shift();
     const resolved = path.resolve(root);
     // Canonical path is the visit key so an in-scope symlink to a book
     // already in the graph is the same book. A missing path keeps the
@@ -250,11 +279,6 @@ function discoverBooks(startRoot, scan, errors) {
       errors.push(outside
         ? label + ' points outside the series directory ' + scopeRoot + '; refusing to follow'
         : label + ' is not a sibling folder in the series directory ' + scopeRoot + '; keep series books side by side, refusing to follow');
-      visited.set(effective, null);
-      continue;
-    }
-    if (depth > MAX_SERIES_DEPTH) {
-      errors.push(label + ' exceeds the series traversal depth of ' + MAX_SERIES_DEPTH + '; refusing to follow further links');
       visited.set(effective, null);
       continue;
     }
@@ -292,13 +316,15 @@ function discoverBooks(startRoot, scan, errors) {
       title: String(data.title ?? path.basename(root)),
       series: seriesId(data),
       status: data.status,
-      bookNumber: Number.isInteger(data["book-number"]) ? data["book-number"] : null,
+      bookNumber: isBookNumber(data["book-number"]) ? data["book-number"] : null,
+      invalidBookNumber: data["book-number"] !== undefined && !isBookNumber(data["book-number"]),
+      seriesTitle: typeof data["series-title"] === "string" && data["series-title"].trim() !== "" ? data["series-title"].trim() : undefined,
       follows: seriesLinks(root, data, "follows"),
       precedes: seriesLinks(root, data, "precedes")
     };
     visited.set(effective, book);
     for (const next of book.follows.concat(book.precedes)) {
-      queue.push({ root: next, depth: depth + 1 });
+      queue.push(next);
     }
   }
   const books = [...visited.values()].filter(Boolean);
@@ -393,7 +419,7 @@ function checkSharedCanon({ order, later }, errors, warnings) {
     const earlierBooks = order.filter((candidate) => reachable.get(candidate.key).has(book.key));
     checkCanonNames(book, earlierBooks, warnings);
     checkCanonDeaths(book, earlierBooks, errors);
-    checkDestroyedArtifacts(book, earlierBooks, warnings);
+    checkDestroyedArtifacts(book, earlierBooks, errors, warnings);
     checkKnownFacts(book, earlierBooks, errors);
   }
 }
@@ -423,8 +449,19 @@ function checkCanonNames(book, earlierBooks, warnings) {
       if (match && canonText(entity[field]) !== canonText(match.entity[field])) {
         warnings.push(`${bookFile(book, entity.file)} ${field} "${entity[field]}" differs from "${match.entity[field]}" in ${bookFile(match.book, match.entity.file)}`);
       }
+      // An audiobook narrator reads each book's own guide, so a respelling
+      // that changes between books changes how the name is said.
+      const said = pronunciationText(entity.pronunciation);
+      const saidBefore = pronunciationText(match?.entity.pronunciation);
+      if (said !== "" && saidBefore !== "" && said !== saidBefore) {
+        warnings.push(`${bookFile(book, entity.file)} pronunciation "${said}" differs from "${saidBefore}" in ${bookFile(match.book, match.entity.file)}`);
+      }
     }
   }
+}
+
+function pronunciationText(value) {
+  return typeof value === "string" ? value.trim().normalize("NFC") : "";
 }
 
 // NFC and NFD spellings of one name (macOS files, pasted text) are the same.
@@ -453,14 +490,31 @@ function checkCanonDeaths(book, earlierBooks, errors) {
       }
     }
   }
+
+  // Learning a fact on the page is an on-page event, like an appearance.
+  for (const entry of knowledgeEntries(book)) {
+    const death = deaths.get(entry.character);
+    if (death && entry.learnedIn) {
+      errors.push(`${bookFile(book, entry.file)} knowledge-state[${entry.index}] has ${entry.character} learn something in ${entry.learnedIn}, but ${entry.character} died in earlier book ${death.title}; drop learned-in or the entry`);
+    }
+  }
 }
 
-function checkDestroyedArtifacts(book, earlierBooks, warnings) {
+function checkDestroyedArtifacts(book, earlierBooks, errors, warnings) {
   const destroyed = firstMatching(earlierBooks, "artifacts", (artifact) => artifact.status === "destroyed");
   for (const artifact of book.project.artifacts) {
     const earlier = destroyed.get(artifact.id);
     if (earlier && artifact.status !== "destroyed") {
       warnings.push(`${bookFile(book, artifact.file)} has status ${artifact.status || "unset"}, but ${artifact.id} was destroyed in earlier book ${earlier.title}`);
+    }
+  }
+  // A scene that changes a destroyed artifact's state uses it on the page.
+  // Mentions stay allowed, since characters remember it.
+  for (const scene of book.project.scenes) {
+    for (const [id, earlier] of destroyed) {
+      if (scene.stateChanges.some((change) => change && typeof change === "object" && String(change.target ?? "") === id)) {
+        errors.push(`${bookFile(book, scene.file)} uses ${id}, which was destroyed in earlier book ${earlier.title}; account for its return or remove the state change`);
+      }
     }
   }
 }
@@ -484,6 +538,15 @@ function checkKnownFacts(book, earlierBooks, errors) {
       errors.push(`${bookFile(book, entry.file)} knowledge-state[${entry.index}] has ${entry.character} learn ${entry.fact} in ${entry.learnedIn}, but they already know it in earlier book ${prior.book.title} (${bookFile(prior.book, prior.entry.file)} knowledge-state[${prior.entry.index}])`);
     }
   }
+}
+
+function knowledgeEntries(book) {
+  const continuity = book.project.continuity;
+  const entries = continuity && Array.isArray(continuity.data["knowledge-state"]) ? continuity.data["knowledge-state"] : [];
+  const file = path.join(book.root, "continuity", "state.md");
+  return entries.flatMap((entry, index) => entry && typeof entry === "object" && typeof entry.character === "string"
+    ? [{ index, file, character: entry.character, learnedIn: entry["learned-in"] ? String(entry["learned-in"]) : "" }]
+    : []);
 }
 
 function knowledgeFacts(book) {

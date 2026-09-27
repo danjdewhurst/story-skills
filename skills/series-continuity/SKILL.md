@@ -10,7 +10,8 @@ description: This skill should be used when the user asks to "write a sequel", "
 Plan and maintain sequels, prequels, and companion books as linked Story Skills projects. Each book stays a standalone project with its own `story.md`, characters, world, chapters, and continuity files. Books point at each other through `story.md` frontmatter, and `story series` checks the canon they share.
 
 - `series` - kebab-case series id shared by every book, such as `the-ember-cycle`
-- `book-number` - publication order (1, 2, 3...)
+- `series-title` - optional retail series name, such as `The Ember Cycle`, that the metadata sheet prints in place of the id
+- `book-number` - publication order (1, 2, 3...); `0` for a prequel published later, a decimal such as `1.5` for a between-books novella
 - `follows` - paths to books set **earlier** in the story's chronology
 - `precedes` - paths to books set **later** in the story's chronology
 
@@ -45,7 +46,7 @@ story init "{Title}" --follows {existing-book-dir} --synopsis "{synopsis}"
 story init "{Title}" --precedes {existing-book-dir} --synopsis "{synopsis}"
 ```
 
-Run `init` from the folder that contains the existing book, never from inside it: `init` refuses a new book inside another project, and a linked book outside the new book's parent folder. It also refuses a `--series` that differs from the linked book's, and a `--book-number` already used in the series. `init` checks that the linked path is a story project, writes the relative link, adds the backlink (and the new book's `series`, when the existing book has none) to the existing book's `story.md`, and inherits `series`, `genre`, `sub-genre`, `pov`, and `tense`. When any book in the linked series has an integer `book-number`, it sets `book-number` to one more than the highest number used anywhere in the series, so publication numbers never collide. A normal `story init` book has none, so a series with no numbered books leaves the new book unnumbered. Pass `--book-number` (or write the field on both `story.md` files) in that case. Pass `--series`, `--genre`, `--pov`, or `--tense` to override the inherited values.
+Run `init` from the folder that contains the existing book, never from inside it: `init` refuses a new book inside another project, and a linked book outside the new book's parent folder. It also refuses a `--series` that differs from the linked book's, and a `--book-number` already used in the series. `init` checks that the linked path is a story project, writes the relative link, adds the backlink (and the new book's `series`, when the existing book has none) to the existing book's `story.md`, and inherits `series`, `genre`, `sub-genre`, `pov`, and `tense`, plus `series-title`, `author` or `authors`, and `language` when the linked book sets them. When any book in the linked series has a `book-number`, it sets `book-number` to one more than the highest whole number used anywhere in the series, so publication numbers never collide. A normal `story init` book has none, so a series with no numbered books leaves the new book unnumbered. Pass `--book-number` (or write the field on both `story.md` files) in that case. Pass `--series`, `--genre`, `--pov`, or `--tense` to override the inherited values.
 
 If the existing book has no `series` yet, pass `--series {series-id}`: `init` also writes that `series` into the existing book's `story.md`. Add matching `book-number` values to both `story.md` files yourself.
 
@@ -57,8 +58,8 @@ If the CLI is not available, add the fields to both `story.md` files by hand.
 
 Only carry entities the new book actually uses. For each one, copy the file from the other book and then adjust it:
 
-- **Keep the filename id identical.** `story series` matches entities across books by id. A renamed file is a new entity to the checker.
-- **Keep `name` identical.** Put new titles or epithets in `aliases`, such as `General Maren` in a prequel for `Lord Maren`. A different `name` produces a warning.
+- **Keep the filename id identical.** `story series` matches entities across books by id. A renamed file is a new entity to the checker. `story rename` warns when the id is also defined in a linked book; rename it there too, or keep the old id.
+- **Keep `name` identical.** Put new titles or epithets in `aliases`, such as `General Maren` in a prequel for `Lord Maren`. A different `name` produces a warning, and so does a different `pronunciation`.
 - **Set state for this book's starting point, not the source book's ending.**
   - Sequel: start from the earlier book's final `status`, relationships, ownership, and knowledge.
   - Prequel: start from the earlier situation, and write the later book's facts as fixed endpoints in a `## Series Canon` section.
@@ -103,13 +104,16 @@ story series .
 - **Errors**
   - A linked path that is not a story project
   - Books that declare different `series` ids
-  - Two books that share a `book-number`
+  - Two books that share a `book-number`, or a `book-number` that is not a number 0 or more
   - A chronology cycle
   - A character who is `deceased` in an earlier book but not `deceased` in a later one
   - A later book whose chapter or scene lists that character as `pov` or under `characters`. Move flashbacks, memories, and ghosts to `mentions`.
   - A later book where a character learns a `fact` (an entry with `learned-in`) that the same character already knows in an earlier book. In a prequel, the usual fix is to remove the knowledge from the prequel, or to change which book the discovery happens in.
+  - A later book where a character who died in an earlier book learns something (a `knowledge-state` entry with `learned-in`)
+  - A later book's scene whose `state-changes` target an artifact `destroyed` in an earlier book
 - **Warnings**
-  - A shared entity whose `name` (or glossary `term`) differs from the most recent earlier book
+  - A shared entity whose `name` (or glossary `term`) or `pronunciation` differs from the most recent earlier book
+  - Linked books that set different `series-title` values
   - An artifact that is `destroyed` in an earlier book but has a different status in a later one
   - Linked books that set no `series` id while the others share one (`Linked books <titles> set no series id; add series: <id>`); add the id to each named book
 

@@ -49,7 +49,11 @@ ai-disclosure: No generative AI was used in writing this book. The cover was des
 | `ai-disclosure` | See below. |
 
 Series books also need `series` and `book-number`; retailers link series
-pages by them, so keep the series name identical everywhere.
+pages by them. `series` is a kebab-case id, not the retail name: set
+`series-title` (such as `The Ember Cycle`) for the name the metadata sheet
+prints, and keep it identical in every book. `book-number` accepts `0` for a
+prequel published later and a decimal such as `1.5` for a novella between
+books.
 
 ## ISBNs
 

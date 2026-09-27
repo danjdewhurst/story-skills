@@ -164,7 +164,7 @@ Some files hold one thing per project and are not entities:
 | `style-sheet.md` (optional) | `style-sheet` | House style that `story prose` reads |
 | `progress.md` (optional) | `progress-log` | Daily word counts written by `story progress --log` |
 
-Characters, locations, factions, artifacts, and glossary terms can also carry a `pronunciation` respelling for the audiobook narration build. Every field of every kind is listed in the [project format reference](project-format.md).
+Characters, locations, systems, factions, artifacts, and glossary terms can also carry a `pronunciation` respelling for the audiobook narration build. Every field of every kind is listed in the [project format reference](project-format.md).
 
 ## Identifiers
 

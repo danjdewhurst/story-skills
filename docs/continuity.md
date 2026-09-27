@@ -62,7 +62,7 @@ Every finding starts with a severity and, usually, a file path. Match the rest o
 
 | The finding contains | Command | Explained in |
 |----------------------|---------|--------------|
-| `lists <id>, who died in`, `who died before the story`, `has died-in`, `died-in references missing chapter` | `continuity` | [Deaths and posthumous appearances](#deaths-and-posthumous-appearances) |
+| `lists <id>, who died in`, `who died before the story`, `has died-in`, `died-in references missing chapter`, `learn something in` | `continuity` | [Deaths and posthumous appearances](#deaths-and-posthumous-appearances) |
 | `POV character <id> is not listed in characters`, `but its scenes are told by`, `does not list them in characters or mentions`, `does not list that location`, `who has status: cut`, `Chapter numbering skips` | `continuity` | [Casts and locations](#casts-and-locations) |
 | `pays off in … before it is planted`, `resolves in … before it is introduced`, `no payoff chapter`, `no planted chapter`, `no plant chapter`, `has no resolved chapter`, `status is still open`, `status is still planned` | `continuity` | [Promises, questions, and clues](#promises-questions-and-clues) |
 | `has no payoff yet`, `payoff chapter … has passed` | `continuity` | [Unfired setups](#unfired-setups-the-chekhov-warning) |
@@ -155,6 +155,8 @@ died-in: chapter-02
 | error | `<character> died-in references missing chapter <chapter>` | Point `died-in` at a chapter that exists. |
 | error | `<chapter or scene> lists <id>, who died in <chapter>; move posthumous appearances to mentions` | Move the id from `characters` (or `pov`) to `mentions`. If they really are alive, fix `died-in`. |
 | warning | `<chapter or scene> lists <id>, who died before the story (deceased with no died-in); move appearances to mentions` | Move the id from `characters` (or `pov`) to `mentions`. If they die during the story, set `died-in`. |
+| error | `continuity/state.md knowledge-state[<n>] has <id> learn something in <chapter>, after they died in <chapter>` | Learning is on-page, like an appearance. Move `learned-in` to a chapter at or before the death, or give the knowledge to a living character. |
+| warning | `continuity/state.md knowledge-state[<n>] has <id> learn something in <chapter>, but <id> died before the story (deceased with no died-in)` | Drop `learned-in` (pre-existing knowledge), or set `died-in` if they die during the story. |
 
 ### Casts and locations
 

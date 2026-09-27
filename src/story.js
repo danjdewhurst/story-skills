@@ -23,7 +23,7 @@ import { PROGRESS_FILE, cleanSessions, computeProgress, formatPercent, localDate
 import { plural } from "./plural.js";
 import { analyzeChapter, chapterFindings, proseRules, repeatedPhrases, similarNames } from "./prose.js";
 import { splitSentences } from "./sentences.js";
-import { areSiblingBooks, buildSeries, canonicalPath, discoverSeriesBooks, linksInclude, readBookFrontmatter, seriesId, seriesLinkPath, seriesLinks, validateSeriesLinks, withSeriesBacklink } from "./series.js";
+import { areSiblingBooks, buildSeries, canonicalPath, discoverSeriesBooks, isBookNumber, linksInclude, readBookFrontmatter, seriesId, seriesLinkPath, seriesLinks, validateSeriesLinks, withSeriesBacklink } from "./series.js";
 
 // writeFile moved to files.js with the rest of the write path guards; it is
 // re-exported because src/import.js imports it from here.
@@ -244,6 +244,7 @@ export function createStoryProject(options) {
     pov: options.pov ?? inherited.pov ?? "third-person-limited",
     tense: options.tense ?? inherited.tense ?? "past",
     form: options.form,
+    inherited: inheritedStoryFields(inherited),
     synopsis: options.synopsis ?? options.defaultSynopsis ?? "Add a 2-3 sentence synopsis here."
   }), { root });
   writeStarterFile(path.join(root, "characters", "_index.md"), characterIndex(storyId, [], "", ""), { root });
@@ -281,6 +282,27 @@ export function createStoryProject(options) {
     ignoredOptions,
     files: REQUIRED_PATHS.filter((entry) => entry.endsWith(".md"))
   };
+}
+
+// Fields a linked book passes to a new book in its series: the retail series
+// name, the byline, and the language. Values of the wrong shape are left
+// behind rather than copied into a fresh story.md that validate rejects.
+function inheritedStoryFields(data) {
+  const fields = {};
+  const text = (value) => typeof value === "string" && value.trim() !== "";
+  if (text(data["series-title"])) {
+    fields["series-title"] = data["series-title"];
+  }
+  if (text(data.author)) {
+    fields.author = data.author;
+  }
+  if (Array.isArray(data.authors) && data.authors.length > 0 && data.authors.every(text)) {
+    fields.authors = data.authors;
+  }
+  if (text(data.language)) {
+    fields.language = data.language;
+  }
+  return fields;
 }
 
 // The frontmatter of an existing story.md, {} when it does not parse, or
@@ -383,7 +405,7 @@ function resolveSeriesOptions(root, cwd, options) {
 
   let bookNumber;
   if (options.bookNumber !== undefined) {
-    bookNumber = requirePositiveInteger(options.bookNumber, "Book number");
+    bookNumber = requireBookNumber(options.bookNumber);
     if (linked.length > 0) {
       const taken = seriesBookNumbers(linked).find((entry) => entry.bookNumber === bookNumber && canonicalPath(entry.root) !== rootKey);
       if (taken) {
@@ -394,8 +416,9 @@ function resolveSeriesOptions(root, cwd, options) {
     // Publication order: the new book comes after every numbered book already
     // in the series, not just the directly linked ones, so it never collides.
     const entries = seriesBookNumbers(linked, true);
-    const all = linked.map((book) => book.data["book-number"]).concat(entries.map((entry) => entry.bookNumber)).filter((value) => Number.isInteger(value));
-    bookNumber = all.length > 0 ? Math.max(...all) + 1 : undefined;
+    const all = linked.map((book) => book.data["book-number"]).concat(entries.map((entry) => entry.bookNumber)).filter(isBookNumber);
+    // After a novella numbered 2.5 the next full book is 3.
+    bookNumber = all.length > 0 ? Math.floor(Math.max(...all)) + 1 : undefined;
   }
 
   const linkPaths = (field) => linked.filter((book) => book.field === field).map((book) => seriesLinkPath(root, book.root));
@@ -413,7 +436,7 @@ function seriesBookNumbers(linked, requireComplete = false) {
       throw new Error(`Cannot compute the next book-number: part of the series linked from --${book.field} ${book.value} could not be read (${errors[0]}); fix it or pass --book-number`);
     }
     for (const entry of books) {
-      if (Number.isInteger(entry.bookNumber)) {
+      if (isBookNumber(entry.bookNumber)) {
         entries.push({ bookNumber: entry.bookNumber, root: entry.root });
       }
     }
@@ -550,7 +573,8 @@ export function scanProject(root) {
       id,
       file,
       name: data.name ?? titleCaseSlug(id),
-      type: data.type ?? ""
+      type: data.type ?? "",
+      pronunciation: data.pronunciation
     }), scanErrors),
     factions: readEntityFiles(projectRoot, path.join("worldbuilding", "factions"), (id, file, data) => ({
       id,
@@ -764,6 +788,7 @@ export function validateProjectOf(project) {
   validatePublishing(project.story.data, errors, warnings);
   validatePronunciations(project, errors);
   validateTextFields(project, errors);
+  validatePortablePaths(project, warnings);
   collectStrayFileWarnings(project, warnings);
   for (const file of ENTITY_SCAN_DIRS.flatMap((dir) => entityFileNames(projectRoot, dir))) {
     if (WINDOWS_RESERVED_ID.test(path.basename(file, ".md").toLowerCase())) {
@@ -1152,6 +1177,12 @@ function checkBodyLinkTarget(project, label, target, errors) {
     return;
   }
   const pathOnly = cleaned.split("#")[0].split("?")[0];
+  // Checked before the id: on Linux a backslash is part of the file name, so
+  // the kebab-case message below would hide the real problem.
+  if (pathOnly.includes("\\") && /\.md$/i.test(pathOnly)) {
+    errors.push(`${label} links to ${cleaned} with a backslash; write ${portableSlashes(cleaned)} so the link works on every system`);
+    return;
+  }
   const base = path.basename(pathOnly);
   if (!base.endsWith(".md")) {
     return;
@@ -2571,8 +2602,35 @@ export function renameEntity(root, options) {
     fs.rmSync(oldFile);
   }
 
+  if (newFile !== oldFile) {
+    warnings = warnings.concat(linkedBookIdWarnings(project, kind, oldId, newId));
+  }
   const reindexed = reindexProject(project.root);
   return { kind, oldId, id: newId, file: newFile, changed: [newFile].concat(reindexed.changed), warnings };
+}
+
+const SERIES_CANON_COLLECTIONS = {
+  character: "characters",
+  location: "locations",
+  system: "systems",
+  faction: "factions",
+  artifact: "artifacts",
+  term: "glossaryTerms"
+};
+
+// `story series` matches shared canon by id, so renaming an id that a linked
+// book also defines detaches the entity from every cross-book check.
+function linkedBookIdWarnings(project, kind, oldId, newId) {
+  const collection = SERIES_CANON_COLLECTIONS[kind];
+  const data = project.story.data ?? {};
+  if (!collection || (seriesLinks(project.root, data, "follows").length === 0 && seriesLinks(project.root, data, "precedes").length === 0)) {
+    return [];
+  }
+  const own = canonicalPath(project.root);
+  const { books } = discoverSeriesBooks(project.root, scanProject);
+  return books
+    .filter((book) => book.key !== own && book.project[collection].some((entity) => entity.id === oldId))
+    .map((book) => `${kind} ${oldId} is also defined in linked book ${book.title} (${seriesLinkPath(project.root, book.root)}); story series matches shared canon by id, so rename it there to ${newId} too, or keep the old id`);
 }
 
 // Updates the first heading that shows the old name (`# Old Name`, or
@@ -2878,6 +2936,9 @@ function storyBible(options) {
   if (options.series !== undefined) {
     data.series = options.series;
   }
+  if (options.inherited?.["series-title"] !== undefined) {
+    data["series-title"] = options.inherited["series-title"];
+  }
   if (options.bookNumber !== undefined) {
     data["book-number"] = options.bookNumber;
   }
@@ -2890,6 +2951,11 @@ function storyBible(options) {
     pov: options.pov,
     tense: options.tense
   });
+  for (const field of ["author", "authors", "language"]) {
+    if (options.inherited?.[field] !== undefined) {
+      data[field] = options.inherited[field];
+    }
+  }
   if (options.form !== undefined) {
     data.form = options.form;
     const target = STORY_FORMS.get(options.form).target;
@@ -3583,6 +3649,16 @@ function parseDecimalInteger(value) {
   }
   const number = Number(text);
   return Number.isSafeInteger(number) ? number : null;
+}
+
+// 0 (a prequel) and decimals (a 1.5 novella) are valid publication numbers.
+function requireBookNumber(value) {
+  const text = typeof value === "string" ? value.trim() : typeof value === "number" ? String(value) : "";
+  const number = /^\d+(?:\.\d+)?$/.test(text) ? Number(text) : NaN;
+  if (!isBookNumber(number)) {
+    throw new Error(`Book number must be 0 or a positive number, such as 2, 0 for a prequel, or 1.5 for a novella; got ${value}`);
+  }
+  return number;
 }
 
 function requirePositiveInteger(value, label) {
@@ -5062,7 +5138,7 @@ function storyIdIsFallback(project) {
 const TEXT_FIELDS = {
   characters: ["pronunciation", "name", "died-in", "arc", "lie", "truth", "ghost-wound"],
   locations: ["pronunciation", "name", "type", "region", "controlled-by", "status"],
-  systems: ["name", "type", "prevalence"],
+  systems: ["pronunciation", "name", "type", "prevalence"],
   factions: ["pronunciation", "name"],
   artifacts: ["pronunciation", "name", "owner", "location"],
   arcs: ["name"],
@@ -5076,7 +5152,7 @@ const TEXT_FIELDS = {
   matter: ["title", "rights-holder", "credit"]
 };
 
-const STORY_TEXT_FIELDS = ["title", "series", "genre", "sub-genre", "setting-era", "pov", "premise", "counter-premise", "author", "season-goal", "language", "publisher", "publication-date", "description", "copyright", "cover-alt", "ai-disclosure", "draft-mode", "cover", "deadline"];
+const STORY_TEXT_FIELDS = ["title", "series", "series-title", "genre", "sub-genre", "setting-era", "pov", "premise", "counter-premise", "author", "season-goal", "language", "publisher", "publication-date", "description", "copyright", "cover-alt", "ai-disclosure", "draft-mode", "cover", "deadline"];
 
 function validateTextFields(project, errors) {
   const check = (label, data, fields) => {
@@ -5117,8 +5193,8 @@ function validateStoryFrontmatter(project, errors) {
   if (data.series !== undefined && !isKebabId(data.series)) {
     errors.push("story.md series must be a kebab-case id");
   }
-  if (data["book-number"] !== undefined && (!Number.isInteger(data["book-number"]) || data["book-number"] <= 0)) {
-    errors.push("story.md book-number must be a positive integer");
+  if (data["book-number"] !== undefined && !isBookNumber(data["book-number"])) {
+    errors.push("story.md book-number must be a number 0 or more, such as 2, 0 for a prequel, or 1.5 for a novella");
   }
   validateStringArray(data, "follows", "story.md", errors);
   validateStringArray(data, "precedes", "story.md", errors);
@@ -5144,8 +5220,27 @@ function validateStoryFrontmatter(project, errors) {
   }
 }
 
+// A path written with Windows separators resolves on Windows and fails on
+// Linux and macOS (a CI runner, say), so warn on every platform.
+function validatePortablePaths(project, warnings) {
+  if (project.story.unreadable) {
+    return;
+  }
+  const data = project.story.data;
+  for (const field of ["follows", "precedes", "cover"]) {
+    const values = Array.isArray(data[field]) ? data[field] : [data[field]];
+    for (const value of values.filter((item) => typeof item === "string" && item.includes("\\"))) {
+      warnings.push(`story.md ${field} ${value} uses a backslash; write ${portableSlashes(value)} so the path works on every system`);
+    }
+  }
+}
+
+function portableSlashes(value) {
+  return String(value).replace(/\\/g, "/");
+}
+
 function validatePronunciations(project, errors) {
-  const entities = [project.characters, project.locations, project.factions, project.artifacts, project.glossaryTerms].flat();
+  const entities = [project.characters, project.locations, project.systems, project.factions, project.artifacts, project.glossaryTerms].flat();
   for (const entity of entities) {
     if (entity.pronunciation !== undefined && typeof entity.pronunciation !== "string") {
       errors.push(`${relative(project, entity.file)} frontmatter field pronunciation must be text`);
