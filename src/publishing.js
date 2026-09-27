@@ -8,7 +8,7 @@ import { isBookNumber, seriesDisplayName } from "./series.js";
 export const MAX_KEYWORDS = 7;
 const BISAC_PATTERN = /^[A-Z]{3}\d{6}$/;
 const LANGUAGE_PATTERN = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
-const SCALAR_FIELDS = ["author", "language", "isbn", "publisher", "publication-date", "description", "copyright", "cover-alt", "ai-disclosure"];
+const SCALAR_FIELDS = ["author", "language", "isbn", "publisher", "publication-date", "description", "copyright", "cover-alt", "ai-disclosure", "chapter-label", "contents-label"];
 
 // A `[TODO: author to supply]` marker, which the publishing skill leaves
 // rather than inventing a value. Builds and the readiness checklist treat it
@@ -49,7 +49,11 @@ export function publishingMeta(data) {
     subjects: list("subjects"),
     copyright: text("copyright"),
     coverAlt: text("cover-alt"),
-    aiDisclosure: text("ai-disclosure")
+    aiDisclosure: text("ai-disclosure"),
+    // Generated labels for a book not in English: "Kapitel" for the chapter
+    // headings and "Inhalt" for the table of contents.
+    chapterLabel: text("chapter-label") || "Chapter",
+    contentsLabel: text("contents-label") || "Contents"
   };
 }
 

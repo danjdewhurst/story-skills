@@ -295,7 +295,9 @@ HTML comments (`<!-- ... -->`) in the prose are left out of the word count and o
 
 `story wordcount` uses the same rule, so the manuscript contains exactly the words that were counted. Keep notes and TODOs above `## Chapter Text`, or they end up in the book. The [reconcile loop](../skills/discovery-drafting/references/reconcile-loop.md) puts its post-hoc chapter notes there for this reason.
 
-Each chapter gets the heading `Chapter N: Title`, built from its `number` and `title` frontmatter. Two chapters with the same `number` stop every export and build:
+Each chapter gets the heading `Chapter N: Title`, built from its `number` and `title` frontmatter. A chapter with `numbered: false` (a Prologue, Interlude, or Epilogue) is headed by its title alone and takes no number, so the chapters after it keep the author's numbering: chapter files Prologue, Arrival, Departure build as `Prologue`, `Chapter 1: Arrival`, `Chapter 2: Departure`. An unnumbered chapter needs a title. `story import` sets `numbered: false` for Prologue, Epilogue, Interlude, and Afterword headings and for headings Pandoc marks `{.unnumbered}` or `{-}`.
+
+For a book not in English, set `chapter-label` and `contents-label` in `story.md` (see [Publishing metadata](#publishing-metadata-in-storymd)). Two chapters with the same `number` stop every export and build:
 
 ```text
 Duplicate chapter number 3: refusing to build with colliding EPUB ids
@@ -386,7 +388,11 @@ Write matter text yourself. The `story-maintenance` skill will not invent acknow
 | `copyright` | Text, such as `Copyright © 2026 Ada Writer` | EPUB `dc:rights`, the generated copyright page, the metadata sheet. |
 | `cover-alt` | Text | The EPUB cover image's alt text, instead of `Cover of <title>`; the metadata sheet. |
 | `ai-disclosure` | Text | The generated copyright page and the metadata sheet. |
-| `form` | `flash`, `short-story`, `novelette`, `novella`, `novel`, `serial`, `picture-book`, or `chapter-book` | The metadata sheet. `story init --form` sets it along with a default `target-words`, and `validate` warns when `target-words`, or the finished manuscript, falls outside the form's usual range. |
+| `chapter-label` | Text, such as `Kapitel` | The word in every generated chapter heading, in place of `Chapter`: `Kapitel 1: Die Glocke`. A `{n}` in it places the number, as in `第{n}章`. Used by the markdown export and every build. |
+| `contents-label` | Text, such as `Inhalt` | The table of contents heading, in place of `Contents`, in the EPUB navigation, the HTML review copy, and the print interior. |
+| `form` | `flash`, `short-story`, `novelette`, `novella`, `novel`, `serial`, `picture-book`, or `chapter-book` | The metadata sheet, and the Shunn layout: `short-story` and `flash` builds use the short-story layout (see [Shunn](#shunn-standard-manuscript-format)). `story init --form` sets it along with a default `target-words`, and `validate` warns when `target-words`, or the finished manuscript, falls outside the form's usual range. |
+
+The other generated text stays in English whatever the `language`: the HTML review copy's note on citing paragraph labels, the narration script's headings, credits (`Written by`, `Narrated by`, `The end. You have been listening to`), and runtime lines, and the metadata sheet. The narration script is a working file, so translate its credits by hand before recording.
 
 A value that starts with `[TODO`, such as the `[TODO: author to supply]` placeholder the publishing skill leaves, counts as missing: builds leave it out, the metadata sheet leaves its box unticked, and `validate` warns about it.
 
@@ -543,7 +549,7 @@ For a book PDF, build the [print interior](#print-interior) and render it with a
 
 ### EPUB
 
-The EPUB build is an EPUB 3 package with one XHTML document per matter page and per chapter, and a navigation document that lists them in reading order under a `Contents` heading. It reads the [publishing metadata](#publishing-metadata-in-storymd) in `story.md`, and one more field:
+The EPUB build is an EPUB 3 package with one XHTML document per matter page and per chapter, and a navigation document that lists them in reading order under a `Contents` heading (or the `contents-label` from `story.md`). It reads the [publishing metadata](#publishing-metadata-in-storymd) in `story.md`, and one more field:
 
 | Field | Effect |
 |-------|--------|
@@ -633,7 +639,7 @@ contact:
   - ada@example.com
 ```
 
-The title page lists the title, `by` and the author (both left out when no author is set), `Approximately N words`, and the contact lines. `N` is the word count of chapter prose, as `story wordcount` reports it, rounded as Shunn format asks: exact under 1,000 words, to the nearest 100 under 40,000, and to the nearest 1,000 above that. Each chapter starts on a new page, and front and back matter are left out, as submissions expect.
+The title page lists the title, `by` and the author (both left out when no author is set), `Approximately N words`, and the contact lines. `N` is the word count of chapter prose, as `story wordcount` reports it, rounded as Shunn format asks: exact under 1,000 words, to the nearest 100 under 40,000, and to the nearest 1,000 above that. Each chapter starts on a new page under its heading, and front and back matter are left out, as submissions expect. When `story.md` sets `form: short-story` or `form: flash`, both builds use Shunn's short-story layout instead: the text runs on from the title block with no chapter headings or page breaks, chapters are joined as sections with a centred `#` between them, every scene break is a `#` as well, and a chapter with no prose is skipped.
 
 The start of *The Last Ember* in `--format shunn`, with those fields set:
 
@@ -692,14 +698,15 @@ How the labels are made:
 
 | Part | Section id | Paragraph labels |
 |------|------------|------------------|
-| Chapter | `ch` and the chapter `number`, padded to two digits: `ch01`, `ch12` | `ch01-p1`, `ch01-p2`, and so on |
+| Chapter | `ch` and the printed chapter number, padded to two digits: `ch01`, `ch12` | `ch01-p1`, `ch01-p2`, and so on |
+| Unnumbered chapter (`numbered: false`) | Its title in kebab case, such as `prologue`; `unnumbered-<NN>` with the file's number when that is blank or taken | `prologue-p1`, and so on |
 | Front matter page | `matter-front-<id>` | `front-<id>-p1`, such as `front-epigraph-p1` |
 | Back matter page | `matter-back-<id>` | `back-<id>-p1`, such as `back-acknowledgments-p1` |
 | Generated copyright page | `matter-front-copyright` | `front-copyright-p1` |
 
 Paragraphs are numbered from 1 within each chapter or page. A scene break is drawn as `* * *` and takes no number: in *Harbor of Second Light*, `ch01-p37` is the last paragraph before the break and `ch01-p38` the first after it. Prose is converted as in the [table below](#how-prose-is-converted-for-epub-docx-shunn-html-and-print), and all text is HTML-escaped. A matter page with `heading: false` gets a visually hidden heading, so screen readers still announce it. The label is faint until the reader hovers over or links to a paragraph; on a narrow screen it sits above the paragraph.
 
-A label depends only on its chapter's `number` and that chapter's own paragraphs, so editing chapter 5 never moves a label in chapter 3. A label is a position, not a permanent id: revising a chapter shifts the labels after the edit within that chapter, and `story move` changes the chapter part. Name the build with `--stamp` (`story build . --format html --stamp beta-round-1` prints `Review copy, build beta-round-1.` at the top), tag the commit you shared, and ask readers to quote the paragraph's first few words with the label. To find where an old label's paragraph is now, search the chapter for the first few words the reader quoted. If the note has no quote, rebuild the tagged commit in a separate worktree and read the label there: `git worktree add ../round-check <tag>`, then `story build ../round-check --format html --out ../round-check.html`, then search the current chapter for that paragraph's text and remove the worktree. `story compare . --ref <tag>` only says which chapters changed and by how much; it does not map labels. The [`editorial-review`](../skills/editorial-review/SKILL.md) skill runs review rounds this way, and [`line-editing`](../skills/line-editing/SKILL.md) cites its own notes with the same labels.
+A label depends only on its chapter's printed number and that chapter's own paragraphs, so editing chapter 5 never moves a label in chapter 3. A label is a position, not a permanent id: revising a chapter shifts the labels after the edit within that chapter, and `story move` changes the chapter part. Name the build with `--stamp` (`story build . --format html --stamp beta-round-1` prints `Review copy, build beta-round-1.` at the top), tag the commit you shared, and ask readers to quote the paragraph's first few words with the label. To find where an old label's paragraph is now, search the chapter for the first few words the reader quoted. If the note has no quote, rebuild the tagged commit in a separate worktree and read the label there: `git worktree add ../round-check <tag>`, then `story build ../round-check --format html --out ../round-check.html`, then search the current chapter for that paragraph's text and remove the worktree. `story compare . --ref <tag>` only says which chapters changed and by how much; it does not map labels. The [`editorial-review`](../skills/editorial-review/SKILL.md) skill runs review rounds this way, and [`line-editing`](../skills/line-editing/SKILL.md) cites its own notes with the same labels.
 
 For a project in a GitHub repository, the `review-copy.yml` workflow template rebuilds this file on every push and publishes it to GitHub Pages, and the `manuscript-note.yml` issue form asks readers for the label. See [Automation and CI](automation.md#review-copy-workflow).
 
@@ -728,7 +735,7 @@ Any other size stops the build with `Unsupported trim size: 7x10. Supported size
 The file opens with a comment that records the trim, the estimated page count, and how to render it:
 
 ```html
-<!-- Print interior for 6x9 trim (6in x 9in), about 5 pages.
+<!-- Print interior for 6x9 trim (6in x 9in), about 10 pages.
      Render to PDF with a CSS paged-media engine, for example:
        npx pagedjs-cli book.print.html -o book.pdf
        weasyprint book.print.html book.pdf
@@ -744,7 +751,7 @@ The layout:
 - **Text.** 11 pt Georgia, or a similar serif, at 1.4 line spacing, justified and hyphenated, with indented paragraphs. The first paragraph of a chapter, and the first after a scene break, is not indented, and a chapter's first letter is enlarged. Scene breaks are centred asterisks.
 - **Matter pages.** Paragraphs are not indented. Front matter pages are centred, apart from the copyright page, which is left-aligned at 9 pt.
 
-The page estimate is chapter words divided by the trim's words per page, rounded up. It is for planning; the rendered PDF's real page count is what printers use to price the book and size the spine. Check the rendered PDF against your printer's current requirements for margins, bleed, and fonts before ordering a proof. Opened in a browser, the file shows the text in one column at the trim width, which is useful for proofreading but is not the paged layout.
+The page estimate follows this layout: two pages for the title page and its back (the copyright page or a blank), the contents (a page per 25 chapters), and then each matter page, chapter, and back matter page rounded up to whole pages at the trim's words per page, with about a third of a page for a heading's sink and half a blank page on average for starting on a right-hand page. A 60-chapter, 80,000-word book at 6x9 comes to about 336 pages, not the 267 its words alone would fill. It is still for planning; the rendered PDF's real page count is what printers use to price the book and size the spine. Check the rendered PDF against your printer's current requirements for margins, bleed, and fonts before ordering a proof. Opened in a browser, the file shows the text in one column at the trim width, which is useful for proofreading but is not the paged layout.
 
 The [`publishing`](../skills/publishing/SKILL.md) skill covers choosing a trim, rendering the PDF, and checking the proof.
 
@@ -783,7 +790,7 @@ The script ends with closing credits: `The end. You have been listening to Harbo
 What goes in:
 
 - **Pronunciation guide.** Every `pronunciation` field on a character, location, system, faction, artifact, or glossary term, sorted by name. Characters with `status: cut` are left out. When there are none, the section says how to add them. Use plain respelling, such as `pronunciation: "SEER-ah VOSS"`; `story validate` rejects a value that is not text.
-- **Sections.** Every front matter page except the copyright page, every chapter as `Chapter N: Title`, then every back matter page. Each opens with its estimated runtime, `[about N min]` or `[under 1 min]`.
+- **Sections.** Every front matter page except the copyright page, every chapter under its heading (`Chapter N: Title`, or the title alone for an unnumbered chapter), then every back matter page. Each opens with its estimated runtime, `[about N min]` or `[under 1 min]`.
 - **Text.** Paragraphs as written, with markdown emphasis kept so the narrator can see where the stress falls. A scene break, in any of the forms the [table below](#how-prose-is-converted-for-epub-docx-shunn-html-and-print) lists (including `\* \* \*` and a lone `#`), becomes `[pause]`, and a backslash at the end of a line is dropped. Blockquote markers are kept as well, so an epigraph reads `> An ember given is a fire kept.`
 - **Runtime.** Every word in those sections, matter included, at 155 words per minute, rounded to the minute. Pace varies by narrator and genre, so time a sample chapter and rescale.
 
@@ -814,7 +821,7 @@ Generated from story.md. Retailer limits change; check each retailer's current r
 | Genre | science-fiction / coastal-mystery |
 | Form | novel |
 | Word count | 1489 |
-| Estimated print pages | 6 at 5.5x8.5, 5 at 6x9 |
+| Estimated print pages | 10 at 5.5x8.5, 10 at 6x9 |
 | Description | 170 characters (limit 4000) |
 | Keywords | 4 of 7: floating city; memory archive; salvage diver; near-future mystery |
 | BISAC subjects | FIC028000; FIC022000 |
@@ -863,7 +870,8 @@ The markdown export copies prose as written, and the narration script nearly doe
 
 | In the chapter prose | In EPUB, DOCX, Shunn, HTML, and print output |
 |----------------------|---------------------------------|
-| Blank line | Paragraph break. Line breaks inside a paragraph become spaces, including a hard break written as a backslash at the end of a line, so the `\` never shows. |
+| Blank line | Paragraph break. Other line breaks inside a paragraph become spaces. |
+| A backslash, or two or more spaces, at the end of a line inside a paragraph | A hard line break, so verse, lyrics, and a letter's sign-off keep their lines: `<br>` in HTML and print, `<br/>` in EPUB, a line break in DOCX, and a backslash break in the `.shunn.md` build. The `\` never shows. |
 | `**bold**` or `__bold__` | Bold (the `.shunn.md` build keeps the markup) |
 | `*italic*` or `_italic_` | Italic (the `.shunn.md` build keeps the markup). Underscores inside a word, as in `snake_case`, stay literal. |
 | `***both***`, or emphasis nested inside emphasis (`*a **b** c*`) | Bold and italic together, following the CommonMark emphasis rules |
@@ -873,7 +881,7 @@ The markdown export copies prose as written, and the narration script nearly doe
 | `#` heading markers | Removed; the heading text becomes an ordinary paragraph, also in the narration script. A heading with no text (`## `) is dropped. |
 | `` `code` `` spans and `` ``` `` fenced code | The code as plain text, without backticks or fence lines, and with no emphasis inside a span (the `.shunn.md` build keeps the backticks) |
 | `[text](target)` links and `![alt](image)` images | The link's text only; images are left out |
-| `>` blockquote markers | Removed, so a quoted epigraph or letter reads as plain text |
+| `>` blockquote paragraphs | A block quotation, indented on both sides: `<blockquote>` in EPUB, HTML, and print, the `Quote` style in DOCX, a half-inch block indent in the Shunn DOCX, and kept `>` markers in the `.shunn.md` build. Consecutive quoted paragraphs share one quotation, and nested `>>` markers are read as one level. |
 
 Lists and other markdown are not converted and appear as their literal text. Keep book prose to paragraphs, emphasis, and scene breaks.
 
@@ -970,6 +978,11 @@ The result is a draft, not submission copy. Literary agents expect present tense
   ```
 
   Folder names match in any letter case, so `Chapters/x.md` is refused too, and a path through a symlinked folder is checked against the real folder it points to: with `lnk` linked to `chapters`, `--out lnk/x.md` is refused. The real path is compared in any letter case too, on every system, so on a case-insensitive disk such as the macOS default an absolute path typed in another case (`/users/me/book/chapters/x.md` for a project at `/Users/me/Book`) is refused. On a case-sensitive disk this errs on the safe side: a sibling folder that differs from the project only in case is refused as well.
+- The skill-owned folders `feedback/`, `submission/`, `publishing/`, and `adaptations/` take a new generated file, such as the synopsis draft in `submission/`, but an existing file there is never replaced, because it may be a reader's notes or a draft you have since rewritten. Delete it first to regenerate it:
+
+  ```text
+  Refusing to overwrite submission/synopsis-1-page.md: files in feedback/, submission/, publishing/, adaptations/ may hold hand-written work. Delete it first to regenerate it, or use a path such as dist/ instead
+  ```
 - `--out` must name a file. `--out dist`, an existing folder, or any path ending in `/` is refused with `--out <path> is a directory: give a file path`, whether or not the folder exists yet; an empty `--out` is refused with `--out needs a file path`.
 
 Treat everything in `dist/` as disposable. It is regenerated from the markdown on every build, so never edit a built file to fix the book: change the chapter or matter file and build again. `story validate` and `story links` do not read `dist/`, and `story rename` and `story remove` never rewrite references inside it. The CLI does not create a `.gitignore`, so add `dist/` to your story repository's `.gitignore` unless you want to commit a particular build.
@@ -1001,6 +1014,7 @@ Treat everything in `dist/` as disposable. It is regenerated from the markdown o
 | `Refusing to access path outside project root: <path>` | A relative `--out` that leaves the project | Use a path inside the project, or an absolute path. |
 | `Refusing to write through symlink: <path>` | The `--out` file is a symlink | Delete the symlink or choose another file. |
 | `Refusing to write generated output to <path>: it is project source. ...` | `--out` names a project file or a path inside an entity folder | Write to `dist/` or another folder outside the project source. |
+| `Refusing to overwrite <path>: files in feedback/, submission/, ... may hold hand-written work. ...` | `--out` names an existing file in a skill-owned folder | Delete the file first if you mean to regenerate it, or write to `dist/`. |
 | `--out <path> is a directory: give a file path` | `--out` names a directory, such as `dist` | Add a file name, such as `dist/book.epub`. |
 | `Cannot export: fix this file first ...`, `Cannot build: ...`, or `Cannot build a synopsis: ...` | An entity file, registry, or `story.md` fails to parse | Fix the listed files; `story validate` reports them too. |
 | `<file>: chapter number must be a positive integer to build` | A chapter's `number` is set but is not a positive integer, such as `three` or `0` | Set `number` to the chapter's number. |

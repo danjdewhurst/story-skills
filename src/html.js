@@ -15,9 +15,11 @@ export const TRIM_SIZES = new Map([
 ]);
 export const DEFAULT_TRIM = "5.5x8.5";
 
-// Each part is { key, kind, title, heading, paragraphs } where paragraphs
-// are pre-rendered inline HTML strings, or null for a scene break.
+// Each part is { key, kind, title, heading, words, paragraphs } where each
+// paragraph is { html, quote } with pre-rendered inline HTML, or null for a
+// scene break. Consecutive quoted paragraphs share one <blockquote>.
 export function reviewHtml(book, { stamp = "" } = {}) {
+  const contents = book.contentsLabel ?? "Contents";
   const rtl = textDirection(book.language) === "rtl";
   const toc = [];
   const sections = [];
@@ -31,15 +33,15 @@ export function reviewHtml(book, { stamp = "" } = {}) {
     let count = 0;
     for (const paragraph of part.paragraphs) {
       if (paragraph === null) {
-        body.push(`<hr class="scene-break" aria-label="Scene break">`);
+        body.push({ quote: false, markup: `<hr class="scene-break" aria-label="Scene break">` });
         continue;
       }
       count += 1;
       const anchor = `${part.key}-p${count}`;
-      body.push(`<p id="${anchor}"><a class="anchor" href="#${anchor}" title="Link to ${anchor}">${anchor}</a>${paragraph}</p>`);
+      body.push({ quote: paragraph.quote, markup: `<p id="${anchor}"><a class="anchor" href="#${anchor}" title="Link to ${anchor}">${anchor}</a>${paragraph.html}</p>` });
     }
     const heading = part.heading ? `<h2>${escapeHtml(part.title)}</h2>` : `<h2 class="visually-hidden">${escapeHtml(part.title)}</h2>`;
-    sections.push(`<section id="${sectionId}" class="${part.kind}">${heading}\n${body.join("\n")}\n</section>`);
+    sections.push(`<section id="${sectionId}" class="${part.kind}">${heading}\n${withBlockquotes(body).join("\n")}\n</section>`);
   }
   const byline = book.authors.length === 0 ? "" : `<p class="byline">${escapeHtml(book.authors.join(" and "))}</p>`;
   return `<!DOCTYPE html>
@@ -65,6 +67,7 @@ p { position: relative; margin: 0 0 1rem; }
 .anchor { position: absolute; left: -5.5rem; width: 5rem; text-align: right; font: 0.7rem/2.2 system-ui, sans-serif; text-decoration: none; opacity: 0.35; }
 p:hover .anchor, p:target .anchor, .anchor:focus { opacity: 1; }
 p:target { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+blockquote { margin: 0 0 1rem; margin-inline-start: 1.5rem; }
 .scene-break { border: 0; text-align: center; margin: 2rem 0; }
 .scene-break::after { content: "* * *"; color: var(--muted); }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
@@ -82,7 +85,7 @@ ${rtl ? `[dir="rtl"] .note { border-left: 0; padding-left: 0; border-right: 3px 
 ${byline}
 <p class="note">Review copy${stamp === "" ? "" : `, build <code>${escapeHtml(stamp)}</code>`}. Every paragraph has a label such as <code>ch03-p12</code> (chapter 3, paragraph 12). Quote the label${stamp === "" ? "" : " and the build"} with each note, with the paragraph's first few words, so the author can find the exact spot after the text changes.</p>
 </header>
-<nav aria-label="Contents"><h2>Contents</h2><ol>
+<nav aria-label="${escapeHtml(contents)}"><h2>${escapeHtml(contents)}</h2><ol>
 ${toc.join("\n")}
 </ol></nav>
 ${sections.join("\n")}
@@ -97,7 +100,7 @@ export function printHtml(book, trimName = DEFAULT_TRIM) {
   if (!trim) {
     throw new Error(`Unsupported trim size: ${trimName}. Supported sizes: ${[...TRIM_SIZES.keys()].join(", ")}`);
   }
-  const pages = estimatePages(book.words, trimName);
+  const pages = estimateBookPages(book, trimName);
   const inside = insideMargin(pages);
   const author = book.authors.join(" and ");
   // An RTL book opens from the other side: its recto pages are left-hand
@@ -113,11 +116,11 @@ export function printHtml(book, trimName = DEFAULT_TRIM) {
     let first = true;
     for (const paragraph of part.paragraphs) {
       if (paragraph === null) {
-        paragraphs.push(`<p class="scene-break" aria-label="Scene break">*&#8195;*&#8195;*</p>`);
+        paragraphs.push({ quote: false, markup: `<p class="scene-break" aria-label="Scene break">*&#8195;*&#8195;*</p>` });
         first = true;
         continue;
       }
-      paragraphs.push(first ? `<p class="first">${paragraph}</p>` : `<p>${paragraph}</p>`);
+      paragraphs.push({ quote: paragraph.quote, markup: first ? `<p class="first">${paragraph.html}</p>` : `<p>${paragraph.html}</p>` });
       first = false;
     }
     if (part.kind === "chapter") {
@@ -129,7 +132,7 @@ export function printHtml(book, trimName = DEFAULT_TRIM) {
       ? `<h1>${escapeHtml(part.title)}</h1>`
       : part.placement === "back" ? `<div class="running-head" aria-hidden="true"></div>` : "";
     // Matter kinds already carry their placement (front, back copyright-page).
-    sections.push(`<section id="${part.key}" class="${part.kind}">${heading}\n${paragraphs.join("\n")}\n</section>`);
+    sections.push(`<section id="${part.key}" class="${part.kind}">${heading}\n${withBlockquotes(paragraphs).join("\n")}\n</section>`);
   }
   // Only the copyright page moves ahead of the contents; other front matter
   // keeps its order after it.
@@ -178,6 +181,8 @@ p.first, p.scene-break + p { text-indent: 0; }
 /* A raised initial: floated drop caps render inconsistently across engines. */
 section.chapter > h1 + p.first::first-letter { font-size: 2.4em; line-height: 1; }
 p.scene-break { text-align: center; text-indent: 0; margin: 0.8em 0; break-after: avoid; }
+blockquote { margin: 0.8em 1.5em; }
+blockquote p { text-indent: 0; text-align: start; }
 section.front p, section.back p { text-indent: 0; margin-bottom: 0.6em; text-align: ${rtl ? "right" : "left"}; }
 section.front:not(.copyright-page) p { text-align: center; }
 @media screen { body { max-width: ${trim.width}; margin: 2rem auto; padding: 0 1rem; } section { margin-top: 3rem; } }
@@ -186,7 +191,7 @@ section.front:not(.copyright-page) p { text-align: center; }
 <body>
 <section class="title-page"><h1>${escapeHtml(book.title)}</h1>${author === "" ? "" : `<p class="author">${escapeHtml(author)}</p>`}</section>
 ${beforeToc.join("\n")}
-<nav class="toc"><h1>Contents</h1><ol>
+<nav class="toc"><h1>${escapeHtml(book.contentsLabel ?? "Contents")}</h1><ol>
 ${toc.join("\n")}
 </ol></nav>
 ${afterToc.join("\n")}
@@ -207,6 +212,30 @@ export function estimatePages(words, trimName = DEFAULT_TRIM) {
   return Math.max(1, Math.ceil(words / trim.wordsPerPage));
 }
 
+// The chapter heading's 1.5in sink and heading take about this much of a
+// section's first page.
+const OPENING_SINK_PAGES = 0.3;
+const CONTENTS_ENTRIES_PER_PAGE = 25;
+
+// Pages of the print interior as printHtml lays it out, which sets the
+// gutter: the title page and its verso (the copyright page or a blank), the
+// contents, and every other section starting on a recto below the heading
+// sink, so each rounds up to whole pages and adds half a blank page on
+// average. Still an estimate: fonts and the engine decide the real count.
+export function estimateBookPages(book, trimName = DEFAULT_TRIM) {
+  const trim = TRIM_SIZES.get(trimName) ?? TRIM_SIZES.get(DEFAULT_TRIM);
+  const chapters = book.parts.filter((part) => part.kind === "chapter").length;
+  let pages = 2 + Math.max(1, Math.ceil(chapters / CONTENTS_ENTRIES_PER_PAGE)) + 0.5;
+  for (const part of book.parts) {
+    if (part.copyright && part.placement === "front") {
+      continue;
+    }
+    const sink = part.heading ? OPENING_SINK_PAGES : 0;
+    pages += Math.max(1, Math.ceil((part.words ?? 0) / trim.wordsPerPage + sink)) + 0.5;
+  }
+  return Math.ceil(pages);
+}
+
 // Longer books need a deeper inside margin so text does not vanish into the
 // spine. Bands follow common print-on-demand minimums plus a reading
 // allowance; confirm against the printer's current guide.
@@ -221,6 +250,26 @@ function insideMargin(pages) {
     return "0.875in";
   }
   return "1in";
+}
+
+// Element markup with each run of quoted paragraphs wrapped in one
+// <blockquote>, so a letter of several paragraphs is one quotation.
+export function withBlockquotes(items) {
+  const out = [];
+  let open = false;
+  for (const item of items) {
+    if (item.quote && !open) {
+      out.push("<blockquote>");
+    } else if (!item.quote && open) {
+      out.push("</blockquote>");
+    }
+    open = item.quote;
+    out.push(item.markup);
+  }
+  if (open) {
+    out.push("</blockquote>");
+  }
+  return out;
 }
 
 export function escapeHtml(value) {

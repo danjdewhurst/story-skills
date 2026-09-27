@@ -14,7 +14,7 @@ import { buildVoices } from "./voices.js";
 import { checkNames, existingNames } from "./names.js";
 import { STORY_FORMS, formRangeWarning } from "./forms.js";
 import { copyrightPage, metadataSheet, publishingMeta, validatePublishing } from "./publishing.js";
-import { DEFAULT_TRIM, estimatePages, printHtml, reviewHtml, TRIM_SIZES } from "./html.js";
+import { DEFAULT_TRIM, estimateBookPages, printHtml, reviewHtml, TRIM_SIZES } from "./html.js";
 import { narrationScript, pronunciationGuide } from "./narration.js";
 import { htmlBook, writeDocx, writeEpub, writeShunnDocx, writeShunnMarkdown } from "./packaging.js";
 import { DEFAULT_PASSES, addedPassNotes, nextPass, passChecks, readPasses, updatePasses, validatePasses } from "./passes.js";
@@ -112,6 +112,7 @@ const RESEARCH_DIR = "research";
 // Chapter statuses that mean the prose is settled, so it should not rest on
 // research that is still open or disputed.
 const SETTLED_CHAPTER_STATUSES = new Set(["final", "complete"]);
+const WRITTEN_CHAPTER_STATUSES = new Set(["revised", "final", "complete"]);
 // EPUB 3 core media types for a cover image, keyed by file extension.
 const COVER_MEDIA_TYPES = {
   ".gif": "image/gif",
@@ -774,7 +775,7 @@ export function validateProjectOf(project) {
   validateFactions(project, errors);
   validateArtifacts(project, errors);
   validateArcs(project, errors);
-  validateChapters(project, errors);
+  validateChapters(project, errors, warnings);
   validateScenes(project, errors);
   validateContinuityState(project, errors, warnings);
   validateQuestions(project, errors);
@@ -2024,12 +2025,12 @@ export function exportManuscript(root, options = {}) {
 
   manuscript.front.forEach(pushMatter);
   for (const chapter of manuscript.chapters) {
-    lines.push(`# ${chapterHeading(chapter.number, chapter.title)}`, "", chapter.body, "");
+    lines.push(`# ${chapter.heading}`, "", chapter.body, "");
   }
   manuscript.back.forEach(pushMatter);
 
   writeFile(output.outFile, `${lines.join("\n").trimEnd()}\n`, output.writeOptions);
-  return { outFile: output.outFile, chapters: project.chapters.length };
+  return { outFile: output.outFile, chapters: project.chapters.length, warnings: manuscript.warnings };
 }
 
 export function buildBook(root, options = {}) {
@@ -2069,13 +2070,14 @@ export function buildBook(root, options = {}) {
 
   const manuscript = manuscriptParts(project);
   if (format === "metadata") {
+    const book = htmlBook(manuscript);
     const words = manuscript.chapters.reduce((sum, chapter) => sum + wordCount(chapter.body), 0);
     writeFile(output.outFile, metadataSheet({
       title: manuscript.title,
       data: project.story.data,
       meta: manuscript.meta,
       words,
-      pages: { "5.5x8.5": estimatePages(words, "5.5x8.5"), "6x9": estimatePages(words, "6x9") },
+      pages: { "5.5x8.5": estimateBookPages(book, "5.5x8.5"), "6x9": estimateBookPages(book, "6x9") },
       hasCopyrightPage: manuscript.front.concat(manuscript.back).some((entry) => entry.copyright),
       coverReady: coverIsReady(project),
       pendingPermissions: project.matter.filter((entry) => entry.permission === "pending").map((entry) => entry.id),
@@ -2098,7 +2100,7 @@ export function buildBook(root, options = {}) {
     writeDocx(output.outFile, manuscript, output.writeOptions);
   }
 
-  return { outFile: output.outFile, chapters: manuscript.chapters.length, format };
+  return { outFile: output.outFile, chapters: manuscript.chapters.length, format, warnings: manuscript.warnings };
 }
 
 // Deterministic synopsis. Budgets are 500 words (1 page) and 1500 (3 pages).
@@ -2259,7 +2261,10 @@ function shunnMeta(project) {
     // book gets a full byline.
     author: publishingMeta(data).authors.join(" and "),
     contact: asArray(data.contact),
-    words: project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0)
+    words: project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0),
+    // Short fiction runs as one text with `#` between sections rather than
+    // as chapters on new pages.
+    shortForm: data.form === "short-story" || data.form === "flash"
   };
 }
 
@@ -4809,18 +4814,39 @@ function manuscriptParts(project, action = "build") {
     seenNumbers.add(chapter.number);
   }
 
+  const meta = publishingMeta(project.story.data);
   const chapters = [];
+  const warnings = [];
+  // An unnumbered chapter (a Prologue, `numbered: false`) prints its title
+  // alone and takes no number, so the chapters after it keep the author's
+  // numbering: Prologue, Chapter 1, Chapter 2.
+  let unnumberedSoFar = 0;
+  const keys = new Set();
   for (const chapter of project.chapters) {
     const markdown = readMarkdown(chapter.file, project.root);
     // Only a real title reaches the book: a missing or blank one leaves the
     // heading as plain "Chapter 2", not "Chapter 2: Chapter 02".
-    const title = markdown.data.title;
-    chapters.push({
+    const rawTitle = markdown.data.title;
+    const title = rawTitle === undefined || rawTitle === null ? "" : String(rawTitle).trim();
+    const numbered = markdown.data.numbered !== false;
+    if (!numbered && title === "") {
+      throw new Error(`${relative(project, chapter.file)}: an unnumbered chapter needs a title to build`);
+    }
+    unnumberedSoFar += numbered ? 0 : 1;
+    const displayNumber = numbered ? chapter.number - unnumberedSoFar : null;
+    const entry = {
       number: chapter.number,
-      title: title === undefined || title === null ? "" : String(title).trim(),
+      title,
+      numbered,
+      displayNumber,
+      heading: numbered ? chapterHeading(displayNumber, title, meta.chapterLabel) : title,
       // LF only, so a CRLF checkout builds the same bytes as an LF one.
       body: chapterProse(markdown.body).replace(/\r\n?/g, "\n").trim()
-    });
+    };
+    chapters.push({ ...entry, key: chapterKey(entry, keys) });
+    if (wordCount(entry.body) === 0) {
+      warnings.push(`${relative(project, chapter.file)} has no prose yet and is built as a heading-only page`);
+    }
   }
 
   // Matter ids become EPUB manifest ids and file names, so they must be safe.
@@ -4840,7 +4866,6 @@ function manuscriptParts(project, action = "build") {
       body: chapterProse(readMarkdown(entry.file, project.root).body).replace(/\r\n?/g, "\n").trim()
     }));
 
-  const meta = publishingMeta(project.story.data);
   const front = matter("front");
   // A copyright line in story.md becomes the copyright page unless a matter
   // page already provides one.
@@ -4856,8 +4881,24 @@ function manuscriptParts(project, action = "build") {
     meta,
     front,
     chapters,
-    back
+    back,
+    warnings
   };
+}
+
+// The review copy's paragraph-label prefix: ch03 for Chapter 3, or the
+// title's slug (prologue) for an unnumbered chapter. A slug that is blank,
+// looks like another label, or repeats one takes the file number instead.
+function chapterKey(chapter, keys) {
+  if (chapter.numbered) {
+    return `ch${String(chapter.displayNumber).padStart(2, "0")}`;
+  }
+  let key = kebabCase(chapter.title);
+  if (key === "" || keys.has(key) || /^(?:ch\d+$|front-|back-|matter-|unnumbered-)/.test(key)) {
+    key = `unnumbered-${String(chapter.number).padStart(2, "0")}`;
+  }
+  keys.add(key);
+  return key;
 }
 
 // A copyright page is found by its id or its title, once, and every build
@@ -5265,6 +5306,11 @@ function fileStem(storyId) {
 // an --out pointing at a chapter would silently replace the prose.
 const SOURCE_ROOT_FILES = new Set(["story.md", STYLE_SHEET_FILE, PROGRESS_FILE]);
 const SOURCE_DIRECTORIES = ["characters", "chapters", "scenes", "worldbuilding", "plot", "continuity", "glossary", MATTER_DIR, RESEARCH_DIR];
+// Skill-owned folders: generated drafts start here (a synopsis in
+// submission/, a narration script in adaptations/), but the files are then
+// edited by hand, and reader notes exist nowhere else, so --out may add a
+// file but never replace one.
+const HAND_EDITED_DIRECTORIES = ["feedback", "submission", "publishing", "adaptations"];
 
 function assertNotProjectSource(project, outFile) {
   // Check the path as typed and the real path behind any symlinked folder
@@ -5282,6 +5328,9 @@ function assertNotProjectSource(project, outFile) {
     const [first] = lower.split(path.sep);
     if (SOURCE_ROOT_FILES.has(lower) || SOURCE_DIRECTORIES.includes(first)) {
       throw new Error(`Refusing to write generated output to ${path.relative(project.root, outFile)}: it is project source. Use a path such as dist/ instead`);
+    }
+    if (HAND_EDITED_DIRECTORIES.includes(first) && relativePath.includes(path.sep) && lstatIfExists(outFile) !== null) {
+      throw new Error(`Refusing to overwrite ${path.relative(project.root, outFile)}: files in ${HAND_EDITED_DIRECTORIES.map((dir) => `${dir}/`).join(", ")} may hold hand-written work. Delete it first to regenerate it, or use a path such as dist/ instead`);
     }
   }
 }
@@ -5707,7 +5756,7 @@ function validateArcs(project, errors) {
   }
 }
 
-function validateChapters(project, errors) {
+function validateChapters(project, errors, warnings) {
   const seenNumbers = new Map();
 
   for (const chapter of project.chapters) {
@@ -5757,6 +5806,17 @@ function validateChapters(project, errors) {
       requireScalar(data, "time-skip", label, errors);
     }
     validateEnum(data, "hook", CHAPTER_HOOKS, label, errors);
+    if (data.numbered !== undefined && typeof data.numbered !== "boolean") {
+      errors.push(`${label} numbered must be true or false`);
+    } else if (data.numbered === false && (typeof data.title !== "string" || data.title.trim() === "")) {
+      errors.push(`${label} is unnumbered (numbered: false), so it needs a title to print as its heading`);
+    }
+    // A planned chapter with no prose yet would ship as a heading-only page.
+    // While drafting that is normal, so validate says so only once the book
+    // or the chapter claims to be finished; build and export always say so.
+    if (chapter.wordCount === 0 && (project.story.data.status === "complete" || WRITTEN_CHAPTER_STATUSES.has(chapter.status))) {
+      warnings.push(`${label} has no prose yet, so export and build print it as a heading-only page`);
+    }
 
     if (filenameNumber === 0) {
       errors.push(`${label} filename must match chapter-{NN}.md`);

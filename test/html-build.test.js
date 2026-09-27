@@ -63,7 +63,7 @@ describe("html and print builds", () => {
   });
 
   test("print defaults to 5.5x8.5, widens the gutter for long books, and rejects unknown trims", () => {
-    const book = (words) => ({ title: "T", authors: [], language: "en", words, parts: [] });
+    const book = (words) => ({ title: "T", authors: [], language: "en", words, parts: [{ key: "ch01", kind: "chapter", title: "C", heading: true, words, paragraphs: [] }] });
     expect(printHtml(book(100))).toContain("size: 5.5in 8.5in; margin: 0.75in 0.5in 0.75in 0.625in;");
     expect(printHtml(book(60000), "6x9")).toContain("0.75in 0.5in 0.75in 0.75in;");
     expect(printHtml(book(120000), "6x9")).toContain("0.75in 0.5in 0.75in 0.875in;");

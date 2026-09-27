@@ -71,7 +71,9 @@ including a `Permissions cleared for quoted matter` row that names each
 matter page still at `permission: pending`, whatever the story status,
 and a `No [TODO markers in chapter prose` row that names each chapter still
 holding a `[TODO` marker, which every build would print. Report it with the
-validate findings. `validate` warns about
+validate findings, and any `has no prose yet` warning from the build: that
+chapter would ship as a heading-only page, so ask whether to write it or
+remove it. `validate` warns about
 `permission: pending` only once the story `status` is `complete`, and
 about a research note with a `risk` but no `reviewed-by` only when a final
 or complete chapter uses it, so also search the files directly before

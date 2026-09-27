@@ -540,6 +540,7 @@ export const COMMANDS = [
     run({ parsed, io, root }) {
       const result = exportManuscript(root(), { out: parsed.options.out });
       io.stdout.write(`Exported ${result.chapters} chapters to ${result.outFile}\n`);
+      writeWarnings(io, result);
       return 0;
     }
   },
@@ -564,6 +565,7 @@ export const COMMANDS = [
         stamp: parsed.options.stamp
       });
       io.stdout.write(`Built ${result.chapters} chapters as ${result.format} to ${result.outFile}\n`);
+      writeWarnings(io, result);
       return 0;
     }
   },

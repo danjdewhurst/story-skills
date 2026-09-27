@@ -237,11 +237,14 @@ Commands that change project files (`add`, `rename`, `remove`, `move`, `reindex`
 
 A file-system failure reads `Cannot <action> <path>: <reason>`, with the path relative to the current directory when it is inside it. The action is `open`, `list`, `check`, `replace`, `create the folder`, `delete`, `copy`, or `write to`, and the reason is `permission denied`, `no such file or folder`, `it is a folder, not a file`, `a part of the path is not a folder`, `the file system is read-only`, `no space left on the device`, `the disk quota is exceeded`, `the file is too large`, `an input/output error`, `the file is in use`, or `the name is too long`.
 
-`--out` on `export`, `build`, `synopsis`, and `diagram` never overwrites project source: `story.md`, `style-sheet.md`, `progress.md`, or anything under `characters/`, `chapters/`, `scenes/`, `worldbuilding/`, `plot/`, `continuity/`, `glossary/`, `matter/`, or `research/`. Folder names match in any letter case (`Chapters/x.md` is refused), and a path through a symlink is checked against the real folder it points to, so `lnk/x.md` is refused when `lnk` links to `chapters`. The real path is compared in any letter case as well, so an absolute path typed in another case on a case-insensitive disk (the macOS default) is caught. It must also name a file, not a directory; `--out dist` is refused even before `dist/` exists:
+`--out` on `export`, `build`, `synopsis`, and `diagram` never overwrites project source: `story.md`, `style-sheet.md`, `progress.md`, or anything under `characters/`, `chapters/`, `scenes/`, `worldbuilding/`, `plot/`, `continuity/`, `glossary/`, `matter/`, or `research/`. It may add a new file under the skill-owned folders `feedback/`, `submission/`, `publishing/`, and `adaptations/`, such as a first synopsis draft, but never replaces one there, because those files are edited by hand and reader notes exist nowhere else; delete the old file first to regenerate it. Folder names match in any letter case (`Chapters/x.md` is refused), and a path through a symlink is checked against the real folder it points to, so `lnk/x.md` is refused when `lnk` links to `chapters`. The real path is compared in any letter case as well, so an absolute path typed in another case on a case-insensitive disk (the macOS default) is caught. It must also name a file, not a directory; `--out dist` is refused even before `dist/` exists:
 
 ```text
 $ story export --out chapters/chapter-01.md
 Refusing to write generated output to chapters/chapter-01.md: it is project source. Use a path such as dist/ instead
+
+$ story export --out feedback/round-1/ann.md
+Refusing to overwrite feedback/round-1/ann.md: files in feedback/, submission/, publishing/, adaptations/ may hold hand-written work. Delete it first to regenerate it, or use a path such as dist/ instead
 
 $ story build --out dist
 --out dist is a directory: give a file path
@@ -383,7 +386,7 @@ Creates a new project from an existing manuscript. `<source>` is a single `.md`,
 - A file with neither becomes one chapter, titled by its first `#` heading or by its file name.
 - When numbered plain `Chapter N` lines did not split a file, because it also has markdown chapter headings or because a line is not between blank lines, `import` warns with the count and the first one: `warning: t.txt: 2 plain-text chapter lines were not used to split chapters (first "Chapter 1" at line 1): ...`.
 - A directory is imported in natural file-name order (`chapter-2` before `chapter-10`). Files with no number in their name come after the numbered ones, except prologue, preface, foreword, introduction, and prelude files, which come first. Hidden files (`.name`), macOS AppleDouble files (`._name`), and Word lock files (`~$name`) are skipped. Symlinks are never followed; a symlink to a document is refused.
-- Leading YAML frontmatter in source files is dropped. A leading `---` block that starts with a blank line, or holds a line that is not YAML (such as `She said: go now.`), is a scene break and is kept. A trailing Pandoc attribute block on a heading (`# Chapter 1: Arrival {#arrival .unnumbered}`) and closing hashes (`## Title ##`) are dropped from the title.
+- Leading YAML frontmatter in source files is dropped. A leading `---` block that starts with a blank line, or holds a line that is not YAML (such as `She said: go now.`), is a scene break and is kept. A trailing Pandoc attribute block on a heading (`# Chapter 1: Arrival {#arrival .unnumbered}`) and closing hashes (`## Title ##`) are dropped from the title. `Prologue`, `Epilogue`, `Interlude`, and `Afterword` chapters, and chapter headings marked `{.unnumbered}` or `{-}`, are written with `numbered: false`, so builds head them with their title alone and number the other chapters from 1.
 - In `.md` and `.markdown` sources, Pandoc's `---` becomes an em dash and `--` an en dash, except inside inline code, closed `` ``` `` code fences, HTML comments (everything after a `<!--` that never closes), link targets (`](...)`), autolinks (`<https://...>`), bare URLs, `www.` addresses, email and `mailto:` addresses, and HTML tags, and on lines made only of dashes (scene breaks), table separator rows (`|---|---|`), and indented code lines (four spaces or a tab). An indented line that continues a list item is prose and is converted. In `.txt` sources, leading tabs and spaces are removed from every line, so indented paragraphs do not become code blocks.
 
 Each chapter is written to `chapters/chapter-NN.md` with `status: draft` and its word count, and the registries are rebuilt. `import` then prints up to 25 capitalised names that appear three or more times, as candidates for `story add character` or `story add location`.
@@ -1755,7 +1758,7 @@ These commands produce files for reading or submission. The source of truth stay
 story export [path] [--out <file>]
 ```
 
-Writes one markdown manuscript: the story title, front matter pages, every chapter as `# Chapter N: Title` followed by its prose, then back matter pages. Only chapter prose is included, not outlines or notes. Matter pages with no text are left out. The file uses LF line endings, even from a CRLF checkout.
+Writes one markdown manuscript: the story title, front matter pages, every chapter as `# Chapter N: Title` (the title alone for a `numbered: false` chapter, and `chapter-label` in place of `Chapter` when `story.md` sets it) followed by its prose, then back matter pages. Only chapter prose is included, not outlines or notes. Matter pages with no text are left out. The file uses LF line endings, even from a CRLF checkout.
 
 | Option | Effect | Default |
 |---|---|---|
@@ -1806,6 +1809,10 @@ Builds a disposable book file in `dist/`. Builds are deterministic: the same sou
 | `print` | `dist/<story-id>.print.html` | A print interior as HTML with CSS paged media, sized to `--trim`, with a title page, contents, and page numbers. Render it to PDF with a paged-media engine such as Paged.js, WeasyPrint, or Prince |
 | `narration` | `dist/<story-id>.narration.md` | An audiobook script: estimated runtime at 155 words a minute, a pronunciation guide from `pronunciation` fields in the bible, opening and closing credits, and each section with its estimated minutes |
 | `metadata` | `dist/<story-id>.metadata.md` | A retailer metadata sheet from `story.md`: title, authors, ISBN, language, word count, estimated print pages, description, keywords, BISAC subjects, and a readiness checklist of what is missing |
+
+`export` and `build` print `warning: chapters/chapter-02.md has no prose yet and is built as a heading-only page` for each chapter with no prose, such as one still at `status: outline`, and build anyway.
+
+With `form: short-story` or `form: flash` in `story.md`, both Shunn builds use the short-story layout: no chapter headings or page breaks, and a centred `#` between chapters and at every scene break.
 
 When `story.md` sets `copyright` and no matter page already covers it, `export` and the `markdown`, `epub`, `docx`, `html`, and `print` builds add a generated copyright page to the front matter. `narration` leaves it out, and Shunn output (`--format shunn` and `docx --shunn`) has no front or back matter at all.
 
@@ -1865,7 +1872,7 @@ Generated from story.md. Retailer limits change; check each retailer's current r
 | Genre | science-fiction / coastal-mystery |
 | Form | novel |
 | Word count | 1489 |
-| Estimated print pages | 6 at 5.5x8.5, 5 at 6x9 |
+| Estimated print pages | 10 at 5.5x8.5, 10 at 6x9 |
 | Description | 170 characters (limit 4000) |
 | Keywords | 4 of 7: floating city; memory archive; salvage diver; near-future mystery |
 | BISAC subjects | FIC028000; FIC022000 |

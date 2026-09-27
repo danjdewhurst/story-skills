@@ -750,7 +750,7 @@ describe("round three", () => {
     expect(computeWordCounts(root).total).toBe(12);
     const html = fs.readFileSync(buildBook(root, { format: "html" }).outFile, "utf8");
     expect(html.match(/class="scene-break"/g)).toHaveLength(2);
-    expect(html).toContain("nothing.&quot; The gate");
+    expect(html).toContain("nothing.&quot;<br>The gate");
     const narration = fs.readFileSync(buildBook(root, { format: "narration" }).outFile, "utf8");
     expect(narration.match(/\[pause\]/g)).toHaveLength(2);
   });

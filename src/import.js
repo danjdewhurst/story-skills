@@ -133,7 +133,7 @@ export function importManuscript(options) {
     const file = path.join(chaptersDir, `chapter-${String(number).padStart(2, "0")}.md`);
     // An untitled numbered heading ("# Chapter 1") takes its new number.
     const title = chapter.title || `Chapter ${number}`;
-    writeFile(file, chapterMarkdown(title, number, words, chapter.prose), { root: created.root });
+    writeFile(file, chapterMarkdown(title, number, words, chapter.prose, chapter.unnumbered), { root: created.root });
   });
 
   reindexProject(created.root);
@@ -485,7 +485,7 @@ function splitByChapterHeadings(text) {
       if (current) {
         sections.push(finishChapter(current));
       }
-      current = { title, lines: part };
+      current = { title, lines: part, unnumbered: unnumberedHeading(lines, index, hidden, markdown) };
     } else if (markdown && underlines.has(index)) {
       continue;
     } else if (current) {
@@ -606,9 +606,9 @@ function setextHeadingText(lines, index, hidden, underline = /^ {0,3}(?:=+|-+)[ 
 // closing hashes (`## Title ##`).
 function cleanHeadingText(text) {
   return text
-    .replace(/\s*\{[#.][^{}]*\}\s*$/, "")
+    .replace(/\s*\{[#.-][^{}]*\}\s*$/, "")
     .replace(/(?:^|[ \t]+)#+[ \t]*$/, "")
-    .replace(/\s*\{[#.][^{}]*\}\s*$/, "")
+    .replace(/\s*\{[#.-][^{}]*\}\s*$/, "")
     .trim();
 }
 
@@ -632,7 +632,18 @@ function chapterTitle(text, pattern, sectionPattern = SECTION_HEADING_PATTERN) {
 }
 
 function finishChapter(section) {
-  return { title: section.title, prose: section.lines.join("\n").trim() };
+  return { title: section.title, prose: section.lines.join("\n").trim(), unnumbered: Boolean(section.unnumbered) };
+}
+
+// A Prologue, Epilogue, Interlude, or Afterword heading, or one Pandoc marks
+// `{.unnumbered}` or `{-}`, builds with its title alone (`numbered: false`).
+function unnumberedHeading(lines, index, hidden, markdown) {
+  const line = lines[index];
+  if (markdown && /\{[^{}]*(?:\.unnumbered|(?:^|[{\s])-(?=[\s}]))[^{}]*\}[\s#]*$/.test(line)) {
+    return true;
+  }
+  const text = markdown ? setextHeadingText(lines, index, hidden) ?? atxHeadingText(line) : line.trim();
+  return SECTION_HEADING_PATTERN.test(text ?? "");
 }
 
 // One chapter titled by the first `# ` heading outside code and comments,
@@ -674,17 +685,18 @@ function stripTitleHeading(text) {
   return text;
 }
 
-function chapterMarkdown(title, number, words, prose) {
+function chapterMarkdown(title, number, words, prose, unnumbered = false) {
   return `${stringifyFrontmatter({
     title,
     number,
+    ...(unnumbered ? { numbered: false } : {}),
     pov: "",
     locations: [],
     characters: [],
     "arcs-advanced": [],
     status: "draft",
     "word-count": words
-  })}# ${chapterHeading(number, title)}
+  })}# ${unnumbered ? title : chapterHeading(number, title)}
 
 ## Chapter Text
 

@@ -93,7 +93,12 @@ every edition.
 2. In the new `story.md`, set `language` (BCP 47: `de`, `es-MX`,
    `pt-BR`), and clear `isbn`, `publisher`, `publication-date`,
    `description`, `keywords`, and `subjects` for the new edition's own
-   values. Every edition needs its own ISBN.
+   values. Every edition needs its own ISBN. Set `chapter-label` (the word
+   for "Chapter", such as `Kapitel`; a `{n}` places the number, as in
+   `第{n}章`) and `contents-label` (such as `Inhalt`) so the built headings
+   and table of contents are not in English. The review-copy note, the
+   narration credits, and the metadata sheet stay in English; translate
+   the narration credits by hand in the built script.
 3. Remove `series`, `book-number`, `follows`, and `precedes` from the
    copied `story.md`. Those fields are for different books in a series,
    and copied values point at the source series, which breaks
@@ -124,6 +129,8 @@ the word and paragraph changes are expected and can be ignored. Also check:
 - [ ] Every chapter and scene file exists in both editions
 - [ ] Glossary terms rendered as the term base says (search the
       translated chapters for each term)
+- [ ] `chapter-label` and `contents-label` set, and a built EPUB or print
+      interior checked for leftover English labels
 - [ ] Chapter titles, epigraphs, and matter pages translated, with
       permissions cleared for the new language (quoted material may need
       a separate permission or an existing published translation)

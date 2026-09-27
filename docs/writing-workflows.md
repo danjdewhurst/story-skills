@@ -1544,7 +1544,7 @@ The sheet ends in a readiness checklist of every missing field. For *The Gannet 
 | Genre | mystery / coastal |
 | Form | novel |
 | Word count | 326 |
-| Estimated print pages | 2 at 5.5x8.5, 2 at 6x9 |
+| Estimated print pages | 6 at 5.5x8.5, 6 at 6x9 |
 | Description | (missing) |
 ...
 

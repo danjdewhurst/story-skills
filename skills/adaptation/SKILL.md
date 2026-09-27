@@ -71,7 +71,8 @@ Follow `references/audiobook.md`.
 
    It opens with the pronunciation guide table, then each chapter with its
    estimated finished runtime (155 words per minute), scene breaks as
-   `[pause]`, and the total runtime.
+   `[pause]`, and the total runtime. `--out` never replaces an existing
+   file under `adaptations/`, so delete the old script before a rebuild.
 3. Review the script for what reads badly aloud: long dialogue runs
    without tags, visual-only jokes, footnotes, maps, letters and texts,
    tables. Record fixes as narrator notes in

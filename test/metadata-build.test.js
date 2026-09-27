@@ -38,7 +38,7 @@ ai-disclosure: No AI was used.`);
     expect(text).toContain("| Genre | fiction / general |");
     expect(text).toContain("| Form | novella |");
     expect(text).toContain("| Word count | 600 |");
-    expect(text).toContain("| Estimated print pages | 3 at 5.5x8.5, 2 at 6x9 |");
+    expect(text).toContain("| Estimated print pages | 7 at 5.5x8.5, 7 at 6x9 |");
     expect(text).toContain("| Description | 16 characters (limit 4000) |");
     expect(text).toContain("| Keywords | 2 of 7: lighthouse; storm |");
     expect(text).toContain("| Cover | (missing) |");

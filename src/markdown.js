@@ -35,9 +35,12 @@ export function titleCaseSlug(slug) {
 
 // "Chapter 3: Arrival", or plain "Chapter 3" when the title is blank or only
 // repeats the number, so an untitled chapter never reads "Chapter 3: Chapter 3".
-export function chapterHeading(number, title) {
+// `word` is story.md's `chapter-label` ("Kapitel"); a `{n}` in it places the
+// number ("第{n}章"), otherwise the number follows it.
+export function chapterHeading(number, title, word = "Chapter") {
   const text = String(title ?? "").trim();
-  const label = `Chapter ${number}`;
+  const name = String(word ?? "").trim() || "Chapter";
+  const label = name.includes("{n}") ? name.replace(/\{n\}/g, String(number)) : `${name} ${number}`;
   return text === "" || text.toLowerCase() === label.toLowerCase() ? label : `${label}: ${text}`;
 }
 

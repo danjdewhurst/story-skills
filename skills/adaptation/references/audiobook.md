@@ -15,6 +15,8 @@ total to budget, not to promise.
 
 Rebuild after every manuscript or pronunciation change. The file is
 generated; keep narrator notes in `production.md`, not in the script.
+`--out` never replaces an existing file under `adaptations/`, so delete
+the old script before rebuilding it.
 
 ## Pronunciation
 

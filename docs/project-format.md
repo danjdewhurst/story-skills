@@ -325,7 +325,7 @@ tense: past
 | `draft-mode` | string | no | `discovered` marks a discovery-drafted project, `outlined` an outline-first one; any other value is a validate error. In a `discovered` project, `story next` treats a drafted chapter with no `mode` of its own as discovered. |
 | `revision-passes` | list of mappings | no | Named revision passes and their progress. See [Revision passes](#revision-passes). |
 | `cover` | path | no | Cover image inside the project: `.jpg`, `.jpeg`, `.png`, `.gif`, or `.webp`. `story build --format epub` embeds it. |
-| `authors`, `language`, `isbn`, `publisher`, `publication-date`, `description`, `keywords`, `subjects`, `copyright`, `cover-alt`, `ai-disclosure` | various | no | Publishing metadata read by `story build`. See [Publishing metadata](#publishing-metadata). |
+| `authors`, `language`, `isbn`, `publisher`, `publication-date`, `description`, `keywords`, `subjects`, `copyright`, `cover-alt`, `ai-disclosure`, `chapter-label`, `contents-label` | various | no | Publishing metadata read by `story build`. See [Publishing metadata](#publishing-metadata). |
 
 `story validate` errors when `cover` names a missing file, a file outside the project, or an unsupported extension. The craft fields `premise`, `counter-premise`, and `season-goal` have no CLI flags: edit `story.md` directly. See the [theme-craft](../skills/theme-craft/SKILL.md), [genre-craft](../skills/genre-craft/SKILL.md), and [discovery-drafting](../skills/discovery-drafting/SKILL.md) skills for how they are used.
 
@@ -406,6 +406,8 @@ These optional fields describe the published edition. Edit them in `story.md` by
 | `copyright` | string | The copyright line, such as `© 2026 Jane Doe`. See below. |
 | `cover-alt` | string | Alt text for the EPUB cover image. Default `Cover of <title>`. |
 | `ai-disclosure` | string | A short statement of how AI tools were used, for retailer and agent disclosure forms. |
+| `chapter-label` | string | The word for generated chapter headings, in place of `Chapter` (`Kapitel`). A `{n}` in it places the number (`第{n}章`). |
+| `contents-label` | string | The generated table of contents heading, in place of `Contents` (`Inhalt`). |
 
 The scalar fields must be text (an unquoted ISBN-13 is also accepted), and `authors`, `keywords`, and `subjects` must be lists of text; `story validate` errors otherwise:
 
@@ -632,6 +634,7 @@ word-count: 1489
 |-------|------|----------|---------|
 | `title` | string | yes | Chapter title. |
 | `number` | integer ≥ 1 | yes | Must match the filename and be unique. When it is set to something other than a positive integer, `story validate` errors, the reports and diagrams use the number in the file name, and `story export` and `story build` refuse to run. |
+| `numbered` | boolean | no | `false` builds the chapter under its title alone, for a Prologue, Interlude, or Epilogue, and leaves it out of the printed chapter count, so the next chapter is still `Chapter 1`. It then needs a title. Default `true`. `story import` sets it for Prologue-style and `{.unnumbered}` headings. |
 | `status` | enum | yes | `outline`, `draft`, `revised`, `final`, or `complete` (default `outline`). |
 | `pov` | character id | no | Point-of-view character. |
 | `locations` | list of location ids | no | Where the chapter takes place. |
@@ -647,7 +650,7 @@ word-count: 1489
 | `time-skip` | string | no | Free-form `from → to` note of a skipped interval. Not checked. |
 | `hook` | enum | no | How the chapter ending pulls the reader on: `cliffhanger`, `question`, `revelation`, `reversal`, `decision`, `emotional`, or `resolution`. Set it with `story add chapter --hook <name>`. Read by [`story pacing`](#pacing). |
 
-`story continuity` treats `pov` and `characters` as the cast, so a deceased character who appears in a flashback or memory belongs in `mentions`, not `characters`. It also warns when the `pov` character is not listed in `characters`, and when chapter numbers skip. `story validate` warns when a chapter has no scene records in `scenes/`.
+`story continuity` treats `pov` and `characters` as the cast, so a deceased character who appears in a flashback or memory belongs in `mentions`, not `characters`. It also warns when the `pov` character is not listed in `characters`, and when chapter numbers skip. `story validate` warns when a chapter has no scene records in `scenes/`, and when a chapter has no prose while it is `revised`, `final`, or `complete`, or the story is `complete`, since it would build as a heading-only page. `story export` and `story build` warn about every chapter with no prose.
 
 ## Scenes
 

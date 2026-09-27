@@ -211,7 +211,7 @@ describe("matter in export and build", () => {
     expect(text).toContain('<li><a href="front-dedication.xhtml">Dedication</a></li>');
     expect(text).toContain(`<li><a href="back-author-note.xhtml">Author's Note</a></li>`);
     expect(text).toContain('<body epub:type="frontmatter"><p>For the lamplighters.</p></body>');
-    expect(text).toContain('<body epub:type="frontmatter"><p>The sea keeps what it takes.</p></body>');
+    expect(text).toContain('<body epub:type="frontmatter"><blockquote><p>The sea keeps what it takes.</p></blockquote></body>');
     expect(text).toContain('<body epub:type="backmatter"><h1>Acknowledgments</h1><p>Thanks to <em>everyone</em>.</p></body>');
     expect(text).toContain('<img src="images/cover.png" alt="Cover of Matter Story"/>');
     expect(text).toContain("OEBPS/images/cover.png");

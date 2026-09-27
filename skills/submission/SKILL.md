@@ -145,7 +145,10 @@ provides.
    1,500. Overwrite the generated files with the rewritten versions and add
    the frontmatter from Conventions below.
 4. If the output is thin, the arc files are thin: fill the missing arc
-   sections with the `plot-structure` skill, rerun, then rewrite.
+   sections with the `plot-structure` skill, rerun, then rewrite. `--out`
+   never replaces an existing file in `submission/`, so to rerun, write to
+   `dist/` and merge, or delete the generated file first after checking with
+   the user that it holds no rewriting they want to keep.
 
 ### 6. Blurb and retailer description
 
@@ -164,7 +167,11 @@ story build . --format shunn
 ```
 
 Confirm `story.md` has `author` (or `authors`) and `contact` first; the
-title page uses them, joining co-authors with "and". Shunn builds leave out `matter/` pages, as submissions expect. For
+title page uses them, joining co-authors with "and". Shunn builds leave out `matter/` pages, as submissions expect. With
+`form: short-story` or `form: flash` in `story.md` they use Shunn's
+short-story layout: the text runs on from the title block, chapters become
+sections separated by a centred `#`, and there are no chapter headings or
+page breaks. Any other form starts each chapter on a new page. For
 self-publishing, hand off to the `publishing` skill, which covers EPUB and
 print builds (`story build . --format epub`, `--format print --trim 6x9`),
 retailer metadata, and launch.
