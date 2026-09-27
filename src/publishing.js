@@ -9,6 +9,17 @@ const BISAC_PATTERN = /^[A-Z]{3}\d{6}$/;
 const LANGUAGE_PATTERN = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
 const SCALAR_FIELDS = ["author", "language", "isbn", "publisher", "publication-date", "description", "copyright", "cover-alt", "ai-disclosure"];
 
+const RTL_LANGUAGES = new Set([
+  "ar", "arc", "bcc", "bqi", "ckb", "dv", "fa", "glk", "he",
+  "iw", "ji", "khw", "ks", "ku", "mzn", "pnb", "ps", "sd",
+  "syc", "syr", "ug", "ur", "yi"
+]);
+
+export function textDirection(language) {
+  const primary = String(language ?? "").trim().toLowerCase().split("-")[0];
+  return RTL_LANGUAGES.has(primary) ? "rtl" : "ltr";
+}
+
 export function publishingMeta(data) {
   const text = (field) => (typeof data[field] === "string" ? data[field].trim() : "");
   const list = (field) => (Array.isArray(data[field]) ? data[field].filter((item) => typeof item === "string" && item.trim() !== "").map((item) => item.trim()) : []);

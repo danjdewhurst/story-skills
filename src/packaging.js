@@ -8,7 +8,7 @@ import { deflateRawSync } from "node:zlib";
 import { writeFile } from "./files.js";
 import { escapeHtml } from "./html.js";
 import { chapterHeading, isSceneBreak, wordCount } from "./markdown.js";
-import { publishingMeta } from "./publishing.js";
+import { publishingMeta, textDirection } from "./publishing.js";
 
 function epubModifiedTimestamp() {
   // Deterministic builds: identical sources must produce byte-identical
@@ -30,11 +30,12 @@ function epubModifiedTimestamp() {
 export function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
   const meta = manuscript.meta ?? publishingMeta({});
   const lang = xmlEscape(meta.language);
+  const dir = textDirection(meta.language);
   const documents = [];
   const pushMatter = (placement) => (entry) => documents.push({
     id: `${placement}-${entry.id}`,
     label: entry.title,
-    content: matterXhtml(entry, placement, lang)
+    content: matterXhtml(entry, placement, lang, dir)
   });
   manuscript.front.forEach(pushMatter("front"));
   // Duplicate chapter numbers are refused up front in manuscriptParts, so ids
@@ -44,7 +45,7 @@ export function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
     documents.push({
       id: `chapter-${String(chapter.number).padStart(2, "0")}`,
       label: chapterHeading(chapter.number, chapter.title),
-      content: chapterXhtml(chapter, lang),
+      content: chapterXhtml(chapter, lang, dir),
       bodymatter: true
     });
   }
@@ -59,7 +60,7 @@ export function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
     const alt = meta.coverAlt === "" ? `Cover of ${manuscript.title}` : meta.coverAlt;
     coverEntries.push(
       { name: `OEBPS/${href}`, content: fs.readFileSync(manuscript.cover.filePath) },
-      { name: "OEBPS/cover.xhtml", content: `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="${lang}" lang="${lang}"><head><title>${xmlEscape(manuscript.title)}</title></head><body epub:type="cover"><img src="${href}" alt="${xmlEscape(alt)}"/></body></html>` }
+      { name: "OEBPS/cover.xhtml", content: `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="${lang}" lang="${lang}" dir="${dir}"><head><title>${xmlEscape(manuscript.title)}</title></head><body epub:type="cover"><img src="${href}" alt="${xmlEscape(alt)}"/></body></html>` }
     );
     coverItems.push(`<item id="cover-image" href="${href}" media-type="${manuscript.cover.mediaType}" properties="cover-image"/>`, `<item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>`);
     coverMeta.push(`<meta name="cover" content="cover-image"/>`);
@@ -78,26 +79,27 @@ export function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
   const accessibility = epubAccessibilityMeta(Boolean(manuscript.cover));
   const items = documents.map((doc) => `<item id="${doc.id}" href="${doc.id}.xhtml" media-type="application/xhtml+xml"/>`);
   const spine = documents.map((doc) => `<itemref idref="${doc.id}"/>`);
+  const spineAttr = dir === "rtl" ? ' page-progression-direction="rtl"' : "";
   const modified = epubModifiedTimestamp();
   writeZip(outFile, [
     // OCF requires mimetype first and uncompressed so the media type sits at
     // a fixed offset in the archive.
     { name: "mimetype", content: "application/epub+zip", stored: true },
     { name: "META-INF/container.xml", content: `<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>` },
-    { name: "OEBPS/content.opf", content: `<?xml version="1.0" encoding="UTF-8"?><package version="3.0" unique-identifier="book-id" xmlns="http://www.idpf.org/2007/opf"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book-id">${identifier}</dc:identifier><dc:title>${xmlEscape(manuscript.title)}</dc:title>${creator}<dc:language>${lang}</dc:language>${optional}<meta property="dcterms:modified">${modified}</meta>${accessibility}${coverMeta.join("")}</metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>${coverItems.join("")}${items.join("")}</manifest><spine>${coverSpine.join("")}${spine.join("")}</spine></package>` },
-    { name: "OEBPS/nav.xhtml", content: navXhtml(manuscript.title, documents, lang) },
+    { name: "OEBPS/content.opf", content: `<?xml version="1.0" encoding="UTF-8"?><package version="3.0" unique-identifier="book-id" xmlns="http://www.idpf.org/2007/opf"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book-id">${identifier}</dc:identifier><dc:title>${xmlEscape(manuscript.title)}</dc:title>${creator}<dc:language>${lang}</dc:language>${optional}<meta property="dcterms:modified">${modified}</meta>${accessibility}${coverMeta.join("")}</metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>${coverItems.join("")}${items.join("")}</manifest><spine${spineAttr}>${coverSpine.join("")}${spine.join("")}</spine></package>` },
+    { name: "OEBPS/nav.xhtml", content: navXhtml(manuscript.title, documents, lang, dir) },
     ...coverEntries,
     ...documents.map((doc) => ({ name: `OEBPS/${doc.id}.xhtml`, content: doc.content }))
   ], writeOptions);
 }
 
-function navXhtml(title, documents, lang = "en") {
+function navXhtml(title, documents, lang = "en", dir = "ltr") {
   const links = documents.map((doc) => `<li><a href="${doc.id}.xhtml">${xmlEscape(doc.label)}</a></li>`);
   const start = documents.find((doc) => doc.bodymatter);
   // The nav document is not in the spine, so landmarks point only at spine
   // documents (EPUBCheck RSC-011); reading systems find the toc themselves.
   const landmarks = start ? `<nav epub:type="landmarks" hidden="hidden"><ol><li><a epub:type="bodymatter" href="${start.id}.xhtml">Start of Content</a></li></ol></nav>` : "";
-  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="${lang}" lang="${lang}"><head><title>${xmlEscape(title)}</title></head><body><nav epub:type="toc" id="toc"><h1>Contents</h1><ol>${links.join("")}</ol></nav>${landmarks}</body></html>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="${lang}" lang="${lang}" dir="${dir}"><head><title>${xmlEscape(title)}</title></head><body><nav epub:type="toc" id="toc"><h1>Contents</h1><ol>${links.join("")}</ol></nav>${landmarks}</body></html>`;
 }
 
 // EPUB Accessibility 1.1 discovery metadata for a text-only book with a
@@ -126,18 +128,18 @@ function xhtmlParagraphs(body) {
   return paragraphs.join("");
 }
 
-function xhtmlDocument(title, lang, bodyType, content) {
-  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="${lang}" lang="${lang}"><head><title>${xmlEscape(title)}</title></head><body epub:type="${bodyType}">${content}</body></html>`;
+function xhtmlDocument(title, lang, dir, bodyType, content) {
+  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="${lang}" lang="${lang}" dir="${dir}"><head><title>${xmlEscape(title)}</title></head><body epub:type="${bodyType}">${content}</body></html>`;
 }
 
-function chapterXhtml(chapter, lang = "en") {
-  return xhtmlDocument(chapter.title, lang, "bodymatter chapter", `<h1>${xmlEscape(chapterHeading(chapter.number, chapter.title))}</h1>${xhtmlParagraphs(chapter.body)}`);
+function chapterXhtml(chapter, lang = "en", dir = "ltr") {
+  return xhtmlDocument(chapter.title, lang, dir, "bodymatter chapter", `<h1>${xmlEscape(chapterHeading(chapter.number, chapter.title))}</h1>${xhtmlParagraphs(chapter.body)}`);
 }
 
-function matterXhtml(entry, placement = "front", lang = "en") {
+function matterXhtml(entry, placement = "front", lang = "en", dir = "ltr") {
   const heading = entry.heading ? `<h1>${xmlEscape(entry.title)}</h1>` : "";
   const bodyType = entry.copyright ? `${placement}matter copyright-page` : `${placement}matter`;
-  return xhtmlDocument(entry.title, lang, bodyType, `${heading}${xhtmlParagraphs(entry.body)}`);
+  return xhtmlDocument(entry.title, lang, dir, bodyType, `${heading}${xhtmlParagraphs(entry.body)}`);
 }
 
 // The manuscript as HTML parts for the review and print builds. Paragraph

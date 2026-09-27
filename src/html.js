@@ -2,6 +2,7 @@
 // terminal: every paragraph has a stable anchor (ch03-p12) they can cite.
 // The print interior is HTML with CSS paged media, rendered to PDF by a
 // paged-media engine such as Paged.js, WeasyPrint, or Prince.
+import { textDirection } from "./publishing.js";
 
 export const TRIM_SIZES = new Map([
   ["5x8", { width: "5in", height: "8in", wordsPerPage: 230 }],
@@ -15,6 +16,7 @@ export const DEFAULT_TRIM = "5.5x8.5";
 // Each part is { key, kind, title, heading, paragraphs } where paragraphs
 // are pre-rendered inline HTML strings, or null for a scene break.
 export function reviewHtml(book) {
+  const dir = textDirection(book.language);
   const toc = [];
   const sections = [];
   for (const part of book.parts) {
@@ -39,7 +41,7 @@ export function reviewHtml(book) {
   }
   const byline = book.authors.length === 0 ? "" : `<p class="byline">${escapeHtml(book.authors.join(" and "))}</p>`;
   return `<!DOCTYPE html>
-<html lang="${escapeHtml(book.language)}">
+<html lang="${escapeHtml(book.language)}" dir="${dir}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -52,19 +54,19 @@ body { margin: 0; background: var(--bg); color: var(--fg); font: 1.1rem/1.65 Geo
 main { max-width: 38rem; margin: 0 auto; padding: 2rem 1rem 6rem; }
 header h1 { font-size: 2rem; line-height: 1.2; margin: 2rem 0 0.25rem; }
 .byline, .note { color: var(--muted); margin: 0 0 1rem; }
-.note { font: 0.9rem/1.5 system-ui, sans-serif; border-left: 3px solid var(--accent); padding-left: 0.75rem; }
-nav ol { padding-left: 1.25rem; }
+.note { font: 0.9rem/1.5 system-ui, sans-serif; border-inline-start: 3px solid var(--accent); padding-inline-start: 0.75rem; }
+nav ol { padding-inline-start: 1.25rem; }
 nav a, .anchor { color: var(--accent); }
 section { border-top: 1px solid var(--rule); margin-top: 3rem; padding-top: 1rem; }
 h2 { font-size: 1.4rem; margin: 1rem 0 1.5rem; }
 p { position: relative; margin: 0 0 1rem; }
-.anchor { position: absolute; left: -5.5rem; width: 5rem; text-align: right; font: 0.7rem/2.2 system-ui, sans-serif; text-decoration: none; opacity: 0.35; }
+.anchor { position: absolute; inset-inline-start: -5.5rem; width: 5rem; text-align: end; font: 0.7rem/2.2 system-ui, sans-serif; text-decoration: none; opacity: 0.35; }
 p:hover .anchor, p:target .anchor, .anchor:focus { opacity: 1; }
 p:target { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .scene-break { border: 0; text-align: center; margin: 2rem 0; }
 .scene-break::after { content: "* * *"; color: var(--muted); }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-@media (max-width: 52rem) { .anchor { position: static; display: block; width: auto; text-align: left; line-height: 1.4; opacity: 0.6; } }
+@media (max-width: 52rem) { .anchor { position: static; display: block; width: auto; text-align: start; line-height: 1.4; opacity: 0.6; } }
 </style>
 </head>
 <body>
@@ -92,6 +94,8 @@ export function printHtml(book, trimName = DEFAULT_TRIM) {
   const pages = estimatePages(book.words, trimName);
   const inside = insideMargin(pages);
   const author = book.authors.join(" and ");
+  const dir = textDirection(book.language);
+  const isRtl = dir === "rtl";
   const toc = [];
   const sections = [];
   for (const part of book.parts) {
@@ -116,8 +120,20 @@ export function printHtml(book, trimName = DEFAULT_TRIM) {
   const beforeToc = copyrightIndex === -1 ? [] : sections.slice(0, copyrightIndex + 1);
   const afterToc = copyrightIndex === -1 ? sections : sections.slice(copyrightIndex + 1);
 
+  const pageCss = isRtl
+    ? `@page { size: ${trim.width} ${trim.height}; margin: 0.75in ${inside} 0.75in 0.5in; }
+@page :left { margin-left: 0.5in; margin-right: ${inside};
+  @top-center { content: string(chapter-title, first-except); font: italic 9pt Georgia, serif; } }
+@page :right { margin-left: ${inside}; margin-right: 0.5in;
+  @top-center { content: "${cssString(author || book.title)}"; font: italic 9pt Georgia, serif; } }`
+    : `@page { size: ${trim.width} ${trim.height}; margin: 0.75in 0.5in 0.75in ${inside}; }
+@page :left { margin-left: 0.5in; margin-right: ${inside};
+  @top-center { content: "${cssString(author || book.title)}"; font: italic 9pt Georgia, serif; } }
+@page :right {
+  @top-center { content: string(chapter-title, first-except); font: italic 9pt Georgia, serif; } }`;
+
   return `<!DOCTYPE html>
-<html lang="${escapeHtml(book.language)}">
+<html lang="${escapeHtml(book.language)}" dir="${dir}">
 <head>
 <meta charset="utf-8">
 <title>${escapeHtml(book.title)}</title>
@@ -128,17 +144,13 @@ export function printHtml(book, trimName = DEFAULT_TRIM) {
        prince book.print.html -o book.pdf
      Check the printer's current specs for margins, bleed, and fonts before upload. -->
 <style>
-@page { size: ${trim.width} ${trim.height}; margin: 0.75in 0.5in 0.75in ${inside}; }
-@page :left { margin-left: 0.5in; margin-right: ${inside};
-  @top-center { content: "${cssString(author || book.title)}"; font: italic 9pt Georgia, serif; } }
-@page :right {
-  @top-center { content: string(chapter-title, first-except); font: italic 9pt Georgia, serif; } }
+${pageCss}
 @page chapter { @bottom-center { content: counter(page); font: 9pt Georgia, serif; } }
 @page :blank { @top-center { content: none; } @bottom-center { content: none; } }
 @page front { @top-center { content: none; } @bottom-center { content: none; } }
 html { font: 11pt/1.4 Georgia, "Iowan Old Style", "Palatino Linotype", serif; }
 body { margin: 0; hyphens: auto; }
-.title-page, .toc, section.front { page: front; break-before: right; }
+.title-page, .toc, section.front { page: front; break-before: ${isRtl ? "left" : "right"}; }
 section.front.copyright-page { break-before: page; font-size: 9pt; }
 .title-page { text-align: center; padding-top: 30%; }
 .title-page h1 { font-size: 26pt; font-weight: normal; margin: 0 0 1em; }
@@ -146,8 +158,8 @@ section.front.copyright-page { break-before: page; font-size: 9pt; }
 .toc h1 { font-size: 14pt; font-weight: normal; text-align: center; font-variant: small-caps; }
 .toc ol { list-style: none; padding: 0; }
 .toc a { color: inherit; text-decoration: none; }
-.toc a::after { content: " " target-counter(attr(href), page); float: right; }
-section.chapter, section.back { page: chapter; break-before: right; }
+.toc a::after { content: " " target-counter(attr(href), page); float: ${isRtl ? "left" : "right"}; }
+section.chapter, section.back { page: chapter; break-before: ${isRtl ? "left" : "right"}; }
 section.chapter > h1, section.back > h1 { string-set: chapter-title content(text); }
 h1 { font-size: 16pt; font-weight: normal; text-align: center; margin: 1.5in 0 0.5in; break-after: avoid; }
 p { margin: 0; text-indent: 1.5em; text-align: justify; widows: 2; orphans: 2; }
@@ -155,7 +167,7 @@ p.first, p.scene-break + p { text-indent: 0; }
 /* A raised initial: floated drop caps render inconsistently across engines. */
 section.chapter > h1 + p.first::first-letter { font-size: 2.4em; line-height: 1; }
 p.scene-break { text-align: center; text-indent: 0; margin: 0.8em 0; break-after: avoid; }
-section.front p, section.back p { text-indent: 0; margin-bottom: 0.6em; text-align: left; }
+section.front p, section.back p { text-indent: 0; margin-bottom: 0.6em; text-align: ${isRtl ? "right" : "left"}; }
 section.front:not(.copyright-page) p { text-align: center; }
 @media screen { body { max-width: ${trim.width}; margin: 2rem auto; padding: 0 1rem; } section { margin-top: 3rem; } }
 </style>

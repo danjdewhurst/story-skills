@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
-import { estimatePages, printHtml } from "../src/html.js";
+import { estimatePages, printHtml, reviewHtml } from "../src/html.js";
 import { buildBook, createEntity, createStoryProject } from "../src/story.js";
 import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
@@ -33,7 +33,7 @@ describe("html and print builds", () => {
     expect(result).toMatchObject({ format: "html", chapters: 2, outFile: path.join(root, "dist", "lamp-tide.html") });
     const html = fs.readFileSync(result.outFile, "utf8");
 
-    expect(html).toContain('<html lang="en-GB">');
+    expect(html).toContain('<html lang="en-GB" dir="ltr">');
     expect(html).toContain("<title>Lamp &amp; Tide: review copy</title>");
     expect(html).toContain('<p class="byline">Ada &quot;Q&quot; Writer</p>');
     expect(html).toContain('<li><a href="#ch01">Chapter 1: Arrival</a></li>');
@@ -45,9 +45,33 @@ describe("html and print builds", () => {
     expect(html).toContain('<section id="matter-back-afterword" class="back"><h2>Afterword</h2>');
   });
 
+  test("the review copy sets dir=rtl for RTL languages including regional tags", () => {
+    const rtlBook = (lang) => ({
+      title: "שלום",
+      authors: ["מחבר"],
+      language: lang,
+      words: 100,
+      parts: [{
+        key: "ch01",
+        kind: "chapter",
+        placement: "body",
+        title: "פרק 1",
+        heading: true,
+        paragraphs: ["שלום עולם."]
+      }]
+    });
+    expect(reviewHtml(rtlBook("he"))).toContain('<html lang="he" dir="rtl">');
+    expect(reviewHtml(rtlBook("he-IL"))).toContain('<html lang="he-IL" dir="rtl">');
+    expect(reviewHtml(rtlBook("ar"))).toContain('<html lang="ar" dir="rtl">');
+    expect(reviewHtml(rtlBook("ar-SA"))).toContain('<html lang="ar-SA" dir="rtl">');
+    expect(reviewHtml(rtlBook("fa"))).toContain('<html lang="fa" dir="rtl">');
+    expect(reviewHtml(rtlBook("ur"))).toContain('<html lang="ur" dir="rtl">');
+  });
+
   test("the print interior sets the trim, running heads, title page, contents, and matter order", () => {
     const { root } = project();
     const html = fs.readFileSync(buildBook(root, { format: "print", trim: "6x9" }).outFile, "utf8");
+    expect(html).toContain('<html lang="en-GB" dir="ltr">');
     expect(html).toContain("@page { size: 6in 9in; margin: 0.75in 0.5in 0.75in 0.625in; }");
     expect(html).toContain('@top-center { content: "Ada \\"Q\\" Writer"; font: italic 9pt Georgia, serif; }');
     expect(html).toContain("string(chapter-title, first-except)");
@@ -60,6 +84,30 @@ describe("html and print builds", () => {
     expect(html).toContain('<li><a href="#ch01">Chapter 1: Arrival</a></li>');
     expect(html).not.toContain('<li><a href="#front-dedication">');
     expect(fs.existsSync(path.join(root, "dist", "lamp-tide.print.html"))).toBe(true);
+  });
+
+  test("the print interior mirrors margins, running heads, breaks, and alignments for RTL books", () => {
+    const rtlBook = (lang) => ({
+      title: "ספר",
+      authors: ["סופר"],
+      language: lang,
+      words: 100,
+      parts: [
+        { key: "front-dedication", kind: "front", placement: "front", title: "הקדשה", heading: true, paragraphs: ["לכולם."] },
+        { key: "ch01", kind: "chapter", placement: "body", title: "פרק 1", heading: true, paragraphs: ["טקסט ראשון."] }
+      ]
+    });
+    for (const lang of ["he", "he-IL", "ar", "ar-SA"]) {
+      const html = printHtml(rtlBook(lang), "6x9");
+      expect(html).toContain(`<html lang="${lang}" dir="rtl">`);
+      expect(html).toContain("@page { size: 6in 9in; margin: 0.75in 0.625in 0.75in 0.5in; }");
+      expect(html).toContain("@page :left { margin-left: 0.5in; margin-right: 0.625in;\n  @top-center { content: string(chapter-title, first-except); font: italic 9pt Georgia, serif; } }");
+      expect(html).toContain('@page :right { margin-left: 0.625in; margin-right: 0.5in;\n  @top-center { content: "סופר"; font: italic 9pt Georgia, serif; } }');
+      expect(html).toContain(".title-page, .toc, section.front { page: front; break-before: left; }");
+      expect(html).toContain("section.chapter, section.back { page: chapter; break-before: left; }");
+      expect(html).toContain('.toc a::after { content: " " target-counter(attr(href), page); float: left; }');
+      expect(html).toContain("section.front p, section.back p { text-indent: 0; margin-bottom: 0.6em; text-align: right; }");
+    }
   });
 
   test("print defaults to 5.5x8.5, widens the gutter for long books, and rejects unknown trims", () => {

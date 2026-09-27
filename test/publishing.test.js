@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { copyrightPage, normalizeIsbn, publishingMeta } from "../src/publishing.js";
+import { copyrightPage, normalizeIsbn, publishingMeta, textDirection } from "../src/publishing.js";
 import { buildBook, createEntity, createStoryProject, validateProject } from "../src/story.js";
 import { makeTempDir, readArchiveText, writeMarkdown } from "./helpers.js";
 
@@ -35,6 +35,30 @@ cover-alt: A lighthouse at dusk
 ai-disclosure: No generative AI was used to write the text.`;
 
 describe("publishing metadata", () => {
+  test("textDirection identifies RTL and LTR languages with regional tags and case variations", () => {
+    expect(textDirection("he")).toBe("rtl");
+    expect(textDirection("he-IL")).toBe("rtl");
+    expect(textDirection("HE")).toBe("rtl");
+    expect(textDirection("ar")).toBe("rtl");
+    expect(textDirection("ar-SA")).toBe("rtl");
+    expect(textDirection("AR-EG")).toBe("rtl");
+    expect(textDirection("fa")).toBe("rtl");
+    expect(textDirection("fa-IR")).toBe("rtl");
+    expect(textDirection("ur")).toBe("rtl");
+    expect(textDirection("ur-PK")).toBe("rtl");
+    expect(textDirection("yi")).toBe("rtl");
+    expect(textDirection("ps")).toBe("rtl");
+    expect(textDirection("en")).toBe("ltr");
+    expect(textDirection("en-GB")).toBe("ltr");
+    expect(textDirection("fr")).toBe("ltr");
+    expect(textDirection("es")).toBe("ltr");
+    expect(textDirection("de")).toBe("ltr");
+    expect(textDirection("ja")).toBe("ltr");
+    expect(textDirection("zh-Hant")).toBe("ltr");
+    expect(textDirection("")).toBe("ltr");
+    expect(textDirection(undefined)).toBe("ltr");
+  });
+
   test("normalizeIsbn accepts valid ISBN-13 and ISBN-10 and rejects bad checksums", () => {
     expect(normalizeIsbn("978-0-306-40615-7")).toBe("9780306406157");
     expect(normalizeIsbn("0-306-40615-2")).toBe("0306406152");
@@ -99,12 +123,24 @@ author: Solo`);
     expect(text).toContain('<meta property="schema:accessModeSufficient">textual</meta>');
     expect(text).toContain('<meta property="schema:accessibilityFeature">alternativeText</meta>');
     expect(text).toContain('<meta property="schema:accessibilityHazard">none</meta>');
-    expect(text).toContain('xml:lang="en-GB" lang="en-GB"');
+    expect(text).toContain('xml:lang="en-GB" lang="en-GB" dir="ltr"');
     expect(text).toContain('<img src="images/cover.png" alt="A lighthouse at dusk"/>');
     expect(text).toContain('<nav epub:type="landmarks" hidden="hidden"><ol><li><a epub:type="bodymatter" href="chapter-01.xhtml">Start of Content</a></li></ol></nav>');
     expect(text).toContain('<body epub:type="bodymatter chapter"><h1>Chapter 1: Arrival</h1>');
     expect(text).toContain('<body epub:type="frontmatter copyright-page"><p>© 2026 Ada Writer</p><p>All rights reserved.</p><p>Published by Lamplight Press</p><p>ISBN 9780306406157</p><p>No generative AI was used to write the text.</p></body>');
     expect(text).toContain('<spine><itemref idref="cover"/><itemref idref="front-copyright"/><itemref idref="chapter-01"/></spine>');
+  });
+
+  test("epub sets page-progression-direction and dir=rtl for RTL languages", () => {
+    for (const lang of ["he", "he-IL", "ar", "ar-SA"]) {
+      const root = project(`language: ${lang}\nauthor: מפרסם\ncover: cover.png`);
+      fs.writeFileSync(path.join(root, "cover.png"), PNG_BYTES);
+      const text = readArchiveText(buildBook(root, { format: "epub" }).outFile);
+
+      expect(text).toContain(`<dc:language>${lang}</dc:language>`);
+      expect(text).toContain(`<spine page-progression-direction="rtl"><itemref idref="cover"/><itemref idref="chapter-01"/></spine>`);
+      expect(text).toContain(`xml:lang="${lang}" lang="${lang}" dir="rtl"`);
+    }
   });
 
   test("an existing copyright matter page wins, and plain books keep the story id and English", () => {
@@ -118,6 +154,8 @@ author: Solo`);
     const plain = readArchiveText(buildBook(project(), { format: "epub" }).outFile);
     expect(plain).toContain('<dc:identifier id="book-id">harbor-lights</dc:identifier>');
     expect(plain).toContain("<dc:language>en</dc:language>");
+    expect(plain).toContain('xml:lang="en" lang="en" dir="ltr"');
+    expect(plain).toContain("<spine><itemref idref=\"chapter-01\"/></spine>");
     expect(plain).not.toContain("alternativeText");
     expect(plain).not.toContain("copyright");
   });
