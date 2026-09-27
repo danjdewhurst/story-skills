@@ -32,7 +32,7 @@ import { plural } from "./plural.js";
 import { analyzeChapter, chapterFindings, proseRules, proseThresholds, repeatedPhrases, similarNames } from "./prose.js";
 import { splitSentences } from "./sentences.js";
 import { areSiblingBooks, buildSeries, canonicalPath, discoverSeriesBooks, isBookNumber, linksInclude, readBookFrontmatter, seriesId, seriesLinkPath, seriesLinks, validateSeriesLinks, withSeriesBacklink } from "./series.js";
-import { asFinding, err, warn } from "./findings.js";
+import { err, warn } from "./findings.js";
 import { EXIT_CODES, projectError, refusedError, usageError, withDefaultExitCode } from "./exit-codes.js";
 
 // writeFile moved to files.js with the rest of the write path guards; it is

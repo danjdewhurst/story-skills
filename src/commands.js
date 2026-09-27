@@ -4,7 +4,7 @@ import { formatClueMatrix } from "./clues.js";
 import { formatContext } from "./context.js";
 import { formatComparison, formatLabelMapping } from "./compare.js";
 import { applySeverity } from "./config.js";
-import { FINDING_CODES, asFinding } from "./findings.js";
+import { FINDING_CODES } from "./findings.js";
 import { importManuscript } from "./import.js";
 import { diagnosticsFrom, resultData, wantsJson, writeJsonResult } from "./json.js";
 import { isTruthy } from "./options.js";
@@ -144,7 +144,7 @@ export const COMMANDS = [
       reportKeptStory(io, result, "--title");
       reportGitignore(io, result);
       for (const warning of result.warnings) {
-        io.stderr.write(`warning: ${asFinding(warning).message}\n`);
+        io.stderr.write(`warning: ${warning.message}\n`);
       }
       if (result.keptStory) {
         io.stderr.write("note: the old chapter files were replaced, so scenes, bible entries, and continuity files may point at chapters that are gone or changed. Run story links to find them.\n");
@@ -736,10 +736,10 @@ function writeFindings(io, result) {
     io.stderr.write(`error: ${findingLine(error)}\n`);
   }
   for (const warning of result.warnings) {
-    io.stderr.write(`warning: ${asFinding(warning).message}\n`);
+    io.stderr.write(`warning: ${warning.message}\n`);
   }
   for (const entry of result.dismissed ?? []) {
-    io.stderr.write(`dismissed: ${asFinding(entry.finding).message} (${entry.note})\n`);
+    io.stderr.write(`dismissed: ${entry.finding.message} (${entry.note})\n`);
   }
   return result.ok ? EXIT_CODES.ok : EXIT_CODES.findings;
 }
@@ -834,11 +834,11 @@ function reportResult(io, result, successMessage, failureMessage) {
   }
 
   for (const warning of result.warnings) {
-    io.stderr.write(`warning: ${asFinding(warning).message}\n`);
+    io.stderr.write(`warning: ${warning.message}\n`);
   }
 
   for (const entry of dismissed) {
-    io.stderr.write(`dismissed: ${asFinding(entry.finding).message} (${entry.note ?? `exemption: ${entry.reason}`})\n`);
+    io.stderr.write(`dismissed: ${entry.finding.message} (${entry.note ?? `exemption: ${entry.reason}`})\n`);
   }
 
   return result.ok ? EXIT_CODES.ok : EXIT_CODES.findings;
@@ -846,7 +846,6 @@ function reportResult(io, result, successMessage, failureMessage) {
 
 // An error as the text output prints it: a warning that severity promoted
 // names its code, so the entry in story.md is easy to find.
-function findingLine(value) {
-  const finding = asFinding(value);
+function findingLine(finding) {
   return FINDING_CODES[finding.code] === "warning" ? `${finding.message} [${finding.code}]` : finding.message;
 }

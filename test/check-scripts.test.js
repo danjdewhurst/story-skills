@@ -454,17 +454,17 @@ describe("check-metadata marketplaces", () => {
 
 describe("check-examples helpers", () => {
   test("collectResult prefixes errors and warnings", () => {
-    const failures = collectResult([], "demo", "validate", { errors: ["bad"], warnings: ["meh"] });
+    const failures = collectResult([], "demo", "validate", { errors: [{ message: "bad" }], warnings: [{ message: "meh" }] });
     expect(failures).toEqual(["demo validate error: bad", "demo validate warning: meh"]);
   });
 
   test("compareFindings reports missing and unexpected findings", () => {
-    const failures = compareFindings([], "demo", "error", ["a", "b"], ["b", "c"]);
+    const failures = compareFindings([], "demo", "error", ["a", "b"], [{ message: "b" }, { message: "c" }]);
     expect(failures).toEqual([
       "demo continuity is missing expected error: a",
       "demo continuity has unexpected error: c"
     ]);
-    expect(compareFindings([], "demo", "warning", ["a"], ["a"])).toEqual([]);
+    expect(compareFindings([], "demo", "warning", ["a"], [{ message: "a" }])).toEqual([]);
   });
 });
 

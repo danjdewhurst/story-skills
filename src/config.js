@@ -4,7 +4,7 @@ import path from "node:path";
 // the import is circular. COMMANDS is only read inside functions, after every
 // module has finished loading.
 import { COMMANDS } from "./commands.js";
-import { FINDING_CODES, asFinding, codesAt, err } from "./findings.js";
+import { FINDING_CODES, codesAt, err } from "./findings.js";
 import { parseFrontmatter } from "./frontmatter.js";
 import { OPTIONS, normalizeBooleanValue, optionFamily, suggestion } from "./options.js";
 import { proseThresholds } from "./prose.js";
@@ -224,7 +224,7 @@ export function applySeverity(result, overrides) {
   const warnings = [];
   const dismissed = [...(result.dismissed ?? [])];
   for (const warning of result.warnings) {
-    const code = asFinding(warning).code;
+    const code = warning.code;
     const level = levels.get(code) ?? "warning";
     if (level === "warning") {
       warnings.push(warning);

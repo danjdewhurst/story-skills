@@ -269,7 +269,7 @@ describe("story context", () => {
     expect(warned.code).toBe(0);
     expect(warned.err).toContain(`warning: characters${path.sep}broken.md:`);
     const json = invokeJson(cwd, ["context", "chapter-02", "--path", root]);
-    expect(json.envelope.diagnostics).toEqual([expect.objectContaining({ severity: "warning", file: path.join("characters", "broken.md"), code: "context" })]);
+    expect(json.envelope.diagnostics).toEqual([expect.objectContaining({ severity: "warning", file: path.join("characters", "broken.md"), code: "context-file-skipped", check: "context" })]);
 
     fs.writeFileSync(path.join(root, "chapters", "chapter-05.md"), "not frontmatter\n", "utf8");
     const failed = invoke(cwd, ["context", "chapter-02", "--path", root]);

@@ -20,12 +20,6 @@ export function warn(code, message, file = null) {
   return { code, message, file };
 }
 
-// Transitional: a finding raised as a bare string, before its check was
-// given codes.
-export function asFinding(value) {
-  return typeof value === "string" ? { code: null, message: value, file: null } : value;
-}
-
 export const FINDING_CODES = {
   // story validate
   "todo-markers": "warning",
@@ -237,7 +231,12 @@ export const FINDING_CODES = {
   "leftover-references": "warning",
   "stale-exemption": "warning",
   "adopted-references": "warning",
-  "unsplit-chapter-lines": "warning"
+  "unsplit-chapter-lines": "warning",
+  // any command with --json, when it fails before producing a result
+  "usage-error": "error",
+  "unusable-project": "error",
+  "write-refused": "error",
+  "command-failed": "error"
 };
 
 export function codesAt(level) {

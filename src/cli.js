@@ -1,7 +1,7 @@
 import path from "node:path";
 import { COMMANDS } from "./commands.js";
 import { applyDefaults, readCliConfig, severityFor } from "./config.js";
-import { diagnostic, writeJsonResult } from "./json.js";
+import { failureDiagnostic, writeJsonResult } from "./json.js";
 import { formatOptionsHelp, isBooleanLiteralToken, isTruthy, parseArgs, suggestion, takesValue } from "./options.js";
 import { VERSION } from "./version.js";
 import { EXIT_CODES, exitCodeFor, projectError, usageError } from "./exit-codes.js";
@@ -67,7 +67,7 @@ export function runCli(argv, io) {
   // result too, so a script reading stdout always gets one object.
   const jsonCommand = COMMANDS_BY_NAME.get(commandWord(argv));
   const failJson = jsonCommand?.options?.includes("json") && jsonRequested(argv)
-    ? (message, exitCode) => writeJsonResult(io, { command: jsonCommand.name, ok: false, exitCode, diagnostics: [diagnostic("error", message, jsonCommand.name)] })
+    ? (message, exitCode) => writeJsonResult(io, { command: jsonCommand.name, ok: false, exitCode, diagnostics: [failureDiagnostic(message, exitCode, jsonCommand.name)] })
     : null;
   try {
     const named = COMMANDS_BY_NAME.get(argv[0]);

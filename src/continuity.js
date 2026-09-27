@@ -1,5 +1,5 @@
 import path from "node:path";
-import { asFinding, err, warn } from "./findings.js";
+import { err, warn } from "./findings.js";
 import { kebabCase } from "./markdown.js";
 import { chapterChronology, deathWindow } from "./chronology.js";
 
@@ -72,7 +72,7 @@ function withExemptions(project, result) {
 // one system (`continuity/promises/x.md`) matches on another.
 function dismissFinding(finding, exemptions, kept, dismissed) {
   const portable = (text) => text.replace(/\\/g, "/");
-  const match = exemptions.find((exemption) => portable(asFinding(finding).message).includes(portable(exemption.pattern)));
+  const match = exemptions.find((exemption) => portable(finding.message).includes(portable(exemption.pattern)));
   if (match) {
     dismissed.push({ finding, reason: match.reason });
   } else {

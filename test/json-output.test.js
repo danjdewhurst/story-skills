@@ -3,7 +3,8 @@ import { Buffer } from "node:buffer";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
-import { API_VERSION, diagnostic, diagnosticsFrom, resultData, writeJsonResult } from "../src/json.js";
+import { err, warn } from "../src/findings.js";
+import { API_VERSION, diagnostic, diagnosticsFrom, failureDiagnostic, resultData, writeJsonResult } from "../src/json.js";
 import { createStoryProject } from "../src/story.js";
 import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
 import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
@@ -69,19 +70,19 @@ describe("--json result envelope", () => {
     expect(envelope.ok).toBe(false);
     expect(envelope.data.errors).toBeGreaterThan(0);
     const missing = envelope.diagnostics.find((entry) => entry.message.includes("nobody-here"));
-    expect(missing).toMatchObject({ severity: "error", file: path.join("chapters", "chapter-01.md"), code: "links" });
+    expect(missing).toMatchObject({ severity: "error", file: path.join("chapters", "chapter-01.md"), code: "missing-reference", check: "links" });
     // The text output prints the same findings, so the two stay in step.
     expect(invoke(root, ["links"]).err).toContain(`error: ${missing.message}`);
   });
 
-  test("report, next, and doctor exit 0 and code each finding by the check that raised it", () => {
+  test("report, next, and doctor exit 0 and name the check that raised each finding", () => {
     const root = brokenProject();
     for (const command of ["report", "next", "doctor"]) {
       const { code, envelope } = invokeJson(root, [command, "--json"]);
       expect(code).toBe(0);
       expect(envelope.data.checks.links).toMatchObject({ ok: false });
       expect(envelope.data.checks.links.errors).toBeGreaterThan(0);
-      expect(envelope.diagnostics.some((entry) => entry.code === "links" && entry.severity === "error")).toBe(true);
+      expect(envelope.diagnostics.some((entry) => entry.check === "links" && entry.code === "missing-reference" && entry.severity === "error")).toBe(true);
       expect(envelope.data.validation).toBeUndefined();
     }
     const { envelope } = invokeJson(root, ["report", "--json"]);
@@ -96,7 +97,7 @@ describe("--json result envelope", () => {
     const { envelope } = invokeJson(root, ["report", "--json"]);
     const parseErrors = envelope.diagnostics.filter((entry) => entry.message.includes("missing YAML frontmatter"));
     expect(parseErrors).toHaveLength(1);
-    expect(parseErrors[0].code).toBe("validate");
+    expect(parseErrors[0]).toMatchObject({ code: "unreadable-file", check: "validate", file: path.join("chapters", "chapter-02.md") });
     const keys = envelope.diagnostics.map((entry) => `${entry.severity} ${entry.message}`);
     expect(new Set(keys).size).toBe(keys.length);
     expect(envelope.data.checks.links.errors).toBeGreaterThan(0);
@@ -114,7 +115,7 @@ describe("--json result envelope", () => {
     expect(code).toBe(0);
     expect(envelope.data.dismissed).toBeGreaterThan(0);
     const dismissed = envelope.diagnostics.find((entry) => entry.severity === "dismissed");
-    expect(dismissed).toMatchObject({ code: "continuity", exemption: "Ghost scene" });
+    expect(dismissed).toMatchObject({ code: "posthumous-appearance", check: "continuity", file: path.join("chapters", "chapter-02.md"), exemption: "Ghost scene" });
   });
 
   test("knowledge --json lists the entries, and a missing --at is a JSON usage error", () => {
@@ -126,7 +127,7 @@ describe("--json result envelope", () => {
     const usage = invokeJson(root, ["knowledge", "sera-voss", "--json"]);
     expect(usage.code).toBe(2);
     expect(usage.envelope.data).toBeNull();
-    expect(usage.envelope.diagnostics).toEqual([{ severity: "error", file: null, message: expect.stringContaining("Usage: story knowledge"), code: "knowledge" }]);
+    expect(usage.envelope.diagnostics).toEqual([{ severity: "error", file: null, message: expect.stringContaining("Usage: story knowledge"), code: "usage-error", check: "knowledge" }]);
   });
 
   test("a failure after --json (unknown character, missing project) is a JSON result", () => {
@@ -244,7 +245,7 @@ describe("--json result envelope", () => {
     const voices = invokeJson(cwd, ["voices", "-", "--json", "--path", root], passage);
     expect(voices.envelope.data.profiles.map((profile) => profile.id)).toEqual(["mara-quill"]);
     const avoided = voices.envelope.diagnostics.find((entry) => entry.message.includes("okay"));
-    expect(avoided).toMatchObject({ severity: "warning", file: "stdin", code: "voices" });
+    expect(avoided).toMatchObject({ severity: "warning", file: "stdin", code: "voice-avoid", check: "voices" });
     expect(avoided.message).toContain("stdin");
 
     // Without a project, prose still lints the passage.
@@ -282,18 +283,23 @@ describe("json helpers", () => {
     expect(writeJsonResult(io, { command: "validate", ok: false, exitCode: 4 })).toBe(4);
   });
 
-  test("diagnostics name the leading project file, or null", () => {
-    expect(diagnostic("warning", "story.md: bad yaml", "validate").file).toBe("story.md");
-    expect(diagnostic("warning", "continuity/state.md knowledge-state[0] is missing knows", "validate").file).toBe("continuity/state.md");
-    expect(diagnostic("error", "Chapter numbering starts at 2, not 1", "validate").file).toBeNull();
-    expect(diagnostic("error", "plot/outline.yml", "validate").file).toBe("plot/outline.yml");
+  test("a diagnostic takes its code, file, and message from the finding", () => {
+    expect(diagnostic("warning", warn("chapter-numbering-start", "Chapter numbering starts at 2, not 1"), "continuity"))
+      .toEqual({ severity: "warning", file: null, message: "Chapter numbering starts at 2, not 1", code: "chapter-numbering-start", check: "continuity" });
+    expect(diagnostic("error", err("unreadable-file", "story.md: bad yaml", "story.md"), "validate").file).toBe("story.md");
+  });
+
+  test("a failure is coded by its exit code", () => {
+    expect([2, 3, 4, 1].map((exitCode) => failureDiagnostic("broke", exitCode, "links").code))
+      .toEqual(["usage-error", "unusable-project", "write-refused", "command-failed"]);
+    expect(failureDiagnostic("broke", 2, "links")).toEqual({ severity: "error", file: null, message: "broke", code: "usage-error", check: "links" });
   });
 
   test("diagnosticsFrom and resultData split a result", () => {
-    const result = { ok: false, errors: ["a.md broke"], warnings: ["b"], extra: 1 };
+    const result = { ok: false, errors: [err("unreadable-file", "a.md broke", "a.md")], warnings: [warn("clock-backward", "b")], extra: 1 };
     expect(diagnosticsFrom(result, "x")).toEqual([
-      { severity: "error", file: "a.md", message: "a.md broke", code: "x" },
-      { severity: "warning", file: null, message: "b", code: "x" }
+      { severity: "error", file: "a.md", message: "a.md broke", code: "unreadable-file", check: "x" },
+      { severity: "warning", file: null, message: "b", code: "clock-backward", check: "x" }
     ]);
     expect(diagnosticsFrom({}, "x")).toEqual([]);
     expect(resultData(result)).toEqual({ extra: 1 });

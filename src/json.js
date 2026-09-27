@@ -1,5 +1,5 @@
 import { EXIT_CODES } from "./exit-codes.js";
-import { asFinding } from "./findings.js";
+import { err } from "./findings.js";
 import { isTruthy } from "./options.js";
 
 // The version of the --json result envelope. Adding a field keeps it;
@@ -25,25 +25,37 @@ export function writeJsonResult(io, { command, ok, exitCode = EXIT_CODES.finding
 }
 
 // A check result's errors, warnings, and dismissed findings as diagnostics.
-// `code` names the check that raised them.
-export function diagnosticsFrom(result, code) {
+// `check` names the check that raised them: validate, links, continuity, or
+// the command.
+export function diagnosticsFrom(result, check) {
   return [
-    ...(result.errors ?? []).map((message) => diagnostic("error", message, code)),
-    ...(result.warnings ?? []).map((message) => diagnostic("warning", message, code)),
-    ...(result.dismissed ?? []).map((entry) => ({ ...diagnostic("dismissed", entry.finding, code), exemption: entry.reason }))
+    ...(result.errors ?? []).map((finding) => diagnostic("error", finding, check)),
+    ...(result.warnings ?? []).map((finding) => diagnostic("warning", finding, check)),
+    ...(result.dismissed ?? []).map((entry) => ({ ...diagnostic("dismissed", entry.finding, check), exemption: entry.reason }))
   ];
 }
 
-export function diagnostic(severity, message, code) {
-  const text = asFinding(message).message;
-  return { severity, file: messageFile(text), message: text, code };
+export function diagnostic(severity, finding, check) {
+  return { severity, file: finding.file, message: finding.message, code: finding.code, check };
 }
 
-// Findings name their file first (`chapters/chapter-02.md references ...`),
-// so the leading path, when there is one, is the file the finding is about.
-function messageFile(message) {
-  const match = /^(\S+?\.(?:md|ya?ml|json))(?=[\s:[]|$)/u.exec(message);
-  return match ? match[1] : null;
+// A command that failed before it produced a result (a usage error, a
+// project it cannot read) as a diagnostic, coded by why it failed.
+export function failureDiagnostic(message, exitCode, check) {
+  return diagnostic("error", failure(message, exitCode), check);
+}
+
+function failure(message, exitCode) {
+  switch (exitCode) {
+    case EXIT_CODES.usage:
+      return err("usage-error", message);
+    case EXIT_CODES.project:
+      return err("unusable-project", message);
+    case EXIT_CODES.refused:
+      return err("write-refused", message);
+    default:
+      return err("command-failed", message);
+  }
 }
 
 // A check result without the fields the envelope already carries.

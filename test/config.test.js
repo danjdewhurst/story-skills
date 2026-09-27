@@ -340,7 +340,7 @@ describe("with --json and stdin", () => {
     const json = JSON.parse(result.out);
     expect(json.ok).toBe(false);
     const promoted = json.diagnostics.find((entry) => entry.message.includes("[TODO marker"));
-    expect(promoted).toMatchObject({ severity: "error", file: "chapters/chapter-01.md", code: "validate" });
+    expect(promoted).toMatchObject({ severity: "error", file: path.join("chapters", "chapter-01.md"), code: "todo-markers", check: "validate" });
     const dismissed = json.diagnostics.find((entry) => entry.message.includes("declares 3 words"));
     expect(dismissed).toMatchObject({ severity: "dismissed", exemption: "severity stale-word-count is off in story.md" });
     expect(json.data.errors).toBe(1);

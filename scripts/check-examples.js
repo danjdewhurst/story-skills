@@ -29,7 +29,7 @@ export const EXPECTED_CONTINUITY = {
 
 // A finding's text; the checks raise { code, message, file } findings.
 function text(finding) {
-  return typeof finding === "string" ? finding : finding.message;
+  return finding.message;
 }
 
 export function collectResult(failures, exampleName, command, result) {

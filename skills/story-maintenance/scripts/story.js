@@ -14,9 +14,6 @@ function err(code, message, file = null) {
 function warn(code, message, file = null) {
   return { code, message, file };
 }
-function asFinding(value) {
-  return typeof value === "string" ? { code: null, message: value, file: null } : value;
-}
 var FINDING_CODES = {
   "todo-markers": "warning",
   "stale-registry": "warning",
@@ -219,7 +216,11 @@ var FINDING_CODES = {
   "leftover-references": "warning",
   "stale-exemption": "warning",
   "adopted-references": "warning",
-  "unsplit-chapter-lines": "warning"
+  "unsplit-chapter-lines": "warning",
+  "usage-error": "error",
+  "unusable-project": "error",
+  "write-refused": "error",
+  "command-failed": "error"
 };
 function codesAt(level) {
   return Object.keys(FINDING_CODES).filter((code) => FINDING_CODES[code] === level);
@@ -681,7 +682,7 @@ function withExemptions(project, result) {
 }
 function dismissFinding(finding, exemptions, kept, dismissed) {
   const portable = (text) => text.replace(/\\/g, "/");
-  const match = exemptions.find((exemption) => portable(asFinding(finding).message).includes(portable(exemption.pattern)));
+  const match = exemptions.find((exemption) => portable(finding.message).includes(portable(exemption.pattern)));
   if (match) {
     dismissed.push({ finding, reason: match.reason });
   } else {
@@ -5855,7 +5856,7 @@ function applySeverity(result, overrides) {
   const warnings = [];
   const dismissed = [...result.dismissed ?? []];
   for (const warning of result.warnings) {
-    const code = asFinding(warning).code;
+    const code = warning.code;
     const level = levels.get(code) ?? "warning";
     if (level === "warning") {
       warnings.push(warning);
@@ -14075,20 +14076,30 @@ function writeJsonResult(io, { command, ok, exitCode = EXIT_CODES.findings, data
 `);
   return envelope.ok ? EXIT_CODES.ok : exitCode;
 }
-function diagnosticsFrom(result, code) {
+function diagnosticsFrom(result, check) {
   return [
-    ...(result.errors ?? []).map((message) => diagnostic("error", message, code)),
-    ...(result.warnings ?? []).map((message) => diagnostic("warning", message, code)),
-    ...(result.dismissed ?? []).map((entry) => ({ ...diagnostic("dismissed", entry.finding, code), exemption: entry.reason }))
+    ...(result.errors ?? []).map((finding) => diagnostic("error", finding, check)),
+    ...(result.warnings ?? []).map((finding) => diagnostic("warning", finding, check)),
+    ...(result.dismissed ?? []).map((entry) => ({ ...diagnostic("dismissed", entry.finding, check), exemption: entry.reason }))
   ];
 }
-function diagnostic(severity, message, code) {
-  const text = asFinding(message).message;
-  return { severity, file: messageFile(text), message: text, code };
+function diagnostic(severity, finding, check) {
+  return { severity, file: finding.file, message: finding.message, code: finding.code, check };
 }
-function messageFile(message) {
-  const match = /^(\S+?\.(?:md|ya?ml|json))(?=[\s:[]|$)/u.exec(message);
-  return match ? match[1] : null;
+function failureDiagnostic(message, exitCode, check) {
+  return diagnostic("error", failure(message, exitCode), check);
+}
+function failure(message, exitCode) {
+  switch (exitCode) {
+    case EXIT_CODES.usage:
+      return err("usage-error", message);
+    case EXIT_CODES.project:
+      return err("unusable-project", message);
+    case EXIT_CODES.refused:
+      return err("write-refused", message);
+    default:
+      return err("command-failed", message);
+  }
 }
 function resultData(result) {
   const { ok, errors, warnings, dismissed, ...data } = result;
@@ -14219,7 +14230,7 @@ var COMMANDS = [
       reportKeptStory(io, result, "--title");
       reportGitignore(io, result);
       for (const warning of result.warnings) {
-        io.stderr.write(`warning: ${asFinding(warning).message}
+        io.stderr.write(`warning: ${warning.message}
 `);
       }
       if (result.keptStory) {
@@ -14798,11 +14809,11 @@ function writeFindings(io, result) {
 `);
   }
   for (const warning of result.warnings) {
-    io.stderr.write(`warning: ${asFinding(warning).message}
+    io.stderr.write(`warning: ${warning.message}
 `);
   }
   for (const entry of result.dismissed ?? []) {
-    io.stderr.write(`dismissed: ${asFinding(entry.finding).message} (${entry.note})
+    io.stderr.write(`dismissed: ${entry.finding.message} (${entry.note})
 `);
   }
   return result.ok ? EXIT_CODES.ok : EXIT_CODES.findings;
@@ -14872,17 +14883,16 @@ function reportResult(io, result, successMessage, failureMessage) {
 `);
   }
   for (const warning of result.warnings) {
-    io.stderr.write(`warning: ${asFinding(warning).message}
+    io.stderr.write(`warning: ${warning.message}
 `);
   }
   for (const entry of dismissed) {
-    io.stderr.write(`dismissed: ${asFinding(entry.finding).message} (${entry.note ?? `exemption: ${entry.reason}`})
+    io.stderr.write(`dismissed: ${entry.finding.message} (${entry.note ?? `exemption: ${entry.reason}`})
 `);
   }
   return result.ok ? EXIT_CODES.ok : EXIT_CODES.findings;
 }
-function findingLine(value) {
-  const finding = asFinding(value);
+function findingLine(finding) {
   return FINDING_CODES[finding.code] === "warning" ? `${finding.message} [${finding.code}]` : finding.message;
 }
 
@@ -14938,7 +14948,7 @@ var CONFIG_REPAIR_COMMANDS = new Set(["validate", "report", "next", "doctor"]);
 function runCli(argv, io) {
   let configured = [];
   const jsonCommand = COMMANDS_BY_NAME.get(commandWord(argv));
-  const failJson = jsonCommand?.options?.includes("json") && jsonRequested(argv) ? (message, exitCode) => writeJsonResult(io, { command: jsonCommand.name, ok: false, exitCode, diagnostics: [diagnostic("error", message, jsonCommand.name)] }) : null;
+  const failJson = jsonCommand?.options?.includes("json") && jsonRequested(argv) ? (message, exitCode) => writeJsonResult(io, { command: jsonCommand.name, ok: false, exitCode, diagnostics: [failureDiagnostic(message, exitCode, jsonCommand.name)] }) : null;
   try {
     const named = COMMANDS_BY_NAME.get(argv[0]);
     const parsed = parseArgs(argv, named ? [...named.options ?? [], ...named.project === "none" ? [] : ["path"]] : undefined);
