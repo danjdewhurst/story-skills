@@ -97,6 +97,18 @@ describe("story compare --anchor", () => {
     expect(() => compareProject(root, { ref: "no-such-tag", anchors: ["ch01-p1"] })).toThrow("Unknown git ref: no-such-tag");
   });
 
+  test("tree entries with a backslash or colon are skipped, never written outside the temp folder", () => {
+    const repo = makeTempDir();
+    const root = project(repo);
+    fs.writeFileSync(path.join(root, "..\\escape.md"), "x\n");
+    fs.writeFileSync(path.join(root, "c:odd.md"), "x\n");
+    git(repo, "init", "-q");
+    git(repo, "add", "-A");
+    git(repo, "commit", "-qm", "round one");
+    const result = invoke(repo, ["compare", root, "--ref", "HEAD", "--anchor", "ch02-p1"]);
+    expect(result.out).toBe("ch02-p1 -> ch02-p1 (text unchanged)\n");
+  });
+
   test("a ref where the project folder has no story.md is an error naming the ref", () => {
     const repo = makeTempDir();
     fs.mkdirSync(path.join(repo, "book"));
@@ -142,6 +154,15 @@ describe("mapLabels", () => {
     const previous = [entry("ch01-p1", "Yes."), entry("ch02-p1", "Intro."), entry("ch02-p2", "Yes.")];
     const current = [entry("ch01-p1", "Yes."), entry("ch02-p1", "New."), entry("ch02-p2", "Intro."), entry("ch02-p3", "Yes.")];
     expect(mapLabels(previous, current, ["ch02-p2", "ch01-p1"]).map((mapped) => mapped.to)).toEqual(["ch02-p3", "ch01-p1"]);
+  });
+
+  test("two copies of a paragraph never both claim the one that survived", () => {
+    const previous = ["Yes.", "One.", "Two.", "Three.", "Yes."].map((text, index) => entry(`ch01-p${index + 1}`, text));
+    const current = ["One.", "Two.", "Three.", "Yes."].map((text, index) => entry(`ch01-p${index + 1}`, text));
+    expect(mapLabels(previous, current, ["ch01-p1", "ch01-p5"])).toEqual([
+      { label: "ch01-p1", status: "not-found", excerpt: "Yes." },
+      { label: "ch01-p5", status: "unchanged", to: "ch01-p4", similarity: 1 }
+    ]);
   });
 
   test("an edit maps to the most similar paragraph, then the one in the same part", () => {
@@ -194,6 +215,11 @@ describe("build --format html --note-url", () => {
     expect(html).toContain(`href="https://example.com/note?title=%5Bch01-p1%5D%20&amp;anchor=ch01-p1&amp;quote=Hi%20%26%20bye"`);
     expect(html).toContain(`[dir="rtl"] .note-link { left: auto; right: -5.5rem; text-align: left; }`);
     expect(reviewHtml({ ...book, language: "en" }, { noteUrl: "https://example.com/note" })).not.toContain(`[dir="rtl"] .note-link`);
+  });
+
+  test("the prefill goes before a #fragment in the note url", () => {
+    const book = { title: "T", authors: [], language: "en", parts: [{ key: "ch01", kind: "chapter", title: "One", heading: true, paragraphs: [{ html: "Hi", text: "Hi", quote: false }] }] };
+    expect(reviewHtml(book, { noteUrl: "https://example.com/new?t=1#form" })).toContain(`href="https://example.com/new?t=1&amp;title=%5Bch01-p1%5D%20&amp;anchor=ch01-p1&amp;quote=Hi#form"`);
   });
 
   test("--note-url is refused with other formats or a non-web address", () => {

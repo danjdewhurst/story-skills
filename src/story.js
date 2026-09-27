@@ -1816,9 +1816,13 @@ function withProjectAtGitRef(root, ref, read) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "story-compare-"));
   try {
     blobs.forEach((entry, index) => {
-      // Git refuses tree entries named "." or "..", so every path stays
-      // inside the temporary directory.
+      // Git refuses tree entries named "." or "..", but a name holding a
+      // backslash or drive colon could still escape on Windows, so skip any
+      // entry that does not resolve inside the temporary directory.
       const target = path.join(dir, ...entry.name.split("/"));
+      if (/[\\:]/.test(entry.name) || !isPathInside(dir, target)) {
+        return;
+      }
       fs.mkdirSync(path.dirname(target), { recursive: true });
       fs.writeFileSync(target, contents[index]);
     });

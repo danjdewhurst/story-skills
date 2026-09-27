@@ -164,30 +164,55 @@ const SIMILAR_SHARE = 0.5;
 export function mapLabels(previous, current, labels) {
   const oldByLabel = new Map(previous.map((entry, index) => [entry.label, { ...entry, index }]));
   const words = current.map((entry) => wordBag(entry.text));
+  const exact = exactPairs(previous, current);
+  const reserved = new Set(exact.values());
   return labels.map((label) => {
     const old = oldByLabel.get(label);
     if (!old) {
       return { label, status: "unknown" };
     }
-    const text = normalise(old.text);
-    const closer = (left, right) => (right.key === old.key) - (left.key === old.key) || Math.abs(left.index - old.index) - Math.abs(right.index - old.index);
-    const exact = current
-      .map((entry, index) => ({ ...entry, index }))
-      .filter((entry) => normalise(entry.text) === text)
-      .sort(closer)[0];
-    if (exact) {
-      return { label, status: "unchanged", to: exact.label, similarity: 1 };
+    if (exact.has(old.index)) {
+      return { label, status: "unchanged", to: current[exact.get(old.index)].label, similarity: 1 };
     }
+    const closer = (left, right) => (right.key === old.key) - (left.key === old.key) || Math.abs(left.index - old.index) - Math.abs(right.index - old.index);
     const bag = wordBag(old.text);
     const best = current
       .map((entry, index) => ({ ...entry, index, similarity: dice(bag, words[index]) }))
-      .filter((entry) => entry.similarity >= SIMILAR_SHARE)
+      .filter((entry) => !reserved.has(entry.index) && entry.similarity >= SIMILAR_SHARE)
       .sort((left, right) => right.similarity - left.similarity || closer(left, right))[0];
     if (best) {
       return { label, status: "edited", to: best.label, similarity: best.similarity };
     }
     return { label, status: "not-found", excerpt: openingWords(old.text) };
   });
+}
+
+// Pairs old and current paragraphs with the same text one to one, closest
+// first (same part, then nearest position), so two copies of a repeated
+// paragraph never both claim the one that survived. Returns a Map from old
+// index to current index.
+function exactPairs(previous, current) {
+  const byText = new Map();
+  current.forEach((entry, index) => {
+    const text = normalise(entry.text);
+    byText.set(text, (byText.get(text) ?? []).concat(index));
+  });
+  const pairs = [];
+  previous.forEach((entry, oldIndex) => {
+    for (const newIndex of byText.get(normalise(entry.text)) ?? []) {
+      pairs.push({ oldIndex, newIndex, sameKey: current[newIndex].key === entry.key, distance: Math.abs(newIndex - oldIndex) });
+    }
+  });
+  pairs.sort((left, right) => right.sameKey - left.sameKey || left.distance - right.distance || left.oldIndex - right.oldIndex);
+  const matched = new Map();
+  const taken = new Set();
+  for (const { oldIndex, newIndex } of pairs) {
+    if (!matched.has(oldIndex) && !taken.has(newIndex)) {
+      matched.set(oldIndex, newIndex);
+      taken.add(newIndex);
+    }
+  }
+  return matched;
 }
 
 function normalise(text) {

@@ -54,7 +54,11 @@ function noteHref(noteUrl, label, stamp, text) {
   }
   params.push(["quote", openingWords(text)]);
   const query = params.map(([name, value]) => `${name}=${encodeURIComponent(value)}`).join("&");
-  return `${noteUrl}${noteUrl.includes("?") ? "&" : "?"}${query}`;
+  // The prefill belongs in the query string, before any #fragment.
+  const hash = noteUrl.indexOf("#");
+  const base = hash === -1 ? noteUrl : noteUrl.slice(0, hash);
+  const fragment = hash === -1 ? "" : noteUrl.slice(hash);
+  return `${base}${base.includes("?") ? "&" : "?"}${query}${fragment}`;
 }
 
 // Each part is { key, kind, title, heading, words, paragraphs } where each
