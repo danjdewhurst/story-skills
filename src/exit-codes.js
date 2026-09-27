@@ -54,7 +54,8 @@ export function withDefaultExitCode(error, exitCode) {
 }
 
 // Syscalls and error codes that mean a write failed rather than a read.
-const WRITE_SYSCALLS = new Set(["write", "rename", "mkdir", "unlink", "rmdir", "copyfile", "rm", "access", "chmod", "fsync"]);
+// `open` is left out because reads use it too.
+const WRITE_SYSCALLS = new Set(["write", "rename", "mkdir", "mkdtemp", "unlink", "rmdir", "copyfile", "rm", "access", "chmod", "fsync"]);
 const WRITE_ERROR_CODES = new Set(["EROFS", "ENOSPC", "EDQUOT", "EFBIG"]);
 
 // The exit code for an error that stopped a command. Errors the CLI raises

@@ -27,7 +27,7 @@ import { plural } from "./plural.js";
 import { analyzeChapter, chapterFindings, proseRules, repeatedPhrases, similarNames } from "./prose.js";
 import { splitSentences } from "./sentences.js";
 import { areSiblingBooks, buildSeries, canonicalPath, discoverSeriesBooks, isBookNumber, linksInclude, readBookFrontmatter, seriesId, seriesLinkPath, seriesLinks, validateSeriesLinks, withSeriesBacklink } from "./series.js";
-import { EXIT_CODES, projectError, refusedError, usageError, withDefaultExitCode, withExitCode } from "./exit-codes.js";
+import { EXIT_CODES, projectError, refusedError, usageError, withDefaultExitCode } from "./exit-codes.js";
 
 // writeFile moved to files.js with the rest of the write path guards; it is
 // re-exported because src/import.js imports it from here.
@@ -4581,22 +4581,17 @@ function nextSceneNumber(project, chapter) {
     .reduce((max, scene) => Math.max(max, scene.scene), 0) + 1;
 }
 
-// Creating a folder, or refusing an unsafe one, is part of a write.
 function ensureDirectory(directory, changed, root) {
-  try {
-    if (!fs.existsSync(directory)) {
-      assertLexicallyInsideRoot(directory, root);
-      assertExistingAncestorInsideRoot(directory, root);
-      fs.mkdirSync(directory, { recursive: true });
-      assertSafeProjectDirectory(directory, root);
-      changed.push(directory);
-      return;
-    }
-
+  if (!fs.existsSync(directory)) {
+    assertLexicallyInsideRoot(directory, root);
+    assertExistingAncestorInsideRoot(directory, root);
+    fs.mkdirSync(directory, { recursive: true });
     assertSafeProjectDirectory(directory, root);
-  } catch (error) {
-    throw withExitCode(error, EXIT_CODES.refused);
+    changed.push(directory);
+    return;
   }
+
+  assertSafeProjectDirectory(directory, root);
 }
 
 function ensureFile(filePath, contents, changed, root) {

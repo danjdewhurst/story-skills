@@ -235,6 +235,26 @@ describe("exit codes", () => {
     }
   });
 
+  test("a symlinked project file exits 3; writing through a symlink exits 4", () => {
+    const root = newProject();
+    const outside = makeTempDir();
+    const registry = path.join(root, "characters", "_index.md");
+    fs.renameSync(registry, path.join(outside, "_index.md"));
+    fs.symlinkSync(path.join(outside, "_index.md"), registry);
+    const reindex = invoke(root, ["reindex"]);
+    expect(reindex.err).toContain("Refusing to read through symlink");
+    expect(reindex.code).toBe(project);
+
+    const target = path.join(outside, "book.md");
+    fs.writeFileSync(target, "old\n");
+    fs.mkdirSync(path.join(root, "dist"), { recursive: true });
+    fs.symlinkSync(target, path.join(root, "dist", "book.md"));
+    const exported = invoke(root, ["export", "--out", "dist/book.md"]);
+    expect(exported.err).toContain("Refusing to write through symlink");
+    expect(exported.code).toBe(refused);
+    expect(fs.readFileSync(target, "utf8")).toBe("old\n");
+  });
+
   test("a project that cannot be built or updated exits 3", () => {
     const root = newProject();
     breakChapter(root);
@@ -275,6 +295,7 @@ describe("exitCodeFor", () => {
   test("sorts raw file-system errors into reads and writes", () => {
     expect(exitCodeFor(Object.assign(new Error("x"), { code: "EACCES", syscall: "open" }))).toBe(project);
     expect(exitCodeFor(Object.assign(new Error("x"), { code: "EACCES", syscall: "rename" }))).toBe(refused);
+    expect(exitCodeFor(Object.assign(new Error("x"), { code: "EACCES", syscall: "mkdtemp" }))).toBe(refused);
     expect(exitCodeFor(Object.assign(new Error("x"), { code: "ENOSPC", syscall: "open" }))).toBe(refused);
   });
 

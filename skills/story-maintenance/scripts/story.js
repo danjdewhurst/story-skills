@@ -1555,7 +1555,7 @@ function withDefaultExitCode(error, exitCode) {
   }
   return error;
 }
-var WRITE_SYSCALLS = new Set(["write", "rename", "mkdir", "unlink", "rmdir", "copyfile", "rm", "access", "chmod", "fsync"]);
+var WRITE_SYSCALLS = new Set(["write", "rename", "mkdir", "mkdtemp", "unlink", "rmdir", "copyfile", "rm", "access", "chmod", "fsync"]);
 var WRITE_ERROR_CODES = new Set(["EROFS", "ENOSPC", "EDQUOT", "EFBIG"]);
 function exitCodeFor(error) {
   if (Number.isInteger(error?.exitCode)) {
@@ -10128,19 +10128,15 @@ function nextSceneNumber(project, chapter) {
   return project.scenes.filter((scene) => scene.chapter === chapter).reduce((max, scene) => Math.max(max, scene.scene), 0) + 1;
 }
 function ensureDirectory(directory, changed, root) {
-  try {
-    if (!fs5.existsSync(directory)) {
-      assertLexicallyInsideRoot(directory, root);
-      assertExistingAncestorInsideRoot(directory, root);
-      fs5.mkdirSync(directory, { recursive: true });
-      assertSafeProjectDirectory(directory, root);
-      changed.push(directory);
-      return;
-    }
+  if (!fs5.existsSync(directory)) {
+    assertLexicallyInsideRoot(directory, root);
+    assertExistingAncestorInsideRoot(directory, root);
+    fs5.mkdirSync(directory, { recursive: true });
     assertSafeProjectDirectory(directory, root);
-  } catch (error) {
-    throw withExitCode(error, EXIT_CODES.refused);
+    changed.push(directory);
+    return;
   }
+  assertSafeProjectDirectory(directory, root);
 }
 function ensureFile(filePath, contents, changed, root) {
   if (!fs5.existsSync(filePath)) {
