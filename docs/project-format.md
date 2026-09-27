@@ -1093,7 +1093,7 @@ Chapters and scenes can carry a story `date` and `time`; `story continuity` and 
 | `time` | `HH:MM` on a 24-hour clock, or one of `dawn`, `morning`, `midday`, `afternoon`, `evening`, `night`. |
 | `travel-hours` | A number of hours, zero or more. Scenes only. |
 
-For ordering, named times count as 05:00 (`dawn`), 07:00 (`morning`), 12:00 (`midday`), 15:00 (`afternoon`), 19:00 (`evening`), and 23:00 (`night`). `story add chapter` and `story add scene` reject a malformed `--date` or `--time`. In hand-edited files, `story continuity` reports malformed values as warnings. The same date format applies to `deadline` and `publication-date` in `story.md` and to `sessions[].date` in `progress.md`.
+`story timeline` sorts named times as 05:00 (`dawn`), 07:00 (`morning`), 12:00 (`midday`), 15:00 (`afternoon`), 19:00 (`evening`), and 23:00 (`night`). `story continuity` reads each as the span listed under [Route travel](#route-travel), for clock order and `travel-hours` as well as routes, so it reports only what is impossible on every reading. `story add chapter` and `story add scene` reject a malformed `--date` or `--time`. In hand-edited files, `story continuity` reports malformed values as warnings. The same date format applies to `deadline` and `publication-date` in `story.md` and to `sessions[].date` in `progress.md`.
 
 ### Route travel
 
@@ -1104,6 +1104,12 @@ error: scenes/chapter-01-scene-02.md puts mara-quill at town-b 2h after scenes/c
 ```
 
 Only scene `date`, `time`, and `location` count; chapter dates and undated scenes are not used. The gap is always read as generously as the times allow, so only journeys impossible on any reading are reported. An exact `HH:MM` is a single moment. A named time covers a span: `dawn` 04:00 to 06:59, `morning` 05:00 to 11:59, `midday` 11:00 to 13:59, `afternoon` 12:00 to 17:59, `evening` 17:00 to 21:59, and `night` 20:00 to 23:59. A scene with no time covers the whole day.
+
+A character in two scenes at different places at the same exact `HH:MM` on the same day is an error even without a route between the places:
+
+```text
+error: scenes/chapter-01-scene-02.md puts ann at gamma at the same time as scenes/chapter-01-scene-01.md at alpha
+```
 
 ## Analysis views
 

@@ -184,7 +184,9 @@ export const COMMANDS = [
     usage: "continuity [path]",
     summary: [
       "Check deterministic continuity contracts: deaths,",
-      "promises, questions, casts, and durable state.",
+      "casts and cut characters, promises, questions,",
+      "clues, prop custody, clock and travel time,",
+      "location routes, and durable state.",
       "Findings matching continuity/exemptions.md are",
       "reported as dismissed"
     ],

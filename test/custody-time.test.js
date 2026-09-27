@@ -203,7 +203,7 @@ time: "09:00"
     const root = baseProject(1);
     writeScene(root, 1, 1, `
 date: 2026-01-05
-time: morning
+time: evening
 `);
     writeScene(root, 1, 2, `
 date: 2026-01-05

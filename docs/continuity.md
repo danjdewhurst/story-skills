@@ -63,14 +63,14 @@ Every finding starts with a severity and, usually, a file path. Match the rest o
 | The finding contains | Command | Explained in |
 |----------------------|---------|--------------|
 | `lists <id>, who died in`, `who died before the story`, `has died-in`, `died-in references missing chapter` | `continuity` | [Deaths and posthumous appearances](#deaths-and-posthumous-appearances) |
-| `POV character <id> is not listed in characters`, `but its scenes are told by`, `does not list them in characters or mentions`, `does not list that location`, `Chapter numbering skips` | `continuity` | [Casts and locations](#casts-and-locations) |
+| `POV character <id> is not listed in characters`, `but its scenes are told by`, `does not list them in characters or mentions`, `does not list that location`, `who has status: cut`, `Chapter numbering skips` | `continuity` | [Casts and locations](#casts-and-locations) |
 | `pays off in … before it is planted`, `resolves in … before it is introduced`, `no payoff chapter`, `no planted chapter`, `no plant chapter`, `has no resolved chapter`, `status is still open`, `status is still planned` | `continuity` | [Promises, questions, and clues](#promises-questions-and-clues) |
 | `has no payoff yet`, `payoff chapter … has passed` | `continuity` | [Unfired setups](#unfired-setups-the-chekhov-warning) |
 | `story.md is complete but` | `continuity` | [Finishing the book](#finishing-the-book) |
 | `current-chapter … is behind`, `current-chapter … is ahead`, `state.md … references missing`, `is missing knows`, `repeats fact`, `must be a kebab-case id`, `conflicts with`, `must be a mapping` | `continuity` | [Continuity state](#continuity-state) |
 | `uses <artifact>, destroyed/lost since`, `mentions <artifact>, destroyed/lost since`, `destroyed/lost before the story`, `references missing since chapter` | `continuity` | [Prop custody](#prop-custody) |
-| `timestamp runs backward`, `allows only …h for travel`, `is earlier than Chapter`, `malformed date`, `malformed time`, `negative travel-hours` | `continuity` | [Clock and travel time](#clock-and-travel-time) |
-| `puts <character> at <location> …, but the fastest route takes` | `continuity` | [Route travel](#route-travel) |
+| `timestamp runs backward`, `allows only …h for travel` (or `allows at most …h`), `is earlier than Chapter`, `malformed date`, `malformed time`, `negative travel-hours` | `continuity` | [Clock and travel time](#clock-and-travel-time) |
+| `puts <character> at <location> …, but the fastest route takes`, `at the same time as` | `continuity` | [Route travel](#route-travel) |
 | `dismissed:` | `continuity` | [Exemptions](#exemptions) |
 | `has no hook`, `end in an outright yes`, `with no sequel`, `end on resolution`, `the median chapter` | `pacing` | [Pacing findings](#pacing-findings) |
 | `never planted: readers cannot play fair`, `late plant`, `lists no characters`, `red herring with no payoff`, `no clue is significance-delayed` | `clues` | [Fair-play findings](#fair-play-findings) |
@@ -120,15 +120,17 @@ The report itself (timeline sections, pacing and clue grids, prose counts, voice
 
 | File | Fields |
 |------|--------|
-| `characters/*.md` | `status`, `died-in` |
+| `characters/*.md` | `status`, `died-in`, `relationships` |
 | `worldbuilding/locations/*.md` | `routes` |
+| `worldbuilding/factions/*.md` | the file itself: a faction id is accepted as an `object-state` `owner` |
+| `plot/arcs/*.md` | `characters` |
 | `chapters/chapter-NN.md` | `number`, `status`, `pov`, `characters`, `mentions`, `locations`, `date`, `time` |
 | `scenes/*.md` | `chapter`, `scene`, `pov`, `characters`, `mentions`, `location`, `state-changes`, `date`, `time`, `travel-hours` |
 | `continuity/promises/*.md` | `status`, `planted`, `payoff` |
 | `continuity/questions/*.md` | `status`, `introduced`, `resolved` |
 | `continuity/clues/*.md` | `status`, `planted`, `payoff` |
 | `continuity/state.md` | `current-chapter`, `character-state`, `knowledge-state`, `object-state` |
-| `worldbuilding/artifacts/*.md` | `status` |
+| `worldbuilding/artifacts/*.md` | `status` (and the file itself, for `object-state` `artifact`) |
 | `story.md` | `status` |
 | `continuity/exemptions.md` | `exemptions` |
 
@@ -164,6 +166,9 @@ These checks keep the scene records and the chapter frontmatter in step, so the 
 | warning | `<chapter> has POV <id> but its scenes are told by <ids>` | The chapter's `pov` matches none of its scenes' `pov` values. Correct whichever is wrong. Scenes with no `pov` are not counted. |
 | warning | `<scene> lists <id> but <chapter> does not list them in characters or mentions` | Add the character to the parent chapter's `characters` or `mentions`. |
 | warning | `<scene> is set in <location> but <chapter> does not list that location` | Add the location to the chapter's `locations`. |
+| warning | `<chapter or scene> lists <id>, who has status: cut; drop them from pov and characters` | Finish the cut: take the character out of `pov` and `characters`, or set their `status` back if they return. |
+| warning | `<arc> lists <id>, who has status: cut; drop them from characters` | Take the character out of the arc's `characters`. |
+| warning | `<character> has a relationship with <id>, but <id> has status: cut; drop the relationship on both sides` | Remove the relationship from both character files. A relationship between two cut characters is not reported. |
 | warning | `Chapter numbering starts at <n>, not 1` | Chapters before the first are missing, usually after `story remove chapter` or an unfinished `story move`. Add them, or renumber with `story move chapter <id> --number 1`. |
 | warning | `Chapter numbering skips from <n> to <m>` | Add the missing chapter, or close the gap with `story move chapter <id> --number <n>`. Scaffolding a far-off chapter ahead of time also triggers this. |
 
@@ -201,17 +206,17 @@ Entries with `status: abandoned` are skipped entirely. Everything else is checke
 | error | `<promise> is planted but has no planted chapter` (clues: `is planted but no plant chapter recorded`) | Record `planted`, or set the status back to `planned`. |
 | error | `<question> is answered` or `is resolved` `but has no resolved chapter` | Record `resolved`. |
 | error | `<question> records resolved chapter <chapter> but status is still open` | Set `status: resolved` (or `answered`), or clear `resolved`. |
-| warning | `<promise or clue> records planted chapter <chapter> but status is still planned` | Set `status: planted` once the setup is on the page. The warning appears only once that chapter has prose: it is at or before the latest drafted chapter (see below). |
+| warning | `<promise or clue> records planted chapter <chapter> but status is still planned` | Set `status: planted` once the setup is on the page. The warning appears only once that chapter has prose: its own `status` is not `outline`, even when later chapters are drafted. |
 
 `story links` separately checks that the chapter ids in these fields exist, with one allowance for scheduling ahead. A promise or clue may name a `chapter-NN` that has no chapter file yet in `payoff`, and in `planted` while its status is `planned`; a question may name one in `introduced` while its status is `open`; and a research note may name one in `used-in`. The number must be 1 or more and must not belong to an existing chapter under another id, so `chapter-1` beside `chapter-01`, or `chapter-00`, is reported as a missing chapter. Once the status is `planted` or `paid-off`, the `planted` chapter must exist, and once it is `paid-off`, the `payoff` chapter must exist too. A question's `introduced` chapter must exist once it is no longer `open`, and its `resolved` chapter must always exist; scaffold the chapter first (`story add chapter "Title" --number 7`). Outline chapters satisfy the link check without counting as drafted.
 
 #### Unfired setups (the Chekhov warning)
 
-A promise or clue with `status: planted` gets a warning as soon as its recorded `payoff` chapter has been drafted, however soon after the plant that is. With no `payoff` recorded, it gets one once three or more chapters follow its `planted` chapter, up to the latest drafted chapter. The gap counts chapter files, not chapter numbers, so chapters 2 and 10 are one chapter apart. The latest drafted chapter is the highest-numbered chapter whose `status` is not `outline`, so scaffolding outline chapters ahead of time does not trigger the warning.
+A promise or clue with `status: planted` gets a warning as soon as its recorded `payoff` chapter has been drafted (its own `status` is not `outline`), however soon after the plant that is. An outline payoff chapter does not count, even when later chapters are drafted out of order. A scheduled `chapter-NN` with no file yet counts as drafted once the latest drafted chapter reaches its number. With no `payoff` recorded, it gets one once three or more chapters follow its `planted` chapter, up to the latest drafted chapter. The gap counts chapter files, not chapter numbers, so chapters 2 and 10 are one chapter apart. The latest drafted chapter is the highest-numbered chapter whose `status` is not `outline`, so scaffolding outline chapters ahead of time does not trigger the warning.
 
 | Situation | Result |
 |-----------|--------|
-| `payoff` recorded for a chapter still ahead of the latest drafted chapter | No warning: the payoff is scheduled |
+| `payoff` recorded for a chapter not drafted yet (an outline, or a scheduled `chapter-NN` ahead of the latest drafted chapter) | No warning: the payoff is scheduled |
 | `payoff` recorded for a chapter already drafted | warning: `<file> payoff chapter <chapter> has passed and status is still planted` |
 | No `payoff` recorded, planted fewer than 3 chapters ago | No warning |
 | No `payoff` recorded, planted 3 or more chapters ago | warning: `<file> was planted in <chapter>, <n> chapters ago, and has no payoff yet` |
@@ -324,16 +329,16 @@ Ordering and travel checks switch on as soon as any scene or chapter has a `date
 | `time` | scene or chapter | `HH:MM` (24-hour) or a named part of day |
 | `travel-hours` | scene | A YAML number (not a quoted string): the minimum hours of travel needed to reach this scene from the previous one. `story validate` rejects any other value; inside `story continuity` it is treated as 0, which switches the travel check off. |
 
-Named parts of day sort as fixed clock times: `dawn` 05:00, `morning` 07:00, `midday` 12:00, `afternoon` 15:00, `evening` 19:00, `night` 23:00. `HH:MM` needs two-digit hours (`09:00`, not `9:00`). Quoting `HH:MM` times (`time: "22:00"`) keeps other YAML tools from reading them as numbers.
+Named parts of day cover a span of the clock, the same spans the [route check](#route-travel) uses: `dawn` 04:00-06:59, `morning` 05:00-11:59, `midday` 11:00-13:59, `afternoon` 12:00-17:59, `evening` 17:00-21:59, `night` 20:00-23:59. The clock checks read each at its most generous, so only an order or a journey that is impossible on every reading is reported. (`story timeline` sorts them as fixed points: `dawn` 05:00, `morning` 07:00, `midday` 12:00, `afternoon` 15:00, `evening` 19:00, `night` 23:00.) `HH:MM` needs two-digit hours (`09:00`, not `9:00`). Quoting `HH:MM` times (`time: "22:00"`) keeps other YAML tools from reading them as numbers.
 
 `story add chapter` and `story add scene` reject a bad `--date`, `--time`, or `--travel-hours` when they create the file. `story validate` rejects a non-numeric `travel-hours` and a `date` or `time` that is not a single value, but it does not check date or time formats, so a malformed date or time you type by hand is only reported by `story continuity`, as the warnings below.
 
-The checker walks the same units as [`story timeline`](#story-timeline), in reading order: each chapter's scenes by scene number, or the chapter itself when it has no scene records. A chapter's `date` and `time` apply only when it stands in for its scenes this way. It keeps a reference point, the latest moment the story has reached so far, with the latest known time on that day. For each dated unit:
+The checker walks the same units as [`story timeline`](#story-timeline), in reading order: each chapter's scenes by scene number, or the chapter itself when it has no scene records. A chapter's `date` and `time` apply only when it stands in for its scenes this way. It keeps a reference point, the earliest moment the story can have reached so far. For each dated unit:
 
-- An earlier date than the reference, or the same date with an earlier time, is a **backward timestamp** warning. A unit that runs backward (a flashback, or a misdated unit) does not become the reference, so the units after it are still checked against the main line.
+- A unit whose latest reading is still before the reference is a **backward timestamp** warning: an earlier date, or the same date with a time that cannot fall after it (`10:20` then `morning` is fine, since morning runs to 11:59; `evening` then `dawn` is not). A unit that runs backward (a flashback, or a misdated unit) does not become the reference, so the units after it are still checked against the main line.
 - If the reference itself was out of place (a flash-forward prologue that the following units all fall before), the first unit after it is reported and the story continues from there, so one outlier gives one warning.
-- An untimed unit on the reference's day could happen at any time that day: it is never backward against that day, and the reference keeps its known time.
-- If the scene has `travel-hours` and both it and the reference have a time, the hours between them must be at least `travel-hours`, or it is an error.
+- An untimed unit on the reference's day could happen at any time that day: it is never backward against that day, and the reference keeps its known time. Likewise a named time that could start before the reference's time leaves the reference in place.
+- If the scene has `travel-hours` and both it and the reference have a time, the hours between them, at their widest reading, must be at least `travel-hours`, or it is an error.
 
 In the same copy, the scenes carry these dates. Chapter 3's scene is set the night before chapter 2's, and chapter 4's scene asserts a 30-hour journey from the scene before it:
 
@@ -344,10 +349,10 @@ In the same copy, the scenes carry these dates. Chapter 3's scene is set the nig
 | `chapter-03-scene-01` | `1924-10-20` | `"22:00"` | `flashback-to: the night of the fire` |
 | `chapter-04-scene-01` | `1924-10-21` | `"23:30"` | `travel-hours: 30` |
 
-Chapter 3's scene runs backward, so it gets a warning, no travel check, and does not become the reference. Chapter 4 is then measured from chapter 2's scene (`morning`, read as 07:00), 16.5 hours earlier. The clock findings from that run (alongside the custody errors above) are:
+Chapter 3's scene runs backward, so it gets a warning, no travel check, and does not become the reference. Chapter 4 is then measured from chapter 2's scene (`morning`, which can start as early as 05:00), at most 18.5 hours earlier. The clock findings from that run (alongside the custody errors above) are:
 
 ```text
-error: scenes/chapter-04-scene-01.md allows only 16.5h for travel of 30h
+error: scenes/chapter-04-scene-01.md allows at most 18.5h for travel of 30h
 warning: scenes/chapter-03-scene-01.md timestamp runs backward
 ```
 
@@ -355,6 +360,7 @@ warning: scenes/chapter-03-scene-01.md timestamp runs backward
 |----------|---------|-----|
 | warning | `<scene> timestamp runs backward` | Correct the date or time. If the scene is a deliberate flashback, add an [exemption](#exemptions) for it. |
 | error | `<scene> allows only <x>h for travel of <y>h` | Move the scene later, shorten the journey, or lower `travel-hours`. |
+| error | `<scene> allows at most <x>h for travel of <y>h` | As above. `at most` means one of the two units has a named part of day, and even its widest reading is too short. |
 | warning | `Chapter <n> date <date> is earlier than Chapter <m> date <date>` | A chapter with no scene records runs backward. The dates include the times when both fall on the same day, and the reference may be a scene file instead of a chapter. Correct the chapter date, or exempt a flashback chapter. |
 | warning | `<scene> has travel-hours but no date, so the clock check skips it` | Add a `date` (and `time`) so the journey can be checked. |
 | warning | `<scene> has malformed date "<value>"`, `has malformed time "<value>"`, `has negative travel-hours <n>` | Use `YYYY-MM-DD`, `HH:MM` or a named part of day, and a number of hours that is zero or more. A scene with a malformed date is left out of the clock checks. |
@@ -384,7 +390,7 @@ A location that lists the same destination twice uses only the fastest route; `s
 
 A route is two-way unless the destination records its own route back, in which case each direction uses its own hours (a river that is quicker downstream, for example). The checker finds the fastest path through any number of places, so a harbour-to-mill route and a mill-to-keep route together give a harbour-to-keep time.
 
-Once any location has a valid route, `story continuity` follows every character through the dated scene records. A character is sighted at a scene's `location` when they are its `pov` (or, for a scene with no `pov`, its chapter's `pov`, as `story timeline` shows it) or are listed in its `characters`; `mentions` do not count. For each sighting, the checker looks back at every earlier sighting of the same character at a different connected place, and reports an error if even the fastest route could not cover the distance in the time between them. Each scene is reported at most once per character.
+Once any location has a valid route, `story continuity` follows every character through the dated scene records. A character is sighted at a scene's `location` when they are its `pov` (or, for a scene with no `pov`, its chapter's `pov`, as `story timeline` shows it) or are listed in its `characters`; `mentions` do not count. For each sighting, the checker looks back at every earlier sighting of the same character at a different place connected by routes, and reports an error if even the fastest route could not cover the distance in the time between them. Each scene is reported at most once per character.
 
 Scene times are read generously, so only journeys that are impossible on any reading are reported:
 
@@ -399,7 +405,9 @@ Scene times are read generously, so only journeys that are impossible on any rea
 | `night` | 20:00 to 23:59 |
 | none | Any time that day |
 
-Scenes without a valid `date`, scenes without a `location`, and places with no routes at all are left out. The route check runs alongside the `travel-hours` check and does not replace it.
+Scenes without a valid `date` or without a `location` are left out. The route check runs alongside the `travel-hours` check and does not replace it.
+
+No journey takes no time, so a character in two scenes at different places at the same exact `HH:MM` on the same day is an error even when the places have no route between them, or the project has no routes at all. Places joined by a route get the route message instead. A named time or an untimed scene could be a different moment, so it never triggers this.
 
 From a copy of [`examples/harbor-of-second-light`](../examples/harbor-of-second-light/), whose Port Kestrel file carries the route above. The copy dates chapter 1's reef scene `2041-03-02` at `"05:40"`, and adds a second scene in which Mara is on the council steps in Port Kestrel twenty minutes later (`story add scene "Council Steps" --chapter chapter-01 --location port-kestrel --pov mara-quill --character mara-quill --date 2041-03-02 --time 06:00`):
 
@@ -414,6 +422,7 @@ Hours are shown to 0.1h, with the gap rounded down and the route time rounded up
 | Severity | Message | Fix |
 |----------|---------|-----|
 | error | `<scene> puts <character> at <location> <n>h after <earlier scene> at <location>, but the fastest route takes <m>h` | Move the later scene later, move the character to a nearer place, or take them out of one scene's cast. If a faster way exists (a boat, a portal), add it as a route. |
+| error | `<scene> puts <character> at <location> at the same time as <earlier scene> at <location>` | The two scenes share a date and exact time but name different places, with no route between them. Correct a time or a location, or take the character out of one scene's cast. |
 | error | The same, with `at most <n>h` | As above. `at most` means one of the two scenes has a named part of day or no time, and even the widest reading is too short. Giving both scenes an `HH:MM` time makes the gap exact. |
 
 Record routes with the [`worldbuilding`](../skills/worldbuilding/SKILL.md) skill, whose [`maps-and-routes.md`](../skills/worldbuilding/references/maps-and-routes.md) reference covers recording them. To see the network, run [`story diagram locations`](#story-diagram).

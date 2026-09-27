@@ -73,7 +73,8 @@ span (`dawn` 04:00-06:59, `morning` 05:00-11:59, `midday` 11:00-13:59,
 `afternoon` 12:00-17:59, `evening` 17:00-21:59, `night` 20:00-23:59), and
 a scene with a `date` but no `time` spans its whole day. The gap is taken
 at its most generous reading, so only a journey impossible on every
-reading is an error.
+reading is an error. A character at two different places at the same
+exact `HH:MM` is an error even with no route between them.
 
 To fix a finding:
 

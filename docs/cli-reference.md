@@ -49,7 +49,7 @@ Absolute paths in output are shortened to `~/stories/...`.
 | | [`reindex [path]`](#reindex) | Rebuild registry tables from entity files | Yes |
 | | [`wordcount [path]`](#wordcount) | Count chapter prose words | With `--write` |
 | | [`links [path]`](#links) | Check cross-references and backlinks | No |
-| Analysis | [`continuity [path]`](#continuity) | Check deaths, promises, questions, casts, and state | No |
+| Analysis | [`continuity [path]`](#continuity) | Check deaths, casts, promises, questions, clues, prop custody, clock and travel time, routes, and state | No |
 | | [`knowledge <id>`](#knowledge) | List what a character knew at a chapter | No |
 | | [`compare [path]`](#compare) | Compare chapters with an earlier draft | No |
 | | [`progress [path]`](#progress) | Show words against targets and deadline | With `--log` |
@@ -613,7 +613,7 @@ These commands read the project and never change story files. The one exception 
 story continuity [path]
 ```
 
-Runs the deterministic continuity engine over frontmatter: characters appearing after they die, promises and clues paid off before they are planted, questions resolved before they are introduced, planted setups with no payoff, POV characters missing from a chapter's cast or from all of its scenes, destroyed or lost artifacts used later, impossible clock and travel times (including journeys faster than the shortest path through location `routes`), and references in `continuity/state.md`. Findings matching an entry in `continuity/exemptions.md` are reported as `dismissed` and do not fail the run.
+Runs the deterministic continuity engine over frontmatter: characters appearing after they die, promises and clues paid off before they are planted, questions resolved before they are introduced, planted setups with no payoff, POV characters missing from a chapter's cast or from all of its scenes, `status: cut` characters still listed in a cast, arc, or relationship, destroyed or lost artifacts used later, impossible clock and travel times (including journeys faster than the shortest path through location `routes`, and a character at two different places at the same exact time), and references in `continuity/state.md`. Findings matching an entry in `continuity/exemptions.md` are reported as `dismissed` and do not fail the run.
 
 Using a copy of [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/), which is broken on purpose:
 

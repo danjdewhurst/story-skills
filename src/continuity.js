@@ -22,12 +22,16 @@ export function checkContinuity(project) {
       .filter((chapter) => chapter.status !== "outline")
       .reduce((max, chapter) => Math.max(max, chapter.number), 0),
     highestChapter: project.chapters.reduce((max, chapter) => Math.max(max, chapter.number), 0),
-    chapterNumberList: project.chapters.map((chapter) => chapter.number)
+    chapterNumberList: project.chapters.map((chapter) => chapter.number),
+    // Chapters with prose: a setup or payoff is on the page only once its
+    // own chapter is past outline, even when later chapters are drafted.
+    draftedChapters: new Set(project.chapters.filter((chapter) => chapter.status !== "outline").map((chapter) => chapter.id))
   };
 
   checkCharacterDeaths(project, context, errors, warnings);
   checkChapterCasts(project, warnings);
   checkSceneCasts(project, warnings);
+  checkCutCharacters(project, warnings);
   checkChapterSequence(project, warnings);
   checkPromises(project, context, errors, warnings);
   checkQuestions(project, context, errors);
@@ -151,6 +155,42 @@ function checkSceneCasts(project, warnings) {
   }
 }
 
+// A character cut with `status: cut` keeps their file, but every cast, arc,
+// and relationship should drop them, so an unfinished cut is reported.
+function checkCutCharacters(project, warnings) {
+  const cut = new Set(project.characters.filter((character) => character.status === "cut").map((character) => character.id));
+  if (cut.size === 0) {
+    return;
+  }
+  for (const entry of [...project.chapters, ...project.scenes]) {
+    const listed = [...new Set([idText(entry.pov), ...entry.characters.map(idText)])].filter((id) => cut.has(id));
+    for (const id of listed) {
+      warnings.push(`${relative(project, entry.file)} lists ${id}, who has status: cut; drop them from pov and characters`);
+    }
+  }
+  for (const arc of project.arcs) {
+    for (const id of new Set(arc.characters.map(idText))) {
+      if (cut.has(id)) {
+        warnings.push(`${relative(project, arc.file)} lists ${id}, who has status: cut; drop them from characters`);
+      }
+    }
+  }
+  // A relationship between two cut characters is left alone.
+  for (const character of project.characters) {
+    for (const relationship of character.relationships) {
+      if (!relationship || typeof relationship !== "object" || Array.isArray(relationship)) {
+        continue;
+      }
+      const target = idText(relationship.character);
+      if (target === "" || cut.has(target) === cut.has(character.id)) {
+        continue;
+      }
+      const who = cut.has(target) ? target : character.id;
+      warnings.push(`${relative(project, character.file)} has a relationship with ${target}, but ${who} has status: cut; drop the relationship on both sides`);
+    }
+  }
+}
+
 function checkChapterSequence(project, warnings) {
   const numbers = project.chapters
     .map((chapter) => chapter.number)
@@ -189,7 +229,7 @@ function checkPromises(project, context, errors, warnings) {
       errors.push(`${label} is planted but has no planted chapter`);
     }
 
-    const stale = stalePlannedWarning(label, promise, plantedNumber, context.latestChapter);
+    const stale = stalePlannedWarning(label, promise, context);
     if (stale) {
       warnings.push(stale);
     }
@@ -265,7 +305,7 @@ function checkClues(project, context, errors, warnings) {
       errors.push(`${label} is planted but no plant chapter recorded`);
     }
 
-    const stale = stalePlannedWarning(label, clue, plantedNumber, context.latestChapter);
+    const stale = stalePlannedWarning(label, clue, context);
     if (stale) {
       warnings.push(stale);
     }
@@ -279,8 +319,8 @@ function checkClues(project, context, errors, warnings) {
 
 // `status: planned` with a `planted` chapter records where a setup will go.
 // Once that chapter has prose, the setup should be on the page.
-function stalePlannedWarning(label, entry, plantedNumber, latestChapter) {
-  if (entry.status !== "planned" || !entry.planted || plantedNumber === undefined || plantedNumber > latestChapter) {
+function stalePlannedWarning(label, entry, context) {
+  if (entry.status !== "planned" || !entry.planted || !context.draftedChapters.has(entry.planted)) {
     return "";
   }
   return `${label} records planted chapter ${entry.planted} but status is still planned`;
@@ -314,14 +354,13 @@ function chekhovWarning(label, planted, plantedNumber, payoff, payoffNumber, con
   const latestChapter = context.latestChapter;
   const since = context.chapterNumberList.filter((number) => number > plantedNumber && number <= latestChapter).length;
   // A recorded payoff chapter that has been drafted should have paid off,
-  // however soon after the plant it came.
-  if (payoff && payoffNumber !== undefined && payoffNumber <= latestChapter) {
-    return `${label} payoff chapter ${payoff} has passed and status is still planted`;
+  // however soon after the plant it came. A payoff chapter with no file is
+  // judged by its number against the latest drafted chapter.
+  if (payoff && payoffNumber !== undefined) {
+    const drafted = context.chapterNumbers.has(payoff) ? context.draftedChapters.has(payoff) : payoffNumber <= latestChapter;
+    return drafted ? `${label} payoff chapter ${payoff} has passed and status is still planted` : "";
   }
   if (since < CHEKHOV_CHAPTER_GAP) {
-    return "";
-  }
-  if (payoff && payoffNumber !== undefined && payoffNumber > latestChapter) {
     return "";
   }
   return `${label} was planted in ${planted}, ${since} chapters ago, and has no payoff yet`;
@@ -553,7 +592,8 @@ function stateChangeTargets(change, artifact) {
 // the ordering checks run over dated units in reading order (see
 // readingUnits). A unit runs backward when it is earlier than the latest
 // moment the story has reached, and scene travel-hours asserts a minimum
-// time since that moment.
+// time since that moment. Named times are windows (see sceneWindow), as in
+// the route check, so only what is impossible on every reading is reported.
 const TIME_RANKS = new Map([
   ["dawn", 300],
   ["morning", 420],
@@ -602,6 +642,7 @@ function checkClock(project, errors, warnings) {
       time: minutes === undefined ? "" : unit.time.trim(),
       days: parsed.days,
       minutes,
+      ...sceneWindow(parsed.days, unit.time),
       travelHours: isChapter ? 0 : unit.travelHours,
       flashback: !isChapter && unit.flashbackTo !== ""
     });
@@ -691,17 +732,17 @@ function checkClockOrder(stamps, errors, warnings) {
   }
 }
 
+// Backward only when the latest reading of this unit is still before the
+// earliest moment the story has reached.
 function runsBackward(current, reference) {
-  if (current.days !== reference.days) {
-    return current.days < reference.days;
-  }
-  return current.minutes !== undefined && reference.minutes !== undefined && current.minutes < reference.minutes;
+  return current.latest < reference.earliest;
 }
 
-// An untimed unit on the reference's day could fall at any time that day, so
-// the reference keeps its known time.
+// The story has reached at least the later of the two earliest readings. An
+// untimed unit, or a named time that starts before the reference's known
+// time, could fall after it, so the reference stays.
 function advanceClock(reference, current) {
-  return current.days === reference.days && current.minutes === undefined ? reference : current;
+  return current.earliest <= reference.earliest ? reference : current;
 }
 
 function backwardFinding(current, reference) {
@@ -713,13 +754,16 @@ function backwardFinding(current, reference) {
   return `${current.label} date ${when(current)} is earlier than ${reference.label} date ${when(reference)}`;
 }
 
+// The gap is taken at its most generous reading: the latest this unit can
+// be against the earliest moment the story has reached.
 function checkTravelHours(current, reference, errors) {
   if (!(current.travelHours > 0) || current.minutes === undefined || reference.minutes === undefined) {
     return;
   }
-  const elapsedHours = ((current.days - reference.days) * 1440 + current.minutes - reference.minutes) / 60;
+  const elapsedHours = (current.latest - reference.earliest) / 60;
   if (elapsedHours < current.travelHours - 1e-9) {
-    errors.push(`${current.label} allows only ${formatHours(elapsedHours, Math.floor)} for travel of ${current.travelHours}h`);
+    const gap = current.exact && reference.exact ? `only ${formatHours(elapsedHours, Math.floor)}` : `at most ${formatHours(elapsedHours, Math.floor)}`;
+    errors.push(`${current.label} allows ${gap} for travel of ${current.travelHours}h`);
   }
 }
 
@@ -749,19 +793,17 @@ function sceneWindow(days, time) {
 // sightings, which may pass through other places. Every earlier sighting is
 // checked, not just the last one, and each gap is taken at its most generous
 // reading of the scene times, so only journeys impossible on any reading are
-// reported, once per scene.
+// reported, once per scene. Two different places at the same exact minute
+// are reported whatever the routes say, since no journey takes no time.
 function checkRouteTravel(project, errors) {
   const graph = routeGraph(project.locations);
-  if (graph.size === 0) {
-    return;
-  }
   // A scene with no pov of its own is told by its chapter's POV, as story
   // timeline shows it.
   const chapterPov = new Map(project.chapters.map((chapter) => [chapter.id, idText(chapter.pov)]));
   const sightings = new Map();
   for (const scene of project.scenes) {
     const parsed = parseClockDate(scene.date);
-    if (!parsed || scene.location === "" || !graph.has(scene.location)) {
+    if (!parsed || scene.location === "") {
       continue;
     }
     const window = sceneWindow(parsed.days, scene.time);
@@ -806,20 +848,29 @@ function checkRouteTravel(project, errors) {
         // for a wide window (an untimed day, `night`), so it must not stop
         // the search.
         const forwardGap = (current.latest - previous.earliest) / 60;
-        if (forwardGap >= longestRoute) {
+        if (forwardGap > 0 && forwardGap >= longestRoute) {
           break;
+        }
+        const from = previous.scene.location;
+        const to = current.scene.location;
+        if (from === to) {
+          continue;
         }
         // Overlapping windows (an untimed day and a time on it) could fall in
         // either order, so the gap is the larger of the two readings.
         const elapsed = Math.max(forwardGap, (previous.latest - current.earliest) / 60);
-        const needed = previous.scene.location === current.scene.location ? undefined : distance(previous.scene.location, current.scene.location);
+        const needed = graph.has(from) && graph.has(to) ? distance(from, to) : undefined;
+        if (needed === undefined && elapsed === 0 && previous.exact && current.exact) {
+          errors.push(`${current.label} puts ${characterId} at ${to} at the same time as ${previous.label} at ${from}`);
+          break;
+        }
         // Route legs are decimal hours, so their float sum can overshoot an
         // exact fit (0.1h + 0.2h against 18 minutes) by a rounding error.
         if (needed !== undefined && elapsed < needed - 1e-9) {
           // Round the gap down and the route up so a near miss (10.98h
           // against 11h) never reads as equal.
           const gap = previous.exact && current.exact ? formatHours(elapsed, Math.floor) : `at most ${formatHours(elapsed, Math.floor)}`;
-          errors.push(`${current.label} puts ${characterId} at ${current.scene.location} ${gap} after ${previous.label} at ${previous.scene.location}, but the fastest route takes ${formatHours(needed, Math.ceil)}`);
+          errors.push(`${current.label} puts ${characterId} at ${to} ${gap} after ${previous.label} at ${from}, but the fastest route takes ${formatHours(needed, Math.ceil)}`);
           break;
         }
       }

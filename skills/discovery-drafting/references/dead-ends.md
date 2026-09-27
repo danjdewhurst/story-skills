@@ -49,7 +49,9 @@ payoff exists in the ledger, the thread is alive — leave it.
    - Update `plot/timeline.md` for any removed events.
 4. **Run maintenance:** `story reindex .`, `story links .`,
    `story validate .`, `story continuity .` — the checker should confirm
-   nothing still references the cut thread.
+   nothing still references the cut thread. `story continuity` warns about
+   a `status: cut` character still in a chapter or scene `pov` or
+   `characters`, an arc's `characters`, or a relationship.
 
 ## The darling log
 
