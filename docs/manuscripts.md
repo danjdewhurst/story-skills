@@ -1,6 +1,6 @@
 # Import, export, and builds
 
-This page is for writers who want to bring an existing draft into Story Skills or get a finished book out of it. It covers `story import`, front and back matter, the publishing fields in `story.md`, `story export`, `story build` (markdown, EPUB, DOCX, Shunn manuscript format, an HTML review copy, a print interior, an audiobook narration script, and a retailer metadata sheet), and `story synopsis`.
+This page is for writers who want to bring an existing draft into Story Skills or get a finished book out of it. It covers `story import`, front and back matter, the publishing fields in `story.md`, `story export`, `story build` (markdown, EPUB, DOCX, Shunn manuscript format, an HTML review copy, a print interior, an audiobook narration script, a retailer metadata sheet, and a Fountain screenplay skeleton), and `story synopsis`.
 
 All output shown was captured by running the commands against copies of the examples, with absolute paths shortened to `~/stories`.
 
@@ -12,7 +12,7 @@ All output shown was captured by running the commands against copies of the exam
 - [Front and back matter](#front-and-back-matter)
 - [Publishing metadata in story.md](#publishing-metadata-in-storymd)
 - [Export a markdown manuscript](#export-a-markdown-manuscript)
-- [Build a book](#build-a-book): [EPUB](#epub), [DOCX](#docx), [Shunn](#shunn-standard-manuscript-format), [HTML review copy](#html-review-copy), [print interior](#print-interior), [narration script](#narration-script), [retailer metadata sheet](#retailer-metadata-sheet)
+- [Build a book](#build-a-book): [EPUB](#epub), [DOCX](#docx), [Shunn](#shunn-standard-manuscript-format), [HTML review copy](#html-review-copy), [print interior](#print-interior), [narration script](#narration-script), [screenplay skeleton](#screenplay-skeleton-fountain), [retailer metadata sheet](#retailer-metadata-sheet)
 - [Build a synopsis](#build-a-synopsis)
 - [Output paths and what is disposable](#output-paths-and-what-is-disposable)
 - [Common errors](#common-errors)
@@ -23,14 +23,14 @@ All output shown was captured by running the commands against copies of the exam
 |---------|-------|--------|----------------|
 | `story import <source\|->` | A manuscript file, a folder of chapter files, or a manuscript piped to stdin (`-`) | A new story project | `./<title-in-kebab-case>/` |
 | `story export [path]` | `story.md`, `chapters/`, `matter/` | One markdown manuscript | `dist/manuscript.md` |
-| `story build [path]` | `story.md`, `chapters/`, `matter/`, the cover image, and (for narration) `pronunciation` fields in the bible | One book file, script, or sheet | `dist/<story-id>.<ext>` |
+| `story build [path]` | `story.md`, `chapters/`, `matter/`, the cover image, (for narration) `pronunciation` fields in the bible, and (for fountain) scene, location, and character records | One book file, script, or sheet | `dist/<story-id>.<ext>` |
 | `story synopsis [path]` | `story.md` and `plot/arcs/` | A synopsis scaffold | Printed to stdout |
 
 ```mermaid
 flowchart LR
   draft["Existing draft<br/>(.md, .markdown, .txt)"] -->|story import| project["Story project<br/>story.md, chapters/, matter/, plot/arcs/"]
   project -->|story export| manuscript["dist/manuscript.md"]
-  project -->|story build| dist["dist/<br/>.md, .epub, .docx, .shunn.md,<br/>.html, .print.html, .narration.md, .metadata.md"]
+  project -->|story build| dist["dist/<br/>.md, .epub, .docx, .shunn.md,<br/>.html, .print.html, .narration.md, .metadata.md, .fountain"]
   project -->|story synopsis| synopsis["Synopsis<br/>(stdout or --out)"]
 ```
 
@@ -40,7 +40,7 @@ Several skills drive these commands:
 - [`submission`](../skills/submission/SKILL.md) builds Shunn manuscripts and rewrites the synopsis scaffold into submission copy.
 - [`publishing`](../skills/publishing/SKILL.md) fills the publishing fields in `story.md`, then works through the metadata sheet, the EPUB, and the print interior.
 - [`editorial-review`](../skills/editorial-review/SKILL.md) builds DOCX and HTML review copies for editors and beta readers, and tracks permissions for quoted matter.
-- [`adaptation`](../skills/adaptation/SKILL.md) builds the narration script for an audiobook.
+- [`adaptation`](../skills/adaptation/SKILL.md) builds the narration script for an audiobook and the scene skeleton for a screenplay.
 
 See the [Skills catalogue](skills.md) for all of them, and the [CLI reference](cli-reference.md) for installing and running the CLI.
 
@@ -513,6 +513,7 @@ The warning is harmless, and the default `dist/` path avoids it. `story build` w
 | `print` | Print interior as HTML with CSS paged media, to render to PDF | `dist/<story-id>.print.html` | Yes |
 | `narration` | Audiobook narration script with a pronunciation guide and runtimes | `dist/<story-id>.narration.md` | Yes, except the copyright page |
 | `metadata` | Retailer metadata sheet with a readiness checklist | `dist/<story-id>.metadata.md` | No prose at all |
+| `fountain` | Screenplay scene skeleton in Fountain, from the scene records | `dist/<story-id>.fountain` | No prose at all |
 
 The story id is the kebab-case title from `story.md`. Build every format of the example *The Last Ember* like this:
 
@@ -525,6 +526,7 @@ story build . --format html
 story build . --format print
 story build . --format narration
 story build . --format metadata
+story build . --format fountain
 ```
 
 ```text
@@ -536,14 +538,16 @@ Built 1 chapters as html to ~/stories/the-last-ember/dist/the-last-ember.html
 Built 1 chapters as print to ~/stories/the-last-ember/dist/the-last-ember.print.html
 Built 1 chapters as narration to ~/stories/the-last-ember/dist/the-last-ember.narration.md
 Built 1 chapters as metadata to ~/stories/the-last-ember/dist/the-last-ember.metadata.md
+Built 1 chapters as fountain to ~/stories/the-last-ember/dist/the-last-ember.fountain
+warning: No setting (interior, exterior, or both) for whispering-vale: their scene headings are forced without INT. or EXT.
 ```
 
-The confirmation always counts chapters, even for the metadata sheet.
+The confirmation always counts chapters, even for the metadata sheet and the screenplay skeleton.
 
 | Option | Effect |
 |--------|--------|
 | `[path]` or `--path <path>` | Project root. Defaults to the current directory. |
-| `--format <name>` | `markdown` (or `md`), `epub`, `docx`, `shunn`, `html`, `print`, `narration`, or `metadata`. Case-insensitive. Defaults to `markdown`. |
+| `--format <name>` | `markdown` (or `md`), `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, or `fountain`. Case-insensitive. Defaults to `markdown`. |
 | `--shunn` | With `--format docx`, apply Shunn formatting. An error with every other format. |
 | `--trim <size>` | With `--format print`, the trim size: `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5`. Case-insensitive. Defaults to `5.5x8.5`. An error with every other format. |
 | `--out <file>` | Output file instead of the default in `dist/`. |
@@ -551,7 +555,7 @@ The confirmation always counts chapters, even for the metadata sheet.
 Any other format is an error:
 
 ```text
-Unsupported build format: pdf. Supported formats: markdown, epub, docx, shunn, html, print, narration, metadata
+Unsupported build format: pdf. Supported formats: markdown, epub, docx, shunn, html, print, narration, metadata, fountain
 ```
 
 For a book PDF, build the [print interior](#print-interior) and render it with a paged-media engine. For a quick PDF of a manuscript, open the DOCX in a word processor and export it.
@@ -820,6 +824,45 @@ What goes in:
 - **Runtime.** Every word in those sections, matter included, at 155 words per minute, rounded to the minute. Pace varies by narrator and genre, so time a sample chapter and rescale.
 
 The [`adaptation`](../skills/adaptation/SKILL.md) skill prepares an audiobook from this script and writes it to `adaptations/audiobook/narration-script.md` with `--out`. The [`worldbuilding`](../skills/worldbuilding/SKILL.md) and [`character-management`](../skills/character-management/SKILL.md) skills add pronunciations when they create invented names.
+
+### Screenplay skeleton (Fountain)
+
+`--format fountain` writes the start of a screenplay adaptation in [Fountain](https://fountain.io), the plain-text screenplay markup that Highland, Beat, Fade In, WriterSolo, Afterwriting, and other screenwriting apps open. It does not convert prose: turning a chapter into action and dialogue means choosing what a camera can show, which is writing, not formatting. The build lays out what the records already say, one scene heading per scene record, and leaves the pages to the writer. On *Harbor of Second Light*:
+
+```shell
+story build . --format fountain
+```
+
+```fountain
+Title: Harbor of Second Light
+Credit: Written by
+Author: Morgan Hale
+Source: Based on the novel by Morgan Hale
+
+[[Scene skeleton built by story build from the scene records. Notes and synopses are not printed. Draft the action and dialogue under each heading, and merge, cut, or reorder scenes as the adaptation needs.]]
+
+## Chapter 1: The Bell Under the Reef
+
+EXT. BELLWETHER REEF
+
+= Reef Bell Discovery
+
+[[Source: chapter-01-scene-01]]
+[[Characters: MARA QUILL]]
+[[Outcome: yes-but]]
+```
+
+What goes in:
+
+- **Title page.** `Title`, then `Credit: Written by` and `Author` from `author` or `authors` in `story.md` (left out when neither is set), and `Source: Based on the <form> by <author>`, where the form is `novel`, `novella`, `short story`, and so on from `form`, or `book` when `form` is not set. Add `Draft date` and `Contact` by hand.
+- **Sections.** One `##` section per chapter, under its book heading, leaving `#` for the acts you add. Sections are not printed. A chapter with no scene records gets a note saying so, and a warning.
+- **Scene headings.** One per scene record, in reading order: chapters by number, scenes by `scene` number. The heading is `INT.`, `EXT.`, or `INT./EXT.` from `setting` (`interior`, `exterior`, or `both`; the scene's own `setting` wins over its location's), the location's `name` in capitals, and the time of day. Named times read as `DAWN`, `MORNING`, `DAY` (`midday` and `afternoon`), `EVENING`, and `NIGHT`; an `HH:MM` time reads as `DAY` from 06:00 to 17:59 and `NIGHT` otherwise; any other value is printed in capitals as written. A scene with no `time` takes its chapter's. With no `setting` on the scene or its location, the heading is forced with a leading period (`.BELLWETHER REEF`) rather than guessing interior or exterior, and the build warns once per location. A scene with no `location` reads `LOCATION TBD`, and one whose `location` has no record reads the id as a name (`sea-cave` as `SEA CAVE`); both warn.
+- **Notes and synopses.** Under each heading, the scene title as a synopsis (`= Reef Bell Discovery`) and notes for the source scene id, the cast in capitals (`pov`, unless the pov is only in `mentions`, then `characters`, by character name), the story date and time, `flashback-to`, `dilemma`, and `outcome`. Screenwriting apps do not print notes or synopses, so the script prints as headings until you write under them. Keep the `[[Source: ...]]` notes so each screen scene traces back to the book.
+- **Escaping.** Names, titles, and notes are single lines with Fountain's markers neutralised: `*` and `_` are escaped with a backslash, and `[[`, `]]`, and `/*` cannot open a note or boneyard. A forced heading always starts with a single period and a letter or digit, and a heading never ends with `#`, which Fountain reads as a scene number.
+
+Scenes whose `chapter` is not in the book are left out, with a warning. Front and back matter and chapter prose are never included.
+
+The [`adaptation`](../skills/adaptation/SKILL.md) skill uses this build as the first draft of `adaptations/screenplay/<story-id>.fountain`: `story build . --format fountain --out adaptations/screenplay/<story-id>.fountain` writes it once, and refuses to replace it after that, so the drafted script is safe from a rebuild. Build to `dist/` to compare a new skeleton with the draft.
 
 ### Retailer metadata sheet
 

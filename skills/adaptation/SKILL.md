@@ -89,14 +89,34 @@ Follow `references/audiobook.md`.
 
 Follow `references/fountain.md`.
 
-1. Build the scene list from scene records (reading order, or
+1. Add `setting: interior`, `exterior`, or `both` to each location the
+   scenes use, and to any scene whose place differs from its location's
+   (on the harbor wall, not in the harbor office). Ask the author when the
+   prose does not settle it. Run `story validate .`.
+2. Build the scene list from scene records (reading order, or
    `story timeline .` for story-time order). Each scene becomes one or
-   more sluglines from its `location`, `time`, and `characters`.
-2. Mark each scene keep, merge, cut, or externalize (interior moments that
+   more sluglines from its `location`, `setting`, `time`, and
+   `characters`.
+3. Mark each scene keep, merge, cut, or externalize (interior moments that
    need an action or line). Save it as
    `adaptations/screenplay/scene-list.md`.
-3. Write `adaptations/screenplay/{story-id}.fountain`. Draft act by act
-   and check length at about one page per minute.
+4. Start the script from the scene records:
+
+   ```shell
+   story build . --format fountain --out adaptations/screenplay/{story-id}.fountain
+   ```
+
+   It writes a title page, a `##` section per chapter, and one scene
+   heading per scene record with the source scene id, cast, and scene
+   notes as unprinted `[[...]]` notes. It carries no prose: the build
+   cannot adapt, so every line of action and dialogue is yours to write.
+   A forced heading (`.LAMP ROOM - DUSK`) means the scene and its location
+   have no `setting`; fix the record or the heading. `--out` never
+   replaces an existing file under `adaptations/`, so once the script is
+   drafted, build to `dist/` instead to compare a new skeleton with it.
+5. Apply the scene list's decisions to the skeleton, then draft act by
+   act and check length at about one page per minute. Keep each scene's
+   `[[Source: ...]]` note.
 
 ### 3. Picture book
 
@@ -175,8 +195,8 @@ Follow `references/translation.md`.
 
 Use the Story CLI when it is available. If `story` is not installed, use `bun run story --` from the Story Skills repository checkout or the bundled fallback `node ../story-maintenance/scripts/story.js` with the same arguments, resolving the path relative to this skill folder. If no CLI is available, write the narration script and scene lists by hand from the chapter and scene files.
 
-After adding `pronunciation` or glossary translations, or setting `form` or
-`language`:
+After adding `pronunciation`, `setting`, or glossary translations, or
+setting `form` or `language`:
 
 ```shell
 story reindex .

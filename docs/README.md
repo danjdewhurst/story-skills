@@ -53,7 +53,7 @@ Pick the route that matches what you came to do. Each one takes four pages; read
 | [Writing workflows](writing-workflows.md) | End-to-end sessions: testing a premise, plotting first, discovery drafting, scene craft, theme and voice, research, revision passes, line editing, feedback and editorial review, submission, self-publishing, and adaptation |
 | [Continuity and analysis](continuity.md) | The continuity engine (including travel times over location routes), exemptions, and the `knowledge`, `timeline`, `prose`, `voices`, `pacing`, `clues`, `names`, `diagram`, `progress`, `compare`, `report`, `next`, and `doctor` commands |
 | [Series](series.md) | Linking sequels and prequels, `story series`, and carrying characters and facts between books |
-| [Import, export, and builds](manuscripts.md) | Importing an existing draft, front and back matter, publishing metadata, and building markdown, EPUB, DOCX, Shunn, HTML review copy, print interior, narration script, retailer metadata sheet, and synopsis output |
+| [Import, export, and builds](manuscripts.md) | Importing an existing draft, front and back matter, publishing metadata, and building markdown, EPUB, DOCX, Shunn, HTML review copy, print interior, narration script, retailer metadata sheet, Fountain screenplay skeleton, and synopsis output |
 | [Automation and CI](automation.md) | The GitHub Actions templates (checks, scheduled drafting, and the review copy with its reader-note issue form), exit codes and output streams, and pre-commit hooks |
 
 ### Reference
@@ -98,7 +98,7 @@ Pick the route that matches what you came to do. Each one takes four pages; read
 | Work with sensitivity readers, editors, permissions, or a co-author | [Writing workflows](writing-workflows.md) and the editorial-review entry in the [Skills catalogue](skills.md) |
 | Write a sequel or prequel | [Series](series.md) |
 | Build an EPUB, DOCX, or submission manuscript | [Import, export, and builds](manuscripts.md#build-a-book) |
-| Build an HTML review copy, a print interior, a narration script, or a retailer metadata sheet | [Import, export, and builds](manuscripts.md) |
+| Build an HTML review copy, a print interior, a narration script, a retailer metadata sheet, or a screenplay skeleton | [Import, export, and builds](manuscripts.md) |
 | Self-publish: metadata, ISBNs, copyright page, print, launch | [Writing workflows](writing-workflows.md), [Import, export, and builds](manuscripts.md), and the publishing entry in the [Skills catalogue](skills.md) |
 | Adapt the book for audio, screen, comics, or translation | [Writing workflows](writing-workflows.md) and the adaptation entry in the [Skills catalogue](skills.md) |
 | Run the checks on every pull request | [Automation and CI](automation.md) |

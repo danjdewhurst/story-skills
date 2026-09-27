@@ -575,6 +575,7 @@ Files: `worldbuilding/locations/<location-id>.md`. Created with `story add locat
 | `tags` | list of strings | no | Free labels. |
 | `status` | string | no | Free text (default `unknown`). |
 | `routes` | list of mappings | no | Journeys to other locations, with travel times. See below. |
+| `setting` | enum | no | `interior`, `exterior`, or `both`: the `INT.`, `EXT.`, or `INT./EXT.` in the scene headings of `story build --format fountain`. A scene's own `setting` overrides it. |
 | `pronunciation` | string | no | Respelling for the narration build (see [Characters](#characters)). |
 | `progressions` | list of mappings | no | Changes from a chapter on, such as `status` or `controlled-by`. See [Progressions](#progressions). |
 
@@ -798,6 +799,7 @@ state-changes:
 | `time` | string | no | Story time (see [Dates and times](#dates-and-times)). |
 | `travel-hours` | number | no | Minimum travel time into this scene; `story continuity` errors when the timestamps allow less. |
 | `flashback-to` | string | no | Free-form note of the moment flashed back to. Kept but not checked; continuity checks use `mentions`. |
+| `setting` | enum | no | `interior`, `exterior`, or `both`, for a scene whose place differs from its location's `setting` (on the harbor wall rather than inside the harbor office). Read only by `story build --format fountain`. |
 
 `state-changes` entries are free-form mappings: each must be a mapping, but the CLI does not require particular keys. Two shapes are in use. The [scene template](../skills/chapter-writing/references/scene-template.md) records `target` and `change`:
 

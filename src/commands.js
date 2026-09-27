@@ -630,8 +630,8 @@ export const COMMANDS = [
       "Build a disposable book artifact in dist/: markdown,",
       "epub, docx, shunn, html (review copy with paragraph",
       "anchors), print (paged-media interior),",
-      "narration (audiobook script), or metadata",
-      "(retailer sheet)"
+      "narration (audiobook script), metadata (retailer",
+      "sheet), or fountain (screenplay scene skeleton)"
     ],
     project: "positional",
     options: ["out", "format", "shunn", "trim", "stamp", "note-url"],

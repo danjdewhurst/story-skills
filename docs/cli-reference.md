@@ -70,7 +70,7 @@ Absolute paths in output are shortened to `~/stories/...`.
 | | [`move <kind> <id>`](#move) | Renumber a chapter or move a scene and update references | Yes |
 | | [`remove <kind> <id>`](#remove) | Delete an entity and scrub references | Yes |
 | Output | [`export [path]`](#export) | Write a combined manuscript markdown file | Yes |
-| | [`build [path]`](#build) | Build markdown, EPUB, DOCX, Shunn, HTML, print, narration, or metadata output in `dist/` | Yes |
+| | [`build [path]`](#build) | Build markdown, EPUB, DOCX, Shunn, HTML, print, narration, metadata, or Fountain output in `dist/` | Yes |
 | | [`synopsis [path]`](#synopsis) | Print or write a 1- or 3-page synopsis from arcs | With `--out` |
 
 ## How the CLI behaves
@@ -1969,7 +1969,7 @@ Builds a disposable book file in `dist/`. Builds are deterministic: the same sou
 
 | Option | Effect | Default |
 |---|---|---|
-| `--format <name>` | `markdown` (or `md`), `epub`, `docx`, `shunn`, `html`, `print`, `narration`, or `metadata` | `markdown` |
+| `--format <name>` | `markdown` (or `md`), `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, or `fountain` | `markdown` |
 | `--shunn` | With `--format docx`, apply Shunn manuscript formatting. An error with any other format | Off |
 | `--trim <size>` | With `--format print`, the trim size: `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5` (case-insensitive). An error with any other format | `5.5x8.5` |
 | `--stamp <label>` | With `--format html`, print this build label (a date, commit, or review round, such as `feedback-round-2`) at the top of the review copy, so readers can say which build a note refers to. An error with any other format or an empty label. Default builds carry no stamp and stay byte-identical | None |
@@ -1987,6 +1987,7 @@ Builds a disposable book file in `dist/`. Builds are deterministic: the same sou
 | `print` | `dist/<story-id>.print.html` | A print interior as HTML with CSS paged media, sized to `--trim`, with a title page, contents, and page numbers. Render it to PDF with a paged-media engine such as Paged.js, WeasyPrint, or Prince |
 | `narration` | `dist/<story-id>.narration.md` | An audiobook script: estimated runtime at 155 words a minute, a pronunciation guide from `pronunciation` fields in the bible, opening and closing credits, and each section with its estimated minutes |
 | `metadata` | `dist/<story-id>.metadata.md` | A retailer metadata sheet from `story.md`: title, authors, ISBN, language, word count, estimated print pages, description, keywords, BISAC subjects, and a readiness checklist of what is missing |
+| `fountain` | `dist/<story-id>.fountain` | A screenplay scene skeleton in Fountain, not a conversion of the prose: a title page, a `##` section per chapter, and one scene heading per scene record (`INT. LAMP ROOM - DUSK`, from the `setting`, location name, and time), with the scene title as a synopsis and the source scene id, cast, and scene notes as unprinted notes. A scene with no `setting` on it or its location gets a forced heading (`.LAMP ROOM - DUSK`) and a warning. See [Screenplay skeleton](manuscripts.md#screenplay-skeleton-fountain) |
 
 `export` and `build` print `warning: chapters/chapter-02.md has no prose yet and is built as a heading-only page` for each chapter with no prose, such as one still at `status: outline`, and build anyway.
 

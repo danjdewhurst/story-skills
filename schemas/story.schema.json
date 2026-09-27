@@ -176,6 +176,7 @@
         "notable-characters": { "$ref": "#/$defs/stringList" },
         "tags": { "$ref": "#/$defs/stringList" },
         "status": { "type": "string" },
+        "setting": { "enum": ["interior", "exterior", "both"] },
         "routes": {
           "type": "array",
           "items": {
@@ -294,7 +295,8 @@
         "sequel": { "type": "boolean" },
         "outcome": { "enum": ["yes", "no", "yes-but", "no-and"] },
         "dilemma": { "type": "string" },
-        "flashback-to": { "type": "string" }
+        "flashback-to": { "type": "string" },
+        "setting": { "enum": ["interior", "exterior", "both"] }
       }
     },
     "question": {

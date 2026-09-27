@@ -192,6 +192,7 @@ The CLI is for maintenance only. Agents write story content directly to markdown
 | `story build [path] --format print --trim 6x9` | Build a print-ready paged-media HTML interior (author and chapter-title running heads, foot page numbers, raised chapter initials) to render to PDF with Paged.js, WeasyPrint, or Prince |
 | `story build [path] --format narration` | Build an audiobook narration script with a pronunciation guide and runtime estimates |
 | `story build [path] --format metadata` | Build a retailer metadata sheet from `story.md` with a readiness checklist |
+| `story build [path] --format fountain` | Build a Fountain screenplay skeleton, one scene heading per scene record, to draft an adaptation into |
 
 Behavior notes:
 

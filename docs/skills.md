@@ -142,7 +142,7 @@ The main handoffs:
 | [series-continuity](#series-continuity) | A new linked project, carried entity files, `fact` ids | `init --follows`/`--precedes`, `series`, `reindex`, `links`, `validate`, `continuity` |
 | [submission](#submission) | `submission/*.md`, Shunn builds in `dist/` | `validate`, `links`, `continuity`, `prose`, `wordcount --write`, `report`, `synopsis`, `build` |
 | [publishing](#publishing) | `story.md` publishing metadata, copyright matter page, `publishing/*.md` | `validate`, `links`, `continuity`, `prose`, `wordcount --write`, `passes`, `add matter`, `build --format metadata`/`epub`/`print`, `reindex` |
-| [adaptation](#adaptation) | `pronunciation` fields, `adaptations/**`, a translated sibling project | `build --format narration`, `timeline`, `names`, `init --form picture-book`, `compare --against`, `reindex`, `links`, `validate`, `continuity` |
+| [adaptation](#adaptation) | `pronunciation` fields, `adaptations/**`, a translated sibling project | `build --format narration`/`fountain`, `timeline`, `names`, `init --form picture-book`, `compare --against`, `reindex`, `links`, `validate`, `continuity` |
 | [story-maintenance](#story-maintenance) | Registries, word counts, exports, `dist/` | Every CLI command |
 
 ## Setting up
@@ -845,7 +845,7 @@ One `story.md` holds one edition's metadata. When the ebook and print ISBNs diff
 **Workflow.** If `status` is not `revising` or `complete`, it warns that adapting a changing draft means redoing the adaptation.
 
 1. **Audiobook.** Adds `pronunciation` (plain respelling with the stressed syllable in capitals, such as `SEER-sha`) to every character, location, faction, artifact, and glossary term a narrator could say wrong, asking you for any not yet decided. Then builds the script with `story build . --format narration --out adaptations/audiobook/narration-script.md`: a pronunciation guide table, each chapter with an estimated finished runtime at 155 words per minute, scene breaks as `[pause]`, and a total runtime. It reviews the script for what reads badly aloud and drafts the production checklist (route such as ACX or Findaway Voices by Spotify, audition script, retail sample, file list, credits, AI narration disclosure) in `adaptations/audiobook/production.md`.
-2. **Screenplay.** Builds a scene list from the scene records (reading order, or `story timeline .` for story-time order), marks each scene keep, merge, cut, or externalise, saves `adaptations/screenplay/scene-list.md`, and writes `adaptations/screenplay/{story-id}.fountain` act by act at about one page per minute.
+2. **Screenplay.** Adds `setting` (`interior`, `exterior`, or `both`) to the locations, and to scenes that differ from their location, then builds a scene list from the scene records (reading order, or `story timeline .` for story-time order), marks each scene keep, merge, cut, or externalise, and saves `adaptations/screenplay/scene-list.md`. It starts the script with `story build . --format fountain --out adaptations/screenplay/{story-id}.fountain`, a skeleton of scene headings and source notes with no prose, and writes the action and dialogue into it act by act at about one page per minute.
 3. **Picture book.** Sets `form: picture-book`, or starts a new project with `story init "Title" --form picture-book` (target 500 words), plans 32 pages and 14 story spreads with a page-turn beat on each in `adaptations/picture-book/pagination.md`, and keeps one chapter per spread with the art notes in the plan, not the prose.
 4. **Comics.** A page plan in `adaptations/comics/page-plan.md`, then a full script with pages, panels, captions, balloons, and SFX.
 5. **Interactive fiction.** Maps scenes to nodes, agrees a branching structure with you, records `adaptations/interactive/branch-map.md`, and writes Ink (`.ink`) or Twine (`.twee`) source.
@@ -855,7 +855,7 @@ One `story.md` holds one edition's metadata. When the ebook and print ISBNs diff
 
 **Writes.** `pronunciation` fields and glossary `## Translations` sections in the source project, planning and script files under `adaptations/audiobook/`, `screenplay/`, `picture-book/`, `comics/`, and `interactive/`, and a translated sibling project. Markdown planning files carry a `type` (`audiobook-production`, `scene-list`, `pagination-plan`, `page-plan`, `branch-map`, `translation-notes`) and `updated`. The CLI doesn't validate `adaptations/`, and builds never include it.
 
-**CLI.** `story build . --format narration`, `story timeline .`, `story names`, `story init --form picture-book`, and `story compare --against`, then `story reindex .`, `story links .`, `story validate .` after adding pronunciations or translations or setting `form` or `language`, plus `story wordcount . --write` after changing chapters in a picture-book or translated project.
+**CLI.** `story build . --format narration`, `story build . --format fountain`, `story timeline .`, `story names`, `story init --form picture-book`, and `story compare --against`, then `story reindex .`, `story links .`, `story validate .` after adding pronunciations or translations or setting `form` or `language`, plus `story wordcount . --write` after changing chapters in a picture-book or translated project.
 
 **References.**
 
@@ -910,7 +910,7 @@ One `story.md` holds one edition's metadata. When the ebook and print ISBNs diff
 
 **Triggers.** "Validate my story project", "reindex", "repair registries", "check links", "check continuity", "count words", "summarize the project", "import an existing manuscript", "export a manuscript", "build a review copy or print interior", "generate a diagram", "check pacing, clues, voices, or names", "track revision passes", "run the story CLI".
 
-**When each command fits.** The skill picks commands the same way the rest of the docs describe: [the maintenance loop](writing-workflows.md#the-maintenance-loop) for the five commands that follow most edits, [When to run what](continuity.md#when-to-run-what) for the analysis commands (`pacing`, `clues`, `voices`, `names`, `passes`, `diagram`, `timeline`, `prose`), and the [command summary](cli-reference.md#command-summary) for everything else, including `init --form`, `import`, `migrate`, `add`/`rename`/`move`/`remove`, `knowledge`, `export`, `build` (markdown, EPUB, DOCX, Shunn, HTML review copy, print interior, narration script, metadata sheet), and `synopsis`.
+**When each command fits.** The skill picks commands the same way the rest of the docs describe: [the maintenance loop](writing-workflows.md#the-maintenance-loop) for the five commands that follow most edits, [When to run what](continuity.md#when-to-run-what) for the analysis commands (`pacing`, `clues`, `voices`, `names`, `passes`, `diagram`, `timeline`, `prose`), and the [command summary](cli-reference.md#command-summary) for everything else, including `init --form`, `import`, `migrate`, `add`/`rename`/`move`/`remove`, `knowledge`, `export`, `build` (markdown, EPUB, DOCX, Shunn, HTML review copy, print interior, narration script, metadata sheet, Fountain screenplay skeleton), and `synopsis`.
 
 **Reads.** The CLI's output, and the project files a finding names when it fixes them.
 

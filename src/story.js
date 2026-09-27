@@ -19,6 +19,7 @@ import { STORY_FORMS, formRangeWarning } from "./forms.js";
 import { copyrightPage, metadataSheet, publishingMeta, validatePublishing } from "./publishing.js";
 import { DEFAULT_TRIM, estimateBookPages, paragraphLabels, printHtml, reviewHtml, TRIM_SIZES } from "./html.js";
 import { narrationScript, pronunciationGuide } from "./narration.js";
+import { SCENE_SETTINGS, fountainScript } from "./fountain.js";
 import { htmlBook, writeDocx, writeEpub, writeShunnDocx, writeShunnMarkdown } from "./packaging.js";
 import { validateCliConfig } from "./config.js";
 import { DEFAULT_PASSES, addedPassNotes, nextPass, passChecks, readPasses, updatePasses, validatePasses } from "./passes.js";
@@ -630,6 +631,7 @@ export function scanProject(root) {
       region: data.region ?? "",
       notableCharacters: asArray(data["notable-characters"]),
       routes: asArray(data.routes),
+      setting: typeof data.setting === "string" ? data.setting : "",
       pronunciation: data.pronunciation
     }), scanErrors),
     systems: readEntityFiles(projectRoot, path.join("worldbuilding", "systems"), (id, file, data) => ({
@@ -719,7 +721,8 @@ export function scanProject(root) {
       sequel: typeof data.sequel === "boolean" ? data.sequel : false,
       outcome: typeof data.outcome === "string" ? data.outcome : "",
       dilemma: String(data.dilemma ?? ""),
-      flashbackTo: String(data["flashback-to"] ?? "")
+      flashbackTo: String(data["flashback-to"] ?? ""),
+      setting: typeof data.setting === "string" ? data.setting : ""
     }), scanErrors),
     questions: readEntityFiles(projectRoot, path.join("continuity", "questions"), (id, file, data) => ({
       id,
@@ -2372,6 +2375,10 @@ export function buildBook(root, options = {}) {
     }), output.writeOptions);
   } else if (format === "narration") {
     writeFile(output.outFile, narrationScript(manuscript, pronunciationGuide(project)), output.writeOptions);
+  } else if (format === "fountain") {
+    const screenplay = screenplayOutline(project, manuscript);
+    writeFile(output.outFile, fountainScript(screenplay), output.writeOptions);
+    return { outFile: output.outFile, chapters: manuscript.chapters.length, format, warnings: screenplay.warnings };
   } else if (format === "html" || format === "print") {
     const book = htmlBook(manuscript);
     const text = format === "html" ? reviewHtml(book, { stamp, noteUrl }) : printHtml(book, trim);
@@ -2388,6 +2395,86 @@ export function buildBook(root, options = {}) {
   }
 
   return { outFile: output.outFile, chapters: manuscript.chapters.length, format, warnings: manuscript.warnings };
+}
+
+// The scene records behind `build --format fountain`, in reading order: each
+// book chapter with its scenes by scene number, each scene resolved to its
+// location name, setting (the scene's own, else its location's), time (the
+// scene's, else its chapter's), and cast (the pov unless only mentioned,
+// then characters), by character name. Missing records are warnings, since
+// the script still builds with forced headings and notes in their place.
+function screenplayOutline(project, manuscript) {
+  const warnings = [];
+  const locations = new Map(project.locations.map((location) => [location.id, location]));
+  const characters = new Map(project.characters.map((character) => [character.id, character]));
+  const bookChapters = new Set(project.chapters.map((chapter) => chapter.id));
+  const unset = new Set();
+  const noScenes = [];
+  for (const scene of project.scenes) {
+    if (!bookChapters.has(scene.chapter)) {
+      warnings.push(`${relative(project, scene.file)} names chapter ${scene.chapter || "(none)"}, which is not in the book, and is left out of the screenplay`);
+    }
+  }
+  const chapters = project.chapters.map((chapter, index) => {
+    const scenes = project.scenes
+      .filter((scene) => scene.chapter === chapter.id)
+      .sort((left, right) => left.scene - right.scene || left.file.localeCompare(right.file, "en"))
+      .map((scene) => {
+        const location = locations.get(scene.location);
+        const setting = scene.setting || location?.setting || "";
+        const notes = [];
+        if (scene.location === "") {
+          notes.push("No location on the scene record: set location for the heading.");
+          warnings.push(`${relative(project, scene.file)} has no location; its screenplay heading reads LOCATION TBD`);
+        } else if (location === undefined) {
+          notes.push(`No location record for ${scene.location}: fix the scene's location or add the location.`);
+          warnings.push(`${relative(project, scene.file)} names location ${scene.location}, which has no record; run story links`);
+        }
+        if (scene.location !== "" && !SCENE_SETTINGS.has(setting)) {
+          notes.push(`No setting: add setting (interior, exterior, or both) to ${location ? `${relative(project, location.file)} or the scene` : "the scene"} for INT. or EXT.`);
+          if (location !== undefined) {
+            unset.add(scene.location);
+          }
+        }
+        const cast = [];
+        for (const id of [scene.mentions.includes(scene.pov) ? "" : scene.pov, ...scene.characters]) {
+          const name = id === "" ? "" : String(characters.get(id)?.name ?? titleCaseSlug(id));
+          if (name !== "" && !cast.includes(name)) {
+            cast.push(name);
+          }
+        }
+        return {
+          id: scene.id,
+          title: String(scene.title),
+          locationName: scene.location === "" ? "" : String(location?.name ?? titleCaseSlug(scene.location)),
+          setting,
+          date: scene.date,
+          time: scene.time || chapter.time,
+          cast,
+          dilemma: scene.dilemma,
+          outcome: scene.outcome,
+          flashbackTo: scene.flashbackTo,
+          notes
+        };
+      });
+    if (scenes.length === 0) {
+      noScenes.push(chapter.id);
+    }
+    return { id: chapter.id, heading: manuscript.chapters[index].heading, scenes };
+  });
+  if (noScenes.length > 0) {
+    warnings.push(`No scene records for ${noScenes.join(", ")}: the screenplay has no headings for ${noScenes.length === 1 ? "that chapter" : "those chapters"}`);
+  }
+  if (unset.size > 0) {
+    warnings.push(`No setting (interior, exterior, or both) for ${[...unset].sort().join(", ")}: their scene headings are forced without INT. or EXT.`);
+  }
+  return {
+    title: manuscript.title,
+    authors: manuscript.meta.authors,
+    form: typeof project.story.data.form === "string" ? project.story.data.form : "",
+    chapters,
+    warnings
+  };
 }
 
 // Deterministic synopsis. Budgets are 500 words (1 page) and 1500 (3 pages).
@@ -5762,7 +5849,8 @@ const BUILD_EXTENSIONS = {
   html: "html",
   print: "print.html",
   narration: "narration.md",
-  metadata: "metadata.md"
+  metadata: "metadata.md",
+  fountain: "fountain"
 };
 
 function normalizeBuildFormat(value) {
@@ -6019,6 +6107,7 @@ function validateLocations(project, errors, warnings) {
     validateStringArray(data, "notable-characters", label, errors);
     validateStringArray(data, "tags", label, errors);
     validateObjectArray(data, "routes", label, errors);
+    validateEnum(data, "setting", SCENE_SETTINGS, label, errors);
     const destinations = new Set();
     for (const route of Array.isArray(data.routes) ? data.routes : []) {
       if (!route || typeof route !== "object" || Array.isArray(route)) {
@@ -6244,6 +6333,7 @@ function validateScenes(project, errors) {
       errors.push(`${label} frontmatter field sequel must be a boolean`);
     }
     validateEnum(data, "outcome", SCENE_OUTCOMES, label, errors);
+    validateEnum(data, "setting", SCENE_SETTINGS, label, errors);
     if (data["flashback-to"] !== undefined) {
       requireScalar(data, "flashback-to", label, errors);
     }

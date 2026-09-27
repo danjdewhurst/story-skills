@@ -4724,7 +4724,7 @@ var OPTIONS = [
   { name: "anchor", value: "<label>", repeatable: true, help: ["Review-copy paragraph label (ch03-p12) to find", "in the current text for compare; repeatable"] },
   { name: "path", value: "<path>", help: ["Project root for every command except init and", "import"] },
   { name: "out", value: "<file>", help: ["Output path for export/build/synopsis/diagram"] },
-  { name: "format", value: "<name>", help: ["Output format for build (markdown, epub, docx,", "shunn, html, print, narration, metadata)"] },
+  { name: "format", value: "<name>", help: ["Output format for build (markdown, epub, docx,", "shunn, html, print, narration, metadata,", "fountain)"] },
   { name: "trim", value: "<size>", help: ["Trim size for build --format print (5x8,", "5.25x8, 5.5x8.5, 6x9, a5; default 5.5x8.5)"] },
   { name: "stamp", value: "<label>", help: ["Build label printed in build --format html (a", "date, commit, or review round)"] },
   { name: "note-url", value: "<url>", help: ["Note form linked, prefilled, from every label in", "build --format html (a GitHub new-issue link)"] },
@@ -5963,6 +5963,101 @@ function formatRuntime(words) {
 }
 function cell2(value) {
   return String(value).replace(/\s+/g, " ").trim().replace(/\|/g, "\\|");
+}
+
+// src/fountain.js
+var SCENE_SETTINGS = new Map([
+  ["interior", "INT."],
+  ["exterior", "EXT."],
+  ["both", "INT./EXT."]
+]);
+var NAMED_TIMES = new Map([
+  ["dawn", "DAWN"],
+  ["morning", "MORNING"],
+  ["midday", "DAY"],
+  ["afternoon", "DAY"],
+  ["evening", "EVENING"],
+  ["night", "NIGHT"]
+]);
+var FORM_NOUNS = {
+  flash: "story",
+  "short-story": "short story",
+  novelette: "novelette",
+  novella: "novella",
+  novel: "novel",
+  serial: "serial",
+  "picture-book": "picture book",
+  "chapter-book": "book"
+};
+function fountainScript(input) {
+  const lines = [`Title: ${inline(input.title)}`];
+  const authors = input.authors.map(inline).filter(Boolean).join(" and ");
+  if (authors !== "") {
+    lines.push("Credit: Written by", `Author: ${authors}`);
+  }
+  const noun = FORM_NOUNS[input.form] ?? "book";
+  lines.push(`Source: Based on the ${noun}${authors === "" ? "" : ` by ${authors}`}`, "");
+  lines.push("[[Scene skeleton built by story build from the scene records. Notes and synopses are not printed. Draft the action and dialogue under each heading, and merge, cut, or reorder scenes as the adaptation needs.]]");
+  for (const chapter of input.chapters) {
+    lines.push("", `## ${sectionText(chapter.heading)}`);
+    if (chapter.scenes.length === 0) {
+      lines.push("", `[[No scene records for ${inline(chapter.id)}: add them to outline this chapter.]]`);
+    }
+    for (const scene of chapter.scenes) {
+      lines.push("", sceneHeading(scene), "", `= ${inline(scene.title)}`, "");
+      const notes = [`Source: ${inline(scene.id)}`];
+      if (scene.cast.length > 0) {
+        notes.push(`Characters: ${scene.cast.map((name) => inline(name).toUpperCase()).join(", ")}`);
+      }
+      const when = [scene.date, scene.time].map(inline).filter(Boolean).join(" ");
+      if (when !== "") {
+        notes.push(`Story time: ${when}`);
+      }
+      if (inline(scene.flashbackTo) !== "") {
+        notes.push(`Flashback to: ${inline(scene.flashbackTo)}`);
+      }
+      if (inline(scene.dilemma) !== "") {
+        notes.push(`Dilemma: ${inline(scene.dilemma)}`);
+      }
+      if (inline(scene.outcome) !== "") {
+        notes.push(`Outcome: ${inline(scene.outcome)}`);
+      }
+      notes.push(...scene.notes.map(inline));
+      lines.push(...notes.map((note) => `[[${note.replace(/\]$/, "] ")}]]`));
+    }
+  }
+  return `${lines.join(`
+`)}
+`;
+}
+function sceneHeading(scene) {
+  const place = inline(scene.locationName).toUpperCase() || "LOCATION TBD";
+  const time = timeOfDay(scene.time);
+  const text = `${place}${time === "" ? "" : ` - ${time}`}`.replace(/[\s#]+$/, "") || "LOCATION TBD";
+  const prefix = SCENE_SETTINGS.get(scene.setting);
+  if (prefix !== undefined) {
+    return `${prefix} ${text}`;
+  }
+  const forced = text.replace(/^[^\p{L}\p{N}]+/u, "");
+  return `.${forced === "" ? "LOCATION TBD" : forced}`;
+}
+function timeOfDay(value) {
+  const text = inline(value);
+  const named = NAMED_TIMES.get(text.toLowerCase());
+  if (named !== undefined) {
+    return named;
+  }
+  const minutes = parseClockTime(text);
+  if (minutes !== undefined) {
+    return minutes >= 6 * 60 && minutes < 18 * 60 ? "DAY" : "NIGHT";
+  }
+  return text.toUpperCase();
+}
+function inline(value) {
+  return String(value ?? "").replace(/[\s\u0000-\u001f\u007f-\u009f]+/g, " ").trim().replace(/[\\*_]/g, "\\$&").replace(/\[(?=\[)/g, "[ ").replace(/\](?=\])/g, "] ");
+}
+function sectionText(value) {
+  return inline(value).replace(/^#+\s*/, "") || "Untitled";
 }
 
 // src/packaging.js
@@ -7288,6 +7383,7 @@ function scanProject(root) {
       region: data.region ?? "",
       notableCharacters: asArray(data["notable-characters"]),
       routes: asArray(data.routes),
+      setting: typeof data.setting === "string" ? data.setting : "",
       pronunciation: data.pronunciation
     }), scanErrors),
     systems: readEntityFiles(projectRoot, path7.join("worldbuilding", "systems"), (id, file, data) => ({
@@ -7370,7 +7466,8 @@ function scanProject(root) {
       sequel: typeof data.sequel === "boolean" ? data.sequel : false,
       outcome: typeof data.outcome === "string" ? data.outcome : "",
       dilemma: String(data.dilemma ?? ""),
-      flashbackTo: String(data["flashback-to"] ?? "")
+      flashbackTo: String(data["flashback-to"] ?? ""),
+      setting: typeof data.setting === "string" ? data.setting : ""
     }), scanErrors),
     questions: readEntityFiles(projectRoot, path7.join("continuity", "questions"), (id, file, data) => ({
       id,
@@ -8749,6 +8846,10 @@ function buildBook(root, options = {}) {
     }), output.writeOptions);
   } else if (format === "narration") {
     writeFile(output.outFile, narrationScript(manuscript, pronunciationGuide(project)), output.writeOptions);
+  } else if (format === "fountain") {
+    const screenplay = screenplayOutline(project, manuscript);
+    writeFile(output.outFile, fountainScript(screenplay), output.writeOptions);
+    return { outFile: output.outFile, chapters: manuscript.chapters.length, format, warnings: screenplay.warnings };
   } else if (format === "html" || format === "print") {
     const book = htmlBook(manuscript);
     const text = format === "html" ? reviewHtml(book, { stamp, noteUrl }) : printHtml(book, trim);
@@ -8764,6 +8865,76 @@ function buildBook(root, options = {}) {
     writeDocx(output.outFile, manuscript, output.writeOptions);
   }
   return { outFile: output.outFile, chapters: manuscript.chapters.length, format, warnings: manuscript.warnings };
+}
+function screenplayOutline(project, manuscript) {
+  const warnings = [];
+  const locations = new Map(project.locations.map((location) => [location.id, location]));
+  const characters = new Map(project.characters.map((character) => [character.id, character]));
+  const bookChapters = new Set(project.chapters.map((chapter) => chapter.id));
+  const unset = new Set;
+  const noScenes = [];
+  for (const scene of project.scenes) {
+    if (!bookChapters.has(scene.chapter)) {
+      warnings.push(`${relative2(project, scene.file)} names chapter ${scene.chapter || "(none)"}, which is not in the book, and is left out of the screenplay`);
+    }
+  }
+  const chapters = project.chapters.map((chapter, index) => {
+    const scenes = project.scenes.filter((scene) => scene.chapter === chapter.id).sort((left, right) => left.scene - right.scene || left.file.localeCompare(right.file, "en")).map((scene) => {
+      const location = locations.get(scene.location);
+      const setting = scene.setting || location?.setting || "";
+      const notes = [];
+      if (scene.location === "") {
+        notes.push("No location on the scene record: set location for the heading.");
+        warnings.push(`${relative2(project, scene.file)} has no location; its screenplay heading reads LOCATION TBD`);
+      } else if (location === undefined) {
+        notes.push(`No location record for ${scene.location}: fix the scene's location or add the location.`);
+        warnings.push(`${relative2(project, scene.file)} names location ${scene.location}, which has no record; run story links`);
+      }
+      if (scene.location !== "" && !SCENE_SETTINGS.has(setting)) {
+        notes.push(`No setting: add setting (interior, exterior, or both) to ${location ? `${relative2(project, location.file)} or the scene` : "the scene"} for INT. or EXT.`);
+        if (location !== undefined) {
+          unset.add(scene.location);
+        }
+      }
+      const cast = [];
+      for (const id of [scene.mentions.includes(scene.pov) ? "" : scene.pov, ...scene.characters]) {
+        const name = id === "" ? "" : String(characters.get(id)?.name ?? titleCaseSlug(id));
+        if (name !== "" && !cast.includes(name)) {
+          cast.push(name);
+        }
+      }
+      return {
+        id: scene.id,
+        title: String(scene.title),
+        locationName: scene.location === "" ? "" : String(location?.name ?? titleCaseSlug(scene.location)),
+        setting,
+        date: scene.date,
+        time: scene.time || chapter.time,
+        cast,
+        dilemma: scene.dilemma,
+        outcome: scene.outcome,
+        flashbackTo: scene.flashbackTo,
+        notes
+      };
+    });
+    if (scenes.length === 0) {
+      noScenes.push(chapter.id);
+    }
+    return { id: chapter.id, heading: manuscript.chapters[index].heading, scenes };
+  });
+  if (noScenes.length > 0) {
+    warnings.push(`No scene records for ${noScenes.join(", ")}: the screenplay has no headings for ${noScenes.length === 1 ? "that chapter" : "those chapters"}`);
+  }
+  if (unset.size > 0) {
+    warnings.push(`No setting (interior, exterior, or both) for ${[...unset].sort().join(", ")}: their scene headings are forced without INT. or EXT.`);
+  }
+  return {
+    title: manuscript.title,
+    authors: manuscript.meta.authors,
+    form: typeof project.story.data.form === "string" ? project.story.data.form : "",
+    chapters,
+    warnings
+  };
 }
 function synopsisBook(root, options = {}) {
   const pages = options.pages === undefined ? 1 : parseDecimalInteger(options.pages);
@@ -11561,7 +11732,8 @@ var BUILD_EXTENSIONS = {
   html: "html",
   print: "print.html",
   narration: "narration.md",
-  metadata: "metadata.md"
+  metadata: "metadata.md",
+  fountain: "fountain"
 };
 function normalizeBuildFormat(value) {
   const format = String(value).trim().toLowerCase();
@@ -11785,6 +11957,7 @@ function validateLocations(project, errors, warnings) {
     validateStringArray(data, "notable-characters", label, errors);
     validateStringArray(data, "tags", label, errors);
     validateObjectArray(data, "routes", label, errors);
+    validateEnum(data, "setting", SCENE_SETTINGS, label, errors);
     const destinations = new Set;
     for (const route of Array.isArray(data.routes) ? data.routes : []) {
       if (!route || typeof route !== "object" || Array.isArray(route)) {
@@ -11995,6 +12168,7 @@ function validateScenes(project, errors) {
       errors.push(`${label} frontmatter field sequel must be a boolean`);
     }
     validateEnum(data, "outcome", SCENE_OUTCOMES, label, errors);
+    validateEnum(data, "setting", SCENE_SETTINGS, label, errors);
     if (data["flashback-to"] !== undefined) {
       requireScalar(data, "flashback-to", label, errors);
     }
@@ -13750,8 +13924,8 @@ var COMMANDS = [
       "Build a disposable book artifact in dist/: markdown,",
       "epub, docx, shunn, html (review copy with paragraph",
       "anchors), print (paged-media interior),",
-      "narration (audiobook script), or metadata",
-      "(retailer sheet)"
+      "narration (audiobook script), metadata (retailer",
+      "sheet), or fountain (screenplay scene skeleton)"
     ],
     project: "positional",
     options: ["out", "format", "shunn", "trim", "stamp", "note-url"],

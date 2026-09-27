@@ -104,7 +104,7 @@ flowchart LR
   E --> F["src/story.js operations"]
   F --> G["scanProject(root)"]
   G --> H["analysis modules: continuity, timeline, prose, voices, pacing, clues, names, series, progress, compare, passes"]
-  F --> I["output modules: diagram, html, narration, publishing"]
+  F --> I["output modules: diagram, html, narration, fountain, publishing"]
 ```
 
 ### Module responsibilities
@@ -138,6 +138,7 @@ flowchart LR
 | `src/publishing.js` | Publishing metadata in `story.md`: validation, ISBN normalisation, the generated copyright page, and the retailer sheet for `build --format metadata`. |
 | `src/html.js` | The single-file HTML review copy with paragraph anchors such as `ch03-p12` (`--format html`), the paged-media print interior (`--format print`), trim sizes, and page estimates. |
 | `src/narration.js` | The audiobook narration script for `--format narration`: pronunciation guide, credits, and runtime estimates at 155 words per minute. |
+| `src/fountain.js` | The screenplay scene skeleton for `--format fountain`: title page, chapter sections, scene headings from `setting`, location, and time, source notes, and the escaping that keeps record text from opening Fountain notes, boneyards, or emphasis. `story.js` resolves the scene records it reads. |
 | `src/series.js` | Series links, backlinks, and shared-canon checks across books. |
 | `src/progress.js` | Pure progress arithmetic and the `progress.md` session log. |
 | `src/compare.js` | Chapter-by-chapter comparison with an earlier draft. |
@@ -151,7 +152,7 @@ Most commands follow the same pattern. A function in `src/story.js` takes the pr
 
 - `diagram` prints Mermaid source to stdout, or writes it with `--out` once the scan is clean. `passes` prints the pass list, rewrites only the `revision-passes` entry in `story.md` when asked to change it, and exits non-zero only when it refuses a change (2 for a pass name that is not kebab-case).
 
-Keep new analysis code in that shape: pure functions over the scanned project, with file I/O left to `story.js`. The output modules (`html.js`, `narration.js`, `publishing.js`, `diagram.js`) follow the same rule: they return strings, and `story.js` writes them. `packaging.js` is the exception, because a ZIP is bytes rather than text: it takes the manuscript and writes the file itself, through the same `writeFile`.
+Keep new analysis code in that shape: pure functions over the scanned project, with file I/O left to `story.js`. The output modules (`html.js`, `narration.js`, `fountain.js`, `publishing.js`, `diagram.js`) follow the same rule: they return strings, and `story.js` writes them. `packaging.js` is the exception, because a ZIP is bytes rather than text: it takes the manuscript and writes the file itself, through the same `writeFile`.
 
 For what the commands do from a user's point of view, see the [CLI reference](cli-reference.md). For the files they read and write, see the [Project format reference](project-format.md).
 
@@ -256,7 +257,7 @@ Never edit the generated file by hand, and always commit it alongside the `src/`
 
 Tests use Bun's built-in runner (`bun:test`) and live in `test/*.test.js`, roughly one file per feature: `cli.test.js`, `registry.test.js`, `continuity.test.js`, `prose.test.js`, `series.test.js`, `shunn-docx.test.js`, `check-scripts.test.js`, and so on. At the time of writing the suite is 688 tests across 46 files.
 
-The newer commands and fields each have their own file: `voices.test.js`, `pacing.test.js`, `clue-matrix.test.js` (the `story clues` grid; `clue.test.js` covers clue entities), `names.test.js`, `diagram.test.js`, `passes.test.js`, `form.test.js`, `routes.test.js` (location routes and travel-time continuity), `research-review.test.js` (research accuracy, method, and risk), `matter-permissions.test.js`, `publishing.test.js`, `html-build.test.js`, `narration.test.js`, and `metadata-build.test.js`. `review-fixes.test.js` holds regression tests for bugs found in review across those features.
+The newer commands and fields each have their own file: `voices.test.js`, `pacing.test.js`, `clue-matrix.test.js` (the `story clues` grid; `clue.test.js` covers clue entities), `names.test.js`, `diagram.test.js`, `passes.test.js`, `form.test.js`, `routes.test.js` (location routes and travel-time continuity), `research-review.test.js` (research accuracy, method, and risk), `matter-permissions.test.js`, `publishing.test.js`, `html-build.test.js`, `narration.test.js`, `fountain.test.js`, and `metadata-build.test.js`. `review-fixes.test.js` holds regression tests for bugs found in review across those features.
 
 ```shell
 bun run test                              # the whole suite

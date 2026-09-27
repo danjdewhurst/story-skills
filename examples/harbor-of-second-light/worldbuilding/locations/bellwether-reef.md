@@ -10,6 +10,7 @@ tags:
   - archive-access
   - dangerous-current
 status: exposed
+setting: exterior
 ---
 
 # Bellwether Reef
