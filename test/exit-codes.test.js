@@ -62,6 +62,7 @@ const OK_ARGS = {
   links: () => ["links"],
   continuity: () => ["continuity"],
   knowledge: () => ["knowledge", "mara-quill", "--at", "chapter-01"],
+  context: () => ["context", "chapter-01"],
   compare: () => ["compare", "--against", "."],
   progress: () => ["progress"],
   timeline: () => ["timeline"],
@@ -288,7 +289,7 @@ describe("exit codes", () => {
   test("a project that cannot be built or updated exits 3", () => {
     const root = newProject();
     breakChapter(root);
-    for (const args of [["reindex"], ["export"], ["build"], ["add", "character", "Tobin"], ["wordcount", "--write"]]) {
+    for (const args of [["reindex"], ["export"], ["build"], ["add", "character", "Tobin"], ["wordcount", "--write"], ["context", "chapter-02"]]) {
       const result = invoke(root, args);
       expect(result.err).toContain("chapters/chapter-01.md");
       expect(result.code).toBe(project);
@@ -304,6 +305,8 @@ describe("exit codes", () => {
       ["diagram", "weather"],
       ["knowledge", "nobody", "--at", "chapter-01"],
       ["knowledge", "mara-quill"],
+      ["context", "chapter-09"],
+      ["context"],
       ["rename", "character", "nobody", "Someone"],
       ["add", "glass", "Pane"],
       ["compare"],

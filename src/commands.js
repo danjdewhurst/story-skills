@@ -5,7 +5,7 @@ import { formatContext } from "./context.js";
 import { formatComparison, formatLabelMapping } from "./compare.js";
 import { applySeverity } from "./config.js";
 import { importManuscript } from "./import.js";
-import { diagnosticsFrom, resultData, wantsJson, writeJsonResult } from "./json.js";
+import { diagnostic, diagnosticsFrom, resultData, wantsJson, writeJsonResult } from "./json.js";
 import { isTruthy } from "./options.js";
 import { STDIN_ARG, readStdin, stdinText } from "./stdin.js";
 import { formatNames } from "./names.js";
@@ -261,14 +261,18 @@ export const COMMANDS = [
     ],
     project: "flag",
     args: 1,
-    options: ["budget", "scenes"],
+    options: ["budget", "scenes", "json"],
     run({ parsed, io, root }) {
       const targetId = parsed.positionals[1];
       if (!targetId) {
-        io.stderr.write("Usage: story context <chapter-or-scene-id> [--budget <tokens>] [--scenes <n>] [--path <project>]\n");
-        return 1;
+        // Thrown, so runCli reports it as text or, with --json, as a result.
+        throw usageError("Usage: story context <chapter-or-scene-id> [--budget <tokens>] [--scenes <n>] [--path <project>]");
       }
       const context = draftingContext(root(), targetId, { budget: parsed.options.budget, scenes: parsed.options.scenes });
+      if (wantsJson(parsed)) {
+        const diagnostics = context.warnings.map((warning) => diagnostic("warning", warning, "context"));
+        return writeJsonResult(io, { command: "context", ok: true, data: context, diagnostics });
+      }
       io.stdout.write(formatContext(context));
       for (const warning of context.warnings) {
         io.stderr.write(`warning: ${warning}\n`);

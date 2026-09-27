@@ -5,7 +5,20 @@ import { runCli } from "../src/cli.js";
 import { buildContext, characterStateAt, estimateTokens, formatContext } from "../src/context.js";
 import { chapterChronology } from "../src/chronology.js";
 import { createStoryProject, draftingContext, scanProject } from "../src/story.js";
+import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
 import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+
+const RESULT_SCHEMA = JSON.parse(fs.readFileSync(RESULT_SCHEMA_PATH, "utf8"));
+
+// A --json run: one envelope on stdout that matches the result schema.
+function invokeJson(cwd, argv) {
+  const result = invoke(cwd, [...argv, "--json"]);
+  expect(result.err).toBe("");
+  const envelope = JSON.parse(result.out);
+  expect(validateAgainstSchema(envelope, RESULT_SCHEMA)).toEqual([]);
+  expect(envelope.ok).toBe(result.code === 0);
+  return { ...result, envelope };
+}
 
 const EXAMPLES = path.join(import.meta.dir, "..", "examples");
 
@@ -158,7 +171,9 @@ describe("story context", () => {
     const context = contextOf(root, "chapter-02");
     const text = textOf(context);
     const json = JSON.stringify(context);
-    for (const output of [text, json]) {
+    const { envelope, out } = invokeJson(path.dirname(root), ["context", "chapter-02", "--path", root]);
+    expect(envelope.data.target.id).toBe("chapter-02");
+    for (const output of [text, json, out]) {
       expect(output).not.toContain("SPOILER");
     }
     expect(text).not.toContain("closed-promise");
@@ -252,11 +267,13 @@ describe("story context", () => {
     fs.writeFileSync(path.join(root, "characters", "broken.md"), "not frontmatter\n", "utf8");
     const warned = invoke(cwd, ["context", "chapter-02", "--path", root]);
     expect(warned.code).toBe(0);
-    expect(warned.err).toContain("warning: Skipped unreadable file: characters");
+    expect(warned.err).toContain(`warning: characters${path.sep}broken.md:`);
+    const json = invokeJson(cwd, ["context", "chapter-02", "--path", root]);
+    expect(json.envelope.diagnostics).toEqual([expect.objectContaining({ severity: "warning", file: path.join("characters", "broken.md"), code: "context" })]);
 
     fs.writeFileSync(path.join(root, "chapters", "chapter-05.md"), "not frontmatter\n", "utf8");
     const failed = invoke(cwd, ["context", "chapter-02", "--path", root]);
-    expect(failed.code).toBe(1);
+    expect(failed.code).toBe(3);
     expect(failed.err).toContain(`chapters${path.sep}chapter-05.md`);
   });
 
@@ -264,7 +281,7 @@ describe("story context", () => {
     const { root, cwd } = contextProject();
     fs.writeFileSync(path.join(root, "scenes", "chapter-02-scene-01.md"), "not frontmatter\n", "utf8");
     const result = invoke(cwd, ["context", "chapter-02-scene-01", "--path", root]);
-    expect(result.code).toBe(1);
+    expect(result.code).toBe(3);
     expect(result.err).toContain(`scenes${path.sep}chapter-02-scene-01.md:`);
     expect(result.err).not.toContain("Unknown chapter or scene");
   });
@@ -362,5 +379,130 @@ describe("story context on the examples", () => {
     expect(text).toContain("### Kael Voss");
     expect(text).not.toContain("The grove was quieter than it should have been.\n\nSera stood");
     expect(text).not.toContain("SPOILER");
+  });
+});
+
+// Progressions on the POV character, a cast member, and the chapter's
+// location. Every change from chapter 3 or later carries a SPOILER marker.
+function progressionProject() {
+  const { root, cwd } = contextProject();
+  writeMarkdown(path.join(root, "characters", "mara-finn.md"), `name: Mara Finn
+role: protagonist
+status: alive
+progressions:
+  - from: chapter-01
+    field: whereabouts
+    value: the mill loft
+  - from: chapter-02
+    field: mood
+    value: wary
+  - from: chapter-03
+    field: mood
+    value: SPOILER-PROG-3 read later, dated earlier
+  - from: chapter-04
+    field: whereabouts
+    value: SPOILER-PROG-4
+  - from: chapter-09
+    field: status
+    value: SPOILER-PROG-9`, "# Mara\n");
+  writeMarkdown(path.join(root, "characters", "jonas-reed.md"), `name: Jonas Reed
+role: supporting
+status: alive
+progressions:
+  - from: chapter-01
+    field: aliases
+    value: The Ferryman
+  - from: chapter-01
+    field: role
+    value: antagonist
+  - from: chapter-04
+    field: status
+    value: SPOILER-JONAS`, "# Jonas\n");
+  writeMarkdown(path.join(root, "worldbuilding", "locations", "the-mill.md"), `name: The Mill
+type: building
+region: Mill Row
+status: working
+progressions:
+  - from: chapter-02
+    field: status
+    value: burned
+  - from: chapter-02
+    field: controlled-by
+    value: the bank
+  - from: chapter-04
+    field: status
+    value: SPOILER-LOCATION`, "# The Mill\n");
+  return { root, cwd };
+}
+
+describe("story context with progressions", () => {
+  test("applies progressions up to the target and none after it", () => {
+    const { root, cwd } = progressionProject();
+    const text = textOf(contextOf(root, "chapter-02"));
+    // POV changes sit under its state, the others' on their cards.
+    expect(text).toContain("- From chapter-01: whereabouts the mill loft\n- From this chapter: mood wary");
+    expect(text).toContain("### Jonas Reed\n- Id: jonas-reed\n- Role: antagonist\n- Status: alive\n- Aliases: The Ferryman\n- From chapter-01: aliases The Ferryman\n- From chapter-01: role antagonist");
+    expect(text).toContain("## Where it happens\n\n### The Mill\n- Id: the-mill\n- Type: building\n- Region: Mill Row\n- Status: burned\n- Controlled by: the bank\n- From this chapter: status burned\n- From this chapter: controlled-by the bank");
+    const { out } = invokeJson(cwd, ["context", "chapter-02", "--path", root]);
+    for (const output of [text, out]) {
+      expect(output).not.toContain("SPOILER");
+    }
+    // At chapter 1 the location has not changed yet.
+    const first = textOf(contextOf(root, "chapter-01-scene-01"));
+    expect(first).toContain("- Status: working");
+    expect(first).not.toContain("burned");
+    for (const marker of ["SPOILER-PROG", "SPOILER-JONAS", "SPOILER-LOCATION"]) {
+      expect(first).not.toContain(marker);
+    }
+  });
+
+  test("a scene target shows only its own location", () => {
+    const { root } = progressionProject();
+    expect(textOf(contextOf(root, "chapter-02-scene-01"))).not.toContain("## Where it happens");
+  });
+
+  test("a dated status progression is shown", () => {
+    const { root } = progressionProject();
+    const project = scanProject(root);
+    const chronology = chapterChronology(project);
+    const frontmatter = { status: "deceased", progressions: [{ from: "chapter-01", field: "status", value: "deceased" }] };
+    expect(characterStateAt({ frontmatter }, chronology, "chapter-02").status).toBe("deceased");
+    expect(characterStateAt({ frontmatter: { status: "deceased" } }, chronology, "chapter-02").status).toBe("");
+  });
+
+  test("the-fall-of-the-citadel keeps chapter 10 and 11 progressions out of chapter 1", () => {
+    const root = path.join(EXAMPLES, "the-fall-of-the-citadel");
+    const text = textOf(contextOf(root, "chapter-01"));
+    expect(text).toContain("### The Ashen Citadel\n- Id: ashen-citadel\n- Type: city\n- Region: Northern Reach\n- Status: thriving");
+    for (const later of ["occupied", "sealed and cooling", "Jaw to collarbone", "in hiding with Kael", "From chapter-1"]) {
+      expect(text).not.toContain(later);
+    }
+    const { envelope } = invokeJson(root, ["context", "chapter-01"]);
+    expect(JSON.stringify(envelope)).not.toContain("occupied");
+  });
+
+  test("story.md cli-defaults set --budget and --scenes for context", () => {
+    const { root, cwd } = contextProject();
+    const storyPath = path.join(root, "story.md");
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("themes:", "cli-defaults:\n  - command: context\n    budget: 300\n    scenes: 1\nthemes:"), "utf8");
+    const { envelope } = invokeJson(cwd, ["context", "chapter-02", "--path", root]);
+    expect(envelope.data.budget).toBe(300);
+    expect(envelope.data.sections.find((section) => section.id === "scenes").items.map((entry) => entry.id)).toEqual(["scene:chapter-01-scene-02"]);
+    // The command line wins.
+    expect(invokeJson(cwd, ["context", "chapter-02", "--path", root, "--budget", "5000"]).envelope.data.budget).toBe(5000);
+  });
+
+  test("usage errors and unusable projects use the shared exit codes", () => {
+    const { root, cwd } = contextProject();
+    expect(invoke(cwd, ["context", "--path", root]).code).toBe(2);
+    expect(invoke(cwd, ["context", "chapter-09", "--path", root]).code).toBe(2);
+    expect(invoke(cwd, ["context", "chapter-02", "--path", root, "--budget", "0"]).code).toBe(2);
+    const missing = invokeJson(cwd, ["context", "--path", root]);
+    expect(missing.code).toBe(2);
+    expect(missing.envelope.data).toBeNull();
+    writeMarkdown(path.join(root, "scenes", "chapter-07-scene-01.md"), "title: Orphan\nchapter: chapter-07\nscene: 1\nstatus: outline", "# Orphan\n");
+    expect(invoke(cwd, ["context", "chapter-07-scene-01", "--path", root]).code).toBe(3);
+    fs.writeFileSync(path.join(root, "chapters", "chapter-05.md"), "not frontmatter\n", "utf8");
+    expect(invoke(cwd, ["context", "chapter-02", "--path", root]).code).toBe(3);
   });
 });

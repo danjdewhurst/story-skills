@@ -39,7 +39,7 @@ If the chapter you are drafting already has a file with its `pov` and `character
 story context chapter-{NN} --path .
 ```
 
-It prints, within a token budget (`--budget`, default 6000), the chapter's outline and cast, the `story.md` essentials and `style-sheet.md` rules, the POV character's knowledge and state at that point, cards for the characters on the page, open promises, clues, and questions, and summaries of the previous scenes. It includes nothing from later chapters, so it is safe to draft from. Read the files it lists under "Left out to fit the budget" when you need them. For a new chapter, run it after step 2 instead.
+It prints, within a token budget (`--budget`, default 6000), the chapter's outline and cast, the `story.md` essentials and `style-sheet.md` rules, the POV character's knowledge and state at that point, cards for the characters on the page and the chapter's locations (with their `progressions` applied at this chapter), open promises, clues, and questions, and summaries of the previous scenes. It includes nothing from later chapters, so it is safe to draft from. Add `--json` if you would rather read the items as data. Read the files it lists under "Left out to fit the budget" when you need them. For a new chapter, run it after step 2 instead.
 
 Read what the packed context leaves out, as needed:
 

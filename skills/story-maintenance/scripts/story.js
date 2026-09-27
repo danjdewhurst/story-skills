@@ -1580,6 +1580,138 @@ function exitCodeFor(error) {
   return EXIT_CODES.findings;
 }
 
+// src/progressions.js
+var PROGRESSION_KINDS = ["character", "location", "faction"];
+var RESERVED_FIELDS = new Set(["progressions", "id", "died-in", "revived-in"]);
+function progressionEntry(item) {
+  if (!item || typeof item !== "object" || Array.isArray(item)) {
+    return null;
+  }
+  const from = idText(item.from);
+  const field = typeof item.field === "string" ? item.field : "";
+  if (from === "" || field === "" || item.value === undefined || item.value === null) {
+    return null;
+  }
+  return { from, field, value: item.value };
+}
+function setOwn(target, key, value) {
+  Object.defineProperty(target, key, { value, enumerable: true, configurable: true, writable: true });
+}
+function chapterPosition(chronology, id) {
+  if (chronology.numbers.has(id)) {
+    return chronology.numbers.get(id);
+  }
+  const match = /^chapter-(\d+)$/.exec(id);
+  return match && Number(match[1]) > 0 ? Number(match[1]) : Number.NaN;
+}
+function happensAfter(chronology, later, earlier) {
+  if (chronology.numbers.has(later) && chronology.numbers.has(earlier)) {
+    return chronology.after(later, earlier);
+  }
+  return chapterPosition(chronology, later) > chapterPosition(chronology, earlier);
+}
+function sortProgressions(list, chronology) {
+  const known = [];
+  const unknown = [];
+  for (const item of list) {
+    const from = item && typeof item === "object" && !Array.isArray(item) ? idText(item.from) : "";
+    (Number.isNaN(chapterPosition(chronology, from)) ? unknown : known).push({ item, from });
+  }
+  known.sort((left, right) => happensAfter(chronology, left.from, right.from) ? 1 : happensAfter(chronology, right.from, left.from) ? -1 : 0);
+  return [...known, ...unknown].map((entry) => entry.item);
+}
+function entityStateAt(data, atChapterId, chronology) {
+  if (Number.isNaN(chapterPosition(chronology, atChapterId))) {
+    throw usageError(`Unknown chapter ${atChapterId}`);
+  }
+  const state = {};
+  for (const [key, value] of Object.entries(data ?? {})) {
+    if (key !== "progressions") {
+      setOwn(state, key, value);
+    }
+  }
+  const entries = (Array.isArray(data?.progressions) ? data.progressions : []).map(progressionEntry).filter((entry) => entry !== null && !Number.isNaN(chapterPosition(chronology, entry.from)) && !happensAfter(chronology, entry.from, atChapterId));
+  entries.sort((left, right) => happensAfter(chronology, left.from, right.from) ? 1 : happensAfter(chronology, right.from, left.from) ? -1 : 0);
+  const changes = [];
+  for (const entry of entries) {
+    changes.push({ field: entry.field, value: entry.value, from: entry.from, previous: Object.hasOwn(state, entry.field) ? state[entry.field] : undefined });
+    setOwn(state, entry.field, entry.value);
+  }
+  return { state, changes };
+}
+function validateProgressions(data, label, rules, chronology, errors) {
+  if (data.progressions === undefined) {
+    return;
+  }
+  if (!Array.isArray(data.progressions)) {
+    errors.push(`${label} frontmatter field progressions must be a list`);
+    return;
+  }
+  const seen = new Map;
+  let latest = null;
+  for (const [index, item] of data.progressions.entries()) {
+    const entryLabel = `${label} progressions[${index}]`;
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      errors.push(`${entryLabel} must be a mapping with from, field, and value`);
+      continue;
+    }
+    const from = idText(item.from);
+    if (from === "") {
+      errors.push(`${entryLabel} is missing from (the chapter the change takes effect)`);
+    }
+    const field = item.field;
+    let fieldOk = false;
+    if (typeof field !== "string" || field.trim() === "") {
+      errors.push(`${entryLabel} is missing field`);
+    } else if (field !== kebabCase(field)) {
+      errors.push(`${entryLabel} field ${field} must be kebab-case`);
+    } else if (RESERVED_FIELDS.has(field)) {
+      errors.push(`${entryLabel} cannot change ${field}${field === "died-in" || field === "revived-in" ? "; set it on the character and story continuity reads it by chapter" : ""}`);
+    } else if (rules.lists.has(field)) {
+      errors.push(`${entryLabel} cannot change ${field}, which is a list; a progression holds a single value`);
+    } else {
+      fieldOk = true;
+    }
+    const value = item.value;
+    if (value === undefined || value === null) {
+      errors.push(`${entryLabel} is missing value`);
+    } else if (typeof value === "object") {
+      errors.push(`${entryLabel} value must be a single value, not a list or mapping`);
+    } else if (fieldOk && rules.enums.has(field) && !rules.enums.get(field).has(value)) {
+      errors.push(`${entryLabel} ${field} has unsupported value ${value}`);
+    }
+    if (from !== "" && fieldOk) {
+      const key = `${from}\x00${field}`;
+      if (seen.has(key)) {
+        errors.push(`${entryLabel} repeats ${field} from ${from} (progressions[${seen.get(key)}])`);
+      } else {
+        seen.set(key, index);
+      }
+    }
+    if (Number.isNaN(chapterPosition(chronology, from))) {
+      continue;
+    }
+    if (latest && happensAfter(chronology, latest.from, from)) {
+      errors.push(`${entryLabel} from ${from} comes before progressions[${latest.index}] from ${latest.from} in the story; list progressions in story order`);
+      continue;
+    }
+    latest = { from, index };
+  }
+}
+function formatStateChanges(changes, atChapterId) {
+  if (changes.length === 0) {
+    return "";
+  }
+  const lines = [`State at ${atChapterId}:`];
+  for (const change of changes) {
+    const previous = change.previous === undefined ? "" : `, was ${change.previous}`;
+    lines.push(`- ${change.field}: ${change.value === "" ? "(cleared)" : change.value} (from ${change.from}${previous})`);
+  }
+  return `${lines.join(`
+`)}
+`;
+}
+
 // src/context.js
 var DEFAULT_CONTEXT_BUDGET = 6000;
 var DEFAULT_CONTEXT_SCENES = 5;
@@ -1673,14 +1805,29 @@ function resolveTarget(project, targetId) {
   }
   return { kind: "scene", id: scene.id, chapter: owner, scene };
 }
+function entityStateAtTarget(frontmatter, chronology, chapterId) {
+  const targetNumber = chronology.numbers.get(chapterId);
+  const readBy = (from) => {
+    const id = idText(from);
+    const number = chronology.numbers.has(id) ? chronology.numbers.get(id) : Number(/^chapter-(\d+)$/.exec(id)?.[1]);
+    return number <= targetNumber;
+  };
+  const data = frontmatter ?? {};
+  const progressions = asList(data.progressions).filter((entry) => isMapping(entry) && readBy(entry.from));
+  return entityStateAt({ ...data, progressions }, chapterId, chronology);
+}
 function characterStateAt(character, chronology, chapterId) {
+  const { state, changes } = entityStateAtTarget(character.frontmatter, chronology, chapterId);
+  return { status: statusAt(character, state, changes, chronology, chapterId), state, changes };
+}
+function statusAt(character, state, changes, chronology, chapterId) {
   const died = String(character.diedIn ?? "");
-  const status = String(character.status ?? "");
+  const status = String(state.status ?? character.status ?? "");
   if (died === "") {
-    return { status: status === "deceased" ? "" : status };
+    return status === "deceased" && !changes.some((change) => change.field === "status") ? "" : status;
   }
   if (died === chapterId) {
-    return { status: "dies in this chapter" };
+    return "dies in this chapter";
   }
   const readBy = (id) => chronology.numbers.has(id) && chronology.numbers.get(id) <= chronology.numbers.get(chapterId);
   const deadIn = (revivedIn) => {
@@ -1690,12 +1837,18 @@ function characterStateAt(character, chronology, chapterId) {
   const revivedIn = String(character.revivedIn ?? "");
   const deadNow = deadIn(readBy(revivedIn) ? revivedIn : "");
   if (revivedIn !== "" && !readBy(revivedIn) && deadNow !== deadIn(revivedIn)) {
-    return { status: "" };
+    return "";
   }
   if (!readBy(died)) {
-    return { status: deadNow ? "" : "alive" };
+    return deadNow ? "" : "alive";
   }
-  return { status: deadNow ? `deceased (died in ${died})` : "alive" };
+  return deadNow ? `deceased (died in ${died})` : "alive";
+}
+function changeLines(changes, chapterId) {
+  return changes.map((change) => `- From ${change.from === chapterId ? "this chapter" : change.from}: ${change.field} ${change.value}`);
+}
+function listOf(value) {
+  return Array.isArray(value) ? value : value === undefined || value === null || value === "" ? [] : [value];
 }
 function buildContext(project, targetId, readBody, options = {}) {
   const budget = options.budget ?? DEFAULT_CONTEXT_BUDGET;
@@ -1788,6 +1941,14 @@ ${body}`)));
         }
       }
     }
+    const povCharacter = characters.get(pov);
+    if (povCharacter) {
+      const { changes } = characterStateAt(povCharacter, chronology, target.chapter.id);
+      if (changes.length > 0) {
+        state.push(...changeLines(changes, target.chapter.id));
+        stateSources.add(relative(povCharacter.file));
+      }
+    }
     if (state.length > 0) {
       povItems.push(item(`state:${pov}`, `${nameOf(pov)}'s state`, [...stateSources].join(", "), lines(`### ${nameOf(pov)}'s state`, ...state)));
     }
@@ -1801,9 +1962,17 @@ ${body}`)));
     }
     const body = readBody(character.file);
     const state = characterStateAt(character, chronology, target.chapter.id);
-    cards.push(item(`character:${id}`, `Card: ${character.name}`, relative(character.file), lines(`### ${character.name}${id === pov ? " (POV)" : ""}`, field("Id", id), field("Role", character.role), field("Status", state.status), field("Aliases", character.aliases), field("Voice words", character.voiceWords), field("Voice avoid", character.voiceAvoid), ...CARD_SECTIONS.map((heading) => subsection(heading, section(body, heading))))));
+    const changes = id === pov ? [] : changeLines(state.changes, target.chapter.id);
+    cards.push(item(`character:${id}`, `Card: ${character.name}`, relative(character.file), lines(`### ${character.name}${id === pov ? " (POV)" : ""}`, field("Id", id), field("Role", state.state.role ?? character.role), field("Status", state.status), field("Aliases", listOf(state.state.aliases)), field("Voice words", listOf(state.state["voice-words"])), field("Voice avoid", listOf(state.state["voice-avoid"])), ...changes, ...CARD_SECTIONS.map((heading) => subsection(heading, section(body, heading))))));
   }
   sections.push({ id: "characters", title: "Characters on the page", items: cards });
+  const places = [];
+  const locationIds = target.scene ? [idText(target.scene.location)] : target.chapter.locations.map(idText);
+  for (const location of project.locations.filter((entry) => locationIds.includes(entry.id))) {
+    const { state, changes } = entityStateAtTarget(location.frontmatter, chronology, target.chapter.id);
+    places.push(item(`location:${location.id}`, `Location: ${location.name}`, relative(location.file), lines(`### ${state.name ?? location.name}`, field("Id", location.id), field("Type", state.type), field("Region", state.region), field("Status", state.status), field("Controlled by", state["controlled-by"]), ...changeLines(changes, target.chapter.id))));
+  }
+  sections.push({ id: "locations", title: "Where it happens", items: places });
   const threads = [];
   const kinds = [
     ["promise", project.promises, "planted", "payoff"],
@@ -1853,7 +2022,7 @@ ${body}`)));
     }
   }
   previous.reverse();
-  const warnings = (project.fileErrors ?? []).map((error) => `Skipped unreadable file: ${error}`);
+  const warnings = [...project.fileErrors ?? []];
   return {
     target: { kind: target.kind, id: target.id, chapter: target.chapter.id, number: targetNumber, title: target.chapter.title },
     budget,
@@ -5542,138 +5711,6 @@ import { execFileSync } from "node:child_process";
 import fs7 from "node:fs";
 import os2 from "node:os";
 import path8 from "node:path";
-
-// src/progressions.js
-var PROGRESSION_KINDS = ["character", "location", "faction"];
-var RESERVED_FIELDS = new Set(["progressions", "id", "died-in", "revived-in"]);
-function progressionEntry(item) {
-  if (!item || typeof item !== "object" || Array.isArray(item)) {
-    return null;
-  }
-  const from = idText(item.from);
-  const field = typeof item.field === "string" ? item.field : "";
-  if (from === "" || field === "" || item.value === undefined || item.value === null) {
-    return null;
-  }
-  return { from, field, value: item.value };
-}
-function setOwn(target, key, value) {
-  Object.defineProperty(target, key, { value, enumerable: true, configurable: true, writable: true });
-}
-function chapterPosition(chronology, id) {
-  if (chronology.numbers.has(id)) {
-    return chronology.numbers.get(id);
-  }
-  const match = /^chapter-(\d+)$/.exec(id);
-  return match && Number(match[1]) > 0 ? Number(match[1]) : Number.NaN;
-}
-function happensAfter(chronology, later, earlier) {
-  if (chronology.numbers.has(later) && chronology.numbers.has(earlier)) {
-    return chronology.after(later, earlier);
-  }
-  return chapterPosition(chronology, later) > chapterPosition(chronology, earlier);
-}
-function sortProgressions(list, chronology) {
-  const known = [];
-  const unknown = [];
-  for (const item of list) {
-    const from = item && typeof item === "object" && !Array.isArray(item) ? idText(item.from) : "";
-    (Number.isNaN(chapterPosition(chronology, from)) ? unknown : known).push({ item, from });
-  }
-  known.sort((left, right) => happensAfter(chronology, left.from, right.from) ? 1 : happensAfter(chronology, right.from, left.from) ? -1 : 0);
-  return [...known, ...unknown].map((entry) => entry.item);
-}
-function entityStateAt(data, atChapterId, chronology) {
-  if (Number.isNaN(chapterPosition(chronology, atChapterId))) {
-    throw usageError(`Unknown chapter ${atChapterId}`);
-  }
-  const state = {};
-  for (const [key, value] of Object.entries(data ?? {})) {
-    if (key !== "progressions") {
-      setOwn(state, key, value);
-    }
-  }
-  const entries = (Array.isArray(data?.progressions) ? data.progressions : []).map(progressionEntry).filter((entry) => entry !== null && !Number.isNaN(chapterPosition(chronology, entry.from)) && !happensAfter(chronology, entry.from, atChapterId));
-  entries.sort((left, right) => happensAfter(chronology, left.from, right.from) ? 1 : happensAfter(chronology, right.from, left.from) ? -1 : 0);
-  const changes = [];
-  for (const entry of entries) {
-    changes.push({ field: entry.field, value: entry.value, from: entry.from, previous: Object.hasOwn(state, entry.field) ? state[entry.field] : undefined });
-    setOwn(state, entry.field, entry.value);
-  }
-  return { state, changes };
-}
-function validateProgressions(data, label, rules, chronology, errors) {
-  if (data.progressions === undefined) {
-    return;
-  }
-  if (!Array.isArray(data.progressions)) {
-    errors.push(`${label} frontmatter field progressions must be a list`);
-    return;
-  }
-  const seen = new Map;
-  let latest = null;
-  for (const [index, item] of data.progressions.entries()) {
-    const entryLabel = `${label} progressions[${index}]`;
-    if (!item || typeof item !== "object" || Array.isArray(item)) {
-      errors.push(`${entryLabel} must be a mapping with from, field, and value`);
-      continue;
-    }
-    const from = idText(item.from);
-    if (from === "") {
-      errors.push(`${entryLabel} is missing from (the chapter the change takes effect)`);
-    }
-    const field = item.field;
-    let fieldOk = false;
-    if (typeof field !== "string" || field.trim() === "") {
-      errors.push(`${entryLabel} is missing field`);
-    } else if (field !== kebabCase(field)) {
-      errors.push(`${entryLabel} field ${field} must be kebab-case`);
-    } else if (RESERVED_FIELDS.has(field)) {
-      errors.push(`${entryLabel} cannot change ${field}${field === "died-in" || field === "revived-in" ? "; set it on the character and story continuity reads it by chapter" : ""}`);
-    } else if (rules.lists.has(field)) {
-      errors.push(`${entryLabel} cannot change ${field}, which is a list; a progression holds a single value`);
-    } else {
-      fieldOk = true;
-    }
-    const value = item.value;
-    if (value === undefined || value === null) {
-      errors.push(`${entryLabel} is missing value`);
-    } else if (typeof value === "object") {
-      errors.push(`${entryLabel} value must be a single value, not a list or mapping`);
-    } else if (fieldOk && rules.enums.has(field) && !rules.enums.get(field).has(value)) {
-      errors.push(`${entryLabel} ${field} has unsupported value ${value}`);
-    }
-    if (from !== "" && fieldOk) {
-      const key = `${from}\x00${field}`;
-      if (seen.has(key)) {
-        errors.push(`${entryLabel} repeats ${field} from ${from} (progressions[${seen.get(key)}])`);
-      } else {
-        seen.set(key, index);
-      }
-    }
-    if (Number.isNaN(chapterPosition(chronology, from))) {
-      continue;
-    }
-    if (latest && happensAfter(chronology, latest.from, from)) {
-      errors.push(`${entryLabel} from ${from} comes before progressions[${latest.index}] from ${latest.from} in the story; list progressions in story order`);
-      continue;
-    }
-    latest = { from, index };
-  }
-}
-function formatStateChanges(changes, atChapterId) {
-  if (changes.length === 0) {
-    return "";
-  }
-  const lines = [`State at ${atChapterId}:`];
-  for (const change of changes) {
-    const previous = change.previous === undefined ? "" : `, was ${change.previous}`;
-    lines.push(`- ${change.field}: ${change.value === "" ? "(cleared)" : change.value} (from ${change.from}${previous})`);
-  }
-  return `${lines.join(`
-`)}
-`;
-}
 
 // src/lock.js
 import fs5 from "node:fs";
@@ -14070,15 +14107,17 @@ var COMMANDS = [
     ],
     project: "flag",
     args: 1,
-    options: ["budget", "scenes"],
+    options: ["budget", "scenes", "json"],
     run({ parsed, io, root }) {
       const targetId = parsed.positionals[1];
       if (!targetId) {
-        io.stderr.write(`Usage: story context <chapter-or-scene-id> [--budget <tokens>] [--scenes <n>] [--path <project>]
-`);
-        return 1;
+        throw usageError("Usage: story context <chapter-or-scene-id> [--budget <tokens>] [--scenes <n>] [--path <project>]");
       }
       const context = draftingContext(root(), targetId, { budget: parsed.options.budget, scenes: parsed.options.scenes });
+      if (wantsJson(parsed)) {
+        const diagnostics = context.warnings.map((warning) => diagnostic("warning", warning, "context"));
+        return writeJsonResult(io, { command: "context", ok: true, data: context, diagnostics });
+      }
       io.stdout.write(formatContext(context));
       for (const warning of context.warnings) {
         io.stderr.write(`warning: ${warning}

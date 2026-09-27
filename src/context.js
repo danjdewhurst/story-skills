@@ -1,6 +1,7 @@
 import path from "node:path";
 import { chapterChronology, deathWindow } from "./chronology.js";
 import { idText } from "./continuity.js";
+import { entityStateAt } from "./progressions.js";
 import { projectError, usageError } from "./exit-codes.js";
 import { extractSection } from "./markdown.js";
 
@@ -127,20 +128,41 @@ function resolveTarget(project, targetId) {
   return { kind: "scene", id: scene.id, chapter: owner, scene };
 }
 
-// A character's state at the target chapter. Today that is the death window
-// (died-in / revived-in); this is the one place where entity progressions
-// (fields that change from a given chapter, issue #258) should be resolved,
-// so cards never show a later chapter's status.
+// An entity's state at the target chapter: its frontmatter with the
+// progressions applied (see progressions.js). Only progressions from chapters
+// read by the target count, so a change recorded for a later chapter, even
+// one set earlier in story time, never shows; entityStateAt then applies them
+// in story order. A planned `chapter-NN` counts by its number.
+export function entityStateAtTarget(frontmatter, chronology, chapterId) {
+  const targetNumber = chronology.numbers.get(chapterId);
+  const readBy = (from) => {
+    const id = idText(from);
+    const number = chronology.numbers.has(id) ? chronology.numbers.get(id) : Number(/^chapter-(\d+)$/.exec(id)?.[1]);
+    return number <= targetNumber;
+  };
+  const data = frontmatter ?? {};
+  const progressions = asList(data.progressions).filter((entry) => isMapping(entry) && readBy(entry.from));
+  return entityStateAt({ ...data, progressions }, chapterId, chronology);
+}
+
+// A character's state at the target chapter: progressions applied, and a
+// status that never reveals a death or revival read after the target.
 export function characterStateAt(character, chronology, chapterId) {
+  const { state, changes } = entityStateAtTarget(character.frontmatter, chronology, chapterId);
+  return { status: statusAt(character, state, changes, chronology, chapterId), state, changes };
+}
+
+function statusAt(character, state, changes, chronology, chapterId) {
   const died = String(character.diedIn ?? "");
-  const status = String(character.status ?? "");
+  const status = String(state.status ?? character.status ?? "");
   if (died === "") {
-    // A `deceased` status with no died-in chapter cannot be dated, so it is
-    // left out rather than risk revealing a later death.
-    return { status: status === "deceased" ? "" : status };
+    // A `deceased` status with no died-in chapter, and no progression dating
+    // it, cannot be placed, so it is left out rather than risk revealing a
+    // later death.
+    return status === "deceased" && !changes.some((change) => change.field === "status") ? "" : status;
   }
   if (died === chapterId) {
-    return { status: "dies in this chapter" };
+    return "dies in this chapter";
   }
   // Read by the target: at or before it in reading order.
   const readBy = (id) => chronology.numbers.has(id) && chronology.numbers.get(id) <= chronology.numbers.get(chapterId);
@@ -153,15 +175,25 @@ export function characterStateAt(character, chronology, chapterId) {
   // A revival read after the target is not known yet; when it would change
   // the answer (it happens before the target in story time), say nothing.
   if (revivedIn !== "" && !readBy(revivedIn) && deadNow !== deadIn(revivedIn)) {
-    return { status: "" };
+    return "";
   }
   // A death in a later or unwritten chapter is not known yet. In a
   // flash-forward set after that death the character is dead in story time,
   // so the status is left out rather than shown as alive.
   if (!readBy(died)) {
-    return { status: deadNow ? "" : "alive" };
+    return deadNow ? "" : "alive";
   }
-  return { status: deadNow ? `deceased (died in ${died})` : "alive" };
+  return deadNow ? `deceased (died in ${died})` : "alive";
+}
+
+// One line per progression applied by the target chapter.
+function changeLines(changes, chapterId) {
+  return changes.map((change) => `- From ${change.from === chapterId ? "this chapter" : change.from}: ${change.field} ${change.value}`);
+}
+
+// A list field after progressions: a progression sets a single value.
+function listOf(value) {
+  return Array.isArray(value) ? value : value === undefined || value === null || value === "" ? [] : [value];
 }
 
 // Builds the context for one chapter or scene. `readBody(file)` returns an
@@ -293,6 +325,14 @@ export function buildContext(project, targetId, readBody, options = {}) {
         }
       }
     }
+    const povCharacter = characters.get(pov);
+    if (povCharacter) {
+      const { changes } = characterStateAt(povCharacter, chronology, target.chapter.id);
+      if (changes.length > 0) {
+        state.push(...changeLines(changes, target.chapter.id));
+        stateSources.add(relative(povCharacter.file));
+      }
+    }
     if (state.length > 0) {
       povItems.push(item(`state:${pov}`, `${nameOf(pov)}'s state`, [...stateSources].join(", "), lines(`### ${nameOf(pov)}'s state`, ...state)));
     }
@@ -308,20 +348,40 @@ export function buildContext(project, targetId, readBody, options = {}) {
     }
     const body = readBody(character.file);
     const state = characterStateAt(character, chronology, target.chapter.id);
+    // The POV character's changes are listed under its state.
+    const changes = id === pov ? [] : changeLines(state.changes, target.chapter.id);
     cards.push(item(`character:${id}`, `Card: ${character.name}`, relative(character.file), lines(
       `### ${character.name}${id === pov ? " (POV)" : ""}`,
       field("Id", id),
-      field("Role", character.role),
+      field("Role", state.state.role ?? character.role),
       field("Status", state.status),
-      field("Aliases", character.aliases),
-      field("Voice words", character.voiceWords),
-      field("Voice avoid", character.voiceAvoid),
+      field("Aliases", listOf(state.state.aliases)),
+      field("Voice words", listOf(state.state["voice-words"])),
+      field("Voice avoid", listOf(state.state["voice-avoid"])),
+      ...changes,
       ...CARD_SECTIONS.map((heading) => subsection(heading, section(body, heading)))
     )));
   }
   sections.push({ id: "characters", title: "Characters on the page", items: cards });
 
-  // 5. Open promises, clues, and questions at this point.
+  // 5. Where it happens: each location at the target, progressions applied.
+  const places = [];
+  const locationIds = target.scene ? [idText(target.scene.location)] : target.chapter.locations.map(idText);
+  for (const location of project.locations.filter((entry) => locationIds.includes(entry.id))) {
+    const { state, changes } = entityStateAtTarget(location.frontmatter, chronology, target.chapter.id);
+    places.push(item(`location:${location.id}`, `Location: ${location.name}`, relative(location.file), lines(
+      `### ${state.name ?? location.name}`,
+      field("Id", location.id),
+      field("Type", state.type),
+      field("Region", state.region),
+      field("Status", state.status),
+      field("Controlled by", state["controlled-by"]),
+      ...changeLines(changes, target.chapter.id)
+    )));
+  }
+  sections.push({ id: "locations", title: "Where it happens", items: places });
+
+  // 6. Open promises, clues, and questions at this point.
   const threads = [];
   const kinds = [
     ["promise", project.promises, "planted", "payoff"],
@@ -356,7 +416,7 @@ export function buildContext(project, targetId, readBody, options = {}) {
   }
   sections.push({ id: "threads", title: "Open promises, clues, and questions", items: threads });
 
-  // 6. Summaries of the scenes just before the target, nearest first for the
+  // 7. Summaries of the scenes just before the target, nearest first for the
   // budget, printed in reading order.
   const before = earlierScenes(project, target, upToTarget);
   // slice(-0) would keep every scene, so count from the front.
@@ -387,7 +447,8 @@ export function buildContext(project, targetId, readBody, options = {}) {
   // Packed nearest first; shown in reading order.
   previous.reverse();
 
-  const warnings = (project.fileErrors ?? []).map((error) => `Skipped unreadable file: ${error}`);
+  // Files left out because they failed to parse; each message names its file.
+  const warnings = [...(project.fileErrors ?? [])];
   return {
     target: { kind: target.kind, id: target.id, chapter: target.chapter.id, number: targetNumber, title: target.chapter.title },
     budget,

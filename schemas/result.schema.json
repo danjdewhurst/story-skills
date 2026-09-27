@@ -8,7 +8,7 @@
   "properties": {
     "apiVersion": { "const": "story/v1" },
     "command": {
-      "enum": ["validate", "links", "continuity", "series", "next", "doctor", "report", "knowledge", "timeline", "prose", "voices", "pacing", "clues", "progress"]
+      "enum": ["validate", "links", "continuity", "series", "next", "doctor", "report", "knowledge", "context", "timeline", "prose", "voices", "pacing", "clues", "progress"]
     },
     "ok": { "type": "boolean", "description": "True exactly when the command exits 0." },
     "data": { "type": ["object", "null"] },
@@ -21,6 +21,7 @@
     { "if": { "properties": { "command": { "enum": ["next", "doctor"] }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-next" } } } },
     { "if": { "properties": { "command": { "const": "report" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-report" } } } },
     { "if": { "properties": { "command": { "const": "knowledge" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-knowledge" } } } },
+    { "if": { "properties": { "command": { "const": "context" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-context" } } } },
     { "if": { "properties": { "command": { "const": "timeline" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-timeline" } } } },
     { "if": { "properties": { "command": { "const": "prose" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-prose" } } } },
     { "if": { "properties": { "command": { "const": "voices" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-voices" } } } },
@@ -174,6 +175,65 @@
         },
         "checks": { "$ref": "#/$defs/checks" },
         "actions": { "type": "array", "items": { "$ref": "#/$defs/action" } }
+      }
+    },
+    "data-context": {
+      "type": "object",
+      "required": ["target", "budget", "estimatedTokens", "sections", "omitted", "warnings"],
+      "properties": {
+        "target": {
+          "type": "object",
+          "required": ["kind", "id", "chapter", "number", "title"],
+          "properties": {
+            "kind": { "enum": ["chapter", "scene"] },
+            "id": { "type": "string", "minLength": 1 },
+            "chapter": { "type": "string", "minLength": 1, "description": "The target's chapter id: the target itself, or the scene's chapter." },
+            "number": { "type": "integer", "minimum": 1 },
+            "title": { "type": "string" }
+          }
+        },
+        "budget": { "type": "integer", "minimum": 1 },
+        "estimatedTokens": { "type": "integer", "minimum": 0, "description": "The estimated tokens of the included items, at ceil(words * 4 / 3) each." },
+        "sections": {
+          "type": "array",
+          "description": "Every section in priority order, each with every candidate item; an item's included says whether it fit the budget.",
+          "items": {
+            "type": "object",
+            "required": ["id", "title", "items"],
+            "properties": {
+              "id": { "enum": ["target", "essentials", "pov", "characters", "locations", "threads", "scenes"] },
+              "title": { "type": "string" },
+              "items": { "type": "array", "items": { "$ref": "#/$defs/context-item" } }
+            }
+          }
+        },
+        "omitted": {
+          "type": "array",
+          "description": "The items left out to fit the budget, in priority order.",
+          "items": {
+            "type": "object",
+            "required": ["id", "label", "source", "tokens"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "label": { "type": "string" },
+              "source": { "type": "string", "description": "The project files the item draws on, comma-separated." },
+              "tokens": { "$ref": "#/$defs/count" }
+            }
+          }
+        },
+        "warnings": { "type": "array", "items": { "type": "string" }, "description": "Project files left out because they failed to parse; also reported as diagnostics." }
+      }
+    },
+    "context-item": {
+      "type": "object",
+      "required": ["id", "label", "source", "text", "tokens", "included"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "description": "The kind and id, such as character:mara-quill or scene:chapter-02-scene-01." },
+        "label": { "type": "string" },
+        "source": { "type": "string", "description": "The project files the item draws on, comma-separated." },
+        "text": { "type": "string", "description": "The item as markdown." },
+        "tokens": { "$ref": "#/$defs/count" },
+        "included": { "type": "boolean" }
       }
     },
     "data-knowledge": {

@@ -275,7 +275,7 @@ Findings keep `1`, so `story validate || exit 1` fails on errors as it always ha
 
 ### JSON output
 
-`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. It works on the check and analysis commands: `validate`, `links`, `continuity`, `series`, `report`, `next`, `doctor`, `knowledge`, `progress`, `timeline`, `prose`, `pacing`, `clues`, and `voices`. Other commands refuse it (`--json does not apply to story wordcount`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`.
+`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. It works on the check and analysis commands: `validate`, `links`, `continuity`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `progress`, `timeline`, `prose`, `pacing`, `clues`, and `voices`. Other commands refuse it (`--json does not apply to story wordcount`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`.
 
 Every result has the same envelope:
 
@@ -832,19 +832,20 @@ Unknown chapter chapter-09
 ### context
 
 ```text
-story context <chapter-or-scene-id> [--budget <tokens>] [--scenes <n>] [--path <project>]
+story context <chapter-or-scene-id> [--budget <tokens>] [--scenes <n>] [--json] [--path <project>]
 ```
 
 Prints, as markdown, the slice of the project an agent needs to draft one chapter or scene, packed into a token budget. It reads files and writes nothing. Items are added in this priority order:
 
 1. **Target**: the chapter or scene's POV, cast, mentions, locations, arcs, date, outcome, hook, and `target-words`, the chapter's `## Outline` (up to the `---` rule above the prose), and the chapter's planned scenes or, for a scene, its `## Purpose`.
 2. **Story essentials**: `story.md` genre, setting era, POV, tense, form, themes, and `premise`, plus its `## Tone & Style`, `## Setting`, and `## Central Conflict` sections; then `style-sheet.md`, when present: `dialect`, `preferred`, `watch-words`, and its body.
-3. **POV knowledge and state**: the POV character's `knowledge-state` entries known at the target, the `character-state` entry from `continuity/state.md` when its `current-chapter` is before the target, and the `state-changes` of earlier scenes whose `character` is the POV character or whose `owner` hands them an artifact.
-4. **Characters on the page**: a card for the POV character and each character in the target's `characters`: role, status at the target, aliases, `voice-words`, `voice-avoid`, and the `## Appearance`, `## Personality & Traits`, `## Motivations & Goals`, and `## Voice & Speech Patterns` sections.
-5. **Open promises, clues, and questions**: each one planted or introduced by the target chapter and not paid off or resolved before it, with its `## Setup`, `## Clue`, or `## Question` section. Those planted, raised, paid off, or answered in the target chapter itself say so; `dropped` and `abandoned` ones are left out.
-6. **Previous scenes**: the `--scenes` scene records just before the target, each with its POV, location, outcome, and `## Purpose`.
+3. **POV knowledge and state**: the POV character's `knowledge-state` entries known at the target, the `character-state` entry from `continuity/state.md` when its `current-chapter` is before the target, the `state-changes` of earlier scenes whose `character` is the POV character or whose `owner` hands them an artifact, and the POV character's [progressions](project-format.md#progressions) applied by the target.
+4. **Characters on the page**: a card for the POV character and each character in the target's `characters`: role, status at the target, aliases, `voice-words`, `voice-avoid`, the progressions applied by the target, and the `## Appearance`, `## Personality & Traits`, `## Motivations & Goals`, and `## Voice & Speech Patterns` sections.
+5. **Where it happens**: each of the chapter's `locations`, or the scene's `location`, with its type, region, status, and `controlled-by` after its progressions, and the progressions applied.
+6. **Open promises, clues, and questions**: each one planted or introduced by the target chapter and not paid off or resolved before it, with its `## Setup`, `## Clue`, or `## Question` section. Those planted, raised, paid off, or answered in the target chapter itself say so; `dropped` and `abandoned` ones are left out.
+7. **Previous scenes**: the `--scenes` scene records just before the target, each with its POV, location, outcome, and `## Purpose`.
 
-It includes nothing from a chapter after the target in reading order (chapter number), so the context never spoils what comes later. A thread, knowledge entry, or scene is dated by its chapter, and one whose chapter is later or unknown is left out. Knowledge is also checked in story time, as [`knowledge`](#knowledge) does, so a fact learned in a flash-forward read earlier is not known yet. The sections that tend to describe the future are never read: the `story.md` synopsis and notes, a character's backstory, arc, and timeline, and the payoff, evidence, and resolution plans of promises, clues, and questions. A character's status is the one at the target: one who dies in the target chapter shows `dies in this chapter`, and one who died earlier shows `deceased (died in <chapter>)`. A character whose `died-in` chapter comes later, or does not exist yet, shows as `alive`; in a flash-forward set after that death the status is left out, and so is a `deceased` status with no `died-in` and a status a later-read `revived-in` would change. A scene with no `pov` of its own uses its chapter's. Sections still holding the starter text `story add` and `story init` write, including the starter outline and style sheet, are skipped. For a scene target, knowledge, threads, and deaths dated to the target chapter are marked as happening in this chapter, since the project does not record which scene; knowledge reads `learned in this chapter, possibly in a later scene`.
+It includes nothing from a chapter after the target in reading order (chapter number), so the context never spoils what comes later. A thread, knowledge entry, or scene is dated by its chapter, and one whose chapter is later or unknown is left out. Progressions count only from chapters read by the target (a planned `chapter-NN` by its number) and are then applied in story time, as `story knowledge` applies them; a progression that dates an alias is how to keep a later alias off earlier cards. Knowledge is also checked in story time, as [`knowledge`](#knowledge) does, so a fact learned in a flash-forward read earlier is not known yet. The sections that tend to describe the future are never read: the `story.md` synopsis and notes, a character's backstory, arc, and timeline, and the payoff, evidence, and resolution plans of promises, clues, and questions. A character's status is the one at the target: one who dies in the target chapter shows `dies in this chapter`, and one who died earlier shows `deceased (died in <chapter>)`. A character whose `died-in` chapter comes later, or does not exist yet, shows as `alive`; in a flash-forward set after that death the status is left out, and so is a `deceased` status with no `died-in` and a status a later-read `revived-in` would change. A scene with no `pov` of its own uses its chapter's. Sections still holding the starter text `story add` and `story init` write, including the starter outline and style sheet, are skipped. For a scene target, knowledge, threads, and deaths dated to the target chapter are marked as happening in this chapter, since the project does not record which scene; knowledge reads `learned in this chapter, possibly in a later scene`.
 
 The budget is an estimate, not a tokenizer count: each item costs `ceil(words × 4 ÷ 3)` tokens, where words are whitespace-separated runs of its text, and the headings between sections are not counted. Items are packed whole in the order above. One that does not fit is left out, a later, smaller one may still fit, and every item left out is listed at the end with the file to read instead. Previous scenes are packed nearest first and printed in reading order.
 
@@ -852,6 +853,7 @@ The budget is an estimate, not a tokenizer count: each item costs `ceil(words ×
 |---|---|
 | `--budget <tokens>` | Token budget, a positive integer (default `6000`) |
 | `--scenes <n>` | How many earlier scenes to summarise, `0` or more (default `5`) |
+| `--json` | Print the context as a JSON result (see below) |
 | `--path <path>` | Project root (default: current directory) |
 
 In [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/), with a small budget:
@@ -863,7 +865,7 @@ story context chapter-02 --budget 200
 ```text
 # Drafting context: chapter-02
 
-Chapter 2: The Millpond. About 183 of 200 tokens
+Chapter 2: The Millpond. About 187 of 200 tokens
 (estimated at 4 tokens per 3 words). Nothing from later chapters is included.
 
 ## Target
@@ -901,23 +903,34 @@ Scenes planned:
 - Role: supporting
 - Status: dies in this chapter
 
+## Where it happens
+
+### The Mill Row
+- Id: the-mill-row
+- Type: district
+- Status: unknown
+
 ## Open promises, clues, and questions
 
 - **The Sealed Letter** (promise; planted in chapter-01)
-- **Edran's Margin Notes** (clue; planted in chapter-01)
-  Edran's handwriting fills every margin of the ledger. Read as bookkeeping, it is only a dead partner's habit; read against the mill's delivery dates, it is a schedule.
+- **The Constable's Silence** (clue; plant in this chapter; red herring)
+  Jonas says nothing to the constable about the letter. It points suspicion at Jonas.
 
 ## Left out to fit the budget
 
 Read these files directly if you need them:
 
-- Clue: The Constable's Silence: continuity/clues/the-constables-silence.md (about 34 tokens)
+- Clue: Edran's Margin Notes: continuity/clues/edrans-margin-notes.md (about 48 tokens)
 - Scene: The Ash and the Ledger: scenes/chapter-01-scene-01.md (about 20 tokens)
 ```
 
 The chapter's outline is still the starter text `story add` writes, so it is skipped. The Burned Page, The Broken Compass, and Who Burned The Mill are left out because they are planted or raised in chapter 3, and Jonas's knowledge of the firestarter's page because its `learned-in` chapter does not exist.
 
-It exits 1 with `Unknown chapter or scene <id>` for an id that is neither, prints the usage line when the id is missing, and refuses a `--budget` that is not a positive integer or a `--scenes` that is not a whole number. A chapter file, `continuity/state.md`, or the target scene's file that fails to parse stops it with the parse error, because the spoiler filter depends on them; any other file that fails to parse is left out with a `warning:` line on stderr.
+`--budget` and `--scenes` can be set for every run with `story.md` [`cli-defaults`](#defaults-and-severity-from-storymd); a flag on the command line wins.
+
+With `--json`, `data` holds `target` (`kind`, `id`, `chapter`, `number`, `title`), `budget`, `estimatedTokens`, `sections` (each `id`, `title`, and every candidate item as `{ id, label, source, text, tokens, included }`, so a script sees what the budget left out), `omitted`, and `warnings`. `source` names the project files the item draws on, comma-separated. Each warning is also a `warning` diagnostic.
+
+It exits 2 with `Unknown chapter or scene <id>` for an id that is neither, with the usage line when the id is missing, and on a `--budget` that is not a positive integer or a `--scenes` that is not a whole number. A chapter file, `continuity/state.md`, or the target scene's file that fails to parse stops it with the parse error and exit 3, because the spoiler filter depends on them, and so does a scene whose chapter does not exist; any other file that fails to parse is left out with a `warning:` line on stderr.
 
 ### compare
 
