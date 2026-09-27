@@ -39,6 +39,8 @@ the-ember-cycle/
     └── story.md               # follows: [../the-fall-of-the-citadel]
 ```
 
+Every linked book must be on disk at that path whenever you run `story links` or `story series`, including in CI, where only the repository being built is checked out. The simplest layout is one repository for the whole series, with a folder per book. If each book has its own repository, the CI workflow must check out every linked book into its sibling folder; see [Project location](automation.md#project-location).
+
 Every link needs a backlink. If book two `follows: [../book-one]`, book one must list `precedes: [../book-two]`. `story links` reports a missing backlink as an error (see [Checking series links](#checking-series-links)).
 
 `story validate` checks the field shapes: `series` must be a single kebab-case id, `book-number` must be a positive integer, and `follows` and `precedes` must be lists of non-empty strings. A single string such as `follows: ../book-one` fails validation with `story.md frontmatter field follows must be a list`. The full field reference is in [Project format reference](project-format.md).

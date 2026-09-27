@@ -181,7 +181,7 @@ All three workflows:
 
 ## Story checks workflow
 
-[`story-checks.yml`](../templates/github/story-checks.yml) is plain CI for a story project. It needs no secrets and only reads the repository (`permissions: contents: read`).
+[`story-checks.yml`](../templates/github/story-checks.yml) is plain CI for a story project. It needs no secrets and only reads the repository (`permissions: contents: read`). Its checkout sets `persist-credentials: false`, so the `GITHUB_TOKEN` is not left in `.git/config` while the CLI fetched at run time executes.
 
 ### Install it
 
@@ -278,6 +278,8 @@ If you want `story-checks.yml` to run on drafted PRs as well, for example becaus
 5. Check `STORY_REF`. The `html` format is newer than Story Skills 0.8.2, so `STORY_REF` must name a later release. A template copied from a release that includes it already does, because the release process sets `STORY_REF` to its own version. With an older tag, the build step fails with `Unsupported build format: html`.
 6. Commit and push to `main`, or run **Review copy** from the Actions tab.
 
+`story build` needs at least one chapter, so a project fresh from `story init` has nothing to publish. Until `chapters/` holds a chapter file, the workflow still runs the checks, then skips the build, upload, and `deploy` steps and passes with a notice. The first push that adds a chapter publishes the first copy.
+
 The address of the site is shown on the run's `deploy` job, on the `github-pages` environment, and in Settings, then Pages. For a project site it is usually `https://<owner>.github.io/<repository>/`. A link to a paragraph adds its label, such as `https://<owner>.github.io/<repository>/#ch03-p12`, which opens the copy at that paragraph and highlights it.
 
 ### Triggers, permissions, and jobs
@@ -291,11 +293,12 @@ The address of the site is shown on the run's `deploy` job, on the `github-pages
 
 The `build` job:
 
-1. Checks out the repository and sets up Node 24.
+1. Checks out the repository without persisting the token (`persist-credentials: false`) and sets up Node 24.
 2. Runs `story validate`, `story links`, and `story continuity`. If any of them fails, nothing is built or published, so readers never get a copy with broken references or a contradicted continuity contract. Readers keep the last good copy.
-3. Builds the review copy with `story build "$STORY_DIR" --format html --out "$GITHUB_WORKSPACE/review-site/index.html"`. The `--out` path is absolute because a relative `--out` is resolved against the project root and may not leave it; see [Output paths](manuscripts.md#output-paths-and-what-is-disposable).
-4. Uploads `index.html` as a workflow artifact named `review-copy`, which you can download from the run page.
-5. Uploads the `review-site` folder as the Pages site.
+3. Looks for a chapter file in `$STORY_DIR/chapters`. With none, the remaining steps and the `deploy` job are skipped.
+4. Builds the review copy with `story build "$STORY_DIR" --format html --out "$GITHUB_WORKSPACE/review-site/index.html"`. The `--out` path is absolute because a relative `--out` is resolved against the project root and may not leave it; see [Output paths](manuscripts.md#output-paths-and-what-is-disposable).
+5. Uploads `index.html` as a workflow artifact named `review-copy`, which you can download from the run page.
+6. Uploads the `review-site` folder as the Pages site.
 
 The `deploy` job then publishes that site with `actions/deploy-pages` to the `github-pages` environment.
 
@@ -353,6 +356,8 @@ env:
 ```
 
 For several books in one repository, copy the check steps once per book, or turn `STORY_DIR` into a matrix value. For a linked series, add a `story series "$STORY_DIR"` step: it exits 1 when canon contradicts itself across books. The `story links` step is what catches a missing series backlink. See [Series](series.md).
+
+Every book a linked series names in `follows` or `precedes` must be in the checkout, at the sibling path the link gives. `story links` and `story series` report a linked book missing from disk as an error (`story.md follows ../the-fall-of-the-citadel is not a story project: missing story.md`), so a sequel kept in its own repository fails `story-checks.yml` on every push, and `review-copy.yml`, which runs `links` before it builds, never publishes. Keep the whole series in one repository, with each book in its own folder and `STORY_DIR` naming the book, or check the other books out beside it with extra `actions/checkout` steps (`repository:` and `path:`) so the relative links resolve. With extra checkouts, check the main repository out into a `path:` too, because a checkout cannot place a sibling outside `$GITHUB_WORKSPACE`.
 
 ### CLI version
 

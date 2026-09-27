@@ -14,6 +14,9 @@
 #
 # If your story project lives in a subdirectory, change STORY_DIR.
 #
+# A project with no chapters yet has nothing to publish, so the build and
+# deploy steps are skipped (and the run passes) until the first chapter exists.
+#
 # The html build format ships in the first story-skills release after 0.8.2;
 # STORY_REF must point at that release or later.
 #
@@ -47,9 +50,13 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      has-chapters: ${{ steps.chapters.outputs.has-chapters }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -62,24 +69,40 @@ jobs:
           npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story links "$STORY_DIR"
           npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story continuity "$STORY_DIR"
 
+      # story build exits 1 with "No chapters found to export" on a project
+      # that has no chapters yet, such as one fresh from story init.
+      - name: Look for chapters
+        id: chapters
+        run: |
+          if [ -n "$(find "$STORY_DIR/chapters" -maxdepth 1 -type f -name '*.md' ! -name '_index.md' ! -name '.*' 2>/dev/null)" ]; then
+            echo "has-chapters=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-chapters=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No chapters yet, so there is no review copy to build or publish."
+          fi
+
       - name: Build the review copy
+        if: steps.chapters.outputs.has-chapters == 'true'
         run: |
           mkdir -p review-site
           npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story build "$STORY_DIR" --format html --out "$GITHUB_WORKSPACE/review-site/index.html"
 
       - name: Keep the review copy as a workflow artifact
+        if: steps.chapters.outputs.has-chapters == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: review-copy
           path: review-site/index.html
 
       - name: Upload the Pages site
+        if: steps.chapters.outputs.has-chapters == 'true'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
         with:
           path: review-site
 
   deploy:
     needs: build
+    if: needs.build.outputs.has-chapters == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
