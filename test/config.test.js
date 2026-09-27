@@ -76,6 +76,17 @@ function noisyProject() {
   return { root, cwd };
 }
 
+// Three chapters where only chapter-02 is reached from chapter-01.
+function branchingProject() {
+  const { root, cwd } = project();
+  const storyPath = path.join(root, "story.md");
+  fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("schema-version: 2\n", "schema-version: 2\nifid: 3F2C9A61-7B1D-4E8A-9C3B-2A6D5E4F1B07\n"));
+  writeChapter(root, 1, "status: draft\nchoices:\n  - text: On\n    to: chapter-02", "Start.");
+  writeChapter(root, 2, "status: draft", "Middle.");
+  writeChapter(root, 3, "status: draft", "Lost.");
+  return { root, cwd };
+}
+
 describe("finding codes", () => {
   test("the codes severity named before every finding had one keep their names", () => {
     const { root, cwd } = noisyProject();
@@ -137,6 +148,54 @@ describe("severity", () => {
     configure(root, "severity:\n  - warning: prose-adverbs\n    level: error");
     expect(invoke(cwd, ["validate", root]).code).toBe(0);
     expect(invoke(cwd, ["prose", root]).code).toBe(1);
+  });
+
+  test("an override applies wherever its warning is reported: links, a build, and report", () => {
+    const { root, cwd } = branchingProject();
+    const unreachable = `${path.join("chapters", "chapter-03.md")} cannot be reached: no choice path from chapter-01 leads to it`;
+    expect(invoke(cwd, ["links", root]).err).toContain(`warning: ${unreachable}\n`);
+
+    configure(root, "severity:\n  - warning: unreachable-chapter\n    level: error");
+    const links = invoke(cwd, ["links", root]);
+    expect(links.code).toBe(1);
+    expect(links.err).toContain(`error: ${unreachable} [unreachable-chapter]\n`);
+    const build = invoke(cwd, ["build", root, "--format", "twee"]);
+    expect(build.code).toBe(1);
+    expect(build.out).toContain("Built 3 chapters as twee");
+    expect(build.err).toContain(`error: ${unreachable} [unreachable-chapter]\n`);
+    expect(invoke(cwd, ["report", root]).out).toContain("- Links: failed (1 errors, 0 warnings)\n");
+
+    const other = branchingProject();
+    configure(other.root, "severity:\n  - warning: unreachable-chapter\n    level: off");
+    const quiet = invoke(other.cwd, ["links", other.root]);
+    expect(quiet.code).toBe(0);
+    expect(quiet.err).toContain(`dismissed: ${unreachable} (severity unreachable-chapter is off in story.md)\n`);
+    const built = invoke(other.cwd, ["build", other.root, "--format", "twee"]);
+    expect(built.code).toBe(0);
+    expect(built.err).toContain(`dismissed: ${unreachable} (severity unreachable-chapter is off in story.md)\n`);
+    expect(invoke(other.cwd, ["report", other.root]).out).toContain("- Links: ok (0 errors, 0 warnings)\n");
+  });
+
+  test("the deceased-without-died-in warning can be promoted", () => {
+    const { root, cwd } = project();
+    writeMarkdown(path.join(root, "characters", "ann.md"), "name: Ann\nrole: supporting\nstatus: alive\nprogressions:\n  - from: chapter-02\n    field: status\n    value: deceased", "# Ann\n");
+    configure(root, "severity:\n  - warning: deceased-without-died-in\n    level: error");
+    const result = invoke(cwd, ["validate", root]);
+    expect(result.code).toBe(1);
+    expect(result.err).toContain("set died-in: chapter-02 too so story continuity checks appearances after the death [deceased-without-died-in]\n");
+  });
+
+  test("a promoted context warning fails the command, as text and as JSON", () => {
+    const { root, cwd } = project();
+    writeChapter(root, 1, "status: draft", "Words.");
+    fs.writeFileSync(path.join(root, "style-sheet.md"), "no frontmatter", "utf8");
+    configure(root, "severity:\n  - warning: context-file-skipped\n    level: error");
+    const text = invoke(cwd, ["context", "chapter-01", "--path", root]);
+    expect(text.code).toBe(1);
+    expect(text.err).toContain("[context-file-skipped]\n");
+    const json = JSON.parse(invoke(cwd, ["context", "chapter-01", "--path", root, "--json"]).out);
+    expect(json.ok).toBe(false);
+    expect(json.diagnostics[0].severity).toBe("error");
   });
 
   test("applySeverity keeps continuity-style dismissals and an already failing result", () => {

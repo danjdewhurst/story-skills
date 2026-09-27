@@ -23,7 +23,7 @@ import { narrationScript, pronunciationGuide } from "./narration.js";
 import { SCENE_SETTINGS, fountainScript } from "./fountain.js";
 import { TWEE_LINK_UNSAFE, derivedIfid, isIfid, tweeSource } from "./twee.js";
 import { htmlBook, writeDocx, writeEpub, writeShunnDocx, writeShunnMarkdown } from "./packaging.js";
-import { validateCliConfig } from "./config.js";
+import { applySeverity, validateCliConfig } from "./config.js";
 import { DEFAULT_PASSES, addedPassNotes, nextPass, passChecks, readPasses, updatePasses, validatePasses } from "./passes.js";
 import { CHAPTER_HOOKS, SCENE_OUTCOMES, buildPacing } from "./pacing.js";
 import { compareChapters, mapLabels, proseParagraphs } from "./compare.js";
@@ -1478,11 +1478,19 @@ export function seriesReport(root) {
   return buildSeries(fs.realpathSync(projectRoot), scanProject);
 }
 
+// validate, links, and continuity over one scan, with the story.md severity
+// overrides applied as those commands apply them.
+function projectChecks(project, severity = []) {
+  return {
+    validation: applySeverity(validateProjectOf(project), severity),
+    links: applySeverity(validateLinksOf(project), severity),
+    continuity: applySeverity(checkContinuity(project), severity)
+  };
+}
+
 export function projectReport(root, options = {}) {
   const project = scanProject(root);
-  const validation = validateProjectOf(project);
-  const links = validateLinksOf(project);
-  const continuity = checkContinuity(project);
+  const { validation, links, continuity } = projectChecks(project, options.severity);
   const totalWords = project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
 
   return {
@@ -1602,9 +1610,7 @@ export function formatProjectReport(report, options = {}) {
 
 export function projectActions(root, options = {}) {
   const project = scanProject(root);
-  const validation = validateProjectOf(project);
-  const links = validateLinksOf(project);
-  const continuity = checkContinuity(project);
+  const { validation, links, continuity } = projectChecks(project, options.severity);
   return {
     root: project.root,
     title: project.title,
