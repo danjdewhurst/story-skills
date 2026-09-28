@@ -2223,7 +2223,9 @@ function referenceEntries(dir, self, depth = 0, collected = []) {
   }
   const entries = fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   for (const entry of entries) {
-    if (entry.name.startsWith(".") || SKIPPED_SCAN_DIRECTORIES.has(entry.name)) {
+    // Hidden entries, build output, and _index.md registry tables, which
+    // are not prose.
+    if (entry.name.startsWith(".") || SKIPPED_SCAN_DIRECTORIES.has(entry.name) || entry.name === "_index.md") {
       continue;
     }
     const fullPath = path.join(dir, entry.name);
@@ -2504,14 +2506,32 @@ function proseBaseline(project, rules, options, warnings) {
     throw usageError(`prose --baseline needs samples in ${STYLE_SHEET_FILE}: list files or folders of your own prose, such as samples: [../book-one]`);
   }
   const samples = [];
+  const self = canonicalPath(project.root);
+  const own = new Set(project.chapters.map((chapter) => canonicalPath(chapter.file)));
   for (const entry of listed) {
-    const target = path.resolve(project.root, entry.trim());
-    if (path.isAbsolute(entry.trim()) || lstatIfExists(target) === null) {
-      warnings.push(warn("style-sample-missing", `${STYLE_SHEET_FILE} samples entry ${entry.trim()} names no file or folder in reach of the project`, STYLE_SHEET_FILE));
+    const sample = entry.trim();
+    if (path.isAbsolute(sample) || /^[A-Za-z]:/.test(sample)) {
+      warnings.push(warn("style-sample-missing", `${STYLE_SHEET_FILE} samples entry ${sample} must be a path relative to the project folder, such as ../book-one, so it is left out`, STYLE_SHEET_FILE));
       continue;
     }
+    const problem = sampleProblem(project, sample);
+    if (problem !== null) {
+      warnings.push(problem);
+      continue;
+    }
+    const target = path.resolve(project.root, sample);
     const real = canonicalPath(target);
-    for (const document of referenceDocuments(real, (file) => displayPath(project.root, target, real, file), null)) {
+    let documents;
+    try {
+      // This project's chapters are what is being compared, never a sample.
+      documents = referenceDocuments(real, (file) => displayPath(project.root, target, real, file), self)
+        .filter((document) => !own.has(canonicalPath(document.path)));
+    } catch (error) {
+      // prose is advisory: one sample it cannot read is reported, not fatal.
+      warnings.push(warn("style-sample-unreadable", `${STYLE_SHEET_FILE} samples entry ${sample} cannot be read, so it is left out: ${error.message}`, STYLE_SHEET_FILE));
+      continue;
+    }
+    for (const document of documents) {
       const prose = document.paragraphs.map((paragraph) => paragraph.text).join("\n\n");
       samples.push({ file: document.file, analysis: analyzeChapter(prose, rules), sentenceLengths: sentenceLengths(prose), contentWords: contentWords(prose, rules) });
     }
@@ -2521,6 +2541,23 @@ function proseBaseline(project, rules, options, warnings) {
     warnings.push(warn("prose-baseline-small", `${STYLE_SHEET_FILE} samples hold ${profile.narrationWords} narration words, too few to compare with (at least 2000): the fixed filter-word and adverb limits apply instead`, STYLE_SHEET_FILE));
   }
   return profile;
+}
+
+// Why a style-sheet samples entry cannot be used, as a warning, or null.
+// validate and prose share it, so both say the same thing.
+// Callers refuse an absolute path first, each in its own words.
+function sampleProblem(project, sample) {
+  const target = path.resolve(project.root, sample);
+  if (lstatIfExists(target) === null) {
+    return warn("style-sample-missing", `${STYLE_SHEET_FILE} samples entry ${sample} names no file or folder in reach of the project`, STYLE_SHEET_FILE);
+  }
+  const real = canonicalPath(target);
+  const self = canonicalPath(project.root);
+  const chapters = path.join(self, "chapters");
+  if (real === self || real === chapters || isPathInside(chapters, real)) {
+    return warn("style-sample-own-chapters", `${STYLE_SHEET_FILE} samples entry ${sample} names this project's own chapters, which are what the samples are compared with: list an earlier book or approved drafts kept elsewhere`, STYLE_SHEET_FILE);
+  }
+  return null;
 }
 
 // The limits the --max-* flags set, named as the flags are.
@@ -7025,8 +7062,11 @@ function validateStyleSheet(project, errors, warnings) {
     const sample = entry.trim();
     if (path.isAbsolute(sample) || /^[A-Za-z]:/.test(sample)) {
       errors.push(err("field-invalid-items", `${label} samples entry ${sample} must be a path relative to the project folder, such as ../book-one`, label));
-    } else if (lstatIfExists(path.resolve(project.root, sample)) === null) {
-      warnings.push(warn("style-sample-missing", `${label} samples entry ${sample} names no file or folder in reach of the project`, label));
+    } else {
+      const problem = sampleProblem(project, sample);
+      if (problem !== null) {
+        warnings.push(problem);
+      }
     }
   }
 }

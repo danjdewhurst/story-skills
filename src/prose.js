@@ -305,9 +305,13 @@ export function baselineFigures(analysis, profile, chapterWords) {
 
 export function baselineFindings(label, analysis, figures, profile, tolerances = BASELINE_TOLERANCES) {
   const findings = [];
-  if (!profile.usable || analysis.narrationWords < PROSE_THRESHOLDS.minRateWords) {
+  // Shape measures need a chapter of some length; the per-1,000 rates need
+  // that much narration, so a chapter that is nearly all dialogue is still
+  // compared on its dialogue share.
+  if (!profile.usable || analysis.words < PROSE_THRESHOLDS.minRateWords) {
     return findings;
   }
+  const rated = analysis.narrationWords >= PROSE_THRESHOLDS.minRateWords;
   const relative = (value, base, share) => base > 0 && Math.abs(value - base) > base * share;
   const direction = (value, base, more, fewer) => (value > base ? more : fewer);
   if (analysis.sentences.count >= tolerances.minSentences && relative(figures.sentenceMean, profile.sentences.mean, tolerances.sentenceLength)) {
@@ -326,11 +330,11 @@ export function baselineFindings(label, analysis, figures, profile, tolerances =
       ? `${label} has ${formatRate(figures[field])} ${name} per 1,000 narration words, ${direction(figures[field], profile[field], "more", "fewer")} than your samples' ${formatRate(profile[field])} (tolerance ${formatRate(allowed)})`
       : null;
   };
-  const filterDrift = rateDrift("filter words", "filterPerThousand");
+  const filterDrift = rated ? rateDrift("filter words", "filterPerThousand") : null;
   if (filterDrift !== null) {
     findings.push(warn("prose-baseline-filter-words", filterDrift, label));
   }
-  const adverbDrift = rateDrift("-ly adverbs", "adverbsPerThousand");
+  const adverbDrift = rated ? rateDrift("-ly adverbs", "adverbsPerThousand") : null;
   if (adverbDrift !== null) {
     findings.push(warn("prose-baseline-adverbs", adverbDrift, label));
   }

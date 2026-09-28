@@ -83,6 +83,7 @@ export const FINDING_CODES = {
   "exemption-chapter-not-carried": "error",
   "style-use-equals-avoid": "error",
   "style-sample-missing": "warning",
+  "style-sample-own-chapters": "warning",
   "duplicate-session-date": "error",
   "research-no-sources": "warning",
   "research-unsettled": "warning",
@@ -215,6 +216,7 @@ export const FINDING_CODES = {
   "prose-baseline-filter-words": "warning",
   "prose-baseline-adverbs": "warning",
   "prose-baseline-small": "warning",
+  "style-sample-unreadable": "warning",
   // story pacing
   "pacing-no-hook": "warning",
   "pacing-no-sequel": "warning",

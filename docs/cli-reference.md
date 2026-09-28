@@ -1183,14 +1183,14 @@ samples:
   - research/approved-chapter-drafts
 ```
 
-Each entry is a path relative to the project folder. A folder holding `story.md` contributes its chapters, and any other folder its `.md`, `.markdown`, and `.txt` files, as [`similarity --against`](#similarity) reads them. From all the samples together `prose` builds a profile:
+Each entry is a path relative to the project folder. A folder holding `story.md` contributes its chapters, and any other folder its `.md`, `.markdown`, and `.txt` files (not `_index.md` registries), as [`similarity --against`](#similarity) reads them. This project's own chapters are never a sample: they are what is compared, so an entry naming the project or its `chapters/` warns `style-sample-own-chapters`. From all the samples together `prose` builds a profile:
 - average sentence length and its spread;
 - average paragraph length;
 - the share of words inside dialogue;
 - filter-word and `-ly` adverb rates per 1,000 narration words;
 - the 20 content words the samples use most, their signature words.
 
-The report prints the profile, and each chapter's paragraph length, dialogue share, and how many signature words it uses. It warns when a chapter with 300 or more narration words drifts from the profile further than these tolerances, in either direction:
+The report prints the profile, and each chapter's paragraph length, dialogue share, and how many signature words it uses. It warns when a chapter of 300 or more words drifts from the profile further than these tolerances, in either direction (the two rates also need 300 narration words, so a chapter that is nearly all dialogue is compared on its dialogue share):
 
 | Measure | Tolerance | Code |
 |---|---|---|
@@ -1200,7 +1200,7 @@ The report prints the profile, and each chapter's paragraph length, dialogue sha
 | Filter words per 1,000 narration words | Half the samples' rate, at least 3 | `prose-baseline-filter-words` |
 | `-ly` adverbs per 1,000 narration words | Half the samples' rate, at least 3 | `prose-baseline-adverbs` |
 
-With a baseline, the fixed `--max-filter-words` and `--max-adverbs` warnings are off: your own rate is the measure. Said-bookisms, uniform sentences, spellings, and similar names are checked as before. The samples need at least 2,000 words of narration. With fewer, `prose` warns `prose-baseline-small` and keeps the fixed limits. A sample entry that names nothing warns `style-sample-missing`, and the rest are used.
+With a baseline, the fixed `--max-filter-words` and `--max-adverbs` warnings are off: your own rate is the measure. Said-bookisms, uniform sentences, spellings, and similar names are checked as before. The samples need at least 2,000 words of narration. With fewer, `prose` warns `prose-baseline-small` and keeps the fixed limits. A sample entry that names nothing warns `style-sample-missing`, one that cannot be read (not UTF-8, say) warns `style-sample-unreadable`, and the rest are used. Signature words leave out the names in this project's bible, but not names from another book's cast.
 
 The baseline is on whenever `samples` lists something. `--baseline false` (or `baseline: false` in `cli-defaults`) turns it off for a run, and `--baseline` with no samples is a usage error. A drift is a prompt to reread the chapter, not a rule: a fight scene should run shorter than the book's average. `--json` adds the profile as `data.baseline` (or `null`) and each chapter's figures as `chapters[].baseline`.
 
@@ -2388,6 +2388,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `stale-exemption` | warning | A continuity exemption's `file` is not a file in the project, or its `chapter` is not a chapter, so it matches nothing. |
 | `style-use-equals-avoid` | error | A style-sheet `preferred` entry uses and avoids the same word. |
 | `style-sample-missing` | warning | A style-sheet `samples` entry names no file or folder. |
+| `style-sample-own-chapters` | warning | A style-sheet `samples` entry names this project or its chapters, which the samples are compared with. |
 | `duplicate-session-date` | error | `progress.md` logs the same date twice. |
 | `research-no-sources` | warning | A verified research note lists no sources. |
 | `research-unsettled` | warning | A settled chapter relies on open or disputed research. |
@@ -2541,7 +2542,9 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `prose-baseline-adverbs` | warning | `-ly` adverbs per 1,000 narration words are further from the baseline than half its rate (at least 3). |
 | `prose-baseline-small` | warning | The `samples` hold fewer than 2,000 narration words, so the fixed limits apply. |
 
-`prose` also reports `style-sample-missing` for a `samples` entry that names nothing.
+| `style-sample-unreadable` | warning | A `samples` entry cannot be read, and is left out. |
+
+`prose` also reports `style-sample-missing` and `style-sample-own-chapters`, as `validate` does.
 
 ### Codes: pacing
 

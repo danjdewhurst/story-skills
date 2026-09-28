@@ -221,4 +221,54 @@ describe("story prose with samples", () => {
     expect(invoke(root, ["prose"]).err).not.toContain("prose-baseline");
     expect(invoke(root, ["prose", "--baseline"]).err).toContain("[prose-baseline-sentences]");
   });
+
+  test("a chapter that is nearly all dialogue is still compared on its dialogue share", () => {
+    const rules = proseRules({}, []);
+    const profile = profileOf(prose(400, 8));
+    const text = Array.from({ length: 40 }, (_, index) => `"${VOCABULARY.slice(0, 8).join(" ")} ${index}."`).join("\n\n");
+    const analysis = analyzeChapter(text, rules);
+    expect(analysis.narrationWords).toBeLessThan(300);
+    const findings = baselineFindings("c.md", analysis, baselineFigures(analysis, profile, []), profile);
+    expect(findings.map((finding) => finding.code)).toContain("prose-baseline-dialogue");
+    // Too little narration for the per-1,000 rates.
+    expect(findings.map((finding) => finding.code)).not.toContain("prose-baseline-filter-words");
+  });
+
+  test("samples never include the chapters being compared", () => {
+    const { cwd, root } = project({ chapter: prose(40, 14) });
+    const withSamples = (list) => writeMarkdown(path.join(root, "style-sheet.md"), `type: style-sheet\ndialect: unspecified\nsamples:\n${list.map((entry) => `  - "${entry}"`).join("\n")}`, "# Style Sheet\n");
+    for (const entry of [".", "chapters", "chapters/chapter-01.md"]) {
+      withSamples([entry]);
+      const report = proseReport(root);
+      expect(report.baseline.samples).toEqual([]);
+      expect(codes(report)).toContain("style-sample-own-chapters");
+      expect(validateProject(root).warnings.map((warning) => warning.code)).toContain("style-sample-own-chapters");
+    }
+    // A parent folder holding this book and another reads only the other.
+    const other = createStoryProject({ cwd, title: "Book One", dir: "book-one", force: false }).root;
+    writeMarkdown(path.join(other, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft", `## Chapter Text\n\n${prose(400, 8)}\n`);
+    withSamples([".."]);
+    expect(proseReport(root).baseline.samples).toEqual(["../book-one/chapters/chapter-01.md"]);
+  });
+
+  test("a sample that cannot be read is reported and left out, and the run goes on", () => {
+    const { root } = project({ samples: prose(400, 8), chapter: prose(40, 14) });
+    fs.writeFileSync(path.join(root, "research", "latin1.txt"), Buffer.from([0x63, 0x61, 0x66, 0xe9]));
+    writeMarkdown(path.join(root, "style-sheet.md"), "type: style-sheet\ndialect: unspecified\nsamples:\n  - research/latin1.txt\n  - research/samples.txt\n  - /abs/path", "# Style Sheet\n");
+    const result = invoke(root, ["prose"]);
+    expect(result.code).toBe(0);
+    expect(result.err).toContain("style-sheet.md samples entry research/latin1.txt cannot be read, so it is left out:");
+    expect(result.err).toContain("[style-sample-unreadable]");
+    expect(result.err).toContain("style-sheet.md samples entry /abs/path must be a path relative to the project folder, such as ../book-one, so it is left out");
+    expect(proseReport(root).baseline.samples).toEqual(["research/samples.txt"]);
+  });
+
+  test("a registry _index.md in a sample folder is not prose", () => {
+    const { cwd, root } = project({ chapter: prose(40, 8) });
+    fs.mkdirSync(path.join(cwd, "drafts"));
+    fs.writeFileSync(path.join(cwd, "drafts", "one.md"), prose(400, 8));
+    fs.writeFileSync(path.join(cwd, "drafts", "_index.md"), "| Chapter | Title |\n|---|---|\n| 1 | One |\n");
+    writeMarkdown(path.join(root, "style-sheet.md"), "type: style-sheet\ndialect: unspecified\nsamples:\n  - ../drafts", "# Style Sheet\n");
+    expect(proseReport(root).baseline.samples).toEqual(["../drafts/one.md"]);
+  });
 });

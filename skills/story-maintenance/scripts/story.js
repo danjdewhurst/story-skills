@@ -76,6 +76,7 @@ var FINDING_CODES = {
   "exemption-chapter-not-carried": "error",
   "style-use-equals-avoid": "error",
   "style-sample-missing": "warning",
+  "style-sample-own-chapters": "warning",
   "duplicate-session-date": "error",
   "research-no-sources": "warning",
   "research-unsettled": "warning",
@@ -204,6 +205,7 @@ var FINDING_CODES = {
   "prose-baseline-filter-words": "warning",
   "prose-baseline-adverbs": "warning",
   "prose-baseline-small": "warning",
+  "style-sample-unreadable": "warning",
   "pacing-no-hook": "warning",
   "pacing-no-sequel": "warning",
   "pacing-easy-wins": "warning",
@@ -2466,9 +2468,10 @@ function baselineFigures(analysis, profile, chapterWords) {
 }
 function baselineFindings(label, analysis, figures, profile, tolerances = BASELINE_TOLERANCES) {
   const findings = [];
-  if (!profile.usable || analysis.narrationWords < PROSE_THRESHOLDS.minRateWords) {
+  if (!profile.usable || analysis.words < PROSE_THRESHOLDS.minRateWords) {
     return findings;
   }
+  const rated = analysis.narrationWords >= PROSE_THRESHOLDS.minRateWords;
   const relative = (value, base, share) => base > 0 && Math.abs(value - base) > base * share;
   const direction = (value, base, more, fewer) => value > base ? more : fewer;
   if (analysis.sentences.count >= tolerances.minSentences && relative(figures.sentenceMean, profile.sentences.mean, tolerances.sentenceLength)) {
@@ -2484,11 +2487,11 @@ function baselineFindings(label, analysis, figures, profile, tolerances = BASELI
     const allowed = Math.max(tolerances.rateFloor, profile[field] * tolerances.rateShare);
     return Math.abs(figures[field] - profile[field]) > allowed ? `${label} has ${formatRate(figures[field])} ${name} per 1,000 narration words, ${direction(figures[field], profile[field], "more", "fewer")} than your samples' ${formatRate(profile[field])} (tolerance ${formatRate(allowed)})` : null;
   };
-  const filterDrift = rateDrift("filter words", "filterPerThousand");
+  const filterDrift = rated ? rateDrift("filter words", "filterPerThousand") : null;
   if (filterDrift !== null) {
     findings.push(warn("prose-baseline-filter-words", filterDrift, label));
   }
-  const adverbDrift = rateDrift("-ly adverbs", "adverbsPerThousand");
+  const adverbDrift = rated ? rateDrift("-ly adverbs", "adverbsPerThousand") : null;
   if (adverbDrift !== null) {
     findings.push(warn("prose-baseline-adverbs", adverbDrift, label));
   }
@@ -10116,7 +10119,7 @@ function referenceEntries(dir, self, depth = 0, collected = []) {
   }
   const entries = fs7.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
   for (const entry of entries) {
-    if (entry.name.startsWith(".") || SKIPPED_SCAN_DIRECTORIES.has(entry.name)) {
+    if (entry.name.startsWith(".") || SKIPPED_SCAN_DIRECTORIES.has(entry.name) || entry.name === "_index.md") {
       continue;
     }
     const fullPath = path11.join(dir, entry.name);
@@ -10334,14 +10337,29 @@ function proseBaseline(project, rules, options, warnings) {
     throw usageError(`prose --baseline needs samples in ${STYLE_SHEET_FILE}: list files or folders of your own prose, such as samples: [../book-one]`);
   }
   const samples = [];
+  const self = canonicalPath(project.root);
+  const own = new Set(project.chapters.map((chapter) => canonicalPath(chapter.file)));
   for (const entry of listed) {
-    const target = path11.resolve(project.root, entry.trim());
-    if (path11.isAbsolute(entry.trim()) || lstatIfExists(target) === null) {
-      warnings.push(warn("style-sample-missing", `${STYLE_SHEET_FILE} samples entry ${entry.trim()} names no file or folder in reach of the project`, STYLE_SHEET_FILE));
+    const sample = entry.trim();
+    if (path11.isAbsolute(sample) || /^[A-Za-z]:/.test(sample)) {
+      warnings.push(warn("style-sample-missing", `${STYLE_SHEET_FILE} samples entry ${sample} must be a path relative to the project folder, such as ../book-one, so it is left out`, STYLE_SHEET_FILE));
       continue;
     }
+    const problem = sampleProblem(project, sample);
+    if (problem !== null) {
+      warnings.push(problem);
+      continue;
+    }
+    const target = path11.resolve(project.root, sample);
     const real = canonicalPath(target);
-    for (const document of referenceDocuments(real, (file) => displayPath(project.root, target, real, file), null)) {
+    let documents;
+    try {
+      documents = referenceDocuments(real, (file) => displayPath(project.root, target, real, file), self).filter((document) => !own.has(canonicalPath(document.path)));
+    } catch (error) {
+      warnings.push(warn("style-sample-unreadable", `${STYLE_SHEET_FILE} samples entry ${sample} cannot be read, so it is left out: ${error.message}`, STYLE_SHEET_FILE));
+      continue;
+    }
+    for (const document of documents) {
       const prose = document.paragraphs.map((paragraph) => paragraph.text).join(`
 
 `);
@@ -10353,6 +10371,19 @@ function proseBaseline(project, rules, options, warnings) {
     warnings.push(warn("prose-baseline-small", `${STYLE_SHEET_FILE} samples hold ${profile.narrationWords} narration words, too few to compare with (at least 2000): the fixed filter-word and adverb limits apply instead`, STYLE_SHEET_FILE));
   }
   return profile;
+}
+function sampleProblem(project, sample) {
+  const target = path11.resolve(project.root, sample);
+  if (lstatIfExists(target) === null) {
+    return warn("style-sample-missing", `${STYLE_SHEET_FILE} samples entry ${sample} names no file or folder in reach of the project`, STYLE_SHEET_FILE);
+  }
+  const real = canonicalPath(target);
+  const self = canonicalPath(project.root);
+  const chapters = path11.join(self, "chapters");
+  if (real === self || real === chapters || isPathInside(chapters, real)) {
+    return warn("style-sample-own-chapters", `${STYLE_SHEET_FILE} samples entry ${sample} names this project's own chapters, which are what the samples are compared with: list an earlier book or approved drafts kept elsewhere`, STYLE_SHEET_FILE);
+  }
+  return null;
 }
 function thresholdSummary(thresholds) {
   return { maxFilterWords: thresholds.filterPerThousand, maxAdverbs: thresholds.adverbsPerThousand, maxBookisms: thresholds.maxBookisms };
@@ -14125,8 +14156,11 @@ function validateStyleSheet(project, errors, warnings) {
     const sample = entry.trim();
     if (path11.isAbsolute(sample) || /^[A-Za-z]:/.test(sample)) {
       errors.push(err("field-invalid-items", `${label} samples entry ${sample} must be a path relative to the project folder, such as ../book-one`, label));
-    } else if (lstatIfExists(path11.resolve(project.root, sample)) === null) {
-      warnings.push(warn("style-sample-missing", `${label} samples entry ${sample} names no file or folder in reach of the project`, label));
+    } else {
+      const problem = sampleProblem(project, sample);
+      if (problem !== null) {
+        warnings.push(problem);
+      }
     }
   }
 }
