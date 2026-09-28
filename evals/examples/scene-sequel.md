@@ -8,7 +8,7 @@ I sat back on my heels. My hands were shaking, so I put them on my knees.
 
 Then I lit the lamp, because that is the job, and I trimmed it, and I sat with the chest.
 
-Two ways, and neither of them clean. Take the bar to it and break what Ana kept shut. Or leave it, and never know why somebody climbed my stairs to hang a key where I would find it.
+Two ways, and neither of them clean. Force it, and break what Ana kept shut. Or leave it, and never know why somebody climbed my stairs to hang a key where I would find it.
 
 I would not break it.
 

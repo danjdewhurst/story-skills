@@ -136,7 +136,7 @@ hand before/after skill changes, with results recorded below.
 | `scene-sequel` | A scene and its sequel from a scene record: goal, conflict, and the disaster (the key snaps), then reaction, the dilemma stated as a choice, and the decision, not carried out. A scene with no turn (the key turns, the lid comes up), a forced lock, or anything from inside the chest fails. Evaluates the `scene-craft` skill. |
 | `plot-beats` | Three-act beats mapped onto the eight chapters the book already has, as an arc Plot Points table. A chapter past `Ch 8`, a proposed new chapter, or a midpoint row anywhere but `Ch 4` fails. Evaluates the `plot-structure` skill. |
 | `premise-logline` | One logline from the user's spark, plus four stress tests reported pass, weak, or fail. A test reported weak or fail, a new relative, or deciding who left the key or what the chest holds fails. Evaluates the `premise-workshop` skill. |
-| `context-boundary` | A chapter drafted from `story context` output with the whole-book outline open beside it: it stays inside the target length and uses nothing the packed context leaves out (the logbook, the fuse wire, who left the key). Evaluates `chapter-writing`'s use of `story context`. |
+| `context-boundary` | A chapter drafted from `story context` output with the whole-book outline open beside it: it stays inside the target length and uses nothing the packed context leaves out (the logbook, the fuse wire, who left the key). Evaluates `chapter-writing`'s use of `story context`. The runner gives the model no tools, so the fixture supplies the command's output: it tests staying inside the budget and the spoiler boundary, not the choice to run the command. |
 
 ## Skill coverage
 
