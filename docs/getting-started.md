@@ -134,9 +134,13 @@ This step is optional. Install the CLI if you want to run checks yourself in a t
 | Run without installing (npm) | `npx story-skills --help` |
 | Run without installing (Bun) | `bunx story-skills --help` |
 | Install globally | `npm install -g story-skills`, then `story --help` |
+| Without Node: Homebrew (macOS, Linux) | `brew install danjdewhurst/tap/story-skills`, then `story --help` |
+| Without Node: download a binary | The archive for your system from the [releases page](https://github.com/danjdewhurst/story-skills/releases) |
 | Try unreleased changes from GitHub | `npx --yes --package github:danjdewhurst/story-skills story --help` |
 | From a clone of this repository | `bun install`, then `bun run story -- --help` |
 | Bundled copy in an installed skill | `node <skills-directory>/story-maintenance/scripts/story.js --help` |
+
+The standalone binaries come with releases after 0.17.0, for macOS (Apple silicon and Intel), Linux (x64 and arm64), and Windows (x64). Each release has one archive per system, `story-skills_<version>_<os>_<arch>.tar.gz` (a `.zip` for Windows), holding the `story` executable, and a `story-skills_<version>_checksums.txt` to check it against (`sha256sum -c`, or `shasum -a 256 -c` on macOS). Unpack it and put `story` somewhere on your `PATH`. The binary replaces only the CLI: it runs the same code and reports the same version as the npm package, and it needs no Node. The skills still need Claude Code, Codex, or another agent (see [Install the skills](#install-the-skills)).
 
 Check the installed version:
 
@@ -173,6 +177,7 @@ The bundled CLI at `story-maintenance/scripts/story.js` lives inside the skill f
 | Task | Command |
 |------|---------|
 | Update a global install | `npm install -g story-skills@latest` |
+| Update a Homebrew install | `brew upgrade story-skills` |
 | Pin a global install to one release | `npm install -g story-skills@0.17.0` |
 | Run one release without installing | `npx story-skills@0.17.0 --help` |
 | Remove a global install | `npm uninstall -g story-skills` |

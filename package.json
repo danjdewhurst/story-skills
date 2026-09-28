@@ -24,6 +24,7 @@
   ],
   "scripts": {
     "build:fallback": "node scripts/build-fallback.js",
+    "build:binaries": "node scripts/build-binaries.js",
     "check:metadata": "node scripts/check-metadata.js",
     "check:fallback": "node scripts/check-fallback.js",
     "check:evals": "node scripts/check-evals.js",

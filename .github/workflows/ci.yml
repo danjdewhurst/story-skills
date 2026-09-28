@@ -98,3 +98,35 @@ jobs:
       # cannot ship a story bin that crashes on start.
       - name: Install and run the packed tarball
         run: node scripts/check-package.js
+
+  # Builds the standalone binary on each release OS and runs it there, as the
+  # publish workflow does for a release.
+  binary:
+    name: Binary ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: darwin-arm64, runner: macos-latest }
+          - { target: darwin-x64, runner: macos-15-intel }
+          - { target: linux-x64, runner: ubuntu-latest }
+          - { target: linux-arm64, runner: ubuntu-24.04-arm }
+          - { target: windows-x64, runner: windows-latest }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
+
+      - name: Build and smoke-test the binary
+        run: bun scripts/build-binaries.js --target "${{ matrix.target }}" --smoke --out "$RUNNER_TEMP/binaries"

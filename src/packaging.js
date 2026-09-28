@@ -629,7 +629,7 @@ const ZIP_DEFLATED = 8;
 // and Node versions.
 const ZIP_DEFLATE_LEVEL = 9;
 
-function writeZip(outFile, entries, writeOptions = {}) {
+export function writeZip(outFile, entries, writeOptions = {}) {
   const localParts = [];
   const centralParts = [];
   let offset = 0;

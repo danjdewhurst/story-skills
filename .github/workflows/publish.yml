@@ -3,6 +3,12 @@ name: Publish
 # `bun run release` pushes a vX.Y.Z tag, and this workflow publishes that
 # version to npm through trusted publishing (OIDC). No npm token is stored;
 # npmjs.com trusts this workflow file by name, and provenance is automatic.
+#
+# It also builds the standalone `story` binaries, each on its own OS so it
+# can be smoke-tested there (and so macOS builds are signed as they need),
+# attaches them and a checksums file to the GitHub release, and, when a
+# HOMEBREW_TAP_TOKEN secret is set, updates the formula in
+# danjdewhurst/homebrew-tap.
 on:
   push:
     tags: ["v*"]
@@ -70,3 +76,164 @@ jobs:
             exit 0
           fi
           npm publish
+
+  binaries:
+    name: Binary ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { target: darwin-arm64, runner: macos-latest }
+          - { target: darwin-x64, runner: macos-15-intel }
+          - { target: linux-x64, runner: ubuntu-latest }
+          - { target: linux-arm64, runner: ubuntu-24.04-arm }
+          - { target: windows-x64, runner: windows-latest }
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out the release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
+
+      # --smoke runs the binary on this runner: --version must match the
+      # package, and validate must pass on an example.
+      - name: Build and smoke-test the binary
+        run: bun scripts/build-binaries.js --target "${{ matrix.target }}" --smoke --out dist/binaries
+
+      - name: Keep the archive for the release
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: binary-${{ matrix.target }}
+          path: dist/binaries/story-skills_*
+          retention-days: 7
+          if-no-files-found: error
+
+  release-assets:
+    needs: binaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - name: Collect the archives
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: binary-*
+          path: dist/binaries
+          merge-multiple: true
+
+      # One checksums file for every archive, in sha256sum format.
+      - name: Write the checksums
+        working-directory: dist/binaries
+        run: |
+          rm -f story-skills_*_checksums.txt
+          version="${TAG#v}"
+          sha256sum story-skills_"$version"_* > "story-skills_${version}_checksums.txt"
+          cat "story-skills_${version}_checksums.txt"
+          [ "$(wc -l < "story-skills_${version}_checksums.txt")" -eq 5 ]
+
+      # `bun run release` creates the GitHub release right after pushing the
+      # tag, so give it a few minutes to appear.
+      - name: Attach the binaries to the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for attempt in $(seq 1 30); do
+            if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+              gh release upload "$TAG" dist/binaries/* --repo "$GITHUB_REPOSITORY" --clobber
+              exit 0
+            fi
+            echo "Waiting for the GitHub release $TAG ($attempt/30)"
+            sleep 10
+          done
+          echo "::error::GitHub release $TAG does not exist; create it, then re-run this job."
+          exit 1
+
+      - name: Keep the checksums for the tap
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: checksums
+          path: dist/binaries/story-skills_*_checksums.txt
+          retention-days: 7
+          if-no-files-found: error
+
+  # Needs a HOMEBREW_TAP_TOKEN secret: a fine-grained token with contents
+  # write access to danjdewhurst/homebrew-tap. Without it the job says so and
+  # succeeds, and the formula can be updated by hand.
+  homebrew:
+    needs: release-assets
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - name: Check for the tap token
+        id: token
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -z "$TAP_TOKEN" ]; then
+            echo "::notice::No HOMEBREW_TAP_TOKEN secret, so the Homebrew formula was not updated. See docs/development.md#standalone-binaries."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out the release tag
+        if: steps.token.outputs.present == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
+
+      - name: Set up Node
+        if: steps.token.outputs.present == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+
+      - name: Fetch the checksums
+        if: steps.token.outputs.present == 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: checksums
+          path: ${{ runner.temp }}/checksums
+
+      - name: Update the formula in the tap
+        if: steps.token.outputs.present == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          version="${TAG#v}"
+          tap="$RUNNER_TEMP/homebrew-tap"
+          gh auth setup-git
+          git clone --depth 1 https://github.com/danjdewhurst/homebrew-tap.git "$tap"
+          node scripts/homebrew-formula.js "$version" "$RUNNER_TEMP/checksums/story-skills_${version}_checksums.txt" > "$tap/story-skills.rb"
+          cd "$tap"
+          if git diff --quiet && [ -z "$(git status --porcelain)" ]; then
+            echo "The formula already describes $TAG."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add story-skills.rb
+          git commit -m "Brew formula update for story-skills version $TAG"
+          git push origin HEAD

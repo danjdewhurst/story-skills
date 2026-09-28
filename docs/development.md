@@ -509,7 +509,7 @@ Both plugin manifests pick up new skills automatically: `.codex-plugin/plugin.js
 
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on pushes to `main` and on every pull request. A new run on the same ref cancels the one in progress. The workflow file is the source of truth for which checks run and in what order.
 
-Both jobs check out with `persist-credentials: false`, since neither pushes. The `test` job installs the Bun version pinned by `packageManager` in `package.json` (`check:metadata` fails if `bun-version` drifts from the pin) and runs, in order:
+Every job checks out with `persist-credentials: false`, since none pushes. The `test` job installs the Bun version pinned by `packageManager` in `package.json` (`check:metadata` fails if `bun-version` drifts from the pin) and runs, in order:
 
 1. `bun install`
 2. `bun run check:metadata`
@@ -521,6 +521,8 @@ Both jobs check out with `persist-credentials: false`, since neither pushes. The
 8. `node skills/story-maintenance/scripts/story.js --help`
 
 The `node` job runs on Node 18, 20, and 22 without Bun. It runs `node scripts/check-examples.js`, then `--version` and `validate examples/the-last-ember` against both the source CLI (`node bin/story.js`) and the bundled fallback. It then copies `skills/story-maintenance` into a temporary folder under a `{ "type": "commonjs" }` `package.json` and runs `--version` and `validate` against that copy, the way a copied install runs. Last, `node scripts/check-package.js` (also `bun run check:package`) runs `npm pack`, installs the tarball into an empty temporary folder, and runs the installed `story --version`, `story validate` on the packaged `the-last-ember` example, and the packaged fallback's `--version`. Every other check runs from the checkout, so this is the one that fails when a file the CLI imports is missing from the `files` list in `package.json`. This is what keeps the Node 18 floor in `engines.node` honest; `test/check-scripts.test.js` fails if the matrix stops including the floor.
+
+The `binary` job builds the standalone executable for each release target on its own runner (macOS arm64 and Intel, Linux x64 and arm64, Windows x64) with `bun scripts/build-binaries.js --target <target> --smoke`, which runs it there: `--version` must match the package and `validate` must pass on an example. The publish workflow repeats this for a release; see [Standalone binaries](#standalone-binaries).
 
 Every action in the repository's workflows and in `templates/github/` is pinned to a full commit SHA with the version tag in a trailing comment, and [`.github/dependabot.yml`](../.github/dependabot.yml) proposes weekly updates for the `github-actions` ecosystem. `test/check-scripts.test.js` enforces the pinning for `ci.yml` and the three workflow templates, so a new `uses:` line with a moving tag there fails `bun run test`. Dependabot updates only `.github/workflows/`, so the same test fails when a template's pin for an action differs from `ci.yml`: after merging a Dependabot bump, copy the new SHA and version comment into `templates/github/`. `publish.yml` is pinned the same way, but no test checks it, so keep it pinned by hand.
 
@@ -585,6 +587,19 @@ The tag push triggers [`.github/workflows/publish.yml`](../.github/workflows/pub
 The workflow checks out the tag, sets up Node 24, upgrades npm to 11 (trusted publishing needs npm 11.5.1 or later), fails if the tag does not equal `v` plus the `package.json` version, smoke-tests both CLIs, runs `node scripts/check-package.js` to install the packed tarball and run it, and runs `npm publish`. If the version is already on npm, it exits successfully without publishing, so re-running it is safe. The workflow also has a manual `workflow_dispatch` trigger that takes a `tag` input, for re-publishing an existing tag.
 
 Because trusted publishing is tied to the workflow file name, renaming `publish.yml` breaks publishing until the trusted publisher is updated on npmjs.com.
+
+### Standalone binaries
+
+The same tag push builds standalone `story` executables with `bun build --compile` ([`scripts/build-binaries.js`](../scripts/build-binaries.js)).
+- **Build.** Each release target builds on its own runner: `darwin-arm64` on `macos-latest`, `darwin-x64` on `macos-15-intel`, `linux-x64` on `ubuntu-latest`, `linux-arm64` on `ubuntu-24.04-arm`, and `windows-x64` on `windows-latest`. Building natively lets `--smoke` run each binary on its own OS (`--version` must print the package version, and `validate` must pass on an example). It also means the macOS binaries get the ad-hoc signature Apple silicon needs, which a cross-compile from Linux may not add.
+- **Release assets.** A collector job writes `story-skills_<version>_checksums.txt` for the five archives and attaches everything to the GitHub release that `bun run release` creates. It waits up to five minutes for that release to appear.
+- **Homebrew.** A last job writes the formula with [`scripts/homebrew-formula.js`](../scripts/homebrew-formula.js) and pushes it to `story-skills.rb` in [`danjdewhurst/homebrew-tap`](https://github.com/danjdewhurst/homebrew-tap). It needs a `HOMEBREW_TAP_TOKEN` repository secret: a fine-grained personal access token with **Contents: read and write** on that repository only. Without the secret the job succeeds with a notice, and you can update the tap by hand:
+
+```shell
+node scripts/homebrew-formula.js 0.18.0 story-skills_0.18.0_checksums.txt > ../homebrew-tap/story-skills.rb
+```
+
+The binaries run the same source as `bin/story.js`, with `VERSION` inlined, so `check:metadata` needs to know nothing about them. To build locally, `bun run build:binaries -- --host --smoke` builds and tests this machine's binary into `dist/binaries/`. With no flags it cross-compiles every target, which is useful for checking the build but not for testing the macOS binaries.
 
 ## See also
 

@@ -133,6 +133,14 @@ npm install -g story-skills   # then: story --help
 
 To try unreleased changes, run it straight from GitHub with `npx --yes --package github:danjdewhurst/story-skills story --help`.
 
+**Without Node.** Releases after 0.17.0 attach a standalone `story` binary for macOS (Apple silicon and Intel), Linux (x64 and arm64), and Windows (x64). Install it with Homebrew on macOS or Linux, or download the archive for your system from the [releases page](https://github.com/danjdewhurst/story-skills/releases), check it against the release's `checksums.txt`, and put `story` on your `PATH`:
+
+```shell
+brew install danjdewhurst/tap/story-skills   # then: story --help
+```
+
+The binary is the CLI only, and reports the same `story --version` as the npm package. The skills still need an agent such as Claude Code or Codex (see [Quick start](#quick-start)).
+
 From a clone, use `bun install` and then `bun run story -- --help`. Copied-skill installs don't need either: `story-maintenance` bundles a `scripts/story.js` fallback that agents run with Node.
 
 The CLI is for maintenance only. Agents write story content directly to markdown files and never create project-local build or generator scripts to emit the story.
