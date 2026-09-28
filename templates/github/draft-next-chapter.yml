@@ -15,11 +15,11 @@
 #      npx skills add danjdewhurst/story-skills  (or commit skills/ to .claude/skills/)
 #   3. Adjust STORY_DIR, the budgets, and the cron schedule to taste.
 #
-# The Story CLI runs straight from GitHub, pinned to the STORY_REF tag below;
+# The Story CLI is installed from GitHub, pinned to the STORY_REF tag below;
 # bump STORY_REF when you adopt a newer story-skills release. To use the
-# story-skills package from npm instead, replace each
-# github:danjdewhurst/story-skills#... --package value with
-# story-skills@<version>, including those in the prompt and --allowedTools.
+# story-skills package from npm instead, replace
+# github:danjdewhurst/story-skills#$STORY_REF with story-skills@<version> in
+# the two "Install the Story CLI" steps.
 #
 # Actions are pinned to commit SHAs with their moving tags in comments, so a
 # compromised tag cannot silently change what this workflow runs. Dependabot
@@ -31,16 +31,19 @@
 # treat everything it reads, and everything it writes, as untrusted.
 #   - Triggers: `schedule` and `workflow_dispatch` only, never `pull_request`
 #     or `pull_request_target`, so a fork cannot start a run with the secrets.
-#   - The draft job has a read-only token, and the agent may run only the
-#     allowlisted story and git commands below: it cannot push, open pull
-#     requests, or run other shell commands. Its commits leave the job only as
-#     a git bundle.
-#   - The publish job runs on a fresh runner that never executes anything the
-#     agent wrote. It accepts the bundle only if the commits sit on a draft/
-#     branch built on the starting commit, change nothing but markdown files
-#     inside the story project (no dotfiles, .github/, .claude/, symlinks, or
-#     scripts), and contain no secret. Then it runs the checks, pushes, and
-#     opens the pull request.
+#   - The draft job has a read-only token. The agent may run only the story
+#     CLI (installed outside the repository before it starts) and `git
+#     checkout -b draft/`, `git add`, and `git commit`, may not edit .git/,
+#     and cannot push or open pull requests. Its commits leave the job only as
+#     a git bundle. Treat the draft job as untrusted all the same: the API key
+#     is the one secret it holds.
+#   - The publish job runs on a fresh runner and never runs anything the agent
+#     wrote. It takes only commits on a draft/ branch built on the commit the
+#     run started from, that change nothing but the story's own markdown
+#     (chapters/, scenes/, characters/, and the other story folders, and
+#     story.md, style-sheet.md, and progress.md; no CLAUDE.md, AGENTS.md, or
+#     SKILL.md), and that hold no copy of the API key. Then it runs the
+#     checks, pushes, and opens the pull request.
 # Protect your default branch (require pull requests) as well.
 #
 # GitHub does not start other workflows for pull requests opened with the
@@ -78,6 +81,11 @@ concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
 
+# `bash -eo pipefail` for every run step, so a failure inside a pipe stops it.
+defaults:
+  run:
+    shell: bash
+
 env:
   STORY_DIR: "."
   STORY_REF: "v0.17.0"
@@ -98,7 +106,6 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      base: ${{ steps.start.outputs.base }}
       drafted: ${{ steps.bundle.outputs.drafted }}
       branch: ${{ steps.bundle.outputs.branch }}
     steps:
@@ -154,15 +161,23 @@ jobs:
         with:
           node-version: 24
 
-      - name: Note where drafting starts
-        id: start
+      # Installed outside the repository before the agent starts, and run as
+      # plain `story`: npx would read an .npmrc the agent could write.
+      - name: Install the Story CLI
         if: steps.guard.outputs.skip != 'true'
-        run: echo "base=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        working-directory: ${{ runner.temp }}
+        run: |
+          npm install --global --prefix "$RUNNER_TEMP/story-cli" "github:danjdewhurst/story-skills#$STORY_REF"
+          echo "$RUNNER_TEMP/story-cli/bin" >> "$GITHUB_PATH"
 
       - name: Draft the next chapter
         id: draft
         if: steps.guard.outputs.skip != 'true'
         uses: anthropics/claude-code-action@9171db3e57d6a3140a37ddc2ba92788584e0ead6 # v1.0.234
+        env:
+          # Overrides .git/config for the agent's git add and git commit, so a
+          # config the agent wrote cannot run a command.
+          GIT_CONFIG_PARAMETERS: "'core.fsmonitor=false' 'core.hooksPath=/dev/null' 'commit.gpgsign=false'"
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -180,10 +195,11 @@ jobs:
             no shell variables, so it matches the allowed-tools list. You cannot
             push or open a pull request: commit your work on the branch and stop.
             The workflow checks the commit, pushes it, and opens the pull request.
-            Change only markdown files in the story project; the workflow refuses
-            a commit that touches anything else.
+            Change only the story's own markdown (story.md, style-sheet.md, and
+            the story folders such as chapters/, scenes/, characters/, plot/, and
+            continuity/); the workflow refuses a commit that touches anything else.
 
-            1. Run `npx --yes --package github:danjdewhurst/story-skills#${{ env.STORY_REF }} story next ${{ env.STORY_DIR }}` and
+            1. Run `story next ${{ env.STORY_DIR }}` and
                read story.md, chapters/_index.md, continuity/state.md, open
                questions, promises, and the active arc files.
             2. If the next actions report any P0 maintenance issues, fix those
@@ -197,28 +213,29 @@ jobs:
                the chapter that line names (an existing chapter with no prose yet,
                or a new one to add) following the chapter-writing skill. Once the
                chapter file exists with its pov and characters, run
-               `npx --yes --package github:danjdewhurst/story-skills#${{ env.STORY_REF }} story context chapter-<number> --path ${{ env.STORY_DIR }}`
+               `story context chapter-<number> --path ${{ env.STORY_DIR }}`
                and draft from the context it prints (it holds nothing from
-               later chapters; if this STORY_REF has no context command, read
-               the files the skill lists instead). Outline first, then prose under "## Chapter Text",
+               later chapters). Outline first, then prose under "## Chapter Text",
                between ${{ env.MIN_WORDS }} and ${{ env.MAX_WORDS }} words, with
                accurate frontmatter (pov, status, word-count, locations, characters, mentions, arcs-advanced).
                Add matching scene records and update continuity/state.md,
                promises, questions, and the timeline.
             5. Run the maintenance commands and make them pass:
-               npx --yes --package github:danjdewhurst/story-skills#${{ env.STORY_REF }} story wordcount ${{ env.STORY_DIR }} --write
-               npx --yes --package github:danjdewhurst/story-skills#${{ env.STORY_REF }} story reindex ${{ env.STORY_DIR }}
-               npx --yes --package github:danjdewhurst/story-skills#${{ env.STORY_REF }} story validate ${{ env.STORY_DIR }}
-               npx --yes --package github:danjdewhurst/story-skills#${{ env.STORY_REF }} story links ${{ env.STORY_DIR }}
-               npx --yes --package github:danjdewhurst/story-skills#${{ env.STORY_REF }} story continuity ${{ env.STORY_DIR }}
-            6. Commit everything on the branch. Make the commit message's first
-               line "Draft chapter <number>: <title>" (or "Maintenance: <what you
-               fixed>"), and its body a summary of the beats, the arcs advanced,
-               and any promises planted or paid off. The pull request uses it.
+               story wordcount ${{ env.STORY_DIR }} --write
+               story reindex ${{ env.STORY_DIR }}
+               story validate ${{ env.STORY_DIR }}
+               story links ${{ env.STORY_DIR }}
+               story continuity ${{ env.STORY_DIR }}
+            6. Commit everything on the branch with git commit -m. Make the
+               message's first line "Draft chapter <number>: <title>" (or
+               "Maintenance: <what you fixed>"), and its body a summary of the
+               beats, the arcs advanced, and any promises planted or paid off.
+               The pull request quotes it.
           claude_args: |
             --max-turns ${{ env.MAX_TURNS }}
             --max-budget-usd ${{ env.MAX_BUDGET_USD }}
-            --allowedTools "Bash(npx --yes --package github:danjdewhurst/story-skills#${{ env.STORY_REF }} story:*),Bash(git checkout -b draft/:*),Bash(git add:*),Bash(git commit:*),Read,Write,Edit,Glob,Grep"
+            --allowedTools "Bash(story:*),Bash(git checkout -b draft/:*),Bash(git add:*),Bash(git commit:*),Read,Write,Edit,Glob,Grep"
+            --disallowedTools "Edit(.git/**),Write(.git/**)"
 
       - name: Explain a stopped agent
         if: failure() && steps.guard.outputs.skip != 'true' && steps.draft.outcome == 'failure'
@@ -232,9 +249,8 @@ jobs:
         id: bundle
         if: steps.guard.outputs.skip != 'true'
         env:
-          BASE: ${{ steps.start.outputs.base }}
+          BASE: ${{ github.sha }}
         run: |
-          set -euo pipefail
           git() { command git -c core.fsmonitor=false -c core.hooksPath=/dev/null "$@"; }
           if [ "$(git rev-parse HEAD)" = "$BASE" ]; then
             echo "The agent made no commit: there was nothing to draft."
@@ -269,7 +285,10 @@ jobs:
       contents: write
       pull-requests: write
     env:
-      BASE: ${{ needs.draft.outputs.base }}
+      # The commit this run started from, from GitHub rather than the draft
+      # job, whose outputs the agent could have tampered with. BRANCH is
+      # checked before it is used.
+      BASE: ${{ github.sha }}
       BRANCH: ${{ needs.draft.outputs.branch }}
     steps:
       - name: Check out repository
@@ -283,6 +302,12 @@ jobs:
         with:
           node-version: 24
 
+      - name: Install the Story CLI
+        working-directory: ${{ runner.temp }}
+        run: |
+          npm install --global --prefix "$RUNNER_TEMP/story-cli" "github:danjdewhurst/story-skills#$STORY_REF"
+          echo "$RUNNER_TEMP/story-cli/bin" >> "$GITHUB_PATH"
+
       - name: Fetch the draft bundle
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -291,16 +316,15 @@ jobs:
 
       # Nothing the agent did is trusted until this passes: new commits on a
       # draft/ branch, built on the commit the run started from, changing
-      # only markdown files inside the story project.
+      # only the story's own markdown.
       - name: Check what the agent committed
         run: |
-          set -euo pipefail
           if ! [[ "$BRANCH" =~ ^draft/(chapter-[1-9][0-9]*|maintenance-[0-9]{4}-[0-9]{2}-[0-9]{2})$ ]]; then
             echo "::error::Unexpected branch name '$BRANCH'. Nothing was pushed."
             exit 1
           fi
           bundle="$RUNNER_TEMP/draft/draft.bundle"
-          git bundle verify "$bundle"
+          git bundle verify --quiet "$bundle"
           git fetch --quiet "$bundle" "refs/heads/$BRANCH:refs/heads/$BRANCH"
           if ! git merge-base --is-ancestor "$BASE" "$BRANCH" || [ "$(git rev-parse "$BRANCH")" = "$BASE" ]; then
             echo "::error::$BRANCH does not add commits to the one the run started from. Nothing was pushed."
@@ -309,18 +333,28 @@ jobs:
           project="${STORY_DIR#./}"
           project="${project%/}"
           [ "$project" = "." ] && project=""
-          refused=$(git diff --raw --no-renames "$BASE" "$BRANCH" | while IFS=$'\t' read -r meta file; do
+          prefix="${project:+$project/}"
+          # Every commit, not just the end result, so a file added and then
+          # removed again is refused too.
+          refused=$(git log --format= --raw --no-renames "$BASE..$BRANCH" | while IFS=$'\t' read -r meta file; do
+            [ -n "$file" ] || continue
             mode=$(echo "$meta" | awk '{ print $2 }')
+            inside="${file#"$prefix"}"
+            name="${file##*/}"
             if [ "$mode" = "120000" ] || [ "$mode" = "160000" ]; then
               echo "$file (a symlink or submodule)"
+            elif [ -n "$prefix" ] && [ "$inside" = "$file" ]; then
+              echo "$file (outside $project)"
             elif [[ "$file" != *.md ]]; then
               echo "$file (not a markdown file)"
             elif [[ "/$file" == */.* ]]; then
               echo "$file (a hidden file or folder)"
-            elif [ -n "$project" ] && [[ "$file" != "$project"/* ]]; then
-              echo "$file (outside $project)"
+            elif [[ "${name,,}" =~ ^(claude|agents|gemini|skill)\.md$ ]]; then
+              echo "$file (instructions for an agent)"
+            elif ! [[ "$inside" =~ ^(story|style-sheet|progress)\.md$ || "$inside" =~ ^(chapters|scenes|characters|worldbuilding|plot|continuity|glossary|matter|research)/ ]]; then
+              echo "$file (not a story file)"
             fi
-          done)
+          done | sort -u)
           if [ -n "$refused" ]; then
             echo "::error::The agent changed files a draft may not touch. Nothing was pushed:"
             echo "$refused"
@@ -328,16 +362,17 @@ jobs:
           fi
           git checkout --quiet "$BRANCH"
 
-      # The agent could read a secret from its environment and write it into
-      # a file; GitHub masks secrets in logs, not in commits. The draft job's
-      # GITHUB_TOKEN was read-only and expired with that job.
+      # The agent could read the key from its environment and write it into
+      # a file or a commit message; GitHub masks secrets in logs, not in
+      # commits. This finds the key as written, not encoded, so it is a last
+      # line of defence. The draft job's GITHUB_TOKEN was read-only and
+      # expired with that job.
       - name: Check the draft holds no secrets
         env:
           SECRET_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          set -euo pipefail
           # grep reads to the end (no -q), so git never sees a closed pipe.
-          if [ -n "$SECRET_API_KEY" ] && { git diff "$BASE" HEAD; git log --format=%B "$BASE..HEAD"; } | grep -F -- "$SECRET_API_KEY" > /dev/null; then
+          if [ -n "$SECRET_API_KEY" ] && git log -p --format=%B "$BASE..HEAD" | grep -F -- "$SECRET_API_KEY" > /dev/null; then
             echo "::error::The drafted commits contain the value of ANTHROPIC_API_KEY. Nothing was pushed; rotate the key."
             exit 1
           fi
@@ -348,8 +383,6 @@ jobs:
       - name: Run the story checks
         id: checks
         run: |
-          set -u
-          story() { npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story "$@"; }
           report="$RUNNER_TEMP/checks.md"
           : > "$report"
           passed=true
@@ -361,18 +394,23 @@ jobs:
               1)
                 passed=false
                 echo "- story $check: failed" >> "$report"
-                jq -r '.diagnostics[] | select(.severity == "error") | "  - \(.file // "project"): \(.message)"' "$RUNNER_TEMP/$check.json" >> "$report"
+                jq -r '.diagnostics[] | select(.severity == "error") | "  - \(.file // "project"): \(.message)"' "$RUNNER_TEMP/$check.json" >> "$report" \
+                  || echo "  - (its findings could not be read; see the job log)" >> "$report"
                 ;;
               *)
                 echo "::error::story $check exited $code, so the project could not be checked. Nothing was pushed."
-                jq -r '.diagnostics[]?.message' "$RUNNER_TEMP/$check.json" 2>/dev/null || true
+                jq -r '.diagnostics[]?.message' "$RUNNER_TEMP/$check.json" || true
                 exit 1
                 ;;
             esac
           done
           if [[ "$BRANCH" =~ ^draft/chapter-([0-9]+)$ ]]; then
             file="chapters/$(printf 'chapter-%02d.md' "${BASH_REMATCH[1]}")"
-            words=$(story wordcount "$STORY_DIR" | awk -F': ' -v file="$file" '$1 == file { print $2 }')
+            if ! counts=$(story wordcount "$STORY_DIR"); then
+              echo "::error::story wordcount failed, so the word range could not be checked. Nothing was pushed."
+              exit 1
+            fi
+            words=$(awk -F': ' -v file="$file" '$1 == file { print $2 }' <<< "$counts")
             if [ -z "$words" ]; then
               passed=false
               echo "- Word range: $file not found" >> "$report"
@@ -386,23 +424,46 @@ jobs:
           cat "$report"
           echo "passed=$passed" >> "$GITHUB_OUTPUT"
 
+      # A branch of the same name left from an earlier run (its pull request
+      # closed, say) would refuse the push, so this run's branch takes the
+      # run number instead.
       - name: Push the branch
+        id: push
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh auth setup-git
-          git push origin "refs/heads/$BRANCH:refs/heads/$BRANCH"
+          target="$BRANCH"
+          if [ -n "$(git ls-remote --heads origin "refs/heads/$target")" ]; then
+            target="$BRANCH-run-$GITHUB_RUN_NUMBER"
+            echo "::warning::$BRANCH already exists on the remote, so this draft is pushed as $target. Delete old draft branches you no longer need."
+          fi
+          git push origin "refs/heads/$BRANCH:refs/heads/$target"
+          echo "branch=$target" >> "$GITHUB_OUTPUT"
 
+      # The agent wrote the commit message, so the pull request quotes it as
+      # an indented block: a closing keyword or @mention in it does nothing.
+      # The title is the commit's first line only when it has the expected
+      # shape. The pull request targets the branch the run started from.
       - name: Open the pull request
         env:
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_BRANCH: ${{ steps.push.outputs.branch }}
           PASSED: ${{ steps.checks.outputs.passed }}
         run: |
-          set -euo pipefail
+          subject=$(git log -1 --format=%s)
+          if [[ "$subject" =~ ^(Draft\ chapter\ [0-9]+|Maintenance):\ [^@#]{1,80}$ ]]; then
+            title="$subject"
+          elif [[ "$BRANCH" =~ ^draft/chapter-([0-9]+)$ ]]; then
+            title="Draft chapter ${BASH_REMATCH[1]}"
+          else
+            title="Story maintenance"
+          fi
           body="$RUNNER_TEMP/pr-body.md"
           {
-            git log --reverse --format='%b' "$BASE..HEAD"
+            echo "## The agent's summary"
+            echo
+            git log --reverse --format='%B' "$BASE..HEAD" | sed 's/^/    /'
             echo
             if [ "$PASSED" = "true" ]; then
               echo "## Checks"
@@ -414,12 +475,12 @@ jobs:
             echo
             cat "$RUNNER_TEMP/checks.md"
             echo
-            echo "Drafted by Claude Code from the draft-next-chapter workflow. Review it as you would any draft."
+            echo "Drafted by Claude Code from the draft-next-chapter workflow. Review it, and its commit messages, as you would any draft."
           } > "$body"
           draft=()
           if [ "$PASSED" != "true" ]; then draft=(--draft); fi
-          gh pr create --base "$DEFAULT_BRANCH" --head "$BRANCH" \
-            --title "$(git log -1 --format=%s)" --body-file "$body" "${draft[@]}"
+          gh pr create --base "$GITHUB_REF_NAME" --head "$HEAD_BRANCH" \
+            --title "$title" --body-file "$body" "${draft[@]}"
 
       - name: Fail when the checks failed
         if: steps.checks.outputs.passed == 'false'

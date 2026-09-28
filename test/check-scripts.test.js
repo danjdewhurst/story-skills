@@ -694,8 +694,10 @@ describe("github workflows", () => {
     const prompt = template.split("prompt: |")[1].split("claude_args:")[0];
     const allowed = /--allowedTools "([^"]+)"/.exec(template)[1];
     const bashPrefixes = [...allowed.matchAll(/Bash\(([^)]+)\)/g)].map(([, rule]) => rule.replace(/(:\*| \*)$/, ""));
-    const commands = [...prompt.matchAll(/npx [^`\n]+/g)].map(([command]) => command.trim());
-    expect(commands.length).toBeGreaterThanOrEqual(6);
+    // Every story command the prompt tells the agent to run, in backticks or
+    // on a line of its own.
+    const commands = [...prompt.matchAll(/\bstory (?:next|context|wordcount|reindex|validate|links|continuity)\b[^`\n]*/g)].map(([command]) => command.trim());
+    expect(commands.length).toBeGreaterThanOrEqual(7);
     for (const command of commands) {
       // Claude Code matches rules against the literal command text, so quotes
       // or shell variables in the prompt would never match an unquoted rule.
