@@ -355,6 +355,25 @@ node scripts/check-schema.js
 Examples match schemas/story.schema.json: harbor-of-second-light, the-fall-of-the-citadel, the-last-ember, the-unraveled-thread
 ```
 
+`story validate` checks the same frontmatter with hand-written rules, so the two can drift. [`test/validate-schema-property.test.js`](../test/validate-schema-property.test.js) keeps them in step. It writes a valid project with one of every entity, then over and over rewrites one field of one file with a generated value. The values cover:
+- a real value taken from the examples;
+- an enum value or a boundary number;
+- a wrong type, a list, or a list of mappings with one key changed;
+- an odd YAML scalar such as `0451`, `yes`, `~`, or `[TODO: fill in]`;
+- a removed required key or an extra unknown one.
+
+It fails when `validate` rejects the file and the schema accepts it, or the other way round.
+
+A few differences are deliberate and listed in `EXCEPTIONS` with the reason, such as a chapter number that must match its file name, an ISBN checksum, a real calendar date, or an unquoted number read as an id. Add to that list only when one side cannot express the rule. Otherwise fix whichever side is wrong. When you add a field, add it to both, and the test will tell you if they disagree.
+
+`bun run test` runs a fixed seed. To search further, run more iterations or another seed, and write what it finds to a file:
+
+```shell
+STORY_PROPERTY_RUNS=20000 STORY_PROPERTY_SEED=7 STORY_PROPERTY_REPORT=/tmp/drift.json bun test test/validate-schema-property.test.js
+```
+
+`STORY_PROPERTY_SEED=random` picks a seed and prints it, so a failure can be replayed.
+
 [`schemas/result.schema.json`](../schemas/result.schema.json) describes the object `story <command> --json` prints: the envelope, and under `$defs/data-<command>` the `data` of each command, chosen with `allOf` and `if`/`then` on `command`. The envelope is built by `writeJsonResult` in [`src/json.js`](../src/json.js); a command that gains `--json` calls it, adds `json` to its `options` in `src/commands.js`, and adds its `data` to the schema. `test/json-output.test.js` runs every `--json` command on every example and checks the output against the schema, so a change to a command's result shows up there. Adding a field keeps `apiVersion` (`story/v2`); renaming, removing, or retyping one needs a new version.
 
 The CLI's own validation (`story validate`) lives in `src/story.js` and is separate from the JSON schema. A new frontmatter field usually needs both: the validation rule in `src/story.js` and the property in the schema. The current schema version is `STORY_SCHEMA_VERSION = 2` in `src/story.js`; `story migrate` upgrades older projects. The field-by-field reference is [Project format reference](project-format.md).

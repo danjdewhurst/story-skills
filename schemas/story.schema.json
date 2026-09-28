@@ -10,30 +10,30 @@
       "type": "object",
       "required": ["title", "schema-version", "genre", "status", "themes", "pov", "tense"],
       "properties": {
-        "title": { "type": "string" },
+        "title": { "type": "string", "pattern": "\\S" },
         "schema-version": { "const": 2 },
         "series": { "$ref": "#/$defs/id" },
         "series-title": { "type": "string" },
         "book-number": { "type": "number", "minimum": 0 },
-        "follows": { "type": "array", "items": { "type": "string", "minLength": 1 } },
-        "precedes": { "type": "array", "items": { "type": "string", "minLength": 1 } },
-        "genre": { "type": "string" },
+        "follows": { "type": "array", "items": { "type": "string", "minLength": 1, "pattern": "\\S" } },
+        "precedes": { "type": "array", "items": { "type": "string", "minLength": 1, "pattern": "\\S" } },
+        "genre": { "type": "string", "pattern": "\\S" },
         "sub-genre": { "type": "string" },
         "setting-era": { "type": "string" },
         "status": { "enum": ["planning", "drafting", "in-progress", "revising", "complete", "abandoned"] },
-        "themes": { "type": "array", "items": { "type": "string" } },
-        "pov": { "type": "string" },
+        "themes": { "type": "array", "items": { "type": "string", "pattern": "\\S" } },
+        "pov": { "type": "string", "pattern": "\\S" },
         "tense": { "enum": ["past", "present", "future", "mixed"] },
         "premise": { "type": "string" },
         "counter-premise": { "type": "string" },
         "author": { "type": "string" },
-        "contact": { "type": "array", "items": { "type": "string" } },
+        "contact": { "type": "array", "items": { "type": "string", "pattern": "\\S" } },
         "season-goal": { "type": "string" },
         "target-words": { "type": "integer", "minimum": 1 },
         "language": { "type": "string", "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$" },
         "isbn": { "type": ["string", "integer"] },
         "publisher": { "type": "string" },
-        "publication-date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "publication-date": { "type": "string", "pattern": "^(?:\\d{4}-\\d{2}-\\d{2})?$", "description": "YYYY-MM-DD; empty means not set yet." },
         "description": { "type": "string" },
         "keywords": { "$ref": "#/$defs/stringList" },
         "subjects": { "type": "array", "items": { "type": "string", "pattern": "^[A-Z]{3}\\d{6}$" } },
@@ -45,8 +45,8 @@
         "contents-label": { "type": "string", "description": "Heading for generated tables of contents, such as Inhalt. Defaults to Contents." },
         "authors": { "$ref": "#/$defs/stringList" },
         "form": { "enum": ["flash", "short-story", "novelette", "novella", "novel", "serial", "picture-book", "chapter-book"] },
-        "draft-mode": { "type": "string" },
-        "cover": { "type": "string", "minLength": 1 },
+        "draft-mode": { "enum": ["discovered", "outlined"] },
+        "cover": { "type": "string", "minLength": 1, "pattern": "\\.(?:[Gg][Ii][Ff]|[Jj][Pp][Ee]?[Gg]|[Pp][Nn][Gg]|[Ww][Ee][Bb][Pp])$", "description": "Cover image path relative to story.md: a .gif, .jpeg, .jpg, .png, or .webp file. story validate also checks the file exists." },
         "deadline": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
         "revision-passes": {
           "type": "array",
@@ -127,14 +127,14 @@
       "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
       "description": "Filename-derived identifier: the kebab-case basename of the entity file without .md. There is no separate id frontmatter field."
     },
-    "stringList": { "type": "array", "items": { "type": "string" } },
+    "stringList": { "type": "array", "items": { "type": "string", "pattern": "\\S" } },
     "character": {
       "type": "object",
       "required": ["id", "name", "role", "status"],
       "properties": {
         "pronunciation": { "type": "string" },
         "id": { "$ref": "#/$defs/id" },
-        "name": { "type": "string" },
+        "name": { "type": "string", "pattern": "\\S" },
         "role": { "enum": ["protagonist", "antagonist", "supporting", "minor", "narrator", "deuteragonist"] },
         "status": { "enum": ["alive", "deceased", "unknown", "missing", "cut"] },
         "died-in": { "type": "string" },
@@ -147,7 +147,7 @@
             "required": ["character", "type"],
             "properties": {
               "character": { "$ref": "#/$defs/id" },
-              "type": { "type": "string" }
+              "type": { "type": "string", "pattern": "\\S" }
             }
           }
         },
@@ -169,8 +169,8 @@
       "properties": {
         "pronunciation": { "type": "string" },
         "id": { "$ref": "#/$defs/id" },
-        "name": { "type": "string" },
-        "type": { "type": "string" },
+        "name": { "type": "string", "pattern": "\\S" },
+        "type": { "type": "string", "pattern": "\\S" },
         "region": { "type": "string" },
         "population": { "type": ["string", "integer"] },
         "controlled-by": { "type": "string" },
@@ -198,8 +198,8 @@
       "required": ["id", "name", "type"],
       "properties": {
         "id": { "$ref": "#/$defs/id" },
-        "name": { "type": "string" },
-        "type": { "type": "string" },
+        "name": { "type": "string", "pattern": "\\S" },
+        "type": { "type": "string", "pattern": "\\S" },
         "prevalence": { "type": "string" },
         "pronunciation": { "type": "string" }
       }
@@ -210,7 +210,7 @@
       "properties": {
         "pronunciation": { "type": "string" },
         "id": { "$ref": "#/$defs/id" },
-        "name": { "type": "string" },
+        "name": { "type": "string", "pattern": "\\S" },
         "type": { "enum": ["family", "guild", "government", "military", "religion", "company", "community", "criminal", "other"] },
         "status": { "enum": ["active", "hidden", "declining", "defeated", "disbanded", "unknown"] },
         "members": { "$ref": "#/$defs/stringList" },
@@ -225,7 +225,7 @@
       "properties": {
         "pronunciation": { "type": "string" },
         "id": { "$ref": "#/$defs/id" },
-        "name": { "type": "string" },
+        "name": { "type": "string", "pattern": "\\S" },
         "type": { "enum": ["object", "weapon", "document", "technology", "relic", "symbol", "resource", "other"] },
         "status": { "enum": ["active", "lost", "destroyed", "hidden", "transferred", "unknown"] },
         "owner": { "type": "string" },
@@ -238,7 +238,7 @@
       "required": ["id", "name", "type", "status"],
       "properties": {
         "id": { "$ref": "#/$defs/id" },
-        "name": { "type": "string" },
+        "name": { "type": "string", "pattern": "\\S" },
         "type": { "enum": ["main", "subplot", "character", "thematic"] },
         "status": { "enum": ["planned", "in-progress", "resolved"] },
         "characters": { "$ref": "#/$defs/stringList" },
@@ -252,7 +252,7 @@
       "required": ["id", "title", "number", "status"],
       "properties": {
         "id": { "$ref": "#/$defs/id" },
-        "title": { "type": "string" },
+        "title": { "type": "string", "pattern": "\\S" },
         "number": { "type": "integer", "minimum": 1 },
         "numbered": { "type": "boolean", "description": "false builds the chapter under its title alone (a Prologue or Epilogue) and leaves it out of the printed chapter count." },
         "status": { "enum": ["outline", "draft", "revised", "final", "complete"] },
@@ -263,7 +263,7 @@
         "characters": { "$ref": "#/$defs/stringList" },
         "mentions": { "$ref": "#/$defs/stringList" },
         "locations": { "$ref": "#/$defs/stringList" },
-        "mode": { "type": "string" },
+        "mode": { "enum": ["discovered", "outlined", ""], "description": "How the chapter was written. story add chapter writes an empty mode, which means unset." },
         "date": { "type": "string" },
         "time": { "type": "string" },
         "strand": { "type": "string" },
@@ -289,7 +289,7 @@
       "required": ["id", "title", "chapter", "scene", "status"],
       "properties": {
         "id": { "$ref": "#/$defs/id" },
-        "title": { "type": "string" },
+        "title": { "type": "string", "pattern": "\\S" },
         "chapter": { "$ref": "#/$defs/id" },
         "scene": { "type": "integer", "minimum": 1 },
         "status": { "enum": ["outline", "draft", "revised", "final", "complete"] },
@@ -317,7 +317,7 @@
       "required": ["id", "title", "status"],
       "properties": {
         "id": { "$ref": "#/$defs/id" },
-        "title": { "type": "string" },
+        "title": { "type": "string", "pattern": "\\S" },
         "status": { "enum": ["open", "answered", "resolved", "dropped", "abandoned"] },
         "introduced": { "type": "string" },
         "resolved": { "type": "string" },
@@ -329,7 +329,7 @@
       "required": ["id", "title", "status"],
       "properties": {
         "id": { "$ref": "#/$defs/id" },
-        "title": { "type": "string" },
+        "title": { "type": "string", "pattern": "\\S" },
         "status": { "enum": ["planned", "planted", "paid-off", "dropped", "abandoned"] },
         "planted": { "type": "string" },
         "payoff": { "type": "string" },
@@ -342,7 +342,7 @@
       "required": ["id", "title", "status"],
       "properties": {
         "id": { "$ref": "#/$defs/id" },
-        "title": { "type": "string" },
+        "title": { "type": "string", "pattern": "\\S" },
         "status": { "enum": ["planned", "planted", "paid-off", "dropped", "abandoned"] },
         "planted": { "type": "string" },
         "payoff": { "type": "string" },
@@ -358,7 +358,7 @@
       "properties": {
         "pronunciation": { "type": "string" },
         "id": { "$ref": "#/$defs/id" },
-        "term": { "type": "string" },
+        "term": { "type": "string", "pattern": "\\S" },
         "category": { "enum": ["person", "place", "faction", "artifact", "concept", "term", "other"] },
         "aliases": { "$ref": "#/$defs/stringList" }
       }
@@ -392,7 +392,7 @@
         "artifact": { "$ref": "#/$defs/id" },
         "owner": { "type": "string" },
         "location": { "type": "string" },
-        "status": { "type": "string" },
+        "status": { "enum": ["active", "lost", "destroyed", "hidden", "transferred", "unknown"] },
         "since": { "type": "string" }
       }
     },
@@ -430,7 +430,7 @@
       "required": ["id", "title", "status"],
       "properties": {
         "id": { "$ref": "#/$defs/id" },
-        "title": { "type": "string" },
+        "title": { "type": "string", "pattern": "\\S" },
         "status": { "enum": ["open", "verified", "disputed"] },
         "sources": { "$ref": "#/$defs/stringList" },
         "used-in": { "type": "array", "items": { "$ref": "#/$defs/id" } },
@@ -447,7 +447,7 @@
       "required": ["id", "title", "placement"],
       "properties": {
         "id": { "$ref": "#/$defs/id" },
-        "title": { "type": "string" },
+        "title": { "type": "string", "pattern": "\\S" },
         "placement": { "enum": ["front", "back"] },
         "order": { "type": "integer", "minimum": 0 },
         "heading": { "type": "boolean" },
@@ -469,8 +469,8 @@
             "type": "object",
             "required": ["use", "avoid"],
             "properties": {
-              "use": { "type": "string", "minLength": 1 },
-              "avoid": { "type": "string", "minLength": 1 }
+              "use": { "type": "string", "minLength": 1, "pattern": "\\S" },
+              "avoid": { "type": "string", "minLength": 1, "pattern": "\\S" }
             }
           }
         },
@@ -492,7 +492,7 @@
         "code": { "enum": ["windows-reserved-name", "stray-file", "nested-file", "symlinked-file", "interrupted-write", "stale-registry", "stale-word-count", "todo-markers", "unclosed-comment", "no-scene-records", "empty-chapter", "near-miss-key", "duplicate-route", "deceased-without-died-in", "style-sample-missing", "style-sample-own-chapters", "research-no-sources", "research-unsettled", "research-unreviewed", "empty-matter", "permission-pending", "permission-no-rights-holder", "backslash-path", "form-length-range", "too-many-keywords", "todo-placeholder", "author-and-authors", "legacy-backlink-type", "unreachable-chapter", "deceased-in-cast", "progression-deceased-in-cast", "progression-death-conflict", "pov-not-in-cast", "pov-scene-mismatch", "scene-cast-not-in-chapter", "scene-location-not-in-chapter", "cut-character-in-cast", "cut-character-in-arc", "cut-character-relationship", "chapter-numbering-start", "chapter-numbering-gap", "promise-stale-planned", "promise-payoff-passed", "promise-unpaid", "clue-stale-planned", "clue-payoff-passed", "clue-unpaid", "current-chapter-behind", "state-duplicate-character", "state-duplicate-artifact", "state-status-conflict", "deceased-learning", "progression-deceased-learning", "learner-not-in-cast", "knowledge-not-recorded", "state-tracks-dead-character", "state-location-drift", "object-not-recorded", "state-object-drift", "malformed-date", "malformed-time", "negative-travel-hours", "travel-hours-undated", "clock-backward", "series-id-missing", "series-title-mismatch", "canon-name-mismatch", "canon-pronunciation-mismatch", "canon-destroyed-status", "prose-filter-words", "prose-adverbs", "prose-bookisms", "prose-avoided-spelling", "prose-uniform-sentences", "prose-similar-names", "prose-baseline-sentences", "prose-baseline-paragraphs", "prose-baseline-dialogue", "prose-baseline-filter-words", "prose-baseline-adverbs", "prose-baseline-small", "style-sample-unreadable", "pacing-no-hook", "pacing-no-sequel", "pacing-easy-wins", "pacing-resolution-run", "pacing-long-chapter", "pacing-short-chapter", "clue-unplanted", "clue-late-plant", "clue-no-characters", "clue-herring-unresolved", "clue-none-delayed", "voice-avoid", "voice-words-unused", "voice-sound-alike", "name-look-alike", "name-shared-initial", "context-file-skipped", "story-missing-at-ref", "similarity-shared-passage", "similarity-no-reference-text", "derived-ifid", "scene-outside-book", "scene-no-location", "scene-unknown-location", "chapter-no-scenes", "scene-no-setting", "unknown-reference", "adopted-references", "linked-book-id", "choices-dropped", "leftover-references", "stale-exemption", "unreadable-file", "entry-not-mapping", "revived-without-death", "died-in-missing-chapter", "revived-in-missing-chapter", "revival-before-death", "death-status-mismatch", "revival-status-mismatch", "posthumous-appearance", "promise-payoff-before-plant", "promise-payoff-missing", "promise-plant-missing", "question-resolved-before-introduced", "question-resolution-missing", "question-open-but-resolved", "clue-payoff-before-plant", "clue-payoff-missing", "clue-plant-missing", "complete-with-open-promise", "complete-with-open-question", "complete-with-open-clue", "current-chapter-ahead", "state-missing-character", "state-missing-location", "state-missing-artifact", "state-missing-owner", "state-missing-chapter", "state-missing-knows", "state-fact-not-kebab", "state-duplicate-fact", "posthumous-learning", "gone-artifact-used", "gone-artifact-mentioned", "travel-too-fast", "route-same-time", "route-too-fast"], "description": "The finding's code: any warning a story.md severity entry can name, or an error story continuity reports." },
         "file": { "type": "string", "pattern": "^(?!.*\\x00)(?![/\\\\])(?![A-Za-z]:)(?!(?:.*[/\\\\])?\\.\\.(?:[/\\\\]|$))(?!\\.?[/\\\\]*$).*\\S", "description": "The project file the finding is about, relative to story.md, such as chapters/chapter-03.md: no absolute path and no .. segment." },
         "chapter": { "$ref": "#/$defs/id", "description": "The chapter a finding that carries a chapter shows up in, such as chapter-03." },
-        "reason": { "type": "string", "minLength": 1 }
+        "reason": { "type": "string", "minLength": 1, "pattern": "\\S" }
       }
     }
   }

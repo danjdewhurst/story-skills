@@ -8359,6 +8359,7 @@ var CHARACTER_STATUSES = new Set(["alive", "deceased", "unknown", "missing", "cu
 var ARC_TYPES = new Set(["main", "subplot", "character", "thematic"]);
 var ARC_STATUSES = new Set(["planned", "in-progress", "resolved"]);
 var CHAPTER_STATUSES = new Set(["outline", "draft", "revised", "final", "complete"]);
+var CHARACTER_ARC_TYPES = new Set(["change-positive", "change-negative", "flat"]);
 var DRAFT_MODES = new Set(["discovered", "outlined"]);
 var SCENE_STATUSES = new Set(["outline", "draft", "revised", "final", "complete"]);
 var FACTION_TYPES = new Set(["family", "guild", "government", "military", "religion", "company", "community", "criminal", "other"]);
@@ -13541,6 +13542,8 @@ function validateTextFields(project, errors) {
       const value = data?.[field];
       if (typeof value === "number" || typeof value === "boolean") {
         errors.push(err("field-not-text", `${label} frontmatter field ${field} must be text: quote it as ${field}: "${value}"`, label));
+      } else if (Array.isArray(value) && !errors.some((error) => error.file === label && error.message.includes(` ${field} `))) {
+        errors.push(err("field-not-text", `${label} frontmatter field ${field} must be text, not a list`, label));
       }
     }
   };
@@ -13562,7 +13565,10 @@ function validateStoryFrontmatter(project, errors) {
   requireScalar(data, "title", "story.md", errors);
   requireScalar(data, "genre", "story.md", errors);
   requireScalar(data, "status", "story.md", errors);
-  requireArray(data, "themes", "story.md", errors);
+  validateStringArray(data, "themes", "story.md", errors);
+  validateStringArray(data, "contact", "story.md", errors);
+  validateStringArray(data, "authors", "story.md", errors);
+  validateStringArray(data, "keywords", "story.md", errors);
   requireScalar(data, "pov", "story.md", errors);
   requireScalar(data, "tense", "story.md", errors);
   validateEnum(data, "status", STORY_STATUSES, "story.md", errors);
@@ -13686,6 +13692,7 @@ function validateCharacters(project, errors, warnings) {
     }
     validateEntityId(character.id, label, errors);
     requireFields(data, ["name", "role", "status"], label, errors);
+    validateEnum(data, "arc-type", CHARACTER_ARC_TYPES, label, errors);
     requireScalar(data, "name", label, errors);
     requireScalar(data, "role", label, errors);
     requireScalar(data, "status", label, errors);
@@ -13722,6 +13729,10 @@ function validateLocations(project, errors, warnings) {
     const data = readValidationData(location.file, project.root, label, errors);
     if (!data) {
       continue;
+    }
+    requireScalar(data, "population", label, errors);
+    if (typeof data.population === "boolean" || typeof data.population === "number" && !Number.isInteger(data.population)) {
+      errors.push(err("field-not-integer", `${label} frontmatter field population must be a whole number or text, such as 300 or "about 300"`, label));
     }
     validateEntityId(location.id, label, errors);
     requireFields(data, ["name", "type"], label, errors);
@@ -13815,6 +13826,7 @@ function validateArcs(project, errors) {
     if (!data) {
       continue;
     }
+    validateStringArray(data, "mice-threads", label, errors);
     validateEntityId(arc.id, label, errors);
     requireFields(data, ["name", "type", "status"], label, errors);
     requireScalar(data, "name", label, errors);
@@ -13974,7 +13986,7 @@ function validateScenes(project, errors) {
   }
 }
 var STATE_ENTRY_KEYS = {
-  "character-state": ["character", "location"],
+  "character-state": ["character", "location", "physical", "emotional", "knowledge"],
   "object-state": ["artifact", "owner", "location", "status", "since"],
   "knowledge-state": ["character", "knows", "learned-in", "fact"]
 };
@@ -13997,6 +14009,11 @@ function validateContinuityState(project, errors, warnings) {
         continue;
       }
       warnNearMissKeys(entry, keys, `${label} ${list}[${index}]`, warnings, label);
+      for (const [key, value] of Object.entries(entry)) {
+        if (keys.includes(key) && Array.isArray(value)) {
+          errors.push(err("field-not-scalar", `${label} ${list}[${index}] ${key} must be a single value, not a list`, label));
+        }
+      }
       if (list === "object-state" && entry.status !== undefined && !ARTIFACT_STATUSES.has(entry.status)) {
         errors.push(err("unsupported-value", `${label} ${list}[${index}] status must be one of ${[...ARTIFACT_STATUSES].join(", ")}, got ${entry.status}`, label));
       }
@@ -14337,11 +14354,6 @@ function validateEntityId(id, label, errors) {
 function requireScalar(data, field, label, errors, file = label) {
   if (data[field] !== undefined && (Array.isArray(data[field]) || typeof data[field] === "object")) {
     errors.push(err("field-not-scalar", `${label} frontmatter field ${field} must be a scalar`, file));
-  }
-}
-function requireArray(data, field, label, errors) {
-  if (data[field] !== undefined && !Array.isArray(data[field])) {
-    errors.push(err("field-not-list", `${label} frontmatter field ${field} must be a list`, label));
   }
 }
 function requireInteger(data, field, label, errors, minimum) {
