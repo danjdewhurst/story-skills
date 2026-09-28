@@ -133,6 +133,19 @@ describe("characterLifeline", () => {
     expect(lifeline(root, "seer").life.deadAtEnd).toBe(true);
   });
 
+  test("an undated chapter between dated ones does not invent a revival", () => {
+    // By date chapter 3 comes before chapter 1; by number chapter 2 sits
+    // between them, where the progression from chapter 3 does not apply yet.
+    const root = book(makeTempDir(), "Mixed", {
+      count: 3,
+      chapters: { 1: "date: 2030-01-01", 3: "date: 2020-01-01" },
+      characters: { seer: `status: alive\n${progression(["chapter-03", "deceased"])}` }
+    });
+    const { life } = lifeline(root, "seer");
+    expect(life.events.filter((event) => event.type === "revival")).toEqual([]);
+    expect(life.deadAtEnd).toBe(true);
+  });
+
   test("a book with no chapters reads the frontmatter status", () => {
     const root = book(makeTempDir(), "Empty", { count: 0, characters: { ghost: `status: deceased\n${progression(["chapter-02", "alive"])}` } });
     expect(lifeline(root, "ghost").life).toEqual({ deadAtStart: true, deadAtEnd: true, events: [] });

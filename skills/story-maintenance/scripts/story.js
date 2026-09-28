@@ -3194,6 +3194,9 @@ function characterLifeline(character, chronology) {
     const byDiedIn = window !== null && (chapter === window.died || window.deadIn(chapter));
     const beforeDeath = leadIn && happensAfter(chronology, window.died, chapter) && progressionStatusAt(character, chapter, chronology).status === "deceased";
     const now = byDiedIn || beforeDeath || progressionDeathFrom(character, chapter, chronology) !== null;
+    if (!now && dead && chapter !== window?.revived && progressionStatusAt(character, chapter, chronology).from === "") {
+      continue;
+    }
     if (now !== dead) {
       events.push(now ? { type: "death", chapter, source: chapter === window?.died ? "died-in" : "progression" } : { type: "revival", chapter, source: chapter === window?.revived ? "revived-in" : "progression" });
       dead = now;

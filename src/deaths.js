@@ -118,6 +118,13 @@ export function characterLifeline(character, chronology) {
     // changes it.
     const beforeDeath = leadIn && happensAfter(chronology, window.died, chapter) && progressionStatusAt(character, chapter, chronology).status === "deceased";
     const now = byDiedIn || beforeDeath || progressionDeathFrom(character, chapter, chronology) !== null;
+    // A revival needs a cause: revived-in, or a status progression that set
+    // the status the character now has. Dates on only some chapters can
+    // order a chapter between two others that disagree about it, which would
+    // otherwise read the frontmatter status there as a return to life.
+    if (!now && dead && chapter !== window?.revived && progressionStatusAt(character, chapter, chronology).from === "") {
+      continue;
+    }
     if (now !== dead) {
       events.push(now
         ? { type: "death", chapter, source: chapter === window?.died ? "died-in" : "progression" }

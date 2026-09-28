@@ -481,7 +481,9 @@ function canonText(value) {
 function checkCanonDeaths(book, earlierBooks, errors) {
   const deaths = deathsBefore(earlierBooks);
   const { chronology, lifelines } = bookLifelines(book);
-  // Dead at `chapterId` unless this book brings them back by then.
+  // Dead at `chapterId` unless this book brings them back by then. A death
+  // this book records after that revival is its own, which story continuity
+  // reports in this book, so it is not reported again as the earlier book's.
   const deadAt = (id, chapterId) => deaths.has(id) && !(lifelines.has(id) && revivedBy(lifelines.get(id), chapterId, chronology));
   for (const character of book.project.characters) {
     const death = deaths.get(character.id);
