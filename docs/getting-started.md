@@ -140,7 +140,14 @@ This step is optional. Install the CLI if you want to run checks yourself in a t
 | From a clone of this repository | `bun install`, then `bun run story -- --help` |
 | Bundled copy in an installed skill | `node <skills-directory>/story-maintenance/scripts/story.js --help` |
 
-The standalone binaries come with releases after 0.17.0, for macOS (Apple silicon and Intel), Linux (x64 and arm64), and Windows (x64). Each release has one archive per system, `story-skills_<version>_<os>_<arch>.tar.gz` (a `.zip` for Windows), holding the `story` executable, and a `story-skills_<version>_checksums.txt` to check it against (`sha256sum -c`, or `shasum -a 256 -c` on macOS). Unpack it and put `story` somewhere on your `PATH`. The binary replaces only the CLI: it runs the same code and reports the same version as the npm package, and it needs no Node. The skills still need Claude Code, Codex, or another agent (see [Install the skills](#install-the-skills)).
+The standalone binaries come with releases after 0.17.0, for macOS (Apple silicon and Intel), Linux (x64 and arm64), and Windows (x64). Each release has one archive per system, `story-skills_<version>_<os>_<arch>.tar.gz` (a `.zip` for Windows), holding the `story` executable, and a `story-skills_<version>_checksums.txt` to check it against. The checksums file lists every archive, so check only the one you downloaded:
+
+```shell
+sha256sum -c --ignore-missing story-skills_<version>_checksums.txt        # Linux
+shasum -a 256 -c --ignore-missing story-skills_<version>_checksums.txt    # macOS
+```
+
+Unpack it and put `story` somewhere on your `PATH`. On macOS, a binary downloaded in a browser is quarantined and, being unnotarised, refused by Gatekeeper; clear the flag with `xattr -d com.apple.quarantine story`, or install with Homebrew, which does not quarantine it. The Linux binaries need glibc, so on Alpine and other musl systems use the npm package instead. The binary replaces only the CLI: it runs the same code and reports the same version as the npm package, and it needs no Node. The skills still need Claude Code, Codex, or another agent (see [Install the skills](#install-the-skills)).
 
 Check the installed version:
 

@@ -130,3 +130,14 @@ jobs:
 
       - name: Build and smoke-test the binary
         run: bun scripts/build-binaries.js --target "${{ matrix.target }}" --smoke --out "$RUNNER_TEMP/binaries"
+
+      # A script that skipped its work would still exit 0, so check the
+      # archive is there.
+      - name: Check the archive was built
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          if ! compgen -G "$RUNNER_TEMP/binaries/story-skills_*_${TARGET//-/_}.*" > /dev/null; then
+            echo "::error::No archive was built for $TARGET."
+            exit 1
+          fi

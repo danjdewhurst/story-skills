@@ -26,13 +26,15 @@ import { repoRoot } from "./bun-pin.js";
 
 export const PACKAGE_NAME = "story-skills";
 
-// Release targets: the name used in archive names and the Bun target.
+// Release targets: the name used in archive names and the Bun target. The
+// x64 targets use Bun's baseline builds, which run on CPUs without AVX2; the
+// default x64 builds crash there with "Illegal instruction".
 export const TARGETS = [
   { name: "darwin-arm64", os: "darwin", arch: "arm64", bun: "bun-darwin-arm64" },
-  { name: "darwin-x64", os: "darwin", arch: "x64", bun: "bun-darwin-x64" },
-  { name: "linux-x64", os: "linux", arch: "x64", bun: "bun-linux-x64" },
+  { name: "darwin-x64", os: "darwin", arch: "x64", bun: "bun-darwin-x64-baseline" },
+  { name: "linux-x64", os: "linux", arch: "x64", bun: "bun-linux-x64-baseline" },
   { name: "linux-arm64", os: "linux", arch: "arm64", bun: "bun-linux-arm64" },
-  { name: "windows-x64", os: "windows", arch: "x64", bun: "bun-windows-x64" }
+  { name: "windows-x64", os: "windows", arch: "x64", bun: "bun-windows-x64-baseline" }
 ];
 
 export function executableName(target) {
@@ -147,7 +149,8 @@ export function buildTarget(target, version, out, { smoke = false } = {}) {
     }
     return { file: path.basename(archive), sha256: sha256File(archive) };
   } finally {
-    fs.rmSync(work, { recursive: true, force: true });
+    // Windows can hold a just-run executable open for a moment.
+    fs.rmSync(work, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   }
 }
 

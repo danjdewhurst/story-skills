@@ -114,6 +114,17 @@ jobs:
       - name: Build and smoke-test the binary
         run: bun scripts/build-binaries.js --target "${{ matrix.target }}" --smoke --out dist/binaries
 
+      # A script that skipped its work would still exit 0, so check the
+      # archive is there.
+      - name: Check the archive was built
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          if ! compgen -G "dist/binaries/story-skills_*_${TARGET//-/_}.*" > /dev/null; then
+            echo "::error::No archive was built for $TARGET."
+            exit 1
+          fi
+
       - name: Keep the archive for the release
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
