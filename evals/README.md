@@ -112,6 +112,8 @@ hand before/after skill changes, with results recorded below.
 
 | Date | Model | Skill(s) | Fixtures | Result | Notes |
 | --- | --- | --- | --- | --- | --- |
+| 2026-09-28 | claude-opus-5-5 | plot-structure, premise-workshop, scene-craft, chapter-writing | plot-beats, premise-logline, scene-sequel, context-boundary | 2/4 PASS: plot-beats, scene-sequel. FAIL: premise-logline (6 invented claims), context-boundary (3 invented claims) | Checker counts are after recalibrating against these drafts (scene-sequel and context-boundary had required `sea-chest` and `brass key` where the drafts said `chest` and `key`; premise-logline's brief now states its 200-word cap, and its `the chest holds` trap needs an object after it). The judge's claims are real: the logline invented a Board deadline and "Ana's secret"; the chapter invented a step count and moved the chest "under the east window". |
+| 2026-09-28 | claude-sonnet-5-5 | plot-structure, premise-workshop, scene-craft, chapter-writing | plot-beats, premise-logline, scene-sequel, context-boundary | 2/4 PASS: plot-beats, context-boundary. FAIL: scene-sequel (350 words, cap 320), premise-logline (two tests reported weak, 239 words) | Judge (claude-opus-5-5) found no invented canon in any draft. The logline failed its own stress tests and offered fixes instead of a logline that passes, which is what the fixture exists to catch. |
 | 2026-09-27 | claude-opus-5 | verse-craft | verse-limerick | PASS (checker 32/32, 0 invented claims) | Two earlier runs passed the checker but the judge caught invented details ("last year", "a drum", a debt); the second also broke AABBA. Fixed by listing usable facts before drafting and checking rhyme and beats even when only the poem is returned. |
 
 ## What each fixture tests
