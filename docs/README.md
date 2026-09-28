@@ -60,7 +60,7 @@ Pick the route that matches what you came to do. Each one takes four pages; read
 
 | Page | What it covers |
 |------|----------------|
-| [Skills catalogue](skills.md) | All 22 skills: triggers, the files each one reads and writes, the commands it runs, and its reference files |
+| [Skills catalogue](skills.md) | All 23 skills: triggers, the files each one reads and writes, the commands it runs, and its reference files |
 | [CLI reference](cli-reference.md) | Every `story` command and option, with usage, output, and exit codes |
 | [Project format reference](project-format.md) | The schema v2 file contract: every file, frontmatter field, allowed value, and registry, plus migration from older projects |
 

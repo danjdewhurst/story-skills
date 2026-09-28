@@ -1,6 +1,6 @@
 # Skills catalogue
 
-This page is for writers and agent operators who want to know what each of the 22 Story Skills does and which one to reach for. For every skill it covers when an agent picks it up, which files it reads and writes, which `story` commands it runs, and the reference files it loads.
+This page is for writers and agent operators who want to know what each of the 23 Story Skills does and which one to reach for. For every skill it covers when an agent picks it up, which files it reads and writes, which `story` commands it runs, and the reference files it loads.
 
 **On this page**
 
@@ -65,6 +65,7 @@ If none of the three is available, skills fall back to doing the registry, backl
 | Write a poem, limerick, or song, or check that verse scans | [verse-craft](#verse-craft) | "Does this limerick scan?" |
 | Revise or continuity-check existing chapters, or work through revision passes | [revision-continuity](#revision-continuity) | "Continuity-check chapter 3" |
 | Line edit, copyedit, proofread, or make the voices distinct | [line-editing](#line-editing) | "Line edit chapter 3" |
+| Get a simulated first read before human readers see the draft | [reader-panel](#reader-panel) | "Give me a simulated beta read" |
 | Process notes from alpha or beta readers, or send them a review copy | [feedback-triage](#feedback-triage) | "Triage the beta feedback" |
 | Brief a sensitivity reader, clear permissions, disclose AI use, or work with an editor or co-author | [editorial-review](#editorial-review) | "Do I need a sensitivity reader?" |
 | Write a sequel, prequel, or companion book | [series-continuity](#series-continuity) | "Start a prequel to The Last Ember" |
@@ -96,7 +97,9 @@ flowchart LR
     end
     draft --> rev[revision-continuity]
     rev --> le[line-editing]
-    le --> fb[feedback-triage]
+    le --> rp[reader-panel]
+    rp --> fb[feedback-triage]
+    le --> fb
     fb -->|revision plan| rev
     fb -->|ready| out
     subgraph out [Send it out]
@@ -112,6 +115,7 @@ The main handoffs:
 - `premise-workshop` hands a brief (title, logline, premise, form, genre) to `story-init`.
 - `chapter-writing` owns new drafting, `revision-continuity` owns structural and continuity edits to existing chapters, and `line-editing` owns the sentence-level passes that follow them.
 - `discovery-drafting` passes batches to `revision-continuity` at the midpoint and when the draft is complete.
+- `reader-panel` writes simulated persona reads as a feedback round for `feedback-triage`, which weighs them as simulated.
 - `feedback-triage` produces a revision plan, and `revision-continuity` carries it out. `editorial-review` routes sensitivity reads and editor letters into `feedback-triage`.
 - `theme-craft` and `genre-craft` audits feed `revision-continuity` as developmental revision plans.
 - `submission` sends readiness blockers back to `revision-continuity` and hands self-publishing production to `publishing`.
@@ -137,6 +141,7 @@ The main handoffs:
 | [verse-craft](#verse-craft) | Standalone poem files, or verse in chapter prose and `matter/` | `add matter`, `wordcount --write`, `links`, `validate` (story verse only) |
 | [revision-continuity](#revision-continuity) | Chapters and every dependent record, `story.md` `revision-passes` | `report`, `passes`, `next`, `move`, `wordcount --write`, `reindex`, `links`, `validate`, `continuity`, `doctor`, `pacing`, `clues`, `voices`, `prose`, `timeline`, `diagram`, `compare`, `series` |
 | [line-editing](#line-editing) | Chapter prose, `style-sheet.md`, character voice fields | `passes`, `prose`, `voices`, `build --format narration`/`html`/`print`, `wordcount --write`, `links`, `validate` |
+| [reader-panel](#reader-panel) | `feedback/round-N/{persona}.md`, marked `source: simulated` | `build --format html --stamp`, `context`, `prose` (line editor), `reindex`, `links`, `validate` |
 | [feedback-triage](#feedback-triage) | `feedback/round-N/*.md` | `build --format html`, `reindex`, `links`, `validate`, `continuity` |
 | [editorial-review](#editorial-review) | Research `risk` and `reviewed-by`, matter permission fields, `story.md` `ai-disclosure` and `authors` | `add research`, `build --format docx`/`html`/`shunn`/`metadata`, `compare`, `reindex`, `links`, `validate`, `wordcount --write` |
 | [series-continuity](#series-continuity) | A new linked project, carried entity files, `fact` ids | `init --follows`/`--precedes`, `series`, `reindex`, `links`, `validate`, `continuity` |
@@ -693,6 +698,37 @@ story compare . --against ../the-tide-room-draft-1
 - [`read-aloud-guide.md`](../skills/line-editing/references/read-aloud-guide.md): running a read-aloud pass with the narration build and system text-to-speech, and what to listen for.
 - [`edit-note-format.md`](../skills/line-editing/references/edit-note-format.md): presenting edits as before/after with a rationale, batching, and recording accepted and rejected changes.
 
+### reader-panel
+
+**Purpose.** Runs structured persona reads of a chapter range before human readers see it, and writes each one as a feedback file in the shape feedback-triage reads, marked `source: simulated`, so the existing triage flow takes over unchanged. It is a cheap first read, never a substitute for people.
+
+**Triggers.** "Simulated beta read", "reader panel", "persona read", "first read before my beta readers", "how would a genre reader react", "would a reader keep going", "pre-beta read", "mock beta readers".
+
+**Not for.** Real reader feedback ([feedback-triage](#feedback-triage)), a paid sensitivity or authenticity read ([editorial-review](#editorial-review)), or the agent's own line edit ([line-editing](#line-editing)).
+
+**Workflow.**
+
+1. **Scope.** Asks for the chapter range and which of the five personas to run: target-genre reader, line editor, sensitivity reader, continuity-minded reader, and first-page reader. The panel gets its own `feedback/round-{N}/`, never shared with human readers, and a stamped HTML build (`story build . --format html --stamp panel-round-{N}`) so its notes cite the same paragraph labels human readers use.
+2. **Context without spoilers.** Each persona reads only the chapters in range, with `story context` on the last of them for background. It reads nothing from `plot/`, arc files, or later chapters, so it cannot know how a setup pays off.
+3. **Independent reads.** One persona at a time, in its own subagent where possible, following its reference file. Every problem cites a paragraph label and quoted words; a persona that finds nothing says so instead of padding.
+4. **Write and hand off.** Writes `feedback/round-{N}/{persona}.md` with `source: simulated` and `persona` in the frontmatter, then hands the round to feedback-triage.
+
+feedback-triage treats persona agreement as one signal, not convergence, confirms each note in the text before planning a fix, and reads a simulated `ready` as ready for human readers, nothing more. The sensitivity persona only flags passages for a paid human reader and never clears a portrayal.
+
+**Reads.** `story.md`, `style-sheet.md`, the chapters in range, and `story context` output.
+
+**Writes.** `feedback/round-N/{persona}.md`.
+
+**CLI.** `story build . --format html --stamp panel-round-{N}` for labels, `story context chapter-{NN} --path .` for background, and `story prose .` for the line editor. The CLI doesn't read `feedback/`.
+
+**References.**
+
+- [`genre-reader.md`](../skills/reader-panel/references/genre-reader.md): the genre's promises, pacing sags, and convention breaks.
+- [`line-editor.md`](../skills/reader-panel/references/line-editor.md): POV slips, filter words, tense drift, repetition, antecedents, and voice drift.
+- [`sensitivity-reader.md`](../skills/reader-panel/references/sensitivity-reader.md): passages to brief a human sensitivity reader on, without clearing any.
+- [`continuity-reader.md`](../skills/reader-panel/references/continuity-reader.md): facts, objects, timeline, knowledge, and presence within the range.
+- [`first-page-reader.md`](../skills/reader-panel/references/first-page-reader.md): whether a reader would keep going, and where they would stop.
+
 ### feedback-triage
 
 **Purpose.** Handles alpha and beta reader feedback in rounds: one file per reader, no revision until the round is complete, then a synthesis with a readiness verdict and a revision plan.
@@ -709,6 +745,8 @@ story compare . --against ../the-tide-room-draft-1
 4. **Hand off.** A `needs-revision` or `not-ready` verdict goes to [revision-continuity](#revision-continuity). A `ready` verdict closes the round.
 
 When reader confusion reveals a gap in clarity, it creates or resolves files in `continuity/questions/` as well.
+
+A round written by [reader-panel](#reader-panel) carries `source: simulated`. The synthesis is labelled simulated, sorts every finding as single-reader (personas run by one model are not independent), checks each note against the text before planning a fix, and treats `ready` as ready for human readers, not for submission.
 
 Anchors are paragraph positions, so a revision moves them. Rebuild and resend the review copy between rounds rather than reusing old anchors.
 
@@ -928,7 +966,7 @@ npx skills add forjd/better-writing
 
 ## Testing skill changes
 
-The [`evals/`](../evals/) directory holds regression fixtures for the fiction-writing skills (seventeen fixtures across eleven skills, listed by skill in its [skill coverage table](../evals/README.md#skill-coverage)). Each fixture is a drafting or editing brief seeded with canon that must survive and traps a lazy draft would spring. Agents using the skills never load it. See the [Development guide](development.md#evals) and [`evals/README.md`](../evals/README.md) before changing a skill's instructions.
+The [`evals/`](../evals/) directory holds regression fixtures for the fiction-writing skills (eighteen fixtures across twelve skills, listed by skill in its [skill coverage table](../evals/README.md#skill-coverage)). Each fixture is a drafting or editing brief seeded with canon that must survive and traps a lazy draft would spring. Agents using the skills never load it. See the [Development guide](development.md#evals) and [`evals/README.md`](../evals/README.md) before changing a skill's instructions.
 
 ## See also
 

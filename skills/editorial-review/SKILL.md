@@ -57,6 +57,9 @@ workflow; offer `git init` if the project has none.
 3. Build what the reader receives: `story build . --format docx` for
    readers who comment in Word, or `story build . --format html` for
    paragraph-anchored notes.
+   A `reader-panel` round's sensitivity persona can point at passages to
+   put in the brief, but it is not a sensitivity read: never record it in
+   `reviewed-by` or treat it as clearing a portrayal.
 4. Record the returned notes as a feedback round (`feedback/round-{N}/`)
    and synthesise them through the `feedback-triage` skill. When the
    reader's notes are incorporated, add them to the research note's

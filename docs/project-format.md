@@ -127,7 +127,7 @@ warning: characters/minor/old-nell.md is nested inside an entity directory and i
 Some skills keep their own working files in the project. The CLI ignores these without a warning:
 
 - `continuity/motifs.md` and `continuity/theme-audit.md`, written by the [theme-craft skill](../skills/theme-craft/SKILL.md)
-- `feedback/round-<N>/`, written by the [feedback-triage skill](../skills/feedback-triage/SKILL.md), and `feedback/briefs/`, where the [editorial-review skill](../skills/editorial-review/SKILL.md) saves sensitivity-reader briefs
+- `feedback/round-<N>/`, written by the [feedback-triage skill](../skills/feedback-triage/SKILL.md) (and by the [reader-panel skill](../skills/reader-panel/SKILL.md) for simulated rounds, whose files carry `source: simulated`), and `feedback/briefs/`, where the [editorial-review skill](../skills/editorial-review/SKILL.md) saves sensitivity-reader briefs
 - `submission/`, written by the [submission skill](../skills/submission/SKILL.md)
 - `publishing/`, where the [publishing skill](../skills/publishing/SKILL.md) keeps `launch-plan.md`, `retailer-copy.md`, `rights.md`, and `one-sheet-<right>.md`
 - `adaptations/`, where the [adaptation skill](../skills/adaptation/SKILL.md) keeps audiobook, screenplay, picture-book, comics, and interactive-fiction working files (`adaptations/audiobook/`, `adaptations/screenplay/`, and so on). Screenplay and interactive sources use their own extensions (`.fountain`, `.ink`, `.twee`).

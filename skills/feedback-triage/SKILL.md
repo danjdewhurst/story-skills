@@ -1,6 +1,6 @@
 ---
 name: feedback-triage
-description: This skill should be used when the user asks to "process beta reader feedback", "alpha reader feedback", "feedback round", "synthesize reader feedback", "reader notes", "beta feedback", "reader readiness check", "review copy", "send the draft to readers", "share with readers who don't use GitHub", or wants to collect, reconcile, and act on external reader feedback for a story project. NOT for rounds with a professional editor (use editorial-review), or for checking a manuscript is ready to query or publish (use submission or publishing).
+description: This skill should be used when the user asks to "process beta reader feedback", "alpha reader feedback", "feedback round", "synthesize reader feedback", "reader notes", "beta feedback", "reader readiness check", "review copy", "send the draft to readers", "share with readers who don't use GitHub", "triage the reader panel", or wants to collect, reconcile, and act on external reader feedback for a story project. NOT for rounds with a professional editor (use editorial-review), or for checking a manuscript is ready to query or publish (use submission or publishing).
 ---
 
 # Feedback Triage
@@ -27,6 +27,8 @@ readers have read. Verify `story.md` exists in the project root.
   synthesis's revision plan)
 - NOT for the agent's own critique of the draft (use `revision-continuity`
   audits; reader feedback is external input)
+- NOT for producing simulated persona reads (use `reader-panel`; this
+  skill synthesises the round it writes)
 
 ## Workflow
 
@@ -110,7 +112,9 @@ readers have read. Verify `story.md` exists in the project root.
 
 ### 3. Synthesize
 
-Only when every expected reader file is collected:
+Only when every expected reader file is collected. If the round's files
+carry `source: simulated`, it is a panel round from the `reader-panel`
+skill: follow "Simulated rounds" below as well.
 
 1. Read all reader files for the round.
 2. Sort every finding into exactly one category:
@@ -137,6 +141,36 @@ Only when every expected reader file is collected:
 3. If the verdict is `ready`, the round is closed — proceed to the next
    round, the next drafting stage, export, or the `submission` skill.
 
+## Simulated rounds
+
+The `reader-panel` skill writes persona reads in this skill's file shape,
+with `source: simulated` and `persona` in the frontmatter. A file without
+`source`, or with `source: human`, is a human reader's. Synthesise a
+panel round as usual, with these differences:
+
+- **Label it.** Set `source: simulated` in the synthesis frontmatter and
+  start the readiness line with "Simulated round:". Refer to the files by
+  persona ("the line-editor persona"), never as readers or beta readers.
+- **Personas are not independent.** Several personas run by one model
+  agreeing is one signal, not convergence. Sort every simulated finding as
+  single-reader, weighed by how specific and checkable it is: a quoted POV
+  slip or a contradiction with both sides cited is worth acting on; a
+  taste note is usually declined.
+- **Check before acting.** Confirm each simulated problem in the text
+  before it enters the revision plan. A note the text does not bear out
+  is declined with the reason "not borne out by the text".
+- **What `ready` means.** A simulated round's `ready` means ready for
+  human readers, nothing more. It never closes a book for submission or
+  publication; hand off to a human round, not to `submission`.
+- **Never mix rounds.** Simulated and human reads go in separate rounds.
+  If a round holds both, move the simulated files to their own round
+  before synthesising. When a later human round repeats a simulated
+  finding, the human readers' notes carry it; the earlier panel adds no
+  weight.
+- The sensitivity persona only flags passages for a human reader. Its
+  notes become items for an `editorial-review` brief, never a finding that
+  a portrayal is fine.
+
 ## Conventions
 
 - Feedback lives under `feedback/round-{N}/`; `{N}` is a plain integer
@@ -150,7 +184,8 @@ Only when every expected reader file is collected:
   than reusing it after a revision.
 - Every feedback file and the synthesis carry YAML frontmatter
   (`reader`, `round`, `chapters-read`, `overall-verdict` / `readers`,
-  `readiness`).
+  `readiness`). Simulated reads and their synthesis also carry
+  `source: simulated`; simulated reads carry `persona`.
 - Findings are quoted or closely paraphrased from readers, never invented.
   If a note is ambiguous, mark it ambiguous in the file rather than
   resolving it silently.
@@ -175,5 +210,5 @@ story continuity .
 
 ## Reference Files
 
-- **`references/feedback-template.md`** - Per-reader feedback file template with frontmatter (`reader`, `round`, `chapters-read`, `overall-verdict`), paragraph anchor citations, the review-copy note for readers, and canon-check discipline
+- **`references/feedback-template.md`** - Per-reader feedback file template with frontmatter (`reader`, `round`, `chapters-read`, `overall-verdict`, and `source`/`persona` for simulated reads), paragraph anchor citations, the review-copy note for readers, and canon-check discipline
 - **`references/synthesis-template.md`** - Round synthesis template: convergent/divergent/single-reader/declined-with-reason categories, readiness verdict, revision plan

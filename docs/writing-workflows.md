@@ -19,6 +19,7 @@ Each workflow stands on its own, so skip the ones that do not apply to your book
 | [Research](#research) | The book depends on real-world facts | `research` |
 | [Revision passes](#revision-passes) | You have a draft to improve, one named pass at a time | `revision-continuity` |
 | [Line editing](#line-editing) | The structure is settled and the sentences need work | `line-editing` |
+| [Reader panel](#reader-panel) | You want a structured first read before human readers see the draft | `reader-panel` |
 | [Feedback triage](#feedback-triage) | Alpha or beta readers have sent notes | `feedback-triage` |
 | [Editorial review](#editorial-review) | You need a sensitivity reader, permissions, an AI-use statement, an editor, or a co-author | `editorial-review` |
 | [Submission prep](#submission-prep) | The manuscript is finished and going to agents or magazines | `submission` |
@@ -42,7 +43,7 @@ flowchart LR
     E --> F
     F --> G[revision-continuity<br/>named passes]
     G --> L[line-editing]
-    L --> H[feedback-triage<br/>editorial-review]
+    L --> H[reader-panel<br/>feedback-triage<br/>editorial-review]
     H -->|needs-revision| G
     H -->|ready| I[submission<br/>publishing<br/>adaptation]
 ```
@@ -56,7 +57,7 @@ flowchart LR
 | Keep it consistent | `voice-style`, `research` | `story prose`, `story voices`, `story validate` |
 | Revise | `revision-continuity`, `theme-craft` (theme audit) | `story passes`, `story next`, `story continuity`, `story pacing`, `story clues`, `story doctor`, `story compare` |
 | Polish | `line-editing` | `story prose`, `story voices`, `story build --format narration`/`html`/`print` |
-| Get outside readers | `feedback-triage`, `editorial-review` | `story build --format html`, `story continuity`, `story validate` |
+| Get outside readers | `reader-panel`, `feedback-triage`, `editorial-review` | `story build --format html`, `story continuity`, `story validate` |
 | Send it out | `submission`, `publishing`, `adaptation` | `story synopsis`, `story build --format shunn`/`epub`/`print`/`metadata`/`narration` |
 
 Sequels and prequels add `series-continuity` on top of any of these; see [Series](series.md).
@@ -1202,6 +1203,32 @@ story validate .
 
 Chapters carry the accepted edits and, where you agreed, `status: revised`. `style-sheet.md` records every new decision, character files carry any agreed voice lists, and `revision-passes` shows `line`, `copyedit`, and `proof` as done. The HTML, print, and narration builds sit in `dist/`, which is disposable.
 
+## Reader panel
+
+**Goal:** get a structured first read of a draft before any person reads it, so the human round spends its attention on what only people can tell you.
+
+**Skill:** [`reader-panel`](../skills/reader-panel/SKILL.md), which hands its round to `feedback-triage`.
+
+```text
+Run a reader panel on chapters 1 to 5 before I send them to beta readers.
+```
+
+The skill runs five personas by default: a reader of your genre, a line editor, a sensitivity persona, a continuity-minded reader, and a first-page reader. It builds a stamped review copy for paragraph labels, gives each persona only the chapters in range plus `story context` for background (nothing from later chapters or the outline), and writes one file per persona:
+
+```text
+feedback/
+└── round-1/
+    ├── genre-reader.md        # source: simulated, persona: genre-reader
+    ├── line-editor.md
+    ├── sensitivity-reader.md
+    ├── continuity-reader.md
+    └── first-page-reader.md
+```
+
+Every note cites a paragraph label and quoted words, and a persona that finds nothing says so. Then `feedback-triage` synthesises the round as simulated: persona agreement is one signal, not convergence, each note is checked in the text before it enters the revision plan, and `ready` means ready for human readers. The sensitivity persona only lists passages to brief a paid sensitivity reader on (see [Editorial review](#editorial-review)); it never says a portrayal is fine.
+
+Keep the panel in its own round. Your human readers go in the next one.
+
 ## Feedback triage
 
 **Goal:** turn alpha and beta reader notes into decisions and a revision plan, without rewriting the book after the first reader replies.
@@ -1769,6 +1796,7 @@ Which commands each skill runs when it finishes. All take the project path, `.` 
 | Research (`research`) | | ✓ | ✓ | ✓ | | |
 | Revision (`revision-continuity`) | ✓ | ✓ | ✓ | ✓ | ✓ | `passes`, `next`, `doctor`, `pacing`, `clues`, `voices`, `compare`, `series` if linked |
 | Line editing (`line-editing`) | ✓ | | ✓ | ✓ | | `passes`, `prose`, `voices`, `build --format narration`/`html`/`print` |
+| Reader panel (`reader-panel`) | | ✓ | ✓ | ✓ | | `build --format html --stamp`, `context`, `prose` |
 | Feedback (`feedback-triage`) | | ✓ | ✓ | ✓ | ✓ | `build --format html` |
 | Editorial review (`editorial-review`) | ✓ | ✓ | ✓ | ✓ | | `add research`, `build --format docx`/`shunn`/`html`/`metadata`, `compare --ref` |
 | Submission (`submission`) | ✓ | | ✓ | ✓ | ✓ | `prose`, `report`, `synopsis`, `build`, `build --format metadata` |
