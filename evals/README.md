@@ -131,13 +131,37 @@ hand before/after skill changes, with results recorded below.
 | `motif-restraint` | The motif carries the chapter's idea through what Tomas does; naming the theme or explaining what the motif means fails. Evaluates the `theme-craft` skill. |
 | `screenplay-fountain` | A passage adapted into one Fountain scene: slugline, source note, and nothing on the page a camera could not photograph. Voiceover, camera directions, and kept first-person narration fail. Evaluates the `adaptation` skill. |
 | `verse-limerick` | One limerick in a character's voice: it names Tomas and the paraffin, stays in one five-line stanza under 60 words, and keeps the key secret. Archaic filler (*o'er*, *nigh*, *did come*) and a scansion table in the output fail. The checker cannot hear meter, so read the draft. Evaluates the `verse-craft` skill. |
+| `scene-sequel` | A scene and its sequel from a scene record: goal, conflict, and the disaster (the key snaps), then reaction, the dilemma stated as a choice, and the decision, not carried out. A scene with no turn (the key turns, the lid comes up), a forced lock, or anything from inside the chest fails. Evaluates the `scene-craft` skill. |
+| `plot-beats` | Three-act beats mapped onto the eight chapters the book already has, as an arc Plot Points table. A chapter past `Ch 8`, a proposed new chapter, or a midpoint row anywhere but `Ch 4` fails. Evaluates the `plot-structure` skill. |
+| `premise-logline` | One logline from the user's spark, plus four stress tests reported pass, weak, or fail. A test reported weak or fail, a new relative, or deciding who left the key or what the chest holds fails. Evaluates the `premise-workshop` skill. |
+| `context-boundary` | A chapter drafted from `story context` output with the whole-book outline open beside it: it stays inside the target length and uses nothing the packed context leaves out (the logbook, the fuse wire, who left the key). Evaluates `chapter-writing`'s use of `story context`. |
 
-Thirteen fixtures cover nine skills: `chapter-writing` (six), `line-editing`,
-`revision-continuity`, `series-continuity`, `genre-craft`, `scene-craft`,
-`theme-craft`, `adaptation`, and `verse-craft`. The other thirteen skills have no
-behavioural regression net and rely on human review. A skill is worth a
-fixture when a substring checker can tell a good output from a bad one; a
-fixture that passes whatever the skill does is worse than an honest gap.
+## Skill coverage
+
+Each fixture runs under the skill its `checks.json` names in `skill`.
+
+| Skill | Fixtures |
+| --- | --- |
+| `adaptation` | `screenplay-fountain` |
+| `chapter-writing` | `anti-slop`, `canon-keeping`, `context-boundary`, `no-invention`, `promise-payoff`, `question-stays-open` |
+| `genre-craft` | `genre-craft-mystery` |
+| `line-editing` | `voice-preservation` |
+| `plot-structure` | `plot-beats` |
+| `premise-workshop` | `premise-logline` |
+| `revision-continuity` | `revision-continuity` |
+| `scene-craft` | `deep-pov`, `scene-sequel` |
+| `series-continuity` | `series-continuity` |
+| `theme-craft` | `motif-restraint` |
+| `verse-craft` | `verse-limerick` |
+
+Seventeen fixtures cover eleven of the 22 skills. These eleven have none:
+`character-management`, `discovery-drafting`, `editorial-review`,
+`feedback-triage`, `publishing`, `research`, `story-init`,
+`story-maintenance`, `submission`, `voice-style`, and `worldbuilding`. They
+have no behavioural regression net and rely on human review. A skill is
+worth a fixture when a substring checker can tell a good output from a bad
+one; a fixture that passes whatever the skill does is worse than an honest
+gap. Keep this table current when you add a fixture.
 
 ## Check format
 
