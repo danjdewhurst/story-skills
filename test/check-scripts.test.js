@@ -672,18 +672,24 @@ describe("github workflows", () => {
     expect(template).toContain('startswith("draft/")');
     // Fork PRs cannot suppress drafting.
     expect(template).toContain("(.isCrossRepository | not)");
-    // Every step after the guard is gated on it, so a skip is a successful no-op.
-    const stepsAfterGuard = template.split("id: guard")[1].split(/\n\s+- name: /).slice(1);
+    // Every later step of the draft job is gated on it, so a skip is a
+    // successful no-op; the publish job runs only when a draft was made.
+    const stepsAfterGuard = template.split("id: guard")[1].split("\n  publish:\n")[0].split(/\n\s+- name: /).slice(1);
     expect(stepsAfterGuard.length).toBeGreaterThan(0);
     for (const step of stepsAfterGuard) {
-      expect(step).toContain("if: steps.guard.outputs.skip != 'true'");
+      expect(step).toMatch(/\n\s+if: [^\n]*steps\.guard\.outputs\.skip != 'true'/);
     }
+    expect(template).toContain("needs: draft\n    if: needs.draft.outputs.drafted == 'true'");
   });
 
   test("draft template prompt commands match the allowed-tools rules", () => {
     // Resolve ${{ env.X }} expressions the way Actions does before the agent sees them.
     const raw = readRepo("templates/github/draft-next-chapter.yml");
-    const envValue = (name) => new RegExp(`^  ${name}: "([^"]*)"`, "m").exec(raw)[1];
+    // A budget is `${{ inputs.x || 'default' }}`: a scheduled run gets the default.
+    const envValue = (name) => {
+      const match = new RegExp(`^  ${name}: (?:"([^"]*)"|\\$\\{\\{ inputs\\.\\w+ \\|\\| '([^']*)' \\}\\})$`, "m").exec(raw);
+      return match[1] ?? match[2];
+    };
     const template = raw.replace(/\$\{\{ env\.(\w+) \}\}/g, (_, name) => envValue(name));
     const prompt = template.split("prompt: |")[1].split("claude_args:")[0];
     const allowed = /--allowedTools "([^"]+)"/.exec(template)[1];

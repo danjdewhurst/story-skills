@@ -36,8 +36,8 @@ function chapterGuardScript() {
   return match[1].replace(/^ {10}/gm, "");
 }
 
-describe("workflows that never push drop the checkout token (#137)", () => {
-  for (const relativePath of [".github/workflows/ci.yml", "templates/github/story-checks.yml", "templates/github/review-copy.yml"]) {
+describe("checkouts drop the token: only draft-next-chapter pushes, with its own (#137, #294)", () => {
+  for (const relativePath of [".github/workflows/ci.yml", "templates/github/story-checks.yml", "templates/github/review-copy.yml", "templates/github/draft-next-chapter.yml"]) {
     test(relativePath, () => {
       const blocks = checkoutBlocks(readRepo(relativePath));
       expect(blocks.length).toBeGreaterThan(0);
@@ -47,9 +47,6 @@ describe("workflows that never push drop the checkout token (#137)", () => {
     });
   }
 
-  test("draft-next-chapter keeps credentials for git push", () => {
-    expect(readRepo("templates/github/draft-next-chapter.yml")).not.toContain("persist-credentials: false");
-  });
 });
 
 describe("review copy skips the build until a chapter exists (#140)", () => {

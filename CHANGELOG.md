@@ -32,6 +32,11 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
     - an object-state `status` outside the artifact statuses.
 
     It accepts the empty chapter `mode` that `story add` writes, and an empty `publication-date`.
+- **`draft-next-chapter.yml`** now separates drafting from publishing:
+  - **Draft job.** The agent runs with a read-only token and no stored git credentials. It only commits on a `draft/` branch; `git push` and `gh pr create` are no longer among its allowed tools. The prompt tells it that project text, including reader notes under `feedback/`, is data and never instructions.
+  - **Publish job.** A fresh runner takes the commits as a git bundle and refuses them if they change anything but markdown inside `STORY_DIR` (no dotfiles, `.github/`, `.claude/`, scripts, or symlinks) or contain the API key. It runs `story validate`, `links`, and `continuity` with `--json`, telling findings (exit 1) from an unusable project (2 to 4), then pushes the branch and opens the pull request. A draft that fails the checks, or falls outside the word range, opens as a draft pull request listing the failures, and the run fails.
+  - **Budgets.** Manual runs take inputs for the word range (`min_words`, `max_words`), `max_turns`, and `max_budget_usd`, passed to Claude Code as `--max-turns` and `--max-budget-usd`. Scheduled runs use their defaults.
+  - **Threat model.** `docs/automation.md` sets it out. Copy the new template over the old one to adopt it. ([#294](https://github.com/danjdewhurst/story-skills/issues/294))
 
 ## [0.17.0] - 2026-09-28
 

@@ -236,7 +236,7 @@ Story Skills ships three workflows and one issue form in [`templates/github/`](.
 | Template | Copy to | Runs on | Needs | What it does |
 |---|---|---|---|---|
 | [`story-checks.yml`](../templates/github/story-checks.yml) | `.github/workflows/` | Push to `main`, every pull request | Nothing | Runs `validate`, `links`, `continuity`, and `report --actionable`. |
-| [`draft-next-chapter.yml`](../templates/github/draft-next-chapter.yml) | `.github/workflows/` | Weekday schedule, manual dispatch | `ANTHROPIC_API_KEY` secret, the skills committed to the repository | Drafts the next chapter with Claude Code, runs the checks, and opens a pull request. |
+| [`draft-next-chapter.yml`](../templates/github/draft-next-chapter.yml) | `.github/workflows/` | Weekday schedule, manual dispatch | `ANTHROPIC_API_KEY` secret, the skills committed to the repository | Drafts the next chapter with Claude Code in a read-only job, then checks the commit and opens a pull request from a second job. |
 | [`review-copy.yml`](../templates/github/review-copy.yml) | `.github/workflows/` | Push to `main`, manual dispatch | GitHub Pages set to deploy from GitHub Actions | Runs the checks, builds the HTML review copy, and publishes it to GitHub Pages. |
 | [`ISSUE_TEMPLATE/manuscript-note.yml`](../templates/github/ISSUE_TEMPLATE/manuscript-note.yml) | `.github/ISSUE_TEMPLATE/` | A reader opening an issue | A `manuscript-note` label | Gives readers a form for a note on one paragraph of the review copy. |
 
@@ -247,9 +247,12 @@ flowchart LR
     A[Schedule or manual run] --> B{Open draft/* PR?}
     B -- yes --> C[Skip]
     B -- no --> D[Claude drafts next chapter]
-    D --> E[Agent opens draft/* PR]
-    E --> F[Workflow re-runs checks]
-    F --> G[You review and merge]
+    D --> E[Agent commits on draft/*]
+    E --> F[Workflow checks the commit]
+    F -- pass --> P[Ready PR]
+    F -- findings --> Q[Draft PR listing them]
+    P --> G[You review and merge]
+    Q --> G
     G --> A
 ```
 
@@ -258,7 +261,7 @@ All three workflows:
 - run the CLI with `npx` from the GitHub tag in `STORY_REF`, using Node 24 from `actions/setup-node`;
 - read the project from `STORY_DIR`, which defaults to the repository root (`.`);
 - pin every action to a commit SHA, with the tag it corresponds to in a comment;
-- set `timeout-minutes` on every job (15 minutes, and 60 for the drafting job), so a run that hangs, or a project that makes the CLI slow, cannot hold a runner for GitHub's six-hour default.
+- set `timeout-minutes` on every job (15 minutes, and 60 for the draft job that runs the agent), so a run that hangs, or a project that makes the CLI slow, cannot hold a runner for GitHub's six-hour default.
 
 ## Story checks workflow
 
@@ -288,7 +291,7 @@ If a continuity finding is intentional, record it in `continuity/exemptions.md` 
 
 ## Draft the next chapter workflow
 
-[`draft-next-chapter.yml`](../templates/github/draft-next-chapter.yml) runs [Claude Code](https://github.com/anthropics/claude-code-action) on a schedule to draft one chapter per run and open a pull request for it. You review the chapter like any other change.
+[`draft-next-chapter.yml`](../templates/github/draft-next-chapter.yml) runs [Claude Code](https://github.com/anthropics/claude-code-action) on a schedule to draft one chapter per run. The agent only commits. The workflow checks the commit, pushes the branch, and opens the pull request, so a chapter that fails the checks arrives as a draft pull request that lists the failures, never as a ready one. You review the chapter like any other change.
 
 ### Install it
 
@@ -296,55 +299,97 @@ If a continuity finding is intentional, record it in `continuity/exemptions.md` 
 2. Add a repository secret named `ANTHROPIC_API_KEY` (Settings, then Secrets and variables, then Actions).
 3. Commit the Story Skills skills into the repository so the agent has the workflows it is told to follow, such as `chapter-writing`. Either run `npx skills add danjdewhurst/story-skills` in the repository and commit the result, or copy this repository's `skills/` directory to `.claude/skills/`. See [Skills catalogue](skills.md).
 4. In Settings, then Actions, then General, under **Workflow permissions**, turn on **Allow GitHub Actions to create and approve pull requests**. Without this, the built-in `GITHUB_TOKEN` cannot open the chapter PR.
-5. Adjust `STORY_DIR` and the cron schedule, then commit.
+5. Protect your default branch: in Settings, then Rules or Branches, require pull requests before merging into `main`.
+6. Adjust `STORY_DIR`, the budgets, and the cron schedule, then commit.
 
-To try it without waiting for the schedule, open the Actions tab, pick **Draft the next chapter**, and choose **Run workflow**.
+To try it without waiting for the schedule, open the Actions tab, pick **Draft the next chapter**, and choose **Run workflow**. The form takes the budgets for that run.
+
+### Budgets
+
+| Budget | Default | Set by | When it is exceeded |
+|---|---|---|---|
+| Words of prose in the drafted chapter | `1500` to `5000` | `MIN_WORDS`, `MAX_WORDS`, or the `min_words` and `max_words` inputs | The agent is told the range. A chapter outside it still gets a pull request, but as a draft that names its word count, and the run fails. |
+| Agent turns | `80` | `MAX_TURNS`, or the `max_turns` input | Passed to Claude Code as `--max-turns`. The agent stops, nothing is pushed, and the run fails with a message naming the budget. |
+| API spend per run | `$5` | `MAX_BUDGET_USD`, or the `max_budget_usd` input | Passed to Claude Code as `--max-budget-usd`. As for turns. |
+| Time | 60 minutes | `timeout-minutes` on the draft job | GitHub cancels the job; nothing is pushed. |
+
+Change the defaults in the `env` block at the top of the file: each is `${{ inputs.<name> || '<default>' }}`, so a scheduled run uses the default after `||` and a manual run can override it. The first step of the run rejects a budget that is not a plain number, since the turn and dollar limits are passed on the agent's command line.
 
 ### Triggers, permissions, and secrets
 
 | Setting | Value | Why |
 |---|---|---|
 | Triggers | `schedule` (`0 6 * * 1-5`, 06:00 UTC on weekdays) and `workflow_dispatch` | Never runs on `pull_request` or `pull_request_target`, so a fork cannot trigger a run that has access to the secrets. |
-| `permissions` | `contents: write`, `pull-requests: write` | To push the draft branch and open the pull request. |
+| Draft job `permissions` | `contents: read`, `pull-requests: read` | The agent runs here. Whatever it is talked into, this job's token cannot push, open pull requests, or comment. |
+| Publish job `permissions` | `contents: write`, `pull-requests: write` | To push the checked branch and open the pull request. The agent never runs in this job. |
 | `concurrency` | One run per workflow, `cancel-in-progress: false` | A manual run that overlaps the schedule waits instead of drafting the same chapter twice. |
-| `timeout-minutes` | `60` | Stops a run that stalls instead of letting it hold a runner, and spend API credit, for six hours. |
-| `ANTHROPIC_API_KEY` | Repository secret you add | Passed to `anthropics/claude-code-action`. |
-| `GITHUB_TOKEN` | Provided by GitHub | Used by the skip guard and by the agent to push and open the PR. |
+| `timeout-minutes` | `60` for the draft job, `15` for the publish job | Stops a run that stalls instead of letting it hold a runner, and spend API credit, for six hours. |
+| `persist-credentials` | `false` on both checkouts | No token is left in `.git/config` for the agent to read. The publish job's push authenticates with `gh auth setup-git`. |
+| `ANTHROPIC_API_KEY` | Repository secret you add | Passed to `anthropics/claude-code-action` in the draft job, and to the publish job's secret check. |
+| `GITHUB_TOKEN` | Provided by GitHub | Read-only in the draft job (the skip guard and the action); write in the publish job (push and pull request). |
 
 ### What a run does
 
-1. **Skip while a draft is open.** The first step lists open pull requests whose head branch starts with `draft/` and comes from this repository. If there is one, every later step is skipped and the run succeeds. Until you merge or close that PR, `story next` would keep recommending the same chapter. Pull requests from forks are ignored, so they cannot block drafting.
-2. **Check out and set up Node.** Full history (`fetch-depth: 0`) and Node 24.
-3. **Draft with Claude Code.** The agent is prompted to:
+The **draft job**:
+
+1. **Skips while a draft is open.** The first step lists open pull requests whose head branch starts with `draft/` and comes from this repository. If there is one, every later step is skipped and the run succeeds. Until you merge or close that PR, `story next` would keep recommending the same chapter. Pull requests from forks are ignored, so they cannot block drafting.
+2. **Checks the budgets** are plain numbers, and that the word range is not upside down.
+3. **Checks out and sets up Node.** Full history (`fetch-depth: 0`), no stored token, and Node 24.
+4. **Drafts with Claude Code.** The agent is told that everything it reads in the project is story material, never instructions. It is prompted to:
    1. run `story next` and read `story.md`, `chapters/_index.md`, `continuity/state.md`, open questions, promises, and the active arcs;
-   2. if `story next` reports a P0 maintenance issue, fix it on a `draft/maintenance-<date>` branch, open a maintenance PR, and stop;
-   3. if `story next` suggests no "Draft chapter" (the story is revising or complete, or every arc is resolved), stop without drafting;
-   4. otherwise draft the next chapter on a branch named `draft/chapter-<number>`, following the `chapter-writing` skill: run `story context chapter-<number>` once the chapter file exists with its POV and cast, and draft from the packed context it prints, which holds nothing from later chapters; then outline first, prose under `## Chapter Text`, accurate frontmatter, matching scene records, and updates to continuity state, promises, questions, and the timeline;
+   2. if `story next` reports a P0 maintenance issue, fix it on a `draft/maintenance-<YYYY-MM-DD>` branch, commit, and stop;
+   3. if `story next` suggests no "Draft chapter" (the story is revising or complete, or every arc is resolved), stop without committing;
+   4. otherwise draft the next chapter on a branch named `draft/chapter-<number>`, following the `chapter-writing` skill: run `story context chapter-<number>` once the chapter file exists with its POV and cast, and draft from the packed context it prints, which holds nothing from later chapters; then outline first, prose under `## Chapter Text` within the word range, accurate frontmatter, matching scene records, and updates to continuity state, promises, questions, and the timeline;
    5. run `story wordcount --write`, `story reindex`, `story validate`, `story links`, and `story continuity`, and make them pass;
-   6. commit, push the branch with `git push -u origin draft/chapter-<number>`, and open a PR titled `Draft chapter <number>: <title>` that summarises the beats, the arcs advanced, and the promises planted or paid off.
-4. **Check the result.** The workflow then runs `story validate`, `story links`, and `story continuity` itself, so a run whose chapter still has errors fails visibly.
+   6. commit, with `Draft chapter <number>: <title>` as the message's first line and a summary of the beats, arcs advanced, and promises planted or paid off as its body.
+5. **Bundles the commits.** If the agent committed nothing, the run ends here, successfully. Otherwise the new commits must be on a branch named `draft/chapter-<number>` or `draft/maintenance-<date>`. They are written to a git bundle and uploaded as a workflow artifact, kept for a day. The bundle is the only thing that leaves this job.
+
+The **publish job** runs on a fresh runner, only when the draft job bundled a commit:
+
+1. **Checks what the agent committed.** It checks out the repository, verifies the bundle, and fetches the branch. It refuses the whole draft, pushing nothing, unless the commits build on the one the run started from and change only markdown files inside `STORY_DIR`. So there can be no dotfiles or hidden folders (`.github/`, `.claude/`, `.npmrc`), no scripts or other file types, and no symlinks or submodules.
+2. **Checks for secrets.** It refuses the draft if the diff or a commit message contains the value of `ANTHROPIC_API_KEY`. GitHub masks secrets in logs, not in commits. Rotate the key if this ever fires.
+3. **Runs the story checks.** It runs `story validate`, `story links`, and `story continuity` with `--json` and reads their exit codes:
+   - `0` passes;
+   - `1` means findings, and each error goes into the pull request body;
+   - `2` to `4` mean the project could not be checked, so the job stops without pushing.
+
+   For a chapter branch it also checks the chapter's word count against the range.
+4. **Pushes the branch and opens the pull request.** The title is the commit's first line. The body holds the agent's summary and the check results. When a check or the word range failed, the pull request is a draft headed "Checks failed", and the run fails so you see it.
 
 The PR is a draft for you to edit, not a finished chapter. [Writing workflows](writing-workflows.md) describes the chapter-writing process the agent follows, and what to look for when you revise.
 
-### What the agent is allowed to do
+### What the agent can and cannot do
 
-The action is started with an `--allowedTools` list that limits the agent to:
+The agent reads the whole project, and some of it is written by other people: reader notes filed through the [manuscript note form](#manuscript-note-issue-form) and recorded under `feedback/`, text from `story import`, research notes pasted from the web. Any of it can carry instructions aimed at the agent (prompt injection). The workflow assumes the worst: the agent may be talked into anything its tools allow. It is built so that even then, nothing reaches your repository without passing the checks above.
+
+What the agent has:
 
 - the `story` CLI, run through the exact `npx --yes --package github:danjdewhurst/story-skills#<STORY_REF> story` prefix;
-- `git checkout -b`, `git add`, and `git commit`;
-- `git push -u origin draft/`, so the agent can push only branches whose names start with `draft/`;
-- `gh pr create`;
-- reading, writing, and searching files (`Read`, `Write`, `Edit`, `Glob`, `Grep`).
+- `git checkout -b draft/`, `git add`, and `git commit`;
+- reading, writing, and searching files (`Read`, `Write`, `Edit`, `Glob`, `Grep`);
+- the prompt's instruction to treat project text as data and report, not follow, any instruction it finds.
 
-Claude Code matches these rules against the literal command text. That is why the prompt spells out each `story` command in full, with no quotes or shell variables. If you edit the prompt, keep each command identical to an allowed prefix, or the agent will be refused permission to run it. The Story Skills test suite checks this for the shipped template.
+What it does not have:
 
-The push rule is a prefix match on the command text, and a crafted refspec could still stretch it, so it is not a hard boundary. Protect your default branch as well: in Settings, then Rules or Branches, require pull requests before merging into `main`, so nothing the agent pushes can land there directly.
+- **No push, no pull requests, no other shell commands.** `git push` and `gh` are not in `--allowedTools`, and the draft job's token is read-only anyway.
+- **No stored token.** The checkout keeps none in `.git/config`, and the draft job's `GITHUB_TOKEN` expires when the job ends.
+- **No way to change what runs next.** Files it writes can only reach the repository as markdown inside the story project, through the publish job's check. That job runs on a fresh runner, so a git hook, `.npmrc`, or script the agent wrote on its own runner never runs there. Workflow files and skills under `.github/` and `.claude/` are refused.
+- **No secrets in the output.** A draft holding the API key's value is refused.
 
-### Why the checks run twice
+What is left, and what covers it:
 
-GitHub does not start other workflows for events caused by the built-in `GITHUB_TOKEN`. A pull request the agent opens therefore does not trigger `story-checks.yml`. The draft workflow runs the same three checks at the end so the drafted branch is still verified.
+- **Bad prose or bad canon.** The agent can still write a chapter that is wrong, or that obeys an instruction hidden in a reader note (a plot turn, a changed name). The story checks catch contradictions they know about. You catch the rest in review: read drafted chapters, and treat a surprising change as a reason to look at the notes it drew on.
+- **Spend.** A hostile note can waste the run's budget, up to the turn and dollar limits and the timeout.
+- **The pull request text.** The title and body come from the agent's commit message, so read them as the agent's words, not the workflow's.
+- **Merging.** Only a person merges. Branch protection on `main` makes sure of that.
 
-If you want `story-checks.yml` to run on drafted PRs as well, for example because it is a required status check, replace `github_token: ${{ secrets.GITHUB_TOKEN }}` in the Claude Code step with a personal access token or GitHub App token stored as a secret.
+Claude Code matches `--allowedTools` rules against the literal command text. That is why the prompt spells out each `story` command in full, with no quotes or shell variables. If you edit the prompt, keep each command identical to an allowed prefix, or the agent will be refused permission to run it. The Story Skills test suite checks this for the shipped template, and runs the publish job's checks against sample commits.
+
+### Why the checks run in the workflow
+
+GitHub does not start other workflows for events caused by the built-in `GITHUB_TOKEN`. A pull request the publish job opens therefore does not trigger `story-checks.yml`. The publish job runs the same three checks itself, and they decide whether the pull request opens ready or as a draft.
+
+If you want `story-checks.yml` to run on drafted PRs as well, for example because it is a required status check, replace `GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}` in the publish job's push and pull request steps with a personal access token or GitHub App token stored as a secret. Keep it out of the draft job.
 
 ## Review copy workflow
 
@@ -446,7 +491,7 @@ Every book a linked series names in `follows` or `precedes` must be in the check
 
 `STORY_REF` is the Story Skills release tag the CLI is fetched from. The release process sets it to the release's own version, so a template copied from a given release already points at that release. Bump it in every workflow file you use when you want a newer release, and run the checks locally first, because new releases can add checks. Releases are listed on the [GitHub releases page](https://github.com/danjdewhurst/story-skills/releases).
 
-To use the npm package instead of the GitHub tag, replace `github:danjdewhurst/story-skills#$STORY_REF` with `story-skills@<version>` in each `npx --package` value. In `draft-next-chapter.yml`, the prompt commands and the `Bash(...)` rule in `--allowedTools` spell it `github:danjdewhurst/story-skills#${{ env.STORY_REF }}` instead; change those together, so they still match.
+To use the npm package instead of the GitHub tag, replace `github:danjdewhurst/story-skills#$STORY_REF` with `story-skills@<version>` in each `npx --package` value. In `draft-next-chapter.yml`, the prompt commands and the `Bash(...)` rule in `--allowedTools` spell it `github:danjdewhurst/story-skills#${{ env.STORY_REF }}` instead; change those together, so they still match. The publish job's checks use `$STORY_REF` like the other workflows.
 
 ### Schedule
 
