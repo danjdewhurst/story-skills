@@ -480,8 +480,7 @@ function canonText(value) {
 // book.
 function checkCanonDeaths(book, earlierBooks, errors) {
   const deaths = deathsBefore(earlierBooks);
-  const chronology = chapterChronology(book.project);
-  const lifelines = new Map(book.project.characters.map((character) => [character.id, characterLifeline(character, chronology)]));
+  const { chronology, lifelines } = bookLifelines(book);
   // Dead at `chapterId` unless this book brings them back by then.
   const deadAt = (id, chapterId) => deaths.has(id) && !(lifelines.has(id) && revivedBy(lifelines.get(id), chapterId, chronology));
   for (const character of book.project.characters) {
@@ -525,9 +524,9 @@ function checkCanonDeaths(book, earlierBooks, errors) {
 function deathsBefore(earlierBooks) {
   const deaths = new Map();
   for (const earlier of earlierBooks) {
-    const chronology = chapterChronology(earlier.project);
+    const { lifelines } = bookLifelines(earlier);
     for (const character of earlier.project.characters) {
-      const lifeline = characterLifeline(character, chronology);
+      const lifeline = lifelines.get(character.id);
       if (lifeline.deadAtEnd && (lifeline.events.length > 0 || !deaths.has(character.id))) {
         deaths.set(character.id, earlier);
       } else if (!lifeline.deadAtEnd && lifeline.events.some((event) => event.type === "revival")) {
@@ -536,6 +535,19 @@ function deathsBefore(earlierBooks) {
     }
   }
   return deaths;
+}
+
+// Each book's chronology and its characters' lifelines, worked out once per
+// book however many later books read it.
+const LIFELINES = new WeakMap();
+
+function bookLifelines(book) {
+  if (!LIFELINES.has(book.project)) {
+    const chronology = chapterChronology(book.project);
+    const lifelines = new Map(book.project.characters.map((character) => [character.id, characterLifeline(character, chronology)]));
+    LIFELINES.set(book.project, { chronology, lifelines });
+  }
+  return LIFELINES.get(book.project);
 }
 
 function checkDestroyedArtifacts(book, earlierBooks, errors, warnings) {
