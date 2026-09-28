@@ -216,6 +216,8 @@ var FINDING_CODES = {
   "name-shared-initial": "warning",
   "context-file-skipped": "warning",
   "story-missing-at-ref": "warning",
+  "similarity-shared-passage": "warning",
+  "similarity-no-reference-text": "warning",
   "derived-ifid": "warning",
   "scene-outside-book": "warning",
   "scene-no-location": "warning",
@@ -2642,7 +2644,7 @@ var OPTIONS = [
   { name: "write", help: ["Update chapter word-count frontmatter"] },
   { name: "log", help: ["Record today's word count in progress.md"] },
   { name: "ref", value: "<git-ref>", help: ["Earlier draft as a git branch, tag, or commit", "for compare"] },
-  { name: "against", value: "<path>", help: ["Earlier draft as another project folder for compare"] },
+  { name: "against", value: "<path>", help: ["Earlier draft as another project folder for", "compare; text to check for similarity (a file,", "folder, or git ref)"] },
   { name: "anchor", value: "<label>", repeatable: true, help: ["Review-copy paragraph label (ch03-p12) to find", "in the current text for compare; repeatable"] },
   { name: "path", value: "<path>", help: ["Project root for every command except init and", "import"] },
   { name: "out", value: "<file>", help: ["Output path for export/build/synopsis/diagram"] },
@@ -2660,6 +2662,7 @@ var OPTIONS = [
   { name: "max-filter-words", value: "<n>", help: ["Warn above n filter words per 1,000 narration", "words for prose (default 10)"] },
   { name: "max-adverbs", value: "<n>", help: ["Warn above n -ly adverbs per 1,000 narration", "words for prose (default 12)"] },
   { name: "max-bookisms", value: "<n>", help: ["Warn above n said-bookism tags in a chapter for", "prose (default 2)"] },
+  { name: "min-words", value: "<n>", help: ["Shortest shared run of words similarity reports", "(default 8, at least 5)"] },
   { name: "pages", value: "<n>", help: ["Synopsis length for synopsis (1 or 3)"] },
   { name: "actionable", help: ["Include next actions in report"] },
   { name: "json", help: ["Print one JSON result object (apiVersion,", "command, ok, data, diagnostics, writes) instead", "of text, for the check and analysis commands"] },
@@ -6056,6 +6059,193 @@ function formatNumber2(value) {
 // src/config.js
 import fs3 from "node:fs";
 import path7 from "node:path";
+
+// src/similarity.js
+var SIMILARITY_DEFAULTS = { minWords: 8 };
+var MIN_SHINGLE = 5;
+var MAX_CANDIDATES = 32;
+var QUOTE_WORDS = 24;
+var CJK = "\\p{sc=Han}\\p{sc=Hiragana}\\p{sc=Katakana}";
+var WORD_CHAR = `(?:(?![${CJK}])[\\p{L}\\p{N}\\p{M}])`;
+var WORD_PATTERN2 = new RegExp(`[${CJK}]|${WORD_CHAR}+(?:['’ʼ]${WORD_CHAR}+)*`, "gu");
+function similarityOptions(options = {}) {
+  const settings = { ...SIMILARITY_DEFAULTS };
+  const raw = options["min-words"];
+  if (raw !== undefined) {
+    const text = String(raw).trim();
+    if (!/^\d+$/.test(text) || Number(text) < MIN_SHINGLE || !Number.isSafeInteger(Number(text))) {
+      throw usageError(`--min-words must be a whole number ${MIN_SHINGLE} or more, such as ${SIMILARITY_DEFAULTS.minWords}`);
+    }
+    settings.minWords = Number(text);
+  }
+  return settings;
+}
+function tokenizeDocument(paragraphs) {
+  const words = [];
+  paragraphs.forEach((paragraph, index) => {
+    for (const match of paragraph.text.normalize("NFC").matchAll(WORD_PATTERN2)) {
+      words.push({
+        word: match[0].toLowerCase().replace(/[’ʼ]/g, "'"),
+        paragraph: index,
+        start: match.index,
+        end: match.index + match[0].length
+      });
+    }
+  });
+  return words;
+}
+function shingleKey(words, at, size) {
+  let key = words[at].word;
+  for (let offset = 1;offset < size; offset += 1) {
+    key += ` ${words[at + offset].word}`;
+  }
+  return key;
+}
+function indexReference(references, size) {
+  const index = new Map;
+  references.forEach((reference, doc) => {
+    const words = reference.words;
+    for (let at = 0;at + size <= words.length; at += 1) {
+      const key = shingleKey(words, at, size);
+      const places = index.get(key);
+      if (places === undefined) {
+        index.set(key, [[doc, at]]);
+      } else if (places.length < MAX_CANDIDATES) {
+        places.push([doc, at]);
+      }
+    }
+  });
+  return index;
+}
+function runLength(source, from, target, at) {
+  let length = 0;
+  while (from + length < source.length && at + length < target.length && source[from + length].word === target[at + length].word) {
+    length += 1;
+  }
+  return length;
+}
+function sharedRuns(sources, references, minWords) {
+  const index = indexReference(references, minWords);
+  const runs = [];
+  sources.forEach((source, doc) => {
+    const words = source.words;
+    let at = 0;
+    while (at + minWords <= words.length) {
+      const places = index.get(shingleKey(words, at, minWords));
+      if (places === undefined) {
+        at += 1;
+        continue;
+      }
+      let best = null;
+      for (const [refDoc, refAt] of places) {
+        const length = runLength(words, at, references[refDoc].words, refAt);
+        if (best === null || length > best.length) {
+          best = { refDoc, refAt, length };
+        }
+      }
+      runs.push({ doc, at, ...best });
+      at += best.length;
+    }
+  });
+  return runs;
+}
+function describe(document, from, length) {
+  const words = document.words.slice(from, from + length);
+  const first = words[0];
+  const last = words[words.length - 1];
+  const labels = document.paragraphs.slice(first.paragraph, last.paragraph + 1).map((paragraph) => paragraph.label);
+  const pieces = [];
+  for (let paragraph = first.paragraph;paragraph <= last.paragraph; paragraph += 1) {
+    const text = document.paragraphs[paragraph].text.normalize("NFC");
+    const start = paragraph === first.paragraph ? first.start : 0;
+    const end = paragraph === last.paragraph ? last.end : text.length;
+    pieces.push(text.slice(start, end).replace(/\s+/g, " ").trim());
+  }
+  return {
+    from: labels[0],
+    to: labels[labels.length - 1],
+    text: pieces.join(" / ")
+  };
+}
+function count(value, noun) {
+  return `${formatNumber2(value)} ${value === 1 ? noun : `${noun}s`}`;
+}
+function place(location) {
+  return location.from === location.to ? location.from : `${location.from} to ${location.to}`;
+}
+function quote(text) {
+  const words = text.split(" ");
+  return words.length > QUOTE_WORDS ? `${words.slice(0, QUOTE_WORDS).join(" ")}…` : text;
+}
+function compareSimilarity(chapters, references, { minWords, label }) {
+  const sources = chapters.map((chapter) => ({ ...chapter, words: tokenizeDocument(chapter.paragraphs) }));
+  const targets = references.map((reference) => ({ ...reference, words: tokenizeDocument(reference.paragraphs) }));
+  const runs = sharedRuns(sources, targets, minWords);
+  const passages = runs.map((run) => {
+    const source = sources[run.doc];
+    const target = targets[run.refDoc];
+    const here = describe(source, run.at, run.length);
+    const there = describe(target, run.refAt, run.length);
+    return {
+      file: source.file,
+      from: here.from,
+      to: here.to,
+      words: run.length,
+      text: here.text,
+      reference: { file: target.file, from: there.from, to: there.to, text: there.text }
+    };
+  });
+  const warnings = passages.map((passage) => warn("similarity-shared-passage", `${passage.file} (${place(passage)}) shares ${count(passage.words, "word")} with ${passage.reference.file} (${place(passage.reference)}): "${quote(passage.text)}"`, passage.file));
+  const summary = sources.map((source) => {
+    const own = passages.filter((passage) => passage.file === source.file);
+    return {
+      file: source.file,
+      title: source.title ?? "",
+      words: source.words.length,
+      sharedWords: own.reduce((sum, passage) => sum + passage.words, 0),
+      passages: own.length
+    };
+  });
+  return {
+    ok: true,
+    errors: [],
+    warnings,
+    label,
+    minWords,
+    reference: {
+      files: targets.length,
+      words: targets.reduce((sum, target) => sum + target.words.length, 0)
+    },
+    words: summary.reduce((sum, chapter) => sum + chapter.words, 0),
+    sharedWords: summary.reduce((sum, chapter) => sum + chapter.sharedWords, 0),
+    chapters: summary,
+    passages
+  };
+}
+function percent(part, whole) {
+  if (whole === 0 || part === 0) {
+    return "0%";
+  }
+  const tenths = Math.max(1, Math.floor(part / whole * 1000));
+  return `${(tenths / 10).toFixed(tenths % 10 === 0 ? 0 : 1)}%`;
+}
+function formatSimilarity(report) {
+  const lines = [
+    `Similarity against ${report.label}: ${count(report.reference.words, "word")} in ${count(report.reference.files, "file")}, runs of ${report.minWords} or more shared words`,
+    ""
+  ];
+  for (const chapter of report.chapters) {
+    const passages = chapter.passages === 0 ? "no shared passages" : `${count(chapter.passages, "shared passage")}, ${count(chapter.sharedWords, "word")} (${percent(chapter.sharedWords, chapter.words)})`;
+    lines.push(`- ${chapter.file}: ${passages}`);
+  }
+  lines.push("", `Total: ${formatNumber2(report.sharedWords)} of ${count(report.words, "word")} shared (${percent(report.sharedWords, report.words)})`);
+  lines.push("Shared text is a place to look, not proof of copying: check each passage in context.");
+  return `${lines.join(`
+`)}
+`;
+}
+
+// src/config.js
 var SEVERITY_LEVELS = ["error", "warning", "off"];
 var TARGETED_COMMANDS = new Set(["knowledge", "add", "rename", "move", "remove"]);
 var TARGETED_FLAGS = { passes: ["start", "done"], progress: ["date"] };
@@ -6109,9 +6299,10 @@ function parseDefaults(raw, errors) {
       continue;
     }
     defaults[name] = parseCommandDefaults(command, item, label, errors);
-    if (name === "prose") {
+    const thresholds = { prose: proseThresholds, similarity: similarityOptions }[name];
+    if (thresholds !== undefined) {
       try {
-        proseThresholds(defaults[name]);
+        thresholds(defaults[name]);
       } catch (error) {
         errors.push(`${label}: ${error.message}`);
       }
@@ -6611,13 +6802,13 @@ function formatTimeline(timeline, totalChapters) {
     if (entry.orphanOf) {
       notes.push(`no chapter file for ${entry.orphanOf}`);
     }
-    lines.push(`- ${when}  ${entry.id}: ${entry.title}${describe(entry)}${notes.length === 0 ? "" : ` [${notes.join("; ")}]`}`);
+    lines.push(`- ${when}  ${entry.id}: ${entry.title}${describe2(entry)}${notes.length === 0 ? "" : ` [${notes.join("; ")}]`}`);
   }
   if (timeline.undated.length > 0) {
     lines.push("", "Undated (reading order):");
     for (const entry of timeline.undated) {
       const orphan = entry.orphanOf ? ` [no chapter file for ${entry.orphanOf}]` : "";
-      lines.push(`- ${entry.id}: ${entry.title}${describe(entry)}${orphan}`);
+      lines.push(`- ${entry.id}: ${entry.title}${describe2(entry)}${orphan}`);
     }
   }
   lines.push("", "POV balance:");
@@ -6653,7 +6844,7 @@ function formatTimeline(timeline, totalChapters) {
 `)}
 `;
 }
-function describe(entry) {
+function describe2(entry) {
   const parts = [];
   if (entry.pov) {
     parts.push(`POV ${entry.pov}`);
@@ -9594,8 +9785,8 @@ function labelsIn(root, label) {
   const project = scanProject(root);
   return paragraphLabels(htmlBook(manuscriptParts(project, `read labels from ${label}`)));
 }
-function withProjectAtGitRef(root, ref, read) {
-  const { git } = gitAtRef(root, ref);
+function withProjectAtGitRef(root, ref, read, flag = "compare --ref") {
+  const { git } = gitAtRef(root, ref, flag);
   const blobs = git(["ls-tree", "-r", "-z", ref, "--", "."]).split("\x00").filter((record) => record !== "").map((record) => {
     const tab = record.indexOf("\t");
     const [mode, type, hash] = record.slice(0, tab).split(" ");
@@ -9631,15 +9822,15 @@ function catBlobs(root, hashes) {
   }
   return contents;
 }
-function gitFailure(error) {
+function gitFailure(error, flag) {
   if (error && error.code === "ENOENT") {
-    return "compare --ref needs git, which was not found on PATH";
+    return `${flag} needs git, which was not found on PATH`;
   }
   const stderr = String(error?.stderr ?? "").trim();
   if (stderr === "" || /not a git repository/i.test(stderr)) {
-    return "compare --ref needs the project inside a git repository";
+    return `${flag} needs the project inside a git repository`;
   }
-  return `compare --ref could not run git: ${stderr.split(/\r?\n/)[0]}`;
+  return `${flag} could not run git: ${stderr.split(/\r?\n/)[0]}`;
 }
 function comparableChapter(id, markdown) {
   const prose = chapterProse(markdown.body);
@@ -9651,7 +9842,7 @@ function comparableChapter(id, markdown) {
   };
 }
 var UNSAFE_GIT_REF = /^-|[\u0000-\u001f\u007f:]/u;
-function gitAtRef(root, ref) {
+function gitAtRef(root, ref, flag = "compare --ref") {
   if (UNSAFE_GIT_REF.test(ref)) {
     throw usageError(`Unsupported git ref: ${ref}`);
   }
@@ -9660,7 +9851,7 @@ function gitAtRef(root, ref) {
   try {
     prefix = git(["rev-parse", "--show-prefix"]).trim();
   } catch (error) {
-    throw projectError(gitFailure(error));
+    throw projectError(gitFailure(error, flag));
   }
   try {
     git(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
@@ -9692,6 +9883,106 @@ function chaptersAtGitRef(root, ref, warnings) {
       return comparableChapter(id, { data: {}, body: raw });
     }
   });
+}
+function similarityReport(root, options = {}) {
+  const against = typeof options.against === "string" ? options.against.trim() : "";
+  if (against === "") {
+    throw usageError("similarity needs --against <file|folder|git-ref>: the text to compare the chapters with");
+  }
+  const { minWords } = similarityOptions(options);
+  const project = scanProject(root);
+  assertProjectParses(project, "check similarity");
+  const chapters = labelledChapters(project, "check similarity", (file) => relative2(project, file));
+  const cwd = options.cwd ?? process.cwd();
+  const target = path11.resolve(cwd, against);
+  const warnings = [];
+  let references;
+  let label;
+  if (lstatIfExists(target) !== null) {
+    if (canonicalPath(target) === canonicalPath(project.root)) {
+      throw usageError(`similarity --against ${against} is this project: point it at other text, or at a git ref for an earlier draft`);
+    }
+    label = against;
+    const own = new Set(project.chapters.map((chapter) => canonicalPath(chapter.file)));
+    references = referenceDocuments(target, cwd).filter((reference) => !own.has(canonicalPath(reference.path)));
+  } else {
+    label = `git ref ${against}`;
+    try {
+      references = withProjectAtGitRef(project.root, against, (oldRoot) => {
+        if (!fs7.existsSync(path11.join(oldRoot, "story.md"))) {
+          throw projectError(`No story project (story.md) at git ref ${against}`);
+        }
+        const old = scanProject(oldRoot);
+        assertProjectParses(old, `read chapters at git ref ${against}`);
+        return labelledChapters(old, `read chapters at git ref ${against}`, (file) => `${against}:${path11.relative(oldRoot, file).split(path11.sep).join("/")}`);
+      }, "similarity --against");
+    } catch (error) {
+      if (error.exitCode === EXIT_CODES.usage || /needs the project inside a git repository|not found on PATH/.test(error.message)) {
+        throw usageError(`similarity --against ${against} is not a file, folder, or git ref`);
+      }
+      throw error;
+    }
+  }
+  const report = compareSimilarity(chapters, references, { minWords, label });
+  if (report.reference.words === 0) {
+    warnings.push(warn("similarity-no-reference-text", `${label} has no text to compare with: check --against names the files you meant`));
+  }
+  return { ...report, warnings: [...warnings, ...report.warnings] };
+}
+function labelledChapters(project, action, fileName) {
+  if (project.chapters.length === 0) {
+    return [];
+  }
+  const { meta, chapters } = bookChapters(project, action);
+  const book = htmlBook({ title: project.title, meta, front: [], chapters, back: [] });
+  return book.parts.map((part, index) => ({
+    file: fileName(project.chapters[index].file),
+    path: project.chapters[index].file,
+    title: chapters[index].title,
+    paragraphs: labelledParagraphs(part).filter((entry) => entry !== null).map((entry) => ({ label: entry.label, text: entry.paragraph.text }))
+  }));
+}
+var REFERENCE_TEXT_FILE = /\.(?:md|markdown|txt)$/i;
+function referenceDocuments(target, cwd) {
+  const display = (file) => path11.relative(cwd, file).split(path11.sep).join("/") || path11.basename(file);
+  const stats = fs7.lstatSync(target);
+  if (stats.isDirectory()) {
+    if (fs7.existsSync(path11.join(target, "story.md"))) {
+      const other = scanProject(target);
+      assertProjectParses(other, `read chapters in ${display(target)}`);
+      return labelledChapters(other, `read chapters in ${display(target)}`, display);
+    }
+    return referenceFiles(target).map((file) => textDocument(file, display(file)));
+  }
+  return [textDocument(target, display(target))];
+}
+function referenceFiles(dir, depth = 0, collected = []) {
+  const entries = fs7.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+  for (const entry of entries) {
+    if (entry.name.startsWith(".") || SKIPPED_SCAN_DIRECTORIES.has(entry.name)) {
+      continue;
+    }
+    const fullPath = path11.join(dir, entry.name);
+    if (entry.isDirectory() && depth < MAX_SCAN_DEPTH) {
+      referenceFiles(fullPath, depth + 1, collected);
+    } else if (entry.isFile() && REFERENCE_TEXT_FILE.test(entry.name)) {
+      collected.push(fullPath);
+      if (collected.length > MAX_SCAN_FILES) {
+        throw projectError(`Too many text files in ${dir}: the reference exceeds the ${MAX_SCAN_FILES} file limit`);
+      }
+    }
+  }
+  return collected;
+}
+function textDocument(file, name) {
+  let text = readTextFile(file).replace(/^﻿/, "").replace(/\r\n?/g, `
+`);
+  if (/\.(?:md|markdown)$/i.test(file)) {
+    text = withoutLeadingFrontmatter(text);
+    text = chapterProse(text);
+  }
+  const paragraphs = text.split(/\n\s*\n/).map((paragraph) => paragraph.replace(/\s+/g, " ").trim()).filter((paragraph) => paragraph !== "").map((paragraph, index) => ({ label: `p${index + 1}`, text: paragraph }));
+  return { file: name, path: file, paragraphs };
 }
 function projectProgress(root, options = {}) {
   const today = options.date === undefined ? localDate() : String(options.date).trim();
@@ -14843,6 +15134,25 @@ var COMMANDS = [
       const comparison = applySeverity(compareProject(root(), { ref: parsed.options.ref, against: parsed.options.against, anchors: parsed.options.anchor, cwd }), overrides);
       io.stdout.write(comparison.anchors ? formatLabelMapping(comparison.anchors, comparison.label) : formatComparison(comparison, comparison.label));
       return reportResult(io, comparison, "Comparison complete", "Comparison failed");
+    }
+  },
+  {
+    name: "similarity",
+    usage: "similarity [path]",
+    summary: [
+      "Find passages of chapter prose that share a run of",
+      "words with other text (--against a file, folder, or",
+      "git ref); advisory, never proof of copying"
+    ],
+    project: "positional",
+    options: ["against", "min-words", "json"],
+    run({ parsed, io, cwd, root, overrides }) {
+      const report = applySeverity(similarityReport(root(), { ...parsed.options, cwd }), overrides);
+      if (wantsJson(parsed)) {
+        return reportJson(io, "similarity", report);
+      }
+      io.stdout.write(formatSimilarity(report));
+      return reportResult(io, report, "Similarity check complete", "Similarity check failed");
     }
   },
   {

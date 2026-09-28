@@ -16,6 +16,7 @@ import { formatProgress } from "./progress.js";
 import { formatStateChanges } from "./progressions.js";
 import { formatProseReport } from "./prose.js";
 import { formatSeriesReport } from "./series.js";
+import { formatSimilarity } from "./similarity.js";
 import { formatTimeline } from "./timeline.js";
 import { formatVoices } from "./voices.js";
 import {
@@ -49,6 +50,7 @@ import {
   renameEntity,
   scanProject,
   seriesReport,
+  similarityReport,
   storyTimeline,
   synopsisBook,
   validateLinks,
@@ -297,6 +299,25 @@ export const COMMANDS = [
       const comparison = applySeverity(compareProject(root(), { ref: parsed.options.ref, against: parsed.options.against, anchors: parsed.options.anchor, cwd }), overrides);
       io.stdout.write(comparison.anchors ? formatLabelMapping(comparison.anchors, comparison.label) : formatComparison(comparison, comparison.label));
       return reportResult(io, comparison, "Comparison complete", "Comparison failed");
+    }
+  },
+  {
+    name: "similarity",
+    usage: "similarity [path]",
+    summary: [
+      "Find passages of chapter prose that share a run of",
+      "words with other text (--against a file, folder, or",
+      "git ref); advisory, never proof of copying"
+    ],
+    project: "positional",
+    options: ["against", "min-words", "json"],
+    run({ parsed, io, cwd, root, overrides }) {
+      const report = applySeverity(similarityReport(root(), { ...parsed.options, cwd }), overrides);
+      if (wantsJson(parsed)) {
+        return reportJson(io, "similarity", report);
+      }
+      io.stdout.write(formatSimilarity(report));
+      return reportResult(io, report, "Similarity check complete", "Similarity check failed");
     }
   },
   {

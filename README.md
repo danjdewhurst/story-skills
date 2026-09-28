@@ -182,6 +182,7 @@ The CLI is for maintenance only. Agents write story content directly to markdown
 | `story diagram relationships --path .` | Print Mermaid source for the family tree and relationships, the location route map, the story-time timeline, the clue flow, or arcs by chapter |
 | `story progress [path] --log` | Report words against `target-words`, the `deadline`, and chapter targets; `--log` records the day's count in `progress.md` for pace and a projected finish |
 | `story compare [path] --ref draft-1` | Compare chapters with an earlier draft (a git ref, or `--against` a copied project folder): word changes, added and removed chapters, and unchanged paragraphs; `--anchor ch03-p12` finds where a review-copy paragraph is now |
+| `story similarity [path] --against ../book-one` | Find passages that share a run of eight or more words with other text (a file, a folder such as your earlier books, or a git ref), with both locations and the shared words; advisory, since shared text is not proof of copying |
 
 **Publish**
 

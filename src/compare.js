@@ -262,6 +262,6 @@ function signed(value) {
   return `${value > 0 ? "+" : value < 0 ? "-" : "±"}${formatNumber(Math.abs(value))}`;
 }
 
-function formatNumber(value) {
+export function formatNumber(value) {
   return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }

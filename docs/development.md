@@ -103,7 +103,7 @@ flowchart LR
   D --> E["command.run({ parsed, io, cwd, root })"]
   E --> F["src/story.js operations"]
   F --> G["scanProject(root)"]
-  G --> H["analysis modules: continuity, timeline, prose, voices, pacing, clues, names, series, progress, compare, passes"]
+  G --> H["analysis modules: continuity, timeline, prose, voices, pacing, clues, names, series, progress, compare, similarity, passes"]
   F --> I["output modules: diagram, html, narration, fountain, publishing"]
 ```
 
@@ -148,13 +148,14 @@ flowchart LR
 | `src/series.js` | Series links, backlinks, and shared-canon checks across books. |
 | `src/progress.js` | Pure progress arithmetic and the `progress.md` session log. |
 | `src/compare.js` | Chapter-by-chapter comparison with an earlier draft. |
+| `src/similarity.js` | Shared-passage detection for `story similarity`: word shingles of the reference indexed once, each hit extended to the longest shared run, the passage's labels and text on both sides, and the report. `story.js` reads the `--against` file, folder, or git ref and labels chapters as the review copy does. |
 | `src/import.js` | Splits an existing manuscript into a new project and suggests entity candidates. |
 | `src/version.js` | `VERSION`, printed by `story --version`. Bumped only by the release script. |
 
 Most commands follow the same pattern. A function in `src/story.js` takes the project root, calls `scanProject(root)` to read every entity file into one in-memory project object, and passes that object to a pure function in a feature module. For example, `checkProjectContinuity(root)` is `checkContinuity(scanProject(root))`. What happens next depends on the kind of command:
 
 - Check commands such as `validate`, `links`, and `continuity` get back `{ ok, errors, warnings }` (plus `dismissed` for continuity), where each error and warning is a finding (see [Raising a finding](#raising-a-finding)), and hand it to `reportResult`.
-- Report commands (`compare`, `progress`, `timeline`, `prose`, `voices`, `pacing`, `clues`, `names`, and `series`) pass their result to a `format*` function from the feature module and write the text to stdout, then hand the same result to `reportResult` for the stderr summary and exit code.
+- Report commands (`compare`, `similarity`, `progress`, `timeline`, `prose`, `voices`, `pacing`, `clues`, `names`, and `series`) pass their result to a `format*` function from the feature module and write the text to stdout, then hand the same result to `reportResult` for the stderr summary and exit code.
 
 - `diagram` prints Mermaid source to stdout, or writes it with `--out` once the scan is clean. `passes` prints the pass list, rewrites only the `revision-passes` entry in `story.md` when asked to change it, and exits non-zero only when it refuses a change (2 for a pass name that is not kebab-case).
 

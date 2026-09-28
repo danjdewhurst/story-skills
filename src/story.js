@@ -18,7 +18,7 @@ import { buildVoices } from "./voices.js";
 import { checkNames, existingNames } from "./names.js";
 import { STORY_FORMS, formRangeWarning } from "./forms.js";
 import { copyrightPage, metadataSheet, publishingMeta, validatePublishing } from "./publishing.js";
-import { DEFAULT_TRIM, estimateBookPages, paragraphLabels, printHtml, reviewHtml, TRIM_SIZES } from "./html.js";
+import { DEFAULT_TRIM, estimateBookPages, labelledParagraphs, paragraphLabels, printHtml, reviewHtml, TRIM_SIZES } from "./html.js";
 import { narrationScript, pronunciationGuide } from "./narration.js";
 import { SCENE_SETTINGS, fountainScript } from "./fountain.js";
 import { inkSource } from "./ink.js";
@@ -28,6 +28,7 @@ import { applySeverity, validateCliConfig } from "./config.js";
 import { DEFAULT_PASSES, addedPassNotes, nextPass, passChecks, readPasses, updatePasses, validatePasses } from "./passes.js";
 import { CHAPTER_HOOKS, SCENE_OUTCOMES, buildPacing } from "./pacing.js";
 import { compareChapters, mapLabels, proseParagraphs } from "./compare.js";
+import { compareSimilarity, similarityOptions } from "./similarity.js";
 import { PROGRESS_FILE, cleanSessions, computeProgress, formatPercent, localDate, withSession } from "./progress.js";
 import { plural } from "./plural.js";
 import { analyzeChapter, chapterFindings, proseRules, proseThresholds, repeatedPhrases, similarNames } from "./prose.js";
@@ -1950,8 +1951,8 @@ function labelsIn(root, label) {
 // Runs `read` on the project's markdown as it was at `ref`, copied into a
 // temporary directory that is removed afterwards. Nothing is written to the
 // repository or its working tree.
-function withProjectAtGitRef(root, ref, read) {
-  const { git } = gitAtRef(root, ref);
+function withProjectAtGitRef(root, ref, read, flag = "compare --ref") {
+  const { git } = gitAtRef(root, ref, flag);
   // -z keeps names unquoted; each record is "<mode> <type> <hash>\t<path>",
   // the path relative to the project folder (-C root).
   const blobs = git(["ls-tree", "-r", "-z", ref, "--", "."])
@@ -1999,15 +2000,15 @@ function catBlobs(root, hashes) {
   return contents;
 }
 
-function gitFailure(error) {
+function gitFailure(error, flag) {
   if (error && error.code === "ENOENT") {
-    return "compare --ref needs git, which was not found on PATH";
+    return `${flag} needs git, which was not found on PATH`;
   }
   const stderr = String(error?.stderr ?? "").trim();
   if (stderr === "" || /not a git repository/i.test(stderr)) {
-    return "compare --ref needs the project inside a git repository";
+    return `${flag} needs the project inside a git repository`;
   }
-  return `compare --ref could not run git: ${stderr.split(/\r?\n/)[0]}`;
+  return `${flag} could not run git: ${stderr.split(/\r?\n/)[0]}`;
 }
 
 function comparableChapter(id, markdown) {
@@ -2028,7 +2029,7 @@ const UNSAFE_GIT_REF = /^-|[\u0000-\u001f\u007f:]/u;
 
 // Checks that `ref` names a commit holding the project folder, and returns a
 // git runner for the project folder plus the folder's path in the repository.
-function gitAtRef(root, ref) {
+function gitAtRef(root, ref, flag = "compare --ref") {
   if (UNSAFE_GIT_REF.test(ref)) {
     throw usageError(`Unsupported git ref: ${ref}`);
   }
@@ -2037,7 +2038,7 @@ function gitAtRef(root, ref) {
   try {
     prefix = git(["rev-parse", "--show-prefix"]).trim();
   } catch (error) {
-    throw projectError(gitFailure(error));
+    throw projectError(gitFailure(error, flag));
   }
   try {
     git(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
@@ -2078,6 +2079,132 @@ function chaptersAtGitRef(root, ref, warnings) {
       return comparableChapter(id, { data: {}, body: raw });
     }
   });
+}
+
+// story similarity: chapter prose against reference text named by
+// --against. An existing file is read as text; a folder is a story project
+// (its chapters) when it holds story.md, and otherwise every .md, .markdown,
+// and .txt file in it; anything else is tried as a git ref, and the
+// project's own chapters at that commit are the reference.
+export function similarityReport(root, options = {}) {
+  const against = typeof options.against === "string" ? options.against.trim() : "";
+  if (against === "") {
+    throw usageError("similarity needs --against <file|folder|git-ref>: the text to compare the chapters with");
+  }
+  const { minWords } = similarityOptions(options);
+  const project = scanProject(root);
+  // A chapter that fails to parse would be left out of the comparison.
+  assertProjectParses(project, "check similarity");
+  const chapters = labelledChapters(project, "check similarity", (file) => relative(project, file));
+  const cwd = options.cwd ?? process.cwd();
+  const target = path.resolve(cwd, against);
+  const warnings = [];
+  let references;
+  let label;
+  if (lstatIfExists(target) !== null) {
+    if (canonicalPath(target) === canonicalPath(project.root)) {
+      throw usageError(`similarity --against ${against} is this project: point it at other text, or at a git ref for an earlier draft`);
+    }
+    label = against;
+    const own = new Set(project.chapters.map((chapter) => canonicalPath(chapter.file)));
+    references = referenceDocuments(target, cwd).filter((reference) => !own.has(canonicalPath(reference.path)));
+  } else {
+    label = `git ref ${against}`;
+    try {
+      references = withProjectAtGitRef(project.root, against, (oldRoot) => {
+        if (!fs.existsSync(path.join(oldRoot, "story.md"))) {
+          throw projectError(`No story project (story.md) at git ref ${against}`);
+        }
+        const old = scanProject(oldRoot);
+        assertProjectParses(old, `read chapters at git ref ${against}`);
+        return labelledChapters(old, `read chapters at git ref ${against}`, (file) => `${against}:${path.relative(oldRoot, file).split(path.sep).join("/")}`);
+      }, "similarity --against");
+    } catch (error) {
+      // A mistyped path is far likelier than a mistyped ref, so say both.
+      if (error.exitCode === EXIT_CODES.usage || /needs the project inside a git repository|not found on PATH/.test(error.message)) {
+        throw usageError(`similarity --against ${against} is not a file, folder, or git ref`);
+      }
+      throw error;
+    }
+  }
+  const report = compareSimilarity(chapters, references, { minWords, label });
+  if (report.reference.words === 0) {
+    warnings.push(warn("similarity-no-reference-text", `${label} has no text to compare with: check --against names the files you meant`));
+  }
+  return { ...report, warnings: [...warnings, ...report.warnings] };
+}
+
+// The project's chapters as the review copy labels their paragraphs, so a
+// passage's label is the one a reader's note would cite. Matter is left
+// out: an epigraph or a quoted song is not chapter prose.
+function labelledChapters(project, action, fileName) {
+  if (project.chapters.length === 0) {
+    return [];
+  }
+  const { meta, chapters } = bookChapters(project, action);
+  const book = htmlBook({ title: project.title, meta, front: [], chapters, back: [] });
+  return book.parts.map((part, index) => ({
+    file: fileName(project.chapters[index].file),
+    path: project.chapters[index].file,
+    title: chapters[index].title,
+    paragraphs: labelledParagraphs(part)
+      .filter((entry) => entry !== null)
+      .map((entry) => ({ label: entry.label, text: entry.paragraph.text }))
+  }));
+}
+
+const REFERENCE_TEXT_FILE = /\.(?:md|markdown|txt)$/i;
+
+// The reference text at a file or folder, one document per file.
+function referenceDocuments(target, cwd) {
+  const display = (file) => path.relative(cwd, file).split(path.sep).join("/") || path.basename(file);
+  const stats = fs.lstatSync(target);
+  if (stats.isDirectory()) {
+    if (fs.existsSync(path.join(target, "story.md"))) {
+      const other = scanProject(target);
+      assertProjectParses(other, `read chapters in ${display(target)}`);
+      return labelledChapters(other, `read chapters in ${display(target)}`, display);
+    }
+    return referenceFiles(target).map((file) => textDocument(file, display(file)));
+  }
+  return [textDocument(target, display(target))];
+}
+
+// Every text file under a folder, skipping hidden entries (and macOS ._
+// files), symlinks, and anything deeper than the scan limit.
+function referenceFiles(dir, depth = 0, collected = []) {
+  const entries = fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  for (const entry of entries) {
+    if (entry.name.startsWith(".") || SKIPPED_SCAN_DIRECTORIES.has(entry.name)) {
+      continue;
+    }
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory() && depth < MAX_SCAN_DEPTH) {
+      referenceFiles(fullPath, depth + 1, collected);
+    } else if (entry.isFile() && REFERENCE_TEXT_FILE.test(entry.name)) {
+      collected.push(fullPath);
+      if (collected.length > MAX_SCAN_FILES) {
+        throw projectError(`Too many text files in ${dir}: the reference exceeds the ${MAX_SCAN_FILES} file limit`);
+      }
+    }
+  }
+  return collected;
+}
+
+// A plain reference file as paragraphs labelled p1, p2, ... A markdown file
+// loses its frontmatter, and a Story Skills chapter file keeps only its
+// ## Chapter Text section.
+function textDocument(file, name) {
+  let text = readTextFile(file).replace(/^﻿/, "").replace(/\r\n?/g, "\n");
+  if (/\.(?:md|markdown)$/i.test(file)) {
+    text = withoutLeadingFrontmatter(text);
+    text = chapterProse(text);
+  }
+  const paragraphs = text.split(/\n\s*\n/)
+    .map((paragraph) => paragraph.replace(/\s+/g, " ").trim())
+    .filter((paragraph) => paragraph !== "")
+    .map((paragraph, index) => ({ label: `p${index + 1}`, text: paragraph }));
+  return { file: name, path: file, paragraphs };
 }
 
 // Word-count progress against story.md target-words and deadline, chapter

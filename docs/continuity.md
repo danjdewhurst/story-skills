@@ -28,6 +28,7 @@ For flags and exit codes of every command, see the [CLI reference](cli-reference
 - [Story diagram](#story-diagram)
 - [Story progress](#story-progress)
 - [Story compare](#story-compare)
+- [Story similarity](#story-similarity)
 - [Story passes](#story-passes)
 - [Report, next, and doctor](#report-next-and-doctor)
 - [When to run what](#when-to-run-what)
@@ -48,6 +49,7 @@ For flags and exit codes of every command, see the [CLI reference](cli-reference
 | [`story diagram <kind>`](#story-diagram) | What do the family tree, route map, timeline, clue flow, or arc map look like? |
 | [`story progress [path]`](#story-progress) | How far along is the draft against its targets and deadline? |
 | [`story compare [path]`](#story-compare) | How much did this revision pass change? |
+| [`story similarity [path]`](#story-similarity) | Does any passage share a run of words with my earlier books, a draft, or a source? |
 | [`story passes [path]`](#story-passes) | Which revision pass am I on, and what should it check? |
 | [`story report [path]`](#story-report) | What is in this project and do the checks pass? |
 | [`story next [path]`](#story-next) | What should I do next? |
@@ -55,7 +57,7 @@ For flags and exit codes of every command, see the [CLI reference](cli-reference
 
 Most commands take the project as an optional positional path or `--path`. `knowledge`, `names`, and `diagram` take only `--path`, because their positional arguments are a character id, candidate names, and a diagram kind.
 
-Only `continuity` and `names` fail because of what the story says: `continuity` on a contradiction, `names` on a candidate that is already taken. The others exit 1 only on files that do not parse, and 2 on bad arguments. `pacing`, `clues`, `prose`, and `voices` findings are always warnings, and `report`, `next`, and `doctor` exit 0 whatever the checks find. For when each command exits 1, see [Output streams and exit codes](cli-reference.md#output-streams-and-exit-codes).
+Only `continuity` and `names` fail because of what the story says: `continuity` on a contradiction, `names` on a candidate that is already taken. The others exit 1 only on files that do not parse, and 2 on bad arguments. `pacing`, `clues`, `prose`, `voices`, and `similarity` findings are always warnings, and `report`, `next`, and `doctor` exit 0 whatever the checks find. For when each command exits 1, see [Output streams and exit codes](cli-reference.md#output-streams-and-exit-codes).
 
 ## Find your message
 
@@ -110,7 +112,7 @@ Chapter order is always the chapter's `number`. Chapter references such as `died
 
 ### How findings are reported
 
-`continuity`, `timeline`, `pacing`, `clues`, `prose`, `voices`, `names`, `progress`, and `compare` all report the same way. On stderr they print one summary line first, like the first line above, and then each finding on its own line:
+`continuity`, `timeline`, `pacing`, `clues`, `prose`, `voices`, `names`, `progress`, `compare`, and `similarity` all report the same way. On stderr they print one summary line first, like the first line above, and then each finding on its own line:
 
 - **error** lines are contradictions. They make the command exit 1.
 - **warning** lines are things that are probably wrong or stale. They never change the exit code.
@@ -1179,6 +1181,33 @@ How to read it:
 To place a reader's note from an older [review copy](manuscripts.md#html-review-copy), add `--anchor <label>` (repeatable): `story compare . --ref beta-round-1 --anchor ch03-p12` prints where that paragraph is now instead of the chapter comparison. See [`compare`](cli-reference.md#mapping-review-copy-labels).
 
 The [`revision-continuity`](../skills/revision-continuity/SKILL.md) skill takes a snapshot before any multi-chapter pass and runs `story compare` afterwards; see [Writing workflows](writing-workflows.md#revision-passes).
+
+## Story similarity
+
+```shell
+story similarity . --against ../book-one
+story similarity . --against sources/letters.txt --min-words 12
+story similarity . --against draft-1
+```
+
+`story similarity` finds passages of chapter prose that share a run of words with other text: your earlier books, a previous draft, or a source you worked from. `--against` is a file, a folder, or a git ref. A folder with `story.md` is compared chapter by chapter; any other folder contributes all its `.md`, `.markdown`, and `.txt` files.
+
+Words are compared lowercased with punctuation dropped. Each run of `--min-words` (default 8) or more shared words is one `similarity-shared-passage` warning. The warning gives the chapter's review-copy label, where the run is in the reference, and the shared words:
+
+```text
+warning: chapters/chapter-02.md (ch02-p1) shares 9 words with ../sources/parish-notes.txt (p2): "was pulled from the millpond on a grey Tuesday" [similarity-shared-passage]
+```
+
+The report above the warnings gives each chapter's shared words and share, and the total.
+
+How to read it:
+
+- **It is a place to look, not a verdict.** Stock phrases, a quotation you meant, or your own recurring line all share words. The command exits 0; promote the warning with `severity` only if you want a CI gate on it.
+- **It only knows the text you gave it.** No shared passages means none with that text, not that the book is original.
+- **Raise `--min-words` for long references.** Against a whole shelf of earlier books, eight-word runs can turn up ordinary phrasing. Set a higher default in `story.md` [`cli-defaults`](project-format.md#cli-defaults-and-severity) once you know what your books share.
+- **Against a git ref it shows what survived a revision.** Every unchanged run is a passage, so use [`story compare`](#story-compare) for the size of a revision and `similarity` for the exact wording that stayed.
+
+The [`editorial-review`](../skills/editorial-review/SKILL.md) skill runs it when you worry about a source and says how to report the result. See [`similarity`](cli-reference.md#similarity) for every option.
 
 ## Story passes
 

@@ -233,6 +233,9 @@ export const FINDING_CODES = {
   "context-file-skipped": "warning",
   // story compare
   "story-missing-at-ref": "warning",
+  // story similarity
+  "similarity-shared-passage": "warning",
+  "similarity-no-reference-text": "warning",
   // story build and story export
   "derived-ifid": "warning",
   "scene-outside-book": "warning",

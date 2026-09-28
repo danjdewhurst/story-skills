@@ -1,6 +1,6 @@
 ---
 name: editorial-review
-description: This skill should be used when the user asks for a "sensitivity reader", "authenticity reader", "cultural review", "is this portrayal okay", "real people in my novel", "defamation", "can I use song lyrics", "epigraph permission", "permissions", "quote permission", "fair use", "AI disclosure", "do I need to disclose AI", "send to my editor", "editorial round", "Word file for my editor", "editor review copy", "co-author", "collaborate on a book", "shared world", "back up my book", or wants to run human editorial, ethics, permissions, or collaboration workflows around a story project. NOT for contracts or selling rights (use publishing) or reader feedback rounds (use feedback-triage).
+description: This skill should be used when the user asks for a "sensitivity reader", "authenticity reader", "cultural review", "is this portrayal okay", "real people in my novel", "defamation", "can I use song lyrics", "epigraph permission", "permissions", "quote permission", "fair use", "AI disclosure", "do I need to disclose AI", "send to my editor", "editorial round", "Word file for my editor", "editor review copy", "co-author", "collaborate on a book", "shared world", "back up my book", "does this echo my source", "similarity check", "check overlap with my earlier books", or wants to run human editorial, ethics, permissions, or collaboration workflows around a story project. NOT for contracts or selling rights (use publishing) or reader feedback rounds (use feedback-triage).
 ---
 
 # Editorial Review
@@ -28,6 +28,7 @@ workflow; offer `git init` if the project has none.
   experience the author does not share
 - Fiction features or resembles real, identifiable people or organisations
 - The manuscript quotes lyrics, poems, epigraphs, or other writers' prose
+- A passage may echo a source, an earlier book, or another writer too closely
 - The user needs an AI-use statement for a retailer, agent, or publisher
 - Sending the manuscript to a human editor, or taking their edits back
 - Two or more people write or maintain the same book or shared world
@@ -94,7 +95,40 @@ or a real organisation is shown doing something discreditable.
 4. `story validate .` warns when a matter page is `pending` and the story
    is `complete`, and when `granted` has no `rights-holder`.
 
-### 4. AI-use disclosure
+### 4. Overlap with other text
+
+When the user worries that a passage echoes a source, an earlier book, or
+another writer too closely, compare the chapters with that text:
+
+```shell
+story similarity . --against ../sources
+story similarity . --against ../book-one --min-words 12
+```
+
+`--against` takes a file, a folder, or a git ref. Each run of shared
+words is a warning with both locations and the words.
+
+Report the result honestly:
+
+- Say what was compared and what was not. The check only sees the text
+  passed to `--against`. It says nothing about other books, the web, or
+  sources nobody gave it, so never tell the user a manuscript is
+  "original", "clean", or "plagiarism-free" on its strength.
+- Shared text is not plagiarism. Stock phrases, a quotation the author
+  meant, and the author's own recurring lines all share words. List each
+  passage with its locations and let the user decide what it is. Never
+  call a passage copied.
+- A passage quoted on purpose from another writer belongs in the
+  permissions pass (section 3), not in a rewrite.
+- A passage that should not be there is rewritten by the author, or with
+  the `line-editing` skill at the author's direction. Never paraphrase it
+  quietly to make the match disappear.
+- Where a matching passage came from AI-assisted drafting, raise it when
+  drafting or revisiting `ai-disclosure` (section 5): the statement
+  describes how AI was used, and the similarity result neither proves nor
+  disproves AI use.
+
+### 5. AI-use disclosure
 
 1. Ask the user how AI tools were used on this book: brainstorming,
    outlining, drafting prose, editing, research, cover or art, or
@@ -113,7 +147,7 @@ or a real organisation is shown doing something discreditable.
 4. `story build . --format metadata` includes the statement on the
    retailer metadata sheet.
 
-### 5. Editorial rounds with a human editor
+### 6. Editorial rounds with a human editor
 
 Follow `references/editor-rounds.md`:
 
@@ -127,7 +161,7 @@ Follow `references/editor-rounds.md`:
    `revision-continuity`; editorial letters go through `feedback-triage`.
 3. Show how deep the round went: `story compare . --ref sent-to-editor-1`.
 
-### 6. Review copies for non-technical readers
+### 7. Review copies for non-technical readers
 
 For beta readers, editors, or agents who never open a terminal:
 
@@ -149,7 +183,7 @@ For beta readers, editors, or agents who never open a terminal:
    `story compare . --ref <round-tag> --anchor <label>` before acting on
    them; see `references/editor-rounds.md`.
 
-### 7. Collaboration and backups
+### 8. Collaboration and backups
 
 Follow `references/collaboration.md` for co-authored books and shared
 worlds: list every author under `authors` in `story.md`, one branch per

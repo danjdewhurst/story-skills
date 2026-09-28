@@ -9,6 +9,7 @@ import { FINDING_CODES, PROJECTLESS_CODES, err, severityCodes } from "./findings
 import { parseFrontmatter } from "./frontmatter.js";
 import { OPTIONS, normalizeBooleanValue, optionFamily, suggestion } from "./options.js";
 import { proseThresholds } from "./prose.js";
+import { similarityOptions } from "./similarity.js";
 
 // Optional CLI configuration in story.md frontmatter:
 //
@@ -93,11 +94,12 @@ function parseDefaults(raw, errors) {
       continue;
     }
     defaults[name] = parseCommandDefaults(command, item, label, errors);
-    // The prose thresholds are checked here too, so story validate catches a
-    // bad one before a CI run of story prose does.
-    if (name === "prose") {
+    // The prose and similarity thresholds are checked here too, so story
+    // validate catches a bad one before a CI run of the command does.
+    const thresholds = { prose: proseThresholds, similarity: similarityOptions }[name];
+    if (thresholds !== undefined) {
       try {
-        proseThresholds(defaults[name]);
+        thresholds(defaults[name]);
       } catch (error) {
         errors.push(`${label}: ${error.message}`);
       }

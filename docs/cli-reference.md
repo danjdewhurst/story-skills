@@ -11,7 +11,7 @@ The CLI never writes story content for you. It scaffolds files, rebuilds registr
 - [How the CLI behaves](#how-the-cli-behaves)
 - [Setup commands](#setup-commands): `init`, `import`, `migrate`
 - [Maintenance commands](#maintenance-commands): `validate`, `reindex`, `wordcount`, `links`
-- [Analysis commands](#analysis-commands): `continuity`, `knowledge`, `context`, `compare`, `progress`, `timeline`, `prose`, `series`, `report`, `next`, `doctor`
+- [Analysis commands](#analysis-commands): `continuity`, `knowledge`, `context`, `compare`, `similarity`, `progress`, `timeline`, `prose`, `series`, `report`, `next`, `doctor`
 - [Craft and revision commands](#craft-and-revision-commands): `pacing`, `clues`, `voices`, `names`, `diagram`, `passes`
 - [Entity commands](#entity-commands): `add`, `rename`, `move`, `remove`
 - [Output commands](#output-commands): `export`, `build`, `synopsis`
@@ -54,6 +54,7 @@ Absolute paths in output are shortened to `~/stories/...`.
 | | [`knowledge <id>`](#knowledge) | List what a character knew at a chapter, and how their progressions had changed them | No |
 | | [`context <id>`](#context) | Pack drafting context for a chapter or scene within a token budget, with no spoilers | No |
 | | [`compare [path]`](#compare) | Compare chapters with an earlier draft | No |
+| | [`similarity [path]`](#similarity) | Find passages that share a run of words with other text: earlier books, a draft, or a source | No |
 | | [`progress [path]`](#progress) | Show words against targets and deadline | With `--log` |
 | | [`timeline [path]`](#timeline) | Show scenes in story-time order, POV balance, presence | No |
 | | [`prose [path\|-]`](#prose) | Lint chapter prose, or a passage piped to stdin | No |
@@ -125,7 +126,7 @@ Every command except `init` and `import` works on one story project: a directory
 
 | Commands | How to give the project | Default |
 |---|---|---|
-| `validate`, `reindex`, `wordcount`, `links`, `continuity`, `compare`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `series`, `passes`, `report`, `next`, `doctor`, `migrate`, `export`, `build`, `synopsis` | A positional `[path]` **or** `--path <path>` | Current directory |
+| `validate`, `reindex`, `wordcount`, `links`, `continuity`, `compare`, `similarity`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `series`, `passes`, `report`, `next`, `doctor`, `migrate`, `export`, `build`, `synopsis` | A positional `[path]` **or** `--path <path>` | Current directory |
 | `knowledge`, `context`, `names`, `diagram`, `add`, `rename`, `move`, `remove` | `--path <path>` only, because their positionals are ids, names, or a diagram kind | Current directory |
 | `init`, `import` | Neither. They create a new project; use `--dir` to choose where | A directory named after the story id |
 
@@ -254,7 +255,7 @@ Defaults apply with `--json` too, and to `prose -` and `voices -` inside a proje
 The CLI prints results to stdout and diagnostics to stderr.
 
 - `validate`, `links`, and `continuity` write everything to **stderr**: a summary line, then one line per `error:`, `warning:`, and `dismissed:` finding. Nothing goes to stdout. A `warning:` line ends with the warning's [code](#finding-codes) in brackets, as does an `error:` line for a warning `severity` promoted.
-- `compare`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `names`, and `series` write their report to stdout, then the same summary and finding lines to stderr.
+- `compare`, `similarity`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `names`, and `series` write their report to stdout, then the same summary and finding lines to stderr.
 - `diagram` writes the Mermaid source (or, with `--out`, a confirmation) to stdout. If the project has a file that fails to parse, it writes the summary and error lines to stderr instead.
 - All other commands write a short confirmation or report to stdout.
 - Errors that stop a command (a bad option, a missing project, an unknown id) print one line to stderr.
@@ -276,7 +277,7 @@ Findings keep `1`, so `story validate || exit 1` fails on errors as it always ha
 
 ### JSON output
 
-`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. It works on the check and analysis commands: `validate`, `links`, `continuity`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `progress`, `timeline`, `prose`, `pacing`, `clues`, and `voices`. Other commands refuse it (`--json does not apply to story wordcount`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`.
+`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. It works on the check and analysis commands: `validate`, `links`, `continuity`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, and `similarity`. Other commands refuse it (`--json does not apply to story wordcount`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`.
 
 Every result has the same envelope:
 
@@ -1017,6 +1018,63 @@ renamed book/ does not exist at git ref v1
 
 $ story compare examples/the-last-ember --ref no-such-tag
 Unknown git ref: no-such-tag
+```
+
+### similarity
+
+```text
+story similarity [path] --against <file|folder|git-ref> [--min-words <n>] [--json]
+```
+
+Finds passages of chapter prose that share a run of words with other text: your earlier books, a previous draft, or a source a passage might echo too closely. It is advisory. A shared run is a place to look, not a finding of copying: a stock phrase, a quotation you meant, or your own recurring line all share words. Each passage is a `similarity-shared-passage` warning, so the command exits 0 unless a `severity` entry promotes it.
+
+| Option | Effect |
+|---|---|
+| `--against <file\|folder\|git-ref>` | The text to compare with, resolved against the current directory. A **file** is read as UTF-8 text; a markdown file loses its frontmatter, and a chapter file keeps only its `## Chapter Text`. A **folder** holding `story.md` is another story project, and its chapters are compared. Any other folder contributes every `.md`, `.markdown`, and `.txt` file in it and its subfolders (hidden files, `dist/`, `node_modules/`, and symlinks are skipped). A name that is neither is tried as a **git ref**, and the project's own chapters at that commit are the reference, read the way `compare --ref` reads them. The project itself, and its own chapter files, are never a reference |
+| `--min-words <n>` | The shortest shared run to report, in words; default `8`, at least `5`. A `story.md` [`cli-defaults`](#defaults-and-severity-from-storymd) entry can set it |
+
+Both sides are split into words and compared lowercased, with punctuation dropped and curly apostrophes folded. So `"The tide, turning,"` matches `the tide turning`, and `lamp-keeper` matches `lamp keeper`. Chinese and Japanese are compared a character at a time. Every run of `--min-words` words in the reference is indexed. Each chapter is scanned for runs in the index, and each hit is extended to the longest run the two texts share. A word is reported in one passage at most.
+
+A passage is located by the paragraph labels the [review copy](#build) uses (`ch02-p1`), in the chapter and, for a story project or git ref, in the reference. A plain file's paragraphs are numbered `p1`, `p2`, and so on, split at blank lines. A passage that crosses paragraphs names both labels (`ch02-p3 to ch02-p4`) and joins their text with ` / `. Front and back matter is left out: an epigraph or quoted lyric belongs on the permissions pass in the `editorial-review` skill, not here.
+
+The report lists each chapter's shared passages and words, then the total. Percentages are rounded down to a tenth, so one shared line in a long book shows as `0.1%`, never `0%`. The warning lines quote up to 24 words of each passage; `--json` gives the full text of both sides in `data.passages`. It stays fast on a whole novel. A 150,000-word manuscript against 300,000 words of reference takes well under a second.
+
+With `../sources/parish-notes.txt` holding a transcribed register entry, in a copy of *The Unraveled Thread*:
+
+```shell
+story similarity --against ../sources
+```
+
+```text
+Similarity against ../sources: 25 words in 1 file, runs of 8 or more shared words
+
+- chapters/chapter-01.md: no shared passages
+- chapters/chapter-02.md: 1 shared passage, 9 words (29%)
+- chapters/chapter-03.md: no shared passages
+- chapters/chapter-04.md: no shared passages
+
+Total: 9 of 111 words shared (8.1%)
+Shared text is a place to look, not proof of copying: check each passage in context.
+Similarity check complete: 0 errors, 1 warnings, 0 dismissed
+warning: chapters/chapter-02.md (ch02-p1) shares 9 words with ../sources/parish-notes.txt (p2): "was pulled from the millpond on a grey Tuesday" [similarity-shared-passage]
+```
+
+Against an earlier draft, `story similarity --against beta-round-1` shows what survived the revision word for word. For a chapter-by-chapter count of changes, use [`compare`](#compare).
+
+Errors:
+
+```text
+$ story similarity
+similarity needs --against <file|folder|git-ref>: the text to compare the chapters with
+
+$ story similarity --against .
+similarity --against . is this project: point it at other text, or at a git ref for an earlier draft
+
+$ story similarity --against no-such-thing
+similarity --against no-such-thing is not a file, folder, or git ref
+
+$ story similarity --against ../notes --min-words 3
+--min-words must be a whole number 5 or more, such as 8
 ```
 
 ### progress
@@ -2229,7 +2287,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 
 - [Any command](#codes-any-command) · [validate](#codes-validate) · [links](#codes-links) · [continuity](#codes-continuity) · [series](#codes-series)
 - [prose](#codes-prose) · [pacing](#codes-pacing) · [clues](#codes-clues) · [voices](#codes-voices) · [names](#codes-names)
-- [context](#codes-context) · [compare](#codes-compare) · [build and export](#codes-build-and-export) · [add, rename, move, and remove](#codes-add-rename-move-and-remove) · [init and import](#codes-init-and-import) · [JSON failures](#codes-json-failures)
+- [context](#codes-context) · [compare](#codes-compare) · [similarity](#codes-similarity) · [build and export](#codes-build-and-export) · [add, rename, move, and remove](#codes-add-rename-move-and-remove) · [init and import](#codes-init-and-import) · [JSON failures](#codes-json-failures)
 
 ### Codes: any command
 
@@ -2494,6 +2552,13 @@ An error means the project is broken or a check failed, so it cannot be turned d
 |---|---|---|
 | `story-missing-at-ref` | warning | `story.md` does not exist at the `--ref` compared against. |
 
+### Codes: similarity
+
+| Code | Level | Reported when |
+|---|---|---|
+| `similarity-shared-passage` | warning | A run of at least `--min-words` words in a chapter also appears in the `--against` text. |
+| `similarity-no-reference-text` | warning | The `--against` file, folder, or git ref holds no words to compare with. |
+
 ### Codes: build and export
 
 `build` and `export` also report `empty-chapter`, and a Twee build `unreachable-chapter`.
@@ -2563,7 +2628,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--write` | | `wordcount` | Boolean |
 | `--log` | | `progress` | Boolean |
 | `--ref` | `<git-ref>` | `compare` | Exclusive with `--against` |
-| `--against` | `<path>` | `compare` | Exclusive with `--ref` |
+| `--against` | `<path>` | `compare`, `similarity` | For `compare`, exclusive with `--ref`. For `similarity`, required: a file, folder, or git ref |
 | `--path` | `<path>` | Every command except `init` and `import` | Project root |
 | `--out` | `<file>` | `export`, `build`, `synopsis`, `diagram` | Relative to the project root |
 | `--format` | `<name>` | `build` | `markdown`, `md`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink` |
@@ -2579,6 +2644,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--max-filter-words` | `<n>` | `prose` | Number 0 or more; default 10 per 1,000 narration words |
 | `--max-adverbs` | `<n>` | `prose` | Number 0 or more; default 12 per 1,000 narration words |
 | `--max-bookisms` | `<n>` | `prose` | Whole number 0 or more; default 2 per chapter |
+| `--min-words` | `<n>` | `similarity` | Whole number 5 or more; default `8` |
 | `--pages` | `<n>` | `synopsis` | `1` or `3` |
 | `--actionable` | | `report` | Boolean |
 | `--id` | `<kebab-id>` | `add` (every kind except `chapter` and `scene`), `rename` | The entity id, instead of one derived from the name; required when the name has no ASCII letters or digits. Refused for `chapter` and `scene`, whose ids come from their numbers |

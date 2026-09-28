@@ -64,6 +64,11 @@ const OK_ARGS = {
   knowledge: () => ["knowledge", "mara-quill", "--at", "chapter-01"],
   context: () => ["context", "chapter-01"],
   compare: () => ["compare", "--against", "."],
+  similarity: (cwd) => {
+    const reference = path.join(cwd, "..", "reference.txt");
+    fs.writeFileSync(reference, "The tide came in over the rocks and the lamp was lit.\n", "utf8");
+    return ["similarity", "--against", reference];
+  },
   progress: () => ["progress"],
   timeline: () => ["timeline"],
   prose: () => ["prose"],
@@ -310,6 +315,8 @@ describe("exit codes", () => {
       ["rename", "character", "nobody", "Someone"],
       ["add", "glass", "Pane"],
       ["compare"],
+      ["similarity"],
+      ["similarity", "--against", "no-such-reference"],
       ["synopsis", "--pages", "2"],
       ["validate", ".", "extra"]
     ]) {
