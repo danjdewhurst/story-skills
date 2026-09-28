@@ -81,6 +81,52 @@ describe("similarity matching", () => {
     expect(report.passages.map((passage) => [passage.words, passage.text])).toEqual([[9, refrain]]);
   });
 
+  test("a longer run that starts a word later, elsewhere in the reference, wins", () => {
+    const greek = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron".split(" ");
+    const report = compareSimilarity(
+      [doc("c.md", greek.join(" "))],
+      [doc("a.txt", `${greek.slice(0, 8).join(" ")} QQQ`), doc("b.txt", greek.slice(1).join(" "))],
+      { minWords: 8, label: "r" }
+    );
+    expect(report.passages.map((passage) => [passage.from, passage.words, passage.reference.file])).toEqual([["p1", 14, "b.txt"]]);
+  });
+
+  test("the longest match is found however often its opening repeats in the reference", () => {
+    const opening = "and then he said that it was over";
+    const filler = Array.from({ length: 40 }, (_, index) => `${opening} filler${index}`).join(". ");
+    const chapter = `${opening} when the lighthouse finally went dark`;
+    const report = compareSimilarity([doc("c.md", chapter)], [doc("r.txt", `${filler}. ${chapter}.`)], { minWords: 8, label: "r" });
+    expect(report.passages.map((passage) => passage.words)).toEqual([14]);
+  });
+
+  test("overlapping runs report each word once, the longest first", () => {
+    const words = "one two three four five six seven eight nine ten eleven twelve".split(" ");
+    const report = compareSimilarity(
+      [doc("c.md", words.join(" "))],
+      [doc("a.txt", words.slice(0, 10).join(" ")), doc("b.txt", `x ${words.slice(2).join(" ")}`)],
+      { minWords: 5, label: "r" }
+    );
+    // b shares words 3-12 (10), a shares 1-10 (10): the tie goes to the
+    // earlier start, and b keeps only its last two words, too few to report.
+    expect(report.passages.map((passage) => [passage.text, passage.reference.file])).toEqual([[words.slice(0, 10).join(" "), "a.txt"]]);
+    expect(report.sharedWords).toBe(10);
+  });
+
+  test("passages are listed in chapter order, whatever their length", () => {
+    const short = "one two three four five six seven eight";
+    const long = "nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen";
+    const report = compareSimilarity([doc("c.md", `${short} gap ${long}`)], [doc("r.txt", `${long} and ${short}`)], { minWords: 8, label: "r" });
+    expect(report.passages.map((passage) => passage.words)).toEqual([8, 10]);
+  });
+
+  test("highly repetitive text on both sides stays fast", () => {
+    const the = Array.from({ length: 20000 }, () => "the").join(" ");
+    const started = performance.now();
+    const report = compareSimilarity([doc("c.md", the)], [doc("r.txt", the)], { minWords: 8, label: "r" });
+    expect(report.passages.map((passage) => passage.words)).toEqual([20000]);
+    expect(performance.now() - started).toBeLessThan(3000);
+  });
+
   test("a run across paragraphs names both labels and joins the text with a slash", () => {
     const report = compareSimilarity(
       [doc("c.md", "alpha beta gamma delta", "epsilon zeta eta theta iota")],
@@ -209,6 +255,48 @@ describe("story similarity", () => {
     expect(result.err).toContain("the reference exceeds the 5000 file limit");
   });
 
+  test("--against a parent folder skips this project and reads another project in it chapter by chapter", () => {
+    const { cwd, root } = project();
+    const other = createStoryProject({ cwd, title: "Book One", dir: "book-one", force: false }).root;
+    writeChapter(other, 1, `Again: ${SHARED}.`);
+    fs.writeFileSync(path.join(cwd, "notes.txt"), "Nothing shared.");
+    const report = similarityReport(root, { against: "..", cwd: root });
+    expect(report.reference.files).toBe(2);
+    expect(report.passages.map((passage) => [passage.reference.file, passage.reference.from])).toEqual([["../book-one/chapters/chapter-01.md", "ch01-p1"]]);
+  });
+
+  test("a symlink named by --against is followed, and shown as typed", () => {
+    const { cwd, root } = project();
+    fs.mkdirSync(path.join(cwd, "sources"));
+    fs.writeFileSync(path.join(cwd, "sources", "a.txt"), SHARED);
+    fs.symlinkSync(path.join(cwd, "sources"), path.join(cwd, "linked"));
+    fs.symlinkSync(path.join(cwd, "sources", "a.txt"), path.join(cwd, "one.txt"));
+    expect(similarityReport(root, { against: "../linked", cwd: root }).passages[0].reference.file).toBe("../linked/a.txt");
+    expect(similarityReport(root, { against: "../one.txt", cwd: root }).passages[0].reference.file).toBe("../one.txt");
+  });
+
+  test("a reference project that cannot build is still compared, by paragraph number", () => {
+    const { cwd, root } = project();
+    const other = createStoryProject({ cwd, title: "Messy", dir: "messy", force: false }).root;
+    writeMarkdown(path.join(other, "chapters", "chapter-01.md"), "title: One\nnumber: 3\nstatus: draft", `## Chapter Text\n\nFirst.\n\n${SHARED}.\n`);
+    writeMarkdown(path.join(other, "chapters", "chapter-02.md"), "title: Two\nnumber: 3\nstatus: draft", "## Chapter Text\n\nSecond.\n");
+    const report = similarityReport(root, { against: "messy", cwd });
+    expect(report.passages[0].reference).toMatchObject({ file: "messy/chapters/chapter-01.md", from: "p2" });
+  });
+
+  test("a relative against in cli-defaults is read from the project folder", () => {
+    const { cwd, root } = project();
+    fs.writeFileSync(path.join(cwd, "source.txt"), SHARED);
+    const storyFile = path.join(root, "story.md");
+    fs.writeFileSync(storyFile, fs.readFileSync(storyFile, "utf8").replace(/^---\n/, "---\ncli-defaults:\n  - command: similarity\n    against: ../source.txt\n"));
+    // Run from the parent folder: ../source.txt from there would not exist.
+    const result = invoke(cwd, ["similarity", path.basename(root)]);
+    expect(result.code).toBe(0);
+    expect(result.err).toContain("shares 13 words with source.txt (p1)");
+    // On the command line it is read from the current directory.
+    expect(invoke(cwd, ["similarity", path.basename(root), "--against", "source.txt"]).err).toContain("shares 13 words with source.txt");
+  });
+
   test("the project's own chapters are never their own reference", () => {
     const { root } = project();
     expect(similarityReport(root, { against: "chapters", cwd: root }).passages).toEqual([]);
@@ -220,14 +308,18 @@ describe("story similarity", () => {
     expect(invoke(root, ["similarity"])).toMatchObject({ code: 2 });
     const unknown = invoke(root, ["similarity", "--against", "no-such-thing"]);
     expect(unknown.code).toBe(2);
-    expect(unknown.err).toContain("similarity --against no-such-thing is not a file, folder, or git ref");
+    expect(unknown.err).toContain("similarity --against no-such-thing is not a file or folder, and the project is not in a git repository, so it cannot be a git ref");
   });
 
   test("a git ref from a folder outside any repository is reported as a usage error", () => {
     const { root } = project();
     const result = invoke(root, ["similarity", "--against", "main"]);
     expect(result.code).toBe(2);
-    expect(result.err).toContain("is not a file, folder, or git ref");
+    expect(result.err).toContain("is not a file or folder, and the project is not in a git repository");
+    git(root, "init", "-q");
+    git(root, "add", "-A");
+    git(root, "commit", "-qm", "draft one");
+    expect(invoke(root, ["similarity", "--against", "no-such-ref"]).err).toContain("is not a file or folder, and no git ref has that name");
   });
 
   test("reference text with no words warns", () => {

@@ -79,11 +79,12 @@ const ADD_OPTIONS = [
 // the command name (default: 1 for "positional", 0 otherwise) and `options`
 // lists the flags the command reads besides --path, so a stray argument or
 // flag is an error rather than silently ignored. `run` receives
-// { parsed, io, cwd, root, overrides }, where root() resolves the project
-// path and overrides holds the story.md severity overrides and the
-// exemptions that name a code (see findingOverrides), passed to
+// { parsed, io, cwd, root, overrides, defaulted }, where root() resolves
+// the project path and overrides holds the story.md severity overrides and
+// the exemptions that name a code (see findingOverrides), passed to
 // applySeverity, and returns the exit code. story.md cli-defaults are
-// already merged into parsed.options.
+// already merged into parsed.options; `defaulted` names the flags they
+// filled in.
 export const COMMANDS = [
   {
     name: "init",
@@ -311,8 +312,8 @@ export const COMMANDS = [
     ],
     project: "positional",
     options: ["against", "min-words", "json"],
-    run({ parsed, io, cwd, root, overrides }) {
-      const report = applySeverity(similarityReport(root(), { ...parsed.options, cwd }), overrides);
+    run({ parsed, io, cwd, root, overrides, defaulted }) {
+      const report = applySeverity(similarityReport(root(), { ...parsed.options, cwd, againstFromProject: defaulted.has("against") }), overrides);
       if (wantsJson(parsed)) {
         return reportJson(io, "similarity", report);
       }

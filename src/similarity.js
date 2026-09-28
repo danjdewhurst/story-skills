@@ -6,10 +6,13 @@ import { warn } from "./findings.js";
 // reference text (the author's earlier books, a previous draft, a source).
 // Both sides are split into words, lowercased, with punctuation dropped, so
 // "The tide, turning," and "the tide turning" match. Every run of
-// `minWords` words (a shingle) in the reference is indexed; each chapter is
-// then scanned for shingles in the index, and each hit is extended word by
-// word to the longest shared run, which is reported once. The result is
-// advisory: a shared run is a place to look, not a finding of copying.
+// `minWords` words (a shingle) in the reference is indexed. Each chapter
+// shingle found there starts an alignment wherever the two texts do not
+// already agree on the word before, and the alignment runs as far as they
+// agree. The longest alignments are reported first; a shorter one keeps
+// only the words no longer one has, if at least `minWords` of them are
+// left. The result is advisory: a shared run is a place to look, not a
+// finding of copying.
 
 export const SIMILARITY_DEFAULTS = { minWords: 8 };
 
@@ -17,9 +20,10 @@ export const SIMILARITY_DEFAULTS = { minWords: 8 };
 // --min-words refuses it.
 const MIN_SHINGLE = 5;
 
-// A common shingle can occur hundreds of times in a long reference; trying
-// more than this many places for each hit only finds the same run again.
-const MAX_CANDIDATES = 32;
+// A shingle can occur thousands of times in a reference built from
+// repeated text. Past this many places a hit is not tried further, so a
+// pathological reference cannot make the scan quadratic.
+const MAX_PLACES = 1000;
 
 // The words of a passage the text output quotes; --json keeps them all.
 const QUOTE_WORDS = 24;
@@ -80,7 +84,7 @@ function indexReference(references, size) {
       const places = index.get(key);
       if (places === undefined) {
         index.set(key, [[doc, at]]);
-      } else if (places.length < MAX_CANDIDATES) {
+      } else {
         places.push([doc, at]);
       }
     }
@@ -96,32 +100,67 @@ function runLength(source, from, target, at) {
   return length;
 }
 
-// The longest shared runs between each source document and the references:
-// each source word is reported in at most one run.
+// Every alignment of a chapter with the references that no earlier word
+// extends, as { doc, at, refDoc, refAt, length }.
+function alignments(source, doc, index, references, minWords) {
+  const words = source.words;
+  const found = [];
+  // The furthest word any alignment found so far reaches. They all start at
+  // or before `at`, so one that cannot reach past it lies inside one of them
+  // and could never be reported: skipping it keeps repetitive text linear.
+  let reach = 0;
+  for (let at = 0; at + minWords <= words.length; at += 1) {
+    const places = index.get(shingleKey(words, at, minWords));
+    if (places === undefined) {
+      continue;
+    }
+    for (const [refDoc, refAt] of places.length > MAX_PLACES ? places.slice(0, MAX_PLACES) : places) {
+      const target = references[refDoc].words;
+      // Already part of the alignment that starts a word earlier.
+      if (at > 0 && refAt > 0 && words[at - 1].word === target[refAt - 1].word) {
+        continue;
+      }
+      if (at + Math.min(words.length - at, target.length - refAt) <= reach) {
+        continue;
+      }
+      const length = runLength(words, at, target, refAt);
+      found.push({ doc, at, refDoc, refAt, length });
+      reach = Math.max(reach, at + length);
+    }
+  }
+  return found;
+}
+
+// The shared runs between each source document and the references, longest
+// first: a run is cut to the words no longer run has reported, and dropped
+// when fewer than `minWords` are left, so each word is reported once.
 export function sharedRuns(sources, references, minWords) {
   const index = indexReference(references, minWords);
   const runs = [];
   sources.forEach((source, doc) => {
-    const words = source.words;
-    let at = 0;
-    while (at + minWords <= words.length) {
-      const places = index.get(shingleKey(words, at, minWords));
-      if (places === undefined) {
-        at += 1;
-        continue;
-      }
-      let best = null;
-      for (const [refDoc, refAt] of places) {
-        const length = runLength(words, at, references[refDoc].words, refAt);
-        if (best === null || length > best.length) {
-          best = { refDoc, refAt, length };
+    const found = alignments(source, doc, index, references, minWords)
+      .sort((a, b) => b.length - a.length || a.at - b.at || a.refDoc - b.refDoc || a.refAt - b.refAt);
+    const taken = new Uint8Array(source.words.length);
+    for (const alignment of found) {
+      let from = alignment.at;
+      const end = alignment.at + alignment.length;
+      while (from < end) {
+        while (from < end && taken[from] === 1) {
+          from += 1;
         }
+        let to = from;
+        while (to < end && taken[to] === 0) {
+          to += 1;
+        }
+        if (to - from >= minWords) {
+          taken.fill(1, from, to);
+          runs.push({ doc, at: from, refDoc: alignment.refDoc, refAt: alignment.refAt + (from - alignment.at), length: to - from });
+        }
+        from = to;
       }
-      runs.push({ doc, at, ...best });
-      at += best.length;
     }
   });
-  return runs;
+  return runs.sort((a, b) => a.doc - b.doc || a.at - b.at);
 }
 
 // A run's paragraphs as labels ("ch03-p12", or "ch03-p12 to ch03-p13") and

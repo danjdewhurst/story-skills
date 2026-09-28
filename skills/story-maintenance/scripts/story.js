@@ -6063,7 +6063,7 @@ import path7 from "node:path";
 // src/similarity.js
 var SIMILARITY_DEFAULTS = { minWords: 8 };
 var MIN_SHINGLE = 5;
-var MAX_CANDIDATES = 32;
+var MAX_PLACES = 1000;
 var QUOTE_WORDS = 24;
 var CJK = "\\p{sc=Han}\\p{sc=Hiragana}\\p{sc=Katakana}";
 var WORD_CHAR = `(?:(?![${CJK}])[\\p{L}\\p{N}\\p{M}])`;
@@ -6110,7 +6110,7 @@ function indexReference(references, size) {
       const places = index.get(key);
       if (places === undefined) {
         index.set(key, [[doc, at]]);
-      } else if (places.length < MAX_CANDIDATES) {
+      } else {
         places.push([doc, at]);
       }
     }
@@ -6124,30 +6124,56 @@ function runLength(source, from, target, at) {
   }
   return length;
 }
+function alignments(source, doc, index, references, minWords) {
+  const words = source.words;
+  const found = [];
+  let reach = 0;
+  for (let at = 0;at + minWords <= words.length; at += 1) {
+    const places = index.get(shingleKey(words, at, minWords));
+    if (places === undefined) {
+      continue;
+    }
+    for (const [refDoc, refAt] of places.length > MAX_PLACES ? places.slice(0, MAX_PLACES) : places) {
+      const target = references[refDoc].words;
+      if (at > 0 && refAt > 0 && words[at - 1].word === target[refAt - 1].word) {
+        continue;
+      }
+      if (at + Math.min(words.length - at, target.length - refAt) <= reach) {
+        continue;
+      }
+      const length = runLength(words, at, target, refAt);
+      found.push({ doc, at, refDoc, refAt, length });
+      reach = Math.max(reach, at + length);
+    }
+  }
+  return found;
+}
 function sharedRuns(sources, references, minWords) {
   const index = indexReference(references, minWords);
   const runs = [];
   sources.forEach((source, doc) => {
-    const words = source.words;
-    let at = 0;
-    while (at + minWords <= words.length) {
-      const places = index.get(shingleKey(words, at, minWords));
-      if (places === undefined) {
-        at += 1;
-        continue;
-      }
-      let best = null;
-      for (const [refDoc, refAt] of places) {
-        const length = runLength(words, at, references[refDoc].words, refAt);
-        if (best === null || length > best.length) {
-          best = { refDoc, refAt, length };
+    const found = alignments(source, doc, index, references, minWords).sort((a, b) => b.length - a.length || a.at - b.at || a.refDoc - b.refDoc || a.refAt - b.refAt);
+    const taken = new Uint8Array(source.words.length);
+    for (const alignment of found) {
+      let from = alignment.at;
+      const end = alignment.at + alignment.length;
+      while (from < end) {
+        while (from < end && taken[from] === 1) {
+          from += 1;
         }
+        let to = from;
+        while (to < end && taken[to] === 0) {
+          to += 1;
+        }
+        if (to - from >= minWords) {
+          taken.fill(1, from, to);
+          runs.push({ doc, at: from, refDoc: alignment.refDoc, refAt: alignment.refAt + (from - alignment.at), length: to - from });
+        }
+        from = to;
       }
-      runs.push({ doc, at, ...best });
-      at += best.length;
     }
   });
-  return runs;
+  return runs.sort((a, b) => a.doc - b.doc || a.at - b.at);
 }
 function describe(document, from, length) {
   const words = document.words.slice(from, from + length);
@@ -9892,19 +9918,21 @@ function similarityReport(root, options = {}) {
   const { minWords } = similarityOptions(options);
   const project = scanProject(root);
   assertProjectParses(project, "check similarity");
-  const chapters = labelledChapters(project, "check similarity", (file) => relative2(project, file));
+  const chapters = labelledChapters(project, (file) => relative2(project, file));
   const cwd = options.cwd ?? process.cwd();
-  const target = path11.resolve(cwd, against);
+  const target = path11.resolve(options.againstFromProject ? project.root : cwd, against);
   const warnings = [];
   let references;
   let label;
   if (lstatIfExists(target) !== null) {
-    if (canonicalPath(target) === canonicalPath(project.root)) {
+    const real = canonicalPath(target);
+    const self = canonicalPath(project.root);
+    if (real === self) {
       throw usageError(`similarity --against ${against} is this project: point it at other text, or at a git ref for an earlier draft`);
     }
     label = against;
     const own = new Set(project.chapters.map((chapter) => canonicalPath(chapter.file)));
-    references = referenceDocuments(target, cwd).filter((reference) => !own.has(canonicalPath(reference.path)));
+    references = referenceDocuments(real, (file) => displayPath(cwd, target, real, file), self).filter((reference) => !own.has(canonicalPath(reference.path)));
   } else {
     label = `git ref ${against}`;
     try {
@@ -9914,11 +9942,12 @@ function similarityReport(root, options = {}) {
         }
         const old = scanProject(oldRoot);
         assertProjectParses(old, `read chapters at git ref ${against}`);
-        return labelledChapters(old, `read chapters at git ref ${against}`, (file) => `${against}:${path11.relative(oldRoot, file).split(path11.sep).join("/")}`);
+        return labelledChapters(old, (file) => `${against}:${path11.relative(oldRoot, file).split(path11.sep).join("/")}`);
       }, "similarity --against");
     } catch (error) {
-      if (error.exitCode === EXIT_CODES.usage || /needs the project inside a git repository|not found on PATH/.test(error.message)) {
-        throw usageError(`similarity --against ${against} is not a file, folder, or git ref`);
+      const reason = error.exitCode === EXIT_CODES.usage ? "no git ref has that name" : /needs the project inside a git repository/.test(error.message) ? "the project is not in a git repository, so it cannot be a git ref" : /not found on PATH/.test(error.message) ? "git was not found on PATH to read it as a git ref" : null;
+      if (reason !== null) {
+        throw usageError(`similarity --against ${against} is not a file or folder, and ${reason}`);
       }
       throw error;
     }
@@ -9929,13 +9958,27 @@ function similarityReport(root, options = {}) {
   }
   return { ...report, warnings: [...warnings, ...report.warnings] };
 }
-function labelledChapters(project, action, fileName) {
+function displayPath(cwd, typed, real, file) {
+  const inside = path11.relative(real, file);
+  const shown = path11.relative(cwd, inside === "" ? typed : path11.join(typed, inside));
+  return shown.split(path11.sep).join("/") || path11.basename(file);
+}
+function labelledChapters(project, fileName) {
   if (project.chapters.length === 0) {
     return [];
   }
-  const { meta, chapters } = bookChapters(project, action);
-  const book = htmlBook({ title: project.title, meta, front: [], chapters, back: [] });
-  return book.parts.map((part, index) => ({
+  let book;
+  try {
+    book = bookChapters(project, "check similarity");
+  } catch {
+    return project.chapters.map((chapter) => ({
+      ...textDocument(chapter.file, fileName(chapter.file), chapterProse(readMarkdown(chapter.file, project.root).body)),
+      title: chapter.title ?? ""
+    }));
+  }
+  const { meta, chapters } = book;
+  const html = htmlBook({ title: project.title, meta, front: [], chapters, back: [] });
+  return html.parts.map((part, index) => ({
     file: fileName(project.chapters[index].file),
     path: project.chapters[index].file,
     title: chapters[index].title,
@@ -9943,20 +9986,29 @@ function labelledChapters(project, action, fileName) {
   }));
 }
 var REFERENCE_TEXT_FILE = /\.(?:md|markdown|txt)$/i;
-function referenceDocuments(target, cwd) {
-  const display = (file) => path11.relative(cwd, file).split(path11.sep).join("/") || path11.basename(file);
-  const stats = fs7.lstatSync(target);
-  if (stats.isDirectory()) {
-    if (fs7.existsSync(path11.join(target, "story.md"))) {
-      const other = scanProject(target);
-      assertProjectParses(other, `read chapters in ${display(target)}`);
-      return labelledChapters(other, `read chapters in ${display(target)}`, display);
-    }
-    return referenceFiles(target).map((file) => textDocument(file, display(file)));
+function referenceDocuments(target, display, self) {
+  if (!fs7.statSync(target).isDirectory()) {
+    return [textDocument(target, display(target))];
   }
-  return [textDocument(target, display(target))];
+  const documents = [];
+  for (const entry of referenceEntries(target, self)) {
+    if (entry.project) {
+      const other = scanProject(entry.path);
+      assertProjectParses(other, `read chapters in ${display(entry.path)}`);
+      documents.push(...labelledChapters(other, display));
+    } else {
+      documents.push(textDocument(entry.path, display(entry.path)));
+    }
+  }
+  return documents;
 }
-function referenceFiles(dir, depth = 0, collected = []) {
+function referenceEntries(dir, self, depth = 0, collected = []) {
+  if (fs7.existsSync(path11.join(dir, "story.md"))) {
+    if (canonicalPath(dir) !== self) {
+      collected.push({ project: true, path: dir });
+    }
+    return collected;
+  }
   const entries = fs7.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
   for (const entry of entries) {
     if (entry.name.startsWith(".") || SKIPPED_SCAN_DIRECTORIES.has(entry.name)) {
@@ -9964,9 +10016,9 @@ function referenceFiles(dir, depth = 0, collected = []) {
     }
     const fullPath = path11.join(dir, entry.name);
     if (entry.isDirectory() && depth < MAX_SCAN_DEPTH) {
-      referenceFiles(fullPath, depth + 1, collected);
+      referenceEntries(fullPath, self, depth + 1, collected);
     } else if (entry.isFile() && REFERENCE_TEXT_FILE.test(entry.name)) {
-      collected.push(fullPath);
+      collected.push({ project: false, path: fullPath });
       if (collected.length > MAX_SCAN_FILES) {
         throw projectError(`Too many text files in ${dir}: the reference exceeds the ${MAX_SCAN_FILES} file limit`);
       }
@@ -9974,12 +10026,12 @@ function referenceFiles(dir, depth = 0, collected = []) {
   }
   return collected;
 }
-function textDocument(file, name) {
-  let text = readTextFile(file).replace(/^﻿/, "").replace(/\r\n?/g, `
+function textDocument(file, name, prose = null) {
+  let text = prose ?? readTextFile(file).replace(/^﻿/, "");
+  text = text.replace(/\r\n?/g, `
 `);
-  if (/\.(?:md|markdown)$/i.test(file)) {
-    text = withoutLeadingFrontmatter(text);
-    text = chapterProse(text);
+  if (prose === null && /\.(?:md|markdown)$/i.test(file)) {
+    text = chapterProse(withoutLeadingFrontmatter(text));
   }
   const paragraphs = text.split(/\n\s*\n/).map((paragraph) => paragraph.replace(/\s+/g, " ").trim()).filter((paragraph) => paragraph !== "").map((paragraph, index) => ({ label: `p${index + 1}`, text: paragraph }));
   return { file: name, path: file, paragraphs };
@@ -15146,8 +15198,8 @@ var COMMANDS = [
     ],
     project: "positional",
     options: ["against", "min-words", "json"],
-    run({ parsed, io, cwd, root, overrides }) {
-      const report = applySeverity(similarityReport(root(), { ...parsed.options, cwd }), overrides);
+    run({ parsed, io, cwd, root, overrides, defaulted }) {
+      const report = applySeverity(similarityReport(root(), { ...parsed.options, cwd, againstFromProject: defaulted.has("against") }), overrides);
       if (wantsJson(parsed)) {
         return reportJson(io, "similarity", report);
       }
@@ -15350,7 +15402,7 @@ var COMMANDS = [
         io.stdout.write(`Updated revision-passes in story.md
 `);
       }
-      const where = shellWord(displayPath(parsed));
+      const where = shellWord(displayPath2(parsed));
       io.stdout.write(formatPasses(result.passes, where === "." ? "story passes" : `story passes ${where}`));
       return 0;
     }
@@ -15362,7 +15414,7 @@ var COMMANDS = [
     project: "positional",
     options: ["actionable", "json"],
     run({ parsed, io, root, overrides }) {
-      const report = projectReport(root(), { displayPath: displayPath(parsed), overrides });
+      const report = projectReport(root(), { displayPath: displayPath2(parsed), overrides });
       if (wantsJson(parsed)) {
         return reportProjectJson(io, "report", report);
       }
@@ -15377,7 +15429,7 @@ var COMMANDS = [
     project: "positional",
     options: ["json"],
     run({ parsed, io, root, overrides }) {
-      const report = projectActions(root(), { displayPath: displayPath(parsed), overrides });
+      const report = projectActions(root(), { displayPath: displayPath2(parsed), overrides });
       if (wantsJson(parsed)) {
         return reportProjectJson(io, "next", report);
       }
@@ -15392,7 +15444,7 @@ var COMMANDS = [
     project: "positional",
     options: ["json"],
     run({ parsed, io, root, overrides }) {
-      const report = projectActions(root(), { displayPath: displayPath(parsed), overrides });
+      const report = projectActions(root(), { displayPath: displayPath2(parsed), overrides });
       if (wantsJson(parsed)) {
         return reportProjectJson(io, "doctor", report);
       }
@@ -15577,7 +15629,7 @@ function writeFindings(io, result) {
   printFindings(io, result);
   return result.ok ? EXIT_CODES.ok : EXIT_CODES.findings;
 }
-function displayPath(parsed) {
+function displayPath2(parsed) {
   const flag = parsed.options.path;
   return parsed.positionals[1] ?? (Array.isArray(flag) ? flag[flag.length - 1] : flag) ?? ".";
 }
@@ -15762,7 +15814,7 @@ Run story --help to list commands.
     const config = command.project === "none" ? null : projectConfig(command, configRoot(cwd, parsed, root));
     configured = config === null ? [] : applyDefaults(config, name, parsed.options).map((key) => [key, parsed.options[key]]);
     const overrides = config === null ? NO_OVERRIDES : findingOverrides(config);
-    return command.run({ parsed, io, cwd, root, overrides });
+    return command.run({ parsed, io, cwd, root, overrides, defaulted: new Set(configured.map(([key]) => key)) });
   } catch (error) {
     const message = `${describeError(error, io.cwd ?? process.cwd())}${configuredHint(error, configured)}`;
     const exitCode = exitCodeFor(error);
