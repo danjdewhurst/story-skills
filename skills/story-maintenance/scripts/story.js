@@ -3130,6 +3130,82 @@ function formatStateChanges(changes, atChapterId) {
 `;
 }
 
+// src/deaths.js
+var STATUS_PROGRESSIONS = new WeakMap;
+function statusProgressions(character) {
+  if (!STATUS_PROGRESSIONS.has(character)) {
+    const list = Array.isArray(character.frontmatter.progressions) ? character.frontmatter.progressions : [];
+    STATUS_PROGRESSIONS.set(character, list.map((item, index) => ({ index, entry: progressionEntry(item) })).filter(({ entry }) => entry !== null && entry.field === "status").map(({ index, entry }) => ({ index, from: entry.from, value: String(entry.value) })));
+  }
+  return STATUS_PROGRESSIONS.get(character);
+}
+function progressionStatusAt(character, chapterId, chronology) {
+  let status = String(character.status);
+  let from = "";
+  let deadFrom = "";
+  if (chronology.numbers.has(chapterId) && statusProgressions(character).length > 0) {
+    for (const change of entityStateAt(character.frontmatter, chapterId, chronology).changes) {
+      if (change.field !== "status") {
+        continue;
+      }
+      const value = String(change.value);
+      if (value === "deceased" && status !== "deceased") {
+        deadFrom = change.from;
+      }
+      status = value;
+      from = change.from;
+    }
+  }
+  return { status, from, deadFrom };
+}
+function progressionDeathAt(character, chapterId, chronology) {
+  const from = progressionDeathFrom(character, chapterId, chronology);
+  if (from === null || from !== "" && !happensAfter(chronology, chapterId, from)) {
+    return null;
+  }
+  return { from };
+}
+function progressionDeathFrom(character, chapterId, chronology) {
+  const { status, deadFrom } = progressionStatusAt(character, chapterId, chronology);
+  if (status !== "deceased" || character.diedIn && deadFrom === "") {
+    return null;
+  }
+  if (character.diedIn && (character.revivedIn === "" || !happensAfter(chronology, deadFrom, character.revivedIn))) {
+    return null;
+  }
+  return deadFrom;
+}
+function characterLifeline(character, chronology) {
+  const status = String(character.status ?? "");
+  const chapters = storyOrder(chronology);
+  if (chapters.length === 0 || character.diedIn && !chronology.numbers.has(character.diedIn)) {
+    const dead = status === "deceased";
+    return { deadAtStart: dead, deadAtEnd: dead, events: [] };
+  }
+  const deadAtStart = status === "deceased" && !character.diedIn;
+  if (!character.diedIn && statusProgressions(character).length === 0) {
+    return { deadAtStart, deadAtEnd: deadAtStart, events: [] };
+  }
+  const window = deathWindow(character, chronology);
+  const events = [];
+  let dead = deadAtStart;
+  for (const chapter of chapters) {
+    const byDiedIn = window !== null && (chapter === window.died || window.deadIn(chapter));
+    const now = byDiedIn || progressionDeathFrom(character, chapter, chronology) !== null;
+    if (now !== dead) {
+      events.push(now ? { type: "death", chapter, source: chapter === window?.died ? "died-in" : "progression" } : { type: "revival", chapter, source: chapter === window?.revived ? "revived-in" : "progression" });
+      dead = now;
+    }
+  }
+  return { deadAtStart, deadAtEnd: dead, events };
+}
+function revivedBy(lifeline, chapterId, chronology) {
+  return chronology.numbers.has(chapterId) && lifeline.events.some((event) => event.type === "revival" && !happensAfter(chronology, event.chapter, chapterId));
+}
+function storyOrder(chronology) {
+  return [...chronology.numbers.keys()].sort((left, right) => chronology.numbers.get(left) - chronology.numbers.get(right) || (left < right ? -1 : left > right ? 1 : 0)).sort((left, right) => chronology.after(left, right) ? 1 : chronology.after(right, left) ? -1 : 0);
+}
+
 // src/continuity.js
 var CHEKHOV_CHAPTER_GAP = 3;
 function checkContinuity(project) {
@@ -3234,50 +3310,6 @@ function checkStatusAppearances(project, character, chronology, warnings) {
       warnings.push(warn("progression-deceased-in-cast", `${entryLabel} lists ${character.id}, whose progressions make them deceased from ${death.from}; move appearances after the death to mentions`, entryLabel, chapterOf(entry)));
     }
   }
-}
-var STATUS_PROGRESSIONS = new WeakMap;
-function statusProgressions(character) {
-  if (!STATUS_PROGRESSIONS.has(character)) {
-    const list = Array.isArray(character.frontmatter.progressions) ? character.frontmatter.progressions : [];
-    STATUS_PROGRESSIONS.set(character, list.map((item, index) => ({ index, entry: progressionEntry(item) })).filter(({ entry }) => entry !== null && entry.field === "status").map(({ index, entry }) => ({ index, from: entry.from, value: String(entry.value) })));
-  }
-  return STATUS_PROGRESSIONS.get(character);
-}
-function progressionStatusAt(character, chapterId, chronology) {
-  let status = String(character.status);
-  let from = "";
-  let deadFrom = "";
-  if (chronology.numbers.has(chapterId) && statusProgressions(character).length > 0) {
-    for (const change of entityStateAt(character.frontmatter, chapterId, chronology).changes) {
-      if (change.field !== "status") {
-        continue;
-      }
-      const value = String(change.value);
-      if (value === "deceased" && status !== "deceased") {
-        deadFrom = change.from;
-      }
-      status = value;
-      from = change.from;
-    }
-  }
-  return { status, from, deadFrom };
-}
-function progressionDeathAt(character, chapterId, chronology) {
-  const from = progressionDeathFrom(character, chapterId, chronology);
-  if (from === null || from !== "" && !happensAfter(chronology, chapterId, from)) {
-    return null;
-  }
-  return { from };
-}
-function progressionDeathFrom(character, chapterId, chronology) {
-  const { status, deadFrom } = progressionStatusAt(character, chapterId, chronology);
-  if (status !== "deceased" || character.diedIn && deadFrom === "") {
-    return null;
-  }
-  if (character.diedIn && (character.revivedIn === "" || !happensAfter(chronology, deadFrom, character.revivedIn))) {
-    return null;
-  }
-  return deadFrom;
 }
 function progressionIndex(character, from) {
   return statusProgressions(character).filter((entry) => entry.from === from).pop().index;
@@ -5077,7 +5109,10 @@ function canonText(value) {
   return typeof value === "string" ? value.normalize("NFC") : value;
 }
 function checkCanonDeaths(book, earlierBooks, errors) {
-  const deaths = firstMatching(earlierBooks, "characters", (character) => character.status === "deceased");
+  const deaths = deathsBefore(earlierBooks);
+  const chronology = chapterChronology(book.project);
+  const lifelines = new Map(book.project.characters.map((character) => [character.id, characterLifeline(character, chronology)]));
+  const deadAt = (id, chapterId) => deaths.has(id) && !(lifelines.has(id) && revivedBy(lifelines.get(id), chapterId, chronology));
   for (const character of book.project.characters) {
     const death = deaths.get(character.id);
     if (!death) {
@@ -5088,18 +5123,34 @@ function checkCanonDeaths(book, earlierBooks, errors) {
     }
   }
   for (const record of book.project.chapters.concat(book.project.scenes)) {
+    const chapterId = record.chapter ?? record.id;
     for (const [id, death] of deaths) {
-      if (record.characters.includes(id) || record.pov === id && !record.mentions.includes(id)) {
+      if ((record.characters.includes(id) || record.pov === id && !record.mentions.includes(id)) && deadAt(id, chapterId)) {
         errors.push(err("canon-posthumous-appearance", `${bookFile(book, record.file)} lists ${id}, who died in earlier book ${death.title}; move appearances to mentions`, bookFile(book, record.file)));
       }
     }
   }
   for (const entry of knowledgeEntries(book)) {
     const death = deaths.get(entry.character);
-    if (death && entry.learnedIn) {
+    if (death && entry.learnedIn && deadAt(entry.character, entry.learnedIn)) {
       errors.push(err("canon-posthumous-learning", `${bookFile(book, entry.file)} knowledge-state[${entry.index}] has ${entry.character} learn something in ${entry.learnedIn}, but ${entry.character} died in earlier book ${death.title}; drop learned-in or the entry`, bookFile(book, entry.file)));
     }
   }
+}
+function deathsBefore(earlierBooks) {
+  const deaths = new Map;
+  for (const earlier of earlierBooks) {
+    const chronology = chapterChronology(earlier.project);
+    for (const character of earlier.project.characters) {
+      const lifeline = characterLifeline(character, chronology);
+      if (lifeline.deadAtEnd && (lifeline.events.length > 0 || !deaths.has(character.id))) {
+        deaths.set(character.id, earlier);
+      } else if (!lifeline.deadAtEnd && lifeline.events.some((event) => event.type === "revival")) {
+        deaths.delete(character.id);
+      }
+    }
+  }
+  return deaths;
 }
 function checkDestroyedArtifacts(book, earlierBooks, errors, warnings) {
   const destroyed = firstMatching(earlierBooks, "artifacts", (artifact) => artifact.status === "destroyed");
@@ -6674,9 +6725,15 @@ function relationshipDiagram(project) {
       }
     }
   }
-  const deceased = characters.filter((character) => character.status === "deceased").map((character) => nodeId(character.id));
+  const chronology = chapterChronology(project);
+  const lifelines = characters.map((character) => ({ id: nodeId(character.id), lifeline: characterLifeline(character, chronology) }));
+  const deceased = lifelines.filter(({ lifeline }) => lifeline.deadAtEnd).map(({ id }) => id);
+  const revived = lifelines.filter(({ lifeline }) => !lifeline.deadAtEnd && lifeline.events.some((event) => event.type === "revival")).map(({ id }) => id);
   if (deceased.length > 0) {
     lines.push("  classDef deceased stroke-dasharray: 4 4,color:#888", `  class ${deceased.join(",")} deceased`);
+  }
+  if (revived.length > 0) {
+    lines.push("  classDef revived stroke-width:3px", `  class ${revived.join(",")} revived`);
   }
   return `${lines.join(`
 `)}

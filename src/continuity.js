@@ -3,7 +3,8 @@ import { dismissByExemptions } from "./exemptions.js";
 import { err, warn } from "./findings.js";
 import { kebabCase } from "./markdown.js";
 import { chapterChronology, deathWindow } from "./chronology.js";
-import { entityStateAt, happensAfter, progressionEntry } from "./progressions.js";
+import { progressionDeathAt, progressionDeathFrom, progressionStatusAt, statusProgressions } from "./deaths.js";
+import { happensAfter } from "./progressions.js";
 
 const CHEKHOV_CHAPTER_GAP = 3;
 
@@ -138,76 +139,6 @@ function checkStatusAppearances(project, character, chronology, warnings) {
       warnings.push(warn("progression-deceased-in-cast", `${entryLabel} lists ${character.id}, whose progressions make them deceased from ${death.from}; move appearances after the death to mentions`, entryLabel, chapterOf(entry)));
     }
   }
-}
-
-// A character's usable status progressions (see progressions.js), with their
-// place in the list. Worked out once per character.
-const STATUS_PROGRESSIONS = new WeakMap();
-
-function statusProgressions(character) {
-  if (!STATUS_PROGRESSIONS.has(character)) {
-    const list = Array.isArray(character.frontmatter.progressions) ? character.frontmatter.progressions : [];
-    STATUS_PROGRESSIONS.set(character, list
-      .map((item, index) => ({ index, entry: progressionEntry(item) }))
-      .filter(({ entry }) => entry !== null && entry.field === "status")
-      .map(({ index, entry }) => ({ index, from: entry.from, value: String(entry.value) })));
-  }
-  return STATUS_PROGRESSIONS.get(character);
-}
-
-// A character's status during chapter `chapterId`, with the status
-// progressions that take effect by then applied in story order: `status`,
-// `from`, the chapter of the last progression that set it ("" while the
-// frontmatter status holds), and `deadFrom`, where the current run of
-// deceased began ("" when it holds from the frontmatter, so a progression
-// that repeats deceased does not move the death). A record in a chapter that
-// is not written keeps the frontmatter status, as the died-in window does.
-function progressionStatusAt(character, chapterId, chronology) {
-  let status = String(character.status);
-  let from = "";
-  let deadFrom = "";
-  if (chronology.numbers.has(chapterId) && statusProgressions(character).length > 0) {
-    for (const change of entityStateAt(character.frontmatter, chapterId, chronology).changes) {
-      if (change.field !== "status") {
-        continue;
-      }
-      const value = String(change.value);
-      if (value === "deceased" && status !== "deceased") {
-        deadFrom = change.from;
-      }
-      status = value;
-      from = change.from;
-    }
-  }
-  return { status, from, deadFrom };
-}
-
-// Whether the character is dead during chapter `chapterId` by their status
-// rather than by died-in: { from: "" } dead since before the story (no
-// died-in), { from } dead by a status progression that took effect in an
-// earlier chapter, or null. With died-in, only a progression death after
-// revived-in counts; the died-in window covers the first.
-function progressionDeathAt(character, chapterId, chronology) {
-  const from = progressionDeathFrom(character, chapterId, chronology);
-  if (from === null || (from !== "" && !happensAfter(chronology, chapterId, from))) {
-    return null;
-  }
-  return { from };
-}
-
-// Where the character's current death by status began at chapter
-// `chapterId`, including in that chapter itself: "" for dead since before
-// the story, a chapter id for a progression death, or null when they are not
-// dead by status (see progressionDeathAt).
-function progressionDeathFrom(character, chapterId, chronology) {
-  const { status, deadFrom } = progressionStatusAt(character, chapterId, chronology);
-  if (status !== "deceased" || (character.diedIn && deadFrom === "")) {
-    return null;
-  }
-  if (character.diedIn && (character.revivedIn === "" || !happensAfter(chronology, deadFrom, character.revivedIn))) {
-    return null;
-  }
-  return deadFrom;
 }
 
 // The status progression listed last among those taking effect in `from`.

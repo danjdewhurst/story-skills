@@ -63,7 +63,7 @@ Only carry entities the new book actually uses. For each one, copy the file from
 - **Set state for this book's starting point, not the source book's ending.**
   - Sequel: start from the earlier book's final `status`, relationships, ownership, and knowledge.
   - Prequel: start from the earlier situation, and write the later book's facts as fixed endpoints in a `## Series Canon` section.
-- **Remove book-local references.** `died-in` and every other chapter id points at chapters in the source book. For a character who died before this book begins, keep `status: deceased` and remove `died-in`, and list them only in `mentions`: `story continuity` warns when one appears in a chapter or scene cast.
+- **Remove book-local references.** `died-in`, the `from` of each `progressions` entry, and every other chapter id point at chapters in the source book. Set the frontmatter to the state the character starts this book in, and drop the source book's `progressions`. For a character who died before this book begins, by `died-in` or by a status progression, keep `status: deceased`, remove `died-in`, and list them only in `mentions`: `story continuity` warns when one appears in a chapter or scene cast. If they come back in this book, add a status progression to `alive` from that chapter; `story series` then allows them on the page from there.
 - **Prune or carry every link.** Relationships, `locations`, `notable-characters`, faction `members`, and artifact `owner`/`location` must point at entities that exist in this book, with backlinks. Either carry the linked entity too, or remove the reference.
 - **Do not copy** chapters, scenes, arcs, questions, promises, or `continuity/state.md`. Rebuild them for the new book:
   - Unresolved questions or promises the new book continues become new files in its `continuity/` folders.
@@ -106,10 +106,10 @@ story series .
   - Books that declare different `series` ids
   - Two books that share a `book-number`, or a `book-number` that is not a number 0 or more
   - A chronology cycle
-  - A character who is `deceased` in an earlier book but not `deceased` in a later one
-  - A later book whose chapter or scene lists that character as `pov` or under `characters`. Move flashbacks, memories, and ghosts to `mentions`. A ghost narrator may stay the `pov` when also listed in `mentions`.
+  - A character who is dead at the end of an earlier book (by `died-in`, a status progression to `deceased`, or `status: deceased`) but not `deceased` in a later one
+  - A later book whose chapter or scene lists that character as `pov` or under `characters`, before a status progression in that book brings them back. Move flashbacks, memories, and ghosts to `mentions`. A ghost narrator may stay the `pov` when also listed in `mentions`.
   - A later book where a character learns a `fact` (an entry with `learned-in`) that the same character already knows in an earlier book. In a prequel, the usual fix is to remove the knowledge from the prequel, or to change which book the discovery happens in.
-  - A later book where a character who died in an earlier book learns something (a `knowledge-state` entry with `learned-in`)
+  - A later book where a character who died in an earlier book learns something (a `knowledge-state` entry with `learned-in`) before being brought back
   - A later book's scene whose `state-changes` target an artifact `destroyed` in an earlier book
 - **Warnings**
   - A shared entity whose `name` (or glossary `term`) or `pronunciation` differs from the most recent earlier book

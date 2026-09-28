@@ -1,4 +1,6 @@
+import { chapterChronology } from "./chronology.js";
 import { usableRoutes } from "./continuity.js";
+import { characterLifeline } from "./deaths.js";
 import { buildTimeline } from "./timeline.js";
 import { usageError } from "./exit-codes.js";
 
@@ -68,9 +70,18 @@ function relationshipDiagram(project) {
       }
     }
   }
-  const deceased = characters.filter((character) => character.status === "deceased").map((character) => nodeId(character.id));
+  // Each character as they stand at the end of the book, read as story
+  // continuity reads deaths (see deaths.js): dead by died-in, a status
+  // progression, or status deceased; revived when they died and came back.
+  const chronology = chapterChronology(project);
+  const lifelines = characters.map((character) => ({ id: nodeId(character.id), lifeline: characterLifeline(character, chronology) }));
+  const deceased = lifelines.filter(({ lifeline }) => lifeline.deadAtEnd).map(({ id }) => id);
+  const revived = lifelines.filter(({ lifeline }) => !lifeline.deadAtEnd && lifeline.events.some((event) => event.type === "revival")).map(({ id }) => id);
   if (deceased.length > 0) {
     lines.push("  classDef deceased stroke-dasharray: 4 4,color:#888", `  class ${deceased.join(",")} deceased`);
+  }
+  if (revived.length > 0) {
+    lines.push("  classDef revived stroke-width:3px", `  class ${revived.join(",")} revived`);
   }
   return `${lines.join("\n")}\n`;
 }

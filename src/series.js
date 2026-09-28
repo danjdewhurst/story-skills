@@ -1,5 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
+import { chapterChronology } from "./chronology.js";
+import { characterLifeline, revivedBy } from "./deaths.js";
 import { err, warn } from "./findings.js";
 import { parseFrontmatter, replaceFrontmatter } from "./frontmatter.js";
 import { readTextFile } from "./files.js";
@@ -472,9 +474,16 @@ function canonText(value) {
 }
 
 // A character who dies in an earlier book stays dead: the later book must mark
-// them deceased and keep them out of on-page casts.
+// them deceased and keep them out of on-page casts until it brings them back.
+// Deaths are read as story continuity reads them (see deaths.js): `died-in`,
+// `revived-in`, `status`, and status progressions, at the end of each earlier
+// book.
 function checkCanonDeaths(book, earlierBooks, errors) {
-  const deaths = firstMatching(earlierBooks, "characters", (character) => character.status === "deceased");
+  const deaths = deathsBefore(earlierBooks);
+  const chronology = chapterChronology(book.project);
+  const lifelines = new Map(book.project.characters.map((character) => [character.id, characterLifeline(character, chronology)]));
+  // Dead at `chapterId` unless this book brings them back by then.
+  const deadAt = (id, chapterId) => deaths.has(id) && !(lifelines.has(id) && revivedBy(lifelines.get(id), chapterId, chronology));
   for (const character of book.project.characters) {
     const death = deaths.get(character.id);
     if (!death) {
@@ -486,10 +495,11 @@ function checkCanonDeaths(book, earlierBooks, errors) {
   }
 
   for (const record of book.project.chapters.concat(book.project.scenes)) {
+    const chapterId = record.chapter ?? record.id;
     for (const [id, death] of deaths) {
       // A pov also listed in mentions narrates without appearing (a ghost),
       // as in single-book continuity.
-      if (record.characters.includes(id) || (record.pov === id && !record.mentions.includes(id))) {
+      if ((record.characters.includes(id) || (record.pov === id && !record.mentions.includes(id))) && deadAt(id, chapterId)) {
         errors.push(err("canon-posthumous-appearance", `${bookFile(book, record.file)} lists ${id}, who died in earlier book ${death.title}; move appearances to mentions`, bookFile(book, record.file)));
       }
     }
@@ -498,10 +508,34 @@ function checkCanonDeaths(book, earlierBooks, errors) {
   // Learning a fact on the page is an on-page event, like an appearance.
   for (const entry of knowledgeEntries(book)) {
     const death = deaths.get(entry.character);
-    if (death && entry.learnedIn) {
+    if (death && entry.learnedIn && deadAt(entry.character, entry.learnedIn)) {
       errors.push(err("canon-posthumous-learning", `${bookFile(book, entry.file)} knowledge-state[${entry.index}] has ${entry.character} learn something in ${entry.learnedIn}, but ${entry.character} died in earlier book ${death.title}; drop learned-in or the entry`, bookFile(book, entry.file)));
     }
   }
+}
+
+// The characters dead at the end of the earlier books, each with the book
+// they died in. Books are read in chronological order. A book that ends with
+// the character dead after a death on its own pages becomes the book they died
+// in; one where they are dead throughout keeps the earlier book, or is the
+// book they died in when no earlier one has them dead. Only a revival in a
+// later book (a `revived-in`, or a status progression away from deceased)
+// brings them back: a later book that simply lists them alive is the
+// canon-death-status error, not a revival.
+function deathsBefore(earlierBooks) {
+  const deaths = new Map();
+  for (const earlier of earlierBooks) {
+    const chronology = chapterChronology(earlier.project);
+    for (const character of earlier.project.characters) {
+      const lifeline = characterLifeline(character, chronology);
+      if (lifeline.deadAtEnd && (lifeline.events.length > 0 || !deaths.has(character.id))) {
+        deaths.set(character.id, earlier);
+      } else if (!lifeline.deadAtEnd && lifeline.events.some((event) => event.type === "revival")) {
+        deaths.delete(character.id);
+      }
+    }
+  }
+  return deaths;
 }
 
 function checkDestroyedArtifacts(book, earlierBooks, errors, warnings) {

@@ -1534,7 +1534,7 @@ Prints [Mermaid](https://mermaid.js.org/) diagram source generated from frontmat
 
 | Kind | What it draws | Reads |
 |---|---|---|
-| `relationships` | Characters and their relationships: family links as solid edges drawn from the elder side, other relationships as dotted edges, deceased characters dashed | Character `relationships`, `status` |
+| `relationships` | Characters and their relationships: family links as solid edges drawn from the elder side, other relationships as dotted edges. Characters dead at the end of the book (by `died-in`, a status progression, or `status: deceased`, in story order, planned chapters included) are dashed (class `deceased`), and characters who died and came back have a thick outline (class `revived`) | Character `relationships`, `status`, `died-in`, `revived-in`, status `progressions` |
 | `locations` | Locations with their region, and routes labelled with hours and mode; a one-way route uses an arrow | Location `region`, `routes` |
 | `timeline` | The dated entries from `story timeline` (scenes, and chapters without scene records) in story order, grouped by date, marking entries told out of order | Scene and chapter `date`, `time` |
 | `clues` | Chapters in order, with an edge from each clue's plant to its reveal; red herrings dotted, unrevealed clues pointing at a "not yet revealed" node | Clue `planted`, `payoff`, `red-herring`, `status` |
@@ -2427,9 +2427,9 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `duplicate-book-number` | error | Two books share a `book-number`. |
 | `canon-name-mismatch` | warning | A shared entity's name differs from an earlier book. |
 | `canon-pronunciation-mismatch` | warning | A shared entity's pronunciation differs from an earlier book. |
-| `canon-death-status` | error | A character who died in an earlier book is not deceased. |
-| `canon-posthumous-appearance` | error | A chapter or scene lists a character who died in an earlier book. |
-| `canon-posthumous-learning` | error | A character who died in an earlier book learns something. |
+| `canon-death-status` | error | A character dead at the end of an earlier book (by `died-in`, a status progression, or `status`) is not deceased. |
+| `canon-posthumous-appearance` | error | A chapter or scene lists a character who died in an earlier book, before this book revives them. |
+| `canon-posthumous-learning` | error | A character who died in an earlier book learns something, before this book revives them. |
 | `canon-destroyed-status` | warning | An artifact destroyed in an earlier book has another status. |
 | `canon-destroyed-artifact-used` | error | A scene uses an artifact destroyed in an earlier book. |
 | `canon-fact-relearned` | error | A character learns a fact they knew in an earlier book. |

@@ -8,6 +8,10 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ## [Unreleased]
 
+### Added
+
+- `story series` and `story diagram` read deaths recorded as status progressions, as `story continuity` does. Deaths and revivals are resolved once, in the new `src/deaths.js`, from `died-in`, `revived-in`, `status`, and status progressions in story order. `story series` reads each earlier book's state at its end, in chronological order: a character killed by a progression in book one is reported in book two with the existing `canon-death-status`, `canon-posthumous-appearance`, and `canon-posthumous-learning` codes, a revival in an earlier book clears the death, and a later book that brings a character back with a status progression is not flagged from that chapter on. `story diagram relationships` marks characters dead at the end of the book (by `died-in`, a progression, or `status`) as `deceased`, and adds a `revived` class for those who died and came back. ([#287](https://github.com/danjdewhurst/story-skills/issues/287))
+
 ## [0.17.0] - 2026-09-28
 
 ### Added
