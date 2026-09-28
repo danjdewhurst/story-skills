@@ -1,0 +1,224 @@
+import { describe, expect, test } from "bun:test";
+import { Buffer } from "node:buffer";
+import fs from "node:fs";
+import path from "node:path";
+import { runCli } from "../src/cli.js";
+import { BASELINE_TOLERANCES, analyzeChapter, baselineFigures, baselineFindings, baselineProfile, contentWords, proseRules, sentenceLengths } from "../src/prose.js";
+import { createStoryProject, proseReport, validateProject } from "../src/story.js";
+import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
+import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+
+const schema = JSON.parse(fs.readFileSync(RESULT_SCHEMA_PATH, "utf8"));
+
+const VOCABULARY = ["harbour", "lantern", "rope", "gull", "tide", "keeper", "stair", "window", "salt", "boat", "shore", "bell", "net", "stone", "wind", "door"];
+
+// `count` sentences of `length` words, `perParagraph` to a paragraph, with
+// words drawn in turn from the vocabulary so the text is the same every run.
+// `extra` is added to the end of every sentence (a filter word, an adverb).
+function prose(count, length, { perParagraph = 4, extra = "", dialogue = false } = {}) {
+  let next = 0;
+  const sentences = [];
+  for (let index = 0; index < count; index += 1) {
+    const words = Array.from({ length }, () => VOCABULARY[next++ % VOCABULARY.length]);
+    words[0] = words[0][0].toUpperCase() + words[0].slice(1);
+    const sentence = `${words.join(" ")}${extra ? ` ${extra}` : ""}.`;
+    sentences.push(dialogue && index % 2 === 0 ? `"${sentence}" she said.` : sentence);
+  }
+  const paragraphs = [];
+  for (let index = 0; index < sentences.length; index += perParagraph) {
+    paragraphs.push(sentences.slice(index, index + perParagraph).join(" "));
+  }
+  return paragraphs.join("\n\n");
+}
+
+function project({ samples, chapter, style = "" } = {}) {
+  const cwd = makeTempDir();
+  const { root } = createStoryProject({ cwd, title: "Baseline Story", force: false });
+  writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft", `## Chapter Text\n\n${chapter}\n`);
+  fs.mkdirSync(path.join(root, "research"), { recursive: true });
+  if (samples !== undefined) {
+    fs.writeFileSync(path.join(root, "research", "samples.txt"), samples);
+  }
+  writeMarkdown(path.join(root, "style-sheet.md"), `type: style-sheet\ndialect: unspecified\n${samples === undefined ? "" : "samples:\n  - research/samples.txt\n"}${style}`, "# Style Sheet\n");
+  return { cwd, root };
+}
+
+function invoke(cwd, argv, stdin) {
+  const io = memoryIo(cwd);
+  if (stdin !== undefined) {
+    io.readStdin = () => Buffer.from(stdin);
+  }
+  const code = runCli(argv, io);
+  return { code, out: io.output(), err: io.error() };
+}
+
+const codes = (report) => report.warnings.map((warning) => warning.code);
+
+function profileOf(text) {
+  const rules = proseRules({}, []);
+  return baselineProfile([{ file: "s.txt", analysis: analyzeChapter(text, rules), sentenceLengths: sentenceLengths(text), contentWords: contentWords(text, rules) }]);
+}
+
+describe("prose baseline profile", () => {
+  test("pools sentence and paragraph lengths, dialogue, rates, and signature words across samples", () => {
+    const rules = proseRules({}, []);
+    const texts = [prose(300, 8), prose(100, 12, { perParagraph: 2 })];
+    const profile = baselineProfile(texts.map((text, index) => ({ file: `s${index}.txt`, analysis: analyzeChapter(text, rules), sentenceLengths: sentenceLengths(text), contentWords: contentWords(text, rules) })));
+    expect(profile.samples).toEqual(["s0.txt", "s1.txt"]);
+    expect(profile.words).toBe(300 * 8 + 100 * 12);
+    expect(profile.sentences.count).toBe(400);
+    expect(profile.sentences.mean).toBe((300 * 8 + 100 * 12) / 400);
+    expect(profile.paragraphMean).toBe(3600 / (75 + 50));
+    expect(profile.dialogueShare).toBe(0);
+    expect(profile.usable).toBe(true);
+    // Every vocabulary word of four letters or more; "net" is too short.
+    expect(profile.signatureWords).toHaveLength(15);
+    expect(profile.signatureWords).not.toContain("net");
+    expect(BASELINE_TOLERANCES.signatureWords).toBeGreaterThanOrEqual(15);
+  });
+
+  test("too little sample narration is not usable, and nothing is compared", () => {
+    const profile = profileOf(prose(20, 8));
+    expect(profile.usable).toBe(false);
+    const analysis = analyzeChapter(prose(100, 30), proseRules({}, []));
+    expect(baselineFindings("c.md", analysis, baselineFigures(analysis, profile, []), profile)).toEqual([]);
+  });
+
+  test("each drift is reported with its direction, and a chapter inside every tolerance is not", () => {
+    const rules = proseRules({}, []);
+    const profile = profileOf(prose(400, 8));
+    const check = (text) => {
+      const analysis = analyzeChapter(text, rules);
+      return baselineFindings("c.md", analysis, baselineFigures(analysis, profile, contentWords(text, rules)), profile);
+    };
+    expect(check(prose(60, 9))).toEqual([]);
+
+    const long = check(prose(40, 14, { perParagraph: 2 }));
+    expect(long.map((finding) => finding.code)).toEqual(["prose-baseline-sentences"]);
+    expect(long[0].message).toBe("c.md sentences average 14.0 words, longer than your samples' 8.0 (tolerance 30%)");
+
+    expect(check(prose(60, 8, { perParagraph: 12 })).map((finding) => finding.code)).toEqual(["prose-baseline-paragraphs"]);
+    const talky = check(prose(80, 8, { dialogue: true }));
+    expect(talky.map((finding) => finding.code)).toContain("prose-baseline-dialogue");
+    expect(talky.find((finding) => finding.code === "prose-baseline-dialogue").message).toMatch(/is \d+\.\d% dialogue, more than your samples' 0\.0% \(tolerance 20 points\)$/);
+
+    const filtered = check(prose(60, 7, { extra: "noticed" }));
+    expect(filtered.map((finding) => finding.code)).toContain("prose-baseline-filter-words");
+    expect(filtered.find((finding) => finding.code === "prose-baseline-filter-words").message).toContain("more than your samples' 0.0 (tolerance 3.0)");
+  });
+
+  test("an author who writes heavy adverbs is warned when a chapter has far fewer", () => {
+    const rules = proseRules({}, []);
+    const profile = profileOf(prose(400, 7, { extra: "slowly" }));
+    const analysis = analyzeChapter(prose(60, 8), rules);
+    const findings = baselineFindings("c.md", analysis, baselineFigures(analysis, profile, []), profile);
+    expect(findings.map((finding) => finding.code)).toEqual(["prose-baseline-adverbs"]);
+    expect(findings[0].message).toContain("fewer than your samples'");
+  });
+});
+
+describe("story prose with samples", () => {
+  test("samples replace the fixed filter-word and adverb limits", () => {
+    // The author uses "slowly" in every sentence, which the fixed limit flags.
+    const { root } = project({ samples: prose(400, 7, { extra: "slowly" }), chapter: prose(60, 7, { extra: "slowly" }) });
+    const report = proseReport(root);
+    expect(report.baseline.usable).toBe(true);
+    expect(report.baseline.samples).toEqual(["research/samples.txt"]);
+    expect(codes(report)).not.toContain("prose-adverbs");
+    expect(codes(report).filter((code) => code.startsWith("prose-baseline"))).toEqual([]);
+    expect(report.chapters[0].baseline).toMatchObject({ adverbsPerThousand: expect.any(Number), signatureWordsUsed: expect.any(Number) });
+
+    // Without the baseline the fixed limit applies again.
+    const off = proseReport(root, { baseline: "false" });
+    expect(off.baseline).toBeNull();
+    expect(codes(off)).toContain("prose-adverbs");
+    expect(off.chapters[0].baseline).toBeUndefined();
+  });
+
+  test("too few sample words warns and keeps the fixed limits", () => {
+    const { root } = project({ samples: prose(30, 7), chapter: prose(60, 7, { extra: "slowly" }) });
+    const report = proseReport(root);
+    expect(codes(report)).toContain("prose-baseline-small");
+    expect(codes(report)).toContain("prose-adverbs");
+    const text = invoke(root, ["prose"]).out;
+    expect(text).toContain("Too few sample words to compare with");
+  });
+
+  test("the text report shows the baseline and each chapter against it", () => {
+    const { root } = project({ samples: prose(400, 8), chapter: prose(40, 14) });
+    const result = invoke(root, ["prose"]);
+    expect(result.code).toBe(0);
+    expect(result.out).toContain("Baseline from 1 sample (3200 words): sentences 8.0 words (spread 0.0), paragraphs 32.0 words, 0.0% dialogue");
+    expect(result.out).toContain("  Signature words: ");
+    expect(result.out).toContain("  Against the baseline: paragraphs 56.0 words, 0.0% dialogue, signature words ");
+    expect(result.err).toContain("warning: chapters/chapter-01.md sentences average 14.0 words, longer than your samples' 8.0 (tolerance 30%) [prose-baseline-sentences]");
+  });
+
+  test("--json includes the profile and each chapter's figures, and matches the schema", () => {
+    const { root } = project({ samples: prose(400, 8), chapter: prose(40, 14) });
+    const result = invoke(root, ["prose", "--json"]);
+    const envelope = JSON.parse(result.out);
+    expect(validateAgainstSchema(envelope, schema)).toEqual([]);
+    expect(envelope.data.baseline).toMatchObject({ samples: ["research/samples.txt"], usable: true, sentences: { mean: 8 } });
+    expect(envelope.data.chapters[0].baseline.sentenceMean).toBe(14);
+    expect(envelope.diagnostics.map((entry) => entry.code)).toContain("prose-baseline-sentences");
+    // Without samples the profile is null.
+    const plain = project({ chapter: prose(40, 14) });
+    expect(JSON.parse(invoke(plain.root, ["prose", "--json"]).out).data.baseline).toBeNull();
+  });
+
+  test("--baseline with no samples is a usage error", () => {
+    const { root } = project({ chapter: prose(40, 8) });
+    const result = invoke(root, ["prose", "--baseline"]);
+    expect(result.code).toBe(2);
+    expect(result.err).toContain("prose --baseline needs samples in style-sheet.md");
+  });
+
+  test("a sample folder can be another story project, read chapter by chapter", () => {
+    const { cwd, root } = project({ chapter: prose(40, 14) });
+    const other = createStoryProject({ cwd, title: "Book One", dir: "book-one", force: false }).root;
+    writeMarkdown(path.join(other, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft", `## Chapter Text\n\n${prose(400, 8)}\n`);
+    writeMarkdown(path.join(root, "style-sheet.md"), "type: style-sheet\ndialect: unspecified\nsamples:\n  - ../book-one", "# Style Sheet\n");
+    const report = proseReport(root);
+    expect(report.baseline.samples).toEqual(["../book-one/chapters/chapter-01.md"]);
+    expect(codes(report)).toContain("prose-baseline-sentences");
+  });
+
+  test("a missing sample is reported by prose and validate, and the rest are used", () => {
+    const { root } = project({ samples: prose(400, 8), chapter: prose(40, 8) });
+    writeMarkdown(path.join(root, "style-sheet.md"), "type: style-sheet\ndialect: unspecified\nsamples:\n  - research/samples.txt\n  - ../gone", "# Style Sheet\n");
+    const report = proseReport(root);
+    expect(report.baseline.samples).toEqual(["research/samples.txt"]);
+    expect(report.warnings.find((warning) => warning.code === "style-sample-missing").message).toBe("style-sheet.md samples entry ../gone names no file or folder in reach of the project");
+    const validation = validateProject(root);
+    expect(validation.ok).toBe(true);
+    expect(validation.warnings.map((warning) => warning.code)).toContain("style-sample-missing");
+  });
+
+  test("validate refuses samples that are not a list of relative paths", () => {
+    const { root } = project({ chapter: prose(40, 8) });
+    const withSamples = (yaml) => {
+      writeMarkdown(path.join(root, "style-sheet.md"), `type: style-sheet\ndialect: unspecified\n${yaml}`, "# Style Sheet\n");
+      return validateProject(root).errors.map((error) => error.message);
+    };
+    expect(withSamples("samples: ../book-one")).toContain("style-sheet.md frontmatter field samples must be a list");
+    expect(withSamples("samples:\n  - /home/me/book")).toContain("style-sheet.md samples entry /home/me/book must be a path relative to the project folder, such as ../book-one");
+    expect(withSamples("samples:\n  - \"C:/books/one\"")).toContain("style-sheet.md samples entry C:/books/one must be a path relative to the project folder, such as ../book-one");
+  });
+
+  test("a passage piped to prose - is compared with the project's samples", () => {
+    const { root } = project({ samples: prose(400, 8), chapter: prose(40, 8) });
+    const result = invoke(root, ["prose", "-", "--json"], prose(40, 14));
+    const envelope = JSON.parse(result.out);
+    expect(envelope.data.baseline.usable).toBe(true);
+    expect(envelope.diagnostics.find((entry) => entry.code === "prose-baseline-sentences")).toMatchObject({ file: "stdin" });
+  });
+
+  test("cli-defaults can turn the baseline off for every run", () => {
+    const { root } = project({ samples: prose(400, 8), chapter: prose(40, 14) });
+    const storyFile = path.join(root, "story.md");
+    fs.writeFileSync(storyFile, fs.readFileSync(storyFile, "utf8").replace(/^---\n/, "---\ncli-defaults:\n  - command: prose\n    baseline: false\n"));
+    expect(invoke(root, ["prose"]).err).not.toContain("prose-baseline");
+    expect(invoke(root, ["prose", "--baseline"]).err).toContain("[prose-baseline-sentences]");
+  });
+});

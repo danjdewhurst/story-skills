@@ -179,6 +179,7 @@ export function analyzeChapter(prose, rules) {
   return {
     words: words.length,
     narrationWords: narration.length,
+    paragraphs: paragraphs.length,
     sentences: sentenceStats(sentences),
     filterWords,
     adverbs,
@@ -191,18 +192,20 @@ export function analyzeChapter(prose, rules) {
   };
 }
 
-export function chapterFindings(label, analysis, thresholds = PROSE_THRESHOLDS) {
+// With a baseline, the author's own rates replace the fixed filter-word and
+// adverb limits, so those two generic warnings are left to baselineFindings.
+export function chapterFindings(label, analysis, thresholds = PROSE_THRESHOLDS, { baseline = false } = {}) {
   const findings = [];
   for (const variant of analysis.variants) {
     findings.push(warn("prose-avoided-spelling", `${label} uses "${variant.avoid}" ${times(variant.count)}; ${variant.source} prefers "${variant.use}"`, label));
   }
   const rated = analysis.narrationWords >= thresholds.minRateWords;
   const filterRate = perThousand(total(analysis.filterWords), analysis.narrationWords);
-  if (rated && filterRate > thresholds.filterPerThousand) {
+  if (!baseline && rated && filterRate > thresholds.filterPerThousand) {
     findings.push(warn("prose-filter-words", `${label} has ${formatAgainst(filterRate, thresholds.filterPerThousand, "over")} filter words per 1,000 narration words (over ${thresholds.filterPerThousand}): ${formatCounts(analysis.filterWords, 5)}`, label));
   }
   const adverbRate = perThousand(total(analysis.adverbs), analysis.narrationWords);
-  if (rated && adverbRate > thresholds.adverbsPerThousand) {
+  if (!baseline && rated && adverbRate > thresholds.adverbsPerThousand) {
     findings.push(warn("prose-adverbs", `${label} has ${formatAgainst(adverbRate, thresholds.adverbsPerThousand, "over")} -ly adverbs per 1,000 narration words (over ${thresholds.adverbsPerThousand}): ${formatCounts(analysis.adverbs, 5)}`, label));
   }
   const bookisms = total(analysis.bookisms);
@@ -212,6 +215,124 @@ export function chapterFindings(label, analysis, thresholds = PROSE_THRESHOLDS) 
   const stats = analysis.sentences;
   if (stats.count >= thresholds.uniformMinSentences && stats.spread < thresholds.uniformSpread) {
     findings.push(warn("prose-uniform-sentences", `${label} sentence lengths are uniform (spread ${formatAgainst(stats.spread, thresholds.uniformSpread, "under")} words over ${stats.count} sentences); vary the rhythm`, label));
+  }
+  return findings;
+}
+
+// The author's own prose, from the style sheet's `samples`, as a profile
+// chapters are compared with. Every tolerance is a documented constant, so
+// the same samples and chapter always give the same findings. A drift is a
+// prompt to reread the chapter, not a rule: a fight scene should run shorter
+// than the book's average.
+export const BASELINE_TOLERANCES = {
+  // Below this much sample narration the profile is too thin to compare with.
+  minSampleWords: 2000,
+  // A chapter needs this many sentences before its average is compared.
+  minSentences: 10,
+  // Average sentence length, as a share of the samples' average.
+  sentenceLength: 0.3,
+  // Average paragraph length, as a share of the samples' average.
+  paragraphLength: 0.5,
+  // Share of words inside dialogue, in percentage points.
+  dialogueShare: 20,
+  // Filter words and -ly adverbs per 1,000 narration words: half the
+  // samples' rate, and never less than this many.
+  rateFloor: 3,
+  rateShare: 0.5,
+  // Signature words: the samples' most used content words.
+  signatureWords: 20,
+  signatureMinCount: 3
+};
+
+export function baselineProfile(samples) {
+  const analyses = samples.map((sample) => sample.analysis);
+  const sum = (pick) => analyses.reduce((total, analysis) => total + pick(analysis), 0);
+  const words = sum((analysis) => analysis.words);
+  const narrationWords = sum((analysis) => analysis.narrationWords);
+  const lengths = samples.flatMap((sample) => sample.sentenceLengths);
+  const counts = new Map();
+  for (const sample of samples) {
+    for (const word of sample.contentWords) {
+      increment(counts, word);
+    }
+  }
+  return {
+    samples: samples.map((sample) => sample.file),
+    words,
+    narrationWords,
+    sentences: sentenceStats(lengths),
+    paragraphMean: sum((analysis) => analysis.paragraphs) === 0 ? 0 : words / sum((analysis) => analysis.paragraphs),
+    dialogueShare: words === 0 ? 0 : ((words - narrationWords) * 100) / words,
+    filterPerThousand: perThousand(sum((analysis) => total(analysis.filterWords)), narrationWords),
+    adverbsPerThousand: perThousand(sum((analysis) => total(analysis.adverbs)), narrationWords),
+    signatureWords: sortCounts(counts)
+      .filter((entry) => entry.count >= BASELINE_TOLERANCES.signatureMinCount)
+      .slice(0, BASELINE_TOLERANCES.signatureWords)
+      .map((entry) => entry.word),
+    usable: narrationWords >= BASELINE_TOLERANCES.minSampleWords
+  };
+}
+
+// The words a signature can be made of: four letters or more, not a common
+// function word, a number, or a name in the bible.
+export function contentWords(prose, rules) {
+  return splitWords(proseParagraphs(prose).join("\n\n"))
+    .map(normalizeWord)
+    .filter((word) => word.length >= 4 && !ECHO_STOPWORDS.has(word) && !PHRASE_STOPWORDS.has(word) && !isName(word, rules) && !/^\p{N}+$/u.test(word));
+}
+
+// The sentence lengths analyzeChapter summarises, for pooling samples.
+export function sentenceLengths(prose) {
+  return proseParagraphs(prose)
+    .flatMap((paragraph) => splitSentences(paragraph))
+    .map((sentence) => splitWords(sentence).length)
+    .filter((count) => count > 0);
+}
+
+// A chapter's figures on the profile's scales, and the signature words it
+// uses.
+export function baselineFigures(analysis, profile, chapterWords) {
+  const used = new Set(chapterWords);
+  return {
+    sentenceMean: analysis.sentences.mean,
+    paragraphMean: analysis.paragraphs === 0 ? 0 : analysis.words / analysis.paragraphs,
+    dialogueShare: analysis.words === 0 ? 0 : ((analysis.words - analysis.narrationWords) * 100) / analysis.words,
+    filterPerThousand: perThousand(total(analysis.filterWords), analysis.narrationWords),
+    adverbsPerThousand: perThousand(total(analysis.adverbs), analysis.narrationWords),
+    signatureWordsUsed: profile.signatureWords.filter((word) => used.has(word)).length
+  };
+}
+
+export function baselineFindings(label, analysis, figures, profile, tolerances = BASELINE_TOLERANCES) {
+  const findings = [];
+  if (!profile.usable || analysis.narrationWords < PROSE_THRESHOLDS.minRateWords) {
+    return findings;
+  }
+  const relative = (value, base, share) => base > 0 && Math.abs(value - base) > base * share;
+  const direction = (value, base, more, fewer) => (value > base ? more : fewer);
+  if (analysis.sentences.count >= tolerances.minSentences && relative(figures.sentenceMean, profile.sentences.mean, tolerances.sentenceLength)) {
+    findings.push(warn("prose-baseline-sentences", `${label} sentences average ${formatRate(figures.sentenceMean)} words, ${direction(figures.sentenceMean, profile.sentences.mean, "longer", "shorter")} than your samples' ${formatRate(profile.sentences.mean)} (tolerance ${tolerances.sentenceLength * 100}%)`, label));
+  }
+  if (relative(figures.paragraphMean, profile.paragraphMean, tolerances.paragraphLength)) {
+    findings.push(warn("prose-baseline-paragraphs", `${label} paragraphs average ${formatRate(figures.paragraphMean)} words, ${direction(figures.paragraphMean, profile.paragraphMean, "longer", "shorter")} than your samples' ${formatRate(profile.paragraphMean)} (tolerance ${tolerances.paragraphLength * 100}%)`, label));
+  }
+  if (Math.abs(figures.dialogueShare - profile.dialogueShare) > tolerances.dialogueShare) {
+    findings.push(warn("prose-baseline-dialogue", `${label} is ${formatRate(figures.dialogueShare)}% dialogue, ${direction(figures.dialogueShare, profile.dialogueShare, "more", "less")} than your samples' ${formatRate(profile.dialogueShare)}% (tolerance ${tolerances.dialogueShare} points)`, label));
+  }
+  // The message for a rate that drifts past its tolerance, or null.
+  const rateDrift = (name, field) => {
+    const allowed = Math.max(tolerances.rateFloor, profile[field] * tolerances.rateShare);
+    return Math.abs(figures[field] - profile[field]) > allowed
+      ? `${label} has ${formatRate(figures[field])} ${name} per 1,000 narration words, ${direction(figures[field], profile[field], "more", "fewer")} than your samples' ${formatRate(profile[field])} (tolerance ${formatRate(allowed)})`
+      : null;
+  };
+  const filterDrift = rateDrift("filter words", "filterPerThousand");
+  if (filterDrift !== null) {
+    findings.push(warn("prose-baseline-filter-words", filterDrift, label));
+  }
+  const adverbDrift = rateDrift("-ly adverbs", "adverbsPerThousand");
+  if (adverbDrift !== null) {
+    findings.push(warn("prose-baseline-adverbs", adverbDrift, label));
   }
   return findings;
 }
@@ -267,6 +388,14 @@ export function formatProseReport(report) {
   if (!report.styleSheet) {
     lines.push("No style-sheet.md: spelling and watch-word checks are off");
   }
+  const profile = report.baseline;
+  if (profile) {
+    const stats = profile.sentences;
+    lines.push(`Baseline from ${profile.samples.length} ${profile.samples.length === 1 ? "sample" : "samples"} (${profile.words} words): sentences ${formatRate(stats.mean)} words (spread ${formatRate(stats.spread)}), paragraphs ${formatRate(profile.paragraphMean)} words, ${formatRate(profile.dialogueShare)}% dialogue, ${formatRate(profile.filterPerThousand)} filter words and ${formatRate(profile.adverbsPerThousand)} -ly adverbs per 1k narration words`);
+    lines.push(profile.usable
+      ? `  Signature words: ${profile.signatureWords.join(", ") || "none"}`
+      : `  Too few sample words to compare with (${profile.narrationWords} of ${BASELINE_TOLERANCES.minSampleWords} narration words): the fixed limits apply`);
+  }
   for (const chapter of report.chapters) {
     const analysis = chapter.analysis;
     const stats = analysis.sentences;
@@ -275,6 +404,10 @@ export function formatProseReport(report) {
     lines.push(`  Filter words: ${formatRate(perThousand(total(analysis.filterWords), analysis.narrationWords))} per 1k narration words${countSuffix(analysis.filterWords)}`);
     lines.push(`  -ly adverbs: ${formatRate(perThousand(total(analysis.adverbs), analysis.narrationWords))} per 1k narration words${countSuffix(analysis.adverbs)}`);
     lines.push(`  Dialogue tags: ${formatCounts(analysis.plainTags, 4) || "none plain"}; said-bookisms: ${formatCounts(analysis.bookisms, 5) || "none"}`);
+    if (chapter.baseline && profile.usable) {
+      const figures = chapter.baseline;
+      lines.push(`  Against the baseline: paragraphs ${formatRate(figures.paragraphMean)} words, ${formatRate(figures.dialogueShare)}% dialogue, signature words ${figures.signatureWordsUsed} of ${profile.signatureWords.length}`);
+    }
     lines.push(`  Echoes within ${PROSE_THRESHOLDS.echoWindow} words: ${formatCounts(analysis.echoes, 5) || "none"}`);
     if (analysis.watch.length > 0) {
       lines.push(`  Watch words: ${analysis.watch.map((entry) => `${entry.word} ${entry.count}`).join(", ")}`);

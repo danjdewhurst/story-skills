@@ -52,6 +52,13 @@ A story project with `story.md` in the root. `story init` scaffolds
    - `allow-words`: built-in filter words, adverbs, or dialect spellings
      this book uses on purpose (a proper noun like *Harbor Street* in a
      British book)
+   - `samples`: files or folders of the author's own prose that sound right,
+     relative to the project folder: an earlier book (`../book-one`) or
+     chapters the author has approved. Ask the user which; never list prose
+     the agent drafted and the author has not approved, or the profile
+     measures the agent's voice. With at least 2,000 words of narration,
+     `story prose` compares each chapter with the samples instead of fixed
+     limits
 4. Character Voices entries summarise each character file's Voice & Speech
    Patterns section in one line and link to it. Record words a speaker
    reaches for in the character file's `voice-words` list and words they
@@ -81,6 +88,15 @@ manuscript it lists repeated 4-word phrases and character first names that
 readers could confuse. Warnings are advisory and the command exits 0 unless
 a file cannot be read. See `references/prose-checks.md` for what each
 count means and how to respond.
+
+When the style sheet lists `samples`, the report opens with a profile of
+the author's own prose, and chapters that drift from it warn
+(`prose-baseline-sentences`, `-paragraphs`, `-dialogue`, `-filter-words`,
+`-adverbs`) in place of the fixed filter-word and adverb limits. Treat a
+drift as a prompt to reread the chapter, not a rule. Tell the user where
+it drifts and ask whether it is deliberate: a fight scene runs short, a
+quiet chapter long. Never rewrite a chapter just to move a number back
+inside its tolerance.
 
 To lint a passage that is not in a chapter file yet (a draft scene, a
 proposed rewrite), pipe it in with `-` in place of the path:

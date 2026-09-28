@@ -45,7 +45,8 @@ const PLACEHOLDERS = new Set([
   "What the reader sees and why it matters.",
   "What the reader or continuity tracker needs answered.",
   "1. Opening beat\n2. Escalation\n3. Turn or decision",
-  // style-sheet.md as story init writes it.
+  // style-sheet.md as story init writes it, and as it did before samples.
+  "The book's house decisions, kept the way a copyeditor keeps them. Read this before drafting or revising prose. `story prose` enforces the lists in the frontmatter: `dialect` (british, american, or unspecified) flags the other dialect's common spellings, each `preferred` entry flags its `avoid` form, `watch-words` are counted in every chapter, and `allow-words` silences a built-in filter word or adverb. Add a `samples` list of your own prose (`../book-one`, approved chapters) and `story prose` compares each chapter with it instead of fixed limits.",
   "The book's house decisions, kept the way a copyeditor keeps them. Read this before drafting or revising prose. `story prose` enforces the lists in the frontmatter: `dialect` (british, american, or unspecified) flags the other dialect's common spellings, each `preferred` entry flags its `avoid` form, `watch-words` are counted in every chapter, and `allow-words` silences a built-in filter word or adverb.",
   "Narrative distance, sentence rhythm, register, and what this prose never does. Quote two or three sentences that sound exactly right.",
   "Record one `preferred` entry per variant (`use: grey`, `avoid: gray`) and note usage rules here.",

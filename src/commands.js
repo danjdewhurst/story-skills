@@ -370,7 +370,7 @@ export const COMMANDS = [
       "- lints a passage from stdin"
     ],
     project: "positional",
-    options: ["json", "max-filter-words", "max-adverbs", "max-bookisms"],
+    options: ["json", "max-filter-words", "max-adverbs", "max-bookisms", "baseline"],
     run({ parsed, io, cwd, root, overrides }) {
       const report = applySeverity(parsed.positionals[1] === STDIN_ARG
         ? proseReport(passageRoot(parsed, cwd, false), { ...parsed.options, passage: pipedText(io, "prose") })

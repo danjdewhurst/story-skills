@@ -1012,6 +1012,8 @@ watch-words:
   - almost
 allow-words:
   - quietly
+samples:
+  - ../book-one
 ---
 ```
 
@@ -1022,6 +1024,7 @@ allow-words:
 | `preferred` | list of mappings | no | Each entry has a non-empty `use` (the house form) and `avoid` (the form to flag), which must differ. An entry naming either word of a built-in dialect pair replaces that pair. |
 | `watch-words` | list of strings | no | Words or phrases `story prose` counts in every chapter. |
 | `allow-words` | list of strings | no | Words `story prose` never flags as filter words, `-ly` adverbs, echoes, said-bookisms, or dialect spellings. Naming either word of a built-in dialect pair here also switches that pair off. |
+| `samples` | list of strings | no | Files or folders of your own prose, relative to the project folder (`../book-one`, `research/approved`). `story prose` builds a profile from them and reports chapters that drift from it, in place of its fixed filter-word and adverb limits (see [`prose`](cli-reference.md#comparing-with-your-own-prose)). An absolute path is an error; an entry that names nothing is a warning. |
 
 The body holds the decisions a copyeditor tracks: voice, spelling and usage, capitalisation, hyphenation, numbers, dialogue punctuation, and character voices. See the [voice-style skill](../skills/voice-style/SKILL.md), [Writing workflows](writing-workflows.md#voice-and-house-style), and [Story prose](continuity.md#story-prose).
 

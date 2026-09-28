@@ -31,7 +31,7 @@ import { compareChapters, mapLabels, proseParagraphs } from "./compare.js";
 import { compareSimilarity, similarityOptions } from "./similarity.js";
 import { PROGRESS_FILE, cleanSessions, computeProgress, formatPercent, localDate, withSession } from "./progress.js";
 import { plural } from "./plural.js";
-import { analyzeChapter, chapterFindings, proseRules, proseThresholds, repeatedPhrases, similarNames } from "./prose.js";
+import { analyzeChapter, baselineFigures, baselineFindings, baselineProfile, chapterFindings, contentWords, proseRules, proseThresholds, repeatedPhrases, sentenceLengths, similarNames } from "./prose.js";
 import { splitSentences } from "./sentences.js";
 import { areSiblingBooks, buildSeries, canonicalPath, discoverSeriesBooks, isBookNumber, linksInclude, readBookFrontmatter, seriesId, seriesLinkPath, seriesLinks, validateSeriesLinks, withSeriesBacklink } from "./series.js";
 import { err, warn } from "./findings.js";
@@ -857,7 +857,7 @@ export function validateProjectOf(project) {
   validateClues(project, errors);
   validateExemptions(project, errors, warnings);
   validateGlossaryTerms(project, errors);
-  validateStyleSheet(project, errors);
+  validateStyleSheet(project, errors, warnings);
   validateMatter(project, errors, warnings);
   validateResearch(project, errors, warnings);
   validateProgressLog(project, errors);
@@ -2442,20 +2442,20 @@ function passageErrors(project) {
 export function proseReport(root, options = {}) {
   const thresholds = proseThresholds(options);
   if (options.passage !== undefined) {
-    return prosePassageReport(root, options.passage, thresholds);
+    return prosePassageReport(root, options.passage, thresholds, options);
   }
   const project = scanProject(root);
   const errors = [...project.fileErrors];
   const warnings = [];
   const names = [...project.characters.map((character) => character.name), ...existingNames(project).map((entry) => entry.name)];
   const rules = proseRules(project.styleSheet?.data, names);
+  const profile = proseBaseline(project, rules, options, warnings);
   const chapters = [];
   for (const chapter of project.chapters) {
     // Chapters that failed to parse are already in fileErrors, not here.
     const label = relative(project, chapter.file);
-    const analysis = analyzeChapter(chapterProse(readMarkdown(chapter.file, project.root).body, " "), rules);
-    chapters.push({ file: label, title: chapter.title, analysis });
-    warnings.push(...chapterFindings(label, analysis, thresholds));
+    const prose = chapterProse(readMarkdown(chapter.file, project.root).body, " ");
+    chapters.push(lintProse(label, chapter.title, prose, rules, thresholds, profile, warnings));
   }
   const phrases = repeatedPhrases(chapters.map((chapter) => chapter.analysis));
   const similar = similarNames(project.characters);
@@ -2471,8 +2471,56 @@ export function proseReport(root, options = {}) {
     chapters,
     phrases,
     similarNames: similar,
-    thresholds: thresholdSummary(thresholds)
+    thresholds: thresholdSummary(thresholds),
+    baseline: profile
   };
+}
+
+// One chapter's (or passage's) analysis and findings, measured against the
+// baseline when there is one.
+function lintProse(label, title, prose, rules, thresholds, profile, warnings) {
+  const analysis = analyzeChapter(prose, rules);
+  const compared = profile !== null && profile.usable;
+  warnings.push(...chapterFindings(label, analysis, thresholds, { baseline: compared }));
+  if (profile === null) {
+    return { file: label, title, analysis };
+  }
+  const figures = baselineFigures(analysis, profile, contentWords(prose, rules));
+  warnings.push(...baselineFindings(label, analysis, figures, profile));
+  return { file: label, title, analysis, baseline: figures };
+}
+
+// The profile of the author's own prose, from the style sheet's `samples`:
+// on whenever samples are listed, unless --baseline false turns it off.
+// --baseline with no samples is a usage error, since there is nothing to
+// compare with.
+function proseBaseline(project, rules, options, warnings) {
+  const listed = asArray(project?.styleSheet?.data?.samples).filter((entry) => typeof entry === "string" && entry.trim() !== "");
+  const wanted = options.baseline === undefined ? listed.length > 0 : isTruthy(options.baseline);
+  if (!wanted) {
+    return null;
+  }
+  if (listed.length === 0) {
+    throw usageError(`prose --baseline needs samples in ${STYLE_SHEET_FILE}: list files or folders of your own prose, such as samples: [../book-one]`);
+  }
+  const samples = [];
+  for (const entry of listed) {
+    const target = path.resolve(project.root, entry.trim());
+    if (path.isAbsolute(entry.trim()) || lstatIfExists(target) === null) {
+      warnings.push(warn("style-sample-missing", `${STYLE_SHEET_FILE} samples entry ${entry.trim()} names no file or folder in reach of the project`, STYLE_SHEET_FILE));
+      continue;
+    }
+    const real = canonicalPath(target);
+    for (const document of referenceDocuments(real, (file) => displayPath(project.root, target, real, file), null)) {
+      const prose = document.paragraphs.map((paragraph) => paragraph.text).join("\n\n");
+      samples.push({ file: document.file, analysis: analyzeChapter(prose, rules), sentenceLengths: sentenceLengths(prose), contentWords: contentWords(prose, rules) });
+    }
+  }
+  const profile = baselineProfile(samples);
+  if (!profile.usable) {
+    warnings.push(warn("prose-baseline-small", `${STYLE_SHEET_FILE} samples hold ${profile.narrationWords} narration words, too few to compare with (at least 2000): the fixed filter-word and adverb limits apply instead`, STYLE_SHEET_FILE));
+  }
+  return profile;
 }
 
 // The limits the --max-* flags set, named as the flags are.
@@ -2481,25 +2529,29 @@ function thresholdSummary(thresholds) {
 }
 
 // `story prose -`: the same per-chapter lint over one piped passage, with
-// the project's style sheet and character names when `root` names a
-// project, and the default rules when it is null. Similar character names
+// the project's style sheet, samples, and character names when `root` names
+// a project, and the default rules when it is null. Similar character names
 // are a bible finding, not a passage one, so they are left out.
-function prosePassageReport(root, passage, thresholds) {
+function prosePassageReport(root, passage, thresholds, options = {}) {
   const project = root === null ? null : scanProject(root);
   const errors = project === null ? [] : passageErrors(project);
   const names = project === null ? [] : [...project.characters.map((character) => character.name), ...existingNames(project).map((entry) => entry.name)];
-  const analysis = analyzeChapter(passageProse(passage), proseRules(project?.styleSheet?.data, names));
+  const rules = proseRules(project?.styleSheet?.data, names);
+  const warnings = [];
+  const profile = project === null ? null : proseBaseline(project, rules, options, warnings);
+  const chapter = lintProse(PASSAGE_LABEL, "passage", passageProse(passage), rules, thresholds, profile, warnings);
   return {
     ok: errors.length === 0,
     errors,
-    warnings: chapterFindings(PASSAGE_LABEL, analysis, thresholds),
+    warnings,
     passage: true,
     styleSheet: Boolean(project?.styleSheet),
-    words: analysis.words,
-    chapters: [{ file: PASSAGE_LABEL, title: "passage", analysis }],
-    phrases: repeatedPhrases([analysis]),
+    words: chapter.analysis.words,
+    chapters: [chapter],
+    phrases: repeatedPhrases([chapter.analysis]),
     similarNames: [],
-    thresholds: thresholdSummary(thresholds)
+    thresholds: thresholdSummary(thresholds),
+    baseline: profile
   };
 }
 
@@ -4139,7 +4191,7 @@ function styleSheet() {
     "allow-words": []
   })}# Style Sheet
 
-The book's house decisions, kept the way a copyeditor keeps them. Read this before drafting or revising prose. \`story prose\` enforces the lists in the frontmatter: \`dialect\` (british, american, or unspecified) flags the other dialect's common spellings, each \`preferred\` entry flags its \`avoid\` form, \`watch-words\` are counted in every chapter, and \`allow-words\` silences a built-in filter word or adverb.
+The book's house decisions, kept the way a copyeditor keeps them. Read this before drafting or revising prose. \`story prose\` enforces the lists in the frontmatter: \`dialect\` (british, american, or unspecified) flags the other dialect's common spellings, each \`preferred\` entry flags its \`avoid\` form, \`watch-words\` are counted in every chapter, and \`allow-words\` silences a built-in filter word or adverb. Add a \`samples\` list of your own prose (\`../book-one\`, approved chapters) and \`story prose\` compares each chapter with it instead of fixed limits.
 
 ## Voice
 
@@ -6936,7 +6988,7 @@ function validateGlossaryTerms(project, errors) {
   }
 }
 
-function validateStyleSheet(project, errors) {
+function validateStyleSheet(project, errors, warnings) {
   if (project.styleSheet === null) {
     return;
   }
@@ -6965,6 +7017,18 @@ function validateStyleSheet(project, errors) {
   });
   validateStringArray(data, "watch-words", label, errors);
   validateStringArray(data, "allow-words", label, errors);
+  validateStringArray(data, "samples", label, errors);
+  for (const entry of asArray(data.samples)) {
+    if (typeof entry !== "string" || entry.trim() === "") {
+      continue;
+    }
+    const sample = entry.trim();
+    if (path.isAbsolute(sample) || /^[A-Za-z]:/.test(sample)) {
+      errors.push(err("field-invalid-items", `${label} samples entry ${sample} must be a path relative to the project folder, such as ../book-one`, label));
+    } else if (lstatIfExists(path.resolve(project.root, sample)) === null) {
+      warnings.push(warn("style-sample-missing", `${label} samples entry ${sample} names no file or folder in reach of the project`, label));
+    }
+  }
 }
 
 function validateDeadline(data, errors) {

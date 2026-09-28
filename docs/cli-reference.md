@@ -1173,7 +1173,38 @@ Three flags change the warning thresholds. Each takes a number 0 or more; set th
 | `--max-adverbs <n>` | `n` `-ly` adverbs per 1,000 narration words | 12 |
 | `--max-bookisms <n>` | `n` said-bookism dialogue tags (a whole number) | 2 |
 
-`story prose -` lints a passage from stdin instead of the chapters, with the style sheet and character names of the project given by `--path` or the current directory (and the default rules outside a project). The passage is reported as `stdin`, and similar character names, a bible finding, are left out. A whole chapter file can be piped: its frontmatter is skipped and only its prose (the text under `## Chapter Text`) is linted, as for a chapter in the project. A chapter or scene file in the project that fails to parse does not fail a passage check, since the passage stands in for them; a broken style sheet or character file still does.
+#### Comparing with your own prose
+
+The fixed limits suit a generic writer. List files or folders of your own prose (earlier books, chapters you are happy with) as `samples` in `style-sheet.md`, and `prose` compares each chapter with them instead:
+
+```yaml
+samples:
+  - ../book-one
+  - research/approved-chapter-drafts
+```
+
+Each entry is a path relative to the project folder. A folder holding `story.md` contributes its chapters, and any other folder its `.md`, `.markdown`, and `.txt` files, as [`similarity --against`](#similarity) reads them. From all the samples together `prose` builds a profile:
+- average sentence length and its spread;
+- average paragraph length;
+- the share of words inside dialogue;
+- filter-word and `-ly` adverb rates per 1,000 narration words;
+- the 20 content words the samples use most, their signature words.
+
+The report prints the profile, and each chapter's paragraph length, dialogue share, and how many signature words it uses. It warns when a chapter with 300 or more narration words drifts from the profile further than these tolerances, in either direction:
+
+| Measure | Tolerance | Code |
+|---|---|---|
+| Average sentence length (chapters with 10 or more sentences) | 30% of the samples' average | `prose-baseline-sentences` |
+| Average paragraph length | 50% of the samples' average | `prose-baseline-paragraphs` |
+| Share of words in dialogue | 20 percentage points | `prose-baseline-dialogue` |
+| Filter words per 1,000 narration words | Half the samples' rate, at least 3 | `prose-baseline-filter-words` |
+| `-ly` adverbs per 1,000 narration words | Half the samples' rate, at least 3 | `prose-baseline-adverbs` |
+
+With a baseline, the fixed `--max-filter-words` and `--max-adverbs` warnings are off: your own rate is the measure. Said-bookisms, uniform sentences, spellings, and similar names are checked as before. The samples need at least 2,000 words of narration. With fewer, `prose` warns `prose-baseline-small` and keeps the fixed limits. A sample entry that names nothing warns `style-sample-missing`, and the rest are used.
+
+The baseline is on whenever `samples` lists something. `--baseline false` (or `baseline: false` in `cli-defaults`) turns it off for a run, and `--baseline` with no samples is a usage error. A drift is a prompt to reread the chapter, not a rule: a fight scene should run shorter than the book's average. `--json` adds the profile as `data.baseline` (or `null`) and each chapter's figures as `chapters[].baseline`.
+
+`story prose -` lints a passage from stdin instead of the chapters, with the style sheet, samples, and character names of the project given by `--path` or the current directory (and the default rules outside a project). The passage is reported as `stdin`, and similar character names, a bible finding, are left out. A whole chapter file can be piped: its frontmatter is skipped and only its prose (the text under `## Chapter Text`) is linted, as for a chapter in the project. A chapter or scene file in the project that fails to parse does not fail a passage check, since the passage stands in for them; a broken style sheet or character file still does.
 
 On [`examples/the-last-ember`](../examples/the-last-ember/), with a five-sentence draft scene:
 
@@ -2356,6 +2387,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `exemption-chapter-not-carried` | error | A continuity exemption sets `chapter` with a `code` whose findings carry no chapter, so it could never match. |
 | `stale-exemption` | warning | A continuity exemption's `file` is not a file in the project, or its `chapter` is not a chapter, so it matches nothing. |
 | `style-use-equals-avoid` | error | A style-sheet `preferred` entry uses and avoids the same word. |
+| `style-sample-missing` | warning | A style-sheet `samples` entry names no file or folder. |
 | `duplicate-session-date` | error | `progress.md` logs the same date twice. |
 | `research-no-sources` | warning | A verified research note lists no sources. |
 | `research-unsettled` | warning | A settled chapter relies on open or disputed research. |
@@ -2502,6 +2534,14 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `prose-avoided-spelling` | warning | A chapter uses a spelling `style-sheet.md` avoids. |
 | `prose-uniform-sentences` | warning | Sentence lengths barely vary. |
 | `prose-similar-names` | warning | Two characters have similar first names. |
+| `prose-baseline-sentences` | warning | Average sentence length is more than 30% away from the `samples` baseline. |
+| `prose-baseline-paragraphs` | warning | Average paragraph length is more than 50% away from the baseline. |
+| `prose-baseline-dialogue` | warning | The share of words in dialogue is more than 20 points away from the baseline. |
+| `prose-baseline-filter-words` | warning | Filter words per 1,000 narration words are further from the baseline than half its rate (at least 3). |
+| `prose-baseline-adverbs` | warning | `-ly` adverbs per 1,000 narration words are further from the baseline than half its rate (at least 3). |
+| `prose-baseline-small` | warning | The `samples` hold fewer than 2,000 narration words, so the fixed limits apply. |
+
+`prose` also reports `style-sample-missing` for a `samples` entry that names nothing.
 
 ### Codes: pacing
 
@@ -2644,6 +2684,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--max-filter-words` | `<n>` | `prose` | Number 0 or more; default 10 per 1,000 narration words |
 | `--max-adverbs` | `<n>` | `prose` | Number 0 or more; default 12 per 1,000 narration words |
 | `--max-bookisms` | `<n>` | `prose` | Whole number 0 or more; default 2 per chapter |
+| `--baseline` | | `prose` | Boolean; on by default when `style-sheet.md` lists `samples` |
 | `--min-words` | `<n>` | `similarity` | Whole number 5 or more; default `8` |
 | `--pages` | `<n>` | `synopsis` | `1` or `3` |
 | `--actionable` | | `report` | Boolean |

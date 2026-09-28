@@ -75,6 +75,7 @@ var FINDING_CODES = {
   "exemption-misspelled-key": "error",
   "exemption-chapter-not-carried": "error",
   "style-use-equals-avoid": "error",
+  "style-sample-missing": "warning",
   "duplicate-session-date": "error",
   "research-no-sources": "warning",
   "research-unsettled": "warning",
@@ -197,6 +198,12 @@ var FINDING_CODES = {
   "prose-avoided-spelling": "warning",
   "prose-uniform-sentences": "warning",
   "prose-similar-names": "warning",
+  "prose-baseline-sentences": "warning",
+  "prose-baseline-paragraphs": "warning",
+  "prose-baseline-dialogue": "warning",
+  "prose-baseline-filter-words": "warning",
+  "prose-baseline-adverbs": "warning",
+  "prose-baseline-small": "warning",
   "pacing-no-hook": "warning",
   "pacing-no-sequel": "warning",
   "pacing-easy-wins": "warning",
@@ -2366,6 +2373,7 @@ function analyzeChapter(prose, rules) {
   return {
     words: words.length,
     narrationWords: narration.length,
+    paragraphs: paragraphs.length,
     sentences: sentenceStats(sentences),
     filterWords,
     adverbs,
@@ -2377,18 +2385,18 @@ function analyzeChapter(prose, rules) {
     phraseSentences: sentenceList.map((sentence) => splitWords(sentence).map(normalizeWord))
   };
 }
-function chapterFindings(label, analysis, thresholds = PROSE_THRESHOLDS) {
+function chapterFindings(label, analysis, thresholds = PROSE_THRESHOLDS, { baseline = false } = {}) {
   const findings = [];
   for (const variant of analysis.variants) {
     findings.push(warn("prose-avoided-spelling", `${label} uses "${variant.avoid}" ${times(variant.count)}; ${variant.source} prefers "${variant.use}"`, label));
   }
   const rated = analysis.narrationWords >= thresholds.minRateWords;
   const filterRate = perThousand(total(analysis.filterWords), analysis.narrationWords);
-  if (rated && filterRate > thresholds.filterPerThousand) {
+  if (!baseline && rated && filterRate > thresholds.filterPerThousand) {
     findings.push(warn("prose-filter-words", `${label} has ${formatAgainst(filterRate, thresholds.filterPerThousand, "over")} filter words per 1,000 narration words (over ${thresholds.filterPerThousand}): ${formatCounts(analysis.filterWords, 5)}`, label));
   }
   const adverbRate = perThousand(total(analysis.adverbs), analysis.narrationWords);
-  if (rated && adverbRate > thresholds.adverbsPerThousand) {
+  if (!baseline && rated && adverbRate > thresholds.adverbsPerThousand) {
     findings.push(warn("prose-adverbs", `${label} has ${formatAgainst(adverbRate, thresholds.adverbsPerThousand, "over")} -ly adverbs per 1,000 narration words (over ${thresholds.adverbsPerThousand}): ${formatCounts(analysis.adverbs, 5)}`, label));
   }
   const bookisms = total(analysis.bookisms);
@@ -2398,6 +2406,91 @@ function chapterFindings(label, analysis, thresholds = PROSE_THRESHOLDS) {
   const stats = analysis.sentences;
   if (stats.count >= thresholds.uniformMinSentences && stats.spread < thresholds.uniformSpread) {
     findings.push(warn("prose-uniform-sentences", `${label} sentence lengths are uniform (spread ${formatAgainst(stats.spread, thresholds.uniformSpread, "under")} words over ${stats.count} sentences); vary the rhythm`, label));
+  }
+  return findings;
+}
+var BASELINE_TOLERANCES = {
+  minSampleWords: 2000,
+  minSentences: 10,
+  sentenceLength: 0.3,
+  paragraphLength: 0.5,
+  dialogueShare: 20,
+  rateFloor: 3,
+  rateShare: 0.5,
+  signatureWords: 20,
+  signatureMinCount: 3
+};
+function baselineProfile(samples) {
+  const analyses = samples.map((sample) => sample.analysis);
+  const sum = (pick) => analyses.reduce((total, analysis) => total + pick(analysis), 0);
+  const words = sum((analysis) => analysis.words);
+  const narrationWords = sum((analysis) => analysis.narrationWords);
+  const lengths = samples.flatMap((sample) => sample.sentenceLengths);
+  const counts = new Map;
+  for (const sample of samples) {
+    for (const word of sample.contentWords) {
+      increment(counts, word);
+    }
+  }
+  return {
+    samples: samples.map((sample) => sample.file),
+    words,
+    narrationWords,
+    sentences: sentenceStats(lengths),
+    paragraphMean: sum((analysis) => analysis.paragraphs) === 0 ? 0 : words / sum((analysis) => analysis.paragraphs),
+    dialogueShare: words === 0 ? 0 : (words - narrationWords) * 100 / words,
+    filterPerThousand: perThousand(sum((analysis) => total(analysis.filterWords)), narrationWords),
+    adverbsPerThousand: perThousand(sum((analysis) => total(analysis.adverbs)), narrationWords),
+    signatureWords: sortCounts(counts).filter((entry) => entry.count >= BASELINE_TOLERANCES.signatureMinCount).slice(0, BASELINE_TOLERANCES.signatureWords).map((entry) => entry.word),
+    usable: narrationWords >= BASELINE_TOLERANCES.minSampleWords
+  };
+}
+function contentWords(prose, rules) {
+  return splitWords(proseParagraphs(prose).join(`
+
+`)).map(normalizeWord).filter((word) => word.length >= 4 && !ECHO_STOPWORDS.has(word) && !PHRASE_STOPWORDS.has(word) && !isName(word, rules) && !/^\p{N}+$/u.test(word));
+}
+function sentenceLengths(prose) {
+  return proseParagraphs(prose).flatMap((paragraph) => splitSentences(paragraph)).map((sentence) => splitWords(sentence).length).filter((count) => count > 0);
+}
+function baselineFigures(analysis, profile, chapterWords) {
+  const used = new Set(chapterWords);
+  return {
+    sentenceMean: analysis.sentences.mean,
+    paragraphMean: analysis.paragraphs === 0 ? 0 : analysis.words / analysis.paragraphs,
+    dialogueShare: analysis.words === 0 ? 0 : (analysis.words - analysis.narrationWords) * 100 / analysis.words,
+    filterPerThousand: perThousand(total(analysis.filterWords), analysis.narrationWords),
+    adverbsPerThousand: perThousand(total(analysis.adverbs), analysis.narrationWords),
+    signatureWordsUsed: profile.signatureWords.filter((word) => used.has(word)).length
+  };
+}
+function baselineFindings(label, analysis, figures, profile, tolerances = BASELINE_TOLERANCES) {
+  const findings = [];
+  if (!profile.usable || analysis.narrationWords < PROSE_THRESHOLDS.minRateWords) {
+    return findings;
+  }
+  const relative = (value, base, share) => base > 0 && Math.abs(value - base) > base * share;
+  const direction = (value, base, more, fewer) => value > base ? more : fewer;
+  if (analysis.sentences.count >= tolerances.minSentences && relative(figures.sentenceMean, profile.sentences.mean, tolerances.sentenceLength)) {
+    findings.push(warn("prose-baseline-sentences", `${label} sentences average ${formatRate(figures.sentenceMean)} words, ${direction(figures.sentenceMean, profile.sentences.mean, "longer", "shorter")} than your samples' ${formatRate(profile.sentences.mean)} (tolerance ${tolerances.sentenceLength * 100}%)`, label));
+  }
+  if (relative(figures.paragraphMean, profile.paragraphMean, tolerances.paragraphLength)) {
+    findings.push(warn("prose-baseline-paragraphs", `${label} paragraphs average ${formatRate(figures.paragraphMean)} words, ${direction(figures.paragraphMean, profile.paragraphMean, "longer", "shorter")} than your samples' ${formatRate(profile.paragraphMean)} (tolerance ${tolerances.paragraphLength * 100}%)`, label));
+  }
+  if (Math.abs(figures.dialogueShare - profile.dialogueShare) > tolerances.dialogueShare) {
+    findings.push(warn("prose-baseline-dialogue", `${label} is ${formatRate(figures.dialogueShare)}% dialogue, ${direction(figures.dialogueShare, profile.dialogueShare, "more", "less")} than your samples' ${formatRate(profile.dialogueShare)}% (tolerance ${tolerances.dialogueShare} points)`, label));
+  }
+  const rateDrift = (name, field) => {
+    const allowed = Math.max(tolerances.rateFloor, profile[field] * tolerances.rateShare);
+    return Math.abs(figures[field] - profile[field]) > allowed ? `${label} has ${formatRate(figures[field])} ${name} per 1,000 narration words, ${direction(figures[field], profile[field], "more", "fewer")} than your samples' ${formatRate(profile[field])} (tolerance ${formatRate(allowed)})` : null;
+  };
+  const filterDrift = rateDrift("filter words", "filterPerThousand");
+  if (filterDrift !== null) {
+    findings.push(warn("prose-baseline-filter-words", filterDrift, label));
+  }
+  const adverbDrift = rateDrift("-ly adverbs", "adverbsPerThousand");
+  if (adverbDrift !== null) {
+    findings.push(warn("prose-baseline-adverbs", adverbDrift, label));
   }
   return findings;
 }
@@ -2440,6 +2533,12 @@ function formatProseReport(report) {
   if (!report.styleSheet) {
     lines.push("No style-sheet.md: spelling and watch-word checks are off");
   }
+  const profile = report.baseline;
+  if (profile) {
+    const stats = profile.sentences;
+    lines.push(`Baseline from ${profile.samples.length} ${profile.samples.length === 1 ? "sample" : "samples"} (${profile.words} words): sentences ${formatRate(stats.mean)} words (spread ${formatRate(stats.spread)}), paragraphs ${formatRate(profile.paragraphMean)} words, ${formatRate(profile.dialogueShare)}% dialogue, ${formatRate(profile.filterPerThousand)} filter words and ${formatRate(profile.adverbsPerThousand)} -ly adverbs per 1k narration words`);
+    lines.push(profile.usable ? `  Signature words: ${profile.signatureWords.join(", ") || "none"}` : `  Too few sample words to compare with (${profile.narrationWords} of ${BASELINE_TOLERANCES.minSampleWords} narration words): the fixed limits apply`);
+  }
   for (const chapter of report.chapters) {
     const analysis = chapter.analysis;
     const stats = analysis.sentences;
@@ -2448,6 +2547,10 @@ function formatProseReport(report) {
     lines.push(`  Filter words: ${formatRate(perThousand(total(analysis.filterWords), analysis.narrationWords))} per 1k narration words${countSuffix(analysis.filterWords)}`);
     lines.push(`  -ly adverbs: ${formatRate(perThousand(total(analysis.adverbs), analysis.narrationWords))} per 1k narration words${countSuffix(analysis.adverbs)}`);
     lines.push(`  Dialogue tags: ${formatCounts(analysis.plainTags, 4) || "none plain"}; said-bookisms: ${formatCounts(analysis.bookisms, 5) || "none"}`);
+    if (chapter.baseline && profile.usable) {
+      const figures = chapter.baseline;
+      lines.push(`  Against the baseline: paragraphs ${formatRate(figures.paragraphMean)} words, ${formatRate(figures.dialogueShare)}% dialogue, signature words ${figures.signatureWordsUsed} of ${profile.signatureWords.length}`);
+    }
     lines.push(`  Echoes within ${PROSE_THRESHOLDS.echoWindow} words: ${formatCounts(analysis.echoes, 5) || "none"}`);
     if (analysis.watch.length > 0) {
       lines.push(`  Watch words: ${analysis.watch.map((entry) => `${entry.word} ${entry.count}`).join(", ")}`);
@@ -2661,6 +2764,7 @@ var OPTIONS = [
   { name: "done", value: "<pass>", help: ["Mark a revision pass done for passes"] },
   { name: "max-filter-words", value: "<n>", help: ["Warn above n filter words per 1,000 narration", "words for prose (default 10)"] },
   { name: "max-adverbs", value: "<n>", help: ["Warn above n -ly adverbs per 1,000 narration", "words for prose (default 12)"] },
+  { name: "baseline", help: ["Compare prose with style-sheet.md samples of your", "own writing (on when samples are listed; --baseline", "false turns it off)"] },
   { name: "max-bookisms", value: "<n>", help: ["Warn above n said-bookism tags in a chapter for", "prose (default 2)"] },
   { name: "min-words", value: "<n>", help: ["Shortest shared run of words similarity reports", "(default 8, at least 5)"] },
   { name: "pages", value: "<n>", help: ["Synopsis length for synopsis (1 or 3)"] },
@@ -4394,6 +4498,7 @@ var PLACEHOLDERS = new Set([
   `1. Opening beat
 2. Escalation
 3. Turn or decision`,
+  "The book's house decisions, kept the way a copyeditor keeps them. Read this before drafting or revising prose. `story prose` enforces the lists in the frontmatter: `dialect` (british, american, or unspecified) flags the other dialect's common spellings, each `preferred` entry flags its `avoid` form, `watch-words` are counted in every chapter, and `allow-words` silences a built-in filter word or adverb. Add a `samples` list of your own prose (`../book-one`, approved chapters) and `story prose` compares each chapter with it instead of fixed limits.",
   "The book's house decisions, kept the way a copyeditor keeps them. Read this before drafting or revising prose. `story prose` enforces the lists in the frontmatter: `dialect` (british, american, or unspecified) flags the other dialect's common spellings, each `preferred` entry flags its `avoid` form, `watch-words` are counted in every chapter, and `allow-words` silences a built-in filter word or adverb.",
   "Narrative distance, sentence rhythm, register, and what this prose never does. Quote two or three sentences that sound exactly right.",
   "Record one `preferred` entry per variant (`use: grey`, `avoid: gray`) and note usage rules here.",
@@ -8901,7 +9006,7 @@ function validateProjectOf(project) {
   validateClues(project, errors);
   validateExemptions(project, errors, warnings);
   validateGlossaryTerms(project, errors);
-  validateStyleSheet(project, errors);
+  validateStyleSheet(project, errors, warnings);
   validateMatter(project, errors, warnings);
   validateResearch(project, errors, warnings);
   validateProgressLog(project, errors);
@@ -10176,19 +10281,19 @@ function passageErrors(project) {
 function proseReport(root, options = {}) {
   const thresholds = proseThresholds(options);
   if (options.passage !== undefined) {
-    return prosePassageReport(root, options.passage, thresholds);
+    return prosePassageReport(root, options.passage, thresholds, options);
   }
   const project = scanProject(root);
   const errors = [...project.fileErrors];
   const warnings = [];
   const names = [...project.characters.map((character) => character.name), ...existingNames(project).map((entry) => entry.name)];
   const rules = proseRules(project.styleSheet?.data, names);
+  const profile = proseBaseline(project, rules, options, warnings);
   const chapters = [];
   for (const chapter of project.chapters) {
     const label = relative2(project, chapter.file);
-    const analysis = analyzeChapter(chapterProse(readMarkdown(chapter.file, project.root).body, " "), rules);
-    chapters.push({ file: label, title: chapter.title, analysis });
-    warnings.push(...chapterFindings(label, analysis, thresholds));
+    const prose = chapterProse(readMarkdown(chapter.file, project.root).body, " ");
+    chapters.push(lintProse(label, chapter.title, prose, rules, thresholds, profile, warnings));
   }
   const phrases = repeatedPhrases(chapters.map((chapter) => chapter.analysis));
   const similar = similarNames(project.characters);
@@ -10204,28 +10309,74 @@ function proseReport(root, options = {}) {
     chapters,
     phrases,
     similarNames: similar,
-    thresholds: thresholdSummary(thresholds)
+    thresholds: thresholdSummary(thresholds),
+    baseline: profile
   };
+}
+function lintProse(label, title, prose, rules, thresholds, profile, warnings) {
+  const analysis = analyzeChapter(prose, rules);
+  const compared = profile !== null && profile.usable;
+  warnings.push(...chapterFindings(label, analysis, thresholds, { baseline: compared }));
+  if (profile === null) {
+    return { file: label, title, analysis };
+  }
+  const figures = baselineFigures(analysis, profile, contentWords(prose, rules));
+  warnings.push(...baselineFindings(label, analysis, figures, profile));
+  return { file: label, title, analysis, baseline: figures };
+}
+function proseBaseline(project, rules, options, warnings) {
+  const listed = asArray(project?.styleSheet?.data?.samples).filter((entry) => typeof entry === "string" && entry.trim() !== "");
+  const wanted = options.baseline === undefined ? listed.length > 0 : isTruthy(options.baseline);
+  if (!wanted) {
+    return null;
+  }
+  if (listed.length === 0) {
+    throw usageError(`prose --baseline needs samples in ${STYLE_SHEET_FILE}: list files or folders of your own prose, such as samples: [../book-one]`);
+  }
+  const samples = [];
+  for (const entry of listed) {
+    const target = path11.resolve(project.root, entry.trim());
+    if (path11.isAbsolute(entry.trim()) || lstatIfExists(target) === null) {
+      warnings.push(warn("style-sample-missing", `${STYLE_SHEET_FILE} samples entry ${entry.trim()} names no file or folder in reach of the project`, STYLE_SHEET_FILE));
+      continue;
+    }
+    const real = canonicalPath(target);
+    for (const document of referenceDocuments(real, (file) => displayPath(project.root, target, real, file), null)) {
+      const prose = document.paragraphs.map((paragraph) => paragraph.text).join(`
+
+`);
+      samples.push({ file: document.file, analysis: analyzeChapter(prose, rules), sentenceLengths: sentenceLengths(prose), contentWords: contentWords(prose, rules) });
+    }
+  }
+  const profile = baselineProfile(samples);
+  if (!profile.usable) {
+    warnings.push(warn("prose-baseline-small", `${STYLE_SHEET_FILE} samples hold ${profile.narrationWords} narration words, too few to compare with (at least 2000): the fixed filter-word and adverb limits apply instead`, STYLE_SHEET_FILE));
+  }
+  return profile;
 }
 function thresholdSummary(thresholds) {
   return { maxFilterWords: thresholds.filterPerThousand, maxAdverbs: thresholds.adverbsPerThousand, maxBookisms: thresholds.maxBookisms };
 }
-function prosePassageReport(root, passage, thresholds) {
+function prosePassageReport(root, passage, thresholds, options = {}) {
   const project = root === null ? null : scanProject(root);
   const errors = project === null ? [] : passageErrors(project);
   const names = project === null ? [] : [...project.characters.map((character) => character.name), ...existingNames(project).map((entry) => entry.name)];
-  const analysis = analyzeChapter(passageProse(passage), proseRules(project?.styleSheet?.data, names));
+  const rules = proseRules(project?.styleSheet?.data, names);
+  const warnings = [];
+  const profile = project === null ? null : proseBaseline(project, rules, options, warnings);
+  const chapter = lintProse(PASSAGE_LABEL, "passage", passageProse(passage), rules, thresholds, profile, warnings);
   return {
     ok: errors.length === 0,
     errors,
-    warnings: chapterFindings(PASSAGE_LABEL, analysis, thresholds),
+    warnings,
     passage: true,
     styleSheet: Boolean(project?.styleSheet),
-    words: analysis.words,
-    chapters: [{ file: PASSAGE_LABEL, title: "passage", analysis }],
-    phrases: repeatedPhrases([analysis]),
+    words: chapter.analysis.words,
+    chapters: [chapter],
+    phrases: repeatedPhrases([chapter.analysis]),
     similarNames: [],
-    thresholds: thresholdSummary(thresholds)
+    thresholds: thresholdSummary(thresholds),
+    baseline: profile
   };
 }
 function exportManuscript(root, options = {}) {
@@ -11578,7 +11729,7 @@ function styleSheet() {
     "allow-words": []
   })}# Style Sheet
 
-The book's house decisions, kept the way a copyeditor keeps them. Read this before drafting or revising prose. \`story prose\` enforces the lists in the frontmatter: \`dialect\` (british, american, or unspecified) flags the other dialect's common spellings, each \`preferred\` entry flags its \`avoid\` form, \`watch-words\` are counted in every chapter, and \`allow-words\` silences a built-in filter word or adverb.
+The book's house decisions, kept the way a copyeditor keeps them. Read this before drafting or revising prose. \`story prose\` enforces the lists in the frontmatter: \`dialect\` (british, american, or unspecified) flags the other dialect's common spellings, each \`preferred\` entry flags its \`avoid\` form, \`watch-words\` are counted in every chapter, and \`allow-words\` silences a built-in filter word or adverb. Add a \`samples\` list of your own prose (\`../book-one\`, approved chapters) and \`story prose\` compares each chapter with it instead of fixed limits.
 
 ## Voice
 
@@ -13938,7 +14089,7 @@ function validateGlossaryTerms(project, errors) {
     validateStringArray(data, "aliases", label, errors);
   }
 }
-function validateStyleSheet(project, errors) {
+function validateStyleSheet(project, errors, warnings) {
   if (project.styleSheet === null) {
     return;
   }
@@ -13966,6 +14117,18 @@ function validateStyleSheet(project, errors) {
   });
   validateStringArray(data, "watch-words", label, errors);
   validateStringArray(data, "allow-words", label, errors);
+  validateStringArray(data, "samples", label, errors);
+  for (const entry of asArray(data.samples)) {
+    if (typeof entry !== "string" || entry.trim() === "") {
+      continue;
+    }
+    const sample = entry.trim();
+    if (path11.isAbsolute(sample) || /^[A-Za-z]:/.test(sample)) {
+      errors.push(err("field-invalid-items", `${label} samples entry ${sample} must be a path relative to the project folder, such as ../book-one`, label));
+    } else if (lstatIfExists(path11.resolve(project.root, sample)) === null) {
+      warnings.push(warn("style-sample-missing", `${label} samples entry ${sample} names no file or folder in reach of the project`, label));
+    }
+  }
 }
 function validateDeadline(data, errors) {
   if (data.deadline !== undefined) {
@@ -15257,7 +15420,7 @@ var COMMANDS = [
       "- lints a passage from stdin"
     ],
     project: "positional",
-    options: ["json", "max-filter-words", "max-adverbs", "max-bookisms"],
+    options: ["json", "max-filter-words", "max-adverbs", "max-bookisms", "baseline"],
     run({ parsed, io, cwd, root, overrides }) {
       const report = applySeverity(parsed.positionals[1] === STDIN_ARG ? proseReport(passageRoot(parsed, cwd, false), { ...parsed.options, passage: pipedText(io, "prose") }) : proseReport(root(), parsed.options), overrides);
       if (wantsJson(parsed)) {

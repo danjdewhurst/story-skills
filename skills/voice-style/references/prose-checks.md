@@ -26,6 +26,26 @@ change them for one run; to change them for the book, record them under
 severity) and run `story validate`. A `severity` entry there can also make a
 prose warning such as `prose-avoided-spelling` fail the run.
 
+## Against the author's samples
+
+With `samples` in the style sheet (at least 2,000 words of narration),
+the filter-word and adverb limits come from the author's own prose, and
+five more drifts are checked in either direction. A chapter needs 300
+narration words before any is compared.
+
+| Drift | Warning when the chapter is further from the samples than |
+|-------|-------------------------------------------------------------|
+| `prose-baseline-sentences` | 30% of their average sentence length (10+ sentences) |
+| `prose-baseline-paragraphs` | 50% of their average paragraph length |
+| `prose-baseline-dialogue` | 20 percentage points of their dialogue share |
+| `prose-baseline-filter-words` | half their filter-word rate, at least 3 per 1,000 |
+| `prose-baseline-adverbs` | half their adverb rate, at least 3 per 1,000 |
+
+The report also lists the samples' 20 signature words (their most used
+content words) and how many of them each chapter uses. A chapter that
+uses few of them may have drifted in vocabulary, or may be about
+something new. Read it before deciding.
+
 ## Responding
 
 - **Filter words** distance the reader from the POV character: *She saw

@@ -850,6 +850,20 @@ The said-bookism list includes tags such as `barked`, `growled`, `hissed`, `laug
 
 The filter-word, adverb, and said-bookism limits are defaults: `--max-filter-words`, `--max-adverbs`, and `--max-bookisms` change them for a run, and `cli-defaults` in `story.md` changes them for the book (see [CLI defaults and severity](project-format.md#cli-defaults-and-severity)).
 
+### Against your own prose
+
+Fixed limits flag a writer whose style is deliberately adverb-heavy or long-sentenced, and they miss a chapter that has drifted from that writer's own voice. List some of your own prose as `samples` in the style sheet, such as an earlier book or chapters you are happy with:
+
+```yaml
+# style-sheet.md
+samples:
+  - ../book-one
+```
+
+`story prose` then builds a profile from the samples. It covers sentence length and spread, paragraph length, the share of words in dialogue, filter-word and adverb rates, and the 20 content words you use most. The report prints the profile above the chapters. A chapter that drifts too far from it, either way, warns: `chapters/chapter-07.md sentences average 14.2 words, longer than your samples' 9.8 (tolerance 30%) [prose-baseline-sentences]`. With samples, your own filter-word and adverb rates replace the fixed limits.
+
+The profile needs 2,000 words of sample narration. The tolerances are fixed and listed in [`prose`](cli-reference.md#comparing-with-your-own-prose), so the same samples and chapter always give the same result. A drift is a prompt to reread, not a verdict: a chase should run shorter than the book's average, and a quiet chapter longer. `--baseline false` turns the comparison off for a run.
+
 Prose findings are warnings. `story prose` exits 0 on any readable project, so you can run it freely, unless a `severity` entry in `story.md` promotes a prose warning, such as `prose-avoided-spelling`, to an error.
 
 To check a passage before it goes into a chapter file, pipe it in with `-` in place of the path: `story prose - < draft-scene.md`. The passage is linted with the same rules and the style sheet of the project in the current directory (or `--path`), and its findings are labelled `stdin`. See [Reading from stdin](cli-reference.md#reading-from-stdin).
