@@ -18,6 +18,7 @@ import { makeTempDir } from "./helpers.js";
 //
 // A fixed seed runs in `bun run test`. To search further:
 //   STORY_PROPERTY_RUNS=20000 STORY_PROPERTY_SEED=7 bun test test/validate-schema-property.test.js
+// (the time limit grows with the run count).
 // STORY_PROPERTY_SEED=random picks a seed and prints it, and
 // STORY_PROPERTY_REPORT=<file> writes the disagreements found as JSON.
 
@@ -33,11 +34,11 @@ const SEED = process.env.STORY_PROPERTY_SEED === "random"
 // rejected; `match`, when set, must match that side's first reason, so an
 // exception cannot hide a different disagreement on the same field.
 const EXCEPTIONS = [
-  { kind: "chapter", field: "number", side: "validate", reason: "the number must match the chapter's file name, which the schema never sees" },
-  { kind: "scene", field: "chapter", side: "validate", reason: "the chapter must match the scene's file name" },
-  { kind: "scene", field: "scene", side: "validate", reason: "the scene number must match the scene's file name" },
-  { kind: "story", field: "isbn", side: "validate", reason: "an ISBN's check digit is arithmetic, not a pattern" },
-  { kind: "story", field: "cover", side: "validate", reason: "the cover file must exist on disk" },
+  { kind: "chapter", field: "number", side: "validate", match: /^filename-number-mismatch/, reason: "the number must match the chapter's file name, which the schema never sees" },
+  { kind: "scene", field: "chapter", side: "validate", match: /^filename-number-mismatch/, reason: "the chapter must match the scene's file name" },
+  { kind: "scene", field: "scene", side: "validate", match: /^filename-number-mismatch/, reason: "the scene number must match the scene's file name" },
+  { kind: "story", field: "isbn", side: "validate", match: /^invalid-isbn/, reason: "an ISBN's check digit is arithmetic, not a pattern" },
+  { kind: "story", field: "cover", side: "validate", match: /^invalid-cover: story\.md cover .* (?:does not exist|is not a file|must be inside the project)$/, reason: "the cover file must exist on disk" },
   { kind: "story", field: "deadline", side: "validate", match: /real YYYY-MM-DD calendar day/, reason: "a date must be a real calendar day (no 2024-13-45), which a pattern cannot check" },
   { kind: "story", field: "publication-date", side: "validate", match: /real YYYY-MM-DD calendar day/, reason: "as for deadline" },
   { kind: "story", field: "publication-date", side: "schema", match: /does not match/, reason: "validate reads a blank value or a [TODO] placeholder in a publishing field as not set yet, and warns (todo-placeholder); the schema describes finished values" },
@@ -51,7 +52,12 @@ const EXCEPTIONS = [
   // validate reads an unquoted number in a list entry as the text or id it
   // spells, so all-digit ids work (#169); the schema asks for the quotes.
   ...[["character", "progressions"], ["location", "progressions"], ["faction", "progressions"], ["location", "routes"], ["state", "character-state"], ["state", "object-state"], ["state", "knowledge-state"]]
-    .map(([kind, field]) => ({ kind, field, side: "schema", match: /: expected string, got (?:integer|number|boolean)$|does not match/, reason: "validate reads an unquoted number or other scalar in a list entry as the text or id it spells (#169); links checks the ids" })),
+    .map(([kind, field]) => ({ kind, field, side: "schema", match: /: expected string, got (?:integer|number|boolean)$/, reason: "validate reads an unquoted number or other scalar in a list entry as the text or id it spells (#169)" })),
+  // Ids in list entries are references: links reports one that names no
+  // entity (which covers one that is not kebab-case), validate only that
+  // each is a single value.
+  ...[["character", "progressions"], ["location", "progressions"], ["faction", "progressions"], ["location", "routes"], ["state", "character-state"], ["state", "object-state"], ["state", "knowledge-state"]]
+    .map(([kind, field]) => ({ kind, field, side: "schema", match: /does not match \^\[a-z0-9\]\+/, reason: "an id in a list entry is a reference, which links checks against the project" })),
   { kind: "research", field: "used-in", side: "schema", match: /does not match/, reason: "used-in names chapters, which links checks against the project; validate checks only that each is text" }
 ];
 
@@ -245,6 +251,7 @@ describe("story validate and schemas/story.schema.json agree (#295)", () => {
     expect(validateAgainstSchema(buildSchemaDocument(root), schema)).toEqual([]);
   });
 
+  // Each run takes a few milliseconds, so a deep search needs more time.
   test(`on ${RUNS} generated documents (seed ${SEED})`, () => {
     if (process.env.STORY_PROPERTY_SEED === "random") {
       console.log(`validate-schema property seed: ${SEED}`);
@@ -321,7 +328,7 @@ describe("story validate and schemas/story.schema.json agree (#295)", () => {
       fs.writeFileSync(process.env.STORY_PROPERTY_REPORT, `${JSON.stringify(unique, null, 2)}\n`);
     }
     expect(unique).toEqual([]);
-  });
+  }, Math.max(5000, RUNS * 10));
 
   test("every exception still describes a real difference", () => {
     // An exception names a kind and a field the test mutates, so a renamed

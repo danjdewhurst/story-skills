@@ -15,20 +15,20 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - `story similarity [path] --against <file|folder|git-ref>` finds passages of chapter prose that share a run of words with other text: earlier books, a previous draft, or a source. Words are compared lowercased without punctuation, and each run of `--min-words` (default 8, at least 5, settable in `cli-defaults`) or more shared words is a `similarity-shared-passage` warning. The warning gives the chapter's review-copy label, the reference's location, and the shared words, and the report adds per-chapter and total shares. A folder with `story.md` is compared chapter by chapter; any other folder contributes its `.md`, `.markdown`, and `.txt` files; anything else is tried as a git ref, read as `compare --ref` reads one. It supports `--json` and is advisory: it exits 0 unless `severity` promotes the warning. The `editorial-review` skill runs it and says how to report shared text honestly: overlap is not plagiarism, and no match is not proof of originality. ([#291](https://github.com/danjdewhurst/story-skills/issues/291))
 - `story series` and `story diagram` read deaths recorded as status progressions, as `story continuity` does. Deaths and revivals are resolved once, in the new `src/deaths.js`, from `died-in`, `revived-in`, `status`, and status progressions in story order. `story series` reads each earlier book's state at its end, in chronological order: a character killed by a progression in book one is reported in book two with the existing `canon-death-status`, `canon-posthumous-appearance`, and `canon-posthumous-learning` codes, a revival in an earlier book clears the death, and a later book that brings a character back with a status progression is not flagged from that chapter on. `story diagram relationships` marks characters dead at the end of the book (by `died-in`, a progression, or `status`) as `deceased`, and adds a `revived` class for those who died and came back. ([#287](https://github.com/danjdewhurst/story-skills/issues/287))
 
-### Fixed
+### Changed
 
-- `story validate` and `schemas/story.schema.json` agree on what they accept. A new seeded property test (`test/validate-schema-property.test.js`) found these disagreements, and each is now fixed on the side that was too loose. ([#295](https://github.com/danjdewhurst/story-skills/issues/295))
+- `story validate` and `schemas/story.schema.json` now accept the same frontmatter, checked by a new seeded property test (`test/validate-schema-property.test.js`). Each disagreement it found was fixed on the side that was too loose, so some projects that passed before now report an error. ([#295](https://github.com/danjdewhurst/story-skills/issues/295))
   - `validate` now rejects:
     - a list in a free-text field (`premise`, `lie`, `region`, `strand`, and the rest);
     - an unknown character `arc-type`;
     - a fractional or true/false `population`;
-    - empty entries in `themes`, `contact`, `authors`, and `keywords`;
-    - `contact` or `mice-threads` written as one value instead of a list;
+    - empty or unquoted-number entries in `themes`, `contact`, `authors`, and `keywords`;
+    - `contact` or `mice-threads` written as one value instead of a list, such as `contact: me@example.com` (write `contact:` then `  - me@example.com`);
     - a list in a documented `continuity/state.md` entry key.
   - The schema now rejects:
     - blank names, titles, terms, and required `type`s, and blank items in string lists;
     - a `mode` or `draft-mode` other than `discovered` or `outlined`;
-    - a `cover` that is not an image;
+    - a `cover` that is not an image file name;
     - an object-state `status` outside the artifact statuses.
 
     It accepts the empty chapter `mode` that `story add` writes, and an empty `publication-date`.

@@ -522,7 +522,7 @@ Status notes:
 - "Later" is story time when both chapters are dated: a chapter's `date`, or else its earliest dated scene. A 2034 prologue read first comes after a 2024 death. Otherwise chapters compare by number.
 - `status: cut` keeps the file for a character removed during discovery drafting, out of canon but on record.
 
-The arc-craft fields `arc-type`, `lie`, `truth`, and `ghost-wound` have no CLI flags and are not checked by the CLI. See the [character-management](../skills/character-management/SKILL.md) and [theme-craft](../skills/theme-craft/SKILL.md) skills.
+The arc-craft fields `arc-type`, `lie`, `truth`, and `ghost-wound` have no CLI flags. `story validate` checks only their shape: `arc-type` must be `change-positive`, `change-negative`, or `flat`, and the other three must be text. See the [character-management](../skills/character-management/SKILL.md) and [theme-craft](../skills/theme-craft/SKILL.md) skills.
 
 `voice-words` and `voice-avoid` have no flags either. `story validate` errors when either is not a list of strings, and [`story voices`](#dialogue-voices) reads both. The [line-editing](../skills/line-editing/SKILL.md) and [voice-style](../skills/voice-style/SKILL.md) skills propose them.
 
@@ -1441,7 +1441,7 @@ A file that fails to parse is reported as an error against its path. The rest of
 - `continuity` also holds the `continuity/state.md` fields and the `exemptions` list.
 - `styleSheet` and `progressLog` hold the optional root files.
 
-The schema also lists values the CLI does not enforce, such as character `arc-type`. It is looser than the CLI elsewhere: it checks the shape of `isbn`, `publication-date`, and `language`, but not ISBN checksums, real calendar days, or whether a referenced id exists. Both require text fields such as `title`, `name`, `term`, and `region` to be strings: an unquoted `title: 1984` parses as a number, so `story validate` reports `frontmatter field title must be text: quote it as title: "1984"`. A location's `population` may be a string or a whole number. In this repository, `bun run test:examples` builds that document for every project in [`examples/`](../examples/) and checks it against the schema with the dependency-free validator in [`scripts/check-schema.js`](../scripts/check-schema.js), so change the schema, the CLI, and the examples together. The [Development guide](development.md#schema) covers the checks.
+`test/validate-schema-property.test.js` keeps the schema and `story validate` accepting the same values, apart from rules a schema cannot express. So the schema is looser than the CLI in those places: it checks the shape of `isbn`, `publication-date`, and `language`, but not ISBN checksums, real calendar days, or whether a referenced id exists. Both require text fields such as `title`, `name`, `term`, and `region` to be strings: an unquoted `title: 1984` parses as a number, so `story validate` reports `frontmatter field title must be text: quote it as title: "1984"`. A location's `population` may be a string or a whole number. In this repository, `bun run test:examples` builds that document for every project in [`examples/`](../examples/) and checks it against the schema with the dependency-free validator in [`scripts/check-schema.js`](../scripts/check-schema.js), so change the schema, the CLI, and the examples together. The [Development guide](development.md#schema) covers the checks.
 
 ## Migrating older projects
 
