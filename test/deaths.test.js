@@ -80,7 +80,8 @@ describe("characterLifeline", () => {
         twice: `status: alive\ndied-in: chapter-01\nrevived-in: chapter-02\n${progression(["chapter-01", "deceased"], ["chapter-02", "alive"], ["chapter-04", "deceased"])}`,
         returned: `status: deceased\n${progression(["chapter-03", "alive"])}`,
         lost: "status: deceased\ndied-in: chapter-09",
-        missing: `status: alive\n${progression(["chapter-02", "missing"])}`
+        missing: `status: alive\n${progression(["chapter-02", "missing"])}`,
+        again: `status: deceased\ndied-in: chapter-04\n${progression(["chapter-02", "alive"], ["chapter-04", "deceased"])}`
       }
     });
     const events = (id) => lifeline(root, id).life;
@@ -102,6 +103,13 @@ describe("characterLifeline", () => {
     // A died-in the book has no chapter for leaves the status in charge.
     expect(events("lost")).toEqual({ deadAtStart: true, deadAtEnd: true, events: [] });
     expect(events("missing")).toEqual({ deadAtStart: false, deadAtEnd: false, events: [] });
+
+    // Opens dead, is brought back, and dies again by died-in.
+    expect(events("again")).toEqual({
+      deadAtStart: true,
+      deadAtEnd: true,
+      events: [{ type: "revival", chapter: "chapter-02", source: "progression" }, { type: "death", chapter: "chapter-04", source: "died-in" }]
+    });
 
     const { life, chronology } = lifeline(root, "returned");
     expect(revivedBy(life, "chapter-02", chronology)).toBe(false);
@@ -174,6 +182,11 @@ describe("story series with deaths recorded as progressions", () => {
     fs.writeFileSync(path.join(one, "characters", "ren.md"), "---\nname: Ren\nrole: supporting\nstatus: deceased\ndied-in: chapter-05\n---\n# Ren\n");
     fs.writeFileSync(path.join(two, "chapters", "chapter-02.md"), "---\ntitle: Chapter 2\nnumber: 2\nstatus: draft\nword-count: 1\ncharacters:\n  - ren\n---\nWords.\n");
     fs.writeFileSync(path.join(two, "chapters", "chapter-04.md"), "---\ntitle: Chapter 4\nnumber: 4\nstatus: draft\nword-count: 1\ncharacters:\n  - ren\n---\nWords.\n");
+    // Kai dies in book one; book two brings them back in chapter 3 and they
+    // die again there by died-in in chapter 5, so chapter 3 is no finding.
+    fs.writeFileSync(path.join(one, "characters", "kai.md"), "---\nname: Kai\nrole: supporting\nstatus: deceased\n---\n# Kai\n");
+    fs.writeFileSync(path.join(two, "characters", "kai.md"), `---\nname: Kai\nrole: supporting\nstatus: deceased\ndied-in: chapter-05\n${progression(["chapter-03", "alive"], ["chapter-05", "deceased"])}\n---\n# Kai\n`);
+    fs.writeFileSync(path.join(two, "chapters", "chapter-03.md"), "---\ntitle: Chapter 3\nnumber: 3\nstatus: draft\nword-count: 1\ncharacters:\n  - mara\n  - kai\n---\nWords.\n");
     linkSeries([one, two]);
 
     expect(seriesReport(two).errors.map((finding) => finding.message)).toEqual([

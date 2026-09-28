@@ -83,7 +83,8 @@ export function progressionDeathFrom(character, chapterId, chronology) {
 // "died-in", "revived-in", or "progression". A character is dead by the end
 // of a chapter from their died-in chapter until revived-in, and from the
 // chapter a status progression makes them deceased until one changes it
-// back; `status: deceased` with no died-in is dead before the story. These
+// back; `status: deceased` with no died-in is dead before the story, as it
+// is with died-in when a status progression brings them back first. These
 // are the rules story continuity checks casts with, so the death chapter
 // itself ends dead and the revival chapter ends alive. Every chapter counts,
 // planned `outline` ones included, as they do for continuity's cast checks.
@@ -98,7 +99,13 @@ export function characterLifeline(character, chronology) {
     const dead = status === "deceased";
     return { deadAtStart: dead, deadAtEnd: dead, events: [] };
   }
-  const deadAtStart = status === "deceased" && !character.diedIn;
+  // With died-in, `status: deceased` normally records that written death.
+  // A status progression away from deceased before died-in says instead that
+  // the character opens the book dead and comes back before dying again, as
+  // a sequel records a character killed in an earlier book.
+  const leadIn = status === "deceased" && Boolean(character.diedIn)
+    && statusProgressions(character).some(({ from, value }) => value !== "deceased" && happensAfter(chronology, character.diedIn, from));
+  const deadAtStart = status === "deceased" && (!character.diedIn || leadIn);
   if (!character.diedIn && statusProgressions(character).length === 0) {
     return { deadAtStart, deadAtEnd: deadAtStart, events: [] };
   }
@@ -107,7 +114,10 @@ export function characterLifeline(character, chronology) {
   let dead = deadAtStart;
   for (const chapter of chapters) {
     const byDiedIn = window !== null && (chapter === window.died || window.deadIn(chapter));
-    const now = byDiedIn || progressionDeathFrom(character, chapter, chronology) !== null;
+    // Before died-in, a lead-in death holds until a status progression
+    // changes it.
+    const beforeDeath = leadIn && happensAfter(chronology, window.died, chapter) && progressionStatusAt(character, chapter, chronology).status === "deceased";
+    const now = byDiedIn || beforeDeath || progressionDeathFrom(character, chapter, chronology) !== null;
     if (now !== dead) {
       events.push(now
         ? { type: "death", chapter, source: chapter === window?.died ? "died-in" : "progression" }

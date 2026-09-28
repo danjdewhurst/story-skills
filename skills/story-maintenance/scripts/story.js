@@ -3182,7 +3182,8 @@ function characterLifeline(character, chronology) {
     const dead = status === "deceased";
     return { deadAtStart: dead, deadAtEnd: dead, events: [] };
   }
-  const deadAtStart = status === "deceased" && !character.diedIn;
+  const leadIn = status === "deceased" && Boolean(character.diedIn) && statusProgressions(character).some(({ from, value }) => value !== "deceased" && happensAfter(chronology, character.diedIn, from));
+  const deadAtStart = status === "deceased" && (!character.diedIn || leadIn);
   if (!character.diedIn && statusProgressions(character).length === 0) {
     return { deadAtStart, deadAtEnd: deadAtStart, events: [] };
   }
@@ -3191,7 +3192,8 @@ function characterLifeline(character, chronology) {
   let dead = deadAtStart;
   for (const chapter of chapters) {
     const byDiedIn = window !== null && (chapter === window.died || window.deadIn(chapter));
-    const now = byDiedIn || progressionDeathFrom(character, chapter, chronology) !== null;
+    const beforeDeath = leadIn && happensAfter(chronology, window.died, chapter) && progressionStatusAt(character, chapter, chronology).status === "deceased";
+    const now = byDiedIn || beforeDeath || progressionDeathFrom(character, chapter, chronology) !== null;
     if (now !== dead) {
       events.push(now ? { type: "death", chapter, source: chapter === window?.died ? "died-in" : "progression" } : { type: "revival", chapter, source: chapter === window?.revived ? "revived-in" : "progression" });
       dead = now;
