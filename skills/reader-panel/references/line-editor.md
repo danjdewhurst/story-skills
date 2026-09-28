@@ -6,7 +6,8 @@ would have written it.
 
 ## Before reading
 
-Read `story.md` for POV and tense, and `style-sheet.md` when there is one:
+Take POV and tense from the `story context` output, and read
+`style-sheet.md` when there is one:
 its house spellings, dialogue punctuation, and watch words are the author's
 choices, not errors. Running `story prose .` gives a mechanical list to
 start from; use only its findings for chapters in range, and confirm each

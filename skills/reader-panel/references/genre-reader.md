@@ -6,7 +6,8 @@ book stops paying them.
 
 ## Before reading
 
-Take the genre and subgenre from `story.md`. Note, in a line each, the
+Take the genre and subgenre from the `story context` output's Story
+essentials. Note, in a line each, the
 three or four promises a reader of that genre expects from the chapters in
 range (a mystery: a fair clue, a question sharpened; a romance: the leads
 on the page together, the obstacle between them; a thriller: a clock that

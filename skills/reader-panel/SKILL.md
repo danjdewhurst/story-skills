@@ -51,8 +51,10 @@ the panel.
 ### 1. Scope the panel
 
 1. Ask the user for the chapter range (default: every drafted chapter)
-   and which personas to run (default: all five). Read `story.md` for
-   genre, form, POV, and tense; the genre reader needs the genre.
+   and which personas to run (default: all five). Take genre, form, POV,
+   and tense from the `story context` output in step 2 (its Story
+   essentials section), not from `story.md`, whose Synopsis may describe
+   the ending. The genre reader needs the genre.
 2. Pick the round number: the next free `N` under `feedback/`. A panel
    gets its own round. Never add simulated reads to a round of human
    readers, so the human synthesis stays independent.
@@ -63,9 +65,10 @@ the panel.
    story build . --format html --stamp panel-round-{N}
    ```
 
-   Cite each note with its paragraph label (`ch03-p12`) and the
-   paragraph's first few words, exactly as the feedback template asks of
-   human readers.
+   The build holds the whole book, so use it for labels only: a persona
+   reads the chapter files in range, never the review copy. Cite each note
+   with its paragraph label (`ch03-p12`) and the paragraph's first few
+   words, exactly as the feedback template asks of human readers.
 
 ### 2. Gather context without spoilers
 
@@ -77,8 +80,9 @@ promised so far), run `story context` on the last chapter in range:
 story context chapter-{NN} --path . --budget 4000
 ```
 
-It includes nothing from later chapters. Do not read `plot/`, arc files,
-promise payoffs, the synopsis, or chapters after the range: a persona
+It includes nothing from later chapters and leaves out the synopsis. Do not
+read `story.md`, `plot/`, arc files, promise payoffs, or chapters after the
+range: a persona
 that knows the ending cannot tell whether the setup works. When the
 genre reader needs the genre's promises, take them from the chapters and
 the genre, not from the outline.
@@ -120,9 +124,12 @@ persona: {file id from the table}
 ---
 ```
 
-The **Canon check** line is filled in as usual. Severity uses the
-template's scale (`blocking`, `major`, `minor`, `nit`), rated by the
-persona's reference file.
+Leave each note's **Canon check** line as `not checked (simulated read)`:
+checking against the bible means reading past the range, so
+`feedback-triage` does it at synthesis. Severity uses the template's scale
+(`blocking`, `major`, `minor`, `nit`), rated by the persona's reference
+file; some personas use only part of it (the sensitivity persona never
+rates a note `blocking`, and the first-page reader has no `nit`).
 
 ### 5. Hand off to feedback-triage
 

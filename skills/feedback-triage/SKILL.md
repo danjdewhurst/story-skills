@@ -153,11 +153,12 @@ panel round as usual, with these differences:
   persona ("the line-editor persona"), never as readers or beta readers.
 - **Personas are not independent.** Several personas run by one model
   agreeing is one signal, not convergence. Sort every simulated finding as
-  single-reader, weighed by how specific and checkable it is: a quoted POV
+  single-reader or declined-with-reason, weighed by how specific and checkable it is: a quoted POV
   slip or a contradiction with both sides cited is worth acting on; a
   taste note is usually declined.
-- **Check before acting.** Confirm each simulated problem in the text
-  before it enters the revision plan. A note the text does not bear out
+- **Check before acting.** Personas leave the canon check to you (they
+  cannot read past their range), so run it here, and confirm each
+  simulated problem in the text before it enters the revision plan. A note the text does not bear out
   is declined with the reason "not borne out by the text".
 - **What `ready` means.** A simulated round's `ready` means ready for
   human readers, nothing more. It never closes a book for submission or

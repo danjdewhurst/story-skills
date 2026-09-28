@@ -25,7 +25,7 @@ The chapter holds Tomas's spare, dry voice almost throughout. One paragraph leav
 - **What the reader said:** "Petra thought the old man looked tired, and she wondered how long he could keep the light alone." Tomas narrates in first person, so he cannot report what Petra thought or wondered. "The old man" is also her phrase for him, not his.
 - **Where:** ch02-p4
 - **Quoted words:** "Petra thought the old man looked tired"
-- **Canon check:** verified against the bible (POV is first person, Tomas)
+- **Canon check:** not checked (simulated read)
 - **Severity (reader's):** major
 
 ## Questions Raised

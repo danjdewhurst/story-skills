@@ -1213,7 +1213,7 @@ Chapters carry the accepted edits and, where you agreed, `status: revised`. `sty
 Run a reader panel on chapters 1 to 5 before I send them to beta readers.
 ```
 
-The skill runs five personas by default: a reader of your genre, a line editor, a sensitivity persona, a continuity-minded reader, and a first-page reader. It builds a stamped review copy for paragraph labels, gives each persona only the chapters in range plus `story context` for background (nothing from later chapters or the outline), and writes one file per persona:
+The skill runs five personas by default: a reader of your genre, a line editor, a sensitivity persona, a continuity-minded reader, and a first-page reader. It builds a stamped review copy for paragraph labels, gives each persona only the chapters in range plus `story context` for background (nothing from later chapters, the outline, or the synopsis), and writes one file per persona:
 
 ```text
 feedback/

@@ -715,7 +715,7 @@ story compare . --against ../the-tide-room-draft-1
 
 feedback-triage treats persona agreement as one signal, not convergence, confirms each note in the text before planning a fix, and reads a simulated `ready` as ready for human readers, nothing more. The sensitivity persona only flags passages for a paid human reader and never clears a portrayal.
 
-**Reads.** `story.md`, `style-sheet.md`, the chapters in range, and `story context` output.
+**Reads.** `style-sheet.md`, the chapters in range, and `story context` output (which leaves out the synopsis, so `story.md` itself is not read).
 
 **Writes.** `feedback/round-N/{persona}.md`.
 
@@ -746,7 +746,7 @@ feedback-triage treats persona agreement as one signal, not convergence, confirm
 
 When reader confusion reveals a gap in clarity, it creates or resolves files in `continuity/questions/` as well.
 
-A round written by [reader-panel](#reader-panel) carries `source: simulated`. The synthesis is labelled simulated, sorts every finding as single-reader (personas run by one model are not independent), checks each note against the text before planning a fix, and treats `ready` as ready for human readers, not for submission.
+A round written by [reader-panel](#reader-panel) carries `source: simulated`. The synthesis is labelled simulated, sorts every finding as single-reader or declined (personas run by one model are not independent), runs the canon check the personas skip, checks each note against the text before planning a fix, and treats `ready` as ready for human readers, not for submission.
 
 Anchors are paragraph positions, so a revision moves them. Rebuild and resend the review copy between rounds rather than reusing old anchors.
 
