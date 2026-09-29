@@ -84,7 +84,8 @@ describe("standalone binaries (#296)", () => {
     expect(publish).toContain('gh release upload "$TAG" dist/binaries/* --repo "$GITHUB_REPOSITORY" --clobber');
     expect(publish).toContain("sha256sum story-skills_");
     // The tap update is skipped, successfully, without its token.
-    expect(publish).toContain("TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}");
+    expect(publish).toContain("TAP_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}");
+    expect(publish).toContain("StrictHostKeyChecking=yes");
     expect(publish).toContain("if: steps.token.outputs.present == 'true'");
     expect(publish).toContain('node scripts/homebrew-formula.js "$version"');
   });

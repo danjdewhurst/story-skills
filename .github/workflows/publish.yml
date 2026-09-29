@@ -7,7 +7,7 @@ name: Publish
 # It also builds the standalone `story` binaries, each on its own OS so it
 # can be smoke-tested there (and so macOS builds are signed as they need),
 # attaches them and a checksums file to the GitHub release, and, when a
-# HOMEBREW_TAP_TOKEN secret is set, updates the formula in
+# HOMEBREW_TAP_DEPLOY_KEY secret is set, updates the formula in
 # danjdewhurst/homebrew-tap.
 on:
   push:
@@ -184,9 +184,10 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
-  # Needs a HOMEBREW_TAP_TOKEN secret: a fine-grained token with contents
-  # write access to danjdewhurst/homebrew-tap. Without it the job says so and
-  # succeeds, and the formula can be updated by hand.
+  # Needs a HOMEBREW_TAP_DEPLOY_KEY secret: the private half of an SSH deploy
+  # key with write access to danjdewhurst/homebrew-tap, and to nothing else.
+  # Without it the job says so and succeeds, and the formula can be updated
+  # by hand.
   homebrew:
     needs: release-assets
     runs-on: ubuntu-latest
@@ -196,13 +197,13 @@ jobs:
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
     steps:
-      - name: Check for the tap token
+      - name: Check for the tap deploy key
         id: token
         env:
-          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          TAP_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
         run: |
-          if [ -z "$TAP_TOKEN" ]; then
-            echo "::notice::No HOMEBREW_TAP_TOKEN secret, so the Homebrew formula was not updated. See docs/development.md#standalone-binaries."
+          if [ -z "$TAP_KEY" ]; then
+            echo "::notice::No HOMEBREW_TAP_DEPLOY_KEY secret, so the Homebrew formula was not updated. See docs/development.md#standalone-binaries."
             echo "present=false" >> "$GITHUB_OUTPUT"
           else
             echo "present=true" >> "$GITHUB_OUTPUT"
@@ -228,15 +229,22 @@ jobs:
           name: checksums
           path: ${{ runner.temp }}/checksums
 
+      # GitHub's SSH host key is pinned (from `gh api meta`), so the key is
+      # only ever offered to github.com.
       - name: Update the formula in the tap
         if: steps.token.outputs.present == 'true'
         env:
-          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          TAP_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
         run: |
           version="${TAG#v}"
           tap="$RUNNER_TEMP/homebrew-tap"
-          gh auth setup-git
-          git clone --depth 1 https://github.com/danjdewhurst/homebrew-tap.git "$tap"
+          ssh_dir="$RUNNER_TEMP/tap-ssh"
+          mkdir -m 700 "$ssh_dir"
+          printf '%s\n' "$TAP_KEY" > "$ssh_dir/key"
+          chmod 600 "$ssh_dir/key"
+          echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" > "$ssh_dir/known_hosts"
+          export GIT_SSH_COMMAND="ssh -i $ssh_dir/key -o IdentitiesOnly=yes -o UserKnownHostsFile=$ssh_dir/known_hosts -o StrictHostKeyChecking=yes"
+          git clone --depth 1 git@github.com:danjdewhurst/homebrew-tap.git "$tap"
           node scripts/homebrew-formula.js "$version" "$RUNNER_TEMP/checksums/story-skills_${version}_checksums.txt" > "$tap/story-skills.rb"
           cd "$tap"
           if git diff --quiet && [ -z "$(git status --porcelain)" ]; then
