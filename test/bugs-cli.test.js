@@ -7,7 +7,7 @@ import { passChecks, DEFAULT_PASSES } from "../src/passes.js";
 import { createEntity, createStoryProject, projectActions, validateLinks, validateProject } from "../src/story.js";
 import { findOverlaps } from "../scripts/check-evals.js";
 import { bumpVersion, parseReleaseArgs } from "../scripts/release.js";
-import { checkDraft } from "../evals/run-evals.js";
+import { checkDraft, wordCount } from "../evals/run-evals.js";
 import { makeTempDir, memoryIo, messages } from "./helpers.js";
 
 const repoRoot = path.resolve(import.meta.dir, "..");
@@ -289,6 +289,36 @@ describe("#98 banned-phrase inflection", () => {
     expect(trapResults(["rich tapestry"], "A rich tapestries hall.")).toEqual([[false, 'trap avoided: "rich tapestry"']]);
     expect(trapResults(["key"], "They carved the turkey.")).toEqual([[true, 'trap avoided: "key"']]);
     expect(trapResults(["delve"], "The delft plates.")).toEqual([[true, 'trap avoided: "delve"']]);
+  });
+});
+
+describe("eval checker in other languages", () => {
+  function results(checks, draft, prefix) {
+    return checkDraft({ required: [], ...checks }, "", draft).filter(([, label]) => label.startsWith(prefix));
+  }
+
+  test("counts each Chinese or Japanese character as a word and other text as before", () => {
+    expect(wordCount("The bell was ringing.")).toBe(4);
+    expect(wordCount("a — b")).toBe(3);
+    expect(wordCount("「来てくれたね」\n\n　大島はうなずいた。")).toBe(14);
+    expect(wordCount("霧見駅 Kirimi 3")).toBe(5);
+    expect(results({ max_words: 3 }, "「ただいま」", "length")).toEqual([[false, "length 4 words <= 3 (absolute cap)"]]);
+  });
+
+  test("French spacing before ; : ! and ? is well formed only in a French fixture", () => {
+    const draft = "« Tu l’as vu faire ? » Il hocha la tête : oui.";
+    expect(results({ language: "fr" }, draft, "well formed: no space before")).toEqual([[true, "well formed: no space before a comma or full stop"]]);
+    expect(results({ language: "fr-CA" }, "Il partit , seul.", "well formed: no space before")).toEqual([[false, "well formed: no space before a comma or full stop"]]);
+    expect(results({}, draft, "well formed: no space before")).toEqual([[false, "well formed: no space before punctuation"]]);
+    expect(results({ language: "fy" }, draft, "well formed: no space before")).toEqual([[false, "well formed: no space before punctuation"]]);
+  });
+
+  test("phrases keep word boundaries next to accented letters and match unspaced scripts as substrings", () => {
+    expect(results({ banned: ["montre"] }, "Cela démontre tout.", "trap avoided")).toEqual([[true, 'trap avoided: "montre"']]);
+    expect(results({ banned: ["montre"] }, "Les montres battaient.", "trap avoided")).toEqual([[false, 'trap avoided: "montre"']]);
+    expect(results({ banned: ["arrêté"] }, "Ils sont arrêtés.", "trap avoided")).toEqual([[false, 'trap avoided: "arrêté"']]);
+    expect(results({ required: ["封筒"] }, "青い封筒が一通。", "canon kept")).toEqual([[true, 'canon kept: "封筒"']]);
+    expect(results({ required: ["مخطوطة"] }, "كانت المخطوطة الخضراء هناك.", "canon kept")).toEqual([[true, 'canon kept: "مخطوطة"']]);
   });
 });
 

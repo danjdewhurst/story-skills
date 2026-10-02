@@ -138,6 +138,12 @@ hand before/after skill changes, with results recorded below.
 | `plot-beats` | Three-act beats mapped onto the eight chapters the book already has, as an arc Plot Points table. A chapter past `Ch 8`, a proposed new chapter, or a midpoint row anywhere but `Ch 4` fails. Evaluates the `plot-structure` skill. |
 | `premise-logline` | One logline from the user's spark, plus four stress tests reported pass, weak, or fail. A test reported weak or fail, a new relative, or deciding who left the key or what the chest holds fails. Evaluates the `premise-workshop` skill. |
 | `reader-panel` | The line-editor persona's simulated read of a short chapter with one planted POV slip (Tomas's first-person narration reports what Petra thought). The read must be a feedback file marked `source: simulated`, cite the slip by its label and words, and file it at the right label, and raise no other problem: a second problem heading, a `Where` line at another paragraph, or a read labelled as a human's fails. Evaluates the `reader-panel` skill. |
+| `drafting-fr` | A scene drafted in French for a book with `language: fr`: dialogue in guillemets, the watch's time spelled out, and the stopped watch left shut. English words or quote marks, `4 h 17` in digits, the second cover, or naming M. F. fails. Evaluates `chapter-writing` in another language. |
+| `drafting-ja` | A scene drafted in Japanese for a vertical book counted in characters: under 500 characters, dialogue in 「」 with no 。 before the closing bracket, numbers in kanji. Latin words, Arabic numerals, curly quotes, or anything the station clerk has kept (the envelope, the timetable, a letter) fails. Evaluates `chapter-writing` in another language. |
+| `drafting-ar` | A scene drafted in Arabic: dialogue in «», the Arabic comma and question mark, and the manuscript left shut. Latin letters or punctuation, the leaf's hiding place, the dedication, or Nader arriving fails. Evaluates `chapter-writing` in another language. |
+| `line-editing-fr` | A French passage with straight quotes, no space before `?`, and filler (*Soudain, elle s'aperçut que*, *perdue dans ses pensées*) must come back in guillemets with French spacing and the filler cut, the rest unchanged. Evaluates `line-editing` with its language conventions. |
+| `line-editing-ja` | A Japanese passage with curly quotes, Arabic numerals in vertical text, `。」`, `・・・`, a half-width `?`, and padding must come back in 「」 with kanji numerals, `……`, and `？`. Evaluates `line-editing` with its language conventions. |
+| `line-editing-ar` | An Arabic passage with straight quotes, Latin commas and question marks, and the style sheet's watch words (فجأة, a named feeling) must come back in «» with `،` and `؟` and the watch words cut. Evaluates `line-editing` with its language conventions. |
 | `context-boundary` | A chapter drafted from `story context` output with the whole-book outline open beside it: it stays inside the target length and uses nothing the packed context leaves out (the logbook, the fuse wire, who left the key). Evaluates `chapter-writing`'s use of `story context`. The runner gives the model no tools, so the fixture supplies the command's output: it tests staying inside the budget and the spoiler boundary, not the choice to run the command. |
 
 ## Skill coverage
@@ -147,9 +153,9 @@ Each fixture runs under the skill its `checks.json` names in `skill`.
 | Skill | Fixtures |
 | --- | --- |
 | `adaptation` | `screenplay-fountain` |
-| `chapter-writing` | `anti-slop`, `canon-keeping`, `context-boundary`, `no-invention`, `promise-payoff`, `question-stays-open` |
+| `chapter-writing` | `anti-slop`, `canon-keeping`, `context-boundary`, `drafting-ar`, `drafting-fr`, `drafting-ja`, `no-invention`, `promise-payoff`, `question-stays-open` |
 | `genre-craft` | `genre-craft-mystery` |
-| `line-editing` | `voice-preservation` |
+| `line-editing` | `line-editing-ar`, `line-editing-fr`, `line-editing-ja`, `voice-preservation` |
 | `plot-structure` | `plot-beats` |
 | `premise-workshop` | `premise-logline` |
 | `reader-panel` | `reader-panel` |
@@ -159,7 +165,7 @@ Each fixture runs under the skill its `checks.json` names in `skill`.
 | `theme-craft` | `motif-restraint` |
 | `verse-craft` | `verse-limerick` |
 
-Eighteen fixtures cover twelve of the 23 skills. These eleven have none:
+Twenty-four fixtures cover twelve of the 23 skills. These eleven have none:
 `character-management`, `discovery-drafting`, `editorial-review`,
 `feedback-triage`, `publishing`, `research`, `story-init`,
 `story-maintenance`, `submission`, `voice-style`, and `worldbuilding`. They
@@ -174,11 +180,13 @@ gap. Keep this table current when you add a fixture.
 
 - `brief`: the drafting instruction to give the skill.
 - `skill`: the skill under test (e.g. `chapter-writing`). Required by `scripts/check-evals.js`; `run-skill.js --skill` selects which skill's instructions to load.
-- `required`: case-insensitive canon phrases that must appear in the draft (facts, names, objects). Matching is stem/inflected, so `logbook` also matches `logbooks`.
+- `required`: case-insensitive canon phrases that must appear in the draft (facts, names, objects). Matching is stem/inflected, so `logbook` also matches `logbooks`. A phrase is matched as whole words, at a boundary with any letter (`montre` does not match *démontre*); a phrase with no Latin letter or digit, such as Japanese `封筒` or Arabic `مخطوطة`, is matched as a substring, since those scripts join words, particles, and prefixes to the text around them.
 - `banned`: case-insensitive phrases that must not appear (resolutions, inventions, slop). Matching is stem/inflected like `required`, so `delve` also catches `delves` and `delving`, and `tapestry` catches `tapestries`; add 2–3 paraphrase variants per trap phrase (e.g. `told Petra about the key` beside `told her about the key`) for what inflection cannot catch.
 - `banned_regex`: regular expressions that must not match (for example invented measurements or anachronisms). Matching is case-insensitive.
 - `max_words_ratio` / `min_words_ratio`: draft length bounds relative to the input, to catch padding and over-cutting.
 - `max_words`: absolute draft word cap, for briefs that promise one (canon-keeping: under 220 words).
+- Word counts (`max_words` and the ratios) count whitespace-separated tokens, except that each Chinese or Japanese character counts as one word, as `story wordcount` counts those scripts, so a Japanese fixture's caps are in characters (drafting-ja: under 500).
+- `language`: the BCP 47 tag of the book the fixture drafts or edits for (`fr`, `ja`, `ar`). In a French fixture (`fr` or `fr-*`) the space-before-punctuation check allows the space French sets before `: ; ! ?`, and checks only commas and full stops. Fixtures in other languages leave out the English-only checks (`requires_first_person`, `requires_past_tense`, `voice_drift`, and the binary-contrast scaffolds, which match only English) and put the language's own traps in `banned_regex`: English words or quote marks, digits where the style sheet spells numbers out, and the language's contrast scaffold (*pas seulement… mais*, だけでなく, ليس فقط).
 - `paragraphs`: exact paragraph count, for briefs that promise one (no-invention: two paragraphs). Fenced code blocks are exempt.
 - `lines`: exact count of nonblank lines, for verse briefs that promise one (verse-limerick: five lines). Fenced code blocks are exempt.
 - `ends_with_question`: when `true`, the draft must end on `?` (question-stays-open, genre-craft-mystery).

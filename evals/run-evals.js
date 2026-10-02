@@ -38,8 +38,15 @@ function normalizeApos(text) {
 // and underscores are equivalent ("sea-chest" matches "sea chest"). Used to
 // build word-boundary regexes from checks.json phrases so punctuation does
 // not matter, while partial-word matches ("key" in "turkey", "Ana" in
-// "Indiana") still fail.
+// "Indiana", "montre" in "démontre") still fail. A phrase with no Latin
+// letter or digit (Japanese, Arabic) is matched as a plain substring, since
+// those scripts join words to the text around them.
 const FLEX_SEP_SRC = "[\\s\\-—–―−‐‑_]+";
+
+// A letter, digit, or underscore in any script, so a word boundary holds
+// next to accented letters (é, ç) as well as ASCII ones.
+const WORD_CHAR_SRC = "[\\p{L}\\p{N}_]";
+const WORD_CHAR = new RegExp(WORD_CHAR_SRC, "u");
 
 function escapeRegExp(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -56,11 +63,11 @@ function phrasePattern(phrase, inflect = false) {
   const last = parts[parts.length - 1].slice(-1);
   let left;
   if (/\d/.test(first)) left = "(?<!\\d)";
-  else if (/[A-Za-z0-9_]/.test(first)) left = "(?<!\\w)";
+  else if (WORD_CHAR.test(first)) left = `(?<!${WORD_CHAR_SRC})`;
   else left = "";
   let right;
   if (/\d/.test(last)) right = "(?!\\d)";
-  else if (/[A-Za-z0-9_]/.test(last)) {
+  else if (WORD_CHAR.test(last)) {
     // With inflect=true (required canon), a trailing inflection is allowed
     // so "logbook" matches "logbooks" while "key" still does not match
     // "turkey".
@@ -74,7 +81,7 @@ function phrasePattern(phrase, inflect = false) {
       else if (/[^e]e$/i.test(word)) inner = `${head}${stem}(?:e|es|ed|ing)`;
       else inner += "(?:s|es|ed|ing|d)?";
     }
-    right = "(?!\\w)";
+    right = `(?!${WORD_CHAR_SRC})`;
   } else right = "";
   return left + inner + right;
 }
@@ -86,7 +93,7 @@ function phraseFound(phrase, text, inflect = false) {
     normText.toLowerCase().includes(normalizeApos(phrase).toLowerCase());
   if (pattern === null) return fallback();
   try {
-    return new RegExp(pattern, "i").test(normText);
+    return new RegExp(pattern, "iu").test(normText);
   } catch {
     return fallback();
   }
@@ -111,8 +118,17 @@ export function loadFixture(fixtureDir) {
   return { checks, inputText };
 }
 
-function wordCount(text) {
-  return text.split(/\s+/).filter(Boolean).length;
+// Chinese and Japanese put no spaces between words, so each of their
+// characters counts as a word, as `story wordcount` counts them; the rest of
+// the text counts its whitespace-separated tokens. Text with no Chinese or
+// Japanese counts exactly as before.
+const CJK_CHAR = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\u30FC]/gu;
+
+export function wordCount(text) {
+  const cjk = (text.match(CJK_CHAR) || []).length;
+  if (cjk === 0) return text.split(/\s+/).filter(Boolean).length;
+  const rest = text.replace(CJK_CHAR, " ").split(/\s+/).filter((token) => /[\p{L}\p{N}]/u.test(token));
+  return cjk + rest.length;
 }
 
 // Fenced code blocks are exempt from well-formedness and structural checks:
@@ -140,12 +156,19 @@ function paragraphs(text) {
 
 // Damage a search-and-replace draft leaves behind: doubled spaces mid-line,
 // a space before closing punctuation, or two punctuation marks with nothing
-// between them ("I !", "our  new", "to .").
-const WELL_FORMED = [
-  [/\S[^\S\n]{2,}\S/, "no doubled spaces inside a line"],
-  [/\s[,.;:!?]/, "no space before punctuation"],
-  [/[,;:!?]\s*[,;:!?]/, "no empty clause between punctuation marks"],
-];
+// between them ("I !", "our  new", "to ."). French sets a space before
+// : ; ! and ? (and inside guillemets), so a fixture with `language: fr`
+// checks only commas and full stops for a space before them.
+function wellFormed(language) {
+  const french = /^fr(?:-|$)/i.test(String(language ?? "").trim());
+  return [
+    [/\S[^\S\n]{2,}\S/, "no doubled spaces inside a line"],
+    french
+      ? [/\s[,.]/, "no space before a comma or full stop"]
+      : [/\s[,.;:!?]/, "no space before punctuation"],
+    [/[,;:!?]\s*[,;:!?]/, "no empty clause between punctuation marks"],
+  ];
+}
 
 // Binary-contrast scaffolds ("not just X but Y"). Checked on every draft;
 // no fixture's ideal output needs one.
@@ -256,7 +279,7 @@ export function checkDraft(checks, inputText, draftText) {
     results.push([ok, `trap avoided: /${pattern}/`]);
   }
 
-  for (const [pattern, desc] of WELL_FORMED) {
+  for (const [pattern, desc] of wellFormed(checks.language)) {
     results.push([!pattern.test(proseOnly), `well formed: ${desc}`]);
   }
 
