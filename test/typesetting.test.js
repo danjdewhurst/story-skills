@@ -52,9 +52,9 @@ function expectWellFormed(xml) {
 const PPR_ORDER = ["pStyle", "keepNext", "bidi", "spacing", "ind", "jc", "textDirection", "outlineLvl"];
 const RPR_ORDER = ["rFonts", "b", "bCs", "i", "iCs", "sz", "szCs", "rtl", "lang"];
 
-function expectSchemaOrder(xml, element, order, ignore = []) {
+function expectSchemaOrder(xml, element, order) {
   for (const match of xml.matchAll(new RegExp(`<w:${element}>(.*?)</w:${element}>`, "g"))) {
-    const children = [...match[1].matchAll(/<w:(\w+)[ />]/g)].map((child) => child[1]).filter((name) => !ignore.includes(name));
+    const children = [...match[1].matchAll(/<w:(\w+)[ />]/g)].map((child) => child[1]);
     const positions = children.map((name) => order.indexOf(name));
     expect(positions).not.toContain(-1);
     expect(positions).toEqual([...positions].sort((a, b) => a - b));
@@ -230,6 +230,14 @@ describe("script-aware typesetting", () => {
     expect(english["word/styles.xml"]).not.toContain("<w:lang");
     expect(english["word/document.xml"]).toContain("<w:sectPr/></w:body>");
 
+    // Shunn runs list bold and italic before the size, as the schema orders
+    // run properties.
+    const shunn = archive(book(null), "docx", { shunn: true, out: "dist/shunn.docx" })["word/document.xml"];
+    expect(shunn).toContain('<w:rPr><w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/><w:b/><w:sz w:val="24"/></w:rPr><w:t xml:space="preserve">bold</w:t>');
+    expect(shunn).toContain('<w:rPr><w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/><w:i/><w:sz w:val="24"/></w:rPr><w:t xml:space="preserve">soft</w:t>');
+    expectWellFormed(shunn);
+    expectSchemaOrder(shunn, "rPr", RPR_ORDER);
+
     const british = archive(book("en-GB"), "docx");
     expect(british["word/styles.xml"]).toContain('<w:szCs w:val="24"/><w:lang w:val="en-GB"/></w:rPr>');
     expect(british["word/document.xml"]).not.toContain("<w:rtl/>");
@@ -272,15 +280,13 @@ describe("script-aware typesetting", () => {
 
     const shunn = archive(root, "docx", { shunn: true, out: "dist/shunn.docx" })["word/document.xml"];
     expect(shunn).toContain('<w:p><w:pPr><w:bidi/><w:spacing w:line="480" w:lineRule="auto"/>');
-    expect(shunn).toContain('<w:rPr><w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/><w:sz w:val="24"/><w:b/><w:bCs/><w:rtl/></w:rPr>');
+    expect(shunn).toContain('<w:rPr><w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/><w:b/><w:bCs/><w:sz w:val="24"/><w:rtl/></w:rPr>');
     // Every run, the chapter heading's page break too, is right to left.
     expect(shunn).toContain('<w:r><w:rPr><w:rtl/></w:rPr><w:br w:type="page"/></w:r>');
     expect(shunn.match(/<w:r>/g).length).toBe(shunn.match(/<w:rtl\/><\/w:rPr>/g).length);
     expectWellFormed(shunn);
-    // Shunn runs have always put sz before b and i, so only the order of
-    // the other properties is checked.
     expectSchemaOrder(shunn, "pPr", PPR_ORDER);
-    expectSchemaOrder(shunn, "rPr", RPR_ORDER, ["b", "bCs", "i", "iCs"]);
+    expectSchemaOrder(shunn, "rPr", RPR_ORDER);
   });
 
   test("validate allows writing-mode: vertical only for a language set vertically", () => {
