@@ -237,7 +237,7 @@ story init "The Sunken Ledger" \
 Created story project: ~/stories/the-sunken-ledger
 ```
 
-The directory name and the story id (`the-sunken-ledger`) come from the title. Use `--dir` to choose a different directory. A title with no ASCII letters or digits, such as `Война и мир`, needs `--dir` with an ASCII folder name, and the story id comes from that folder name. `init` refuses a directory that already exists unless you pass `--force`, and even then it only adds missing starter files.
+The directory name and the story id (`the-sunken-ledger`) come from the title. Use `--dir` to choose a different directory. A Cyrillic or Greek title is transliterated for the directory name (`Война и мир` goes in `voyna-i-mir`), and the story id comes from that folder name. A title in a script with no transliteration table, such as Chinese, needs `--dir` with an ASCII folder name. `init` refuses a directory that already exists unless you pass `--force`, and even then it only adds missing starter files.
 
 `--form` records the form and sets a default word target for it: 80,000 for a `novel`, 30,000 for a `novella`, 12,000 for a `novelette`, 5,000 for a `short-story`, 1,000 for `flash`, 10,000 for a `chapter-book`, and 500 for a `picture-book`. A `serial` gets no book-level target. Without `--form`, `init` writes neither field, so the skill passes `--form novel` if you don't choose.
 

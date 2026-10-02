@@ -8,6 +8,10 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ## [Unreleased]
 
+### Changed
+
+- `story add`, `story rename`, and `story init` transliterate Cyrillic and Greek names and titles into ids, so `story add character "Пётр"` writes `characters/petr.md` and `Ολυμπία` gives `olympia` without `--id`. Cyrillic follows a simplified BGN/PCGN table shared by Russian, Ukrainian, Belarusian, Bulgarian, Serbian, and Macedonian letters; Greek follows a simplified ELOT 743. Both tables are in the [project format reference](docs/project-format.md#transliteration). Ids stay ASCII, names in other scripts (Chinese, Arabic, Hebrew, and the rest) still need `--id` with the same error as before, and existing ids are never rewritten: the story id of a project with a Cyrillic or Greek title still comes from its folder name, and review-copy labels for unnumbered chapters are unchanged. `story init` without `--dir` uses the transliterated title for the folder name (`voyna-i-mir`). ([#313](https://github.com/danjdewhurst/story-skills/issues/313))
+
 ## [0.18.0] - 2026-09-29
 
 ### Added

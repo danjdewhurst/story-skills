@@ -188,7 +188,9 @@ export function createStoryProject(options) {
 
   const cwd = options.cwd ?? process.cwd();
   // A title with no ASCII letters or digits (a translated edition, say) takes
-  // its story id from the project folder, as scanProject does.
+  // its story id from the project folder, as scanProject does. The default
+  // folder transliterates a Cyrillic or Greek title (Война и мир becomes
+  // voyna-i-mir), so the story id comes out the same.
   const titleId = kebabCase(title);
   if (!titleId && options.dir === undefined) {
     throw usageError('Cannot derive a story id from title "' + title + '": pass --dir with an ASCII folder name, or use a title containing ASCII letters or digits');
@@ -573,9 +575,11 @@ function enclosingStoryProject(root) {
 }
 
 // The story id is the kebab-case title, or the project folder name when the
-// title is missing or has no ASCII letters or digits.
+// title is missing or has no ASCII letters or digits. The title is not
+// transliterated: the id is recomputed on every run, and a Cyrillic or Greek
+// title has always fallen back to the folder name.
 function deriveStoryId(title, root) {
-  return kebabCase(String(title ?? "")) || kebabCase(path.basename(root));
+  return kebabCase(String(title ?? ""), { transliterate: false }) || kebabCase(path.basename(root));
 }
 
 // Every registry records the story id, which follows the story.md title, so
@@ -5803,11 +5807,13 @@ function branchGraph(project) {
 // The review copy's paragraph-label prefix: ch03 for Chapter 3, or the
 // title's slug (prologue) for an unnumbered chapter. A slug that is blank,
 // looks like another label, or repeats one takes the file number instead.
+// The slug is not transliterated, so labels readers have quoted from an
+// earlier review copy stay the same.
 function chapterKey(chapter, keys) {
   if (chapter.numbered) {
     return `ch${String(chapter.displayNumber).padStart(2, "0")}`;
   }
-  let key = kebabCase(chapter.title);
+  let key = kebabCase(chapter.title, { transliterate: false });
   if (key === "" || keys.has(key) || /^(?:ch\d+$|front-|back-|matter-|unnumbered-)/.test(key)) {
     key = `unnumbered-${String(chapter.number).padStart(2, "0")}`;
   }
@@ -6362,7 +6368,7 @@ function normalizeBuildFormat(value) {
 // With story.md unreadable or untitled, the story id is only the folder name,
 // so comparing every registry's `story` with it would repeat one problem.
 function storyIdIsFallback(project) {
-  return Boolean(project.story.unreadable) || kebabCase(String(project.story.data.title ?? "")) === "";
+  return Boolean(project.story.unreadable) || kebabCase(String(project.story.data.title ?? ""), { transliterate: false }) === "";
 }
 
 // Free-text and id fields the schema types as strings. An unquoted `1984`

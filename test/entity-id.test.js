@@ -55,7 +55,7 @@ describe("--id for names outside ASCII", () => {
 
   test("a name with no kebab-case form names --id as the fix", () => {
     const root = project("No Id");
-    for (const name of ["Пётр", "李明", "Ολυμπία"]) {
+    for (const name of ["李明", "محمد", "דוד", "สมชาย"]) {
       expect(() => createEntity(root, { kind: "character", name })).toThrow(
         `Cannot derive a kebab-case id from character name "${name}": pass --id with a kebab-case id, or use a name containing ASCII letters or digits`
       );
@@ -89,7 +89,7 @@ describe("--id for names outside ASCII", () => {
     createEntity(root, { kind: "character", name: "Petr", id: "petr" });
     createEntity(root, { kind: "chapter", name: "One", number: 1, character: "petr" });
 
-    expect(() => renameEntity(root, { kind: "character", id: "petr", name: "Пётр Иванов" })).toThrow("pass --id with a kebab-case id");
+    expect(() => renameEntity(root, { kind: "character", id: "petr", name: "李明" })).toThrow("pass --id with a kebab-case id");
 
     const result = renameEntity(root, { kind: "character", id: "petr", name: "Пётр Иванов", newId: "petr-ivanov" });
 

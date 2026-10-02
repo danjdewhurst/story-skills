@@ -154,7 +154,7 @@ The CLI is for maintenance only. Agents write story content directly to markdown
 | `story import draft.md --title "The Lost Coast"` | Split an existing manuscript into a new story project and suggest entity candidates |
 | `story add character "Sera Voss"` | Create entity files for characters, locations, systems, factions, artifacts, arcs, chapters, scenes, questions, promises, clues, terms, research notes, and matter pages |
 | `story add matter "Dedication"` | Add a front (default) or `--placement back` matter page such as a dedication, epigraph, or acknowledgments |
-| `story add character "Пётр" --id petr` | Give the id by hand for a name the CLI cannot slug, so the name keeps its own script |
+| `story add character "李明" --id li-ming` | Give the id by hand for a name the CLI cannot slug (Cyrillic and Greek names are transliterated), so the name keeps its own script |
 | `story names "Seren" "Kestrel Row"` | Check candidate names against every name, alias, and glossary term before using them: clashes fail, look-alikes warn |
 | `story rename character sera-voss "Sera Vale"` | Rename an entity and update kebab-case references |
 | `story move chapter chapter-03 --number 4` | Renumber a chapter, or move a scene with `story move scene <id> --chapter <id>`, renaming the files and rewriting every reference to the old id |
