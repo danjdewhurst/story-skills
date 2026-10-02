@@ -31,7 +31,7 @@ Le car de Lyon déposa Lucienne Marchal sur la place de Montrevel un peu après 
 
 La vitrine de l’atelier n’avait pas changé. Les mêmes réveils sur le même velours vert, la même pendule de bureau arrêtée à midi depuis la guerre et, en lettres dorées que le soleil avait pâlies, le nom de son père : É. MARCHAL, HORLOGER. Sur la porte, une carte écrite au crayon annonçait : Fermé pour raison de santé.
 
-Bastien Roux ouvrit avant qu’elle ait frappé. Il avait dix-neuf ans, des mains trop grandes pour ses poignets, et une loupe encore vissée à l’œil, qu’il retira en rougissant.
+Bastien Roux ouvrit avant qu’elle eût frappé. Il avait dix-neuf ans, des mains trop grandes pour ses poignets, et une loupe encore vissée à l’œil, qu’il retira en rougissant.
 
 « Mademoiselle Lucienne. Je ne savais pas à quelle heure vous arriviez. »
 

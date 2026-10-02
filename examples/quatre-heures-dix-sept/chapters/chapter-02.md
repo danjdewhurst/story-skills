@@ -28,7 +28,7 @@ word-count: 327
 
 ## Chapter Text
 
-Le soir tombait tôt en novembre. Bastien avait allumé la lampe à abat-jour vert au-dessus de l’établi, puis il avait rechargé le poêle sans qu’on le lui demande, comme on le fait dans une maison où quelqu’un manque.
+Le soir tombait tôt en novembre. Bastien avait allumé la lampe à abat-jour vert au-dessus de l’établi, puis il avait rechargé le poêle sans qu’on le lui demandât, comme on le fait dans une maison où quelqu’un manque.
 
 Lucienne sortit le registre du tiroir du comptoir. Son père y notait chaque réparation depuis 1931, de son écriture penchée : la date, le nom du client, la marque, la panne, le prix convenu. Des milliers de lignes. Elle connaissait ce livre mieux que certains visages ; enfant, elle y avait appris à lire les chiffres.
 

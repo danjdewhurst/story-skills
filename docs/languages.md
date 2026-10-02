@@ -27,7 +27,7 @@ Three example projects show a book in each kind of script: [`quatre-heures-dix-s
 title: 霧見駅の忘れもの
 language: ja
 count-unit: characters
-target-characters: 12000
+target-characters: 2000
 writing-mode: vertical
 labels:
   - chapter: 第{n}話
@@ -38,7 +38,7 @@ labels:
 
 - `story init` has no `--language` flag. The `story-init` skill asks for the language and writes it into `story.md`; by hand, add the line after init. `story init --follows` or `--precedes` copies the linked book's `language`.
 - `story import --language <tag>` writes `language` to the new `story.md` and splits the manuscript on that language's chapter headings: `Chapter` in English, `Capítulo` in Spanish, `Chapitre` in French, and `Kapitel` in German, with spelled-out numbers (`Chapitre vingt et un`). In other languages, import a folder with one file per chapter.
-- `story validate` errors on a value that is not a tag (`english`, `fr_FR`) and on a `writing-mode`, `count-unit`, or `labels` it cannot use. A set but invalid tag still picks its language by the first subtag, never English.
+- `story validate` errors on a value that is not a tag (`english`, `fr_FR`), on an unsupported `writing-mode` or `count-unit`, and on a `labels` field that is not a list of `key: text` entries. It warns about a label key it does not know (`unknown-label`), which builds ignore. A set but invalid tag still picks its language by the first subtag, never English.
 - For a book not in English, set `dialect: unspecified` in `style-sheet.md`: the British and American spelling pairs are English.
 
 The tag is read the same way on every system: an old or three-letter code counts as its modern one (`iw` is Hebrew, `jpn` Japanese, `eng` English), `zh-yue` is Cantonese, and a grandfathered tag such as `en-GB-oed` takes its modern form. [Publishing metadata](project-format.md#publishing-metadata) lists every field.
@@ -96,7 +96,7 @@ What still runs: sentence counts and lengths, the style sheet's watch words and 
 | Italian, Portuguese (`pt`, `pt-PT`), Dutch, Polish, Turkish | words | the common marks | translated | Latin, as English | accents dropped |
 | German (`de`), Danish (`da`), Swiss German (`de-CH`) | words | `„…“` and `»…«` (German and Danish), `«…»` (Swiss), with curly and straight quotes | translated for German | Latin | accents dropped |
 | Swedish (`sv`), Finnish (`fi`) | words | `”…”`, `»…»`, and a leading en or em dash, where a dash after a finished line starts a new speaker | translated for Swedish | Latin | accents dropped |
-| Russian, Ukrainian, other Cyrillic; Greek | words | the common marks | translated for Russian and Ukrainian | Cyrillic and Greek font stacks | transliterated (`Пётр` is `petr`) |
+| Russian, Ukrainian, other Cyrillic; Greek | words | the common marks | translated for Russian and Ukrainian | Cyrillic and Greek font stacks | transliterated (`Пётр` is `petr`); a letter outside the tables (Kazakh `қ`) needs `--id` |
 | Japanese (`ja`) | characters | `「…」`, `『…』`, `〝…〟`, curly and straight quotes | translated | Japanese fonts; vertical text with `writing-mode: vertical` | `--id` needed |
 | Chinese (`zh`, `zh-Hans`, `zh-Hant`, `zh-TW`, `cmn`, `yue`, `lzh`) | characters | the common marks, with no dialogue dash | translated, in Simplified or Traditional characters as the script subtag, then the region, says | Simplified or Traditional fonts; vertical text | `--id` needed |
 | Korean (`ko`) | words | the common marks | translated | Korean fonts; vertical text | `--id` needed |
@@ -114,10 +114,10 @@ What still runs: sentence counts and lengths, the style sheet's watch words and 
 
   ```text
   $ story wordcount examples/kirimi-eki-no-wasuremono
-  chapters/chapter-01.md: 710
+  chapters/chapter-01.md: 712
   chapters/chapter-02.md: 539
-  chapters/chapter-03.md: 719
-  Total: 1968 characters
+  chapters/chapter-03.md: 721
+  Total: 1972 characters
   ```
 
   `count-unit: words` keeps a Chinese or Japanese book in words; `count-unit: characters` counts another language in characters (without form ranges). [Counting in characters](project-format.md#counting-in-characters) covers the rules and the sources for the character ranges.
@@ -153,7 +153,7 @@ What still runs: sentence counts and lengths, the style sheet's watch words and 
 Ids stay ASCII kebab-case in every language, so file names and references work everywhere.
 
 - Accented Latin letters lose their accents: `story add character "Émile Marchal"` writes `characters/emile-marchal.md`.
-- Cyrillic and Greek names are transliterated: `Пётр Иванов` gives `petr-ivanov`, `Ολυμπία` gives `olympia`. The tables are in [Transliteration](project-format.md#transliteration).
+- Cyrillic and Greek names are transliterated: `Пётр Иванов` gives `petr-ivanov`, `Ολυμπία` gives `olympia`. The tables are in [Transliteration](project-format.md#transliteration). A name with a letter the tables lack, such as Kazakh `қ`, is not transliterated at all and needs `--id`.
 - Names in any other script (Chinese, Japanese, Korean, Arabic, Hebrew, Devanagari, Thai) need an id from you:
 
   ```text

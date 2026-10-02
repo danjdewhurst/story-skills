@@ -29,7 +29,7 @@ word-count: 321
 
 La salle des hommes, à Saint-Claude, comptait douze lits et une seule fenêtre ouverte. Une religieuse indiqua à Lucienne le dernier lit, près du radiateur, sans lever les yeux de son plateau.
 
-Son père avait maigri en trois jours plus qu’en trois ans. Le côté droit de son visage tombait un peu, comme une pendule mal d’aplomb, mais ses yeux la trouvèrent tout de suite, et eux ne tombaient pas.
+Son père avait maigri en quatre jours plus qu’en trois ans. Le côté droit de son visage tombait un peu, comme une pendule mal d’aplomb, mais ses yeux la trouvèrent tout de suite, et eux ne tombaient pas.
 
 « Papa. »
 
