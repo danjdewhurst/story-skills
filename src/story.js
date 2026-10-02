@@ -34,6 +34,7 @@ import { PROGRESS_FILE, cleanSessions, computeProgress, formatPercent, localDate
 import { plural } from "./plural.js";
 import { BASELINE_CHECKS, PROSE_THRESHOLDS, analyzeChapter, baselineFigures, baselineFindings, baselineProfile, chapterFindings, contentWords, proseRules, proseThresholds, repeatedPhrases, sentenceLengths, similarNames } from "./prose.js";
 import { isLanguageTag, languagePack, projectLanguage, skippedChecks } from "./languages/index.js";
+import { lowerCase } from "./languages/locale.js";
 import { splitSentences } from "./sentences.js";
 import { areSiblingBooks, buildSeries, canonicalPath, discoverSeriesBooks, isBookNumber, linksInclude, readBookFrontmatter, seriesId, seriesLinkPath, seriesLinks, validateSeriesLinks, withSeriesBacklink } from "./series.js";
 import { err, warn } from "./findings.js";
@@ -7146,7 +7147,7 @@ function validateStyleSheet(project, errors, warnings) {
       }
     }
     if (typeof entry.use === "string" && typeof entry.avoid === "string"
-      && entry.use.trim().toLowerCase() === entry.avoid.trim().toLowerCase()) {
+      && lowerCase(entry.use.trim(), project.pack) === lowerCase(entry.avoid.trim(), project.pack)) {
       errors.push(err("style-use-equals-avoid", `${entryLabel} use and avoid must differ`, label));
     }
   });

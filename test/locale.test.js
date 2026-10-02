@@ -10,7 +10,7 @@ import { shunnWordCount } from "../src/packaging.js";
 import { analyzeChapter, proseRules } from "../src/prose.js";
 import { buildSeries } from "../src/series.js";
 import { buildTimeline } from "../src/timeline.js";
-import { buildBook, createStoryProject, scanProject } from "../src/story.js";
+import { buildBook, createStoryProject, scanProject, validateProject } from "../src/story.js";
 import { makeTempDir, writeMarkdown } from "./helpers.js";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
@@ -77,23 +77,26 @@ describe("locale-aware reports and builds", () => {
     expect(guide("en")).toEqual(["Anna", "Åsa", "Örjan", "Zorn"]);
   });
 
-  test("POV balance breaks ties in the story's language", () => {
+  test("POV balance breaks ties by id, the same in every language", () => {
     const povs = (language) => {
       const root = project(language);
-      ["zora", "örjan"].forEach((pov, index) => {
+      // Danish collation puts aa after z; ids must not follow it.
+      ["zorn", "aage"].forEach((pov, index) => {
+        writeMarkdown(path.join(root, "characters", `${pov}.md`), `name: ${pov === "aage" ? "Aage" : "Zorn"}\nrole: minor\nstatus: alive`, `# ${pov}\n`);
         writeMarkdown(path.join(root, "chapters", `chapter-0${index + 1}.md`), `title: Part ${index + 1}\nnumber: ${index + 1}\nstatus: draft\npov: ${pov}`, "## Chapter Text\n\nOne two three.\n");
       });
+      expect(validateProject(root).errors).toEqual([]);
       return buildTimeline(scanProject(root)).pov.map((entry) => entry.pov);
     };
-    expect(povs("sv")).toEqual(["zora", "örjan"]);
-    expect(povs("de")).toEqual(["örjan", "zora"]);
+    expect(povs("da")).toEqual(["aage", "zorn"]);
+    expect(povs("en")).toEqual(["aage", "zorn"]);
   });
 
   test("series books without a number sort by title in their shared language", () => {
-    const order = (language) => {
+    const order = (language, other = language) => {
       const cwd = makeTempDir();
       const first = createStoryProject({ cwd, title: "Zon", language, force: false }).root;
-      const second = createStoryProject({ cwd, title: "Öde", language, force: false }).root;
+      const second = createStoryProject({ cwd, title: "Öde", language: other, force: false }).root;
       const last = createStoryProject({ cwd, title: "Slut", language, force: false }).root;
       const storyPath = path.join(last, "story.md");
       fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace(/^---\n/, `---\nfollows:\n  - ../${path.basename(first)}\n  - ../${path.basename(second)}\n`), "utf8");
@@ -101,6 +104,22 @@ describe("locale-aware reports and builds", () => {
     };
     expect(order("sv")).toEqual(["Zon", "Öde", "Slut"]);
     expect(order("de")).toEqual(["Öde", "Zon", "Slut"]);
+    // Regional variants of one language share its collation.
+    expect(order("sv-SE", "sv-FI")).toEqual(["Zon", "Öde", "Slut"]);
+    // Books in different languages sort in English.
+    expect(order("sv", "de")).toEqual(["Öde", "Zon", "Slut"]);
+  });
+
+  test("validate compares a style-sheet use and avoid in the story's casing", () => {
+    const errors = (language, use, avoid) => {
+      const root = project(language);
+      fs.writeFileSync(path.join(root, "style-sheet.md"), `---\npreferred:\n  - use: ${use}\n    avoid: ${avoid}\n---\n\n# Style Sheet\n`, "utf8");
+      return validateProject(root).errors.filter((entry) => entry.code === "style-use-equals-avoid").length;
+    };
+    expect(errors("tr", "IŞIK", "ışık")).toBe(1);
+    expect(errors("tr", "İnce", "ince")).toBe(1);
+    expect(errors("en", "Grey", "grey")).toBe(1);
+    expect(errors("en", "grey", "gray")).toBe(0);
   });
 
   test("prose word lists sort in the story's language", () => {

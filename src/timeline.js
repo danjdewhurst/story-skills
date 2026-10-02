@@ -1,6 +1,5 @@
 import path from "node:path";
 import { parseClockDate, parseClockTime, readingUnits } from "./continuity.js";
-import { compareText } from "./languages/locale.js";
 import { roundedShares } from "./plural.js";
 
 // Read-only views over the project: story events in chronological order,
@@ -20,7 +19,7 @@ export function buildTimeline(project) {
   return {
     chronology: dated,
     undated: entries.filter((entry) => entry.days === undefined),
-    pov: povBalance(chapters, project.pack),
+    pov: povBalance(chapters),
     presence: characterPresence(project, chapters, chapterById)
   };
 }
@@ -131,7 +130,7 @@ function timelineEntry(project, { unit, chapter, isChapter, orphan }, reading) {
   };
 }
 
-function povBalance(chapters, pack) {
+function povBalance(chapters) {
   const totals = new Map();
   let words = 0;
   for (const chapter of chapters) {
@@ -144,7 +143,7 @@ function povBalance(chapters, pack) {
   }
   return [...totals.values()]
     .map((entry) => ({ ...entry, share: words === 0 ? 0 : (entry.words * 100) / words }))
-    .sort((left, right) => right.words - left.words || right.chapters - left.chapters || compareText(pack)(left.pov, right.pov));
+    .sort((left, right) => right.words - left.words || right.chapters - left.chapters || left.pov.localeCompare(right.pov, "en"));
 }
 
 // Presence counts a character in a chapter when the chapter or one of its
