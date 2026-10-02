@@ -7,7 +7,7 @@ import { compareImportNames, extractNameCandidates, importManuscript } from "../
 import { DEFAULT_LANGUAGE, canonicalTag, checkList, checkSet, hasLists, isLanguageTag, languagePack, projectLanguage, skippedCheck, skippedChecks, skippedLines } from "../src/languages/index.js";
 import { givenName } from "../src/names.js";
 import { adverbLabel, contentWords, proseRules, repeatedPhrases, sentenceLengths } from "../src/prose.js";
-import { splitSentences } from "../src/sentences.js";
+import { endsSentence, splitSentences } from "../src/sentences.js";
 import { createStoryProject, existingStoryLanguage, namesReport, newProjectRoot, proseReport, scanProject, synopsisBook, validateProject, voicesReport } from "../src/story.js";
 import { formatVoices, quoteMatches } from "../src/voices.js";
 import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
@@ -403,6 +403,17 @@ describe("analysis without a language's word lists", () => {
     expect(synopsisBook(root).text).toContain("Logline: Dr.\n");
     fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("language: fr\n", ""));
     expect(synopsisBook(root).text).toContain("Logline: Dr. Hale arriva.\n");
+  });
+
+  test("synopsis list items keep the pack's own stops", () => {
+    const { root } = languageProject("hi");
+    const storyPath = path.join(root, "story.md");
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("Add a 2-3 sentence synopsis here.", "- वह आया।\n- क्या वह गया؟"));
+    expect(synopsisBook(root).text).toContain("Logline: वह आया।\n");
+    expect(endsSentence("क्या वह गया؟", languagePack("hi"))).toBe(true);
+    expect(endsSentence("She left")).toBe(false);
+    expect(endsSentence("She said, \"Go.\"")).toBe(true);
+    expect(endsSentence("She waited…")).toBe(true);
   });
 });
 

@@ -72,6 +72,35 @@ describe("quote conventions", () => {
     expect(quotedSpans("—Uno —dijo—, dos —añadió— y tres.", pack("es"))).toEqual(["Uno", "dos", "y tres."]);
     expect(quotedSpans("— Go — he waved, and left.")).toEqual(["Go"]);
     expect(quoteMatches("— Maybe, said Tom.")[0].text).toBe("Maybe");
+    expect(quotedSpans("—Go home —he said— now.")).toEqual(["Go home", "now."]);
+  });
+
+  test("a dash in the narration after a dash tag is not speech", () => {
+    expect(quotedSpans("—Go home —he said. The sky darkened—rain was coming.")).toEqual(["Go home"]);
+    expect(quotedSpans("—Go home —he said, and walked off—before it rained.")).toEqual(["Go home"]);
+    expect(quotedSpans("—and the house fell silent —or almost— until dawn.")).toEqual(["and the house fell silent"]);
+    expect(quotedSpans("—Ya voy —dijo ella. El cielo se oscureció—llovía.", pack("es"))).toEqual(["Ya voy"]);
+  });
+
+  test("a dash after a finished sentence and before a capital starts a new line", () => {
+    expect(quotedSpans("– Hej, sa Anna. – Kom hit.", pack("sv"))).toEqual(["Hej, sa Anna.", "Kom hit."]);
+    expect(narrationOnly("– Hej, sa Anna. – Kom hit.", pack("sv"))).toBe("  ");
+    expect(quotedSpans("— Что? — спросил он.", pack("ru"))).toEqual(["Что?"]);
+  });
+
+  test("language packs keep straight and curly quotes and the em dash", () => {
+    expect(quotedSpans("\"Hallo\", sagte Anna.", pack("de"))).toEqual(["Hallo"]);
+    expect(quotedSpans("“Hallo”, sagte Anna. „Komm“", pack("de"))).toEqual(["Hallo", "Komm"]);
+    expect(quotedSpans("\"Grüezi\", seit d Anna.", pack("de-CH"))).toEqual(["Grüezi"]);
+    expect(quotedSpans("“Hej,” sagde Anna. ”Kom,” sagde hun. \"Ja.\"", pack("da"))).toEqual(["Hej,", "Kom,", "Ja."]);
+    expect(quotedSpans("\"Hej\", sa Anna.", pack("sv"))).toEqual(["Hej"]);
+    expect(quotedSpans("— Hej, sa Anna.", pack("sv"))).toEqual(["Hej, sa Anna."]);
+    expect(quotedSpans("— Moi, sanoi Anna.", pack("fi"))).toEqual(["Moi, sanoi Anna."]);
+    expect(quotedSpans("\"行くよ\"とミナは言った。", pack("ja"))).toEqual(["行くよ"]);
+  });
+
+  test("French speech is trimmed inside its guillemets", () => {
+    expect(quoteMatches("« Viens », dit-il.", pack("fr"))[0].text).toBe("Viens");
   });
 
   test("speech left open continues with the pack's opening marks", () => {
@@ -120,6 +149,19 @@ describe("sentence conventions", () => {
     expect(split("Il partit. Elle dit : « Viens ! »", "fr")).toEqual(["Il partit.", "Elle dit : « Viens ! »"]);
     expect(split("Er ging. »Komm.« Sie blieb.", "de")).toEqual(["Er ging.", "»Komm.«", "Sie blieb."]);
     expect(split("「行こう。」ミナは笑った。", "ja")).toEqual(["「行こう。」", "ミナは笑った。"]);
+  });
+
+  test("an opening guillemet may stand before a space", () => {
+    expect(split("Il partit. « Quoi ? » demanda-t-il.", "fr")).toEqual(["Il partit.", "« Quoi ? » demanda-t-il."]);
+    expect(split("Il partit. « Quoi ? » demanda-t-il.", "fr")).toEqual(["Il partit.", "« Quoi ? » demanda-t-il."]);
+    expect(split("I left. « Quoi » he said.")).toEqual(["I left. « Quoi » he said."]);
+  });
+
+  test("after a full-width stop, a mark that can open a quote closes only an open one", () => {
+    expect(split("他走了。“等一下，”小明说。", "zh")).toEqual(["他走了。", "“等一下，”小明说。"]);
+    expect(split("„Er ging。“ Dann", "und")).toEqual(["„Er ging。“", "Dann."]);
+    expect(split("他说\"好。\"然后走了。", "zh")).toEqual(["他说\"好。\"", "然后走了。"]);
+    expect(split("好。\"然后\"走了。", "zh")).toEqual(["好。", "\"然后\"走了。"]);
   });
 
   test("English splitting is unchanged", () => {

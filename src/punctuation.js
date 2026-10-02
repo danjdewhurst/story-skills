@@ -31,8 +31,8 @@ const CACHE = new WeakMap();
 // - `openers` and `closers`: every opening and closing quote mark.
 // - `spacedEnds` and `fullWidthEnds`: the sentence-ending marks, split by
 //   whether a space must follow.
-// - `dashes`: the dialogue dash and the quotation dash, or "" when the pack
-//   sets no dialogue dash.
+// - `dashes`: the dialogue dashes and the quotation dash, or "" when the
+//   pack sets no dialogue dash. `dialogueDash` is one dash or a list.
 export function punctuation(pack = languagePack()) {
   if (!CACHE.has(pack)) {
     CACHE.set(pack, buildPunctuation(pack));
@@ -58,7 +58,7 @@ function buildPunctuation(pack) {
     closers: unique(pairs.map((pair) => pair.close)),
     spacedEnds: unique(ends.filter((mark) => !FULL_WIDTH.test(mark))),
     fullWidthEnds: unique(ends.filter((mark) => FULL_WIDTH.test(mark))),
-    dashes: pack.dialogueDash ? unique([pack.dialogueDash, QUOTATION_DASH]) : ""
+    dashes: pack.dialogueDash ? unique([...[].concat(pack.dialogueDash), QUOTATION_DASH]) : ""
   };
 }
 
