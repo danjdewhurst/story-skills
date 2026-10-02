@@ -6,6 +6,7 @@
 // paged-media engine such as Paged.js, WeasyPrint, or Prince.
 import { textDirection } from "./publishing.js";
 import { usageError } from "./exit-codes.js";
+import { wordSpans } from "./words.js";
 
 export const TRIM_SIZES = new Map([
   ["5x8", { width: "5in", height: "8in", wordsPerPage: 230 }],
@@ -40,10 +41,15 @@ export function paragraphLabels(book) {
 }
 
 // The first few words of a paragraph, with an ellipsis when there are more:
-// enough for the author to search for it.
+// enough for the author to search for it. A word is a space-separated run
+// with a letter or digit in it, or a word of Chinese, Japanese, Thai, Lao,
+// Khmer, or Burmese, so those quote a few words rather than the paragraph.
 export function openingWords(text, count = 6) {
-  const words = String(text).split(/\s+/).filter((word) => word !== "");
-  return words.length > count ? `${words.slice(0, count).join(" ")}\u2026` : words.join(" ");
+  const source = String(text);
+  const words = wordSpans(source, /\S*[\p{L}\p{N}]\S*/gu);
+  const opening = words.length > count ? source.slice(0, words[count].start) : source;
+  const collapsed = opening.split(/\s+/).filter((word) => word !== "").join(" ");
+  return words.length > count ? `${collapsed}\u2026` : collapsed;
 }
 
 // A prefilled link to the note form for one paragraph: the issue title and

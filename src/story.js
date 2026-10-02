@@ -29,6 +29,7 @@ import { DEFAULT_PASSES, addedPassNotes, nextPass, passChecks, readPasses, updat
 import { CHAPTER_HOOKS, SCENE_OUTCOMES, buildPacing } from "./pacing.js";
 import { compareChapters, mapLabels, proseParagraphs } from "./compare.js";
 import { compareSimilarity, similarityOptions } from "./similarity.js";
+import { wordSpans } from "./words.js";
 import { PROGRESS_FILE, cleanSessions, computeProgress, formatPercent, localDate, withSession } from "./progress.js";
 import { plural } from "./plural.js";
 import { analyzeChapter, baselineFigures, baselineFindings, baselineProfile, chapterFindings, contentWords, proseRules, proseThresholds, repeatedPhrases, sentenceLengths, similarNames } from "./prose.js";
@@ -2946,6 +2947,24 @@ function lowercaseCommonStart(text) {
   return COMMON_OPENERS.has(first.toLowerCase()) ? `${text[0].toLowerCase()}${text.slice(1)}` : text;
 }
 
+// The longest start of a token, ending after one of its Chinese, Japanese,
+// Thai, Lao, Khmer, or Burmese words, that has at most `room` words; "" if
+// none does. Longer starts never have fewer words, so it is a binary search.
+function longestFittingPrefix(token, room) {
+  const ends = wordSpans(token, /(?!)/gu).map((word) => word.end);
+  let low = 0;
+  let high = ends.length;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (wordCount(token.slice(0, ends[middle - 1])) <= room) {
+      low = middle;
+    } else {
+      high = middle - 1;
+    }
+  }
+  return low === 0 ? "" : token.slice(0, ends[low - 1]);
+}
+
 // Cuts the synopsis at the word budget line by line, so headings and
 // paragraph breaks survive and only the last paragraph is cut short.
 function truncateWords(text, budget) {
@@ -2962,6 +2981,12 @@ function truncateWords(text, budget) {
     for (const token of line.split(/\s+/).filter((part) => part !== "")) {
       const tokenWords = wordCount(token);
       if (used + tokenWords > budget) {
+        // Chinese, Japanese, Thai, Lao, Khmer, and Burmese have no spaces
+        // to cut at, so a token in them is cut after its last word that fits.
+        const cut = longestFittingPrefix(token, budget - used);
+        if (cut !== "") {
+          tokens.push(cut);
+        }
         break;
       }
       tokens.push(token);
