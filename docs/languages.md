@@ -29,12 +29,13 @@ language: ja
 count-unit: characters
 target-characters: 2000
 writing-mode: vertical
+chapter-numerals: native
 labels:
   - chapter: 第{n}話
 ---
 ```
 
-`count-unit` is `characters` by default for Chinese and Japanese and `words` for every other language, so set it only to count the other way. `target-characters` is the length target for a book counted in characters. `writing-mode: vertical` is for Japanese, Chinese, or Korean only. `labels` replaces any generated build text, here the chapter heading. The CLI's YAML has no comments, so keep notes out of the frontmatter.
+`count-unit` is `characters` by default for Chinese and Japanese and `words` for every other language, so set it only to count the other way. `target-characters` is the length target for a book counted in characters. `writing-mode: vertical` is for Japanese, Chinese, or Korean only. `chapter-numerals: native` writes chapter numbers in kanji (`第十二話`). `labels` replaces any generated build text, here the chapter heading. The CLI's YAML has no comments, so keep notes out of the frontmatter.
 
 - `story init` has no `--language` flag. The `story-init` skill asks for the language and writes it into `story.md`; by hand, add the line after init. `story init --follows` or `--precedes` copies the linked book's `language`.
 - `story import --language <tag>` writes `language` to the new `story.md` and splits the manuscript on that language's chapter headings: `Chapter` in English, `Capítulo` in Spanish, `Chapitre` in French, and `Kapitel` in German, with spelled-out numbers (`Chapitre vingt et un`). In other languages, import a folder with one file per chapter.
@@ -137,6 +138,8 @@ What still runs: sentence counts and lengths, the style sheet's watch words and 
 ## Builds: labels, fonts, direction, and vertical text
 
 **Labels.** Chapter headings and every other generated string come from the language pack, in Arabic, Chinese (Simplified, and Traditional for `zh-Hant`, `zh-TW`, `zh-HK`, `zh-MO`, Cantonese, and Classical Chinese), Dutch, French, German, Hebrew, Hindi, Italian, Japanese, Korean, Persian, Polish, Portuguese (Brazilian, and European for `pt-PT`), Russian, Spanish, Swedish, Turkish, and Ukrainian. Each follows its language's conventions: `Chapitre 1 : La montre arrêtée` with a no-break space, `第1章　最後の日` with an ideographic space, `الفصل 1: المخطوطة الخضراء`. Any other language gets English labels. Change any label with `labels` in `story.md`, one `key: text` entry per line; [Build labels](manuscripts.md#build-labels) lists every key. Have a native reader check the labels before you publish.
+
+**Chapter numerals.** Chapter numbers are Western digits (`第1章`, `الفصل 1`) unless `story.md` sets `chapter-numerals: native`, which writes them in the language's own numerals in every heading and table of contents: kanji in Japanese (`第十二章`, `第百一章`), hanzi in Chinese (`第十二章`, `第一百零一章`), and the script's digits in Arabic (`الفصل ١٢`), Persian and Urdu (`۱۲`), Hindi (`१२`), Thai (`๑๒`), and other scripts with digits of their own. File names, EPUB ids, and paragraph labels keep Western digits. The Japanese example sets it, so its vertical headings read `第一章` rather than a sideways `1`. `story validate` reports `unsupported-chapter-numerals` for a language without numerals of its own, such as English or Korean. [Chapter numerals](manuscripts.md#chapter-numerals) has the full table.
 
 **Fonts and capitals.** The EPUB, HTML review copy, and print interior name fonts for Japanese, Simplified and Traditional Chinese, Korean, Arabic, Hebrew, Devanagari, Thai, Cherokee, and Cyrillic and Greek. A script without capitals drops the print interior's small caps, enlarged first letter, and italic running heads. A Latin-script book builds exactly as an English one does.
 
