@@ -4,5 +4,6 @@ export default {
   code: "ko",
   name: "Korean",
   cased: false,
+  script: "Kore",
   segmentation: "space"
 };

@@ -97,7 +97,9 @@ every edition.
    values. Every edition needs its own ISBN. Set `chapter-label` (the word
    for "Chapter", such as `Kapitel`; a `{n}` places the number, as in
    `第{n}章`) and `contents-label` (such as `Inhalt`) so the built headings
-   and table of contents are not in English. The review-copy note, the
+   and table of contents are not in English. For a Japanese or Chinese
+   edition set in columns, also set `writing-mode: vertical`; builds pick
+   fonts for the language's script on their own. The review-copy note, the
    narration credits, and the metadata sheet stay in English; translate
    the narration credits by hand in the built script.
 3. Remove `series`, `book-number`, `follows`, and `precedes` from the

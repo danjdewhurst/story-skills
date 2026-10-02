@@ -42,6 +42,7 @@
         "cover-alt": { "type": "string" },
         "ai-disclosure": { "type": "string" },
         "chapter-label": { "type": "string", "description": "Word for generated chapter headings, such as Kapitel; {n} places the number. Defaults to Chapter." },
+        "writing-mode": { "enum": ["horizontal", "vertical"], "description": "How builds set the text. vertical sets columns top to bottom, right to left, with pages turned right to left; story validate allows it only for a language written that way, such as ja, zh, zh-Hant, or ko-Hani. Defaults to horizontal." },
         "contents-label": { "type": "string", "description": "Heading for generated tables of contents, such as Inhalt. Defaults to Contents." },
         "authors": { "$ref": "#/$defs/stringList" },
         "form": { "enum": ["flash", "short-story", "novelette", "novella", "novel", "serial", "picture-book", "chapter-book"] },

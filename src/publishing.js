@@ -41,6 +41,8 @@ export function publishingMeta(data) {
   return {
     authors: authors.length > 0 ? authors : author === "" ? [] : [author],
     language: text("language") || "en",
+    // "vertical" sets a Japanese or Chinese book in columns; see typesetting.js.
+    writingMode: text("writing-mode") || "horizontal",
     // An unquoted ISBN-13 parses as a number, so accept that too.
     isbn: normalizeIsbn(typeof data.isbn === "number" ? String(data.isbn) : text("isbn")),
     publisher: text("publisher"),

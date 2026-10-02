@@ -389,7 +389,7 @@ Write matter text yourself. The `story-maintenance` skill will not invent acknow
 |-------|------|---------|
 | `author` | Text | The author in the EPUB (`dc:creator`), HTML, print, narration, and metadata builds, and the byline in both Shunn builds. The plain DOCX build does not use it. |
 | `authors` | List of text | Replaces `author` for co-authored books in every build, including the Shunn byline. `validate` warns when both are set. |
-| `language` | BCP 47 tag, such as `en`, `en-GB`, or `fr` | EPUB `dc:language` and the `lang` attribute of every EPUB document; the `lang` attribute of the HTML and print builds; the metadata sheet. Defaults to `en`. A right-to-left language (such as `he`, `ar`, `fa`, or `ur`, or any tag with an Arabic or Hebrew script subtag) also sets `dir="rtl"` on every EPUB, HTML, and print document and `page-progression-direction="rtl"` on the EPUB spine, and the print interior opens from the right: chapters start on left-hand pages and the running heads swap sides. |
+| `language` | BCP 47 tag, such as `en`, `en-GB`, or `fr` | EPUB `dc:language` and the `lang` attribute of every EPUB document; the `lang` attribute of the HTML and print builds; the metadata sheet. Defaults to `en`. A right-to-left language (such as `he`, `ar`, `fa`, or `ur`, or any tag with an Arabic or Hebrew script subtag) also sets `dir="rtl"` on every EPUB, HTML, and print document and `page-progression-direction="rtl"` on the EPUB spine, and the print interior opens from the right: chapters start on left-hand pages and the running heads swap sides. The language's script also picks the fonts and layout of the HTML, print, EPUB, and DOCX builds, and the DOCX build's Word language for any tag but `en`; see [Typesetting other scripts](#typesetting-other-scripts). |
 | `isbn` | ISBN-13 or ISBN-10, hyphens and spaces allowed | The EPUB identifier (`urn:isbn:...`) in place of the story id; the generated copyright page; the metadata sheet. `validate` checks the checksum. Quote it, so a leading zero survives. |
 | `publisher` | Text | EPUB `dc:publisher`, the generated copyright page, the metadata sheet. |
 | `publication-date` | Date, such as `2026-10-01` | EPUB `dc:date`, the metadata sheet. |
@@ -401,6 +401,7 @@ Write matter text yourself. The `story-maintenance` skill will not invent acknow
 | `ai-disclosure` | Text | The generated copyright page and the metadata sheet. |
 | `chapter-label` | Text, such as `Kapitel` | The word in every generated chapter heading, in place of `Chapter`: `Kapitel 1: Die Glocke`. A `{n}` in it places the number, as in `第{n}章`. Used by the markdown export and every build. |
 | `contents-label` | Text, such as `Inhalt` | The table of contents heading, in place of `Contents`, in the EPUB navigation, the HTML review copy, and the print interior. |
+| `writing-mode` | `horizontal` (the default) or `vertical` | `vertical` sets a Japanese or Chinese book in columns, top to bottom and right to left, in the EPUB, HTML, print, and DOCX builds, with pages that turn right to left. `validate` errors when the `language` is not set vertically; see [Typesetting other scripts](#typesetting-other-scripts). |
 | `form` | `flash`, `short-story`, `novelette`, `novella`, `novel`, `serial`, `picture-book`, or `chapter-book` | The metadata sheet, and the Shunn layout: `short-story` and `flash` builds use the short-story layout (see [Shunn](#shunn-standard-manuscript-format)). `story init --form` sets it along with a default `target-words`, and `validate` warns when `target-words`, or the finished manuscript, falls outside the form's usual range. |
 
 The other generated text stays in English whatever the `language`: the HTML review copy's note on citing paragraph labels, the narration script's headings, credits (`Written by`, `Narrated by`, `The end. You have been listening to`), and runtime lines, and the metadata sheet. The narration script is a working file, so translate its credits by hand before recording.
@@ -632,6 +633,8 @@ The DOCX build is a Word document with:
 
 The `author` and `authors` fields are not used. For page layout, headers, and other fonts, open the file in a word processor and change the styles.
 
+For a `language` other than `en`, the document declares it, so Word spell-checks and lays out the text in that language, and picks East Asian or complex-script fonts for the book's script. A right-to-left book has every paragraph and run marked right to left. See [Typesetting other scripts](#typesetting-other-scripts).
+
 ### Shunn standard manuscript format
 
 Shunn manuscript format is the plain layout that many agents, publishers, and short-fiction markets ask for. There are two Shunn builds:
@@ -779,7 +782,7 @@ The layout:
 - **Page order.** A title page with the title and author; the copyright page, if there is one, on the page after it; a contents page listing the chapters with page numbers; the other front matter; the chapters; the back matter. The title page, contents, other front matter pages, chapters, and back matter pages each start on a right-hand page.
 - **Running heads and page numbers.** Left-hand pages show the author at the top (the title when no author is set); right-hand pages show the current chapter title, or nothing on a back matter page with `heading: false`. Chapter and back matter pages have a centred page number at the foot. Front matter pages and blank pages have neither.
 - **Margins.** 0.75 in top and bottom, 0.5 in on the outside edge. The inside (gutter) margin widens with the estimated page count so text does not disappear into the spine: 0.625 in up to 150 pages, 0.75 in up to 300, 0.875 in up to 500, and 1 in beyond.
-- **Text.** 11 pt Georgia, or a similar serif, at 1.4 line spacing, justified and hyphenated, with indented paragraphs. The first paragraph of a chapter, and the first after a scene break, is not indented, and a chapter's first letter is enlarged. Scene breaks are centred asterisks.
+- **Text.** 11 pt Georgia, or a similar serif, at 1.4 line spacing, justified and hyphenated, with indented paragraphs. The first paragraph of a chapter, and the first after a scene break, is not indented, and a chapter's first letter is enlarged. Scene breaks are centred asterisks. A book in another script gets fonts for it, and a script without capitals (Japanese, Arabic, Hindi) keeps its first letter at size and drops the small caps and italic running heads; see [Typesetting other scripts](#typesetting-other-scripts).
 - **Matter pages.** Paragraphs are not indented. Front matter pages are centred, apart from the copyright page, which is left-aligned at 9 pt.
 
 The page estimate follows this layout: two pages for the title page and its back (the copyright page or a blank), the contents (a page per 25 chapters), and then each matter page, chapter, and back matter page rounded up to whole pages at the trim's words per page, with about a third of a page for a heading's sink and half a blank page on average for starting on a right-hand page. A 60-chapter, 80,000-word book at 6x9 comes to about 336 pages, not the 267 its words alone would fill. It is still for planning; the rendered PDF's real page count is what printers use to price the book and size the spine. Check the rendered PDF against your printer's current requirements for margins, bleed, and fonts before ordering a proof. Opened in a browser, the file shows the text in one column at the trim width, which is useful for proofreading but is not the paged layout.
@@ -1027,6 +1030,31 @@ The markdown export copies prose as written, and the narration script nearly doe
 | `>` blockquote paragraphs | A block quotation, indented on both sides: `<blockquote>` in EPUB, HTML, and print, the `Quote` style in DOCX, a half-inch block indent in the Shunn DOCX, and kept `>` markers in the `.shunn.md` build. Consecutive quoted paragraphs share one quotation, and nested `>>` markers are read as one level. |
 
 Lists and other markdown are not converted and appear as their literal text. Keep book prose to paragraphs, emphasis, and scene breaks.
+
+### Typesetting other scripts
+
+The book's `language` decides its script: the tag's script subtag when it has one (`sr-Latn`, `zh-Hant`), else the language's usual script (`ja` is Japanese, `zh-TW` Traditional Chinese, `ru` Cyrillic, `fa` Arabic), else Latin. A Latin-script book builds exactly as an English one does. For other scripts:
+
+- **Fonts.** The HTML review copy, the print interior, and the EPUB name serif fonts for the script: system fonts on macOS, Windows, and Android first, then Noto, then the generic `serif`. Japanese, for example, is `"Hiragino Mincho ProN", "Yu Mincho", YuMincho, "MS Mincho", "Noto Serif JP", "Noto Serif CJK JP", serif`. There are stacks for Japanese, Simplified and Traditional Chinese, Korean, Arabic, Hebrew, Devanagari, Thai, and Cyrillic and Greek; other scripts use the Latin stack, and the browser finds each missing character in a font of its own. An EPUB in a Latin script has no stylesheet, so the reader's own font applies; another script's EPUB adds `style.css` with the font stack.
+- **Capitals.** Small caps, the print interior's enlarged first letter, and italic running heads need a script with capitals and italics. A script without them, such as Japanese, Chinese, Arabic, Hebrew, Devanagari, or Thai, leaves them out. `ja-Latn` (romaji) keeps them.
+- **DOCX.** Any `language` but `en` is written as Word's language for the text (`w:lang`), with its East Asian or complex-script language too where the script needs one, so Word checks spelling and breaks lines for it. Japanese, Chinese, and Korean text uses MS Mincho, SimSun (Simplified), PMingLiU (Traditional), or Batang; Hindi uses Mangal and Thai Tahoma. A right-to-left book marks every paragraph, run, and the section right to left, and bold and italic reach complex-script text.
+
+#### Vertical text
+
+`writing-mode: vertical` in `story.md` sets a book in columns read top to bottom, right to left, as Japanese and Chinese novels often are:
+
+```yaml
+language: ja
+writing-mode: vertical
+```
+
+The EPUB adds `writing-mode: vertical-rl` (and the older `-epub-writing-mode`) in `style.css` and turns its pages right to left (`page-progression-direction="rtl"`). The HTML review copy and the print interior set `writing-mode: vertical-rl`, and the print interior opens from the right like a right-to-left book: chapters start on left-hand pages and the running heads swap sides. The DOCX section is set `tbRl`, Word's vertical layout. Render a vertical print interior with an engine that sets vertical text, such as [Vivliostyle](https://vivliostyle.org/) or Prince.
+
+Only a language written in Chinese characters can go vertical: `ja`, `zh` (and `zh-Hant`, `zh-TW`, `yue`), or a tag with a `Jpan`, `Hani`, `Hans`, or `Hant` script subtag, such as `ko-Hani`. Hangul is set horizontally, so plain `ko` cannot. For any other language, `story validate` reports `unsupported-writing-mode` and builds ignore the field:
+
+```text
+error: story.md writing-mode vertical needs a language set in vertical columns, such as ja, zh, or zh-Hant; en is set horizontally, so builds ignore it [unsupported-writing-mode]
+```
 
 ### Reproducible builds
 

@@ -10,7 +10,8 @@ import { escapeHtml, withBlockquotes } from "./html.js";
 import { languagePack } from "./languages/index.js";
 import { formatNumber } from "./languages/locale.js";
 import { flattenHeadings, isSceneBreak, plainLinks, withoutFenceMarkers, wordCount } from "./markdown.js";
-import { publishingMeta, textDirection } from "./publishing.js";
+import { publishingMeta } from "./publishing.js";
+import { typesetting } from "./typesetting.js";
 
 function epubModifiedTimestamp() {
   // Deterministic builds: identical sources must produce byte-identical
@@ -33,14 +34,18 @@ export function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
   const meta = manuscript.meta ?? publishingMeta({});
   const lang = xmlEscape(meta.language);
   // Reading systems do not infer direction from the language, so an RTL
-  // book says so on every document root and in the spine.
-  const rtl = textDirection(meta.language) === "rtl";
+  // book says so on every document root and in the spine. A vertical book
+  // turns its pages right to left too.
+  const type = typesetting(meta.language, meta.writingMode);
+  const rtl = type.rtl;
   const root = `xml:lang="${lang}" lang="${lang}"${rtl ? ` dir="rtl"` : ""}`;
+  const stylesheet = epubStylesheet(type);
+  const head = stylesheet === "" ? "" : `<link rel="stylesheet" type="text/css" href="style.css"/>`;
   const documents = [];
   const pushMatter = (placement) => (entry) => documents.push({
     id: `${placement}-${entry.id}`,
     label: entry.title,
-    content: matterXhtml(entry, placement, root)
+    content: matterXhtml(entry, placement, root, head)
   });
   manuscript.front.forEach(pushMatter("front"));
   // Duplicate chapter numbers are refused up front in manuscriptParts, so ids
@@ -50,7 +55,7 @@ export function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
     documents.push({
       id: `chapter-${String(chapter.number).padStart(2, "0")}`,
       label: chapter.heading,
-      content: chapterXhtml(chapter, root),
+      content: chapterXhtml(chapter, root, head),
       bodymatter: true
     });
   }
@@ -65,7 +70,7 @@ export function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
     const alt = meta.coverAlt === "" ? `Cover of ${manuscript.title}` : meta.coverAlt;
     coverEntries.push(
       { name: `OEBPS/${href}`, content: fs.readFileSync(manuscript.cover.filePath) },
-      { name: "OEBPS/cover.xhtml", content: `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(manuscript.title)}</title></head><body epub:type="cover"><img src="${href}" alt="${xmlEscape(alt)}"/></body></html>` }
+      { name: "OEBPS/cover.xhtml", content: `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(manuscript.title)}</title>${head}</head><body epub:type="cover"><img src="${href}" alt="${xmlEscape(alt)}"/></body></html>` }
     );
     coverItems.push(`<item id="cover-image" href="${href}" media-type="${manuscript.cover.mediaType}" properties="cover-image"/>`, `<item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>`);
     coverMeta.push(`<meta name="cover" content="cover-image"/>`);
@@ -90,21 +95,38 @@ export function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
     // a fixed offset in the archive.
     { name: "mimetype", content: "application/epub+zip", stored: true },
     { name: "META-INF/container.xml", content: `<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>` },
-    { name: "OEBPS/content.opf", content: `<?xml version="1.0" encoding="UTF-8"?><package version="3.0" unique-identifier="book-id" xmlns="http://www.idpf.org/2007/opf"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book-id">${identifier}</dc:identifier><dc:title>${xmlEscape(manuscript.title)}</dc:title>${creator}<dc:language>${lang}</dc:language>${optional}<meta property="dcterms:modified">${modified}</meta>${accessibility}${coverMeta.join("")}</metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>${coverItems.join("")}${items.join("")}</manifest><spine${rtl ? ` page-progression-direction="rtl"` : ""}>${coverSpine.join("")}${spine.join("")}</spine></package>` },
-    { name: "OEBPS/nav.xhtml", content: navXhtml(manuscript.title, documents, root, meta.contentsLabel) },
+    { name: "OEBPS/content.opf", content: `<?xml version="1.0" encoding="UTF-8"?><package version="3.0" unique-identifier="book-id" xmlns="http://www.idpf.org/2007/opf"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book-id">${identifier}</dc:identifier><dc:title>${xmlEscape(manuscript.title)}</dc:title>${creator}<dc:language>${lang}</dc:language>${optional}<meta property="dcterms:modified">${modified}</meta>${accessibility}${coverMeta.join("")}</metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>${stylesheet === "" ? "" : `<item id="style" href="style.css" media-type="text/css"/>`}${coverItems.join("")}${items.join("")}</manifest><spine${rtl || type.vertical ? ` page-progression-direction="rtl"` : ""}>${coverSpine.join("")}${spine.join("")}</spine></package>` },
+    { name: "OEBPS/nav.xhtml", content: navXhtml(manuscript.title, documents, root, meta.contentsLabel, head) },
+    ...(stylesheet === "" ? [] : [{ name: "OEBPS/style.css", content: stylesheet }]),
     ...coverEntries,
     ...documents.map((doc) => ({ name: `OEBPS/${doc.id}.xhtml`, content: doc.content }))
   ], writeOptions);
 }
 
-// `root` is the html element's language (and direction) attributes.
-function navXhtml(title, documents, root, contentsLabel = "Contents") {
+// The EPUB's stylesheet, or "" when the reading system's defaults serve: a
+// Latin-script book has none. A book in another script names fonts for it,
+// and a vertical book is set in columns (with the -epub- prefix older
+// reading systems read).
+function epubStylesheet(type) {
+  const rules = [];
+  if (type.vertical) {
+    rules.push("html { -epub-writing-mode: vertical-rl; -webkit-writing-mode: vertical-rl; writing-mode: vertical-rl; }");
+  }
+  if (!type.fonts.latin) {
+    rules.push(`body { font-family: ${type.fonts.body}; }`);
+  }
+  return rules.length === 0 ? "" : `${rules.join("\n")}\n`;
+}
+
+// `root` is the html element's language (and direction) attributes, and
+// `head` the stylesheet link, if any.
+function navXhtml(title, documents, root, contentsLabel = "Contents", head = "") {
   const links = documents.map((doc) => `<li><a href="${doc.id}.xhtml">${xmlEscape(doc.label)}</a></li>`);
   const start = documents.find((doc) => doc.bodymatter);
   // The nav document is not in the spine, so landmarks point only at spine
   // documents (EPUBCheck RSC-011); reading systems find the toc themselves.
   const landmarks = start ? `<nav epub:type="landmarks" hidden="hidden"><ol><li><a epub:type="bodymatter" href="${start.id}.xhtml">Start of Content</a></li></ol></nav>` : "";
-  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(title)}</title></head><body><nav epub:type="toc" id="toc"><h1>${xmlEscape(contentsLabel)}</h1><ol>${links.join("")}</ol></nav>${landmarks}</body></html>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(title)}</title>${head}</head><body><nav epub:type="toc" id="toc"><h1>${xmlEscape(contentsLabel)}</h1><ol>${links.join("")}</ol></nav>${landmarks}</body></html>`;
 }
 
 // EPUB Accessibility 1.1 discovery metadata for a text-only book with a
@@ -131,21 +153,21 @@ function xhtmlParagraphs(body) {
   }))).join("");
 }
 
-function xhtmlDocument(title, root, bodyType, content) {
-  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(title)}</title></head><body epub:type="${bodyType}">${content}</body></html>`;
+function xhtmlDocument(title, root, head, bodyType, content) {
+  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(title)}</title>${head}</head><body epub:type="${bodyType}">${content}</body></html>`;
 }
 
-function chapterXhtml(chapter, root) {
+function chapterXhtml(chapter, root, head) {
   const heading = chapter.heading;
   // XHTML needs a non-blank <title>; an untitled chapter uses its heading.
   const title = String(chapter.title ?? "").trim() || heading;
-  return xhtmlDocument(title, root, "bodymatter chapter", `<h1>${xmlEscape(heading)}</h1>${xhtmlParagraphs(chapter.body)}`);
+  return xhtmlDocument(title, root, head, "bodymatter chapter", `<h1>${xmlEscape(heading)}</h1>${xhtmlParagraphs(chapter.body)}`);
 }
 
-function matterXhtml(entry, placement, root) {
+function matterXhtml(entry, placement, root, head) {
   const heading = entry.heading ? `<h1>${xmlEscape(entry.title)}</h1>` : "";
   const bodyType = entry.copyright ? `${placement}matter copyright-page` : `${placement}matter`;
-  return xhtmlDocument(entry.title, root, bodyType, `${heading}${xhtmlParagraphs(entry.body)}`);
+  return xhtmlDocument(entry.title, root, head, bodyType, `${heading}${xhtmlParagraphs(entry.body)}`);
 }
 
 // The manuscript as HTML parts for the review and print builds. Paragraph
@@ -192,6 +214,7 @@ export function htmlBook(manuscript) {
     title: manuscript.title,
     authors: manuscript.meta.authors,
     language: manuscript.meta.language,
+    writingMode: manuscript.meta.writingMode,
     contentsLabel: manuscript.meta.contentsLabel,
     words: manuscript.chapters.reduce((sum, chapter) => sum + wordCount(chapter.body), 0),
     parts
@@ -199,15 +222,16 @@ export function htmlBook(manuscript) {
 }
 
 export function writeDocx(outFile, manuscript, writeOptions = {}) {
-  const bodyParts = [paragraphXml(manuscript.title, "Title")];
+  const script = docxScript(manuscript.meta);
+  const bodyParts = [paragraphXml(script, manuscript.title, "Title")];
   const pushSection = (heading, body) => {
     if (heading !== null) {
-      bodyParts.push(paragraphXml(heading, "Heading1"));
+      bodyParts.push(paragraphXml(script, heading, "Heading1"));
     }
     for (const paragraph of markdownParagraphs(body)) {
       bodyParts.push(paragraph.sceneBreak
-        ? paragraphXml("* * *", "SceneBreak")
-        : paragraphXml(paragraph.text, paragraph.quote ? "Quote" : "", inlineRuns(paragraph.text)));
+        ? paragraphXml(script, "* * *", "SceneBreak")
+        : paragraphXml(script, paragraph.text, paragraph.quote ? "Quote" : "", inlineRuns(paragraph.text)));
     }
   };
   const pushMatter = (entry) => pushSection(entry.heading ? entry.title : null, entry.body);
@@ -217,55 +241,81 @@ export function writeDocx(outFile, manuscript, writeOptions = {}) {
   }
   manuscript.back.forEach(pushMatter);
 
-  writeZip(outFile, docxPackageEntries(bodyParts.join("")), writeOptions);
+  writeZip(outFile, docxPackageEntries(script, bodyParts.join("")), writeOptions);
 }
 
-function docxPackageEntries(body) {
+// Word's settings for the book's language and script, as XML fragments:
+// `lang` for the run defaults (left out for the default language, en, so
+// Word keeps the reader's own), `bidi` and `rtl` to mark each paragraph and
+// run right to left, `bold` and `italic` that reach complex-script text
+// too (bCs, iCs), `sizeCs` for complex-script text sizes, `fonts` for the
+// run defaults, and the section properties: columns set top to bottom and
+// right to left for a vertical book, or a right-to-left section.
+function docxScript(meta) {
+  const language = meta?.language ?? "en";
+  const type = typesetting(language, meta?.writingMode);
+  const { eastAsia, cs, eastAsian, complex } = type.docx;
+  const tag = xmlEscape(language);
+  const font = (name) => `"${name ?? "Times New Roman"}"`;
+  return {
+    lang: language.toLowerCase() === "en" ? "" : `<w:lang w:val="${tag}"${eastAsian ? ` w:eastAsia="${tag}"` : ""}${complex ? ` w:bidi="${tag}"` : ""}/>`,
+    bidi: type.rtl ? "<w:bidi/>" : "",
+    rtl: type.rtl ? "<w:rtl/>" : "",
+    bold: complex ? "<w:b/><w:bCs/>" : "<w:b/>",
+    italic: complex ? "<w:i/><w:iCs/>" : "<w:i/>",
+    sizeCs: complex,
+    // The eastAsia hint sets quotation marks and other shared punctuation in
+    // the East Asian font.
+    fonts: `<w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:eastAsia=${font(eastAsia)} w:cs=${font(cs)}${eastAsian ? ` w:hint="eastAsia"` : ""}/>`,
+    section: type.vertical ? `<w:sectPr><w:textDirection w:val="tbRl"/></w:sectPr>` : type.rtl ? `<w:sectPr><w:bidi/></w:sectPr>` : "<w:sectPr/>"
+  };
+}
+
+function docxPackageEntries(script, body) {
   return [
     { name: "[Content_Types].xml", content: `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>` },
     { name: "_rels/.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>` },
     { name: "word/_rels/document.xml.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
-    { name: "word/styles.xml", content: DOCX_STYLES },
-    { name: "word/document.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr/></w:body></w:document>` }
+    { name: "word/styles.xml", content: docxStyles(script) },
+    { name: "word/document.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}${script.section}</w:body></w:document>` }
   ];
 }
 
-// Body text is 12pt Times New Roman at 1.5 spacing with a half-inch
-// first-line indent, so paragraph breaks show without blank lines; titles,
-// headings, and scene breaks cancel the indent.
-const DOCX_STYLES = `<?xml version="1.0" encoding="UTF-8"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">`
-  + `<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:eastAsia="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="360" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>`
-  + `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/><w:pPr><w:ind w:firstLine="720"/></w:pPr></w:style>`
-  + `<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:rPr><w:b/><w:sz w:val="56"/></w:rPr></w:style>`
-  + `<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="480" w:after="240"/><w:ind w:firstLine="0"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style>`
-  + `<w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:before="120" w:after="120"/><w:ind w:left="720" w:right="720" w:firstLine="0"/></w:pPr></w:style>`
-  + `<w:style w:type="paragraph" w:customStyle="1" w:styleId="SceneBreak"><w:name w:val="Scene Break"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:before="240" w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr></w:style>`
-  + `</w:styles>`;
+// Body text is 12pt Times New Roman (or a font for the book's script) at
+// 1.5 spacing with a half-inch first-line indent, so paragraph breaks show
+// without blank lines; titles, headings, and scene breaks cancel the indent.
+function docxStyles(script) {
+  return `<?xml version="1.0" encoding="UTF-8"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">`
+    + `<w:docDefaults><w:rPrDefault><w:rPr>${script.fonts}<w:sz w:val="24"/><w:szCs w:val="24"/>${script.lang}</w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="360" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>`
+    + `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/><w:pPr><w:ind w:firstLine="720"/></w:pPr></w:style>`
+    + `<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:rPr>${script.bold}<w:sz w:val="56"/>${script.sizeCs ? `<w:szCs w:val="56"/>` : ""}</w:rPr></w:style>`
+    + `<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="480" w:after="240"/><w:ind w:firstLine="0"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr>${script.bold}<w:sz w:val="32"/>${script.sizeCs ? `<w:szCs w:val="32"/>` : ""}</w:rPr></w:style>`
+    + `<w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:before="120" w:after="120"/><w:ind w:left="720" w:right="720" w:firstLine="0"/></w:pPr></w:style>`
+    + `<w:style w:type="paragraph" w:customStyle="1" w:styleId="SceneBreak"><w:name w:val="Scene Break"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:before="240" w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr></w:style>`
+    + `</w:styles>`;
+}
 
 // Shunn manuscript format: Courier New 12pt, double spacing, page break
 // before each chapter heading, and a title page with contact and word count.
 const SHUNN_RUN_FONTS = `<w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/><w:sz w:val="24"/>`;
 const SHUNN_PARAGRAPH_SPACING = `<w:spacing w:line="480" w:lineRule="auto"/>`;
 
-function shunnRunXml(text, decoration) {
-  return `<w:r><w:rPr>${SHUNN_RUN_FONTS}${decoration}</w:rPr>${docxTextXml(text)}</w:r>`;
-}
-
-function shunnTextRunXml(run) {
-  return shunnRunXml(run.text, `${run.strong ? "<w:b/>" : ""}${run.em ? "<w:i/>" : ""}`);
+// `script` is docxScript's settings for the book's language.
+function shunnRunXml(script, text, { strong = false, em = false } = {}) {
+  return `<w:r><w:rPr>${SHUNN_RUN_FONTS}${strong ? script.bold : ""}${em ? script.italic : ""}${script.rtl}</w:rPr>${docxTextXml(text)}</w:r>`;
 }
 
 // Body paragraphs indent their first line half an inch; centred lines
 // (title page, scene breaks) do not, and a quotation is indented as a block.
-function shunnParagraphXml(runXml, centered, quote = false) {
+function shunnParagraphXml(script, runXml, centered, quote = false) {
   const layout = centered
     ? `<w:ind w:firstLine="0"/><w:jc w:val="center"/>`
     : quote ? `<w:ind w:left="720" w:right="720" w:firstLine="0"/>` : `<w:ind w:firstLine="720"/>`;
-  return `<w:p><w:pPr>${SHUNN_PARAGRAPH_SPACING}${layout}</w:pPr>${runXml}</w:p>`;
+  return `<w:p><w:pPr>${script.bidi}${SHUNN_PARAGRAPH_SPACING}${layout}</w:pPr>${runXml}</w:p>`;
 }
 
-function shunnChapterHeadingXml(text) {
-  return `<w:p><w:pPr>${SHUNN_PARAGRAPH_SPACING}<w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:r><w:br w:type="page"/></w:r>${shunnRunXml(text, "<w:b/>")}</w:p>`;
+function shunnChapterHeadingXml(script, text) {
+  return `<w:p><w:pPr>${script.bidi}${SHUNN_PARAGRAPH_SPACING}<w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:r><w:br w:type="page"/></w:r>${shunnRunXml(script, text, { strong: true })}</w:p>`;
 }
 
 // Shunn word counts are rounded: exact under 1,000 words, to the nearest
@@ -277,15 +327,16 @@ export function shunnWordCount(words, pack = languagePack()) {
   return formatNumber(rounded, pack);
 }
 
-function shunnTitlePageXml(meta) {
-  const lines = [shunnParagraphXml(shunnRunXml(meta.title, "<w:b/>"), true)];
+function shunnTitlePageXml(script, meta) {
+  const line = (text, decoration) => shunnParagraphXml(script, shunnRunXml(script, text, decoration), true);
+  const lines = [line(meta.title, { strong: true })];
   // The byline is left out, "by" and all, when there is no author.
   if (meta.author) {
-    lines.push(shunnParagraphXml(shunnRunXml("by", ""), true), shunnParagraphXml(shunnRunXml(meta.author, ""), true));
+    lines.push(line("by"), line(meta.author));
   }
-  lines.push(shunnParagraphXml(shunnRunXml(`Approximately ${shunnWordCount(meta.words, meta.pack)} words`, ""), true));
+  lines.push(line(`Approximately ${shunnWordCount(meta.words, meta.pack)} words`));
   for (const contactLine of meta.contact) {
-    lines.push(shunnParagraphXml(shunnRunXml(String(contactLine), ""), true));
+    lines.push(line(String(contactLine)));
   }
   return lines;
 }
@@ -296,17 +347,18 @@ function shunnTitlePageXml(meta) {
 // section or scene break is a centred `#`, as Shunn's short-story format
 // sets it.
 export function writeShunnDocx(outFile, manuscript, meta, writeOptions = {}) {
-  const paragraphs = [...shunnTitlePageXml(meta)];
+  const script = docxScript(manuscript.meta);
+  const paragraphs = [...shunnTitlePageXml(script, meta)];
   const sceneBreak = meta.shortForm ? "#" : "* * *";
-  const hash = shunnParagraphXml(shunnRunXml("#", ""), true);
+  const hash = shunnParagraphXml(script, shunnRunXml(script, "#"), true);
   if (meta.shortForm) {
-    paragraphs.push(shunnParagraphXml("", true));
+    paragraphs.push(shunnParagraphXml(script, "", true));
   }
   let sections = 0;
   for (const chapter of manuscript.chapters) {
     const body = markdownParagraphs(chapter.body);
     if (!meta.shortForm) {
-      paragraphs.push(shunnChapterHeadingXml(chapter.heading));
+      paragraphs.push(shunnChapterHeadingXml(script, chapter.heading));
     } else if (body.length === 0) {
       continue;
     } else if (sections++ > 0) {
@@ -314,12 +366,12 @@ export function writeShunnDocx(outFile, manuscript, meta, writeOptions = {}) {
     }
     for (const paragraph of body) {
       paragraphs.push(paragraph.sceneBreak
-        ? shunnParagraphXml(shunnRunXml(sceneBreak, ""), true)
-        : shunnParagraphXml(inlineRuns(paragraph.text).map(shunnTextRunXml).join(""), false, paragraph.quote));
+        ? shunnParagraphXml(script, shunnRunXml(script, sceneBreak), true)
+        : shunnParagraphXml(script, inlineRuns(paragraph.text).map((run) => shunnRunXml(script, run.text, run)).join(""), false, paragraph.quote));
     }
   }
 
-  writeZip(outFile, docxPackageEntries(paragraphs.join("")), writeOptions);
+  writeZip(outFile, docxPackageEntries(script, paragraphs.join("")), writeOptions);
 }
 
 export function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {}) {
@@ -364,10 +416,11 @@ function docxTextXml(text) {
   return String(text).split(LINE_BREAK).map((part) => `<w:t xml:space="preserve">${xmlEscape(part)}</w:t>`).join("<w:br/>");
 }
 
-function paragraphXml(text, style = "", runs = [{ text }]) {
-  const styleXml = style ? `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>` : "";
+function paragraphXml(script, text, style = "", runs = [{ text }]) {
+  const properties = `${style ? `<w:pStyle w:val="${style}"/>` : ""}${script.bidi}`;
+  const styleXml = properties === "" ? "" : `<w:pPr>${properties}</w:pPr>`;
   const runXml = runs.map((run) => {
-    const decoration = `${run.strong ? "<w:b/>" : ""}${run.em ? "<w:i/>" : ""}`;
+    const decoration = `${run.strong ? script.bold : ""}${run.em ? script.italic : ""}${script.rtl}`;
     const runStyle = decoration === "" ? "" : `<w:rPr>${decoration}</w:rPr>`;
     return `<w:r>${runStyle}${docxTextXml(run.text)}</w:r>`;
   });

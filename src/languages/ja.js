@@ -5,5 +5,6 @@ export default {
   code: "ja",
   name: "Japanese",
   cased: false,
+  script: "Jpan",
   segmentation: "character"
 };

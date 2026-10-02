@@ -7,6 +7,7 @@
 export default {
   code: "en",
   name: "English",
+  script: "Latn",
   checks: {
     // story prose: narration verbs that filter a scene through a character.
     filterWords: [

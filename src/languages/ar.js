@@ -4,5 +4,6 @@ export default {
   code: "ar",
   name: "Arabic",
   cased: false,
+  script: "Arab",
   segmentation: "space"
 };
