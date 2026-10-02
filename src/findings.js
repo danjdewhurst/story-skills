@@ -102,6 +102,8 @@ export const FINDING_CODES = {
   "too-many-keywords": "warning",
   "todo-placeholder": "warning",
   "author-and-authors": "warning",
+  "unknown-label": "warning",
+  "blank-label": "warning",
   // story links
   "missing-reference": "error",
   "missing-backlink": "error",

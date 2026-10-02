@@ -34,7 +34,7 @@ import { wordSpans } from "./words.js";
 import { PROGRESS_FILE, cleanSessions, computeProgress, formatPercent, localDate, withSession } from "./progress.js";
 import { plural } from "./plural.js";
 import { BASELINE_CHECKS, PROSE_THRESHOLDS, analyzeChapter, baselineFigures, baselineFindings, baselineProfile, chapterFindings, contentWords, proseRules, proseThresholds, repeatedPhrases, sentenceLengths, similarNames } from "./prose.js";
-import { isLanguageTag, languagePack, projectLanguage, skippedChecks } from "./languages/index.js";
+import { fillLabel, isLanguageTag, joinNames, languagePack, projectLanguage, skippedChecks } from "./languages/index.js";
 import { lowerCase } from "./languages/locale.js";
 import { endsSentence, splitSentences } from "./sentences.js";
 import { areSiblingBooks, buildSeries, canonicalPath, discoverSeriesBooks, isBookNumber, linksInclude, readBookFrontmatter, seriesId, seriesLinkPath, seriesLinks, validateSeriesLinks, withSeriesBacklink } from "./series.js";
@@ -2970,6 +2970,7 @@ function screenplayOutline(project, book) {
   return {
     title: project.title,
     authors: book.meta.authors,
+    labels: book.meta.labels,
     form: typeof project.story.data.form === "string" ? project.story.data.form : "",
     pack: project.pack,
     chapters,
@@ -3153,11 +3154,13 @@ function truncateWords(text, budget) {
 
 function shunnMeta(project) {
   const data = project.story.data;
+  const meta = publishingMeta(data);
   return {
     title: project.title,
     // Like every other build, `authors` wins over `author`, so a co-written
     // book gets a full byline.
-    author: publishingMeta(data).authors.join(" and "),
+    author: joinNames(meta.authors, meta.labels),
+    labels: meta.labels,
     contact: asArray(data.contact),
     words: project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0),
     pack: project.pack,
@@ -5844,7 +5847,7 @@ function bookChapters(project, action = "build") {
       title,
       numbered,
       displayNumber,
-      heading: numbered ? chapterHeading(displayNumber, title, meta.chapterLabel) : title,
+      heading: numbered ? chapterHeading(displayNumber, title, meta.labels) : title,
       // LF only, so a CRLF checkout builds the same bytes as an LF one.
       body: chapterProse(markdown.body).replace(/\r\n?/g, "\n").trim()
     };
@@ -5882,12 +5885,12 @@ function manuscriptParts(project, action = "build") {
   const back = matter("back");
   const hasCopyrightPage = [...front, ...back].some((entry) => entry.copyright);
   if (meta.copyright !== "" && !hasCopyrightPage) {
-    front.unshift({ id: "copyright", title: "Copyright", heading: false, copyright: true, body: copyrightPage(meta) });
+    front.unshift({ id: "copyright", title: fillLabel(meta.labels, "copyright"), heading: false, copyright: true, body: copyrightPage(meta) });
   }
 
   return {
     title: project.title,
-    author: meta.authors.join(" and "),
+    author: joinNames(meta.authors, meta.labels),
     meta,
     // The count unit, for the print page estimate and narration runtime.
     unit: project.unit.name,

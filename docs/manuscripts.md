@@ -308,7 +308,7 @@ HTML comments (`<!-- ... -->`) in the prose are left out of the word count and o
 
 Each chapter gets the heading `Chapter N: Title`, built from its `number` and `title` frontmatter. A chapter with `numbered: false` (a Prologue, Interlude, or Epilogue) is headed by its title alone and takes no number, so the chapters after it keep the author's numbering: chapter files Prologue, Arrival, Departure build as `Prologue`, `Chapter 1: Arrival`, `Chapter 2: Departure`. An unnumbered chapter needs a title. `story import` sets `numbered: false` for Prologue, Epilogue, Interlude, and Afterword headings and for headings Pandoc marks `{.unnumbered}` or `{-}`.
 
-For a book not in English, set `chapter-label` and `contents-label` in `story.md` (see [Publishing metadata](#publishing-metadata-in-storymd)). Two chapters with the same `number` stop every export and build:
+For a book not in English, set `language` in `story.md`: the headings follow the language's convention (`Kapitel 1: Die Glocke`, `第1章　風`), and `labels` changes them (see [Build labels](#build-labels)). Two chapters with the same `number` stop every export and build:
 
 ```text
 Duplicate chapter number 3: refusing to build with colliding EPUB ids
@@ -389,7 +389,7 @@ Write matter text yourself. The `story-maintenance` skill will not invent acknow
 |-------|------|---------|
 | `author` | Text | The author in the EPUB (`dc:creator`), HTML, print, narration, and metadata builds, and the byline in both Shunn builds. The plain DOCX build does not use it. |
 | `authors` | List of text | Replaces `author` for co-authored books in every build, including the Shunn byline. `validate` warns when both are set. |
-| `language` | BCP 47 tag, such as `en`, `en-GB`, or `fr` | EPUB `dc:language` and the `lang` attribute of every EPUB document; the `lang` attribute of the HTML and print builds; the metadata sheet. Defaults to `en`. A right-to-left language (such as `he`, `ar`, `fa`, or `ur`, or any tag with an Arabic or Hebrew script subtag) also sets `dir="rtl"` on every EPUB, HTML, and print document and `page-progression-direction="rtl"` on the EPUB spine, and the print interior opens from the right: chapters start on left-hand pages and the running heads swap sides. The language's script also picks the fonts and layout of the HTML, print, EPUB, and DOCX builds, and the DOCX build's Word language for any tag but `en`; see [Typesetting other scripts](#typesetting-other-scripts). |
+| `language` | BCP 47 tag, such as `en`, `en-GB`, or `fr` | EPUB `dc:language` and the `lang` attribute of every EPUB document; the `lang` attribute of the HTML and print builds; the metadata sheet; the language of all generated text (see [Build labels](#build-labels)). Defaults to `en`. A right-to-left language (such as `he`, `ar`, `fa`, or `ur`, or any tag with an Arabic or Hebrew script subtag) also sets `dir="rtl"` on every EPUB, HTML, and print document and `page-progression-direction="rtl"` on the EPUB spine, and the print interior opens from the right: chapters start on left-hand pages and the running heads swap sides. The language's script also picks the fonts and layout of the HTML, print, EPUB, and DOCX builds, and the DOCX build's Word language for any tag but `en`; see [Typesetting other scripts](#typesetting-other-scripts). |
 | `isbn` | ISBN-13 or ISBN-10, hyphens and spaces allowed | The EPUB identifier (`urn:isbn:...`) in place of the story id; the generated copyright page; the metadata sheet. `validate` checks the checksum. Quote it, so a leading zero survives. |
 | `publisher` | Text | EPUB `dc:publisher`, the generated copyright page, the metadata sheet. |
 | `publication-date` | Date, such as `2026-10-01` | EPUB `dc:date`, the metadata sheet. |
@@ -397,18 +397,66 @@ Write matter text yourself. The `story-maintenance` skill will not invent acknow
 | `keywords` | List of text | The metadata sheet. `validate` warns above 7. |
 | `subjects` | List of BISAC codes, such as `FIC022000` | EPUB `dc:subject`, the metadata sheet. `validate` rejects anything not shaped like a BISAC code. |
 | `copyright` | Text, such as `Copyright © 2026 Ada Writer` | EPUB `dc:rights`, the generated copyright page, the metadata sheet. |
-| `cover-alt` | Text | The EPUB cover image's alt text, instead of `Cover of <title>`; the metadata sheet. |
+| `cover-alt` | Text | The EPUB cover image's alt text, instead of `Cover of <title>` in the book's language; the metadata sheet. |
 | `ai-disclosure` | Text | The generated copyright page and the metadata sheet. |
-| `chapter-label` | Text, such as `Kapitel` | The word in every generated chapter heading, in place of `Chapter`: `Kapitel 1: Die Glocke`. A `{n}` in it places the number, as in `第{n}章`. Used by the markdown export and every build. |
-| `contents-label` | Text, such as `Inhalt` | The table of contents heading, in place of `Contents`, in the EPUB navigation, the HTML review copy, and the print interior. |
+| `labels` | List of `key: text` entries | Replaces any generated text in builds, such as the chapter headings or `All rights reserved.` See [Build labels](#build-labels). |
+| `chapter-label` | Text, such as `Teil` | The word in every generated chapter heading, in place of the language's own (`Chapter` in English): `Teil 1: Die Glocke`. A `{n}` in it places the number, as in `第{n}章`. The same as a `chapter` entry in `labels`, which wins. |
+| `contents-label` | Text, such as `Übersicht` | The table of contents heading, in place of the language's own (`Contents` in English). The same as a `contents` entry in `labels`, which wins. |
 | `writing-mode` | `horizontal` (the default) or `vertical` | `vertical` sets a Japanese, Chinese, or Korean book in columns, top to bottom and right to left, in the EPUB, HTML, print, and DOCX builds, with pages that turn right to left. `validate` errors when the `language` is not set vertically; see [Typesetting other scripts](#typesetting-other-scripts). |
 | `form` | `flash`, `short-story`, `novelette`, `novella`, `novel`, `serial`, `picture-book`, or `chapter-book` | The metadata sheet, and the Shunn layout: `short-story` and `flash` builds use the short-story layout (see [Shunn](#shunn-standard-manuscript-format)). `story init --form` sets it along with a default `target-words`, and `validate` warns when `target-words`, or the finished manuscript, falls outside the form's usual range. |
-
-The other generated text stays in English whatever the `language`: the HTML review copy's note on citing paragraph labels, the narration script's headings, credits (`Written by`, `Narrated by`, `The end. You have been listening to`), and runtime lines, and the metadata sheet. The narration script is a working file, so translate its credits by hand before recording.
 
 A value that starts with `[TODO`, such as the `[TODO: author to supply]` placeholder the publishing skill leaves, counts as missing: builds leave it out, the metadata sheet leaves its box unticked, and `validate` warns about it.
 
 A value that fails validation does not stop a build: builds never validate the project first. An ISBN with a bad checksum, for example, is dropped, and the EPUB falls back to the story id as its identifier. Run `story validate .` before building a copy to send out.
+
+### Build labels
+
+Every piece of text a build generates for readers is in the book's `language`: chapter headings, the contents heading, the generated copyright page, the name screen readers announce for a scene break, the EPUB cover alt text, landmark, and accessibility summary, the HTML review copy's title, note, and link names, the Shunn title block, the narration script's spoken credits, and the Fountain title page. The language packs translate these labels for Arabic (`ar`), Chinese (`zh`, in Simplified characters; `zh-Hant`, `zh-TW`, `zh-HK`, `zh-MO`, Cantonese `yue` or `zh-yue`, and Classical Chinese `lzh` get Traditional), Dutch (`nl`), French (`fr`), German (`de`), Hebrew (`he`), Hindi (`hi`), Italian (`it`), Japanese (`ja`), Korean (`ko`), Persian (`fa`), Polish (`pl`), Portuguese (`pt`, in Brazilian Portuguese; `pt-PT` changes the few labels that differ, such as `Direitos de autor` and `ligação`), Russian (`ru`), Spanish (`es`), Swedish (`sv`), Turkish (`tr`), and Ukrainian (`uk`). Any other language gets the English labels.
+
+Each pack follows its language's conventions. Chapter headings read `Kapitel 1: Die Glocke`, `Chapitre 1 : La Cloche` (a no-break space before the colon), `Глава 1. Колокол`, or `第1章　風` (an ideographic space). Numbers keep Latin digits in every language, with the language's separators in the Shunn word count (`Environ 87 000 mots` in French). Where a name would need a grammatical case or a suffix to agree with the words around it, as in Polish, Russian, Ukrainian, Turkish, and Korean, the labels set it after a colon or on its own instead. Have a native reader check the labels before you publish.
+
+To change any label, list it under `labels` in `story.md`, one `key: text` entry per line. `{name}` places a value, and a label you leave out keeps the pack's text:
+
+```yaml
+language: de
+labels:
+  - chapter: Teil {n}
+  - chapter-heading: "{chapter} – {title}"
+  - all-rights-reserved: Alle Rechte bei der Autorin.
+```
+
+| Key | English | Used in |
+|-----|---------|---------|
+| `chapter` | `Chapter {n}` | Every numbered chapter heading. Without `{n}`, the number follows the label. |
+| `chapter-heading` | `{chapter}: {title}` | A chapter heading with its title. A title that only repeats `{chapter}` is left out. |
+| `contents` | `Contents` | The table of contents heading in the EPUB, HTML review copy, and print interior. |
+| `and` | `{a} and {b}` | Bylines and credits with more than one author: three names read `A and B and C`. |
+| `copyright` | `Copyright` | The generated copyright page's name in tables of contents. |
+| `all-rights-reserved` | `All rights reserved.` | The generated copyright page. |
+| `published-by` | `Published by {publisher}` | The generated copyright page. |
+| `scene-break` | `Scene break` | What screen readers announce for a scene break in the HTML and print builds. |
+| `cover-alt` | `Cover of {title}` | The EPUB cover's alt text when `cover-alt` is not set. |
+| `start-of-content` | `Start of Content` | The EPUB landmark that points at the first chapter. |
+| `accessibility-summary` | `Text-only book with a navigable table of contents, …` | The EPUB accessibility summary. |
+| `accessibility-summary-cover` | `Text book with a described cover image, …` | The same, for a book with a cover. |
+| `review-title` | `{title}: review copy` | The HTML review copy's page title. |
+| `review-intro`, `review-intro-build` | `Review copy.`, `Review copy, build {build}.` | The first sentence of the review copy's note, without and with `--stamp`. |
+| `review-labels` | `Every paragraph has a label such as {label} (chapter 3, paragraph 12).` | The review copy's note. |
+| `review-quote`, `review-quote-build` | `Quote the label with each note, …` | The review copy's note, without and with `--stamp`. |
+| `review-note-link` | `The Note link beside each label opens a note with these filled in.` | The review copy's note, with `--note-url`. |
+| `note`, `note-title` | `Note`, `Write a note on {label}` | The note link beside each paragraph label, and its tooltip. |
+| `anchor-title` | `Link to {label}` | A paragraph label's tooltip. |
+| `by` | `by` | The line before the author in the Shunn title block. Empty leaves the line out. |
+| `approximate-words` | `Approximately {words} words` | The Shunn title block. |
+| `approximate-characters` | `Approximately {characters} characters` | The Shunn title block of a book [counted in characters](project-format.md#counting-in-characters). |
+| `narration-opening`, `narration-opening-anonymous` | `{title}. Written by {authors}. Narrated by {narrator}.` | The narration script's opening credits, with and without an author. |
+| `narration-closing`, `narration-closing-anonymous` | `The end. You have been listening to {title}, …` | The narration script's closing credits, with and without an author. |
+| `screenplay-credit` | `Written by` | The Fountain `Credit`. |
+| `screenplay-source`, `screenplay-source-anonymous` | `Based on the {form} by {authors}` | The Fountain `Source`, with and without an author. `{form}` is the English noun for `form` (`novel`, `short story`), so other languages leave it out. |
+
+`chapter-label` and `contents-label` still work and set `chapter` and `contents`; a `labels` entry wins over them. Quote a value that starts with `{` or contains `: `. A blank entry is ignored, so no title, heading, or landmark comes out empty, except `by`, where blank leaves the Shunn `by` line out; a `[TODO` placeholder is ignored like any other. An `and` label without both `{a}` and `{b}` would drop an author, so names are then joined with commas. `story validate` reports `labels` that is not a list of `key: text` entries, or an entry whose value is not text, as an error; an entry that names no label as an `unknown-label` warning; a blank entry (other than `by`) as a `blank-label` warning; and a `[TODO` entry as a `todo-placeholder` warning. Builds ignore all three.
+
+Text for the author, not the reader, stays in English: the retailer metadata sheet, the narration script's headings, runtime line, `[pause]` and `[narrator]` markers, the Fountain notes and synopses, Fountain's `INT.` and `EXT.` scene headings (which are Fountain syntax), the paragraph labels such as `ch03-p12`, and the chapter files `story add chapter` writes.
 
 ### The generated copyright page
 
@@ -440,7 +488,7 @@ ISBN 9780306406157
 > An ember given is a fire kept. An ember taken is a debt the mountain remembers.
 ```
 
-The page holds the `copyright` line, `All rights reserved.`, then `Published by` the `publisher`, the `isbn`, and the `ai-disclosure` text when each is set. The ISBN is printed as bare digits. For different wording, such as a Creative Commons licence or a disclaimer, write your own page with `story add matter "Copyright" --order 0 --heading false`; the generated page is then left out. The [`publishing`](../skills/publishing/SKILL.md) skill has a template for it.
+The page holds the `copyright` line, `All rights reserved.`, then `Published by` the `publisher`, the `isbn`, and the `ai-disclosure` text when each is set, in the book's language (`Alle Rechte vorbehalten.` and `Erschienen bei` for `de`; see [Build labels](#build-labels)). The ISBN is printed as bare digits. For different wording, such as a Creative Commons licence or a disclaimer, write your own page with `story add matter "Copyright" --order 0 --heading false`; the generated page is then left out. The [`publishing`](../skills/publishing/SKILL.md) skill has a template for it.
 
 ## Export a markdown manuscript
 
@@ -567,7 +615,7 @@ For a book PDF, build the [print interior](#print-interior) and render it with a
 
 ### EPUB
 
-The EPUB build is an EPUB 3 package with one XHTML document per matter page and per chapter, and a navigation document that lists them in reading order under a `Contents` heading (or the `contents-label` from `story.md`). It reads the [publishing metadata](#publishing-metadata-in-storymd) in `story.md`, and one more field:
+The EPUB build is an EPUB 3 package with one XHTML document per matter page and per chapter, and a navigation document that lists them in reading order under a contents heading in the book's language (`Contents` in English; see [Build labels](#build-labels)). It reads the [publishing metadata](#publishing-metadata-in-storymd) in `story.md`, and one more field:
 
 | Field | Effect |
 |-------|--------|
@@ -659,7 +707,7 @@ contact:
   - ada@example.com
 ```
 
-The title page lists the title, `by` and the author (both left out when no author is set), `Approximately N words`, and the contact lines. `N` is the word count of chapter prose, as `story wordcount` reports it, rounded as Shunn format asks: exact under 1,000 words, to the nearest 100 under 40,000, and to the nearest 1,000 above that. Each chapter starts on a new page under its heading, and front and back matter are left out, as submissions expect. When `story.md` sets `form: short-story` or `form: flash`, both builds use Shunn's short-story layout instead: the text runs on from the title block with no chapter headings or page breaks, chapters are joined as sections with a centred `#` between them, every scene break is a `#` as well, and a chapter with no prose is skipped.
+The title page lists the title, `by` and the author (both left out when no author is set), `Approximately N words`, and the contact lines, in the book's language: `von` and `Etwa 87.000 Wörter` in German, and the author alone, with no `by`, in languages that set a byline that way, such as Japanese and Russian (see [Build labels](#build-labels)). `N` is the word count of chapter prose, as `story wordcount` reports it, rounded as Shunn format asks: exact under 1,000 words, to the nearest 100 under 40,000, and to the nearest 1,000 above that. Each chapter starts on a new page under its heading, and front and back matter are left out, as submissions expect. When `story.md` sets `form: short-story` or `form: flash`, both builds use Shunn's short-story layout instead: the text runs on from the title block with no chapter headings or page breaks, chapters are joined as sections with a centred `#` between them, every scene break is a `#` as well, and a chapter with no prose is skipped.
 
 The start of *The Last Ember* in `--format shunn`, with those fields set:
 
@@ -821,14 +869,14 @@ Harbor of Second Light. Written by Morgan Hale. Narrated by [narrator].
 The bell was ringing under the reef.
 ```
 
-The script ends with closing credits: `The end. You have been listening to Harbor of Second Light, written by Morgan Hale, narrated by [narrator].` Replace `[narrator]` with the narrator's name.
+The script ends with closing credits: `The end. You have been listening to Harbor of Second Light, written by Morgan Hale, narrated by [narrator].` Replace `[narrator]` with the narrator's name. The credits are spoken, so they are in the book's language (see [Build labels](#build-labels)); the rest of the script is working notes, in English.
 
 What goes in:
 
 - **Pronunciation guide.** Every `pronunciation` field on a character, location, system, faction, artifact, or glossary term, sorted by name. Characters with `status: cut` are left out. When there are none, the section says how to add them. Use plain respelling, such as `pronunciation: "SEER-ah VOSS"`; `story validate` rejects a value that is not text.
 - **Sections.** Every front matter page except the copyright page, every chapter under its heading (`Chapter N: Title`, or the title alone for an unnumbered chapter), then every back matter page. Each opens with its estimated runtime, `[about N min]` or `[under 1 min]`.
 - **Text.** Paragraphs as written, with markdown emphasis kept so the narrator can see where the stress falls. A scene break, in any of the forms the [table below](#how-prose-is-converted-for-epub-docx-shunn-html-and-print) lists (including `\* \* \*` and a lone `#`), becomes `[pause]`, and a backslash at the end of a line is dropped. Blockquote markers are kept as well, so an epigraph reads `> An ember given is a fire kept.`
-- **Runtime.** Every word in those sections, matter included, at 155 words per minute, rounded to the minute. A book [counted in characters](project-format.md#counting-in-characters) is timed at 300 characters per minute, about the pace of Japanese broadcast narration; Mandarin narration runs a little slower, and the count includes punctuation, which is not read. Pace varies by narrator and genre, so time a sample chapter and rescale.
+- **Runtime.** Every word in those sections, matter included, at the language's narration pace, rounded to the minute: 155 words per minute in English, and an estimate for most languages with translated labels (120 for German, 135 for French), with English's pace for Persian, Hindi, and every language without a pack. A book [counted in characters](project-format.md#counting-in-characters) is timed in characters: 300 a minute for Japanese and Chinese, about the pace of Japanese broadcast narration (Mandarin narration runs a little slower, and the count includes punctuation, which is not read), and the same 300 for a book in another language set to `count-unit: characters`. The first line names the rate and unit used. Pace varies by narrator and genre, so time a sample chapter and rescale.
 
 The [`adaptation`](../skills/adaptation/SKILL.md) skill prepares an audiobook from this script and writes it to `adaptations/audiobook/narration-script.md` with `--out`. The [`worldbuilding`](../skills/worldbuilding/SKILL.md) and [`character-management`](../skills/character-management/SKILL.md) skills add pronunciations when they create invented names.
 
@@ -861,7 +909,7 @@ EXT. BELLWETHER REEF
 
 What goes in:
 
-- **Title page.** `Title`, then `Credit: Written by` and `Author` from `author` or `authors` in `story.md` (left out when neither is set), and `Source: Based on the <form> by <author>`, where the form is `novel`, `novella`, `short story`, and so on from `form`, or `book` when `form` is not set. Add `Draft date` and `Contact` by hand.
+- **Title page.** `Title`, then `Credit: Written by` and `Author` from `author` or `authors` in `story.md` (left out when neither is set), and `Source: Based on the <form> by <author>`, where the form is `novel`, `novella`, `short story`, and so on from `form`, or `book` when `form` is not set. In another language, `Credit` and `Source` are in that language and leave the form out: `Source: Nach einer Vorlage von <author>` in German. Add `Draft date` and `Contact` by hand.
 - **Sections.** One `##` section per chapter, under its book heading, leaving `#` for the acts you add. Sections are not printed. A chapter with no scene records gets a note saying so, and a warning.
 - **Scene headings.** One per scene record, in reading order: chapters by number, scenes by `scene` number. The heading is `INT.`, `EXT.`, or `INT./EXT.` from `setting` (`interior`, `exterior`, or `both`; the scene's own `setting` wins over its location's), the location's `name` in capitals (both read as the location stands in the scene's chapter, after its [progressions](project-format.md#progressions)), and the time of day. Named times read as `DAWN`, `MORNING`, `DAY` (`midday` and `afternoon`), `EVENING`, and `NIGHT`; an `HH:MM` time reads as `DAY` from 06:00 to 17:59 and `NIGHT` otherwise; any other value is printed in capitals as written. A scene with no `time` takes its chapter's. With no `setting` on the scene or its location, the heading is forced with a leading period (`.BELLWETHER REEF`) rather than guessing interior or exterior, and the build warns once per location. A scene with no `location` reads `LOCATION TBD`, and one whose `location` has no record reads the id as a name (`sea-cave` as `SEA CAVE`); both warn.
 - **Notes and synopses.** Under each heading, the scene title as a synopsis (`= Reef Bell Discovery`) and notes for the source scene id, the cast in capitals (`pov`, unless the pov is only in `mentions`, then `characters`, by character name), the story date and time, `flashback-to`, `dilemma`, and `outcome`. Screenwriting apps do not print notes or synopses, so the script prints as headings until you write under them. Keep the `[[Source: ...]]` notes so each screen scene traces back to the book.

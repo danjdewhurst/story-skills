@@ -1,9 +1,45 @@
-// Hebrew: no letter case; words are spaced. No word lists yet.
+// Hebrew: no letter case; words are spaced. No word lists yet. Labels that
+// address the reader use the plural imperative, which is gender-neutral.
 
 export default {
   code: "he",
   name: "Hebrew",
   cased: false,
   script: "Hebr",
-  segmentation: "space"
+  segmentation: "space",
+  narrationRate: 125,
+  labels: {
+    chapter: "פרק {n}",
+    "chapter-heading": "{chapter}: {title}",
+    contents: "תוכן העניינים",
+    and: "{a} ו{b}",
+    copyright: "זכויות יוצרים",
+    "all-rights-reserved": "כל הזכויות שמורות.",
+    "published-by": "בהוצאת {publisher}",
+    "scene-break": "מעבר סצנה",
+    "cover-alt": "כריכת הספר {title}",
+    "start-of-content": "תחילת התוכן",
+    "accessibility-summary": "ספר טקסט בלבד, עם תוכן עניינים ניתן לניווט, כותרת לכל פרק וסדר קריאה לוגי יחיד.",
+    "accessibility-summary-cover": "ספר טקסט עם תמונת כריכה מתוארת, תוכן עניינים ניתן לניווט, כותרת לכל פרק וסדר קריאה לוגי יחיד.",
+    "review-title": "{title}: עותק לקריאה",
+    "review-intro": "עותק לקריאה.",
+    "review-intro-build": "עותק לקריאה, גרסה {build}.",
+    "review-labels": "לכל פסקה יש תווית, למשל {label} (פרק 3, פסקה 12).",
+    "review-quote": "ציינו בכל הערה את התווית ואת המילים הראשונות של הפסקה, כדי שאפשר יהיה למצוא את המקום המדויק גם אחרי שהטקסט ישתנה.",
+    "review-quote-build": "ציינו בכל הערה את התווית, את הגרסה ואת המילים הראשונות של הפסקה, כדי שאפשר יהיה למצוא את המקום המדויק גם אחרי שהטקסט ישתנה.",
+    "review-note-link": "הקישור \"הערה\" שליד כל תווית פותח הערה שהפרטים האלה כבר מולאו בה.",
+    note: "הערה",
+    "note-title": "כתיבת הערה על {label}",
+    "anchor-title": "קישור אל {label}",
+    by: "מאת",
+    "approximate-words": "כ־{words} מילים",
+    "approximate-characters": "כ־{characters} תווים",
+    "narration-opening": "{title}. מאת {authors}. בקריאת {narrator}.",
+    "narration-opening-anonymous": "{title}. בקריאת {narrator}.",
+    "narration-closing": "הסוף. האזנתם לספר {title} מאת {authors}, בקריאת {narrator}.",
+    "narration-closing-anonymous": "הסוף. האזנתם לספר {title}, בקריאת {narrator}.",
+    "screenplay-credit": "נכתב על ידי",
+    "screenplay-source": "על פי היצירה מאת {authors}",
+    "screenplay-source-anonymous": "על פי יצירה ספרותית"
+  }
 };

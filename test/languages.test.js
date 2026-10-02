@@ -72,12 +72,12 @@ describe("language packs", () => {
     expect(british.tag).toBe("en-GB");
     expect(british.checks.dialectPairs).toBe(english.checks.dialectPairs);
 
-    const french = languagePack("fr-CA");
-    expect(french.code).toBe("und");
-    expect(french.tag).toBe("fr-CA");
-    expect(french.checks).toEqual({});
-    expect(french.labels).toEqual({});
-    expect(french.quotes).toContainEqual(["“", "”"]);
+    const czech = languagePack("cs-CZ");
+    expect(czech.code).toBe("und");
+    expect(czech.tag).toBe("cs-CZ");
+    expect(czech.checks).toEqual({});
+    expect(czech.labels).toEqual({});
+    expect(czech.quotes).toContainEqual(["“", "”"]);
 
     expect(languagePack(" de ").tag).toBe("de");
     expect(languagePack("").tag).toBe(DEFAULT_LANGUAGE);
@@ -112,8 +112,9 @@ describe("language packs", () => {
     for (const tag of ["zh-yue", "zh-cmn-Hans", "zh-min-nan", "en-GB-oed", "sgn-BE-FR", "no-bok"]) {
       expect(isLanguageTag(tag)).toBe(true);
     }
-    // An extlang tag drops its macrolanguage for the locale and keeps it for the pack.
-    expect(languagePack("zh-yue")).toMatchObject({ tag: "zh-yue", locale: "yue", code: "zh", segmentation: "character" });
+    // An extlang tag drops its macrolanguage for the locale and keeps it for the pack:
+    // zh-yue layers the zh pack, then yue (Traditional labels).
+    expect(languagePack("zh-yue")).toMatchObject({ tag: "zh-yue", locale: "yue", code: "yue", segmentation: "character" });
     expect(languagePack("zh-cmn-Hans")).toMatchObject({ locale: "cmn-Hans", code: "zh" });
     expect(languagePack("zh-min-nan")).toMatchObject({ locale: "nan", code: "zh" });
     expect(languagePack("en-GB-oed")).toMatchObject({ tag: "en-GB-oed", locale: "en-GB-oxendict", code: "en" });
@@ -129,7 +130,7 @@ describe("language packs", () => {
   });
 
   test("a set but invalid language resolves from its first subtag or the base pack, never English", () => {
-    expect(languagePack("fr_FR")).toMatchObject({ tag: "fr_FR", locale: "fr", code: "und" });
+    expect(languagePack("cs_CZ")).toMatchObject({ tag: "cs_CZ", locale: "cs", code: "und" });
     expect(languagePack("en_GB")).toMatchObject({ tag: "en_GB", locale: "en", code: "en" });
     expect(languagePack("en-GB-GB")).toMatchObject({ locale: "en", code: "en" });
     expect(languagePack("not a tag")).toMatchObject({ tag: "not a tag", locale: "und", code: "und" });

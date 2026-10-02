@@ -188,5 +188,57 @@ export default {
       "councillor", "councilor", "general", "colonel", "major", "sergeant", "lieutenant", "commander",
       "professor", "prof", "saint", "st", "old", "young", "little"
     ]
+  },
+
+  // Generated text in builds, by key. Every other pack's labels fall back to
+  // these, and story.md `labels:` overrides any of them. `{name}` places a
+  // value; see buildLabels in ./index.js.
+  labels: {
+    // A numbered chapter's heading alone, and with its title.
+    chapter: "Chapter {n}",
+    "chapter-heading": "{chapter}: {title}",
+    contents: "Contents",
+    // Two names in a byline or credit; three or more join pair by pair.
+    and: "{a} and {b}",
+    // The copyright page built from story.md `copyright`.
+    copyright: "Copyright",
+    "all-rights-reserved": "All rights reserved.",
+    "published-by": "Published by {publisher}",
+    // What a screen reader says for a scene break in the HTML builds.
+    "scene-break": "Scene break",
+    // EPUB: the cover's fallback alt text, the body-matter landmark, and the
+    // accessibility summary without and with a cover.
+    "cover-alt": "Cover of {title}",
+    "start-of-content": "Start of Content",
+    "accessibility-summary": "Text-only book with a navigable table of contents, headings for each chapter, and a single logical reading order.",
+    "accessibility-summary-cover": "Text book with a described cover image, a navigable table of contents, headings for each chapter, and a single logical reading order.",
+    // The HTML review copy: its title, the note under the title (one
+    // sentence each, with -build forms for a stamped build), and the links
+    // beside each paragraph label.
+    "review-title": "{title}: review copy",
+    "review-intro": "Review copy.",
+    "review-intro-build": "Review copy, build {build}.",
+    "review-labels": "Every paragraph has a label such as {label} (chapter 3, paragraph 12).",
+    "review-quote": "Quote the label with each note, with the paragraph's first few words, so the author can find the exact spot after the text changes.",
+    "review-quote-build": "Quote the label and the build with each note, with the paragraph's first few words, so the author can find the exact spot after the text changes.",
+    "review-note-link": "The Note link beside each label opens a note with these filled in.",
+    note: "Note",
+    "note-title": "Write a note on {label}",
+    "anchor-title": "Link to {label}",
+    // The Shunn manuscript's title block. An empty `by` leaves its line out,
+    // for a language that writes a byline as the name alone.
+    by: "by",
+    "approximate-words": "Approximately {words} words",
+    "approximate-characters": "Approximately {characters} characters",
+    // The narration script's spoken credits.
+    "narration-opening": "{title}. Written by {authors}. Narrated by {narrator}.",
+    "narration-opening-anonymous": "{title}. Narrated by {narrator}.",
+    "narration-closing": "The end. You have been listening to {title}, written by {authors}, narrated by {narrator}.",
+    "narration-closing-anonymous": "The end. You have been listening to {title}, narrated by {narrator}.",
+    // The Fountain title page. {form} is story.md `form` as an English noun
+    // (novel, short story), so other languages leave it out.
+    "screenplay-credit": "Written by",
+    "screenplay-source": "Based on the {form} by {authors}",
+    "screenplay-source-anonymous": "Based on the {form}"
   }
 };

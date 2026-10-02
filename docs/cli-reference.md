@@ -2156,7 +2156,7 @@ These commands produce files for reading or submission. The source of truth stay
 story export [path] [--out <file>]
 ```
 
-Writes one markdown manuscript: the story title, front matter pages, every chapter as `# Chapter N: Title` (the title alone for a `numbered: false` chapter, and `chapter-label` in place of `Chapter` when `story.md` sets it) followed by its prose, then back matter pages. Only chapter prose is included, not outlines or notes. Matter pages with no text are left out. The file uses LF line endings, even from a CRLF checkout.
+Writes one markdown manuscript: the story title, front matter pages, every chapter as `# Chapter N: Title` (the title alone for a `numbered: false` chapter; in the book's `language`, or as `story.md` `labels` sets it, such as `# Kapitel N: Title`) followed by its prose, then back matter pages. Only chapter prose is included, not outlines or notes. Matter pages with no text are left out. The file uses LF line endings, even from a CRLF checkout.
 
 | Option | Effect | Default |
 |---|---|---|
@@ -2206,7 +2206,7 @@ Builds a disposable book file in `dist/`. Builds are deterministic: the same sou
 | `shunn` | `dist/<story-id>.shunn.md` | Shunn manuscript markdown: title, byline, approximate word count (characters for a book counted in characters), `contact` lines, page breaks between chapters; no matter pages |
 | `html` | `dist/<story-id>.html` | A single-file review copy for readers: contents list, and a label on every paragraph (`ch03-p12` is chapter 3, paragraph 12) that readers quote with their notes. A label is the paragraph's chapter and position in this build, so an earlier edit in the chapter renumbers it and `move` changes its chapter part; readers should quote the `--stamp` build label and the paragraph's first few words too |
 | `print` | `dist/<story-id>.print.html` | A print interior as HTML with CSS paged media, sized to `--trim`, with a title page, contents, and page numbers. Render it to PDF with a paged-media engine such as Paged.js, WeasyPrint, or Prince |
-| `narration` | `dist/<story-id>.narration.md` | An audiobook script: estimated runtime at 155 words a minute (300 characters a minute for a book [counted in characters](project-format.md#counting-in-characters)), a pronunciation guide from `pronunciation` fields in the bible, opening and closing credits, and each section with its estimated minutes |
+| `narration` | `dist/<story-id>.narration.md` | An audiobook script: estimated runtime at the language's narration pace (155 words a minute in English; 300 characters a minute for a book [counted in characters](project-format.md#counting-in-characters)), a pronunciation guide from `pronunciation` fields in the bible, opening and closing credits, and each section with its estimated minutes |
 | `metadata` | `dist/<story-id>.metadata.md` | A retailer metadata sheet from `story.md`: title, authors, ISBN, language, word count (character count for a book counted in characters, with pages estimated from characters a page), estimated print pages, description, keywords, BISAC subjects, and a readiness checklist of what is missing |
 | `fountain` | `dist/<story-id>.fountain` | A screenplay scene skeleton in Fountain, not a conversion of the prose: a title page, a `##` section per chapter, and one scene heading per scene record (`INT. LAMP ROOM - DUSK`, from the `setting`, location name, and time), with the scene title as a synopsis and the source scene id, cast, and scene notes as unprinted notes. A scene with no `setting` on it or its location gets a forced heading (`.LAMP ROOM - DUSK`) and a warning. See [Screenplay skeleton](manuscripts.md#screenplay-skeleton-fountain) |
 | `twee` | `dist/<story-id>.twee` | A Twine story in Twee 3: `StoryTitle`, `StoryData` with the IFID (`ifid` in `story.md`, or one derived from the story id, with a warning giving the line to pin it) and the first chapter as the start, then one passage per chapter, named by its id, ending in a `[[text->chapter-NN]]` link for each of its [`choices`](project-format.md#branching-chapters). With no choices anywhere, each chapter links to the next. No matter pages. Refuses to build, exiting 3, while a choice is malformed or leads to a missing chapter, a chapter file name is not kebab-case, or `ifid` is malformed, and warns about chapters no choice path reaches. See [Twine story](manuscripts.md#twine-story) |
@@ -2430,6 +2430,8 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `too-many-keywords` | warning | `story.md` lists more keywords than most retailers accept. |
 | `todo-placeholder` | warning | A publishing field is still a `[TODO]` placeholder. |
 | `author-and-authors` | warning | `story.md` sets both `author` and `authors`. |
+| `unknown-label` | warning | A `story.md` `labels` entry names no build label, so builds ignore it. |
+| `blank-label` | warning | A `story.md` `labels` entry is blank (other than `by`), so builds use the language's own text. |
 
 ### Codes: links
 

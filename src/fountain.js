@@ -1,5 +1,5 @@
 import { parseClockTime } from "./continuity.js";
-import { languagePack } from "./languages/index.js";
+import { fillLabel, joinNames, languagePack } from "./languages/index.js";
 import { upperCase } from "./languages/locale.js";
 
 // Screenplay scene skeleton in Fountain for `build --format fountain`. Prose
@@ -46,12 +46,14 @@ export function fountainScript(input) {
   // Names and places are capitalised in the story's language (İ in Turkish).
   const pack = input.pack ?? languagePack();
   const lines = [`Title: ${inline(input.title)}`];
-  const authors = input.authors.map(inline).filter(Boolean).join(" and ");
+  const authors = joinNames(input.authors.map(inline).filter(Boolean), input.labels);
+  // The labels' own text is escaped as names are; the names are already.
+  const label = (key, values) => fillLabel(input.labels, key, values, escapeText).trim();
   if (authors !== "") {
-    lines.push("Credit: Written by", `Author: ${authors}`);
+    lines.push(`Credit: ${label("screenplay-credit")}`, `Author: ${authors}`);
   }
-  const noun = FORM_NOUNS[input.form] ?? "book";
-  lines.push(`Source: Based on the ${noun}${authors === "" ? "" : ` by ${authors}`}`, "");
+  const form = FORM_NOUNS[input.form] ?? "book";
+  lines.push(`Source: ${authors === "" ? label("screenplay-source-anonymous", { form }) : label("screenplay-source", { form, authors })}`, "");
   lines.push("[[Scene skeleton built by story build from the scene records. Notes and synopses are not printed. Draft the action and dialogue under each heading, and merge, cut, or reorder scenes as the adaptation needs.]]");
 
   for (const chapter of input.chapters) {
@@ -121,9 +123,13 @@ export function timeOfDay(value, pack = languagePack()) {
 // note and boneyard delimiters are broken up, so a name or title can never
 // open a note, a boneyard, or emphasis that swallows the rest of the script.
 export function inline(value) {
-  return String(value ?? "")
+  return escapeText(String(value ?? "").replace(/[\s\u0000-\u001f\u007f-\u009f]+/g, " ").trim());
+}
+
+// inline without the trim, for the text between a label's placeholders.
+function escapeText(text) {
+  return String(text)
     .replace(/[\s\u0000-\u001f\u007f-\u009f]+/g, " ")
-    .trim()
     .replace(/[\\*_]/g, "\\$&")
     .replace(/\[(?=\[)/g, "[ ")
     .replace(/\](?=\])/g, "] ");

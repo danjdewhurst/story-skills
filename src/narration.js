@@ -1,9 +1,12 @@
+import { fillLabel, joinNames } from "./languages/index.js";
 import { compareText } from "./languages/locale.js";
 import { characterCount, flattenHeadings, isSceneBreak, plainLinks, wordCount } from "./markdown.js";
 
 // Audiobook narration script: a pronunciation guide from the bible, opening
 // and closing credits, and each section with its estimated finished runtime.
-// Emphasis stays marked so the narrator knows where the stress falls.
+// Emphasis stays marked so the narrator knows where the stress falls. The
+// credits are spoken, so they are in the book's language; the rest is the
+// narrator's working notes, in English.
 
 export const NARRATION_WORDS_PER_MINUTE = 155;
 // For a book counted in characters: Japanese narration runs about 300
@@ -11,11 +14,28 @@ export const NARRATION_WORDS_PER_MINUTE = 155;
 // and the count includes punctuation, which is not read.
 export const NARRATION_CHARACTERS_PER_MINUTE = 300;
 
+// The unit the book is counted in (story.md `count-unit`, else its
+// language pack's), which the runtime is timed in.
+export function narrationUnit(manuscript) {
+  return manuscript?.unit === "characters" ? "characters" : "words";
+}
+
+// Units a minute in `unit`: the language pack's `narrationRate`, which is
+// in the pack's own count unit (`meta.countUnit`), or the default for the
+// unit when the book is counted another way (a German book set to
+// `count-unit: characters`) or the pack has no rate.
+export function narrationRate(meta, unit = "words") {
+  const fallback = unit === "characters" ? NARRATION_CHARACTERS_PER_MINUTE : NARRATION_WORDS_PER_MINUTE;
+  return typeof meta?.narrationRate === "number" && (meta.countUnit ?? "words") === unit ? meta.narrationRate : fallback;
+}
+
 export function narrationScript(manuscript, guide) {
-  const authors = manuscript.meta.authors.join(" and ");
-  const [rate, unit, count] = manuscript.unit === "characters"
-    ? [NARRATION_CHARACTERS_PER_MINUTE, "characters", characterCount]
-    : [NARRATION_WORDS_PER_MINUTE, "words", wordCount];
+  const labels = manuscript.meta.labels;
+  const unit = narrationUnit(manuscript);
+  const rate = narrationRate(manuscript.meta, unit);
+  const count = unit === "characters" ? characterCount : wordCount;
+  const authors = joinNames(manuscript.meta.authors, labels);
+  const narrator = "[narrator]";
   const sections = [
     ...manuscript.front.filter((entry) => !entry.copyright).map((entry) => ({ title: entry.title, body: entry.body })),
     ...manuscript.chapters.map((chapter) => ({ title: chapter.heading, body: chapter.body })),
@@ -39,7 +59,8 @@ export function narrationScript(manuscript, guide) {
       lines.push(`| ${cell(entry.name)} | ${cell(entry.pronunciation)} | ${entry.kind} |`);
     }
   }
-  lines.push("", "## Opening Credits", "", `${manuscript.title}${/[.!?…]["”’')\]]*$/.test(manuscript.title) ? "" : "."}${authors === "" ? "" : ` Written by ${authors}.`} Narrated by [narrator].`);
+  const credit = (key) => fillLabel(labels, authors === "" ? `${key}-anonymous` : key, { title: manuscript.title, authors, narrator });
+  lines.push("", "## Opening Credits", "", withoutDoubledStop(credit("narration-opening"), manuscript.title));
   // Section times are cut from the running total, so they add up to the
   // finished runtime instead of each rounding on its own.
   let wordsSoFar = 0;
@@ -49,8 +70,15 @@ export function narrationScript(manuscript, guide) {
     const minutes = Math.round(wordsSoFar / rate) - before;
     lines.push("", `## ${section.title}`, "", `[${minutes < 1 ? "under 1 min" : `about ${minutes} min`}]`, "", narrationBody(section.body));
   }
-  lines.push("", "## Closing Credits", "", `The end. You have been listening to ${manuscript.title}${authors === "" ? "" : `, written by ${authors}`}, narrated by [narrator].`, "");
+  lines.push("", "## Closing Credits", "", credit("narration-closing"), "");
   return lines.join("\n");
+}
+
+// A title that ends a sentence itself ("Run!", "Why?") takes no full stop
+// after it: the credit's "{title}." opening reads "Run! Written by".
+function withoutDoubledStop(text, title) {
+  const ending = /[.!?…。！？]["”’')\]」』》]*$/u;
+  return text.startsWith(title) && ending.test(title) && /^[.。।]/u.test(text.slice(title.length)) ? `${title}${text.slice(title.length + 1)}` : text;
 }
 
 export function pronunciationGuide(project) {

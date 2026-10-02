@@ -299,7 +299,7 @@ describe("a book counted in characters", () => {
     expect(sheet).toContain("| Character count | 32 |");
     expect(sheet).not.toContain("Word count");
     expect(invoke(root, ["build", "--format", "shunn", "--out", "shunn.md"]).code).toBe(0);
-    expect(fs.readFileSync(path.join(root, "shunn.md"), "utf8")).toContain("Approximately 32 characters");
+    expect(fs.readFileSync(path.join(root, "shunn.md"), "utf8")).toContain("約32字");
   });
 
   test("count-unit: words keeps a Japanese book in words", () => {

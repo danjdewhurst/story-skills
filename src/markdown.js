@@ -1,3 +1,4 @@
+import { fillLabel } from "./languages/index.js";
 import { wordSpans } from "./words.js";
 
 // Latin letters that NFKD does not decompose into a base letter plus marks,
@@ -98,13 +99,15 @@ export function titleCaseSlug(slug) {
 
 // "Chapter 3: Arrival", or plain "Chapter 3" when the title is blank or only
 // repeats the number, so an untitled chapter never reads "Chapter 3: Chapter 3".
-// `word` is story.md's `chapter-label` ("Kapitel"); a `{n}` in it places the
-// number ("第{n}章"), otherwise the number follows it.
-export function chapterHeading(number, title, word = "Chapter") {
+// `labels` are the book's (see buildLabels): `chapter` places the number
+// ("Kapitel {n}", "第{n}章") and `chapter-heading` joins it to the title
+// ("{chapter}: {title}"). The number keeps Latin digits, as every number
+// in builds does (see formatNumber in ./languages/locale.js).
+export function chapterHeading(number, title, labels = undefined) {
   const text = String(title ?? "").trim();
-  const name = String(word ?? "").trim() || "Chapter";
-  const label = name.includes("{n}") ? name.replace(/\{n\}/g, String(number)) : `${name} ${number}`;
-  return text === "" || text.toLowerCase() === label.toLowerCase() ? label : `${label}: ${text}`;
+  const n = String(number);
+  const label = fillLabel(labels, "chapter", { n }).trim() || fillLabel(undefined, "chapter", { n });
+  return text === "" || text.toLowerCase() === label.toLowerCase() ? label : fillLabel(labels, "chapter-heading", { chapter: label, title: text });
 }
 
 // Characters that continue a word: letters, combining marks (vowel signs,

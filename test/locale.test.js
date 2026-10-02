@@ -158,7 +158,7 @@ describe("locale-aware reports and builds", () => {
     const root = project("de");
     writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: Eins\nnumber: 1\nstatus: draft", `## Chapter Text\n\n${"Wort ".repeat(1234)}\n`);
     const text = fs.readFileSync(buildBook(root, { format: "shunn" }).outFile, "utf8");
-    expect(text).toContain("Approximately 1.200 words");
+    expect(text).toContain("Etwa 1.200 Wörter");
   });
 
   // Collation can differ between ICU versions, so the bundled fallback under

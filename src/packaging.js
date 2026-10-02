@@ -7,7 +7,7 @@ import fs from "node:fs";
 import { deflateRawSync } from "node:zlib";
 import { writeFile } from "./files.js";
 import { escapeHtml, withBlockquotes } from "./html.js";
-import { languagePack } from "./languages/index.js";
+import { fillLabel, languagePack } from "./languages/index.js";
 import { formatNumber } from "./languages/locale.js";
 import { characterCount, flattenHeadings, isSceneBreak, plainLinks, withoutFenceMarkers, wordCount } from "./markdown.js";
 import { publishingMeta } from "./publishing.js";
@@ -67,7 +67,7 @@ export function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
   const coverSpine = [];
   if (manuscript.cover) {
     const href = `images/cover.${manuscript.cover.extension}`;
-    const alt = meta.coverAlt === "" ? `Cover of ${manuscript.title}` : meta.coverAlt;
+    const alt = meta.coverAlt === "" ? fillLabel(meta.labels, "cover-alt", { title: manuscript.title }) : meta.coverAlt;
     coverEntries.push(
       { name: `OEBPS/${href}`, content: fs.readFileSync(manuscript.cover.filePath) },
       { name: "OEBPS/cover.xhtml", content: `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(manuscript.title)}</title>${head}</head><body epub:type="cover"><img src="${href}" alt="${xmlEscape(alt)}"/></body></html>` }
@@ -86,7 +86,7 @@ export function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
     ...meta.subjects.map((subject) => `<dc:subject>${xmlEscape(subject)}</dc:subject>`),
     meta.copyright === "" ? "" : `<dc:rights>${xmlEscape(meta.copyright)}</dc:rights>`
   ].join("");
-  const accessibility = epubAccessibilityMeta(Boolean(manuscript.cover));
+  const accessibility = epubAccessibilityMeta(Boolean(manuscript.cover), meta.labels);
   const items = documents.map((doc) => `<item id="${doc.id}" href="${doc.id}.xhtml" media-type="application/xhtml+xml"/>`);
   const spine = documents.map((doc) => `<itemref idref="${doc.id}"/>`);
   const modified = epubModifiedTimestamp();
@@ -96,7 +96,7 @@ export function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
     { name: "mimetype", content: "application/epub+zip", stored: true },
     { name: "META-INF/container.xml", content: `<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>` },
     { name: "OEBPS/content.opf", content: `<?xml version="1.0" encoding="UTF-8"?><package version="3.0" unique-identifier="book-id" xmlns="http://www.idpf.org/2007/opf"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book-id">${identifier}</dc:identifier><dc:title>${xmlEscape(manuscript.title)}</dc:title>${creator}<dc:language>${lang}</dc:language>${optional}<meta property="dcterms:modified">${modified}</meta>${accessibility}${coverMeta.join("")}${type.vertical ? `<meta name="primary-writing-mode" content="vertical-rl"/>` : ""}</metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>${stylesheet === "" ? "" : `<item id="style" href="style.css" media-type="text/css"/>`}${coverItems.join("")}${items.join("")}</manifest><spine${rtl || type.vertical ? ` page-progression-direction="rtl"` : ""}>${coverSpine.join("")}${spine.join("")}</spine></package>` },
-    { name: "OEBPS/nav.xhtml", content: navXhtml(manuscript.title, documents, root, meta.contentsLabel, head) },
+    { name: "OEBPS/nav.xhtml", content: navXhtml(manuscript.title, documents, root, meta.labels, head) },
     ...(stylesheet === "" ? [] : [{ name: "OEBPS/style.css", content: stylesheet }]),
     ...coverEntries,
     ...documents.map((doc) => ({ name: `OEBPS/${doc.id}.xhtml`, content: doc.content }))
@@ -118,24 +118,24 @@ function epubStylesheet(type) {
   return rules.length === 0 ? "" : `${rules.join("\n")}\n`;
 }
 
-// `root` is the html element's language (and direction) attributes, and
+// `root` is the html element's language (and direction) attributes,
+// `labels` the book's, for the contents heading and the landmark, and
 // `head` the stylesheet link, if any.
-function navXhtml(title, documents, root, contentsLabel = "Contents", head = "") {
+function navXhtml(title, documents, root, labels, head = "") {
   const links = documents.map((doc) => `<li><a href="${doc.id}.xhtml">${xmlEscape(doc.label)}</a></li>`);
   const start = documents.find((doc) => doc.bodymatter);
   // The nav document is not in the spine, so landmarks point only at spine
   // documents (EPUBCheck RSC-011); reading systems find the toc themselves.
-  const landmarks = start ? `<nav epub:type="landmarks" hidden="hidden"><ol><li><a epub:type="bodymatter" href="${start.id}.xhtml">Start of Content</a></li></ol></nav>` : "";
-  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(title)}</title>${head}</head><body><nav epub:type="toc" id="toc"><h1>${xmlEscape(contentsLabel)}</h1><ol>${links.join("")}</ol></nav>${landmarks}</body></html>`;
+  const landmarks = start ? `<nav epub:type="landmarks" hidden="hidden"><ol><li><a epub:type="bodymatter" href="${start.id}.xhtml">${xmlEscape(fillLabel(labels, "start-of-content"))}</a></li></ol></nav>` : "";
+  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(title)}</title>${head}</head><body><nav epub:type="toc" id="toc"><h1>${xmlEscape(fillLabel(labels, "contents"))}</h1><ol>${links.join("")}</ol></nav>${landmarks}</body></html>`;
 }
 
 // EPUB Accessibility 1.1 discovery metadata for a text-only book with a
-// table of contents and a single reading order.
-function epubAccessibilityMeta(hasCover) {
+// table of contents and a single reading order. The summary is in the
+// book's language, from `labels`.
+function epubAccessibilityMeta(hasCover, labels) {
   const features = ["tableOfContents", "readingOrder", "structuralNavigation", ...(hasCover ? ["alternativeText"] : [])];
-  const summary = hasCover
-    ? "Text book with a described cover image, a navigable table of contents, headings for each chapter, and a single logical reading order."
-    : "Text-only book with a navigable table of contents, headings for each chapter, and a single logical reading order.";
+  const summary = xmlEscape(fillLabel(labels, hasCover ? "accessibility-summary-cover" : "accessibility-summary"));
   return [
     `<meta property="schema:accessMode">textual</meta>`,
     ...(hasCover ? [`<meta property="schema:accessMode">visual</meta>`] : []),
@@ -221,7 +221,7 @@ export function htmlBook(manuscript) {
     authors: manuscript.meta.authors,
     language: manuscript.meta.language,
     writingMode: manuscript.meta.writingMode,
-    contentsLabel: manuscript.meta.contentsLabel,
+    labels: manuscript.meta.labels,
     words: manuscript.chapters.reduce((sum, chapter) => sum + wordCount(chapter.body), 0),
     parts
   };
@@ -337,19 +337,28 @@ export function shunnWordCount(words, pack = languagePack()) {
   return formatNumber(rounded, pack);
 }
 
-// The title page's length line, in characters for a book counted in
-// characters (`meta.characters`), rounded the same way.
+// The title page's length line in the book's language, in characters for a
+// book counted in characters (`meta.characters`), rounded the same way.
 function shunnLength(meta) {
-  return meta.characters === undefined ? `Approximately ${shunnWordCount(meta.words, meta.pack)} words` : `Approximately ${shunnWordCount(meta.characters, meta.pack)} characters`;
+  return meta.characters === undefined
+    ? fillLabel(meta.labels, "approximate-words", { words: shunnWordCount(meta.words, meta.pack) })
+    : fillLabel(meta.labels, "approximate-characters", { characters: shunnWordCount(meta.characters, meta.pack) });
+}
+
+// The title block's byline, as lines: "by" and the author, the name alone
+// when the language's `by` label is empty, and nothing without an author.
+function shunnByline(meta) {
+  if (!meta.author) {
+    return [];
+  }
+  const by = fillLabel(meta.labels, "by");
+  return by === "" ? [meta.author] : [by, meta.author];
 }
 
 function shunnTitlePageXml(script, meta) {
   const line = (text, decoration) => shunnParagraphXml(script, shunnRunXml(script, text, decoration), true);
   const lines = [line(meta.title, { strong: true })];
-  // The byline is left out, "by" and all, when there is no author.
-  if (meta.author) {
-    lines.push(line("by"), line(meta.author));
-  }
+  lines.push(...shunnByline(meta).map((text) => line(text)));
   lines.push(line(shunnLength(meta)));
   for (const contactLine of meta.contact) {
     lines.push(line(String(contactLine)));
@@ -392,10 +401,7 @@ export function writeShunnDocx(outFile, manuscript, meta, writeOptions = {}) {
 
 export function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {}) {
   const lines = [meta.title];
-  if (meta.author) {
-    lines.push("by", meta.author);
-  }
-  lines.push("", shunnLength(meta), "");
+  lines.push(...shunnByline(meta), "", shunnLength(meta), "");
   for (const contactLine of meta.contact) {
     lines.push(String(contactLine));
   }
