@@ -257,6 +257,12 @@ function main() {
         );
       }
     }
+    if ("language" in checks) {
+      check(
+        typeof checks.language === "string" && /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(checks.language),
+        `${name}/checks.json: language must be a BCP 47 tag such as fr, ja, or ar`
+      );
+    }
     if ("voice_drift" in checks) {
       const drift = checks.voice_drift;
       if (typeof drift !== "object" || drift === null || Array.isArray(drift)) {
