@@ -6,5 +6,7 @@ export default {
   code: "sv",
   name: "Swedish",
   quotes: [["”", "”"], ["’", "’"], ["»", "»"], ["“", "”"], ["\"", "\""]],
-  dialogueDash: ["–", "—"]
+  dialogueDash: ["–", "—"],
+  // – Hej, sa Anna. – Kom hit. is two lines of speech.
+  dashStartsLine: true
 };

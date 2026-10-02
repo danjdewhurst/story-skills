@@ -39,8 +39,12 @@ export default {
   // The dash that opens a line of dialogue (— Line, said Cy.), a list of
   // them, or null.
   // Speech runs to a closing dash or a tag after a comma, and resumes after
-  // the next dash (—Ya voy —dijo ella—. Espera.).
+  // the dash that closes the tag (—Ya voy —dijo ella—. Espera.).
   dialogueDash: "—",
+  // Whether a dash after a finished sentence and before a capital starts a
+  // new line of speech (– Hej, sa Anna. – Kom hit.) rather than narration
+  // (—Vete. —Ella se giró.).
+  dashStartsLine: false,
   // Generated text in builds, by key.
   labels: {},
   // Word lists for the analysis checks, by name; see ./en.js.
