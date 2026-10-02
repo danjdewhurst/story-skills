@@ -11,7 +11,7 @@ import { languagePack } from "./languages/index.js";
 import { formatNumber } from "./languages/locale.js";
 import { flattenHeadings, isSceneBreak, plainLinks, withoutFenceMarkers, wordCount } from "./markdown.js";
 import { publishingMeta } from "./publishing.js";
-import { typesetting } from "./typesetting.js";
+import { typesetting, writtenTag } from "./typesetting.js";
 
 function epubModifiedTimestamp() {
   // Deterministic builds: identical sources must produce byte-identical
@@ -95,7 +95,7 @@ export function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
     // a fixed offset in the archive.
     { name: "mimetype", content: "application/epub+zip", stored: true },
     { name: "META-INF/container.xml", content: `<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>` },
-    { name: "OEBPS/content.opf", content: `<?xml version="1.0" encoding="UTF-8"?><package version="3.0" unique-identifier="book-id" xmlns="http://www.idpf.org/2007/opf"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book-id">${identifier}</dc:identifier><dc:title>${xmlEscape(manuscript.title)}</dc:title>${creator}<dc:language>${lang}</dc:language>${optional}<meta property="dcterms:modified">${modified}</meta>${accessibility}${coverMeta.join("")}</metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>${stylesheet === "" ? "" : `<item id="style" href="style.css" media-type="text/css"/>`}${coverItems.join("")}${items.join("")}</manifest><spine${rtl || type.vertical ? ` page-progression-direction="rtl"` : ""}>${coverSpine.join("")}${spine.join("")}</spine></package>` },
+    { name: "OEBPS/content.opf", content: `<?xml version="1.0" encoding="UTF-8"?><package version="3.0" unique-identifier="book-id" xmlns="http://www.idpf.org/2007/opf"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book-id">${identifier}</dc:identifier><dc:title>${xmlEscape(manuscript.title)}</dc:title>${creator}<dc:language>${lang}</dc:language>${optional}<meta property="dcterms:modified">${modified}</meta>${accessibility}${coverMeta.join("")}${type.vertical ? `<meta name="primary-writing-mode" content="vertical-rl"/>` : ""}</metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>${stylesheet === "" ? "" : `<item id="style" href="style.css" media-type="text/css"/>`}${coverItems.join("")}${items.join("")}</manifest><spine${rtl || type.vertical ? ` page-progression-direction="rtl"` : ""}>${coverSpine.join("")}${spine.join("")}</spine></package>` },
     { name: "OEBPS/nav.xhtml", content: navXhtml(manuscript.title, documents, root, meta.contentsLabel, head) },
     ...(stylesheet === "" ? [] : [{ name: "OEBPS/style.css", content: stylesheet }]),
     ...coverEntries,
@@ -255,10 +255,11 @@ function docxScript(meta) {
   const language = meta?.language ?? "en";
   const type = typesetting(language, meta?.writingMode);
   const { eastAsia, cs, eastAsian, complex } = type.docx;
-  const tag = xmlEscape(language);
+  const written = writtenTag(language);
+  const tag = xmlEscape(written);
   const font = (name) => `"${name ?? "Times New Roman"}"`;
   return {
-    lang: language.toLowerCase() === "en" ? "" : `<w:lang w:val="${tag}"${eastAsian ? ` w:eastAsia="${tag}"` : ""}${complex ? ` w:bidi="${tag}"` : ""}/>`,
+    lang: written === "en" || written === "und" ? "" : `<w:lang w:val="${tag}"${eastAsian ? ` w:eastAsia="${tag}"` : ""}${complex ? ` w:bidi="${tag}"` : ""}/>`,
     bidi: type.rtl ? "<w:bidi/>" : "",
     rtl: type.rtl ? "<w:rtl/>" : "",
     bold: complex ? "<w:b/><w:bCs/>" : "<w:b/>",
@@ -315,7 +316,7 @@ function shunnParagraphXml(script, runXml, centered, quote = false) {
 }
 
 function shunnChapterHeadingXml(script, text) {
-  return `<w:p><w:pPr>${script.bidi}${SHUNN_PARAGRAPH_SPACING}<w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:r><w:br w:type="page"/></w:r>${shunnRunXml(script, text, { strong: true })}</w:p>`;
+  return `<w:p><w:pPr>${script.bidi}${SHUNN_PARAGRAPH_SPACING}<w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:r>${script.rtl === "" ? "" : `<w:rPr>${script.rtl}</w:rPr>`}<w:br w:type="page"/></w:r>${shunnRunXml(script, text, { strong: true })}</w:p>`;
 }
 
 // Shunn word counts are rounded: exact under 1,000 words, to the nearest

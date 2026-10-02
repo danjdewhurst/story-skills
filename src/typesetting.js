@@ -1,5 +1,5 @@
 import { err } from "./findings.js";
-import { languagePack, projectLanguage } from "./languages/index.js";
+import { languagePack, lookupTag, projectLanguage } from "./languages/index.js";
 import { textDirection } from "./publishing.js";
 
 // How a book is set for its language's script: the fonts the HTML, print,
@@ -13,17 +13,20 @@ export const WRITING_MODES = new Set(["horizontal", "vertical"]);
 // Scripts with upper and lower case.
 const CASED_SCRIPTS = new Set(["Latn", "Cyrl", "Grek", "Armn", "Copt", "Glag", "Adlm", "Osge", "Dsrt"]);
 
-// Scripts set top to bottom in columns running right to left. Korean is
-// left out: Hangul is set horizontally, so ko needs ko-Hani to go vertical.
-const VERTICAL_SCRIPTS = new Set(["Jpan", "Hani", "Hans", "Hant", "Hira", "Kana", "Bopo"]);
+// Scripts set top to bottom in columns running right to left. Traditional
+// Mongolian runs its columns left to right (vertical-lr), which the builds
+// do not set yet.
+const VERTICAL_SCRIPTS = new Set(["Jpan", "Hani", "Hans", "Hant", "Hira", "Kana", "Bopo", "Kore", "Hang"]);
 
 // Scripts Word treats as East Asian (the eastAsia font and language) and as
 // complex (the cs font, the bidi language, and bCs/iCs for bold and italic).
 const EAST_ASIAN_SCRIPTS = new Set(["Jpan", "Hani", "Hans", "Hant", "Hira", "Kana", "Bopo", "Kore", "Hang"]);
 const COMPLEX_SCRIPTS = new Set(["Arab", "Hebr", "Syrc", "Thaa", "Nkoo", "Deva", "Beng", "Guru", "Gujr", "Orya", "Taml", "Telu", "Knda", "Mlym", "Sinh", "Thai", "Laoo", "Khmr", "Mymr", "Tibt"]);
 
-// The script of a common language that has no pack yet (a pack's `script`
-// wins), so a Russian or Persian book still gets fonts for its script.
+// The script of a common language that has no pack of its own yet (the
+// language's own pack's `script` wins), so a Russian or Persian book still
+// gets fonts for its script. It wins over a macrolanguage's pack, so
+// Cantonese (zh-yue, under zh) is written in Traditional characters.
 const LIKELY_SCRIPTS = {
   Cyrl: ["ru", "uk", "be", "bg", "mk", "sr", "kk", "ky", "mn", "tg", "tt", "ba", "cv", "os"],
   Grek: ["el"],
@@ -48,7 +51,9 @@ const LIKELY_SCRIPTS = {
   Ethi: ["am", "ti"],
   Thaa: ["dv"],
   Syrc: ["syr"],
-  Hant: ["yue"]
+  Cher: ["chr"],
+  Hans: ["cmn", "wuu", "hak", "nan", "gan", "hsn", "cjy"],
+  Hant: ["yue", "lzh"]
 };
 const SCRIPT_OF = new Map(Object.entries(LIKELY_SCRIPTS).flatMap(([script, codes]) => codes.map((code) => [code, script])));
 
@@ -70,7 +75,8 @@ const FONT_STACKS = {
   Arab: `"Noto Naskh Arabic", "Geeza Pro", "Times New Roman", "Traditional Arabic", serif`,
   Hebr: `"Noto Serif Hebrew", "Times New Roman", David, "Arial Hebrew", serif`,
   Deva: `"Noto Serif Devanagari", "Kohinoor Devanagari", "Devanagari Sangam MN", Mangal, "Nirmala UI", serif`,
-  Thai: `"Noto Serif Thai", Thonburi, "Leelawadee UI", Tahoma, serif`
+  Thai: `"Noto Serif Thai", Thonburi, "Leelawadee UI", Tahoma, serif`,
+  Cher: `"Plantagenet Cherokee", Gadugi, "Noto Sans Cherokee", serif`
 };
 FONT_STACKS.Grek = FONT_STACKS.Cyrl;
 
@@ -79,29 +85,47 @@ FONT_STACKS.Grek = FONT_STACKS.Cyrl;
 const DOCX_EAST_ASIA = { Jpan: "MS Mincho", Hans: "SimSun", Hant: "PMingLiU", Kore: "Batang" };
 const DOCX_COMPLEX = { Deva: "Mangal", Thai: "Tahoma" };
 
-// A language tag's subtags, in lower case, and its script subtag in title
-// case (Latn) or null.
+// A language tag read as the language packs read it (lookupTag: aliases
+// such as iw and jpn resolved, an extlang tag such as zh-yue as yue, a
+// grandfathered tag in its modern form), so the same tag finds the same
+// script on every runtime: { primary, script, region, subtags } with the
+// script in title case (Latn) or null. Only the subtag after the language
+// can be a script and only the one after that (or after the language) a
+// region, so a private-use or extension subtag (en-x-hani, ar-u-nu-latn)
+// never counts.
 function parseTag(language) {
-  const subtags = String(language ?? "").trim().toLowerCase().split(/[-_]/);
-  const script = subtags.slice(1).find((subtag) => /^[a-z]{4}$/.test(subtag));
-  return { subtags, script: script === undefined ? null : `${script[0].toUpperCase()}${script.slice(1)}` };
+  const subtags = lookupTag(String(language ?? "").trim() || "en")[0].split("-");
+  const [primary, ...rest] = subtags;
+  const script = /^[a-z]{4}$/.test(rest[0] ?? "") ? `${rest[0][0].toUpperCase()}${rest[0].slice(1)}` : null;
+  const region = rest[script === null ? 0 : 1] ?? "";
+  return { primary, script, region: /^(?:[a-z]{2}|\d{3})$/.test(region) ? region : null, subtags };
+}
+
+// The tag in its usual case (zh-Hant-TW, en-GB), after the lookup above,
+// for Word's language settings. "und" when the tag names no language.
+export function writtenTag(language) {
+  const { script, region, subtags } = parseTag(language);
+  const at = script === null ? 1 : 2;
+  return subtags.map((subtag, index) => {
+    if (index === 1 && script !== null) {
+      return script;
+    }
+    return index === at && region !== null ? subtag.toUpperCase() : subtag;
+  }).join("-");
 }
 
 // The ISO 15924 script a book in `language` is written in: the tag's script
-// subtag (sr-Latn, zh-Hant), else the pack's, else the table above, else
-// Latin.
+// subtag (sr-Latn, zh-Hant), else the language's own pack's, else the
+// table above, else a macrolanguage pack's (zh for cmn), else Latin.
 export function languageScript(language) {
-  const { subtags, script } = parseTag(language);
+  const { primary, script, region } = parseTag(language);
   if (script !== null) {
     return script;
   }
-  const primary = subtags[0];
   const pack = languagePack(language);
-  const found = pack.script ?? SCRIPT_OF.get(primary) ?? "Latn";
-  if (found === "Hans" && subtags.slice(1).some((subtag) => TRADITIONAL_REGIONS.has(subtag))) {
-    return "Hant";
-  }
-  return found;
+  const own = pack.code.split("-")[0] === primary ? pack.script : null;
+  const found = own ?? SCRIPT_OF.get(primary) ?? pack.script ?? "Latn";
+  return found === "Hans" && TRADITIONAL_REGIONS.has(region) ? "Hant" : found;
 }
 
 // The script whose fonts set the book: Japanese kana and Han in a Japanese
@@ -118,11 +142,11 @@ function fontScript(script, language) {
     return "Hant";
   }
   if (script === "Hani") {
-    const [primary, ...rest] = parseTag(language).subtags;
+    const { primary, region } = parseTag(language);
     if (primary === "ja" || primary === "ko") {
       return primary === "ja" ? "Jpan" : "Kore";
     }
-    return primary === "yue" || rest.some((subtag) => TRADITIONAL_REGIONS.has(subtag)) ? "Hant" : "Hans";
+    return SCRIPT_OF.get(primary) === "Hant" || TRADITIONAL_REGIONS.has(region) ? "Hant" : "Hans";
   }
   return script;
 }
@@ -174,7 +198,9 @@ export function validateWritingMode(data, errors) {
     return;
   }
   const language = projectLanguage(data);
-  if (!supportsVertical(language)) {
-    errors.push(err("unsupported-writing-mode", `story.md writing-mode vertical needs a language set in vertical columns, such as ja, zh, or zh-Hant; ${language} is set horizontally, so builds ignore it`, "story.md"));
+  if (languageScript(language) === "Mong") {
+    errors.push(err("unsupported-writing-mode", `story.md writing-mode vertical is not supported yet for ${language}: traditional Mongolian runs its columns left to right (vertical-lr), so builds ignore it`, "story.md"));
+  } else if (!supportsVertical(language)) {
+    errors.push(err("unsupported-writing-mode", `story.md writing-mode vertical needs a language set in vertical columns, such as ja, zh, zh-Hant, or ko; ${language} is set horizontally, so builds ignore it`, "story.md"));
   }
 }
