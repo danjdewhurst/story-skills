@@ -54,7 +54,10 @@ the panel.
    and which personas to run (default: all five). Take genre, form, POV,
    and tense from the `story context` output in step 2 (its Story
    essentials section), not from `story.md`, whose Synopsis may describe
-   the ending. The genre reader needs the genre.
+   the ending. The genre reader needs the genre. Also read `language` from
+   `story.md` frontmatter only (a missing field means `en`): it is no
+   spoiler, and every persona reads the book as a reader of that
+   language would.
 2. Pick the round number: the next free `N` under `feedback/`. A panel
    gets its own round. Never add simulated reads to a round of human
    readers, so the human synthesis stays independent.
@@ -81,7 +84,7 @@ story context chapter-{NN} --path . --budget 4000
 ```
 
 It includes nothing from later chapters and leaves out the synopsis. Do not
-read `story.md`, `plot/`, arc files, promise payoffs, or chapters after the
+read `story.md` beyond its `language` field, `plot/`, arc files, promise payoffs, or chapters after the
 range: a persona
 that knows the ending cannot tell whether the setup works. When the
 genre reader needs the genre's promises, take them from the chapters and
@@ -91,7 +94,7 @@ the genre, not from the outline.
 
 1. Run one persona at a time. If you can start subagents, give each
    persona its own subagent with only its reference file, the chapters in
-   range, and the `story context` output, so no persona reads another's
+   range, the `story context` output, and the book's language, so no persona reads another's
    notes. Otherwise finish and save one persona's file before starting the
    next, and do not revise earlier files after reading later ones.
 2. Follow the persona's reference file. Read the whole range before
@@ -103,7 +106,12 @@ the genre, not from the outline.
    nothing writes that in **Overall Impression** and leaves **Problems**
    empty. Never pad a read to look thorough, and never invent a problem
    another persona or a craft checklist would expect.
-5. Mark uncertainty. When a note depends on something the persona cannot
+5. Read in the book's language. Judge prose, dialogue, and punctuation
+   by that language's conventions and the style sheet, not English ones:
+   guillemets or dialogue dashes are not errors in a French or Spanish
+   book. Quote the text exactly as written, and write the notes in the
+   language the user works in with you unless they ask otherwise.
+6. Mark uncertainty. When a note depends on something the persona cannot
    see (a later payoff, the author's intent), say so in the note instead
    of asserting it.
 

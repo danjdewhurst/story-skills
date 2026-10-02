@@ -48,10 +48,17 @@ start — arcs get built during reconciliation.
    craft in `chapter-writing/references/writing-guidelines.md` and the
    scene-grain tools in the `scene-craft` skill as usual, and write in the
    voice and house style recorded in `style-sheet.md` — discovery changes
-   *planning order*, not prose standards.
+   *planning order*, not prose standards. Write in the `language` set in
+   `story.md` (a missing field means `en`); the craft references' word-level
+   advice is English, so in another language keep its aims and follow the
+   style sheet's conventions.
 3. **Run the reconcile loop.** After each chapter, follow
    `references/reconcile-loop.md` exactly:
-   - Extract new entity/promise candidates (import-style, user-approved)
+   - Extract new entity/promise candidates (import-style, user-approved),
+     keeping names as the prose spells them. Ids stay ASCII kebab-case: a
+     name with no ASCII letters or digits (`Пётр`, `李明`) needs
+     `story add character "Пётр" --id petr`, with the id agreed with the
+     user
    - Reverse-outline the chapter into the chapter file and `scenes/` records
    - Diff against the bible (new / contradiction / enrichment / dangling)
    - Reconcile: update the bible **or** revise the chapter — never neither

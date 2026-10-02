@@ -28,7 +28,10 @@ allow-words:
   turns on a built-in list of common spelling pairs (colour/color,
   grey/gray, defence/defense, travelled/traveled, and their inflections).
   -ise/-ize is not in the list because British publishers use both; add
-  `preferred` entries for the words the book uses.
+  `preferred` entries for the words the book uses. The pairs are English:
+  for a book in another language use `unspecified`, and record that
+  language's variant choices (Brazilian or European Portuguese spellings,
+  German reformed or traditional spelling) as `preferred` entries.
 - `preferred` entries need a non-empty `use` and `avoid` that differ. The
   frontmatter parser does not read inline lists, so write one entry per
   avoided form. A style-sheet entry naming either word of a built-in dialect
@@ -61,7 +64,11 @@ calendars are written, and how time of day is told.
 
 **Dialogue And Punctuation.** Double or single quotes, closed or spaced
 dashes, ellipsis style, what italics are for, and the default tags
-(*said*/*asked* plus action beats is the usual baseline).
+(in English, *said*/*asked* plus action beats is the usual baseline).
+Other languages use guillemets, dialogue dashes, corner brackets, or
+spaces before punctuation: choose and record them with
+`../../line-editing/references/language-conventions.md`, including one
+example line of dialogue with a tag.
 
 **Character Voices.** One line per POV character or major speaker, linked
 to the character file:
@@ -78,7 +85,9 @@ Read at least 1,000 words and note, with examples:
 1. Distance: are feelings named (*she was afraid*) or shown through the body?
 2. Rhythm: typical sentence length and when it changes. `story prose .`
    reports average, longest, and spread per chapter.
-3. Register: vocabulary level, contractions, profanity, era markers.
+3. Register: vocabulary level, contractions, profanity, era markers, and
+   in languages that have them, forms of address (*tu*/*vous*,
+   *du*/*Sie*) and politeness levels.
 4. Figurative language: how often, and drawn from which domain (the POV
    character's world, not the author's).
 5. Paragraphing: long blocks or frequent breaks; one-line paragraphs for

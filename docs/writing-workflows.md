@@ -90,6 +90,23 @@ Almost every workflow ends with some subset of these five commands:
 
 `story add` rebuilds the registries itself, so you only need `story reindex .` after editing files by hand. `story next .` runs `validate`, `links`, and `continuity` and turns their results into a prioritised to-do list, which makes it a good way to start a session.
 
+### Writing in another language
+
+Every workflow below works for a book in any language. Set `language` in `story.md` to a BCP 47 tag (`fr`, `es-MX`, `pt-BR`, `ja`); without it the skills assume English. `story-init` asks for it and adds it to `story.md`, since `story init` has no flag for it:
+
+```yaml
+language: fr
+```
+
+The skills that draft, edit, or critique prose then work in that language: chapters are drafted in it, line edits follow its grammar and conventions, reader-panel personas read as its readers would, and verse is scanned by its own tradition rather than in English feet. Advice built on English word lists (filter words, -ly adverbs, *said*, British and American spellings) is marked as English, and for another language the skills apply its aim rather than its lists. When `story prose` or `story voices` reports a check skipped for the book's language, the skill does that pass by reading.
+
+Two things to settle early in a book not in English:
+
+- **The style sheet.** Set `dialect: unspecified` (the British and American spelling pairs are English) and record spelling variants as `preferred` entries.
+- **Dialogue punctuation.** Guillemets, dialogue dashes, corner brackets, or spaces before punctuation. The `voice-style` skill settles them with you from line-editing's [`language-conventions.md`](../skills/line-editing/references/language-conventions.md) and records an example line in the style sheet.
+
+For sending the book out, `submission` treats its query-letter, Shunn, and word-count conventions as the English-language market's and asks for your market's guidelines, and `publishing` covers Thema subjects alongside BISAC, ISBN agencies and retailers outside the US and UK, and rights by language and territory.
+
 ## Premise workshop
 
 **Goal:** turn a spark into a premise that can carry a book, choose its form, and hand a brief to `story-init`, before any project folder exists.
@@ -131,7 +148,7 @@ The [form reference](../skills/premise-workshop/references/form-choice.md) count
 
 ### 5. Hand off to story-init
 
-The skill shows a one-screen brief (working title, logline, premise, counter-premise, stakes, form, genre and sub-genre, POV and tense if known, themes, comps). On your approval it follows `story-init` with that brief, so you are not asked the same questions twice. Workshop text is your own words, so it quotes every value in single quotes for the shell, writing an apostrophe inside a value as `'\''`:
+The skill shows a one-screen brief (working title, logline, premise, counter-premise, stakes, form, genre and sub-genre, POV and tense if known, themes, comps, and the book's language). On your approval it follows `story-init` with that brief, so you are not asked the same questions twice. Workshop text is your own words, so it quotes every value in single quotes for the shell, writing an apostrophe inside a value as `'\''`:
 
 ```shell
 story init 'The Gannet Point Light' --form novel --genre mystery --sub-genre coastal \
@@ -194,7 +211,7 @@ limited, past tense. A lighthouse keeper's daughter finds a drowned man in
 the tide room. Themes: grief and duty.
 ```
 
-The [`story-init`](../skills/story-init/SKILL.md) skill asks for anything missing (title, form, sub-genre, setting era, 2 to 4 themes, POV, tense), then scaffolds the project with the CLI:
+The [`story-init`](../skills/story-init/SKILL.md) skill asks for anything missing (title, form, sub-genre, setting era, 2 to 4 themes, POV, tense, language), then scaffolds the project with the CLI. For a book not in English it then adds `language` to `story.md` (see [Writing in another language](#writing-in-another-language)):
 
 ```shell
 story init "The Gannet Point Light" --form novel --genre mystery --sub-genre coastal \
@@ -770,7 +787,7 @@ story validate .
 Set up the style sheet from the first two chapters. We're using American spelling.
 ```
 
-The skill reads `story.md`, the existing `style-sheet.md`, and two or three drafted chapters (or asks you for a sample paragraph, or three published books whose voice is close). It fills in the style sheet from decisions the prose has already made. Where the draft is inconsistent, *grey* in one chapter and *gray* in another, it asks you which wins instead of choosing. The frontmatter is machine-readable:
+The skill reads `story.md`, the existing `style-sheet.md`, and two or three drafted chapters (or asks you for a sample paragraph, or three published books whose voice is close). It fills in the style sheet from decisions the prose has already made. Where the draft is inconsistent, *grey* in one chapter and *gray* in another, it asks you which wins instead of choosing. For a book not in English it uses `dialect: unspecified` and records the language's dialogue and punctuation conventions (see [Writing in another language](#writing-in-another-language)). The frontmatter is machine-readable:
 
 ```yaml
 ---

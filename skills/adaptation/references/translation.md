@@ -74,7 +74,8 @@ unless the target is British or American English, and use `preferred`,
 `watch-words`, and the body for:
 
 - Quotation style: « » with spaces in French, „ " or » « in German,
-  em-dash dialogue in Spanish and many other languages
+  em-dash dialogue in Spanish and many other languages (see
+  `../../line-editing/references/language-conventions.md` for more)
 - Formal and informal address (tu/vous, du/Sie, tú/usted) per character
   pair, and when it changes in the story
 - Numbers, dates, units, and currency: convert or keep

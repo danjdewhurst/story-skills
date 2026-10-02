@@ -33,7 +33,13 @@ outline-first drafting workflow.
    - Past events or a time jump are needed → `references/flashbacks-time.md`
    - Starting the book or a chapter, or introducing a character → `references/openings.md`
 2. **Read the relevant reference(s).** Each file carries its own checklists
-   and planning fields; apply them, don't paraphrase them.
+   and planning fields; apply them, don't paraphrase them. Read `language`
+   in `story.md` (a missing field means `en`) and plan and draft in that
+   language. The structural tools (scene and sequel, try/fail, scene
+   cards, psychic distance) apply in any language; the word lists and
+   dialogue-tag advice in `deep-pov.md` and `dialogue-subtext.md` are
+   English, so for another language look for the same effect in that
+   language and take dialogue punctuation from the style sheet.
 3. **Clarify missing inputs before planning or editing.** Ask the user for
    any required inputs you cannot establish from the project files — scene
    purpose, viewpoint, location, canon-changing intent, and the applicable
@@ -72,7 +78,8 @@ outline-first drafting workflow.
      for the first-page counterpart)
 6. **Run the reference's checklist** against the draft or the revision plan
    (try/fail checklist, deep-POV filter-word scan, tag-swap test, first-page
-   hook check). Run `story pacing .` to see scene outcomes, sequel counts,
+   hook check). If `story prose` reports the filter-word check skipped for
+   the book's language, do that scan by reading. Run `story pacing .` to see scene outcomes, sequel counts,
    and chapter hooks across the book: it warns after three or more
    consecutive `yes` outcomes, four or more scene units without a sequel,
    and three or more chapters in a row ending on `resolution`.

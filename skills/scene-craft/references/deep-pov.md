@@ -36,7 +36,9 @@ When a scene is planned at deep-POV level, enforce these mechanically before
 and after drafting:
 
 **Filter words to strike.** These words insert a narrator between the reader
-and the POV character's perception:
+and the POV character's perception. The list is English; for a book in
+another language (`language` in `story.md`), look for that language's
+verbs of feeling, knowing, and perceiving used the same way:
 
 - felt, feel, feeling (she felt afraid → her hands shook)
 - knew, know, knowing
@@ -49,7 +51,8 @@ and the POV character's perception:
 This is a checkable list, not a style guide. Scan the draft for each word;
 where it mediates perception, rewrite as direct perception. `story prose .`
 counts the common filter words in narration per chapter (see the
-`voice-style` skill).
+`voice-style` skill). If it reports the check skipped for the book's
+language, do this scan by reading.
 
 **No thought-tags.** Italicized thoughts with tags ("she thought," "she told
 herself") are training wheels. Deep POV expresses thought as unmediated

@@ -38,7 +38,10 @@ kept material into `story.md` after init.
 
 ### 1. Capture the spark
 
-Ask what the user has, in their words, and do not improve it yet. Sort it:
+Ask what the user has, in their words, and do not improve it yet. Ask
+which language the book will be written in if it is not clear, and
+workshop in that language: what-ifs, loglines, and titles are drafted in
+it, and comps come from the market that reads it. Sort it:
 an **image** (a drowned bell tower), a **what-if** (what if grief could be
 sold), a **character** (a lighthouse keeper who has never left the rock),
 a **setting** (a city that moves every winter), or a **feeling** they want
@@ -123,7 +126,8 @@ unverified.
 
 Present a one-screen brief: working title, logline, premise,
 counter-premise, stakes, form, genre and sub-genre, POV and tense if
-known, themes, and the comps. On approval, follow the `story-init` skill
+known, themes, the comps, and the book's language as a BCP 47 tag (`en`,
+`fr`, `es-MX`, `ja`). On approval, follow the `story-init` skill
 with the brief:
 
 ```shell
@@ -137,8 +141,10 @@ where `$(...)`, backticks, and `"` still take effect.
 
 `--form` sets `form` in `story.md` and a default `target-words` for the
 form when none is given (`serial` sets none; set per-episode chapter
-`target-words` instead). Then hand-edit `premise` and `counter-premise`
-into `story.md`, and move the stakes, rejected what-ifs worth keeping,
+`target-words` instead). The form defaults and `references/form-choice.md`
+lengths are English word counts; for a book in another language, discuss
+the target with the user. Then hand-edit `premise`, `counter-premise`,
+and, for a book not in English, `language` into `story.md`, and move the stakes, rejected what-ifs worth keeping,
 title shortlist, and comps into its `## Notes` section. Keep
 `premise-notes.md` if one was made: offer to move it into the new
 project as `notes/premise-notes.md`, and delete it only when the user

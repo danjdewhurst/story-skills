@@ -23,6 +23,19 @@ later). Read `style-sheet.md` if present; if it is missing or thin, build
 it first with the `voice-style` skill, because the copyedit checks against
 it.
 
+## Language
+
+Read `language` in `story.md` (a BCP 47 tag such as `en-GB`, `fr`, or
+`ja`; a missing field means `en`). Edit in that language and to its
+grammar and conventions, and write edit notes in the language the user
+works in with you, quoting the prose exactly as written. The checklists'
+word-level advice (filter words, -ly adverbs, *said*, dialogue
+punctuation) is English: for another language, apply its aim, not its
+word lists, and take dialogue and punctuation from the style sheet and
+`references/language-conventions.md`. When `story prose` or
+`story voices` reports a check skipped for the book's language, or a
+check plainly does not fit it, do that pass by reading.
+
 ## When to Use
 
 - A chapter's structure is settled and the prose needs polish
@@ -111,7 +124,10 @@ when two voices are near-identical, when a character says a
 2. Run `story prose .` and fix every avoided spelling. Then work through
    `references/copyedit-checklist.md` against `style-sheet.md`: grammar,
    punctuation, dialogue punctuation, capitalisation, hyphenation,
-   numbers, and consistency of names and terms (check the glossary).
+   numbers, and consistency of names and terms (check the glossary). For
+   a book not in English, take dialogue and punctuation conventions from
+   `references/language-conventions.md`; if the style sheet has not
+   recorded them, settle them with the author first.
 3. Record every new decision in `style-sheet.md` in the same change, so
    the next chapter follows it.
 4. Tell the user plainly: this is a consistency and correctness pass, not
@@ -127,7 +143,9 @@ story build . --format narration
 
 Offer to play chapters with the system's text-to-speech if one is
 installed (`say` on macOS; `espeak-ng` or `spd-say` on Linux). Check with
-`command -v`; ask before installing anything. Listen for stumbles,
+`command -v`; ask before installing anything. Choose a voice for the
+book's `language` (`say -v '?'` and `espeak-ng --voices` list them); an
+English voice reading another language is no test of the prose. Listen for stumbles,
 unintended rhymes, tongue-twisters, and runs of same-length sentences;
 record them as edit notes.
 
@@ -195,4 +213,5 @@ story validate .
 - **`references/line-edit-checklist.md`** - Paragraph-level line edit checks (clarity, precision, economy, rhythm, POV distance, voice) and character-voice differentiation levers
 - **`references/copyedit-checklist.md`** - Copyedit and proof checks against the style sheet: grammar, punctuation, dialogue punctuation, consistency, and the proof pass on built copies
 - **`references/read-aloud-guide.md`** - Running a read-aloud pass with the narration build and OS text-to-speech, and what to listen for
+- **`references/language-conventions.md`** - Dialogue and punctuation conventions by language (quote marks, dialogue dashes, spacing before punctuation, Spanish ¿¡, CJK brackets), and how to record them in the style sheet
 - **`references/edit-note-format.md`** - How to present edits to the author: before/after with rationale, batching, and recording accepted and rejected changes

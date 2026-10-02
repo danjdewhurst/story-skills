@@ -13,6 +13,13 @@ scene breaks as `[pause]`, and the total runtime. Actual pace varies by
 narrator and genre; thrillers read faster than literary fiction. Use the
 total to budget, not to promise.
 
+155 words per minute is an English narration rate. Speech rate in words
+differs by language, because words differ in length, so for a book in
+another language (`language` in `story.md`) time the narrator reading a
+sample chapter and rescale the totals. For Chinese and Japanese, where
+`story wordcount` counts each character as a word, the build's runtimes
+are not a usable estimate: time a sample and work from that.
+
 Rebuild after every manuscript or pronunciation change. The file is
 generated; keep narrator notes in `production.md`, not in the script.
 `--out` never replaces an existing file under `adaptations/`, so delete
@@ -31,6 +38,13 @@ pronunciation: SEER-sha VAYL
 - Respell in plain syllables with the stressed syllable in capitals.
   Avoid ambiguous spellings (`th` in *thin* or *this*? write
   `TH as in thin`).
+- Respell for the narrator's language. `SEER-sha` assumes English
+  spelling; a German or Spanish narrator would read it differently. For
+  a book in another language, respell in that language's spelling
+  conventions, mark stress the way its narrators expect, and add IPA
+  when the author or narrator wants it. In languages with tone or
+  pitch accent, ask how the narrator wants it marked. In Japanese, the
+  kana reading usually does this job.
 - Include invented words, made-up units, non-English names, real places
   with local pronunciations, and any name with a silent letter.
 - For real places and names, record the source (a local speaker, a

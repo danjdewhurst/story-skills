@@ -45,6 +45,10 @@ $ node skills/story-maintenance/scripts/story.js --version
 
 If none of the three is available, skills fall back to doing the registry, backlink, and word-count checks by hand. Agents run the CLI where it is installed and never copy `story.js` into your story project.
 
+### Stories in other languages
+
+Every skill that drafts, edits, or critiques prose reads `language` in `story.md` (a BCP 47 tag such as `fr`, `es-MX`, or `ja`; a missing field means `en`) and works in that language: chapter-writing, discovery-drafting, scene-craft, voice-style, verse-craft, revision-continuity, line-editing, and reader-panel. story-init asks for the language, and premise-workshop includes it in its brief. Craft advice built on English word lists (filter words, -ly adverbs, *said* and said-bookisms, British and American spelling pairs) is labelled as English in the skills and their references: for another language the skills keep its aim and apply that language's own conventions. When `story prose` or `story voices` reports a check skipped for the book's language, or a check plainly does not fit it, the skill does that pass by reading. Dialogue and punctuation conventions by language (quote marks, dialogue dashes, spacing before punctuation, Spanish `¿` and `¡`, CJK brackets) are in line-editing's [`language-conventions.md`](../skills/line-editing/references/language-conventions.md), which voice-style uses to fill the style sheet. submission, publishing, and adaptation mark which of their figures and practices belong to the US and UK English-language market.
+
 ## Which skill do I want?
 
 | You want to... | Skill | Try saying |
@@ -162,7 +166,7 @@ The main handoffs:
 
 **Workflow.**
 
-1. **Capture the spark** in your words, sort it (image, what-if, character, setting, feeling), and ask what drew you to it. That answer is kept as the check on later drift.
+1. **Capture the spark** in your words, sort it (image, what-if, character, setting, feeling), and ask what drew you to it. That answer is kept as the check on later drift. It also asks which language the book will be written in when that is not clear, and workshops in it.
 2. **Generate 8 to 12 what-ifs** from different angles (invert it, raise the cost, move it in time or place, give it to the wrong person). You pick one to three; it doesn't rank them unless asked.
 3. **Workshop the logline** for each pick with the recipe in `story-init`'s `title-logline.md`, then run the stress tests (active protagonist, opposition that can win, a choice at the end, personal stakes, enough situation for the length), reporting each as pass, weak, or fail with one revision per weak test.
 4. **Draft `premise` and `counter-premise`** as value-plus-cause hypotheses, or record `premise: tbd-discovery`. The logline goes in the Synopsis section, not `premise`.
@@ -176,7 +180,7 @@ The main handoffs:
    story init 'The Keeper of Skerry Light' --form novella --genre fantasy --sub-genre coastal --synopsis 'A lighthouse keeper who has never left the rock must choose between the light and her drowned brother.' --theme isolation
    ```
 
-   It then hand-edits `premise` and `counter-premise` into `story.md`, and moves the stakes, kept what-ifs, title shortlist, and comps into `## Notes`.
+   The brief includes the book's language as a BCP 47 tag. It then hand-edits `premise`, `counter-premise`, and, for a book not in English, `language` into `story.md`, and moves the stakes, kept what-ifs, title shortlist, and comps into `## Notes`.
 
 **Reads.** Your answers; after init, `story.md` and the registries that `story names` checks.
 
@@ -188,7 +192,7 @@ The main handoffs:
 
 - [`what-if-generation.md`](../skills/premise-workshop/references/what-if-generation.md): angles for turning an image, character, setting, or question into what-ifs that carry conflict, with worked examples.
 - [`premise-tests.md`](../skills/premise-workshop/references/premise-tests.md): logline stress tests, the three levels of stakes, and common premise failures with fixes.
-- [`form-choice.md`](../skills/premise-workshop/references/form-choice.md): matching an idea's scope to a form, what each form does well, and the `form` values.
+- [`form-choice.md`](../skills/premise-workshop/references/form-choice.md): matching an idea's scope to a form, what each form does well, and the `form` values. Its lengths are English word counts.
 - [`title-and-comps.md`](../skills/premise-workshop/references/title-and-comps.md): title families, shortlist tests, `story names` checks, and the comparable-title sanity check.
 
 It also borrows `title-logline.md` from story-init and `controlling-idea.md` from theme-craft.
@@ -203,7 +207,7 @@ It also borrows `title-logline.md` from story-init and `controlling-idea.md` fro
 
 **Workflow.**
 
-1. Asks for the title, form, genre and sub-genre, a two- or three-sentence synopsis, setting era, two to four themes, POV style, and tense. If a `premise-workshop` session produced a premise, logline, genre, and form, it reuses them rather than asking again.
+1. Asks for the title, form, genre and sub-genre, a two- or three-sentence synopsis, setting era, two to four themes, POV style, tense, and the language the book is written in (a BCP 47 tag, default `en`). If a `premise-workshop` session produced a premise, logline, genre, and form, it reuses them rather than asking again.
 2. Scaffolds the project with the CLI:
 
    ```shell
@@ -211,11 +215,12 @@ It also borrows `title-logline.md` from story-init and `controlling-idea.md` fro
    ```
 
    `--form` records `form` in `story.md` and, when no target is given, sets a default `target-words`: novel 80,000, novella 30,000, novelette 12,000, short story 5,000, flash 1,000, chapter book 10,000, picture book 500. Serials get no book-level default. Without `--form`, `init` writes neither field, so the skill passes `--form novel` if you don't choose. The story id recorded in every registry comes from the title, and `--dir` sets only the directory. A title with no ASCII letters or digits takes its story id from the folder name: a Cyrillic or Greek title is transliterated for the default folder (`Война и мир` goes in `voyna-i-mir`), and a title in a script with no transliteration table needs `--dir` with an ASCII folder name. `init` refuses an existing directory unless you pass `--force`, and with `--force` it only adds missing starter files.
-3. Drafts a working `premise` (value plus cause) and `counter-premise` in `story.md` as hypotheses to revisit in revision, not commitments.
-4. Without the CLI, writes the same folder layout and empty registries by hand from the templates in the skill.
-5. Suggests next steps (workshop the premise if it is still a guess, a first character, worldbuilding, plot structure, the style sheet, `story next .`) and runs `story validate` on the new project.
+3. Records the language: `story init` has no flag for it, so for a book not in English the skill adds `language` to `story.md` by hand, sets `dialect: unspecified` in `style-sheet.md`, and suggests settling dialogue punctuation with voice-style before the first chapter.
+4. Drafts a working `premise` (value plus cause) and `counter-premise` in `story.md` as hypotheses to revisit in revision, not commitments.
+5. Without the CLI, writes the same folder layout and empty registries by hand from the templates in the skill.
+6. Suggests next steps (workshop the premise if it is still a guess, a first character, worldbuilding, plot structure, the style sheet, `story next .`) and runs `story validate` on the new project.
 
-It doesn't ask for publishing metadata (`isbn`, `publisher`, `description`, `keywords`, and the rest). That waits for [publishing](#publishing).
+It doesn't ask for the other publishing metadata (`isbn`, `publisher`, `description`, `keywords`, and the rest). That waits for [publishing](#publishing).
 
 **Reads.** Your answers, or the brief from `premise-workshop`.
 
@@ -447,7 +452,7 @@ It never fixes an audit finding by adding a speech or narration that explains th
 
 When `story.md` links other books, reveals the series depends on get a stable `fact` id (see [Series](series.md)). Revising or continuity-checking an existing chapter belongs to [revision-continuity](#revision-continuity); line edits, copyedits, and proofing belong to [line-editing](#line-editing).
 
-**Reads.** `story.md`, `style-sheet.md` (when present), `chapters/_index.md`, `plot/_index.md`, `plot/timeline.md`, `scenes/_index.md`, `continuity/state.md`, the questions and promises registries, and the POV character's file. After chapter one it also reads the previous chapter and the active arcs.
+**Reads.** `story.md` (including `language`, which it drafts in), `style-sheet.md` (when present), `chapters/_index.md`, `plot/_index.md`, `plot/timeline.md`, `scenes/_index.md`, `continuity/state.md`, the questions and promises registries, and the POV character's file. After chapter one it also reads the previous chapter and the active arcs.
 
 **Prose pass and companion skill.** The [line-editing](#line-editing) skill ships with Story Skills and owns the prose-quality pass; run it on a drafted chapter before marking it `revised`. The separate [`better-writing`](https://github.com/forjd/better-writing) skill is an optional complement: before drafting, chapter-writing checks for it and uses it for voice calibration and a final pass. If it is missing, the skill offers you the link and asks before any install, then continues with its own `writing-guidelines.md`.
 
@@ -483,7 +488,7 @@ When `story.md` links other books, reveals the series depends on get a stable `f
 5. **Cadence.** Logs sessions with `story progress . --log`, and hands batches to [revision-continuity](#revision-continuity) at the midpoint and at the end of the draft.
 6. **Close out.** Flags any `mode: discovered` chapter that lacks post-hoc notes or a completed diff.
 
-**Reads.** `story.md` and its kernel, `style-sheet.md`, the previous chapter's post-hoc notes and last few pages at the start of each session, and, in the reconcile loop and batch reviews, the bible files and the promise and question ledgers.
+**Reads.** `story.md` (its kernel and `language`), `style-sheet.md`, the previous chapter's post-hoc notes and last few pages at the start of each session, and, in the reconcile loop and batch reviews, the bible files and the promise and question ledgers.
 
 **Writes.** `story.md` (kernel and `draft-mode`), chapters and their post-hoc notes, `scenes/`, and whichever bible files the reconcile step updates.
 
@@ -524,7 +529,7 @@ When `story.md` links other books, reveals the series depends on get a stable `f
 4. Records machine-readable state on the scene file: `outcome` (`yes`, `no`, `yes-but`, or `no-and`, preferring the complicating `yes-but` and `no-and`), `sequel: true`, `dilemma`, a `## Sequel` section, `flashback-to` for flashbacks (a freeform note that `story validate` checks is a single value but continuity checks ignore; flashback-only characters move to `mentions`), and current `state-changes`. When the scene ends its chapter, it sets the chapter's `hook`.
 5. Runs the reference's checklist and `story pacing .`, and marks intentional departures (a deliberate info dump, say) in the scene's planning notes so a later audit leaves them alone. `story pacing` warns after three or more consecutive `yes` outcomes, four or more scene units without a sequel, and three or more chapters in a row ending on `resolution`.
 
-**Reads.** The reference file for the craft problem at hand, the scene file in `scenes/`, the chapter outline or prose, and whatever project files settle the scene's purpose, viewpoint, and location.
+**Reads.** The reference file for the craft problem at hand, `story.md` `language`, the scene file in `scenes/`, the chapter outline or prose, and whatever project files settle the scene's purpose, viewpoint, and location.
 
 **Writes.** `scenes/*.md` frontmatter and `## Planning`, `## Scene Card`, or `## Sequel` sections; chapter outlines and the chapter `hook`; and `continuity/state.md` plus entity files when a scene decision changes canon.
 
@@ -562,7 +567,7 @@ When `story.md` links other books, reveals the series depends on get a stable `f
 
 `chapter-writing` and `discovery-drafting` read `style-sheet.md` before drafting, and the copyedit in `line-editing` enforces it. Projects created before the style sheet existed can add one with `story init "<title>" --dir . --force`, which only adds missing files.
 
-**Reads.** `story.md` (genre, POV, tense, and tone), `style-sheet.md`, character voice fields, and two or three drafted chapters or a sample you supply.
+**Reads.** `story.md` (genre, POV, tense, tone, and `language`), `style-sheet.md`, character voice fields, and two or three drafted chapters or a sample you supply.
 
 **Writes.** `style-sheet.md`, character `voice-words` and `voice-avoid` (with your approval), and chapter prose.
 
@@ -571,7 +576,9 @@ When `story.md` links other books, reveals the series depends on get a stable `f
 **References.**
 
 - [`style-sheet-guide.md`](../skills/voice-style/references/style-sheet-guide.md): each style-sheet section, the frontmatter format, and how to extract a voice description from sample prose.
-- [`prose-checks.md`](../skills/voice-style/references/prose-checks.md): what each `story prose` count measures, its warning threshold, and when to keep the flagged text.
+- [`prose-checks.md`](../skills/voice-style/references/prose-checks.md): what each `story prose` count measures, its warning threshold, when to keep the flagged text, and which checks rest on English word lists.
+
+It also uses line-editing's [`language-conventions.md`](../skills/line-editing/references/language-conventions.md) for the style sheet's dialogue and punctuation in a book not in English.
 
 ### verse-craft
 
@@ -592,7 +599,7 @@ When `story.md` links other books, reveals the series depends on get a stable `f
 5. **Revise.** Proposes fixes in line-editing's before/after format, with the verse line as the location, and rescans every changed line.
 6. **Place story verse.** Puts the verse in the chapter or a `matter/` file, ends each line of a stanza except the last with a backslash so builds keep the line breaks, then runs `story wordcount --write`, `story links`, and `story validate`.
 
-**Reads.** For story verse, `story.md`, the speaker's character file, and the chapter the verse goes in. Nothing for a standalone poem.
+**Reads.** For story verse, `story.md` (including `language`), the speaker's character file, and the chapter the verse goes in. Nothing for a standalone poem, though it asks the language when the request leaves it open. Verse in another language is scanned by that language's tradition (syllabic, quantitative, mora-based, or tonal), not in English feet.
 
 **Writes.** A standalone poem file where you ask for it, or verse in chapter prose and `matter/` files.
 
@@ -601,8 +608,8 @@ When `story.md` links other books, reveals the series depends on get a stable `f
 **References.**
 
 - [`forms.md`](../skills/verse-craft/references/forms.md): rules, an original example, and common faults for the limerick, sonnets, haiku, villanelle, ballad, clerihew, couplets, free verse, song lyrics, and rhyming picture-book text.
-- [`meter-and-scansion.md`](../skills/verse-craft/references/meter-and-scansion.md): feet and meters, finding a word's stress, the scansion table format, and which departures are allowed.
-- [`rhyme.md`](../skills/verse-craft/references/rhyme.md): kinds of rhyme, scheme notation, forced-rhyme tells, and rhymes readers have seen too often.
+- [`meter-and-scansion.md`](../skills/verse-craft/references/meter-and-scansion.md): feet and meters, finding a word's stress, the scansion table format, which departures are allowed, and the syllabic, quantitative, mora-based, and tonal traditions of other languages.
+- [`rhyme.md`](../skills/verse-craft/references/rhyme.md): kinds of rhyme, scheme notation, forced-rhyme tells, rhymes readers have seen too often, and rhyme in other languages.
 
 ## Revising and reviewing
 
@@ -683,7 +690,7 @@ story compare . --against ../the-tide-room-draft-1
 6. **Proof.** Marks `story passes . --start proof`, builds the copy a reader will see (`story build . --format html` and `story build . --format print --trim 6x9`), and proofs it for typos introduced by editing, doubled words, broken scene breaks, headings, matter pages, and widows and orphans, citing locations by paragraph anchor (`ch03-p12`). Rendering the print HTML to PDF needs a paged-media engine you install.
 7. **Close.** Summarises what changed and what was kept on purpose, moves chapter `status` from `draft` to `revised` only with your agreement, and marks the pass done, for example `story passes . --done line`.
 
-**Reads.** `story.md`, `style-sheet.md` (built first with voice-style if it is missing or thin), the glossary, character files, and the chapters in scope.
+**Reads.** `story.md` (including `language`: it edits to that language's grammar and conventions), `style-sheet.md` (built first with voice-style if it is missing or thin), the glossary, character files, and the chapters in scope.
 
 **Writes.** Chapter prose below `## Chapter Text`, `style-sheet.md` decisions, character `voice-words` and `voice-avoid` with your approval, chapter `status`, and `story.md` `revision-passes`.
 
@@ -696,6 +703,7 @@ story compare . --against ../the-tide-room-draft-1
 - [`line-edit-checklist.md`](../skills/line-editing/references/line-edit-checklist.md): paragraph-level checks (clarity, precision, economy, rhythm, POV distance, voice) and the levers for differentiating character voices.
 - [`copyedit-checklist.md`](../skills/line-editing/references/copyedit-checklist.md): copyedit checks against the style sheet (grammar, punctuation, dialogue punctuation, consistency) and the proof pass on built copies.
 - [`read-aloud-guide.md`](../skills/line-editing/references/read-aloud-guide.md): running a read-aloud pass with the narration build and system text-to-speech, and what to listen for.
+- [`language-conventions.md`](../skills/line-editing/references/language-conventions.md): dialogue and punctuation conventions by language (quote marks, dialogue dashes, spacing before punctuation, Spanish `¿` and `¡`, CJK brackets), forms of address, and how to record them in the style sheet.
 - [`edit-note-format.md`](../skills/line-editing/references/edit-note-format.md): presenting edits as before/after with a rationale, batching, and recording accepted and rejected changes.
 
 ### reader-panel
@@ -715,7 +723,7 @@ story compare . --against ../the-tide-room-draft-1
 
 feedback-triage treats persona agreement as one signal, not convergence, confirms each note in the text before planning a fix, and reads a simulated `ready` as ready for human readers, nothing more. The sensitivity persona only flags passages for a paid human reader and never clears a portrayal.
 
-**Reads.** `style-sheet.md`, the chapters in range, and `story context` output (which leaves out the synopsis, so `story.md` itself is not read).
+**Reads.** `style-sheet.md`, the chapters in range, `story context` output (which leaves out the synopsis), and only the `language` field of `story.md`, so every persona reads as a reader of the book's language would.
 
 **Writes.** `feedback/round-N/{persona}.md`.
 
@@ -818,7 +826,7 @@ Anchors are paragraph positions, so a revision moves them. Rebuild and resend th
 
 [Submission prep](writing-workflows.md#submission-prep) walks through each step, with the length and format rules for every file.
 
-**Reads.** `story.md` (`status`, `genre`, `sub-genre`, `premise`, `author`, `contact`, and the synopsis), the manuscript, the main arc files, and the protagonist's character file. If `status` is not `complete` or `revising`, it warns you that the readiness check will fail until the draft is finished.
+**Reads.** `story.md` (`status`, `genre`, `sub-genre`, `premise`, `author`, `contact`, `language`, and the synopsis), the manuscript, the main arc files, and the protagonist's character file. If `status` is not `complete` or `revising`, it warns you that the readiness check will fail until the draft is finished.
 
 **Writes.** `submission/query.md`, `submission/comps.md`, `submission/synopsis-1-page.md`, `submission/synopsis-3-page.md`, `submission/blurb.md`, and `submission/tracker.md`, each with a `type` and `updated` in its frontmatter. The CLI doesn't validate `submission/`, and builds never include it.
 
@@ -829,7 +837,9 @@ Anchors are paragraph positions, so a revision moves them. Rebuild and resend th
 - [`query-letter.md`](../skills/submission/references/query-letter.md): query structure, length, personalisation, and common mistakes.
 - [`blurb.md`](../skills/submission/references/blurb.md): back-cover and retailer description formulas, length, and taglines.
 - [`comp-titles.md`](../skills/submission/references/comp-titles.md): choosing and phrasing comparable titles, and the verification rule.
-- [`word-count-norms.md`](../skills/submission/references/word-count-norms.md): rough word-count ranges by category, to confirm with you for your market.
+- [`word-count-norms.md`](../skills/submission/references/word-count-norms.md): rough word-count ranges by category for the English-language market only, to confirm with you for your market.
+
+The query letter, Shunn format, and these norms are English-language market conventions; for another market the skill asks for the guidelines of the agents or publishers you are targeting.
 - [`tracker-template.md`](../skills/submission/references/tracker-template.md): the tracker template and what each status means.
 
 ### publishing
@@ -864,12 +874,12 @@ One `story.md` holds one edition's metadata. When the ebook and print ISBNs diff
 
 **References.**
 
-- [`metadata-checklist.md`](../skills/publishing/references/metadata-checklist.md): every publishing field, ISBN sources and trade-offs, keywords, BISAC subjects, descriptions, AI disclosure, and CIP or PCN notes.
+- [`metadata-checklist.md`](../skills/publishing/references/metadata-checklist.md): every publishing field, ISBN agencies (including outside the English-speaking markets) and trade-offs, keywords, BISAC and Thema subjects, descriptions, AI disclosure, and CIP or PCN notes. `subjects` holds BISAC only; Thema codes are recorded in `publishing/launch-plan.md`.
 - [`copyright-page.md`](../skills/publishing/references/copyright-page.md): the copyright page template, optional lines, permissions credits, and legal deposit notes.
 - [`print-interior.md`](../skills/publishing/references/print-interior.md): trim size choice, page-count estimates, rendering to PDF, printer checks, cover wrap, and proofs.
-- [`launch-plan.md`](../skills/publishing/references/launch-plan.md): distribution and exclusivity, pricing considerations, and the T-90 to T+30 launch timeline with ARCs, newsletter, and ad testing.
+- [`launch-plan.md`](../skills/publishing/references/launch-plan.md): distribution and exclusivity, routes outside the US and UK (Amazon's country stores, Kobo, tolino, subscription services), pricing considerations including fixed book prices, and the T-90 to T+30 launch timeline with ARCs, newsletter, and ad testing.
 - [`contract-red-flags.md`](../skills/publishing/references/contract-red-flags.md): clause-by-clause red flags for publishing and rights contracts, and where to get a professional review.
-- [`rights-one-sheet.md`](../skills/publishing/references/rights-one-sheet.md): the rights inventory template and one-sheets for foreign, audio, and film rights.
+- [`rights-one-sheet.md`](../skills/publishing/references/rights-one-sheet.md): the rights inventory template by language and territory, starting from the book's own language, and one-sheets for foreign, audio, and film rights.
 
 ### adaptation
 
@@ -898,7 +908,7 @@ One `story.md` holds one edition's metadata. When the ebook and print ISBNs diff
 
 **References.**
 
-- [`audiobook.md`](../skills/adaptation/references/audiobook.md): narration script review, pronunciation, runtime, production routes, narrator auditions, the audio file checklist, and AI narration disclosure.
+- [`audiobook.md`](../skills/adaptation/references/audiobook.md): narration script review, pronunciation respelled for the narrator's language, runtime (the 155 words per minute rate is English: for other languages, time a sample chapter), production routes, narrator auditions, the audio file checklist, and AI narration disclosure.
 - [`fountain.md`](../skills/adaptation/references/fountain.md): the scene list from scene records, novel-to-screen choices, and Fountain syntax.
 - [`picture-book.md`](../skills/adaptation/references/picture-book.md): 32-page and 14-spread pagination, page-turn beats, text and illustration interplay, the spread brief template, and art notes.
 - [`comics-script.md`](../skills/adaptation/references/comics-script.md): page and panel script format, pacing per page, balloon limits, and page-turn reveals.
