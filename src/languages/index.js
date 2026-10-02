@@ -1,10 +1,15 @@
 import ar from "./ar.js";
 import base from "./base.js";
+import da from "./da.js";
+import deCh from "./de-ch.js";
+import de from "./de.js";
 import en from "./en.js";
+import fi from "./fi.js";
 import he from "./he.js";
 import hi from "./hi.js";
 import ja from "./ja.js";
 import ko from "./ko.js";
+import sv from "./sv.js";
 import th from "./th.js";
 import zh from "./zh.js";
 
@@ -19,7 +24,7 @@ export const DEFAULT_LANGUAGE = "en";
 
 // Every pack, by code. A regional pack (en-GB) is keyed by its tag in lower
 // case and holds only what differs from its language's pack.
-const PACKS = new Map([ar, en, he, hi, ja, ko, th, zh].map((pack) => [pack.code, pack]));
+const PACKS = new Map([ar, da, de, deCh, en, fi, he, hi, ja, ko, sv, th, zh].map((pack) => [pack.code, pack]));
 
 // The shape of a language tag, as story.schema.json checks it. Validity
 // depends on this alone, never on the runtime's Intl data, so extlang tags

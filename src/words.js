@@ -14,6 +14,8 @@ const SOUTHEAST_ASIAN = "\\p{Script=Thai}\\p{Script=Lao}\\p{Script=Khmer}\\p{Scr
 // Soft hyphens and zero-width joiners inside a word keep the run going, so
 // the segmenter sees the whole word.
 const JOINER = "\\u00AD\\u200C\\u200D";
+// Every letter of those scripts, as the body of a character class.
+export const UNSPACED_LETTERS = `${CJK}${SOUTHEAST_ASIAN}`;
 const UNSPACED = new RegExp(`[${CJK}]|[${SOUTHEAST_ASIAN}](?:[${SOUTHEAST_ASIAN}]|[${JOINER}]+(?=[${SOUTHEAST_ASIAN}]))*`, "gu");
 const CJK_CHARACTER = new RegExp(`^[${CJK}]$`, "u");
 
@@ -83,4 +85,16 @@ export function wordSpans(text, pattern) {
   }
   between(source.length);
   return spans;
+}
+
+// The offsets in `text` where a word of those scripts starts or ends, as a
+// Set: a name or phrase in them sits against the next word with no space,
+// so its edges must fall here to count as whole words.
+export function unspacedBoundaries(text) {
+  const boundaries = new Set();
+  for (const { start, end } of wordSpans(text, /(?!)/gu)) {
+    boundaries.add(start);
+    boundaries.add(end);
+  }
+  return boundaries;
 }

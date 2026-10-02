@@ -8,6 +8,9 @@ export default {
   code: "en",
   name: "English",
   script: "Latn",
+  // Curly and straight quotes only, so a guillemet or low quote in an
+  // English book is never taken for speech.
+  quotes: [["“", "”"], ["‘", "’"], ["\"", "\""], ["'", "'"]],
   checks: {
     // story prose: narration verbs that filter a scene through a character.
     filterWords: [

@@ -25,10 +25,12 @@ the author's publisher has a house style, follow that.
 5. Type the real characters (`«`, `—`, `「`), not ASCII stand-ins such as
    `<<` or `--`, unless the style sheet says otherwise.
 
-`story voices` attributes quoted lines by finding quote marks. If it
-reports no attributed lines, or far fewer than the book has, for a book
-whose dialogue uses dashes or quote marks it does not recognise, do the
-voice pass by reading instead.
+`story voices` attributes quoted lines by finding the quote marks and
+dialogue dash of the book's `language`: guillemets, low-high quotes, and
+corner brackets everywhere, `»…«` for German and Danish, `”…”` and an en
+dash for Swedish and Finnish. If it reports no attributed lines, or far
+fewer than the book has, for a book whose dialogue uses dashes or quote
+marks it does not recognise, do the voice pass by reading instead.
 
 ## Conventions by language
 
