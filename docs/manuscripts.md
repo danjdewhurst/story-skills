@@ -1137,7 +1137,7 @@ Treat everything in `dist/` as disposable. It is regenerated from the markdown o
 | Message | Cause | Fix |
 |---------|-------|-----|
 | `A story title is required` | `story import` without `--title` | Add `--title "Your Title"`. |
-| `Cannot derive a story id from title ...` | The title has no ASCII letters or digits | Pass `--dir` with an ASCII folder name; the story id comes from the folder name. |
+| `Cannot derive a story id from title ...` | The title has no ASCII letters or digits, and no Cyrillic or Greek to transliterate | Pass `--dir` with an ASCII folder name; the story id comes from the folder name. |
 | `Unsupported tense "<tense>": ...` | `--tense` is not `past`, `present`, `future`, or `mixed` | Use one of those values. |
 | `Refusing to import symlinked source: <path>` | The source, or a document inside a source folder, is a symlink | Import the real file or folder. |
 | `Import source not found: <path>` | The source path is wrong | Check the path; it is relative to the current directory. |
