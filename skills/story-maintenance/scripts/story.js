@@ -2546,16 +2546,24 @@ var CHINESE_SCRIPTS = {
   gan: "Hans",
   hsn: "Hans",
   cjy: "Hans",
+  cdo: "Hans",
+  cpx: "Hans",
+  czh: "Hans",
+  czo: "Hans",
+  mnp: "Hans",
   yue: "Hant",
   lzh: "Hant"
 };
-var TRADITIONAL_REGIONS = new Set(["tw", "hk", "mo"]);
+var REGION_SCRIPTS = { tw: "Hant", hk: "Hant", mo: "Hant", cn: "Hans", sg: "Hans" };
 function hanScript(language) {
   const { primary, script, region } = parseTag(language);
   if (script === "Hans" || script === "Hant") {
     return script;
   }
-  return TRADITIONAL_REGIONS.has(region) ? "Hant" : CHINESE_SCRIPTS[primary] ?? "Hans";
+  if (script === "Bopo") {
+    return "Hant";
+  }
+  return REGION_SCRIPTS[region] ?? CHINESE_SCRIPTS[primary] ?? "Hans";
 }
 function chineseScript(language) {
   const { primary, macrolanguage } = parseTag(language);
