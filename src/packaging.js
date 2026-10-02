@@ -298,12 +298,15 @@ function docxStyles(script) {
 
 // Shunn manuscript format: Courier New 12pt, double spacing, page break
 // before each chapter heading, and a title page with contact and word count.
-const SHUNN_RUN_FONTS = `<w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/><w:sz w:val="24"/>`;
+const SHUNN_FONT = `<w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/>`;
+const SHUNN_SIZE = `<w:sz w:val="24"/>`;
 const SHUNN_PARAGRAPH_SPACING = `<w:spacing w:line="480" w:lineRule="auto"/>`;
 
-// `script` is docxScript's settings for the book's language.
+// `script` is docxScript's settings for the book's language. Run properties
+// keep the order the WordprocessingML schema gives them: font, bold,
+// italic, size, then direction.
 function shunnRunXml(script, text, { strong = false, em = false } = {}) {
-  return `<w:r><w:rPr>${SHUNN_RUN_FONTS}${strong ? script.bold : ""}${em ? script.italic : ""}${script.rtl}</w:rPr>${docxTextXml(text)}</w:r>`;
+  return `<w:r><w:rPr>${SHUNN_FONT}${strong ? script.bold : ""}${em ? script.italic : ""}${SHUNN_SIZE}${script.rtl}</w:rPr>${docxTextXml(text)}</w:r>`;
 }
 
 // Body paragraphs indent their first line half an inch; centred lines
