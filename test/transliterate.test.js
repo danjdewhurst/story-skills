@@ -48,6 +48,21 @@ describe("kebabCase transliterates Cyrillic and Greek", () => {
     expect(kebabCase("Łukasz Straße")).toBe("lukasz-strasse");
   });
 
+  test("Bulgarian and Macedonian grave-accented letters and the Ukrainian apostrophe", () => {
+    expect(kebabCase("ѐтер")).toBe("eter");
+    expect(kebabCase("Свѝрка")).toBe("svirka");
+    expect(kebabCase("ѝ")).toBe("i");
+    expect(kebabCase("Мʼята")).toBe("myata");
+    expect(kebabCase("OʼBrien", { transliterate: false })).toBe("o-brien");
+  });
+
+  test("a Cyrillic or Greek letter the tables lack is never dropped from a transliteration", () => {
+    expect(kebabCase("Қазақ")).toBe("");
+    expect(kebabCase("Ѣлка")).toBe("");
+    expect(kebabCase("Sera Қазақ")).toBe("sera");
+    expect(kebabCase("Sera Қазақ")).toBe(kebabCase("Sera Қазақ", { transliterate: false }));
+  });
+
   test("scripts without a table still leave nothing", () => {
     for (const name of ["李明", "東京", "محمد", "דוד", "สมชาย", "देवी"]) {
       expect(kebabCase(name)).toBe("");
@@ -120,6 +135,22 @@ describe("ids recomputed on every run do not change", () => {
     expect(validateProject(created.root).ok).toBe(true);
     createEntity(created.root, { kind: "chapter", name: "Один", number: 1 });
     expect(path.basename(buildBook(created.root, { format: "epub" }).outFile)).toBe("war-and-peace.epub");
+  });
+
+  test("a Cyrillic folder name is not transliterated into the story id", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Война и мир", dir: "Проект-Book" });
+    expect(created.storyId).toBe("book");
+    expect(scanProject(created.root).storyId).toBe("book");
+    expect(validateProject(created.root).ok).toBe(true);
+  });
+
+  test("init without --dir names the folder after a mixed-script title's story id", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Война и мир 2" });
+    expect(created.root).toBe(path.join(cwd, "2"));
+    expect(created.storyId).toBe("2");
+    expect(validateProject(created.root).ok).toBe(true);
   });
 
   test("an unnumbered Cyrillic chapter keeps its file-number review label", () => {

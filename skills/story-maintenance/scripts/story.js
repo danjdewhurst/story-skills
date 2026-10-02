@@ -1103,7 +1103,9 @@ var CYRILLIC = {
   џ: "dz",
   ѓ: "gj",
   ќ: "kj",
-  ѕ: "dz"
+  ѕ: "dz",
+  ѐ: "e",
+  ѝ: "i"
 };
 var GREEK_DIGRAPHS = { αυ: "av", ευ: "ev", ηυ: "iv", ου: "ou", γγ: "ng", γξ: "nx", γχ: "nch" };
 var GREEK = {
@@ -1137,11 +1139,13 @@ var GREEK = {
 };
 var TRANSLITERATIONS = { ...GREEK_DIGRAPHS, ...CYRILLIC, ...GREEK };
 var TRANSLITERATION_PATTERN = new RegExp(`${Object.keys(GREEK_DIGRAPHS).join("|")}|[${Object.keys(CYRILLIC).join("")}${Object.keys(GREEK).join("")}]`, "g");
+var UNTRANSLITERATED_LETTER = /[\p{Script=Cyrillic}\p{Script=Greek}]/u;
 function transliterate(value) {
-  return String(value).toLowerCase().normalize("NFD").replace(/([Ͱ-Ͽ])([̀-ͯ]+)/g, (_, letter, marks) => letter + (marks.includes("̈") ? "̈" : "")).normalize("NFC").replace(TRANSLITERATION_PATTERN, (letters) => TRANSLITERATIONS[letters]);
+  const spelled = String(value).toLowerCase().normalize("NFD").replace(/([\u0370-\u03ff])([\u0300-\u036f]+)/g, (_, letter, marks) => letter + (marks.includes("̈") ? "̈" : "")).normalize("NFC").replace(/\u02bc/g, "").replace(TRANSLITERATION_PATTERN, (letters) => TRANSLITERATIONS[letters]);
+  return UNTRANSLITERATED_LETTER.test(spelled) ? null : spelled;
 }
 function kebabCase(value, { transliterate: scripts = true } = {}) {
-  return foldLatin(scripts ? transliterate(value) : value).replace(/['\u2018\u2019]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return foldLatin((scripts ? transliterate(value) : null) ?? value).replace(/['‘’]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 function titleCaseSlug(slug) {
   return String(slug).split("-").filter(Boolean).map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`).join(" ");
@@ -8516,7 +8520,7 @@ function createStoryProject(options) {
     throw usageError("A story title is required");
   }
   const cwd = options.cwd ?? process.cwd();
-  const titleId = kebabCase(title);
+  const titleId = kebabCase(title, { transliterate: false }) || kebabCase(title);
   if (!titleId && options.dir === undefined) {
     throw usageError('Cannot derive a story id from title "' + title + '": pass --dir with an ASCII folder name, or use a title containing ASCII letters or digits');
   }
@@ -8834,7 +8838,7 @@ function enclosingStoryProject(root) {
   return null;
 }
 function deriveStoryId(title, root) {
-  return kebabCase(String(title ?? ""), { transliterate: false }) || kebabCase(path11.basename(root));
+  return kebabCase(String(title ?? ""), { transliterate: false }) || kebabCase(path11.basename(root), { transliterate: false });
 }
 function storyIdMismatch(label, project) {
   return err("story-id-mismatch", `${label} story must be ${project.storyId} (run story reindex after changing the story.md title)`, label);

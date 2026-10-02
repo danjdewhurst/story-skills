@@ -288,7 +288,7 @@ Some files appear only once you need them: `matter/` for front and back matter, 
 Every story element is a markdown file with YAML frontmatter, and the skills cross-reference those files to keep the project consistent:
 
 - **`story.md`** is the top-level bible that every skill reads. Its **`schema-version: 2`** field lets the CLI detect incompatible project formats.
-- Every entity file is named by a **kebab-case identifier**, such as `sera-voss` or `chapter-01`. It comes from the entity's name, or from `story add --id` when the name has no ASCII letters or digits; names themselves may be written in any script.
+- Every entity file is named by a **kebab-case identifier**, such as `sera-voss` or `chapter-01`. It comes from the entity's name, or from `story add --id` when the name has nothing to slug; Cyrillic and Greek names are transliterated (`Пётр` gives `petr`), and names themselves may be written in any script.
 - **`_index.md`** files are the registries for each domain.
 - Relationships and references are kept **bidirectional**.
 - Scene records and continuity state keep character knowledge, object ownership, and setups and payoffs in files, so they carry over between sessions.

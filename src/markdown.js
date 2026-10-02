@@ -21,21 +21,24 @@ export function foldLatin(value) {
 // in Cyrillic. Shared letters follow a simplified BGN/PCGN Russian
 // romanisation (ж zh, х kh, ц ts, щ shch, ы y, the hard and soft signs
 // dropped), so a language-specific spelling, such as Ukrainian и as "y" or
-// Bulgarian щ as "sht", needs --id. The letters other languages add take their
-// usual forms: Ukrainian є ye, і i, ї yi, ґ g; Belarusian ў u; Serbian and
-// Macedonian ђ dj, ј j, љ lj, њ nj, ћ c, џ dz, ѓ gj, ќ kj, ѕ dz.
+// Bulgarian щ as "sht" and ъ as "a", needs --id. The letters other languages
+// add take their usual forms: Ukrainian є ye, і i, ї yi, ґ g; Belarusian ў u;
+// Serbian and Macedonian ђ dj, ј j, љ lj, њ nj, ћ c, џ dz, ѓ gj, ќ kj, ѕ dz;
+// Bulgarian and Macedonian ѐ e, ѝ i.
 const CYRILLIC = {
   а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z", и: "i", й: "y",
   к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r", с: "s", т: "t", у: "u", ф: "f",
   х: "kh", ц: "ts", ч: "ch", ш: "sh", щ: "shch", ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya",
   є: "ye", і: "i", ї: "yi", ґ: "g", ў: "u",
-  ђ: "dj", ј: "j", љ: "lj", њ: "nj", ћ: "c", џ: "dz", ѓ: "gj", ќ: "kj", ѕ: "dz"
+  ђ: "dj", ј: "j", љ: "lj", њ: "nj", ћ: "c", џ: "dz", ѓ: "gj", ќ: "kj", ѕ: "dz", ѐ: "e", ѝ: "i"
 };
 
 // Lowercase Greek letters as ASCII, after ELOT 743 (the Greek standard the UN
 // adopted) simplified to fixed values: αυ, ευ, and ηυ are always "av", "ev",
-// and "iv", and accents and breathings are dropped. A diaeresis keeps two
-// vowels apart, so αϋ is "ay" rather than "av".
+// and "iv" (ELOT writes "af", "ef", and "if" before a voiceless consonant),
+// μπ, ντ, and γκ are always "mp", "nt", and "gk" (ELOT writes "b", "d", and
+// "g" at the start of a word), and accents and breathings are dropped. A
+// diaeresis keeps two vowels apart, so αϋ is "ay" rather than "av".
 const GREEK_DIGRAPHS = { αυ: "av", ευ: "ev", ηυ: "iv", ου: "ou", γγ: "ng", γξ: "nx", γχ: "nch" };
 const GREEK = {
   α: "a", β: "v", γ: "g", δ: "d", ε: "e", ζ: "z", η: "i", θ: "th", ι: "i", κ: "k", λ: "l",
@@ -47,29 +50,37 @@ const TRANSLITERATION_PATTERN = new RegExp(
   `${Object.keys(GREEK_DIGRAPHS).join("|")}|[${Object.keys(CYRILLIC).join("")}${Object.keys(GREEK).join("")}]`,
   "g"
 );
+const UNTRANSLITERATED_LETTER = /[\p{Script=Cyrillic}\p{Script=Greek}]/u;
 
 // Spells Cyrillic and Greek letters in lowercase ASCII: "Пётр" becomes "petr",
-// "Ολυμπία" becomes "olympia". Other text is only lowercased. Greek accents
-// and breathings go first, keeping a diaeresis, and the text is recomposed so
-// й, ё, ї, ѓ, and ќ match the table whether they arrive composed or not.
+// "Ολυμπία" becomes "olympia". Other text is only lowercased, but the modifier
+// apostrophe Ukrainian writes (Мʼята) is dropped like any other apostrophe.
+// Greek accents and breathings go first, keeping a diaeresis, and the text is
+// recomposed so й, ё, ї, ѓ, and ќ match the table whether they arrive composed
+// or not. Returns null when a Cyrillic or Greek letter has no entry (Kazakh қ,
+// pre-reform ѣ), so a name is never spelled with letters missing.
 function transliterate(value) {
-  return String(value)
+  const spelled = String(value)
     .toLowerCase()
     .normalize("NFD")
-    .replace(/([Ͱ-Ͽ])([̀-ͯ]+)/g, (_, letter, marks) => letter + (marks.includes("̈") ? "̈" : ""))
+    .replace(/([\u0370-\u03ff])([\u0300-\u036f]+)/g, (_, letter, marks) => letter + (marks.includes("\u0308") ? "\u0308" : ""))
     .normalize("NFC")
+    .replace(/\u02bc/g, "")
     .replace(TRANSLITERATION_PATTERN, (letters) => TRANSLITERATIONS[letters]);
+  return UNTRANSLITERATED_LETTER.test(spelled) ? null : spelled;
 }
 
 // The ASCII kebab-case id for a name or title. Latin letters are folded and
 // Cyrillic and Greek transliterated; other scripts (CJK, Arabic, Hebrew, and
-// the rest) leave nothing, so a name written only in them needs --id.
+// the rest) leave nothing, so a name written only in them needs --id. A name
+// with a Cyrillic or Greek letter the tables lack is not transliterated at
+// all, and slugs as it did before transliteration.
 // `transliterate: false` leaves Cyrillic and Greek out as well, for ids that
 // are recomputed on every run (the story id, review-copy labels) and so must
 // not change for projects made before transliteration.
 export function kebabCase(value, { transliterate: scripts = true } = {}) {
-  return foldLatin(scripts ? transliterate(value) : value)
-    .replace(/['\u2018\u2019]/g, "")
+  return foldLatin((scripts ? transliterate(value) : null) ?? value)
+    .replace(/['‘’]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");

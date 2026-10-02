@@ -189,9 +189,10 @@ export function createStoryProject(options) {
   const cwd = options.cwd ?? process.cwd();
   // A title with no ASCII letters or digits (a translated edition, say) takes
   // its story id from the project folder, as scanProject does. The default
-  // folder transliterates a Cyrillic or Greek title (Война и мир becomes
-  // voyna-i-mir), so the story id comes out the same.
-  const titleId = kebabCase(title);
+  // folder is the story id: the title's ASCII slug when it has one (Война и
+  // мир 2 goes in 2/, matching its id), else the transliterated title (Война
+  // и мир goes in voyna-i-mir/), which the id then comes from.
+  const titleId = kebabCase(title, { transliterate: false }) || kebabCase(title);
   if (!titleId && options.dir === undefined) {
     throw usageError('Cannot derive a story id from title "' + title + '": pass --dir with an ASCII folder name, or use a title containing ASCII letters or digits');
   }
@@ -575,11 +576,11 @@ function enclosingStoryProject(root) {
 }
 
 // The story id is the kebab-case title, or the project folder name when the
-// title is missing or has no ASCII letters or digits. The title is not
-// transliterated: the id is recomputed on every run, and a Cyrillic or Greek
-// title has always fallen back to the folder name.
+// title is missing or has no ASCII letters or digits. Neither is
+// transliterated: the id is recomputed on every run, so a Cyrillic or Greek
+// title or folder name must give the id it always has.
 function deriveStoryId(title, root) {
-  return kebabCase(String(title ?? ""), { transliterate: false }) || kebabCase(path.basename(root));
+  return kebabCase(String(title ?? ""), { transliterate: false }) || kebabCase(path.basename(root), { transliterate: false });
 }
 
 // Every registry records the story id, which follows the story.md title, so
