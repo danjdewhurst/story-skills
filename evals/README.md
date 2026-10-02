@@ -180,7 +180,7 @@ gap. Keep this table current when you add a fixture.
 
 - `brief`: the drafting instruction to give the skill.
 - `skill`: the skill under test (e.g. `chapter-writing`). Required by `scripts/check-evals.js`; `run-skill.js --skill` selects which skill's instructions to load.
-- `required`: case-insensitive canon phrases that must appear in the draft (facts, names, objects). Matching is stem/inflected, so `logbook` also matches `logbooks`. A phrase in a script written with spaces (Latin with or without accents, Cyrillic, Greek, Arabic, Hebrew, Devanagari, and the rest) is matched as whole words, at a boundary with any letter: `montre` does not match *démontre*, `à` does not match *déjà*, and `кот` does not match *который*. Arabic and Hebrew phrases may also follow the conjunction, preposition, and article those languages join to a word (`مخطوطة` matches *المخطوطة* and *بالمخطوطة*, `ספר` matches *בספר*), and an Arabic phrase may take a pronoun or plural ending (`مخطوطة` matches *مخطوطتها*). A phrase in a script written without spaces (Chinese, Japanese, Thai, Lao, Khmer, Myanmar), such as Japanese `封筒`, is matched as a substring, since those scripts join words and particles to the text around them. A mixed phrase bounds each end by the script of its first or last letter, so `Kirimi駅` matches *Kirimi駅前* but not *XKirimi駅*.
+- `required`: case-insensitive canon phrases that must appear in the draft (facts, names, objects). Matching is stem/inflected, so `logbook` also matches `logbooks`. How a phrase's ends match depends on the script of its first and last letter (see [Phrase matching by script](#phrase-matching-by-script)).
 - `banned`: case-insensitive phrases that must not appear (resolutions, inventions, slop). Matching is stem/inflected like `required`, so `delve` also catches `delves` and `delving`, and `tapestry` catches `tapestries`; add 2–3 paraphrase variants per trap phrase (e.g. `told Petra about the key` beside `told her about the key`) for what inflection cannot catch.
 - `banned_regex`: regular expressions that must not match (for example invented measurements or anachronisms). Matching is case-insensitive and in Unicode mode, so `\b` is an ASCII word boundary: in a fixture whose traps sit next to accented letters, bound a word with `(?<![\p{L}\p{M}])` and `(?![\p{L}\p{M}])` instead, so that `the` does not match inside French *thé*.
 - `max_words_ratio` / `min_words_ratio`: draft length bounds relative to the input, to catch padding and over-cutting.
@@ -195,6 +195,21 @@ gap. Keep this table current when you add a fixture.
 - `voice_drift`: for keep-my-voice briefs, the largest change allowed per marker between input and draft. Markers are `contraction_rate`, `first_person_rate`, and `hedge_rate` (all per 100 words) and `mean_word_length`. Limits are regression tripwires calibrated so the known-good draft passes with headroom (voice-preservation drifts +1.21/+1.62/0.00/−0.31 against limits 3.0/3.0/2.0/0.6), not perceptual thresholds. Drift is directional: rates fail when they fall past the limit (voice stripped) and warn on overshoot; `mean_word_length` fails when it rises past the limit and warns on a fall.
 
 Every fixture also gets three well-formedness checks the checker applies itself: no doubled spaces inside a line, no space before punctuation, and no empty clause between punctuation marks. Four structure checks run on every draft as well: the binary-contrast scaffolds ("not just X but Y", "isn't just", "it's not about X, it's Y", "not because X but because Y"), which no fixture's ideal draft needs.
+
+### Phrase matching by script
+
+`required` and `banned` phrases ignore case, treat spaces, hyphens, and dashes alike, and bound each end by the script of the phrase's first or last letter:
+
+| Script at that end | Start of the phrase | End of the phrase |
+| --- | --- | --- |
+| Latin, with or without accents | Not inside a word: `montre` misses *démontre*, `à` misses *déjà* | Not inside a word, except by an English inflection: `logbook` matches *logbooks*, `key` misses *turkey* |
+| Any other script written with spaces (Cyrillic, Greek, Arabic, Hebrew, Devanagari, Hangul, ...) | Not inside a word: `кот` misses *скот*, `در` misses *بدر* | Open, for case endings, plurals, and joined particles: `кот` matches *кота*, `ספר` *ספרים*, `책` *책을*, `کتاب` *کتابی* |
+| Chinese, Japanese, Thai, Lao, Khmer, Myanmar | Open: `封筒` matches inside *青い封筒が* | Open |
+| A digit, in any script | Not after another digit | Not before another digit |
+
+A mixed phrase bounds each end by its own script, so `Kirimi駅` matches *Kirimi駅前* but not *XKirimi駅*. An open end also lets a word that only starts with the phrase match (`кот` in *который*), so pick phrases long enough to be distinctive.
+
+A fixture whose `language` is Arabic (`ar`) or Hebrew (`he`) also lets a phrase follow the prefixes those languages join to a word. In Arabic these are و or ف, then ب, ك, or ل, then the article ال (`مخطوطة` matches *والمخطوطة*, *بالمخطوطة*, and *للمخطوطة*; a phrase that starts with ال matches *للمخطوطة* too), and the future س before a verb's own prefix (`يدخل` matches *سيدخل*, `حب` misses *سحب*). An Arabic final ة also matches ت and ات, and a final ى matches ا (`مخطوطة` matches *مخطوطتها* and *مخطوطات*, `ليلى` matches *ليلاه*). In Hebrew they are ו, ש (after כ or מ), ב, כ, ל, or מ, then the article ה (`ספר` matches *בספר*, `הלך` matches *כשהלך*). A fixture in another language written in these scripts (Persian, Urdu, Yiddish), or with no `language`, gets the plain rule above.
 
 ## Adding a fixture
 

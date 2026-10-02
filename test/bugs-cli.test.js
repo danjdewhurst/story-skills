@@ -332,35 +332,72 @@ describe("eval checker in other languages", () => {
     expect(results({ banned: ["montre"] }, "Les montres battaient.", "trap avoided")).toEqual([[false, 'trap avoided: "montre"']]);
     expect(results({ banned: ["arrêté"] }, "Ils sont arrêtés.", "trap avoided")).toEqual([[false, 'trap avoided: "arrêté"']]);
     expect(results({ required: ["封筒"] }, "青い封筒が一通。", "canon kept")).toEqual([[true, 'canon kept: "封筒"']]);
-    expect(results({ required: ["مخطوطة"] }, "كانت المخطوطة الخضراء هناك.", "canon kept")).toEqual([[true, 'canon kept: "مخطوطة"']]);
+    expect(results({ language: "ar", required: ["مخطوطة"] }, "كانت المخطوطة الخضراء هناك.", "canon kept")).toEqual([[true, 'canon kept: "مخطوطة"']]);
   });
 
-  test("#334 phrases in spaced scripts match whole words, whatever the alphabet", () => {
-    const trap = (phrase, draft) => results({ banned: [phrase] }, draft, "trap avoided")[0][0];
-    const kept = (phrase, draft) => results({ required: [phrase] }, draft, "canon kept")[0][0];
-    // French with no ASCII letter, Russian, Greek, Devanagari, Hebrew.
+  test("#334 phrases in spaced scripts start at a word boundary, whatever the alphabet", () => {
+    const trap = (phrase, draft, language) => results({ language, banned: [phrase] }, draft, "trap avoided")[0][0];
+    const kept = (phrase, draft, language) => results({ language, required: [phrase] }, draft, "canon kept")[0][0];
+    // A phrase may not start inside a word: French with no ASCII letter,
+    // Russian, Greek, Devanagari, Hebrew, Persian.
     expect(trap("à", "Il était déjà parti.")).toBe(true);
     expect(trap("à", "Il pensait à elle.")).toBe(false);
-    expect(trap("кот", "Человек, который ждал.")).toBe(true);
-    expect(trap("кот", "Кот спал на окне.")).toBe(false);
-    expect(trap("και", "Ο καιρός άλλαξε.")).toBe(true);
-    expect(trap("και", "Ήρθε και έφυγε.")).toBe(false);
+    expect(trap("кот", "Пастух гнал скот.")).toBe(true);
+    expect(trap("ναι", "Είναι εδώ.")).toBe(true);
+    expect(trap("ναι", "Ναι, είπε.")).toBe(false);
     expect(trap("राम", "उसने आराम किया।")).toBe(true);
     expect(trap("राम", "राम घर गया।")).toBe(false);
     expect(trap("שם", "ירד גשם כל הלילה.")).toBe(true);
-    expect(trap("ספר", "הוא קרא בספר.")).toBe(false);
-    // Arabic: a different word that only contains the phrase is not a match,
-    // the joined conjunction, preposition, and article are, and so are the
-    // pronoun endings.
-    expect(trap("نادر", "كانت تحفة نادرة.")).toBe(true);
-    expect(trap("علم", "جاء المعلم.")).toBe(true);
-    expect(trap("نادر", "ونادر لم يأت.")).toBe(false);
-    expect(trap("مخطوطة", "أمسكت بالمخطوطة.")).toBe(false);
-    expect(trap("مخطوطة", "قرأت للمخطوطة.")).toBe(false);
-    expect(kept("مخطوطة", "فتحت مخطوطتها.")).toBe(true);
-    expect(kept("مكبس", "رفعت المكبس.")).toBe(true);
-    // Unspaced scripts still match inside the text around them; a mixed
-    // phrase bounds each edge by its own script.
+    expect(trap("در", "بدر آمد.", "fa")).toBe(true);
+    // Latin keeps its strict end, with English inflections.
+    expect(trap("montre", "Il montrait tout.", "fr")).toBe(true);
+    // Any other spaced script may run on at the end, for case endings,
+    // plurals, and joined particles.
+    expect(kept("кот", "Она видела кота.", "ru")).toBe(true);
+    expect(kept("мост", "Он шёл к мосту.", "ru")).toBe(true);
+    expect(kept("ספר", "היו שם ספרים.", "he")).toBe(true);
+    expect(kept("책", "책을 읽었다.", "ko")).toBe(true);
+    expect(kept("کتاب", "کتابی خرید.", "fa")).toBe(true);
+  });
+
+  test("#334 Arabic and Hebrew fixtures allow the prefixes those languages join to a word", () => {
+    const trap = (phrase, draft, language) => results({ language, banned: [phrase] }, draft, "trap avoided")[0][0];
+    const kept = (phrase, draft, language) => results({ language, required: [phrase] }, draft, "canon kept")[0][0];
+    // Arabic: conjunction, preposition, and article; ل before ال.
+    expect(trap("نادر", "ونادر لم يأت.", "ar")).toBe(false);
+    expect(trap("مخطوطة", "أمسكت بالمخطوطة.", "ar")).toBe(false);
+    expect(trap("مخطوطة", "قرأت للمخطوطة.", "ar")).toBe(false);
+    expect(trap("المخطوطة", "قرأت للمخطوطة.", "ar")).toBe(false);
+    expect(trap("المخطوطة", "أمسكت بالمخطوطة.", "ar-EG")).toBe(false);
+    expect(trap("علم", "جاء المعلم.", "ar")).toBe(true);
+    // The future س only before a verb's own prefix.
+    expect(trap("يدخل", "سيدخل غدا.", "ar")).toBe(false);
+    expect(trap("حب", "سحب الكرسي.", "ar")).toBe(true);
+    expect(trap("عيد", "كان سعيدا.", "ar")).toBe(true);
+    // Endings: ة as ت or the plural ات, ى as ا.
+    expect(kept("مخطوطة", "فتحت مخطوطتها.", "ar")).toBe(true);
+    expect(kept("مخطوطة", "رأت مخطوطات.", "ar")).toBe(true);
+    expect(kept("ليلى", "رأى ليلاه.", "ar")).toBe(true);
+    expect(kept("مكبس", "رفعت المكبس.", "ar")).toBe(true);
+    // Without an Arabic language, the plain rule: no prefixes.
+    expect(kept("مكبس", "رفعت المكبس.")).toBe(false);
+    expect(kept("مكبس", "رفعت المكبس.", "fa")).toBe(false);
+    // Hebrew: ו, ש after כ or מ, a preposition, and the article.
+    expect(trap("ספר", "הוא קרא בספר.", "he")).toBe(false);
+    expect(trap("הלך", "כשהלך הביתה.", "he")).toBe(false);
+    expect(trap("ספר", "הוא קרא בספר.")).toBe(true);
+  });
+
+  test("#334 digits in any script keep a digit boundary only", () => {
+    const kept = (phrase, draft) => results({ required: [phrase] }, draft, "canon kept")[0][0];
+    expect(kept("١", "a١")).toBe(true);
+    expect(kept("١", "١٢")).toBe(false);
+    expect(kept("3", "٣3")).toBe(false);
+    expect(kept("3", "x3")).toBe(true);
+  });
+
+  test("#334 unspaced scripts match as substrings, and a mixed phrase bounds each edge by its script", () => {
+    const kept = (phrase, draft) => results({ required: [phrase] }, draft, "canon kept")[0][0];
     expect(kept("แมว", "แมวดำนอนอยู่")).toBe(true);
     expect(kept("時刻表", "古い時刻表が")).toBe(true);
     expect(kept("Kirimi駅", "Kirimi駅前で")).toBe(true);
