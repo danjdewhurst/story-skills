@@ -1,4 +1,6 @@
 import { parseClockTime } from "./continuity.js";
+import { languagePack } from "./languages/index.js";
+import { upperCase } from "./languages/locale.js";
 
 // Screenplay scene skeleton in Fountain for `build --format fountain`. Prose
 // cannot be turned into a screenplay mechanically, so this writes only what
@@ -37,10 +39,12 @@ const FORM_NOUNS = {
   "chapter-book": "book"
 };
 
-// input: { title, authors, form, chapters: [{ id, heading, scenes: [scene] }] }
+// input: { title, authors, form, pack, chapters: [{ id, heading, scenes: [scene] }] }
 // where each scene is { id, title, locationName, setting, time, date,
 // cast: [name], dilemma, outcome, flashbackTo, notes: [text] }.
 export function fountainScript(input) {
+  // Names and places are capitalised in the story's language (İ in Turkish).
+  const pack = input.pack ?? languagePack();
   const lines = [`Title: ${inline(input.title)}`];
   const authors = input.authors.map(inline).filter(Boolean).join(" and ");
   if (authors !== "") {
@@ -56,10 +60,10 @@ export function fountainScript(input) {
       lines.push("", `[[No scene records for ${inline(chapter.id)}: add them to outline this chapter.]]`);
     }
     for (const scene of chapter.scenes) {
-      lines.push("", sceneHeading(scene), "", `= ${inline(scene.title)}`, "");
+      lines.push("", sceneHeading(scene, pack), "", `= ${inline(scene.title)}`, "");
       const notes = [`Source: ${inline(scene.id)}`];
       if (scene.cast.length > 0) {
-        notes.push(`Characters: ${scene.cast.map((name) => inline(name).toUpperCase()).join(", ")}`);
+        notes.push(`Characters: ${scene.cast.map((name) => upperCase(inline(name), pack)).join(", ")}`);
       }
       const when = [scene.date, scene.time].map(inline).filter(Boolean).join(" ");
       if (when !== "") {
@@ -84,9 +88,9 @@ export function fountainScript(input) {
 
 // INT. LAMP ROOM - DUSK. Without a setting there is no honest INT. or EXT.,
 // so the heading is forced with a leading period instead.
-export function sceneHeading(scene) {
-  const place = inline(scene.locationName).toUpperCase() || "LOCATION TBD";
-  const time = timeOfDay(scene.time);
+export function sceneHeading(scene, pack = languagePack()) {
+  const place = upperCase(inline(scene.locationName), pack) || "LOCATION TBD";
+  const time = timeOfDay(scene.time, pack);
   // A trailing #...# is read as a scene number; a heading never ends in #.
   const text = `${place}${time === "" ? "" : ` - ${time}`}`.replace(/[\s#]+$/, "") || "LOCATION TBD";
   const prefix = SCENE_SETTINGS.get(scene.setting);
@@ -99,7 +103,7 @@ export function sceneHeading(scene) {
   return `.${forced === "" ? "LOCATION TBD" : forced}`;
 }
 
-export function timeOfDay(value) {
+export function timeOfDay(value, pack = languagePack()) {
   const text = inline(value);
   const named = NAMED_TIMES.get(text.toLowerCase());
   if (named !== undefined) {
@@ -109,7 +113,7 @@ export function timeOfDay(value) {
   if (minutes !== undefined) {
     return minutes >= 6 * 60 && minutes < 18 * 60 ? "DAY" : "NIGHT";
   }
-  return text.toUpperCase();
+  return upperCase(text, pack);
 }
 
 // One line of Fountain text from a record value: whitespace and control

@@ -3,6 +3,8 @@ import path from "node:path";
 import { chapterChronology } from "./chronology.js";
 import { characterLifeline, revivedBy } from "./deaths.js";
 import { err, warn } from "./findings.js";
+import { languagePack } from "./languages/index.js";
+import { compareText } from "./languages/locale.js";
 import { parseFrontmatter, replaceFrontmatter } from "./frontmatter.js";
 import { readTextFile } from "./files.js";
 
@@ -373,8 +375,9 @@ function chronologicalOrder(books, errors) {
 
   const order = [];
   const ready = books.filter((book) => indegree.get(book.key) === 0);
+  const compareTitles = compareText(seriesPack(books));
   while (ready.length > 0) {
-    ready.sort(compareBooks);
+    ready.sort((left, right) => compareBooks(left, right, compareTitles));
     const book = ready.shift();
     order.push(book);
     for (const target of later.get(book.key)) {
@@ -410,10 +413,17 @@ function checkDuplicateBookNumbers(books, errors) {
 // Among books whose earlier books are already listed, the lowest
 // book-number goes next, then title, then canonical path, so the report is
 // the same whichever book it starts from.
-function compareBooks(left, right) {
+function compareBooks(left, right, compareTitles) {
   return (left.bookNumber ?? Infinity) - (right.bookNumber ?? Infinity)
-    || left.title.localeCompare(right.title, "en")
+    || compareTitles(left.title, right.title)
     || (left.key < right.key ? -1 : left.key > right.key ? 1 : 0);
+}
+
+// Titles sort in the books' language when every book shares one, and in
+// English otherwise, so the order never depends on the starting book.
+function seriesPack(books) {
+  const locales = new Set(books.map((book) => book.project.pack?.locale ?? languagePack().locale));
+  return locales.size === 1 ? books[0].project.pack ?? languagePack() : languagePack();
 }
 
 function checkSharedCanon({ order, later }, errors, warnings) {

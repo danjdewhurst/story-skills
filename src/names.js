@@ -1,5 +1,6 @@
 import { err, warn } from "./findings.js";
 import { checkSet, languagePack } from "./languages/index.js";
+import { lowerCase } from "./languages/locale.js";
 import { foldLatin, splitWords } from "./markdown.js";
 import { editDistance } from "./prose.js";
 
@@ -19,7 +20,7 @@ const NO_WORDS = new Set();
 export function givenName(name, pack = languagePack()) {
   const titles = checkSet(pack, "titleWords") ?? NO_WORDS;
   const words = splitWords(String(name));
-  const index = words.findIndex((word) => !titles.has(word.toLowerCase().replace(/[.’']/g, "")));
+  const index = words.findIndex((word) => !titles.has(lowerCase(word, pack).replace(/[.’']/g, "")));
   return index === -1 ? "" : words[index];
 }
 

@@ -1,5 +1,6 @@
 import { warn } from "./findings.js";
 import { checkList, checkSet, languagePack, skippedChecks, skippedLines } from "./languages/index.js";
+import { compareText, lowerCase } from "./languages/locale.js";
 import { splitWords } from "./markdown.js";
 import { givenName } from "./names.js";
 import { plural } from "./plural.js";
@@ -130,7 +131,7 @@ export function buildVoices(project, chapters) {
   const profiles = project.characters
     .map((character) => profile(character, lines.get(character.id), pack, rules))
     .filter((entry) => entry.lines > 0);
-  signatureWords(profiles);
+  signatureWords(profiles, pack);
 
   const warnings = [];
   for (const character of project.characters) {
@@ -442,19 +443,19 @@ function profile(character, said, pack, rules) {
     contractions: rules.contraction === null ? null : words.length === 0 ? 0 : ((text.match(rules.contraction) ?? []).length * 100) / words.length,
     questions: sentences.length === 0 ? 0 : questions / sentences.length,
     exclamations: sentences.length === 0 ? 0 : exclamations / sentences.length,
-    counts: wordCounts(words, rules.stopwords),
+    counts: wordCounts(words, rules.stopwords, pack),
     signature: []
   };
 }
 
 // Without stopwords no word is counted, so no signature words are found.
-function wordCounts(words, stopwords) {
+function wordCounts(words, stopwords, pack) {
   const counts = new Map();
   if (stopwords === null) {
     return counts;
   }
   for (const raw of words) {
-    const word = raw.toLowerCase().replace(/’/g, "'");
+    const word = lowerCase(raw, pack).replace(/’/g, "'");
     if (word.length >= 4 && !stopwords.has(word) && !/^\d+$/.test(word)) {
       counts.set(word, (counts.get(word) ?? 0) + 1);
     }
@@ -464,7 +465,7 @@ function wordCounts(words, stopwords) {
 
 // A signature word is one a character uses at least twice and more often,
 // per word spoken, than everyone else's dialogue combined.
-function signatureWords(profiles) {
+function signatureWords(profiles, pack) {
   const totals = new Map();
   let allWords = 0;
   for (const entry of profiles) {
@@ -487,7 +488,7 @@ function signatureWords(profiles) {
       }
     }
     entry.signature = scored
-      .sort((left, right) => right.score - left.score || right.count - left.count || left.word.localeCompare(right.word, "en"))
+      .sort((left, right) => right.score - left.score || right.count - left.count || compareText(pack)(left.word, right.word))
       .slice(0, 5)
       .map((item) => item.word);
     delete entry.counts;

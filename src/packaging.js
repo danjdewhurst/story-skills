@@ -7,6 +7,8 @@ import fs from "node:fs";
 import { deflateRawSync } from "node:zlib";
 import { writeFile } from "./files.js";
 import { escapeHtml, withBlockquotes } from "./html.js";
+import { languagePack } from "./languages/index.js";
+import { formatNumber } from "./languages/locale.js";
 import { flattenHeadings, isSceneBreak, plainLinks, withoutFenceMarkers, wordCount } from "./markdown.js";
 import { publishingMeta, textDirection } from "./publishing.js";
 
@@ -267,11 +269,12 @@ function shunnChapterHeadingXml(text) {
 }
 
 // Shunn word counts are rounded: exact under 1,000 words, to the nearest
-// 100 below novel length (40,000), and to the nearest 1,000 above it.
-export function shunnWordCount(words) {
+// 100 below novel length (40,000), and to the nearest 1,000 above it, and
+// written as the story's language writes numbers (12.300 in German).
+export function shunnWordCount(words, pack = languagePack()) {
   const step = words < 1000 ? 1 : words < 40000 ? 100 : 1000;
   const rounded = Math.round(words / step) * step;
-  return String(rounded).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return formatNumber(rounded, pack);
 }
 
 function shunnTitlePageXml(meta) {
@@ -280,7 +283,7 @@ function shunnTitlePageXml(meta) {
   if (meta.author) {
     lines.push(shunnParagraphXml(shunnRunXml("by", ""), true), shunnParagraphXml(shunnRunXml(meta.author, ""), true));
   }
-  lines.push(shunnParagraphXml(shunnRunXml(`Approximately ${shunnWordCount(meta.words)} words`, ""), true));
+  lines.push(shunnParagraphXml(shunnRunXml(`Approximately ${shunnWordCount(meta.words, meta.pack)} words`, ""), true));
   for (const contactLine of meta.contact) {
     lines.push(shunnParagraphXml(shunnRunXml(String(contactLine), ""), true));
   }
@@ -324,7 +327,7 @@ export function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {})
   if (meta.author) {
     lines.push("by", meta.author);
   }
-  lines.push("", `Approximately ${shunnWordCount(meta.words)} words`, "");
+  lines.push("", `Approximately ${shunnWordCount(meta.words, meta.pack)} words`, "");
   for (const contactLine of meta.contact) {
     lines.push(String(contactLine));
   }
