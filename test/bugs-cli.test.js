@@ -334,6 +334,40 @@ describe("eval checker in other languages", () => {
     expect(results({ required: ["封筒"] }, "青い封筒が一通。", "canon kept")).toEqual([[true, 'canon kept: "封筒"']]);
     expect(results({ required: ["مخطوطة"] }, "كانت المخطوطة الخضراء هناك.", "canon kept")).toEqual([[true, 'canon kept: "مخطوطة"']]);
   });
+
+  test("#334 phrases in spaced scripts match whole words, whatever the alphabet", () => {
+    const trap = (phrase, draft) => results({ banned: [phrase] }, draft, "trap avoided")[0][0];
+    const kept = (phrase, draft) => results({ required: [phrase] }, draft, "canon kept")[0][0];
+    // French with no ASCII letter, Russian, Greek, Devanagari, Hebrew.
+    expect(trap("à", "Il était déjà parti.")).toBe(true);
+    expect(trap("à", "Il pensait à elle.")).toBe(false);
+    expect(trap("кот", "Человек, который ждал.")).toBe(true);
+    expect(trap("кот", "Кот спал на окне.")).toBe(false);
+    expect(trap("και", "Ο καιρός άλλαξε.")).toBe(true);
+    expect(trap("και", "Ήρθε και έφυγε.")).toBe(false);
+    expect(trap("राम", "उसने आराम किया।")).toBe(true);
+    expect(trap("राम", "राम घर गया।")).toBe(false);
+    expect(trap("שם", "ירד גשם כל הלילה.")).toBe(true);
+    expect(trap("ספר", "הוא קרא בספר.")).toBe(false);
+    // Arabic: a different word that only contains the phrase is not a match,
+    // the joined conjunction, preposition, and article are, and so are the
+    // pronoun endings.
+    expect(trap("نادر", "كانت تحفة نادرة.")).toBe(true);
+    expect(trap("علم", "جاء المعلم.")).toBe(true);
+    expect(trap("نادر", "ونادر لم يأت.")).toBe(false);
+    expect(trap("مخطوطة", "أمسكت بالمخطوطة.")).toBe(false);
+    expect(trap("مخطوطة", "قرأت للمخطوطة.")).toBe(false);
+    expect(kept("مخطوطة", "فتحت مخطوطتها.")).toBe(true);
+    expect(kept("مكبس", "رفعت المكبس.")).toBe(true);
+    // Unspaced scripts still match inside the text around them; a mixed
+    // phrase bounds each edge by its own script.
+    expect(kept("แมว", "แมวดำนอนอยู่")).toBe(true);
+    expect(kept("時刻表", "古い時刻表が")).toBe(true);
+    expect(kept("Kirimi駅", "Kirimi駅前で")).toBe(true);
+    expect(kept("Kirimi駅", "XKirimi駅前で")).toBe(false);
+    expect(kept("駅 Kirimi", "霧見駅 Kirimi")).toBe(true);
+    expect(kept("駅 Kirimi", "駅 Kirimian")).toBe(false);
+  });
 });
 
 describe("eval checker line count", () => {
