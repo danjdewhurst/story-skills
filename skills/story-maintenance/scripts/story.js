@@ -2181,13 +2181,36 @@ function skippedLines(skipped) {
   return skipped.map((entry) => `Note: ${entry.message}`);
 }
 
+// src/languages/locale.js
+var COMPARERS = new Map;
+function compareText(pack = languagePack()) {
+  if (!COMPARERS.has(pack.locale)) {
+    const collator = new Intl.Collator(pack.locale);
+    COMPARERS.set(pack.locale, (left, right) => collator.compare(left, right) || (left < right ? -1 : left > right ? 1 : 0));
+  }
+  return COMPARERS.get(pack.locale);
+}
+function lowerCase(text, pack = languagePack()) {
+  return String(text).toLocaleLowerCase(pack.locale);
+}
+function upperCase(text, pack = languagePack()) {
+  return String(text).toLocaleUpperCase(pack.locale);
+}
+var NUMBER_FORMATS = new Map;
+function formatNumber(value, pack = languagePack()) {
+  if (!NUMBER_FORMATS.has(pack.locale)) {
+    NUMBER_FORMATS.set(pack.locale, new Intl.NumberFormat(pack.locale, { numberingSystem: "latn", maximumFractionDigits: 0 }));
+  }
+  return NUMBER_FORMATS.get(pack.locale).format(value);
+}
+
 // src/names.js
 var MAJOR_ROLES = new Set(["protagonist", "antagonist", "deuteragonist", "narrator"]);
 var NO_WORDS = new Set;
 function givenName(name, pack = languagePack()) {
   const titles = checkSet(pack, "titleWords") ?? NO_WORDS;
   const words = splitWords(String(name));
-  const index = words.findIndex((word) => !titles.has(word.toLowerCase().replace(/[.’']/g, "")));
+  const index = words.findIndex((word) => !titles.has(lowerCase(word, pack).replace(/[.’']/g, "")));
   return index === -1 ? "" : words[index];
 }
 function existingNames(project) {
@@ -2477,7 +2500,7 @@ function buildVoices(project, chapters) {
     credit(null, pending);
   }
   const profiles = project.characters.map((character) => profile(character, lines.get(character.id), pack, rules)).filter((entry) => entry.lines > 0);
-  signatureWords(profiles);
+  signatureWords(profiles, pack);
   const warnings = [];
   for (const character of project.characters) {
     const said = lines.get(character.id);
@@ -2726,24 +2749,24 @@ function profile(character, said, pack, rules) {
     contractions: rules.contraction === null ? null : words.length === 0 ? 0 : (text.match(rules.contraction) ?? []).length * 100 / words.length,
     questions: sentences.length === 0 ? 0 : questions / sentences.length,
     exclamations: sentences.length === 0 ? 0 : exclamations / sentences.length,
-    counts: wordCounts(words, rules.stopwords),
+    counts: wordCounts(words, rules.stopwords, pack),
     signature: []
   };
 }
-function wordCounts(words, stopwords) {
+function wordCounts(words, stopwords, pack) {
   const counts = new Map;
   if (stopwords === null) {
     return counts;
   }
   for (const raw of words) {
-    const word = raw.toLowerCase().replace(/’/g, "'");
+    const word = lowerCase(raw, pack).replace(/’/g, "'");
     if (word.length >= 4 && !stopwords.has(word) && !/^\d+$/.test(word)) {
       counts.set(word, (counts.get(word) ?? 0) + 1);
     }
   }
   return counts;
 }
-function signatureWords(profiles) {
+function signatureWords(profiles, pack) {
   const totals = new Map;
   let allWords = 0;
   for (const entry of profiles) {
@@ -2765,7 +2788,7 @@ function signatureWords(profiles) {
         scored.push({ word, count, score: own - others });
       }
     }
-    entry.signature = scored.sort((left, right) => right.score - left.score || right.count - left.count || left.word.localeCompare(right.word, "en")).slice(0, 5).map((item) => item.word);
+    entry.signature = scored.sort((left, right) => right.score - left.score || right.count - left.count || compareText(pack)(left.word, right.word)).slice(0, 5).map((item) => item.word);
     delete entry.counts;
   }
 }
@@ -2851,10 +2874,10 @@ function proseThresholds(options = {}) {
 function proseRules(styleData, names, pack = languagePack()) {
   const data = styleData ?? {};
   const skipped = skippedChecks(pack, PROSE_CHECKS);
-  const allow = new Set(stringList2(data["allow-words"]).map(normalizeWord));
+  const allow = new Set(stringList2(data["allow-words"]).map((word) => normalizeWord(word, pack)));
   const variants = [];
   for (const entry of Array.isArray(data.preferred) ? data.preferred : []) {
-    if (entry && typeof entry.use === "string" && typeof entry.avoid === "string" && entry.use.trim() !== "" && entry.avoid.trim() !== "" && normalizeWord(entry.use.trim()) !== normalizeWord(entry.avoid.trim())) {
+    if (entry && typeof entry.use === "string" && typeof entry.avoid === "string" && entry.use.trim() !== "" && entry.avoid.trim() !== "" && normalizeWord(entry.use.trim(), pack) !== normalizeWord(entry.avoid.trim(), pack)) {
       variants.push({ use: entry.use.trim(), avoid: entry.avoid.trim(), source: "style sheet" });
     }
   }
@@ -2863,7 +2886,7 @@ function proseRules(styleData, names, pack = languagePack()) {
   if ((dialect === "british" || dialect === "american") && dialectPairs === null) {
     skipped.push(skippedCheck(pack, DIALECT_CHECK));
   } else if (dialect === "british" || dialect === "american") {
-    const claimed = new Set(variants.flatMap((variant) => [normalizeWord(variant.use), normalizeWord(variant.avoid)]).concat([...allow]));
+    const claimed = new Set(variants.flatMap((variant) => [normalizeWord(variant.use, pack), normalizeWord(variant.avoid, pack)]).concat([...allow]));
     for (const [british, american] of dialectPairs) {
       const [use, avoid] = dialect === "british" ? [british, american] : [american, british];
       if (!claimed.has(use) && !claimed.has(avoid)) {
@@ -2874,7 +2897,7 @@ function proseRules(styleData, names, pack = languagePack()) {
   const nameTokens = new Set;
   for (const name of names) {
     for (const token of splitWords(String(name))) {
-      nameTokens.add(nameKey(token));
+      nameTokens.add(nameKey(token, pack));
     }
   }
   const allowed = (name) => {
@@ -2910,8 +2933,8 @@ function analyzeChapter(prose, rules) {
 `));
   const sentenceList = paragraphs.flatMap((paragraph) => splitSentences(paragraph, { pack: rules.pack }));
   const sentences = sentenceList.map((sentence) => splitWords(sentence).length).filter((count) => count > 0);
-  const filterWords = rules.filterWords === null ? [] : countMatching(narration, (word) => rules.filterWords.has(word));
-  const adverbs = rules.adverbSuffixes === null ? [] : countMatching(narration, (word) => isAdverb(word, rules));
+  const filterWords = rules.filterWords === null ? [] : countMatching(narration, (word) => rules.filterWords.has(word), rules.pack);
+  const adverbs = rules.adverbSuffixes === null ? [] : countMatching(narration, (word) => isAdverb(word, rules), rules.pack);
   const tags = rules.plainTags === null ? { plain: [], bookisms: [] } : dialogueTags(paragraphs, rules);
   return {
     words: words.length,
@@ -2925,7 +2948,7 @@ function analyzeChapter(prose, rules) {
     echoes: echoes(words, rules),
     watch: rules.watch.map(({ word, pattern }) => ({ word, count: countPattern(text, pattern) })).filter((entry) => entry.count > 0),
     variants: rules.variants.map(({ use, avoid, source, pattern }) => ({ use, avoid, source, count: countVariant(text, pattern, rules) })).filter((entry) => entry.count > 0),
-    phraseSentences: sentenceList.map((sentence) => splitWords(sentence).map(normalizeWord))
+    phraseSentences: sentenceList.map((sentence) => splitWords(sentence).map((word) => normalizeWord(word, rules.pack)))
   };
 }
 function chapterFindings(label, analysis, thresholds = PROSE_THRESHOLDS, { baseline = false, pack = languagePack() } = {}) {
@@ -2984,7 +3007,7 @@ function baselineProfile(samples, pack = languagePack()) {
     dialogueShare: words === 0 ? 0 : (words - narrationWords) * 100 / words,
     filterPerThousand: checkRuns(pack, "filter-words") ? perThousand(sum((analysis) => total(analysis.filterWords)), narrationWords) : null,
     adverbsPerThousand: checkRuns(pack, "adverbs") ? perThousand(sum((analysis) => total(analysis.adverbs)), narrationWords) : null,
-    signatureWords: checkRuns(pack, "signature-words") ? sortCounts(counts).filter((entry) => entry.count >= BASELINE_TOLERANCES.signatureMinCount).slice(0, BASELINE_TOLERANCES.signatureWords).map((entry) => entry.word) : null,
+    signatureWords: checkRuns(pack, "signature-words") ? sortCounts(counts, pack).filter((entry) => entry.count >= BASELINE_TOLERANCES.signatureMinCount).slice(0, BASELINE_TOLERANCES.signatureWords).map((entry) => entry.word) : null,
     usable: narrationWords >= BASELINE_TOLERANCES.minSampleWords
   };
 }
@@ -2994,7 +3017,7 @@ function contentWords(prose, rules) {
   }
   return splitWords(proseParagraphs(prose).join(`
 
-`)).map(normalizeWord).filter((word) => word.length >= 4 && !rules.echoStopwords.has(word) && !rules.phraseStopwords.has(word) && !isName(word, rules) && !/^\p{N}+$/u.test(word));
+`)).map((word) => normalizeWord(word, rules.pack)).filter((word) => word.length >= 4 && !rules.echoStopwords.has(word) && !rules.phraseStopwords.has(word) && !isName(word, rules) && !/^\p{N}+$/u.test(word));
 }
 function sentenceLengths(prose, pack = languagePack()) {
   return proseParagraphs(prose).flatMap((paragraph) => splitSentences(paragraph, { pack })).map((sentence) => splitWords(sentence).length).filter((count) => count > 0);
@@ -3064,10 +3087,10 @@ function repeatedPhrases(analyses, thresholds = PROSE_THRESHOLDS, pack = languag
     }
   }
   const repeated = new Map([...counts].filter(([, count]) => count >= thresholds.phraseMinCount));
-  return sortCounts(repeated).slice(0, thresholds.phraseLimit).map((entry) => ({ phrase: entry.word, count: entry.count }));
+  return sortCounts(repeated, pack).slice(0, thresholds.phraseLimit).map((entry) => ({ phrase: entry.word, count: entry.count }));
 }
 function similarNames(characters, pack = languagePack()) {
-  const firsts = characters.map((character) => ({ id: character.id, name: String(character.name), first: givenName(character.name, pack).toLowerCase() })).filter((entry) => entry.first.length >= 3).sort((left, right) => left.id.localeCompare(right.id, "en"));
+  const firsts = characters.map((character) => ({ id: character.id, name: String(character.name), first: lowerCase(givenName(character.name, pack), pack) })).filter((entry) => entry.first.length >= 3).sort((left, right) => left.id.localeCompare(right.id, "en"));
   const pairs = [];
   for (let left = 0;left < firsts.length; left += 1) {
     for (let right = left + 1;right < firsts.length; right += 1) {
@@ -3166,7 +3189,7 @@ function dialogueTags(paragraphs, rules) {
         continue;
       }
       for (const raw of after) {
-        const word = raw.toLowerCase();
+        const word = lowerCase(raw, rules.pack);
         if (rules.plainTags.has(word)) {
           increment(plain, word);
           break;
@@ -3178,7 +3201,7 @@ function dialogueTags(paragraphs, rules) {
       }
     }
   }
-  return { plain: sortCounts(plain), bookisms: sortCounts(bookisms) };
+  return { plain: sortCounts(plain, rules.pack), bookisms: sortCounts(bookisms, rules.pack) };
 }
 function tagKind(quoted, nextWord, rules) {
   const end = quoted.trim().replace(/["'”’)\]*_]+$/, "").slice(-1);
@@ -3186,7 +3209,7 @@ function tagKind(quoted, nextWord, rules) {
     return "none";
   }
   if (/[?!…—–-]/.test(end) && /^\p{Lu}/u.test(nextWord)) {
-    return rules.beatPronouns.has(nextWord.toLowerCase()) ? "none" : "plain";
+    return rules.beatPronouns.has(lowerCase(nextWord, rules.pack)) ? "none" : "plain";
   }
   return "any";
 }
@@ -3194,13 +3217,13 @@ function isAdverb(word, rules) {
   return word.length > 4 && rules.adverbSuffixes.some((suffix) => word.endsWith(suffix)) && !rules.adverbExceptions.has(word) && !rules.allow.has(word) && !isName(word, rules);
 }
 function isName(word, rules) {
-  return rules.nameTokens.has(word) || rules.nameTokens.has(nameKey(word));
+  return rules.nameTokens.has(word) || rules.nameTokens.has(nameKey(word, rules.pack));
 }
-function normalizeWord(word) {
-  return String(word).toLowerCase().replace(/’/g, "'");
+function normalizeWord(word, pack) {
+  return lowerCase(word, pack).replace(/’/g, "'");
 }
-function nameKey(word) {
-  return normalizeWord(word).replace(/'s$/, "");
+function nameKey(word, pack) {
+  return normalizeWord(word, pack).replace(/'s$/, "");
 }
 function countVariant(text, pattern, rules) {
   let count = 0;
@@ -3220,7 +3243,7 @@ function echoes(words, rules) {
   const lastSeen = new Map;
   const counts = new Map;
   words.forEach((raw, index) => {
-    const word = normalizeWord(raw);
+    const word = normalizeWord(raw, rules.pack);
     if (word.length < PROSE_THRESHOLDS.echoMinLength || rules.echoStopwords.has(word) || isName(word, rules) || rules.allow.has(word) || /^\p{N}+$/u.test(word)) {
       return;
     }
@@ -3229,7 +3252,7 @@ function echoes(words, rules) {
     }
     lastSeen.set(word, index);
   });
-  return sortCounts(counts);
+  return sortCounts(counts, rules.pack);
 }
 function sentenceStats(lengths) {
   if (lengths.length === 0) {
@@ -3239,15 +3262,15 @@ function sentenceStats(lengths) {
   const variance = lengths.reduce((sum, value) => sum + (value - mean) ** 2, 0) / lengths.length;
   return { count: lengths.length, mean, longest: Math.max(...lengths), spread: Math.sqrt(variance) };
 }
-function countMatching(words, predicate) {
+function countMatching(words, predicate, pack) {
   const counts = new Map;
   for (const raw of words) {
-    const word = normalizeWord(raw);
+    const word = normalizeWord(raw, pack);
     if (predicate(word)) {
       increment(counts, word);
     }
   }
-  return sortCounts(counts);
+  return sortCounts(counts, pack);
 }
 function phrasePattern2(phrase) {
   const body = phrase.trim().split(/\s+/).map((word) => escapeRegExp(word).replace(/['’]/g, "['’]")).join("\\s+");
@@ -3279,9 +3302,8 @@ function editDistance(a, b) {
 function increment(counts, key) {
   counts.set(key, (counts.get(key) ?? 0) + 1);
 }
-var COLLATOR = new Intl.Collator("en");
-function sortCounts(counts) {
-  return [...counts.entries()].map(([word, count]) => ({ word, count })).sort((left, right) => right.count - left.count || COLLATOR.compare(left.word, right.word));
+function sortCounts(counts, pack) {
+  return [...counts.entries()].map(([word, count]) => ({ word, count })).sort((left, right) => right.count - left.count || compareText(pack)(left.word, right.word));
 }
 function stringList2(value) {
   return Array.isArray(value) ? value.filter((item) => typeof item === "string" && item.trim() !== "").map((item) => item.trim()) : [];
@@ -5728,8 +5750,9 @@ function chronologicalOrder(books, errors) {
   }
   const order = [];
   const ready = books.filter((book) => indegree.get(book.key) === 0);
+  const compareTitles = compareText(seriesPack(books));
   while (ready.length > 0) {
-    ready.sort(compareBooks);
+    ready.sort((left, right) => compareBooks(left, right, compareTitles));
     const book = ready.shift();
     order.push(book);
     for (const target of later.get(book.key)) {
@@ -5759,8 +5782,12 @@ function checkDuplicateBookNumbers(books, errors) {
     }
   }
 }
-function compareBooks(left, right) {
-  return (left.bookNumber ?? Infinity) - (right.bookNumber ?? Infinity) || left.title.localeCompare(right.title, "en") || (left.key < right.key ? -1 : left.key > right.key ? 1 : 0);
+function compareBooks(left, right, compareTitles) {
+  return (left.bookNumber ?? Infinity) - (right.bookNumber ?? Infinity) || compareTitles(left.title, right.title) || (left.key < right.key ? -1 : left.key > right.key ? 1 : 0);
+}
+function seriesPack(books) {
+  const locales = new Set(books.map((book) => book.project.pack?.locale ?? languagePack().locale));
+  return locales.size === 1 ? books[0].project.pack ?? languagePack() : languagePack();
 }
 function checkSharedCanon({ order, later }, errors, warnings) {
   const reachable = new Map(order.map((book) => [book.key, collectLater(book.key, later, new Set)]));
@@ -6477,10 +6504,10 @@ function computeProgress({ words, target, deadline, today, chapters, sessions })
 function formatProgress(progress) {
   const lines = [];
   if (progress.target === null) {
-    lines.push(`Progress: ${formatNumber(progress.words)} words (no target-words in story.md)`);
+    lines.push(`Progress: ${formatNumber2(progress.words)} words (no target-words in story.md)`);
   } else {
-    lines.push(`Progress: ${formatNumber(progress.words)} of ${formatNumber(progress.target)} words (${formatPercent(progress.percent, 1)}%)`);
-    lines.push(`Remaining: ${plural2(progress.remaining, "word", formatNumber)}`);
+    lines.push(`Progress: ${formatNumber2(progress.words)} of ${formatNumber2(progress.target)} words (${formatPercent(progress.percent, 1)}%)`);
+    lines.push(`Remaining: ${plural2(progress.remaining, "word", formatNumber2)}`);
   }
   if (progress.deadline) {
     const { date, daysLeft, perDay } = progress.deadline;
@@ -6489,19 +6516,19 @@ function formatProgress(progress) {
     } else if (perDay === null) {
       lines.push(`Deadline: ${date} (${daysLeft === 0 ? "today" : `${plural2(daysLeft, "day")} left`})`);
     } else if (daysLeft === 0) {
-      lines.push(`Deadline: ${date} (today): ${plural2(perDay, "word", formatNumber)} needed`);
+      lines.push(`Deadline: ${date} (today): ${plural2(perDay, "word", formatNumber2)} needed`);
     } else {
-      lines.push(`Deadline: ${date} (${plural2(daysLeft, "day")} left): ${formatNumber(perDay)} words a day needed`);
+      lines.push(`Deadline: ${date} (${plural2(daysLeft, "day")} left): ${formatNumber2(perDay)} words a day needed`);
     }
   }
   if (progress.lastSession) {
     const { date, since } = progress.lastSession;
-    lines.push(`Sessions: ${progress.sessions} logged; last ${date} (${since >= 0 ? "+" : ""}${formatNumber(since)} words since)`);
+    lines.push(`Sessions: ${progress.sessions} logged; last ${date} (${since >= 0 ? "+" : ""}${formatNumber2(since)} words since)`);
   } else {
     lines.push("Sessions: none logged (run story progress --log after a writing session)");
   }
   if (progress.pace !== null) {
-    lines.push(`Pace: ${formatNumber(Math.round(progress.pace))} words a day over the last ${Math.min(progress.sessions, PACE_SESSIONS)} sessions`);
+    lines.push(`Pace: ${formatNumber2(Math.round(progress.pace))} words a day over the last ${Math.min(progress.sessions, PACE_SESSIONS)} sessions`);
   }
   if (progress.projected) {
     lines.push(`Projected finish at this pace: ${progress.projected}`);
@@ -6509,7 +6536,7 @@ function formatProgress(progress) {
   if (progress.chapters.length > 0) {
     lines.push("", "Chapter targets:");
     for (const chapter of progress.chapters) {
-      lines.push(`- ${chapter.id}: ${formatNumber(chapter.words)} of ${formatNumber(chapter.target)} words (${formatPercent(chapter.percent, 0)}%)`);
+      lines.push(`- ${chapter.id}: ${formatNumber2(chapter.words)} of ${formatNumber2(chapter.target)} words (${formatPercent(chapter.percent, 0)}%)`);
     }
   }
   return `${lines.join(`
@@ -6534,7 +6561,7 @@ function formatPercent(percent, places) {
   }
   return value.toFixed(places);
 }
-function formatNumber(value) {
+function formatNumber2(value) {
   return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
@@ -6636,7 +6663,7 @@ function formatComparison(comparison, label) {
   const lines = [
     `Compared with ${label}`,
     `Chapters: ${comparison.beforeChapters} then, ${comparison.afterChapters} now (${added} added, ${removed} removed${moved > 0 ? `, ${moved} moved` : ""})`,
-    `Words: ${formatNumber2(comparison.beforeWords)} then, ${formatNumber2(comparison.afterWords)} now (${signed(comparison.afterWords - comparison.beforeWords)})`,
+    `Words: ${formatNumber3(comparison.beforeWords)} then, ${formatNumber3(comparison.afterWords)} now (${signed(comparison.afterWords - comparison.beforeWords)})`,
     ""
   ];
   if (comparison.chapters.length === 0) {
@@ -6645,13 +6672,13 @@ function formatComparison(comparison, label) {
   for (const chapter of comparison.chapters) {
     const name = `${chapter.id} ${chapter.title}${chapter.movedFrom ? ` (moved from ${chapter.movedFrom})` : ""}`;
     if (chapter.status === "added") {
-      lines.push(`- ${name}: added (${formatNumber2(chapter.after)} words)`);
+      lines.push(`- ${name}: added (${formatNumber3(chapter.after)} words)`);
     } else if (chapter.status === "removed") {
-      lines.push(`- ${name}: removed (was ${formatNumber2(chapter.before)} words)`);
+      lines.push(`- ${name}: removed (was ${formatNumber3(chapter.before)} words)`);
     } else if (chapter.status === "unchanged") {
-      lines.push(`- ${name}: unchanged (${formatNumber2(chapter.after)} words)`);
+      lines.push(`- ${name}: unchanged (${formatNumber3(chapter.after)} words)`);
     } else {
-      lines.push(`- ${name}: ${formatNumber2(chapter.before)} -> ${formatNumber2(chapter.after)} words (${signed(chapter.after - chapter.before)}), ${formatPercent(chapter.unchanged * 100, 0)}% of paragraphs unchanged`);
+      lines.push(`- ${name}: ${formatNumber3(chapter.before)} -> ${formatNumber3(chapter.after)} words (${signed(chapter.after - chapter.before)}), ${formatPercent(chapter.unchanged * 100, 0)}% of paragraphs unchanged`);
     }
   }
   return `${lines.join(`
@@ -6744,9 +6771,9 @@ function formatLabelMapping(mapping, label) {
 `;
 }
 function signed(value) {
-  return `${value > 0 ? "+" : value < 0 ? "-" : "±"}${formatNumber2(Math.abs(value))}`;
+  return `${value > 0 ? "+" : value < 0 ? "-" : "±"}${formatNumber3(Math.abs(value))}`;
 }
-function formatNumber2(value) {
+function formatNumber3(value) {
   return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
@@ -6881,7 +6908,7 @@ function describe(document, from, length) {
   };
 }
 function count(value, noun) {
-  return `${formatNumber2(value)} ${value === 1 ? noun : `${noun}s`}`;
+  return `${formatNumber3(value)} ${value === 1 ? noun : `${noun}s`}`;
 }
 function place(location) {
   return location.from === location.to ? location.from : `${location.from} to ${location.to}`;
@@ -6951,7 +6978,7 @@ function formatSimilarity(report) {
     const passages = chapter.passages === 0 ? "no shared passages" : `${count(chapter.passages, "shared passage")}, ${count(chapter.sharedWords, "word")} (${percent(chapter.sharedWords, chapter.words)})`;
     lines.push(`- ${chapter.file}: ${passages}`);
   }
-  lines.push("", `Total: ${formatNumber2(report.sharedWords)} of ${count(report.words, "word")} shared (${percent(report.sharedWords, report.words)})`);
+  lines.push("", `Total: ${formatNumber3(report.sharedWords)} of ${count(report.words, "word")} shared (${percent(report.sharedWords, report.words)})`);
   lines.push("Shared text is a place to look, not proof of copying: check each passage in context.");
   return `${lines.join(`
 `)}
@@ -7350,7 +7377,7 @@ function buildTimeline(project) {
   return {
     chronology: dated,
     undated: entries.filter((entry) => entry.days === undefined),
-    pov: povBalance(chapters),
+    pov: povBalance(chapters, project.pack),
     presence: characterPresence(project, chapters, chapterById)
   };
 }
@@ -7444,7 +7471,7 @@ function timelineEntry(project, { unit, chapter, isChapter, orphan }, reading) {
     reading
   };
 }
-function povBalance(chapters) {
+function povBalance(chapters, pack) {
   const totals = new Map;
   let words = 0;
   for (const chapter of chapters) {
@@ -7455,7 +7482,7 @@ function povBalance(chapters) {
     words += chapter.wordCount;
     totals.set(key, entry);
   }
-  return [...totals.values()].map((entry) => ({ ...entry, share: words === 0 ? 0 : entry.words * 100 / words })).sort((left, right) => right.words - left.words || right.chapters - left.chapters || left.pov.localeCompare(right.pov, "en"));
+  return [...totals.values()].map((entry) => ({ ...entry, share: words === 0 ? 0 : entry.words * 100 / words })).sort((left, right) => right.words - left.words || right.chapters - left.chapters || compareText(pack)(left.pov, right.pov));
 }
 function characterPresence(project, chapters, chapterById) {
   const present = new Map(project.characters.map((character) => [character.id, new Set]));
@@ -7530,7 +7557,7 @@ function formatTimeline(timeline, totalChapters) {
   }
   const shares = roundedShares(timeline.pov.map((entry) => entry.words));
   for (const [index, entry] of timeline.pov.entries()) {
-    lines.push(`- ${entry.pov}: ${plural3(entry.chapters, "chapter")}, ${formatNumber3(entry.words)} words (${shares[index]}%)`);
+    lines.push(`- ${entry.pov}: ${plural3(entry.chapters, "chapter")}, ${formatNumber4(entry.words)} words (${shares[index]}%)`);
   }
   lines.push("", "Character presence:");
   if (timeline.presence.length === 0) {
@@ -7570,7 +7597,7 @@ function describe2(entry) {
 function plural3(count, noun) {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
-function formatNumber3(value) {
+function formatNumber4(value) {
   return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
@@ -7848,7 +7875,8 @@ function pronunciationGuide(project) {
   project.factions.forEach((faction) => add("faction", faction.name, faction.pronunciation));
   project.artifacts.forEach((artifact) => add("artifact", artifact.name, artifact.pronunciation));
   project.glossaryTerms.forEach((term) => add("term", term.term, term.pronunciation));
-  return guide.sort((left, right) => left.name.localeCompare(right.name, "en") || left.kind.localeCompare(right.kind, "en"));
+  const compare = compareText(project.pack);
+  return guide.sort((left, right) => compare(left.name, right.name) || left.kind.localeCompare(right.kind, "en"));
 }
 function narrationBody(body) {
   return flattenHeadings(plainLinks(String(body).replace(/\r\n?/g, `
@@ -7890,6 +7918,7 @@ var FORM_NOUNS = {
   "chapter-book": "book"
 };
 function fountainScript(input) {
+  const pack = input.pack ?? languagePack();
   const lines = [`Title: ${inline(input.title)}`];
   const authors = input.authors.map(inline).filter(Boolean).join(" and ");
   if (authors !== "") {
@@ -7904,10 +7933,10 @@ function fountainScript(input) {
       lines.push("", `[[No scene records for ${inline(chapter.id)}: add them to outline this chapter.]]`);
     }
     for (const scene of chapter.scenes) {
-      lines.push("", sceneHeading(scene), "", `= ${inline(scene.title)}`, "");
+      lines.push("", sceneHeading(scene, pack), "", `= ${inline(scene.title)}`, "");
       const notes = [`Source: ${inline(scene.id)}`];
       if (scene.cast.length > 0) {
-        notes.push(`Characters: ${scene.cast.map((name) => inline(name).toUpperCase()).join(", ")}`);
+        notes.push(`Characters: ${scene.cast.map((name) => upperCase(inline(name), pack)).join(", ")}`);
       }
       const when = [scene.date, scene.time].map(inline).filter(Boolean).join(" ");
       if (when !== "") {
@@ -7930,9 +7959,9 @@ function fountainScript(input) {
 `)}
 `;
 }
-function sceneHeading(scene) {
-  const place = inline(scene.locationName).toUpperCase() || "LOCATION TBD";
-  const time = timeOfDay(scene.time);
+function sceneHeading(scene, pack = languagePack()) {
+  const place = upperCase(inline(scene.locationName), pack) || "LOCATION TBD";
+  const time = timeOfDay(scene.time, pack);
   const text = `${place}${time === "" ? "" : ` - ${time}`}`.replace(/[\s#]+$/, "") || "LOCATION TBD";
   const prefix = SCENE_SETTINGS.get(scene.setting);
   if (prefix !== undefined) {
@@ -7941,7 +7970,7 @@ function sceneHeading(scene) {
   const forced = text.replace(/^[^\p{L}\p{N}]+/u, "");
   return `.${forced === "" ? "LOCATION TBD" : forced}`;
 }
-function timeOfDay(value) {
+function timeOfDay(value, pack = languagePack()) {
   const text = inline(value);
   const named = NAMED_TIMES.get(text.toLowerCase());
   if (named !== undefined) {
@@ -7951,7 +7980,7 @@ function timeOfDay(value) {
   if (minutes !== undefined) {
     return minutes >= 6 * 60 && minutes < 18 * 60 ? "DAY" : "NIGHT";
   }
-  return text.toUpperCase();
+  return upperCase(text, pack);
 }
 function inline(value) {
   return String(value ?? "").replace(/[\s\u0000-\u001f\u007f-\u009f]+/g, " ").trim().replace(/[\\*_]/g, "\\$&").replace(/\[(?=\[)/g, "[ ").replace(/\](?=\])/g, "] ");
@@ -8254,17 +8283,17 @@ function shunnParagraphXml(runXml, centered, quote = false) {
 function shunnChapterHeadingXml(text) {
   return `<w:p><w:pPr>${SHUNN_PARAGRAPH_SPACING}<w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:r><w:br w:type="page"/></w:r>${shunnRunXml(text, "<w:b/>")}</w:p>`;
 }
-function shunnWordCount(words) {
+function shunnWordCount(words, pack = languagePack()) {
   const step = words < 1000 ? 1 : words < 40000 ? 100 : 1000;
   const rounded = Math.round(words / step) * step;
-  return String(rounded).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return formatNumber(rounded, pack);
 }
 function shunnTitlePageXml(meta) {
   const lines = [shunnParagraphXml(shunnRunXml(meta.title, "<w:b/>"), true)];
   if (meta.author) {
     lines.push(shunnParagraphXml(shunnRunXml("by", ""), true), shunnParagraphXml(shunnRunXml(meta.author, ""), true));
   }
-  lines.push(shunnParagraphXml(shunnRunXml(`Approximately ${shunnWordCount(meta.words)} words`, ""), true));
+  lines.push(shunnParagraphXml(shunnRunXml(`Approximately ${shunnWordCount(meta.words, meta.pack)} words`, ""), true));
   for (const contactLine of meta.contact) {
     lines.push(shunnParagraphXml(shunnRunXml(String(contactLine), ""), true));
   }
@@ -8298,7 +8327,7 @@ function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {}) {
   if (meta.author) {
     lines.push("by", meta.author);
   }
-  lines.push("", `Approximately ${shunnWordCount(meta.words)} words`, "");
+  lines.push("", `Approximately ${shunnWordCount(meta.words, meta.pack)} words`, "");
   for (const contactLine of meta.contact) {
     lines.push(String(contactLine));
   }
@@ -11207,6 +11236,7 @@ function screenplayOutline(project, book) {
     title: project.title,
     authors: book.meta.authors,
     form: typeof project.story.data.form === "string" ? project.story.data.form : "",
+    pack: project.pack,
     chapters,
     warnings
   };
@@ -11398,6 +11428,7 @@ function shunnMeta(project) {
     author: publishingMeta(data).authors.join(" and "),
     contact: asArray(data.contact),
     words: project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0),
+    pack: project.pack,
     shortForm: data.form === "short-story" || data.form === "flash"
   };
 }
@@ -15273,7 +15304,7 @@ function extractNameCandidates(prose, pack = languagePack()) {
       addCandidate(counts, name);
     }
   }
-  return [...counts.entries()].filter(([, count]) => count >= CANDIDATE_THRESHOLD).sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0], "en")).slice(0, CANDIDATE_LIMIT).map(([name, count]) => ({ name, count }));
+  return [...counts.entries()].filter(([, count]) => count >= CANDIDATE_THRESHOLD).sort((left, right) => right[1] - left[1] || compareText(pack)(left[0], right[0])).slice(0, CANDIDATE_LIMIT).map(([name, count]) => ({ name, count }));
 }
 function withoutPossessive(name) {
   return name.replace(/['’]s$/, "");

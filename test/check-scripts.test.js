@@ -62,9 +62,10 @@ function lcovRecord(file, { lines = [10, 10], functions = [2, 2], branches = nul
 
 // A bare `localeCompare` resolves against the host default locale, so registry,
 // backlink, and report order can differ between machines and differ again on a
-// `small-icu` Node build. Every runtime call site pins `"en"`; the scan below is
+// `small-icu` Node build. Every runtime call site pins `"en"` or passes a
+// language pack's `pack.locale` (src/languages/locale.js); the scan below is
 // a dependency-free source check that keeps a new one from drifting back.
-const LOCALE_ARGUMENT = /^(["'])[a-z]{2}(-[A-Za-z0-9]+)*\1$/;
+const LOCALE_ARGUMENT = /^(?:(["'])[a-z]{2}(-[A-Za-z0-9]+)*\1|pack\.locale)$/;
 
 // Each entry pairs a call shape with the argument index that must hold a locale.
 const LOCALE_CALLS = [
@@ -814,6 +815,8 @@ describe("locale-sensitive comparisons", () => {
     expect(pinning("new Intl.Collator()")).toEqual([false]);
     expect(pinning("value.toLocaleUpperCase(\"en\")")).toEqual([true]);
     expect(pinning("value.toLocaleUpperCase()")).toEqual([false]);
+    expect(pinning("new Intl.Collator(pack.locale)")).toEqual([true]);
+    expect(pinning("value.toLocaleLowerCase(locale)")).toEqual([false]);
     expect(localeCallSites("const label = \"no comparison here\";")).toEqual([]);
   });
 });

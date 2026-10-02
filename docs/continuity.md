@@ -808,6 +808,10 @@ Note: Repeated phrases skipped: no phraseStopwords list for language fr
 
 Sentence counts, the style sheet's watch words and `preferred` spellings, the baseline's sentence, paragraph, and dialogue measures, and similar names still run. A `british` or `american` `dialect` is skipped too. A baseline leaves out the filter-word and adverb rates and the signature words. In `story voices`, speech tags, contraction counts, and signature words are skipped: lines are attributed by action beats alone, and characters are compared on sentence length, questions, and exclamations. `story names` compares a name from its first word, since no titles are known. `--json` lists the skipped checks in `data.skipped`. Skipping never changes the exit code.
 
+### Sorting, casing, and numbers
+
+Lists shown to you follow the book's language too: the pronunciation guide in a narration build, the POV balance in `story timeline`, unnumbered books in `story series` (when every book shares a language), the word lists in `story prose` and `story voices`, and the entity candidates from `story import`. Swedish puts `Åsa` and `Örjan` after `Zorn`, German files `Äpfel` with `Apfel`, and Turkish puts `çay` after `cuma`. Words are lower-cased in the language before they are compared, so a Turkish `IŞIK` and `ışık` are the same word, and a Fountain build capitalises names and places in it (`İSKELE`, not `ISKELE`). Ids, file names, and chapter numbers sort the same in every language, and names the collator ranks equal are ordered by code point, so a report never depends on the order files were read. The Shunn manuscript's word count is written as the language writes numbers (`Approximately 12.300 words` in German), always with the digits 0 to 9; author-facing CLI reports keep `12,300`.
+
 ## Story prose
 
 ```shell

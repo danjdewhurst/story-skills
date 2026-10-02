@@ -1,3 +1,4 @@
+import { compareText } from "./languages/locale.js";
 import { flattenHeadings, isSceneBreak, plainLinks, wordCount } from "./markdown.js";
 
 // Audiobook narration script: a pronunciation guide from the bible, opening
@@ -58,7 +59,9 @@ export function pronunciationGuide(project) {
   project.factions.forEach((faction) => add("faction", faction.name, faction.pronunciation));
   project.artifacts.forEach((artifact) => add("artifact", artifact.name, artifact.pronunciation));
   project.glossaryTerms.forEach((term) => add("term", term.term, term.pronunciation));
-  return guide.sort((left, right) => left.name.localeCompare(right.name, "en") || left.kind.localeCompare(right.kind, "en"));
+  // Names in the story's language order; kinds are fixed English words.
+  const compare = compareText(project.pack);
+  return guide.sort((left, right) => compare(left.name, right.name) || left.kind.localeCompare(right.kind, "en"));
 }
 
 function narrationBody(body) {

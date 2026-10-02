@@ -1,6 +1,7 @@
 import { usageError } from "./exit-codes.js";
 import { warn } from "./findings.js";
 import { checkList, checkSet, hasLists, languagePack, skippedCheck, skippedChecks, skippedLines } from "./languages/index.js";
+import { compareText, lowerCase } from "./languages/locale.js";
 import { escapeRegExp, scanComments, splitWords, withoutFenceMarkers } from "./markdown.js";
 import { givenName } from "./names.js";
 import { splitSentences } from "./sentences.js";
@@ -79,13 +80,13 @@ export function proseThresholds(options = {}) {
 export function proseRules(styleData, names, pack = languagePack()) {
   const data = styleData ?? {};
   const skipped = skippedChecks(pack, PROSE_CHECKS);
-  const allow = new Set(stringList(data["allow-words"]).map(normalizeWord));
+  const allow = new Set(stringList(data["allow-words"]).map((word) => normalizeWord(word, pack)));
   const variants = [];
   for (const entry of Array.isArray(data.preferred) ? data.preferred : []) {
     // validate rejects an entry whose use and avoid are the same word.
     if (entry && typeof entry.use === "string" && typeof entry.avoid === "string"
       && entry.use.trim() !== "" && entry.avoid.trim() !== ""
-      && normalizeWord(entry.use.trim()) !== normalizeWord(entry.avoid.trim())) {
+      && normalizeWord(entry.use.trim(), pack) !== normalizeWord(entry.avoid.trim(), pack)) {
       variants.push({ use: entry.use.trim(), avoid: entry.avoid.trim(), source: "style sheet" });
     }
   }
@@ -96,7 +97,7 @@ export function proseRules(styleData, names, pack = languagePack()) {
   } else if (dialect === "british" || dialect === "american") {
     // A style-sheet entry or allow-word naming either spelling overrides the
     // built-in pair, so "use: toward" in a British book is not flagged twice.
-    const claimed = new Set(variants.flatMap((variant) => [normalizeWord(variant.use), normalizeWord(variant.avoid)]).concat([...allow]));
+    const claimed = new Set(variants.flatMap((variant) => [normalizeWord(variant.use, pack), normalizeWord(variant.avoid, pack)]).concat([...allow]));
     for (const [british, american] of dialectPairs) {
       const [use, avoid] = dialect === "british" ? [british, american] : [american, british];
       if (!claimed.has(use) && !claimed.has(avoid)) {
@@ -107,7 +108,7 @@ export function proseRules(styleData, names, pack = languagePack()) {
   const nameTokens = new Set();
   for (const name of names) {
     for (const token of splitWords(String(name))) {
-      nameTokens.add(nameKey(token));
+      nameTokens.add(nameKey(token, pack));
     }
   }
   const allowed = (name) => {
@@ -143,8 +144,8 @@ export function analyzeChapter(prose, rules) {
   const sentences = sentenceList.map((sentence) => splitWords(sentence).length).filter((count) => count > 0);
 
   // A skipped check counts nothing.
-  const filterWords = rules.filterWords === null ? [] : countMatching(narration, (word) => rules.filterWords.has(word));
-  const adverbs = rules.adverbSuffixes === null ? [] : countMatching(narration, (word) => isAdverb(word, rules));
+  const filterWords = rules.filterWords === null ? [] : countMatching(narration, (word) => rules.filterWords.has(word), rules.pack);
+  const adverbs = rules.adverbSuffixes === null ? [] : countMatching(narration, (word) => isAdverb(word, rules), rules.pack);
   const tags = rules.plainTags === null ? { plain: [], bookisms: [] } : dialogueTags(paragraphs, rules);
 
   return {
@@ -159,7 +160,7 @@ export function analyzeChapter(prose, rules) {
     echoes: echoes(words, rules),
     watch: rules.watch.map(({ word, pattern }) => ({ word, count: countPattern(text, pattern) })).filter((entry) => entry.count > 0),
     variants: rules.variants.map(({ use, avoid, source, pattern }) => ({ use, avoid, source, count: countVariant(text, pattern, rules) })).filter((entry) => entry.count > 0),
-    phraseSentences: sentenceList.map((sentence) => splitWords(sentence).map(normalizeWord))
+    phraseSentences: sentenceList.map((sentence) => splitWords(sentence).map((word) => normalizeWord(word, rules.pack)))
   };
 }
 
@@ -239,7 +240,7 @@ export function baselineProfile(samples, pack = languagePack()) {
     filterPerThousand: checkRuns(pack, "filter-words") ? perThousand(sum((analysis) => total(analysis.filterWords)), narrationWords) : null,
     adverbsPerThousand: checkRuns(pack, "adverbs") ? perThousand(sum((analysis) => total(analysis.adverbs)), narrationWords) : null,
     signatureWords: checkRuns(pack, "signature-words")
-      ? sortCounts(counts)
+      ? sortCounts(counts, pack)
         .filter((entry) => entry.count >= BASELINE_TOLERANCES.signatureMinCount)
         .slice(0, BASELINE_TOLERANCES.signatureWords)
         .map((entry) => entry.word)
@@ -256,7 +257,7 @@ export function contentWords(prose, rules) {
     return [];
   }
   return splitWords(proseParagraphs(prose).join("\n\n"))
-    .map(normalizeWord)
+    .map((word) => normalizeWord(word, rules.pack))
     .filter((word) => word.length >= 4 && !rules.echoStopwords.has(word) && !rules.phraseStopwords.has(word) && !isName(word, rules) && !/^\p{N}+$/u.test(word));
 }
 
@@ -348,7 +349,7 @@ export function repeatedPhrases(analyses, thresholds = PROSE_THRESHOLDS, pack = 
   // Filter before sorting: a long manuscript has hundreds of thousands of
   // distinct phrases, almost all seen once.
   const repeated = new Map([...counts].filter(([, count]) => count >= thresholds.phraseMinCount));
-  return sortCounts(repeated)
+  return sortCounts(repeated, pack)
     .slice(0, thresholds.phraseLimit)
     .map((entry) => ({ phrase: entry.word, count: entry.count }));
 }
@@ -358,7 +359,7 @@ export function repeatedPhrases(analyses, thresholds = PROSE_THRESHOLDS, pack = 
 // so Captain Mara Dole is compared as Mara.
 export function similarNames(characters, pack = languagePack()) {
   const firsts = characters
-    .map((character) => ({ id: character.id, name: String(character.name), first: givenName(character.name, pack).toLowerCase() }))
+    .map((character) => ({ id: character.id, name: String(character.name), first: lowerCase(givenName(character.name, pack), pack) }))
     .filter((entry) => entry.first.length >= 3)
     .sort((left, right) => left.id.localeCompare(right.id, "en"));
   const pairs = [];
@@ -472,7 +473,7 @@ function dialogueTags(paragraphs, rules) {
         continue;
       }
       for (const raw of after) {
-        const word = raw.toLowerCase();
+        const word = lowerCase(raw, rules.pack);
         if (rules.plainTags.has(word)) {
           increment(plain, word);
           break;
@@ -484,7 +485,7 @@ function dialogueTags(paragraphs, rules) {
       }
     }
   }
-  return { plain: sortCounts(plain), bookisms: sortCounts(bookisms) };
+  return { plain: sortCounts(plain, rules.pack), bookisms: sortCounts(bookisms, rules.pack) };
 }
 
 // Whether the words after a quote can be its tag. A quote ending in a full
@@ -499,7 +500,7 @@ function tagKind(quoted, nextWord, rules) {
     return "none";
   }
   if (/[?!…—–-]/.test(end) && /^\p{Lu}/u.test(nextWord)) {
-    return rules.beatPronouns.has(nextWord.toLowerCase()) ? "none" : "plain";
+    return rules.beatPronouns.has(lowerCase(nextWord, rules.pack)) ? "none" : "plain";
   }
   return "any";
 }
@@ -510,17 +511,17 @@ function isAdverb(word, rules) {
 
 // A name token, also in the possessive (Maren's, Maren’s).
 function isName(word, rules) {
-  return rules.nameTokens.has(word) || rules.nameTokens.has(nameKey(word));
+  return rules.nameTokens.has(word) || rules.nameTokens.has(nameKey(word, rules.pack));
 }
 
 // Lower case with curly apostrophes made straight, so style-sheet entries
 // typed with ' match manuscripts that use ’.
-function normalizeWord(word) {
-  return String(word).toLowerCase().replace(/’/g, "'");
+function normalizeWord(word, pack) {
+  return lowerCase(word, pack).replace(/’/g, "'");
 }
 
-function nameKey(word) {
-  return normalizeWord(word).replace(/'s$/, "");
+function nameKey(word, pack) {
+  return normalizeWord(word, pack).replace(/'s$/, "");
 }
 
 // Uses of an avoided spelling, minus capitalised uses that are part of a
@@ -544,7 +545,7 @@ function echoes(words, rules) {
   const lastSeen = new Map();
   const counts = new Map();
   words.forEach((raw, index) => {
-    const word = normalizeWord(raw);
+    const word = normalizeWord(raw, rules.pack);
     if (word.length < PROSE_THRESHOLDS.echoMinLength || rules.echoStopwords.has(word) || isName(word, rules) || rules.allow.has(word) || /^\p{N}+$/u.test(word)) {
       return;
     }
@@ -553,7 +554,7 @@ function echoes(words, rules) {
     }
     lastSeen.set(word, index);
   });
-  return sortCounts(counts);
+  return sortCounts(counts, rules.pack);
 }
 
 function sentenceStats(lengths) {
@@ -565,15 +566,15 @@ function sentenceStats(lengths) {
   return { count: lengths.length, mean, longest: Math.max(...lengths), spread: Math.sqrt(variance) };
 }
 
-function countMatching(words, predicate) {
+function countMatching(words, predicate, pack) {
   const counts = new Map();
   for (const raw of words) {
-    const word = normalizeWord(raw);
+    const word = normalizeWord(raw, pack);
     if (predicate(word)) {
       increment(counts, word);
     }
   }
-  return sortCounts(counts);
+  return sortCounts(counts, pack);
 }
 
 function phrasePattern(phrase) {
@@ -615,13 +616,12 @@ function increment(counts, key) {
   counts.set(key, (counts.get(key) ?? 0) + 1);
 }
 
-const COLLATOR = new Intl.Collator("en");
-
-// Highest count first, then alphabetical, so output is stable across runs.
-function sortCounts(counts) {
+// Highest count first, then alphabetical in the story's language, so output
+// is stable across runs.
+function sortCounts(counts, pack) {
   return [...counts.entries()]
     .map(([word, count]) => ({ word, count }))
-    .sort((left, right) => right.count - left.count || COLLATOR.compare(left.word, right.word));
+    .sort((left, right) => right.count - left.count || compareText(pack)(left.word, right.word));
 }
 
 function stringList(value) {

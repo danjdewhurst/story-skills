@@ -2863,6 +2863,7 @@ function screenplayOutline(project, book) {
     title: project.title,
     authors: book.meta.authors,
     form: typeof project.story.data.form === "string" ? project.story.data.form : "",
+    pack: project.pack,
     chapters,
     warnings
   };
@@ -3051,6 +3052,7 @@ function shunnMeta(project) {
     author: publishingMeta(data).authors.join(" and "),
     contact: asArray(data.contact),
     words: project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0),
+    pack: project.pack,
     // Short fiction runs as one text with `#` between sections rather than
     // as chapters on new pages.
     shortForm: data.form === "short-story" || data.form === "flash"

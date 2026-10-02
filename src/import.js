@@ -4,6 +4,7 @@ import path from "node:path";
 import { warn } from "./findings.js";
 import { parseFrontmatter, stringifyFrontmatter, withoutLeadingFrontmatter } from "./frontmatter.js";
 import { checkList, isLanguageTag, languagePack } from "./languages/index.js";
+import { compareText } from "./languages/locale.js";
 import { chapterHeading, escapeRegExp, fencedLineIndexes, scanComments, splitFences, titleCaseSlug, wordCount } from "./markdown.js";
 import { MAX_READ_BYTES } from "./files.js";
 import { STDIN_ARG, decodeUtf8 } from "./stdin.js";
@@ -238,7 +239,7 @@ export function extractNameCandidates(prose, pack = languagePack()) {
 
   return [...counts.entries()]
     .filter(([, count]) => count >= CANDIDATE_THRESHOLD)
-    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0], "en"))
+    .sort((left, right) => right[1] - left[1] || compareText(pack)(left[0], right[0]))
     .slice(0, CANDIDATE_LIMIT)
     .map(([name, count]) => ({ name, count }));
 }
