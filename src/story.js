@@ -24,6 +24,7 @@ import { SCENE_SETTINGS, fountainScript } from "./fountain.js";
 import { inkSource } from "./ink.js";
 import { TWEE_LINK_UNSAFE, derivedIfid, isIfid, tweeSource } from "./twee.js";
 import { htmlBook, writeDocx, writeEpub, writeShunnDocx, writeShunnMarkdown } from "./packaging.js";
+import { CHAPTER_NUMERALS, validateChapterNumerals } from "./numerals.js";
 import { validateWritingMode, WRITING_MODES } from "./typesetting.js";
 import { applySeverity, validateCliConfig } from "./config.js";
 import { DEFAULT_PASSES, addedPassNotes, nextPass, passChecks, readPasses, updatePasses, validatePasses } from "./passes.js";
@@ -5862,7 +5863,7 @@ function bookChapters(project, action = "build") {
       title,
       numbered,
       displayNumber,
-      heading: numbered ? chapterHeading(displayNumber, title, meta.labels) : title,
+      heading: numbered ? chapterHeading(displayNumber, title, meta.labels, meta.chapterNumerals) : title,
       // LF only, so a CRLF checkout builds the same bytes as an LF one.
       body: chapterProse(markdown.body).replace(/\r\n?/g, "\n").trim()
     };
@@ -6666,6 +6667,11 @@ function validateStoryFrontmatter(project, errors) {
     requireScalar(data, "writing-mode", "story.md", errors);
     validateEnum(data, "writing-mode", WRITING_MODES, "story.md", errors);
     validateWritingMode(data, errors);
+  }
+  if (data["chapter-numerals"] !== undefined) {
+    requireScalar(data, "chapter-numerals", "story.md", errors);
+    validateEnum(data, "chapter-numerals", CHAPTER_NUMERALS, "story.md", errors);
+    validateChapterNumerals(data, errors);
   }
   validateCover(project, errors);
   validatePasses(data, "story.md", errors);

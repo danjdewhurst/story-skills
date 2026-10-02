@@ -91,6 +91,7 @@ var FINDING_CODES = {
   "session-without-characters": "warning",
   "invalid-language": "error",
   "unsupported-writing-mode": "error",
+  "unsupported-chapter-numerals": "error",
   "invalid-isbn": "error",
   "invalid-subject": "error",
   "too-many-keywords": "warning",
@@ -431,13 +432,13 @@ function formatClueMatrix(matrix) {
 }
 
 // src/context.js
-import path5 from "node:path";
+import path6 from "node:path";
 
 // src/continuity.js
-import path4 from "node:path";
+import path5 from "node:path";
 
 // src/exemptions.js
-import path3 from "node:path";
+import path4 from "node:path";
 
 // src/files.js
 import fs from "node:fs";
@@ -5087,6 +5088,1322 @@ function joinNames(names, labels) {
   return names.length === 0 ? "" : names.reduce((joined, name) => fillLabel(joiner, "and", { a: joined, b: name }));
 }
 
+// src/series.js
+import fs2 from "node:fs";
+import path3 from "node:path";
+
+// src/progressions.js
+var PROGRESSION_KINDS = ["character", "location", "faction"];
+var RESERVED_FIELDS = new Set(["progressions", "id", "died-in", "revived-in"]);
+function progressionEntry(item) {
+  if (!item || typeof item !== "object" || Array.isArray(item)) {
+    return null;
+  }
+  const from = idText(item.from);
+  const field = typeof item.field === "string" ? item.field : "";
+  if (from === "" || field === "" || item.value === undefined || item.value === null) {
+    return null;
+  }
+  return { from, field, value: item.value };
+}
+function setOwn(target, key, value) {
+  Object.defineProperty(target, key, { value, enumerable: true, configurable: true, writable: true });
+}
+function chapterPosition(chronology, id) {
+  if (chronology.numbers.has(id)) {
+    return chronology.numbers.get(id);
+  }
+  const match = /^chapter-(\d+)$/.exec(id);
+  return match && Number(match[1]) > 0 ? Number(match[1]) : Number.NaN;
+}
+function happensAfter(chronology, later, earlier) {
+  if (chronology.numbers.has(later) && chronology.numbers.has(earlier)) {
+    return chronology.after(later, earlier);
+  }
+  return chapterPosition(chronology, later) > chapterPosition(chronology, earlier);
+}
+function sortProgressions(list, chronology) {
+  const known = [];
+  const unknown = [];
+  for (const item of list) {
+    const from = item && typeof item === "object" && !Array.isArray(item) ? idText(item.from) : "";
+    (Number.isNaN(chapterPosition(chronology, from)) ? unknown : known).push({ item, from });
+  }
+  known.sort((left, right) => happensAfter(chronology, left.from, right.from) ? 1 : happensAfter(chronology, right.from, left.from) ? -1 : 0);
+  return [...known, ...unknown].map((entry) => entry.item);
+}
+function entityStateAt(data, atChapterId, chronology) {
+  if (Number.isNaN(chapterPosition(chronology, atChapterId))) {
+    throw usageError(`Unknown chapter ${atChapterId}`);
+  }
+  const state = {};
+  for (const [key, value] of Object.entries(data ?? {})) {
+    if (key !== "progressions") {
+      setOwn(state, key, value);
+    }
+  }
+  const entries = (Array.isArray(data?.progressions) ? data.progressions : []).map(progressionEntry).filter((entry) => entry !== null && !Number.isNaN(chapterPosition(chronology, entry.from)) && !happensAfter(chronology, entry.from, atChapterId));
+  entries.sort((left, right) => happensAfter(chronology, left.from, right.from) ? 1 : happensAfter(chronology, right.from, left.from) ? -1 : 0);
+  const changes = [];
+  for (const entry of entries) {
+    changes.push({ field: entry.field, value: entry.value, from: entry.from, previous: Object.hasOwn(state, entry.field) ? state[entry.field] : undefined });
+    setOwn(state, entry.field, entry.value);
+  }
+  return { state, changes };
+}
+function validateProgressions(data, label, rules, chronology, errors) {
+  if (data.progressions === undefined) {
+    return;
+  }
+  if (!Array.isArray(data.progressions)) {
+    errors.push(err("field-not-list", `${label} frontmatter field progressions must be a list`, label));
+    return;
+  }
+  const seen = new Map;
+  let latest = null;
+  for (const [index, item] of data.progressions.entries()) {
+    const entryLabel = `${label} progressions[${index}]`;
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      errors.push(err("entry-not-mapping", `${entryLabel} must be a mapping with from, field, and value`, label));
+      continue;
+    }
+    const from = idText(item.from);
+    if (from === "") {
+      errors.push(err("missing-field", `${entryLabel} is missing from (the chapter the change takes effect)`, label));
+    }
+    const field = item.field;
+    let fieldOk = false;
+    if (typeof field !== "string" || field.trim() === "") {
+      errors.push(err("missing-field", `${entryLabel} is missing field`, label));
+    } else if (field !== kebabCase(field)) {
+      errors.push(err("id-not-kebab", `${entryLabel} field ${field} must be kebab-case`, label));
+    } else if (RESERVED_FIELDS.has(field)) {
+      errors.push(err("progression-fixed-field", `${entryLabel} cannot change ${field}${field === "died-in" || field === "revived-in" ? "; set it on the character and story continuity reads it by chapter" : ""}`, label));
+    } else if (rules.lists.has(field)) {
+      errors.push(err("progression-list-field", `${entryLabel} cannot change ${field}, which is a list; a progression holds a single value`, label));
+    } else {
+      fieldOk = true;
+    }
+    const value = item.value;
+    if (value === undefined || value === null) {
+      errors.push(err("missing-field", `${entryLabel} is missing value`, label));
+    } else if (typeof value === "object") {
+      errors.push(err("field-not-scalar", `${entryLabel} value must be a single value, not a list or mapping`, label));
+    } else if (fieldOk && rules.enums.has(field) && !rules.enums.get(field).has(value)) {
+      errors.push(err("unsupported-value", `${entryLabel} ${field} has unsupported value ${value}`, label));
+    }
+    if (from !== "" && fieldOk) {
+      const key = `${from}\x00${field}`;
+      if (seen.has(key)) {
+        errors.push(err("progression-duplicate", `${entryLabel} repeats ${field} from ${from} (progressions[${seen.get(key)}])`, label));
+      } else {
+        seen.set(key, index);
+      }
+    }
+    if (Number.isNaN(chapterPosition(chronology, from))) {
+      continue;
+    }
+    if (latest && happensAfter(chronology, latest.from, from)) {
+      errors.push(err("progression-out-of-order", `${entryLabel} from ${from} comes before progressions[${latest.index}] from ${latest.from} in the story; list progressions in story order`, label));
+      continue;
+    }
+    latest = { from, index };
+  }
+}
+function formatStateChanges(changes, atChapterId) {
+  if (changes.length === 0) {
+    return "";
+  }
+  const lines = [`State at ${atChapterId}:`];
+  for (const change of changes) {
+    const previous = change.previous === undefined ? "" : `, was ${change.previous}`;
+    lines.push(`- ${change.field}: ${change.value === "" ? "(cleared)" : change.value} (from ${change.from}${previous})`);
+  }
+  return `${lines.join(`
+`)}
+`;
+}
+
+// src/deaths.js
+var STATUS_PROGRESSIONS = new WeakMap;
+function statusProgressions(character) {
+  if (!STATUS_PROGRESSIONS.has(character)) {
+    const list = Array.isArray(character.frontmatter.progressions) ? character.frontmatter.progressions : [];
+    STATUS_PROGRESSIONS.set(character, list.map((item, index) => ({ index, entry: progressionEntry(item) })).filter(({ entry }) => entry !== null && entry.field === "status").map(({ index, entry }) => ({ index, from: entry.from, value: String(entry.value) })));
+  }
+  return STATUS_PROGRESSIONS.get(character);
+}
+function progressionStatusAt(character, chapterId, chronology) {
+  let status = String(character.status);
+  let from = "";
+  let deadFrom = "";
+  if (chronology.numbers.has(chapterId) && statusProgressions(character).length > 0) {
+    for (const change of entityStateAt(character.frontmatter, chapterId, chronology).changes) {
+      if (change.field !== "status") {
+        continue;
+      }
+      const value = String(change.value);
+      if (value === "deceased" && status !== "deceased") {
+        deadFrom = change.from;
+      }
+      status = value;
+      from = change.from;
+    }
+  }
+  return { status, from, deadFrom };
+}
+function progressionDeathAt(character, chapterId, chronology) {
+  const from = progressionDeathFrom(character, chapterId, chronology);
+  if (from === null || from !== "" && !happensAfter(chronology, chapterId, from)) {
+    return null;
+  }
+  return { from };
+}
+function progressionDeathFrom(character, chapterId, chronology) {
+  const { status, deadFrom } = progressionStatusAt(character, chapterId, chronology);
+  if (status !== "deceased" || character.diedIn && deadFrom === "") {
+    return null;
+  }
+  if (character.diedIn && (character.revivedIn === "" || !happensAfter(chronology, deadFrom, character.revivedIn))) {
+    return null;
+  }
+  return deadFrom;
+}
+function characterLifeline(character, chronology) {
+  const status = String(character.status ?? "");
+  const chapters = storyOrder(chronology);
+  if (chapters.length === 0 || character.diedIn && !chronology.numbers.has(character.diedIn)) {
+    const dead = status === "deceased";
+    return { deadAtStart: dead, deadAtEnd: dead, events: [] };
+  }
+  const leadIn = status === "deceased" && Boolean(character.diedIn) && statusProgressions(character).some(({ from, value }) => value !== "deceased" && happensAfter(chronology, character.diedIn, from));
+  const deadAtStart = status === "deceased" && (!character.diedIn || leadIn);
+  if (!character.diedIn && statusProgressions(character).length === 0) {
+    return { deadAtStart, deadAtEnd: deadAtStart, events: [] };
+  }
+  const window = deathWindow(character, chronology);
+  const events = [];
+  let dead = deadAtStart;
+  for (const chapter of chapters) {
+    const byDiedIn = window !== null && (chapter === window.died || window.deadIn(chapter));
+    const beforeDeath = leadIn && happensAfter(chronology, window.died, chapter) && progressionStatusAt(character, chapter, chronology).status === "deceased";
+    const now = byDiedIn || beforeDeath || progressionDeathFrom(character, chapter, chronology) !== null;
+    if (!now && dead && chapter !== window?.revived && progressionStatusAt(character, chapter, chronology).from === "") {
+      continue;
+    }
+    if (now !== dead) {
+      events.push(now ? { type: "death", chapter, source: chapter === window?.died ? "died-in" : "progression" } : { type: "revival", chapter, source: chapter === window?.revived ? "revived-in" : "progression" });
+      dead = now;
+    }
+  }
+  return { deadAtStart, deadAtEnd: dead, events };
+}
+function revivedBy(lifeline, chapterId, chronology) {
+  return chronology.numbers.has(chapterId) && lifeline.events.some((event) => event.type === "revival" && !happensAfter(chronology, event.chapter, chapterId));
+}
+function storyOrder(chronology) {
+  return [...chronology.numbers.keys()].sort((left, right) => chronology.numbers.get(left) - chronology.numbers.get(right) || (left < right ? -1 : left > right ? 1 : 0)).sort((left, right) => chronology.after(left, right) ? 1 : chronology.after(right, left) ? -1 : 0);
+}
+
+// src/languages/locale.js
+var COMPARERS = new Map;
+function compareText(pack = languagePack()) {
+  if (!COMPARERS.has(pack.locale)) {
+    const collator = new Intl.Collator(pack.locale);
+    COMPARERS.set(pack.locale, (left, right) => collator.compare(left, right) || (left < right ? -1 : left > right ? 1 : 0));
+  }
+  return COMPARERS.get(pack.locale);
+}
+function lowerCase(text, pack = languagePack()) {
+  return String(text).toLocaleLowerCase(pack.locale);
+}
+function upperCase(text, pack = languagePack()) {
+  return String(text).toLocaleUpperCase(pack.locale);
+}
+var DOTLESS_I = new Set(["tr", "az"]);
+function casesDotlessI(pack) {
+  return DOTLESS_I.has(pack.locale.split("-")[0].toLowerCase());
+}
+function matchingCase(phrase, pack = languagePack()) {
+  return casesDotlessI(pack) ? lowerCase(phrase, pack) : String(phrase);
+}
+function matchingText(text, pack = languagePack()) {
+  const source = String(text);
+  const same = { text: source, original: (start, end) => [start, end] };
+  if (!casesDotlessI(pack)) {
+    return same;
+  }
+  const lower = lowerCase(source, pack);
+  if (lower.length === source.length) {
+    return { ...same, text: lower };
+  }
+  let folded = "";
+  const starts = [];
+  const sources = [];
+  const add = (from, value) => {
+    starts.push(folded.length);
+    sources.push(from);
+    folded += lowerCase(value, pack);
+  };
+  let last = 0;
+  for (const match of source.matchAll(/I\p{M}+/gu)) {
+    if (match.index > last) {
+      add(last, source.slice(last, match.index));
+    }
+    add(match.index, match[0]);
+    last = match.index + match[0].length;
+  }
+  if (last < source.length) {
+    add(last, source.slice(last));
+  }
+  starts.push(folded.length);
+  sources.push(source.length);
+  const piece = (offset) => {
+    let low = 0;
+    let high = starts.length - 1;
+    while (low < high) {
+      const middle = low + high + 1 >> 1;
+      if (starts[middle] <= offset) {
+        low = middle;
+      } else {
+        high = middle - 1;
+      }
+    }
+    return low;
+  };
+  const at = (offset, end) => {
+    const index = piece(offset);
+    const inside = offset - starts[index];
+    if (inside === 0) {
+      return sources[index];
+    }
+    if (starts[index + 1] - starts[index] === sources[index + 1] - sources[index]) {
+      return sources[index] + inside;
+    }
+    return sources[end ? index + 1 : index];
+  };
+  return { text: folded, original: (start, end) => [at(start, false), at(end, true)] };
+}
+var NUMBER_FORMATS = new Map;
+function formatNumber(value, pack = languagePack()) {
+  if (!NUMBER_FORMATS.has(pack.locale)) {
+    NUMBER_FORMATS.set(pack.locale, new Intl.NumberFormat(pack.locale, { numberingSystem: "latn", maximumFractionDigits: 0 }));
+  }
+  return NUMBER_FORMATS.get(pack.locale).format(value);
+}
+
+// src/series.js
+var SERIES_LINK_INVERSES = [["follows", "precedes"], ["precedes", "follows"]];
+var MAX_SERIES_BOOKS = 100;
+var SHARED_CANON = [
+  ["characters", "Characters", "name"],
+  ["locations", "Locations", "name"],
+  ["systems", "Systems", "name"],
+  ["factions", "Factions", "name"],
+  ["artifacts", "Artifacts", "name"],
+  ["glossaryTerms", "Glossary terms", "term"]
+];
+function isBookNumber(value) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+function seriesDisplayName(data) {
+  const title = data?.["series-title"];
+  return typeof title === "string" && title.trim() !== "" ? title.trim() : seriesId(data);
+}
+function seriesLinkPath(fromRoot, toRoot) {
+  return path3.relative(fromRoot, toRoot).split(path3.sep).join("/");
+}
+function seriesLinks(root, data, field) {
+  const raw = data[field];
+  const values = Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : [];
+  return values.filter((value) => typeof value === "string" && value.trim() !== "").map((value) => path3.resolve(root, value));
+}
+function seriesId(data) {
+  const value = data?.series;
+  if (value === undefined || value === null) {
+    return;
+  }
+  return String(value).trim() === "" ? undefined : value;
+}
+function areSiblingBooks(left, right) {
+  return path3.dirname(canonicalPath(left)) === path3.dirname(canonicalPath(right));
+}
+function linksInclude(links, root) {
+  const key = canonicalPath(root);
+  return links.some((link) => link === root || canonicalPath(link) === key);
+}
+function readBookFrontmatter(root) {
+  const storyPath = path3.join(root, "story.md");
+  if (!fs2.existsSync(storyPath)) {
+    return null;
+  }
+  return parseFrontmatter(readTextFile(storyPath), storyPath).data;
+}
+function validateSeriesLinks(root, data, errors) {
+  for (const [field, inverse] of SERIES_LINK_INVERSES) {
+    const raw = Array.isArray(data[field]) ? data[field] : [data[field]];
+    const backslashed = raw.filter((value) => typeof value === "string" && value.includes("\\"));
+    for (const value of backslashed) {
+      errors.push(err("series-link-backslash", `story.md ${field} ${value} uses a backslash; write ${value.replace(/\\/g, "/")} so the link works on every system`, "story.md"));
+    }
+    for (const target of seriesLinks(root, { [field]: raw.filter((value) => !backslashed.includes(value)) }, field)) {
+      const label = `story.md ${field} ${seriesLinkPath(root, target)}`;
+      if (target === root || canonicalPath(target) === canonicalPath(root)) {
+        errors.push(err("series-link-self", `${label} points at this book`, "story.md"));
+        continue;
+      }
+      let other;
+      try {
+        other = readBookFrontmatter(target);
+      } catch (error) {
+        errors.push(err("series-link-unreadable", `${label}: ${error.message}`, "story.md"));
+        continue;
+      }
+      if (!other) {
+        errors.push(err("series-link-not-project", `${label} is not a story project: missing story.md`, "story.md"));
+        continue;
+      }
+      if (!areSiblingBooks(root, target)) {
+        errors.push(err("series-link-not-sibling", `${label} is not in the same parent folder as this book; story series only follows links between sibling book folders`, "story.md"));
+      }
+      if (!linksInclude(seriesLinks(target, other, inverse), root)) {
+        errors.push(err("series-missing-backlink", `${label} is missing backlink: add ${seriesLinkPath(target, root)} to its ${inverse}`, "story.md"));
+      }
+      const ownSeries = seriesId(data);
+      const otherSeries = seriesId(other);
+      if (ownSeries !== undefined && otherSeries !== undefined && ownSeries !== otherSeries) {
+        errors.push(err("series-link-other-series", `${label} belongs to series ${otherSeries}, not ${ownSeries}`, "story.md"));
+      }
+    }
+  }
+}
+function withSeriesBacklink(targetRoot, field, linkedRoot, newSeriesId) {
+  const storyPath = path3.join(targetRoot, "story.md");
+  const markdown = readTextFile(storyPath);
+  const { data } = parseFrontmatter(markdown, storyPath);
+  const current = data[field];
+  const existing = Array.isArray(current) ? current : typeof current === "string" && current.trim() !== "" ? [current] : [];
+  const linked = linksInclude(seriesLinks(targetRoot, { [field]: existing }, field), linkedRoot);
+  const addSeries = seriesId(data) === undefined && newSeriesId !== undefined;
+  if (linked && !addSeries) {
+    return null;
+  }
+  return replaceFrontmatter(markdown, {
+    ...data,
+    ...addSeries ? { series: newSeriesId } : {},
+    ...linked ? {} : { [field]: existing.concat(seriesLinkPath(targetRoot, linkedRoot)) }
+  });
+}
+function buildSeries(startRoot, scan) {
+  const errors = [];
+  const warnings = [];
+  const books = discoverBooks(startRoot, scan, errors).books;
+  if (books.length === 0) {
+    return {
+      root: startRoot,
+      series: null,
+      books: [],
+      ordered: false,
+      shared: [],
+      ok: false,
+      errors,
+      warnings
+    };
+  }
+  const seriesIds = [...new Set(books.map((book) => book.series).filter((series) => series !== undefined))].sort();
+  if (seriesIds.length > 1) {
+    errors.push(err("series-conflict", `Linked books belong to different series: ${seriesIds.join(", ")}`));
+  }
+  const unnamed = books.filter((book) => book.series === undefined);
+  if (seriesIds.length === 1 && unnamed.length > 0) {
+    warnings.push(warn("series-id-missing", `Linked books ${unnamed.map((book) => book.title).join(", ")} set no series id; add series: ${seriesIds[0]}`));
+  }
+  for (const book of books.filter((candidate) => candidate.invalidBookNumber)) {
+    errors.push(err("invalid-book-number", `${book.label}: story.md book-number ${JSON.stringify(book.project.story.data["book-number"])} is not a number 0 or more; the book is listed as unnumbered`, path3.join(book.label, "story.md")));
+  }
+  const seriesTitles = [...new Set(books.map((book) => book.seriesTitle).filter((title) => title !== undefined))].sort();
+  if (seriesTitles.length > 1) {
+    warnings.push(warn("series-title-mismatch", `Linked books set different series-title values: ${seriesTitles.map((title) => `"${title}"`).join(", ")}; keep the series name identical everywhere`));
+  }
+  checkDuplicateBookNumbers(books, errors);
+  const chronology = chronologicalOrder(books, errors);
+  if (chronology) {
+    checkSharedCanon(chronology, errors, warnings);
+  }
+  return {
+    root: startRoot,
+    series: books[0]?.series ?? seriesIds[0] ?? null,
+    seriesTitle: books[0]?.seriesTitle ?? seriesTitles[0] ?? null,
+    books: (chronology ? chronology.order : books).map((book) => ({
+      title: book.title,
+      label: book.label,
+      bookNumber: book.bookNumber,
+      status: book.status
+    })),
+    ordered: Boolean(chronology),
+    shared: sharedCanon(books),
+    ok: errors.length === 0,
+    errors,
+    warnings
+  };
+}
+function formatSeriesReport(report) {
+  const lines = [
+    `# Series: ${report.seriesTitle ?? report.series ?? "Unnamed series"}`,
+    "",
+    report.ordered ? "Chronological order:" : "Books (unordered):"
+  ];
+  report.books.forEach((book, index) => {
+    const details = [book.bookNumber === null ? "unnumbered" : `book ${book.bookNumber}`, book.status || "no status"];
+    lines.push(`${index + 1}. ${book.title} (${details.join(", ")}) - ${book.label}`);
+  });
+  lines.push("", "Shared canon:");
+  if (report.shared.length === 0) {
+    lines.push("- None");
+  }
+  for (const entry of report.shared) {
+    lines.push(`- ${entry.label}: ${entry.ids.join(", ")}`);
+  }
+  return `${lines.join(`
+`)}
+
+`;
+}
+function canonicalPath(target) {
+  const resolved = path3.resolve(target);
+  const tail = [];
+  let current = resolved;
+  while (current !== path3.dirname(current)) {
+    try {
+      const real = fs2.realpathSync(current);
+      return tail.length === 0 ? real : path3.join(real, ...tail.reverse());
+    } catch {
+      tail.push(path3.basename(current));
+      current = path3.dirname(current);
+    }
+  }
+  try {
+    return path3.join(fs2.realpathSync(current), ...tail.reverse());
+  } catch {
+    return path3.join(current, ...tail.reverse());
+  }
+}
+function discoverBooks(startRoot, scan, errors) {
+  const startResolved = path3.resolve(startRoot);
+  const scopeRoot = path3.dirname(startResolved);
+  const scopeReal = canonicalPath(scopeRoot);
+  const visited = new Map;
+  const queue = [startResolved];
+  while (queue.length > 0) {
+    const root = queue.shift();
+    const resolved = path3.resolve(root);
+    const effective = canonicalPath(resolved);
+    if (visited.has(effective)) {
+      continue;
+    }
+    if (visited.size >= MAX_SERIES_BOOKS) {
+      errors.push(err("series-too-many-books", "Series links exceed the " + MAX_SERIES_BOOKS + " book limit; refusing to traverse further"));
+      break;
+    }
+    const label = seriesLinkPath(startRoot, root) || ".";
+    if (path3.dirname(resolved) !== scopeRoot || path3.dirname(effective) !== scopeReal) {
+      const outside = !isPathInside2(scopeRoot, resolved) || !isPathInside2(scopeReal, effective);
+      errors.push(outside ? err("series-link-outside", label + " points outside the series directory " + scopeRoot + "; refusing to follow") : err("series-link-not-sibling", label + " is not a sibling folder in the series directory " + scopeRoot + "; keep series books side by side, refusing to follow"));
+      visited.set(effective, null);
+      continue;
+    }
+    if (!fs2.existsSync(path3.join(root, "story.md"))) {
+      errors.push(err("series-link-not-project", `${label} is not a story project: missing story.md`));
+      visited.set(effective, null);
+      continue;
+    }
+    let project;
+    try {
+      project = scan(root);
+    } catch (error) {
+      errors.push(err("series-link-unreadable", `${label}: ${error.message}`));
+      visited.set(effective, null);
+      continue;
+    }
+    for (const scanError of project.fileErrors ?? []) {
+      errors.push({ ...scanError, message: `${label}: ${scanError.message}`, file: path3.join(label, scanError.file) });
+    }
+    if (project.story?.unreadable) {
+      visited.set(effective, null);
+      continue;
+    }
+    const data = project.story.data;
+    const book = {
+      root,
+      key: effective,
+      label,
+      project,
+      title: String(data.title ?? path3.basename(root)),
+      series: seriesId(data),
+      status: data.status,
+      bookNumber: isBookNumber(data["book-number"]) ? data["book-number"] : null,
+      invalidBookNumber: data["book-number"] !== undefined && !isBookNumber(data["book-number"]),
+      seriesTitle: typeof data["series-title"] === "string" && data["series-title"].trim() !== "" ? data["series-title"].trim() : undefined,
+      follows: seriesLinks(root, data, "follows"),
+      precedes: seriesLinks(root, data, "precedes")
+    };
+    visited.set(effective, book);
+    for (const next of book.follows.concat(book.precedes)) {
+      queue.push(next);
+    }
+  }
+  const books = [...visited.values()].filter(Boolean);
+  return { books, complete: books.length === visited.size };
+}
+function discoverSeriesBooks(startRoot, scan) {
+  const errors = [];
+  const { books, complete } = discoverBooks(startRoot, scan, errors);
+  return { books, complete, errors };
+}
+function isPathInside2(root, target) {
+  const relativePath = path3.relative(root, target);
+  return !path3.isAbsolute(relativePath) && (relativePath === "" || !relativePath.split(path3.sep).includes(".."));
+}
+function chronologicalOrder(books, errors) {
+  const byKey = new Map(books.map((book) => [book.key, book]));
+  const later = new Map(books.map((book) => [book.key, new Set]));
+  for (const book of books) {
+    for (const earlier of book.follows.map(canonicalPath)) {
+      if (byKey.has(earlier) && earlier !== book.key) {
+        later.get(earlier).add(book.key);
+      }
+    }
+    for (const next of book.precedes.map(canonicalPath)) {
+      if (byKey.has(next) && next !== book.key) {
+        later.get(book.key).add(next);
+      }
+    }
+  }
+  const indegree = new Map(books.map((book) => [book.key, 0]));
+  for (const targets of later.values()) {
+    for (const target of targets) {
+      indegree.set(target, indegree.get(target) + 1);
+    }
+  }
+  const order = [];
+  const ready = books.filter((book) => indegree.get(book.key) === 0);
+  const compareTitles = compareText(seriesPack(books));
+  while (ready.length > 0) {
+    ready.sort((left, right) => compareBooks(left, right, compareTitles));
+    const book = ready.shift();
+    order.push(book);
+    for (const target of later.get(book.key)) {
+      indegree.set(target, indegree.get(target) - 1);
+      if (indegree.get(target) === 0) {
+        ready.push(byKey.get(target));
+      }
+    }
+  }
+  if (order.length < books.length) {
+    const cycle = books.filter((book) => !order.includes(book)).map((book) => book.title);
+    errors.push(err("series-cycle", `Series chronology has a cycle between ${cycle.join(", ")}; check follows and precedes`));
+    return null;
+  }
+  return { order, later };
+}
+function checkDuplicateBookNumbers(books, errors) {
+  const byNumber = new Map;
+  for (const book of books) {
+    if (book.bookNumber !== null) {
+      byNumber.set(book.bookNumber, (byNumber.get(book.bookNumber) ?? []).concat(book.label));
+    }
+  }
+  for (const [number, labels] of [...byNumber].sort((left, right) => left[0] - right[0])) {
+    if (labels.length > 1) {
+      errors.push(err("duplicate-book-number", `Books ${labels.join(", ")} share book-number ${number}; book-number is publication order and must be unique`));
+    }
+  }
+}
+function compareBooks(left, right, compareTitles) {
+  return (left.bookNumber ?? Infinity) - (right.bookNumber ?? Infinity) || compareTitles(left.title, right.title) || (left.key < right.key ? -1 : left.key > right.key ? 1 : 0);
+}
+function seriesPack(books) {
+  const languages = new Set(books.map((book) => (book.project.pack ?? languagePack()).locale.split("-")[0]));
+  return languages.size === 1 ? languagePack([...languages][0]) : languagePack();
+}
+function checkSharedCanon({ order, later }, errors, warnings) {
+  const reachable = new Map(order.map((book) => [book.key, collectLater(book.key, later, new Set)]));
+  for (const book of order) {
+    const earlierBooks = order.filter((candidate) => reachable.get(candidate.key).has(book.key));
+    checkCanonNames(book, earlierBooks, warnings);
+    checkCanonDeaths(book, earlierBooks, errors);
+    checkDestroyedArtifacts(book, earlierBooks, errors, warnings);
+    checkKnownFacts(book, earlierBooks, errors);
+  }
+}
+function collectLater(root, later, seen) {
+  for (const next of later.get(root)) {
+    if (!seen.has(next)) {
+      seen.add(next);
+      collectLater(next, later, seen);
+    }
+  }
+  return seen;
+}
+function checkCanonNames(book, earlierBooks, warnings) {
+  for (const [key, , field] of SHARED_CANON) {
+    const canon = new Map;
+    for (const earlier of earlierBooks) {
+      for (const entity of earlier.project[key]) {
+        canon.set(entity.id, { book: earlier, entity });
+      }
+    }
+    for (const entity of book.project[key]) {
+      const match = canon.get(entity.id);
+      if (match && canonText(entity[field]) !== canonText(match.entity[field])) {
+        warnings.push(warn("canon-name-mismatch", `${bookFile(book, entity.file)} ${field} "${entity[field]}" differs from "${match.entity[field]}" in ${bookFile(match.book, match.entity.file)}`, bookFile(book, entity.file)));
+      }
+      const said = pronunciationText(entity.pronunciation);
+      const saidBefore = pronunciationText(match?.entity.pronunciation);
+      if (said !== "" && saidBefore !== "" && said !== saidBefore) {
+        warnings.push(warn("canon-pronunciation-mismatch", `${bookFile(book, entity.file)} pronunciation "${said}" differs from "${saidBefore}" in ${bookFile(match.book, match.entity.file)}`, bookFile(book, entity.file)));
+      }
+    }
+  }
+}
+function pronunciationText(value) {
+  return typeof value === "string" ? value.trim().normalize("NFC") : "";
+}
+function canonText(value) {
+  return typeof value === "string" ? value.normalize("NFC") : value;
+}
+function checkCanonDeaths(book, earlierBooks, errors) {
+  const deaths = deathsBefore(earlierBooks);
+  const { chronology, lifelines } = bookLifelines(book);
+  const deadAt = (id, chapterId) => deaths.has(id) && !(lifelines.has(id) && revivedBy(lifelines.get(id), chapterId, chronology));
+  for (const character of book.project.characters) {
+    const death = deaths.get(character.id);
+    if (!death) {
+      continue;
+    }
+    if (character.status !== "deceased") {
+      errors.push(err("canon-death-status", `${bookFile(book, character.file)} has status ${character.status || "unset"}, but ${character.id} is deceased in earlier book ${death.title}; set status: deceased`, bookFile(book, character.file)));
+    }
+  }
+  for (const record of book.project.chapters.concat(book.project.scenes)) {
+    const chapterId = record.chapter ?? record.id;
+    for (const [id, death] of deaths) {
+      if ((record.characters.includes(id) || record.pov === id && !record.mentions.includes(id)) && deadAt(id, chapterId)) {
+        errors.push(err("canon-posthumous-appearance", `${bookFile(book, record.file)} lists ${id}, who died in earlier book ${death.title}; move appearances to mentions`, bookFile(book, record.file)));
+      }
+    }
+  }
+  for (const entry of knowledgeEntries(book)) {
+    const death = deaths.get(entry.character);
+    if (death && entry.learnedIn && deadAt(entry.character, entry.learnedIn)) {
+      errors.push(err("canon-posthumous-learning", `${bookFile(book, entry.file)} knowledge-state[${entry.index}] has ${entry.character} learn something in ${entry.learnedIn}, but ${entry.character} died in earlier book ${death.title}; drop learned-in or the entry`, bookFile(book, entry.file)));
+    }
+  }
+}
+function deathsBefore(earlierBooks) {
+  const deaths = new Map;
+  for (const earlier of earlierBooks) {
+    const { lifelines } = bookLifelines(earlier);
+    for (const character of earlier.project.characters) {
+      const lifeline = lifelines.get(character.id);
+      if (lifeline.deadAtEnd && (lifeline.events.length > 0 || !deaths.has(character.id))) {
+        deaths.set(character.id, earlier);
+      } else if (!lifeline.deadAtEnd && lifeline.events.some((event) => event.type === "revival")) {
+        deaths.delete(character.id);
+      }
+    }
+  }
+  return deaths;
+}
+var LIFELINES = new WeakMap;
+function bookLifelines(book) {
+  if (!LIFELINES.has(book.project)) {
+    const chronology = chapterChronology(book.project);
+    const lifelines = new Map(book.project.characters.map((character) => [character.id, characterLifeline(character, chronology)]));
+    LIFELINES.set(book.project, { chronology, lifelines });
+  }
+  return LIFELINES.get(book.project);
+}
+function checkDestroyedArtifacts(book, earlierBooks, errors, warnings) {
+  const destroyed = firstMatching(earlierBooks, "artifacts", (artifact) => artifact.status === "destroyed");
+  for (const artifact of book.project.artifacts) {
+    const earlier = destroyed.get(artifact.id);
+    if (earlier && artifact.status !== "destroyed") {
+      warnings.push(warn("canon-destroyed-status", `${bookFile(book, artifact.file)} has status ${artifact.status || "unset"}, but ${artifact.id} was destroyed in earlier book ${earlier.title}`, bookFile(book, artifact.file)));
+    }
+  }
+  for (const scene of book.project.scenes) {
+    for (const [id, earlier] of destroyed) {
+      if (scene.stateChanges.some((change) => change && typeof change === "object" && String(change.target ?? "") === id)) {
+        errors.push(err("canon-destroyed-artifact-used", `${bookFile(book, scene.file)} uses ${id}, which was destroyed in earlier book ${earlier.title}; account for its return or remove the state change`, bookFile(book, scene.file)));
+      }
+    }
+  }
+}
+function checkKnownFacts(book, earlierBooks, errors) {
+  const known = new Map;
+  for (const earlier of earlierBooks) {
+    for (const entry of knowledgeFacts(earlier)) {
+      if (!known.has(entry.key)) {
+        known.set(entry.key, { book: earlier, entry });
+      }
+    }
+  }
+  for (const entry of knowledgeFacts(book)) {
+    const prior = known.get(entry.key);
+    if (prior && entry.learnedIn) {
+      errors.push(err("canon-fact-relearned", `${bookFile(book, entry.file)} knowledge-state[${entry.index}] has ${entry.character} learn ${entry.fact} in ${entry.learnedIn}, but they already know it in earlier book ${prior.book.title} (${bookFile(prior.book, prior.entry.file)} knowledge-state[${prior.entry.index}])`, bookFile(book, entry.file)));
+    }
+  }
+}
+function knowledgeEntries(book) {
+  const continuity = book.project.continuity;
+  const entries = continuity && Array.isArray(continuity.data["knowledge-state"]) ? continuity.data["knowledge-state"] : [];
+  const file = path3.join(book.root, "continuity", "state.md");
+  return entries.flatMap((entry, index) => entry && typeof entry === "object" && typeof entry.character === "string" ? [{ index, file, character: entry.character, learnedIn: entry["learned-in"] ? String(entry["learned-in"]) : "" }] : []);
+}
+function knowledgeFacts(book) {
+  const continuity = book.project.continuity;
+  const entries = continuity && Array.isArray(continuity.data["knowledge-state"]) ? continuity.data["knowledge-state"] : [];
+  const file = path3.join(book.root, "continuity", "state.md");
+  const facts = [];
+  entries.forEach((entry, index) => {
+    const fact = entry && typeof entry === "object" ? String(entry.fact ?? "") : "";
+    if (fact !== "" && typeof entry.character === "string") {
+      facts.push({
+        index,
+        file,
+        character: entry.character,
+        fact,
+        key: `${entry.character}\x00${fact}`,
+        learnedIn: entry["learned-in"] ? String(entry["learned-in"]) : ""
+      });
+    }
+  });
+  return facts;
+}
+function firstMatching(books, key, predicate) {
+  const matches = new Map;
+  for (const book of books) {
+    for (const entity of book.project[key]) {
+      if (!matches.has(entity.id) && predicate(entity)) {
+        matches.set(entity.id, book);
+      }
+    }
+  }
+  return matches;
+}
+function sharedCanon(books) {
+  const shared = [];
+  for (const [key, label] of SHARED_CANON) {
+    const counts = new Map;
+    for (const book of books) {
+      for (const entity of book.project[key]) {
+        counts.set(entity.id, (counts.get(entity.id) ?? 0) + 1);
+      }
+    }
+    const ids = [...counts].filter(([, count]) => count > 1).map(([id]) => id).sort();
+    if (ids.length > 0) {
+      shared.push({ label, ids });
+    }
+  }
+  const factBooks = new Map;
+  for (const book of books) {
+    for (const entry of knowledgeFacts(book)) {
+      factBooks.set(entry.fact, (factBooks.get(entry.fact) ?? new Set).add(book.root));
+    }
+  }
+  const facts = [...factBooks].filter(([, roots]) => roots.size > 1).map(([fact]) => fact).sort();
+  if (facts.length > 0) {
+    shared.push({ label: "Facts", ids: facts });
+  }
+  return shared;
+}
+function bookFile(book, file) {
+  return path3.join(book.label, path3.relative(book.root, file));
+}
+
+// src/publishing.js
+var MAX_KEYWORDS = 7;
+var BISAC_PATTERN = /^[A-Z]{3}\d{6}$/;
+var SCALAR_FIELDS = ["author", "language", "isbn", "publisher", "publication-date", "description", "copyright", "cover-alt", "ai-disclosure", "chapter-label", "contents-label"];
+function isPlaceholder(value) {
+  return typeof value === "string" && /^\[TODO\b/i.test(value.trim());
+}
+var RTL_LANGUAGES = new Set(["ar", "arc", "ckb", "dv", "fa", "he", "iw", "ji", "ks", "ku", "ps", "sd", "syr", "ug", "ur", "yi"]);
+var RTL_SCRIPTS = new Set(["adlm", "arab", "hebr", "mand", "nkoo", "rohg", "samr", "syrc", "thaa"]);
+function textDirection(language) {
+  const [lookup, macrolanguage] = lookupTag(String(language ?? "").trim() || DEFAULT_LANGUAGE);
+  const [primary, ...subtags] = lookup.split("-");
+  const script = subtags.find((subtag) => /^[a-z]{4}$/.test(subtag));
+  if (script !== undefined) {
+    return RTL_SCRIPTS.has(script) ? "rtl" : "ltr";
+  }
+  return RTL_LANGUAGES.has(primary) || RTL_LANGUAGES.has(macrolanguage) ? "rtl" : "ltr";
+}
+function publishingMeta(data) {
+  const text = (field) => typeof data[field] === "string" && !isPlaceholder(data[field]) ? data[field].trim() : "";
+  const list = (field) => Array.isArray(data[field]) ? data[field].filter((item) => typeof item === "string" && item.trim() !== "" && !isPlaceholder(item)).map((item) => item.trim()) : [];
+  const authors = list("authors");
+  const author = text("author");
+  const pack = languagePack(projectLanguage(data));
+  return {
+    authors: authors.length > 0 ? authors : author === "" ? [] : [author],
+    language: text("language") || "en",
+    writingMode: text("writing-mode") || "horizontal",
+    chapterNumerals: chapterNumerals(data),
+    isbn: normalizeIsbn(typeof data.isbn === "number" ? String(data.isbn) : text("isbn")),
+    publisher: text("publisher"),
+    publicationDate: text("publication-date"),
+    description: text("description"),
+    keywords: list("keywords"),
+    subjects: list("subjects"),
+    copyright: text("copyright"),
+    coverAlt: text("cover-alt"),
+    aiDisclosure: text("ai-disclosure"),
+    labels: buildLabels(data, pack),
+    narrationRate: pack.narrationRate,
+    countUnit: pack.countUnit
+  };
+}
+function buildLabels(data, pack = languagePack(projectLanguage(data))) {
+  const labels = { ...languagePack("en").labels, ...pack.labels };
+  const set = (key, value) => {
+    if (typeof value !== "string" || isPlaceholder(value) || isBlankLabel(key, value)) {
+      return;
+    }
+    labels[key] = key !== "chapter" ? value : value.includes("{n}") ? value.trim() : `${value.trim()} {n}`;
+  };
+  set("chapter", data["chapter-label"]);
+  set("contents", typeof data["contents-label"] === "string" ? data["contents-label"].trim() : undefined);
+  for (const [key, value] of labelEntries(data.labels)) {
+    if (LABEL_KEYS.includes(key)) {
+      set(key, value);
+    }
+  }
+  return labels;
+}
+function labelEntries(value) {
+  return Array.isArray(value) ? value.filter(isEntry).flatMap((entry) => Object.entries(entry)) : [];
+}
+function isBlankLabel(key, value) {
+  return key !== "by" && value.trim() === "";
+}
+function isEntry(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function validatePublishing(data, errors, warnings) {
+  for (const field of SCALAR_FIELDS) {
+    if (data[field] !== undefined && typeof data[field] !== "string" && !(field === "isbn" && typeof data[field] === "number")) {
+      errors.push(err("field-not-text", `story.md frontmatter field ${field} must be text`, "story.md"));
+    }
+  }
+  for (const field of ["keywords", "subjects", "authors"]) {
+    if (data[field] !== undefined && (!Array.isArray(data[field]) || data[field].some((item) => typeof item !== "string"))) {
+      errors.push(err("field-not-list", `story.md frontmatter field ${field} must be a list of text`, "story.md"));
+    }
+  }
+  if (data.labels !== undefined) {
+    if (!Array.isArray(data.labels) || !data.labels.every(isEntry)) {
+      errors.push(err("field-not-list", "story.md frontmatter field labels must be a list of label: text entries, such as - chapter: Teil {n}", "story.md"));
+    } else {
+      for (const [key, value] of labelEntries(data.labels)) {
+        if (!LABEL_KEYS.includes(key)) {
+          warnings.push(warn("unknown-label", `story.md labels entry ${key} is not a build label; builds ignore it (see docs/manuscripts.md#build-labels)`, "story.md"));
+        } else if (typeof value !== "string") {
+          errors.push(err("field-not-text", `story.md labels entry ${key} must be text`, "story.md"));
+        } else if (isPlaceholder(value)) {
+          warnings.push(warn("todo-placeholder", `story.md labels entry ${key} is still a [TODO] placeholder; builds use the language's own text`, "story.md"));
+        } else if (isBlankLabel(key, value)) {
+          warnings.push(warn("blank-label", `story.md labels entry ${key} is blank; builds use the language's own text`, "story.md"));
+        }
+      }
+    }
+  }
+  if (typeof data.language === "string" && !isPlaceholder(data.language) && !isLanguageTag(data.language)) {
+    errors.push(err("invalid-language", `story.md language ${data.language} must be a BCP 47 tag such as en, en-GB, or fr`, "story.md"));
+  }
+  const isbn = typeof data.isbn === "number" ? String(data.isbn) : data.isbn;
+  if (typeof isbn === "string" && isbn.trim() !== "" && !isPlaceholder(isbn) && normalizeIsbn(isbn) === "") {
+    const hint = typeof data.isbn === "number" ? "; quote it so leading zeros survive" : "";
+    errors.push(err("invalid-isbn", `story.md isbn ${isbn} is not a valid ISBN-13 or ISBN-10 (check the digits and checksum${hint})`, "story.md"));
+  }
+  if (typeof data["publication-date"] === "string" && !isPlaceholder(data["publication-date"])) {
+    const dateError = storyDateError(data["publication-date"]);
+    if (dateError !== "") {
+      errors.push(err("invalid-date", `story.md publication-date ${dateError}`, "story.md"));
+    }
+  }
+  if (Array.isArray(data.subjects)) {
+    for (const subject of data.subjects) {
+      if (typeof subject === "string" && !isPlaceholder(subject) && !BISAC_PATTERN.test(subject.trim())) {
+        errors.push(err("invalid-subject", `story.md subject ${subject} must be a BISAC code such as FIC022000`, "story.md"));
+      }
+    }
+  }
+  if (Array.isArray(data.keywords) && data.keywords.length > MAX_KEYWORDS) {
+    warnings.push(warn("too-many-keywords", `story.md lists ${data.keywords.length} keywords; most retailers accept ${MAX_KEYWORDS}`, "story.md"));
+  }
+  for (const field of [...SCALAR_FIELDS, "authors", "keywords", "subjects"]) {
+    const values = Array.isArray(data[field]) ? data[field] : [data[field]];
+    if (values.some(isPlaceholder)) {
+      warnings.push(warn("todo-placeholder", `story.md ${field} is still a [TODO] placeholder; builds leave it out`, "story.md"));
+    }
+  }
+  if (data.author !== undefined && data.authors !== undefined) {
+    warnings.push(warn("author-and-authors", "story.md sets both author and authors; builds use authors", "story.md"));
+  }
+}
+function normalizeIsbn(value) {
+  const compact = String(value ?? "").replace(/[\s-]/g, "").toUpperCase();
+  if (/^97[89]\d{10}$/.test(compact)) {
+    const sum = [...compact.slice(0, 12)].reduce((total, digit, index) => total + Number(digit) * (index % 2 === 0 ? 1 : 3), 0);
+    return (10 - sum % 10) % 10 === Number(compact[12]) ? compact : "";
+  }
+  if (/^\d{9}[\dX]$/.test(compact)) {
+    const sum = [...compact].reduce((total, char, index) => total + (char === "X" ? 10 : Number(char)) * (10 - index), 0);
+    return sum % 11 === 0 ? compact : "";
+  }
+  return "";
+}
+function copyrightPage(meta) {
+  const lines = [meta.copyright, "", fillLabel(meta.labels, "all-rights-reserved")];
+  if (meta.publisher !== "") {
+    lines.push("", fillLabel(meta.labels, "published-by", { publisher: meta.publisher }));
+  }
+  if (meta.isbn !== "") {
+    lines.push("", `ISBN ${meta.isbn}`);
+  }
+  if (meta.aiDisclosure !== "") {
+    lines.push("", meta.aiDisclosure);
+  }
+  return lines.join(`
+`);
+}
+var DESCRIPTION_LIMIT = 4000;
+function metadataSheet(input) {
+  const { title, data, meta, words, characters, pages } = input;
+  const seriesName = seriesDisplayName(data);
+  const series = typeof seriesName === "string" ? `${seriesName}${isBookNumber(data["book-number"]) ? `, book ${data["book-number"]}` : ""}` : "";
+  const rows = [
+    ["Title", title],
+    ["Series", series],
+    ["Author(s)", meta.authors.join("; ")],
+    ["ISBN", meta.isbn],
+    ["Publisher", meta.publisher],
+    ["Publication date", meta.publicationDate],
+    ["Language", meta.language],
+    ["Genre", [data.genre, data["sub-genre"]].filter((value) => typeof value === "string" && value !== "").join(" / ")],
+    ["Form", typeof data.form === "string" ? data.form : ""],
+    characters === undefined ? ["Word count", String(words)] : ["Character count", String(characters)],
+    ["Estimated print pages", Object.entries(pages).map(([trim, count]) => `${count} at ${trim}`).join(", ")],
+    ["Description", meta.description === "" ? "" : `${meta.description.length} characters (limit ${DESCRIPTION_LIMIT})`],
+    ["Keywords", meta.keywords.length === 0 ? "" : `${meta.keywords.length} of ${MAX_KEYWORDS}: ${meta.keywords.join("; ")}`],
+    ["BISAC subjects", meta.subjects.join("; ")],
+    ["Copyright", meta.copyright],
+    ["Cover", typeof data.cover === "string" ? data.cover : ""],
+    ["Cover alt text", meta.coverAlt],
+    ["AI disclosure", meta.aiDisclosure]
+  ];
+  const checks = [
+    ["Author named (`author` or `authors`)", meta.authors.length > 0],
+    ["ISBN for this edition (`isbn`), or a retailer-assigned identifier", meta.isbn !== ""],
+    ["Publisher or imprint (`publisher`)", meta.publisher !== ""],
+    ["Publication date (`publication-date`)", meta.publicationDate !== ""],
+    [`Description under ${DESCRIPTION_LIMIT} characters (\`description\`)`, meta.description !== "" && meta.description.length <= DESCRIPTION_LIMIT],
+    [`Keywords, up to ${MAX_KEYWORDS} (\`keywords\`)`, meta.keywords.length > 0 && meta.keywords.length <= MAX_KEYWORDS],
+    ["BISAC subjects (`subjects`)", meta.subjects.length > 0],
+    ["Copyright line (`copyright`) or copyright matter page", meta.copyright !== "" || input.hasCopyrightPage],
+    ["Cover image (`cover`)", Boolean(input.coverReady)],
+    ["Cover alt text (`cover-alt`)", meta.coverAlt !== ""],
+    ["AI-use statement decided (`ai-disclosure`)", meta.aiDisclosure !== ""],
+    [`Permissions cleared for quoted matter (\`permission\`${(input.pendingPermissions ?? []).length > 0 ? `; pending: ${input.pendingPermissions.join(", ")}` : ""})`, (input.pendingPermissions ?? []).length === 0],
+    [`No \`[TODO\` markers in chapter prose${(input.todoChapters ?? []).length > 0 ? ` (found in: ${input.todoChapters.join(", ")})` : ""}`, (input.todoChapters ?? []).length === 0],
+    ["Story status is complete", data.status === "complete"]
+  ];
+  return [
+    `# ${title}: Retailer Metadata`,
+    "",
+    "Generated from story.md. Retailer limits change; check each retailer's current requirements before upload.",
+    "",
+    "| Field | Value |",
+    "| --- | --- |",
+    ...rows.map(([field, value]) => `| ${field} | ${value === "" ? "(missing)" : tableCell(value)} |`),
+    "",
+    "## Description",
+    "",
+    meta.description === "" ? "(missing)" : meta.description,
+    "",
+    "## Readiness",
+    "",
+    ...checks.map(([label, ok]) => `- [${ok ? "x" : " "}] ${label}`),
+    ""
+  ].join(`
+`);
+}
+function tableCell(value) {
+  return String(value).replace(/\|/g, "\\|").replace(/\n/g, " ");
+}
+
+// src/typesetting.js
+var WRITING_MODES = new Set(["horizontal", "vertical"]);
+var CASED_SCRIPTS = new Set(["Latn", "Cyrl", "Grek", "Armn", "Copt", "Glag", "Adlm", "Osge", "Dsrt"]);
+var VERTICAL_SCRIPTS = new Set(["Jpan", "Hani", "Hans", "Hant", "Hira", "Kana", "Bopo", "Kore", "Hang"]);
+var EAST_ASIAN_SCRIPTS = new Set(["Jpan", "Hani", "Hans", "Hant", "Hira", "Kana", "Bopo", "Kore", "Hang"]);
+var COMPLEX_SCRIPTS = new Set(["Arab", "Hebr", "Syrc", "Thaa", "Nkoo", "Deva", "Beng", "Guru", "Gujr", "Orya", "Taml", "Telu", "Knda", "Mlym", "Sinh", "Thai", "Laoo", "Khmr", "Mymr", "Tibt"]);
+var LIKELY_SCRIPTS = {
+  Cyrl: ["ru", "uk", "be", "bg", "mk", "sr", "kk", "ky", "mn", "tg", "tt", "ba", "cv", "os"],
+  Grek: ["el"],
+  Armn: ["hy"],
+  Geor: ["ka"],
+  Arab: ["fa", "ur", "ps", "sd", "ug", "ckb", "ks"],
+  Hebr: ["yi"],
+  Deva: ["mr", "ne", "sa", "kok", "mai", "bho"],
+  Beng: ["bn", "as"],
+  Guru: ["pa"],
+  Gujr: ["gu"],
+  Orya: ["or"],
+  Taml: ["ta"],
+  Telu: ["te"],
+  Knda: ["kn"],
+  Mlym: ["ml"],
+  Sinh: ["si"],
+  Laoo: ["lo"],
+  Khmr: ["km"],
+  Mymr: ["my"],
+  Tibt: ["bo", "dz"],
+  Ethi: ["am", "ti"],
+  Thaa: ["dv"],
+  Syrc: ["syr"],
+  Cher: ["chr"]
+};
+var SCRIPT_OF = new Map(Object.entries(LIKELY_SCRIPTS).flatMap(([script, codes]) => codes.map((code) => [code, script])));
+var LATIN_SERIF = `Georgia, "Iowan Old Style", "Palatino Linotype", serif`;
+var FONT_STACKS = {
+  Cyrl: `Georgia, "Palatino Linotype", "Times New Roman", "Noto Serif", "DejaVu Serif", serif`,
+  Jpan: `"Hiragino Mincho ProN", "Yu Mincho", YuMincho, "MS Mincho", "Noto Serif JP", "Noto Serif CJK JP", serif`,
+  Hans: `"Songti SC", STSong, SimSun, "Noto Serif SC", "Noto Serif CJK SC", serif`,
+  Hant: `"Songti TC", PMingLiU, MingLiU, "Noto Serif TC", "Noto Serif CJK TC", serif`,
+  Kore: `AppleMyungjo, Batang, "Nanum Myeongjo", "Noto Serif KR", "Noto Serif CJK KR", serif`,
+  Arab: `"Noto Naskh Arabic", "Geeza Pro", "Times New Roman", "Traditional Arabic", serif`,
+  Hebr: `"Noto Serif Hebrew", "Times New Roman", David, "Arial Hebrew", serif`,
+  Deva: `"Noto Serif Devanagari", "Kohinoor Devanagari", "Devanagari Sangam MN", Mangal, "Nirmala UI", serif`,
+  Thai: `"Noto Serif Thai", Thonburi, "Leelawadee UI", Tahoma, serif`,
+  Cher: `"Plantagenet Cherokee", Gadugi, "Noto Sans Cherokee", serif`
+};
+FONT_STACKS.Grek = FONT_STACKS.Cyrl;
+var DOCX_EAST_ASIA = { Jpan: "MS Mincho", Hans: "SimSun", Hant: "PMingLiU", Kore: "Batang" };
+var DOCX_COMPLEX = { Deva: "Mangal", Thai: "Tahoma" };
+function writtenTag(language) {
+  const { script, region, subtags } = parseTag(language);
+  const at = script === null ? 1 : 2;
+  return subtags.map((subtag, index) => {
+    if (index === 1 && script !== null) {
+      return script;
+    }
+    return index === at && region !== null ? subtag.toUpperCase() : subtag;
+  }).join("-");
+}
+function languageScript(language) {
+  const { primary, script } = parseTag(language);
+  if (script !== null) {
+    return script;
+  }
+  const chinese = chineseScript(language);
+  if (chinese !== null) {
+    return chinese;
+  }
+  const pack = languagePack(language);
+  const own = pack.code.split("-")[0] === primary ? pack.script : null;
+  return own ?? SCRIPT_OF.get(primary) ?? pack.script ?? "Latn";
+}
+function fontScript(script, language) {
+  if (script === "Hira" || script === "Kana") {
+    return "Jpan";
+  }
+  if (script === "Hang") {
+    return "Kore";
+  }
+  if (script === "Bopo") {
+    return "Hant";
+  }
+  if (script === "Hani") {
+    const { primary } = parseTag(language);
+    if (primary === "ja" || primary === "ko") {
+      return primary === "ja" ? "Jpan" : "Kore";
+    }
+    return hanScript(language);
+  }
+  return script;
+}
+function supportsVertical(language) {
+  return VERTICAL_SCRIPTS.has(languageScript(language));
+}
+var SETTINGS = new Map;
+function typesetting(language = "en", writingMode = "horizontal") {
+  const key = `${language}\x00${writingMode}`;
+  if (!SETTINGS.has(key)) {
+    const script = languageScript(language);
+    const explicit = parseTag(language).script !== null;
+    const fonts = fontScript(script, language);
+    const body = FONT_STACKS[fonts] ?? LATIN_SERIF;
+    SETTINGS.set(key, Object.freeze({
+      script,
+      cased: CASED_SCRIPTS.has(script) && (explicit || languagePack(language).cased),
+      rtl: textDirection(language) === "rtl",
+      vertical: writingMode === "vertical" && VERTICAL_SCRIPTS.has(script),
+      fonts: Object.freeze({ body, heads: body === LATIN_SERIF ? "Georgia, serif" : body, latin: body === LATIN_SERIF }),
+      docx: Object.freeze({
+        eastAsia: DOCX_EAST_ASIA[fonts] ?? null,
+        cs: DOCX_COMPLEX[fonts] ?? null,
+        eastAsian: EAST_ASIAN_SCRIPTS.has(script),
+        complex: COMPLEX_SCRIPTS.has(script)
+      })
+    }));
+  }
+  return SETTINGS.get(key);
+}
+function validateWritingMode(data, errors) {
+  if (data["writing-mode"] !== "vertical") {
+    return;
+  }
+  const language = projectLanguage(data);
+  if (languageScript(language) === "Mong") {
+    errors.push(err("unsupported-writing-mode", `story.md writing-mode vertical is not supported yet for ${language}: traditional Mongolian runs its columns left to right (vertical-lr), so builds ignore it`, "story.md"));
+  } else if (!supportsVertical(language)) {
+    errors.push(err("unsupported-writing-mode", `story.md writing-mode vertical needs a language set in vertical columns, such as ja, zh, zh-Hant, or ko; ${language} is set horizontally, so builds ignore it`, "story.md"));
+  }
+}
+
+// src/numerals.js
+var CHAPTER_NUMERALS = new Set(["western", "native"]);
+var DIGIT_ZEROS = {
+  arab: 1632,
+  arabext: 1776,
+  nkoo: 1984,
+  deva: 2406,
+  beng: 2534,
+  guru: 2662,
+  gujr: 2790,
+  orya: 2918,
+  tamldec: 3046,
+  telu: 3174,
+  knda: 3302,
+  mlym: 3430,
+  thai: 3664,
+  laoo: 3792,
+  tibt: 3872,
+  mymr: 4160,
+  khmr: 6112,
+  mong: 6160
+};
+var SCRIPT_DIGITS = {
+  Arab: "arab",
+  Nkoo: "nkoo",
+  Deva: "deva",
+  Beng: "beng",
+  Guru: "guru",
+  Gujr: "gujr",
+  Orya: "orya",
+  Taml: "tamldec",
+  Telu: "telu",
+  Knda: "knda",
+  Mlym: "mlym",
+  Thai: "thai",
+  Laoo: "laoo",
+  Tibt: "tibt",
+  Mymr: "mymr",
+  Khmr: "khmr",
+  Mong: "mong"
+};
+var EXTENDED_ARABIC = new Set(["fa", "ur", "ps", "ks", "pa"]);
+var HAN_DIGITS = "〇一二三四五六七八九";
+var HAN_UNITS = ["", "十", "百", "千"];
+var HAN_GROUPS = { jpan: ["", "万", "億"], hans: ["", "万", "亿"], hant: ["", "萬", "億"] };
+function nativeNumerals(language) {
+  const script = languageScript(language);
+  const { primary } = parseTag(language);
+  if (script === "Jpan" || script === "Hira" || script === "Kana" || script === "Hani" && primary === "ja") {
+    return "jpan";
+  }
+  if (script === "Hans" || script === "Hant") {
+    return script.toLowerCase();
+  }
+  if (script === "Hani" && primary !== "ko" || script === "Bopo") {
+    return hanScript(language).toLowerCase();
+  }
+  if (script === "Arab" && EXTENDED_ARABIC.has(primary)) {
+    return "arabext";
+  }
+  return SCRIPT_DIGITS[script] ?? null;
+}
+function chapterNumerals(data) {
+  return data?.["chapter-numerals"] === "native" ? nativeNumerals(projectLanguage(data)) ?? "latn" : "latn";
+}
+function formatNumeral(value, system = "latn") {
+  const text = String(value);
+  if (DIGIT_ZEROS[system] !== undefined && /^\d+$/.test(text)) {
+    return text.replace(/\d/g, (digit) => String.fromCodePoint(DIGIT_ZEROS[system] + Number(digit)));
+  }
+  if (HAN_GROUPS[system] !== undefined && Number.isSafeInteger(value) && value >= 0 && value < 1000000000000) {
+    return hanNumeral(value, system);
+  }
+  return text;
+}
+function hanNumeral(value, system) {
+  const chinese = system !== "jpan";
+  if (value === 0) {
+    return chinese ? "零" : HAN_DIGITS[0];
+  }
+  const groups = [];
+  for (let rest = value;rest > 0; rest = Math.floor(rest / 1e4)) {
+    groups.push(rest % 1e4);
+  }
+  let text = "";
+  let gap = false;
+  for (let index = groups.length - 1;index >= 0; index -= 1) {
+    const group = groups[index];
+    if (group === 0) {
+      gap = text !== "";
+      continue;
+    }
+    if (chinese && text !== "" && (gap || group < 1000)) {
+      text += "零";
+    }
+    text += hanGroup(group, chinese, text === "") + HAN_GROUPS[system][index];
+    gap = false;
+  }
+  return text;
+}
+function hanGroup(group, chinese, leading) {
+  const digits = String(group).padStart(4, "0").split("").map(Number);
+  let text = "";
+  let zero = false;
+  digits.forEach((digit, position) => {
+    const unit = HAN_UNITS[3 - position];
+    if (digit === 0) {
+      zero = text !== "";
+      return;
+    }
+    if (chinese && zero) {
+      text += "零";
+    }
+    zero = false;
+    const one = digit === 1 && unit !== "" && (!chinese || unit === "十" && leading && text === "");
+    text += `${one ? "" : HAN_DIGITS[digit]}${unit}`;
+  });
+  return text;
+}
+function validateChapterNumerals(data, errors) {
+  if (data["chapter-numerals"] !== "native") {
+    return;
+  }
+  const language = projectLanguage(data);
+  if (nativeNumerals(language) === null) {
+    errors.push(err("unsupported-chapter-numerals", `story.md chapter-numerals native needs a language with its own numerals, such as ja, zh, ar, fa, hi, or th; ${language} prints 0-9, so builds ignore it`, "story.md"));
+  }
+}
+
 // src/words.js
 var CJK = "\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}\\u30FC";
 var SOUTHEAST_ASIAN = "\\p{Script=Thai}\\p{Script=Lao}\\p{Script=Khmer}\\p{Script=Myanmar}";
@@ -5331,11 +6648,12 @@ function kebabCase(value, { transliterate: scripts = true } = {}) {
 function titleCaseSlug(slug) {
   return String(slug).split("-").filter(Boolean).map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`).join(" ");
 }
-function chapterHeading(number, title, labels = undefined) {
+function chapterHeading(number, title, labels = undefined, numerals = "latn") {
   const text = String(title ?? "").trim();
-  const n = String(number);
-  const label = fillLabel(labels, "chapter", { n }).trim() || fillLabel(undefined, "chapter", { n });
-  return text === "" || text.toLowerCase() === label.toLowerCase() ? label : fillLabel(labels, "chapter-heading", { chapter: label, title: text });
+  const chapter = (n) => fillLabel(labels, "chapter", { n }).trim() || fillLabel(undefined, "chapter", { n });
+  const label = chapter(formatNumeral(number, numerals));
+  const repeats = [label, chapter(String(number))].some((form) => text.toLowerCase() === form.toLowerCase());
+  return text === "" || repeats ? label : fillLabel(labels, "chapter-heading", { chapter: label, title: text });
 }
 var WORD_CHARS = "\\p{L}\\p{M}\\p{N}\\u200C\\u200D\\u00AD";
 var URL_PLACEHOLDER = "";
@@ -5604,93 +6922,6 @@ function escapeRegExp(value) {
 function leadingHeadingLength(masked) {
   const match = /^(?:[ \t]*\r?\n)*(?:[ \t]{0,3}#(?!#)[ \t]+[^\r\n]*|[ \t]{0,3}\S[^\r\n]*\r?\n[ \t]{0,3}=+[ \t]*)(?:\r?\n|$)/.exec(masked);
   return match ? match[0].length : 0;
-}
-
-// src/languages/locale.js
-var COMPARERS = new Map;
-function compareText(pack = languagePack()) {
-  if (!COMPARERS.has(pack.locale)) {
-    const collator = new Intl.Collator(pack.locale);
-    COMPARERS.set(pack.locale, (left, right) => collator.compare(left, right) || (left < right ? -1 : left > right ? 1 : 0));
-  }
-  return COMPARERS.get(pack.locale);
-}
-function lowerCase(text, pack = languagePack()) {
-  return String(text).toLocaleLowerCase(pack.locale);
-}
-function upperCase(text, pack = languagePack()) {
-  return String(text).toLocaleUpperCase(pack.locale);
-}
-var DOTLESS_I = new Set(["tr", "az"]);
-function casesDotlessI(pack) {
-  return DOTLESS_I.has(pack.locale.split("-")[0].toLowerCase());
-}
-function matchingCase(phrase, pack = languagePack()) {
-  return casesDotlessI(pack) ? lowerCase(phrase, pack) : String(phrase);
-}
-function matchingText(text, pack = languagePack()) {
-  const source = String(text);
-  const same = { text: source, original: (start, end) => [start, end] };
-  if (!casesDotlessI(pack)) {
-    return same;
-  }
-  const lower = lowerCase(source, pack);
-  if (lower.length === source.length) {
-    return { ...same, text: lower };
-  }
-  let folded = "";
-  const starts = [];
-  const sources = [];
-  const add = (from, value) => {
-    starts.push(folded.length);
-    sources.push(from);
-    folded += lowerCase(value, pack);
-  };
-  let last = 0;
-  for (const match of source.matchAll(/I\p{M}+/gu)) {
-    if (match.index > last) {
-      add(last, source.slice(last, match.index));
-    }
-    add(match.index, match[0]);
-    last = match.index + match[0].length;
-  }
-  if (last < source.length) {
-    add(last, source.slice(last));
-  }
-  starts.push(folded.length);
-  sources.push(source.length);
-  const piece = (offset) => {
-    let low = 0;
-    let high = starts.length - 1;
-    while (low < high) {
-      const middle = low + high + 1 >> 1;
-      if (starts[middle] <= offset) {
-        low = middle;
-      } else {
-        high = middle - 1;
-      }
-    }
-    return low;
-  };
-  const at = (offset, end) => {
-    const index = piece(offset);
-    const inside = offset - starts[index];
-    if (inside === 0) {
-      return sources[index];
-    }
-    if (starts[index + 1] - starts[index] === sources[index + 1] - sources[index]) {
-      return sources[index] + inside;
-    }
-    return sources[end ? index + 1 : index];
-  };
-  return { text: folded, original: (start, end) => [at(start, false), at(end, true)] };
-}
-var NUMBER_FORMATS = new Map;
-function formatNumber(value, pack = languagePack()) {
-  if (!NUMBER_FORMATS.has(pack.locale)) {
-    NUMBER_FORMATS.set(pack.locale, new Intl.NumberFormat(pack.locale, { numberingSystem: "latn", maximumFractionDigits: 0 }));
-  }
-  return NUMBER_FORMATS.get(pack.locale).format(value);
 }
 
 // src/names.js
@@ -7278,7 +8509,7 @@ function parseArgs(argv, suggestFrom = OPTIONS.map((option) => option.name)) {
 }
 
 // src/exemptions.js
-var EXEMPTIONS_FILE = path3.join("continuity", "exemptions.md");
+var EXEMPTIONS_FILE = path4.join("continuity", "exemptions.md");
 var MATCH_KEYS = ["pattern", "code", "file", "chapter"];
 var MIN_PATTERN_LENGTH = 4;
 function portable(text) {
@@ -7289,7 +8520,7 @@ function exemptionFile(value) {
   if (text.startsWith("/") || /^[A-Za-z]:/.test(text) || text.split("/").includes("..") || text.includes("\x00")) {
     return null;
   }
-  const normalized = path3.posix.normalize(text).replace(/\/$/, "");
+  const normalized = path4.posix.normalize(text).replace(/\/$/, "");
   return normalized === "." ? null : normalized;
 }
 function exemptionProblems(entry, label = "exemption") {
@@ -7388,7 +8619,7 @@ function parseExemptions(entries) {
 }
 function readExemptionLog(root) {
   try {
-    return parseExemptions(parseFrontmatter(readTextFile(path3.join(root, EXEMPTIONS_FILE))).data.exemptions);
+    return parseExemptions(parseFrontmatter(readTextFile(path4.join(root, EXEMPTIONS_FILE))).data.exemptions);
   } catch {
     return [];
   }
@@ -7414,219 +8645,6 @@ function dismissByExemptions(result, exemptions, { errors: withErrors }) {
     return result;
   }
   return { ...result, ok: withErrors ? errors.length === 0 : result.ok, errors, warnings, dismissed };
-}
-
-// src/progressions.js
-var PROGRESSION_KINDS = ["character", "location", "faction"];
-var RESERVED_FIELDS = new Set(["progressions", "id", "died-in", "revived-in"]);
-function progressionEntry(item) {
-  if (!item || typeof item !== "object" || Array.isArray(item)) {
-    return null;
-  }
-  const from = idText(item.from);
-  const field = typeof item.field === "string" ? item.field : "";
-  if (from === "" || field === "" || item.value === undefined || item.value === null) {
-    return null;
-  }
-  return { from, field, value: item.value };
-}
-function setOwn(target, key, value) {
-  Object.defineProperty(target, key, { value, enumerable: true, configurable: true, writable: true });
-}
-function chapterPosition(chronology, id) {
-  if (chronology.numbers.has(id)) {
-    return chronology.numbers.get(id);
-  }
-  const match = /^chapter-(\d+)$/.exec(id);
-  return match && Number(match[1]) > 0 ? Number(match[1]) : Number.NaN;
-}
-function happensAfter(chronology, later, earlier) {
-  if (chronology.numbers.has(later) && chronology.numbers.has(earlier)) {
-    return chronology.after(later, earlier);
-  }
-  return chapterPosition(chronology, later) > chapterPosition(chronology, earlier);
-}
-function sortProgressions(list, chronology) {
-  const known = [];
-  const unknown = [];
-  for (const item of list) {
-    const from = item && typeof item === "object" && !Array.isArray(item) ? idText(item.from) : "";
-    (Number.isNaN(chapterPosition(chronology, from)) ? unknown : known).push({ item, from });
-  }
-  known.sort((left, right) => happensAfter(chronology, left.from, right.from) ? 1 : happensAfter(chronology, right.from, left.from) ? -1 : 0);
-  return [...known, ...unknown].map((entry) => entry.item);
-}
-function entityStateAt(data, atChapterId, chronology) {
-  if (Number.isNaN(chapterPosition(chronology, atChapterId))) {
-    throw usageError(`Unknown chapter ${atChapterId}`);
-  }
-  const state = {};
-  for (const [key, value] of Object.entries(data ?? {})) {
-    if (key !== "progressions") {
-      setOwn(state, key, value);
-    }
-  }
-  const entries = (Array.isArray(data?.progressions) ? data.progressions : []).map(progressionEntry).filter((entry) => entry !== null && !Number.isNaN(chapterPosition(chronology, entry.from)) && !happensAfter(chronology, entry.from, atChapterId));
-  entries.sort((left, right) => happensAfter(chronology, left.from, right.from) ? 1 : happensAfter(chronology, right.from, left.from) ? -1 : 0);
-  const changes = [];
-  for (const entry of entries) {
-    changes.push({ field: entry.field, value: entry.value, from: entry.from, previous: Object.hasOwn(state, entry.field) ? state[entry.field] : undefined });
-    setOwn(state, entry.field, entry.value);
-  }
-  return { state, changes };
-}
-function validateProgressions(data, label, rules, chronology, errors) {
-  if (data.progressions === undefined) {
-    return;
-  }
-  if (!Array.isArray(data.progressions)) {
-    errors.push(err("field-not-list", `${label} frontmatter field progressions must be a list`, label));
-    return;
-  }
-  const seen = new Map;
-  let latest = null;
-  for (const [index, item] of data.progressions.entries()) {
-    const entryLabel = `${label} progressions[${index}]`;
-    if (!item || typeof item !== "object" || Array.isArray(item)) {
-      errors.push(err("entry-not-mapping", `${entryLabel} must be a mapping with from, field, and value`, label));
-      continue;
-    }
-    const from = idText(item.from);
-    if (from === "") {
-      errors.push(err("missing-field", `${entryLabel} is missing from (the chapter the change takes effect)`, label));
-    }
-    const field = item.field;
-    let fieldOk = false;
-    if (typeof field !== "string" || field.trim() === "") {
-      errors.push(err("missing-field", `${entryLabel} is missing field`, label));
-    } else if (field !== kebabCase(field)) {
-      errors.push(err("id-not-kebab", `${entryLabel} field ${field} must be kebab-case`, label));
-    } else if (RESERVED_FIELDS.has(field)) {
-      errors.push(err("progression-fixed-field", `${entryLabel} cannot change ${field}${field === "died-in" || field === "revived-in" ? "; set it on the character and story continuity reads it by chapter" : ""}`, label));
-    } else if (rules.lists.has(field)) {
-      errors.push(err("progression-list-field", `${entryLabel} cannot change ${field}, which is a list; a progression holds a single value`, label));
-    } else {
-      fieldOk = true;
-    }
-    const value = item.value;
-    if (value === undefined || value === null) {
-      errors.push(err("missing-field", `${entryLabel} is missing value`, label));
-    } else if (typeof value === "object") {
-      errors.push(err("field-not-scalar", `${entryLabel} value must be a single value, not a list or mapping`, label));
-    } else if (fieldOk && rules.enums.has(field) && !rules.enums.get(field).has(value)) {
-      errors.push(err("unsupported-value", `${entryLabel} ${field} has unsupported value ${value}`, label));
-    }
-    if (from !== "" && fieldOk) {
-      const key = `${from}\x00${field}`;
-      if (seen.has(key)) {
-        errors.push(err("progression-duplicate", `${entryLabel} repeats ${field} from ${from} (progressions[${seen.get(key)}])`, label));
-      } else {
-        seen.set(key, index);
-      }
-    }
-    if (Number.isNaN(chapterPosition(chronology, from))) {
-      continue;
-    }
-    if (latest && happensAfter(chronology, latest.from, from)) {
-      errors.push(err("progression-out-of-order", `${entryLabel} from ${from} comes before progressions[${latest.index}] from ${latest.from} in the story; list progressions in story order`, label));
-      continue;
-    }
-    latest = { from, index };
-  }
-}
-function formatStateChanges(changes, atChapterId) {
-  if (changes.length === 0) {
-    return "";
-  }
-  const lines = [`State at ${atChapterId}:`];
-  for (const change of changes) {
-    const previous = change.previous === undefined ? "" : `, was ${change.previous}`;
-    lines.push(`- ${change.field}: ${change.value === "" ? "(cleared)" : change.value} (from ${change.from}${previous})`);
-  }
-  return `${lines.join(`
-`)}
-`;
-}
-
-// src/deaths.js
-var STATUS_PROGRESSIONS = new WeakMap;
-function statusProgressions(character) {
-  if (!STATUS_PROGRESSIONS.has(character)) {
-    const list = Array.isArray(character.frontmatter.progressions) ? character.frontmatter.progressions : [];
-    STATUS_PROGRESSIONS.set(character, list.map((item, index) => ({ index, entry: progressionEntry(item) })).filter(({ entry }) => entry !== null && entry.field === "status").map(({ index, entry }) => ({ index, from: entry.from, value: String(entry.value) })));
-  }
-  return STATUS_PROGRESSIONS.get(character);
-}
-function progressionStatusAt(character, chapterId, chronology) {
-  let status = String(character.status);
-  let from = "";
-  let deadFrom = "";
-  if (chronology.numbers.has(chapterId) && statusProgressions(character).length > 0) {
-    for (const change of entityStateAt(character.frontmatter, chapterId, chronology).changes) {
-      if (change.field !== "status") {
-        continue;
-      }
-      const value = String(change.value);
-      if (value === "deceased" && status !== "deceased") {
-        deadFrom = change.from;
-      }
-      status = value;
-      from = change.from;
-    }
-  }
-  return { status, from, deadFrom };
-}
-function progressionDeathAt(character, chapterId, chronology) {
-  const from = progressionDeathFrom(character, chapterId, chronology);
-  if (from === null || from !== "" && !happensAfter(chronology, chapterId, from)) {
-    return null;
-  }
-  return { from };
-}
-function progressionDeathFrom(character, chapterId, chronology) {
-  const { status, deadFrom } = progressionStatusAt(character, chapterId, chronology);
-  if (status !== "deceased" || character.diedIn && deadFrom === "") {
-    return null;
-  }
-  if (character.diedIn && (character.revivedIn === "" || !happensAfter(chronology, deadFrom, character.revivedIn))) {
-    return null;
-  }
-  return deadFrom;
-}
-function characterLifeline(character, chronology) {
-  const status = String(character.status ?? "");
-  const chapters = storyOrder(chronology);
-  if (chapters.length === 0 || character.diedIn && !chronology.numbers.has(character.diedIn)) {
-    const dead = status === "deceased";
-    return { deadAtStart: dead, deadAtEnd: dead, events: [] };
-  }
-  const leadIn = status === "deceased" && Boolean(character.diedIn) && statusProgressions(character).some(({ from, value }) => value !== "deceased" && happensAfter(chronology, character.diedIn, from));
-  const deadAtStart = status === "deceased" && (!character.diedIn || leadIn);
-  if (!character.diedIn && statusProgressions(character).length === 0) {
-    return { deadAtStart, deadAtEnd: deadAtStart, events: [] };
-  }
-  const window = deathWindow(character, chronology);
-  const events = [];
-  let dead = deadAtStart;
-  for (const chapter of chapters) {
-    const byDiedIn = window !== null && (chapter === window.died || window.deadIn(chapter));
-    const beforeDeath = leadIn && happensAfter(chronology, window.died, chapter) && progressionStatusAt(character, chapter, chronology).status === "deceased";
-    const now = byDiedIn || beforeDeath || progressionDeathFrom(character, chapter, chronology) !== null;
-    if (!now && dead && chapter !== window?.revived && progressionStatusAt(character, chapter, chronology).from === "") {
-      continue;
-    }
-    if (now !== dead) {
-      events.push(now ? { type: "death", chapter, source: chapter === window?.died ? "died-in" : "progression" } : { type: "revival", chapter, source: chapter === window?.revived ? "revived-in" : "progression" });
-      dead = now;
-    }
-  }
-  return { deadAtStart, deadAtEnd: dead, events };
-}
-function revivedBy(lifeline, chapterId, chronology) {
-  return chronology.numbers.has(chapterId) && lifeline.events.some((event) => event.type === "revival" && !happensAfter(chronology, event.chapter, chapterId));
-}
-function storyOrder(chronology) {
-  return [...chronology.numbers.keys()].sort((left, right) => chronology.numbers.get(left) - chronology.numbers.get(right) || (left < right ? -1 : left > right ? 1 : 0)).sort((left, right) => chronology.after(left, right) ? 1 : chronology.after(right, left) ? -1 : 0);
 }
 
 // src/continuity.js
@@ -7962,7 +8980,7 @@ function checkContinuityState(project, context, errors, warnings) {
   if (!project.continuity) {
     return;
   }
-  const label = path4.join("continuity", "state.md");
+  const label = path5.join("continuity", "state.md");
   const data = project.continuity.data;
   const currentChapter = data["current-chapter"];
   if (Number.isInteger(currentChapter)) {
@@ -8095,7 +9113,7 @@ function checkStateAgainstStory(project, context, warnings) {
   if (!project.continuity) {
     return;
   }
-  const label = path4.join("continuity", "state.md");
+  const label = path5.join("continuity", "state.md");
   const data = project.continuity.data;
   const { chronology } = context;
   const currentChapter = Number.isInteger(data["current-chapter"]) ? data["current-chapter"] : -Infinity;
@@ -8269,7 +9287,7 @@ function requireMapping(entry, entryLabel, file, errors) {
   return true;
 }
 function relative(project, file) {
-  return path4.relative(project.root, file);
+  return path5.relative(project.root, file);
 }
 function chapterOf(record) {
   const id = record.chapter !== undefined ? idText(record.chapter) : record.id;
@@ -8937,8 +9955,8 @@ function buildContext(project, targetId, readBody, options = {}) {
   const unit = target.scene ?? target.chapter;
   const pov = idText(unit.pov) || idText(target.chapter.pov);
   const cast = [...new Set([pov, ...unit.characters.map(idText)].filter(Boolean))];
-  const relative = (file) => path5.relative(project.root, file);
-  const statePath = path5.join("continuity", "state.md");
+  const relative = (file) => path6.relative(project.root, file);
+  const statePath = path6.join("continuity", "state.md");
   const sections = [];
   const chapterBody = readBody(target.chapter.file);
   const chapterScenes = project.scenes.filter((scene) => scene.chapter === target.chapter.id);
@@ -9153,890 +10171,6 @@ function formatContext(context) {
   return `${out.join(`
 `)}
 `;
-}
-
-// src/series.js
-import fs2 from "node:fs";
-import path6 from "node:path";
-var SERIES_LINK_INVERSES = [["follows", "precedes"], ["precedes", "follows"]];
-var MAX_SERIES_BOOKS = 100;
-var SHARED_CANON = [
-  ["characters", "Characters", "name"],
-  ["locations", "Locations", "name"],
-  ["systems", "Systems", "name"],
-  ["factions", "Factions", "name"],
-  ["artifacts", "Artifacts", "name"],
-  ["glossaryTerms", "Glossary terms", "term"]
-];
-function isBookNumber(value) {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0;
-}
-function seriesDisplayName(data) {
-  const title = data?.["series-title"];
-  return typeof title === "string" && title.trim() !== "" ? title.trim() : seriesId(data);
-}
-function seriesLinkPath(fromRoot, toRoot) {
-  return path6.relative(fromRoot, toRoot).split(path6.sep).join("/");
-}
-function seriesLinks(root, data, field) {
-  const raw = data[field];
-  const values = Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : [];
-  return values.filter((value) => typeof value === "string" && value.trim() !== "").map((value) => path6.resolve(root, value));
-}
-function seriesId(data) {
-  const value = data?.series;
-  if (value === undefined || value === null) {
-    return;
-  }
-  return String(value).trim() === "" ? undefined : value;
-}
-function areSiblingBooks(left, right) {
-  return path6.dirname(canonicalPath(left)) === path6.dirname(canonicalPath(right));
-}
-function linksInclude(links, root) {
-  const key = canonicalPath(root);
-  return links.some((link) => link === root || canonicalPath(link) === key);
-}
-function readBookFrontmatter(root) {
-  const storyPath = path6.join(root, "story.md");
-  if (!fs2.existsSync(storyPath)) {
-    return null;
-  }
-  return parseFrontmatter(readTextFile(storyPath), storyPath).data;
-}
-function validateSeriesLinks(root, data, errors) {
-  for (const [field, inverse] of SERIES_LINK_INVERSES) {
-    const raw = Array.isArray(data[field]) ? data[field] : [data[field]];
-    const backslashed = raw.filter((value) => typeof value === "string" && value.includes("\\"));
-    for (const value of backslashed) {
-      errors.push(err("series-link-backslash", `story.md ${field} ${value} uses a backslash; write ${value.replace(/\\/g, "/")} so the link works on every system`, "story.md"));
-    }
-    for (const target of seriesLinks(root, { [field]: raw.filter((value) => !backslashed.includes(value)) }, field)) {
-      const label = `story.md ${field} ${seriesLinkPath(root, target)}`;
-      if (target === root || canonicalPath(target) === canonicalPath(root)) {
-        errors.push(err("series-link-self", `${label} points at this book`, "story.md"));
-        continue;
-      }
-      let other;
-      try {
-        other = readBookFrontmatter(target);
-      } catch (error) {
-        errors.push(err("series-link-unreadable", `${label}: ${error.message}`, "story.md"));
-        continue;
-      }
-      if (!other) {
-        errors.push(err("series-link-not-project", `${label} is not a story project: missing story.md`, "story.md"));
-        continue;
-      }
-      if (!areSiblingBooks(root, target)) {
-        errors.push(err("series-link-not-sibling", `${label} is not in the same parent folder as this book; story series only follows links between sibling book folders`, "story.md"));
-      }
-      if (!linksInclude(seriesLinks(target, other, inverse), root)) {
-        errors.push(err("series-missing-backlink", `${label} is missing backlink: add ${seriesLinkPath(target, root)} to its ${inverse}`, "story.md"));
-      }
-      const ownSeries = seriesId(data);
-      const otherSeries = seriesId(other);
-      if (ownSeries !== undefined && otherSeries !== undefined && ownSeries !== otherSeries) {
-        errors.push(err("series-link-other-series", `${label} belongs to series ${otherSeries}, not ${ownSeries}`, "story.md"));
-      }
-    }
-  }
-}
-function withSeriesBacklink(targetRoot, field, linkedRoot, newSeriesId) {
-  const storyPath = path6.join(targetRoot, "story.md");
-  const markdown = readTextFile(storyPath);
-  const { data } = parseFrontmatter(markdown, storyPath);
-  const current = data[field];
-  const existing = Array.isArray(current) ? current : typeof current === "string" && current.trim() !== "" ? [current] : [];
-  const linked = linksInclude(seriesLinks(targetRoot, { [field]: existing }, field), linkedRoot);
-  const addSeries = seriesId(data) === undefined && newSeriesId !== undefined;
-  if (linked && !addSeries) {
-    return null;
-  }
-  return replaceFrontmatter(markdown, {
-    ...data,
-    ...addSeries ? { series: newSeriesId } : {},
-    ...linked ? {} : { [field]: existing.concat(seriesLinkPath(targetRoot, linkedRoot)) }
-  });
-}
-function buildSeries(startRoot, scan) {
-  const errors = [];
-  const warnings = [];
-  const books = discoverBooks(startRoot, scan, errors).books;
-  if (books.length === 0) {
-    return {
-      root: startRoot,
-      series: null,
-      books: [],
-      ordered: false,
-      shared: [],
-      ok: false,
-      errors,
-      warnings
-    };
-  }
-  const seriesIds = [...new Set(books.map((book) => book.series).filter((series) => series !== undefined))].sort();
-  if (seriesIds.length > 1) {
-    errors.push(err("series-conflict", `Linked books belong to different series: ${seriesIds.join(", ")}`));
-  }
-  const unnamed = books.filter((book) => book.series === undefined);
-  if (seriesIds.length === 1 && unnamed.length > 0) {
-    warnings.push(warn("series-id-missing", `Linked books ${unnamed.map((book) => book.title).join(", ")} set no series id; add series: ${seriesIds[0]}`));
-  }
-  for (const book of books.filter((candidate) => candidate.invalidBookNumber)) {
-    errors.push(err("invalid-book-number", `${book.label}: story.md book-number ${JSON.stringify(book.project.story.data["book-number"])} is not a number 0 or more; the book is listed as unnumbered`, path6.join(book.label, "story.md")));
-  }
-  const seriesTitles = [...new Set(books.map((book) => book.seriesTitle).filter((title) => title !== undefined))].sort();
-  if (seriesTitles.length > 1) {
-    warnings.push(warn("series-title-mismatch", `Linked books set different series-title values: ${seriesTitles.map((title) => `"${title}"`).join(", ")}; keep the series name identical everywhere`));
-  }
-  checkDuplicateBookNumbers(books, errors);
-  const chronology = chronologicalOrder(books, errors);
-  if (chronology) {
-    checkSharedCanon(chronology, errors, warnings);
-  }
-  return {
-    root: startRoot,
-    series: books[0]?.series ?? seriesIds[0] ?? null,
-    seriesTitle: books[0]?.seriesTitle ?? seriesTitles[0] ?? null,
-    books: (chronology ? chronology.order : books).map((book) => ({
-      title: book.title,
-      label: book.label,
-      bookNumber: book.bookNumber,
-      status: book.status
-    })),
-    ordered: Boolean(chronology),
-    shared: sharedCanon(books),
-    ok: errors.length === 0,
-    errors,
-    warnings
-  };
-}
-function formatSeriesReport(report) {
-  const lines = [
-    `# Series: ${report.seriesTitle ?? report.series ?? "Unnamed series"}`,
-    "",
-    report.ordered ? "Chronological order:" : "Books (unordered):"
-  ];
-  report.books.forEach((book, index) => {
-    const details = [book.bookNumber === null ? "unnumbered" : `book ${book.bookNumber}`, book.status || "no status"];
-    lines.push(`${index + 1}. ${book.title} (${details.join(", ")}) - ${book.label}`);
-  });
-  lines.push("", "Shared canon:");
-  if (report.shared.length === 0) {
-    lines.push("- None");
-  }
-  for (const entry of report.shared) {
-    lines.push(`- ${entry.label}: ${entry.ids.join(", ")}`);
-  }
-  return `${lines.join(`
-`)}
-
-`;
-}
-function canonicalPath(target) {
-  const resolved = path6.resolve(target);
-  const tail = [];
-  let current = resolved;
-  while (current !== path6.dirname(current)) {
-    try {
-      const real = fs2.realpathSync(current);
-      return tail.length === 0 ? real : path6.join(real, ...tail.reverse());
-    } catch {
-      tail.push(path6.basename(current));
-      current = path6.dirname(current);
-    }
-  }
-  try {
-    return path6.join(fs2.realpathSync(current), ...tail.reverse());
-  } catch {
-    return path6.join(current, ...tail.reverse());
-  }
-}
-function discoverBooks(startRoot, scan, errors) {
-  const startResolved = path6.resolve(startRoot);
-  const scopeRoot = path6.dirname(startResolved);
-  const scopeReal = canonicalPath(scopeRoot);
-  const visited = new Map;
-  const queue = [startResolved];
-  while (queue.length > 0) {
-    const root = queue.shift();
-    const resolved = path6.resolve(root);
-    const effective = canonicalPath(resolved);
-    if (visited.has(effective)) {
-      continue;
-    }
-    if (visited.size >= MAX_SERIES_BOOKS) {
-      errors.push(err("series-too-many-books", "Series links exceed the " + MAX_SERIES_BOOKS + " book limit; refusing to traverse further"));
-      break;
-    }
-    const label = seriesLinkPath(startRoot, root) || ".";
-    if (path6.dirname(resolved) !== scopeRoot || path6.dirname(effective) !== scopeReal) {
-      const outside = !isPathInside2(scopeRoot, resolved) || !isPathInside2(scopeReal, effective);
-      errors.push(outside ? err("series-link-outside", label + " points outside the series directory " + scopeRoot + "; refusing to follow") : err("series-link-not-sibling", label + " is not a sibling folder in the series directory " + scopeRoot + "; keep series books side by side, refusing to follow"));
-      visited.set(effective, null);
-      continue;
-    }
-    if (!fs2.existsSync(path6.join(root, "story.md"))) {
-      errors.push(err("series-link-not-project", `${label} is not a story project: missing story.md`));
-      visited.set(effective, null);
-      continue;
-    }
-    let project;
-    try {
-      project = scan(root);
-    } catch (error) {
-      errors.push(err("series-link-unreadable", `${label}: ${error.message}`));
-      visited.set(effective, null);
-      continue;
-    }
-    for (const scanError of project.fileErrors ?? []) {
-      errors.push({ ...scanError, message: `${label}: ${scanError.message}`, file: path6.join(label, scanError.file) });
-    }
-    if (project.story?.unreadable) {
-      visited.set(effective, null);
-      continue;
-    }
-    const data = project.story.data;
-    const book = {
-      root,
-      key: effective,
-      label,
-      project,
-      title: String(data.title ?? path6.basename(root)),
-      series: seriesId(data),
-      status: data.status,
-      bookNumber: isBookNumber(data["book-number"]) ? data["book-number"] : null,
-      invalidBookNumber: data["book-number"] !== undefined && !isBookNumber(data["book-number"]),
-      seriesTitle: typeof data["series-title"] === "string" && data["series-title"].trim() !== "" ? data["series-title"].trim() : undefined,
-      follows: seriesLinks(root, data, "follows"),
-      precedes: seriesLinks(root, data, "precedes")
-    };
-    visited.set(effective, book);
-    for (const next of book.follows.concat(book.precedes)) {
-      queue.push(next);
-    }
-  }
-  const books = [...visited.values()].filter(Boolean);
-  return { books, complete: books.length === visited.size };
-}
-function discoverSeriesBooks(startRoot, scan) {
-  const errors = [];
-  const { books, complete } = discoverBooks(startRoot, scan, errors);
-  return { books, complete, errors };
-}
-function isPathInside2(root, target) {
-  const relativePath = path6.relative(root, target);
-  return !path6.isAbsolute(relativePath) && (relativePath === "" || !relativePath.split(path6.sep).includes(".."));
-}
-function chronologicalOrder(books, errors) {
-  const byKey = new Map(books.map((book) => [book.key, book]));
-  const later = new Map(books.map((book) => [book.key, new Set]));
-  for (const book of books) {
-    for (const earlier of book.follows.map(canonicalPath)) {
-      if (byKey.has(earlier) && earlier !== book.key) {
-        later.get(earlier).add(book.key);
-      }
-    }
-    for (const next of book.precedes.map(canonicalPath)) {
-      if (byKey.has(next) && next !== book.key) {
-        later.get(book.key).add(next);
-      }
-    }
-  }
-  const indegree = new Map(books.map((book) => [book.key, 0]));
-  for (const targets of later.values()) {
-    for (const target of targets) {
-      indegree.set(target, indegree.get(target) + 1);
-    }
-  }
-  const order = [];
-  const ready = books.filter((book) => indegree.get(book.key) === 0);
-  const compareTitles = compareText(seriesPack(books));
-  while (ready.length > 0) {
-    ready.sort((left, right) => compareBooks(left, right, compareTitles));
-    const book = ready.shift();
-    order.push(book);
-    for (const target of later.get(book.key)) {
-      indegree.set(target, indegree.get(target) - 1);
-      if (indegree.get(target) === 0) {
-        ready.push(byKey.get(target));
-      }
-    }
-  }
-  if (order.length < books.length) {
-    const cycle = books.filter((book) => !order.includes(book)).map((book) => book.title);
-    errors.push(err("series-cycle", `Series chronology has a cycle between ${cycle.join(", ")}; check follows and precedes`));
-    return null;
-  }
-  return { order, later };
-}
-function checkDuplicateBookNumbers(books, errors) {
-  const byNumber = new Map;
-  for (const book of books) {
-    if (book.bookNumber !== null) {
-      byNumber.set(book.bookNumber, (byNumber.get(book.bookNumber) ?? []).concat(book.label));
-    }
-  }
-  for (const [number, labels] of [...byNumber].sort((left, right) => left[0] - right[0])) {
-    if (labels.length > 1) {
-      errors.push(err("duplicate-book-number", `Books ${labels.join(", ")} share book-number ${number}; book-number is publication order and must be unique`));
-    }
-  }
-}
-function compareBooks(left, right, compareTitles) {
-  return (left.bookNumber ?? Infinity) - (right.bookNumber ?? Infinity) || compareTitles(left.title, right.title) || (left.key < right.key ? -1 : left.key > right.key ? 1 : 0);
-}
-function seriesPack(books) {
-  const languages = new Set(books.map((book) => (book.project.pack ?? languagePack()).locale.split("-")[0]));
-  return languages.size === 1 ? languagePack([...languages][0]) : languagePack();
-}
-function checkSharedCanon({ order, later }, errors, warnings) {
-  const reachable = new Map(order.map((book) => [book.key, collectLater(book.key, later, new Set)]));
-  for (const book of order) {
-    const earlierBooks = order.filter((candidate) => reachable.get(candidate.key).has(book.key));
-    checkCanonNames(book, earlierBooks, warnings);
-    checkCanonDeaths(book, earlierBooks, errors);
-    checkDestroyedArtifacts(book, earlierBooks, errors, warnings);
-    checkKnownFacts(book, earlierBooks, errors);
-  }
-}
-function collectLater(root, later, seen) {
-  for (const next of later.get(root)) {
-    if (!seen.has(next)) {
-      seen.add(next);
-      collectLater(next, later, seen);
-    }
-  }
-  return seen;
-}
-function checkCanonNames(book, earlierBooks, warnings) {
-  for (const [key, , field] of SHARED_CANON) {
-    const canon = new Map;
-    for (const earlier of earlierBooks) {
-      for (const entity of earlier.project[key]) {
-        canon.set(entity.id, { book: earlier, entity });
-      }
-    }
-    for (const entity of book.project[key]) {
-      const match = canon.get(entity.id);
-      if (match && canonText(entity[field]) !== canonText(match.entity[field])) {
-        warnings.push(warn("canon-name-mismatch", `${bookFile(book, entity.file)} ${field} "${entity[field]}" differs from "${match.entity[field]}" in ${bookFile(match.book, match.entity.file)}`, bookFile(book, entity.file)));
-      }
-      const said = pronunciationText(entity.pronunciation);
-      const saidBefore = pronunciationText(match?.entity.pronunciation);
-      if (said !== "" && saidBefore !== "" && said !== saidBefore) {
-        warnings.push(warn("canon-pronunciation-mismatch", `${bookFile(book, entity.file)} pronunciation "${said}" differs from "${saidBefore}" in ${bookFile(match.book, match.entity.file)}`, bookFile(book, entity.file)));
-      }
-    }
-  }
-}
-function pronunciationText(value) {
-  return typeof value === "string" ? value.trim().normalize("NFC") : "";
-}
-function canonText(value) {
-  return typeof value === "string" ? value.normalize("NFC") : value;
-}
-function checkCanonDeaths(book, earlierBooks, errors) {
-  const deaths = deathsBefore(earlierBooks);
-  const { chronology, lifelines } = bookLifelines(book);
-  const deadAt = (id, chapterId) => deaths.has(id) && !(lifelines.has(id) && revivedBy(lifelines.get(id), chapterId, chronology));
-  for (const character of book.project.characters) {
-    const death = deaths.get(character.id);
-    if (!death) {
-      continue;
-    }
-    if (character.status !== "deceased") {
-      errors.push(err("canon-death-status", `${bookFile(book, character.file)} has status ${character.status || "unset"}, but ${character.id} is deceased in earlier book ${death.title}; set status: deceased`, bookFile(book, character.file)));
-    }
-  }
-  for (const record of book.project.chapters.concat(book.project.scenes)) {
-    const chapterId = record.chapter ?? record.id;
-    for (const [id, death] of deaths) {
-      if ((record.characters.includes(id) || record.pov === id && !record.mentions.includes(id)) && deadAt(id, chapterId)) {
-        errors.push(err("canon-posthumous-appearance", `${bookFile(book, record.file)} lists ${id}, who died in earlier book ${death.title}; move appearances to mentions`, bookFile(book, record.file)));
-      }
-    }
-  }
-  for (const entry of knowledgeEntries(book)) {
-    const death = deaths.get(entry.character);
-    if (death && entry.learnedIn && deadAt(entry.character, entry.learnedIn)) {
-      errors.push(err("canon-posthumous-learning", `${bookFile(book, entry.file)} knowledge-state[${entry.index}] has ${entry.character} learn something in ${entry.learnedIn}, but ${entry.character} died in earlier book ${death.title}; drop learned-in or the entry`, bookFile(book, entry.file)));
-    }
-  }
-}
-function deathsBefore(earlierBooks) {
-  const deaths = new Map;
-  for (const earlier of earlierBooks) {
-    const { lifelines } = bookLifelines(earlier);
-    for (const character of earlier.project.characters) {
-      const lifeline = lifelines.get(character.id);
-      if (lifeline.deadAtEnd && (lifeline.events.length > 0 || !deaths.has(character.id))) {
-        deaths.set(character.id, earlier);
-      } else if (!lifeline.deadAtEnd && lifeline.events.some((event) => event.type === "revival")) {
-        deaths.delete(character.id);
-      }
-    }
-  }
-  return deaths;
-}
-var LIFELINES = new WeakMap;
-function bookLifelines(book) {
-  if (!LIFELINES.has(book.project)) {
-    const chronology = chapterChronology(book.project);
-    const lifelines = new Map(book.project.characters.map((character) => [character.id, characterLifeline(character, chronology)]));
-    LIFELINES.set(book.project, { chronology, lifelines });
-  }
-  return LIFELINES.get(book.project);
-}
-function checkDestroyedArtifacts(book, earlierBooks, errors, warnings) {
-  const destroyed = firstMatching(earlierBooks, "artifacts", (artifact) => artifact.status === "destroyed");
-  for (const artifact of book.project.artifacts) {
-    const earlier = destroyed.get(artifact.id);
-    if (earlier && artifact.status !== "destroyed") {
-      warnings.push(warn("canon-destroyed-status", `${bookFile(book, artifact.file)} has status ${artifact.status || "unset"}, but ${artifact.id} was destroyed in earlier book ${earlier.title}`, bookFile(book, artifact.file)));
-    }
-  }
-  for (const scene of book.project.scenes) {
-    for (const [id, earlier] of destroyed) {
-      if (scene.stateChanges.some((change) => change && typeof change === "object" && String(change.target ?? "") === id)) {
-        errors.push(err("canon-destroyed-artifact-used", `${bookFile(book, scene.file)} uses ${id}, which was destroyed in earlier book ${earlier.title}; account for its return or remove the state change`, bookFile(book, scene.file)));
-      }
-    }
-  }
-}
-function checkKnownFacts(book, earlierBooks, errors) {
-  const known = new Map;
-  for (const earlier of earlierBooks) {
-    for (const entry of knowledgeFacts(earlier)) {
-      if (!known.has(entry.key)) {
-        known.set(entry.key, { book: earlier, entry });
-      }
-    }
-  }
-  for (const entry of knowledgeFacts(book)) {
-    const prior = known.get(entry.key);
-    if (prior && entry.learnedIn) {
-      errors.push(err("canon-fact-relearned", `${bookFile(book, entry.file)} knowledge-state[${entry.index}] has ${entry.character} learn ${entry.fact} in ${entry.learnedIn}, but they already know it in earlier book ${prior.book.title} (${bookFile(prior.book, prior.entry.file)} knowledge-state[${prior.entry.index}])`, bookFile(book, entry.file)));
-    }
-  }
-}
-function knowledgeEntries(book) {
-  const continuity = book.project.continuity;
-  const entries = continuity && Array.isArray(continuity.data["knowledge-state"]) ? continuity.data["knowledge-state"] : [];
-  const file = path6.join(book.root, "continuity", "state.md");
-  return entries.flatMap((entry, index) => entry && typeof entry === "object" && typeof entry.character === "string" ? [{ index, file, character: entry.character, learnedIn: entry["learned-in"] ? String(entry["learned-in"]) : "" }] : []);
-}
-function knowledgeFacts(book) {
-  const continuity = book.project.continuity;
-  const entries = continuity && Array.isArray(continuity.data["knowledge-state"]) ? continuity.data["knowledge-state"] : [];
-  const file = path6.join(book.root, "continuity", "state.md");
-  const facts = [];
-  entries.forEach((entry, index) => {
-    const fact = entry && typeof entry === "object" ? String(entry.fact ?? "") : "";
-    if (fact !== "" && typeof entry.character === "string") {
-      facts.push({
-        index,
-        file,
-        character: entry.character,
-        fact,
-        key: `${entry.character}\x00${fact}`,
-        learnedIn: entry["learned-in"] ? String(entry["learned-in"]) : ""
-      });
-    }
-  });
-  return facts;
-}
-function firstMatching(books, key, predicate) {
-  const matches = new Map;
-  for (const book of books) {
-    for (const entity of book.project[key]) {
-      if (!matches.has(entity.id) && predicate(entity)) {
-        matches.set(entity.id, book);
-      }
-    }
-  }
-  return matches;
-}
-function sharedCanon(books) {
-  const shared = [];
-  for (const [key, label] of SHARED_CANON) {
-    const counts = new Map;
-    for (const book of books) {
-      for (const entity of book.project[key]) {
-        counts.set(entity.id, (counts.get(entity.id) ?? 0) + 1);
-      }
-    }
-    const ids = [...counts].filter(([, count]) => count > 1).map(([id]) => id).sort();
-    if (ids.length > 0) {
-      shared.push({ label, ids });
-    }
-  }
-  const factBooks = new Map;
-  for (const book of books) {
-    for (const entry of knowledgeFacts(book)) {
-      factBooks.set(entry.fact, (factBooks.get(entry.fact) ?? new Set).add(book.root));
-    }
-  }
-  const facts = [...factBooks].filter(([, roots]) => roots.size > 1).map(([fact]) => fact).sort();
-  if (facts.length > 0) {
-    shared.push({ label: "Facts", ids: facts });
-  }
-  return shared;
-}
-function bookFile(book, file) {
-  return path6.join(book.label, path6.relative(book.root, file));
-}
-
-// src/publishing.js
-var MAX_KEYWORDS = 7;
-var BISAC_PATTERN = /^[A-Z]{3}\d{6}$/;
-var SCALAR_FIELDS = ["author", "language", "isbn", "publisher", "publication-date", "description", "copyright", "cover-alt", "ai-disclosure", "chapter-label", "contents-label"];
-function isPlaceholder(value) {
-  return typeof value === "string" && /^\[TODO\b/i.test(value.trim());
-}
-var RTL_LANGUAGES = new Set(["ar", "arc", "ckb", "dv", "fa", "he", "iw", "ji", "ks", "ku", "ps", "sd", "syr", "ug", "ur", "yi"]);
-var RTL_SCRIPTS = new Set(["adlm", "arab", "hebr", "mand", "nkoo", "rohg", "samr", "syrc", "thaa"]);
-function textDirection(language) {
-  const [lookup, macrolanguage] = lookupTag(String(language ?? "").trim() || DEFAULT_LANGUAGE);
-  const [primary, ...subtags] = lookup.split("-");
-  const script = subtags.find((subtag) => /^[a-z]{4}$/.test(subtag));
-  if (script !== undefined) {
-    return RTL_SCRIPTS.has(script) ? "rtl" : "ltr";
-  }
-  return RTL_LANGUAGES.has(primary) || RTL_LANGUAGES.has(macrolanguage) ? "rtl" : "ltr";
-}
-function publishingMeta(data) {
-  const text = (field) => typeof data[field] === "string" && !isPlaceholder(data[field]) ? data[field].trim() : "";
-  const list = (field) => Array.isArray(data[field]) ? data[field].filter((item) => typeof item === "string" && item.trim() !== "" && !isPlaceholder(item)).map((item) => item.trim()) : [];
-  const authors = list("authors");
-  const author = text("author");
-  const pack = languagePack(projectLanguage(data));
-  return {
-    authors: authors.length > 0 ? authors : author === "" ? [] : [author],
-    language: text("language") || "en",
-    writingMode: text("writing-mode") || "horizontal",
-    isbn: normalizeIsbn(typeof data.isbn === "number" ? String(data.isbn) : text("isbn")),
-    publisher: text("publisher"),
-    publicationDate: text("publication-date"),
-    description: text("description"),
-    keywords: list("keywords"),
-    subjects: list("subjects"),
-    copyright: text("copyright"),
-    coverAlt: text("cover-alt"),
-    aiDisclosure: text("ai-disclosure"),
-    labels: buildLabels(data, pack),
-    narrationRate: pack.narrationRate,
-    countUnit: pack.countUnit
-  };
-}
-function buildLabels(data, pack = languagePack(projectLanguage(data))) {
-  const labels = { ...languagePack("en").labels, ...pack.labels };
-  const set = (key, value) => {
-    if (typeof value !== "string" || isPlaceholder(value) || isBlankLabel(key, value)) {
-      return;
-    }
-    labels[key] = key !== "chapter" ? value : value.includes("{n}") ? value.trim() : `${value.trim()} {n}`;
-  };
-  set("chapter", data["chapter-label"]);
-  set("contents", typeof data["contents-label"] === "string" ? data["contents-label"].trim() : undefined);
-  for (const [key, value] of labelEntries(data.labels)) {
-    if (LABEL_KEYS.includes(key)) {
-      set(key, value);
-    }
-  }
-  return labels;
-}
-function labelEntries(value) {
-  return Array.isArray(value) ? value.filter(isEntry).flatMap((entry) => Object.entries(entry)) : [];
-}
-function isBlankLabel(key, value) {
-  return key !== "by" && value.trim() === "";
-}
-function isEntry(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-function validatePublishing(data, errors, warnings) {
-  for (const field of SCALAR_FIELDS) {
-    if (data[field] !== undefined && typeof data[field] !== "string" && !(field === "isbn" && typeof data[field] === "number")) {
-      errors.push(err("field-not-text", `story.md frontmatter field ${field} must be text`, "story.md"));
-    }
-  }
-  for (const field of ["keywords", "subjects", "authors"]) {
-    if (data[field] !== undefined && (!Array.isArray(data[field]) || data[field].some((item) => typeof item !== "string"))) {
-      errors.push(err("field-not-list", `story.md frontmatter field ${field} must be a list of text`, "story.md"));
-    }
-  }
-  if (data.labels !== undefined) {
-    if (!Array.isArray(data.labels) || !data.labels.every(isEntry)) {
-      errors.push(err("field-not-list", "story.md frontmatter field labels must be a list of label: text entries, such as - chapter: Teil {n}", "story.md"));
-    } else {
-      for (const [key, value] of labelEntries(data.labels)) {
-        if (!LABEL_KEYS.includes(key)) {
-          warnings.push(warn("unknown-label", `story.md labels entry ${key} is not a build label; builds ignore it (see docs/manuscripts.md#build-labels)`, "story.md"));
-        } else if (typeof value !== "string") {
-          errors.push(err("field-not-text", `story.md labels entry ${key} must be text`, "story.md"));
-        } else if (isPlaceholder(value)) {
-          warnings.push(warn("todo-placeholder", `story.md labels entry ${key} is still a [TODO] placeholder; builds use the language's own text`, "story.md"));
-        } else if (isBlankLabel(key, value)) {
-          warnings.push(warn("blank-label", `story.md labels entry ${key} is blank; builds use the language's own text`, "story.md"));
-        }
-      }
-    }
-  }
-  if (typeof data.language === "string" && !isPlaceholder(data.language) && !isLanguageTag(data.language)) {
-    errors.push(err("invalid-language", `story.md language ${data.language} must be a BCP 47 tag such as en, en-GB, or fr`, "story.md"));
-  }
-  const isbn = typeof data.isbn === "number" ? String(data.isbn) : data.isbn;
-  if (typeof isbn === "string" && isbn.trim() !== "" && !isPlaceholder(isbn) && normalizeIsbn(isbn) === "") {
-    const hint = typeof data.isbn === "number" ? "; quote it so leading zeros survive" : "";
-    errors.push(err("invalid-isbn", `story.md isbn ${isbn} is not a valid ISBN-13 or ISBN-10 (check the digits and checksum${hint})`, "story.md"));
-  }
-  if (typeof data["publication-date"] === "string" && !isPlaceholder(data["publication-date"])) {
-    const dateError = storyDateError(data["publication-date"]);
-    if (dateError !== "") {
-      errors.push(err("invalid-date", `story.md publication-date ${dateError}`, "story.md"));
-    }
-  }
-  if (Array.isArray(data.subjects)) {
-    for (const subject of data.subjects) {
-      if (typeof subject === "string" && !isPlaceholder(subject) && !BISAC_PATTERN.test(subject.trim())) {
-        errors.push(err("invalid-subject", `story.md subject ${subject} must be a BISAC code such as FIC022000`, "story.md"));
-      }
-    }
-  }
-  if (Array.isArray(data.keywords) && data.keywords.length > MAX_KEYWORDS) {
-    warnings.push(warn("too-many-keywords", `story.md lists ${data.keywords.length} keywords; most retailers accept ${MAX_KEYWORDS}`, "story.md"));
-  }
-  for (const field of [...SCALAR_FIELDS, "authors", "keywords", "subjects"]) {
-    const values = Array.isArray(data[field]) ? data[field] : [data[field]];
-    if (values.some(isPlaceholder)) {
-      warnings.push(warn("todo-placeholder", `story.md ${field} is still a [TODO] placeholder; builds leave it out`, "story.md"));
-    }
-  }
-  if (data.author !== undefined && data.authors !== undefined) {
-    warnings.push(warn("author-and-authors", "story.md sets both author and authors; builds use authors", "story.md"));
-  }
-}
-function normalizeIsbn(value) {
-  const compact = String(value ?? "").replace(/[\s-]/g, "").toUpperCase();
-  if (/^97[89]\d{10}$/.test(compact)) {
-    const sum = [...compact.slice(0, 12)].reduce((total, digit, index) => total + Number(digit) * (index % 2 === 0 ? 1 : 3), 0);
-    return (10 - sum % 10) % 10 === Number(compact[12]) ? compact : "";
-  }
-  if (/^\d{9}[\dX]$/.test(compact)) {
-    const sum = [...compact].reduce((total, char, index) => total + (char === "X" ? 10 : Number(char)) * (10 - index), 0);
-    return sum % 11 === 0 ? compact : "";
-  }
-  return "";
-}
-function copyrightPage(meta) {
-  const lines = [meta.copyright, "", fillLabel(meta.labels, "all-rights-reserved")];
-  if (meta.publisher !== "") {
-    lines.push("", fillLabel(meta.labels, "published-by", { publisher: meta.publisher }));
-  }
-  if (meta.isbn !== "") {
-    lines.push("", `ISBN ${meta.isbn}`);
-  }
-  if (meta.aiDisclosure !== "") {
-    lines.push("", meta.aiDisclosure);
-  }
-  return lines.join(`
-`);
-}
-var DESCRIPTION_LIMIT = 4000;
-function metadataSheet(input) {
-  const { title, data, meta, words, characters, pages } = input;
-  const seriesName = seriesDisplayName(data);
-  const series = typeof seriesName === "string" ? `${seriesName}${isBookNumber(data["book-number"]) ? `, book ${data["book-number"]}` : ""}` : "";
-  const rows = [
-    ["Title", title],
-    ["Series", series],
-    ["Author(s)", meta.authors.join("; ")],
-    ["ISBN", meta.isbn],
-    ["Publisher", meta.publisher],
-    ["Publication date", meta.publicationDate],
-    ["Language", meta.language],
-    ["Genre", [data.genre, data["sub-genre"]].filter((value) => typeof value === "string" && value !== "").join(" / ")],
-    ["Form", typeof data.form === "string" ? data.form : ""],
-    characters === undefined ? ["Word count", String(words)] : ["Character count", String(characters)],
-    ["Estimated print pages", Object.entries(pages).map(([trim, count]) => `${count} at ${trim}`).join(", ")],
-    ["Description", meta.description === "" ? "" : `${meta.description.length} characters (limit ${DESCRIPTION_LIMIT})`],
-    ["Keywords", meta.keywords.length === 0 ? "" : `${meta.keywords.length} of ${MAX_KEYWORDS}: ${meta.keywords.join("; ")}`],
-    ["BISAC subjects", meta.subjects.join("; ")],
-    ["Copyright", meta.copyright],
-    ["Cover", typeof data.cover === "string" ? data.cover : ""],
-    ["Cover alt text", meta.coverAlt],
-    ["AI disclosure", meta.aiDisclosure]
-  ];
-  const checks = [
-    ["Author named (`author` or `authors`)", meta.authors.length > 0],
-    ["ISBN for this edition (`isbn`), or a retailer-assigned identifier", meta.isbn !== ""],
-    ["Publisher or imprint (`publisher`)", meta.publisher !== ""],
-    ["Publication date (`publication-date`)", meta.publicationDate !== ""],
-    [`Description under ${DESCRIPTION_LIMIT} characters (\`description\`)`, meta.description !== "" && meta.description.length <= DESCRIPTION_LIMIT],
-    [`Keywords, up to ${MAX_KEYWORDS} (\`keywords\`)`, meta.keywords.length > 0 && meta.keywords.length <= MAX_KEYWORDS],
-    ["BISAC subjects (`subjects`)", meta.subjects.length > 0],
-    ["Copyright line (`copyright`) or copyright matter page", meta.copyright !== "" || input.hasCopyrightPage],
-    ["Cover image (`cover`)", Boolean(input.coverReady)],
-    ["Cover alt text (`cover-alt`)", meta.coverAlt !== ""],
-    ["AI-use statement decided (`ai-disclosure`)", meta.aiDisclosure !== ""],
-    [`Permissions cleared for quoted matter (\`permission\`${(input.pendingPermissions ?? []).length > 0 ? `; pending: ${input.pendingPermissions.join(", ")}` : ""})`, (input.pendingPermissions ?? []).length === 0],
-    [`No \`[TODO\` markers in chapter prose${(input.todoChapters ?? []).length > 0 ? ` (found in: ${input.todoChapters.join(", ")})` : ""}`, (input.todoChapters ?? []).length === 0],
-    ["Story status is complete", data.status === "complete"]
-  ];
-  return [
-    `# ${title}: Retailer Metadata`,
-    "",
-    "Generated from story.md. Retailer limits change; check each retailer's current requirements before upload.",
-    "",
-    "| Field | Value |",
-    "| --- | --- |",
-    ...rows.map(([field, value]) => `| ${field} | ${value === "" ? "(missing)" : tableCell(value)} |`),
-    "",
-    "## Description",
-    "",
-    meta.description === "" ? "(missing)" : meta.description,
-    "",
-    "## Readiness",
-    "",
-    ...checks.map(([label, ok]) => `- [${ok ? "x" : " "}] ${label}`),
-    ""
-  ].join(`
-`);
-}
-function tableCell(value) {
-  return String(value).replace(/\|/g, "\\|").replace(/\n/g, " ");
-}
-
-// src/typesetting.js
-var WRITING_MODES = new Set(["horizontal", "vertical"]);
-var CASED_SCRIPTS = new Set(["Latn", "Cyrl", "Grek", "Armn", "Copt", "Glag", "Adlm", "Osge", "Dsrt"]);
-var VERTICAL_SCRIPTS = new Set(["Jpan", "Hani", "Hans", "Hant", "Hira", "Kana", "Bopo", "Kore", "Hang"]);
-var EAST_ASIAN_SCRIPTS = new Set(["Jpan", "Hani", "Hans", "Hant", "Hira", "Kana", "Bopo", "Kore", "Hang"]);
-var COMPLEX_SCRIPTS = new Set(["Arab", "Hebr", "Syrc", "Thaa", "Nkoo", "Deva", "Beng", "Guru", "Gujr", "Orya", "Taml", "Telu", "Knda", "Mlym", "Sinh", "Thai", "Laoo", "Khmr", "Mymr", "Tibt"]);
-var LIKELY_SCRIPTS = {
-  Cyrl: ["ru", "uk", "be", "bg", "mk", "sr", "kk", "ky", "mn", "tg", "tt", "ba", "cv", "os"],
-  Grek: ["el"],
-  Armn: ["hy"],
-  Geor: ["ka"],
-  Arab: ["fa", "ur", "ps", "sd", "ug", "ckb", "ks"],
-  Hebr: ["yi"],
-  Deva: ["mr", "ne", "sa", "kok", "mai", "bho"],
-  Beng: ["bn", "as"],
-  Guru: ["pa"],
-  Gujr: ["gu"],
-  Orya: ["or"],
-  Taml: ["ta"],
-  Telu: ["te"],
-  Knda: ["kn"],
-  Mlym: ["ml"],
-  Sinh: ["si"],
-  Laoo: ["lo"],
-  Khmr: ["km"],
-  Mymr: ["my"],
-  Tibt: ["bo", "dz"],
-  Ethi: ["am", "ti"],
-  Thaa: ["dv"],
-  Syrc: ["syr"],
-  Cher: ["chr"]
-};
-var SCRIPT_OF = new Map(Object.entries(LIKELY_SCRIPTS).flatMap(([script, codes]) => codes.map((code) => [code, script])));
-var LATIN_SERIF = `Georgia, "Iowan Old Style", "Palatino Linotype", serif`;
-var FONT_STACKS = {
-  Cyrl: `Georgia, "Palatino Linotype", "Times New Roman", "Noto Serif", "DejaVu Serif", serif`,
-  Jpan: `"Hiragino Mincho ProN", "Yu Mincho", YuMincho, "MS Mincho", "Noto Serif JP", "Noto Serif CJK JP", serif`,
-  Hans: `"Songti SC", STSong, SimSun, "Noto Serif SC", "Noto Serif CJK SC", serif`,
-  Hant: `"Songti TC", PMingLiU, MingLiU, "Noto Serif TC", "Noto Serif CJK TC", serif`,
-  Kore: `AppleMyungjo, Batang, "Nanum Myeongjo", "Noto Serif KR", "Noto Serif CJK KR", serif`,
-  Arab: `"Noto Naskh Arabic", "Geeza Pro", "Times New Roman", "Traditional Arabic", serif`,
-  Hebr: `"Noto Serif Hebrew", "Times New Roman", David, "Arial Hebrew", serif`,
-  Deva: `"Noto Serif Devanagari", "Kohinoor Devanagari", "Devanagari Sangam MN", Mangal, "Nirmala UI", serif`,
-  Thai: `"Noto Serif Thai", Thonburi, "Leelawadee UI", Tahoma, serif`,
-  Cher: `"Plantagenet Cherokee", Gadugi, "Noto Sans Cherokee", serif`
-};
-FONT_STACKS.Grek = FONT_STACKS.Cyrl;
-var DOCX_EAST_ASIA = { Jpan: "MS Mincho", Hans: "SimSun", Hant: "PMingLiU", Kore: "Batang" };
-var DOCX_COMPLEX = { Deva: "Mangal", Thai: "Tahoma" };
-function writtenTag(language) {
-  const { script, region, subtags } = parseTag(language);
-  const at = script === null ? 1 : 2;
-  return subtags.map((subtag, index) => {
-    if (index === 1 && script !== null) {
-      return script;
-    }
-    return index === at && region !== null ? subtag.toUpperCase() : subtag;
-  }).join("-");
-}
-function languageScript(language) {
-  const { primary, script } = parseTag(language);
-  if (script !== null) {
-    return script;
-  }
-  const chinese = chineseScript(language);
-  if (chinese !== null) {
-    return chinese;
-  }
-  const pack = languagePack(language);
-  const own = pack.code.split("-")[0] === primary ? pack.script : null;
-  return own ?? SCRIPT_OF.get(primary) ?? pack.script ?? "Latn";
-}
-function fontScript(script, language) {
-  if (script === "Hira" || script === "Kana") {
-    return "Jpan";
-  }
-  if (script === "Hang") {
-    return "Kore";
-  }
-  if (script === "Bopo") {
-    return "Hant";
-  }
-  if (script === "Hani") {
-    const { primary } = parseTag(language);
-    if (primary === "ja" || primary === "ko") {
-      return primary === "ja" ? "Jpan" : "Kore";
-    }
-    return hanScript(language);
-  }
-  return script;
-}
-function supportsVertical(language) {
-  return VERTICAL_SCRIPTS.has(languageScript(language));
-}
-var SETTINGS = new Map;
-function typesetting(language = "en", writingMode = "horizontal") {
-  const key = `${language}\x00${writingMode}`;
-  if (!SETTINGS.has(key)) {
-    const script = languageScript(language);
-    const explicit = parseTag(language).script !== null;
-    const fonts = fontScript(script, language);
-    const body = FONT_STACKS[fonts] ?? LATIN_SERIF;
-    SETTINGS.set(key, Object.freeze({
-      script,
-      cased: CASED_SCRIPTS.has(script) && (explicit || languagePack(language).cased),
-      rtl: textDirection(language) === "rtl",
-      vertical: writingMode === "vertical" && VERTICAL_SCRIPTS.has(script),
-      fonts: Object.freeze({ body, heads: body === LATIN_SERIF ? "Georgia, serif" : body, latin: body === LATIN_SERIF }),
-      docx: Object.freeze({
-        eastAsia: DOCX_EAST_ASIA[fonts] ?? null,
-        cs: DOCX_COMPLEX[fonts] ?? null,
-        eastAsian: EAST_ASIAN_SCRIPTS.has(script),
-        complex: COMPLEX_SCRIPTS.has(script)
-      })
-    }));
-  }
-  return SETTINGS.get(key);
-}
-function validateWritingMode(data, errors) {
-  if (data["writing-mode"] !== "vertical") {
-    return;
-  }
-  const language = projectLanguage(data);
-  if (languageScript(language) === "Mong") {
-    errors.push(err("unsupported-writing-mode", `story.md writing-mode vertical is not supported yet for ${language}: traditional Mongolian runs its columns left to right (vertical-lr), so builds ignore it`, "story.md"));
-  } else if (!supportsVertical(language)) {
-    errors.push(err("unsupported-writing-mode", `story.md writing-mode vertical needs a language set in vertical columns, such as ja, zh, zh-Hant, or ko; ${language} is set horizontally, so builds ignore it`, "story.md"));
-  }
 }
 
 // src/html.js
@@ -17811,7 +17945,7 @@ function bookChapters(project, action = "build") {
       title,
       numbered,
       displayNumber,
-      heading: numbered ? chapterHeading(displayNumber, title, meta.labels) : title,
+      heading: numbered ? chapterHeading(displayNumber, title, meta.labels, meta.chapterNumerals) : title,
       body: chapterProse(markdown.body).replace(/\r\n?/g, `
 `).trim()
     };
@@ -18450,6 +18584,11 @@ function validateStoryFrontmatter(project, errors) {
     requireScalar(data, "writing-mode", "story.md", errors);
     validateEnum(data, "writing-mode", WRITING_MODES, "story.md", errors);
     validateWritingMode(data, errors);
+  }
+  if (data["chapter-numerals"] !== undefined) {
+    requireScalar(data, "chapter-numerals", "story.md", errors);
+    validateEnum(data, "chapter-numerals", CHAPTER_NUMERALS, "story.md", errors);
+    validateChapterNumerals(data, errors);
   }
   validateCover(project, errors);
   validatePasses(data, "story.md", errors);

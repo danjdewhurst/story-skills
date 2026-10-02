@@ -98,7 +98,9 @@ every edition.
    generated label in builds: chapter headings, the table of contents,
    the copyright page, the review-copy note, the Shunn title block, and the
    narration credits. For a Japanese, Chinese, or Korean edition set in
-   columns, also set `writing-mode: vertical`; builds pick fonts for the
+   columns, also set `writing-mode: vertical`. Ask whether chapter
+   numbers should use the language's own numerals (`第十二章`, `١٢`) and,
+   if so, set `chapter-numerals: native`. Builds pick fonts for the
    language's script on their own. A language with no pack of its own gets English
    labels; ask the user for the wording and set each one under `labels`
    (`- chapter: Kapitel {n}`; see docs/manuscripts.md, Build labels). The

@@ -1,6 +1,7 @@
 import { storyDateError } from "./continuity.js";
 import { err, warn } from "./findings.js";
 import { DEFAULT_LANGUAGE, fillLabel, isLanguageTag, LABEL_KEYS, languagePack, lookupTag, projectLanguage } from "./languages/index.js";
+import { chapterNumerals } from "./numerals.js";
 import { isBookNumber, seriesDisplayName } from "./series.js";
 
 // Publishing metadata kept in story.md: what retailers, distributors, and the
@@ -48,6 +49,9 @@ export function publishingMeta(data) {
     language: text("language") || "en",
     // "vertical" sets a Japanese or Chinese book in columns; see typesetting.js.
     writingMode: text("writing-mode") || "horizontal",
+    // The numeral system chapter headings print their numbers in (latn,
+    // jpan, arab); see numerals.js.
+    chapterNumerals: chapterNumerals(data),
     // An unquoted ISBN-13 parses as a number, so accept that too.
     isbn: normalizeIsbn(typeof data.isbn === "number" ? String(data.isbn) : text("isbn")),
     publisher: text("publisher"),

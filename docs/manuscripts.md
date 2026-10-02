@@ -401,6 +401,7 @@ Write matter text yourself. The `story-maintenance` skill will not invent acknow
 | `ai-disclosure` | Text | The generated copyright page and the metadata sheet. |
 | `labels` | List of `key: text` entries | Replaces any generated text in builds, such as the chapter headings or `All rights reserved.` See [Build labels](#build-labels). |
 | `chapter-label` | Text, such as `Teil` | The word in every generated chapter heading, in place of the language's own (`Chapter` in English): `Teil 1: Die Glocke`. A `{n}` in it places the number, as in `第{n}章`. The same as a `chapter` entry in `labels`, which wins. |
+| `chapter-numerals` | `western` (the default) or `native` | The numerals chapter headings print their numbers in. `native` uses the language's own: Han numerals in Japanese and Chinese (`第十二章`), the script's digits in Arabic, Persian, Hindi, Thai, and other languages that have them (`الفصل ١٢`). See [Chapter numerals](#chapter-numerals). |
 | `contents-label` | Text, such as `Übersicht` | The table of contents heading, in place of the language's own (`Contents` in English). The same as a `contents` entry in `labels`, which wins. |
 | `writing-mode` | `horizontal` (the default) or `vertical` | `vertical` sets a Japanese, Chinese, or Korean book in columns, top to bottom and right to left, in the EPUB, HTML, print, and DOCX builds, with pages that turn right to left. `validate` errors when the `language` is not set vertically; see [Typesetting other scripts](#typesetting-other-scripts). |
 | `form` | `flash`, `short-story`, `novelette`, `novella`, `novel`, `serial`, `picture-book`, or `chapter-book` | The metadata sheet, and the Shunn layout: `short-story` and `flash` builds use the short-story layout (see [Shunn](#shunn-standard-manuscript-format)). `story init --form` sets it along with a default `target-words`, and `validate` warns when `target-words`, or the finished manuscript, falls outside the form's usual range. |
@@ -413,7 +414,7 @@ A value that fails validation does not stop a build: builds never validate the p
 
 Every piece of text a build generates for readers is in the book's `language`: chapter headings, the contents heading, the generated copyright page, the name screen readers announce for a scene break, the EPUB cover alt text, landmark, and accessibility summary, the HTML review copy's title, note, and link names, the Shunn title block, the narration script's spoken credits, and the Fountain title page. The language packs translate these labels for Arabic (`ar`), Chinese (`zh`, Mandarin `cmn`, and the other Chinese languages in Simplified characters; `zh-Hant`, `zh-TW`, `zh-HK`, `zh-MO`, Cantonese `yue` or `zh-yue`, and Classical Chinese `lzh` get Traditional, and a script subtag wins, then a region, so `yue-Hans` and `yue-CN` are Simplified and `cmn-Hant` and `cmn-TW` Traditional, as their typesetting is), Dutch (`nl`), French (`fr`), German (`de`), Hebrew (`he`), Hindi (`hi`), Italian (`it`), Japanese (`ja`), Korean (`ko`), Persian (`fa`), Polish (`pl`), Portuguese (`pt`, in Brazilian Portuguese; `pt-PT` changes the few labels that differ, such as `Direitos de autor` and `ligação`), Russian (`ru`), Spanish (`es`), Swedish (`sv`), Turkish (`tr`), and Ukrainian (`uk`). Any other language gets the English labels.
 
-Each pack follows its language's conventions. Chapter headings read `Kapitel 1: Die Glocke`, `Chapitre 1 : La Cloche` (a no-break space before the colon), `Глава 1. Колокол`, or `第1章　風` (an ideographic space). Numbers keep Latin digits in every language, with the language's separators in the Shunn word count (`Environ 87 000 mots` in French). Where a name would need a grammatical case or a suffix to agree with the words around it, as in Polish, Russian, Ukrainian, Turkish, and Korean, the labels set it after a colon or on its own instead. Have a native reader check the labels before you publish.
+Each pack follows its language's conventions. Chapter headings read `Kapitel 1: Die Glocke`, `Chapitre 1 : La Cloche` (a no-break space before the colon), `Глава 1. Колокол`, or `第1章　風` (an ideographic space). Numbers keep Latin digits in every language unless `chapter-numerals: native` asks for the language's own in chapter headings (see [Chapter numerals](#chapter-numerals)), with the language's separators in the Shunn word count (`Environ 87 000 mots` in French). Where a name would need a grammatical case or a suffix to agree with the words around it, as in Polish, Russian, Ukrainian, Turkish, and Korean, the labels set it after a colon or on its own instead. Have a native reader check the labels before you publish.
 
 To change any label, list it under `labels` in `story.md`, one `key: text` entry per line. `{name}` places a value, and a label you leave out keeps the pack's text:
 
@@ -455,6 +456,34 @@ labels:
 | `screenplay-source`, `screenplay-source-anonymous` | `Based on the {form} by {authors}` | The Fountain `Source`, with and without an author. `{form}` is the English noun for `form` (`novel`, `short story`), so other languages leave it out. |
 
 `chapter-label` and `contents-label` still work and set `chapter` and `contents`; a `labels` entry wins over them. Quote a value that starts with `{` or contains `: `. A blank entry is ignored, so no title, heading, or landmark comes out empty, except `by`, where blank leaves the Shunn `by` line out; a `[TODO` placeholder is ignored like any other. An `and` label without both `{a}` and `{b}` would drop an author, so names are then joined with commas. `story validate` reports `labels` that is not a list of `key: text` entries, or an entry whose value is not text, as an error; an entry that names no label as an `unknown-label` warning; a blank entry (other than `by`) as a `blank-label` warning; and a `[TODO` entry as a `todo-placeholder` warning. Builds ignore all three.
+
+#### Chapter numerals
+
+Chapter headings print their numbers in Western digits (`第1章`, `الفصل 3`) unless `story.md` sets `chapter-numerals: native`, which prints them in the language's own numerals:
+
+```yaml
+language: ja
+writing-mode: vertical
+chapter-numerals: native
+```
+
+| Language | `native` prints | Chapters 1, 12, 21, 101 |
+|----------|-----------------|-------------------------|
+| Japanese (`ja`) | Han numerals, Japanese style: no `一` before `十`, `百`, or `千`, and no zero | `第一章`, `第十二章`, `第二十一章`, `第百一章` |
+| Simplified Chinese (`zh`, `zh-CN`, `cmn`) | Han numerals, Chinese style: `一` before every `百` and `千`, and before `十` except at the start; `零` for skipped places | `第一章`, `第十二章`, `第二十一章`, `第一百零一章` |
+| Traditional Chinese (`zh-Hant`, `zh-TW`, `yue`) | The same, with `萬` for ten thousand | `第一章`, `第十二章`, `第二十一章`, `第一百零一章` |
+| Arabic (`ar`), Sorani Kurdish (`ckb`), Sindhi (`sd`) | Arabic-Indic digits | `١`, `١٢`, `٢١`, `١٠١` |
+| Persian (`fa`), Urdu (`ur`), Pashto (`ps`), Kashmiri (`ks`), Punjabi in Shahmukhi (`pa-Arab`) | Extended Arabic-Indic digits | `۱`, `۱۲`, `۲۱`, `۱۰۱` |
+| Hindi (`hi`), Marathi (`mr`), Nepali (`ne`), and other Devanagari languages | Devanagari digits | `१`, `१२`, `२१`, `१०१` |
+| Thai (`th`) | Thai digits | `๑`, `๑๒`, `๒๑`, `๑๐๑` |
+
+Bengali, Gurmukhi, Gujarati, Odia, Tamil, Telugu, Kannada, Malayalam, Lao, Tibetan, Myanmar, Khmer, Mongolian, and N'Ko books get their script's digits the same way, by the script the language is written in (see [Typesetting other scripts](#typesetting-other-scripts)). The `chapter` label places the number as before (`第{n}章`, `الفصل {n}`, or a `labels` entry of your own), so `native` changes only the number. Every heading that prints a chapter number uses it: the chapter's heading and its contents entry in the EPUB, HTML review copy, and print interior, and the markdown, Shunn, DOCX, narration, and Fountain builds. File names, EPUB ids, anchors, and paragraph labels such as `ch03-p12` keep Western digits, so links and review notes still match. The builds write the numerals out themselves rather than asking the system's locale data, so every machine builds the same bytes.
+
+A title that only repeats the number, in either form (`第3章` or `第三章`), is left out, as for `chapter-heading`. Korean, Hebrew, and the Latin, Cyrillic, and other scripts without numerals of their own print Western digits; for them `story validate` reports `unsupported-chapter-numerals` and builds ignore the field:
+
+```text
+error: story.md chapter-numerals native needs a language with its own numerals, such as ja, zh, ar, fa, hi, or th; en prints 0-9, so builds ignore it [unsupported-chapter-numerals]
+```
 
 Text for the author, not the reader, stays in English: the retailer metadata sheet, the narration script's headings, runtime line, `[pause]` and `[narrator]` markers, the Fountain notes and synopses, Fountain's `INT.` and `EXT.` scene headings (which are Fountain syntax), the paragraph labels such as `ch03-p12`, and the chapter files `story add chapter` writes.
 
