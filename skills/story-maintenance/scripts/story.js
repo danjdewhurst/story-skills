@@ -1100,6 +1100,7 @@ var base_default = {
   dialogueDash: "—",
   dashStartsLine: false,
   ordinalStop: false,
+  capitalInitials: false,
   labels: {},
   narrationRate: 155,
   checks: {}
@@ -1140,6 +1141,7 @@ var de_default = {
   name: "German",
   quotes: [["„", "“"], ["‚", "‘"], ["»", "«"], ["›", "‹"], ["“", "”"], ['"', '"']],
   ordinalStop: true,
+  capitalInitials: true,
   narrationRate: 120,
   labels: {
     chapter: "Kapitel {n}",
@@ -2474,6 +2476,7 @@ var ORDINALS2 = [
 var es_default = {
   code: "es",
   name: "Spanish",
+  capitalInitials: true,
   narrationRate: 150,
   labels: {
     chapter: "Capítulo {n}",
@@ -2607,12 +2610,15 @@ var es_default = {
       "ornamente",
       "pigmente",
       "reglamente",
-      "suplemente"
+      "suplemente",
+      "condimente",
+      "cumplimente",
+      "parlamente",
+      "pavimente"
     ],
     adverbBlockers: [
       "el",
       "la",
-      "lo",
       "los",
       "las",
       "un",
@@ -2630,7 +2636,6 @@ var es_default = {
       "esa",
       "esta",
       "aquella",
-      "que",
       "se",
       "me",
       "te",
@@ -3152,6 +3157,7 @@ var fi_default = {
 var fr_default = {
   code: "fr",
   name: "French",
+  capitalInitials: true,
   narrationRate: 135,
   inciseTags: true,
   labels: {
@@ -5799,8 +5805,7 @@ function anyOf(marks) {
 }
 
 // src/sentences.js
-var INITIAL_LETTER = "[A-Za-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u024F\\u0370-\\u03FF\\u0400-\\u04FF]";
-var INITIALS = `(?:${INITIAL_LETTER}\\.)*${INITIAL_LETTER}`;
+var INITIALS = "(?:[A-Za-z]\\.)*[A-Za-z]";
 var NEVER = "(?!)";
 var CONTEXT_WINDOW = 64;
 var CLOSING_MARKS = ")\\]*_";
@@ -5833,6 +5838,7 @@ function buildRules(pack) {
   const startLetter = pack.cased === false ? "\\p{L}\\p{N}" : "\\p{Lu}\\p{Lo}\\p{N}";
   return {
     title: new RegExp(`(?:^|[\\s${openers}(])(?:${[...words("titleAbbreviations"), INITIALS].join("|")})$`),
+    capitalInitial: pack.capitalInitials === true ? new RegExp(`(?:^|[\\s${openers}(])(?:\\p{Lu}\\.)*\\p{Lu}$`, "u") : null,
     context: new RegExp(`(?:^|[\\s${openers}(])(?:${either([...words("contextAbbreviations"), ...pack.ordinalStop === true ? ["\\d+"] : []])})$`),
     calendar: new RegExp(`^(?:${either(words("calendarWords"))})(?![\\p{L}\\p{N}])`, "u"),
     end: new RegExp(ends.join("|") || NEVER, "g"),
@@ -5884,7 +5890,7 @@ function splitSentences(text, { capitalStart = true, pack = languagePack() } = {
     }
     const from = Math.max(start, match.index - CONTEXT_WINDOW);
     const before = `${from > start ? "x" : ""}${normalized.slice(from, match.index)}`;
-    const abbreviation = match[0] === "." && (rules.context.test(before) ? /^[\p{Ll}\p{N}]/u.test(next) || rules.calendar.test(next) : rules.title.test(before));
+    const abbreviation = match[0] === "." && (rules.context.test(before) ? /^[\p{Ll}\p{N}]/u.test(next) || rules.calendar.test(next) : rules.title.test(before) || rules.capitalInitial !== null && rules.capitalInitial.test(before));
     const stammer = /^(?:…|\.\.\.)/.test(match[0]) && isStammer(before, next, rules);
     if (abbreviation || stammer) {
       continue;
@@ -5967,6 +5973,7 @@ function buildVoiceRules(pack) {
     tagAfterQuote: null,
     tagBeforeQuote: null,
     dashTag: null,
+    dashIncise: null,
     incise: null,
     elision: new RegExp(`^(?:${elisions.map(listWord).join("|") || NEVER2})(?![\\p{L}\\p{N}])`, "iu"),
     contraction: suffixes === null || contractedIs === null ? null : new RegExp(`[\\p{L}](?:${suffixes.map(apostrophe).join("|") || NEVER2})\\b|(?<![\\p{L}\\p{N}])(?:${contractedIs.map(listWord).join("|") || NEVER2})['’]s(?![\\p{L}\\p{N}])`, "giu"),
@@ -5979,8 +5986,9 @@ function buildVoiceRules(pack) {
   const pronounAlternation = pronouns.map(listWord).join("|") || NEVER2;
   const links = (checkList(pack, "inversionLinks") ?? []).map(listWord).join("|");
   const inciseVerbs = [...new Set([...verbs, ...checkList(pack, "plainTags") ?? [], ...checkList(pack, "saidBookisms") ?? []])].map(listWord).join("|");
-  const inciseCore = `(?:(?:${inciseVerbs})(?:${links || NEVER2})(?:${pronounAlternation})|(?:${inciseVerbs})\\s+\\p{Lu}[\\p{L}'’-]*(?:\\s+\\p{Lu}[\\p{L}'’-]*){0,2}|(?:${pronounAlternation})\\s+(?:${inciseVerbs}))(?![\\p{L}\\p{N}])`;
-  const inciseDash = pack.inciseTags === true ? `|(?<=[?!…])\\s+(?=${inciseCore})` : "";
+  const incisePronouns = [...new Set([...pronouns, ...checkList(pack, "beatPronouns") ?? []])].map(listWord).join("|");
+  const inciseCore = `(?:(?:${inciseVerbs})(?:${links || NEVER2})(?:${incisePronouns})|(?:${inciseVerbs})\\s+\\p{Lu}[\\p{L}'’-]*(?:\\s+\\p{Lu}[\\p{L}'’-]*){0,2}|(?:${incisePronouns})\\s+(?:${inciseVerbs}))(?![\\p{L}\\p{N}])`;
+  const inciseDash = pack.inciseTags === true ? `|,\\s+(?=${inciseCore})|(?<=[?!…])\\s+(?=${inciseCore})` : "";
   const inverted = links === "" ? "" : `|(?:${verbAlternation})(?:${links})(?:${pronounAlternation})`;
   const pronounTag = `(?:(?:${pronounAlternation})\\s+(?:${verbAlternation})|(?:${verbAlternation})\\s+(?:${pronounAlternation})${inverted})(?![\\p{L}\\p{N}])`;
   return {
@@ -5990,6 +5998,7 @@ function buildVoiceRules(pack) {
     tagAfterQuote: new RegExp(`^[\\s,.;:!?…()—–-]*${pronounTag}`, "iu"),
     tagBeforeQuote: new RegExp(`(?<![\\p{L}\\p{N}])${pronounTag}[\\s,:…()—–-]*$`, "iu"),
     incise: pack.inciseTags === true ? new RegExp(`(?:,|(?<=[?!…]))\\s+${inciseCore}\\s*(?:,|[.!?…]?\\s*$)`, "u") : null,
+    dashIncise: pack.inciseTags === true ? new RegExp(`^,\\s+${inciseCore}[^,.!?;:…—–«»"“”]*,`, "u") : null,
     dashTag: new RegExp(`(?:,\\s+(?:(?:${verbAlternation})\\s+\\p{Lu}|(?:${pronounAlternation})\\s+(?:${verbAlternation})(?![\\p{L}\\p{N}])${inverted === "" ? "" : `${inverted}(?![\\p{L}\\p{N}])`}|\\p{Lu}[\\p{L}'’-]*(?:\\s+\\p{Lu}[\\p{L}'’-]*){0,2}\\s+(?:${verbAlternation})(?![\\p{L}\\p{N}]))${inciseDash})`, "u")
   };
 }
@@ -6230,8 +6239,11 @@ function dashMatches(paragraph, rules, matches) {
     matches.push({ start, end: newLine ? close : Math.min(close + 1, paragraph.length), text });
     index = close + 1;
     start = Infinity;
+    const incise = !closedByDash && close === tag && rules.dashIncise !== null ? rules.dashIncise.exec(paragraph.slice(close, close + 120)) : null;
     if (newLine) {
       start = close;
+    } else if (incise !== null) {
+      start = close + incise[0].length - 1;
     } else if (closedByDash) {
       const next = nextDash(index);
       start = next !== Infinity && tagCloses(paragraph, index, next, rules) ? next : Infinity;

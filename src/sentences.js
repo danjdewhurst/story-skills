@@ -10,10 +10,11 @@ import { SENTENCE_OPENERS, anyOf, charClass, punctuation } from "./punctuation.j
 // never end one. Words that often close a sentence too (etc., No., a.m.)
 // end it unless the next word starts in lower case, with a digit, or is a
 // calendar word (No. 5, 9 a.m. Monday). Initials need no list, so a
-// language without one still keeps them. An initial is any Latin, Greek,
-// or Cyrillic letter (É. Zola, А. С. Пушкин).
-const INITIAL_LETTER = "[A-Za-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u024F\\u0370-\\u03FF\\u0400-\\u04FF]";
-const INITIALS = `(?:${INITIAL_LETTER}\\.)*${INITIAL_LETTER}`;
+// language without one still keeps them. In a pack with
+// `capitalInitials`, any capital letter is an initial too (É. Zola); only
+// capitals, so a one-letter word (Russian я, Portuguese é) still ends a
+// sentence.
+const INITIALS = "(?:[A-Za-z]\\.)*[A-Za-z]";
 const NEVER = "(?!)";
 // How many characters either side of a stop decide whether it ends a
 // sentence.
@@ -72,6 +73,7 @@ function buildRules(pack) {
   const startLetter = pack.cased === false ? "\\p{L}\\p{N}" : "\\p{Lu}\\p{Lo}\\p{N}";
   return {
     title: new RegExp(`(?:^|[\\s${openers}(])(?:${[...words("titleAbbreviations"), INITIALS].join("|")})$`),
+    capitalInitial: pack.capitalInitials === true ? new RegExp(`(?:^|[\\s${openers}(])(?:\\p{Lu}\\.)*\\p{Lu}$`, "u") : null,
     // In a pack with `ordinalStop`, a number before the stop is an ordinal
     // (am 3. Mai) and is read like a context abbreviation.
     context: new RegExp(`(?:^|[\\s${openers}(])(?:${either([...words("contextAbbreviations"), ...(pack.ordinalStop === true ? ["\\d+"] : [])])})$`),
@@ -154,7 +156,7 @@ export function splitSentences(text, { capitalStart = true, pack = languagePack(
     const before = `${from > start ? "x" : ""}${normalized.slice(from, match.index)}`;
     const abbreviation = match[0] === "." && (rules.context.test(before)
       ? /^[\p{Ll}\p{N}]/u.test(next) || rules.calendar.test(next)
-      : rules.title.test(before));
+      : rules.title.test(before) || (rules.capitalInitial !== null && rules.capitalInitial.test(before)));
     const stammer = /^(?:…|\.\.\.)/.test(match[0]) && isStammer(before, next, rules);
     if (abbreviation || stammer) {
       continue;

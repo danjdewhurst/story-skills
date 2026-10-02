@@ -362,8 +362,11 @@ describe("language edge cases", () => {
       "D’un grognement, il rangea le paiement et l'aliment. Son rangement était parfaitement net."
     ].join("\n\n"), rules);
     expect(analysis.adverbs).toEqual([{ word: "lentement", count: 2 }, { word: "évidemment", count: 1 }, { word: "parfaitement", count: 1 }, { word: "vraiment", count: 1 }]);
-    const spanish = analyzeChapter("Tenía la mente en blanco. Espero que lo lamente. Caminaba lentamente.", proseRules({}, [], languagePack("es")));
+    const spanish = analyzeChapter("Tenía la mente en blanco. Espero que lo lamente y se lamente. Caminaba lentamente.", proseRules({}, [], languagePack("es")));
     expect(spanish.adverbs).toEqual([{ word: "lentamente", count: 1 }]);
+    // Que and lo come before adverbs too.
+    const before = analyzeChapter("Dijo que finalmente vendría. Lo que realmente importa. Era lo realmente importante. Sabía que rápidamente se iría.", proseRules({}, [], languagePack("es")));
+    expect(before.adverbs).toEqual([{ word: "realmente", count: 2 }, { word: "finalmente", count: 1 }, { word: "rápidamente", count: 1 }]);
   });
 
   test("French tags inside the speech, and after ? or ! in dash dialogue, are tags", () => {
@@ -375,6 +378,12 @@ describe("language edge cases", () => {
     const analysis = analyzeChapter(paragraphs.join("\n\n"), proseRules({}, [], french));
     expect(analysis.plainTags).toEqual([{ word: "demanda", count: 2 }, { word: "dit", count: 1 }]);
     expect(analysis.bookisms).toEqual([{ word: "s'exclama", count: 1 }]);
+    // In dash dialogue speech resumes after an incise that closes with a
+    // comma, even after more words; a comma that ends no tag is speech.
+    const dashes = ["— Viens, dit-il, nous partons.", "— Viens, dit Paul en souriant, nous partons.", "— C'est fini, dit-on souvent, mais non.", "— Viens, mon ami, nous partons.", "— Viens, dit-il."];
+    expect(dashes.map((paragraph) => quoteMatches(paragraph, french).map((match) => match.text)))
+      .toEqual([["Viens", "nous partons."], ["Viens", "nous partons."], ["C'est fini", "mais non."], ["Viens, mon ami, nous partons."], ["Viens"]]);
+    expect(narrationOnly(dashes[1], french).trim()).toBe("dit Paul en souriant");
     // English has no incise: the comma inside a quote is speech.
     expect(quoteMatches("\"Come, said he, we leave.\"").map((match) => match.text)).toEqual(["Come, said he, we leave."]);
 
@@ -423,7 +432,13 @@ describe("language edge cases", () => {
       .toEqual(["César mourut en 44 av. J.-C.", "Puis vint É. Zola.", "Il partit."]);
     expect(splitSentences("Der sog. Experte kam. Es kostete 3 Mio. Euro. Dann ging er.", { pack: languagePack("de") }))
       .toEqual(["Der sog. Experte kam.", "Es kostete 3 Mio. Euro.", "Dann ging er."]);
-    expect(splitSentences("Then came Ö. Lind. He left.")).toEqual(["Then came Ö. Lind.", "He left."]);
+    expect(splitSentences("Llegó Á. Pérez. Se fue.", { pack: languagePack("es") })).toEqual(["Llegó Á. Pérez.", "Se fue."]);
+    // Only capitals are initials, and only in a pack with capitalInitials:
+    // a one-letter word still ends a sentence, and English is as before.
+    expect(splitSentences("Это была я. Потом она ушла.", { pack: languagePack("ru") })).toEqual(["Это была я.", "Потом она ушла."]);
+    expect(splitSentences("Sim, é. Depois saiu.", { pack: languagePack("pt") })).toEqual(["Sim, é.", "Depois saiu."]);
+    expect(splitSentences("Il vint à é. Puis partit.", { pack: languagePack("fr") })).toEqual(["Il vint à é.", "Puis partit."]);
+    expect(splitSentences("He met É. Zola. She saw Ö. Then left.")).toEqual(["He met É.", "Zola.", "She saw Ö.", "Then left."]);
   });
 
   test("plural tags count", () => {
