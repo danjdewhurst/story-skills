@@ -12,8 +12,8 @@ mentions:
 arcs-advanced: []
 status: draft
 hook: question
-word-count: 629
-character-count: 710
+word-count: 631
+character-count: 712
 ---
 
 # Chapter 1: 最後の日
@@ -56,4 +56,4 @@ character-count: 710
 
 　それだけ言うと、彼は次の客の切符に記念の日付印を押した。
 
-　遥は駅前の坂を上りながら、何度も振り返った。三十年前といえば、遥はまだ四つだ。祖母も、まだ五十代だったはずだ。
+　遥は駅前の坂を上りながら、何度も振り返った。三十年前といえば、遥はまだ四つだった。祖母も、まだ五十代だったはずだ。

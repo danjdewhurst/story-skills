@@ -21,7 +21,7 @@ knowledge-state:
     knows: 祖母が昭和六十一年の上り十四時五分発に鉛筆で丸をつけていた
     learned-in: chapter-02
   - character: morita-haruka
-    knows: 封筒には二月十四日十四時五分発の切符と「待っています。」の便箋が入っていた
+    knows: 封筒には二月十四日十四時五分発の切符と〈待っています。〉の便箋が入っていた
     learned-in: chapter-03
 ---
 
