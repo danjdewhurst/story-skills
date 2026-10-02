@@ -91,8 +91,10 @@ Then check what the CLI cannot:
    for the English-language market only: state the number and the range,
    and ask the user to confirm current norms for their market. For a book
    in another language, report the count and ask for that market's norms
-   instead. Never pad or cut to hit a number without the
-   user's direction.
+   instead. A Chinese or Japanese book is counted in characters: report
+   `story wordcount .`'s character total, and `story validate .` checks
+   `target-characters` against broad per-form character ranges. Never pad
+   or cut to hit a number without the user's direction.
 5. No `[TODO` markers remain in chapter prose. `story validate` warns about
    each chapter that still has one.
 6. Open questions and planted promises are resolved, or deliberately left
@@ -226,7 +228,9 @@ declines, and entries with no response after the window the user sets.
 - `submission/` is outside the story model: the CLI does not validate it
   and builds never include it.
 - Word counts in submission copy come from `story wordcount .`, rounded to
-  the nearest thousand (`87,000 words`).
+  the nearest thousand (`87,000 words`). A Chinese or Japanese book gives
+  its length in characters, as `story wordcount .` reports it (`12万字`,
+  or sheets of 400字 when a Japanese contest asks for them).
 - Tracker statuses: `queried`, `requested-partial`, `requested-full`,
   `offer`, `declined`, `no-response`, `withdrawn`.
 - When the manuscript changes after the package is drafted, reread the

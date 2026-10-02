@@ -1,6 +1,6 @@
 import { parseClockDate } from "./continuity.js";
 
-// Word-count progress against the book target, per-chapter targets, the
+// Progress in words or characters against the book target, per-chapter targets, the
 // deadline, and the session log in progress.md. Pure functions: story.js
 // reads and writes the files.
 
@@ -12,18 +12,19 @@ const PROJECTION_HORIZON_DAYS = 100 * 366;
 
 // Adds or replaces the log entry for `date` and keeps entries in date order.
 // Existing entries are kept as written, extra fields and all; only the
-// entry for `date` changes its word count.
-export function withSession(sessions, date, words) {
+// entry for `date` changes its counts. `counts` is { words }, plus
+// { characters } for a project counted in characters.
+export function withSession(sessions, date, counts) {
   let found = false;
   const kept = (Array.isArray(sessions) ? sessions : []).map((session) => {
     if (!found && session && typeof session === "object" && sessionDate(session) === date) {
       found = true;
-      return { ...session, words };
+      return { ...session, ...counts };
     }
     return session;
   });
   if (!found) {
-    kept.push({ date, words });
+    kept.push({ date, ...counts });
   }
   return kept.sort((left, right) => sessionDate(left).localeCompare(sessionDate(right), "en"));
 }
@@ -32,18 +33,45 @@ function sessionDate(session) {
   return String(session?.date ?? "").trim();
 }
 
-// Valid sessions only, in date order; validate reports the malformed ones.
-export function cleanSessions(value) {
+// Valid sessions only, in date order, as { date, words } with the count
+// from `field` ("characters" for a project counted in characters, where an
+// entry logged without one is left out); validate reports the malformed
+// ones.
+export function cleanSessions(value, field = "words") {
   const sessions = [];
   for (const entry of Array.isArray(value) ? value : []) {
-    if (entry && typeof entry === "object" && parseClockDate(sessionDate(entry)) && Number.isInteger(entry.words) && entry.words >= 0) {
-      sessions.push({ date: sessionDate(entry), words: entry.words });
+    if (entry && typeof entry === "object" && parseClockDate(sessionDate(entry)) && Number.isInteger(entry.words) && entry.words >= 0
+      && Number.isInteger(entry[field]) && entry[field] >= 0) {
+      sessions.push({ date: sessionDate(entry), words: entry[field] });
     }
   }
   return sessions.sort((left, right) => left.date.localeCompare(right.date, "en"));
 }
 
-export function computeProgress({ words, target, deadline, today, chapters, sessions }) {
+// Progress in the count unit. The inputs call every count `words`; for a
+// project counted in characters (`unit` "characters") they are characters,
+// and the result names them so: `characters` in place of each `words`, and
+// `unit: "characters"`.
+export function computeProgress({ unit = "words", ...input }) {
+  const result = progressIn(input);
+  if (unit !== "characters") {
+    return result;
+  }
+  const rename = ({ words, ...rest }) => ({ characters: words, ...rest });
+  const { words, ...rest } = result;
+  return {
+    unit,
+    characters: words,
+    ...rest,
+    chapters: rest.chapters.map((chapter) => {
+      const { id, ...counts } = chapter;
+      return { id, ...rename(counts) };
+    }),
+    lastSession: rest.lastSession === null ? null : { date: rest.lastSession.date, ...rename({ words: rest.lastSession.words, since: rest.lastSession.since }) }
+  };
+}
+
+function progressIn({ words, target, deadline, today, chapters, sessions }) {
   const todayDays = parseClockDate(today).days;
   const result = {
     words,
@@ -91,12 +119,15 @@ export function computeProgress({ words, target, deadline, today, chapters, sess
 }
 
 export function formatProgress(progress) {
+  const characters = progress.unit === "characters";
+  const noun = characters ? "character" : "word";
+  const count = (entry) => (characters ? entry.characters : entry.words);
   const lines = [];
   if (progress.target === null) {
-    lines.push(`Progress: ${formatNumber(progress.words)} words (no target-words in story.md)`);
+    lines.push(`Progress: ${formatNumber(count(progress))} ${noun}s (no target-${noun}s in story.md)`);
   } else {
-    lines.push(`Progress: ${formatNumber(progress.words)} of ${formatNumber(progress.target)} words (${formatPercent(progress.percent, 1)}%)`);
-    lines.push(`Remaining: ${plural(progress.remaining, "word", formatNumber)}`);
+    lines.push(`Progress: ${formatNumber(count(progress))} of ${formatNumber(progress.target)} ${noun}s (${formatPercent(progress.percent, 1)}%)`);
+    lines.push(`Remaining: ${plural(progress.remaining, noun, formatNumber)}`);
   }
 
   if (progress.deadline) {
@@ -106,20 +137,20 @@ export function formatProgress(progress) {
     } else if (perDay === null) {
       lines.push(`Deadline: ${date} (${daysLeft === 0 ? "today" : `${plural(daysLeft, "day")} left`})`);
     } else if (daysLeft === 0) {
-      lines.push(`Deadline: ${date} (today): ${plural(perDay, "word", formatNumber)} needed`);
+      lines.push(`Deadline: ${date} (today): ${plural(perDay, noun, formatNumber)} needed`);
     } else {
-      lines.push(`Deadline: ${date} (${plural(daysLeft, "day")} left): ${formatNumber(perDay)} words a day needed`);
+      lines.push(`Deadline: ${date} (${plural(daysLeft, "day")} left): ${formatNumber(perDay)} ${noun}s a day needed`);
     }
   }
 
   if (progress.lastSession) {
     const { date, since } = progress.lastSession;
-    lines.push(`Sessions: ${progress.sessions} logged; last ${date} (${since >= 0 ? "+" : ""}${formatNumber(since)} words since)`);
+    lines.push(`Sessions: ${progress.sessions} logged; last ${date} (${since >= 0 ? "+" : ""}${formatNumber(since)} ${noun}s since)`);
   } else {
     lines.push("Sessions: none logged (run story progress --log after a writing session)");
   }
   if (progress.pace !== null) {
-    lines.push(`Pace: ${formatNumber(Math.round(progress.pace))} words a day over the last ${Math.min(progress.sessions, PACE_SESSIONS)} sessions`);
+    lines.push(`Pace: ${formatNumber(Math.round(progress.pace))} ${noun}s a day over the last ${Math.min(progress.sessions, PACE_SESSIONS)} sessions`);
   }
   if (progress.projected) {
     lines.push(`Projected finish at this pace: ${progress.projected}`);
@@ -128,7 +159,7 @@ export function formatProgress(progress) {
   if (progress.chapters.length > 0) {
     lines.push("", "Chapter targets:");
     for (const chapter of progress.chapters) {
-      lines.push(`- ${chapter.id}: ${formatNumber(chapter.words)} of ${formatNumber(chapter.target)} words (${formatPercent(chapter.percent, 0)}%)`);
+      lines.push(`- ${chapter.id}: ${formatNumber(count(chapter))} of ${formatNumber(chapter.target)} ${noun}s (${formatPercent(chapter.percent, 0)}%)`);
     }
   }
   return `${lines.join("\n")}\n`;

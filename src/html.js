@@ -8,12 +8,16 @@ import { typesetting } from "./typesetting.js";
 import { usageError } from "./exit-codes.js";
 import { wordSpans } from "./words.js";
 
+// Trim sizes and how much text a typical page holds, for the page estimate.
+// charactersPerPage is for a book counted in characters (Chinese, Japanese)
+// set horizontally in this layout: a full page of the text block, less the
+// short lines of dialogue and paragraph ends, as wordsPerPage allows.
 export const TRIM_SIZES = new Map([
-  ["5x8", { width: "5in", height: "8in", wordsPerPage: 230 }],
-  ["5.25x8", { width: "5.25in", height: "8in", wordsPerPage: 250 }],
-  ["5.5x8.5", { width: "5.5in", height: "8.5in", wordsPerPage: 275 }],
-  ["6x9", { width: "6in", height: "9in", wordsPerPage: 300 }],
-  ["a5", { width: "148mm", height: "210mm", wordsPerPage: 270 }]
+  ["5x8", { width: "5in", height: "8in", wordsPerPage: 230, charactersPerPage: 480 }],
+  ["5.25x8", { width: "5.25in", height: "8in", wordsPerPage: 250, charactersPerPage: 520 }],
+  ["5.5x8.5", { width: "5.5in", height: "8.5in", wordsPerPage: 275, charactersPerPage: 580 }],
+  ["6x9", { width: "6in", height: "9in", wordsPerPage: 300, charactersPerPage: 640 }],
+  ["a5", { width: "148mm", height: "210mm", wordsPerPage: 270, charactersPerPage: 560 }]
 ]);
 export const DEFAULT_TRIM = "5.5x8.5";
 
@@ -315,11 +319,13 @@ const CONTENTS_ENTRIES_PER_PAGE = 25;
 // average. Still an estimate: fonts and the engine decide the real count.
 export function estimateBookPages(book, trimName = DEFAULT_TRIM) {
   const trim = TRIM_SIZES.get(trimName) ?? TRIM_SIZES.get(DEFAULT_TRIM);
+  // A book counted in characters (`book.unit`) is measured in characters.
+  const [perPage, length] = book.unit === "characters" ? [trim.charactersPerPage, (part) => part.characters] : [trim.wordsPerPage, (part) => part.words];
   const chapters = book.parts.filter((part) => part.kind === "chapter").length;
   let pages = 2 + Math.max(1, Math.ceil(chapters / CONTENTS_ENTRIES_PER_PAGE)) + 0.5;
   for (const part of book.parts.filter((entry) => !(entry.copyright && entry.placement === "front"))) {
     const sink = part.heading ? OPENING_SINK_PAGES : 0;
-    pages += Math.max(1, Math.ceil((part.words ?? 0) / trim.wordsPerPage + sink)) + 0.5;
+    pages += Math.max(1, Math.ceil((length(part) ?? 0) / perPage + sink)) + 0.5;
   }
   return Math.ceil(pages);
 }

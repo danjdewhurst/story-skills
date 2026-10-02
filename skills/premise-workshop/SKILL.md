@@ -143,7 +143,11 @@ where `$(...)`, backticks, and `"` still take effect.
 form when none is given (`serial` sets none; set per-episode chapter
 `target-words` instead). The form defaults and `references/form-choice.md`
 lengths are English word counts; for a book in another language, discuss
-the target with the user. Then hand-edit `premise`, `counter-premise`,
+the target with the user. A Chinese (`zh`) or Japanese (`ja`) book is
+counted in characters: talk about length in characters (10万字, or
+sheets of 400字 for Japanese), and once `language` is in `story.md`,
+replace `target-words` with `target-characters` (the story-init skill
+lists the per-form defaults). Then hand-edit `premise`, `counter-premise`,
 and `language` (the tag from the brief) into `story.md`, and move the stakes, rejected what-ifs worth keeping,
 title shortlist, and comps into its `## Notes` section. Keep
 `premise-notes.md` if one was made: offer to move it into the new
@@ -184,8 +188,9 @@ story validate .
 story report .
 ```
 
-`story validate` warns when `target-words` sits outside the chosen form's
-usual range; either adjust the target or confirm the choice with the user.
+`story validate` warns when `target-words` (`target-characters` for
+Chinese or Japanese) sits outside the chosen form's usual range; either
+adjust the target or confirm the choice with the user.
 `story reindex .` is needed only when the title changed, but it is safe to
 run every time.
 

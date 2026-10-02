@@ -86,6 +86,7 @@ var FINDING_CODES = {
   "permission-no-rights-holder": "warning",
   "backslash-path": "warning",
   "form-length-range": "warning",
+  "unused-target": "warning",
   "invalid-language": "error",
   "unsupported-writing-mode": "error",
   "invalid-isbn": "error",
@@ -1255,6 +1256,18 @@ function isSceneBreak(paragraph) {
 function wordCount(markdown) {
   return splitWords(markdown).length;
 }
+var graphemes;
+function characterCount(markdown) {
+  const text = plainLinks(withoutFenceMarkers(String(markdown).replace(//g, " "))).split(`
+`).filter((line) => !isSceneBreak(line)).join(`
+`).replace(/\\([!-/:-@[-`{-~])/g, "$1").replace(/[#>*_~|`\s]+/gu, "");
+  graphemes ??= new Intl.Segmenter("en", { granularity: "grapheme" });
+  let count = 0;
+  for (const _ of graphemes.segment(text)) {
+    count += 1;
+  }
+  return count;
+}
 function chapterProse(markdownBody, commentReplacement = "") {
   return scanComments(proseSection(markdownBody), commentReplacement).text;
 }
@@ -1496,6 +1509,7 @@ var base_default = {
   cased: true,
   script: null,
   segmentation: "space",
+  countUnit: "words",
   sentenceEnd: [".", "!", "?", "…", "。", "！", "？", "؟", "۔", "।", "॥", "።"],
   quotes: [
     ["“", "”"],
@@ -2075,7 +2089,14 @@ var ja_default = {
   script: "Jpan",
   segmentation: "character",
   quotes: [["「", "」"], ["『", "』"], ["“", "”"], ["〝", "〟"], ['"', '"']],
-  dialogueDash: null
+  dialogueDash: null,
+  countUnit: "characters",
+  characterForms: {
+    flash: { min: 1, max: 1e4, target: 4000 },
+    "short-story": { min: 4000, max: 40000, target: 20000 },
+    novella: { min: 40000, max: 120000, target: 80000 },
+    novel: { min: 120000, max: null, target: 150000 }
+  }
 };
 
 // src/languages/ko.js
@@ -2112,7 +2133,14 @@ var zh_default = {
   cased: false,
   script: "Hans",
   segmentation: "character",
-  dialogueDash: null
+  dialogueDash: null,
+  countUnit: "characters",
+  characterForms: {
+    flash: { min: 1, max: 2000, target: 1500 },
+    "short-story": { min: 2000, max: 25000, target: 1e4 },
+    novella: { min: 25000, max: 130000, target: 60000 },
+    novel: { min: 130000, max: null, target: 200000 }
+  }
 };
 
 // src/languages/index.js
@@ -5491,7 +5519,7 @@ function buildContext(project, targetId, readBody, options = {}) {
     field("Date", [unit.date, unit.time].filter(Boolean).join(" ")),
     field("Outcome", target.scene ? target.scene.outcome : ""),
     field("Hook", target.chapter.hook),
-    field("Target words", target.chapter.targetWords || "")
+    project.unit?.name === "characters" ? field("Target characters", target.chapter.targetCount || "") : field("Target words", target.chapter.targetWords || "")
   ];
   const outline = extractSection(chapterBody, "Outline").split(/^[ \t]*(?:-{3,}|\*{3,})[ \t]*$/m)[0].trim();
   if (outline !== "" && !PLACEHOLDERS.has(outline)) {
@@ -6338,7 +6366,7 @@ function copyrightPage(meta) {
 }
 var DESCRIPTION_LIMIT = 4000;
 function metadataSheet(input) {
-  const { title, data, meta, words, pages } = input;
+  const { title, data, meta, words, characters, pages } = input;
   const seriesName = seriesDisplayName(data);
   const series = typeof seriesName === "string" ? `${seriesName}${isBookNumber(data["book-number"]) ? `, book ${data["book-number"]}` : ""}` : "";
   const rows = [
@@ -6351,7 +6379,7 @@ function metadataSheet(input) {
     ["Language", meta.language],
     ["Genre", [data.genre, data["sub-genre"]].filter((value) => typeof value === "string" && value !== "").join(" / ")],
     ["Form", typeof data.form === "string" ? data.form : ""],
-    ["Word count", String(words)],
+    characters === undefined ? ["Word count", String(words)] : ["Character count", String(characters)],
     ["Estimated print pages", Object.entries(pages).map(([trim, count]) => `${count} at ${trim}`).join(", ")],
     ["Description", meta.description === "" ? "" : `${meta.description.length} characters (limit ${DESCRIPTION_LIMIT})`],
     ["Keywords", meta.keywords.length === 0 ? "" : `${meta.keywords.length} of ${MAX_KEYWORDS}: ${meta.keywords.join("; ")}`],
@@ -6540,11 +6568,11 @@ function validateWritingMode(data, errors) {
 
 // src/html.js
 var TRIM_SIZES = new Map([
-  ["5x8", { width: "5in", height: "8in", wordsPerPage: 230 }],
-  ["5.25x8", { width: "5.25in", height: "8in", wordsPerPage: 250 }],
-  ["5.5x8.5", { width: "5.5in", height: "8.5in", wordsPerPage: 275 }],
-  ["6x9", { width: "6in", height: "9in", wordsPerPage: 300 }],
-  ["a5", { width: "148mm", height: "210mm", wordsPerPage: 270 }]
+  ["5x8", { width: "5in", height: "8in", wordsPerPage: 230, charactersPerPage: 480 }],
+  ["5.25x8", { width: "5.25in", height: "8in", wordsPerPage: 250, charactersPerPage: 520 }],
+  ["5.5x8.5", { width: "5.5in", height: "8.5in", wordsPerPage: 275, charactersPerPage: 580 }],
+  ["6x9", { width: "6in", height: "9in", wordsPerPage: 300, charactersPerPage: 640 }],
+  ["a5", { width: "148mm", height: "210mm", wordsPerPage: 270, charactersPerPage: 560 }]
 ]);
 var DEFAULT_TRIM = "5.5x8.5";
 function labelledParagraphs(part) {
@@ -6789,11 +6817,12 @@ var OPENING_SINK_PAGES = 0.3;
 var CONTENTS_ENTRIES_PER_PAGE = 25;
 function estimateBookPages(book, trimName = DEFAULT_TRIM) {
   const trim = TRIM_SIZES.get(trimName) ?? TRIM_SIZES.get(DEFAULT_TRIM);
+  const [perPage, length] = book.unit === "characters" ? [trim.charactersPerPage, (part) => part.characters] : [trim.wordsPerPage, (part) => part.words];
   const chapters = book.parts.filter((part) => part.kind === "chapter").length;
   let pages = 2 + Math.max(1, Math.ceil(chapters / CONTENTS_ENTRIES_PER_PAGE)) + 0.5;
   for (const part of book.parts.filter((entry) => !(entry.copyright && entry.placement === "front"))) {
     const sink = part.heading ? OPENING_SINK_PAGES : 0;
-    pages += Math.max(1, Math.ceil((part.words ?? 0) / trim.wordsPerPage + sink)) + 0.5;
+    pages += Math.max(1, Math.ceil((length(part) ?? 0) / perPage + sink)) + 0.5;
   }
   return Math.ceil(pages);
 }
@@ -6837,33 +6866,51 @@ function cssString(value) {
 var PROGRESS_FILE = "progress.md";
 var PACE_SESSIONS = 7;
 var PROJECTION_HORIZON_DAYS = 100 * 366;
-function withSession(sessions, date, words) {
+function withSession(sessions, date, counts) {
   let found = false;
   const kept = (Array.isArray(sessions) ? sessions : []).map((session) => {
     if (!found && session && typeof session === "object" && sessionDate(session) === date) {
       found = true;
-      return { ...session, words };
+      return { ...session, ...counts };
     }
     return session;
   });
   if (!found) {
-    kept.push({ date, words });
+    kept.push({ date, ...counts });
   }
   return kept.sort((left, right) => sessionDate(left).localeCompare(sessionDate(right), "en"));
 }
 function sessionDate(session) {
   return String(session?.date ?? "").trim();
 }
-function cleanSessions(value) {
+function cleanSessions(value, field = "words") {
   const sessions = [];
   for (const entry of Array.isArray(value) ? value : []) {
-    if (entry && typeof entry === "object" && parseClockDate(sessionDate(entry)) && Number.isInteger(entry.words) && entry.words >= 0) {
-      sessions.push({ date: sessionDate(entry), words: entry.words });
+    if (entry && typeof entry === "object" && parseClockDate(sessionDate(entry)) && Number.isInteger(entry.words) && entry.words >= 0 && Number.isInteger(entry[field]) && entry[field] >= 0) {
+      sessions.push({ date: sessionDate(entry), words: entry[field] });
     }
   }
   return sessions.sort((left, right) => left.date.localeCompare(right.date, "en"));
 }
-function computeProgress({ words, target, deadline, today, chapters, sessions }) {
+function computeProgress({ unit = "words", ...input }) {
+  const result = progressIn(input);
+  if (unit !== "characters") {
+    return result;
+  }
+  const rename = ({ words, ...rest }) => ({ characters: words, ...rest });
+  const { words, ...rest } = result;
+  return {
+    unit,
+    characters: words,
+    ...rest,
+    chapters: rest.chapters.map((chapter) => {
+      const { id, ...counts } = chapter;
+      return { id, ...rename(counts) };
+    }),
+    lastSession: rest.lastSession === null ? null : { date: rest.lastSession.date, ...rename({ words: rest.lastSession.words, since: rest.lastSession.since }) }
+  };
+}
+function progressIn({ words, target, deadline, today, chapters, sessions }) {
   const todayDays = parseClockDate(today).days;
   const result = {
     words,
@@ -6902,12 +6949,15 @@ function computeProgress({ words, target, deadline, today, chapters, sessions })
   return result;
 }
 function formatProgress(progress) {
+  const characters = progress.unit === "characters";
+  const noun = characters ? "character" : "word";
+  const count = (entry) => characters ? entry.characters : entry.words;
   const lines = [];
   if (progress.target === null) {
-    lines.push(`Progress: ${formatNumber2(progress.words)} words (no target-words in story.md)`);
+    lines.push(`Progress: ${formatNumber2(count(progress))} ${noun}s (no target-${noun}s in story.md)`);
   } else {
-    lines.push(`Progress: ${formatNumber2(progress.words)} of ${formatNumber2(progress.target)} words (${formatPercent(progress.percent, 1)}%)`);
-    lines.push(`Remaining: ${plural2(progress.remaining, "word", formatNumber2)}`);
+    lines.push(`Progress: ${formatNumber2(count(progress))} of ${formatNumber2(progress.target)} ${noun}s (${formatPercent(progress.percent, 1)}%)`);
+    lines.push(`Remaining: ${plural2(progress.remaining, noun, formatNumber2)}`);
   }
   if (progress.deadline) {
     const { date, daysLeft, perDay } = progress.deadline;
@@ -6916,19 +6966,19 @@ function formatProgress(progress) {
     } else if (perDay === null) {
       lines.push(`Deadline: ${date} (${daysLeft === 0 ? "today" : `${plural2(daysLeft, "day")} left`})`);
     } else if (daysLeft === 0) {
-      lines.push(`Deadline: ${date} (today): ${plural2(perDay, "word", formatNumber2)} needed`);
+      lines.push(`Deadline: ${date} (today): ${plural2(perDay, noun, formatNumber2)} needed`);
     } else {
-      lines.push(`Deadline: ${date} (${plural2(daysLeft, "day")} left): ${formatNumber2(perDay)} words a day needed`);
+      lines.push(`Deadline: ${date} (${plural2(daysLeft, "day")} left): ${formatNumber2(perDay)} ${noun}s a day needed`);
     }
   }
   if (progress.lastSession) {
     const { date, since } = progress.lastSession;
-    lines.push(`Sessions: ${progress.sessions} logged; last ${date} (${since >= 0 ? "+" : ""}${formatNumber2(since)} words since)`);
+    lines.push(`Sessions: ${progress.sessions} logged; last ${date} (${since >= 0 ? "+" : ""}${formatNumber2(since)} ${noun}s since)`);
   } else {
     lines.push("Sessions: none logged (run story progress --log after a writing session)");
   }
   if (progress.pace !== null) {
-    lines.push(`Pace: ${formatNumber2(Math.round(progress.pace))} words a day over the last ${Math.min(progress.sessions, PACE_SESSIONS)} sessions`);
+    lines.push(`Pace: ${formatNumber2(Math.round(progress.pace))} ${noun}s a day over the last ${Math.min(progress.sessions, PACE_SESSIONS)} sessions`);
   }
   if (progress.projected) {
     lines.push(`Projected finish at this pace: ${progress.projected}`);
@@ -6936,7 +6986,7 @@ function formatProgress(progress) {
   if (progress.chapters.length > 0) {
     lines.push("", "Chapter targets:");
     for (const chapter of progress.chapters) {
-      lines.push(`- ${chapter.id}: ${formatNumber2(chapter.words)} of ${formatNumber2(chapter.target)} words (${formatPercent(chapter.percent, 0)}%)`);
+      lines.push(`- ${chapter.id}: ${formatNumber2(count(chapter))} of ${formatNumber2(chapter.target)} ${noun}s (${formatPercent(chapter.percent, 0)}%)`);
     }
   }
   return `${lines.join(`
@@ -7585,6 +7635,43 @@ import { Buffer as Buffer4 } from "node:buffer";
 import fs8 from "node:fs";
 import path12 from "node:path";
 
+// src/forms.js
+var STORY_FORMS = new Map([
+  ["flash", { min: 1, max: 1500, target: 1000 }],
+  ["short-story", { min: 1000, max: 7500, target: 5000 }],
+  ["novelette", { min: 7500, max: 17500, target: 12000 }],
+  ["novella", { min: 17500, max: 40000, target: 30000 }],
+  ["novel", { min: 40000, max: 200000, target: 80000 }],
+  ["serial", { min: null, max: null, target: null }],
+  ["picture-book", { min: 1, max: 1000, target: 500 }],
+  ["chapter-book", { min: 4000, max: 15000, target: 1e4 }]
+]);
+var COUNT_UNITS = new Map([
+  ["words", { name: "words", noun: "word", title: "Words", countField: "word-count", targetField: "target-words" }],
+  ["characters", { name: "characters", noun: "character", title: "Characters", countField: "character-count", targetField: "target-characters" }]
+]);
+function countUnit(storyData, pack) {
+  const value = storyData?.["count-unit"];
+  return COUNT_UNITS.get(COUNT_UNITS.has(value) ? value : pack?.countUnit) ?? COUNT_UNITS.get("words");
+}
+function formRanges(unit, pack) {
+  if (unit.name === "words") {
+    return STORY_FORMS;
+  }
+  const ranges = pack?.characterForms;
+  return ranges ? new Map(Object.entries(ranges)) : null;
+}
+function formRangeWarning(form, count, label, ranges = STORY_FORMS, unit = COUNT_UNITS.get("words")) {
+  const range = ranges?.get(form);
+  if (!range || range.min === null || !Number.isInteger(count) || count <= 0) {
+    return "";
+  }
+  if (count < range.min || count > range.max) {
+    return `${label} ${count} is outside the usual ${form} range of ${range.min}-${range.max} ${unit.name}`;
+  }
+  return "";
+}
+
 // src/stdin.js
 import { Buffer as Buffer2 } from "node:buffer";
 import fs4 from "node:fs";
@@ -8202,42 +8289,22 @@ function timelineText(text) {
   return String(text).replace(/:/g, "∶").replace(/\s+/g, " ").trim();
 }
 
-// src/forms.js
-var STORY_FORMS = new Map([
-  ["flash", { min: 1, max: 1500, target: 1000 }],
-  ["short-story", { min: 1000, max: 7500, target: 5000 }],
-  ["novelette", { min: 7500, max: 17500, target: 12000 }],
-  ["novella", { min: 17500, max: 40000, target: 30000 }],
-  ["novel", { min: 40000, max: 200000, target: 80000 }],
-  ["serial", { min: null, max: null, target: null }],
-  ["picture-book", { min: 1, max: 1000, target: 500 }],
-  ["chapter-book", { min: 4000, max: 15000, target: 1e4 }]
-]);
-function formRangeWarning(form, words, label) {
-  const range = STORY_FORMS.get(form);
-  if (!range || range.min === null || !Number.isInteger(words) || words <= 0) {
-    return "";
-  }
-  if (words < range.min || words > range.max) {
-    return `${label} ${words} is outside the usual ${form} range of ${range.min}-${range.max} words`;
-  }
-  return "";
-}
-
 // src/narration.js
 var NARRATION_WORDS_PER_MINUTE = 155;
+var NARRATION_CHARACTERS_PER_MINUTE = 300;
 function narrationScript(manuscript, guide) {
   const authors = manuscript.meta.authors.join(" and ");
+  const [rate, unit, count] = manuscript.unit === "characters" ? [NARRATION_CHARACTERS_PER_MINUTE, "characters", characterCount] : [NARRATION_WORDS_PER_MINUTE, "words", wordCount];
   const sections = [
     ...manuscript.front.filter((entry) => !entry.copyright).map((entry) => ({ title: entry.title, body: entry.body })),
     ...manuscript.chapters.map((chapter) => ({ title: chapter.heading, body: chapter.body })),
     ...manuscript.back.map((entry) => ({ title: entry.title, body: entry.body }))
-  ].map((section) => ({ ...section, words: wordCount(section.body) }));
+  ].map((section) => ({ ...section, words: count(section.body) }));
   const totalWords = sections.reduce((sum, section) => sum + section.words, 0);
   const lines = [
     `# ${manuscript.title}: Narration Script`,
     "",
-    `Estimated finished runtime: ${formatRuntime(totalWords)} at ${NARRATION_WORDS_PER_MINUTE} words per minute (${totalWords} words). Narration pace varies; time a sample chapter and rescale.`,
+    `Estimated finished runtime: ${formatRuntime(totalWords, rate)} at ${rate} ${unit} per minute (${totalWords} ${unit}). Narration pace varies; time a sample chapter and rescale.`,
     "",
     "## Pronunciation Guide",
     ""
@@ -8253,9 +8320,9 @@ function narrationScript(manuscript, guide) {
   lines.push("", "## Opening Credits", "", `${manuscript.title}${/[.!?…]["”’')\]]*$/.test(manuscript.title) ? "" : "."}${authors === "" ? "" : ` Written by ${authors}.`} Narrated by [narrator].`);
   let wordsSoFar = 0;
   for (const section of sections) {
-    const before = Math.round(wordsSoFar / NARRATION_WORDS_PER_MINUTE);
+    const before = Math.round(wordsSoFar / rate);
     wordsSoFar += section.words;
-    const minutes = Math.round(wordsSoFar / NARRATION_WORDS_PER_MINUTE) - before;
+    const minutes = Math.round(wordsSoFar / rate) - before;
     lines.push("", `## ${section.title}`, "", `[${minutes < 1 ? "under 1 min" : `about ${minutes} min`}]`, "", narrationBody(section.body));
   }
   lines.push("", "## Closing Credits", "", `The end. You have been listening to ${manuscript.title}${authors === "" ? "" : `, written by ${authors}`}, narrated by [narrator].`, "");
@@ -8285,8 +8352,8 @@ function narrationBody(body) {
 
 `);
 }
-function formatRuntime(words) {
-  const minutes = Math.round(words / NARRATION_WORDS_PER_MINUTE);
+function formatRuntime(words, rate = NARRATION_WORDS_PER_MINUTE) {
+  const minutes = Math.round(words / rate);
   return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
 }
 function cell2(value) {
@@ -8613,6 +8680,7 @@ function matterXhtml(entry, placement, root, head) {
   return xhtmlDocument(entry.title, root, head, bodyType, `${heading}${xhtmlParagraphs(entry.body)}`);
 }
 function htmlBook(manuscript) {
+  const characters = (body) => manuscript.unit === "characters" ? { characters: characterCount(body) } : {};
   const paragraphs = (body) => markdownParagraphs(body).map((paragraph) => {
     if (paragraph.sceneBreak) {
       return null;
@@ -8632,6 +8700,7 @@ function htmlBook(manuscript) {
     title: entry.title,
     heading: entry.heading,
     words: wordCount(entry.body),
+    ...characters(entry.body),
     paragraphs: paragraphs(entry.body)
   });
   const parts = [
@@ -8643,12 +8712,14 @@ function htmlBook(manuscript) {
       title: chapter.heading,
       heading: true,
       words: wordCount(chapter.body),
+      ...characters(chapter.body),
       paragraphs: paragraphs(chapter.body)
     })),
     ...manuscript.back.map(matter("back"))
   ];
   return {
     title: manuscript.title,
+    ...manuscript.unit === "characters" ? { unit: "characters" } : {},
     authors: manuscript.meta.authors,
     language: manuscript.meta.language,
     writingMode: manuscript.meta.writingMode,
@@ -8724,13 +8795,16 @@ function shunnWordCount(words, pack = languagePack()) {
   const rounded = Math.round(words / step) * step;
   return formatNumber(rounded, pack);
 }
+function shunnLength(meta) {
+  return meta.characters === undefined ? `Approximately ${shunnWordCount(meta.words, meta.pack)} words` : `Approximately ${shunnWordCount(meta.characters, meta.pack)} characters`;
+}
 function shunnTitlePageXml(script, meta) {
   const line = (text, decoration) => shunnParagraphXml(script, shunnRunXml(script, text, decoration), true);
   const lines = [line(meta.title, { strong: true })];
   if (meta.author) {
     lines.push(line("by"), line(meta.author));
   }
-  lines.push(line(`Approximately ${shunnWordCount(meta.words, meta.pack)} words`));
+  lines.push(line(shunnLength(meta)));
   for (const contactLine of meta.contact) {
     lines.push(line(String(contactLine)));
   }
@@ -8765,7 +8839,7 @@ function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {}) {
   if (meta.author) {
     lines.push("by", meta.author);
   }
-  lines.push("", `Approximately ${shunnWordCount(meta.words, meta.pack)} words`, "");
+  lines.push("", shunnLength(meta), "");
   for (const contactLine of meta.contact) {
     lines.push(String(contactLine));
   }
@@ -9222,6 +9296,8 @@ var EASY_WIN_RUN = 3;
 var NO_SEQUEL_RUN = 4;
 var RESOLUTION_RUN = 3;
 function buildPacing(project) {
+  const characters = project.unit?.name === "characters";
+  const key = characters ? "characters" : "words";
   const chapters = [...project.chapters].sort((left, right) => left.number - right.number || left.id.localeCompare(right.id, "en"));
   const files = new Map(chapters.map((chapter) => [chapter.id, project.root === undefined ? null : path10.relative(project.root, chapter.file)]));
   const warnings = [];
@@ -9239,7 +9315,7 @@ function buildPacing(project) {
     rows.push({
       id: chapter.id,
       number: chapter.number,
-      words: chapter.wordCount,
+      [key]: characters ? chapter.count : chapter.wordCount,
       scenes: scenes.filter((scene) => !scene.sequel).length,
       sequels: scenes.filter((scene) => scene.sequel).length,
       outcomes,
@@ -9278,21 +9354,22 @@ function buildPacing(project) {
     }
   }
   flushRun(resolutions, RESOLUTION_RUN, warnings, (run) => warn("pacing-resolution-run", `${run.length} chapters in a row end on resolution (${span(run)}): readers can put the book down`));
-  const written = rows.filter((row) => row.words > 0);
-  const median = medianOf(written.map((row) => row.words));
+  const written = rows.filter((row) => row[key] > 0);
+  const median = medianOf(written.map((row) => row[key]));
   if (written.length >= 3) {
     for (const row of written) {
-      if (row.words > median * 2) {
-        warnings.push(warn("pacing-long-chapter", `${row.id} runs ${row.words} words, over twice the median chapter (${formatMedian(median)}): consider splitting it`, files.get(row.id)));
-      } else if (row.words < median / 2) {
-        warnings.push(warn("pacing-short-chapter", `${row.id} runs ${row.words} words, under half the median chapter (${formatMedian(median)}): check it earns its place`, files.get(row.id)));
+      if (row[key] > median * 2) {
+        warnings.push(warn("pacing-long-chapter", `${row.id} runs ${row[key]} ${key}, over twice the median chapter (${formatMedian(median)}): consider splitting it`, files.get(row.id)));
+      } else if (row[key] < median / 2) {
+        warnings.push(warn("pacing-short-chapter", `${row.id} runs ${row[key]} ${key}, under half the median chapter (${formatMedian(median)}): check it earns its place`, files.get(row.id)));
       }
     }
   }
   const recorded = units.filter((unit) => !unit.sequel && SCENE_OUTCOMES.has(unit.outcome));
   return {
+    ...characters ? { unit: "characters" } : {},
     rows,
-    medianWords: formatMedian(median),
+    [characters ? "medianCharacters" : "medianWords"]: formatMedian(median),
     totals: {
       scenes: units.filter((unit) => !unit.sequel).length,
       sequels: units.filter((unit) => unit.sequel).length,
@@ -9326,11 +9403,12 @@ function medianOf(values) {
 }
 function formatPacing(pacing) {
   const { totals } = pacing;
+  const characters = pacing.unit === "characters";
   const setbackShare = totals.outcomesRecorded === 0 ? "no outcomes recorded" : `${Math.round(totals.setbacks * 100 / totals.outcomesRecorded)}% of recorded outcomes are setbacks or complications`;
   const lines = [
     `Pacing: ${plural(totals.scenes, "scene")}, ${plural(totals.sequels, "sequel")}, ${totals.hooks} of ${plural(pacing.rows.length, "chapter")} with hooks`,
     `Outcomes: ${setbackShare}`,
-    `Median chapter: ${pacing.medianWords} words`,
+    characters ? `Median chapter: ${pacing.medianCharacters} characters` : `Median chapter: ${pacing.medianWords} words`,
     ""
   ];
   if (pacing.rows.length === 0) {
@@ -9342,7 +9420,7 @@ function formatPacing(pacing) {
   const outcomesOf = (row) => `${row.outcomes.yes}/${row.outcomes.no}/${row.outcomes["yes-but"]}/${row.outcomes["no-and"]}`;
   const columns = [
     { title: "Ch", value: (row) => String(row.number) },
-    { title: "Words", value: (row) => String(row.words) },
+    characters ? { title: "Characters", value: (row) => String(row.characters) } : { title: "Words", value: (row) => String(row.words) },
     { title: "Scenes", value: (row) => String(row.scenes) },
     { title: "Sequels", value: (row) => String(row.sequels) },
     { title: "Outcomes (yes/no/yes-but/no-and)", value: outcomesOf, left: true }
@@ -9532,6 +9610,9 @@ function createStoryProject(options) {
   for (const directory of PROJECT_DIRECTORIES) {
     makeDirectories(path11.join(root, directory));
   }
+  const storyInherited = { ...inheritedStoryFields(inherited), ...options.language === undefined ? {} : { language: options.language.trim() } };
+  const pack = languagePack(projectLanguage(storyInherited));
+  const unit = countUnit(storyInherited, pack);
   const storyWritten = writeStarterFile(path11.join(root, "story.md"), storyBible({
     title,
     storyId,
@@ -9546,14 +9627,16 @@ function createStoryProject(options) {
     pov: options.pov ?? inherited.pov ?? "third-person-limited",
     tense: options.tense ?? inherited.tense ?? "past",
     form: options.form,
-    inherited: { ...inheritedStoryFields(inherited), ...options.language === undefined ? {} : { language: options.language.trim() } },
+    unit,
+    pack,
+    inherited: storyInherited,
     synopsis: options.synopsis ?? options.defaultSynopsis ?? "Add a 2-3 sentence synopsis here."
   }), { root });
   writeStarterFile(path11.join(root, "characters", "_index.md"), characterIndex(storyId, [], "", ""), { root });
   writeStarterFile(path11.join(root, "worldbuilding", "_index.md"), worldIndex(storyId, [], [], [], [], ""), { root });
   writeStarterFile(path11.join(root, "plot", "_index.md"), plotIndex(storyId, "three-act", [], "", ""), { root });
   writeStarterFile(path11.join(root, "plot", "timeline.md"), timeline(storyId), { root });
-  writeStarterFile(path11.join(root, "chapters", "_index.md"), chapterIndex(storyId, []), { root });
+  writeStarterFile(path11.join(root, "chapters", "_index.md"), chapterIndex(storyId, [], unit), { root });
   writeStarterFile(path11.join(root, "scenes", "_index.md"), sceneIndex(storyId, []), { root });
   writeStarterFile(path11.join(root, "continuity", "state.md"), continuityState(storyId), { root });
   writeStarterFile(path11.join(root, "continuity", "questions", "_index.md"), questionIndex(storyId, []), { root });
@@ -9636,6 +9719,9 @@ function inheritedStoryFields(data) {
   }
   if (text(data.language)) {
     fields.language = data.language;
+  }
+  if (COUNT_UNITS.has(data["count-unit"])) {
+    fields["count-unit"] = data["count-unit"];
   }
   return fields;
 }
@@ -9816,6 +9902,19 @@ function deriveStoryId(title, root) {
 function storyIdMismatch(label, project) {
   return err("story-id-mismatch", `${label} story must be ${project.storyId} (run story reindex after changing the story.md title)`, label);
 }
+function chapterLength(unit, data, markdown) {
+  const prose = chapterProse(markdown.body);
+  const words = wordCount(prose);
+  const declared = data[unit.countField];
+  const target = data[unit.targetField];
+  return {
+    wordCount: words,
+    count: unit.name === "characters" ? characterCount(prose) : words,
+    declaredCount: declared === undefined ? 0 : Number.isInteger(declared) ? declared : null,
+    countMissing: declared === undefined,
+    targetCount: Number.isInteger(target) && target > 0 ? target : 0
+  };
+}
 function scanProject(root) {
   const projectRoot = path11.resolve(root);
   const scanErrors = [];
@@ -9840,13 +9939,16 @@ function scanProject(root) {
     }
   }
   const language = projectLanguage(story.data);
+  const pack = languagePack(language);
+  const unit = countUnit(story.data, pack);
   const project = {
     root: projectRoot,
     story,
     storyId,
     title: titleText || path11.basename(projectRoot),
     language,
-    pack: languagePack(language),
+    pack,
+    unit,
     fileErrors: scanErrors,
     characters: readEntityFiles(projectRoot, "characters", (id, file, data) => ({
       id,
@@ -9926,7 +10028,7 @@ function scanProject(root) {
       declaredWordCount: data["word-count"] === undefined ? 0 : Number.isInteger(data["word-count"]) ? data["word-count"] : null,
       wordCountMissing: data["word-count"] === undefined,
       targetWords: Number.isInteger(data["target-words"]) && data["target-words"] > 0 ? data["target-words"] : 0,
-      wordCount: wordCount(chapterProse(markdown.body)),
+      ...chapterLength(unit, data, markdown),
       unclosedComment: hasUnclosedComment(chapterProse(markdown.body)),
       todoMarkers: countTodoMarkers(chapterProse(markdown.body)),
       date: String(data.date ?? ""),
@@ -10079,6 +10181,9 @@ function validateProjectOf(project) {
   validateResearch(project, errors, warnings);
   validateProgressLog(project, errors);
   validateFormRange(project, warnings);
+  if (!project.story.unreadable) {
+    unusedTargetWarnings(project, "story.md", project.story.data, warnings);
+  }
   validatePublishing(project.story.data, errors, warnings);
   validatePronunciations(project, errors);
   validateTextFields(project, errors);
@@ -10121,6 +10226,9 @@ function validateProjectOf(project) {
     const file = path11.relative(projectRoot, chapter.file);
     if (chapter.declaredWordCount !== null && chapter.declaredWordCount !== chapter.wordCount) {
       warnings.push(warn("stale-word-count", chapter.wordCountMissing ? `${file} has no word-count (contains ${chapter.wordCount})` : `${file} declares ${plural(chapter.declaredWordCount, "word")} but contains ${chapter.wordCount}`, file));
+    }
+    if (project.unit.name === "characters" && chapter.declaredCount !== null && chapter.declaredCount !== chapter.count) {
+      warnings.push(warn("stale-word-count", chapter.countMissing ? `${file} has no ${project.unit.countField} (contains ${chapter.count})` : `${file} declares ${plural(chapter.declaredCount, project.unit.noun)} but contains ${chapter.count}`, file));
     }
     if (chapter.todoMarkers > 0) {
       warnings.push(warn("todo-markers", `${file} has ${plural(chapter.todoMarkers, "[TODO marker")} in its prose, which every build prints: resolve ${chapter.todoMarkers === 1 ? "it" : "them"} or move ${chapter.todoMarkers === 1 ? "it" : "them"} into an HTML comment`, file));
@@ -10596,9 +10704,12 @@ function projectReport(root, options = {}) {
   const project = scanProject(root);
   const { validation, links, continuity } = projectChecks(project, options.overrides);
   const totalWords = project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
+  const characters = project.unit.name === "characters";
+  const targetCharacters = project.story.data["target-characters"];
   return {
     root: project.root,
     title: project.title,
+    ...characters ? { unit: "characters", targetCharacters: Number.isInteger(targetCharacters) ? targetCharacters : null } : {},
     storyId: project.storyId,
     schemaVersion: project.story.data["schema-version"],
     series: project.story.data.series,
@@ -10624,14 +10735,16 @@ function projectReport(root, options = {}) {
       clues: project.clues.length,
       glossaryTerms: project.glossaryTerms.length,
       research: project.research.length,
-      words: totalWords
+      words: totalWords,
+      ...characters ? { proseCharacters: project.chapters.reduce((sum, chapter) => sum + chapter.count, 0) } : {}
     },
     chapters: project.chapters.map((chapter) => ({
       number: chapter.number,
       title: chapter.title,
       status: chapter.status,
       pov: chapter.pov,
-      wordCount: chapter.wordCount
+      wordCount: chapter.wordCount,
+      ...characters ? { characterCount: chapter.count } : {}
     })),
     arcs: project.arcs.map((arc) => ({
       name: arc.name,
@@ -10644,6 +10757,13 @@ function projectReport(root, options = {}) {
     continuity,
     actions: buildProjectActions(project, validation, links, continuity, options.displayPath)
   };
+}
+function reportLengthLines(report) {
+  const [name, total, target] = report.unit === "characters" ? ["characters", report.counts.proseCharacters, report.targetCharacters] : ["words", report.counts.words, report.targetWords];
+  return [
+    `- Total ${name}: ${total}`,
+    ...target > 0 ? [`- Target ${name}: ${target} (${formatPercent(total * 100 / target, 0)}%)`] : []
+  ];
 }
 function formatProjectReport(report, options = {}) {
   const lines = [
@@ -10671,8 +10791,7 @@ function formatProjectReport(report, options = {}) {
     `- Clues: ${report.counts.clues}`,
     `- Glossary terms: ${report.counts.glossaryTerms}`,
     ...report.counts.research === 0 ? [] : [`- Research notes: ${report.counts.research}`],
-    `- Total words: ${report.counts.words}`,
-    ...report.targetWords > 0 ? [`- Target words: ${report.targetWords} (${formatPercent(report.counts.words * 100 / report.targetWords, 0)}%)`] : [],
+    ...reportLengthLines(report),
     "",
     "Chapters:"
   ];
@@ -10680,7 +10799,8 @@ function formatProjectReport(report, options = {}) {
     lines.push("- None");
   } else {
     for (const chapter of report.chapters) {
-      lines.push(`- ${chapter.number}. ${chapter.title} (${chapter.status}, ${chapter.wordCount} words, POV: ${chapter.pov || "unspecified"})`);
+      const length = report.unit === "characters" ? `${chapter.characterCount} characters` : `${chapter.wordCount} words`;
+      lines.push(`- ${chapter.number}. ${chapter.title} (${chapter.status}, ${length}, POV: ${chapter.pov || "unspecified"})`);
     }
   }
   lines.push("", "Arcs:");
@@ -10760,7 +10880,7 @@ function reindexProjectUnlocked(root) {
   writeRegistry(at("characters", "_index.md"), (existing) => characterIndex(project.storyId, project.characters, extractSection(existing, "Relationship Map"), extractSection(existing, "Family Trees")), changed, project.root);
   writeRegistry(at("worldbuilding", "_index.md"), (existing) => worldIndex(project.storyId, project.locations, project.systems, project.factions, project.artifacts, extractSection(existing, "World Overview")), changed, project.root);
   writeRegistry(at("plot", "_index.md"), (existing) => plotIndex(project.storyId, plotStructure, project.arcs, extractSection(existing, "Story Structure"), extractSection(existing, "Theme Tracking")), changed, project.root);
-  writeRegistry(at("chapters", "_index.md"), () => chapterIndex(project.storyId, project.chapters), changed, project.root);
+  writeRegistry(at("chapters", "_index.md"), () => chapterIndex(project.storyId, project.chapters, project.unit), changed, project.root);
   writeRegistry(at("scenes", "_index.md"), () => sceneIndex(project.storyId, project.scenes), changed, project.root);
   writeRegistry(at("continuity", "questions", "_index.md"), () => questionIndex(project.storyId, project.questions), changed, project.root);
   writeRegistry(at("continuity", "promises", "_index.md"), () => promiseIndex(project.storyId, project.promises), changed, project.root);
@@ -10896,19 +11016,23 @@ function computeWordCounts(root, options = {}) {
 function computeWordCountsUnlocked(root, options = {}) {
   const project = scanProject(root);
   assertProjectParses(project, "count words");
+  const characters = project.unit.name === "characters";
   const chapters = [];
   for (const chapter of project.chapters) {
     chapters.push({
       number: chapter.number,
       title: chapter.title,
       file: path11.relative(project.root, chapter.file),
-      wordCount: chapter.wordCount
+      wordCount: chapter.wordCount,
+      ...characters ? { characterCount: chapter.count } : {}
     });
-    if (options.write && chapter.declaredWordCount !== chapter.wordCount) {
+    if (options.write && (chapter.declaredWordCount !== chapter.wordCount || chapter.declaredCount !== chapter.count)) {
       const markdown = readMarkdown(chapter.file, project.root);
+      const prose = chapterProse(markdown.body);
       writeFile(chapter.file, replaceFrontmatter(markdown.rawMarkdown, {
         ...markdown.data,
-        "word-count": wordCount(chapterProse(markdown.body))
+        "word-count": wordCount(prose),
+        ...characters ? { "character-count": characterCount(prose) } : {}
       }), { root: project.root, unchangedFrom: markdown.rawMarkdown });
     }
   }
@@ -10916,8 +11040,9 @@ function computeWordCountsUnlocked(root, options = {}) {
     reindexProject(project.root);
   }
   return {
+    ...characters ? { unit: "characters" } : {},
     chapters,
-    total: chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0)
+    total: chapters.reduce((sum, chapter) => sum + (characters ? chapter.characterCount : chapter.wordCount), 0)
   };
 }
 function compareProject(root, options = {}) {
@@ -11217,6 +11342,9 @@ function projectProgress(root, options = {}) {
   }
   let project = scanProject(root);
   const words = project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
+  const unit = project.unit;
+  const characters = unit.name === "characters";
+  const counts = characters ? { words, characters: project.chapters.reduce((sum, chapter) => sum + chapter.count, 0) } : { words };
   let logged = null;
   if (options.log) {
     assertProjectParses(project, "log progress");
@@ -11230,37 +11358,40 @@ function projectProgress(root, options = {}) {
     }
     const filePath = path11.join(project.root, PROGRESS_FILE);
     const existing = project.progressLog;
-    const sessions = withSession(asArray(existing?.data.sessions), today, words);
-    const contents = existing === null ? progressLogFile(sessions) : replaceFrontmatter(existing.rawMarkdown, { ...existing.data, sessions });
+    const sessions = withSession(asArray(existing?.data.sessions), today, counts);
+    const contents = existing === null ? progressLogFile(sessions, unit) : replaceFrontmatter(existing.rawMarkdown, { ...existing.data, sessions });
     writeFile(filePath, contents, { root: project.root });
-    logged = { file: filePath, date: today, words };
+    logged = { file: filePath, date: today, ...counts };
     project = scanProject(root);
   }
   const data = project.story.data;
   const errors = [...project.fileErrors];
-  if (data["target-words"] !== undefined) {
-    requireInteger(data, "target-words", "story.md", errors, 1);
+  if (data[unit.targetField] !== undefined) {
+    requireInteger(data, unit.targetField, "story.md", errors, 1);
   }
   validateDeadline(data, errors);
+  const target = data[unit.targetField];
   return {
     ok: errors.length === 0,
     errors,
     warnings: [],
     logged,
     ...computeProgress({
-      words,
-      target: Number.isInteger(data["target-words"]) && data["target-words"] > 0 ? data["target-words"] : null,
+      ...characters ? { unit: unit.name } : {},
+      words: characters ? counts.characters : words,
+      target: Number.isInteger(target) && target > 0 ? target : null,
       deadline: typeof data.deadline === "string" ? data.deadline : null,
       today,
-      chapters: project.chapters.map((chapter) => ({ id: chapter.id, words: chapter.wordCount, target: chapter.targetWords })),
-      sessions: cleanSessions(project.progressLog?.data.sessions)
+      chapters: project.chapters.map((chapter) => ({ id: chapter.id, words: chapter.count, target: chapter.targetCount })),
+      sessions: cleanSessions(project.progressLog?.data.sessions, unit.name)
     })
   };
 }
-function progressLogFile(sessions) {
+function progressLogFile(sessions, unit) {
+  const counts = unit.name === "characters" ? "word and character counts" : "word count";
   return `${stringifyFrontmatter({ type: "progress-log", sessions })}# Progress Log
 
-\`story progress --log\` records the manuscript word count for the day in the frontmatter above. Set \`target-words\` and \`deadline\` in \`story.md\`, and \`target-words\` on chapters, to measure against them.
+\`story progress --log\` records the manuscript ${counts} for the day in the frontmatter above. Set \`${unit.targetField}\` and \`deadline\` in \`story.md\`, and \`${unit.targetField}\` on chapters, to measure against them.
 `;
 }
 function storyTimeline(root) {
@@ -11557,6 +11688,7 @@ function buildBook(root, options = {}) {
       data: project.story.data,
       meta: manuscript.meta,
       words,
+      ...manuscript.unit === "characters" ? { characters: manuscript.chapters.reduce((sum, chapter) => sum + characterCount(chapter.body), 0) } : {},
       pages: { "5.5x8.5": estimateBookPages(book, "5.5x8.5"), "6x9": estimateBookPages(book, "6x9") },
       hasCopyrightPage: manuscript.front.concat(manuscript.back).some((entry) => entry.copyright),
       coverReady: coverIsReady(project),
@@ -11868,6 +12000,7 @@ function shunnMeta(project) {
     contact: asArray(data.contact),
     words: project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0),
     pack: project.pack,
+    ...project.unit.name === "characters" ? { characters: project.chapters.reduce((sum, chapter) => sum + chapter.count, 0) } : {},
     shortForm: data.form === "short-story" || data.form === "flash"
   };
 }
@@ -12587,16 +12720,16 @@ function storyBible(options) {
     pov: options.pov,
     tense: options.tense
   });
-  for (const field of ["author", "authors", "language"]) {
+  for (const field of ["author", "authors", "language", "count-unit"]) {
     if (options.inherited?.[field] !== undefined) {
       data[field] = options.inherited[field];
     }
   }
   if (options.form !== undefined) {
     data.form = options.form;
-    const target = STORY_FORMS.get(options.form).target;
+    const target = formRanges(options.unit, options.pack)?.get(options.form)?.target ?? null;
     if (target !== null) {
-      data["target-words"] = target;
+      data[options.unit.targetField] = target;
     }
   }
   for (const field of ["follows", "precedes"]) {
@@ -12703,19 +12836,20 @@ ${themeTracking || `| Theme | Arcs | Chapters |
 | *No themes tracked yet* | | |`}
 `;
 }
-function chapterIndex(storyId, chapters) {
-  const rows = chapters.length === 0 ? ["| *No chapters yet* | | | | | |"] : chapters.map((chapter) => `| ${cell3(chapter.number)} | ${cell3(chapter.title)} | ${cell3(chapter.pov)} | ${cell3(chapter.status)} | ${cell3(chapter.wordCount)} | [${chapter.id}](${path11.basename(chapter.file)}) |`);
-  const total = chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
+function chapterIndex(storyId, chapters, unit = COUNT_UNITS.get("words")) {
+  const rows = chapters.length === 0 ? ["| *No chapters yet* | | | | | |"] : chapters.map((chapter) => `| ${cell3(chapter.number)} | ${cell3(chapter.title)} | ${cell3(chapter.pov)} | ${cell3(chapter.status)} | ${cell3(chapter.count)} | [${chapter.id}](${path11.basename(chapter.file)}) |`);
+  const total = chapters.reduce((sum, chapter) => sum + chapter.count, 0);
+  const heading = `${unit.noun[0].toUpperCase()}${unit.noun.slice(1)} Count`;
   return `${stringifyFrontmatter({ type: "chapter-registry", story: storyId })}# Chapters
 
 ## Registry
 
-| # | Title | POV | Status | Word Count | File |
-|---|-------|-----|--------|------------|------|
+| # | Title | POV | Status | ${heading} | File |
+|---|-------|-----|--------|${"-".repeat(heading.length + 2)}|------|
 ${rows.join(`
 `)}
 
-## Total Word Count: ${total}
+## Total ${heading}: ${total}
 `;
 }
 function timeline(storyId) {
@@ -12915,7 +13049,7 @@ function buildProjectActions(project, validation, links, continuity, displayPath
   let nextNumber = 1;
   for (const chapter of project.chapters) {
     const file = relative2(project, chapter.file);
-    if (chapter.declaredWordCount !== chapter.wordCount && !wordCountOverridden.has(file)) {
+    if ((chapter.declaredWordCount !== chapter.wordCount || chapter.declaredCount !== chapter.count) && !wordCountOverridden.has(file)) {
       staleChapters.push(chapter);
     }
     let hasScene = false;
@@ -13031,7 +13165,7 @@ function buildEntity(project, kind, name, options) {
   if (kind === "chapter") {
     const number = options.number === undefined ? project.chapters.reduce((max, chapter) => Math.max(max, chapter.number), 0) + 1 : requirePositiveInteger(options.number, "chapter number");
     const id = `chapter-${String(number).padStart(2, "0")}`;
-    return entityResult(project, kind, id, chapterFile(name, number, options));
+    return entityResult(project, kind, id, chapterFile(name, number, options, project.unit));
   }
   if (kind === "scene") {
     if (options.chapter === undefined && project.chapters.length === 0) {
@@ -13412,7 +13546,7 @@ What changes because of this arc.
 | | | | | planned |
 `;
 }
-function chapterFile(title, number, options) {
+function chapterFile(title, number, options, unit) {
   const dateError = storyDateError(options.date);
   if (dateError) {
     throw usageError(dateError);
@@ -13434,7 +13568,8 @@ function chapterFile(title, number, options) {
     date: options.date ?? "",
     time: options.time ?? "",
     ...options.hook === undefined ? {} : { hook: options.hook },
-    "word-count": 0
+    "word-count": 0,
+    ...unit.name === "characters" ? { "character-count": 0 } : {}
   })}# ${chapterHeading(number, title)}
 
 ## Outline
@@ -14092,6 +14227,7 @@ function manuscriptParts(project, action = "build") {
     title: project.title,
     author: meta.authors.join(" and "),
     meta,
+    unit: project.unit.name,
     front,
     chapters,
     back,
@@ -14681,6 +14817,10 @@ function validateStoryFrontmatter(project, errors) {
   if (data["target-words"] !== undefined) {
     requireInteger(data, "target-words", "story.md", errors, 1);
   }
+  if (data["target-characters"] !== undefined) {
+    requireInteger(data, "target-characters", "story.md", errors, 1);
+  }
+  validateEnum(data, "count-unit", COUNT_UNITS, "story.md", errors);
   validateEnum(data, "form", STORY_FORMS, "story.md", errors);
   if (data["draft-mode"] !== undefined) {
     requireScalar(data, "draft-mode", "story.md", errors);
@@ -14729,16 +14869,26 @@ function validatePronunciations(project, errors) {
 }
 function validateFormRange(project, warnings) {
   const data = project.story.data;
-  const targetWarning = formRangeWarning(data.form, data["target-words"], "story.md target-words");
+  const { unit } = project;
+  const ranges = formRanges(unit, project.pack);
+  const targetWarning = formRangeWarning(data.form, data[unit.targetField], `story.md ${unit.targetField}`, ranges, unit);
   if (targetWarning !== "") {
     warnings.push(warn("form-length-range", targetWarning, "story.md"));
   }
   if (data.status === "complete") {
-    const words = project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
-    const wordsWarning = formRangeWarning(data.form, words, "Manuscript length");
-    if (wordsWarning !== "") {
-      warnings.push(warn("form-length-range", wordsWarning));
+    const length = project.chapters.reduce((sum, chapter) => sum + chapter.count, 0);
+    const lengthWarning = formRangeWarning(data.form, length, "Manuscript length", ranges, unit);
+    if (lengthWarning !== "") {
+      warnings.push(warn("form-length-range", lengthWarning));
     }
+  }
+}
+function unusedTargetWarnings(project, label, data, warnings) {
+  const { unit } = project;
+  const other = [...COUNT_UNITS.values()].find((entry) => entry !== unit);
+  if (data[other.targetField] !== undefined && data[unit.targetField] === undefined) {
+    const why = project.story.data["count-unit"] === undefined ? `language ${project.language}` : "count-unit";
+    warnings.push(warn("unused-target", `${label} ${other.targetField} is not measured: this book counts ${unit.name} (${why}), so set ${unit.targetField}`, label));
   }
 }
 function validateIndexFrontmatter(project, errors) {
@@ -14962,9 +15112,16 @@ function validateChapters(project, errors, warnings) {
     if (data["word-count"] !== undefined) {
       requireInteger(data, "word-count", label, errors, 0);
     }
+    if (data["character-count"] !== undefined) {
+      requireInteger(data, "character-count", label, errors, 0);
+    }
     if (data["target-words"] !== undefined) {
       requireInteger(data, "target-words", label, errors, 1);
     }
+    if (data["target-characters"] !== undefined) {
+      requireInteger(data, "target-characters", label, errors, 1);
+    }
+    unusedTargetWarnings(project, label, data, warnings);
     if (data.date !== undefined) {
       requireScalar(data, "date", label, errors);
     }
@@ -15313,6 +15470,9 @@ function validateProgressLog(project, errors) {
     if (!Number.isInteger(entry.words) || entry.words < 0) {
       errors.push(err("field-not-integer", `${label} words must be a non-negative integer`, PROGRESS_FILE));
     }
+    if (entry.characters !== undefined && (!Number.isInteger(entry.characters) || entry.characters < 0)) {
+      errors.push(err("field-not-integer", `${label} characters must be a non-negative integer`, PROGRESS_FILE));
+    }
   });
 }
 function validateOptionalRegistry(project, directory, expectedType, errors) {
@@ -15656,14 +15816,19 @@ function importManuscript(options) {
   if (chapters.length === 0) {
     throw usageError("No chapter content found in import source");
   }
+  const characters = countUnit(target === null ? null : existingStoryData(target), pack).name === "characters";
   let totalWords = 0;
+  let totalCharacters = 0;
   const chapterFiles = chapters.map((chapter, index) => {
     const number = index + 1;
-    const words = wordCount(scanComments(chapter.prose).text);
+    const prose = scanComments(chapter.prose).text;
+    const words = wordCount(prose);
+    const counts = characters ? { "word-count": words, "character-count": characterCount(prose) } : { "word-count": words };
     totalWords += words;
+    totalCharacters += counts["character-count"] ?? 0;
     const title = chapter.title || `Chapter ${number}`;
     const name = `chapter-${String(number).padStart(2, "0")}.md`;
-    const text = chapterMarkdown(title, number, words, chapter.prose, chapter.unnumbered);
+    const text = chapterMarkdown(title, number, counts, chapter.prose, chapter.unnumbered);
     const bytes = Buffer4.byteLength(text, "utf8");
     if (bytes > MAX_READ_BYTES) {
       throw usageError(`Cannot import: ${name} would be ${bytes} bytes, over the ${MAX_READ_BYTES} byte limit story reads. Split the manuscript with chapter headings first`);
@@ -15715,6 +15880,7 @@ function importManuscript(options) {
     ignoredOptions: created.ignoredOptions,
     chapters: chapters.length,
     words: totalWords,
+    ...characters ? { characters: totalCharacters } : {},
     warnings,
     gitignore: created.gitignore,
     candidates: extractNameCandidates(chapters.map((chapter) => chapter.prose).join(`
@@ -16123,7 +16289,7 @@ function stripTitleHeading(text, rules) {
   }
   return text;
 }
-function chapterMarkdown(title, number, words, prose, unnumbered = false) {
+function chapterMarkdown(title, number, counts, prose, unnumbered = false) {
   return `${stringifyFrontmatter({
     title,
     number,
@@ -16133,7 +16299,7 @@ function chapterMarkdown(title, number, words, prose, unnumbered = false) {
     characters: [],
     "arcs-advanced": [],
     status: "draft",
-    "word-count": words
+    ...counts
   })}# ${unnumbered ? title : chapterHeading(number, title)}
 
 ## Chapter Text
@@ -16303,7 +16469,8 @@ var COMMANDS = [
         language: parsed.options.language,
         force: isTruthy(parsed.options.force)
       });
-      io.stdout.write(`Imported ${result.chapters} ${result.chapters === 1 ? "chapter" : "chapters"} (${result.words} ${result.words === 1 ? "word" : "words"}) into ${result.root}
+      const [length, noun] = result.characters === undefined ? [result.words, "word"] : [result.characters, "character"];
+      io.stdout.write(`Imported ${result.chapters} ${result.chapters === 1 ? "chapter" : "chapters"} (${length} ${length === 1 ? noun : `${noun}s`}) into ${result.root}
 `);
       reportKeptStory(io, result, "--title");
       reportGitignore(io, result);
@@ -16355,11 +16522,12 @@ var COMMANDS = [
     options: ["write"],
     run({ parsed, io, root }) {
       const result = computeWordCounts(root(), { write: isTruthy(parsed.options.write) });
+      const characters = result.unit === "characters";
       for (const chapter of result.chapters) {
-        io.stdout.write(`${chapter.file}: ${chapter.wordCount}
+        io.stdout.write(`${chapter.file}: ${characters ? chapter.characterCount : chapter.wordCount}
 `);
       }
-      io.stdout.write(`Total: ${result.total}
+      io.stdout.write(`Total: ${result.total}${characters ? " characters" : ""}
 `);
       return 0;
     }
@@ -16499,7 +16667,8 @@ var COMMANDS = [
         return reportJson(io, "progress", progress, { writes: progress.logged ? [progress.logged.file] : [] });
       }
       if (progress.logged) {
-        io.stdout.write(`Logged ${progress.logged.words} words for ${progress.logged.date} in ${progress.logged.file}
+        const { characters, words } = progress.logged;
+        io.stdout.write(`Logged ${characters === undefined ? `${words} words` : `${characters} characters`} for ${progress.logged.date} in ${progress.logged.file}
 `);
       }
       io.stdout.write(formatProgress(progress));

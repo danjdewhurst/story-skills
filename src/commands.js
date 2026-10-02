@@ -145,7 +145,8 @@ export const COMMANDS = [
         language: parsed.options.language,
         force: isTruthy(parsed.options.force)
       });
-      io.stdout.write(`Imported ${result.chapters} ${result.chapters === 1 ? "chapter" : "chapters"} (${result.words} ${result.words === 1 ? "word" : "words"}) into ${result.root}\n`);
+      const [length, noun] = result.characters === undefined ? [result.words, "word"] : [result.characters, "character"];
+      io.stdout.write(`Imported ${result.chapters} ${result.chapters === 1 ? "chapter" : "chapters"} (${length} ${length === 1 ? noun : `${noun}s`}) into ${result.root}\n`);
       reportKeptStory(io, result, "--title");
       reportGitignore(io, result);
       for (const warning of result.warnings) {
@@ -192,10 +193,12 @@ export const COMMANDS = [
     options: ["write"],
     run({ parsed, io, root }) {
       const result = computeWordCounts(root(), { write: isTruthy(parsed.options.write) });
+      // A project counted in characters prints characters, and says so.
+      const characters = result.unit === "characters";
       for (const chapter of result.chapters) {
-        io.stdout.write(`${chapter.file}: ${chapter.wordCount}\n`);
+        io.stdout.write(`${chapter.file}: ${characters ? chapter.characterCount : chapter.wordCount}\n`);
       }
-      io.stdout.write(`Total: ${result.total}\n`);
+      io.stdout.write(`Total: ${result.total}${characters ? " characters" : ""}\n`);
       return 0;
     }
   },
@@ -337,7 +340,8 @@ export const COMMANDS = [
         return reportJson(io, "progress", progress, { writes: progress.logged ? [progress.logged.file] : [] });
       }
       if (progress.logged) {
-        io.stdout.write(`Logged ${progress.logged.words} words for ${progress.logged.date} in ${progress.logged.file}\n`);
+        const { characters, words } = progress.logged;
+        io.stdout.write(`Logged ${characters === undefined ? `${words} words` : `${characters} characters`} for ${progress.logged.date} in ${progress.logged.file}\n`);
       }
       io.stdout.write(formatProgress(progress));
       return reportResult(io, progress, "Progress checked", "Progress check failed");

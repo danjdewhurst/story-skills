@@ -1,7 +1,9 @@
-// Story forms and their usual word-count ranges. The ranges follow common
-// award and market conventions; they are advisory, so a book outside its
-// form's range is a warning, not an error. Serials have no range because
-// installments vary.
+// Story forms, the unit a manuscript's length is counted in, and each form's
+// usual length. The word ranges follow common award and market
+// conventions; character ranges come from the language pack (see
+// ../docs/project-format.md for their sources). They are advisory, so a
+// book outside its form's range is a warning, not an error. Serials have no
+// range because installments vary.
 
 export const STORY_FORMS = new Map([
   ["flash", { min: 1, max: 1500, target: 1000 }],
@@ -14,13 +16,39 @@ export const STORY_FORMS = new Map([
   ["chapter-book", { min: 4000, max: 15000, target: 10000 }]
 ]);
 
-export function formRangeWarning(form, words, label) {
-  const range = STORY_FORMS.get(form);
-  if (!range || range.min === null || !Number.isInteger(words) || words <= 0) {
+// The units a length is counted in, by story.md `count-unit`: the noun the
+// output prints, the chapter field that records the count, and the target
+// fields. Chinese and Japanese count characters (10万字), every other
+// language words.
+export const COUNT_UNITS = new Map([
+  ["words", { name: "words", noun: "word", title: "Words", countField: "word-count", targetField: "target-words" }],
+  ["characters", { name: "characters", noun: "character", title: "Characters", countField: "character-count", targetField: "target-characters" }]
+]);
+
+// The project's count unit: story.md `count-unit` when it names one, else
+// the language pack's. validate reports any other value.
+export function countUnit(storyData, pack) {
+  const value = storyData?.["count-unit"];
+  return COUNT_UNITS.get(COUNT_UNITS.has(value) ? value : pack?.countUnit) ?? COUNT_UNITS.get("words");
+}
+
+// Each form's { min, max, target } in the unit, or null when the pack has
+// no ranges for it (a language counted in characters without its own).
+export function formRanges(unit, pack) {
+  if (unit.name === "words") {
+    return STORY_FORMS;
+  }
+  const ranges = pack?.characterForms;
+  return ranges ? new Map(Object.entries(ranges)) : null;
+}
+
+export function formRangeWarning(form, count, label, ranges = STORY_FORMS, unit = COUNT_UNITS.get("words")) {
+  const range = ranges?.get(form);
+  if (!range || range.min === null || !Number.isInteger(count) || count <= 0) {
     return "";
   }
-  if (words < range.min || words > range.max) {
-    return `${label} ${words} is outside the usual ${form} range of ${range.min}-${range.max} words`;
+  if (count < range.min || count > range.max) {
+    return `${label} ${count} is outside the usual ${form} range of ${range.min}-${range.max} ${unit.name}`;
   }
   return "";
 }

@@ -1,25 +1,32 @@
 import { compareText } from "./languages/locale.js";
-import { flattenHeadings, isSceneBreak, plainLinks, wordCount } from "./markdown.js";
+import { characterCount, flattenHeadings, isSceneBreak, plainLinks, wordCount } from "./markdown.js";
 
 // Audiobook narration script: a pronunciation guide from the bible, opening
 // and closing credits, and each section with its estimated finished runtime.
 // Emphasis stays marked so the narrator knows where the stress falls.
 
 export const NARRATION_WORDS_PER_MINUTE = 155;
+// For a book counted in characters: Japanese narration runs about 300
+// characters a minute (the NHK announcer's pace), Mandarin a little slower,
+// and the count includes punctuation, which is not read.
+export const NARRATION_CHARACTERS_PER_MINUTE = 300;
 
 export function narrationScript(manuscript, guide) {
   const authors = manuscript.meta.authors.join(" and ");
+  const [rate, unit, count] = manuscript.unit === "characters"
+    ? [NARRATION_CHARACTERS_PER_MINUTE, "characters", characterCount]
+    : [NARRATION_WORDS_PER_MINUTE, "words", wordCount];
   const sections = [
     ...manuscript.front.filter((entry) => !entry.copyright).map((entry) => ({ title: entry.title, body: entry.body })),
     ...manuscript.chapters.map((chapter) => ({ title: chapter.heading, body: chapter.body })),
     ...manuscript.back.map((entry) => ({ title: entry.title, body: entry.body }))
-  ].map((section) => ({ ...section, words: wordCount(section.body) }));
+  ].map((section) => ({ ...section, words: count(section.body) }));
   const totalWords = sections.reduce((sum, section) => sum + section.words, 0);
 
   const lines = [
     `# ${manuscript.title}: Narration Script`,
     "",
-    `Estimated finished runtime: ${formatRuntime(totalWords)} at ${NARRATION_WORDS_PER_MINUTE} words per minute (${totalWords} words). Narration pace varies; time a sample chapter and rescale.`,
+    `Estimated finished runtime: ${formatRuntime(totalWords, rate)} at ${rate} ${unit} per minute (${totalWords} ${unit}). Narration pace varies; time a sample chapter and rescale.`,
     "",
     "## Pronunciation Guide",
     ""
@@ -37,9 +44,9 @@ export function narrationScript(manuscript, guide) {
   // finished runtime instead of each rounding on its own.
   let wordsSoFar = 0;
   for (const section of sections) {
-    const before = Math.round(wordsSoFar / NARRATION_WORDS_PER_MINUTE);
+    const before = Math.round(wordsSoFar / rate);
     wordsSoFar += section.words;
-    const minutes = Math.round(wordsSoFar / NARRATION_WORDS_PER_MINUTE) - before;
+    const minutes = Math.round(wordsSoFar / rate) - before;
     lines.push("", `## ${section.title}`, "", `[${minutes < 1 ? "under 1 min" : `about ${minutes} min`}]`, "", narrationBody(section.body));
   }
   lines.push("", "## Closing Credits", "", `The end. You have been listening to ${manuscript.title}${authors === "" ? "" : `, written by ${authors}`}, narrated by [narrator].`, "");
@@ -76,8 +83,8 @@ function narrationBody(body) {
     .join("\n\n");
 }
 
-export function formatRuntime(words) {
-  const minutes = Math.round(words / NARRATION_WORDS_PER_MINUTE);
+export function formatRuntime(words, rate = NARRATION_WORDS_PER_MINUTE) {
+  const minutes = Math.round(words / rate);
   return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
 }
 

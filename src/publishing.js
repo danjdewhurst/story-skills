@@ -142,7 +142,7 @@ export const DESCRIPTION_LIMIT = 4000;
 // Retailer metadata sheet: every field a distributor form asks for, with a
 // readiness checklist of what is still missing.
 export function metadataSheet(input) {
-  const { title, data, meta, words, pages } = input;
+  const { title, data, meta, words, characters, pages } = input;
   const seriesName = seriesDisplayName(data);
   const series = typeof seriesName === "string" ? `${seriesName}${isBookNumber(data["book-number"]) ? `, book ${data["book-number"]}` : ""}` : "";
   const rows = [
@@ -155,7 +155,7 @@ export function metadataSheet(input) {
     ["Language", meta.language],
     ["Genre", [data.genre, data["sub-genre"]].filter((value) => typeof value === "string" && value !== "").join(" / ")],
     ["Form", typeof data.form === "string" ? data.form : ""],
-    ["Word count", String(words)],
+    characters === undefined ? ["Word count", String(words)] : ["Character count", String(characters)],
     ["Estimated print pages", Object.entries(pages).map(([trim, count]) => `${count} at ${trim}`).join(", ")],
     ["Description", meta.description === "" ? "" : `${meta.description.length} characters (limit ${DESCRIPTION_LIMIT})`],
     ["Keywords", meta.keywords.length === 0 ? "" : `${meta.keywords.length} of ${MAX_KEYWORDS}: ${meta.keywords.join("; ")}`],

@@ -9,7 +9,7 @@ import { writeFile } from "./files.js";
 import { escapeHtml, withBlockquotes } from "./html.js";
 import { languagePack } from "./languages/index.js";
 import { formatNumber } from "./languages/locale.js";
-import { flattenHeadings, isSceneBreak, plainLinks, withoutFenceMarkers, wordCount } from "./markdown.js";
+import { characterCount, flattenHeadings, isSceneBreak, plainLinks, withoutFenceMarkers, wordCount } from "./markdown.js";
 import { publishingMeta } from "./publishing.js";
 import { typesetting, writtenTag } from "./typesetting.js";
 
@@ -175,6 +175,8 @@ function matterXhtml(entry, placement, root, head) {
 // chapter's title (prologue), or matter id (front-dedication), so they stay
 // stable while other chapters change.
 export function htmlBook(manuscript) {
+  // A book counted in characters also counts each part's characters.
+  const characters = (body) => (manuscript.unit === "characters" ? { characters: characterCount(body) } : {});
   const paragraphs = (body) => markdownParagraphs(body).map((paragraph) => {
     if (paragraph.sceneBreak) {
       return null;
@@ -195,6 +197,7 @@ export function htmlBook(manuscript) {
     title: entry.title,
     heading: entry.heading,
     words: wordCount(entry.body),
+    ...characters(entry.body),
     paragraphs: paragraphs(entry.body)
   });
   const parts = [
@@ -206,12 +209,15 @@ export function htmlBook(manuscript) {
       title: chapter.heading,
       heading: true,
       words: wordCount(chapter.body),
+      ...characters(chapter.body),
       paragraphs: paragraphs(chapter.body)
     })),
     ...manuscript.back.map(matter("back"))
   ];
   return {
     title: manuscript.title,
+    // The unit the print page estimate counts (see estimateBookPages).
+    ...(manuscript.unit === "characters" ? { unit: "characters" } : {}),
     authors: manuscript.meta.authors,
     language: manuscript.meta.language,
     writingMode: manuscript.meta.writingMode,
@@ -331,6 +337,12 @@ export function shunnWordCount(words, pack = languagePack()) {
   return formatNumber(rounded, pack);
 }
 
+// The title page's length line, in characters for a book counted in
+// characters (`meta.characters`), rounded the same way.
+function shunnLength(meta) {
+  return meta.characters === undefined ? `Approximately ${shunnWordCount(meta.words, meta.pack)} words` : `Approximately ${shunnWordCount(meta.characters, meta.pack)} characters`;
+}
+
 function shunnTitlePageXml(script, meta) {
   const line = (text, decoration) => shunnParagraphXml(script, shunnRunXml(script, text, decoration), true);
   const lines = [line(meta.title, { strong: true })];
@@ -338,7 +350,7 @@ function shunnTitlePageXml(script, meta) {
   if (meta.author) {
     lines.push(line("by"), line(meta.author));
   }
-  lines.push(line(`Approximately ${shunnWordCount(meta.words, meta.pack)} words`));
+  lines.push(line(shunnLength(meta)));
   for (const contactLine of meta.contact) {
     lines.push(line(String(contactLine)));
   }
@@ -383,7 +395,7 @@ export function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {})
   if (meta.author) {
     lines.push("by", meta.author);
   }
-  lines.push("", `Approximately ${shunnWordCount(meta.words, meta.pack)} words`, "");
+  lines.push("", shunnLength(meta), "");
   for (const contactLine of meta.contact) {
     lines.push(String(contactLine));
   }

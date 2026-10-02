@@ -179,6 +179,29 @@ export function wordCount(markdown) {
   return splitWords(markdown).length;
 }
 
+// Created on first use, so a project counted in words never needs it.
+let graphemes;
+
+// Characters as Chinese and Japanese count a manuscript: every grapheme
+// cluster that is not whitespace, punctuation included, after the markdown
+// stripping wordCount does. Scene break lines and markup characters are
+// not book text, so they are left out; a full-width space indent is
+// whitespace.
+export function characterCount(markdown) {
+  const text = plainLinks(withoutFenceMarkers(String(markdown).replace(//g, " ")))
+    .split("\n")
+    .filter((line) => !isSceneBreak(line))
+    .join("\n")
+    .replace(/\\([!-/:-@[-`{-~])/g, "$1")
+    .replace(/[#>*_~|`\s]+/gu, "");
+  graphemes ??= new Intl.Segmenter("en", { granularity: "grapheme" });
+  let count = 0;
+  for (const _ of graphemes.segment(text)) {
+    count += 1;
+  }
+  return count;
+}
+
 // The prose of a chapter or matter page, without its outline and without
 // HTML comments, which are notes to the author rather than book text.
 // `commentReplacement` stands in for each comment (see scanComments).
