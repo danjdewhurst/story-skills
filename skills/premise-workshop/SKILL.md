@@ -144,7 +144,7 @@ form when none is given (`serial` sets none; set per-episode chapter
 `target-words` instead). The form defaults and `references/form-choice.md`
 lengths are English word counts; for a book in another language, discuss
 the target with the user. Then hand-edit `premise`, `counter-premise`,
-and, for a book not in English, `language` into `story.md`, and move the stakes, rejected what-ifs worth keeping,
+and `language` (the tag from the brief) into `story.md`, and move the stakes, rejected what-ifs worth keeping,
 title shortlist, and comps into its `## Notes` section. Keep
 `premise-notes.md` if one was made: offer to move it into the new
 project as `notes/premise-notes.md`, and delete it only when the user
