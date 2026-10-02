@@ -419,11 +419,12 @@ function compareBooks(left, right, compareTitles) {
     || (left.key < right.key ? -1 : left.key > right.key ? 1 : 0);
 }
 
-// Titles sort in the books' language when every book shares one, and in
-// English otherwise, so the order never depends on the starting book.
+// Titles sort in the books' language when every book shares one (sv-SE and
+// sv-FI books sort as sv), and in English otherwise, so the order never
+// depends on the starting book.
 function seriesPack(books) {
-  const locales = new Set(books.map((book) => book.project.pack?.locale ?? languagePack().locale));
-  return locales.size === 1 ? books[0].project.pack ?? languagePack() : languagePack();
+  const languages = new Set(books.map((book) => (book.project.pack ?? languagePack()).locale.split("-")[0]));
+  return languages.size === 1 ? languagePack([...languages][0]) : languagePack();
 }
 
 function checkSharedCanon({ order, later }, errors, warnings) {

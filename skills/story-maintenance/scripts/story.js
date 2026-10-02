@@ -5786,8 +5786,8 @@ function compareBooks(left, right, compareTitles) {
   return (left.bookNumber ?? Infinity) - (right.bookNumber ?? Infinity) || compareTitles(left.title, right.title) || (left.key < right.key ? -1 : left.key > right.key ? 1 : 0);
 }
 function seriesPack(books) {
-  const locales = new Set(books.map((book) => book.project.pack?.locale ?? languagePack().locale));
-  return locales.size === 1 ? books[0].project.pack ?? languagePack() : languagePack();
+  const languages = new Set(books.map((book) => (book.project.pack ?? languagePack()).locale.split("-")[0]));
+  return languages.size === 1 ? languagePack([...languages][0]) : languagePack();
 }
 function checkSharedCanon({ order, later }, errors, warnings) {
   const reachable = new Map(order.map((book) => [book.key, collectLater(book.key, later, new Set)]));
@@ -7377,7 +7377,7 @@ function buildTimeline(project) {
   return {
     chronology: dated,
     undated: entries.filter((entry) => entry.days === undefined),
-    pov: povBalance(chapters, project.pack),
+    pov: povBalance(chapters),
     presence: characterPresence(project, chapters, chapterById)
   };
 }
@@ -7471,7 +7471,7 @@ function timelineEntry(project, { unit, chapter, isChapter, orphan }, reading) {
     reading
   };
 }
-function povBalance(chapters, pack) {
+function povBalance(chapters) {
   const totals = new Map;
   let words = 0;
   for (const chapter of chapters) {
@@ -7482,7 +7482,7 @@ function povBalance(chapters, pack) {
     words += chapter.wordCount;
     totals.set(key, entry);
   }
-  return [...totals.values()].map((entry) => ({ ...entry, share: words === 0 ? 0 : entry.words * 100 / words })).sort((left, right) => right.words - left.words || right.chapters - left.chapters || compareText(pack)(left.pov, right.pov));
+  return [...totals.values()].map((entry) => ({ ...entry, share: words === 0 ? 0 : entry.words * 100 / words })).sort((left, right) => right.words - left.words || right.chapters - left.chapters || left.pov.localeCompare(right.pov, "en"));
 }
 function characterPresence(project, chapters, chapterById) {
   const present = new Map(project.characters.map((character) => [character.id, new Set]));
@@ -14813,7 +14813,7 @@ function validateStyleSheet(project, errors, warnings) {
         errors.push(err("missing-field", `${entryLabel} requires a non-empty ${field}`, label));
       }
     }
-    if (typeof entry.use === "string" && typeof entry.avoid === "string" && entry.use.trim().toLowerCase() === entry.avoid.trim().toLowerCase()) {
+    if (typeof entry.use === "string" && typeof entry.avoid === "string" && lowerCase(entry.use.trim(), project.pack) === lowerCase(entry.avoid.trim(), project.pack)) {
       errors.push(err("style-use-equals-avoid", `${entryLabel} use and avoid must differ`, label));
     }
   });
