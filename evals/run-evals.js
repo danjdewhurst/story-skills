@@ -43,9 +43,10 @@ function normalizeApos(text) {
 // those scripts join words to the text around them.
 const FLEX_SEP_SRC = "[\\s\\-—–―−‐‑_]+";
 
-// A letter, digit, or underscore in any script, so a word boundary holds
-// next to accented letters (é, ç) as well as ASCII ones.
-const WORD_CHAR_SRC = "[\\p{L}\\p{N}_]";
+// A letter, combining mark, digit, or underscore in any script, so a word
+// boundary holds next to accented letters (é, ç), precomposed or written
+// with a combining accent, as well as ASCII ones.
+const WORD_CHAR_SRC = "[\\p{L}\\p{M}\\p{N}_]";
 const WORD_CHAR = new RegExp(WORD_CHAR_SRC, "u");
 
 function escapeRegExp(s) {
@@ -129,6 +130,29 @@ export function wordCount(text) {
   if (cjk === 0) return text.split(/\s+/).filter(Boolean).length;
   const rest = text.replace(CJK_CHAR, " ").split(/\s+/).filter((token) => /[\p{L}\p{N}]/u.test(token));
   return cjk + rest.length;
+}
+
+// A book in Chinese or Japanese is measured in characters, as `story
+// wordcount` measures it there: grapheme clusters that are not whitespace,
+// punctuation included. A fixture whose `language` is one of these counts
+// its length checks this way, so its caps read as the book's own counts.
+const CHARACTER_LANGUAGES = /^(?:zh|ja|cmn|yue|lzh|jpn|zho|chi)(?:-|$)/i;
+let graphemes;
+
+export function characterCount(text) {
+  graphemes ??= new Intl.Segmenter("en", { granularity: "grapheme" });
+  let count = 0;
+  for (const { segment } of graphemes.segment(text)) {
+    if (!/^\s+$/u.test(segment)) count += 1;
+  }
+  return count;
+}
+
+// How a fixture measures length: its counter and the unit it reports.
+export function lengthUnit(language) {
+  return CHARACTER_LANGUAGES.test(String(language ?? "").trim())
+    ? { count: characterCount, name: "characters" }
+    : { count: wordCount, name: "words" };
 }
 
 // Fenced code blocks are exempt from well-formedness and structural checks:
@@ -271,7 +295,9 @@ export function checkDraft(checks, inputText, draftText) {
     }
     let ok;
     try {
-      ok = new RegExp(pattern, "i").test(normDraft) === false;
+      // Unicode mode, so a pattern can bound a word with \p{L}, which
+      // holds next to accented letters where \b does not.
+      ok = new RegExp(pattern, "iu").test(normDraft) === false;
     } catch (err) {
       results.push([false, `banned pattern invalid: /${pattern}/ (${err})`]);
       continue;
@@ -328,18 +354,19 @@ export function checkDraft(checks, inputText, draftText) {
       `structure: past-tense voice present (${markers.length} marker(s), need ${PAST_TENSE_MIN_MARKERS})`,
     ]);
   }
+  const unit = lengthUnit(checks.language);
   if (checks.max_words !== undefined) {
-    const count = wordCount(draftText);
+    const count = unit.count(draftText);
     results.push([
       count <= checks.max_words,
-      `length ${count} words <= ${checks.max_words} (absolute cap)`,
+      `length ${count} ${unit.name} <= ${checks.max_words} (absolute cap)`,
     ]);
   }
 
   const maxRatio = checks.max_words_ratio;
   const minRatio = checks.min_words_ratio;
   if (maxRatio !== undefined || minRatio !== undefined) {
-    const ratio = wordCount(draftText) / Math.max(wordCount(inputText), 1);
+    const ratio = unit.count(draftText) / Math.max(unit.count(inputText), 1);
     if (maxRatio !== undefined) {
       results.push([
         ratio <= maxRatio,
