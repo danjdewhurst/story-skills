@@ -5,10 +5,11 @@ import { warn } from "./findings.js";
 import { parseFrontmatter, stringifyFrontmatter, withoutLeadingFrontmatter } from "./frontmatter.js";
 import { checkList, isLanguageTag, languagePack } from "./languages/index.js";
 import { compareText } from "./languages/locale.js";
-import { chapterHeading, escapeRegExp, fencedLineIndexes, scanComments, splitFences, titleCaseSlug, wordCount } from "./markdown.js";
+import { chapterHeading, characterCount, escapeRegExp, fencedLineIndexes, scanComments, splitFences, titleCaseSlug, wordCount } from "./markdown.js";
+import { countUnit } from "./forms.js";
 import { MAX_READ_BYTES } from "./files.js";
 import { STDIN_ARG, decodeUtf8 } from "./stdin.js";
-import { assertProjectParses, createStoryProject, existingStoryLanguage, newProjectRoot, reindexProject, scanProject, writeFile } from "./story.js";
+import { assertProjectParses, createStoryProject, existingStoryData, existingStoryLanguage, newProjectRoot, reindexProject, scanProject, writeFile } from "./story.js";
 import { EXIT_CODES, usageError, withDefaultExitCode } from "./exit-codes.js";
 
 // A lone "I" before a word is the pronoun ("Chapter I Am Legend"), not a numeral.
@@ -124,16 +125,24 @@ export function importManuscript(options) {
   // Build every chapter file before touching the disk: frontmatter and
   // headings make a chapter a little larger than its prose, and a file over
   // the size story reads would leave a project no command can open.
+  // A book counted in characters (Chinese, Japanese, or story.md
+  // `count-unit`) records character-count too, as story wordcount --write
+  // does.
+  const characters = countUnit(target === null ? null : existingStoryData(target), pack).name === "characters";
   let totalWords = 0;
+  let totalCharacters = 0;
   const chapterFiles = chapters.map((chapter, index) => {
     const number = index + 1;
     // Count as the scanner does, without HTML comments.
-    const words = wordCount(scanComments(chapter.prose).text);
+    const prose = scanComments(chapter.prose).text;
+    const words = wordCount(prose);
+    const counts = characters ? { "word-count": words, "character-count": characterCount(prose) } : { "word-count": words };
     totalWords += words;
+    totalCharacters += counts["character-count"] ?? 0;
     // An untitled numbered heading ("# Chapter 1") takes its new number.
     const title = chapter.title || `Chapter ${number}`;
     const name = `chapter-${String(number).padStart(2, "0")}.md`;
-    const text = chapterMarkdown(title, number, words, chapter.prose, chapter.unnumbered);
+    const text = chapterMarkdown(title, number, counts, chapter.prose, chapter.unnumbered);
     const bytes = Buffer.byteLength(text, "utf8");
     if (bytes > MAX_READ_BYTES) {
       throw usageError(`Cannot import: ${name} would be ${bytes} bytes, over the ${MAX_READ_BYTES} byte limit story reads. Split the manuscript with chapter headings first`);
@@ -195,6 +204,7 @@ export function importManuscript(options) {
     ignoredOptions: created.ignoredOptions,
     chapters: chapters.length,
     words: totalWords,
+    ...(characters ? { characters: totalCharacters } : {}),
     warnings,
     gitignore: created.gitignore,
     candidates: extractNameCandidates(chapters.map((chapter) => chapter.prose).join("\n\n"), pack)
@@ -719,7 +729,7 @@ function stripTitleHeading(text, rules) {
   return text;
 }
 
-function chapterMarkdown(title, number, words, prose, unnumbered = false) {
+function chapterMarkdown(title, number, counts, prose, unnumbered = false) {
   return `${stringifyFrontmatter({
     title,
     number,
@@ -729,7 +739,7 @@ function chapterMarkdown(title, number, words, prose, unnumbered = false) {
     characters: [],
     "arcs-advanced": [],
     status: "draft",
-    "word-count": words
+    ...counts
   })}# ${unnumbered ? title : chapterHeading(number, title)}
 
 ## Chapter Text

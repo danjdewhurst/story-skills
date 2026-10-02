@@ -292,6 +292,22 @@ A `word-count` that is not an integer, such as `lots`, is an error instead (`fro
 
 Word counts and builds remove an HTML comment without leaving a gap, so `really<!--x-->quiet` counts as one word. `story prose` and `story voices` put a space where the comment was, so they read it as two words, `really` and `quiet`.
 
+### Counting in characters
+
+Chinese and Japanese manuscripts are measured in characters (10万字, sheets of 400字 manuscript paper), not words, so a book whose `language` is `zh` or `ja` (any tag under them, such as `zh-Hant-TW`) counts its length in characters. `count-unit` in `story.md` overrides the language either way: `count-unit: characters` for another language, or `count-unit: words` to keep a Chinese or Japanese book in words.
+
+A character is a grapheme cluster that is not whitespace, after the same markdown handling as word counts: comments, images, link targets, fence lines, scene break lines, and the markdown characters `` # > * _ ~ | ` `` are left out, and a backslash escape is the character it escapes. Punctuation counts (`「どこで」と言った。` is 10 characters), as it fills a square of manuscript paper; whitespace, including a full-width indent (`　`), does not. A base character with its combining marks, or an emoji with its modifiers, counts once.
+
+In a book counted in characters:
+
+- `story wordcount` prints each chapter's characters and `Total: N characters`, and `--write` records `character-count` beside `word-count` in each chapter. `story validate` warns when either is missing or stale (`declares 10 characters but contains 32`), with the same `stale-word-count` code. `story import` and `story add chapter` write both fields.
+- `target-characters` in `story.md` and in chapters is the target: `story progress`, `story report`, `story context`, and the form range read it. A `target-words` there is not measured, and `story validate` says so (`unused-target`); the same goes for `target-characters` in a book counted in words.
+- `story progress --log` records `characters` beside `words` in each `progress.md` session, and pace is measured from the sessions that have it.
+- The chapter registry's column and total are `Character Count`; `story report`, `story pacing`, and `story progress` give lengths in characters.
+- `story build --format metadata` gives a `Character count`, the Shunn title page says `Approximately N characters`, the print page estimate uses characters a page, and the narration script times the book at 300 characters a minute.
+
+Everything else stays in words: word-based analysis (`story prose`, `story voices`, `story compare`, `story similarity`), the POV balance in `story timeline`, and the empty-chapter checks, which look for prose at all.
+
 ## Story file
 
 `story.md` holds project-wide metadata. Its body is the story bible: synopsis, tone, setting, and notes. A new project's file looks like this:
@@ -334,6 +350,8 @@ tense: past
 | `season-goal` | string | no | One-sentence goal for a season or volume of serial fiction. |
 | `form` | enum | no | The story's form: `flash`, `short-story`, `novelette`, `novella`, `novel`, `serial`, `picture-book`, or `chapter-book`. `story init --form` sets it with a default `target-words`. See [Story form](#story-form). `story report` shows it. |
 | `target-words` | integer ≥ 1 | no | Word-count target for the book, used by `story progress` and `story report`. |
+| `target-characters` | integer ≥ 1 | no | Character target for a book [counted in characters](#counting-in-characters), used in place of `target-words`. |
+| `count-unit` | `words` or `characters` | no | The unit lengths are counted in. Defaults from `language`: `characters` for Chinese (`zh`) and Japanese (`ja`), `words` otherwise. See [Counting in characters](#counting-in-characters). |
 | `deadline` | `YYYY-MM-DD` | no | Due date; `story progress` reports days left and words a day needed. Must be a real calendar day. |
 | `draft-mode` | string | no | `discovered` marks a discovery-drafted project, `outlined` an outline-first one; any other value is a validate error. In a `discovered` project, `story next` treats a drafted chapter with no `mode` of its own as discovered. |
 | `revision-passes` | list of mappings | no | Named revision passes and their progress. See [Revision passes](#revision-passes). |
@@ -347,7 +365,7 @@ tense: past
 
 ### Story form
 
-`form` names the kind of book, and each form has a usual word-count range. `story init --form <form>` writes `form` and a default `target-words`; a form with no range writes no target. Any other `--form` value is refused, and `story validate` reports an unsupported `form` as an error.
+`form` names the kind of book, and each form has a usual length range. `story init --form <form>` writes `form` and a default `target-words`, or `target-characters` for a book [counted in characters](#counting-in-characters); a form with no range writes no target. Any other `--form` value is refused, and `story validate` reports an unsupported `form` as an error.
 
 | `form` | Usual range (words) | Default `target-words` |
 |--------|---------------------|------------------------|
@@ -365,6 +383,21 @@ The ranges are advisory. `story validate` warns when `target-words` falls outsid
 ```text
 warning: story.md target-words 30000 is outside the usual novel range of 40000-200000 words [form-length-range]
 ```
+
+A book counted in characters is checked against character ranges for its language, with `target-characters`. Neither Chinese nor Japanese draws its lines where English does, and neither has a novelette, so the ranges below are broad. The Chinese ones follow the China Writers Association's prize rules, which count 版面字数, a page-layout count of lines times characters a line that runs above a count of characters: 小小说 under 2,000, 短篇小说 under 25,000, and 中篇小说 25,000 to 130,000 ([Lu Xun Literary Prize call for entries, 2022](https://www.chinawriter.com.cn/n1/2022/0315/c403937-32375409.html)), and 长篇小说 130,000 and up ([Mao Dun Literature Prize rules, 2023](https://www.chinawriter.com.cn/n1/2023/0315/c403937-32644335.html)). Japanese has no official lines: 中編 is usually about 100 to 300 sheets of 400字 (40,000 to 120,000 characters), 短編 under 100 sheets, and 長編 300 sheets and up ([中編小説, Wikipedia](https://ja.wikipedia.org/wiki/%E4%B8%AD%E7%B7%A8%E5%B0%8F%E8%AA%AC)), and ショートショート about 10 sheets, with the Hoshi Shinichi Award taking up to 10,000 characters ([ショートショート, Wikipedia](https://ja.wikipedia.org/wiki/%E3%82%B7%E3%83%A7%E3%83%BC%E3%83%88%E3%82%B7%E3%83%A7%E3%83%BC%E3%83%88)). No source sets the novelette, picture-book, or chapter-book ranges, so those are wide guesses; check the market or contest you write for.
+
+| `form` | Chinese (characters) | Default | Japanese (characters) | Default |
+|--------|----------------------|---------|-----------------------|---------|
+| `flash` | up to 2,000 | 1,500 | up to 10,000 | 4,000 |
+| `short-story` | 2,000 to 25,000 | 10,000 | 4,000 to 40,000 | 20,000 |
+| `novelette` | 10,000 to 40,000 | 20,000 | 20,000 to 60,000 | 40,000 |
+| `novella` | 25,000 to 130,000 | 60,000 | 40,000 to 120,000 | 80,000 |
+| `novel` | 130,000 to 1,000,000 | 200,000 | 120,000 to 600,000 | 150,000 |
+| `serial` | no range | none | no range | none |
+| `picture-book` | up to 3,000 | 1,000 | up to 3,000 | 1,000 |
+| `chapter-book` | 3,000 to 30,000 | 10,000 | 3,000 to 30,000 | 10,000 |
+
+Another language counted in characters (`count-unit: characters`) has no ranges, so its length is not checked against its form.
 
 The [premise-workshop skill](../skills/premise-workshop/SKILL.md) helps choose a form.
 
@@ -744,7 +777,9 @@ word-count: 1489
 | `mentions` | list of character or artifact ids | no | Characters or artifacts referenced, remembered, recorded, or seen in flashback, but not present. |
 | `arcs-advanced` | list of arc ids | no | Arcs the chapter moves forward. |
 | `word-count` | integer ≥ 0 | no | Prose word count, maintained by `story wordcount --write`. |
+| `character-count` | integer ≥ 0 | no | Prose character count, maintained by `story wordcount --write` in a book [counted in characters](#counting-in-characters). |
 | `target-words` | integer ≥ 1 | no | Word target for the chapter; `story progress` reports against it. |
+| `target-characters` | integer ≥ 1 | no | Character target for the chapter, in a book counted in characters. |
 | `mode` | string | no | `discovered` marks a discovery-drafted chapter that must go through the [discovery-drafting](../skills/discovery-drafting/SKILL.md) reconcile loop; `outlined` marks one written outline-first. Any other value is a validate error. Set it with `story add chapter --mode discovered`. `story next` counts the loop done only when `## Chapter Notes (post-hoc)` sits above `## Chapter Text`. |
 | `date` | `YYYY-MM-DD` | no | Story date; enables clock checks. |
 | `time` | string | no | Story time of day (see [Dates and times](#dates-and-times)). |
@@ -1130,8 +1165,9 @@ sessions:
 | `sessions` | list of mappings | no | One entry per day, in date order. |
 | `sessions[].date` | `YYYY-MM-DD` | yes | Session date; `--date` sets it (default today). Dates must be unique. |
 | `sessions[].words` | integer ≥ 0 | yes | Word count of the whole manuscript on that date. |
+| `sessions[].characters` | integer ≥ 0 | no | Character count on that date, logged in a book [counted in characters](#counting-in-characters). |
 
-`story progress` measures these against `target-words` and `deadline` in `story.md` and against chapter `target-words`. See [Continuity and analysis](continuity.md#story-progress).
+`story progress` measures these against `target-words` and `deadline` in `story.md` and against chapter `target-words`, or the `characters` against `target-characters` in a book counted in characters. See [Continuity and analysis](continuity.md#story-progress).
 
 ## Registries
 

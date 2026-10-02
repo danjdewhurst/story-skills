@@ -756,13 +756,15 @@ story build . --format print --trim 6x9
 Built 1 chapters as print to ~/stories/harbor-of-second-light/dist/harbor-of-second-light.print.html
 ```
 
-| `--trim` | Page size | Words per page, for the estimate |
-|----------|-----------|----------------------------------|
-| `5x8` | 5 × 8 in | 230 |
-| `5.25x8` | 5.25 × 8 in | 250 |
-| `5.5x8.5` (default) | 5.5 × 8.5 in | 275 |
-| `6x9` | 6 × 9 in | 300 |
-| `a5` | 148 × 210 mm | 270 |
+| `--trim` | Page size | Words per page, for the estimate | Characters per page |
+|----------|-----------|----------------------------------|---------------------|
+| `5x8` | 5 × 8 in | 230 | 480 |
+| `5.25x8` | 5.25 × 8 in | 250 | 520 |
+| `5.5x8.5` (default) | 5.5 × 8.5 in | 275 | 580 |
+| `6x9` | 6 × 9 in | 300 | 640 |
+| `a5` | 148 × 210 mm | 270 | 560 |
+
+A book [counted in characters](project-format.md#counting-in-characters) (Chinese, Japanese) is estimated in characters per page: a full page of this horizontal layout, less the short lines that dialogue and paragraph ends leave, as the word figures allow. It is rougher than the word estimate, and a vertical layout sets a different count.
 
 Any other size stops the build with `Unsupported trim size: 7x10. Supported sizes: 5x8, 5.25x8, 5.5x8.5, 6x9, a5`. The trim is not part of the default file name, so pass `--out` to keep interiors for two trims side by side.
 
@@ -826,7 +828,7 @@ What goes in:
 - **Pronunciation guide.** Every `pronunciation` field on a character, location, system, faction, artifact, or glossary term, sorted by name. Characters with `status: cut` are left out. When there are none, the section says how to add them. Use plain respelling, such as `pronunciation: "SEER-ah VOSS"`; `story validate` rejects a value that is not text.
 - **Sections.** Every front matter page except the copyright page, every chapter under its heading (`Chapter N: Title`, or the title alone for an unnumbered chapter), then every back matter page. Each opens with its estimated runtime, `[about N min]` or `[under 1 min]`.
 - **Text.** Paragraphs as written, with markdown emphasis kept so the narrator can see where the stress falls. A scene break, in any of the forms the [table below](#how-prose-is-converted-for-epub-docx-shunn-html-and-print) lists (including `\* \* \*` and a lone `#`), becomes `[pause]`, and a backslash at the end of a line is dropped. Blockquote markers are kept as well, so an epigraph reads `> An ember given is a fire kept.`
-- **Runtime.** Every word in those sections, matter included, at 155 words per minute, rounded to the minute. Pace varies by narrator and genre, so time a sample chapter and rescale.
+- **Runtime.** Every word in those sections, matter included, at 155 words per minute, rounded to the minute. A book [counted in characters](project-format.md#counting-in-characters) is timed at 300 characters per minute, about the pace of Japanese broadcast narration; Mandarin narration runs a little slower, and the count includes punctuation, which is not read. Pace varies by narrator and genre, so time a sample chapter and rescale.
 
 The [`adaptation`](../skills/adaptation/SKILL.md) skill prepares an audiobook from this script and writes it to `adaptations/audiobook/narration-script.md` with `--out`. The [`worldbuilding`](../skills/worldbuilding/SKILL.md) and [`character-management`](../skills/character-management/SKILL.md) skills add pronunciations when they create invented names.
 

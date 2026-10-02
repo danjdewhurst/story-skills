@@ -10,13 +10,13 @@ import { buildContext, DEFAULT_CONTEXT_BUDGET, DEFAULT_CONTEXT_SCENES } from "./
 import { assertExistingAncestorInsideRoot, assertLexicallyInsideRoot, assertSafeProjectDirectory, assertSafeProjectPath, isPathInside, lstatIfExists, makeDirectories, nearestExistingAncestor, readTextFile, TEMPORARY_FILE_PATTERN, writeFile } from "./files.js";
 import { isTruthy } from "./options.js";
 import { withProjectLock } from "./lock.js";
-import { chapterHeading, chapterProse, countTodoMarkers, escapeRegExp, extractSection, fencedLineIndexes, hasUnclosedComment, kebabCase, scanComments, titleCaseSlug, wordCount } from "./markdown.js";
+import { chapterHeading, chapterProse, characterCount, countTodoMarkers, escapeRegExp, extractSection, fencedLineIndexes, hasUnclosedComment, kebabCase, scanComments, titleCaseSlug, wordCount } from "./markdown.js";
 import { buildTimeline } from "./timeline.js";
 import { buildClueMatrix } from "./clues.js";
 import { buildDiagram } from "./diagram.js";
 import { buildVoices } from "./voices.js";
 import { checkNames, existingNames } from "./names.js";
-import { STORY_FORMS, formRangeWarning } from "./forms.js";
+import { COUNT_UNITS, STORY_FORMS, countUnit, formRangeWarning, formRanges } from "./forms.js";
 import { copyrightPage, metadataSheet, publishingMeta, validatePublishing } from "./publishing.js";
 import { DEFAULT_TRIM, estimateBookPages, labelledParagraphs, paragraphLabels, printHtml, reviewHtml, TRIM_SIZES } from "./html.js";
 import { narrationScript, pronunciationGuide } from "./narration.js";
@@ -271,6 +271,10 @@ export function createStoryProject(options) {
     makeDirectories(path.join(root, directory));
   }
 
+  // An explicit --language replaces one inherited from a linked book.
+  const storyInherited = { ...inheritedStoryFields(inherited), ...(options.language === undefined ? {} : { language: options.language.trim() }) };
+  const pack = languagePack(projectLanguage(storyInherited));
+  const unit = countUnit(storyInherited, pack);
   const storyWritten = writeStarterFile(path.join(root, "story.md"), storyBible({
     title,
     storyId,
@@ -285,15 +289,16 @@ export function createStoryProject(options) {
     pov: options.pov ?? inherited.pov ?? "third-person-limited",
     tense: options.tense ?? inherited.tense ?? "past",
     form: options.form,
-    // An explicit --language replaces one inherited from a linked book.
-    inherited: { ...inheritedStoryFields(inherited), ...(options.language === undefined ? {} : { language: options.language.trim() }) },
+    unit,
+    pack,
+    inherited: storyInherited,
     synopsis: options.synopsis ?? options.defaultSynopsis ?? "Add a 2-3 sentence synopsis here."
   }), { root });
   writeStarterFile(path.join(root, "characters", "_index.md"), characterIndex(storyId, [], "", ""), { root });
   writeStarterFile(path.join(root, "worldbuilding", "_index.md"), worldIndex(storyId, [], [], [], [], ""), { root });
   writeStarterFile(path.join(root, "plot", "_index.md"), plotIndex(storyId, "three-act", [], "", ""), { root });
   writeStarterFile(path.join(root, "plot", "timeline.md"), timeline(storyId), { root });
-  writeStarterFile(path.join(root, "chapters", "_index.md"), chapterIndex(storyId, []), { root });
+  writeStarterFile(path.join(root, "chapters", "_index.md"), chapterIndex(storyId, [], unit), { root });
   writeStarterFile(path.join(root, "scenes", "_index.md"), sceneIndex(storyId, []), { root });
   writeStarterFile(path.join(root, "continuity", "state.md"), continuityState(storyId), { root });
   writeStarterFile(path.join(root, "continuity", "questions", "_index.md"), questionIndex(storyId, []), { root });
@@ -399,12 +404,15 @@ function inheritedStoryFields(data) {
   if (text(data.language)) {
     fields.language = data.language;
   }
+  if (COUNT_UNITS.has(data["count-unit"])) {
+    fields["count-unit"] = data["count-unit"];
+  }
   return fields;
 }
 
 // The frontmatter of an existing story.md, {} when it does not parse, or
 // null when there is none.
-function existingStoryData(root) {
+export function existingStoryData(root) {
   if (!lstatIfExists(path.join(root, "story.md"))) {
     return null;
   }
@@ -615,6 +623,24 @@ function storyIdMismatch(label, project) {
   return err("story-id-mismatch", `${label} story must be ${project.storyId} (run story reindex after changing the story.md title)`, label);
 }
 
+// A chapter's word count and its length in the count unit: `count`, the
+// count its frontmatter declares in the unit's field (0 when missing, null
+// when not an integer), and the target in the unit's target field (0 when
+// unset). For a project counted in words these repeat the word fields.
+function chapterLength(unit, data, markdown) {
+  const prose = chapterProse(markdown.body);
+  const words = wordCount(prose);
+  const declared = data[unit.countField];
+  const target = data[unit.targetField];
+  return {
+    wordCount: words,
+    count: unit.name === "characters" ? characterCount(prose) : words,
+    declaredCount: declared === undefined ? 0 : Number.isInteger(declared) ? declared : null,
+    countMissing: declared === undefined,
+    targetCount: Number.isInteger(target) && target > 0 ? target : 0
+  };
+}
+
 export function scanProject(root) {
   const projectRoot = path.resolve(root);
   const scanErrors = [];
@@ -641,6 +667,8 @@ export function scanProject(root) {
   }
 
   const language = projectLanguage(story.data);
+  const pack = languagePack(language);
+  const unit = countUnit(story.data, pack);
   const project = {
     root: projectRoot,
     story,
@@ -650,7 +678,10 @@ export function scanProject(root) {
     // story.md `language` (en when unset) and its language pack, which the
     // analysis commands take their word lists from.
     language,
-    pack: languagePack(language),
+    pack,
+    // The unit lengths are counted in (see forms.js): words, or characters
+    // for Chinese and Japanese.
+    unit,
     fileErrors: scanErrors,
     characters: readEntityFiles(projectRoot, "characters", (id, file, data) => ({
       id,
@@ -734,7 +765,9 @@ export function scanProject(root) {
       declaredWordCount: data["word-count"] === undefined ? 0 : Number.isInteger(data["word-count"]) ? data["word-count"] : null,
       wordCountMissing: data["word-count"] === undefined,
       targetWords: Number.isInteger(data["target-words"]) && data["target-words"] > 0 ? data["target-words"] : 0,
-      wordCount: wordCount(chapterProse(markdown.body)),
+      // wordCount, and the length in the project's count unit, which every
+      // measure (progress, pacing, form ranges, registries) uses.
+      ...chapterLength(unit, data, markdown),
       unclosedComment: hasUnclosedComment(chapterProse(markdown.body)),
       todoMarkers: countTodoMarkers(chapterProse(markdown.body)),
       date: String(data.date ?? ""),
@@ -901,6 +934,9 @@ export function validateProjectOf(project) {
   validateResearch(project, errors, warnings);
   validateProgressLog(project, errors);
   validateFormRange(project, warnings);
+  if (!project.story.unreadable) {
+    unusedTargetWarnings(project, "story.md", project.story.data, warnings);
+  }
   validatePublishing(project.story.data, errors, warnings);
   validatePronunciations(project, errors);
   validateTextFields(project, errors);
@@ -959,6 +995,13 @@ export function validateProjectOf(project) {
       warnings.push(warn("stale-word-count", chapter.wordCountMissing
         ? `${file} has no word-count (contains ${chapter.wordCount})`
         : `${file} declares ${plural(chapter.declaredWordCount, "word")} but contains ${chapter.wordCount}`, file));
+    }
+    // A project counted in characters records both counts; the same code
+    // covers both, since story wordcount --write fixes both.
+    if (project.unit.name === "characters" && chapter.declaredCount !== null && chapter.declaredCount !== chapter.count) {
+      warnings.push(warn("stale-word-count", chapter.countMissing
+        ? `${file} has no ${project.unit.countField} (contains ${chapter.count})`
+        : `${file} declares ${plural(chapter.declaredCount, project.unit.noun)} but contains ${chapter.count}`, file));
     }
 
     if (chapter.todoMarkers > 0) {
@@ -1534,10 +1577,15 @@ export function projectReport(root, options = {}) {
   const project = scanProject(root);
   const { validation, links, continuity } = projectChecks(project, options.overrides);
   const totalWords = project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
+  // A project counted in characters adds its character counts and target
+  // beside the word counts, which keep their meaning.
+  const characters = project.unit.name === "characters";
+  const targetCharacters = project.story.data["target-characters"];
 
   return {
     root: project.root,
     title: project.title,
+    ...(characters ? { unit: "characters", targetCharacters: Number.isInteger(targetCharacters) ? targetCharacters : null } : {}),
     storyId: project.storyId,
     schemaVersion: project.story.data["schema-version"],
     series: project.story.data.series,
@@ -1563,14 +1611,16 @@ export function projectReport(root, options = {}) {
       clues: project.clues.length,
       glossaryTerms: project.glossaryTerms.length,
       research: project.research.length,
-      words: totalWords
+      words: totalWords,
+      ...(characters ? { proseCharacters: project.chapters.reduce((sum, chapter) => sum + chapter.count, 0) } : {})
     },
     chapters: project.chapters.map((chapter) => ({
       number: chapter.number,
       title: chapter.title,
       status: chapter.status,
       pov: chapter.pov,
-      wordCount: chapter.wordCount
+      wordCount: chapter.wordCount,
+      ...(characters ? { characterCount: chapter.count } : {})
     })),
     arcs: project.arcs.map((arc) => ({
       name: arc.name,
@@ -1583,6 +1633,17 @@ export function projectReport(root, options = {}) {
     continuity,
     actions: buildProjectActions(project, validation, links, continuity, options.displayPath)
   };
+}
+
+// The manuscript's length and target in the report's count unit.
+function reportLengthLines(report) {
+  const [name, total, target] = report.unit === "characters"
+    ? ["characters", report.counts.proseCharacters, report.targetCharacters]
+    : ["words", report.counts.words, report.targetWords];
+  return [
+    `- Total ${name}: ${total}`,
+    ...(target > 0 ? [`- Target ${name}: ${target} (${formatPercent((total * 100) / target, 0)}%)`] : [])
+  ];
 }
 
 export function formatProjectReport(report, options = {}) {
@@ -1611,8 +1672,7 @@ export function formatProjectReport(report, options = {}) {
     `- Clues: ${report.counts.clues}`,
     `- Glossary terms: ${report.counts.glossaryTerms}`,
     ...(report.counts.research === 0 ? [] : [`- Research notes: ${report.counts.research}`]),
-    `- Total words: ${report.counts.words}`,
-    ...(report.targetWords > 0 ? [`- Target words: ${report.targetWords} (${formatPercent((report.counts.words * 100) / report.targetWords, 0)}%)`] : []),
+    ...reportLengthLines(report),
     "",
     "Chapters:"
   ];
@@ -1621,7 +1681,8 @@ export function formatProjectReport(report, options = {}) {
     lines.push("- None");
   } else {
     for (const chapter of report.chapters) {
-      lines.push(`- ${chapter.number}. ${chapter.title} (${chapter.status}, ${chapter.wordCount} words, POV: ${chapter.pov || "unspecified"})`);
+      const length = report.unit === "characters" ? `${chapter.characterCount} characters` : `${chapter.wordCount} words`;
+      lines.push(`- ${chapter.number}. ${chapter.title} (${chapter.status}, ${length}, POV: ${chapter.pov || "unspecified"})`);
     }
   }
 
@@ -1729,7 +1790,7 @@ function reindexProjectUnlocked(root) {
     extractSection(existing, "Story Structure"),
     extractSection(existing, "Theme Tracking")
   ), changed, project.root);
-  writeRegistry(at("chapters", "_index.md"), () => chapterIndex(project.storyId, project.chapters), changed, project.root);
+  writeRegistry(at("chapters", "_index.md"), () => chapterIndex(project.storyId, project.chapters, project.unit), changed, project.root);
   writeRegistry(at("scenes", "_index.md"), () => sceneIndex(project.storyId, project.scenes), changed, project.root);
   writeRegistry(at("continuity", "questions", "_index.md"), () => questionIndex(project.storyId, project.questions), changed, project.root);
   writeRegistry(at("continuity", "promises", "_index.md"), () => promiseIndex(project.storyId, project.promises), changed, project.root);
@@ -1880,6 +1941,7 @@ export function computeWordCounts(root, options = {}) {
 function computeWordCountsUnlocked(root, options = {}) {
   const project = scanProject(root);
   assertProjectParses(project, "count words");
+  const characters = project.unit.name === "characters";
   const chapters = [];
 
   for (const chapter of project.chapters) {
@@ -1887,15 +1949,20 @@ function computeWordCountsUnlocked(root, options = {}) {
       number: chapter.number,
       title: chapter.title,
       file: path.relative(project.root, chapter.file),
-      wordCount: chapter.wordCount
+      wordCount: chapter.wordCount,
+      ...(characters ? { characterCount: chapter.count } : {})
     });
 
-    if (options.write && chapter.declaredWordCount !== chapter.wordCount) {
+    // A project counted in characters records character-count beside
+    // word-count.
+    if (options.write && (chapter.declaredWordCount !== chapter.wordCount || chapter.declaredCount !== chapter.count)) {
       const markdown = readMarkdown(chapter.file, project.root);
+      const prose = chapterProse(markdown.body);
       // An editor saving the chapter meanwhile keeps its save.
       writeFile(chapter.file, replaceFrontmatter(markdown.rawMarkdown, {
         ...markdown.data,
-        "word-count": wordCount(chapterProse(markdown.body))
+        "word-count": wordCount(prose),
+        ...(characters ? { "character-count": characterCount(prose) } : {})
       }), { root: project.root, unchangedFrom: markdown.rawMarkdown });
     }
   }
@@ -1904,9 +1971,12 @@ function computeWordCountsUnlocked(root, options = {}) {
     reindexProject(project.root);
   }
 
+  // `total` is in the count unit: a book counted in characters says so with
+  // `unit`, and its chapters carry characterCount.
   return {
+    ...(characters ? { unit: "characters" } : {}),
     chapters,
-    total: chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0)
+    total: chapters.reduce((sum, chapter) => sum + (characters ? chapter.characterCount : chapter.wordCount), 0)
   };
 }
 
@@ -2308,6 +2378,11 @@ export function projectProgress(root, options = {}) {
   }
   let project = scanProject(root);
   const words = project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
+  // A project counted in characters logs its characters beside its words
+  // and measures progress in characters.
+  const unit = project.unit;
+  const characters = unit.name === "characters";
+  const counts = characters ? { words, characters: project.chapters.reduce((sum, chapter) => sum + chapter.count, 0) } : { words };
   let logged = null;
   if (options.log) {
     // A chapter that fails to parse would be left out of the logged total.
@@ -2324,41 +2399,44 @@ export function projectProgress(root, options = {}) {
     }
     const filePath = path.join(project.root, PROGRESS_FILE);
     const existing = project.progressLog;
-    const sessions = withSession(asArray(existing?.data.sessions), today, words);
+    const sessions = withSession(asArray(existing?.data.sessions), today, counts);
     const contents = existing === null
-      ? progressLogFile(sessions)
+      ? progressLogFile(sessions, unit)
       : replaceFrontmatter(existing.rawMarkdown, { ...existing.data, sessions });
     writeFile(filePath, contents, { root: project.root });
-    logged = { file: filePath, date: today, words };
+    logged = { file: filePath, date: today, ...counts };
     project = scanProject(root);
   }
   const data = project.story.data;
   // An invalid target or deadline would otherwise read as none at all.
   const errors = [...project.fileErrors];
-  if (data["target-words"] !== undefined) {
-    requireInteger(data, "target-words", "story.md", errors, 1);
+  if (data[unit.targetField] !== undefined) {
+    requireInteger(data, unit.targetField, "story.md", errors, 1);
   }
   validateDeadline(data, errors);
+  const target = data[unit.targetField];
   return {
     ok: errors.length === 0,
     errors,
     warnings: [],
     logged,
     ...computeProgress({
-      words,
-      target: Number.isInteger(data["target-words"]) && data["target-words"] > 0 ? data["target-words"] : null,
+      ...(characters ? { unit: unit.name } : {}),
+      words: characters ? counts.characters : words,
+      target: Number.isInteger(target) && target > 0 ? target : null,
       deadline: typeof data.deadline === "string" ? data.deadline : null,
       today,
-      chapters: project.chapters.map((chapter) => ({ id: chapter.id, words: chapter.wordCount, target: chapter.targetWords })),
-      sessions: cleanSessions(project.progressLog?.data.sessions)
+      chapters: project.chapters.map((chapter) => ({ id: chapter.id, words: chapter.count, target: chapter.targetCount })),
+      sessions: cleanSessions(project.progressLog?.data.sessions, unit.name)
     })
   };
 }
 
-function progressLogFile(sessions) {
+function progressLogFile(sessions, unit) {
+  const counts = unit.name === "characters" ? "word and character counts" : "word count";
   return `${stringifyFrontmatter({ type: "progress-log", sessions })}# Progress Log
 
-\`story progress --log\` records the manuscript word count for the day in the frontmatter above. Set \`target-words\` and \`deadline\` in \`story.md\`, and \`target-words\` on chapters, to measure against them.
+\`story progress --log\` records the manuscript ${counts} for the day in the frontmatter above. Set \`${unit.targetField}\` and \`deadline\` in \`story.md\`, and \`${unit.targetField}\` on chapters, to measure against them.
 `;
 }
 
@@ -2728,6 +2806,8 @@ export function buildBook(root, options = {}) {
       data: project.story.data,
       meta: manuscript.meta,
       words,
+      // A book counted in characters gives its character count.
+      ...(manuscript.unit === "characters" ? { characters: manuscript.chapters.reduce((sum, chapter) => sum + characterCount(chapter.body), 0) } : {}),
       pages: { "5.5x8.5": estimateBookPages(book, "5.5x8.5"), "6x9": estimateBookPages(book, "6x9") },
       hasCopyrightPage: manuscript.front.concat(manuscript.back).some((entry) => entry.copyright),
       coverReady: coverIsReady(project),
@@ -3055,6 +3135,8 @@ function shunnMeta(project) {
     contact: asArray(data.contact),
     words: project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0),
     pack: project.pack,
+    // A book counted in characters gives its length in characters.
+    ...(project.unit.name === "characters" ? { characters: project.chapters.reduce((sum, chapter) => sum + chapter.count, 0) } : {}),
     // Short fiction runs as one text with `#` between sections rather than
     // as chapters on new pages.
     shortForm: data.form === "short-story" || data.form === "flash"
@@ -3997,16 +4079,17 @@ function storyBible(options) {
     pov: options.pov,
     tense: options.tense
   });
-  for (const field of ["author", "authors", "language"]) {
+  for (const field of ["author", "authors", "language", "count-unit"]) {
     if (options.inherited?.[field] !== undefined) {
       data[field] = options.inherited[field];
     }
   }
   if (options.form !== undefined) {
     data.form = options.form;
-    const target = STORY_FORMS.get(options.form).target;
+    // In the book's count unit: target-characters for Chinese or Japanese.
+    const target = formRanges(options.unit, options.pack)?.get(options.form)?.target ?? null;
     if (target !== null) {
-      data["target-words"] = target;
+      data[options.unit.targetField] = target;
     }
   }
   for (const field of ["follows", "precedes"]) {
@@ -4129,21 +4212,23 @@ ${themeTracking || `| Theme | Arcs | Chapters |
 `;
 }
 
-function chapterIndex(storyId, chapters) {
+// The chapter registry, with each chapter's length in the count unit.
+function chapterIndex(storyId, chapters, unit = COUNT_UNITS.get("words")) {
   const rows = chapters.length === 0
     ? ["| *No chapters yet* | | | | | |"]
-    : chapters.map((chapter) => `| ${cell(chapter.number)} | ${cell(chapter.title)} | ${cell(chapter.pov)} | ${cell(chapter.status)} | ${cell(chapter.wordCount)} | [${chapter.id}](${path.basename(chapter.file)}) |`);
-  const total = chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
+    : chapters.map((chapter) => `| ${cell(chapter.number)} | ${cell(chapter.title)} | ${cell(chapter.pov)} | ${cell(chapter.status)} | ${cell(chapter.count)} | [${chapter.id}](${path.basename(chapter.file)}) |`);
+  const total = chapters.reduce((sum, chapter) => sum + chapter.count, 0);
+  const heading = `${unit.noun[0].toUpperCase()}${unit.noun.slice(1)} Count`;
 
   return `${stringifyFrontmatter({ type: "chapter-registry", story: storyId })}# Chapters
 
 ## Registry
 
-| # | Title | POV | Status | Word Count | File |
-|---|-------|-----|--------|------------|------|
+| # | Title | POV | Status | ${heading} | File |
+|---|-------|-----|--------|${"-".repeat(heading.length + 2)}|------|
 ${rows.join("\n")}
 
-## Total Word Count: ${total}
+## Total ${heading}: ${total}
 `;
 }
 
@@ -4377,7 +4462,7 @@ function buildProjectActions(project, validation, links, continuity, displayPath
   let nextNumber = 1;
   for (const chapter of project.chapters) {
     const file = relative(project, chapter.file);
-    if (chapter.declaredWordCount !== chapter.wordCount && !wordCountOverridden.has(file)) {
+    if ((chapter.declaredWordCount !== chapter.wordCount || chapter.declaredCount !== chapter.count) && !wordCountOverridden.has(file)) {
       staleChapters.push(chapter);
     }
     let hasScene = false;
@@ -4517,7 +4602,7 @@ function buildEntity(project, kind, name, options) {
       ? project.chapters.reduce((max, chapter) => Math.max(max, chapter.number), 0) + 1
       : requirePositiveInteger(options.number, "chapter number");
     const id = `chapter-${String(number).padStart(2, "0")}`;
-    return entityResult(project, kind, id, chapterFile(name, number, options));
+    return entityResult(project, kind, id, chapterFile(name, number, options, project.unit));
   }
 
   if (kind === "scene") {
@@ -4940,7 +5025,7 @@ What changes because of this arc.
 `;
 }
 
-function chapterFile(title, number, options) {
+function chapterFile(title, number, options, unit) {
   const dateError = storyDateError(options.date);
   if (dateError) {
     throw usageError(dateError);
@@ -4962,7 +5047,9 @@ function chapterFile(title, number, options) {
     date: options.date ?? "",
     time: options.time ?? "",
     ...(options.hook === undefined ? {} : { hook: options.hook }),
-    "word-count": 0
+    "word-count": 0,
+    // A book counted in characters records character-count too.
+    ...(unit.name === "characters" ? { "character-count": 0 } : {})
   })}# ${chapterHeading(number, title)}
 
 ## Outline
@@ -5776,6 +5863,8 @@ function manuscriptParts(project, action = "build") {
     title: project.title,
     author: meta.authors.join(" and "),
     meta,
+    // The count unit, for the print page estimate and narration runtime.
+    unit: project.unit.name,
     front,
     chapters,
     back,
@@ -6520,6 +6609,10 @@ function validateStoryFrontmatter(project, errors) {
   if (data["target-words"] !== undefined) {
     requireInteger(data, "target-words", "story.md", errors, 1);
   }
+  if (data["target-characters"] !== undefined) {
+    requireInteger(data, "target-characters", "story.md", errors, 1);
+  }
+  validateEnum(data, "count-unit", COUNT_UNITS, "story.md", errors);
   validateEnum(data, "form", STORY_FORMS, "story.md", errors);
   if (data["draft-mode"] !== undefined) {
     requireScalar(data, "draft-mode", "story.md", errors);
@@ -6573,18 +6666,34 @@ function validatePronunciations(project, errors) {
   }
 }
 
+// The target and, once the book is complete, the manuscript, against the
+// form's usual range in the count unit. A language counted in characters
+// without ranges of its own is not checked.
 function validateFormRange(project, warnings) {
   const data = project.story.data;
-  const targetWarning = formRangeWarning(data.form, data["target-words"], "story.md target-words");
+  const { unit } = project;
+  const ranges = formRanges(unit, project.pack);
+  const targetWarning = formRangeWarning(data.form, data[unit.targetField], `story.md ${unit.targetField}`, ranges, unit);
   if (targetWarning !== "") {
     warnings.push(warn("form-length-range", targetWarning, "story.md"));
   }
   if (data.status === "complete") {
-    const words = project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
-    const wordsWarning = formRangeWarning(data.form, words, "Manuscript length");
-    if (wordsWarning !== "") {
-      warnings.push(warn("form-length-range", wordsWarning));
+    const length = project.chapters.reduce((sum, chapter) => sum + chapter.count, 0);
+    const lengthWarning = formRangeWarning(data.form, length, "Manuscript length", ranges, unit);
+    if (lengthWarning !== "") {
+      warnings.push(warn("form-length-range", lengthWarning));
     }
+  }
+}
+
+// A target in the other unit is never measured: progress, report, and the
+// form range read only the count unit's target field.
+function unusedTargetWarnings(project, label, data, warnings) {
+  const { unit } = project;
+  const other = [...COUNT_UNITS.values()].find((entry) => entry !== unit);
+  if (data[other.targetField] !== undefined && data[unit.targetField] === undefined) {
+    const why = project.story.data["count-unit"] === undefined ? `language ${project.language}` : "count-unit";
+    warnings.push(warn("unused-target", `${label} ${other.targetField} is not measured: this book counts ${unit.name} (${why}), so set ${unit.targetField}`, label));
   }
 }
 
@@ -6828,9 +6937,16 @@ function validateChapters(project, errors, warnings) {
     if (data["word-count"] !== undefined) {
       requireInteger(data, "word-count", label, errors, 0);
     }
+    if (data["character-count"] !== undefined) {
+      requireInteger(data, "character-count", label, errors, 0);
+    }
     if (data["target-words"] !== undefined) {
       requireInteger(data, "target-words", label, errors, 1);
     }
+    if (data["target-characters"] !== undefined) {
+      requireInteger(data, "target-characters", label, errors, 1);
+    }
+    unusedTargetWarnings(project, label, data, warnings);
     if (data.date !== undefined) {
       requireScalar(data, "date", label, errors);
     }
@@ -7212,6 +7328,9 @@ function validateProgressLog(project, errors) {
     }
     if (!Number.isInteger(entry.words) || entry.words < 0) {
       errors.push(err("field-not-integer", `${label} words must be a non-negative integer`, PROGRESS_FILE));
+    }
+    if (entry.characters !== undefined && (!Number.isInteger(entry.characters) || entry.characters < 0)) {
+      errors.push(err("field-not-integer", `${label} characters must be a non-negative integer`, PROGRESS_FILE));
     }
   });
 }

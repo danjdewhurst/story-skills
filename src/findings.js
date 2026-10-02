@@ -93,6 +93,7 @@ export const FINDING_CODES = {
   "permission-no-rights-holder": "warning",
   "backslash-path": "warning",
   "form-length-range": "warning",
+  "unused-target": "warning",
   "invalid-language": "error",
   "unsupported-writing-mode": "error",
   "invalid-isbn": "error",

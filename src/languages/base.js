@@ -18,6 +18,9 @@ export default {
   // "character" (each character is a word), or "dictionary" (a word
   // segmenter is needed).
   segmentation: "space",
+  // The unit a manuscript's length is counted in, unless story.md sets
+  // `count-unit`: "words" or "characters".
+  countUnit: "words",
   // Marks that can end a sentence: the full stop, question and exclamation
   // marks, and ellipsis; the full-width CJK stops (。！？), which need no
   // space after them; the Arabic question mark (؟), the Urdu full stop (۔),

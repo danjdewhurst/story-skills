@@ -680,6 +680,15 @@ Total: 131
 
 Without `--write`, the same counts are printed and nothing changes.
 
+A Chinese or Japanese book, or one with `count-unit: characters`, is [counted in characters](project-format.md#counting-in-characters): each chapter's line gives its characters, the total says `Total: N characters`, and `--write` records `character-count` beside `word-count`:
+
+```text
+$ story wordcount --write
+chapters/chapter-01.md: 3120
+chapters/chapter-02.md: 2875
+Total: 5995 characters
+```
+
 ### links
 
 ```text
@@ -1087,6 +1096,8 @@ story progress [path] [--log] [--date <YYYY-MM-DD>]
 
 Reports the manuscript word count against `target-words` in `story.md`, the days left to `deadline` and the words a day needed to meet it, per-chapter `target-words`, and pace from the session log in `progress.md`.
 
+A book [counted in characters](project-format.md#counting-in-characters) reports characters against `target-characters` instead (`Progress: 52,300 of 120,000 characters (43.6%)`), and `--log` records `characters` beside `words` in the session. Its `--json` data has `unit: "characters"` and a `characters` count wherever a book counted in words has `words` (top level, each chapter, and `lastSession`); `target`, `remaining`, `perDay`, and `pace` are in characters.
+
 | Option | Effect |
 |---|---|
 | `--log` | Record today's total word count in `progress.md`, creating the file if needed. A second log on the same date replaces the first |
@@ -1311,7 +1322,7 @@ See [Series](series.md).
 story report [path] [--actionable]
 ```
 
-Prints a project summary: metadata (with a `Form:` line when `story.md` sets `form`), entity counts, total words (and percentage of `target-words`, when set), a line per chapter and arc, and the result of `validate`, `links`, and `continuity`. A metadata field that `story.md` does not set, such as `status` or `pov`, prints as `unset`, and a missing `title` shows the project folder name.
+Prints a project summary: metadata (with a `Form:` line when `story.md` sets `form`), entity counts, total words (and percentage of `target-words`, when set), a line per chapter and arc, and the result of `validate`, `links`, and `continuity`. A book [counted in characters](project-format.md#counting-in-characters) gives total characters against `target-characters` and each chapter's characters; its `--json` data adds `unit: "characters"`, `targetCharacters`, `counts.proseCharacters`, and a `characterCount` on each chapter, and keeps the word counts. A metadata field that `story.md` does not set, such as `status` or `pov`, prints as `unset`, and a missing `title` shows the project folder name.
 
 | Option | Effect |
 |---|---|
@@ -1456,7 +1467,7 @@ The rules behind each report, and how to act on them, are in [Continuity and ana
 story pacing [path]
 ```
 
-A pacing dashboard built from frontmatter. For each chapter it shows the prose word count, the number of scenes and sequels (scene records with `sequel: true`), the tally of scene `outcome` values, and the chapter-ending `hook`. Record outcomes with `story add scene --outcome` and hooks with `story add chapter --hook` (see [add](#add)), or edit the fields by hand.
+A pacing dashboard built from frontmatter. For each chapter it shows the prose word count (characters in a book [counted in characters](project-format.md#counting-in-characters), whose `--json` data then has `unit: "characters"`, a `characters` count on each row in place of `words`, and `medianCharacters` in place of `medianWords`), the number of scenes and sequels (scene records with `sequel: true`), the tally of scene `outcome` values, and the chapter-ending `hook`. Record outcomes with `story add scene --outcome` and hooks with `story add chapter --hook` (see [add](#add)), or edit the fields by hand.
 
 | Field | Values |
 |---|---|
@@ -2192,11 +2203,11 @@ Builds a disposable book file in `dist/`. Builds are deterministic: the same sou
 | `epub` | `dist/<story-id>.epub` | EPUB 3 with a navigation document, front and back matter, and accessibility metadata. Reads `author` or `authors`, `language`, `isbn`, `publisher`, `publication-date`, `description`, `subjects`, `copyright`, `cover`, and `cover-alt` from `story.md` when set |
 | `docx` | `dist/<story-id>.docx` | Word document with headings and paragraphs |
 | `docx` with `--shunn` | `dist/<story-id>.docx` | Shunn format: Courier New 12pt, double-spaced, title page |
-| `shunn` | `dist/<story-id>.shunn.md` | Shunn manuscript markdown: title, byline, approximate word count, `contact` lines, page breaks between chapters; no matter pages |
+| `shunn` | `dist/<story-id>.shunn.md` | Shunn manuscript markdown: title, byline, approximate word count (characters for a book counted in characters), `contact` lines, page breaks between chapters; no matter pages |
 | `html` | `dist/<story-id>.html` | A single-file review copy for readers: contents list, and a label on every paragraph (`ch03-p12` is chapter 3, paragraph 12) that readers quote with their notes. A label is the paragraph's chapter and position in this build, so an earlier edit in the chapter renumbers it and `move` changes its chapter part; readers should quote the `--stamp` build label and the paragraph's first few words too |
 | `print` | `dist/<story-id>.print.html` | A print interior as HTML with CSS paged media, sized to `--trim`, with a title page, contents, and page numbers. Render it to PDF with a paged-media engine such as Paged.js, WeasyPrint, or Prince |
-| `narration` | `dist/<story-id>.narration.md` | An audiobook script: estimated runtime at 155 words a minute, a pronunciation guide from `pronunciation` fields in the bible, opening and closing credits, and each section with its estimated minutes |
-| `metadata` | `dist/<story-id>.metadata.md` | A retailer metadata sheet from `story.md`: title, authors, ISBN, language, word count, estimated print pages, description, keywords, BISAC subjects, and a readiness checklist of what is missing |
+| `narration` | `dist/<story-id>.narration.md` | An audiobook script: estimated runtime at 155 words a minute (300 characters a minute for a book [counted in characters](project-format.md#counting-in-characters)), a pronunciation guide from `pronunciation` fields in the bible, opening and closing credits, and each section with its estimated minutes |
+| `metadata` | `dist/<story-id>.metadata.md` | A retailer metadata sheet from `story.md`: title, authors, ISBN, language, word count (character count for a book counted in characters, with pages estimated from characters a page), estimated print pages, description, keywords, BISAC subjects, and a readiness checklist of what is missing |
 | `fountain` | `dist/<story-id>.fountain` | A screenplay scene skeleton in Fountain, not a conversion of the prose: a title page, a `##` section per chapter, and one scene heading per scene record (`INT. LAMP ROOM - DUSK`, from the `setting`, location name, and time), with the scene title as a synopsis and the source scene id, cast, and scene notes as unprinted notes. A scene with no `setting` on it or its location gets a forced heading (`.LAMP ROOM - DUSK`) and a warning. See [Screenplay skeleton](manuscripts.md#screenplay-skeleton-fountain) |
 | `twee` | `dist/<story-id>.twee` | A Twine story in Twee 3: `StoryTitle`, `StoryData` with the IFID (`ifid` in `story.md`, or one derived from the story id, with a warning giving the line to pin it) and the first chapter as the start, then one passage per chapter, named by its id, ending in a `[[text->chapter-NN]]` link for each of its [`choices`](project-format.md#branching-chapters). With no choices anywhere, each chapter links to the next. No matter pages. Refuses to build, exiting 3, while a choice is malformed or leads to a missing chapter, a chapter file name is not kebab-case, or `ifid` is malformed, and warns about chapters no choice path reaches. See [Twine story](manuscripts.md#twine-story) |
 | `ink` | `dist/<story-id>.ink` | An ink story for Inky and inklecate from the same chapters and choices, with the same checks as `twee`: `# title`, `# author`, and `# ifid` global tags, a divert to the first chapter, then one knot per chapter (`chapter-03` becomes `chapter_03`), ending in a sticky `+ [text] -> knot` choice for each of its `choices`, or `-> END` when it has none. With no choices anywhere, each chapter diverts to the next. Prose and choice text are escaped so ink reads them as text. See [ink story](manuscripts.md#ink-story) |
@@ -2409,7 +2420,8 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `permission-pending` | warning | A matter page's permission is pending and the story is complete. |
 | `permission-no-rights-holder` | warning | A matter page's permission is granted but names no rights holder. |
 | `backslash-path` | warning | A `story.md` path (`follows`, `precedes`, `cover`) uses a backslash. |
-| `form-length-range` | warning | The target or finished length is outside the usual range for the story's `form`. |
+| `form-length-range` | warning | The target or finished length is outside the usual range for the story's `form`, in the book's count unit. |
+| `unused-target` | warning | `story.md` or a chapter sets a target in the unit the book does not count in (`target-words` in a book counted in characters, or the reverse), so nothing measures it. |
 | `invalid-language` | error | `story.md` `language` is not a BCP 47 tag. |
 | `unsupported-writing-mode` | error | `story.md` sets `writing-mode: vertical` for a language that is not set in vertical columns (or for traditional Mongolian, not supported yet). |
 | `invalid-isbn` | error | `story.md` `isbn` is not a valid ISBN. |

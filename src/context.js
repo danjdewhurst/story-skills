@@ -235,7 +235,9 @@ export function buildContext(project, targetId, readBody, options = {}) {
     field("Date", [unit.date, unit.time].filter(Boolean).join(" ")),
     field("Outcome", target.scene ? target.scene.outcome : ""),
     field("Hook", target.chapter.hook),
-    field("Target words", target.chapter.targetWords || "")
+    project.unit?.name === "characters"
+      ? field("Target characters", target.chapter.targetCount || "")
+      : field("Target words", target.chapter.targetWords || "")
   ];
   // The outline ends at the `---` rule above the prose, or at the next
   // heading, so the chapter's own prose never comes along.

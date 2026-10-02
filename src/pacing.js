@@ -15,7 +15,12 @@ const EASY_WIN_RUN = 3;
 const NO_SEQUEL_RUN = 4;
 const RESOLUTION_RUN = 3;
 
+// Lengths are in the project's count unit: a project counted in characters
+// has `unit: "characters"`, a `characters` count on each row in place of
+// `words`, and `medianCharacters` in place of `medianWords`.
 export function buildPacing(project) {
+  const characters = project.unit?.name === "characters";
+  const key = characters ? "characters" : "words";
   const chapters = [...project.chapters].sort((left, right) => left.number - right.number || left.id.localeCompare(right.id, "en"));
   // The chapter file a finding is about, relative to the project.
   const files = new Map(chapters.map((chapter) => [chapter.id, project.root === undefined ? null : path.relative(project.root, chapter.file)]));
@@ -37,7 +42,7 @@ export function buildPacing(project) {
     rows.push({
       id: chapter.id,
       number: chapter.number,
-      words: chapter.wordCount,
+      [key]: characters ? chapter.count : chapter.wordCount,
       scenes: scenes.filter((scene) => !scene.sequel).length,
       sequels: scenes.filter((scene) => scene.sequel).length,
       outcomes,
@@ -80,22 +85,23 @@ export function buildPacing(project) {
   }
   flushRun(resolutions, RESOLUTION_RUN, warnings, (run) => warn("pacing-resolution-run", `${run.length} chapters in a row end on resolution (${span(run)}): readers can put the book down`));
 
-  const written = rows.filter((row) => row.words > 0);
-  const median = medianOf(written.map((row) => row.words));
+  const written = rows.filter((row) => row[key] > 0);
+  const median = medianOf(written.map((row) => row[key]));
   if (written.length >= 3) {
     for (const row of written) {
-      if (row.words > median * 2) {
-        warnings.push(warn("pacing-long-chapter", `${row.id} runs ${row.words} words, over twice the median chapter (${formatMedian(median)}): consider splitting it`, files.get(row.id)));
-      } else if (row.words < median / 2) {
-        warnings.push(warn("pacing-short-chapter", `${row.id} runs ${row.words} words, under half the median chapter (${formatMedian(median)}): check it earns its place`, files.get(row.id)));
+      if (row[key] > median * 2) {
+        warnings.push(warn("pacing-long-chapter", `${row.id} runs ${row[key]} ${key}, over twice the median chapter (${formatMedian(median)}): consider splitting it`, files.get(row.id)));
+      } else if (row[key] < median / 2) {
+        warnings.push(warn("pacing-short-chapter", `${row.id} runs ${row[key]} ${key}, under half the median chapter (${formatMedian(median)}): check it earns its place`, files.get(row.id)));
       }
     }
   }
 
   const recorded = units.filter((unit) => !unit.sequel && SCENE_OUTCOMES.has(unit.outcome));
   return {
+    ...(characters ? { unit: "characters" } : {}),
     rows,
-    medianWords: formatMedian(median),
+    [characters ? "medianCharacters" : "medianWords"]: formatMedian(median),
     totals: {
       scenes: units.filter((unit) => !unit.sequel).length,
       sequels: units.filter((unit) => unit.sequel).length,
@@ -135,11 +141,12 @@ function medianOf(values) {
 
 export function formatPacing(pacing) {
   const { totals } = pacing;
+  const characters = pacing.unit === "characters";
   const setbackShare = totals.outcomesRecorded === 0 ? "no outcomes recorded" : `${Math.round((totals.setbacks * 100) / totals.outcomesRecorded)}% of recorded outcomes are setbacks or complications`;
   const lines = [
     `Pacing: ${plural(totals.scenes, "scene")}, ${plural(totals.sequels, "sequel")}, ${totals.hooks} of ${plural(pacing.rows.length, "chapter")} with hooks`,
     `Outcomes: ${setbackShare}`,
-    `Median chapter: ${pacing.medianWords} words`,
+    characters ? `Median chapter: ${pacing.medianCharacters} characters` : `Median chapter: ${pacing.medianWords} words`,
     ""
   ];
   if (pacing.rows.length === 0) {
@@ -151,7 +158,7 @@ export function formatPacing(pacing) {
   const outcomesOf = (row) => `${row.outcomes.yes}/${row.outcomes.no}/${row.outcomes["yes-but"]}/${row.outcomes["no-and"]}`;
   const columns = [
     { title: "Ch", value: (row) => String(row.number) },
-    { title: "Words", value: (row) => String(row.words) },
+    characters ? { title: "Characters", value: (row) => String(row.characters) } : { title: "Words", value: (row) => String(row.words) },
     { title: "Scenes", value: (row) => String(row.scenes) },
     { title: "Sequels", value: (row) => String(row.sequels) },
     { title: "Outcomes (yes/no/yes-but/no-and)", value: outcomesOf, left: true }
