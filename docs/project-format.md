@@ -1087,7 +1087,7 @@ The body holds the decisions a copyeditor tracks: voice, spelling and usage, cap
 
 #### Word lists
 
-`story prose`, `story voices`, `story names`, `story import`, and the sentence splitter take their word lists from the language pack for `story.md` `language` (see [Books not in English](continuity.md#books-not-in-english)). `add-words` and `replace-words` change any of them for one book, and can supply a list a language has no pack for, which turns on the check that needs it. Each entry names a list and gives its words separated by commas; an entry may repeat a list, and words in a list are matched in lower case unless the table says otherwise:
+`story prose`, `story voices`, `story names`, `story import`, and the sentence splitter take their word lists from the language pack for `story.md` `language` (see [Books not in English](continuity.md#books-not-in-english)). `add-words` and `replace-words` change any of them for one book, and can supply a list a language has no pack for, which turns on the check that needs it. Each entry names a list and gives its words separated by commas, or as a flow list (`[sintió, vio]`); an entry may repeat a list, and words in a list are matched in lower case unless the table says otherwise. An apostrophe in a word matches a straight or curly one, and an abbreviation may be written with or without its full stop (`Sig.` or `Sig`):
 
 ```yaml
 replace-words:
@@ -1108,6 +1108,7 @@ add-words:
 | `beat-pronouns` | `prose` | Pronouns that, capitalised after a quote ending in `?`, `!`, or a dash, start an action beat rather than a tag. |
 | `inversion-links` | `prose`, `voices` | What joins an inverted tag's verb and pronoun (`-t-` and `-` in French `demanda-t-elle`, `dit-il`). |
 | `adverb-suffixes`, `adverb-exceptions` | `prose` | The endings that mark a manner adverb (`ly`), and the words with those endings that are not adverbs. The check needs both. |
+| `adverb-blockers` | `prose` | Words after which an adverb-shaped word is a noun or verb (French `le moment`, `ils aiment`); one ending in an apostrophe is an elision joined to the word (`l'appartement`). |
 | `echo-stopwords`, `phrase-stopwords` | `prose` | Common words never counted as echoes or signature words, and function words a repeated phrase cannot be made of alone. |
 | `dialect-pairs` | `prose` | `british/american` spelling pairs, such as `kerb/curb`, for `dialect`. |
 | `speech-verbs`, `speech-pronouns` | `voices` | Verbs and pronouns that tag speech (`she said`, `said Tom`). |
@@ -1119,9 +1120,10 @@ add-words:
 | `calendar-words` | sentences, `import` | Days and months, as written, which never count as names. |
 | `chapter-words`, `section-words`, `part-words` | `import` | Heading words for a chapter, an unnumbered chapter such as a prologue, and a part. |
 | `front-matter-words` | `import` | Names of source files that sort before the numbered chapters. |
+| `ordinal-words` | `import` | Ordinals that may come before a chapter or part word (`Erstes Kapitel`, `Première partie`); with this list, a number with a full stop may too (`1. Kapitel`). |
 | `number-words`, `number-joiners` | `import` | Spelled-out chapter numbers. A numeral is a run of number words joined by a space, a hyphen, nothing, or a joiner (`vingt et un`, `einundzwanzig`). Replacing `number-words` drops a pack's built-in numbers, English's included. |
 | `candidate-stopwords` | `import` | Capitalised words that are never names, as written. |
-| `determiners`, `noun-suffixes` | `import` | For a language that capitalises nouns: words after which a capitalised word is a common noun (`die`, `einem`), and endings only nouns have (`ung`). |
+| `determiners`, `relative-words`, `noun-suffixes` | `import` | For a language that capitalises nouns: words after which a capitalised word is a common noun (`die`, `einem`), the determiners that start a relative clause after a comma instead (`die Frau, die Lena kannte`), and endings only nouns have (`ung`). |
 | `title-words` | `names`, `voices`, `prose` | Titles and articles before a name (Lord, Frau), so a name is known by the word after them. |
 
 ### Front and back matter

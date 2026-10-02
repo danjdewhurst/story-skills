@@ -15,8 +15,19 @@
 //   (lentement, vraiment, absolument, constamment). The suffixes are the
 //   endings those take, so moment, comment, and dorment never count; the
 //   nouns and verbs that share an ending are exceptions.
+//   Since French nouns take an article, `adverbBlockers` lists the words
+//   after which an -ment word is a noun or verb (le moment, ils aiment),
+//   with the elisions (l'appartement, s'enflamment).
 // - Inverted tags (dit-il, demanda-t-elle) join verb and pronoun with a
 //   hyphen; `inversionLinks` names the joins, so the tag counts as dit.
+//   A tag may stand inside the speech (« Viens, dit-il, nous partons. »,
+//   — Viens ! s'exclama-t-il.); `inciseTags` reads it there.
+// - Filter words leave out vit (also "lives") and compris (also
+//   "included"), and se demander, which is two words and whose demandait
+//   is also a tag.
+// - Headings: an ordinal may come before the heading word (Première
+//   partie), in `ordinalWords`; septante, huitante, octante, and nonante
+//   are numbers too.
 // - No dialectPairs: the British and American pairs are English. Record
 //   Quebec or Swiss usage as style-sheet `preferred` entries.
 // - No contractionSuffixes or contractedIs: elision (l'homme, j'ai) is
@@ -29,6 +40,9 @@ export default {
   code: "fr",
   name: "French",
   narrationRate: 135,
+  // A tag may stand inside the speech: « Viens, dit-il, nous partons. »,
+  // or — Viens ! s'exclama-t-il.
+  inciseTags: true,
   labels: {
     chapter: "Chapitre {n}",
     "chapter-heading": "{chapter} : {title}",
@@ -65,11 +79,12 @@ export default {
   },
   checks: {
     filterWords: [
-      "sentit", "sentait", "sentis", "senti", "vit", "voyait", "vis", "entendit", "entendait", "entendis",
+      "sentit", "sentait", "sentis", "senti", "voyait", "vis", "entendit", "entendait", "entendis",
       "entendu", "remarqua", "remarquait", "remarquai", "remarqué", "aperçut", "apercevait", "aperçus",
       "aperçu", "sembla", "semblait", "parut", "paraissait", "observa", "observait", "sut", "savait",
       "sus", "su", "décida", "décidait", "décidai", "décidé", "pensa", "pensait", "pensai", "pensé",
-      "comprit", "comprenait", "compris", "réalisa", "réalisait", "crut", "croyait", "songea", "songeait"
+      "comprit", "comprenait", "réalisa", "réalisait", "crut", "croyait", "songea", "songeait", "regarda",
+      "regardait", "écouta", "écoutait"
     ],
 
     // Tags that replace "dit" with an action or a manner. Murmura,
@@ -79,10 +94,10 @@ export default {
       "aboya", "affirma", "bougonna", "cracha", "déclara", "glapit", "gloussa", "gronda", "grogna",
       "haleta", "maugréa", "minauda", "persifla", "railla", "ricana", "ronronna", "rugit", "rétorqua",
       "sanglota", "siffla", "souffla", "soupira", "sourit", "s'enquit", "s'esclaffa", "s'exclama",
-      "s'écria", "trancha", "ironisa", "énonça"
+      "s'écria", "trancha", "ironisa", "énonça", "rit", "gémit", "plaisanta", "grommela"
     ],
 
-    plainTags: ["dit", "dis", "demanda", "demandai", "demande"],
+    plainTags: ["dit", "dis", "dirent", "demanda", "demandai", "demande", "demandèrent"],
 
     beatPronouns: ["il", "elle", "ils", "elles", "je", "nous", "on", "vous", "tu"],
 
@@ -118,7 +133,64 @@ export default {
       "revirement", "riment", "ronflement", "roulement", "rugissement", "ruissellement", "saignement",
       "scintillement", "sentiment", "serrement", "sifflement", "soulagement", "soulèvement", "suppriment",
       "supplément", "tiraillement", "tintement", "traitement", "tremblement", "tressaillement",
-      "véhément", "vêtement", "vieillissement", "aiment", "abîment", "condiment", "rudiment"
+      "véhément", "vêtement", "vieillissement", "aiment", "abîment", "condiment", "rudiment",
+      "abattement", "aboutissement", "abrutissement", "accablement", "accomplissement", "accroissement",
+      "achèvement", "acheminement", "adoucissement", "affaiblissement", "affaissement", "affolement",
+      "agenouillement", "agissement", "agrandissement", "ahurissement", "ajustement", "alignement",
+      "allaitement", "allongement", "alourdissement", "amoncellement", "amusement", "anéantissement",
+      "apitoiement", "applaudissement", "appauvrissement", "arrachement", "arrangement", "arriment",
+      "assentiment", "assombrissement", "assoupissement", "atermoiement", "attendrissement", "attroupement",
+      "avancement", "avènement", "avilissement", "bâillement", "balbutiement", "bannissement", "bégaiement",
+      "bêlement", "beuglement", "blanchiment", "bouillonnement", "bredouillement", "bruissement",
+      "chamboulement", "chancellement", "chargement", "chavirement", "chevauchement", "chuintement",
+      "classement", "clapotement", "cliquetement", "clignotement", "commandement", "compartiment",
+      "compriment", "consentement", "contentement", "couronnement", "crissement", "croassement",
+      "débarquement", "débordement", "déchaînement", "déchirement", "décollement", "découragement",
+      "décrément", "dédommagement", "défilement", "dégagement", "déguisement", "délabrement",
+      "délaissement", "délassement", "démantèlement", "déménagement", "dénigrement", "dénouement",
+      "dénuement", "dépassement", "dépaysement", "dépérissement", "déploiement", "déracinement",
+      "dérangement", "dérèglement", "désagrément", "désarmement", "désœuvrement", "dessèchement",
+      "détournement", "dévoilement", "discernement", "durcissement", "ébahissement", "éblouissement",
+      "éboulement", "ébranlement", "écartement", "échauffement", "éclaircissement", "éclatement",
+      "écrasement", "écroulement", "effacement", "effarement", "effleurement", "effritement", "égouttement",
+      "élargissement", "émerveillement", "emballement", "embellissement", "embrasement", "émiettement",
+      "emménagement", "empêchement", "empiètement", "empilement", "empoisonnement", "emprisonnement",
+      "encadrement", "enchaînement", "encombrement", "endettement", "endormissement", "enfoncement",
+      "enflamment", "engloutissement", "engouement", "enivrement", "enlisement", "enracinement",
+      "enregistrement", "enrichissement", "enroulement", "enrouement", "ensevelissement", "ensorcellement",
+      "entassement", "entrechoquement", "entrelacement", "envahissement", "envoûtement", "épaississement",
+      "épanchement", "épanouissement", "éparpillement", "escarpement", "escriment", "essoufflement",
+      "étalement", "étirement", "étouffement", "étourdissement", "excrément", "exhument", "flamboiement",
+      "fléchissement", "foisonnement", "fonctionnement", "fourmillement", "fourvoiement",
+      "frétillement", "froissement", "gazouillement", "glapissement", "gloussement", "gonflement",
+      "grignotement", "grognement", "grossissement", "grouillement", "halètement", "harcèlement",
+      "hébergement", "hennissement", "incrément", "inhument", "jaunissement", "jappement", "larmoiement",
+      "licenciement", "maniement", "marmonnement", "martèlement", "médicament", "ménagement", "miaulement",
+      "miroitement", "nivellement", "noircissement", "ondoiement", "oppriment", "ornement", "paiement",
+      "pansement", "parlement", "pétillement", "peuplement", "piaillement", "picotement", "placement",
+      "plissement", "pourrissement", "priment", "prolongement", "raffermissement", "rafraîchissement",
+      "raidissement", "rajeunissement", "ralliement", "rallument", "ramollissement", "raniment", "rangement",
+      "rapetissement", "ravissement", "rayonnement", "recensement", "recommencement", "recrutement",
+      "redoublement", "redressement", "refroidissement", "regroupement", "rejaillissement", "remboursement",
+      "remuement", "renfrognement", "renforcement", "reniement", "renoncement", "renouvellement",
+      "renversement", "répriment", "resserrement", "retentissement", "rétablissement", "retournement",
+      "retranchement", "rétrécissement", "ricanement", "ronronnement", "roucoulement", "saisissement",
+      "sautillement", "sédiment", "sifflotement", "sous-estiment", "subliment", "surgissement", "susurrement",
+      "tapotement", "tassement", "tâtonnement", "tégument", "titubement", "tortillement", "tournoiement",
+      "trébuchement", "tremblotement", "trépignement", "tressautement", "trottinement", "tutoiement",
+      "vacillement", "vagissement", "verdissement", "vouvoiement", "vrombissement", "émolument", "enrhument"
+    ],
+
+    // Words after which a word in -ment is not an adverb: articles,
+    // possessives, and demonstratives (le moment, son mouvement), subject
+    // pronouns and qui before a verb (ils aiment), and prepositions that
+    // take a bare noun (avec étonnement). Those ending in an apostrophe are
+    // elisions joined to the word (l'appartement, s'enflamment).
+    adverbBlockers: [
+      "le", "la", "les", "un", "une", "du", "des", "au", "aux", "ce", "cet", "cette", "ces", "mon", "ma",
+      "mes", "ton", "ta", "tes", "son", "sa", "ses", "notre", "nos", "votre", "vos", "leur", "leurs",
+      "quel", "quelle", "quels", "quelles", "chaque", "aucun", "aucune", "nul", "nulle", "ils", "elles",
+      "qui", "avec", "en", "de", "par", "l'", "d'", "s'", "n'", "j'", "m'", "t'"
     ],
 
     echoStopwords: [
@@ -161,8 +233,9 @@ export default {
 
     // Sentence splitting: M. Dupont, Mme Roux, and Dr Morel never end a
     // sentence (M. is an initial); etc. and p. may.
-    titleAbbreviations: ["Mme", "Mmes", "Mlle", "Mlles", "MM", "Me", "Dr", "Pr", "St", "Ste", "Mgr", "cf", "env"],
-    contextAbbreviations: ["etc", "av", "apr", "chap", "vol", "n°"],
+    // av. and apr. come before J.-C., which may end a sentence.
+    titleAbbreviations: ["Mme", "Mmes", "Mlle", "Mlles", "MM", "Me", "Dr", "Pr", "St", "Ste", "Mgr", "cf", "env", "av", "apr"],
+    contextAbbreviations: ["etc", "chap", "vol", "n°", "J.-C"],
 
     // Written in lower case in French, so only a capitalised one at the
     // start of a sentence could pass for a name.
@@ -185,10 +258,17 @@ export default {
       words: [
         "un", "deux", "trois", "quatre", "cinq", "six", "sept", "huit", "neuf", "dix", "onze", "douze",
         "treize", "quatorze", "quinze", "seize", "vingt", "vingts", "trente", "quarante", "cinquante",
-        "soixante", "cent", "cents", "premier"
+        "soixante", "cent", "cents", "premier", "première",
+        // Belgian and Swiss French.
+        "septante", "huitante", "octante", "nonante"
       ],
       joiners: ["et"]
     },
+    // Ordinals that may come before the heading word (Première partie).
+    ordinalWords: [
+      "premier", "première", "deuxième", "second", "seconde", "troisième", "quatrième", "cinquième",
+      "sixième", "septième", "huitième", "neuvième", "dixième", "onzième", "douzième"
+    ],
 
     candidateStopwords: [
       "À", "Alors", "Après", "Au", "Aux", "Avec", "Ce", "Cela", "Ces", "Cette", "Comme", "Dans", "De", "Des",

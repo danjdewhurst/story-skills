@@ -7,13 +7,25 @@
 // preterite and imperfect, third and first person singular (dijo, dije,
 // decía). Choices that differ from English:
 // - Adverbs: a manner adverb ends in -mente (lentamente), so that is the
-//   suffix, with the -mente words that are not adverbs as exceptions.
+//   suffix, with the -mente words that are not adverbs as exceptions, and
+//   `adverbBlockers` for the words before a noun or subjunctive (la mente,
+//   que lo lamente).
+// - Headings: an ordinal may come before the heading word (Primera
+//   parte), in `ordinalWords`.
 // - No dialectPairs: the British and American pairs are English. Record a
 //   Spanish variant's spellings as style-sheet `preferred` entries.
 // - No contractionSuffixes or contractedIs: al and del are compulsory, so
 //   they say nothing about how formal a voice is, and Spanish marks
 //   dropped sounds (pa', to') too rarely for a count. The contraction count
 //   is skipped. No elisions either: no word opens with an apostrophe.
+
+// Ordinals, masculine and feminine: a chapter number after the heading
+// word (Capítulo primero), or before it (Primera parte).
+const ORDINALS = [
+  "primero", "primera", "primer", "segundo", "segunda", "tercero", "tercera", "tercer", "cuarto", "cuarta",
+  "quinto", "quinta", "sexto", "sexta", "séptimo", "séptima", "octavo", "octava", "noveno", "novena",
+  "décimo", "décima", "undécimo", "undécima", "duodécimo", "duodécima"
+];
 
 export default {
   code: "es",
@@ -71,7 +83,7 @@ export default {
       "siseó", "sollozó", "sonrió", "suspiró", "bromeó", "ronroneó", "aseveró", "graznó"
     ],
 
-    plainTags: ["dijo", "dice", "dije", "preguntó", "pregunta", "pregunté"],
+    plainTags: ["dijo", "dice", "dije", "dijeron", "preguntó", "pregunta", "pregunté", "preguntaron"],
 
     beatPronouns: ["él", "ella", "ellos", "ellas", "yo", "nosotros", "nosotras", "usted", "tú"],
 
@@ -83,7 +95,15 @@ export default {
       "mente", "demente", "clemente", "inclemente", "vehemente",
       "alimente", "argumente", "atormente", "aumente", "cimente", "comente", "complemente",
       "documente", "experimente", "fomente", "fragmente", "implemente", "incremente", "lamente",
-      "segmente", "sedimente"
+      "segmente", "sedimente", "fermente", "ornamente", "pigmente", "reglamente", "suplemente"
+    ],
+
+    // Words after which a word in -mente is not an adverb: articles and
+    // possessives (la mente) and the que or object pronoun of a
+    // subjunctive (que lo lamente).
+    adverbBlockers: [
+      "el", "la", "lo", "los", "las", "un", "una", "unos", "unas", "mi", "tu", "su", "mis", "tus", "sus",
+      "nuestra", "vuestra", "esa", "esta", "aquella", "que", "se", "me", "te", "le", "les", "nos", "os"
     ],
 
     echoStopwords: [
@@ -126,8 +146,9 @@ export default {
 
     // Sentence splitting: Sr. García and Dña. Elvira never end a sentence;
     // etc. and núm. may. Single letters (p. ej., a. m.) are initials.
-    titleAbbreviations: ["Sr", "Sra", "Srta", "Dr", "Dra", "Dña", "Lic", "Ing", "Prof", "Profa", "Sto", "Sta", "Gral", "Cap", "Excmo", "Excma", "Ilmo", "Mons", "Fr", "ej"],
-    contextAbbreviations: ["etc", "núm", "pág", "aprox", "vs", "a.m", "p.m"],
+    titleAbbreviations: ["Sr", "Sra", "Srta", "Dr", "Dra", "Dña", "Ud", "Uds", "Vd", "Vds", "Lic", "Ing", "Prof", "Profa", "Sto", "Sta", "Gral", "Cap", "Excmo", "Excma", "Ilmo", "Mons", "Fr", "ej", "EE"],
+    // UU. closes EE. UU., which may end a sentence.
+    contextAbbreviations: ["etc", "núm", "pág", "aprox", "vs", "a.m", "p.m", "a. m", "p. m", "UU"],
 
     // Written in lower case in Spanish, so only a capitalised one at the
     // start of a sentence could pass for a name.
@@ -138,10 +159,11 @@ export default {
     ],
 
     // story import.
-    chapterWords: ["capítulo"],
-    sectionWords: ["prólogo", "epílogo", "interludio", "posfacio"],
+    // Written without accents too, as plain-text drafts often are.
+    chapterWords: ["capítulo", "capitulo"],
+    sectionWords: ["prólogo", "prologo", "epílogo", "epilogo", "interludio", "posfacio"],
     partWords: ["parte"],
-    frontMatterWords: ["prólogo", "prefacio", "introducción", "preludio", "preámbulo"],
+    frontMatterWords: ["prólogo", "prologo", "prefacio", "introducción", "introduccion", "preludio", "preámbulo"],
 
     // Spelled-out chapter numbers ("Capítulo veintiuno", "Capítulo treinta
     // y dos", "Capítulo primero"), as words joined by a space, a hyphen, or
@@ -155,10 +177,12 @@ export default {
         "treinta", "cuarenta", "cincuenta", "sesenta", "setenta", "ochenta", "noventa",
         "cien", "ciento", "doscientos", "trescientos", "cuatrocientos", "quinientos", "seiscientos",
         "setecientos", "ochocientos", "novecientos",
-        "primero", "segundo", "tercero", "cuarto", "quinto", "sexto", "séptimo", "octavo", "noveno", "décimo"
+        ...ORDINALS
       ],
       joiners: ["y"]
     },
+    // Ordinals that may come before the heading word (Primera parte).
+    ordinalWords: ORDINALS,
 
     candidateStopwords: [
       "A", "Al", "Allí", "Ahora", "Aquí", "Así", "Como", "Cómo", "Con", "Cuando", "De", "Del", "Desde",

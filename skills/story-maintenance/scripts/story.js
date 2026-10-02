@@ -1120,6 +1120,21 @@ var de_ch_default = {
 };
 
 // src/languages/de.js
+var ORDINALS = [
+  "erst",
+  "zweit",
+  "dritt",
+  "viert",
+  "fünft",
+  "sechst",
+  "siebt",
+  "siebent",
+  "acht",
+  "neunt",
+  "zehnt",
+  "elft",
+  "zwölft"
+].flatMap((stem) => ["e", "er", "es", "en"].map((ending) => `${stem}${ending}`));
 var de_default = {
   code: "de",
   name: "German",
@@ -1214,12 +1229,15 @@ var de_default = {
       "stöhnte",
       "säuselte",
       "verkündete",
-      "versetzte",
       "witzelte",
       "zischte",
-      "ächzte"
+      "ächzte",
+      "hauchte",
+      "schmunzelte",
+      "blaffte",
+      "schnauzte"
     ],
-    plainTags: ["sagte", "fragte", "sagt", "fragt"],
+    plainTags: ["sagte", "sagten", "fragte", "fragten", "sagt", "fragt", "versetzte"],
     beatPronouns: ["er", "sie", "es", "ich", "wir", "ihr", "du"],
     echoStopwords: [
       "aber",
@@ -1486,7 +1504,7 @@ var de_default = {
       "wohl",
       "wollte"
     ],
-    titleAbbreviations: ["Dr", "Prof", "Hr", "Hrn", "Fr", "Frl", "St", "bzw", "ca", "vgl", "ggf", "evtl", "inkl", "zzgl", "Str", "Mio", "Mrd"],
+    titleAbbreviations: ["Dr", "Prof", "Hr", "Hrn", "Fr", "Frl", "St", "bzw", "bspw", "ca", "ehem", "sog", "vgl", "ggf", "evtl", "inkl", "zzgl", "Str", "Mio", "Mrd"],
     contextAbbreviations: ["usw", "etc", "Nr", "Jh", "Std", "Min"],
     calendarWords: [
       "Montag",
@@ -1550,6 +1568,7 @@ var de_default = {
       ],
       joiners: ["und"]
     },
+    ordinalWords: ORDINALS,
     candidateStopwords: [
       "Aber",
       "Als",
@@ -1633,8 +1652,72 @@ var de_default = {
       "Wo",
       "Zu",
       "Zum",
-      "Zur"
+      "Zur",
+      "Abend",
+      "Angst",
+      "Arbeit",
+      "Augen",
+      "Blut",
+      "Brot",
+      "Durst",
+      "Ende",
+      "Erde",
+      "Feuer",
+      "Frauen",
+      "Freude",
+      "Geld",
+      "Glück",
+      "Gott",
+      "Hand",
+      "Händen",
+      "Hause",
+      "Haus",
+      "Häusern",
+      "Herz",
+      "Hilfe",
+      "Himmel",
+      "Hunger",
+      "Jahre",
+      "Jahren",
+      "Kinder",
+      "Kindern",
+      "Kraft",
+      "Leben",
+      "Leute",
+      "Leuten",
+      "Licht",
+      "Liebe",
+      "Luft",
+      "Lust",
+      "Männer",
+      "Männern",
+      "Menschen",
+      "Minuten",
+      "Morgen",
+      "Musik",
+      "Mut",
+      "Nacht",
+      "Recht",
+      "Regen",
+      "Ruhe",
+      "Schuld",
+      "Schule",
+      "Sorge",
+      "Sorgen",
+      "Spaß",
+      "Stunden",
+      "Tag",
+      "Tage",
+      "Tagen",
+      "Tod",
+      "Uhr",
+      "Wasser",
+      "Wein",
+      "Welt",
+      "Wind",
+      "Zeit"
     ],
+    relativeWords: ["der", "die", "das", "den", "dem", "deren", "dessen", "denen"],
     determiners: [
       "der",
       "die",
@@ -2360,6 +2443,34 @@ var en_default = {
 };
 
 // src/languages/es.js
+var ORDINALS2 = [
+  "primero",
+  "primera",
+  "primer",
+  "segundo",
+  "segunda",
+  "tercero",
+  "tercera",
+  "tercer",
+  "cuarto",
+  "cuarta",
+  "quinto",
+  "quinta",
+  "sexto",
+  "sexta",
+  "séptimo",
+  "séptima",
+  "octavo",
+  "octava",
+  "noveno",
+  "novena",
+  "décimo",
+  "décima",
+  "undécimo",
+  "undécima",
+  "duodécimo",
+  "duodécima"
+];
 var es_default = {
   code: "es",
   name: "Spanish",
@@ -2466,7 +2577,7 @@ var es_default = {
       "aseveró",
       "graznó"
     ],
-    plainTags: ["dijo", "dice", "dije", "preguntó", "pregunta", "pregunté"],
+    plainTags: ["dijo", "dice", "dije", "dijeron", "preguntó", "pregunta", "pregunté", "preguntaron"],
     beatPronouns: ["él", "ella", "ellos", "ellas", "yo", "nosotros", "nosotras", "usted", "tú"],
     adverbSuffixes: ["mente"],
     adverbLabel: "-mente adverbs",
@@ -2491,7 +2602,42 @@ var es_default = {
       "incremente",
       "lamente",
       "segmente",
-      "sedimente"
+      "sedimente",
+      "fermente",
+      "ornamente",
+      "pigmente",
+      "reglamente",
+      "suplemente"
+    ],
+    adverbBlockers: [
+      "el",
+      "la",
+      "lo",
+      "los",
+      "las",
+      "un",
+      "una",
+      "unos",
+      "unas",
+      "mi",
+      "tu",
+      "su",
+      "mis",
+      "tus",
+      "sus",
+      "nuestra",
+      "vuestra",
+      "esa",
+      "esta",
+      "aquella",
+      "que",
+      "se",
+      "me",
+      "te",
+      "le",
+      "les",
+      "nos",
+      "os"
     ],
     echoStopwords: [
       "ahora",
@@ -2717,8 +2863,8 @@ var es_default = {
       "creo",
       "sobre"
     ],
-    titleAbbreviations: ["Sr", "Sra", "Srta", "Dr", "Dra", "Dña", "Lic", "Ing", "Prof", "Profa", "Sto", "Sta", "Gral", "Cap", "Excmo", "Excma", "Ilmo", "Mons", "Fr", "ej"],
-    contextAbbreviations: ["etc", "núm", "pág", "aprox", "vs", "a.m", "p.m"],
+    titleAbbreviations: ["Sr", "Sra", "Srta", "Dr", "Dra", "Dña", "Ud", "Uds", "Vd", "Vds", "Lic", "Ing", "Prof", "Profa", "Sto", "Sta", "Gral", "Cap", "Excmo", "Excma", "Ilmo", "Mons", "Fr", "ej", "EE"],
+    contextAbbreviations: ["etc", "núm", "pág", "aprox", "vs", "a.m", "p.m", "a. m", "p. m", "UU"],
     calendarWords: [
       "Lunes",
       "Martes",
@@ -2741,10 +2887,10 @@ var es_default = {
       "Noviembre",
       "Diciembre"
     ],
-    chapterWords: ["capítulo"],
-    sectionWords: ["prólogo", "epílogo", "interludio", "posfacio"],
+    chapterWords: ["capítulo", "capitulo"],
+    sectionWords: ["prólogo", "prologo", "epílogo", "epilogo", "interludio", "posfacio"],
     partWords: ["parte"],
-    frontMatterWords: ["prólogo", "prefacio", "introducción", "preludio", "preámbulo"],
+    frontMatterWords: ["prólogo", "prologo", "prefacio", "introducción", "introduccion", "preludio", "preámbulo"],
     numberWords: {
       words: [
         "uno",
@@ -2798,19 +2944,11 @@ var es_default = {
         "setecientos",
         "ochocientos",
         "novecientos",
-        "primero",
-        "segundo",
-        "tercero",
-        "cuarto",
-        "quinto",
-        "sexto",
-        "séptimo",
-        "octavo",
-        "noveno",
-        "décimo"
+        ...ORDINALS2
       ],
       joiners: ["y"]
     },
+    ordinalWords: ORDINALS2,
     candidateStopwords: [
       "A",
       "Al",
@@ -3015,6 +3153,7 @@ var fr_default = {
   code: "fr",
   name: "French",
   narrationRate: 135,
+  inciseTags: true,
   labels: {
     chapter: "Chapitre {n}",
     "chapter-heading": "{chapter} : {title}",
@@ -3055,7 +3194,6 @@ var fr_default = {
       "sentait",
       "sentis",
       "senti",
-      "vit",
       "voyait",
       "vis",
       "entendit",
@@ -3090,13 +3228,16 @@ var fr_default = {
       "pensé",
       "comprit",
       "comprenait",
-      "compris",
       "réalisa",
       "réalisait",
       "crut",
       "croyait",
       "songea",
-      "songeait"
+      "songeait",
+      "regarda",
+      "regardait",
+      "écouta",
+      "écoutait"
     ],
     saidBookisms: [
       "aboya",
@@ -3128,9 +3269,13 @@ var fr_default = {
       "s'écria",
       "trancha",
       "ironisa",
-      "énonça"
+      "énonça",
+      "rit",
+      "gémit",
+      "plaisanta",
+      "grommela"
     ],
-    plainTags: ["dit", "dis", "demanda", "demandai", "demande"],
+    plainTags: ["dit", "dis", "dirent", "demanda", "demandai", "demande", "demandèrent"],
     beatPronouns: ["il", "elle", "ils", "elles", "je", "nous", "on", "vous", "tu"],
     inversionLinks: ["-t-", "-"],
     adverbSuffixes: ["ement", "ément", "iment", "ument", "ûment", "amment", "emment"],
@@ -3294,7 +3439,340 @@ var fr_default = {
       "aiment",
       "abîment",
       "condiment",
-      "rudiment"
+      "rudiment",
+      "abattement",
+      "aboutissement",
+      "abrutissement",
+      "accablement",
+      "accomplissement",
+      "accroissement",
+      "achèvement",
+      "acheminement",
+      "adoucissement",
+      "affaiblissement",
+      "affaissement",
+      "affolement",
+      "agenouillement",
+      "agissement",
+      "agrandissement",
+      "ahurissement",
+      "ajustement",
+      "alignement",
+      "allaitement",
+      "allongement",
+      "alourdissement",
+      "amoncellement",
+      "amusement",
+      "anéantissement",
+      "apitoiement",
+      "applaudissement",
+      "appauvrissement",
+      "arrachement",
+      "arrangement",
+      "arriment",
+      "assentiment",
+      "assombrissement",
+      "assoupissement",
+      "atermoiement",
+      "attendrissement",
+      "attroupement",
+      "avancement",
+      "avènement",
+      "avilissement",
+      "bâillement",
+      "balbutiement",
+      "bannissement",
+      "bégaiement",
+      "bêlement",
+      "beuglement",
+      "blanchiment",
+      "bouillonnement",
+      "bredouillement",
+      "bruissement",
+      "chamboulement",
+      "chancellement",
+      "chargement",
+      "chavirement",
+      "chevauchement",
+      "chuintement",
+      "classement",
+      "clapotement",
+      "cliquetement",
+      "clignotement",
+      "commandement",
+      "compartiment",
+      "compriment",
+      "consentement",
+      "contentement",
+      "couronnement",
+      "crissement",
+      "croassement",
+      "débarquement",
+      "débordement",
+      "déchaînement",
+      "déchirement",
+      "décollement",
+      "découragement",
+      "décrément",
+      "dédommagement",
+      "défilement",
+      "dégagement",
+      "déguisement",
+      "délabrement",
+      "délaissement",
+      "délassement",
+      "démantèlement",
+      "déménagement",
+      "dénigrement",
+      "dénouement",
+      "dénuement",
+      "dépassement",
+      "dépaysement",
+      "dépérissement",
+      "déploiement",
+      "déracinement",
+      "dérangement",
+      "dérèglement",
+      "désagrément",
+      "désarmement",
+      "désœuvrement",
+      "dessèchement",
+      "détournement",
+      "dévoilement",
+      "discernement",
+      "durcissement",
+      "ébahissement",
+      "éblouissement",
+      "éboulement",
+      "ébranlement",
+      "écartement",
+      "échauffement",
+      "éclaircissement",
+      "éclatement",
+      "écrasement",
+      "écroulement",
+      "effacement",
+      "effarement",
+      "effleurement",
+      "effritement",
+      "égouttement",
+      "élargissement",
+      "émerveillement",
+      "emballement",
+      "embellissement",
+      "embrasement",
+      "émiettement",
+      "emménagement",
+      "empêchement",
+      "empiètement",
+      "empilement",
+      "empoisonnement",
+      "emprisonnement",
+      "encadrement",
+      "enchaînement",
+      "encombrement",
+      "endettement",
+      "endormissement",
+      "enfoncement",
+      "enflamment",
+      "engloutissement",
+      "engouement",
+      "enivrement",
+      "enlisement",
+      "enracinement",
+      "enregistrement",
+      "enrichissement",
+      "enroulement",
+      "enrouement",
+      "ensevelissement",
+      "ensorcellement",
+      "entassement",
+      "entrechoquement",
+      "entrelacement",
+      "envahissement",
+      "envoûtement",
+      "épaississement",
+      "épanchement",
+      "épanouissement",
+      "éparpillement",
+      "escarpement",
+      "escriment",
+      "essoufflement",
+      "étalement",
+      "étirement",
+      "étouffement",
+      "étourdissement",
+      "excrément",
+      "exhument",
+      "flamboiement",
+      "fléchissement",
+      "foisonnement",
+      "fonctionnement",
+      "fourmillement",
+      "fourvoiement",
+      "frétillement",
+      "froissement",
+      "gazouillement",
+      "glapissement",
+      "gloussement",
+      "gonflement",
+      "grignotement",
+      "grognement",
+      "grossissement",
+      "grouillement",
+      "halètement",
+      "harcèlement",
+      "hébergement",
+      "hennissement",
+      "incrément",
+      "inhument",
+      "jaunissement",
+      "jappement",
+      "larmoiement",
+      "licenciement",
+      "maniement",
+      "marmonnement",
+      "martèlement",
+      "médicament",
+      "ménagement",
+      "miaulement",
+      "miroitement",
+      "nivellement",
+      "noircissement",
+      "ondoiement",
+      "oppriment",
+      "ornement",
+      "paiement",
+      "pansement",
+      "parlement",
+      "pétillement",
+      "peuplement",
+      "piaillement",
+      "picotement",
+      "placement",
+      "plissement",
+      "pourrissement",
+      "priment",
+      "prolongement",
+      "raffermissement",
+      "rafraîchissement",
+      "raidissement",
+      "rajeunissement",
+      "ralliement",
+      "rallument",
+      "ramollissement",
+      "raniment",
+      "rangement",
+      "rapetissement",
+      "ravissement",
+      "rayonnement",
+      "recensement",
+      "recommencement",
+      "recrutement",
+      "redoublement",
+      "redressement",
+      "refroidissement",
+      "regroupement",
+      "rejaillissement",
+      "remboursement",
+      "remuement",
+      "renfrognement",
+      "renforcement",
+      "reniement",
+      "renoncement",
+      "renouvellement",
+      "renversement",
+      "répriment",
+      "resserrement",
+      "retentissement",
+      "rétablissement",
+      "retournement",
+      "retranchement",
+      "rétrécissement",
+      "ricanement",
+      "ronronnement",
+      "roucoulement",
+      "saisissement",
+      "sautillement",
+      "sédiment",
+      "sifflotement",
+      "sous-estiment",
+      "subliment",
+      "surgissement",
+      "susurrement",
+      "tapotement",
+      "tassement",
+      "tâtonnement",
+      "tégument",
+      "titubement",
+      "tortillement",
+      "tournoiement",
+      "trébuchement",
+      "tremblotement",
+      "trépignement",
+      "tressautement",
+      "trottinement",
+      "tutoiement",
+      "vacillement",
+      "vagissement",
+      "verdissement",
+      "vouvoiement",
+      "vrombissement",
+      "émolument",
+      "enrhument"
+    ],
+    adverbBlockers: [
+      "le",
+      "la",
+      "les",
+      "un",
+      "une",
+      "du",
+      "des",
+      "au",
+      "aux",
+      "ce",
+      "cet",
+      "cette",
+      "ces",
+      "mon",
+      "ma",
+      "mes",
+      "ton",
+      "ta",
+      "tes",
+      "son",
+      "sa",
+      "ses",
+      "notre",
+      "nos",
+      "votre",
+      "vos",
+      "leur",
+      "leurs",
+      "quel",
+      "quelle",
+      "quels",
+      "quelles",
+      "chaque",
+      "aucun",
+      "aucune",
+      "nul",
+      "nulle",
+      "ils",
+      "elles",
+      "qui",
+      "avec",
+      "en",
+      "de",
+      "par",
+      "l'",
+      "d'",
+      "s'",
+      "n'",
+      "j'",
+      "m'",
+      "t'"
     ],
     echoStopwords: [
       "ainsi",
@@ -3538,8 +4016,8 @@ var fr_default = {
       "juste",
       "vraiment"
     ],
-    titleAbbreviations: ["Mme", "Mmes", "Mlle", "Mlles", "MM", "Me", "Dr", "Pr", "St", "Ste", "Mgr", "cf", "env"],
-    contextAbbreviations: ["etc", "av", "apr", "chap", "vol", "n°"],
+    titleAbbreviations: ["Mme", "Mmes", "Mlle", "Mlles", "MM", "Me", "Dr", "Pr", "St", "Ste", "Mgr", "cf", "env", "av", "apr"],
+    contextAbbreviations: ["etc", "chap", "vol", "n°", "J.-C"],
     calendarWords: [
       "Lundi",
       "Mardi",
@@ -3591,10 +4069,32 @@ var fr_default = {
         "soixante",
         "cent",
         "cents",
-        "premier"
+        "premier",
+        "première",
+        "septante",
+        "huitante",
+        "octante",
+        "nonante"
       ],
       joiners: ["et"]
     },
+    ordinalWords: [
+      "premier",
+      "première",
+      "deuxième",
+      "second",
+      "seconde",
+      "troisième",
+      "quatrième",
+      "cinquième",
+      "sixième",
+      "septième",
+      "huitième",
+      "neuvième",
+      "dixième",
+      "onzième",
+      "douzième"
+    ],
     candidateStopwords: [
       "À",
       "Alors",
@@ -5299,7 +5799,8 @@ function anyOf(marks) {
 }
 
 // src/sentences.js
-var INITIALS = "(?:[A-Za-z]\\.)*[A-Za-z]";
+var INITIAL_LETTER = "[A-Za-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u024F\\u0370-\\u03FF\\u0400-\\u04FF]";
+var INITIALS = `(?:${INITIAL_LETTER}\\.)*${INITIAL_LETTER}`;
 var NEVER = "(?!)";
 var CONTEXT_WINDOW = 64;
 var CLOSING_MARKS = ")\\]*_";
@@ -5315,7 +5816,7 @@ function sentenceRules(pack) {
   return RULES.get(pack);
 }
 function buildRules(pack) {
-  const words = (name) => (checkList(pack, name) ?? []).map(escapeRegExp);
+  const words = (name) => (checkList(pack, name) ?? []).map((word) => escapeRegExp(word).replace(/'/g, "['’]"));
   const either = (list) => list.length === 0 ? NEVER : list.join("|");
   const marks = punctuation(pack);
   const openers = charClass(marks.openers + SENTENCE_OPENERS);
@@ -5466,16 +5967,20 @@ function buildVoiceRules(pack) {
     tagAfterQuote: null,
     tagBeforeQuote: null,
     dashTag: null,
-    elision: new RegExp(`^(?:${elisions.map(escape).join("|") || NEVER2})(?![\\p{L}\\p{N}])`, "iu"),
-    contraction: suffixes === null || contractedIs === null ? null : new RegExp(`[\\p{L}](?:${suffixes.map(apostrophe).join("|") || NEVER2})\\b|(?<![\\p{L}\\p{N}])(?:${contractedIs.map(escape).join("|") || NEVER2})['’]s(?![\\p{L}\\p{N}])`, "giu"),
+    incise: null,
+    elision: new RegExp(`^(?:${elisions.map(listWord).join("|") || NEVER2})(?![\\p{L}\\p{N}])`, "iu"),
+    contraction: suffixes === null || contractedIs === null ? null : new RegExp(`[\\p{L}](?:${suffixes.map(apostrophe).join("|") || NEVER2})\\b|(?<![\\p{L}\\p{N}])(?:${contractedIs.map(listWord).join("|") || NEVER2})['’]s(?![\\p{L}\\p{N}])`, "giu"),
     stopwords: checkSet(pack, "voiceStopwords")
   };
   if (verbs === null || pronouns === null) {
     return rules;
   }
-  const verbAlternation = verbs.map((verb) => escape(verb).replace(/ /g, "\\s+")).join("|") || NEVER2;
-  const pronounAlternation = pronouns.map(escape).join("|") || NEVER2;
-  const links = (checkList(pack, "inversionLinks") ?? []).map(escape).join("|");
+  const verbAlternation = verbs.map(listWord).join("|") || NEVER2;
+  const pronounAlternation = pronouns.map(listWord).join("|") || NEVER2;
+  const links = (checkList(pack, "inversionLinks") ?? []).map(listWord).join("|");
+  const inciseVerbs = [...new Set([...verbs, ...checkList(pack, "plainTags") ?? [], ...checkList(pack, "saidBookisms") ?? []])].map(listWord).join("|");
+  const inciseCore = `(?:(?:${inciseVerbs})(?:${links || NEVER2})(?:${pronounAlternation})|(?:${inciseVerbs})\\s+\\p{Lu}[\\p{L}'’-]*(?:\\s+\\p{Lu}[\\p{L}'’-]*){0,2}|(?:${pronounAlternation})\\s+(?:${inciseVerbs}))(?![\\p{L}\\p{N}])`;
+  const inciseDash = pack.inciseTags === true ? `|(?<=[?!…])\\s+(?=${inciseCore})` : "";
   const inverted = links === "" ? "" : `|(?:${verbAlternation})(?:${links})(?:${pronounAlternation})`;
   const pronounTag = `(?:(?:${pronounAlternation})\\s+(?:${verbAlternation})|(?:${verbAlternation})\\s+(?:${pronounAlternation})${inverted})(?![\\p{L}\\p{N}])`;
   return {
@@ -5484,7 +5989,8 @@ function buildVoiceRules(pack) {
     tagVerb: new RegExp(`(?<![\\p{L}\\p{N}])(?:${verbAlternation})(?![\\p{L}\\p{N}])`, "iu"),
     tagAfterQuote: new RegExp(`^[\\s,.;:!?…()—–-]*${pronounTag}`, "iu"),
     tagBeforeQuote: new RegExp(`(?<![\\p{L}\\p{N}])${pronounTag}[\\s,:…()—–-]*$`, "iu"),
-    dashTag: new RegExp(`,\\s+(?:(?:${verbAlternation})\\s+\\p{Lu}|(?:${pronounAlternation})\\s+(?:${verbAlternation})(?![\\p{L}\\p{N}])${inverted === "" ? "" : `${inverted}(?![\\p{L}\\p{N}])`}|\\p{Lu}[\\p{L}'’-]*(?:\\s+\\p{Lu}[\\p{L}'’-]*){0,2}\\s+(?:${verbAlternation})(?![\\p{L}\\p{N}]))`, "u")
+    incise: pack.inciseTags === true ? new RegExp(`(?:,|(?<=[?!…]))\\s+${inciseCore}\\s*(?:,|[.!?…]?\\s*$)`, "u") : null,
+    dashTag: new RegExp(`(?:,\\s+(?:(?:${verbAlternation})\\s+\\p{Lu}|(?:${pronounAlternation})\\s+(?:${verbAlternation})(?![\\p{L}\\p{N}])${inverted === "" ? "" : `${inverted}(?![\\p{L}\\p{N}])`}|\\p{Lu}[\\p{L}'’-]*(?:\\s+\\p{Lu}[\\p{L}'’-]*){0,2}\\s+(?:${verbAlternation})(?![\\p{L}\\p{N}]))${inciseDash})`, "u")
   };
 }
 var VOICE_THRESHOLDS = {
@@ -5587,7 +6093,7 @@ function hasPronounTag(paragraph, pack) {
   return rules.tagAfterQuote !== null && quoteMatches(paragraph, pack).some((match) => rules.tagAfterQuote.test(paragraph.slice(match.end, match.end + TAG_WINDOW)) || rules.tagBeforeQuote.test(paragraph.slice(Math.max(0, match.start - TAG_WINDOW), match.start)));
 }
 function speakerPatterns(characters, pack, rules) {
-  const verbs = rules.verbs === null ? null : rules.verbs.flatMap((verb) => [verb, `${verb[0].toUpperCase()}${verb.slice(1)}`]).map((verb) => escape(verb).replace(/ /g, "\\s+")).join("|") || NEVER2;
+  const verbs = rules.verbs === null ? null : rules.verbs.flatMap((verb) => [verb, `${verb[0].toUpperCase()}${verb.slice(1)}`]).map(listWord).join("|") || NEVER2;
   return characters.filter((character) => character.status !== "cut").map((character) => {
     const names = new Set;
     const full = String(character.name ?? "").trim();
@@ -5676,10 +6182,21 @@ function quoteMatches(paragraph, pack = languagePack()) {
       index += 1;
       continue;
     }
-    matches.push({ start: index, end: close + 1, text: paragraph.slice(index + 1, close).trim() });
+    matches.push(...splitIncise({ start: index, end: close + 1, text: paragraph.slice(index + 1, close).trim() }, paragraph, rules));
     index = close + 1;
   }
   return matches;
+}
+function splitIncise(match, paragraph, rules) {
+  const tag = rules.incise === null ? null : rules.incise.exec(paragraph.slice(match.start + 1, match.end - 1));
+  if (tag === null) {
+    return [match];
+  }
+  const tagStart = match.start + 1 + tag.index;
+  const tagEnd = tagStart + tag[0].length;
+  const first = { start: match.start, end: tagStart, text: paragraph.slice(match.start + 1, tagStart).trim() };
+  const rest = paragraph.slice(tagEnd, match.end - 1).trim();
+  return rest === "" ? [first] : [first, { start: tagEnd - 1, end: match.end, text: rest }];
 }
 function dashMatches(paragraph, rules, matches) {
   const dash = rules.dashOpen === null ? null : rules.dashOpen.exec(paragraph);
@@ -5905,6 +6422,9 @@ function phrasePattern(phrase, pack) {
   const edge = `(?![${UNSPACED_LETTERS}])[\\p{L}\\p{M}\\p{N}]`;
   return new RegExp(`(?<!${edge})${escape(matchingCase(String(phrase).trim(), pack)).replace(/['’]/g, "['’]")}(?!${edge})`, "giu");
 }
+function listWord(word) {
+  return escape(word).replace(/'/g, "['’]").replace(/ /g, "\\s+");
+}
 function escape(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -6023,6 +6543,7 @@ function proseRules(styleData, names, pack = languagePack()) {
     inversionLinks: checkList(pack, "inversionLinks") ?? [],
     adverbSuffixes: checkList(pack, "adverbExceptions") === null ? null : checkList(pack, "adverbSuffixes"),
     adverbExceptions: checkSet(pack, "adverbExceptions"),
+    adverbBlockers: checkSet(pack, "adverbBlockers"),
     echoStopwords: checkSet(pack, "echoStopwords"),
     phraseStopwords: checkSet(pack, "phraseStopwords"),
     nameTokens
@@ -6040,7 +6561,7 @@ function analyzeChapter(prose, rules) {
   const sentenceList = paragraphs.flatMap((paragraph) => splitSentences(paragraph, { pack: rules.pack }));
   const sentences = sentenceList.map((sentence) => splitWords(sentence).length).filter((count) => count > 0);
   const filterWords = rules.filterWords === null ? [] : countMatching(narration, (word) => rules.filterWords.has(word), rules.pack);
-  const adverbs = rules.adverbSuffixes === null ? [] : countMatching(narration, (word) => isAdverb(word, rules), rules.pack);
+  const adverbs = rules.adverbSuffixes === null ? [] : countAdverbs(narration, rules);
   const tags = rules.plainTags === null ? { plain: [], bookisms: [] } : dialogueTags(paragraphs, rules);
   const cased = rules.watch.length + rules.variants.length === 0 ? null : matchingText(text, rules.pack);
   return {
@@ -6328,6 +6849,23 @@ function tagKind(quoted, nextWord, rules) {
     return rules.beatPronouns.has(lowerCase(nextWord, rules.pack)) ? "none" : "plain";
   }
   return "any";
+}
+function countAdverbs(words, rules) {
+  if (rules.adverbBlockers === null) {
+    return countMatching(words, (word) => isAdverb(word, rules), rules.pack);
+  }
+  const counts = new Map;
+  let previous = "";
+  for (const raw of words) {
+    const word = normalizeWord(raw, rules.pack);
+    const elision = /^\p{L}{1,2}'(?=\p{L})/u.exec(word)?.[0] ?? "";
+    const bare = word.slice(elision.length);
+    if (!rules.adverbBlockers.has(previous) && !rules.adverbBlockers.has(elision) && isAdverb(bare, rules)) {
+      increment(counts, bare);
+    }
+    previous = word;
+  }
+  return sortCounts(counts, rules.pack);
 }
 function isAdverb(word, rules) {
   return word.length > 4 && rules.adverbSuffixes.some((suffix) => word.endsWith(suffix)) && !rules.adverbExceptions.has(word) && !rules.allow.has(word) && !isName(word, rules);
@@ -10540,6 +11078,7 @@ var STYLE_LISTS = {
   "inversion-links": { list: "inversionLinks" },
   "adverb-suffixes": { list: "adverbSuffixes" },
   "adverb-exceptions": { list: "adverbExceptions" },
+  "adverb-blockers": { list: "adverbBlockers" },
   "echo-stopwords": { list: "echoStopwords" },
   "phrase-stopwords": { list: "phraseStopwords" },
   "dialect-pairs": { list: "dialectPairs" },
@@ -10549,17 +11088,19 @@ var STYLE_LISTS = {
   "contracted-is": { list: "contractedIs" },
   elisions: { list: "elisions" },
   "voice-stopwords": { list: "voiceStopwords" },
-  "title-abbreviations": { list: "titleAbbreviations", cased: true },
-  "context-abbreviations": { list: "contextAbbreviations", cased: true },
+  "title-abbreviations": { list: "titleAbbreviations", cased: true, abbreviation: true },
+  "context-abbreviations": { list: "contextAbbreviations", cased: true, abbreviation: true },
   "calendar-words": { list: "calendarWords", cased: true },
   "chapter-words": { list: "chapterWords" },
   "section-words": { list: "sectionWords" },
   "part-words": { list: "partWords" },
   "front-matter-words": { list: "frontMatterWords" },
+  "ordinal-words": { list: "ordinalWords" },
   "number-words": { list: "numberWords", part: "words" },
   "number-joiners": { list: "numberWords", part: "joiners" },
   "candidate-stopwords": { list: "candidateStopwords", cased: true },
   determiners: { list: "determiners" },
+  "relative-words": { list: "relativeWords" },
   "noun-suffixes": { list: "nounSuffixes" },
   "title-words": { list: "titleWords" }
 };
@@ -10571,13 +11112,14 @@ function isEntry2(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 function styleWords(value) {
-  if (Array.isArray(value) && value.length === 0) {
-    return [];
+  if (Array.isArray(value)) {
+    return value.every((word) => typeof word === "string") ? value.map((word) => word.trim()).filter((word) => word !== "") : null;
   }
   if (typeof value !== "string") {
     return null;
   }
-  return value.split(",").map((word) => word.trim()).filter((word) => word !== "");
+  const flow = /^\[(.*)\]$/s.exec(value.trim());
+  return (flow === null ? value : flow[1]).split(",").map((word) => word.trim().replace(/^(["'])(.*)\1$/s, "$2").trim()).filter((word) => word !== "");
 }
 function withStyleLists(pack, styleData) {
   const changes = STYLE_LIST_FIELDS.flatMap((field) => styleListEntries(styleData?.[field]).filter(([key, value]) => Object.prototype.hasOwnProperty.call(STYLE_LISTS, key) && styleWords(value) !== null).map(([key, value]) => ({ replace: field === "replace-words", key, words: styleWords(value) })));
@@ -10587,11 +11129,12 @@ function withStyleLists(pack, styleData) {
   const checks = { ...pack.checks };
   const cleared = new Set;
   for (const { replace, key, words } of changes) {
-    const { list, part, cased = false } = STYLE_LISTS[key];
+    const { list, part, cased = false, abbreviation = false } = STYLE_LISTS[key];
     const written = words.map((word) => {
-      const straight = word.replace(/’/g, "'");
+      const apostrophe = word.replace(/’/g, "'");
+      const straight = abbreviation ? apostrophe.replace(/\.$/, "") : apostrophe;
       return cased ? straight : lowerCase(straight, pack);
-    });
+    }).filter((word) => word !== "");
     const fresh = replace && !cleared.has(key);
     cleared.add(key);
     if (part !== undefined) {
@@ -12729,8 +13272,11 @@ function inheritedStoryFields(data) {
   return fields;
 }
 function existingStyleData(root) {
-  const errors = [];
-  return lstatIfExists(path11.join(root, "story.md")) ? readStyleSheet(root, errors)?.data ?? null : null;
+  try {
+    return readStyleSheet(root, [])?.data ?? null;
+  } catch {
+    return null;
+  }
 }
 function existingStoryData(root) {
   if (!lstatIfExists(path11.join(root, "story.md"))) {
@@ -18802,21 +19348,34 @@ function importRules(pack) {
   return RULES3.get(pack);
 }
 function buildImportRules(pack) {
-  const either = (name) => (checkList(pack, name) ?? []).map(escapeRegExp).join("|") || NEVER3;
+  const either = (name) => (checkList(pack, name) ?? []).map(listWord2).join("|") || NEVER3;
   const chapter = either("chapterWords");
   const section = either("sectionWords");
   const chapterNumber = `(?:\\d+(?:\\.\\d+)?|${wordNumeral(checkList(pack, "numberWords"))}${ROMAN_NUMERAL})(?=[\\s:.\\-–—]|$)`;
+  const ordinal = checkList(pack, "ordinalWords") === null ? null : `(?:\\d+\\.|(?:${either("ordinalWords")})(?![A-Za-z]))\\s+`;
+  const ordinalFirst = (words, rest) => ordinal === null ? "" : `|^${ordinal}(?:${words})(?![A-Za-z])${rest}`;
   return {
-    chapterHeading: new RegExp(`^(?:${chapter})(?![A-Za-z])\\s*(?:${chapterNumber})?\\s*[:.\\-–—]*\\s*(.*)$`, "i"),
-    plainChapter: new RegExp(`^(?:${chapter})\\s+${chapterNumber}\\s*(?:[:.\\-–—]+\\s*(.*))?$`, "i"),
+    chapterHeading: new RegExp(`^(?:${chapter})(?![A-Za-z])\\s*(?:${chapterNumber})?\\s*[:.\\-–—]*\\s*(.*)$${ordinalFirst(chapter, "\\s*[:.\\-–—]*\\s*(.*)$")}`, "i"),
+    plainChapter: new RegExp(`^(?:${chapter})\\s+${chapterNumber}\\s*(?:[:.\\-–—]+\\s*(.*))?$${ordinalFirst(chapter, "\\s*(?:[:.\\-–—]+\\s*(.*))?$")}`, "i"),
     sectionHeading: new RegExp(`^(?:${section})(?![A-Za-z])`, "i"),
     plainSection: new RegExp(`^(?:${section})\\s*(?:[:.\\-–—]+.*)?$`, "i"),
-    partHeading: new RegExp(`^(?:${either("partWords")})(?![A-Za-z])`, "i"),
+    partHeading: new RegExp(`^${ordinal === null ? "" : `(?:${ordinal})?`}(?:${either("partWords")})(?![A-Za-z])`, "i"),
     frontMatter: new RegExp(`^(?:${either("frontMatterWords")})\\b`, "i"),
     candidateStopwords: new Set([...checkList(pack, "candidateStopwords") ?? [], ...checkList(pack, "calendarWords") ?? []]),
     determiners: checkSet(pack, "determiners"),
-    nounSuffixes: checkList(pack, "nounSuffixes") ?? []
+    relativeWords: checkSet(pack, "relativeWords") ?? new Set,
+    nounSuffixes: checkList(pack, "nounSuffixes") ?? [],
+    titleWords: checkSet(pack, "titleWords") ?? new Set,
+    speechBefore: speechPattern(pack, (verbs) => `(?<![\\p{L}\\p{N}])(?:${verbs})\\s+$`),
+    speechAfter: speechPattern(pack, (verbs) => `^\\s+(?:${verbs})(?![\\p{L}\\p{N}])`)
   };
+}
+function speechPattern(pack, shape) {
+  const verbs = checkList(pack, "speechVerbs");
+  return verbs === null || verbs.length === 0 ? null : new RegExp(shape(verbs.map(listWord2).join("|")), "iu");
+}
+function listWord2(word) {
+  return escapeRegExp(word).replace(/'/g, "['’]");
 }
 function wordNumeral(words) {
   if (words === null) {
@@ -18958,53 +19517,74 @@ function extractNameCandidates(prose, pack = languagePack()) {
   const stopwords = rules.candidateStopwords;
   const counts = new Map;
   const determined = new Map;
+  const named = new Set;
   const nounRule = rules.determiners !== null;
+  const speaks = (index, end) => rules.speechBefore !== null && rules.speechBefore.test(prose.slice(Math.max(0, index - 40), index)) || rules.speechAfter !== null && rules.speechAfter.test(prose.slice(end, end + 40));
   for (const match of prose.matchAll(NAME_RUN_PATTERN)) {
     const words = match[0].replace(/\s+/g, " ").split(" ");
     let article = false;
-    while (words.length > 0 && (stopwords.has(words[0]) || nounRule && rules.determiners.has(lowerCase(words[0], pack)))) {
-      article ||= nounRule && rules.determiners.has(lowerCase(words[0], pack));
+    let titled = false;
+    while (words.length > 0 && (stopwords.has(straight(words[0])) || nounRule && rules.determiners.has(lowerCase(words[0], pack)))) {
+      const word = lowerCase(words[0], pack);
+      const determiner = nounRule && rules.determiners.has(word);
+      article ||= determiner;
+      titled ||= !determiner && rules.titleWords.has(word.replace(/\.$/, ""));
       words.shift();
     }
     if (words.length > 0) {
       const name = withoutPossessive(words.join(" "));
       addCandidate(counts, name);
-      if (nounRule && words.length === 1 && (article || afterDeterminer(prose, match.index, rules.determiners, pack))) {
-        addCandidate(determined, name);
+      if (nounRule && words.length === 1) {
+        if (titled || speaks(match.index, match.index + match[0].length)) {
+          named.add(name);
+        } else if (article || afterDeterminer(prose, match.index, rules, pack)) {
+          addCandidate(determined, name);
+        }
       }
     }
   }
   for (const match of prose.matchAll(NAME_SINGLE_PATTERN)) {
     const name = withoutPossessive(match[0]);
-    if (stopwords.has(name)) {
+    if (stopwords.has(straight(name))) {
       continue;
+    }
+    if (nounRule && speaks(match.index, match.index + match[0].length)) {
+      named.add(name);
     }
     if (DISTINCTIVE_NAME.test(name) || MID_SENTENCE.test(prose.slice(Math.max(0, match.index - 3), match.index))) {
       addCandidate(counts, name);
-      if (nounRule && afterDeterminer(prose, match.index, rules.determiners, pack)) {
+      if (nounRule && afterDeterminer(prose, match.index, rules, pack)) {
         addCandidate(determined, name);
       }
     }
   }
-  const commonNoun = (name, count) => nounRule && !name.includes(" ") && ((determined.get(name) ?? 0) >= count * DETERMINED_SHARE || rules.nounSuffixes.some((suffix) => lowerCase(name, pack).endsWith(suffix)));
+  const commonNoun = (name, count) => {
+    const articles = determined.get(name) ?? 0;
+    return nounRule && !name.includes(" ") && !named.has(name) && (articles >= count * DETERMINED_SHARE || articles > 0 && rules.nounSuffixes.some((suffix) => lowerCase(name, pack).endsWith(suffix)));
+  };
   return [...counts.entries()].filter(([name, count]) => count >= CANDIDATE_THRESHOLD && !commonNoun(name, count)).sort((left, right) => right[1] - left[1] || compareText(pack)(left[0], right[0])).slice(0, CANDIDATE_LIMIT).map(([name, count]) => ({ name, count }));
 }
 var PHRASE_BEFORE = /(?<![\p{L}\p{M}'’-])(?:[\p{L}\p{M}'’-]+\s+){1,3}$/u;
-function afterDeterminer(prose, index, determiners, pack) {
-  const phrase = PHRASE_BEFORE.exec(prose.slice(Math.max(0, index - 80), index));
+function afterDeterminer(prose, index, rules, pack) {
+  const before = prose.slice(Math.max(0, index - 80), index);
+  const phrase = PHRASE_BEFORE.exec(before);
   if (phrase === null) {
     return false;
   }
   const words = phrase[0].trim().split(/\s+/);
   for (let position = words.length - 1;position >= 0; position -= 1) {
-    if (determiners.has(lowerCase(words[position], pack))) {
-      return true;
+    const word = lowerCase(words[position], pack);
+    if (rules.determiners.has(word)) {
+      return !(position === 0 && rules.relativeWords.has(word) && /,\s*$/.test(before.slice(0, phrase.index)));
     }
     if (!/^\p{Ll}/u.test(words[position])) {
       return false;
     }
   }
   return false;
+}
+function straight(word) {
+  return word.replace(/’/g, "'");
 }
 function withoutPossessive(name) {
   return name.replace(/['’]s$/, "");
@@ -19325,7 +19905,7 @@ function chapterTitle(text, pattern, sectionPattern) {
     return text.replace(/[\s:.\-–—]+$/, "");
   }
   const match = pattern.exec(text);
-  return match ? (match[1] ?? "").trim() : null;
+  return match ? (match[1] ?? match[2] ?? "").trim() : null;
 }
 function finishChapter(section) {
   return { title: section.title, prose: section.lines.join(`

@@ -10,8 +10,10 @@ import { SENTENCE_OPENERS, anyOf, charClass, punctuation } from "./punctuation.j
 // never end one. Words that often close a sentence too (etc., No., a.m.)
 // end it unless the next word starts in lower case, with a digit, or is a
 // calendar word (No. 5, 9 a.m. Monday). Initials need no list, so a
-// language without one still keeps them.
-const INITIALS = "(?:[A-Za-z]\\.)*[A-Za-z]";
+// language without one still keeps them. An initial is any Latin, Greek,
+// or Cyrillic letter (É. Zola, А. С. Пушкин).
+const INITIAL_LETTER = "[A-Za-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u024F\\u0370-\\u03FF\\u0400-\\u04FF]";
+const INITIALS = `(?:${INITIAL_LETTER}\\.)*${INITIAL_LETTER}`;
 const NEVER = "(?!)";
 // How many characters either side of a stop decide whether it ends a
 // sentence.
@@ -39,7 +41,8 @@ function sentenceRules(pack) {
 }
 
 function buildRules(pack) {
-  const words = (name) => (checkList(pack, name) ?? []).map(escapeRegExp);
+  // An apostrophe in a list word matches a straight or curly one.
+  const words = (name) => (checkList(pack, name) ?? []).map((word) => escapeRegExp(word).replace(/'/g, "['’]"));
   const either = (list) => (list.length === 0 ? NEVER : list.join("|"));
   const marks = punctuation(pack);
   // Opening quotes, and Spanish ¿ and ¡, can stand before a sentence's

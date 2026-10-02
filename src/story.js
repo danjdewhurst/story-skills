@@ -411,15 +411,20 @@ function inheritedStoryFields(data) {
   return fields;
 }
 
-// The frontmatter of an existing story.md, {} when it does not parse, or
-// null when there is none.
-// The style-sheet.md frontmatter of the project at `root`, or null when it
-// has none or it cannot be read (validate reports that).
+// The style-sheet.md frontmatter in `root`, or null when there is none or
+// it cannot be read (validate reports that). Read on its own, so a style
+// sheet in a folder without story.md still counts.
 export function existingStyleData(root) {
-  const errors = [];
-  return lstatIfExists(path.join(root, "story.md")) ? readStyleSheet(root, errors)?.data ?? null : null;
+  try {
+    return readStyleSheet(root, [])?.data ?? null;
+  } catch {
+    // `root` is a file, say: the import refuses it later, with its own message.
+    return null;
+  }
 }
 
+// The frontmatter of an existing story.md, {} when it does not parse, or
+// null when there is none.
 export function existingStoryData(root) {
   if (!lstatIfExists(path.join(root, "story.md"))) {
     return null;

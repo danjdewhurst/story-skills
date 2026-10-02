@@ -34,29 +34,51 @@ function importRules(pack) {
 }
 
 function buildImportRules(pack) {
-  const either = (name) => (checkList(pack, name) ?? []).map(escapeRegExp).join("|") || NEVER;
+  const either = (name) => (checkList(pack, name) ?? []).map(listWord).join("|") || NEVER;
   const chapter = either("chapterWords");
   const section = either("sectionWords");
   // An arabic number may carry a decimal part ("Chapter 12.5").
   const chapterNumber = `(?:\\d+(?:\\.\\d+)?|${wordNumeral(checkList(pack, "numberWords"))}${ROMAN_NUMERAL})(?=[\\s:.\\-–—]|$)`;
+  // In a pack with `ordinalWords`, an ordinal, or a number with a full
+  // stop, may come before the heading word (Erstes Kapitel, 1. Kapitel,
+  // Première partie).
+  const ordinal = checkList(pack, "ordinalWords") === null ? null : `(?:\\d+\\.|(?:${either("ordinalWords")})(?![A-Za-z]))\\s+`;
+  const ordinalFirst = (words, rest) => (ordinal === null ? "" : `|^${ordinal}(?:${words})(?![A-Za-z])${rest}`);
   return {
-    chapterHeading: new RegExp(`^(?:${chapter})(?![A-Za-z])\\s*(?:${chapterNumber})?\\s*[:.\\-–—]*\\s*(.*)$`, "i"),
+    chapterHeading: new RegExp(`^(?:${chapter})(?![A-Za-z])\\s*(?:${chapterNumber})?\\s*[:.\\-–—]*\\s*(.*)$${ordinalFirst(chapter, "\\s*[:.\\-–—]*\\s*(.*)$")}`, "i"),
     // A plain-text chapter line ("Chapter 3", "CHAPTER ONE: Arrival") must
     // carry a number and nothing else, or a separator before its title, so
     // a sentence such as "Chapter 12 was the worst." never splits.
-    plainChapter: new RegExp(`^(?:${chapter})\\s+${chapterNumber}\\s*(?:[:.\\-–—]+\\s*(.*))?$`, "i"),
+    plainChapter: new RegExp(`^(?:${chapter})\\s+${chapterNumber}\\s*(?:[:.\\-–—]+\\s*(.*))?$${ordinalFirst(chapter, "\\s*(?:[:.\\-–—]+\\s*(.*))?$")}`, "i"),
     // Sections that are chapters in their own right but carry no number.
     sectionHeading: new RegExp(`^(?:${section})(?![A-Za-z])`, "i"),
     // As a plain line, the section name stands alone or before a separator.
     plainSection: new RegExp(`^(?:${section})\\s*(?:[:.\\-–—]+.*)?$`, "i"),
     // A part heading groups chapters; it is prose, never a chapter or the title.
-    partHeading: new RegExp(`^(?:${either("partWords")})(?![A-Za-z])`, "i"),
+    partHeading: new RegExp(`^${ordinal === null ? "" : `(?:${ordinal})?`}(?:${either("partWords")})(?![A-Za-z])`, "i"),
     frontMatter: new RegExp(`^(?:${either("frontMatterWords")})\\b`, "i"),
     candidateStopwords: new Set([...(checkList(pack, "candidateStopwords") ?? []), ...(checkList(pack, "calendarWords") ?? [])]),
     // For a language that capitalises its nouns; see extractNameCandidates.
     determiners: checkSet(pack, "determiners"),
-    nounSuffixes: checkList(pack, "nounSuffixes") ?? []
+    relativeWords: checkSet(pack, "relativeWords") ?? new Set(),
+    nounSuffixes: checkList(pack, "nounSuffixes") ?? [],
+    titleWords: checkSet(pack, "titleWords") ?? new Set(),
+    // A speech verb next to a word ("sagte Lena", "Lena fragte") marks a
+    // speaker, so a name.
+    speechBefore: speechPattern(pack, (verbs) => `(?<![\\p{L}\\p{N}])(?:${verbs})\\s+$`),
+    speechAfter: speechPattern(pack, (verbs) => `^\\s+(?:${verbs})(?![\\p{L}\\p{N}])`)
   };
+}
+
+function speechPattern(pack, shape) {
+  const verbs = checkList(pack, "speechVerbs");
+  return verbs === null || verbs.length === 0 ? null : new RegExp(shape(verbs.map(listWord).join("|")), "iu");
+}
+
+// A word-list entry as a pattern: an apostrophe matches a straight or
+// curly one.
+function listWord(word) {
+  return escapeRegExp(word).replace(/'/g, "['’]");
 }
 
 // Spelled-out chapter numbers, as a pattern followed by `|`, or "" when the
@@ -248,10 +270,14 @@ const MID_SENTENCE = /\p{Ll}[,;:]?\s$/u;
 const DISTINCTIVE_NAME = /^\p{Lu}.*\p{Lu}/u;
 
 // In a language that capitalises every noun (German), a pack lists
-// `determiners` and `nounSuffixes`. A single word that ends like a noun,
-// or follows a determiner (die Tür, der alte Hund) in at least a third of
-// its uses, is then a common noun, not a name; a name is seldom set after
-// an article (die kleine Anna), so an occasional one keeps it.
+// `determiners` and `nounSuffixes`. A single word that follows a
+// determiner (die Tür, der alte Hund) in at least a third of its uses, or
+// ends like a noun (Hoffnung) and follows one at least once, is a common
+// noun, not a name; a name is seldom set after an article (die kleine
+// Anna), so an occasional one keeps it. A word that ever follows a title
+// (Herr Jung) or stands next to a speech verb (sagte Gretchen) is a name
+// whatever else it does, since spoken German sets articles before names
+// (den Peter).
 const DETERMINED_SHARE = 1 / 3;
 
 export function extractNameCandidates(prose, pack = languagePack()) {
@@ -259,39 +285,58 @@ export function extractNameCandidates(prose, pack = languagePack()) {
   const stopwords = rules.candidateStopwords;
   const counts = new Map();
   const determined = new Map();
+  const named = new Set();
   const nounRule = rules.determiners !== null;
+  const speaks = (index, end) => (rules.speechBefore !== null && rules.speechBefore.test(prose.slice(Math.max(0, index - 40), index)))
+    || (rules.speechAfter !== null && rules.speechAfter.test(prose.slice(end, end + 40)));
 
   for (const match of prose.matchAll(NAME_RUN_PATTERN)) {
     const words = match[0].replace(/\s+/g, " ").split(" ");
     let article = false;
-    while (words.length > 0 && (stopwords.has(words[0]) || (nounRule && rules.determiners.has(lowerCase(words[0], pack))))) {
-      article ||= nounRule && rules.determiners.has(lowerCase(words[0], pack));
+    let titled = false;
+    while (words.length > 0 && (stopwords.has(straight(words[0])) || (nounRule && rules.determiners.has(lowerCase(words[0], pack))))) {
+      const word = lowerCase(words[0], pack);
+      const determiner = nounRule && rules.determiners.has(word);
+      article ||= determiner;
+      // Title words include the articles (der, die); only a real title
+      // (Herr, Frau, Dr) marks a name.
+      titled ||= !determiner && rules.titleWords.has(word.replace(/\.$/, ""));
       words.shift();
     }
     if (words.length > 0) {
       const name = withoutPossessive(words.join(" "));
       addCandidate(counts, name);
-      if (nounRule && words.length === 1 && (article || afterDeterminer(prose, match.index, rules.determiners, pack))) {
-        addCandidate(determined, name);
+      if (nounRule && words.length === 1) {
+        if (titled || speaks(match.index, match.index + match[0].length)) {
+          named.add(name);
+        } else if (article || afterDeterminer(prose, match.index, rules, pack)) {
+          addCandidate(determined, name);
+        }
       }
     }
   }
 
   for (const match of prose.matchAll(NAME_SINGLE_PATTERN)) {
     const name = withoutPossessive(match[0]);
-    if (stopwords.has(name)) {
+    if (stopwords.has(straight(name))) {
       continue;
+    }
+    if (nounRule && speaks(match.index, match.index + match[0].length)) {
+      named.add(name);
     }
     if (DISTINCTIVE_NAME.test(name) || MID_SENTENCE.test(prose.slice(Math.max(0, match.index - 3), match.index))) {
       addCandidate(counts, name);
-      if (nounRule && afterDeterminer(prose, match.index, rules.determiners, pack)) {
+      if (nounRule && afterDeterminer(prose, match.index, rules, pack)) {
         addCandidate(determined, name);
       }
     }
   }
 
-  const commonNoun = (name, count) => nounRule && !name.includes(" ")
-    && ((determined.get(name) ?? 0) >= count * DETERMINED_SHARE || rules.nounSuffixes.some((suffix) => lowerCase(name, pack).endsWith(suffix)));
+  const commonNoun = (name, count) => {
+    const articles = determined.get(name) ?? 0;
+    return nounRule && !name.includes(" ") && !named.has(name)
+      && (articles >= count * DETERMINED_SHARE || (articles > 0 && rules.nounSuffixes.some((suffix) => lowerCase(name, pack).endsWith(suffix))));
+  };
   return [...counts.entries()]
     .filter(([name, count]) => count >= CANDIDATE_THRESHOLD && !commonNoun(name, count))
     .sort((left, right) => right[1] - left[1] || compareText(pack)(left[0], right[0]))
@@ -301,24 +346,33 @@ export function extractNameCandidates(prose, pack = languagePack()) {
 
 // Whether the word at `index` follows a determiner, with up to two
 // lower-case words between ("die Tür", "der alte graue Hund"). Only spaces
-// may separate them: a comma or full stop ends the phrase.
+// may separate them: a comma or full stop ends the phrase. A determiner
+// that is also a relative pronoun starts a clause after a comma (die
+// Frau, die Lena kannte), so it does not count there.
 const PHRASE_BEFORE = /(?<![\p{L}\p{M}'’-])(?:[\p{L}\p{M}'’-]+\s+){1,3}$/u;
 
-function afterDeterminer(prose, index, determiners, pack) {
-  const phrase = PHRASE_BEFORE.exec(prose.slice(Math.max(0, index - 80), index));
+function afterDeterminer(prose, index, rules, pack) {
+  const before = prose.slice(Math.max(0, index - 80), index);
+  const phrase = PHRASE_BEFORE.exec(before);
   if (phrase === null) {
     return false;
   }
   const words = phrase[0].trim().split(/\s+/);
   for (let position = words.length - 1; position >= 0; position -= 1) {
-    if (determiners.has(lowerCase(words[position], pack))) {
-      return true;
+    const word = lowerCase(words[position], pack);
+    if (rules.determiners.has(word)) {
+      return !(position === 0 && rules.relativeWords.has(word) && /,\s*$/.test(before.slice(0, phrase.index)));
     }
     if (!/^\p{Ll}/u.test(words[position])) {
       return false;
     }
   }
   return false;
+}
+
+// Stopwords are listed with a straight apostrophe (Qu'il).
+function straight(word) {
+  return word.replace(/’/g, "'");
 }
 
 // "Élodie’s" counts as "Élodie"; "King’s Road" keeps its inner possessive.
@@ -738,7 +792,8 @@ function chapterTitle(text, pattern, sectionPattern) {
     return text.replace(/[\s:.\-–—]+$/, "");
   }
   const match = pattern.exec(text);
-  return match ? (match[1] ?? "").trim() : null;
+  // An ordinal-first heading (Erstes Kapitel: Titel) captures its title second.
+  return match ? (match[1] ?? match[2] ?? "").trim() : null;
 }
 
 function finishChapter(section) {
