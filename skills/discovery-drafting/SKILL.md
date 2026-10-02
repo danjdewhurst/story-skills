@@ -55,10 +55,11 @@ start — arcs get built during reconciliation.
 3. **Run the reconcile loop.** After each chapter, follow
    `references/reconcile-loop.md` exactly:
    - Extract new entity/promise candidates (import-style, user-approved),
-     keeping names as the prose spells them. Ids stay ASCII kebab-case: a
-     name with no ASCII letters or digits (`Пётр`, `李明`) needs
-     `story add character "Пётр" --id petr`, with the id agreed with the
-     user
+     keeping names as the prose spells them. Ids stay ASCII kebab-case:
+     Cyrillic and Greek names get one automatically (`Пётр` gives
+     `petr`), and a name in a script with no transliteration table
+     (`李明`) needs `story add character "李明" --id li-ming`, with the
+     id agreed with the user
    - Reverse-outline the chapter into the chapter file and `scenes/` records
    - Diff against the bible (new / contradiction / enrichment / dangling)
    - Reconcile: update the bible **or** revise the chapter — never neither
