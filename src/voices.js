@@ -66,6 +66,7 @@ function buildVoiceRules(pack) {
     tagAfterQuote: null,
     tagBeforeQuote: null,
     dashTag: null,
+    dashIncise: null,
     // A tag inside a quote (« Viens, dit-il, nous partons. »), in a pack
     // with `inciseTags`, or null.
     incise: null,
@@ -90,9 +91,11 @@ function buildVoiceRules(pack) {
   // another or by the end of the quote (« Viens, dit-il, nous partons. »),
   // or after ? or ! (— Viens ! s'exclama-t-il.). The prose check's tags
   // count as well as the speech verbs.
+  // An incise may invert any pronoun (dit-on, demandez-vous).
   const inciseVerbs = [...new Set([...verbs, ...(checkList(pack, "plainTags") ?? []), ...(checkList(pack, "saidBookisms") ?? [])])].map(listWord).join("|");
-  const inciseCore = `(?:(?:${inciseVerbs})(?:${links || NEVER})(?:${pronounAlternation})|(?:${inciseVerbs})\\s+\\p{Lu}[\\p{L}'’-]*(?:\\s+\\p{Lu}[\\p{L}'’-]*){0,2}|(?:${pronounAlternation})\\s+(?:${inciseVerbs}))(?![\\p{L}\\p{N}])`;
-  const inciseDash = pack.inciseTags === true ? `|(?<=[?!…])\\s+(?=${inciseCore})` : "";
+  const incisePronouns = [...new Set([...pronouns, ...(checkList(pack, "beatPronouns") ?? [])])].map(listWord).join("|");
+  const inciseCore = `(?:(?:${inciseVerbs})(?:${links || NEVER})(?:${incisePronouns})|(?:${inciseVerbs})\\s+\\p{Lu}[\\p{L}'’-]*(?:\\s+\\p{Lu}[\\p{L}'’-]*){0,2}|(?:${incisePronouns})\\s+(?:${inciseVerbs}))(?![\\p{L}\\p{N}])`;
+  const inciseDash = pack.inciseTags === true ? `|,\\s+(?=${inciseCore})|(?<=[?!…])\\s+(?=${inciseCore})` : "";
   const inverted = links === "" ? "" : `|(?:${verbAlternation})(?:${links})(?:${pronounAlternation})`;
   const pronounTag = `(?:(?:${pronounAlternation})\\s+(?:${verbAlternation})|(?:${verbAlternation})\\s+(?:${pronounAlternation})${inverted})(?![\\p{L}\\p{N}])`;
   return {
@@ -107,6 +110,10 @@ function buildVoiceRules(pack) {
     // Dialogue set with a leading dash (— Line, said Cy.) runs to a closing
     // dash or to a tag after a comma.
     incise: pack.inciseTags === true ? new RegExp(`(?:,|(?<=[?!…]))\\s+${inciseCore}\\s*(?:,|[.!?…]?\\s*$)`, "u") : null,
+    // In dash dialogue, a tag after a comma that closes with another comma,
+    // perhaps after more words (— Viens, dit Paul en souriant, nous
+    // partons.): speech resumes after it.
+    dashIncise: pack.inciseTags === true ? new RegExp(`^,\\s+${inciseCore}[^,.!?;:…—–«»"“”]*,`, "u") : null,
     dashTag: new RegExp(`(?:,\\s+(?:(?:${verbAlternation})\\s+\\p{Lu}|(?:${pronounAlternation})\\s+(?:${verbAlternation})(?![\\p{L}\\p{N}])${inverted === "" ? "" : `${inverted}(?![\\p{L}\\p{N}])`}|\\p{Lu}[\\p{L}'’-]*(?:\\s+\\p{Lu}[\\p{L}'’-]*){0,2}\\s+(?:${verbAlternation})(?![\\p{L}\\p{N}]))${inciseDash})`, "u")
   };
 }
@@ -434,8 +441,12 @@ function dashMatches(paragraph, rules, matches) {
     matches.push({ start, end: newLine ? close : Math.min(close + 1, paragraph.length), text });
     index = close + 1;
     start = Infinity;
+    const incise = !closedByDash && close === tag && rules.dashIncise !== null ? rules.dashIncise.exec(paragraph.slice(close, close + 120)) : null;
     if (newLine) {
       start = close;
+    } else if (incise !== null) {
+      // Speech resumes after the incise's closing comma.
+      start = close + incise[0].length - 1;
     } else if (closedByDash) {
       const next = nextDash(index);
       start = next !== Infinity && tagCloses(paragraph, index, next, rules) ? next : Infinity;

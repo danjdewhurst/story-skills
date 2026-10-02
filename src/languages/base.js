@@ -52,6 +52,9 @@ export default {
   // German), so it ends a sentence only before a capital that is not a
   // calendar word.
   ordinalStop: false,
+  // Whether any capital letter before a full stop is an initial (É. Zola),
+  // not only A to Z.
+  capitalInitials: false,
   // Generated text in builds, by key; a key a pack leaves out is English
   // (see ./en.js).
   labels: {},

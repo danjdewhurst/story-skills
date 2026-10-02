@@ -39,6 +39,8 @@
 export default {
   code: "fr",
   name: "French",
+  // Any capital before a full stop is an initial (É. Zola, Á. Pérez).
+  capitalInitials: true,
   narrationRate: 135,
   // A tag may stand inside the speech: « Viens, dit-il, nous partons. »,
   // or — Viens ! s'exclama-t-il.

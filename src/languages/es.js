@@ -9,7 +9,7 @@
 // - Adverbs: a manner adverb ends in -mente (lentamente), so that is the
 //   suffix, with the -mente words that are not adverbs as exceptions, and
 //   `adverbBlockers` for the words before a noun or subjunctive (la mente,
-//   que lo lamente).
+//   se lamente). Que and lo also come before adverbs, so they are not.
 // - Headings: an ordinal may come before the heading word (Primera
 //   parte), in `ordinalWords`.
 // - No dialectPairs: the British and American pairs are English. Record a
@@ -30,6 +30,8 @@ const ORDINALS = [
 export default {
   code: "es",
   name: "Spanish",
+  // Any capital before a full stop is an initial (É. Zola, Á. Pérez).
+  capitalInitials: true,
   narrationRate: 150,
   labels: {
     chapter: "Capítulo {n}",
@@ -95,15 +97,18 @@ export default {
       "mente", "demente", "clemente", "inclemente", "vehemente",
       "alimente", "argumente", "atormente", "aumente", "cimente", "comente", "complemente",
       "documente", "experimente", "fomente", "fragmente", "implemente", "incremente", "lamente",
-      "segmente", "sedimente", "fermente", "ornamente", "pigmente", "reglamente", "suplemente"
+      "segmente", "sedimente", "fermente", "ornamente", "pigmente", "reglamente", "suplemente",
+      "condimente", "cumplimente", "parlamente", "pavimente"
     ],
 
-    // Words after which a word in -mente is not an adverb: articles and
-    // possessives (la mente) and the que or object pronoun of a
-    // subjunctive (que lo lamente).
+    // Words after which a word in -mente is not an adverb: articles,
+    // possessives, and demonstratives (la mente, su mente), and object
+    // pronouns before a subjunctive (se lamente). Que and lo come before
+    // adverbs too (que finalmente, lo realmente importante), so the
+    // subjunctives they introduce are exceptions instead.
     adverbBlockers: [
-      "el", "la", "lo", "los", "las", "un", "una", "unos", "unas", "mi", "tu", "su", "mis", "tus", "sus",
-      "nuestra", "vuestra", "esa", "esta", "aquella", "que", "se", "me", "te", "le", "les", "nos", "os"
+      "el", "la", "los", "las", "un", "una", "unos", "unas", "mi", "tu", "su", "mis", "tus", "sus",
+      "nuestra", "vuestra", "esa", "esta", "aquella", "se", "me", "te", "le", "les", "nos", "os"
     ],
 
     echoStopwords: [

@@ -42,6 +42,8 @@ export default {
   name: "German",
   quotes: [["„", "“"], ["‚", "‘"], ["»", "«"], ["›", "‹"], ["“", "”"], ["\"", "\""]],
   ordinalStop: true,
+  // Any capital before a full stop is an initial (É. Zola, Á. Pérez).
+  capitalInitials: true,
   narrationRate: 120,
   labels: {
     chapter: "Kapitel {n}",
