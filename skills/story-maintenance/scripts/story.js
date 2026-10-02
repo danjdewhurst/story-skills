@@ -6295,7 +6295,8 @@ var DIGIT_ZEROS = {
   tibt: 3872,
   mymr: 4160,
   khmr: 6112,
-  mong: 6160
+  mong: 6160,
+  mtei: 44016
 };
 var SCRIPT_DIGITS = {
   Arab: "arab",
@@ -6314,15 +6315,17 @@ var SCRIPT_DIGITS = {
   Tibt: "tibt",
   Mymr: "mymr",
   Khmr: "khmr",
-  Mong: "mong"
+  Mong: "mong",
+  Mtei: "mtei"
 };
-var EXTENDED_ARABIC = new Set(["fa", "ur", "ps", "ks", "pa"]);
+var NUMERAL_SCRIPTS = { nqo: "Nkoo", mni: "Beng", prs: "Arab", "az-ir": "Arab", "uz-af": "Arab" };
+var EXTENDED_ARABIC = new Set(["fa", "prs", "ur", "ps", "ks", "pa", "az", "uz"]);
 var HAN_DIGITS = "〇一二三四五六七八九";
 var HAN_UNITS = ["", "十", "百", "千"];
-var HAN_GROUPS = { jpan: ["", "万", "億"], hans: ["", "万", "亿"], hant: ["", "萬", "億"] };
+var HAN_GROUPS = { jpan: ["", "万", "億", "兆"], hans: ["", "万", "亿", "万亿"], hant: ["", "萬", "億", "兆"] };
 function nativeNumerals(language) {
-  const script = languageScript(language);
-  const { primary } = parseTag(language);
+  const { primary, script: subtag, region } = parseTag(language);
+  const script = subtag ?? NUMERAL_SCRIPTS[`${primary}-${region}`] ?? NUMERAL_SCRIPTS[primary] ?? languageScript(language);
   if (script === "Jpan" || script === "Hira" || script === "Kana" || script === "Hani" && primary === "ja") {
     return "jpan";
   }
@@ -6345,7 +6348,7 @@ function formatNumeral(value, system = "latn") {
   if (DIGIT_ZEROS[system] !== undefined && /^\d+$/.test(text)) {
     return text.replace(/\d/g, (digit) => String.fromCodePoint(DIGIT_ZEROS[system] + Number(digit)));
   }
-  if (HAN_GROUPS[system] !== undefined && Number.isSafeInteger(value) && value >= 0 && value < 1000000000000) {
+  if (HAN_GROUPS[system] !== undefined && Number.isSafeInteger(value) && value >= 0) {
     return hanNumeral(value, system);
   }
   return text;
@@ -6370,7 +6373,8 @@ function hanNumeral(value, system) {
     if (chinese && text !== "" && (gap || group < 1000)) {
       text += "零";
     }
-    text += hanGroup(group, chinese, text === "") + HAN_GROUPS[system][index];
+    const unit = system === "hans" && index === 3 && groups[2] !== 0 ? "万" : HAN_GROUPS[system][index];
+    text += hanGroup(group, chinese, text === "") + unit;
     gap = false;
   }
   return text;
@@ -6652,7 +6656,8 @@ function chapterHeading(number, title, labels = undefined, numerals = "latn") {
   const text = String(title ?? "").trim();
   const chapter = (n) => fillLabel(labels, "chapter", { n }).trim() || fillLabel(undefined, "chapter", { n });
   const label = chapter(formatNumeral(number, numerals));
-  const repeats = [label, chapter(String(number))].some((form) => text.toLowerCase() === form.toLowerCase());
+  const fold = (value) => value.normalize("NFKC").toLowerCase();
+  const repeats = [label, chapter(String(number))].some((form) => fold(text) === fold(form));
   return text === "" || repeats ? label : fillLabel(labels, "chapter-heading", { chapter: label, title: text });
 }
 var WORD_CHARS = "\\p{L}\\p{M}\\p{N}\\u200C\\u200D\\u00AD";

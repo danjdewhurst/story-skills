@@ -44,8 +44,16 @@ describe("chapter numerals", () => {
     expect(formatNumeral(10010, "hant")).toBe("一萬零一十");
     expect(formatNumeral(200000000, "hant")).toBe("二億");
     expect([formatNumeral(0, "jpan"), formatNumeral(0, "hans")]).toEqual(["〇", "零"]);
-    // Beyond the groups the tables name, the number keeps 0-9.
-    expect(formatNumeral(1e12, "jpan")).toBe("1000000000000");
+    // 兆 (10^12) covers every safe integer; Simplified Chinese writes 万亿,
+    // or 万 before a 亿 group of its own.
+    expect([formatNumeral(1e12, "jpan"), formatNumeral(1e12, "hant"), formatNumeral(1e12, "hans")]).toEqual(["一兆", "一兆", "一万亿"]);
+    expect(formatNumeral(1e12 + 1, "hans")).toBe("一万亿零一");
+    expect(formatNumeral(1234500000000, "hans")).toBe("一万二千三百四十五亿");
+    expect(formatNumeral(1000100000000, "hans")).toBe("一万零一亿");
+    expect(formatNumeral(1234500000000, "jpan")).toBe("一兆二千三百四十五億");
+    expect(formatNumeral(Number.MAX_SAFE_INTEGER, "jpan")).toBe("九千七兆千九百九十二億五千四百七十四万九百九十一");
+    // Past the safe integers, the number keeps 0-9.
+    expect(formatNumeral(2 ** 60, "jpan")).toBe(String(2 ** 60));
   });
 
   test("digit systems swap each digit from fixed tables, without grouping", () => {
@@ -57,7 +65,7 @@ describe("chapter numerals", () => {
     expect(formatNumeral(12, "latn")).toBe("12");
     expect(formatNumeral(12, "unknown")).toBe("12");
     // Each table agrees with the runtime's own digits for that system.
-    for (const system of ["arab", "arabext", "deva", "beng", "guru", "gujr", "orya", "tamldec", "telu", "knda", "mlym", "thai", "laoo", "tibt", "mymr", "khmr", "mong", "nkoo"]) {
+    for (const system of ["arab", "arabext", "deva", "beng", "guru", "gujr", "orya", "tamldec", "telu", "knda", "mlym", "thai", "laoo", "tibt", "mymr", "khmr", "mong", "nkoo", "mtei"]) {
       expect({ system, text: formatNumeral(9876543210, system) }).toEqual({ system, text: new Intl.NumberFormat("en", { numberingSystem: system, useGrouping: false }).format(9876543210) });
     }
   });
@@ -69,6 +77,17 @@ describe("chapter numerals", () => {
       ar: "arab", ckb: "arab", fa: "arabext", ur: "arabext", ps: "arabext", pa: "guru", "pa-Arab": "arabext", hi: "deva", mr: "deva", ne: "deva", bn: "beng",
       th: "thai", lo: "laoo", km: "khmr", my: "mymr", bo: "tibt", "mn-Mong": "mong", en: null, ko: null, he: null, ru: null, mn: null, "ar-Latn": null
     });
+    // Tags whose script the typesetting table does not name: N'Ko and
+    // Manipuri by language, Dari, and Azerbaijani in Iran and Uzbek in
+    // Afghanistan, which use the Persian digit forms in Arabic script.
+    const more = Object.fromEntries(["nqo", "nqo-Nkoo", "mni", "mni-Beng", "mni-Mtei", "prs", "prs-AF", "az-IR", "az-Arab", "az", "uz-AF", "uz-Arab", "uz"].map((tag) => [tag, nativeNumerals(tag)]));
+    expect(more).toEqual({
+      nqo: "nkoo", "nqo-Nkoo": "nkoo", mni: "beng", "mni-Beng": "beng", "mni-Mtei": "mtei", prs: "arabext", "prs-AF": "arabext",
+      "az-IR": "arabext", "az-Arab": "arabext", az: null, "uz-AF": "arabext", "uz-Arab": "arabext", uz: null
+    });
+    for (const language of ["nqo", "mni", "prs", "az-IR"]) {
+      expect({ language, codes: codes(validateProject(project(`Book ${language}`, `language: ${language}\nchapter-numerals: native\n`)).errors) }).toEqual({ language, codes: [] });
+    }
     expect(chapterNumerals({ language: "ja" })).toBe("latn");
     expect(chapterNumerals({ language: "ja", "chapter-numerals": "western" })).toBe("latn");
     expect(chapterNumerals({ language: "ja", "chapter-numerals": "native" })).toBe("jpan");
@@ -83,6 +102,9 @@ describe("chapter numerals", () => {
     expect(chapterHeading(3, "第3章", ja, "jpan")).toBe("第三章");
     expect(chapterHeading(3, "第三章", ja, "jpan")).toBe("第三章");
     expect(chapterHeading(3, "第三章", ja)).toBe("第3章　第三章");
+    // Full-width digits repeat the number too.
+    expect(chapterHeading(12, "第１２章", ja, "jpan")).toBe("第十二章");
+    expect(chapterHeading(12, "第１２章", ja)).toBe("第12章");
     expect(chapterHeading(12, "البداية", buildLabels({ language: "ar" }), "arab")).toBe("الفصل ١٢: البداية");
     // A chapter label without {n} still takes the number after it.
     expect(chapterHeading(4, "", buildLabels({ language: "hi", "chapter-label": "भाग" }), "deva")).toBe("भाग ४");

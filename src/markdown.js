@@ -109,7 +109,9 @@ export function chapterHeading(number, title, labels = undefined, numerals = "la
   const text = String(title ?? "").trim();
   const chapter = (n) => fillLabel(labels, "chapter", { n }).trim() || fillLabel(undefined, "chapter", { n });
   const label = chapter(formatNumeral(number, numerals));
-  const repeats = [label, chapter(String(number))].some((form) => text.toLowerCase() === form.toLowerCase());
+  // NFKC reads full-width digits as 0-9, so 第１２章 repeats 第12章.
+  const fold = (value) => value.normalize("NFKC").toLowerCase();
+  const repeats = [label, chapter(String(number))].some((form) => fold(text) === fold(form));
   return text === "" || repeats ? label : fillLabel(labels, "chapter-heading", { chapter: label, title: text });
 }
 
