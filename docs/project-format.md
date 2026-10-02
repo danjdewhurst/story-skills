@@ -138,14 +138,17 @@ Any other directory that is not an entity directory (for example `notes/` or `im
 
 An entity's id is its filename without `.md`. Frontmatter never carries a separate `id` field. Ids must be kebab-case: lowercase ASCII letters and digits in groups joined by single hyphens (`sera-voss`, `chapter-03`, `ember-magic`). `story validate` reports `filename id must be kebab-case` otherwise.
 
-When `story add` or `story init` derives an id from a name, it:
+When `story add`, `story rename`, or `story init` derives an id from a name, it:
 
-1. strips accents (`Élan` becomes `elan`) and spells out Latin letters that have none to strip (`Æthelred` becomes `aethelred`, `Søren` becomes `soren`, `Straße` becomes `strasse`, and likewise `ł`, `đ`, `ð`, `þ`, and `œ`),
-2. drops straight and curly apostrophes (`Sera's Reclamation` becomes `seras-reclamation`),
-3. lowercases, and
-4. replaces every run of other characters with one hyphen and trims hyphens from the ends.
+1. transliterates Cyrillic and Greek letters (`Пётр` becomes `petr`, `Ολυμπία` becomes `olympia`; see [Transliteration](#transliteration)),
+2. strips accents (`Élan` becomes `elan`) and spells out Latin letters that have none to strip (`Æthelred` becomes `aethelred`, `Søren` becomes `soren`, `Straße` becomes `strasse`, and likewise `ł`, `đ`, `ð`, `þ`, and `œ`),
+3. drops straight and curly apostrophes (`Sera's Reclamation` becomes `seras-reclamation`),
+4. lowercases, and
+5. replaces every run of other characters with one hyphen and trims hyphens from the ends.
 
-Names themselves are free text in any script, and ids stay ASCII so that filenames are portable. A name with no ASCII letters or digits at all (`Пётр`, `李明`) leaves nothing to slug, so `story add --id` and `story rename --id` give the id by hand: `story add character "Пётр" --id petr` writes `characters/petr.md` with `name: Пётр`. `story init --dir` does the same job for a story title. Chapter and scene ids come from their numbers, so they take `--number` or `--chapter`/`--scene` rather than `--id`.
+Names themselves are free text in any script, and ids stay ASCII so that filenames are portable. A name written only in a script with no transliteration table (`李明`, `محمد`, `דוד`, Thai, Devanagari, and the rest) leaves nothing to slug, so `story add --id` and `story rename --id` give the id by hand: `story add character "李明" --id li-ming` writes `characters/li-ming.md` with `name: 李明`. `--id` also overrides a transliteration you would spell differently (`story add character "Юлия" --id julia`). `story init --dir` does the same job for a story title. Chapter and scene ids come from their numbers, so they take `--number` or `--chapter`/`--scene` rather than `--id`.
+
+Existing ids are never rewritten: transliteration only changes the id a new `add` or `rename` derives, and `story validate` accepts exactly the ids it accepted before.
 
 Windows reserves the file names `con`, `prn`, `aux`, `nul`, `com1` to `com9`, and `lpt1` to `lpt9` with any extension, so a project with `characters/con.md` cannot be checked out there. `story init` and `story import` also refuse a project folder with such a name (`con.txt` included), a name ending in a dot or space, or a name containing `< > : " | ? *`. `story add` and `story rename` refuse those ids:
 
@@ -165,7 +168,7 @@ Cannot use story id con: Windows reserves the file name con. Choose a longer nam
 warning: characters/nul.md uses a file name Windows reserves, so the project cannot be checked out on Windows; rename the entity [windows-reserved-name]
 ```
 
-The story id is derived the same way from the `title` in `story.md` (`The Last Ember` becomes `the-last-ember`), or from the project directory name when the title has no ASCII letters or digits. Registries and state files record it in their `story` field.
+The story id is derived the same way from the `title` in `story.md` (`The Last Ember` becomes `the-last-ember`), or from the project directory name when the title has no ASCII letters or digits. The story id is recomputed from the title on every run, so it is never transliterated: a Cyrillic or Greek title keeps the folder-name id it has always had. `story init` without `--dir` transliterates such a title for the folder name instead (`Война и мир` goes in `voyna-i-mir/`, which then gives the story id). Registries and state files record it in their `story` field.
 
 Chapters and scenes use fixed filename patterns instead of names:
 
@@ -175,6 +178,13 @@ Chapters and scenes use fixed filename patterns instead of names:
 | Scene | `{chapter-id}-scene-{NN}.md` | For example `chapter-03-scene-02.md`. `story add scene` pads `NN` to two digits. Frontmatter `chapter` and `scene` must equal the filename parts. |
 
 Because chapter and scene ids come from their numbers, `story rename chapter` and `story rename scene` change only the `title`; the id and filename stay the same. `story move` changes a chapter's number or a scene's chapter and position, renaming the files and rewriting the references to the old id. Renaming any other entity derives a new id from the new name and renames the file.
+
+### Transliteration
+
+One fixed table per script, the same for every language that uses it, so the same name always gives the same id:
+
+- **Cyrillic** follows a simplified BGN/PCGN romanisation of Russian: `а б в г д е ё ж з и й к л м н о п р с т у ф х ц ч ш щ ы э ю я` become `a b v g d e e zh z i y k l m n o p r s t u f kh ts ch sh shch y e yu ya`, and the signs `ъ` and `ь` are dropped (`Хрущёв` becomes `khrushchev`). Letters other languages add take their usual forms: Ukrainian `є ye`, `і i`, `ї yi`, `ґ g`; Belarusian `ў u`; Serbian and Macedonian `ђ dj`, `ј j`, `љ lj`, `њ nj`, `ћ c`, `џ dz`, `ѓ gj`, `ќ kj`, `ѕ dz`. Because the table is shared, language-specific spellings are not applied: Ukrainian `и` is `i`, not `y`, and Bulgarian `щ` is `shch`, not `sht`. Pass `--id` when you want them.
+- **Greek** follows ELOT 743 (the Greek national standard the UN adopted), simplified to fixed values: `α β γ δ ε ζ η θ ι κ λ μ ν ξ ο π ρ σ/ς τ υ φ χ ψ ω` become `a v g d e z i th i k l m n x o p r s t y f ch ps o`, with the digraphs `ου ou`, `αυ av`, `ευ ev`, `ηυ iv`, `γγ ng`, `γξ nx`, and `γχ nch` (`Ευριπίδης` becomes `evripidis`). Accents and breathings are dropped (`Ἀλέξανδρος` becomes `alexandros`); a diaeresis keeps two vowels apart, so `Αϋπνία` becomes `aypnia`.
 
 ## Frontmatter syntax
 

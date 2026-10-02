@@ -378,7 +378,7 @@ A parse error names the file by its path inside the project, never an absolute p
 story init <title> [options]
 ```
 
-Scaffolds a new story project: `story.md`, `style-sheet.md`, `plot/timeline.md`, `continuity/state.md`, every entity folder, empty registries, and a `.gitignore`. The story id is the kebab-case form of the title (`The Salt Road` becomes `the-salt-road`), and the project goes in a directory of that name unless you pass `--dir`. A title with no ASCII letters or digits, such as `Война и мир`, has no kebab-case form, so it needs `--dir` with an ASCII folder name; the story id then comes from the folder name (`story init "Война и мир" --dir voina` gives the id `voina`). The id follows the `story.md` title on every run, so after changing the title run `story reindex` to rewrite it in the registries, `plot/timeline.md`, and `continuity/state.md`; until then `story validate` fails with `story must be <new-id>`.
+Scaffolds a new story project: `story.md`, `style-sheet.md`, `plot/timeline.md`, `continuity/state.md`, every entity folder, empty registries, and a `.gitignore`. The story id is the kebab-case form of the title (`The Salt Road` becomes `the-salt-road`), and the project goes in a directory of that name unless you pass `--dir`. A title with no ASCII letters or digits takes its story id from the folder name instead. A Cyrillic or Greek title is transliterated for the default folder (`story init "Война и мир"` creates `voyna-i-mir/`, so the id is `voyna-i-mir`), and `--dir` picks another (`story init "Война и мир" --dir voina` gives the id `voina`). A title in a script with no transliteration table, such as `红楼梦`, has no kebab-case form, so it needs `--dir` with an ASCII folder name. The id follows the `story.md` title on every run, so after changing the title run `story reindex` to rewrite it in the registries, `plot/timeline.md`, and `continuity/state.md`; until then `story validate` fails with `story must be <new-id>`.
 
 | Option | Effect | Default |
 |---|---|---|
@@ -1785,16 +1785,19 @@ See [Writing workflows](writing-workflows.md) for where passes fit in a revision
 | `matter` | `matter` | `matter/` | The title, or `--id` |
 | `research` | `research`, `research-note`, `research-notes` | `research/` | The title, or `--id` |
 
-Kinds are case-insensitive. Ids are lowercase kebab-case: accents are stripped, apostrophes dropped, and every other run of non-alphanumeric characters becomes a hyphen, so `Sera's Reclamation` becomes `seras-reclamation`.
+Kinds are case-insensitive. Ids are lowercase kebab-case: Cyrillic and Greek letters are transliterated, accents are stripped, apostrophes dropped, and every other run of non-alphanumeric characters becomes a hyphen, so `Sera's Reclamation` becomes `seras-reclamation`, `Пётр Иванов` becomes `petr-ivanov`, and `Ολυμπία` becomes `olympia`. The [Project format reference](project-format.md#transliteration) has the transliteration tables.
 
-Names may be written in any script; ids stay ASCII, so that entity filenames are portable across file systems and archive formats. A name with no ASCII letters or digits at all (`Пётр`, `李明`, `Ολυμπία`) leaves nothing to slug, so [`add`](#add) and [`rename`](#rename) take the id from `--id` instead and keep the name as written:
+Names may be written in any script; ids stay ASCII, so that entity filenames are portable across file systems and archive formats. A name written only in a script with no transliteration table (`李明`, `محمد`, `דוד`) leaves nothing to slug, so [`add`](#add) and [`rename`](#rename) take the id from `--id` instead and keep the name as written. `--id` also overrides a transliteration you would spell differently:
 
 ```text
 $ story add character "Пётр"
-Cannot derive a kebab-case id from character name "Пётр": pass --id with a kebab-case id, or use a name containing ASCII letters or digits
-
-$ story add character "Пётр" --id petr
 Created character petr: ~/stories/the-salt-road/characters/petr.md
+
+$ story add character "李明"
+Cannot derive a kebab-case id from character name "李明": pass --id with a kebab-case id, or use a name containing ASCII letters or digits
+
+$ story add character "李明" --id li-ming
+Created character li-ming: ~/stories/the-salt-road/characters/li-ming.md
 ```
 
 ### add
@@ -1813,7 +1816,7 @@ $ story add villain "Lord Maren"
 Unsupported entity kind: villain: expected one of character, location, system, faction, artifact, arc, chapter, scene, question, promise, clue, term, matter, research
 ```
 
-`--id` sets the id instead of deriving it from the name, which is how a name in a script with no ASCII letters or digits gets a file (see [Entity kinds](#entity-kinds)). The value must already be kebab-case, so `add` never quietly rewrites it, and it is refused for chapters and scenes, whose ids come from their numbers:
+`--id` sets the id instead of deriving it from the name, which is how a name in a script with no transliteration table gets a file (see [Entity kinds](#entity-kinds)). The value must already be kebab-case, so `add` never quietly rewrites it, and it is refused for chapters and scenes, whose ids come from their numbers:
 
 ```text
 $ story add character "Пётр" --id Petr
@@ -1994,14 +1997,17 @@ Sets the entity's name or title and, when the new name gives a different id, ren
 
 Chapter and scene ids come from their numbers, so renaming one changes only its title; to change the number, use [`move`](#move). `rename` also updates the entity's first heading when it shows the old name, such as `# Ilse Marrow` or `# Chapter 1: Low Tide`.
 
-The positional id names the entity being renamed; `--id` gives the id it moves to, instead of one derived from the new name. It is required when the new name has no ASCII letters or digits, must already be kebab-case, and is refused for chapters and scenes:
+The positional id names the entity being renamed; `--id` gives the id it moves to, instead of one derived from the new name. It is required when the new name leaves nothing to slug (a script with no transliteration table), must already be kebab-case, and is refused for chapters and scenes:
 
 ```text
 $ story rename character petr "Пётр Иванов"
-Cannot derive a kebab-case id from character name "Пётр Иванов": pass --id with a kebab-case id, or use a name containing ASCII letters or digits
-
-$ story rename character petr "Пётр Иванов" --id petr-ivanov
 Renamed character petr to petr-ivanov: ~/stories/the-salt-road/characters/petr-ivanov.md
+
+$ story rename character li-ming "李明华"
+Cannot derive a kebab-case id from character name "李明华": pass --id with a kebab-case id, or use a name containing ASCII letters or digits
+
+$ story rename character li-ming "李明华" --id li-minghua
+Renamed character li-ming to li-minghua: ~/stories/the-salt-road/characters/li-minghua.md
 ```
 
 Every rewrite is planned before anything is written, so a file that fails to parse leaves the project unchanged. An entity file (a file directly in an entity folder), one of the registries the CLI writes (the `_index.md` in `characters/`, `worldbuilding/`, `plot/`, `chapters/`, `scenes/`, `continuity/questions/`, `continuity/promises/`, `continuity/clues/`, `glossary/`, `matter/`, and `research/`), or one of `story.md`, `style-sheet.md`, `progress.md`, `plot/timeline.md`, `continuity/state.md`, and `continuity/exemptions.md` with no YAML frontmatter stops it the same way, with `<file> is missing YAML frontmatter; nothing was changed`. Other markdown, such as `continuity/motifs.md`, `continuity/theme-audit.md`, a README, or an `_index.md` in a folder of your own such as `notes/`, may be plain; when its frontmatter uses YAML the CLI does not parse, only its body links are rewritten, and a note over 5 MiB, or past the first 5,000 such notes, is skipped. Reference-style link definitions (`[bo]: ../characters/bo.md`) are rewritten like inline links. A damaged registry gets a hint, since registries are generated: `characters/_index.md is missing YAML frontmatter (it is a registry: run story reindex to rebuild it); nothing was changed`. Every file `rename` will rewrite or delete, and every folder it writes into, must be writable before it starts: otherwise it refuses with `Cannot write to plot/arcs/the-drowned-witness.md (permission denied); nothing was changed. Fix it and run the command again`. A write that still fails partway (a full disk, say) adds `Some files were already updated: fix the problem and run the same command again to finish` to the error; the rerun finishes the job. `move` and `remove` check and report the same way. `rename` refuses if an entity with the new id already exists, if another kind that shares a reference field uses it (see [add](#add)), or if the new id is one Windows reserves as a file name, as `add` does (`Cannot use character id aux: Windows reserves the file name aux.md. ...`).
@@ -2691,7 +2697,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--min-words` | `<n>` | `similarity` | Whole number 5 or more; default `8` |
 | `--pages` | `<n>` | `synopsis` | `1` or `3` |
 | `--actionable` | | `report` | Boolean |
-| `--id` | `<kebab-id>` | `add` (every kind except `chapter` and `scene`), `rename` | The entity id, instead of one derived from the name; required when the name has no ASCII letters or digits. Refused for `chapter` and `scene`, whose ids come from their numbers |
+| `--id` | `<kebab-id>` | `add` (every kind except `chapter` and `scene`), `rename` | The entity id, instead of one derived from the name; required when the name has nothing to slug, such as a name only in Chinese, Arabic, or Hebrew. Refused for `chapter` and `scene`, whose ids come from their numbers |
 | `--number` | `<n>` | `add chapter`, `move chapter` | Required for `move chapter` |
 | `--chapter` | `<id>` | `add scene`, `move scene` | |
 | `--scene` | `<n>` | `add scene`, `move scene` | |

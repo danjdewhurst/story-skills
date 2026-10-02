@@ -1056,8 +1056,92 @@ var LATIN_FOLD_PATTERN = new RegExp(`[${Object.keys(LATIN_FOLDS).join("")}]`, "g
 function foldLatin(value) {
   return String(value).replace(LATIN_FOLD_PATTERN, (letter) => LATIN_FOLDS[letter]).normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
 }
-function kebabCase(value) {
-  return foldLatin(value).replace(/['\u2018\u2019]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+var CYRILLIC = {
+  а: "a",
+  б: "b",
+  в: "v",
+  г: "g",
+  д: "d",
+  е: "e",
+  ё: "e",
+  ж: "zh",
+  з: "z",
+  и: "i",
+  й: "y",
+  к: "k",
+  л: "l",
+  м: "m",
+  н: "n",
+  о: "o",
+  п: "p",
+  р: "r",
+  с: "s",
+  т: "t",
+  у: "u",
+  ф: "f",
+  х: "kh",
+  ц: "ts",
+  ч: "ch",
+  ш: "sh",
+  щ: "shch",
+  ъ: "",
+  ы: "y",
+  ь: "",
+  э: "e",
+  ю: "yu",
+  я: "ya",
+  є: "ye",
+  і: "i",
+  ї: "yi",
+  ґ: "g",
+  ў: "u",
+  ђ: "dj",
+  ј: "j",
+  љ: "lj",
+  њ: "nj",
+  ћ: "c",
+  џ: "dz",
+  ѓ: "gj",
+  ќ: "kj",
+  ѕ: "dz"
+};
+var GREEK_DIGRAPHS = { αυ: "av", ευ: "ev", ηυ: "iv", ου: "ou", γγ: "ng", γξ: "nx", γχ: "nch" };
+var GREEK = {
+  α: "a",
+  β: "v",
+  γ: "g",
+  δ: "d",
+  ε: "e",
+  ζ: "z",
+  η: "i",
+  θ: "th",
+  ι: "i",
+  κ: "k",
+  λ: "l",
+  μ: "m",
+  ν: "n",
+  ξ: "x",
+  ο: "o",
+  π: "p",
+  ρ: "r",
+  σ: "s",
+  ς: "s",
+  τ: "t",
+  υ: "y",
+  φ: "f",
+  χ: "ch",
+  ψ: "ps",
+  ω: "o",
+  ϊ: "i",
+  ϋ: "y"
+};
+var TRANSLITERATIONS = { ...GREEK_DIGRAPHS, ...CYRILLIC, ...GREEK };
+var TRANSLITERATION_PATTERN = new RegExp(`${Object.keys(GREEK_DIGRAPHS).join("|")}|[${Object.keys(CYRILLIC).join("")}${Object.keys(GREEK).join("")}]`, "g");
+function transliterate(value) {
+  return String(value).toLowerCase().normalize("NFD").replace(/([Ͱ-Ͽ])([̀-ͯ]+)/g, (_, letter, marks) => letter + (marks.includes("̈") ? "̈" : "")).normalize("NFC").replace(TRANSLITERATION_PATTERN, (letters) => TRANSLITERATIONS[letters]);
+}
+function kebabCase(value, { transliterate: scripts = true } = {}) {
+  return foldLatin(scripts ? transliterate(value) : value).replace(/['\u2018\u2019]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 function titleCaseSlug(slug) {
   return String(slug).split("-").filter(Boolean).map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`).join(" ");
@@ -8750,7 +8834,7 @@ function enclosingStoryProject(root) {
   return null;
 }
 function deriveStoryId(title, root) {
-  return kebabCase(String(title ?? "")) || kebabCase(path11.basename(root));
+  return kebabCase(String(title ?? ""), { transliterate: false }) || kebabCase(path11.basename(root));
 }
 function storyIdMismatch(label, project) {
   return err("story-id-mismatch", `${label} story must be ${project.storyId} (run story reindex after changing the story.md title)`, label);
@@ -13087,7 +13171,7 @@ function chapterKey(chapter, keys) {
   if (chapter.numbered) {
     return `ch${String(chapter.displayNumber).padStart(2, "0")}`;
   }
-  let key = kebabCase(chapter.title);
+  let key = kebabCase(chapter.title, { transliterate: false });
   if (key === "" || keys.has(key) || /^(?:ch\d+$|front-|back-|matter-|unnumbered-)/.test(key)) {
     key = `unnumbered-${String(chapter.number).padStart(2, "0")}`;
   }
@@ -13517,7 +13601,7 @@ function normalizeBuildFormat(value) {
   throw usageError(`Unsupported build format: ${value === "" ? "(empty)" : value}. Supported formats: ${Object.keys(BUILD_EXTENSIONS).join(", ")}`);
 }
 function storyIdIsFallback(project) {
-  return Boolean(project.story.unreadable) || kebabCase(String(project.story.data.title ?? "")) === "";
+  return Boolean(project.story.unreadable) || kebabCase(String(project.story.data.title ?? ""), { transliterate: false }) === "";
 }
 var TEXT_FIELDS = {
   characters: ["pronunciation", "name", "died-in", "revived-in", "arc", "lie", "truth", "ghost-wound"],
