@@ -5,7 +5,7 @@ import path from "node:path";
 import { fountainScript } from "../src/fountain.js";
 import { extractNameCandidates } from "../src/import.js";
 import { languagePack } from "../src/languages/index.js";
-import { compareText, formatNumber, lowerCase, lowerCaseText, upperCase } from "../src/languages/locale.js";
+import { compareText, formatNumber, lowerCase, matchingCase, matchingText, upperCase } from "../src/languages/locale.js";
 import { shunnWordCount } from "../src/packaging.js";
 import { analyzeChapter, proseRules } from "../src/prose.js";
 import { buildSeries } from "../src/series.js";
@@ -53,22 +53,31 @@ describe("locale-aware text", () => {
     expect(upperCase("straße", languagePack("de"))).toBe("STRASSE");
   });
 
-  test("lower-cases text for matching and maps spans back to the text as written", () => {
-    const same = lowerCaseText("IŞIK İnce", languagePack("tr"));
+  test("prepares Turkish and Azerbaijani text for matching and maps spans back to the text as written", () => {
+    const same = matchingText("IŞIK İnce", languagePack("tr"));
     expect(same.text).toBe("ışık ince");
     expect(same.original(5, 9)).toEqual([5, 9]);
-    // Outside Turkish İ lower-cases to i and a combining dot, one longer.
-    const english = lowerCaseText("İnce Road", languagePack("en"));
-    expect(english.text).toBe("i̇nce road");
-    expect(english.original(6, 10)).toEqual([5, 9]);
-    expect(english.original(0, 1)).toEqual([0, 1]);
-    expect(english.original(1, 4)).toEqual([0, 3]);
+    expect(matchingCase("İNCE", languagePack("az-Latn-AZ"))).toBe("ince");
     // Turkish drops a dot written after I, one shorter.
-    const turkish = lowerCaseText("İnce yol", languagePack("tr"));
-    expect(turkish.text).toBe("ince yol");
-    expect(turkish.original(5, 8)).toEqual([6, 9]);
-    expect(turkish.original(0, 4)).toEqual([0, 5]);
-    expect(turkish.original(0, 1)).toEqual([0, 2]);
+    const turkish = matchingText("Bir I\u0307nce yol, I\u0130\u0307 I\u0323\u0307", languagePack("tr"));
+    expect(turkish.text).toBe("bir ince yol, \u0131i\u0307 i\u0323");
+    expect(turkish.original(4, 8)).toEqual([4, 9]);
+    expect(turkish.original(9, 12)).toEqual([10, 13]);
+    expect(turkish.original(4, 5)).toEqual([4, 6]);
+    expect(turkish.original(5, 6)).toEqual([6, 7]);
+    expect(turkish.original(14, 17)).toEqual([15, 18]);
+    expect(turkish.original(18, 20)).toEqual([19, 22]);
+    expect(turkish.original(18, 19)).toEqual([19, 22]);
+    expect(turkish.original(19, 20)).toEqual([19, 22]);
+  });
+
+  test("leaves text as written for matching outside Turkish and Azerbaijani", () => {
+    for (const tag of ["en", "lt", "ru", "kk"]) {
+      const prepared = matchingText("İnce ÌR Ирина", languagePack(tag));
+      expect(prepared.text).toBe("İnce ÌR Ирина");
+      expect(prepared.original(5, 7)).toEqual([5, 7]);
+      expect(matchingCase("İnce", languagePack(tag))).toBe("İnce");
+    }
   });
 
   test("writes reader-facing numbers in the language, always with 0-9 digits", () => {

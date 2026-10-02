@@ -1,7 +1,7 @@
 import { usageError } from "./exit-codes.js";
 import { warn } from "./findings.js";
 import { checkList, checkSet, hasLists, languagePack, skippedCheck, skippedChecks, skippedLines } from "./languages/index.js";
-import { compareText, lowerCase, lowerCaseText } from "./languages/locale.js";
+import { compareText, lowerCase, matchingCase, matchingText } from "./languages/locale.js";
 import { escapeRegExp, scanComments, splitWords, withoutFenceMarkers } from "./markdown.js";
 import { givenName } from "./names.js";
 import { splitSentences } from "./sentences.js";
@@ -148,7 +148,7 @@ export function analyzeChapter(prose, rules) {
   const adverbs = rules.adverbSuffixes === null ? [] : countMatching(narration, (word) => isAdverb(word, rules), rules.pack);
   const tags = rules.plainTags === null ? { plain: [], bookisms: [] } : dialogueTags(paragraphs, rules);
   // Watch words and avoided spellings match in the story's casing.
-  const cased = rules.watch.length + rules.variants.length === 0 ? null : lowerCaseText(text, rules.pack);
+  const cased = rules.watch.length + rules.variants.length === 0 ? null : matchingText(text, rules.pack);
 
   return {
     words: words.length,
@@ -527,8 +527,8 @@ function nameKey(word, pack) {
 }
 
 // Uses of an avoided spelling, minus capitalised uses that are part of a
-// name in the bible (Dorian Gray, Center Point). `cased` is `text`
-// lower-cased by lowerCaseText; the capital is looked for as written.
+// name in the bible (Dorian Gray, Center Point). `cased` is `text` as
+// matchingText gives it; the capital is looked for as written.
 function countVariant(text, cased, pattern, rules) {
   let count = 0;
   for (const match of cased.text.matchAll(pattern)) {
@@ -581,11 +581,9 @@ function countMatching(words, predicate, pack) {
   return sortCounts(counts, pack);
 }
 
-// A watch word or avoided spelling lower-cased with the pack, to match
-// against lowerCaseText. The `i` flag stays for what lower-casing leaves
-// unequal, such as Greek final sigma, so English matches as it always has.
+// A watch word or avoided spelling, to match against matchingText.
 function phrasePattern(phrase, pack) {
-  const body = lowerCase(phrase.trim(), pack).split(/\s+/).map((word) => escapeRegExp(word).replace(/['’]/g, "['’]")).join("\\s+");
+  const body = matchingCase(phrase.trim(), pack).split(/\s+/).map((word) => escapeRegExp(word).replace(/['’]/g, "['’]")).join("\\s+");
   // Letter boundaries only, so compounds ("grey-haired") and possessives
   // still count as uses of the word.
   return new RegExp(`(?<![\\p{L}\\p{M}\\p{N}])${body}(?![\\p{L}\\p{M}\\p{N}])`, "giu");
