@@ -209,7 +209,7 @@ Behavior notes:
 
 - **Matter pages** from `matter/` appear in the export and in every build format except Shunn, which is a submission format.
 - **EPUB and DOCX** builds target plain prose: `*italic*` and `**bold**` become italic and bold runs, scene-break lines (`***`, `---`) become a `* * *` separator, and other markdown structure such as blockquotes, lists, and tables is flattened to text. The markdown export keeps chapter text as-is.
-- **Books not in English** get build text in their language (chapter headings, contents, copyright page, EPUB accessibility text) for about 20 languages, overridable with `labels` in `story.md`. Builds set Arabic, Hebrew, Persian, and other right-to-left languages right to left, pick fonts for the script, can set Japanese, Chinese, and Korean vertically (`writing-mode: vertical`), and can print native chapter numerals (`chapter-numerals: native`, such as `第十二章`). See [Writing in other languages](docs/languages.md).
+- **Books not in English** get build text in their language (chapter headings, contents, copyright page, EPUB accessibility text) in 18 languages, overridable with `labels` in `story.md`. Builds set Arabic, Hebrew, Persian, and other right-to-left languages right to left, pick fonts for the script, can set Japanese, Chinese, and Korean vertically (`writing-mode: vertical`), and can print native chapter numerals (`chapter-numerals: native`, such as `第十二章`). See [Writing in other languages](docs/languages.md).
 - **`story rename`, `story move`, and `story remove`** update entity ids in frontmatter reference fields and markdown link targets. They never edit prose, so a character called "Port" can be renamed without touching the word "port" in chapter text.
 - A command that changes a frontmatter value rewrites only the entries that changed. Comment lines, unchanged entries, and the body keep their exact text, and files whose values don't change are left untouched.
 
@@ -244,7 +244,7 @@ story import brouillon.md --title "La Côte perdue" --language fr
 
 It splits the manuscript on chapter headings (or imports a directory of chapter files in natural name order, so `chapter-2` comes before `chapter-10`), creates the full project layout with accurate word counts and registries, and prints recurring proper-name candidates so an agent can follow up with `story add character` and `story add location` to build out the bible.
 
-`--language` sets the manuscript's language. Chapter headings are recognised in English, Spanish (`Capítulo`), French (`Chapitre`), and German (`Kapitel`), and the language is written to the new `story.md`.
+`--language` sets the manuscript's language, writes it to the new `story.md`, and splits on that language's own chapter headings: `Chapter` in English (the default), `Capítulo` in Spanish, `Chapitre` in French, and `Kapitel` in German. For a manuscript in any other language, import a folder with one file per chapter.
 
 `--force` lets an import reuse an existing directory. It replaces every `chapter-NN.md` file in `chapters/`, so stale chapters from an earlier import are removed.
 
@@ -254,8 +254,8 @@ Running **story-init** creates this layout:
 
 ```
 my-story/
-├── story.md                  # Story bible: title, genre, themes, POV, tense, language
-├── style-sheet.md            # Voice, house spellings, watch words, and word lists
+├── story.md                  # Story bible: title, genre, themes, POV, tense
+├── style-sheet.md            # Voice, house spellings, and watch words
 ├── characters/
 │   └── _index.md             # Character registry
 ├── worldbuilding/
