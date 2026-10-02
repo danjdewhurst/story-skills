@@ -7,7 +7,7 @@ import { passChecks, DEFAULT_PASSES } from "../src/passes.js";
 import { createEntity, createStoryProject, projectActions, validateLinks, validateProject } from "../src/story.js";
 import { findOverlaps } from "../scripts/check-evals.js";
 import { bumpVersion, parseReleaseArgs } from "../scripts/release.js";
-import { checkDraft, wordCount } from "../evals/run-evals.js";
+import { characterCount, checkDraft, wordCount } from "../evals/run-evals.js";
 import { makeTempDir, memoryIo, messages } from "./helpers.js";
 
 const repoRoot = path.resolve(import.meta.dir, "..");
@@ -305,6 +305,19 @@ describe("eval checker in other languages", () => {
     expect(results({ max_words: 3 }, "「ただいま」", "length")).toEqual([[false, "length 4 words <= 3 (absolute cap)"]]);
   });
 
+  test("a Chinese or Japanese fixture measures length in characters, punctuation included, as story wordcount does", () => {
+    expect(characterCount("　「ただいま」\n\nが")).toBe(7);
+    expect(results({ language: "ja", max_words: 6 }, "「ただいま」", "length")).toEqual([[true, "length 6 characters <= 6 (absolute cap)"]]);
+    expect(results({ language: "zh-Hant", max_words: 5 }, "「你好！」", "length")).toEqual([[true, "length 5 characters <= 5 (absolute cap)"]]);
+    expect(results({ language: "ko", max_words: 5 }, "안녕 하세요", "length")).toEqual([[true, "length 2 words <= 5 (absolute cap)"]]);
+  });
+
+  test("banned_regex runs in Unicode mode, so \\p{L} boundaries hold next to accented letters", () => {
+    const traps = { banned_regex: ["(?<![\\p{L}\\p{M}])(?:the|said)(?![\\p{L}\\p{M}])"] };
+    expect(results(traps, "Elle but son thé.", "trap avoided")[0][0]).toBe(true);
+    expect(results(traps, "She said nothing.", "trap avoided")[0][0]).toBe(false);
+  });
+
   test("French spacing before ; : ! and ? is well formed only in a French fixture", () => {
     const draft = "« Tu l’as vu faire ? » Il hocha la tête : oui.";
     expect(results({ language: "fr" }, draft, "well formed: no space before")).toEqual([[true, "well formed: no space before a comma or full stop"]]);
@@ -315,6 +328,7 @@ describe("eval checker in other languages", () => {
 
   test("phrases keep word boundaries next to accented letters and match unspaced scripts as substrings", () => {
     expect(results({ banned: ["montre"] }, "Cela démontre tout.", "trap avoided")).toEqual([[true, 'trap avoided: "montre"']]);
+    expect(results({ banned: ["montre"] }, "Cela de\\u0301montre tout.", "trap avoided")).toEqual([[true, 'trap avoided: "montre"']]);
     expect(results({ banned: ["montre"] }, "Les montres battaient.", "trap avoided")).toEqual([[false, 'trap avoided: "montre"']]);
     expect(results({ banned: ["arrêté"] }, "Ils sont arrêtés.", "trap avoided")).toEqual([[false, 'trap avoided: "arrêté"']]);
     expect(results({ required: ["封筒"] }, "青い封筒が一通。", "canon kept")).toEqual([[true, 'canon kept: "封筒"']]);

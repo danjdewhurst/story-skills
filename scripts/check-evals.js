@@ -304,7 +304,7 @@ function main() {
     for (const pattern of checks.banned_regex || []) {
       if (typeof pattern !== "string") continue;
       try {
-        new RegExp(pattern, "i");
+        new RegExp(pattern, "iu");
       } catch (err) {
         errors.push(`${name}/checks.json: banned_regex /${pattern}/ does not compile (${err.message})`);
       }
