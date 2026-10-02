@@ -6,5 +6,7 @@ export default {
   code: "fi",
   name: "Finnish",
   quotes: [["”", "”"], ["’", "’"], ["»", "»"], ["“", "”"], ["\"", "\""]],
-  dialogueDash: ["–", "—"]
+  dialogueDash: ["–", "—"],
+  // – Moi, sanoi Anna. – Tule tänne. is two lines of speech.
+  dashStartsLine: true
 };

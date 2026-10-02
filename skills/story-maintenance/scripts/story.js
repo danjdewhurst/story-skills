@@ -1511,6 +1511,7 @@ var base_default = {
     ["『", "』"]
   ],
   dialogueDash: "—",
+  dashStartsLine: false,
   labels: {},
   checks: {}
 };
@@ -2044,7 +2045,8 @@ var fi_default = {
   code: "fi",
   name: "Finnish",
   quotes: [["”", "”"], ["’", "’"], ["»", "»"], ["“", "”"], ['"', '"']],
-  dialogueDash: ["–", "—"]
+  dialogueDash: ["–", "—"],
+  dashStartsLine: true
 };
 
 // src/languages/he.js
@@ -2090,7 +2092,8 @@ var sv_default = {
   code: "sv",
   name: "Swedish",
   quotes: [["”", "”"], ["’", "’"], ["»", "»"], ["“", "”"], ['"', '"']],
-  dialogueDash: ["–", "—"]
+  dialogueDash: ["–", "—"],
+  dashStartsLine: true
 };
 
 // src/languages/th.js
@@ -2597,6 +2600,7 @@ function buildVoiceRules(pack) {
     dashOpen: marks.dashes === "" ? null : new RegExp(`^${anyOf(marks.dashes)}\\s*`),
     dashClose: new RegExp(`\\s${anyOf(marks.dashes)}`),
     dash: new RegExp(anyOf(marks.dashes)),
+    dashStartsLine: pack.dashStartsLine === true,
     stop: new RegExp(anyOf(marks.spacedEnds + marks.fullWidthEnds)),
     stopEnd: new RegExp(`${anyOf(marks.spacedEnds + marks.fullWidthEnds)}[${charClass(marks.closers)})]*$`),
     tagVerb: null,
@@ -2840,7 +2844,7 @@ function dashMatches(paragraph, rules, matches) {
     const close = Math.min(tag, closing, paragraph.length);
     const text = paragraph.slice(from, close).trim();
     const closedByDash = closing < Math.min(tag, paragraph.length);
-    const newLine = closedByDash && rules.stopEnd.test(text) && /^\s*\p{Lu}/u.test(paragraph.slice(close + 1, close + 4));
+    const newLine = closedByDash && rules.dashStartsLine && rules.stopEnd.test(text) && /^\s*\p{Lu}/u.test(paragraph.slice(close + 1, close + 4)) && !(rules.tagVerb !== null && rules.tagVerb.test(text));
     matches.push({ start, end: newLine ? close : Math.min(close + 1, paragraph.length), text });
     index = close + 1;
     start = Infinity;

@@ -51,6 +51,7 @@ function buildVoiceRules(pack) {
     dashOpen: marks.dashes === "" ? null : new RegExp(`^${anyOf(marks.dashes)}\\s*`),
     dashClose: new RegExp(`\\s${anyOf(marks.dashes)}`),
     dash: new RegExp(anyOf(marks.dashes)),
+    dashStartsLine: pack.dashStartsLine === true,
     // A sentence-ending mark, and text that ends with one.
     stop: new RegExp(anyOf(marks.spacedEnds + marks.fullWidthEnds)),
     stopEnd: new RegExp(`${anyOf(marks.spacedEnds + marks.fullWidthEnds)}[${charClass(marks.closers)})]*$`),
@@ -351,8 +352,10 @@ export function quoteMatches(paragraph, pack = languagePack()) {
 // `matches`; returns where the quote scan starts. Speech stops at a tag
 // after a comma or at a closing dash. After a closing dash, speech starts
 // again:
-// - at once, when the speech before it ended a sentence and a capital
-//   follows the dash (– Hej, sa Anna. – Kom hit.);
+// - at once, in a pack with `dashStartsLine` (Swedish, Finnish), when the
+//   speech before it ended a sentence, holds no speech verb, and a capital
+//   follows the dash (– Hej, sa Anna. – Kom hit.); elsewhere that dash
+//   opens narration (—Is it? —I asked.);
 // - after the tag, when the next dash closes it (see tagCloses).
 // The searches use global patterns from a moving start, never slices of
 // the rest, so many dashes stay linear.
@@ -384,7 +387,8 @@ function dashMatches(paragraph, rules, matches) {
     const close = Math.min(tag, closing, paragraph.length);
     const text = paragraph.slice(from, close).trim();
     const closedByDash = closing < Math.min(tag, paragraph.length);
-    const newLine = closedByDash && rules.stopEnd.test(text) && /^\s*\p{Lu}/u.test(paragraph.slice(close + 1, close + 4));
+    const newLine = closedByDash && rules.dashStartsLine && rules.stopEnd.test(text)
+      && /^\s*\p{Lu}/u.test(paragraph.slice(close + 1, close + 4)) && !(rules.tagVerb !== null && rules.tagVerb.test(text));
     matches.push({ start, end: newLine ? close : Math.min(close + 1, paragraph.length), text });
     index = close + 1;
     start = Infinity;

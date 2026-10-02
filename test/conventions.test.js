@@ -82,10 +82,19 @@ describe("quote conventions", () => {
     expect(quotedSpans("—Ya voy —dijo ella. El cielo se oscureció—llovía.", pack("es"))).toEqual(["Ya voy"]);
   });
 
-  test("a dash after a finished sentence and before a capital starts a new line", () => {
+  test("in Swedish and Finnish a dash after a finished sentence and before a capital starts a new line", () => {
     expect(quotedSpans("– Hej, sa Anna. – Kom hit.", pack("sv"))).toEqual(["Hej, sa Anna.", "Kom hit."]);
     expect(narrationOnly("– Hej, sa Anna. – Kom hit.", pack("sv"))).toBe("  ");
+    expect(quotedSpans("– Moi. – Tule tänne.", pack("fi"))).toEqual(["Moi.", "Tule tänne."]);
     expect(quotedSpans("— Что? — спросил он.", pack("ru"))).toEqual(["Что?"]);
+  });
+
+  test("elsewhere a dash after a finished sentence and before a capital is narration", () => {
+    expect(quotedSpans("—Is it? —I asked.")).toEqual(["Is it?"]);
+    expect(quotedSpans("—Stop! —Mara grabbed his arm.")).toEqual(["Stop!"]);
+    expect(quotedSpans("— Go. — He waved.")).toEqual(["Go."]);
+    expect(quotedSpans("—Go home. —She turned. —Now.")).toEqual(["Go home."]);
+    expect(quotedSpans("—Vete. —Ella se giró.", pack("es"))).toEqual(["Vete."]);
   });
 
   test("language packs keep straight and curly quotes and the em dash", () => {
