@@ -191,6 +191,30 @@ describe("prose analysis", () => {
     expect(shorter.variants.map((entry) => entry.count)).toEqual([1]);
   });
 
+  test("matches watch words and avoided spellings inside scripts written without spaces", () => {
+    // Chinese and Japanese: any run of characters is whole words.
+    const japanese = analyzeChapter("彼女はとても静かだった。とてもOKだ。", proseRules({ "watch-words": ["とても", "ok"] }, [], languagePack("ja")));
+    expect(japanese.watch).toEqual([{ word: "とても", count: 2 }, { word: "ok", count: 1 }]);
+    const chinese = analyzeChapter("他突然笑了。他在家裡，突然安静。", proseRules({
+      "watch-words": ["突然"],
+      preferred: [{ use: "里", avoid: "裡" }]
+    }, [], languagePack("zh")));
+    expect(chinese.watch).toEqual([{ word: "突然", count: 2 }]);
+    expect(chinese.variants).toEqual([{ use: "里", avoid: "裡", source: "style sheet", count: 1 }]);
+    // Thai matches at the segmenter's word boundaries (ฉัน รัก แมว), so
+    // แม is not found inside แมว.
+    const thai = analyzeChapter("ฉันรักแมว ฉันรักแมว", proseRules({ "watch-words": ["รัก", "แม", "แมว"] }, [], languagePack("th")));
+    expect(thai.watch).toEqual([{ word: "รัก", count: 2 }, { word: "แมว", count: 2 }]);
+  });
+
+  test("matches unspaced watch words in long chapters quickly", () => {
+    const chapter = "彼女はとても静かだった。ฉันรักแมว ".repeat(20000);
+    const started = Date.now();
+    expect(analyzeChapter(chapter, proseRules({ "watch-words": ["とても", "รัก", "แม", "静か"] }, [], languagePack("ja"))).watch)
+      .toEqual([{ word: "とても", count: 20000 }, { word: "รัก", count: 20000 }, { word: "静か", count: 20000 }]);
+    expect(Date.now() - started).toBeLessThan(10000);
+  });
+
   test("matches other languages' watch words as the case-insensitive regex always has", () => {
     // Dotted İ is its own letter outside Turkish, as before.
     const english = analyze("ince İnce INCE", { "watch-words": ["İnce", "ince"] });
