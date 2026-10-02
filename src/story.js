@@ -36,7 +36,7 @@ import { plural } from "./plural.js";
 import { BASELINE_CHECKS, PROSE_THRESHOLDS, analyzeChapter, baselineFigures, baselineFindings, baselineProfile, chapterFindings, contentWords, proseRules, proseThresholds, repeatedPhrases, sentenceLengths, similarNames } from "./prose.js";
 import { isLanguageTag, languagePack, projectLanguage, skippedChecks } from "./languages/index.js";
 import { lowerCase } from "./languages/locale.js";
-import { splitSentences } from "./sentences.js";
+import { endsSentence, splitSentences } from "./sentences.js";
 import { areSiblingBooks, buildSeries, canonicalPath, discoverSeriesBooks, isBookNumber, linksInclude, readBookFrontmatter, seriesId, seriesLinkPath, seriesLinks, validateSeriesLinks, withSeriesBacklink } from "./series.js";
 import { err, warn } from "./findings.js";
 import { EXEMPTIONS_FILE, exemptionFile, exemptionProblems, isChapterId, parseExemptions } from "./exemptions.js";
@@ -2939,7 +2939,7 @@ function synopsisSentences(section, pack) {
         return line;
       }
       const content = item[1].trim();
-      return /[.!?]$/.test(content) ? content : `${content}.`;
+      return endsSentence(content, pack) ? content : `${content}.`;
     })
     .join("\n");
   return splitSentences(text, { capitalStart: false, pack }).filter((sentence) => !SCAFFOLD_SENTENCES.has(sentence));

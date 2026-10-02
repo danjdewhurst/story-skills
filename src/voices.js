@@ -51,6 +51,11 @@ function buildVoiceRules(pack) {
     dashOpen: marks.dashes === "" ? null : new RegExp(`^${anyOf(marks.dashes)}\\s*`),
     dashClose: new RegExp(`\\s${anyOf(marks.dashes)}`),
     dash: new RegExp(anyOf(marks.dashes)),
+    // A sentence-ending mark, and text that ends with one.
+    stop: new RegExp(anyOf(marks.spacedEnds + marks.fullWidthEnds)),
+    stopEnd: new RegExp(`${anyOf(marks.spacedEnds + marks.fullWidthEnds)}[${charClass(marks.closers)})]*$`),
+    // A speech verb anywhere in a dash dialogue's tag, or null without verbs.
+    tagVerb: null,
     // An opening single quote (‘) after a non-letter, for open speech.
     singleOpen: new Map(marks.pairs.filter((pair) => pair.kind === "single" && pair.open !== pair.close)
       .map((pair) => [pair, new RegExp(`(?<![\\p{L}\\p{N}])${anyOf(pair.open)}`, "u")])),
@@ -78,6 +83,7 @@ function buildVoiceRules(pack) {
   return {
     ...rules,
     verbs,
+    tagVerb: new RegExp(`(?<![\\p{L}\\p{N}])(?:${verbAlternation})(?![\\p{L}\\p{N}])`, "iu"),
     // A tag right after a closing quote (`"...," she said`) or right before
     // an opening one (`She said, "..."`); a pronoun and verb elsewhere in the
     // paragraph ("She said nothing more") is narration.
@@ -335,7 +341,7 @@ export function quoteMatches(paragraph, pack = languagePack()) {
       index += 1;
       continue;
     }
-    matches.push({ start: index, end: close + 1, text: paragraph.slice(index + 1, close) });
+    matches.push({ start: index, end: close + 1, text: paragraph.slice(index + 1, close).trim() });
     index = close + 1;
   }
   return matches;
@@ -343,9 +349,13 @@ export function quoteMatches(paragraph, pack = languagePack()) {
 
 // Speech in a paragraph that opens with the dialogue dash, added to
 // `matches`; returns where the quote scan starts. Speech stops at a tag
-// after a comma or at a closing dash; after a closing dash the tag runs to
-// the next dash, where speech resumes. The searches use global patterns
-// from a moving start, never slices, so many dashes stay linear.
+// after a comma or at a closing dash. After a closing dash, speech starts
+// again:
+// - at once, when the speech before it ended a sentence and a capital
+//   follows the dash (– Hej, sa Anna. – Kom hit.);
+// - after the tag, when the next dash closes it (see tagCloses).
+// The searches use global patterns from a moving start, never slices of
+// the rest, so many dashes stay linear.
 function dashMatches(paragraph, rules, matches) {
   const dash = rules.dashOpen === null ? null : rules.dashOpen.exec(paragraph);
   if (!dash) {
@@ -372,12 +382,39 @@ function dashMatches(paragraph, rules, matches) {
     const tag = nextTag(from);
     const closing = nextClosing(from) + 1;
     const close = Math.min(tag, closing, paragraph.length);
-    matches.push({ start, end: Math.min(close + 1, paragraph.length), text: paragraph.slice(from, close) });
+    const text = paragraph.slice(from, close).trim();
+    const closedByDash = closing < Math.min(tag, paragraph.length);
+    const newLine = closedByDash && rules.stopEnd.test(text) && /^\s*\p{Lu}/u.test(paragraph.slice(close + 1, close + 4));
+    matches.push({ start, end: newLine ? close : Math.min(close + 1, paragraph.length), text });
     index = close + 1;
-    start = closing < Math.min(tag, paragraph.length) ? nextDash(index) : Infinity;
+    start = Infinity;
+    if (newLine) {
+      start = close;
+    } else if (closedByDash) {
+      const next = nextDash(index);
+      start = next !== Infinity && tagCloses(paragraph, index, next, rules) ? next : Infinity;
+    }
     from = start === Infinity ? Infinity : start + 1 + /^[\s.,;:]*/.exec(paragraph.slice(start + 1, start + 65))[0].length;
   } while (from < paragraph.length);
   return index;
+}
+
+// Whether the dash at `dash` closes the tag that starts at `from`, so speech
+// resumes after it: Spanish closes the tag with a dash against its last
+// word (—dijo ella—. Espera.), Russian with a spaced dash after its
+// punctuation (— сказал он. — Как дела?). A dash between two words, or one
+// after narration that has run past a sentence end, is narration
+// (—he said. The sky darkened—rain was coming.). With speech verbs, the
+// tag must hold one, so —the house fell silent —or almost— is narration.
+function tagCloses(paragraph, from, dash, rules) {
+  const tag = paragraph.slice(from, dash).trimEnd();
+  if (rules.tagVerb !== null && !rules.tagVerb.test(tag)) {
+    return false;
+  }
+  if (/\s/.test(paragraph[dash - 1] ?? "")) {
+    return /[.!?…,;:]$/.test(tag) && !rules.stop.test(tag.slice(0, -1));
+  }
+  return !LETTER.test(paragraph[dash + 1] ?? "") && !rules.stop.test(tag);
 }
 
 // Opening and closing positions of each quote pair that closes with a mark

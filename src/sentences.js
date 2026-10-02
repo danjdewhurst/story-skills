@@ -25,6 +25,7 @@ const OPENING_MARKS = "(\\[*_";
 const FULL_WIDTH_CLOSERS = "」』）";
 // Closing guillemets, which some languages set after a space.
 const SPACED_CLOSERS = "»›";
+const SPACED_OPENERS = "«‹";
 const RULES = new WeakMap();
 
 // The patterns built from a pack's word lists and punctuation, once per
@@ -49,9 +50,18 @@ function buildRules(pack) {
   // guillemet may follow the stop after a space, where it cannot open a
   // quote in this language.
   const spacedClosers = [...SPACED_CLOSERS].filter((mark) => marks.closers.includes(mark) && !marks.openers.includes(mark)).join("");
+  // Likewise an opening guillemet may stand before a space (« Quoi ? »).
+  const spacedOpeners = [...SPACED_OPENERS].filter((mark) => marks.openers.includes(mark) && !marks.closers.includes(mark)).join("");
+  const opening = `(?:[${openers}${OPENING_MARKS}]|${anyOf(spacedOpeners)} )*`;
+  // After a full-width stop, which needs no space, a closing mark that can
+  // also open a quote in this language (“ closes „…“ but opens “…”) is taken
+  // only when it closes a quote still open in the sentence; see
+  // closingQuotes.
+  const ambiguous = [...marks.closers].filter((mark) => marks.openers.includes(mark)).join("");
+  const plainClosers = charClass([...marks.closers].filter((mark) => !ambiguous.includes(mark)).join(""));
   const ends = [
     marks.spacedEnds === "" ? null : `${anyOf(marks.spacedEnds)}+(?: ${anyOf(spacedClosers)})?[${closers}${CLOSING_MARKS}]*(?= |$)`,
-    marks.fullWidthEnds === "" ? null : `${anyOf(marks.fullWidthEnds)}+[${closers}${CLOSING_MARKS}${FULL_WIDTH_CLOSERS}]*`
+    marks.fullWidthEnds === "" ? null : `${anyOf(marks.fullWidthEnds)}+`
   ].filter(Boolean);
   // A letter of a script without case (Arabic, Hebrew, Devanagari, Chinese,
   // Japanese, Thai) starts a sentence as a capital does. In a pack for such
@@ -67,13 +77,43 @@ function buildRules(pack) {
     // after it and has no capitals.
     end: new RegExp(ends.join("|") || NEVER, "g"),
     fullWidth: new RegExp(`^${anyOf(marks.fullWidthEnds)}`),
+    fullWidthCloser: new RegExp(`[${plainClosers}${CLOSING_MARKS}${FULL_WIDTH_CLOSERS}]`),
+    ambiguous,
+    pairs: marks.pairs,
     // The next sentence starts with a capital, digit, or letter without
     // case, after any opening quotes, brackets, or emphasis marks.
-    start: new RegExp(`^[${openers}${OPENING_MARKS}]*[${startLetter}]`, "u"),
+    start: new RegExp(`^${opening}[${startLetter}]`, "u"),
     // A last sentence that already ends with a stop gets no full stop.
     finished: new RegExp(`${anyOf(marks.spacedEnds + marks.fullWidthEnds)}(?: ${anyOf(spacedClosers)})?[${closers})\\]${FULL_WIDTH_CLOSERS}]*$`),
-    firstWord: new RegExp(`^[${openers}${OPENING_MARKS}]*([\\p{L}\\p{N}'’]+)`, "u")
+    firstWord: new RegExp(`^${opening}([\\p{L}\\p{N}'’]+)`, "u")
   };
+}
+
+// The end of a sentence that a full-width stop ends at `end`, past any
+// closing quotes and brackets after it. A mark that can also open a quote
+// counts only when a quote it closes is still open in the sentence.
+function closingQuotes(text, start, end, rules) {
+  let position = end;
+  while (position < text.length) {
+    const mark = text[position];
+    if (!rules.fullWidthCloser.test(mark) && !(rules.ambiguous.includes(mark) && quoteOpen(text.slice(start, position), mark, rules))) {
+      break;
+    }
+    position += 1;
+  }
+  return position;
+}
+
+function quoteOpen(sentence, mark, rules) {
+  return rules.pairs.some(({ open, close }) => close === mark && (open === close
+    ? sentence.split(mark).length % 2 === 0
+    : sentence.lastIndexOf(open) > sentence.lastIndexOf(close)));
+}
+
+// Whether `text` already ends a sentence with one of the pack's stops, so
+// a list item needs no full stop added.
+export function endsSentence(text, pack = languagePack()) {
+  return sentenceRules(pack).finished.test(String(text).trim());
 }
 
 // With `capitalStart` (the default), only a capital, digit, letter without
@@ -90,12 +130,13 @@ export function splitSentences(text, { capitalStart = true, pack = languagePack(
   const sentences = [];
   let start = 0;
   for (const match of normalized.matchAll(rules.end)) {
-    const end = match.index + match[0].length;
     if (rules.fullWidth.test(match[0])) {
+      const end = closingQuotes(normalized, start, match.index + match[0].length, rules);
       sentences.push(normalized.slice(start, end).trim());
       start = end;
       continue;
     }
+    const end = match.index + match[0].length;
     // Only the words either side of the stop decide, so test short windows:
     // slicing the whole text each time would make long passages quadratic.
     const next = normalized.slice(end + 1, end + 1 + CONTEXT_WINDOW);

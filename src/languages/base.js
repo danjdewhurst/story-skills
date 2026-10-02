@@ -36,7 +36,8 @@ export default {
     ["«", "»"], ["‹", "›"], ["„", "“"], ["„", "”"], ["‚", "‘"],
     ["「", "」"], ["『", "』"]
   ],
-  // The dash that opens a line of dialogue (— Line, said Cy.), or null.
+  // The dash that opens a line of dialogue (— Line, said Cy.), a list of
+  // them, or null.
   // Speech runs to a closing dash or a tag after a comma, and resumes after
   // the next dash (—Ya voy —dijo ella—. Espera.).
   dialogueDash: "—",
