@@ -38,9 +38,7 @@ function normalizeApos(text) {
 // and underscores are equivalent ("sea-chest" matches "sea chest"). Used to
 // build word-boundary regexes from checks.json phrases so punctuation does
 // not matter, while partial-word matches ("key" in "turkey", "Ana" in
-// "Indiana", "montre" in "démontre") still fail. A phrase with no Latin
-// letter or digit (Japanese, Arabic) is matched as a plain substring, since
-// those scripts join words to the text around them.
+// "Indiana", "montre" in "démontre", "кот" in "который") still fail.
 const FLEX_SEP_SRC = "[\\s\\-—–―−‐‑_]+";
 
 // A letter, combining mark, digit, or underscore in any script, so a word
@@ -49,36 +47,80 @@ const FLEX_SEP_SRC = "[\\s\\-—–―−‐‑_]+";
 const WORD_CHAR_SRC = "[\\p{L}\\p{M}\\p{N}_]";
 const WORD_CHAR = new RegExp(WORD_CHAR_SRC, "u");
 
+// Scripts written without spaces between words: Chinese, Japanese, Thai,
+// Lao, Khmer, and Myanmar, the set src/words.js splits by character or by
+// dictionary. A phrase edge in one of these joins the text around it, so
+// that edge is matched with no boundary.
+const UNSPACED_LETTER =
+  /[\p{scx=Han}\p{scx=Hiragana}\p{scx=Katakana}\p{scx=Thai}\p{scx=Lao}\p{scx=Khmer}\p{scx=Myanmar}]/u;
+
+// Arabic and Hebrew join a conjunction, a preposition, and the article to
+// the word after them (مخطوطة "manuscript", والمخطوطة "and the manuscript";
+// ספר "book", בספר "in the book"), so a phrase starting in these scripts may
+// follow them inside a word. Arabic ل before ال contracts to لل, and س marks
+// a verb's future.
+const ARABIC_LETTER = /\p{Script=Arabic}/u;
+const HEBREW_LETTER = /\p{Script=Hebrew}/u;
+const ARABIC_PROCLITICS_SRC = "(?:[وف]?(?:[بك]?ال|لل|[بكلس])?)";
+const HEBREW_PROCLITICS_SRC = "(?:ו?ש?[בכלמ]?ה?)";
+// Pronoun and plural endings joined to an Arabic word (مخطوطتها "her
+// manuscript"). A final ة is written ت before an ending and gives way to
+// the plural ات.
+const ARABIC_ENDINGS_SRC = "(?:ه|ها|هم|هما|هن|ك|كما|كم|كن|ي|ني|نا|ان|ين|ون|ات)";
+
+// The first or last letter of a phrase part, whose script decides how that
+// edge is bounded. A combining mark (a vowel sign, a harakah) belongs to the
+// letter before it, so it is skipped.
+function edgeLetter(text, fromEnd) {
+  const chars = [...text];
+  if (fromEnd) chars.reverse();
+  return chars.find((c) => /\p{L}/u.test(c)) ?? "";
+}
+
 function escapeRegExp(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+// Each edge of a phrase is bounded by what stands there: a digit may not run
+// on into another digit; a letter of a script written with spaces (Latin
+// with or without accents, Cyrillic, Greek, Arabic, Hebrew, Devanagari, ...)
+// may not run on into another letter; a letter of an unspaced script, or
+// punctuation, is matched as it stands. A mixed phrase ("Kirimi駅") bounds
+// each edge by its own script.
 function phrasePattern(phrase, inflect = false) {
   const norm = normalizeApos(phrase);
-  if (!/[A-Za-z0-9]/.test(norm)) return null;
   const parts = norm.split(new RegExp(FLEX_SEP_SRC)).filter(Boolean);
   if (parts.length === 0) return null;
   const innerPieces = parts.map((p) => [...p].map(escapeRegExp).join(""));
   let inner = innerPieces.join(FLEX_SEP_SRC);
   const first = parts[0][0];
   const last = parts[parts.length - 1].slice(-1);
+  const firstLetter = edgeLetter(parts[0], false);
+  const lastLetter = edgeLetter(parts[parts.length - 1], true);
   let left;
   if (/\d/.test(first)) left = "(?<!\\d)";
-  else if (WORD_CHAR.test(first)) left = `(?<!${WORD_CHAR_SRC})`;
-  else left = "";
+  else if (WORD_CHAR.test(first) && !UNSPACED_LETTER.test(firstLetter)) {
+    left = `(?<!${WORD_CHAR_SRC})`;
+    if (ARABIC_LETTER.test(firstLetter)) left += ARABIC_PROCLITICS_SRC;
+    else if (HEBREW_LETTER.test(firstLetter)) left += HEBREW_PROCLITICS_SRC;
+  } else left = "";
   let right;
   if (/\d/.test(last)) right = "(?!\\d)";
-  else if (WORD_CHAR.test(last)) {
+  else if (WORD_CHAR.test(last) && !UNSPACED_LETTER.test(lastLetter)) {
     // With inflect=true (required canon), a trailing inflection is allowed
     // so "logbook" matches "logbooks" while "key" still does not match
     // "turkey".
     // A silent final e drops before -ing/-ed ("delve" -> "delving") and a
-    // consonant + y becomes -ies/-ied ("tapestry" -> "tapestries").
+    // consonant + y becomes -ies/-ied ("tapestry" -> "tapestries"). An
+    // Arabic word takes its pronoun and plural endings instead.
     if (inflect) {
       const word = parts[parts.length - 1];
       const head = innerPieces.slice(0, -1).concat("").join(FLEX_SEP_SRC);
       const stem = [...word.slice(0, -1)].map(escapeRegExp).join("");
-      if (/[^aeiouy]y$/i.test(word)) inner = `${head}${stem}(?:y|ys|ies|ied|ying)`;
+      if (ARABIC_LETTER.test(lastLetter)) {
+        if (word.endsWith("ة")) inner = `${head}${stem}(?:ة|ت${ARABIC_ENDINGS_SRC}|ات)`;
+        else inner += `${ARABIC_ENDINGS_SRC}?`;
+      } else if (/[^aeiouy]y$/i.test(word)) inner = `${head}${stem}(?:y|ys|ies|ied|ying)`;
       else if (/[^e]e$/i.test(word)) inner = `${head}${stem}(?:e|es|ed|ing)`;
       else inner += "(?:s|es|ed|ing|d)?";
     }
