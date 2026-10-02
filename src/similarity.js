@@ -1,6 +1,7 @@
 import { formatNumber } from "./compare.js";
 import { usageError } from "./exit-codes.js";
 import { warn } from "./findings.js";
+import { wordSpans } from "./words.js";
 
 // story similarity: passages of chapter prose that share a run of words with
 // reference text (the author's earlier books, a previous draft, a source).
@@ -28,12 +29,11 @@ const MAX_PLACES = 1000;
 // The words of a passage the text output quotes; --json keeps them all.
 const QUOTE_WORDS = 24;
 
-// Chinese and Japanese are written without spaces, so each character is a
-// word, as story wordcount counts them. Other letters, digits, and combining
-// marks make words, joined by an inner apostrophe (don't, O'Brien).
-const CJK = "\\p{sc=Han}\\p{sc=Hiragana}\\p{sc=Katakana}";
-const WORD_CHAR = `(?:(?![${CJK}])[\\p{L}\\p{N}\\p{M}])`;
-const WORD_PATTERN = new RegExp(`[${CJK}]|${WORD_CHAR}+(?:['’ʼ]${WORD_CHAR}+)*`, "gu");
+// Letters, digits, and combining marks make words, joined by an inner
+// apostrophe (don't, O'Brien). Chinese and Japanese are a word per
+// character, and Thai, Lao, Khmer, and Burmese are split by dictionary, as
+// story wordcount counts them (see wordSpans).
+const WORD_PATTERN = /[\p{L}\p{N}\p{M}]+(?:['’ʼ][\p{L}\p{N}\p{M}]+)*/gu;
 
 export function similarityOptions(options = {}) {
   const settings = { ...SIMILARITY_DEFAULTS };
@@ -54,13 +54,8 @@ export function similarityOptions(options = {}) {
 export function tokenizeDocument(paragraphs) {
   const words = [];
   paragraphs.forEach((paragraph, index) => {
-    for (const match of paragraph.text.normalize("NFC").matchAll(WORD_PATTERN)) {
-      words.push({
-        word: match[0].toLowerCase().replace(/[’ʼ]/g, "'"),
-        paragraph: index,
-        start: match.index,
-        end: match.index + match[0].length
-      });
+    for (const { word, start, end } of wordSpans(paragraph.text.normalize("NFC"), WORD_PATTERN)) {
+      words.push({ word: word.toLowerCase().replace(/[’ʼ]/g, "'"), paragraph: index, start, end });
     }
   });
   return words;

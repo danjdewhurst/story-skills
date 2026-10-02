@@ -1,3 +1,5 @@
+import { wordSpans } from "./words.js";
+
 // Latin letters that NFKD does not decompose into a base letter plus marks,
 // spelled the way they are usually transliterated into ASCII.
 const LATIN_FOLDS = {
@@ -116,9 +118,6 @@ const WORD_PATTERN = new RegExp(
   `${URL_PLACEHOLDER}|[\\p{L}\\p{N}][${WORD_CHARS}]*(?:(?:['\u2019\u2010\u2011-]|(?<=\\p{N})[.,:](?=\\p{N}))[\\p{L}\\p{N}][${WORD_CHARS}]*)*`,
   "gu"
 );
-// One Han, Hiragana, or Katakana character, or the Katakana long-vowel mark,
-// which Unicode files under no single script.
-const CJK_CHARACTER = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\u30FC]/gu;
 // A bare URL or email address counts as one word. The lookbehinds start a
 // match only at the start of a token, so scanning stays linear.
 const URL_OR_EMAIL = /(?<![a-z0-9+.-])(?:[a-z][a-z0-9+.-]*:\/\/|www\.)[^\s<>()[\]`]*[^\s<>()[\]`.,;:!?'"\u2019\u201d*_~]|(?<![\p{L}\p{N}._%+-])[\p{L}\p{N}][\p{L}\p{N}._%+-]*@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/giu;
@@ -157,16 +156,15 @@ export function splitWords(markdown) {
     // A backslash escape (`didn\'t`) is the character it escapes.
     .replace(/\\([!-/:-@[-`{-~])/g, "$1")
     .replace(/[#>*_~|`]/g, " ")
-    .replace(/(?<!\p{N}):|:(?!\p{N})/gu, " ")
-    // Chinese and Japanese put no spaces between words, so each Han, Hiragana,
-    // or Katakana character counts as one word, as Word and Scrivener count.
-    .replace(CJK_CHARACTER, " $& ");
+    .replace(/(?<!\p{N}):|:(?!\p{N})/gu, " ");
 
   // Letters and digits in any script; apostrophes (straight or curly) and
   // hyphens join a word rather than split it, so "don\u2019t" and "well-known"
   // each count once. "U.S.A" is three words because the periods split it.
+  // Chinese and Japanese count a word per character, and Thai, Lao, Khmer,
+  // and Burmese are split by dictionary (see wordSpans).
   let next = 0;
-  return (normalized.match(WORD_PATTERN) ?? []).map((word) => (word === URL_PLACEHOLDER ? urls[next++] : word));
+  return wordSpans(normalized, WORD_PATTERN).map(({ word }) => (word === URL_PLACEHOLDER ? urls[next++] : word));
 }
 
 // A scene break paragraph: three or more of the same marker, optionally
