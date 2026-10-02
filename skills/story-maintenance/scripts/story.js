@@ -2456,11 +2456,10 @@ var labels = {
   "screenplay-source": "改編自{authors}的作品",
   "screenplay-source-anonymous": "改編自原著"
 };
-var chinese = { cased: false, segmentation: "character", countUnit: "characters", dialogueDash: null, narrationRate: 300 };
 var zh_hant_default = [
-  ...["zh-hant", "zh-tw", "zh-hk", "zh-mo"].map((code) => ({ code, name: "Chinese (Traditional)", script: "Hant", labels })),
-  { code: "yue", name: "Cantonese", ...chinese, script: "Hant", labels },
-  { code: "lzh", name: "Classical Chinese", ...chinese, script: "Hant", labels }
+  { code: "zh-hant", name: "Chinese (Traditional)", script: "Hant", labels },
+  { code: "yue", name: "Cantonese" },
+  { code: "lzh", name: "Classical Chinese" }
 ];
 
 // src/languages/index.js
@@ -2530,6 +2529,38 @@ function lookupTag(language) {
   }
   return [subtags.join("-"), null];
 }
+function parseTag(language) {
+  const [lookup, macrolanguage] = lookupTag(String(language ?? "").trim() || DEFAULT_LANGUAGE);
+  const subtags = lookup.split("-");
+  const [primary, ...rest] = subtags;
+  const script = /^[a-z]{4}$/.test(rest[0] ?? "") ? `${rest[0][0].toUpperCase()}${rest[0].slice(1)}` : null;
+  const region = rest[script === null ? 0 : 1] ?? "";
+  return { primary, macrolanguage, script, region: /^(?:[a-z]{2}|\d{3})$/.test(region) ? region : null, subtags };
+}
+var CHINESE_SCRIPTS = {
+  zh: "Hans",
+  cmn: "Hans",
+  wuu: "Hans",
+  hak: "Hans",
+  nan: "Hans",
+  gan: "Hans",
+  hsn: "Hans",
+  cjy: "Hans",
+  yue: "Hant",
+  lzh: "Hant"
+};
+var TRADITIONAL_REGIONS = new Set(["tw", "hk", "mo"]);
+function hanScript(language) {
+  const { primary, script, region } = parseTag(language);
+  if (script === "Hans" || script === "Hant") {
+    return script;
+  }
+  return TRADITIONAL_REGIONS.has(region) ? "Hant" : CHINESE_SCRIPTS[primary] ?? "Hans";
+}
+function chineseScript(language) {
+  const { primary, macrolanguage } = parseTag(language);
+  return CHINESE_SCRIPTS[primary] !== undefined || macrolanguage === "zh" ? hanScript(language) : null;
+}
 function canonicalTag(value) {
   try {
     return typeof value === "string" ? Intl.getCanonicalLocales(value)[0] ?? null : null;
@@ -2555,8 +2586,13 @@ function languagePack(tag = DEFAULT_LANGUAGE) {
 function resolvePack(language) {
   const [lookup, macrolanguage] = lookupTag(language);
   const subtags = lookup.split("-");
-  const keys = [macrolanguage, ...subtags.map((_, index) => subtags.slice(0, index + 1).join("-"))];
-  const layers = [base_default, ...keys.map((key) => PACKS.get(key)).filter((pack) => pack !== undefined)];
+  const chinese = chineseScript(language);
+  const keys = new Set([
+    chinese === null ? macrolanguage : "zh",
+    chinese === "Hant" ? "zh-hant" : null,
+    ...subtags.map((_, index) => subtags.slice(0, index + 1).join("-"))
+  ]);
+  const layers = [base_default, ...[...keys].map((key) => PACKS.get(key)).filter((pack) => pack !== undefined)];
   const pack = {};
   for (const layer of layers) {
     Object.assign(pack, layer, {
@@ -7389,12 +7425,9 @@ var LIKELY_SCRIPTS = {
   Ethi: ["am", "ti"],
   Thaa: ["dv"],
   Syrc: ["syr"],
-  Cher: ["chr"],
-  Hans: ["cmn", "wuu", "hak", "nan", "gan", "hsn", "cjy"],
-  Hant: ["yue", "lzh"]
+  Cher: ["chr"]
 };
 var SCRIPT_OF = new Map(Object.entries(LIKELY_SCRIPTS).flatMap(([script, codes]) => codes.map((code) => [code, script])));
-var TRADITIONAL_REGIONS = new Set(["tw", "hk", "mo"]);
 var LATIN_SERIF = `Georgia, "Iowan Old Style", "Palatino Linotype", serif`;
 var FONT_STACKS = {
   Cyrl: `Georgia, "Palatino Linotype", "Times New Roman", "Noto Serif", "DejaVu Serif", serif`,
@@ -7411,13 +7444,6 @@ var FONT_STACKS = {
 FONT_STACKS.Grek = FONT_STACKS.Cyrl;
 var DOCX_EAST_ASIA = { Jpan: "MS Mincho", Hans: "SimSun", Hant: "PMingLiU", Kore: "Batang" };
 var DOCX_COMPLEX = { Deva: "Mangal", Thai: "Tahoma" };
-function parseTag(language) {
-  const subtags = lookupTag(String(language ?? "").trim() || "en")[0].split("-");
-  const [primary, ...rest] = subtags;
-  const script = /^[a-z]{4}$/.test(rest[0] ?? "") ? `${rest[0][0].toUpperCase()}${rest[0].slice(1)}` : null;
-  const region = rest[script === null ? 0 : 1] ?? "";
-  return { primary, script, region: /^(?:[a-z]{2}|\d{3})$/.test(region) ? region : null, subtags };
-}
 function writtenTag(language) {
   const { script, region, subtags } = parseTag(language);
   const at = script === null ? 1 : 2;
@@ -7429,14 +7455,17 @@ function writtenTag(language) {
   }).join("-");
 }
 function languageScript(language) {
-  const { primary, script, region } = parseTag(language);
+  const { primary, script } = parseTag(language);
   if (script !== null) {
     return script;
   }
+  const chinese = chineseScript(language);
+  if (chinese !== null) {
+    return chinese;
+  }
   const pack = languagePack(language);
   const own = pack.code.split("-")[0] === primary ? pack.script : null;
-  const found = own ?? SCRIPT_OF.get(primary) ?? pack.script ?? "Latn";
-  return found === "Hans" && TRADITIONAL_REGIONS.has(region) ? "Hant" : found;
+  return own ?? SCRIPT_OF.get(primary) ?? pack.script ?? "Latn";
 }
 function fontScript(script, language) {
   if (script === "Hira" || script === "Kana") {
@@ -7449,11 +7478,11 @@ function fontScript(script, language) {
     return "Hant";
   }
   if (script === "Hani") {
-    const { primary, region } = parseTag(language);
+    const { primary } = parseTag(language);
     if (primary === "ja" || primary === "ko") {
       return primary === "ja" ? "Jpan" : "Kore";
     }
-    return SCRIPT_OF.get(primary) === "Hant" || TRADITIONAL_REGIONS.has(region) ? "Hant" : "Hans";
+    return hanScript(language);
   }
   return script;
 }

@@ -5,6 +5,7 @@ import { fillLabel, joinNames, LABEL_KEYS, languagePack } from "../src/languages
 import { chapterHeading } from "../src/markdown.js";
 import { formatRuntime, narrationRate, narrationScript } from "../src/narration.js";
 import { buildLabels, publishingMeta, textDirection } from "../src/publishing.js";
+import { typesetting } from "../src/typesetting.js";
 import { buildBook, createStoryProject, validateProject } from "../src/story.js";
 import { makeTempDir, messages, readArchiveText, writeMarkdown } from "./helpers.js";
 
@@ -215,6 +216,24 @@ describe("build labels", () => {
     }
     expect(publishingMeta({ language: "zh-CN" }).labels.contents).toBe("目录");
     expect(languagePack("yue")).toMatchObject({ cased: false, segmentation: "character", script: "Hant" });
+  });
+
+  test("Chinese labels follow the script subtag, then the region, then the language", () => {
+    const cases = {
+      "zh-cmn-Hant": "Hant", "yue-Hans": "Hans", "lzh-Hans": "Hans", cmn: "Hans", "cmn-Hant": "Hant", "cmn-TW": "Hant",
+      "zh-Hans-HK": "Hans", "zh-TW": "Hant", "zh-yue-Hans": "Hans", wuu: "Hans", "zh-min-nan": "Hans", hak: "Hans", nan: "Hans", gan: "Hans", hsn: "Hans", cjy: "Hans", "zh-gan": "Hans"
+    };
+    for (const [tag, script] of Object.entries(cases)) {
+      const pack = languagePack(tag);
+      const type = typesetting(tag);
+      expect({ tag, script: pack.script, contents: publishingMeta({ language: tag }).labels.contents, type: type.script }).toEqual({ tag, script, contents: script === "Hant" ? "目錄" : "目录", type: script });
+      expect({ tag, countUnit: pack.countUnit, segmentation: pack.segmentation, cased: pack.cased, quotes: pack.quotes }).toEqual({ tag, countUnit: "characters", segmentation: "character", cased: false, quotes: languagePack("zh").quotes });
+      expect(type.fonts.body).toBe(typesetting(script === "Hant" ? "zh-Hant" : "zh").fonts.body);
+    }
+    expect(languagePack("yue-Hans")).toMatchObject({ code: "yue", name: "Cantonese" });
+    expect(languagePack("cmn-Hant").code).toBe("zh-hant");
+    // English is untouched.
+    expect(languagePack("en").labels.contents).toBe("Contents");
   });
 
   test("European Portuguese changes only the labels that differ", () => {

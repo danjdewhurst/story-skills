@@ -1,8 +1,9 @@
-// Chinese in Traditional characters: zh-Hant, and zh-TW, zh-HK, and zh-MO,
-// which use it, layered over ./zh.js with only the script and build labels
-// changed. Cantonese (yue, and zh-yue under zh) and Classical Chinese (lzh)
-// are written in Traditional characters too, as ../typesetting.js sets them;
-// as tags of their own they also need zh's case and segmentation.
+// Chinese in Traditional characters, layered over ./zh.js with only the
+// script and build labels changed. ./index.js layers it for any Chinese tag
+// hanScript reads as Traditional: zh-Hant, zh-TW, zh-HK, and zh-MO,
+// cmn-Hant, and Cantonese (yue, zh-yue) and Classical Chinese (lzh) unless
+// the tag says Hans. The yue and lzh packs only name the language, so
+// yue-Hans gets the Simplified labels, as its typesetting does.
 
 const labels = {
   chapter: "第{n}章",
@@ -39,10 +40,8 @@ const labels = {
   "screenplay-source-anonymous": "改編自原著"
 };
 
-const chinese = { cased: false, segmentation: "character", countUnit: "characters", dialogueDash: null, narrationRate: 300 };
-
 export default [
-  ...["zh-hant", "zh-tw", "zh-hk", "zh-mo"].map((code) => ({ code, name: "Chinese (Traditional)", script: "Hant", labels })),
-  { code: "yue", name: "Cantonese", ...chinese, script: "Hant", labels },
-  { code: "lzh", name: "Classical Chinese", ...chinese, script: "Hant", labels }
+  { code: "zh-hant", name: "Chinese (Traditional)", script: "Hant", labels },
+  { code: "yue", name: "Cantonese" },
+  { code: "lzh", name: "Classical Chinese" }
 ];

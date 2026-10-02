@@ -1,5 +1,5 @@
 import { err } from "./findings.js";
-import { languagePack, lookupTag, projectLanguage } from "./languages/index.js";
+import { chineseScript, hanScript, languagePack, parseTag, projectLanguage } from "./languages/index.js";
 import { textDirection } from "./publishing.js";
 
 // How a book is set for its language's script: the fonts the HTML, print,
@@ -25,8 +25,8 @@ const COMPLEX_SCRIPTS = new Set(["Arab", "Hebr", "Syrc", "Thaa", "Nkoo", "Deva",
 
 // The script of a common language that has no pack of its own yet (the
 // language's own pack's `script` wins), so a Russian or Persian book still
-// gets fonts for its script. It wins over a macrolanguage's pack, so
-// Cantonese (zh-yue, under zh) is written in Traditional characters.
+// gets fonts for its script. Chinese languages are not listed: hanScript
+// in ./languages/index.js picks Simplified or Traditional for them.
 const LIKELY_SCRIPTS = {
   Cyrl: ["ru", "uk", "be", "bg", "mk", "sr", "kk", "ky", "mn", "tg", "tt", "ba", "cv", "os"],
   Grek: ["el"],
@@ -51,15 +51,9 @@ const LIKELY_SCRIPTS = {
   Ethi: ["am", "ti"],
   Thaa: ["dv"],
   Syrc: ["syr"],
-  Cher: ["chr"],
-  Hans: ["cmn", "wuu", "hak", "nan", "gan", "hsn", "cjy"],
-  Hant: ["yue", "lzh"]
+  Cher: ["chr"]
 };
 const SCRIPT_OF = new Map(Object.entries(LIKELY_SCRIPTS).flatMap(([script, codes]) => codes.map((code) => [code, script])));
-
-// Chinese is written in Traditional characters in Taiwan, Hong Kong, and
-// Macau unless the tag names a script.
-const TRADITIONAL_REGIONS = new Set(["tw", "hk", "mo"]);
 
 const LATIN_SERIF = `Georgia, "Iowan Old Style", "Palatino Linotype", serif`;
 
@@ -85,24 +79,10 @@ FONT_STACKS.Grek = FONT_STACKS.Cyrl;
 const DOCX_EAST_ASIA = { Jpan: "MS Mincho", Hans: "SimSun", Hant: "PMingLiU", Kore: "Batang" };
 const DOCX_COMPLEX = { Deva: "Mangal", Thai: "Tahoma" };
 
-// A language tag read as the language packs read it (lookupTag: aliases
-// such as iw and jpn resolved, an extlang tag such as zh-yue as yue, a
-// grandfathered tag in its modern form), so the same tag finds the same
-// script on every runtime: { primary, script, region, subtags } with the
-// script in title case (Latn) or null. Only the subtag after the language
-// can be a script and only the one after that (or after the language) a
-// region, so a private-use or extension subtag (en-x-hani, ar-u-nu-latn)
-// never counts.
-function parseTag(language) {
-  const subtags = lookupTag(String(language ?? "").trim() || "en")[0].split("-");
-  const [primary, ...rest] = subtags;
-  const script = /^[a-z]{4}$/.test(rest[0] ?? "") ? `${rest[0][0].toUpperCase()}${rest[0].slice(1)}` : null;
-  const region = rest[script === null ? 0 : 1] ?? "";
-  return { primary, script, region: /^(?:[a-z]{2}|\d{3})$/.test(region) ? region : null, subtags };
-}
-
-// The tag in its usual case (zh-Hant-TW, en-GB), after the lookup above,
-// for Word's language settings. "und" when the tag names no language.
+// The tag in its usual case (zh-Hant-TW, en-GB), read as the language
+// packs read it (parseTag: aliases such as iw and jpn resolved, an extlang
+// tag such as zh-yue as yue, a grandfathered tag in its modern form), for
+// Word's language settings. "und" when the tag names no language.
 export function writtenTag(language) {
   const { script, region, subtags } = parseTag(language);
   const at = script === null ? 1 : 2;
@@ -115,17 +95,22 @@ export function writtenTag(language) {
 }
 
 // The ISO 15924 script a book in `language` is written in: the tag's script
-// subtag (sr-Latn, zh-Hant), else the language's own pack's, else the
-// table above, else a macrolanguage pack's (zh for cmn), else Latin.
+// subtag (sr-Latn, zh-Hant), else for Chinese the one its pack is chosen
+// by (chineseScript: zh-TW and yue are Traditional), else the language's
+// own pack's, else the table above, else a macrolanguage pack's, else
+// Latin. Tags resolve as the packs resolve them, the same on every runtime.
 export function languageScript(language) {
-  const { primary, script, region } = parseTag(language);
+  const { primary, script } = parseTag(language);
   if (script !== null) {
     return script;
   }
+  const chinese = chineseScript(language);
+  if (chinese !== null) {
+    return chinese;
+  }
   const pack = languagePack(language);
   const own = pack.code.split("-")[0] === primary ? pack.script : null;
-  const found = own ?? SCRIPT_OF.get(primary) ?? pack.script ?? "Latn";
-  return found === "Hans" && TRADITIONAL_REGIONS.has(region) ? "Hant" : found;
+  return own ?? SCRIPT_OF.get(primary) ?? pack.script ?? "Latn";
 }
 
 // The script whose fonts set the book: Japanese kana and Han in a Japanese
@@ -142,11 +127,11 @@ function fontScript(script, language) {
     return "Hant";
   }
   if (script === "Hani") {
-    const { primary, region } = parseTag(language);
+    const { primary } = parseTag(language);
     if (primary === "ja" || primary === "ko") {
       return primary === "ja" ? "Jpan" : "Kore";
     }
-    return SCRIPT_OF.get(primary) === "Hant" || TRADITIONAL_REGIONS.has(region) ? "Hant" : "Hans";
+    return hanScript(language);
   }
   return script;
 }
