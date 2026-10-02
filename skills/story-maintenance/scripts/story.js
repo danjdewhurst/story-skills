@@ -1470,64 +1470,610 @@ function leadingHeadingLength(masked) {
   return match ? match[0].length : 0;
 }
 
+// src/languages/base.js
+var base_default = {
+  code: "und",
+  name: "Generic",
+  cased: true,
+  segmentation: "space",
+  sentenceEnd: [".", "!", "?", "…", "。", "！", "？"],
+  quotes: [["“", "”"], ["‘", "’"], ['"', '"'], ["'", "'"]],
+  dialogueDash: "—",
+  labels: {},
+  checks: {}
+};
+
+// src/languages/en.js
+var en_default = {
+  code: "en",
+  name: "English",
+  checks: {
+    filterWords: [
+      "felt",
+      "saw",
+      "heard",
+      "noticed",
+      "realized",
+      "realised",
+      "wondered",
+      "seemed",
+      "watched",
+      "knew",
+      "decided",
+      "thought",
+      "sensed"
+    ],
+    saidBookisms: [
+      "barked",
+      "bellowed",
+      "breathed",
+      "chuckled",
+      "cooed",
+      "declared",
+      "exclaimed",
+      "gasped",
+      "grinned",
+      "groaned",
+      "growled",
+      "grunted",
+      "hissed",
+      "inquired",
+      "interjected",
+      "intoned",
+      "laughed",
+      "opined",
+      "purred",
+      "queried",
+      "quipped",
+      "retorted",
+      "shrieked",
+      "sighed",
+      "smiled",
+      "smirked",
+      "snapped",
+      "snarled",
+      "sneered",
+      "spat",
+      "stated"
+    ],
+    plainTags: ["said", "asked", "says", "asks"],
+    beatPronouns: ["he", "she", "they", "i", "we", "it", "you"],
+    adverbSuffixes: ["ly"],
+    adverbExceptions: [
+      "ally",
+      "anomaly",
+      "apply",
+      "assembly",
+      "belly",
+      "bully",
+      "burly",
+      "butterfly",
+      "chilly",
+      "comply",
+      "costly",
+      "curly",
+      "daily",
+      "deadly",
+      "dolly",
+      "dragonfly",
+      "early",
+      "elderly",
+      "family",
+      "fly",
+      "folly",
+      "friendly",
+      "ghastly",
+      "ghostly",
+      "gully",
+      "holly",
+      "holy",
+      "homely",
+      "hourly",
+      "imply",
+      "italy",
+      "jelly",
+      "jolly",
+      "july",
+      "lily",
+      "likely",
+      "lively",
+      "lonely",
+      "lovely",
+      "melancholy",
+      "monopoly",
+      "monthly",
+      "multiply",
+      "oily",
+      "only",
+      "orderly",
+      "prickly",
+      "rally",
+      "rely",
+      "reply",
+      "sickly",
+      "silly",
+      "sly",
+      "smelly",
+      "stately",
+      "supply",
+      "surly",
+      "tally",
+      "ugly",
+      "unlikely",
+      "weekly",
+      "wobbly",
+      "woolly",
+      "yearly"
+    ],
+    echoStopwords: [
+      "about",
+      "above",
+      "after",
+      "again",
+      "against",
+      "along",
+      "always",
+      "among",
+      "another",
+      "around",
+      "because",
+      "before",
+      "behind",
+      "being",
+      "below",
+      "between",
+      "could",
+      "couldn't",
+      "didn't",
+      "doesn't",
+      "don't",
+      "every",
+      "first",
+      "hadn't",
+      "haven't",
+      "isn't",
+      "might",
+      "never",
+      "other",
+      "right",
+      "should",
+      "since",
+      "something",
+      "still",
+      "their",
+      "there",
+      "these",
+      "thing",
+      "things",
+      "those",
+      "though",
+      "three",
+      "through",
+      "until",
+      "wasn't",
+      "where",
+      "which",
+      "while",
+      "without",
+      "would",
+      "wouldn't",
+      "you're",
+      "they're",
+      "we're"
+    ],
+    phraseStopwords: [
+      "a",
+      "an",
+      "and",
+      "as",
+      "at",
+      "be",
+      "but",
+      "by",
+      "for",
+      "from",
+      "had",
+      "has",
+      "have",
+      "he",
+      "her",
+      "his",
+      "i",
+      "in",
+      "into",
+      "is",
+      "it",
+      "its",
+      "me",
+      "my",
+      "not",
+      "of",
+      "on",
+      "or",
+      "she",
+      "so",
+      "that",
+      "the",
+      "their",
+      "them",
+      "then",
+      "they",
+      "this",
+      "to",
+      "was",
+      "we",
+      "were",
+      "with",
+      "you"
+    ],
+    dialectPairs: [
+      ["armour", "armor"],
+      ["armoured", "armored"],
+      ["centre", "center"],
+      ["centres", "centers"],
+      ["centred", "centered"],
+      ["colour", "color"],
+      ["colours", "colors"],
+      ["coloured", "colored"],
+      ["colourful", "colorful"],
+      ["defence", "defense"],
+      ["defences", "defenses"],
+      ["favour", "favor"],
+      ["favours", "favors"],
+      ["favoured", "favored"],
+      ["favourite", "favorite"],
+      ["grey", "gray"],
+      ["greying", "graying"],
+      ["harbour", "harbor"],
+      ["harbours", "harbors"],
+      ["honour", "honor"],
+      ["honours", "honors"],
+      ["honoured", "honored"],
+      ["honourable", "honorable"],
+      ["jewellery", "jewelry"],
+      ["labour", "labor"],
+      ["mould", "mold"],
+      ["mouldy", "moldy"],
+      ["neighbour", "neighbor"],
+      ["neighbours", "neighbors"],
+      ["odour", "odor"],
+      ["offence", "offense"],
+      ["plough", "plow"],
+      ["rumour", "rumor"],
+      ["rumours", "rumors"],
+      ["sceptic", "skeptic"],
+      ["sceptical", "skeptical"],
+      ["smoulder", "smolder"],
+      ["smouldering", "smoldering"],
+      ["theatre", "theater"],
+      ["towards", "toward"],
+      ["travelled", "traveled"],
+      ["travelling", "traveling"],
+      ["traveller", "traveler"],
+      ["cancelled", "canceled"],
+      ["vapour", "vapor"],
+      ["whisky", "whiskey"]
+    ],
+    speechVerbs: [
+      "said",
+      "says",
+      "asked",
+      "asks",
+      "replied",
+      "replies",
+      "answered",
+      "answers",
+      "whispered",
+      "whispers",
+      "shouted",
+      "shouts",
+      "called",
+      "calls",
+      "muttered",
+      "mutters",
+      "murmured",
+      "murmurs",
+      "cried",
+      "cries",
+      "yelled",
+      "yells",
+      "added",
+      "adds",
+      "told",
+      "tells",
+      "snapped",
+      "snaps",
+      "admitted",
+      "admits",
+      "insisted",
+      "insists",
+      "demanded",
+      "demands",
+      "continued",
+      "continues",
+      "began",
+      "begins",
+      "went on",
+      "goes on"
+    ],
+    speechPronouns: ["he", "she", "they", "i", "we"],
+    contractionSuffixes: ["n't", "'re", "'ll", "'ve", "'m", "'d"],
+    contractedIs: ["it", "that", "let", "what", "there", "here", "where", "who", "he", "she", "how", "when", "why"],
+    elisions: ["em", "tis", "twas", "cause", "cos", "til", "till", "bout", "round", "n", "nuff"],
+    voiceStopwords: [
+      "that",
+      "this",
+      "with",
+      "have",
+      "what",
+      "from",
+      "they",
+      "there",
+      "their",
+      "them",
+      "then",
+      "than",
+      "were",
+      "would",
+      "could",
+      "should",
+      "your",
+      "yours",
+      "just",
+      "know",
+      "been",
+      "will",
+      "when",
+      "where",
+      "which",
+      "about",
+      "into",
+      "some",
+      "because",
+      "want",
+      "like",
+      "only",
+      "here",
+      "does",
+      "didn't",
+      "don't",
+      "it's",
+      "can't",
+      "won't",
+      "i'm",
+      "you're",
+      "we're",
+      "that's",
+      "there's",
+      "what's",
+      "going",
+      "come",
+      "back",
+      "over",
+      "tell",
+      "said",
+      "more",
+      "very",
+      "also"
+    ],
+    titleAbbreviations: ["Dr", "Mr", "Mrs", "Ms", "St", "Mt", "Jr", "Sr", "Prof", "Capt", "Gen", "Col", "Lt", "Sgt", "Rev", "Fr", "e.g", "i.e"],
+    contextAbbreviations: ["No", "vs", "etc", "a.m", "p.m"],
+    calendarWords: [
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+      "Sunday",
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December"
+    ],
+    chapterWords: ["chapter"],
+    sectionWords: ["prologue", "epilogue", "interlude", "afterword"],
+    partWords: ["part"],
+    frontMatterWords: ["prologue", "preface", "foreword", "introduction", "prelude"],
+    numberWords: {
+      units: ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine"],
+      teens: ["ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"],
+      tens: ["twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"],
+      hundred: "hundred",
+      and: "and"
+    },
+    candidateStopwords: [
+      "A",
+      "An",
+      "And",
+      "At",
+      "But",
+      "By",
+      "Dr",
+      "For",
+      "He",
+      "Her",
+      "His",
+      "I",
+      "If",
+      "In",
+      "It",
+      "Its",
+      "Mr",
+      "Mrs",
+      "Ms",
+      "No",
+      "Not",
+      "Of",
+      "On",
+      "Or",
+      "She",
+      "That",
+      "The",
+      "Then",
+      "They",
+      "Their",
+      "This",
+      "To",
+      "We",
+      "When",
+      "While",
+      "With",
+      "Yes",
+      "You"
+    ],
+    titleWords: [
+      "the",
+      "a",
+      "an",
+      "lord",
+      "lady",
+      "sir",
+      "dame",
+      "dr",
+      "doctor",
+      "mr",
+      "mrs",
+      "ms",
+      "miss",
+      "master",
+      "mistress",
+      "captain",
+      "capt",
+      "king",
+      "queen",
+      "prince",
+      "princess",
+      "duke",
+      "duchess",
+      "count",
+      "countess",
+      "baron",
+      "baroness",
+      "father",
+      "mother",
+      "sister",
+      "brother",
+      "uncle",
+      "aunt",
+      "councillor",
+      "councilor",
+      "general",
+      "colonel",
+      "major",
+      "sergeant",
+      "lieutenant",
+      "commander",
+      "professor",
+      "prof",
+      "saint",
+      "st",
+      "old",
+      "young",
+      "little"
+    ]
+  }
+};
+
+// src/languages/index.js
+var DEFAULT_LANGUAGE = "en";
+var PACKS = new Map([en_default].map((pack) => [pack.code, pack]));
+var TAG_PATTERN = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
+function isLanguageTag(value) {
+  return typeof value === "string" && TAG_PATTERN.test(value.trim());
+}
+function projectLanguage(storyData) {
+  const value = storyData?.language;
+  return isLanguageTag(value) ? value.trim() : DEFAULT_LANGUAGE;
+}
+var RESOLVED = new Map;
+function languagePack(tag = DEFAULT_LANGUAGE) {
+  const language = isLanguageTag(tag) ? tag.trim() : DEFAULT_LANGUAGE;
+  if (!RESOLVED.has(language)) {
+    RESOLVED.set(language, resolvePack(language));
+  }
+  return RESOLVED.get(language);
+}
+function resolvePack(language) {
+  const subtags = language.toLowerCase().split("-");
+  const layers = [base_default];
+  for (let length = 1;length <= subtags.length; length += 1) {
+    const pack = PACKS.get(subtags.slice(0, length).join("-"));
+    if (pack !== undefined) {
+      layers.push(pack);
+    }
+  }
+  const pack = {};
+  for (const layer of layers) {
+    Object.assign(pack, layer, {
+      checks: { ...pack.checks, ...layer.checks },
+      labels: { ...pack.labels, ...layer.labels }
+    });
+  }
+  pack.tag = language;
+  return deepFreeze(pack);
+}
+function deepFreeze(value) {
+  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    Object.values(value).forEach(deepFreeze);
+  }
+  return value;
+}
+function checkList(pack, name) {
+  return pack.checks[name] ?? null;
+}
+function hasLists(pack, names) {
+  return names.every((name) => checkList(pack, name) !== null);
+}
+var SETS = new WeakMap;
+function checkSet(pack, name) {
+  if (!SETS.has(pack)) {
+    SETS.set(pack, new Map);
+  }
+  const sets = SETS.get(pack);
+  if (!sets.has(name)) {
+    const list = checkList(pack, name);
+    sets.set(name, list === null ? null : new Set(list));
+  }
+  return sets.get(name);
+}
+function skippedChecks(pack, definitions) {
+  return definitions.filter((definition) => !hasLists(pack, definition.lists)).map((definition) => skippedCheck(pack, definition));
+}
+function skippedCheck(pack, { check, label, lists }) {
+  const missing = lists.filter((name) => checkList(pack, name) === null);
+  const names = missing.length < 3 ? missing.join(" or ") : `${missing.slice(0, -1).join(", ")}, or ${missing[missing.length - 1]}`;
+  return {
+    check,
+    language: pack.tag,
+    missing,
+    message: `${label} skipped: no ${names} list for language ${pack.tag}`
+  };
+}
+function skippedLines(skipped) {
+  return skipped.map((entry) => `Note: ${entry.message}`);
+}
+
 // src/names.js
 var MAJOR_ROLES = new Set(["protagonist", "antagonist", "deuteragonist", "narrator"]);
-var TITLE_WORDS = new Set([
-  "the",
-  "a",
-  "an",
-  "lord",
-  "lady",
-  "sir",
-  "dame",
-  "dr",
-  "doctor",
-  "mr",
-  "mrs",
-  "ms",
-  "miss",
-  "master",
-  "mistress",
-  "captain",
-  "capt",
-  "king",
-  "queen",
-  "prince",
-  "princess",
-  "duke",
-  "duchess",
-  "count",
-  "countess",
-  "baron",
-  "baroness",
-  "father",
-  "mother",
-  "sister",
-  "brother",
-  "uncle",
-  "aunt",
-  "councillor",
-  "councilor",
-  "general",
-  "colonel",
-  "major",
-  "sergeant",
-  "lieutenant",
-  "commander",
-  "professor",
-  "prof",
-  "saint",
-  "st",
-  "old",
-  "young",
-  "little"
-]);
-function givenName(name) {
+var NO_WORDS = new Set;
+function givenName(name, pack = languagePack()) {
+  const titles = checkSet(pack, "titleWords") ?? NO_WORDS;
   const words = splitWords(String(name));
-  const index = words.findIndex((word) => !TITLE_WORDS.has(word.toLowerCase().replace(/[.’']/g, "")));
+  const index = words.findIndex((word) => !titles.has(word.toLowerCase().replace(/[.’']/g, "")));
   return index === -1 ? "" : words[index];
 }
 function existingNames(project) {
+  const pack = project.pack ?? languagePack();
   const names = [];
   const add = (kind, id, name, role = "", given = false, full = name) => {
     if (typeof name === "string" && name.trim() !== "") {
@@ -1538,7 +2084,7 @@ function existingNames(project) {
     if (character.status === "cut") {
       continue;
     }
-    const first = givenName(character.name);
+    const first = givenName(character.name, pack);
     const single = first !== "" && first === String(character.name).trim();
     add("character", character.id, String(character.name), character.role, single);
     if (first !== "" && !single) {
@@ -1561,7 +2107,7 @@ function existingNames(project) {
   }
   return names;
 }
-function checkNames(candidates, names) {
+function checkNames(candidates, names, pack = languagePack()) {
   const errors = [];
   const warnings = [];
   const results = [];
@@ -1571,7 +2117,7 @@ function checkNames(candidates, names) {
       continue;
     }
     const key = normalize(candidate);
-    const first = normalize(givenName(candidate));
+    const first = normalize(givenName(candidate, pack));
     const clashes = [];
     const lookalikes = [];
     const initials = [];
@@ -1637,17 +2183,30 @@ function formatNames(report) {
 }
 
 // src/sentences.js
-var TITLE_ABBREVIATIONS = /(?:^|[\s(“"‘'])(?:Dr|Mr|Mrs|Ms|St|Mt|Jr|Sr|Prof|Capt|Gen|Col|Lt|Sgt|Rev|Fr|e\.g|i\.e|(?:[A-Za-z]\.)*[A-Za-z])$/;
-var CONTEXT_ABBREVIATIONS = /(?:^|[\s(“"‘'])(?:No|vs|etc|a\.m|p\.m)$/;
-var CALENDAR_WORD = /^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|January|February|March|April|May|June|July|August|September|October|November|December)(?![\p{L}\p{N}])/u;
+var INITIALS = "(?:[A-Za-z]\\.)*[A-Za-z]";
+var NEVER = "(?!)";
+var ABBREVIATIONS = new WeakMap;
+function abbreviations(pack) {
+  if (!ABBREVIATIONS.has(pack)) {
+    const words = (name) => (checkList(pack, name) ?? []).map(escapeRegExp);
+    const either = (list) => list.length === 0 ? NEVER : list.join("|");
+    ABBREVIATIONS.set(pack, {
+      title: new RegExp(`(?:^|[\\s(“"‘'])(?:${[...words("titleAbbreviations"), INITIALS].join("|")})$`),
+      context: new RegExp(`(?:^|[\\s(“"‘'])(?:${either(words("contextAbbreviations"))})$`),
+      calendar: new RegExp(`^(?:${either(words("calendarWords"))})(?![\\p{L}\\p{N}])`, "u")
+    });
+  }
+  return ABBREVIATIONS.get(pack);
+}
 var SENTENCE_END = /[.!?…]+["”’')\]*_]*(?= |$)|[。！？]+[」』）”’"')\]*_]*/g;
 var CONTEXT_WINDOW = 64;
 var SENTENCE_START = /^["'“‘(\[*_]*[\p{Lu}\p{N}]/u;
-function splitSentences(text, { capitalStart = true } = {}) {
+function splitSentences(text, { capitalStart = true, pack = languagePack() } = {}) {
   const normalized = String(text).replace(/\s+/g, " ").trim();
   if (normalized === "") {
     return [];
   }
+  const rules = abbreviations(pack);
   const sentences = [];
   let start = 0;
   for (const match of normalized.matchAll(SENTENCE_END)) {
@@ -1663,7 +2222,7 @@ function splitSentences(text, { capitalStart = true } = {}) {
     }
     const from = Math.max(start, match.index - CONTEXT_WINDOW);
     const before = `${from > start ? "x" : ""}${normalized.slice(from, match.index)}`;
-    const abbreviation = match[0] === "." && (CONTEXT_ABBREVIATIONS.test(before) ? /^[\p{Ll}\p{N}]/u.test(next) || CALENDAR_WORD.test(next) : TITLE_ABBREVIATIONS.test(before));
+    const abbreviation = match[0] === "." && (rules.context.test(before) ? /^[\p{Ll}\p{N}]/u.test(next) || rules.calendar.test(next) : rules.title.test(before));
     const stammer = /^(?:…|\.\.\.)/.test(match[0]) && isStammer(before, next);
     if (abbreviation || stammer) {
       continue;
@@ -1707,105 +2266,49 @@ function roundedShares(values) {
 }
 
 // src/voices.js
-var SPEECH_VERBS = [
-  "said",
-  "says",
-  "asked",
-  "asks",
-  "replied",
-  "replies",
-  "answered",
-  "answers",
-  "whispered",
-  "whispers",
-  "shouted",
-  "shouts",
-  "called",
-  "calls",
-  "muttered",
-  "mutters",
-  "murmured",
-  "murmurs",
-  "cried",
-  "cries",
-  "yelled",
-  "yells",
-  "added",
-  "adds",
-  "told",
-  "tells",
-  "snapped",
-  "snaps",
-  "admitted",
-  "admits",
-  "insisted",
-  "insists",
-  "demanded",
-  "demands",
-  "continued",
-  "continues",
-  "began",
-  "begins",
-  "went on",
-  "goes on"
+var VOICE_CHECKS = [
+  { check: "speech-tags", label: "Speech-tag attribution", lists: ["speechVerbs", "speechPronouns"] },
+  { check: "contractions", label: "Contraction counts", lists: ["contractionSuffixes", "contractedIs"] },
+  { check: "signature-words", label: "Signature words", lists: ["voiceStopwords"] }
 ];
-var CONTRACTION_PATTERN = /[\p{L}](?:n['’]t|['’](?:re|ll|ve|m|d))\b|(?<![\p{L}\p{N}])(?:it|that|let|what|there|here|where|who|he|she|how|when|why)['’]s(?![\p{L}\p{N}])/giu;
-var STOPWORDS = new Set([
-  "that",
-  "this",
-  "with",
-  "have",
-  "what",
-  "from",
-  "they",
-  "there",
-  "their",
-  "them",
-  "then",
-  "than",
-  "were",
-  "would",
-  "could",
-  "should",
-  "your",
-  "yours",
-  "just",
-  "know",
-  "been",
-  "will",
-  "when",
-  "where",
-  "which",
-  "about",
-  "into",
-  "some",
-  "because",
-  "want",
-  "like",
-  "only",
-  "here",
-  "does",
-  "didn't",
-  "don't",
-  "it's",
-  "can't",
-  "won't",
-  "i'm",
-  "you're",
-  "we're",
-  "that's",
-  "there's",
-  "what's",
-  "going",
-  "come",
-  "back",
-  "over",
-  "tell",
-  "said",
-  "more",
-  "very",
-  "also"
-]);
+var NEVER2 = "(?!)";
+var RULES = new WeakMap;
+function voiceRules(pack) {
+  if (!RULES.has(pack)) {
+    RULES.set(pack, buildVoiceRules(pack));
+  }
+  return RULES.get(pack);
+}
+function buildVoiceRules(pack) {
+  const verbs = checkList(pack, "speechVerbs");
+  const pronouns = checkList(pack, "speechPronouns");
+  const suffixes = checkList(pack, "contractionSuffixes");
+  const contractedIs = checkList(pack, "contractedIs");
+  const elisions = checkList(pack, "elisions") ?? [];
+  const apostrophe = (word) => escape(word).replace(/'/g, "['’]");
+  const rules = {
+    verbs: null,
+    tagAfterQuote: null,
+    tagBeforeQuote: null,
+    dashTag: null,
+    elision: new RegExp(`^(?:${elisions.map(escape).join("|") || NEVER2})(?![\\p{L}\\p{N}])`, "iu"),
+    contraction: suffixes === null || contractedIs === null ? null : new RegExp(`[\\p{L}](?:${suffixes.map(apostrophe).join("|") || NEVER2})\\b|(?<![\\p{L}\\p{N}])(?:${contractedIs.map(escape).join("|") || NEVER2})['’]s(?![\\p{L}\\p{N}])`, "giu"),
+    stopwords: checkSet(pack, "voiceStopwords")
+  };
+  if (verbs === null || pronouns === null) {
+    return rules;
+  }
+  const verbAlternation = verbs.map((verb) => escape(verb).replace(/ /g, "\\s+")).join("|") || NEVER2;
+  const pronounAlternation = pronouns.map(escape).join("|") || NEVER2;
+  const pronounTag = `(?:(?:${pronounAlternation})\\s+(?:${verbAlternation})|(?:${verbAlternation})\\s+(?:${pronounAlternation}))(?![\\p{L}\\p{N}])`;
+  return {
+    ...rules,
+    verbs,
+    tagAfterQuote: new RegExp(`^[\\s,.;:!?…()—–-]*${pronounTag}`, "iu"),
+    tagBeforeQuote: new RegExp(`(?<![\\p{L}\\p{N}])${pronounTag}[\\s,:…()—–-]*$`, "iu"),
+    dashTag: new RegExp(`,\\s+(?:(?:${verbAlternation})\\s+\\p{Lu}|(?:${pronounAlternation})\\s+(?:${verbAlternation})(?![\\p{L}\\p{N}])|\\p{Lu}[\\p{L}'’-]*(?:\\s+\\p{Lu}[\\p{L}'’-]*){0,2}\\s+(?:${verbAlternation})(?![\\p{L}\\p{N}]))`, "u")
+  };
+}
 var VOICE_THRESHOLDS = {
   minLines: 5,
   sentenceLength: 1.5,
@@ -1814,7 +2317,9 @@ var VOICE_THRESHOLDS = {
   exclamations: 0.1
 };
 function buildVoices(project, chapters) {
-  const speakers = speakerPatterns(project.characters);
+  const pack = project.pack ?? languagePack();
+  const rules = voiceRules(pack);
+  const speakers = speakerPatterns(project.characters, pack, rules);
   const lines = new Map(project.characters.map((character) => [character.id, []]));
   let unattributed = 0;
   for (const chapter of chapters) {
@@ -1834,15 +2339,15 @@ function buildVoices(project, chapters) {
         pending = [];
         chainSpeaker = null;
       }
-      const quotes = quotedSpans(paragraph);
-      const open = splitOpenSpeech(paragraph).open;
+      const quotes = quotedSpans(paragraph, pack);
+      const open = splitOpenSpeech(paragraph, pack).open;
       if (open !== null) {
         quotes.push(open);
       }
       if (quotes.length === 0) {
         continue;
       }
-      const speaker = attribute(paragraph, speakers) ?? chainSpeaker;
+      const speaker = attribute(paragraph, speakers, pack) ?? chainSpeaker;
       if (open !== null && speaker === null) {
         pending.push(...quotes);
         continue;
@@ -1853,7 +2358,7 @@ function buildVoices(project, chapters) {
     }
     credit(null, pending);
   }
-  const profiles = project.characters.map((character) => profile(character, lines.get(character.id))).filter((entry) => entry.lines > 0);
+  const profiles = project.characters.map((character) => profile(character, lines.get(character.id), pack, rules)).filter((entry) => entry.lines > 0);
   signatureWords(profiles);
   const warnings = [];
   for (const character of project.characters) {
@@ -1878,33 +2383,31 @@ function buildVoices(project, chapters) {
   for (let left = 0;left < eligible.length; left += 1) {
     for (let right = left + 1;right < eligible.length; right += 1) {
       if (similarVoices(eligible[left], eligible[right])) {
-        warnings.push(warn("voice-sound-alike", `${eligible[left].id} and ${eligible[right].id} may sound alike: similar sentence length, contractions, questions, and exclamations`));
+        const measures = rules.contraction === null ? "sentence length, questions" : "sentence length, contractions, questions";
+        warnings.push(warn("voice-sound-alike", `${eligible[left].id} and ${eligible[right].id} may sound alike: similar ${measures}, and exclamations`));
       }
     }
   }
   return {
     profiles: profiles.sort((left, right) => right.words - left.words || left.id.localeCompare(right.id, "en")),
     unattributed,
-    warnings
+    warnings,
+    skipped: skippedChecks(pack, VOICE_CHECKS)
   };
 }
-var PRONOUNS = "he|she|they|i|we";
-var VERB_ALTERNATION = SPEECH_VERBS.map((verb) => verb.replace(/ /g, "\\s+")).join("|");
-var PRONOUN_TAG_SOURCE = `(?:(?:${PRONOUNS})\\s+(?:${VERB_ALTERNATION})|(?:${VERB_ALTERNATION})\\s+(?:${PRONOUNS}))(?![\\p{L}\\p{N}])`;
-var TAG_AFTER_QUOTE = new RegExp(`^[\\s,.;:!?…()—–-]*${PRONOUN_TAG_SOURCE}`, "iu");
-var TAG_BEFORE_QUOTE = new RegExp(`(?<![\\p{L}\\p{N}])${PRONOUN_TAG_SOURCE}[\\s,:…()—–-]*$`, "iu");
 var TAG_WINDOW = 40;
-function hasPronounTag(paragraph) {
-  return quoteMatches(paragraph).some((match) => TAG_AFTER_QUOTE.test(paragraph.slice(match.end, match.end + TAG_WINDOW)) || TAG_BEFORE_QUOTE.test(paragraph.slice(Math.max(0, match.start - TAG_WINDOW), match.start)));
+function hasPronounTag(paragraph, pack) {
+  const rules = voiceRules(pack);
+  return rules.tagAfterQuote !== null && quoteMatches(paragraph, pack).some((match) => rules.tagAfterQuote.test(paragraph.slice(match.end, match.end + TAG_WINDOW)) || rules.tagBeforeQuote.test(paragraph.slice(Math.max(0, match.start - TAG_WINDOW), match.start)));
 }
-function speakerPatterns(characters) {
-  const verbs = SPEECH_VERBS.flatMap((verb) => [verb, `${verb[0].toUpperCase()}${verb.slice(1)}`]).map((verb) => verb.replace(/ /g, "\\s+")).join("|");
+function speakerPatterns(characters, pack, rules) {
+  const verbs = rules.verbs === null ? null : rules.verbs.flatMap((verb) => [verb, `${verb[0].toUpperCase()}${verb.slice(1)}`]).map((verb) => escape(verb).replace(/ /g, "\\s+")).join("|") || NEVER2;
   return characters.filter((character) => character.status !== "cut").map((character) => {
     const names = new Set;
     const full = String(character.name ?? "").trim();
     if (full !== "") {
       names.add(full);
-      const first = givenName(full);
+      const first = givenName(full, pack);
       if (first.length >= 2) {
         names.add(first);
       }
@@ -1921,19 +2424,19 @@ function speakerPatterns(characters) {
       id: character.id,
       keys,
       name: new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternatives})(?![\\p{L}\\p{N}])`, "u"),
-      subject: new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternatives})\\s+(?:${verbs})(?![\\p{L}\\p{N}])`, "u"),
-      inverted: new RegExp(`(?<![\\p{L}\\p{N}])(?:${verbs})\\s+(?:${alternatives})(?![\\p{L}\\p{N}])`, "u")
+      subject: verbs === null ? null : new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternatives})\\s+(?:${verbs})(?![\\p{L}\\p{N}])`, "u"),
+      inverted: verbs === null ? null : new RegExp(`(?<![\\p{L}\\p{N}])(?:${verbs})\\s+(?:${alternatives})(?![\\p{L}\\p{N}])`, "u")
     };
   }).filter(Boolean);
 }
 var NON_WORD = /[^\p{L}\p{N}]+/u;
 var OPENS_WITH_QUOTE = /^["“‘']/;
-function attribute(paragraph, allSpeakers) {
-  const narration = `${splitOpenSpeech(paragraph).narration} `;
+function attribute(paragraph, allSpeakers, pack) {
+  const narration = `${splitOpenSpeech(paragraph, pack).narration} `;
   const words = new Set(narration.split(NON_WORD));
   const speakers = allSpeakers.filter((speaker) => [...speaker.keys].some((key) => key === "" || words.has(key)));
   for (const form of ["subject", "inverted"]) {
-    const tagged = speakers.filter((speaker) => speaker[form].test(narration));
+    const tagged = speakers.filter((speaker) => speaker[form] !== null && speaker[form].test(narration));
     if (tagged.length === 1) {
       return tagged[0].id;
     }
@@ -1941,17 +2444,16 @@ function attribute(paragraph, allSpeakers) {
       return null;
     }
   }
-  if (hasPronounTag(paragraph)) {
+  if (hasPronounTag(paragraph, pack)) {
     return null;
   }
   const named = speakers.filter((speaker) => speaker.name.test(narration));
   return named.length === 1 ? named[0].id : null;
 }
 var LETTER = /[\p{L}\p{N}]/u;
-var ELISION = /^(?:em|tis|twas|cause|cos|til|till|bout|round|n|nuff)(?![\p{L}\p{N}])/iu;
 var DASH_OPEN = /^[—―]\s*/;
-var DASH_TAG = new RegExp(`,\\s+(?:(?:${VERB_ALTERNATION})\\s+\\p{Lu}|(?:${PRONOUNS})\\s+(?:${VERB_ALTERNATION})(?![\\p{L}\\p{N}])|\\p{Lu}[\\p{L}'’-]*(?:\\s+\\p{Lu}[\\p{L}'’-]*){0,2}\\s+(?:${VERB_ALTERNATION})(?![\\p{L}\\p{N}]))`, "u");
-function quoteMatches(paragraph) {
+function quoteMatches(paragraph, pack = languagePack()) {
+  const rules = voiceRules(pack);
   const matches = [];
   const next = { "”": -1, '"': -1 };
   const find = (key, from) => {
@@ -1961,12 +2463,12 @@ function quoteMatches(paragraph) {
     }
     return next[key];
   };
-  const singles = singleQuoteMarks(paragraph);
+  const singles = singleQuoteMarks(paragraph, rules);
   let index = 0;
   const dash = DASH_OPEN.exec(paragraph);
   if (dash) {
     const body = paragraph.slice(dash[0].length);
-    const tag = DASH_TAG.exec(body);
+    const tag = rules.dashTag === null ? null : rules.dashTag.exec(body);
     const closing = /\s[—―]/.exec(body);
     const stop = Math.min(tag ? tag.index : Infinity, closing ? closing.index + 1 : Infinity);
     const close = stop === Infinity ? paragraph.length : dash[0].length + stop;
@@ -1992,7 +2494,7 @@ function quoteMatches(paragraph) {
   }
   return matches;
 }
-function singleQuoteMarks(paragraph) {
+function singleQuoteMarks(paragraph, rules) {
   const marks = { "‘": { open: [], close: [] }, "'": { open: [], close: [] } };
   for (let index = 0;index < paragraph.length; index += 1) {
     const char = paragraph[index];
@@ -2003,7 +2505,7 @@ function singleQuoteMarks(paragraph) {
     } else if (char === "’" && !LETTER.test(after)) {
       marks["‘"].close.push(index);
     } else if (char === "'") {
-      if (!LETTER.test(before) && LETTER.test(after) && !ELISION.test(paragraph.slice(index + 1))) {
+      if (!LETTER.test(before) && LETTER.test(after) && !rules.elision.test(paragraph.slice(index + 1))) {
         marks["'"].open.push(index);
       } else if (!LETTER.test(after) && before !== "" && !/\s/.test(before)) {
         marks["'"].close.push(index);
@@ -2050,20 +2552,20 @@ function firstAfter(sorted, value) {
   const position = firstIndexAfter(sorted, value);
   return position === -1 ? Infinity : sorted[position];
 }
-function replaceQuotes(paragraph) {
+function replaceQuotes(paragraph, pack = languagePack()) {
   let result = "";
   let position = 0;
-  for (const match of quoteMatches(paragraph)) {
+  for (const match of quoteMatches(paragraph, pack)) {
     result += `${paragraph.slice(position, match.start)} `;
     position = match.end;
   }
   return result + paragraph.slice(position);
 }
-function quotedSpans(paragraph) {
-  return quoteMatches(paragraph).map((match) => match.text.trim()).filter((text) => text !== "");
+function quotedSpans(paragraph, pack = languagePack()) {
+  return quoteMatches(paragraph, pack).map((match) => match.text.trim()).filter((text) => text !== "");
 }
-function splitOpenSpeech(paragraph) {
-  const text = replaceQuotes(paragraph);
+function splitOpenSpeech(paragraph, pack = languagePack()) {
+  const text = replaceQuotes(paragraph, pack);
   const cuts = [];
   const curly = text.indexOf("“", text.lastIndexOf("”") + 1);
   if (curly !== -1) {
@@ -2078,7 +2580,7 @@ function splitOpenSpeech(paragraph) {
   if (single) {
     cuts.push(lastSingleClose + 1 + single.index);
   }
-  if (/^'[\p{L}\p{N}]/u.test(text) && !ELISION.test(text.slice(1))) {
+  if (/^'[\p{L}\p{N}]/u.test(text) && !voiceRules(pack).elision.test(text.slice(1))) {
     cuts.push(0);
   }
   if (cuts.length === 0) {
@@ -2088,13 +2590,13 @@ function splitOpenSpeech(paragraph) {
   const open = text.slice(cut + 1).trim();
   return { narration: text.slice(0, cut), open: open === "" ? null : open };
 }
-function narrationOnly(paragraph) {
-  return splitOpenSpeech(paragraph).narration;
+function narrationOnly(paragraph, pack = languagePack()) {
+  return splitOpenSpeech(paragraph, pack).narration;
 }
-function profile(character, said) {
+function profile(character, said, pack, rules) {
   const text = said.map((line) => line.text).join(" ");
   const words = splitWords(text);
-  const sentences = said.flatMap((line) => splitSentences(line.text).filter((sentence) => splitWords(sentence).length > 0));
+  const sentences = said.flatMap((line) => splitSentences(line.text, { pack }).filter((sentence) => splitWords(sentence).length > 0));
   const questions = sentences.filter((sentence) => /\?["'”’)]*$/.test(sentence.trim())).length;
   const exclamations = sentences.filter((sentence) => /!["'”’)]*$/.test(sentence.trim())).length;
   return {
@@ -2102,18 +2604,21 @@ function profile(character, said) {
     lines: said.length,
     words: words.length,
     sentenceLength: sentences.length === 0 ? 0 : words.length / sentences.length,
-    contractions: words.length === 0 ? 0 : (text.match(CONTRACTION_PATTERN) ?? []).length * 100 / words.length,
+    contractions: rules.contraction === null ? null : words.length === 0 ? 0 : (text.match(rules.contraction) ?? []).length * 100 / words.length,
     questions: sentences.length === 0 ? 0 : questions / sentences.length,
     exclamations: sentences.length === 0 ? 0 : exclamations / sentences.length,
-    counts: wordCounts(words),
+    counts: wordCounts(words, rules.stopwords),
     signature: []
   };
 }
-function wordCounts(words) {
+function wordCounts(words, stopwords) {
   const counts = new Map;
+  if (stopwords === null) {
+    return counts;
+  }
   for (const raw of words) {
     const word = raw.toLowerCase().replace(/’/g, "'");
-    if (word.length >= 4 && !STOPWORDS.has(word) && !/^\d+$/.test(word)) {
+    if (word.length >= 4 && !stopwords.has(word) && !/^\d+$/.test(word)) {
       counts.set(word, (counts.get(word) ?? 0) + 1);
     }
   }
@@ -2148,7 +2653,7 @@ function signatureWords(profiles) {
 function similarVoices(left, right) {
   const limits = VOICE_THRESHOLDS;
   const close = (a, b, limit) => Math.abs(a - b) < limit - 0.000000001;
-  return close(left.sentenceLength, right.sentenceLength, limits.sentenceLength) && close(left.contractions, right.contractions, limits.contractions) && close(left.questions, right.questions, limits.questions) && close(left.exclamations, right.exclamations, limits.exclamations);
+  return close(left.sentenceLength, right.sentenceLength, limits.sentenceLength) && (left.contractions === null || close(left.contractions, right.contractions, limits.contractions)) && close(left.questions, right.questions, limits.questions) && close(left.exclamations, right.exclamations, limits.exclamations);
 }
 function phrasePattern(phrase) {
   return new RegExp(`(?<![\\p{L}\\p{M}\\p{N}])${escape(String(phrase).trim()).replace(/['’]/g, "['’]")}(?![\\p{L}\\p{M}\\p{N}])`, "iu");
@@ -2160,15 +2665,18 @@ function stringList(value) {
   return (Array.isArray(value) ? value : []).filter((item) => typeof item === "string" && item.trim() !== "");
 }
 function formatVoices(report) {
-  const lines = [`Voices: ${plural(report.profiles.length, "speaking character")}, ${plural(report.unattributed, "unattributed line")}`];
+  const skipped = report.skipped ?? [];
+  const lines = [`Voices: ${plural(report.profiles.length, "speaking character")}, ${plural(report.unattributed, "unattributed line")}`, ...skippedLines(skipped)];
   if (report.profiles.length === 0) {
     lines.push("", `- None: tag dialogue with a character's name and a speech verb ("...," Mara said)`);
     return `${lines.join(`
 `)}
 `;
   }
+  const signatures = !skipped.some((entry) => entry.check === "signature-words");
   for (const entry of report.profiles) {
-    lines.push("", `${entry.id}: ${plural(entry.lines, "line")}, ${plural(entry.words, "word")}`, `  Sentence length ${entry.sentenceLength.toFixed(1)}, contractions ${entry.contractions.toFixed(1)} per 100 words, questions ${Math.round(entry.questions * 100)}%, exclamations ${Math.round(entry.exclamations * 100)}%`, `  Signature words: ${entry.signature.join(", ") || "none yet"}`);
+    const contractions = entry.contractions === null ? "" : `, contractions ${entry.contractions.toFixed(1)} per 100 words`;
+    lines.push("", `${entry.id}: ${plural(entry.lines, "line")}, ${plural(entry.words, "word")}`, `  Sentence length ${entry.sentenceLength.toFixed(1)}${contractions}, questions ${Math.round(entry.questions * 100)}%, exclamations ${Math.round(entry.exclamations * 100)}%`, ...signatures ? [`  Signature words: ${entry.signature.join(", ") || "none yet"}`] : []);
   }
   return `${lines.join(`
 `)}
@@ -2176,270 +2684,17 @@ function formatVoices(report) {
 }
 
 // src/prose.js
-var FILTER_WORDS = [
-  "felt",
-  "saw",
-  "heard",
-  "noticed",
-  "realized",
-  "realised",
-  "wondered",
-  "seemed",
-  "watched",
-  "knew",
-  "decided",
-  "thought",
-  "sensed"
+var PROSE_CHECKS = [
+  { check: "filter-words", label: "Filter words", lists: ["filterWords"] },
+  { check: "adverbs", label: "Adverbs", lists: ["adverbSuffixes", "adverbExceptions"] },
+  { check: "dialogue-tags", label: "Dialogue tags", lists: ["plainTags", "saidBookisms", "beatPronouns"] },
+  { check: "echoes", label: "Echoes", lists: ["echoStopwords"] },
+  { check: "repeated-phrases", label: "Repeated phrases", lists: ["phraseStopwords"] }
 ];
-var SAID_BOOKISMS = [
-  "barked",
-  "bellowed",
-  "breathed",
-  "chuckled",
-  "cooed",
-  "declared",
-  "exclaimed",
-  "gasped",
-  "grinned",
-  "groaned",
-  "growled",
-  "grunted",
-  "hissed",
-  "inquired",
-  "interjected",
-  "intoned",
-  "laughed",
-  "opined",
-  "purred",
-  "queried",
-  "quipped",
-  "retorted",
-  "shrieked",
-  "sighed",
-  "smiled",
-  "smirked",
-  "snapped",
-  "snarled",
-  "sneered",
-  "spat",
-  "stated"
+var BASELINE_CHECKS = [
+  { check: "signature-words", label: "Baseline signature words", lists: ["echoStopwords", "phraseStopwords"] }
 ];
-var PLAIN_TAGS = ["said", "asked", "says", "asks"];
-var NOT_ADVERBS = new Set([
-  "ally",
-  "anomaly",
-  "apply",
-  "assembly",
-  "belly",
-  "bully",
-  "burly",
-  "butterfly",
-  "chilly",
-  "comply",
-  "costly",
-  "curly",
-  "daily",
-  "deadly",
-  "dolly",
-  "dragonfly",
-  "early",
-  "elderly",
-  "family",
-  "fly",
-  "folly",
-  "friendly",
-  "ghastly",
-  "ghostly",
-  "gully",
-  "holly",
-  "holy",
-  "homely",
-  "hourly",
-  "imply",
-  "italy",
-  "jelly",
-  "jolly",
-  "july",
-  "lily",
-  "likely",
-  "lively",
-  "lonely",
-  "lovely",
-  "melancholy",
-  "monopoly",
-  "monthly",
-  "multiply",
-  "oily",
-  "only",
-  "orderly",
-  "prickly",
-  "rally",
-  "rely",
-  "reply",
-  "sickly",
-  "silly",
-  "sly",
-  "smelly",
-  "stately",
-  "supply",
-  "surly",
-  "tally",
-  "ugly",
-  "unlikely",
-  "weekly",
-  "wobbly",
-  "woolly",
-  "yearly"
-]);
-var ECHO_STOPWORDS = new Set([
-  "about",
-  "above",
-  "after",
-  "again",
-  "against",
-  "along",
-  "always",
-  "among",
-  "another",
-  "around",
-  "because",
-  "before",
-  "behind",
-  "being",
-  "below",
-  "between",
-  "could",
-  "couldn't",
-  "didn't",
-  "doesn't",
-  "don't",
-  "every",
-  "first",
-  "hadn't",
-  "haven't",
-  "isn't",
-  "might",
-  "never",
-  "other",
-  "right",
-  "should",
-  "since",
-  "something",
-  "still",
-  "their",
-  "there",
-  "these",
-  "thing",
-  "things",
-  "those",
-  "though",
-  "three",
-  "through",
-  "until",
-  "wasn't",
-  "where",
-  "which",
-  "while",
-  "without",
-  "would",
-  "wouldn't",
-  "you're",
-  "they're",
-  "we're"
-]);
-var PHRASE_STOPWORDS = new Set([
-  "a",
-  "an",
-  "and",
-  "as",
-  "at",
-  "be",
-  "but",
-  "by",
-  "for",
-  "from",
-  "had",
-  "has",
-  "have",
-  "he",
-  "her",
-  "his",
-  "i",
-  "in",
-  "into",
-  "is",
-  "it",
-  "its",
-  "me",
-  "my",
-  "not",
-  "of",
-  "on",
-  "or",
-  "she",
-  "so",
-  "that",
-  "the",
-  "their",
-  "them",
-  "then",
-  "they",
-  "this",
-  "to",
-  "was",
-  "we",
-  "were",
-  "with",
-  "you"
-]);
-var DIALECT_PAIRS = [
-  ["armour", "armor"],
-  ["armoured", "armored"],
-  ["centre", "center"],
-  ["centres", "centers"],
-  ["centred", "centered"],
-  ["colour", "color"],
-  ["colours", "colors"],
-  ["coloured", "colored"],
-  ["colourful", "colorful"],
-  ["defence", "defense"],
-  ["defences", "defenses"],
-  ["favour", "favor"],
-  ["favours", "favors"],
-  ["favoured", "favored"],
-  ["favourite", "favorite"],
-  ["grey", "gray"],
-  ["greying", "graying"],
-  ["harbour", "harbor"],
-  ["harbours", "harbors"],
-  ["honour", "honor"],
-  ["honours", "honors"],
-  ["honoured", "honored"],
-  ["honourable", "honorable"],
-  ["jewellery", "jewelry"],
-  ["labour", "labor"],
-  ["mould", "mold"],
-  ["mouldy", "moldy"],
-  ["neighbour", "neighbor"],
-  ["neighbours", "neighbors"],
-  ["odour", "odor"],
-  ["offence", "offense"],
-  ["plough", "plow"],
-  ["rumour", "rumor"],
-  ["rumours", "rumors"],
-  ["sceptic", "skeptic"],
-  ["sceptical", "skeptical"],
-  ["smoulder", "smolder"],
-  ["smouldering", "smoldering"],
-  ["theatre", "theater"],
-  ["towards", "toward"],
-  ["travelled", "traveled"],
-  ["travelling", "traveling"],
-  ["traveller", "traveler"],
-  ["cancelled", "canceled"],
-  ["vapour", "vapor"],
-  ["whisky", "whiskey"]
-];
+var DIALECT_CHECK = { check: "dialect-spellings", label: "British and American spellings", lists: ["dialectPairs"] };
 var PROSE_THRESHOLDS = {
   filterPerThousand: 10,
   adverbsPerThousand: 12,
@@ -2468,8 +2723,9 @@ function proseThresholds(options = {}) {
   }
   return thresholds;
 }
-function proseRules(styleData, names) {
+function proseRules(styleData, names, pack = languagePack()) {
   const data = styleData ?? {};
+  const skipped = skippedChecks(pack, PROSE_CHECKS);
   const allow = new Set(stringList2(data["allow-words"]).map(normalizeWord));
   const variants = [];
   for (const entry of Array.isArray(data.preferred) ? data.preferred : []) {
@@ -2478,9 +2734,12 @@ function proseRules(styleData, names) {
     }
   }
   const dialect = typeof data.dialect === "string" ? data.dialect : "unspecified";
-  if (dialect === "british" || dialect === "american") {
+  const dialectPairs = checkList(pack, "dialectPairs");
+  if ((dialect === "british" || dialect === "american") && dialectPairs === null) {
+    skipped.push(skippedCheck(pack, DIALECT_CHECK));
+  } else if (dialect === "british" || dialect === "american") {
     const claimed = new Set(variants.flatMap((variant) => [normalizeWord(variant.use), normalizeWord(variant.avoid)]).concat([...allow]));
-    for (const [british, american] of DIALECT_PAIRS) {
+    for (const [british, american] of dialectPairs) {
       const [use, avoid] = dialect === "british" ? [british, american] : [american, british];
       if (!claimed.has(use) && !claimed.has(avoid)) {
         variants.push({ use, avoid, source: `${dialect} dialect` });
@@ -2493,12 +2752,25 @@ function proseRules(styleData, names) {
       nameTokens.add(nameKey(token));
     }
   }
+  const allowed = (name) => {
+    const list = checkList(pack, name);
+    return list === null ? null : new Set(list.filter((word) => !allow.has(word)));
+  };
+  const tags = !skipped.some((entry) => entry.check === "dialogue-tags");
   return {
+    pack,
+    skipped,
     allow,
     variants: variants.map((variant) => ({ ...variant, pattern: phrasePattern2(variant.avoid) })),
     watch: stringList2(data["watch-words"]).map((word) => ({ word, pattern: phrasePattern2(word) })),
-    filterWords: new Set(FILTER_WORDS.filter((word) => !allow.has(word))),
-    bookisms: new Set(SAID_BOOKISMS.filter((word) => !allow.has(word))),
+    filterWords: allowed("filterWords"),
+    bookisms: tags ? allowed("saidBookisms") : null,
+    plainTags: tags ? checkSet(pack, "plainTags") : null,
+    beatPronouns: tags ? checkSet(pack, "beatPronouns") : null,
+    adverbSuffixes: checkList(pack, "adverbExceptions") === null ? null : checkList(pack, "adverbSuffixes"),
+    adverbExceptions: checkSet(pack, "adverbExceptions"),
+    echoStopwords: checkSet(pack, "echoStopwords"),
+    phraseStopwords: checkSet(pack, "phraseStopwords"),
     nameTokens
   };
 }
@@ -2508,14 +2780,14 @@ function analyzeChapter(prose, rules) {
 
 `);
   const words = splitWords(text);
-  const narration = splitWords(paragraphs.map(narrationOnly).join(`
+  const narration = splitWords(paragraphs.map((paragraph) => narrationOnly(paragraph, rules.pack)).join(`
 
 `));
-  const sentenceList = paragraphs.flatMap((paragraph) => splitSentences(paragraph));
+  const sentenceList = paragraphs.flatMap((paragraph) => splitSentences(paragraph, { pack: rules.pack }));
   const sentences = sentenceList.map((sentence) => splitWords(sentence).length).filter((count) => count > 0);
-  const filterWords = countMatching(narration, (word) => rules.filterWords.has(word));
-  const adverbs = countMatching(narration, (word) => isAdverb(word, rules));
-  const tags = dialogueTags(paragraphs, rules);
+  const filterWords = rules.filterWords === null ? [] : countMatching(narration, (word) => rules.filterWords.has(word));
+  const adverbs = rules.adverbSuffixes === null ? [] : countMatching(narration, (word) => isAdverb(word, rules));
+  const tags = rules.plainTags === null ? { plain: [], bookisms: [] } : dialogueTags(paragraphs, rules);
   return {
     words: words.length,
     narrationWords: narration.length,
@@ -2592,12 +2864,15 @@ function baselineProfile(samples) {
   };
 }
 function contentWords(prose, rules) {
+  if (rules.echoStopwords === null || rules.phraseStopwords === null) {
+    return [];
+  }
   return splitWords(proseParagraphs(prose).join(`
 
-`)).map(normalizeWord).filter((word) => word.length >= 4 && !ECHO_STOPWORDS.has(word) && !PHRASE_STOPWORDS.has(word) && !isName(word, rules) && !/^\p{N}+$/u.test(word));
+`)).map(normalizeWord).filter((word) => word.length >= 4 && !rules.echoStopwords.has(word) && !rules.phraseStopwords.has(word) && !isName(word, rules) && !/^\p{N}+$/u.test(word));
 }
-function sentenceLengths(prose) {
-  return proseParagraphs(prose).flatMap((paragraph) => splitSentences(paragraph)).map((sentence) => splitWords(sentence).length).filter((count) => count > 0);
+function sentenceLengths(prose, pack = languagePack()) {
+  return proseParagraphs(prose).flatMap((paragraph) => splitSentences(paragraph, { pack })).map((sentence) => splitWords(sentence).length).filter((count) => count > 0);
 }
 function baselineFigures(analysis, profile, chapterWords) {
   const used = new Set(chapterWords);
@@ -2641,14 +2916,18 @@ function baselineFindings(label, analysis, figures, profile, tolerances = BASELI
   }
   return findings;
 }
-function repeatedPhrases(analyses, thresholds = PROSE_THRESHOLDS) {
+function repeatedPhrases(analyses, thresholds = PROSE_THRESHOLDS, pack = languagePack()) {
+  const stopwords = checkSet(pack, "phraseStopwords");
+  if (stopwords === null) {
+    return [];
+  }
   const counts = new Map;
   const size = thresholds.phraseLength;
   for (const analysis of analyses) {
     for (const sentence of analysis.phraseSentences) {
       for (let index = 0;index + size <= sentence.length; index += 1) {
         const gram = sentence.slice(index, index + size);
-        if (gram.every((word) => PHRASE_STOPWORDS.has(word))) {
+        if (gram.every((word) => stopwords.has(word))) {
           continue;
         }
         const key = gram.join(" ");
@@ -2659,8 +2938,8 @@ function repeatedPhrases(analyses, thresholds = PROSE_THRESHOLDS) {
   const repeated = new Map([...counts].filter(([, count]) => count >= thresholds.phraseMinCount));
   return sortCounts(repeated).slice(0, thresholds.phraseLimit).map((entry) => ({ phrase: entry.word, count: entry.count }));
 }
-function similarNames(characters) {
-  const firsts = characters.map((character) => ({ id: character.id, name: String(character.name), first: givenName(character.name).toLowerCase() })).filter((entry) => entry.first.length >= 3).sort((left, right) => left.id.localeCompare(right.id, "en"));
+function similarNames(characters, pack = languagePack()) {
+  const firsts = characters.map((character) => ({ id: character.id, name: String(character.name), first: givenName(character.name, pack).toLowerCase() })).filter((entry) => entry.first.length >= 3).sort((left, right) => left.id.localeCompare(right.id, "en"));
   const pairs = [];
   for (let left = 0;left < firsts.length; left += 1) {
     for (let right = left + 1;right < firsts.length; right += 1) {
@@ -2680,6 +2959,9 @@ function formatProseReport(report) {
   if (!report.styleSheet) {
     lines.push("No style-sheet.md: spelling and watch-word checks are off");
   }
+  const skipped = report.skipped ?? [];
+  lines.push(...skippedLines(skipped));
+  const runs = (check) => !skipped.some((entry) => entry.check === check);
   const profile = report.baseline;
   if (profile) {
     const stats = profile.sentences;
@@ -2691,14 +2973,22 @@ function formatProseReport(report) {
     const stats = analysis.sentences;
     lines.push("", `${chapter.file}: ${chapter.title} (${analysis.words} words)`);
     lines.push(`  Sentences: ${stats.count}, average ${formatRate(stats.mean)} words, longest ${stats.longest}, spread ${formatRate(stats.spread)}`);
-    lines.push(`  Filter words: ${formatRate(perThousand(total(analysis.filterWords), analysis.narrationWords))} per 1k narration words${countSuffix(analysis.filterWords)}`);
-    lines.push(`  -ly adverbs: ${formatRate(perThousand(total(analysis.adverbs), analysis.narrationWords))} per 1k narration words${countSuffix(analysis.adverbs)}`);
-    lines.push(`  Dialogue tags: ${formatCounts(analysis.plainTags, 4) || "none plain"}; said-bookisms: ${formatCounts(analysis.bookisms, 5) || "none"}`);
+    if (runs("filter-words")) {
+      lines.push(`  Filter words: ${formatRate(perThousand(total(analysis.filterWords), analysis.narrationWords))} per 1k narration words${countSuffix(analysis.filterWords)}`);
+    }
+    if (runs("adverbs")) {
+      lines.push(`  -ly adverbs: ${formatRate(perThousand(total(analysis.adverbs), analysis.narrationWords))} per 1k narration words${countSuffix(analysis.adverbs)}`);
+    }
+    if (runs("dialogue-tags")) {
+      lines.push(`  Dialogue tags: ${formatCounts(analysis.plainTags, 4) || "none plain"}; said-bookisms: ${formatCounts(analysis.bookisms, 5) || "none"}`);
+    }
     if (chapter.baseline && profile.usable) {
       const figures = chapter.baseline;
       lines.push(`  Against the baseline: paragraphs ${formatRate(figures.paragraphMean)} words, ${formatRate(figures.dialogueShare)}% dialogue, signature words ${figures.signatureWordsUsed} of ${profile.signatureWords.length}`);
     }
-    lines.push(`  Echoes within ${PROSE_THRESHOLDS.echoWindow} words: ${formatCounts(analysis.echoes, 5) || "none"}`);
+    if (runs("echoes")) {
+      lines.push(`  Echoes within ${PROSE_THRESHOLDS.echoWindow} words: ${formatCounts(analysis.echoes, 5) || "none"}`);
+    }
     if (analysis.watch.length > 0) {
       lines.push(`  Watch words: ${analysis.watch.map((entry) => `${entry.word} ${entry.count}`).join(", ")}`);
     }
@@ -2706,10 +2996,15 @@ function formatProseReport(report) {
       lines.push(`  Spelling: ${analysis.variants.map((entry) => `${entry.avoid} ${entry.count} (use ${entry.use})`).join(", ")}`);
     }
   }
-  lines.push("", report.passage ? "Passage:" : "Manuscript:");
-  lines.push(`  Repeated ${PROSE_THRESHOLDS.phraseLength}-word phrases: ${report.phrases.map((entry) => `"${entry.phrase}" ${entry.count}`).join(", ") || "none"}`);
+  const whole = [];
+  if (runs("repeated-phrases")) {
+    whole.push(`  Repeated ${PROSE_THRESHOLDS.phraseLength}-word phrases: ${report.phrases.map((entry) => `"${entry.phrase}" ${entry.count}`).join(", ") || "none"}`);
+  }
   if (!report.passage) {
-    lines.push(`  Similar character names: ${report.similarNames.map(([a, b]) => `${a.name} / ${b.name}`).join(", ") || "none"}`);
+    whole.push(`  Similar character names: ${report.similarNames.map(([a, b]) => `${a.name} / ${b.name}`).join(", ") || "none"}`);
+  }
+  if (whole.length > 0) {
+    lines.push("", report.passage ? "Passage:" : "Manuscript:", ...whole);
   }
   return `${lines.join(`
 `)}
@@ -2718,20 +3013,19 @@ function formatProseReport(report) {
 function proseParagraphs(prose) {
   return withoutFenceMarkers(scanComments(String(prose), " ").text).split(/\r?\n\s*\r?\n/).map((paragraph) => paragraph.split(/\r?\n/).filter((line) => !/^\s{0,3}#/.test(line)).join(" ")).map((paragraph) => paragraph.replace(/\s+/g, " ").trim()).filter((paragraph) => paragraph !== "" && !/^([*_-])( ?\1){2,}$/.test(paragraph));
 }
-var BEAT_PRONOUNS = new Set(["he", "she", "they", "i", "we", "it", "you"]);
 function dialogueTags(paragraphs, rules) {
   const plain = new Map;
   const bookisms = new Map;
   for (const paragraph of paragraphs) {
-    for (const match of quoteMatches(paragraph)) {
+    for (const match of quoteMatches(paragraph, rules.pack)) {
       const after = splitWords(paragraph.slice(match.end, match.end + 200).split(/[.!?;:“"]/)[0]).slice(0, 3);
-      const tag = tagKind(match.text, after[0] ?? "");
+      const tag = tagKind(match.text, after[0] ?? "", rules);
       if (tag === "none") {
         continue;
       }
       for (const raw of after) {
         const word = raw.toLowerCase();
-        if (PLAIN_TAGS.includes(word)) {
+        if (rules.plainTags.has(word)) {
           increment(plain, word);
           break;
         }
@@ -2744,18 +3038,18 @@ function dialogueTags(paragraphs, rules) {
   }
   return { plain: sortCounts(plain), bookisms: sortCounts(bookisms) };
 }
-function tagKind(quoted, nextWord) {
+function tagKind(quoted, nextWord, rules) {
   const end = quoted.trim().replace(/["'”’)\]*_]+$/, "").slice(-1);
   if (end === ".") {
     return "none";
   }
   if (/[?!…—–-]/.test(end) && /^\p{Lu}/u.test(nextWord)) {
-    return BEAT_PRONOUNS.has(nextWord.toLowerCase()) ? "none" : "plain";
+    return rules.beatPronouns.has(nextWord.toLowerCase()) ? "none" : "plain";
   }
   return "any";
 }
 function isAdverb(word, rules) {
-  return word.length > 4 && word.endsWith("ly") && !NOT_ADVERBS.has(word) && !rules.allow.has(word) && !isName(word, rules);
+  return word.length > 4 && rules.adverbSuffixes.some((suffix) => word.endsWith(suffix)) && !rules.adverbExceptions.has(word) && !rules.allow.has(word) && !isName(word, rules);
 }
 function isName(word, rules) {
   return rules.nameTokens.has(word) || rules.nameTokens.has(nameKey(word));
@@ -2778,11 +3072,14 @@ function countVariant(text, pattern, rules) {
   return count;
 }
 function echoes(words, rules) {
+  if (rules.echoStopwords === null) {
+    return [];
+  }
   const lastSeen = new Map;
   const counts = new Map;
   words.forEach((raw, index) => {
     const word = normalizeWord(raw);
-    if (word.length < PROSE_THRESHOLDS.echoMinLength || ECHO_STOPWORDS.has(word) || isName(word, rules) || rules.allow.has(word) || /^\p{N}+$/u.test(word)) {
+    if (word.length < PROSE_THRESHOLDS.echoMinLength || rules.echoStopwords.has(word) || isName(word, rules) || rules.allow.has(word) || /^\p{N}+$/u.test(word)) {
       return;
     }
     if (lastSeen.has(word) && index - lastSeen.get(word) <= PROSE_THRESHOLDS.echoWindow) {
@@ -5522,7 +5819,6 @@ function bookFile(book, file) {
 // src/publishing.js
 var MAX_KEYWORDS = 7;
 var BISAC_PATTERN = /^[A-Z]{3}\d{6}$/;
-var LANGUAGE_PATTERN = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
 var SCALAR_FIELDS = ["author", "language", "isbn", "publisher", "publication-date", "description", "copyright", "cover-alt", "ai-disclosure", "chapter-label", "contents-label"];
 function isPlaceholder(value) {
   return typeof value === "string" && /^\[TODO\b/i.test(value.trim());
@@ -5569,7 +5865,7 @@ function validatePublishing(data, errors, warnings) {
       errors.push(err("field-not-list", `story.md frontmatter field ${field} must be a list of text`, "story.md"));
     }
   }
-  if (typeof data.language === "string" && !isPlaceholder(data.language) && !LANGUAGE_PATTERN.test(data.language.trim())) {
+  if (typeof data.language === "string" && !isPlaceholder(data.language) && !isLanguageTag(data.language)) {
     errors.push(err("invalid-language", `story.md language ${data.language} must be a BCP 47 tag such as en, en-GB, or fr`, "story.md"));
   }
   const isbn = typeof data.isbn === "number" ? String(data.isbn) : data.isbn;
@@ -8918,11 +9214,14 @@ function scanProject(root) {
       continuity = null;
     }
   }
+  const language = projectLanguage(story.data);
   const project = {
     root: projectRoot,
     story,
     storyId,
     title: titleText || path11.basename(projectRoot),
+    language,
+    pack: languagePack(language),
     fileErrors: scanErrors,
     characters: readEntityFiles(projectRoot, "characters", (id, file, data) => ({
       id,
@@ -10397,7 +10696,7 @@ function namesReport(root, candidates) {
     throw usageError("Usage: story names <name...> [--path <project>]");
   }
   const project = scanProject(root);
-  const result = checkNames(list, existingNames(project));
+  const result = checkNames(list, existingNames(project), project.pack);
   const errors = [...project.fileErrors, ...result.errors];
   return { ok: errors.length === 0, errors, warnings: result.warnings, results: result.results };
 }
@@ -10431,7 +10730,7 @@ function proseReport(root, options = {}) {
   const errors = [...project.fileErrors];
   const warnings = [];
   const names = [...project.characters.map((character) => character.name), ...existingNames(project).map((entry) => entry.name)];
-  const rules = proseRules(project.styleSheet?.data, names);
+  const rules = proseRules(project.styleSheet?.data, names, project.pack);
   const profile = proseBaseline(project, rules, options, warnings);
   const chapters = [];
   for (const chapter of project.chapters) {
@@ -10439,8 +10738,8 @@ function proseReport(root, options = {}) {
     const prose = chapterProse(readMarkdown(chapter.file, project.root).body, " ");
     chapters.push(lintProse(label, chapter.title, prose, rules, thresholds, profile, warnings));
   }
-  const phrases = repeatedPhrases(chapters.map((chapter) => chapter.analysis));
-  const similar = similarNames(project.characters);
+  const phrases = repeatedPhrases(chapters.map((chapter) => chapter.analysis), PROSE_THRESHOLDS, project.pack);
+  const similar = similarNames(project.characters, project.pack);
   for (const [left, right] of similar) {
     warnings.push(warn("prose-similar-names", `characters ${left.id} and ${right.id} have similar first names (${left.name} / ${right.name})`));
   }
@@ -10454,7 +10753,8 @@ function proseReport(root, options = {}) {
     phrases,
     similarNames: similar,
     thresholds: thresholdSummary(thresholds),
-    baseline: profile
+    baseline: profile,
+    skipped: proseSkipped(rules, profile)
   };
 }
 function lintProse(label, title, prose, rules, thresholds, profile, warnings) {
@@ -10504,7 +10804,7 @@ function proseBaseline(project, rules, options, warnings) {
       const prose = document.paragraphs.map((paragraph) => paragraph.text).join(`
 
 `);
-      samples.push({ file: document.file, analysis: analyzeChapter(prose, rules), sentenceLengths: sentenceLengths(prose), contentWords: contentWords(prose, rules) });
+      samples.push({ file: document.file, analysis: analyzeChapter(prose, rules), sentenceLengths: sentenceLengths(prose, rules.pack), contentWords: contentWords(prose, rules) });
     }
   }
   const profile = baselineProfile(samples);
@@ -10526,6 +10826,9 @@ function sampleProblem(project, sample) {
   }
   return null;
 }
+function proseSkipped(rules, profile) {
+  return profile === null ? rules.skipped : [...rules.skipped, ...skippedChecks(rules.pack, BASELINE_CHECKS)];
+}
 function thresholdSummary(thresholds) {
   return { maxFilterWords: thresholds.filterPerThousand, maxAdverbs: thresholds.adverbsPerThousand, maxBookisms: thresholds.maxBookisms };
 }
@@ -10533,7 +10836,7 @@ function prosePassageReport(root, passage, thresholds, options = {}) {
   const project = root === null ? null : scanProject(root);
   const errors = project === null ? [] : passageErrors(project);
   const names = project === null ? [] : [...project.characters.map((character) => character.name), ...existingNames(project).map((entry) => entry.name)];
-  const rules = proseRules(project?.styleSheet?.data, names);
+  const rules = proseRules(project?.styleSheet?.data, names, project?.pack);
   const warnings = [];
   const profile = project === null ? null : proseBaseline(project, rules, options, warnings);
   const chapter = lintProse(PASSAGE_LABEL, "passage", passageProse(passage), rules, thresholds, profile, warnings);
@@ -10545,10 +10848,11 @@ function prosePassageReport(root, passage, thresholds, options = {}) {
     styleSheet: Boolean(project?.styleSheet),
     words: chapter.analysis.words,
     chapters: [chapter],
-    phrases: repeatedPhrases([chapter.analysis]),
+    phrases: repeatedPhrases([chapter.analysis], PROSE_THRESHOLDS, rules.pack),
     similarNames: [],
     thresholds: thresholdSummary(thresholds),
-    baseline: profile
+    baseline: profile,
+    skipped: proseSkipped(rules, profile)
   };
 }
 function exportManuscript(root, options = {}) {
@@ -14642,80 +14946,41 @@ function relative2(project, file) {
 
 // src/import.js
 var ROMAN_NUMERAL = "(?!i\\s+\\S)(?=[ivxlc])c{0,3}(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})";
-var UNIT_WORDS = "one|two|three|four|five|six|seven|eight|nine";
-var TENS_WORDS = "twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety";
-var BELOW_HUNDRED = `(?:(?:${TENS_WORDS})(?:[-\\s](?:${UNIT_WORDS}))?|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|${UNIT_WORDS})`;
-var WORD_NUMERAL = `(?:(?:${UNIT_WORDS})[-\\s]hundred(?:(?:[-\\s]and)?[-\\s]${BELOW_HUNDRED})?|${BELOW_HUNDRED})`;
-var CHAPTER_NUMBER = `(?:\\d+(?:\\.\\d+)?|${WORD_NUMERAL}|${ROMAN_NUMERAL})(?=[\\s:.\\-–—]|$)`;
-var CHAPTER_HEADING_PATTERN = new RegExp(`^chapter(?![A-Za-z])\\s*(?:${CHAPTER_NUMBER})?\\s*[:.\\-–—]*\\s*(.*)$`, "i");
-var PLAIN_CHAPTER_PATTERN = new RegExp(`^chapter\\s+${CHAPTER_NUMBER}\\s*(?:[:.\\-–—]+\\s*(.*))?$`, "i");
-var SECTION_HEADING_PATTERN = /^(?:prologue|epilogue|interlude|afterword)(?![A-Za-z])/i;
-var PLAIN_SECTION_PATTERN = /^(?:prologue|epilogue|interlude|afterword)\s*(?:[:.\-–—]+.*)?$/i;
 var PLAIN_LINE_MAX_LENGTH = 80;
-var PART_HEADING = /^part(?![A-Za-z])/i;
 var GENERATED_MARKER = /<!--\s*Generated by story (?:export|build)\.\s*-->/g;
-var FRONT_MATTER_NAMES = /^(?:prologue|preface|foreword|introduction|prelude)\b/i;
 var CANDIDATE_THRESHOLD = 3;
 var CANDIDATE_LIMIT = 25;
-var CANDIDATE_STOPWORDS = new Set([
-  "A",
-  "An",
-  "And",
-  "At",
-  "But",
-  "By",
-  "Dr",
-  "For",
-  "He",
-  "Her",
-  "His",
-  "I",
-  "If",
-  "In",
-  "It",
-  "Its",
-  "Mr",
-  "Mrs",
-  "Ms",
-  "No",
-  "Not",
-  "Of",
-  "On",
-  "Or",
-  "She",
-  "That",
-  "The",
-  "Then",
-  "They",
-  "Their",
-  "This",
-  "To",
-  "We",
-  "When",
-  "While",
-  "With",
-  "Yes",
-  "You",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-  "Sunday",
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December"
-]);
+var NEVER3 = "(?!)";
+var RULES2 = new WeakMap;
+function importRules(pack) {
+  if (!RULES2.has(pack)) {
+    RULES2.set(pack, buildImportRules(pack));
+  }
+  return RULES2.get(pack);
+}
+function buildImportRules(pack) {
+  const either = (name) => (checkList(pack, name) ?? []).map(escapeRegExp).join("|") || NEVER3;
+  const chapter = either("chapterWords");
+  const section = either("sectionWords");
+  const chapterNumber = `(?:\\d+(?:\\.\\d+)?|${wordNumeral(checkList(pack, "numberWords"))}${ROMAN_NUMERAL})(?=[\\s:.\\-–—]|$)`;
+  return {
+    chapterHeading: new RegExp(`^(?:${chapter})(?![A-Za-z])\\s*(?:${chapterNumber})?\\s*[:.\\-–—]*\\s*(.*)$`, "i"),
+    plainChapter: new RegExp(`^(?:${chapter})\\s+${chapterNumber}\\s*(?:[:.\\-–—]+\\s*(.*))?$`, "i"),
+    sectionHeading: new RegExp(`^(?:${section})(?![A-Za-z])`, "i"),
+    plainSection: new RegExp(`^(?:${section})\\s*(?:[:.\\-–—]+.*)?$`, "i"),
+    partHeading: new RegExp(`^(?:${either("partWords")})(?![A-Za-z])`, "i"),
+    frontMatter: new RegExp(`^(?:${either("frontMatterWords")})\\b`, "i"),
+    candidateStopwords: new Set([...checkList(pack, "candidateStopwords") ?? [], ...checkList(pack, "calendarWords") ?? []])
+  };
+}
+function wordNumeral(words) {
+  if (words === null) {
+    return "";
+  }
+  const units = words.units.join("|");
+  const belowHundred = `(?:(?:${words.tens.join("|")})(?:[-\\s](?:${units}))?|${words.teens.join("|")}|${units})`;
+  return `(?:(?:${units})[-\\s]${words.hundred}(?:(?:[-\\s]${words.and})?[-\\s]${belowHundred})?|${belowHundred})|`;
+}
 var MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024;
 var MAX_IMPORT_FILES = 500;
 function rejectSymlinkedSource(filePath) {
@@ -14743,9 +15008,11 @@ function importManuscript(options) {
   if (!fromStdin && fs8.statSync(source).isDirectory() && fs8.existsSync(path12.join(source, "story.md"))) {
     throw usageError(`${rawSource} is already a story project (it has story.md); import reads manuscript files, so point it at the draft instead`);
   }
+  const pack = languagePack(options.language);
+  const rules = importRules(pack);
   const warnings = [];
-  const documents = fromStdin ? [{ name: "stdin", text: options.readStdin(), untitled: true }] : readImportSource(source);
-  const chapters = splitChapters(documents, warnings);
+  const documents = fromStdin ? [{ name: "stdin", text: options.readStdin(), untitled: true }] : readImportSource(source, rules);
+  const chapters = splitChapters(documents, warnings, rules);
   if (chapters.length === 0) {
     throw usageError("No chapter content found in import source");
   }
@@ -14811,7 +15078,7 @@ function importManuscript(options) {
     gitignore: created.gitignore,
     candidates: extractNameCandidates(chapters.map((chapter) => chapter.prose).join(`
 
-`))
+`), pack)
   };
 }
 var NAME_WORD = "(?:(?:Ma?c|[OD]['’])(?=\\p{Lu}))?\\p{Lu}\\p{Ll}+(?:['’]\\p{Ll}+)?(?:-\\p{Lu}\\p{Ll}+)*";
@@ -14819,11 +15086,12 @@ var NAME_RUN_PATTERN = new RegExp(`(?<![\\p{L}\\p{N}'’-])${NAME_WORD}(?:\\s+${
 var NAME_SINGLE_PATTERN = new RegExp(`(?<![\\p{L}\\p{N}'’-])(?<!${NAME_WORD}\\s+)${NAME_WORD}(?![\\p{L}\\p{N}])(?!\\s+${NAME_WORD})`, "gu");
 var MID_SENTENCE = /\p{Ll}[,;:]?\s$/u;
 var DISTINCTIVE_NAME = /^\p{Lu}.*\p{Lu}/u;
-function extractNameCandidates(prose) {
+function extractNameCandidates(prose, pack = languagePack()) {
+  const stopwords = importRules(pack).candidateStopwords;
   const counts = new Map;
   for (const match of prose.matchAll(NAME_RUN_PATTERN)) {
     const words = match[0].replace(/\s+/g, " ").split(" ");
-    while (words.length > 0 && CANDIDATE_STOPWORDS.has(words[0])) {
+    while (words.length > 0 && stopwords.has(words[0])) {
       words.shift();
     }
     if (words.length > 0) {
@@ -14832,7 +15100,7 @@ function extractNameCandidates(prose) {
   }
   for (const match of prose.matchAll(NAME_SINGLE_PATTERN)) {
     const name = withoutPossessive(match[0]);
-    if (CANDIDATE_STOPWORDS.has(name)) {
+    if (stopwords.has(name)) {
       continue;
     }
     if (DISTINCTIVE_NAME.test(name) || MID_SENTENCE.test(prose.slice(Math.max(0, match.index - 3), match.index))) {
@@ -14850,14 +15118,14 @@ function addCandidate(counts, name) {
 function readSourceText(filePath) {
   return decodeUtf82(fs8.readFileSync(filePath), `Cannot import ${filePath}`, "Save it as UTF-8 plain text or markdown first");
 }
-function readImportSource(source) {
+function readImportSource(source, rules) {
   try {
-    return readSourceDocuments(source);
+    return readSourceDocuments(source, rules);
   } catch (error) {
     throw withDefaultExitCode(error, EXIT_CODES.usage);
   }
 }
-function readSourceDocuments(source) {
+function readSourceDocuments(source, rules) {
   rejectSymlinkedSource(source);
   if (fs8.statSync(source).isFile()) {
     assertImportFileSize(source);
@@ -14882,7 +15150,7 @@ function readSourceDocuments(source) {
       names.push(entry.name);
     }
   }
-  names.sort(compareImportNames);
+  names.sort((left, right) => compareImportNames(left, right, rules));
   if (names.length > MAX_IMPORT_FILES) {
     throw usageError("Too many import files in " + source + ": " + names.length + " exceeds the " + MAX_IMPORT_FILES + " file limit");
   }
@@ -14896,16 +15164,16 @@ function readSourceDocuments(source) {
   }
   return documents;
 }
-function importNameRank(name, nums) {
+function importNameRank(name, nums, rules) {
   if (nums.length > 0) {
     return 1;
   }
-  return FRONT_MATTER_NAMES.test(name) ? 0 : 2;
+  return rules.frontMatter.test(name) ? 0 : 2;
 }
-function compareImportNames(left, right) {
+function compareImportNames(left, right, rules = importRules(languagePack())) {
   const leftNums = [...left.matchAll(/\d+/g)].map((match) => Number(match[0]));
   const rightNums = [...right.matchAll(/\d+/g)].map((match) => Number(match[0]));
-  const rankDiff = importNameRank(left, leftNums) - importNameRank(right, rightNums);
+  const rankDiff = importNameRank(left, leftNums, rules) - importNameRank(right, rightNums, rules);
   if (rankDiff !== 0) {
     return rankDiff;
   }
@@ -14928,7 +15196,7 @@ function compareImportNames(left, right) {
   }
   return left < right ? -1 : 1;
 }
-function splitChapters(documents, warnings = []) {
+function splitChapters(documents, warnings, rules) {
   const chapters = [];
   for (const document of documents) {
     const source = document.text.replace(/\r\n?/g, `
@@ -14942,7 +15210,7 @@ function splitChapters(documents, warnings = []) {
     const offset = source.slice(0, source.length - body.length).split(`
 `).length - 1;
     const text = normalizeSource(body, document.name);
-    const { sections, unused, markdown } = splitByChapterHeadings(text);
+    const { sections, unused, markdown } = splitByChapterHeadings(text, rules);
     if (unused.length > 0) {
       const count = unused.length === 1 ? "1 plain-text chapter line was" : `${unused.length} plain-text chapter lines were`;
       const why = markdown ? "the file has markdown chapter headings, which take precedence, so make these headings too (## Chapter 1)" : "a chapter line splits only when it stands alone between blank lines, so add a blank line after each";
@@ -15020,7 +15288,7 @@ function protectComments(text, change) {
   }
   return result;
 }
-function splitByChapterHeadings(text) {
+function splitByChapterHeadings(text, rules) {
   const lines = text.split(`
 `);
   const hidden = hiddenLineIndexes(lines);
@@ -15031,26 +15299,26 @@ function splitByChapterHeadings(text) {
     }
     const setext = setextHeadingText(lines, index, hidden);
     const heading = setext ?? atxHeadingText(line);
-    const title = heading === null ? null : chapterTitle(heading, CHAPTER_HEADING_PATTERN);
+    const title = heading === null ? null : chapterTitle(heading, rules.chapterHeading, rules.sectionHeading);
     if (title !== null && setext !== null) {
       underlines.add(index + 1);
     }
     return title;
   });
   const markdown = markdownTitles.some((title) => title !== null);
-  const titles = markdown ? markdownTitles : lines.map((line, index) => hidden.has(index) ? null : plainChapterTitle(lines, index));
-  const unused = unusedChapterLines(lines, hidden, titles, underlines);
+  const titles = markdown ? markdownTitles : lines.map((line, index) => hidden.has(index) ? null : plainChapterTitle(lines, index, rules));
+  const unused = unusedChapterLines(lines, hidden, titles, underlines, rules);
   const sections = [];
   let current = null;
   const preamble = [];
   for (const [index, line] of lines.entries()) {
     const title = titles[index];
     if (title !== null) {
-      const part = takePartHeading(current ? current.lines : preamble);
+      const part = takePartHeading(current ? current.lines : preamble, rules);
       if (current) {
         sections.push(finishChapter(current));
       }
-      current = { title, lines: part, unnumbered: unnumberedHeading(lines, index, hidden, markdown) };
+      current = { title, lines: part, unnumbered: unnumberedHeading(lines, index, hidden, markdown, rules) };
     } else if (markdown && underlines.has(index)) {
       continue;
     } else if (current) {
@@ -15064,7 +15332,7 @@ function splitByChapterHeadings(text) {
   }
   sections.push(finishChapter(current));
   const opening = stripTitleHeading(preamble.join(`
-`)).trim();
+`), rules).trim();
   const plainTitleOnly = markdown ? false : !opening.includes(`
 `) && opening.length <= PLAIN_LINE_MAX_LENGTH;
   if (opening !== "" && scanComments(opening).text.trim() === "") {
@@ -15079,26 +15347,26 @@ ${sections[0].prose}`.trim();
   }
   return { sections, unused, markdown };
 }
-function unusedChapterLines(lines, hidden, titles, underlines) {
+function unusedChapterLines(lines, hidden, titles, underlines, rules) {
   const unused = [];
   for (const [index, line] of lines.entries()) {
     const text = line.trim();
     if (titles[index] !== null || hidden.has(index) || underlines.has(index) || text.length > PLAIN_LINE_MAX_LENGTH) {
       continue;
     }
-    if (PLAIN_CHAPTER_PATTERN.test(text)) {
+    if (rules.plainChapter.test(text)) {
       unused.push({ index, text });
     }
   }
   return unused;
 }
-function takePartHeading(lines) {
+function takePartHeading(lines, rules) {
   let end = lines.length;
   while (end > 0 && lines[end - 1].trim() === "") {
     end -= 1;
   }
   const heading = end > 0 ? atxHeadingText(lines[end - 1]) : null;
-  if (heading === null || !PART_HEADING.test(heading)) {
+  if (heading === null || !rules.partHeading.test(heading)) {
     return [];
   }
   return lines.splice(end - 1).slice(0, 1);
@@ -15147,15 +15415,15 @@ function setextHeadingText(lines, index, hidden, underline = /^ {0,3}(?:=+|-+)[ 
 function cleanHeadingText(text) {
   return text.replace(/\s*\{[#.-][^{}]*\}\s*$/, "").replace(/(?:^|[ \t]+)#+[ \t]*$/, "").replace(/\s*\{[#.-][^{}]*\}\s*$/, "").trim();
 }
-function plainChapterTitle(lines, index) {
+function plainChapterTitle(lines, index, rules) {
   const text = lines[index].trim();
   const alone = (lines[index - 1] ?? "").trim() === "" && (lines[index + 1] ?? "").trim() === "";
   if (!alone || text === "" || text.length > PLAIN_LINE_MAX_LENGTH) {
     return null;
   }
-  return chapterTitle(text, PLAIN_CHAPTER_PATTERN, PLAIN_SECTION_PATTERN);
+  return chapterTitle(text, rules.plainChapter, rules.plainSection);
 }
-function chapterTitle(text, pattern, sectionPattern = SECTION_HEADING_PATTERN) {
+function chapterTitle(text, pattern, sectionPattern) {
   if (sectionPattern.test(text)) {
     return text.replace(/[\s:.\-–—]+$/, "");
   }
@@ -15166,13 +15434,13 @@ function finishChapter(section) {
   return { title: section.title, prose: section.lines.join(`
 `).trim(), unnumbered: Boolean(section.unnumbered) };
 }
-function unnumberedHeading(lines, index, hidden, markdown) {
+function unnumberedHeading(lines, index, hidden, markdown, rules) {
   const line = lines[index];
   if (markdown && /\{[^{}]*(?:\.unnumbered|(?:^|[{\s])-(?=[\s}]))[^{}]*\}[\s#]*$/.test(line)) {
     return true;
   }
   const text = markdown ? setextHeadingText(lines, index, hidden) ?? atxHeadingText(line) : line.trim();
-  return SECTION_HEADING_PATTERN.test(text ?? "");
+  return rules.sectionHeading.test(text ?? "");
 }
 function singleChapter(text, document) {
   const lines = text.split(`
@@ -15196,7 +15464,7 @@ function singleChapter(text, document) {
     prose: text.trim()
   };
 }
-function stripTitleHeading(text) {
+function stripTitleHeading(text, rules) {
   const lines = text.split(`
 `);
   const first = lines.findIndex((line) => line.trim() !== "");
@@ -15205,7 +15473,7 @@ function stripTitleHeading(text) {
   }
   const atx = atxHeadingText(lines[first].trimStart());
   if (atx !== null && /^\s*#[ \t]/.test(lines[first])) {
-    return PART_HEADING.test(atx) ? text : lines.slice(first + 1).join(`
+    return rules.partHeading.test(atx) ? text : lines.slice(first + 1).join(`
 `);
   }
   if (setextHeadingText(lines, first, new Set, /^ {0,3}=+[ \t]*$/) !== null) {

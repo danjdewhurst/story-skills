@@ -8,6 +8,10 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ## [Unreleased]
 
+### Added
+
+- Language packs keyed by `story.md` `language`. `story prose`, `story voices`, and `story names` now take their word lists (filter words, said-bookisms, `-ly` adverbs, speech verbs, contractions, stopwords, British and American spellings, and the titles stripped from a name) from a pack for the book's language, resolved from the BCP 47 tag (`fr-CA`, then `fr`, then a generic base pack). Only English has word lists so far, and English output is unchanged. In a book in another language, a check whose list the pack lacks is skipped instead of run with English words, so a French manuscript no longer gets English false positives: the text output prints a `Note:` line naming each skipped check and the language, and `--json` lists them in `data.skipped` (`[]` for English). In `story voices`, lines are then attributed by action beats alone and `contractions` is `null`. Exit codes are unchanged. ([#306](https://github.com/danjdewhurst/story-skills/issues/306))
+
 ### Changed
 
 - `story add`, `story rename`, and `story init` transliterate Cyrillic and Greek names and titles into ids, so `story add character "Пётр"` writes `characters/petr.md` and `Ολυμπία` gives `olympia` without `--id`. Cyrillic follows a simplified BGN/PCGN table shared by Russian, Ukrainian, Belarusian, Bulgarian, Serbian, and Macedonian letters; Greek follows a simplified ELOT 743. Both tables are in the [project format reference](docs/project-format.md#transliteration). Ids stay ASCII. Names in other scripts (Chinese, Arabic, Hebrew, and the rest), and names with a Cyrillic or Greek letter the tables lack (Kazakh `қ`), still need `--id` with the same error as before. Existing ids are never rewritten: the story id is still derived from the title and folder name without transliteration, and review-copy labels for unnumbered chapters are unchanged. `story init` without `--dir` uses the transliterated title for the folder name when the title has no ASCII letters or digits (`voyna-i-mir`). ([#313](https://github.com/danjdewhurst/story-skills/issues/313))

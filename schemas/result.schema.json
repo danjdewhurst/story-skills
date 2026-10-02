@@ -71,6 +71,20 @@
       "required": ["word", "count"],
       "properties": { "word": { "type": "string" }, "count": { "$ref": "#/$defs/count" } }
     },
+    "skipped-checks": {
+      "type": "array",
+      "description": "Checks the story's language pack has no word lists for, so they did not run; empty for English.",
+      "items": {
+        "type": "object",
+        "required": ["check", "language", "missing", "message"],
+        "properties": {
+          "check": { "type": "string", "description": "The skipped check, such as filter-words or speech-tags." },
+          "language": { "type": "string", "description": "The story.md language tag." },
+          "missing": { "type": "array", "items": { "type": "string" }, "description": "The word lists the pack lacks." },
+          "message": { "type": "string", "description": "The note the text output prints." }
+        }
+      }
+    },
     "data-check": {
       "type": "object",
       "required": ["errors", "warnings", "dismissed"],
@@ -382,8 +396,9 @@
     },
     "data-prose": {
       "type": "object",
-      "required": ["styleSheet", "words", "chapters", "phrases", "similarNames", "thresholds", "baseline"],
+      "required": ["styleSheet", "words", "chapters", "phrases", "similarNames", "thresholds", "baseline", "skipped"],
       "properties": {
+        "skipped": { "$ref": "#/$defs/skipped-checks" },
         "styleSheet": { "type": "boolean" },
         "baseline": {
           "type": ["object", "null"],
@@ -498,8 +513,9 @@
     },
     "data-voices": {
       "type": "object",
-      "required": ["profiles", "unattributed"],
+      "required": ["profiles", "unattributed", "skipped"],
       "properties": {
+        "skipped": { "$ref": "#/$defs/skipped-checks" },
         "profiles": {
           "type": "array",
           "items": {
@@ -510,7 +526,7 @@
               "lines": { "$ref": "#/$defs/count" },
               "words": { "$ref": "#/$defs/count" },
               "sentenceLength": { "type": "number" },
-              "contractions": { "type": "number" },
+              "contractions": { "type": ["number", "null"], "description": "Per 100 words, or null when the contraction count is skipped for the language." },
               "questions": { "type": "number" },
               "exclamations": { "type": "number" },
               "signature": { "type": "array", "items": { "type": "string" } }

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { makeTempDir } from "./helpers.js";
-import { checkCoverage, parseLcov } from "../scripts/check-coverage.js";
+import { checkCoverage, parseLcov, sourceFiles } from "../scripts/check-coverage.js";
 import { collectResult, compareFindings } from "../scripts/check-examples.js";
 import { docVersionFiles } from "../scripts/doc-versions.js";
 import { checkDocBunPin, checkDocVersions, checkMarketplaces, checkSkillFrontmatter, checkTemplateStoryRef, checkVersionModule, checkWorkflowBunPin, expectEqual } from "../scripts/check-metadata.js";
@@ -214,6 +214,13 @@ describe("missing bun", () => {
 });
 
 describe("check-coverage", () => {
+  test("gates source files in subfolders such as src/languages", () => {
+    const files = sourceFiles(path.resolve(import.meta.dir, "..", "src"));
+    expect(files).toContain(path.resolve(import.meta.dir, "..", "src", "languages", "en.js"));
+    expect(files).toContain(path.resolve(import.meta.dir, "..", "src", "story.js"));
+    expect(files.every((file) => file.endsWith(".js"))).toBe(true);
+  });
+
   test("parses BRDA branch records for real", () => {
     const records = parseLcov(
       "TN:\nSF:/repo/src/a.js\nBRDA:10,0,0,1\nBRDA:10,0,1,-\nBRDA:12,1,0,3\n" +

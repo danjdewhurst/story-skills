@@ -1,5 +1,6 @@
 import { storyDateError } from "./continuity.js";
 import { err, warn } from "./findings.js";
+import { isLanguageTag } from "./languages/index.js";
 import { isBookNumber, seriesDisplayName } from "./series.js";
 
 // Publishing metadata kept in story.md: what retailers, distributors, and the
@@ -8,7 +9,6 @@ import { isBookNumber, seriesDisplayName } from "./series.js";
 
 export const MAX_KEYWORDS = 7;
 const BISAC_PATTERN = /^[A-Z]{3}\d{6}$/;
-const LANGUAGE_PATTERN = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
 const SCALAR_FIELDS = ["author", "language", "isbn", "publisher", "publication-date", "description", "copyright", "cover-alt", "ai-disclosure", "chapter-label", "contents-label"];
 
 // A `[TODO: author to supply]` marker, which the publishing skill leaves
@@ -69,7 +69,7 @@ export function validatePublishing(data, errors, warnings) {
       errors.push(err("field-not-list", `story.md frontmatter field ${field} must be a list of text`, "story.md"));
     }
   }
-  if (typeof data.language === "string" && !isPlaceholder(data.language) && !LANGUAGE_PATTERN.test(data.language.trim())) {
+  if (typeof data.language === "string" && !isPlaceholder(data.language) && !isLanguageTag(data.language)) {
     errors.push(err("invalid-language", `story.md language ${data.language} must be a BCP 47 tag such as en, en-GB, or fr`, "story.md"));
   }
   const isbn = typeof data.isbn === "number" ? String(data.isbn) : data.isbn;
