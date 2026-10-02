@@ -37,16 +37,16 @@ voice pass by reading instead.
 | English (US) | “…”, ‘…’ | Quote marks; comma or full stop inside the closing quote | No space before punctuation |
 | English (UK) | Often ‘…’, “…” (many publishers use US order) | Quote marks; punctuation inside or outside by sense, per house style | No space before punctuation |
 | French | « … », “…” | Guillemets, often with an em dash (—) marking a change of speaker inside them; some books use dashes only | A no-break space inside guillemets and before `: ; ! ?` (often a narrow no-break space, U+202F, before `; ! ?`). Quebec usage often drops the space before `; ! ?` |
-| Spanish | « … », “…”, then ‘…’ | An em dash (raya) opens each line and sets off the tag: `—Ya voy —dijo ella—. Espera.` | `¿` and `¡` open questions and exclamations; the full stop goes after a closing dash or quote |
-| Portuguese | Brazil “…”; Portugal « … » | An em dash (travessão) opens each line and sets off the tag | No space before punctuation |
-| Italian | « … » or “…” | Guillemets (caporali) or an em dash, by publisher | No space before punctuation |
+| Spanish | «…», “…”, then ‘…’ | An em dash (raya) opens each line and sets off the tag: `—Ya voy —dijo ella—. Espera.` | No spaces inside guillemets; `¿` and `¡` open questions and exclamations; the full stop goes after a closing dash or quote |
+| Portuguese | Brazil “…”; Portugal «…» | An em dash (travessão) opens each line and sets off the tag | No space before punctuation |
+| Italian | «…» or “…” | Guillemets (caporali) or an em dash, by publisher | No spaces inside guillemets or before punctuation |
 | German | „…“ and ‚…‘, or »…« and ›…‹ in many books | Quote marks; a comma follows the closing quote before the tag: `„Komm“, sagte sie.` | No space before punctuation |
 | Swiss German | «…», ‹…› | Quote marks | No spaces inside the guillemets |
 | Polish | „…”, «…» | Usually a dash opening each line in fiction | No space before punctuation |
 | Russian | «…», „…“ | An em dash opens each line and sets off the tag | No space before punctuation |
 | Czech | „…“, ‚…‘ | Quote marks | No space before punctuation |
 | Swedish | ”…”, ’…’ (both marks the same shape) | Quote marks or a dialogue dash, by publisher | No space before punctuation |
-| Greek | « … », “…” | Guillemets or a dash | `;` is the question mark; the raised dot `·` is the semicolon |
+| Greek | «…», “…” | Guillemets or a dash | `;` is the question mark; the raised dot `·` is the semicolon |
 | Japanese | 「…」, 『…』 | Each spoken line in 「」, usually its own paragraph | Full-width `、` and `。`; no spaces between words; modern fiction usually drops `。` before a closing `」`; `……` and `――` are doubled |
 | Chinese (Simplified) | “…”, ‘…’ (full width) | Quote marks | Full-width `，。！？：；`; `……` (six dots) and `——` are doubled; `《》` marks titles |
 | Chinese (Traditional) | 「…」, 『…』 | Corner brackets | Full-width punctuation as above |

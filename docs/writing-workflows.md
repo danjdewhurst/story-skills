@@ -211,7 +211,7 @@ limited, past tense. A lighthouse keeper's daughter finds a drowned man in
 the tide room. Themes: grief and duty.
 ```
 
-The [`story-init`](../skills/story-init/SKILL.md) skill asks for anything missing (title, form, sub-genre, setting era, 2 to 4 themes, POV, tense, language), then scaffolds the project with the CLI. For a book not in English it then adds `language` to `story.md` (see [Writing in another language](#writing-in-another-language)):
+The [`story-init`](../skills/story-init/SKILL.md) skill asks for anything missing (title, form, sub-genre, setting era, 2 to 4 themes, POV, tense, language), then scaffolds the project with the CLI and adds `language` to `story.md` by hand (see [Writing in another language](#writing-in-another-language)):
 
 ```shell
 story init "The Gannet Point Light" --form novel --genre mystery --sub-genre coastal \

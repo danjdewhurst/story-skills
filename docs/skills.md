@@ -180,7 +180,7 @@ The main handoffs:
    story init 'The Keeper of Skerry Light' --form novella --genre fantasy --sub-genre coastal --synopsis 'A lighthouse keeper who has never left the rock must choose between the light and her drowned brother.' --theme isolation
    ```
 
-   The brief includes the book's language as a BCP 47 tag. It then hand-edits `premise`, `counter-premise`, and, for a book not in English, `language` into `story.md`, and moves the stakes, kept what-ifs, title shortlist, and comps into `## Notes`.
+   The brief includes the book's language as a BCP 47 tag. It then hand-edits `premise`, `counter-premise`, and `language` into `story.md`, and moves the stakes, kept what-ifs, title shortlist, and comps into `## Notes`.
 
 **Reads.** Your answers; after init, `story.md` and the registries that `story names` checks.
 
@@ -215,7 +215,7 @@ It also borrows `title-logline.md` from story-init and `controlling-idea.md` fro
    ```
 
    `--form` records `form` in `story.md` and, when no target is given, sets a default `target-words`: novel 80,000, novella 30,000, novelette 12,000, short story 5,000, flash 1,000, chapter book 10,000, picture book 500. Serials get no book-level default. Without `--form`, `init` writes neither field, so the skill passes `--form novel` if you don't choose. The story id recorded in every registry comes from the title, and `--dir` sets only the directory. A title with no ASCII letters or digits takes its story id from the folder name: a Cyrillic or Greek title is transliterated for the default folder (`Война и мир` goes in `voyna-i-mir`), and a title in a script with no transliteration table needs `--dir` with an ASCII folder name. `init` refuses an existing directory unless you pass `--force`, and with `--force` it only adds missing starter files.
-3. Records the language: `story init` has no flag for it, so for a book not in English the skill adds `language` to `story.md` by hand, sets `dialect: unspecified` in `style-sheet.md`, and suggests settling dialogue punctuation with voice-style before the first chapter.
+3. Records the language: `story init` has no flag for it, so the skill adds `language` to `story.md` by hand with the exact tag you gave (`en-GB` included). For a book not in English it also sets `dialect: unspecified` in `style-sheet.md` and suggests settling dialogue punctuation with voice-style before the first chapter.
 4. Drafts a working `premise` (value plus cause) and `counter-premise` in `story.md` as hypotheses to revisit in revision, not commitments.
 5. Without the CLI, writes the same folder layout and empty registries by hand from the templates in the skill.
 6. Suggests next steps (workshop the premise if it is still a guess, a first character, worldbuilding, plot structure, the style sheet, `story next .`) and runs `story validate` on the new project.
