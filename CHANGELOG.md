@@ -28,6 +28,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ### Fixed
 
+- `story prose` watch words and avoided spellings, and `story voices` `voice-words` and `voice-avoid`, match in the casing of the book's language, so in a Turkish book `ılık` counts `ILIK`, and `ince` counts `İnce` but not `ınce`. Before, they matched by English casing whatever the language. English output is unchanged. ([#324](https://github.com/danjdewhurst/story-skills/issues/324))
 - The Shunn DOCX build wrote bold and italic after the font size in each run's properties, against the order the WordprocessingML schema sets, which strict readers can reject. Runs now list the font, bold, italic, then the size, so bold and italic Shunn runs change byte for byte; how Word shows them does not. ([#312](https://github.com/danjdewhurst/story-skills/issues/312))
 
 ## [0.18.0] - 2026-09-29

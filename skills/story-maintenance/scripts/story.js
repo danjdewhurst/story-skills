@@ -2300,6 +2300,48 @@ function lowerCase(text, pack = languagePack()) {
 function upperCase(text, pack = languagePack()) {
   return String(text).toLocaleUpperCase(pack.locale);
 }
+function lowerCaseText(text, pack = languagePack()) {
+  const source = String(text);
+  const lower = lowerCase(source, pack);
+  if (lower.length === source.length) {
+    return { text: lower, original: (start, end) => [start, end] };
+  }
+  let folded = "";
+  const starts = [];
+  const sources = [];
+  for (const match of source.matchAll(/(?:[\0-\x7F](?!\p{M}))+|\P{M}\p{M}*|\p{M}+/gsu)) {
+    starts.push(folded.length);
+    sources.push(match.index);
+    folded += lowerCase(match[0], pack);
+  }
+  starts.push(folded.length);
+  sources.push(source.length);
+  const piece = (offset) => {
+    let low = 0;
+    let high = starts.length - 1;
+    while (low < high) {
+      const middle = low + high + 1 >> 1;
+      if (starts[middle] <= offset) {
+        low = middle;
+      } else {
+        high = middle - 1;
+      }
+    }
+    return low;
+  };
+  const at = (offset, end) => {
+    const index = piece(offset);
+    const inside = offset - starts[index];
+    if (inside === 0) {
+      return sources[index];
+    }
+    if (starts[index + 1] - starts[index] === sources[index + 1] - sources[index]) {
+      return sources[index] + inside;
+    }
+    return sources[end ? index + 1 : index];
+  };
+  return { text: folded, original: (start, end) => [at(start, false), at(end, true)] };
+}
 var NUMBER_FORMATS = new Map;
 function formatNumber(value, pack = languagePack()) {
   if (!NUMBER_FORMATS.has(pack.locale)) {
@@ -2711,19 +2753,26 @@ function buildVoices(project, chapters) {
   const profiles = project.characters.map((character) => profile(character, lines.get(character.id), pack, rules)).filter((entry) => entry.lines > 0);
   signatureWords(profiles, pack);
   const warnings = [];
+  const casedLines = new Map;
+  const says = (pattern, line) => {
+    if (!casedLines.has(line)) {
+      casedLines.set(line, lowerCaseText(line.text, pack));
+    }
+    return containsWords(pattern, line.text, casedLines.get(line));
+  };
   for (const character of project.characters) {
     const said = lines.get(character.id);
     for (const phrase of stringList(character.voiceAvoid)) {
-      const pattern = phrasePattern(phrase);
-      const chaptersUsing = [...new Set(said.filter((line) => containsWords(pattern, line.text)).map((line) => line.chapter))];
+      const pattern = phrasePattern(phrase, pack);
+      const chaptersUsing = [...new Set(said.filter((line) => says(pattern, line)).map((line) => line.chapter))];
       if (chaptersUsing.length > 0) {
         warnings.push(warn("voice-avoid", `${character.id} says "${phrase}", which is in their voice-avoid list (${chaptersUsing.join(", ")})`));
       }
     }
     if (said.length >= VOICE_THRESHOLDS.minLines) {
       for (const phrase of stringList(character.voiceWords)) {
-        const pattern = phrasePattern(phrase);
-        if (!said.some((line) => containsWords(pattern, line.text))) {
+        const pattern = phrasePattern(phrase, pack);
+        if (!said.some((line) => says(pattern, line))) {
           warnings.push(warn("voice-words-unused", `${character.id} does not say "${phrase}" from their voice-words list in ${said.length} attributed lines of dialogue`));
         }
       }
@@ -2783,10 +2832,11 @@ function speakerPatterns(characters, pack, rules) {
 var NON_WORD = /[^\p{L}\p{N}]+/u;
 var SPACED_LETTER = `(?![${UNSPACED_LETTERS}])[\\p{L}\\p{N}]`;
 var UNSPACED_LETTER = new RegExp(`[${UNSPACED_LETTERS}]`, "u");
-function containsWords(pattern, text) {
+function containsWords(pattern, text, cased = null) {
   let boundaries = null;
-  for (const match of text.matchAll(pattern)) {
-    const edges = [match.index, match.index + match[0].length].filter((offset) => UNSPACED_LETTER.test(text[offset - 1] ?? "") && UNSPACED_LETTER.test(text[offset] ?? ""));
+  for (const match of (cased?.text ?? text).matchAll(pattern)) {
+    const span = [match.index, match.index + match[0].length];
+    const edges = (cased === null ? span : cased.original(...span)).filter((offset) => UNSPACED_LETTER.test(text[offset - 1] ?? "") && UNSPACED_LETTER.test(text[offset] ?? ""));
     if (edges.length === 0) {
       return true;
     }
@@ -3065,9 +3115,9 @@ function similarVoices(left, right) {
   const close = (a, b, limit) => Math.abs(a - b) < limit - 0.000000001;
   return close(left.sentenceLength, right.sentenceLength, limits.sentenceLength) && (left.contractions === null || close(left.contractions, right.contractions, limits.contractions)) && close(left.questions, right.questions, limits.questions) && close(left.exclamations, right.exclamations, limits.exclamations);
 }
-function phrasePattern(phrase) {
+function phrasePattern(phrase, pack) {
   const edge = `(?![${UNSPACED_LETTERS}])[\\p{L}\\p{M}\\p{N}]`;
-  return new RegExp(`(?<!${edge})${escape(String(phrase).trim()).replace(/['’]/g, "['’]")}(?!${edge})`, "giu");
+  return new RegExp(`(?<!${edge})${escape(lowerCase(String(phrase).trim(), pack)).replace(/['’]/g, "['’]")}(?!${edge})`, "giu");
 }
 function escape(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -3178,8 +3228,8 @@ function proseRules(styleData, names, pack = languagePack()) {
     pack,
     skipped,
     allow,
-    variants: variants.map((variant) => ({ ...variant, pattern: phrasePattern2(variant.avoid) })),
-    watch: stringList2(data["watch-words"]).map((word) => ({ word, pattern: phrasePattern2(word) })),
+    variants: variants.map((variant) => ({ ...variant, pattern: phrasePattern2(variant.avoid, pack) })),
+    watch: stringList2(data["watch-words"]).map((word) => ({ word, pattern: phrasePattern2(word, pack) })),
     filterWords: allowed("filterWords"),
     bookisms: tags ? allowed("saidBookisms") : null,
     plainTags: tags ? checkSet(pack, "plainTags") : null,
@@ -3205,6 +3255,7 @@ function analyzeChapter(prose, rules) {
   const filterWords = rules.filterWords === null ? [] : countMatching(narration, (word) => rules.filterWords.has(word), rules.pack);
   const adverbs = rules.adverbSuffixes === null ? [] : countMatching(narration, (word) => isAdverb(word, rules), rules.pack);
   const tags = rules.plainTags === null ? { plain: [], bookisms: [] } : dialogueTags(paragraphs, rules);
+  const cased = rules.watch.length + rules.variants.length === 0 ? null : lowerCaseText(text, rules.pack);
   return {
     words: words.length,
     narrationWords: narration.length,
@@ -3215,8 +3266,8 @@ function analyzeChapter(prose, rules) {
     plainTags: tags.plain,
     bookisms: tags.bookisms,
     echoes: echoes(words, rules),
-    watch: rules.watch.map(({ word, pattern }) => ({ word, count: countPattern(text, pattern) })).filter((entry) => entry.count > 0),
-    variants: rules.variants.map(({ use, avoid, source, pattern }) => ({ use, avoid, source, count: countVariant(text, pattern, rules) })).filter((entry) => entry.count > 0),
+    watch: rules.watch.map(({ word, pattern }) => ({ word, count: countPattern(cased.text, pattern) })).filter((entry) => entry.count > 0),
+    variants: rules.variants.map(({ use, avoid, source, pattern }) => ({ use, avoid, source, count: countVariant(text, cased, pattern, rules) })).filter((entry) => entry.count > 0),
     phraseSentences: sentenceList.map((sentence) => splitWords(sentence).map((word) => normalizeWord(word, rules.pack)))
   };
 }
@@ -3494,10 +3545,11 @@ function normalizeWord(word, pack) {
 function nameKey(word, pack) {
   return normalizeWord(word, pack).replace(/'s$/, "");
 }
-function countVariant(text, pattern, rules) {
+function countVariant(text, cased, pattern, rules) {
   let count = 0;
-  for (const match of text.matchAll(pattern)) {
-    const first = splitWords(match[0])[0] ?? "";
+  for (const match of cased.text.matchAll(pattern)) {
+    const [start, end] = cased.original(match.index, match.index + match[0].length);
+    const first = splitWords(text.slice(start, end))[0] ?? "";
     if (/^\p{Lu}/u.test(first) && isName(first, rules)) {
       continue;
     }
@@ -3541,8 +3593,8 @@ function countMatching(words, predicate, pack) {
   }
   return sortCounts(counts, pack);
 }
-function phrasePattern2(phrase) {
-  const body = phrase.trim().split(/\s+/).map((word) => escapeRegExp(word).replace(/['’]/g, "['’]")).join("\\s+");
+function phrasePattern2(phrase, pack) {
+  const body = lowerCase(phrase.trim(), pack).split(/\s+/).map((word) => escapeRegExp(word).replace(/['’]/g, "['’]")).join("\\s+");
   return new RegExp(`(?<![\\p{L}\\p{M}\\p{N}])${body}(?![\\p{L}\\p{M}\\p{N}])`, "giu");
 }
 function countPattern(text, pattern) {

@@ -810,7 +810,7 @@ Sentence counts, the style sheet's watch words and `preferred` spellings, the ba
 
 ### Sorting, casing, and numbers
 
-Lists shown to you follow the book's language too: the pronunciation guide in a narration build, unnumbered books in `story series` (when every book shares a language; `sv-SE` and `sv-FI` count as one), the word lists in `story prose` and `story voices`, and the entity candidates from `story import`. Swedish puts `Åsa` and `Örjan` after `Zorn`, German files `Äpfel` with `Apfel`, and Turkish puts `çay` after `cuma`. Words are lower-cased in the language before they are compared, so a Turkish `IŞIK` and `ışık` are the same word, and a Fountain build capitalises names and places in it (`İSKELE`, not `ISKELE`). Watch words and `preferred` spellings are still matched with JavaScript's case-insensitive regular expressions, which ignore Turkish dotted and dotless i, so a Turkish watch word matches only as cased in the manuscript or style sheet. Ids (such as the POV ids in `story timeline`), file names, and chapter numbers sort the same in every language, and names the collator ranks equal are ordered by code point, so a report never depends on the order files were read. The Shunn manuscript's word count is written as the language writes numbers (`Approximately 12.300 words` in German), always with the digits 0 to 9; author-facing CLI reports keep `12,300`.
+Lists shown to you follow the book's language too: the pronunciation guide in a narration build, unnumbered books in `story series` (when every book shares a language; `sv-SE` and `sv-FI` count as one), the word lists in `story prose` and `story voices`, and the entity candidates from `story import`. Swedish puts `Åsa` and `Örjan` after `Zorn`, German files `Äpfel` with `Apfel`, and Turkish puts `çay` after `cuma`. Words are lower-cased in the language before they are compared, so a Turkish `IŞIK` and `ışık` are the same word, and a Fountain build capitalises names and places in it (`İSKELE`, not `ISKELE`). Watch words, `preferred` spellings, and a character's `voice-words` and `voice-avoid` match in the language's casing too, so a Turkish watch word `ılık` counts `ILIK`, and `ince` counts `İnce` but not `ınce`. Ids (such as the POV ids in `story timeline`), file names, and chapter numbers sort the same in every language, and names the collator ranks equal are ordered by code point, so a report never depends on the order files were read. The Shunn manuscript's word count is written as the language writes numbers (`Approximately 12.300 words` in German), always with the digits 0 to 9; author-facing CLI reports keep `12,300`.
 
 ### Sentences and dialogue in other languages
 
@@ -927,7 +927,7 @@ allow-words:
 | `watch-words` | Counted in every chapter, as a reminder of your own tics. |
 | `allow-words` | Silences a word as a filter word, said-bookism, adverb, or echo. Naming either spelling of a built-in dialect pair turns that pair off. |
 
-Matches are case-insensitive whole words, so `grey-haired` still counts as a use of `grey`, and a straight apostrophe in the style sheet also matches a curly one in the manuscript (`don't` counts `don’t`). A capitalised word that is part of a name in the bible (`Dorian Gray`, `Center Point`) is not counted as an avoided spelling, and a `preferred` entry whose `use` and `avoid` are the same word is skipped. `story validate` checks the style sheet's shape: `type: style-sheet`, a known `dialect`, and a non-empty, different `use` and `avoid` in each `preferred` entry.
+Matches are case-insensitive whole words, with case following the book's language (Turkish `ILIK` is a use of `ılık`), so `grey-haired` still counts as a use of `grey`, and a straight apostrophe in the style sheet also matches a curly one in the manuscript (`don't` counts `don’t`). A capitalised word that is part of a name in the bible (`Dorian Gray`, `Center Point`) is not counted as an avoided spelling, and a `preferred` entry whose `use` and `avoid` are the same word is skipped. `story validate` checks the style sheet's shape: `type: style-sheet`, a known `dialect`, and a non-empty, different `use` and `avoid` in each `preferred` entry.
 
 ### Acting on the report
 
@@ -985,7 +985,7 @@ voice-avoid:
   - good
 ```
 
-`voice-words` are words and phrases the character does say; `voice-avoid` are ones they would never say. Both are lists of strings, matched as whole words or phrases, case-insensitively, with either straight or curly apostrophes. The [`voice-style`](../skills/voice-style/SKILL.md) skill records them.
+`voice-words` are words and phrases the character does say; `voice-avoid` are ones they would never say. Both are lists of strings, matched as whole words or phrases, case-insensitively in the book's language, with either straight or curly apostrophes. The [`voice-style`](../skills/voice-style/SKILL.md) skill records them.
 
 ### Voice findings
 

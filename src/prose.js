@@ -1,7 +1,7 @@
 import { usageError } from "./exit-codes.js";
 import { warn } from "./findings.js";
 import { checkList, checkSet, hasLists, languagePack, skippedCheck, skippedChecks, skippedLines } from "./languages/index.js";
-import { compareText, lowerCase } from "./languages/locale.js";
+import { compareText, lowerCase, lowerCaseText } from "./languages/locale.js";
 import { escapeRegExp, scanComments, splitWords, withoutFenceMarkers } from "./markdown.js";
 import { givenName } from "./names.js";
 import { splitSentences } from "./sentences.js";
@@ -120,8 +120,8 @@ export function proseRules(styleData, names, pack = languagePack()) {
     pack,
     skipped,
     allow,
-    variants: variants.map((variant) => ({ ...variant, pattern: phrasePattern(variant.avoid) })),
-    watch: stringList(data["watch-words"]).map((word) => ({ word, pattern: phrasePattern(word) })),
+    variants: variants.map((variant) => ({ ...variant, pattern: phrasePattern(variant.avoid, pack) })),
+    watch: stringList(data["watch-words"]).map((word) => ({ word, pattern: phrasePattern(word, pack) })),
     filterWords: allowed("filterWords"),
     // Dialogue tags need all three lists, so they are all null without one.
     bookisms: tags ? allowed("saidBookisms") : null,
@@ -147,6 +147,8 @@ export function analyzeChapter(prose, rules) {
   const filterWords = rules.filterWords === null ? [] : countMatching(narration, (word) => rules.filterWords.has(word), rules.pack);
   const adverbs = rules.adverbSuffixes === null ? [] : countMatching(narration, (word) => isAdverb(word, rules), rules.pack);
   const tags = rules.plainTags === null ? { plain: [], bookisms: [] } : dialogueTags(paragraphs, rules);
+  // Watch words and avoided spellings match in the story's casing.
+  const cased = rules.watch.length + rules.variants.length === 0 ? null : lowerCaseText(text, rules.pack);
 
   return {
     words: words.length,
@@ -158,8 +160,8 @@ export function analyzeChapter(prose, rules) {
     plainTags: tags.plain,
     bookisms: tags.bookisms,
     echoes: echoes(words, rules),
-    watch: rules.watch.map(({ word, pattern }) => ({ word, count: countPattern(text, pattern) })).filter((entry) => entry.count > 0),
-    variants: rules.variants.map(({ use, avoid, source, pattern }) => ({ use, avoid, source, count: countVariant(text, pattern, rules) })).filter((entry) => entry.count > 0),
+    watch: rules.watch.map(({ word, pattern }) => ({ word, count: countPattern(cased.text, pattern) })).filter((entry) => entry.count > 0),
+    variants: rules.variants.map(({ use, avoid, source, pattern }) => ({ use, avoid, source, count: countVariant(text, cased, pattern, rules) })).filter((entry) => entry.count > 0),
     phraseSentences: sentenceList.map((sentence) => splitWords(sentence).map((word) => normalizeWord(word, rules.pack)))
   };
 }
@@ -525,11 +527,13 @@ function nameKey(word, pack) {
 }
 
 // Uses of an avoided spelling, minus capitalised uses that are part of a
-// name in the bible (Dorian Gray, Center Point).
-function countVariant(text, pattern, rules) {
+// name in the bible (Dorian Gray, Center Point). `cased` is `text`
+// lower-cased by lowerCaseText; the capital is looked for as written.
+function countVariant(text, cased, pattern, rules) {
   let count = 0;
-  for (const match of text.matchAll(pattern)) {
-    const first = splitWords(match[0])[0] ?? "";
+  for (const match of cased.text.matchAll(pattern)) {
+    const [start, end] = cased.original(match.index, match.index + match[0].length);
+    const first = splitWords(text.slice(start, end))[0] ?? "";
     if (/^\p{Lu}/u.test(first) && isName(first, rules)) {
       continue;
     }
@@ -577,8 +581,11 @@ function countMatching(words, predicate, pack) {
   return sortCounts(counts, pack);
 }
 
-function phrasePattern(phrase) {
-  const body = phrase.trim().split(/\s+/).map((word) => escapeRegExp(word).replace(/['’]/g, "['’]")).join("\\s+");
+// A watch word or avoided spelling lower-cased with the pack, to match
+// against lowerCaseText. The `i` flag stays for what lower-casing leaves
+// unequal, such as Greek final sigma, so English matches as it always has.
+function phrasePattern(phrase, pack) {
+  const body = lowerCase(phrase.trim(), pack).split(/\s+/).map((word) => escapeRegExp(word).replace(/['’]/g, "['’]")).join("\\s+");
   // Letter boundaries only, so compounds ("grey-haired") and possessives
   // still count as uses of the word.
   return new RegExp(`(?<![\\p{L}\\p{M}\\p{N}])${body}(?![\\p{L}\\p{M}\\p{N}])`, "giu");

@@ -90,6 +90,22 @@ describe("story voices", () => {
     expect(report.profiles.map((entry) => [entry.id, entry.signature])).toEqual([["tom-reed", ["kelp", "brine"]]]);
   });
 
+  test("matches voice-words and voice-avoid in the story's casing", () => {
+    const cwd = makeTempDir();
+    const { root } = createStoryProject({ cwd, title: "Sesler", force: false, language: "tr" });
+    writeCharacter(root, "mara", "Mara", "voice-words:\n  - ince\nvoice-avoid:\n  - ılık");
+    writeCharacter(root, "tom", "Tom", "voice-words:\n  - ince");
+    const lines = [];
+    for (let index = 0; index < 5; index += 1) {
+      lines.push("Mara güldü. \"ILIK bir gün, ınce değil.\"", "Tom baktı. \"İnce bir ses mi?\"");
+    }
+    writeChapter(root, 1, lines);
+    const warnings = messages(voicesReport(root).warnings);
+    expect(warnings).toContain("mara says \"ılık\", which is in their voice-avoid list (chapter-01)");
+    expect(warnings).toContain("mara does not say \"ince\" from their voice-words list in 5 attributed lines of dialogue");
+    expect(warnings.filter((message) => message.startsWith("tom "))).toEqual([]);
+  });
+
   test("quotedSpans pairs curly and straight quotes and skips empty ones", () => {
     expect(quotedSpans("“One,” she said, \"two\" and \"\" “ ”")).toEqual(["One,", "two"]);
   });
