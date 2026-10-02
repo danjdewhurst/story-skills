@@ -221,12 +221,17 @@ describe("build labels", () => {
   test("Chinese labels follow the script subtag, then the region, then the language", () => {
     const cases = {
       "zh-cmn-Hant": "Hant", "yue-Hans": "Hans", "lzh-Hans": "Hans", cmn: "Hans", "cmn-Hant": "Hant", "cmn-TW": "Hant",
-      "zh-Hans-HK": "Hans", "zh-TW": "Hant", "zh-yue-Hans": "Hans", wuu: "Hans", "zh-min-nan": "Hans", hak: "Hans", nan: "Hans", gan: "Hans", hsn: "Hans", cjy: "Hans", "zh-gan": "Hans"
+      "zh-Hans-HK": "Hans", "zh-TW": "Hant", "zh-yue-Hans": "Hans", wuu: "Hans", "zh-min-nan": "Hans", hak: "Hans", nan: "Hans", gan: "Hans", hsn: "Hans", cjy: "Hans", "zh-gan": "Hans",
+      // A mainland China or Singapore region is Simplified, even for Cantonese
+      // and Classical Chinese, and Bopomofo is Traditional.
+      "yue-CN": "Hans", "zh-yue-CN": "Hans", "lzh-CN": "Hans", "yue-SG": "Hans", "zh-Bopo": "Hant",
+      cdo: "Hans", cpx: "Hans", czh: "Hans", czo: "Hans", mnp: "Hans", "zh-cdo": "Hans"
     };
     for (const [tag, script] of Object.entries(cases)) {
       const pack = languagePack(tag);
       const type = typesetting(tag);
-      expect({ tag, script: pack.script, contents: publishingMeta({ language: tag }).labels.contents, type: type.script }).toEqual({ tag, script, contents: script === "Hant" ? "目錄" : "目录", type: script });
+      expect({ tag, script: pack.script, contents: publishingMeta({ language: tag }).labels.contents }).toEqual({ tag, script, contents: script === "Hant" ? "目錄" : "目录" });
+      expect({ tag, type: type.script }).toEqual({ tag, type: tag === "zh-Bopo" ? "Bopo" : script });
       expect({ tag, countUnit: pack.countUnit, segmentation: pack.segmentation, cased: pack.cased, quotes: pack.quotes }).toEqual({ tag, countUnit: "characters", segmentation: "character", cased: false, quotes: languagePack("zh").quotes });
       expect(type.fonts.body).toBe(typesetting(script === "Hant" ? "zh-Hant" : "zh").fonts.body);
     }

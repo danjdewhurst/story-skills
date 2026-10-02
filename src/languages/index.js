@@ -112,24 +112,30 @@ export function parseTag(language) {
 // Any extlang under zh (zh-yue, zh-min-nan) is Chinese too.
 const CHINESE_SCRIPTS = {
   zh: "Hans", cmn: "Hans", wuu: "Hans", hak: "Hans", nan: "Hans", gan: "Hans", hsn: "Hans", cjy: "Hans",
+  cdo: "Hans", cpx: "Hans", czh: "Hans", czo: "Hans", mnp: "Hans",
   yue: "Hant", lzh: "Hant"
 };
 
-// Chinese is written in Traditional characters in Taiwan, Hong Kong, and
-// Macau unless the tag names a script.
-const TRADITIONAL_REGIONS = new Set(["tw", "hk", "mo"]);
+// Regions that decide the script when the tag names none: Traditional in
+// Taiwan, Hong Kong, and Macau, Simplified in mainland China and Singapore,
+// whatever the language's usual script (yue-CN and lzh-CN are Simplified).
+const REGION_SCRIPTS = { tw: "Hant", hk: "Hant", mo: "Hant", cn: "Hans", sg: "Hans" };
 
 // Which Chinese characters, Simplified (Hans) or Traditional (Hant), a tag
-// is written in: its script subtag when that is one of the two, else
-// Traditional for a Taiwan, Hong Kong, or Macau region, else the language's
-// usual script, else Simplified. The Chinese packs and the builds' fonts
-// both come from this, so labels and typesetting always agree.
+// is written in: its script subtag when that is one of the two (Bopomofo,
+// zh-Bopo, counts as Traditional, as its fonts do), else the region's
+// script, else the language's usual script, else Simplified. The Chinese
+// packs and the builds' fonts both come from this, so labels and
+// typesetting always agree.
 export function hanScript(language) {
   const { primary, script, region } = parseTag(language);
   if (script === "Hans" || script === "Hant") {
     return script;
   }
-  return TRADITIONAL_REGIONS.has(region) ? "Hant" : CHINESE_SCRIPTS[primary] ?? "Hans";
+  if (script === "Bopo") {
+    return "Hant";
+  }
+  return REGION_SCRIPTS[region] ?? CHINESE_SCRIPTS[primary] ?? "Hans";
 }
 
 // hanScript for a Chinese language (zh, cmn, yue, zh-yue), else null.
