@@ -38,7 +38,7 @@ function normalizeApos(text) {
 // and underscores are equivalent ("sea-chest" matches "sea chest"). Used to
 // build word-boundary regexes from checks.json phrases so punctuation does
 // not matter, while partial-word matches ("key" in "turkey", "Ana" in
-// "Indiana", "montre" in "démontre", "кот" in "который") still fail.
+// "Indiana", "montre" in "démontre", "кот" in "скот") still fail.
 const FLEX_SEP_SRC = "[\\s\\-—–―−‐‑_]+";
 
 // A letter, combining mark, digit, or underscore in any script, so a word
@@ -54,19 +54,32 @@ const WORD_CHAR = new RegExp(WORD_CHAR_SRC, "u");
 const UNSPACED_LETTER =
   /[\p{scx=Han}\p{scx=Hiragana}\p{scx=Katakana}\p{scx=Thai}\p{scx=Lao}\p{scx=Khmer}\p{scx=Myanmar}]/u;
 
-// Arabic and Hebrew join a conjunction, a preposition, and the article to
-// the word after them (مخطوطة "manuscript", والمخطوطة "and the manuscript";
-// ספר "book", בספר "in the book"), so a phrase starting in these scripts may
-// follow them inside a word. Arabic ل before ال contracts to لل, and س marks
-// a verb's future.
+const LATIN_LETTER = /\p{Script=Latin}/u;
 const ARABIC_LETTER = /\p{Script=Arabic}/u;
 const HEBREW_LETTER = /\p{Script=Hebrew}/u;
-const ARABIC_PROCLITICS_SRC = "(?:[وف]?(?:[بك]?ال|لل|[بكلس])?)";
-const HEBREW_PROCLITICS_SRC = "(?:ו?ש?[בכלמ]?ה?)";
-// Pronoun and plural endings joined to an Arabic word (مخطوطتها "her
-// manuscript"). A final ة is written ت before an ending and gives way to
-// the plural ات.
-const ARABIC_ENDINGS_SRC = "(?:ه|ها|هم|هما|هن|ك|كما|كم|كن|ي|ني|نا|ان|ين|ون|ات)";
+// A decimal digit in any script (0-9, Arabic-Indic ١, Devanagari १, ...).
+const DIGIT = /\p{Nd}/u;
+
+// Arabic and Hebrew join a conjunction, a preposition, and the article to
+// the word after them (مخطوطة "manuscript", والمخطوطة "and the manuscript";
+// ספר "book", בספר "in the book"), so in a fixture in those languages a
+// phrase may follow them inside a word. Arabic ل before ال contracts to لل,
+// and س marks the future before a verb's own prefix (سيدخل). Hebrew ש
+// ("that") may itself follow כ or מ (כשהלך "when he went"). Other languages
+// in these scripts (Persian, Urdu, Yiddish) join no such prefixes, so they
+// take the plain rule.
+const ARABIC_PROCLITICS_SRC = "(?:[وف]?(?:[بك]?ال|لل|[بكل]|س(?=[يتنأ]))?)";
+const ARABIC_ARTICLE_SRC = "(?:[وف]?(?:[بك]?ال|لل))";
+const HEBREW_PROCLITICS_SRC = "(?:ו?(?:[כמ]?ש)?[בכלמ]?ה?)";
+
+// The fixture's language, as far as phrase matching cares: "ar", "he", or
+// null for anything else.
+function prefixLanguage(language) {
+  const primary = String(language ?? "").trim().toLowerCase().split(/[-_]/)[0];
+  if (["ar", "ara", "arb"].includes(primary)) return "ar";
+  if (["he", "iw", "heb"].includes(primary)) return "he";
+  return null;
+}
 
 // The first or last letter of a phrase part, whose script decides how that
 // edge is bounded. A combining mark (a vowel sign, a harakah) belongs to the
@@ -81,57 +94,72 @@ function escapeRegExp(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-// Each edge of a phrase is bounded by what stands there: a digit may not run
-// on into another digit; a letter of a script written with spaces (Latin
-// with or without accents, Cyrillic, Greek, Arabic, Hebrew, Devanagari, ...)
-// may not run on into another letter; a letter of an unspaced script, or
-// punctuation, is matched as it stands. A mixed phrase ("Kirimi駅") bounds
-// each edge by its own script.
-function phrasePattern(phrase, inflect = false) {
+// Each edge of a phrase is bounded by what stands there:
+// - a digit, in any script, may not run on into another digit;
+// - a letter of a script written with spaces (Latin with or without
+//   accents, Cyrillic, Greek, Arabic, Hebrew, Devanagari, Hangul, ...) may
+//   not follow another letter, so a phrase matches only at the start of a
+//   word;
+// - at the end, a Latin letter may not run on into another letter except by
+//   an English inflection, while a letter of any other spaced script may,
+//   since those languages inflect by endings and join particles to the word
+//   (кот in кота, ספר in ספרים, 책 in 책을, کتاب in کتابی);
+// - a letter of an unspaced script, or punctuation, is matched as it stands.
+// A mixed phrase ("Kirimi駅") bounds each edge by its own script. `language`
+// is the fixture's, which adds the Arabic and Hebrew prefixes above.
+function phrasePattern(phrase, inflect = false, language = null) {
   const norm = normalizeApos(phrase);
   const parts = norm.split(new RegExp(FLEX_SEP_SRC)).filter(Boolean);
   if (parts.length === 0) return null;
   const innerPieces = parts.map((p) => [...p].map(escapeRegExp).join(""));
   let inner = innerPieces.join(FLEX_SEP_SRC);
-  const first = parts[0][0];
-  const last = parts[parts.length - 1].slice(-1);
+  const first = [...parts[0]][0];
+  const last = [...parts[parts.length - 1]].pop();
   const firstLetter = edgeLetter(parts[0], false);
   const lastLetter = edgeLetter(parts[parts.length - 1], true);
-  let left;
-  if (/\d/.test(first)) left = "(?<!\\d)";
-  else if (WORD_CHAR.test(first) && !UNSPACED_LETTER.test(firstLetter)) {
-    left = `(?<!${WORD_CHAR_SRC})`;
-    if (ARABIC_LETTER.test(firstLetter)) left += ARABIC_PROCLITICS_SRC;
-    else if (HEBREW_LETTER.test(firstLetter)) left += HEBREW_PROCLITICS_SRC;
-  } else left = "";
+  const prefixes = prefixLanguage(language);
+  const arabic = prefixes === "ar" && ARABIC_LETTER.test(lastLetter);
   let right;
-  if (/\d/.test(last)) right = "(?!\\d)";
-  else if (WORD_CHAR.test(last) && !UNSPACED_LETTER.test(lastLetter)) {
+  if (DIGIT.test(last)) right = "(?!\\p{Nd})";
+  else if (WORD_CHAR.test(last) && LATIN_LETTER.test(lastLetter)) {
     // With inflect=true (required canon), a trailing inflection is allowed
     // so "logbook" matches "logbooks" while "key" still does not match
     // "turkey".
     // A silent final e drops before -ing/-ed ("delve" -> "delving") and a
-    // consonant + y becomes -ies/-ied ("tapestry" -> "tapestries"). An
-    // Arabic word takes its pronoun and plural endings instead.
+    // consonant + y becomes -ies/-ied ("tapestry" -> "tapestries").
     if (inflect) {
       const word = parts[parts.length - 1];
       const head = innerPieces.slice(0, -1).concat("").join(FLEX_SEP_SRC);
       const stem = [...word.slice(0, -1)].map(escapeRegExp).join("");
-      if (ARABIC_LETTER.test(lastLetter)) {
-        if (word.endsWith("ة")) inner = `${head}${stem}(?:ة|ت${ARABIC_ENDINGS_SRC}|ات)`;
-        else inner += `${ARABIC_ENDINGS_SRC}?`;
-      } else if (/[^aeiouy]y$/i.test(word)) inner = `${head}${stem}(?:y|ys|ies|ied|ying)`;
+      if (/[^aeiouy]y$/i.test(word)) inner = `${head}${stem}(?:y|ys|ies|ied|ying)`;
       else if (/[^e]e$/i.test(word)) inner = `${head}${stem}(?:e|es|ed|ing)`;
       else inner += "(?:s|es|ed|ing|d)?";
     }
     right = `(?!${WORD_CHAR_SRC})`;
-  } else right = "";
+  } else {
+    // An Arabic final ة is written ت before an ending and gives way to the
+    // plural ات (مخطوطتها, مخطوطات); a final ى is written ا (ليلاه).
+    if (arabic && /[ةى]$/.test(inner)) {
+      inner = inner.slice(0, -1) + (inner.endsWith("ة") ? "(?:ة|ت|ات)" : "(?:ى|ا)");
+    }
+    right = "";
+  }
+  let left;
+  if (DIGIT.test(first)) left = "(?<!\\p{Nd})";
+  else if (WORD_CHAR.test(first) && !UNSPACED_LETTER.test(firstLetter)) {
+    left = `(?<!${WORD_CHAR_SRC})`;
+    if (prefixes === "ar" && ARABIC_LETTER.test(firstLetter)) {
+      // A phrase that starts with the article also matches it after ل (لل).
+      if (inner.startsWith("ال")) inner = ARABIC_ARTICLE_SRC + inner.slice(2);
+      else left += ARABIC_PROCLITICS_SRC;
+    } else if (prefixes === "he" && HEBREW_LETTER.test(firstLetter)) left += HEBREW_PROCLITICS_SRC;
+  } else left = "";
   return left + inner + right;
 }
 
-function phraseFound(phrase, text, inflect = false) {
+function phraseFound(phrase, text, inflect = false, language = null) {
   const normText = normalizeApos(text);
-  const pattern = phrasePattern(phrase, inflect);
+  const pattern = phrasePattern(phrase, inflect, language);
   const fallback = () =>
     normText.toLowerCase().includes(normalizeApos(phrase).toLowerCase());
   if (pattern === null) return fallback();
@@ -311,7 +339,7 @@ export function checkDraft(checks, inputText, draftText) {
       continue;
     }
     results.push([
-      phraseFound(fact, normDraft, true),
+      phraseFound(fact, normDraft, true, checks.language),
       `canon kept: "${fact}"`,
     ]);
   }
@@ -325,7 +353,7 @@ export function checkDraft(checks, inputText, draftText) {
     // "treasures", or "shows Petra the keys" springs the same trap as the
     // base form. See phraseFound's inflect flag.
     results.push([
-      !phraseFound(phrase, normDraft, true),
+      !phraseFound(phrase, normDraft, true, checks.language),
       `trap avoided: "${phrase}"`,
     ]);
   }
