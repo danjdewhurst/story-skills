@@ -1,5 +1,6 @@
 import { usageError } from "./exit-codes.js";
 import { warn } from "./findings.js";
+import { checkList, checkSet, languagePack, skippedCheck, skippedChecks, skippedLines } from "./languages/index.js";
 import { escapeRegExp, scanComments, splitWords, withoutFenceMarkers } from "./markdown.js";
 import { givenName } from "./names.js";
 import { splitSentences } from "./sentences.js";
@@ -8,85 +9,23 @@ import { narrationOnly, quoteMatches, replaceQuotes } from "./voices.js";
 // Deterministic prose checks for `story prose`. Everything here is counting:
 // no scoring, no rewriting. Thresholds only decide which counts are raised as
 // warnings; the full counts are always reported so the writer can judge.
+// The word lists come from the story's language pack; a check whose lists
+// the pack lacks is skipped and listed in the rules' `skipped`.
 
-const FILTER_WORDS = [
-  "felt", "saw", "heard", "noticed", "realized", "realised", "wondered",
-  "seemed", "watched", "knew", "decided", "thought", "sensed"
+export const PROSE_CHECKS = [
+  { check: "filter-words", label: "Filter words", lists: ["filterWords"] },
+  { check: "adverbs", label: "Adverbs", lists: ["adverbSuffixes", "adverbExceptions"] },
+  { check: "dialogue-tags", label: "Dialogue tags", lists: ["plainTags", "saidBookisms", "beatPronouns"] },
+  { check: "echoes", label: "Echoes", lists: ["echoStopwords"] },
+  { check: "repeated-phrases", label: "Repeated phrases", lists: ["phraseStopwords"] }
 ];
 
-// Tags that replace "said" with an action or a manner. "whispered",
-// "muttered", and "shouted" are left out on purpose: they describe volume,
-// which "said" cannot.
-const SAID_BOOKISMS = [
-  "barked", "bellowed", "breathed", "chuckled", "cooed", "declared", "exclaimed",
-  "gasped", "grinned", "groaned", "growled", "grunted", "hissed", "inquired",
-  "interjected", "intoned", "laughed", "opined", "purred", "queried", "quipped",
-  "retorted", "shrieked", "sighed", "smiled", "smirked", "snapped", "snarled",
-  "sneered", "spat", "stated"
+// Checks that run only with a baseline from style-sheet.md samples.
+export const BASELINE_CHECKS = [
+  { check: "signature-words", label: "Baseline signature words", lists: ["echoStopwords", "phraseStopwords"] }
 ];
 
-const PLAIN_TAGS = ["said", "asked", "says", "asks"];
-
-// Words ending in -ly that are not manner adverbs.
-const NOT_ADVERBS = new Set([
-  "ally", "anomaly", "apply", "assembly", "belly", "bully", "burly", "butterfly",
-  "chilly", "comply", "costly", "curly", "daily", "deadly", "dolly", "dragonfly",
-  "early", "elderly", "family", "fly", "folly", "friendly", "ghastly", "ghostly",
-  "gully", "holly", "holy", "homely", "hourly", "imply", "italy", "jelly", "jolly",
-  "july", "lily", "likely", "lively", "lonely", "lovely", "melancholy", "monopoly",
-  "monthly", "multiply", "oily", "only", "orderly", "prickly", "rally", "rely",
-  "reply", "sickly", "silly", "sly", "smelly", "stately", "supply", "surly",
-  "tally", "ugly", "unlikely", "weekly", "wobbly", "woolly", "yearly"
-]);
-
-// Common words long enough to pass the echo length floor but too frequent to
-// count as an echo.
-const ECHO_STOPWORDS = new Set([
-  "about", "above", "after", "again", "against", "along", "always", "among",
-  "another", "around", "because", "before", "behind", "being", "below", "between",
-  "could", "couldn't", "didn't", "doesn't", "don't", "every", "first", "hadn't",
-  "haven't", "isn't", "might", "never", "other", "right", "should", "since",
-  "something", "still", "their", "there", "these", "thing", "things", "those",
-  "though", "three", "through", "until", "wasn't", "where", "which", "while",
-  "without", "would", "wouldn't", "you're", "they're", "we're"
-]);
-
-const PHRASE_STOPWORDS = new Set([
-  "a", "an", "and", "as", "at", "be", "but", "by", "for", "from", "had", "has",
-  "have", "he", "her", "his", "i", "in", "into", "is", "it", "its", "me", "my",
-  "not", "of", "on", "or", "she", "so", "that", "the", "their", "them", "then",
-  "they", "this", "to", "was", "we", "were", "with", "you"
-]);
-
-// [british, american] pairs, including the common inflections, flagged by
-// the style sheet's dialect. -ise/-ize is left out because British publishers
-// use both; record that choice as a preferred entry instead.
-const DIALECT_PAIRS = [
-  ["armour", "armor"], ["armoured", "armored"],
-  ["centre", "center"], ["centres", "centers"], ["centred", "centered"],
-  ["colour", "color"], ["colours", "colors"], ["coloured", "colored"], ["colourful", "colorful"],
-  ["defence", "defense"], ["defences", "defenses"],
-  ["favour", "favor"], ["favours", "favors"], ["favoured", "favored"], ["favourite", "favorite"],
-  ["grey", "gray"], ["greying", "graying"],
-  ["harbour", "harbor"], ["harbours", "harbors"],
-  ["honour", "honor"], ["honours", "honors"], ["honoured", "honored"], ["honourable", "honorable"],
-  ["jewellery", "jewelry"],
-  ["labour", "labor"],
-  ["mould", "mold"], ["mouldy", "moldy"],
-  ["neighbour", "neighbor"], ["neighbours", "neighbors"],
-  ["odour", "odor"],
-  ["offence", "offense"],
-  ["plough", "plow"],
-  ["rumour", "rumor"], ["rumours", "rumors"],
-  ["sceptic", "skeptic"], ["sceptical", "skeptical"],
-  ["smoulder", "smolder"], ["smouldering", "smoldering"],
-  ["theatre", "theater"],
-  ["towards", "toward"],
-  ["travelled", "traveled"], ["travelling", "traveling"], ["traveller", "traveler"],
-  ["cancelled", "canceled"],
-  ["vapour", "vapor"],
-  ["whisky", "whiskey"]
-];
+const DIALECT_CHECK = { check: "dialect-spellings", label: "British and American spellings", lists: ["dialectPairs"] };
 
 export const PROSE_THRESHOLDS = {
   filterPerThousand: 10,
@@ -124,8 +63,11 @@ export function proseThresholds(options = {}) {
 
 // `names` are every name and alias in the bible: their words are never
 // adverbs or echoes, and a capitalised name is never a dialect spelling.
-export function proseRules(styleData, names) {
+// `pack` is the story's language pack, English by default. A word list the
+// pack lacks is null in the rules, and its check is listed in `skipped`.
+export function proseRules(styleData, names, pack = languagePack()) {
   const data = styleData ?? {};
+  const skipped = skippedChecks(pack, PROSE_CHECKS);
   const allow = new Set(stringList(data["allow-words"]).map(normalizeWord));
   const variants = [];
   for (const entry of Array.isArray(data.preferred) ? data.preferred : []) {
@@ -137,11 +79,14 @@ export function proseRules(styleData, names) {
     }
   }
   const dialect = typeof data.dialect === "string" ? data.dialect : "unspecified";
-  if (dialect === "british" || dialect === "american") {
+  const dialectPairs = checkList(pack, "dialectPairs");
+  if ((dialect === "british" || dialect === "american") && dialectPairs === null) {
+    skipped.push(skippedCheck(pack, DIALECT_CHECK));
+  } else if (dialect === "british" || dialect === "american") {
     // A style-sheet entry or allow-word naming either spelling overrides the
     // built-in pair, so "use: toward" in a British book is not flagged twice.
     const claimed = new Set(variants.flatMap((variant) => [normalizeWord(variant.use), normalizeWord(variant.avoid)]).concat([...allow]));
-    for (const [british, american] of DIALECT_PAIRS) {
+    for (const [british, american] of dialectPairs) {
       const [use, avoid] = dialect === "british" ? [british, american] : [american, british];
       if (!claimed.has(use) && !claimed.has(avoid)) {
         variants.push({ use, avoid, source: `${dialect} dialect` });
@@ -154,12 +99,26 @@ export function proseRules(styleData, names) {
       nameTokens.add(nameKey(token));
     }
   }
+  const allowed = (name) => {
+    const list = checkList(pack, name);
+    return list === null ? null : new Set(list.filter((word) => !allow.has(word)));
+  };
+  const tags = !skipped.some((entry) => entry.check === "dialogue-tags");
   return {
+    pack,
+    skipped,
     allow,
     variants: variants.map((variant) => ({ ...variant, pattern: phrasePattern(variant.avoid) })),
     watch: stringList(data["watch-words"]).map((word) => ({ word, pattern: phrasePattern(word) })),
-    filterWords: new Set(FILTER_WORDS.filter((word) => !allow.has(word))),
-    bookisms: new Set(SAID_BOOKISMS.filter((word) => !allow.has(word))),
+    filterWords: allowed("filterWords"),
+    // Dialogue tags need all three lists, so they are all null without one.
+    bookisms: tags ? allowed("saidBookisms") : null,
+    plainTags: tags ? checkSet(pack, "plainTags") : null,
+    beatPronouns: tags ? checkSet(pack, "beatPronouns") : null,
+    adverbSuffixes: checkList(pack, "adverbExceptions") === null ? null : checkList(pack, "adverbSuffixes"),
+    adverbExceptions: checkSet(pack, "adverbExceptions"),
+    echoStopwords: checkSet(pack, "echoStopwords"),
+    phraseStopwords: checkSet(pack, "phraseStopwords"),
     nameTokens
   };
 }
@@ -168,13 +127,14 @@ export function analyzeChapter(prose, rules) {
   const paragraphs = proseParagraphs(prose);
   const text = paragraphs.join("\n\n");
   const words = splitWords(text);
-  const narration = splitWords(paragraphs.map(narrationOnly).join("\n\n"));
-  const sentenceList = paragraphs.flatMap((paragraph) => splitSentences(paragraph));
+  const narration = splitWords(paragraphs.map((paragraph) => narrationOnly(paragraph, rules.pack)).join("\n\n"));
+  const sentenceList = paragraphs.flatMap((paragraph) => splitSentences(paragraph, { pack: rules.pack }));
   const sentences = sentenceList.map((sentence) => splitWords(sentence).length).filter((count) => count > 0);
 
-  const filterWords = countMatching(narration, (word) => rules.filterWords.has(word));
-  const adverbs = countMatching(narration, (word) => isAdverb(word, rules));
-  const tags = dialogueTags(paragraphs, rules);
+  // A skipped check counts nothing.
+  const filterWords = rules.filterWords === null ? [] : countMatching(narration, (word) => rules.filterWords.has(word));
+  const adverbs = rules.adverbSuffixes === null ? [] : countMatching(narration, (word) => isAdverb(word, rules));
+  const tags = rules.plainTags === null ? { plain: [], bookisms: [] } : dialogueTags(paragraphs, rules);
 
   return {
     words: words.length,
@@ -274,17 +234,21 @@ export function baselineProfile(samples) {
 }
 
 // The words a signature can be made of: four letters or more, not a common
-// function word, a number, or a name in the bible.
+// function word, a number, or a name in the bible. None without the pack's
+// stopwords, so the signature words are skipped.
 export function contentWords(prose, rules) {
+  if (rules.echoStopwords === null || rules.phraseStopwords === null) {
+    return [];
+  }
   return splitWords(proseParagraphs(prose).join("\n\n"))
     .map(normalizeWord)
-    .filter((word) => word.length >= 4 && !ECHO_STOPWORDS.has(word) && !PHRASE_STOPWORDS.has(word) && !isName(word, rules) && !/^\p{N}+$/u.test(word));
+    .filter((word) => word.length >= 4 && !rules.echoStopwords.has(word) && !rules.phraseStopwords.has(word) && !isName(word, rules) && !/^\p{N}+$/u.test(word));
 }
 
 // The sentence lengths analyzeChapter summarises, for pooling samples.
-export function sentenceLengths(prose) {
+export function sentenceLengths(prose, pack = languagePack()) {
   return proseParagraphs(prose)
-    .flatMap((paragraph) => splitSentences(paragraph))
+    .flatMap((paragraph) => splitSentences(paragraph, { pack }))
     .map((sentence) => splitWords(sentence).length)
     .filter((count) => count > 0);
 }
@@ -341,14 +305,19 @@ export function baselineFindings(label, analysis, figures, profile, tolerances =
   return findings;
 }
 
-export function repeatedPhrases(analyses, thresholds = PROSE_THRESHOLDS) {
+// None when the pack has no phrase stopwords: the check is skipped.
+export function repeatedPhrases(analyses, thresholds = PROSE_THRESHOLDS, pack = languagePack()) {
+  const stopwords = checkSet(pack, "phraseStopwords");
+  if (stopwords === null) {
+    return [];
+  }
   const counts = new Map();
   const size = thresholds.phraseLength;
   for (const analysis of analyses) {
     for (const sentence of analysis.phraseSentences) {
       for (let index = 0; index + size <= sentence.length; index += 1) {
         const gram = sentence.slice(index, index + size);
-        if (gram.every((word) => PHRASE_STOPWORDS.has(word))) {
+        if (gram.every((word) => stopwords.has(word))) {
           continue;
         }
         const key = gram.join(" ");
@@ -367,9 +336,9 @@ export function repeatedPhrases(analyses, thresholds = PROSE_THRESHOLDS) {
 // Character first names that a reader could confuse: identical, sharing
 // their first three letters, or one or two edits apart. Titles are skipped,
 // so Captain Mara Dole is compared as Mara.
-export function similarNames(characters) {
+export function similarNames(characters, pack = languagePack()) {
   const firsts = characters
-    .map((character) => ({ id: character.id, name: String(character.name), first: givenName(character.name).toLowerCase() }))
+    .map((character) => ({ id: character.id, name: String(character.name), first: givenName(character.name, pack).toLowerCase() }))
     .filter((entry) => entry.first.length >= 3)
     .sort((left, right) => left.id.localeCompare(right.id, "en"));
   const pairs = [];
@@ -392,6 +361,11 @@ export function formatProseReport(report) {
   if (!report.styleSheet) {
     lines.push("No style-sheet.md: spelling and watch-word checks are off");
   }
+  // Checks the language pack cannot run are noted here and their lines left
+  // out below, so a zero is never read as a clean result.
+  const skipped = report.skipped ?? [];
+  lines.push(...skippedLines(skipped));
+  const runs = (check) => !skipped.some((entry) => entry.check === check);
   const profile = report.baseline;
   if (profile) {
     const stats = profile.sentences;
@@ -405,14 +379,22 @@ export function formatProseReport(report) {
     const stats = analysis.sentences;
     lines.push("", `${chapter.file}: ${chapter.title} (${analysis.words} words)`);
     lines.push(`  Sentences: ${stats.count}, average ${formatRate(stats.mean)} words, longest ${stats.longest}, spread ${formatRate(stats.spread)}`);
-    lines.push(`  Filter words: ${formatRate(perThousand(total(analysis.filterWords), analysis.narrationWords))} per 1k narration words${countSuffix(analysis.filterWords)}`);
-    lines.push(`  -ly adverbs: ${formatRate(perThousand(total(analysis.adverbs), analysis.narrationWords))} per 1k narration words${countSuffix(analysis.adverbs)}`);
-    lines.push(`  Dialogue tags: ${formatCounts(analysis.plainTags, 4) || "none plain"}; said-bookisms: ${formatCounts(analysis.bookisms, 5) || "none"}`);
+    if (runs("filter-words")) {
+      lines.push(`  Filter words: ${formatRate(perThousand(total(analysis.filterWords), analysis.narrationWords))} per 1k narration words${countSuffix(analysis.filterWords)}`);
+    }
+    if (runs("adverbs")) {
+      lines.push(`  -ly adverbs: ${formatRate(perThousand(total(analysis.adverbs), analysis.narrationWords))} per 1k narration words${countSuffix(analysis.adverbs)}`);
+    }
+    if (runs("dialogue-tags")) {
+      lines.push(`  Dialogue tags: ${formatCounts(analysis.plainTags, 4) || "none plain"}; said-bookisms: ${formatCounts(analysis.bookisms, 5) || "none"}`);
+    }
     if (chapter.baseline && profile.usable) {
       const figures = chapter.baseline;
       lines.push(`  Against the baseline: paragraphs ${formatRate(figures.paragraphMean)} words, ${formatRate(figures.dialogueShare)}% dialogue, signature words ${figures.signatureWordsUsed} of ${profile.signatureWords.length}`);
     }
-    lines.push(`  Echoes within ${PROSE_THRESHOLDS.echoWindow} words: ${formatCounts(analysis.echoes, 5) || "none"}`);
+    if (runs("echoes")) {
+      lines.push(`  Echoes within ${PROSE_THRESHOLDS.echoWindow} words: ${formatCounts(analysis.echoes, 5) || "none"}`);
+    }
     if (analysis.watch.length > 0) {
       lines.push(`  Watch words: ${analysis.watch.map((entry) => `${entry.word} ${entry.count}`).join(", ")}`);
     }
@@ -420,11 +402,16 @@ export function formatProseReport(report) {
       lines.push(`  Spelling: ${analysis.variants.map((entry) => `${entry.avoid} ${entry.count} (use ${entry.use})`).join(", ")}`);
     }
   }
-  lines.push("", report.passage ? "Passage:" : "Manuscript:");
-  lines.push(`  Repeated ${PROSE_THRESHOLDS.phraseLength}-word phrases: ${report.phrases.map((entry) => `"${entry.phrase}" ${entry.count}`).join(", ") || "none"}`);
+  const whole = [];
+  if (runs("repeated-phrases")) {
+    whole.push(`  Repeated ${PROSE_THRESHOLDS.phraseLength}-word phrases: ${report.phrases.map((entry) => `"${entry.phrase}" ${entry.count}`).join(", ") || "none"}`);
+  }
   // Similar names are a bible finding, so a passage report leaves them out.
   if (!report.passage) {
-    lines.push(`  Similar character names: ${report.similarNames.map(([a, b]) => `${a.name} / ${b.name}`).join(", ") || "none"}`);
+    whole.push(`  Similar character names: ${report.similarNames.map(([a, b]) => `${a.name} / ${b.name}`).join(", ") || "none"}`);
+  }
+  if (whole.length > 0) {
+    lines.push("", report.passage ? "Passage:" : "Manuscript:", ...whole);
   }
   return `${lines.join("\n")}\n`;
 }
@@ -440,22 +427,20 @@ function proseParagraphs(prose) {
     .filter((paragraph) => paragraph !== "" && !/^([*_-])( ?\1){2,}$/.test(paragraph));
 }
 
-const BEAT_PRONOUNS = new Set(["he", "she", "they", "i", "we", "it", "you"]);
-
 function dialogueTags(paragraphs, rules) {
   const plain = new Map();
   const bookisms = new Map();
   for (const paragraph of paragraphs) {
-    for (const match of quoteMatches(paragraph)) {
+    for (const match of quoteMatches(paragraph, rules.pack)) {
       // A tag sits within a few words of the closing quote.
       const after = splitWords(paragraph.slice(match.end, match.end + 200).split(/[.!?;:“"]/)[0]).slice(0, 3);
-      const tag = tagKind(match.text, after[0] ?? "");
+      const tag = tagKind(match.text, after[0] ?? "", rules);
       if (tag === "none") {
         continue;
       }
       for (const raw of after) {
         const word = raw.toLowerCase();
-        if (PLAIN_TAGS.includes(word)) {
+        if (rules.plainTags.has(word)) {
           increment(plain, word);
           break;
         }
@@ -475,19 +460,19 @@ function dialogueTags(paragraphs, rules) {
 // the sentence as a tag; a capitalised pronoun starts a beat, and a
 // capitalised name counts only with a plain tag ("Now?" Mara asked.), since
 // "No!" Mara laughed. is a beat.
-function tagKind(quoted, nextWord) {
+function tagKind(quoted, nextWord, rules) {
   const end = quoted.trim().replace(/["'”’)\]*_]+$/, "").slice(-1);
   if (end === ".") {
     return "none";
   }
   if (/[?!…—–-]/.test(end) && /^\p{Lu}/u.test(nextWord)) {
-    return BEAT_PRONOUNS.has(nextWord.toLowerCase()) ? "none" : "plain";
+    return rules.beatPronouns.has(nextWord.toLowerCase()) ? "none" : "plain";
   }
   return "any";
 }
 
 function isAdverb(word, rules) {
-  return word.length > 4 && word.endsWith("ly") && !NOT_ADVERBS.has(word) && !rules.allow.has(word) && !isName(word, rules);
+  return word.length > 4 && rules.adverbSuffixes.some((suffix) => word.endsWith(suffix)) && !rules.adverbExceptions.has(word) && !rules.allow.has(word) && !isName(word, rules);
 }
 
 // A name token, also in the possessive (Maren's, Maren’s).
@@ -520,11 +505,14 @@ function countVariant(text, pattern, rules) {
 }
 
 function echoes(words, rules) {
+  if (rules.echoStopwords === null) {
+    return [];
+  }
   const lastSeen = new Map();
   const counts = new Map();
   words.forEach((raw, index) => {
     const word = normalizeWord(raw);
-    if (word.length < PROSE_THRESHOLDS.echoMinLength || ECHO_STOPWORDS.has(word) || isName(word, rules) || rules.allow.has(word) || /^\p{N}+$/u.test(word)) {
+    if (word.length < PROSE_THRESHOLDS.echoMinLength || rules.echoStopwords.has(word) || isName(word, rules) || rules.allow.has(word) || /^\p{N}+$/u.test(word)) {
       return;
     }
     if (lastSeen.has(word) && index - lastSeen.get(word) <= PROSE_THRESHOLDS.echoWindow) {

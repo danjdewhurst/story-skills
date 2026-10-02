@@ -1165,6 +1165,8 @@ An advisory prose lint. For each chapter it reports sentence count, average and 
 
 Style findings are warnings, so `prose` exits 1 only when a file's frontmatter fails to parse, or when a `severity` entry in `story.md` promotes a prose warning to an error (see [Defaults and severity from story.md](#defaults-and-severity-from-storymd)).
 
+The word lists (filter words, `-ly` adverbs and their exceptions, dialogue tags and said-bookisms, echo and phrase stopwords, British and American spellings) come from the language pack for `story.md` `language`. Only English has them so far. In another language, each check whose list the pack lacks is skipped rather than run with English words: `filter-words`, `adverbs`, `dialogue-tags`, `echoes`, `repeated-phrases`, plus `dialect-spellings` when the style sheet sets a `dialect` and `signature-words` when a baseline is on. The text output prints `Note: Filter words skipped: no filterWords list for language fr` under the heading for each one and leaves its line out, and `--json` lists them in `data.skipped` as `{ check, language, missing, message }` (`[]` for English). Skipping never changes the exit code. See [Books not in English](continuity.md#books-not-in-english).
+
 Three flags change the warning thresholds. Each takes a number 0 or more; set them for every run with `cli-defaults` in `story.md`.
 
 | Flag | Warns when a chapter has more than | Default |
@@ -1545,6 +1547,8 @@ It warns when:
 
 `voices` exits 1 only when a file fails to parse.
 
+Speech verbs, pronouns, contractions, and stopwords come from the language pack for `story.md` `language`. Only English has them so far, so in another language the `speech-tags`, `contractions`, and `signature-words` checks are skipped: lines are attributed by action beats alone, `contractions` is `null` in `--json`, and the sound-alike comparison leaves contractions out. The text output prints a `Note:` line for each skipped check, and `--json` lists them in `data.skipped` (`[]` for English). See [Books not in English](continuity.md#books-not-in-english).
+
 `story voices -` fingerprints the dialogue in a passage from stdin instead of the chapters, against the characters of the project given by `--path` or the current directory; outside a project it is an error. As for `prose -`, a broken chapter or scene file does not fail the check. Findings name the passage as `stdin`: `warning: kael-voss says "soldiers", which is in their voice-avoid list (stdin)`. The five-line thresholds still apply, so a short passage only reports `voice-avoid` words.
 
 On a copy of [`examples/the-last-ember`](../examples/the-last-ember/), after adding `reckon` to `voice-words` and `soldiers` to `voice-avoid` in `characters/kael-voss.md` (as block lists; the parser does not read `[a, b]`):
@@ -1572,7 +1576,7 @@ With no attributed dialogue it prints `- None: tag dialogue with a character's n
 story names <name...> [--path <project>]
 ```
 
-Checks one or more candidate names against every name in the story bible: characters (full name, given name, and `aliases`, skipping characters with `status: cut`), locations, factions, artifacts, systems, and glossary terms with their aliases. Quote a name that contains spaces. Each candidate gets one status line on stdout:
+Checks one or more candidate names against every name in the story bible: characters (full name, given name, and `aliases`, skipping characters with `status: cut`), locations, factions, artifacts, systems, and glossary terms with their aliases. Quote a name that contains spaces. Each candidate gets one status line on stdout: A given name skips leading titles (`Lord`, `Captain`, `the`) from the language pack of `story.md` `language`; a language without a title list compares a name from its first word.
 
 | Status | Meaning | Reported as |
 |---|---|---|

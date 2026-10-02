@@ -81,6 +81,17 @@ export function checkCoverage(lcovText, absoluteSourceFiles) {
   return { failures, filesWithBranches, filesChecked: absoluteSourceFiles.length };
 }
 
+// Every .js file under `dir`, subfolders (src/languages) included.
+export function sourceFiles(dir) {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      return sourceFiles(full);
+    }
+    return entry.name.endsWith(".js") ? [full] : [];
+  });
+}
+
 function main(argv) {
   const [lcovPath, sourceDir] = argv;
   if (!lcovPath || !sourceDir) {
@@ -89,9 +100,7 @@ function main(argv) {
   }
 
   const lcov = fs.readFileSync(lcovPath, "utf8");
-  const requiredFiles = fs.readdirSync(sourceDir)
-    .filter((file) => file.endsWith(".js"))
-    .map((file) => path.resolve(sourceDir, file));
+  const requiredFiles = sourceFiles(path.resolve(sourceDir));
   const { failures, filesWithBranches } = checkCoverage(lcov, requiredFiles);
 
   if (failures.length > 0) {

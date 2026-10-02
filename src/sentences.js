@@ -1,14 +1,31 @@
+import { checkList, languagePack } from "./languages/index.js";
+import { escapeRegExp } from "./markdown.js";
+
 // One sentence splitter for synopsis, prose, and voices, so `Dr. Hale`, the
 // `U.S. Navy`, and a stammer (`I… I don't know`) never end a sentence.
 
-// Words that end in a full stop without ending the sentence: titles and
-// initials (Dr. Hale, J. Smith, the U.S. Navy) never end one. Words that
-// often close a sentence too (etc., No., a.m.) end it unless the next word
-// starts in lower case, with a digit, or is a day or month (No. 5, 9 a.m.
-// Monday).
-const TITLE_ABBREVIATIONS = /(?:^|[\s(“"‘'])(?:Dr|Mr|Mrs|Ms|St|Mt|Jr|Sr|Prof|Capt|Gen|Col|Lt|Sgt|Rev|Fr|e\.g|i\.e|(?:[A-Za-z]\.)*[A-Za-z])$/;
-const CONTEXT_ABBREVIATIONS = /(?:^|[\s(“"‘'])(?:No|vs|etc|a\.m|p\.m)$/;
-const CALENDAR_WORD = /^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|January|February|March|April|May|June|July|August|September|October|November|December)(?![\p{L}\p{N}])/u;
+// Words that end in a full stop without ending the sentence come from the
+// language pack. Titles and initials (Dr. Hale, J. Smith, the U.S. Navy)
+// never end one. Words that often close a sentence too (etc., No., a.m.)
+// end it unless the next word starts in lower case, with a digit, or is a
+// calendar word (No. 5, 9 a.m. Monday). Initials need no list, so a
+// language without one still keeps them.
+const INITIALS = "(?:[A-Za-z]\\.)*[A-Za-z]";
+const NEVER = "(?!)";
+const ABBREVIATIONS = new WeakMap();
+
+function abbreviations(pack) {
+  if (!ABBREVIATIONS.has(pack)) {
+    const words = (name) => (checkList(pack, name) ?? []).map(escapeRegExp);
+    const either = (list) => (list.length === 0 ? NEVER : list.join("|"));
+    ABBREVIATIONS.set(pack, {
+      title: new RegExp(`(?:^|[\\s(“"‘'])(?:${[...words("titleAbbreviations"), INITIALS].join("|")})$`),
+      context: new RegExp(`(?:^|[\\s(“"‘'])(?:${either(words("contextAbbreviations"))})$`),
+      calendar: new RegExp(`^(?:${either(words("calendarWords"))})(?![\\p{L}\\p{N}])`, "u")
+    });
+  }
+  return ABBREVIATIONS.get(pack);
+}
 // A sentence ends at a run of . ! ? or … plus any closing quotes, brackets,
 // or emphasis marks, before a space or the end of the text.
 // A Chinese or Japanese full stop, exclamation, or question mark (。！？)
@@ -24,11 +41,13 @@ const SENTENCE_START = /^["'“‘(\[*_]*[\p{Lu}\p{N}]/u;
 // With `capitalStart` (the default), only a capital, digit, or opening quote
 // starts the next sentence, so `"Why?" she asked` stays one sentence. The
 // synopsis turns it off because its list items may start in lower case.
-export function splitSentences(text, { capitalStart = true } = {}) {
+// `pack` is the story's language pack, English by default.
+export function splitSentences(text, { capitalStart = true, pack = languagePack() } = {}) {
   const normalized = String(text).replace(/\s+/g, " ").trim();
   if (normalized === "") {
     return [];
   }
+  const rules = abbreviations(pack);
   const sentences = [];
   let start = 0;
   for (const match of normalized.matchAll(SENTENCE_END)) {
@@ -48,9 +67,9 @@ export function splitSentences(text, { capitalStart = true } = {}) {
     // as whole.
     const from = Math.max(start, match.index - CONTEXT_WINDOW);
     const before = `${from > start ? "x" : ""}${normalized.slice(from, match.index)}`;
-    const abbreviation = match[0] === "." && (CONTEXT_ABBREVIATIONS.test(before)
-      ? /^[\p{Ll}\p{N}]/u.test(next) || CALENDAR_WORD.test(next)
-      : TITLE_ABBREVIATIONS.test(before));
+    const abbreviation = match[0] === "." && (rules.context.test(before)
+      ? /^[\p{Ll}\p{N}]/u.test(next) || rules.calendar.test(next)
+      : rules.title.test(before));
     const stammer = /^(?:…|\.\.\.)/.test(match[0]) && isStammer(before, next);
     if (abbreviation || stammer) {
       continue;

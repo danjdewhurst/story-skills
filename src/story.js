@@ -32,7 +32,8 @@ import { compareSimilarity, similarityOptions } from "./similarity.js";
 import { wordSpans } from "./words.js";
 import { PROGRESS_FILE, cleanSessions, computeProgress, formatPercent, localDate, withSession } from "./progress.js";
 import { plural } from "./plural.js";
-import { analyzeChapter, baselineFigures, baselineFindings, baselineProfile, chapterFindings, contentWords, proseRules, proseThresholds, repeatedPhrases, sentenceLengths, similarNames } from "./prose.js";
+import { BASELINE_CHECKS, PROSE_THRESHOLDS, analyzeChapter, baselineFigures, baselineFindings, baselineProfile, chapterFindings, contentWords, proseRules, proseThresholds, repeatedPhrases, sentenceLengths, similarNames } from "./prose.js";
+import { languagePack, projectLanguage, skippedChecks } from "./languages/index.js";
 import { splitSentences } from "./sentences.js";
 import { areSiblingBooks, buildSeries, canonicalPath, discoverSeriesBooks, isBookNumber, linksInclude, readBookFrontmatter, seriesId, seriesLinkPath, seriesLinks, validateSeriesLinks, withSeriesBacklink } from "./series.js";
 import { err, warn } from "./findings.js";
@@ -615,12 +616,17 @@ export function scanProject(root) {
     }
   }
 
+  const language = projectLanguage(story.data);
   const project = {
     root: projectRoot,
     story,
     storyId,
     // Display title: story.md `title`, else the folder name.
     title: titleText || path.basename(projectRoot),
+    // story.md `language` (en when unset) and its language pack, which the
+    // analysis commands take their word lists from.
+    language,
+    pack: languagePack(language),
     fileErrors: scanErrors,
     characters: readEntityFiles(projectRoot, "characters", (id, file, data) => ({
       id,
@@ -2403,7 +2409,7 @@ export function namesReport(root, candidates) {
     throw usageError("Usage: story names <name...> [--path <project>]");
   }
   const project = scanProject(root);
-  const result = checkNames(list, existingNames(project));
+  const result = checkNames(list, existingNames(project), project.pack);
   const errors = [...project.fileErrors, ...result.errors];
   return { ok: errors.length === 0, errors, warnings: result.warnings, results: result.results };
 }
@@ -2459,7 +2465,7 @@ export function proseReport(root, options = {}) {
   const errors = [...project.fileErrors];
   const warnings = [];
   const names = [...project.characters.map((character) => character.name), ...existingNames(project).map((entry) => entry.name)];
-  const rules = proseRules(project.styleSheet?.data, names);
+  const rules = proseRules(project.styleSheet?.data, names, project.pack);
   const profile = proseBaseline(project, rules, options, warnings);
   const chapters = [];
   for (const chapter of project.chapters) {
@@ -2468,8 +2474,8 @@ export function proseReport(root, options = {}) {
     const prose = chapterProse(readMarkdown(chapter.file, project.root).body, " ");
     chapters.push(lintProse(label, chapter.title, prose, rules, thresholds, profile, warnings));
   }
-  const phrases = repeatedPhrases(chapters.map((chapter) => chapter.analysis));
-  const similar = similarNames(project.characters);
+  const phrases = repeatedPhrases(chapters.map((chapter) => chapter.analysis), PROSE_THRESHOLDS, project.pack);
+  const similar = similarNames(project.characters, project.pack);
   for (const [left, right] of similar) {
     warnings.push(warn("prose-similar-names", `characters ${left.id} and ${right.id} have similar first names (${left.name} / ${right.name})`));
   }
@@ -2483,7 +2489,8 @@ export function proseReport(root, options = {}) {
     phrases,
     similarNames: similar,
     thresholds: thresholdSummary(thresholds),
-    baseline: profile
+    baseline: profile,
+    skipped: proseSkipped(rules, profile)
   };
 }
 
@@ -2542,7 +2549,7 @@ function proseBaseline(project, rules, options, warnings) {
     }
     for (const document of documents) {
       const prose = document.paragraphs.map((paragraph) => paragraph.text).join("\n\n");
-      samples.push({ file: document.file, analysis: analyzeChapter(prose, rules), sentenceLengths: sentenceLengths(prose), contentWords: contentWords(prose, rules) });
+      samples.push({ file: document.file, analysis: analyzeChapter(prose, rules), sentenceLengths: sentenceLengths(prose, rules.pack), contentWords: contentWords(prose, rules) });
     }
   }
   const profile = baselineProfile(samples);
@@ -2569,6 +2576,12 @@ function sampleProblem(project, sample) {
   return null;
 }
 
+// The prose checks the story's language pack cannot run, with the baseline's
+// own when a baseline is on.
+function proseSkipped(rules, profile) {
+  return profile === null ? rules.skipped : [...rules.skipped, ...skippedChecks(rules.pack, BASELINE_CHECKS)];
+}
+
 // The limits the --max-* flags set, named as the flags are.
 function thresholdSummary(thresholds) {
   return { maxFilterWords: thresholds.filterPerThousand, maxAdverbs: thresholds.adverbsPerThousand, maxBookisms: thresholds.maxBookisms };
@@ -2582,7 +2595,7 @@ function prosePassageReport(root, passage, thresholds, options = {}) {
   const project = root === null ? null : scanProject(root);
   const errors = project === null ? [] : passageErrors(project);
   const names = project === null ? [] : [...project.characters.map((character) => character.name), ...existingNames(project).map((entry) => entry.name)];
-  const rules = proseRules(project?.styleSheet?.data, names);
+  const rules = proseRules(project?.styleSheet?.data, names, project?.pack);
   const warnings = [];
   const profile = project === null ? null : proseBaseline(project, rules, options, warnings);
   const chapter = lintProse(PASSAGE_LABEL, "passage", passageProse(passage), rules, thresholds, profile, warnings);
@@ -2594,10 +2607,11 @@ function prosePassageReport(root, passage, thresholds, options = {}) {
     styleSheet: Boolean(project?.styleSheet),
     words: chapter.analysis.words,
     chapters: [chapter],
-    phrases: repeatedPhrases([chapter.analysis]),
+    phrases: repeatedPhrases([chapter.analysis], PROSE_THRESHOLDS, rules.pack),
     similarNames: [],
     thresholds: thresholdSummary(thresholds),
-    baseline: profile
+    baseline: profile,
+    skipped: proseSkipped(rules, profile)
   };
 }
 

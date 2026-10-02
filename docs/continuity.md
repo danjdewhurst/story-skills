@@ -790,6 +790,24 @@ The columns are chapter numbers, in order. Rows are sorted by the chapter that p
 
 To see the same plant-to-reveal flow as a picture, run [`story diagram clues`](#story-diagram). The [`genre-craft`](../skills/genre-craft/SKILL.md) skill's [mystery fair-play reference](../skills/genre-craft/references/mystery-fair-play.md) covers planting technique and red-herring discipline.
 
+## Books not in English
+
+`story prose`, `story voices`, and `story names` use word lists: filter words, said-bookisms, `-ly` adverbs, speech verbs, contractions, stopwords, and the titles stripped from a name. These come from a language pack chosen by `language` in `story.md` (see [Publishing metadata](project-format.md#publishing-metadata)). `fr-CA` uses a French-Canadian pack if there is one, then a French pack, then a generic base pack with no word lists. A book with no `language` uses English.
+
+Only English has word lists so far. In a book in any other language, a check that needs a list the pack lacks is skipped, never run with English words, so a French manuscript gets no English false positives. Each skipped check prints a note under the report heading, and its per-chapter line is left out:
+
+```text
+$ story prose
+Prose report: 1 chapter, 1489 words
+Note: Filter words skipped: no filterWords list for language fr
+Note: Adverbs skipped: no adverbSuffixes or adverbExceptions list for language fr
+Note: Dialogue tags skipped: no plainTags, saidBookisms, or beatPronouns list for language fr
+Note: Echoes skipped: no echoStopwords list for language fr
+Note: Repeated phrases skipped: no phraseStopwords list for language fr
+```
+
+Sentence counts, the style sheet's watch words and `preferred` spellings, the baseline's sentence, paragraph, and dialogue measures, and similar names still run. A `british` or `american` `dialect` is skipped too, as are a baseline's signature words. In `story voices`, speech tags, contraction counts, and signature words are skipped: lines are attributed by action beats alone, and characters are compared on sentence length, questions, and exclamations. `story names` compares a name from its first word, since no titles are known. `--json` lists the skipped checks in `data.skipped`. Skipping never changes the exit code.
+
 ## Story prose
 
 ```shell
@@ -864,7 +882,7 @@ samples:
 
 The profile needs 2,000 words of sample narration. The tolerances are fixed and listed in [`prose`](cli-reference.md#comparing-with-your-own-prose), so the same samples and chapter always give the same result. A drift is a prompt to reread, not a verdict: a chase should run shorter than the book's average, and a quiet chapter longer. `--baseline false` turns the comparison off for a run.
 
-Prose findings are warnings. `story prose` exits 0 on any readable project, so you can run it freely, unless a `severity` entry in `story.md` promotes a prose warning, such as `prose-avoided-spelling`, to an error.
+Prose findings are warnings. `story prose` exits 0 on any readable project, so you can run it freely, unless a `severity` entry in `story.md` promotes a prose warning, such as `prose-avoided-spelling`, to an error. The word lists are English; a book in another language skips the checks that need them (see [Books not in English](#books-not-in-english)).
 
 To check a passage before it goes into a chapter file, pipe it in with `-` in place of the path: `story prose - < draft-scene.md`. The passage is linted with the same rules and the style sheet of the project in the current directory (or `--path`), and its findings are labelled `stdin`. See [Reading from stdin](cli-reference.md#reading-from-stdin).
 
@@ -907,7 +925,7 @@ Treat the counts as a list of places to reread, not a list of errors. Filter wor
 story voices .
 ```
 
-`story voices` fingerprints each character's dialogue from the chapter prose, so you can see whether characters sound different from each other and from how you described them. It is advisory: every finding is a warning, and it exits 0 on any readable project.
+`story voices` fingerprints each character's dialogue from the chapter prose, so you can see whether characters sound different from each other and from how you described them. It is advisory: every finding is a warning, and it exits 0 on any readable project. Its speech verbs, contractions, and stopwords are English; see [Books not in English](#books-not-in-english) for other languages.
 
 `story voices - < draft-scene.md` checks the dialogue in a piped passage instead, against the characters of the project in the current directory (or `--path`). See [Reading from stdin](cli-reference.md#reading-from-stdin).
 

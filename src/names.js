@@ -1,4 +1,5 @@
 import { err, warn } from "./findings.js";
+import { checkSet, languagePack } from "./languages/index.js";
 import { foldLatin, splitWords } from "./markdown.js";
 import { editDistance } from "./prose.js";
 
@@ -9,26 +10,21 @@ import { editDistance } from "./prose.js";
 
 const MAJOR_ROLES = new Set(["protagonist", "antagonist", "deuteragonist", "narrator"]);
 
-// Leading words that are titles or articles, not names: "Lord Maren" is
-// known as Maren, and "The Iron Lord" should not make every "The..." name a
-// look-alike.
-const TITLE_WORDS = new Set([
-  "the", "a", "an", "lord", "lady", "sir", "dame", "dr", "doctor", "mr", "mrs", "ms", "miss",
-  "master", "mistress", "captain", "capt", "king", "queen", "prince", "princess", "duke", "duchess",
-  "count", "countess", "baron", "baroness", "father", "mother", "sister", "brother", "uncle", "aunt",
-  "councillor", "councilor", "general", "colonel", "major", "sergeant", "lieutenant", "commander",
-  "professor", "prof", "saint", "st", "old", "young", "little"
-]);
+const NO_WORDS = new Set();
 
-// The first word of a name that is not a title or article, or "" when the
-// name is all titles.
-export function givenName(name) {
+// The first word of a name that is not a title or article ("Lord Maren" is
+// known as Maren), or "" when the name is all titles. The titles are the
+// language pack's `titleWords`; without them every name keeps its first
+// word.
+export function givenName(name, pack = languagePack()) {
+  const titles = checkSet(pack, "titleWords") ?? NO_WORDS;
   const words = splitWords(String(name));
-  const index = words.findIndex((word) => !TITLE_WORDS.has(word.toLowerCase().replace(/[.’']/g, "")));
+  const index = words.findIndex((word) => !titles.has(word.toLowerCase().replace(/[.’']/g, "")));
   return index === -1 ? "" : words[index];
 }
 
 export function existingNames(project) {
+  const pack = project.pack ?? languagePack();
   const names = [];
   // `given` marks the one word a reader knows the name by; only character
   // names have one. Every other entry is compared as a whole name.
@@ -41,7 +37,7 @@ export function existingNames(project) {
     if (character.status === "cut") {
       continue;
     }
-    const first = givenName(character.name);
+    const first = givenName(character.name, pack);
     const single = first !== "" && first === String(character.name).trim();
     add("character", character.id, String(character.name), character.role, single);
     if (first !== "" && !single) {
@@ -65,7 +61,7 @@ export function existingNames(project) {
   return names;
 }
 
-export function checkNames(candidates, names) {
+export function checkNames(candidates, names, pack = languagePack()) {
   const errors = [];
   const warnings = [];
   const results = [];
@@ -75,7 +71,7 @@ export function checkNames(candidates, names) {
       continue;
     }
     const key = normalize(candidate);
-    const first = normalize(givenName(candidate));
+    const first = normalize(givenName(candidate, pack));
     const clashes = [];
     const lookalikes = [];
     const initials = [];

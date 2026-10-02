@@ -150,6 +150,7 @@ flowchart LR
 | `src/compare.js` | Chapter-by-chapter comparison with an earlier draft. |
 | `src/similarity.js` | Shared-passage detection for `story similarity`: word shingles of the reference indexed once, each hit extended to the longest shared run, the passage's labels and text on both sides, and the report. `story.js` reads the `--against` file, folder, or git ref and labels chapters as the review copy does. |
 | `src/import.js` | Splits an existing manuscript into a new project and suggests entity candidates. |
+| `src/languages/` | Language packs: `index.js` resolves a BCP 47 tag to a pack (`languagePack`), reads story.md `language` (`projectLanguage`), and answers whether a pack has a word list (`checkList`, `checkSet`, `hasLists`, `skippedChecks`). `base.js` is the generic pack and `en.js` holds every English word list the analysis modules use. See [Language packs](#language-packs). |
 | `src/version.js` | `VERSION`, printed by `story --version`. Bumped only by the release script. |
 
 Most commands follow the same pattern. A function in `src/story.js` takes the project root, calls `scanProject(root)` to read every entity file into one in-memory project object, and passes that object to a pure function in a feature module. For example, `checkProjectContinuity(root)` is `checkContinuity(scanProject(root))`. What happens next depends on the kind of command:
@@ -250,6 +251,14 @@ Do not add a separate dispatch branch in `src/cli.js` or edit help text by hand.
 
 Add an entry to `OPTIONS` in `src/options.js`, placed where it should appear in help, and read it in the command's `run` through `parsed.options["flag-name"]`; read boolean flags with `isTruthy`. The `add`, `rename`, and `remove` commands spread `parsed.options` into `createEntity`, `renameEntity`, and `removeEntity`, so a new flag reaches those functions without a `run` change, but the function still has to read it. If the flag writes to a list field, make it `repeatable` and consider a hidden plural alias, following `--character` / `--characters`.
 
+### Language packs
+
+`prose`, `voices`, `names`, `import`, and the sentence splitter take their word lists from a language pack rather than module constants. `scanProject` sets `project.language` (story.md `language`, `en` when unset or not a tag) and `project.pack` (`languagePack(project.language)`), and the report functions in `story.js` pass `project.pack` on. Each analysis function takes the pack as its last argument and defaults to English, so a caller without a project gets the English behaviour.
+
+A pack is a plain data module, so it bundles into the Node fallback without JSON imports. `languagePack("fr-CA")` layers `base.js`, then the pack for `fr`, then one for `fr-ca`, using whichever exist; later layers replace top-level fields, and `checks` and `labels` merge by key. The result is frozen and cached per tag, with `tag` (as given) and `code` (the most specific pack found, `und` for the base alone). The top-level fields are `cased`, `segmentation` (`space`, `character`, or `dictionary`), `sentenceEnd`, `quotes` (open and close pairs), `dialogueDash`, `labels`, and `checks`, which holds the word lists by name.
+
+A check never runs with another language's words. `checkList(pack, name)` and `checkSet(pack, name)` return `null` for a list the pack lacks (an empty list is a list), and a module declares its checks as `{ check, label, lists }` entries (`PROSE_CHECKS` in `prose.js`, `VOICE_CHECKS` in `voices.js`). `skippedChecks(pack, definitions)` returns one `{ check, language, missing, message }` entry per check whose lists are missing. The module skips that check, adds the entries to its result's `skipped` (which `--json` prints as `data.skipped`), and its formatter prints `skippedLines(skipped)` as `Note:` lines. To add a language, add `src/languages/<code>.js` with the lists it has, register it in `PACKS` in `index.js`, and add tests. To add a word list, put it in `en.js` and name it in the check that uses it.
+
 ## The bundled fallback
 
 [`skills/story-maintenance/scripts/story.js`](../skills/story-maintenance/scripts/story.js) is a single-file build of the whole CLI. Regenerate it with:
@@ -303,7 +312,7 @@ Beyond the CLI, the tests also check repository invariants: `test/check-scripts.
 bun run test:coverage
 ```
 
-This runs the suite with lcov output into `coverage/`, then `node scripts/check-coverage.js coverage/lcov.info src`, then `check:fallback`. The coverage threshold is 100%: every `.js` file in `src/` must have a coverage record, and every line and every function in it must be hit. If the lcov report includes branch records (`BRDA`, or `BRF`/`BRH`), branches must be at 100% too. Bun's lcov reporter does not currently emit branch records, so the branch gate is skipped with a note:
+This runs the suite with lcov output into `coverage/`, then `node scripts/check-coverage.js coverage/lcov.info src`, then `check:fallback`. The coverage threshold is 100%: every `.js` file in `src/` and its subfolders (`src/languages/`) must have a coverage record, and every line and every function in it must be hit. If the lcov report includes branch records (`BRDA`, or `BRF`/`BRH`), branches must be at 100% too. Bun's lcov reporter does not currently emit branch records, so the branch gate is skipped with a note:
 
 ```text
 Note: coverage/lcov.info contains no branch records, so the branch gate was skipped. Use a coverage reporter that emits BRDA/BRF/BRH records to enforce branch coverage.
