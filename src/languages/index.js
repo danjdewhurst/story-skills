@@ -58,7 +58,7 @@ const GRANDFATHERED = {
 // finds the same pack on every runtime. An extlang tag drops its
 // macrolanguage (zh-yue is yue, under zh); a tag that is not valid keeps
 // only a first subtag that is a language (fr_FR is fr), else it is und.
-function lookupTag(language) {
+export function lookupTag(language) {
   const lower = language.toLowerCase();
   if (GRANDFATHERED[lower] !== undefined) {
     return GRANDFATHERED[lower];

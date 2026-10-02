@@ -6174,7 +6174,7 @@ function tableCell(value) {
 // src/typesetting.js
 var WRITING_MODES = new Set(["horizontal", "vertical"]);
 var CASED_SCRIPTS = new Set(["Latn", "Cyrl", "Grek", "Armn", "Copt", "Glag", "Adlm", "Osge", "Dsrt"]);
-var VERTICAL_SCRIPTS = new Set(["Jpan", "Hani", "Hans", "Hant", "Hira", "Kana", "Bopo"]);
+var VERTICAL_SCRIPTS = new Set(["Jpan", "Hani", "Hans", "Hant", "Hira", "Kana", "Bopo", "Kore", "Hang"]);
 var EAST_ASIAN_SCRIPTS = new Set(["Jpan", "Hani", "Hans", "Hant", "Hira", "Kana", "Bopo", "Kore", "Hang"]);
 var COMPLEX_SCRIPTS = new Set(["Arab", "Hebr", "Syrc", "Thaa", "Nkoo", "Deva", "Beng", "Guru", "Gujr", "Orya", "Taml", "Telu", "Knda", "Mlym", "Sinh", "Thai", "Laoo", "Khmr", "Mymr", "Tibt"]);
 var LIKELY_SCRIPTS = {
@@ -6201,7 +6201,9 @@ var LIKELY_SCRIPTS = {
   Ethi: ["am", "ti"],
   Thaa: ["dv"],
   Syrc: ["syr"],
-  Hant: ["yue"]
+  Cher: ["chr"],
+  Hans: ["cmn", "wuu", "hak", "nan", "gan", "hsn", "cjy"],
+  Hant: ["yue", "lzh"]
 };
 var SCRIPT_OF = new Map(Object.entries(LIKELY_SCRIPTS).flatMap(([script, codes]) => codes.map((code) => [code, script])));
 var TRADITIONAL_REGIONS = new Set(["tw", "hk", "mo"]);
@@ -6215,28 +6217,38 @@ var FONT_STACKS = {
   Arab: `"Noto Naskh Arabic", "Geeza Pro", "Times New Roman", "Traditional Arabic", serif`,
   Hebr: `"Noto Serif Hebrew", "Times New Roman", David, "Arial Hebrew", serif`,
   Deva: `"Noto Serif Devanagari", "Kohinoor Devanagari", "Devanagari Sangam MN", Mangal, "Nirmala UI", serif`,
-  Thai: `"Noto Serif Thai", Thonburi, "Leelawadee UI", Tahoma, serif`
+  Thai: `"Noto Serif Thai", Thonburi, "Leelawadee UI", Tahoma, serif`,
+  Cher: `"Plantagenet Cherokee", Gadugi, "Noto Sans Cherokee", serif`
 };
 FONT_STACKS.Grek = FONT_STACKS.Cyrl;
 var DOCX_EAST_ASIA = { Jpan: "MS Mincho", Hans: "SimSun", Hant: "PMingLiU", Kore: "Batang" };
 var DOCX_COMPLEX = { Deva: "Mangal", Thai: "Tahoma" };
 function parseTag(language) {
-  const subtags = String(language ?? "").trim().toLowerCase().split(/[-_]/);
-  const script = subtags.slice(1).find((subtag) => /^[a-z]{4}$/.test(subtag));
-  return { subtags, script: script === undefined ? null : `${script[0].toUpperCase()}${script.slice(1)}` };
+  const subtags = lookupTag(String(language ?? "").trim() || "en")[0].split("-");
+  const [primary, ...rest] = subtags;
+  const script = /^[a-z]{4}$/.test(rest[0] ?? "") ? `${rest[0][0].toUpperCase()}${rest[0].slice(1)}` : null;
+  const region = rest[script === null ? 0 : 1] ?? "";
+  return { primary, script, region: /^(?:[a-z]{2}|\d{3})$/.test(region) ? region : null, subtags };
+}
+function writtenTag(language) {
+  const { script, region, subtags } = parseTag(language);
+  const at = script === null ? 1 : 2;
+  return subtags.map((subtag, index) => {
+    if (index === 1 && script !== null) {
+      return script;
+    }
+    return index === at && region !== null ? subtag.toUpperCase() : subtag;
+  }).join("-");
 }
 function languageScript(language) {
-  const { subtags, script } = parseTag(language);
+  const { primary, script, region } = parseTag(language);
   if (script !== null) {
     return script;
   }
-  const primary = subtags[0];
   const pack = languagePack(language);
-  const found = pack.script ?? SCRIPT_OF.get(primary) ?? "Latn";
-  if (found === "Hans" && subtags.slice(1).some((subtag) => TRADITIONAL_REGIONS.has(subtag))) {
-    return "Hant";
-  }
-  return found;
+  const own = pack.code.split("-")[0] === primary ? pack.script : null;
+  const found = own ?? SCRIPT_OF.get(primary) ?? pack.script ?? "Latn";
+  return found === "Hans" && TRADITIONAL_REGIONS.has(region) ? "Hant" : found;
 }
 function fontScript(script, language) {
   if (script === "Hira" || script === "Kana") {
@@ -6249,11 +6261,11 @@ function fontScript(script, language) {
     return "Hant";
   }
   if (script === "Hani") {
-    const [primary, ...rest] = parseTag(language).subtags;
+    const { primary, region } = parseTag(language);
     if (primary === "ja" || primary === "ko") {
       return primary === "ja" ? "Jpan" : "Kore";
     }
-    return primary === "yue" || rest.some((subtag) => TRADITIONAL_REGIONS.has(subtag)) ? "Hant" : "Hans";
+    return SCRIPT_OF.get(primary) === "Hant" || TRADITIONAL_REGIONS.has(region) ? "Hant" : "Hans";
   }
   return script;
 }
@@ -6289,8 +6301,10 @@ function validateWritingMode(data, errors) {
     return;
   }
   const language = projectLanguage(data);
-  if (!supportsVertical(language)) {
-    errors.push(err("unsupported-writing-mode", `story.md writing-mode vertical needs a language set in vertical columns, such as ja, zh, or zh-Hant; ${language} is set horizontally, so builds ignore it`, "story.md"));
+  if (languageScript(language) === "Mong") {
+    errors.push(err("unsupported-writing-mode", `story.md writing-mode vertical is not supported yet for ${language}: traditional Mongolian runs its columns left to right (vertical-lr), so builds ignore it`, "story.md"));
+  } else if (!supportsVertical(language)) {
+    errors.push(err("unsupported-writing-mode", `story.md writing-mode vertical needs a language set in vertical columns, such as ja, zh, zh-Hant, or ko; ${language} is set horizontally, so builds ignore it`, "story.md"));
   }
 }
 
@@ -8312,7 +8326,7 @@ function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
   writeZip(outFile, [
     { name: "mimetype", content: "application/epub+zip", stored: true },
     { name: "META-INF/container.xml", content: `<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>` },
-    { name: "OEBPS/content.opf", content: `<?xml version="1.0" encoding="UTF-8"?><package version="3.0" unique-identifier="book-id" xmlns="http://www.idpf.org/2007/opf"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book-id">${identifier}</dc:identifier><dc:title>${xmlEscape(manuscript.title)}</dc:title>${creator}<dc:language>${lang}</dc:language>${optional}<meta property="dcterms:modified">${modified}</meta>${accessibility}${coverMeta.join("")}</metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>${stylesheet === "" ? "" : `<item id="style" href="style.css" media-type="text/css"/>`}${coverItems.join("")}${items.join("")}</manifest><spine${rtl || type.vertical ? ` page-progression-direction="rtl"` : ""}>${coverSpine.join("")}${spine.join("")}</spine></package>` },
+    { name: "OEBPS/content.opf", content: `<?xml version="1.0" encoding="UTF-8"?><package version="3.0" unique-identifier="book-id" xmlns="http://www.idpf.org/2007/opf"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book-id">${identifier}</dc:identifier><dc:title>${xmlEscape(manuscript.title)}</dc:title>${creator}<dc:language>${lang}</dc:language>${optional}<meta property="dcterms:modified">${modified}</meta>${accessibility}${coverMeta.join("")}${type.vertical ? `<meta name="primary-writing-mode" content="vertical-rl"/>` : ""}</metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>${stylesheet === "" ? "" : `<item id="style" href="style.css" media-type="text/css"/>`}${coverItems.join("")}${items.join("")}</manifest><spine${rtl || type.vertical ? ` page-progression-direction="rtl"` : ""}>${coverSpine.join("")}${spine.join("")}</spine></package>` },
     { name: "OEBPS/nav.xhtml", content: navXhtml(manuscript.title, documents, root, meta.contentsLabel, head) },
     ...stylesheet === "" ? [] : [{ name: "OEBPS/style.css", content: stylesheet }],
     ...coverEntries,
@@ -8436,10 +8450,11 @@ function docxScript(meta) {
   const language = meta?.language ?? "en";
   const type = typesetting(language, meta?.writingMode);
   const { eastAsia, cs, eastAsian, complex } = type.docx;
-  const tag = xmlEscape(language);
+  const written = writtenTag(language);
+  const tag = xmlEscape(written);
   const font = (name) => `"${name ?? "Times New Roman"}"`;
   return {
-    lang: language.toLowerCase() === "en" ? "" : `<w:lang w:val="${tag}"${eastAsian ? ` w:eastAsia="${tag}"` : ""}${complex ? ` w:bidi="${tag}"` : ""}/>`,
+    lang: written === "en" || written === "und" ? "" : `<w:lang w:val="${tag}"${eastAsian ? ` w:eastAsia="${tag}"` : ""}${complex ? ` w:bidi="${tag}"` : ""}/>`,
     bidi: type.rtl ? "<w:bidi/>" : "",
     rtl: type.rtl ? "<w:rtl/>" : "",
     bold: complex ? "<w:b/><w:bCs/>" : "<w:b/>",
@@ -8471,7 +8486,7 @@ function shunnParagraphXml(script, runXml, centered, quote = false) {
   return `<w:p><w:pPr>${script.bidi}${SHUNN_PARAGRAPH_SPACING}${layout}</w:pPr>${runXml}</w:p>`;
 }
 function shunnChapterHeadingXml(script, text) {
-  return `<w:p><w:pPr>${script.bidi}${SHUNN_PARAGRAPH_SPACING}<w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:r><w:br w:type="page"/></w:r>${shunnRunXml(script, text, { strong: true })}</w:p>`;
+  return `<w:p><w:pPr>${script.bidi}${SHUNN_PARAGRAPH_SPACING}<w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:r>${script.rtl === "" ? "" : `<w:rPr>${script.rtl}</w:rPr>`}<w:br w:type="page"/></w:r>${shunnRunXml(script, text, { strong: true })}</w:p>`;
 }
 function shunnWordCount(words, pack = languagePack()) {
   const step = words < 1000 ? 1 : words < 40000 ? 100 : 1000;

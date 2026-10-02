@@ -468,7 +468,7 @@ These optional fields describe the published edition. Edit them in `story.md` by
 | `ai-disclosure` | string | A short statement of how AI tools were used, for retailer and agent disclosure forms. |
 | `chapter-label` | string | The word for generated chapter headings, in place of `Chapter` (`Kapitel`). A `{n}` in it places the number (`第{n}章`). |
 | `contents-label` | string | The generated table of contents heading, in place of `Contents` (`Inhalt`). |
-| `writing-mode` | `horizontal` or `vertical` | How builds set the text. Default `horizontal`. `vertical` sets columns top to bottom and right to left, with pages turned right to left, and is valid only for a language written in Chinese characters (`ja`, `zh`, `zh-Hant`, `ko-Hani`); `story validate` errors with `unsupported-writing-mode` otherwise, and with `unsupported-value` on any other value. See [Typesetting other scripts](manuscripts.md#typesetting-other-scripts). |
+| `writing-mode` | `horizontal` or `vertical` | How builds set the text. Default `horizontal`. `vertical` sets columns top to bottom and right to left, with pages turned right to left, and is valid only for Japanese, Chinese, or Korean (`ja`, `zh`, `zh-Hant`, `ko`); `story validate` errors with `unsupported-writing-mode` otherwise, and with `unsupported-value` on any other value. See [Typesetting other scripts](manuscripts.md#typesetting-other-scripts). |
 
 The scalar fields must be text (an unquoted ISBN-13 is also accepted), and `authors`, `keywords`, and `subjects` must be lists of text; `story validate` errors otherwise:
 

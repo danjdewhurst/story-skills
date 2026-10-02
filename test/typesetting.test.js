@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { buildBook, createStoryProject, validateProject } from "../src/story.js";
-import { languageScript, supportsVertical, typesetting } from "../src/typesetting.js";
+import { languageScript, supportsVertical, typesetting, writtenTag } from "../src/typesetting.js";
 import { makeTempDir, readArchiveEntries, writeMarkdown } from "./helpers.js";
 
 // A two-chapter book in `language`, with optional extra story.md lines.
@@ -73,6 +73,35 @@ describe("script-aware typesetting", () => {
     expect(languageScript("sr-Latn")).toBe("Latn");
     expect(languageScript("fa")).toBe("Arab");
     expect(languageScript("xx")).toBe("Latn");
+    expect(languageScript("chr")).toBe("Cher");
+
+    // Tags resolve as the language packs resolve them, not through Intl:
+    // aliases, extlang tags, and grandfathered tags.
+    expect(languageScript("iw")).toBe("Hebr");
+    expect(languageScript("ji")).toBe("Hebr");
+    expect(languageScript("jpn")).toBe("Jpan");
+    expect(languageScript("zh-yue")).toBe("Hant");
+    expect(languageScript("zh-min-nan")).toBe("Hans");
+    for (const code of ["cmn", "wuu", "hak", "nan", "gan", "hsn", "cjy"]) {
+      expect(languageScript(code)).toBe("Hans");
+    }
+    expect(languageScript("lzh")).toBe("Hant");
+
+    // Only the subtag after the language is a script, and only the next a
+    // region; extension and private-use subtags never count.
+    expect(languageScript("en-x-hani")).toBe("Latn");
+    expect(languageScript("en-x-test")).toBe("Latn");
+    expect(languageScript("ar-u-nu-latn")).toBe("Arab");
+    expect(languageScript("zh-x-tw")).toBe("Hans");
+    expect(languageScript("zh-yue-HK")).toBe("Hant");
+
+    expect(writtenTag("en-gb")).toBe("en-GB");
+    expect(writtenTag("zh-hant-tw")).toBe("zh-Hant-TW");
+    expect(writtenTag("jpn")).toBe("ja");
+    expect(writtenTag("iw-il")).toBe("he-IL");
+    expect(writtenTag("zh-yue")).toBe("yue");
+    expect(writtenTag("ar-u-nu-latn")).toBe("ar-u-nu-latn");
+    expect(writtenTag("en-GB-oed")).toBe("en-GB-oxendict");
 
     expect(typesetting("ja")).toMatchObject({ cased: false, rtl: false, vertical: false });
     expect(typesetting("ja-Latn").cased).toBe(true);
@@ -82,13 +111,17 @@ describe("script-aware typesetting", () => {
     expect(typesetting("en", "vertical").vertical).toBe(false);
 
     expect(supportsVertical("zh-Hant")).toBe(true);
-    expect(supportsVertical("ko")).toBe(false);
+    expect(supportsVertical("jpn")).toBe(true);
+    expect(supportsVertical("ko")).toBe(true);
+    expect(supportsVertical("ko-Hang")).toBe(true);
     expect(supportsVertical("ko-Hani")).toBe(true);
     expect(supportsVertical("ar")).toBe(false);
+    expect(supportsVertical("en-x-hani")).toBe(false);
+    expect(supportsVertical("mn-Mong")).toBe(false);
   });
 
   test("every font stack ends in a generic family", () => {
-    for (const language of ["en", "ru", "el", "ja", "zh", "zh-TW", "ko", "ar", "he", "hi", "th", "km"]) {
+    for (const language of ["en", "ru", "el", "ja", "zh", "zh-TW", "ko", "ar", "he", "hi", "th", "km", "chr"]) {
       const { fonts } = typesetting(language);
       expect(fonts.body).toMatch(/, serif$/);
       expect(fonts.heads).toMatch(/, serif$/);
@@ -184,6 +217,9 @@ describe("script-aware typesetting", () => {
     const vertical = archive(book("ja", "writing-mode: vertical\n"), "epub");
     expect(vertical["OEBPS/style.css"]).toContain("html { -epub-writing-mode: vertical-rl; -webkit-writing-mode: vertical-rl; writing-mode: vertical-rl; }");
     expect(vertical["OEBPS/content.opf"]).toContain('<spine page-progression-direction="rtl">');
+    // Kindle reads the writing mode from this OPF 2 meta.
+    expect(vertical["OEBPS/content.opf"]).toContain('<meta name="primary-writing-mode" content="vertical-rl"/></metadata>');
+    expect(chinese["OEBPS/content.opf"]).not.toContain("primary-writing-mode");
     expect(vertical["OEBPS/chapter-01.xhtml"]).toContain('xml:lang="ja" lang="ja">');
     expectWellFormed(vertical["OEBPS/content.opf"]);
   });
@@ -197,6 +233,10 @@ describe("script-aware typesetting", () => {
     const british = archive(book("en-GB"), "docx");
     expect(british["word/styles.xml"]).toContain('<w:szCs w:val="24"/><w:lang w:val="en-GB"/></w:rPr>');
     expect(british["word/document.xml"]).not.toContain("<w:rtl/>");
+
+    // Word gets the tag in its usual form, aliases resolved.
+    expect(archive(book("jpn"), "docx")["word/styles.xml"]).toContain('<w:lang w:val="ja" w:eastAsia="ja"/>');
+    expect(archive(book("zh-hant-tw"), "docx")["word/styles.xml"]).toContain('<w:lang w:val="zh-Hant-TW" w:eastAsia="zh-Hant-TW"/>');
   });
 
   test("DOCX sets East Asian fonts and language, and vertical text, for Japanese", () => {
@@ -233,7 +273,9 @@ describe("script-aware typesetting", () => {
     const shunn = archive(root, "docx", { shunn: true, out: "dist/shunn.docx" })["word/document.xml"];
     expect(shunn).toContain('<w:p><w:pPr><w:bidi/><w:spacing w:line="480" w:lineRule="auto"/>');
     expect(shunn).toContain('<w:rPr><w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/><w:sz w:val="24"/><w:b/><w:bCs/><w:rtl/></w:rPr>');
-    expect(shunn.match(/<w:r><w:rPr>/g).length).toBe(shunn.match(/<w:rtl\/><\/w:rPr>/g).length);
+    // Every run, the chapter heading's page break too, is right to left.
+    expect(shunn).toContain('<w:r><w:rPr><w:rtl/></w:rPr><w:br w:type="page"/></w:r>');
+    expect(shunn.match(/<w:r>/g).length).toBe(shunn.match(/<w:rtl\/><\/w:rPr>/g).length);
     expectWellFormed(shunn);
     // Shunn runs have always put sz before b and i, so only the order of
     // the other properties is checked.
@@ -246,11 +288,16 @@ describe("script-aware typesetting", () => {
     expect(codes(book("ja", "writing-mode: vertical\n"))).toEqual([]);
     expect(codes(book("zh-Hant", "writing-mode: vertical\n"))).toEqual([]);
     expect(codes(book("ko", "writing-mode: horizontal\n"))).toEqual([]);
-    expect(codes(book("ko", "writing-mode: vertical\n"))).toContain("unsupported-writing-mode");
+    expect(codes(book("ko", "writing-mode: vertical\n"))).toEqual([]);
+    expect(codes(book("jpn", "writing-mode: vertical\n"))).toEqual([]);
+    expect(codes(book("en-x-hani", "writing-mode: vertical\n"))).toContain("unsupported-writing-mode");
     expect(codes(book(null, "writing-mode: vertical\n"))).toContain("unsupported-writing-mode");
     expect(codes(book("ja", "writing-mode: sideways\n"))).toContain("unsupported-value");
     expect(codes(book("ja", "writing-mode:\n  - vertical\n"))).toContain("field-not-scalar");
     const message = validateProject(book("en", "writing-mode: vertical\n")).errors.find((error) => error.code === "unsupported-writing-mode").message;
     expect(message).toContain("en is set horizontally");
+    const mongolian = validateProject(book("mn-Mong", "writing-mode: vertical\n")).errors.find((error) => error.code === "unsupported-writing-mode").message;
+    expect(mongolian).toContain("not supported yet for mn-Mong");
+    expect(mongolian).toContain("vertical-lr");
   });
 });

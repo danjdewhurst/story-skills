@@ -401,7 +401,7 @@ Write matter text yourself. The `story-maintenance` skill will not invent acknow
 | `ai-disclosure` | Text | The generated copyright page and the metadata sheet. |
 | `chapter-label` | Text, such as `Kapitel` | The word in every generated chapter heading, in place of `Chapter`: `Kapitel 1: Die Glocke`. A `{n}` in it places the number, as in `第{n}章`. Used by the markdown export and every build. |
 | `contents-label` | Text, such as `Inhalt` | The table of contents heading, in place of `Contents`, in the EPUB navigation, the HTML review copy, and the print interior. |
-| `writing-mode` | `horizontal` (the default) or `vertical` | `vertical` sets a Japanese or Chinese book in columns, top to bottom and right to left, in the EPUB, HTML, print, and DOCX builds, with pages that turn right to left. `validate` errors when the `language` is not set vertically; see [Typesetting other scripts](#typesetting-other-scripts). |
+| `writing-mode` | `horizontal` (the default) or `vertical` | `vertical` sets a Japanese, Chinese, or Korean book in columns, top to bottom and right to left, in the EPUB, HTML, print, and DOCX builds, with pages that turn right to left. `validate` errors when the `language` is not set vertically; see [Typesetting other scripts](#typesetting-other-scripts). |
 | `form` | `flash`, `short-story`, `novelette`, `novella`, `novel`, `serial`, `picture-book`, or `chapter-book` | The metadata sheet, and the Shunn layout: `short-story` and `flash` builds use the short-story layout (see [Shunn](#shunn-standard-manuscript-format)). `story init --form` sets it along with a default `target-words`, and `validate` warns when `target-words`, or the finished manuscript, falls outside the form's usual range. |
 
 The other generated text stays in English whatever the `language`: the HTML review copy's note on citing paragraph labels, the narration script's headings, credits (`Written by`, `Narrated by`, `The end. You have been listening to`), and runtime lines, and the metadata sheet. The narration script is a working file, so translate its credits by hand before recording.
@@ -1033,28 +1033,30 @@ Lists and other markdown are not converted and appear as their literal text. Kee
 
 ### Typesetting other scripts
 
-The book's `language` decides its script: the tag's script subtag when it has one (`sr-Latn`, `zh-Hant`), else the language's usual script (`ja` is Japanese, `zh-TW` Traditional Chinese, `ru` Cyrillic, `fa` Arabic), else Latin. A Latin-script book builds exactly as an English one does. For other scripts:
+The book's `language` decides its script: the tag's script subtag when it has one (`sr-Latn`, `zh-Hant`), else the language's usual script (`ja` is Japanese, `zh-TW` and `yue` Traditional Chinese, `cmn` Simplified, `ru` Cyrillic, `fa` Arabic, `chr` Cherokee), else Latin. The tag is read as the language packs read it, the same on every runtime: an old or three-letter code counts as its modern one (`iw` is Hebrew, `jpn` Japanese), and `zh-yue` is Cantonese. Only the subtag right after the language is a script, so an extension or private-use subtag (`ar-u-nu-latn`, `en-x-hani`) never changes it. A Latin-script book builds exactly as an English one does. For other scripts:
 
-- **Fonts.** The HTML review copy, the print interior, and the EPUB name serif fonts for the script: system fonts on macOS, Windows, and Android first, then Noto, then the generic `serif`. Japanese, for example, is `"Hiragino Mincho ProN", "Yu Mincho", YuMincho, "MS Mincho", "Noto Serif JP", "Noto Serif CJK JP", serif`. There are stacks for Japanese, Simplified and Traditional Chinese, Korean, Arabic, Hebrew, Devanagari, Thai, and Cyrillic and Greek; other scripts use the Latin stack, and the browser finds each missing character in a font of its own. An EPUB in a Latin script has no stylesheet, so the reader's own font applies; another script's EPUB adds `style.css` with the font stack.
+- **Fonts.** The HTML review copy, the print interior, and the EPUB name serif fonts for the script: system fonts on macOS, Windows, and Android first, then Noto, then the generic `serif`. Japanese, for example, is `"Hiragino Mincho ProN", "Yu Mincho", YuMincho, "MS Mincho", "Noto Serif JP", "Noto Serif CJK JP", serif`. There are stacks for Japanese, Simplified and Traditional Chinese, Korean, Arabic, Hebrew, Devanagari, Thai, Cherokee, and Cyrillic and Greek; other scripts use the Latin stack, and the browser finds each missing character in a font of its own. An EPUB in a Latin script has no stylesheet, so the reader's own font applies; another script's EPUB adds `style.css` with the font stack.
 - **Capitals.** Small caps, the print interior's enlarged first letter, and italic running heads need a script with capitals and italics. A script without them, such as Japanese, Chinese, Arabic, Hebrew, Devanagari, or Thai, leaves them out. `ja-Latn` (romaji) keeps them.
-- **DOCX.** Any `language` but `en` is written as Word's language for the text (`w:lang`), with its East Asian or complex-script language too where the script needs one, so Word checks spelling and breaks lines for it. Japanese, Chinese, and Korean text uses MS Mincho, SimSun (Simplified), PMingLiU (Traditional), or Batang; Hindi uses Mangal and Thai Tahoma. A right-to-left book marks every paragraph, run, and the section right to left, and bold and italic reach complex-script text.
+- **DOCX.** Any `language` but `en` is written, in its usual form (`jpn` as `ja`, `zh-hant-tw` as `zh-Hant-TW`), as Word's language for the text (`w:lang`), with its East Asian or complex-script language too where the script needs one, so Word checks spelling and breaks lines for it. Japanese, Chinese, and Korean text uses MS Mincho, SimSun (Simplified), PMingLiU (Traditional), or Batang; Hindi uses Mangal and Thai Tahoma. A right-to-left book marks every paragraph, run, and the section right to left, and bold and italic reach complex-script text.
 
 #### Vertical text
 
-`writing-mode: vertical` in `story.md` sets a book in columns read top to bottom, right to left, as Japanese and Chinese novels often are:
+`writing-mode: vertical` in `story.md` sets a book in columns read top to bottom, right to left, as Japanese and Chinese novels often are, and Korean ones can be:
 
 ```yaml
 language: ja
 writing-mode: vertical
 ```
 
-The EPUB adds `writing-mode: vertical-rl` (and the older `-epub-writing-mode`) in `style.css` and turns its pages right to left (`page-progression-direction="rtl"`). The HTML review copy and the print interior set `writing-mode: vertical-rl`, and the print interior opens from the right like a right-to-left book: chapters start on left-hand pages and the running heads swap sides. The DOCX section is set `tbRl`, Word's vertical layout. Render a vertical print interior with an engine that sets vertical text, such as [Vivliostyle](https://vivliostyle.org/) or Prince.
+The EPUB adds `writing-mode: vertical-rl` (and the older `-epub-writing-mode`) in `style.css` and turns its pages right to left (`page-progression-direction="rtl"`), with `<meta name="primary-writing-mode" content="vertical-rl"/>` in the package for Kindle. The HTML review copy and the print interior set `writing-mode: vertical-rl`, and the print interior opens from the right like a right-to-left book: chapters start on left-hand pages and the running heads swap sides. The DOCX section is set `tbRl`, Word's vertical layout. Render a vertical print interior with an engine that sets vertical text, such as [Vivliostyle](https://vivliostyle.org/) or Prince.
 
-Only a language written in Chinese characters can go vertical: `ja`, `zh` (and `zh-Hant`, `zh-TW`, `yue`), or a tag with a `Jpan`, `Hani`, `Hans`, or `Hant` script subtag, such as `ko-Hani`. Hangul is set horizontally, so plain `ko` cannot. For any other language, `story validate` reports `unsupported-writing-mode` and builds ignore the field:
+Only Japanese, Chinese, and Korean can go vertical: `ja`, `zh` (and `zh-Hant`, `zh-TW`, `yue`, `cmn`, `lzh`), `ko`, or a tag with a `Jpan`, `Hani`, `Hans`, `Hant`, `Kore`, or `Hang` script subtag. For any other language, `story validate` reports `unsupported-writing-mode` and builds ignore the field:
 
 ```text
-error: story.md writing-mode vertical needs a language set in vertical columns, such as ja, zh, or zh-Hant; en is set horizontally, so builds ignore it [unsupported-writing-mode]
+error: story.md writing-mode vertical needs a language set in vertical columns, such as ja, zh, zh-Hant, or ko; en is set horizontally, so builds ignore it [unsupported-writing-mode]
 ```
+
+Traditional Mongolian (`mn-Mong`) is vertical too, but its columns run left to right (`vertical-lr`), which the builds do not set yet; `validate` says so with the same code.
 
 ### Reproducible builds
 

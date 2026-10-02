@@ -2411,7 +2411,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `backslash-path` | warning | A `story.md` path (`follows`, `precedes`, `cover`) uses a backslash. |
 | `form-length-range` | warning | The target or finished length is outside the usual range for the story's `form`. |
 | `invalid-language` | error | `story.md` `language` is not a BCP 47 tag. |
-| `unsupported-writing-mode` | error | `story.md` sets `writing-mode: vertical` for a language that is not set in vertical columns. |
+| `unsupported-writing-mode` | error | `story.md` sets `writing-mode: vertical` for a language that is not set in vertical columns (or for traditional Mongolian, not supported yet). |
 | `invalid-isbn` | error | `story.md` `isbn` is not a valid ISBN. |
 | `invalid-subject` | error | A `story.md` `subjects` entry is not a BISAC code. |
 | `too-many-keywords` | warning | `story.md` lists more keywords than most retailers accept. |
