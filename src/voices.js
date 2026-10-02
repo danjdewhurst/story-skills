@@ -1,6 +1,6 @@
 import { warn } from "./findings.js";
 import { checkList, checkSet, languagePack, skippedChecks, skippedLines } from "./languages/index.js";
-import { compareText, lowerCase, lowerCaseText } from "./languages/locale.js";
+import { compareText, lowerCase, matchingCase, matchingText } from "./languages/locale.js";
 import { splitWords } from "./markdown.js";
 import { givenName } from "./names.js";
 import { plural } from "./plural.js";
@@ -158,12 +158,12 @@ export function buildVoices(project, chapters) {
   signatureWords(profiles, pack);
 
   const warnings = [];
-  // Voice phrases match in the story's casing, so each line is lower-cased
+  // Voice phrases match in the story's casing, so each line is prepared
   // once, when a phrase is first looked for in it.
   const casedLines = new Map();
   const says = (pattern, line) => {
     if (!casedLines.has(line)) {
-      casedLines.set(line, lowerCaseText(line.text, pack));
+      casedLines.set(line, matchingText(line.text, pack));
     }
     return containsWords(pattern, line.text, casedLines.get(line));
   };
@@ -267,8 +267,8 @@ const UNSPACED_LETTER = new RegExp(`[${UNSPACED_LETTERS}]`, "u");
 
 // Whether the global `pattern`, bounded by SPACED_LETTER, matches `text`
 // as whole words: an edge between two letters of an unspaced script must
-// fall between two of its words. With `cased`, `text` lower-cased by
-// lowerCaseText, the pattern runs on that and its edges map back to `text`.
+// fall between two of its words. With `cased`, `text` as matchingText gives
+// it, the pattern runs on that and its edges map back to `text`.
 function containsWords(pattern, text, cased = null) {
   let boundaries = null;
   for (const match of (cased?.text ?? text).matchAll(pattern)) {
@@ -643,12 +643,11 @@ function similarVoices(left, right) {
     && close(left.exclamations, right.exclamations, limits.exclamations);
 }
 
-// A voice-words or voice-avoid phrase as whole words, lower-cased with the
-// pack, for containsWords on lowerCaseText. The `i` flag stays for what
-// lower-casing leaves unequal, such as Greek final sigma.
+// A voice-words or voice-avoid phrase as whole words, for containsWords on
+// matchingText.
 function phrasePattern(phrase, pack) {
   const edge = `(?![${UNSPACED_LETTERS}])[\\p{L}\\p{M}\\p{N}]`;
-  return new RegExp(`(?<!${edge})${escape(lowerCase(String(phrase).trim(), pack)).replace(/['’]/g, "['’]")}(?!${edge})`, "giu");
+  return new RegExp(`(?<!${edge})${escape(matchingCase(String(phrase).trim(), pack)).replace(/['’]/g, "['’]")}(?!${edge})`, "giu");
 }
 
 function escape(value) {

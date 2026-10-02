@@ -2300,19 +2300,41 @@ function lowerCase(text, pack = languagePack()) {
 function upperCase(text, pack = languagePack()) {
   return String(text).toLocaleUpperCase(pack.locale);
 }
-function lowerCaseText(text, pack = languagePack()) {
+var DOTLESS_I = new Set(["tr", "az"]);
+function casesDotlessI(pack) {
+  return DOTLESS_I.has(pack.locale.split("-")[0].toLowerCase());
+}
+function matchingCase(phrase, pack = languagePack()) {
+  return casesDotlessI(pack) ? lowerCase(phrase, pack) : String(phrase);
+}
+function matchingText(text, pack = languagePack()) {
   const source = String(text);
+  const same = { text: source, original: (start, end) => [start, end] };
+  if (!casesDotlessI(pack)) {
+    return same;
+  }
   const lower = lowerCase(source, pack);
   if (lower.length === source.length) {
-    return { text: lower, original: (start, end) => [start, end] };
+    return { ...same, text: lower };
   }
   let folded = "";
   const starts = [];
   const sources = [];
-  for (const match of source.matchAll(/(?:[\0-\x7F](?!\p{M}))+|\P{M}\p{M}*|\p{M}+/gsu)) {
+  const add = (from, value) => {
     starts.push(folded.length);
-    sources.push(match.index);
-    folded += lowerCase(match[0], pack);
+    sources.push(from);
+    folded += lowerCase(value, pack);
+  };
+  let last = 0;
+  for (const match of source.matchAll(/I\p{M}+/gu)) {
+    if (match.index > last) {
+      add(last, source.slice(last, match.index));
+    }
+    add(match.index, match[0]);
+    last = match.index + match[0].length;
+  }
+  if (last < source.length) {
+    add(last, source.slice(last));
   }
   starts.push(folded.length);
   sources.push(source.length);
@@ -2756,7 +2778,7 @@ function buildVoices(project, chapters) {
   const casedLines = new Map;
   const says = (pattern, line) => {
     if (!casedLines.has(line)) {
-      casedLines.set(line, lowerCaseText(line.text, pack));
+      casedLines.set(line, matchingText(line.text, pack));
     }
     return containsWords(pattern, line.text, casedLines.get(line));
   };
@@ -3117,7 +3139,7 @@ function similarVoices(left, right) {
 }
 function phrasePattern(phrase, pack) {
   const edge = `(?![${UNSPACED_LETTERS}])[\\p{L}\\p{M}\\p{N}]`;
-  return new RegExp(`(?<!${edge})${escape(lowerCase(String(phrase).trim(), pack)).replace(/['’]/g, "['’]")}(?!${edge})`, "giu");
+  return new RegExp(`(?<!${edge})${escape(matchingCase(String(phrase).trim(), pack)).replace(/['’]/g, "['’]")}(?!${edge})`, "giu");
 }
 function escape(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -3255,7 +3277,7 @@ function analyzeChapter(prose, rules) {
   const filterWords = rules.filterWords === null ? [] : countMatching(narration, (word) => rules.filterWords.has(word), rules.pack);
   const adverbs = rules.adverbSuffixes === null ? [] : countMatching(narration, (word) => isAdverb(word, rules), rules.pack);
   const tags = rules.plainTags === null ? { plain: [], bookisms: [] } : dialogueTags(paragraphs, rules);
-  const cased = rules.watch.length + rules.variants.length === 0 ? null : lowerCaseText(text, rules.pack);
+  const cased = rules.watch.length + rules.variants.length === 0 ? null : matchingText(text, rules.pack);
   return {
     words: words.length,
     narrationWords: narration.length,
@@ -3594,7 +3616,7 @@ function countMatching(words, predicate, pack) {
   return sortCounts(counts, pack);
 }
 function phrasePattern2(phrase, pack) {
-  const body = lowerCase(phrase.trim(), pack).split(/\s+/).map((word) => escapeRegExp(word).replace(/['’]/g, "['’]")).join("\\s+");
+  const body = matchingCase(phrase.trim(), pack).split(/\s+/).map((word) => escapeRegExp(word).replace(/['’]/g, "['’]")).join("\\s+");
   return new RegExp(`(?<![\\p{L}\\p{M}\\p{N}])${body}(?![\\p{L}\\p{M}\\p{N}])`, "giu");
 }
 function countPattern(text, pattern) {

@@ -28,32 +28,58 @@ export function upperCase(text, pack = languagePack()) {
   return String(text).toLocaleUpperCase(pack.locale);
 }
 
-// `text` lower-cased with the pack, for matching author-supplied words
-// (watch words, avoided spellings, voice phrases) against prose. Lower-case
-// the pattern's words with the same pack and match against this, so Turkish
-// ILIK finds ılık and İnce finds ince but not ınce, which the regex `i` flag
-// alone, blind to language, gets wrong. Lower-casing can change the length
-// (İ is i plus a combining dot outside Turkish; Turkish drops a dot written
-// after I), so `original(start, end)` maps a span of the lower-cased text
-// back to the text as written, for excerpts and offsets.
-export function lowerCaseText(text, pack = languagePack()) {
+// Languages whose i has a dotted and a dotless form in both cases (I ı,
+// İ i), which the regex `i` flag, following English casing, gets wrong.
+// Turkish and Azerbaijani are the ones the runtime lower-cases that way.
+const DOTLESS_I = new Set(["tr", "az"]);
+
+function casesDotlessI(pack) {
+  return DOTLESS_I.has(pack.locale.split("-")[0].toLowerCase());
+}
+
+// Author-supplied words (watch words, avoided spellings, voice phrases) and
+// the prose they are looked for in, made ready for a case-insensitive (`i`)
+// regex. In Turkish and Azerbaijani both are lower-cased with the pack, so
+// ILIK finds ılık and İnce finds ince but not ınce; every other language
+// matches the text as written, with the `i` flag alone.
+export function matchingCase(phrase, pack = languagePack()) {
+  return casesDotlessI(pack) ? lowerCase(phrase, pack) : String(phrase);
+}
+
+// `text` as matchingCase gives it, with `original(start, end)` mapping a
+// span of it back to the text as written, for excerpts and offsets: a
+// Turkish lower-casing drops a dot written after I (I followed by U+0307 is
+// i), so the text can come out shorter.
+export function matchingText(text, pack = languagePack()) {
   const source = String(text);
-  const lower = lowerCase(source, pack);
-  // A locale's lower-casing only lengthens text or only shortens it, so the
-  // same length means every character kept its place.
-  if (lower.length === source.length) {
-    return { text: lower, original: (start, end) => [start, end] };
+  const same = { text: source, original: (start, end) => [start, end] };
+  if (!casesDotlessI(pack)) {
+    return same;
   }
-  // Otherwise lower-case each letter with its marks, the unit whose length
-  // can change, and note where each piece starts in both texts. A run of
-  // ASCII with no mark after it keeps its length, so it is one piece.
+  const lower = lowerCase(source, pack);
+  if (lower.length === source.length) {
+    return { ...same, text: lower };
+  }
+  // Only an I with marks after it can change length, so each is a piece of
+  // its own, lower-cased alone; the runs between keep their length.
   let folded = "";
   const starts = [];
   const sources = [];
-  for (const match of source.matchAll(/(?:[\0-\x7F](?!\p{M}))+|\P{M}\p{M}*|\p{M}+/gsu)) {
+  const add = (from, value) => {
     starts.push(folded.length);
-    sources.push(match.index);
-    folded += lowerCase(match[0], pack);
+    sources.push(from);
+    folded += lowerCase(value, pack);
+  };
+  let last = 0;
+  for (const match of source.matchAll(/I\p{M}+/gu)) {
+    if (match.index > last) {
+      add(last, source.slice(last, match.index));
+    }
+    add(match.index, match[0]);
+    last = match.index + match[0].length;
+  }
+  if (last < source.length) {
+    add(last, source.slice(last));
   }
   starts.push(folded.length);
   sources.push(source.length);

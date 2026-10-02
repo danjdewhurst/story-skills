@@ -183,10 +183,32 @@ describe("prose analysis", () => {
     }, [], languagePack("tr")));
     expect(turkish.watch).toEqual([{ word: "ılık", count: 2 }, { word: "ince", count: 1 }]);
     expect(turkish.variants.map((entry) => entry.count)).toEqual([2]);
-    // In English İ lower-cases one longer; the capital of a name is still
-    // read from the text as written after it.
-    const english = analyze("İzmir had Gray Morn at the gray sea.", { dialect: "british" }, ["Gray Morn"]);
-    expect(english.variants).toEqual([{ use: "grey", avoid: "gray", source: "british dialect", count: 1 }]);
+    // Turkish drops a dot written after I, so the text matched is shorter;
+    // the capital of a name is still read from the text as written.
+    const shorter = analyzeChapter("I\u0307zmir had Gray Morn at the gray sea.", proseRules({
+      preferred: [{ use: "grey", avoid: "gray" }]
+    }, ["Gray Morn"], languagePack("tr")));
+    expect(shorter.variants.map((entry) => entry.count)).toEqual([1]);
+  });
+
+  test("matches other languages' watch words as the case-insensitive regex always has", () => {
+    // Dotted İ is its own letter outside Turkish, as before.
+    const english = analyze("ince İnce INCE", { "watch-words": ["İnce", "ince"] });
+    expect(english.watch).toEqual([{ word: "İnce", count: 1 }, { word: "ince", count: 2 }]);
+    // Lithuanian lower-casing adds a dot to I before an accent; matching
+    // does not.
+    const lithuanian = analyzeChapter("ÌR ir ìr", proseRules({ "watch-words": ["ìr"] }, [], languagePack("lt")));
+    expect(lithuanian.watch).toEqual([{ word: "ìr", count: 2 }]);
+  });
+
+  test("matches watch words in long chapters quickly, with or without dotted capitals", () => {
+    const cyrillic = "Ирина шла к морю, и вдруг ветер стих. İ ".repeat(25000);
+    const turkish = "Ilık rüzgâr birden durdu, I\u0307nce bir ses geldi. ".repeat(20000);
+    const started = Date.now();
+    expect(analyzeChapter(cyrillic, proseRules({ "watch-words": ["вдруг"] }, [], languagePack("ru"))).watch).toEqual([{ word: "вдруг", count: 25000 }]);
+    expect(analyzeChapter(turkish, proseRules({ "watch-words": ["ince", "ılık"] }, [], languagePack("tr"))).watch)
+      .toEqual([{ word: "ince", count: 20000 }, { word: "ılık", count: 20000 }]);
+    expect(Date.now() - started).toBeLessThan(10000);
   });
 
   test("finds repeated phrases that are not all stopwords", () => {
