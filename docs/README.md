@@ -109,7 +109,7 @@ Pick the route that matches what you came to do. Each one takes four pages; read
 
 ## Example projects
 
-The repository includes five sample projects in [`examples/`](../examples/). The pages above use them for their sample output.
+The repository includes eight sample projects in [`examples/`](../examples/). The pages above use them for their sample output.
 
 | Example | Shows |
 |---------|-------|
@@ -118,6 +118,9 @@ The repository includes five sample projects in [`examples/`](../examples/). The
 | [`harbor-of-second-light`](../examples/harbor-of-second-light/) | A science-fiction coastal mystery with populated continuity state, knowledge entries, publishing metadata, a location route, and a pronunciation |
 | [`the-gull-rock-light`](../examples/the-gull-rock-light/) | A short second-person branching story: chapter `choices` for `story build --format twee` and `--format ink` |
 | [`the-unraveled-thread`](../examples/the-unraveled-thread/) | A village mystery that is broken on purpose to show the main kinds of continuity finding, plus clues (one a red herring) for `story clues` and scene outcomes and chapter hooks for `story pacing` |
+| [`quatre-heures-dix-sept`](../examples/quatre-heures-dix-sept/) | A short story in French (`language: fr`): dialogue in guillemets with French no-break spaces, and French build labels |
+| [`kirimi-eki-no-wasuremono`](../examples/kirimi-eki-no-wasuremono/) | A short story in Japanese (`language: ja`): counted in characters, `target-characters`, corner-bracket dialogue, and `writing-mode: vertical` |
+| [`laysat-lil-bay`](../examples/laysat-lil-bay/) | A short story in Arabic (`language: ar`): right-to-left builds and Arabic punctuation |
 
 ## Other resources
 

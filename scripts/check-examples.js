@@ -29,9 +29,10 @@ export const EXPECTED_CONTINUITY = {
 };
 
 // Character counts for Chinese and Japanese books split text into grapheme
-// clusters with Intl.Segmenter, which no example exercises yet, so CI's
-// Node matrix checks these directly: punctuation counts, whitespace (a
-// full-width indent included) and markup do not, and a cluster counts once.
+// clusters with Intl.Segmenter. kirimi-eki-no-wasuremono counts plain
+// Japanese prose, so CI's Node matrix also checks the edge cases directly:
+// punctuation counts, whitespace (a full-width indent included) and markup
+// do not, and a cluster counts once.
 export const CHARACTER_COUNT_CASES = [
   ["　吾輩は猫である。名前はまだ無い。", 16],
   ["「你好，世界！」她说。", 11],
@@ -120,7 +121,7 @@ function main() {
     const continuity = checkProjectContinuity(root);
     const counts = computeWordCounts(root);
     const expected = EXPECTED_CONTINUITY[name];
-    summaries.push(`${name}: ${counts.chapters.length} chapters, ${counts.total} words, ${continuity.errors.length + continuity.warnings.length} expected continuity findings`);
+    summaries.push(`${name}: ${counts.chapters.length} chapters, ${counts.total} ${counts.unit ?? "words"}, ${continuity.errors.length + continuity.warnings.length} expected continuity findings`);
 
     collectResult(failures, name, "validate", validation);
     collectResult(failures, name, "links", links);

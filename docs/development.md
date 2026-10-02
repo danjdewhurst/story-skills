@@ -354,10 +354,16 @@ bun run test:examples
 ```text
 Examples are valid:
 harbor-of-second-light: 1 chapters, 1489 words, 0 expected continuity findings
+kirimi-eki-no-wasuremono: 3 chapters, 1968 characters, 0 expected continuity findings
+laysat-lil-bay: 3 chapters, 670 words, 0 expected continuity findings
+quatre-heures-dix-sept: 3 chapters, 1079 words, 0 expected continuity findings
 the-fall-of-the-citadel: 1 chapters, 248 words, 0 expected continuity findings
+the-gull-rock-light: 6 chapters, 550 words, 0 expected continuity findings
 the-last-ember: 1 chapters, 993 words, 0 expected continuity findings
 the-unraveled-thread: 4 chapters, 111 words, 7 expected continuity findings
 ```
+
+A book [counted in characters](project-format.md#counting-in-characters), such as the Japanese example, reports its total in characters. The French, Japanese, and Arabic examples keep the checks honest for books not in English: each must pass every check with no warnings, as an English example must.
 
 `the-last-ember` and `the-fall-of-the-citadel` are linked books in the same series, so the series check also confirms they agree on shared canon.
 
