@@ -210,7 +210,7 @@ function resolvePack(language) {
   return deepFreeze(pack);
 }
 
-function deepFreeze(value) {
+export function deepFreeze(value) {
   if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
     Object.freeze(value);
     Object.values(value).forEach(deepFreeze);

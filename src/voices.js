@@ -80,7 +80,11 @@ function buildVoiceRules(pack) {
   }
   const verbAlternation = verbs.map((verb) => escape(verb).replace(/ /g, "\\s+")).join("|") || NEVER;
   const pronounAlternation = pronouns.map(escape).join("|") || NEVER;
-  const pronounTag = `(?:(?:${pronounAlternation})\\s+(?:${verbAlternation})|(?:${verbAlternation})\\s+(?:${pronounAlternation}))(?![\\p{L}\\p{N}])`;
+  // An inverted tag joined by a hyphen (dit-il, demanda-t-elle), in a pack
+  // with `inversionLinks`.
+  const links = (checkList(pack, "inversionLinks") ?? []).map(escape).join("|");
+  const inverted = links === "" ? "" : `|(?:${verbAlternation})(?:${links})(?:${pronounAlternation})`;
+  const pronounTag = `(?:(?:${pronounAlternation})\\s+(?:${verbAlternation})|(?:${verbAlternation})\\s+(?:${pronounAlternation})${inverted})(?![\\p{L}\\p{N}])`;
   return {
     ...rules,
     verbs,
@@ -92,7 +96,7 @@ function buildVoiceRules(pack) {
     tagBeforeQuote: new RegExp(`(?<![\\p{L}\\p{N}])${pronounTag}[\\s,:…()—–-]*$`, "iu"),
     // Dialogue set with a leading dash (— Line, said Cy.) runs to a closing
     // dash or to a tag after a comma.
-    dashTag: new RegExp(`,\\s+(?:(?:${verbAlternation})\\s+\\p{Lu}|(?:${pronounAlternation})\\s+(?:${verbAlternation})(?![\\p{L}\\p{N}])|\\p{Lu}[\\p{L}'’-]*(?:\\s+\\p{Lu}[\\p{L}'’-]*){0,2}\\s+(?:${verbAlternation})(?![\\p{L}\\p{N}]))`, "u")
+    dashTag: new RegExp(`,\\s+(?:(?:${verbAlternation})\\s+\\p{Lu}|(?:${pronounAlternation})\\s+(?:${verbAlternation})(?![\\p{L}\\p{N}])${inverted === "" ? "" : `${inverted}(?![\\p{L}\\p{N}])`}|\\p{Lu}[\\p{L}'’-]*(?:\\s+\\p{Lu}[\\p{L}'’-]*){0,2}\\s+(?:${verbAlternation})(?![\\p{L}\\p{N}]))`, "u")
   };
 }
 

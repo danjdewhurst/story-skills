@@ -84,6 +84,7 @@ export const FINDING_CODES = {
   "style-use-equals-avoid": "error",
   "style-sample-missing": "warning",
   "style-sample-own-chapters": "warning",
+  "unknown-word-list": "warning",
   "duplicate-session-date": "error",
   "research-no-sources": "warning",
   "research-unsettled": "warning",

@@ -576,7 +576,7 @@ When `story.md` links other books, reveals the series depends on get a stable `f
 **References.**
 
 - [`style-sheet-guide.md`](../skills/voice-style/references/style-sheet-guide.md): each style-sheet section, the frontmatter format, and how to extract a voice description from sample prose.
-- [`prose-checks.md`](../skills/voice-style/references/prose-checks.md): what each `story prose` count measures, its warning threshold, when to keep the flagged text, and which checks rest on English word lists.
+- [`prose-checks.md`](../skills/voice-style/references/prose-checks.md): what each `story prose` count measures, its warning threshold, when to keep the flagged text, which languages have word lists (English, Spanish, French, German), and how to add or replace them in the style sheet.
 
 It also uses line-editing's [`language-conventions.md`](../skills/line-editing/references/language-conventions.md) for the style sheet's dialogue and punctuation in a book not in English.
 

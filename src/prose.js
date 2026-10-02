@@ -127,6 +127,8 @@ export function proseRules(styleData, names, pack = languagePack()) {
     bookisms: tags ? allowed("saidBookisms") : null,
     plainTags: tags ? checkSet(pack, "plainTags") : null,
     beatPronouns: tags ? checkSet(pack, "beatPronouns") : null,
+    // The joins of an inverted tag's verb and pronoun (dit-il).
+    inversionLinks: checkList(pack, "inversionLinks") ?? [],
     adverbSuffixes: checkList(pack, "adverbExceptions") === null ? null : checkList(pack, "adverbSuffixes"),
     adverbExceptions: checkSet(pack, "adverbExceptions"),
     echoStopwords: checkSet(pack, "echoStopwords"),
@@ -475,7 +477,7 @@ function dialogueTags(paragraphs, rules) {
         continue;
       }
       for (const raw of after) {
-        const word = lowerCase(raw, rules.pack);
+        const word = tagWord(normalizeWord(raw, rules.pack), rules);
         if (rules.plainTags.has(word)) {
           increment(plain, word);
           break;
@@ -496,6 +498,17 @@ function dialogueTags(paragraphs, rules) {
 // the sentence as a tag; a capitalised pronoun starts a beat, and a
 // capitalised name counts only with a plain tag ("Now?" Mara asked.), since
 // "No!" Mara laughed. is a beat.
+// An inverted tag (dit-il, demanda-t-elle) counts as its verb.
+function tagWord(word, rules) {
+  for (const link of rules.inversionLinks) {
+    const index = word.indexOf(link);
+    if (index > 0 && rules.beatPronouns.has(word.slice(index + link.length))) {
+      return word.slice(0, index);
+    }
+  }
+  return word;
+}
+
 function tagKind(quoted, nextWord, rules) {
   const end = quoted.trim().replace(/["'”’)\]*_]+$/, "").slice(-1);
   if (end === ".") {

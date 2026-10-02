@@ -491,7 +491,7 @@ These optional fields describe the published edition. Edit them in `story.md` by
 |-------|------|--------------------|
 | `author` | string | A single author name (see the table above). |
 | `authors` | list of strings | Author names for a co-written book. Builds use it in place of `author`; `story validate` warns when both are set. |
-| `language` | string | BCP 47 language tag such as `en`, `en-GB`, or `fr-CA`. Default `en`. `story validate` errors on a value that is not a tag. The EPUB package and every EPUB document declare it. It also picks the language pack whose word lists `story prose`, `story voices`, and `story names` use (a set but invalid tag picks by its first subtag, never English); only English has word lists so far, so another language skips the checks that need them (see [Books not in English](continuity.md#books-not-in-english)). |
+| `language` | string | BCP 47 language tag such as `en`, `en-GB`, or `fr-CA`. Default `en`. `story validate` errors on a value that is not a tag. The EPUB package and every EPUB document declare it. It also picks the language pack whose word lists `story prose`, `story voices`, and `story names` use (a set but invalid tag picks by its first subtag, never English); English, Spanish, French, and German have word lists, and another language skips the checks whose lists it lacks unless `style-sheet.md` supplies them (see [Books not in English](continuity.md#books-not-in-english) and [Word lists](#word-lists)). |
 | `isbn` | string | ISBN-13 or ISBN-10 of the edition being built; hyphens and spaces are allowed. `story validate` checks the checksum. Quote an ISBN-10 that starts with `0`: unquoted, YAML reads it as a number and drops the zero, and validation then fails. The EPUB identifier becomes `urn:isbn:<digits>`. |
 | `publisher` | string | Publisher name, written to the EPUB package and the copyright page. |
 | `publication-date` | `YYYY-MM-DD` | Must be a real calendar day. Written to the EPUB package. |
@@ -1063,6 +1063,10 @@ watch-words:
   - almost
 allow-words:
   - quietly
+add-words:
+  - filter-words: glimpsed, spotted
+replace-words:
+  - said-bookisms: hissed, snarled, purred
 samples:
   - ../book-one
 ---
@@ -1075,9 +1079,50 @@ samples:
 | `preferred` | list of mappings | no | Each entry has a non-empty `use` (the house form) and `avoid` (the form to flag), which must differ. An entry naming either word of a built-in dialect pair replaces that pair. |
 | `watch-words` | list of strings | no | Words or phrases `story prose` counts in every chapter. |
 | `allow-words` | list of strings | no | Words `story prose` never flags as filter words, `-ly` adverbs, echoes, said-bookisms, or dialect spellings. Naming either word of a built-in dialect pair here also switches that pair off. |
+| `add-words` | list of `list: words` entries | no | Words added to the language pack's word lists, one `- list-name: word, word` entry per line. See [Word lists](#word-lists). |
+| `replace-words` | list of `list: words` entries | no | Word lists that replace the language pack's, in the same shape; `[]` empties a list. See [Word lists](#word-lists). |
 | `samples` | list of strings | no | Files or folders of your own prose, relative to the project folder (`../book-one`, `research/approved`). `story prose` builds a profile from them and reports chapters that drift from it, in place of its fixed filter-word and adverb limits (see [`prose`](cli-reference.md#comparing-with-your-own-prose)). An absolute path is an error; an entry that names nothing, or names this project's own chapters, is a warning. |
 
 The body holds the decisions a copyeditor tracks: voice, spelling and usage, capitalisation, hyphenation, numbers, dialogue punctuation, and character voices. See the [voice-style skill](../skills/voice-style/SKILL.md), [Writing workflows](writing-workflows.md#voice-and-house-style), and [Story prose](continuity.md#story-prose).
+
+#### Word lists
+
+`story prose`, `story voices`, `story names`, `story import`, and the sentence splitter take their word lists from the language pack for `story.md` `language` (see [Books not in English](continuity.md#books-not-in-english)). `add-words` and `replace-words` change any of them for one book, and can supply a list a language has no pack for, which turns on the check that needs it. Each entry names a list and gives its words separated by commas; an entry may repeat a list, and words in a list are matched in lower case unless the table says otherwise:
+
+```yaml
+replace-words:
+  - filter-words: sentì, vide, udì, notò
+  - plain-tags: disse, chiese
+add-words:
+  - said-bookisms: ruggì, sibilò
+  - title-words: signor, signora
+```
+
+`replace-words` is applied first: the pack's list is dropped and the entries' words used instead (`- said-bookisms: []` leaves the list empty, so its check runs and finds nothing). `add-words` then adds to the list, or creates it. `allow-words` still silences single words. Quote a value that contains `: `. `story validate` reports a field that is not a list of `list: words` entries, and an entry whose value is not text or `[]`, as errors, and an entry that names no list as an `unknown-word-list` warning, which the checks ignore.
+
+| List | Used by | Holds |
+|------|---------|-------|
+| `filter-words` | `prose` | Narration verbs that filter a scene through a character (felt, saw). |
+| `said-bookisms` | `prose` | Dialogue tags that replace said with an action or manner. Needs `plain-tags` and `beat-pronouns` too. |
+| `plain-tags` | `prose` | The plain tags (said, asked). |
+| `beat-pronouns` | `prose` | Pronouns that, capitalised after a quote ending in `?`, `!`, or a dash, start an action beat rather than a tag. |
+| `inversion-links` | `prose`, `voices` | What joins an inverted tag's verb and pronoun (`-t-` and `-` in French `demanda-t-elle`, `dit-il`). |
+| `adverb-suffixes`, `adverb-exceptions` | `prose` | The endings that mark a manner adverb (`ly`), and the words with those endings that are not adverbs. The check needs both. |
+| `echo-stopwords`, `phrase-stopwords` | `prose` | Common words never counted as echoes or signature words, and function words a repeated phrase cannot be made of alone. |
+| `dialect-pairs` | `prose` | `british/american` spelling pairs, such as `kerb/curb`, for `dialect`. |
+| `speech-verbs`, `speech-pronouns` | `voices` | Verbs and pronouns that tag speech (`she said`, `said Tom`). |
+| `contraction-suffixes`, `contracted-is` | `voices` | Contraction endings after a letter (`n't`), and the words after which `'s` is a contraction rather than a possessive. The count needs both. |
+| `elisions` | `voices` | Words that open with an apostrophe (`'em`), so the apostrophe is not an opening quote. |
+| `voice-stopwords` | `voices` | Common words that say nothing about a voice. |
+| `title-abbreviations` | sentences | Abbreviations that never end a sentence (`Dr`), as written. |
+| `context-abbreviations` | sentences | Abbreviations that end a sentence unless the next word is in lower case, a number, or a calendar word (`etc`), as written. |
+| `calendar-words` | sentences, `import` | Days and months, as written, which never count as names. |
+| `chapter-words`, `section-words`, `part-words` | `import` | Heading words for a chapter, an unnumbered chapter such as a prologue, and a part. |
+| `front-matter-words` | `import` | Names of source files that sort before the numbered chapters. |
+| `number-words`, `number-joiners` | `import` | Spelled-out chapter numbers. A numeral is a run of number words joined by a space, a hyphen, nothing, or a joiner (`vingt et un`, `einundzwanzig`). Replacing `number-words` drops a pack's built-in numbers, English's included. |
+| `candidate-stopwords` | `import` | Capitalised words that are never names, as written. |
+| `determiners`, `noun-suffixes` | `import` | For a language that capitalises nouns: words after which a capitalised word is a common noun (`die`, `einem`), and endings only nouns have (`ung`). |
+| `title-words` | `names`, `voices`, `prose` | Titles and articles before a name (Lord, Frau), so a name is known by the word after them. |
 
 ### Front and back matter
 

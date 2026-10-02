@@ -48,6 +48,10 @@ export default {
   // new line of speech (– Hej, sa Anna. – Kom hit.) rather than narration
   // (—Vete. —Ella se giró.).
   dashStartsLine: false,
+  // Whether a full stop after a number marks an ordinal (am 3. Mai, as in
+  // German), so it ends a sentence only before a capital that is not a
+  // calendar word.
+  ordinalStop: false,
   // Generated text in builds, by key; a key a pack leaves out is English
   // (see ./en.js).
   labels: {},

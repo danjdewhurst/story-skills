@@ -40,6 +40,14 @@ allow-words:
   boundaries, so compounds (*grey-haired*) and possessives count.
 - `allow-words` silences built-in filter words, -ly adverbs, echo words,
   said-bookisms, and dialect pairs.
+- `add-words` and `replace-words` change the language pack's word lists
+  for this book, one `- list-name: word, word` entry per line, such as
+  `- said-bookisms: rugió, bufó` or `- filter-words: []` (an empty list).
+  `replace-words` drops the pack's list first; `add-words` adds to it, or
+  supplies a list for a language with no pack, which turns its check on.
+  The list names are in `docs/project-format.md`, Word lists. Add words
+  only when the author asks for them, then run `story validate`, which
+  warns about a list name it does not know.
 
 ## Sections
 
