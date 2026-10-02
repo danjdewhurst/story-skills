@@ -4,7 +4,7 @@
 
 **Agent Skills for planning, tracking, and drafting fiction in markdown.**
 
-Story Skills gives agents a shared project format for fiction: a story bible, characters, worldbuilding, factions, artifacts, plot arcs, scenes, continuity state, promises and payoffs, timelines, and chapter drafts. Everything is plain markdown with YAML frontmatter, packaged as standard Agent Skills with Codex and Claude Code plugins.
+Story Skills gives agents a shared project format for fiction: a story bible, characters, worldbuilding, factions, artifacts, plot arcs, scenes, continuity state, promises and payoffs, timelines, and chapter drafts. Everything is plain markdown with YAML frontmatter, packaged as standard Agent Skills with Codex and Claude Code plugins. A book can be written in any language: set `language` in `story.md` and the skills draft and edit in it, while the CLI counts, checks, and typesets for it ([Writing in other languages](docs/languages.md)).
 
 The companion `story` CLI treats the story bible as a checkable contract. Its **continuity engine** catches dead characters walking, payoffs that land before their setup, unfired Chekhov guns, and stale story state, deterministically, before a reader finds them.
 
@@ -151,7 +151,7 @@ The CLI is for maintenance only. Agents write story content directly to markdown
 |---------|---------|
 | `story init "The Last Ember"` | Scaffold a story project with the standard markdown layout |
 | `story init "Book Two" --follows the-last-ember` | Scaffold a sequel (or a prequel with `--precedes`) linked to an existing book, writing the backlink |
-| `story import draft.md --title "The Lost Coast"` | Split an existing manuscript into a new story project and suggest entity candidates |
+| `story import draft.md --title "The Lost Coast"` | Split an existing manuscript into a new story project and suggest entity candidates; `--language` reads Spanish, French, or German chapter headings |
 | `story add character "Sera Voss"` | Create entity files for characters, locations, systems, factions, artifacts, arcs, chapters, scenes, questions, promises, clues, terms, research notes, and matter pages |
 | `story add matter "Dedication"` | Add a front (default) or `--placement back` matter page such as a dedication, epigraph, or acknowledgments |
 | `story add character "李明" --id li-ming` | Give the id by hand for a name the CLI cannot slug (Cyrillic and Greek names are transliterated), so the name keeps its own script |
@@ -170,7 +170,7 @@ The CLI is for maintenance only. Agents write story content directly to markdown
 | `story continuity [path]` | Check deterministic continuity contracts: deaths, promises and payoffs, questions, casts, durable state, and travel times along location routes |
 | `story series [path]` | Order linked sequels and prequels by chronology and check shared canon: deaths, casts, knowledge fact ids, names, and destroyed artifacts |
 | `story reindex [path]` | Rebuild registry tables from the current markdown files |
-| `story wordcount [path] --write` | Count chapter prose and update chapter frontmatter plus the chapter registry |
+| `story wordcount [path] --write` | Count chapter prose and update chapter frontmatter plus the chapter registry; Chinese and Japanese books count characters (`count-unit`) |
 | `story doctor [path]` | Show health checks with actionable repair steps |
 | `story next [path]` | Recommend the next deterministic writing or maintenance actions, including the next revision pass while revising |
 | `story passes [path] --init` | Record named revision passes (structure, character, theme, continuity, pacing, line, copyedit, proof) in `story.md`; `--start` and `--done` mark progress |
@@ -183,12 +183,12 @@ The CLI is for maintenance only. Agents write story content directly to markdown
 | `story knowledge sera-voss --at chapter-03` | Show what a character knew at a chapter, from timeline-scoped knowledge state |
 | `story context chapter-03 --budget 6000` | Pack the drafting context for a chapter or scene (style rules, POV knowledge, cast cards, open threads, recent scenes) into a token budget, with nothing from later chapters |
 | `story timeline [path]` | Show scenes in story-time order from their `date`/`time` (marking scenes told out of order), POV balance by words, and each character's presence and longest absence |
-| `story prose [path]` | Lint chapter prose: filter words, -ly adverbs, said-bookisms, echoes, sentence rhythm, repeated phrases, similar names, and `style-sheet.md` spellings and watch words |
+| `story prose [path]` | Lint chapter prose: filter words, adverbs, said-bookisms, echoes, sentence rhythm, repeated phrases, similar names, and `style-sheet.md` spellings and watch words. Word lists follow the book's `language` (English, Spanish, French, and German built in); a check with no list for the language is skipped with a note |
 | `story voices [path]` | Fingerprint each character's attributed dialogue (sentence length, contractions, questions, signature words) and flag `voice-avoid` words and characters who sound alike. Only named speech tags and single-name action beats count; pronoun tags do not |
 | `story pacing [path]` | Tabulate scenes, sequels, scene outcomes (`yes`, `no`, `yes-but`, `no-and`), and chapter hooks; flag runs of easy wins, missing sequels, flat chapter endings, and length outliers |
 | `story clues [path]` | Draw the fair-play grid of clue plants and reveals by chapter; flag late plants, unplanted reveals, and red herrings never debunked |
 | `story diagram relationships --path .` | Print Mermaid source for the family tree and relationships, the location route map, the story-time timeline, the clue flow, or arcs by chapter |
-| `story progress [path] --log` | Report words against `target-words`, the `deadline`, and chapter targets; `--log` records the day's count in `progress.md` for pace and a projected finish |
+| `story progress [path] --log` | Report words against `target-words` (or characters against `target-characters`), the `deadline`, and chapter targets; `--log` records the day's count in `progress.md` for pace and a projected finish |
 | `story compare [path] --ref draft-1` | Compare chapters with an earlier draft (a git ref, or `--against` a copied project folder): word changes, added and removed chapters, and unchanged paragraphs; `--anchor ch03-p12` finds where a review-copy paragraph is now |
 | `story similarity [path] --against ../book-one` | Find passages that share a run of eight or more words with other text (a file, a folder such as your earlier books, or a git ref), with both locations and the shared words; advisory, since shared text is not proof of copying |
 
@@ -209,6 +209,7 @@ Behavior notes:
 
 - **Matter pages** from `matter/` appear in the export and in every build format except Shunn, which is a submission format.
 - **EPUB and DOCX** builds target plain prose: `*italic*` and `**bold**` become italic and bold runs, scene-break lines (`***`, `---`) become a `* * *` separator, and other markdown structure such as blockquotes, lists, and tables is flattened to text. The markdown export keeps chapter text as-is.
+- **Books not in English** get build text in their language (chapter headings, contents, copyright page, EPUB accessibility text) for about 20 languages, overridable with `labels` in `story.md`. Builds set Arabic, Hebrew, Persian, and other right-to-left languages right to left, pick fonts for the script, can set Japanese, Chinese, and Korean vertically (`writing-mode: vertical`), and can print native chapter numerals (`chapter-numerals: native`, such as `第十二章`). See [Writing in other languages](docs/languages.md).
 - **`story rename`, `story move`, and `story remove`** update entity ids in frontmatter reference fields and markdown link targets. They never edit prose, so a character called "Port" can be renamed without touching the word "port" in chapter text.
 - A command that changes a frontmatter value rewrites only the entries that changed. Comment lines, unchanged entries, and the body keep their exact text, and files whose values don't change are left untouched.
 
@@ -238,9 +239,12 @@ Most writers don't start from a blank page. `story import` builds a Story Skills
 
 ```shell
 story import draft.md --title "The Lost Coast" --genre mystery
+story import brouillon.md --title "La Côte perdue" --language fr
 ```
 
 It splits the manuscript on chapter headings (or imports a directory of chapter files in natural name order, so `chapter-2` comes before `chapter-10`), creates the full project layout with accurate word counts and registries, and prints recurring proper-name candidates so an agent can follow up with `story add character` and `story add location` to build out the bible.
+
+`--language` sets the manuscript's language. Chapter headings are recognised in English, Spanish (`Capítulo`), French (`Chapitre`), and German (`Kapitel`), and the language is written to the new `story.md`.
 
 `--force` lets an import reuse an existing directory. It replaces every `chapter-NN.md` file in `chapters/`, so stale chapters from an earlier import are removed.
 
@@ -250,8 +254,8 @@ Running **story-init** creates this layout:
 
 ```
 my-story/
-├── story.md                  # Story bible: title, genre, themes, POV, tense
-├── style-sheet.md            # Voice, house spellings, and watch words
+├── story.md                  # Story bible: title, genre, themes, POV, tense, language
+├── style-sheet.md            # Voice, house spellings, watch words, and word lists
 ├── characters/
 │   └── _index.md             # Character registry
 ├── worldbuilding/
