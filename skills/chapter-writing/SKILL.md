@@ -43,7 +43,7 @@ It prints, within a token budget (`--budget`, default 6000), the chapter's outli
 
 Read what the packed context leaves out, as needed:
 
-- `story.md` - genre, themes, POV, tense
+- `story.md` - genre, themes, POV, tense, and `language` (a BCP 47 tag; a missing field means `en`). Draft in that language, with its dialogue punctuation as the style sheet records it. If the style sheet records none and the book is not in English, settle it with the user first (see `../line-editing/references/language-conventions.md`)
 - `style-sheet.md`, when present - voice, house spellings, dialogue punctuation, character voices, and watch words. If it is missing, draft normally and suggest the `voice-style` skill once a chapter exists
 - `chapters/_index.md` - what's been written, current word count
 - `plot/_index.md` - arc status, what needs to happen next
@@ -85,13 +85,13 @@ Present the outline to the user for approval. Revise until approved.
 
 With the approved outline, write the full prose:
 
-- Follow the POV and tense from `story.md`
+- Write in the book's `language` and follow the POV and tense from `story.md`. The craft advice in `references/writing-guidelines.md` and `scene-craft` is written for English; in another language keep its aims and use that language's own conventions
 - Use the POV character's voice and speech patterns from their profile
 - Ground scenes in location details from worldbuilding files
 - Consult `references/writing-guidelines.md` for quick prose craft guidance. For the deep reference — the Scene/Sequel unit, dialogue subtext and voice-differentiation, deep POV and psychic distance — use the `scene-craft` skill.
 - Give each speaker their recorded voice, using `voice-words` and avoiding `voice-avoid` from their character file
 - When available, apply the `better-writing` skill before finalizing prose; the `line-editing` skill handles the fuller prose pass afterwards
-- To check a drafted scene before saving it, pipe it to `story prose -` (style sheet, filter words, echoes) and `story voices -` (`voice-avoid` words) from the project folder
+- To check a drafted scene before saving it, pipe it to `story prose -` (style sheet, filter words, echoes) and `story voices -` (`voice-avoid` words) from the project folder. If either reports a check skipped for the book's language, reread the scene for that check instead
 - Use the chapter template from `references/chapter-template.md`
 - Include the approved outline in the file above `## Chapter Text` (for reference). CLI word counts start at that heading, so an outline kept above it never inflates `word-count`: run `story wordcount . --write` after writing to record counts.
 

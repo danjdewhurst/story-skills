@@ -40,7 +40,8 @@ speaks or sings it.
 
 ## Hard Rules
 
-- Never say a line scans without showing its stresses. Mark them as in
+- Never say a line scans without showing its stresses (or, in another
+  language's tradition, what that tradition counts). Mark them as in
   `references/meter-and-scansion.md`.
 - Never pad a line to fill the meter ("did go", "so very", "oh", "all
   alone and lone"). Rewrite the line instead.
@@ -75,9 +76,19 @@ speaks or sings it.
    or land a rhyme. Before drafting, list the facts the verse may use
    (names, objects, habits, running jokes the project states) and take
    every detail from that list.
-4. Ask which accent the verse is scanned in when it matters (British and
-   American stress differ on words such as *address*, *garage*,
-   *cigarette*), and which dialect the rhymes must work in.
+4. Settle the language. For story verse it is `language` in `story.md`
+   (a missing field means `en`); for a standalone poem, ask if the request
+   leaves it open. Write and scan in that language's own tradition:
+   syllabic (French, Spanish, Italian), quantitative (Classical Greek,
+   Latin, Arabic), mora-based (Japanese), or tonal (Classical Chinese)
+   verse is not measured in English feet. See "Verse in other languages"
+   in `references/meter-and-scansion.md` and "Rhyme in other languages"
+   in `references/rhyme.md`. The forms, examples, and forced-rhyme tells
+   in the references are English; adapt them, and say when you cannot
+   scan a tradition reliably.
+5. For English, ask which accent the verse is scanned in when it matters
+   (British and American stress differ on words such as *address*,
+   *garage*, *cigarette*), and which dialect the rhymes must work in.
 
 ### 2. Draft
 
@@ -160,7 +171,8 @@ story validate
   for the limerick, sonnets, haiku, villanelle, ballad, clerihew, couplets,
   free verse, song lyrics, and rhyming picture-book text
 - **`references/meter-and-scansion.md`** - Feet and meters, how to find a
-  word's stress, the scansion table format, and which departures are
-  allowed
+  word's stress, the scansion table format, which departures are
+  allowed, and syllabic, quantitative, mora-based, and tonal traditions
+  in other languages
 - **`references/rhyme.md`** - Kinds of rhyme, scheme notation, forced-rhyme
-  tells, and rhymes readers have seen too often
+  tells, rhymes readers have seen too often, and rhyme in other languages

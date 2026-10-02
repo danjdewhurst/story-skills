@@ -19,6 +19,26 @@ outline divider.
 | Repeated phrases | 4-word sequences inside one sentence, across the whole manuscript, that are not all function words | Never; the top 10 with 3+ uses are listed |
 | Similar names | Character first names that match, share their first three letters, or are one or two edits apart | Any pair |
 
+## Other languages
+
+The filter-word, -ly adverb, said-bookism, plain-tag, and dialect-pair
+lists are English, and so are the function words that echoes and
+repeated phrases ignore. Read `language` in `story.md` (missing means
+`en`). For a book in another language:
+
+- If the report says a check was skipped for the book's language, do that
+  pass by reading, looking for the same effect in that language (verbs of
+  perceiving that announce instead of show, adverbs propping up weak
+  verbs, tags that tell the reader how to hear a line).
+- If a check ran with English word lists on a non-English book, ignore its
+  counts: they measure English words the book rarely contains.
+- Never translate an English list into `watch-words` to stand in for a
+  missing check. Use `watch-words` for this book's own tics.
+- Avoided spellings, watch words, sentence rhythm, and similar names do
+  not depend on English lists.
+
+## Limits
+
 The filter-word, adverb, and said-bookism limits are defaults. `story prose
 --max-filter-words <n>`, `--max-adverbs <n>`, and `--max-bookisms <n>`
 change them for one run; to change them for the book, record them under

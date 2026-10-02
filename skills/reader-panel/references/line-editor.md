@@ -20,7 +20,8 @@ one in the text before noting it.
   (a first-person narrator who tells us what another character thought).
   Quote the slip.
 - **Filter words and distance.** "I saw", "she felt", "he noticed" where
-  the book's psychic distance is otherwise close.
+  the book's psychic distance is otherwise close. In a book in another
+  language, look for the same perceiving verbs in that language.
 - **Tense drift** outside dialogue and deliberate shifts.
 - **Repetition.** The same distinctive word or construction close together.
 - **Unclear antecedents.** A "he" or "it" that could point at two things.

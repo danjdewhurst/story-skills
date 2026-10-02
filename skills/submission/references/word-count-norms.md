@@ -1,5 +1,14 @@
 # Word-Count Norms
 
+**English-language market only.** Do not apply these ranges to a book in
+another language (`language` in `story.md`): the same story runs to a
+different word count in each language, Chinese and Japanese publishing
+count characters rather than words (Japanese manuscripts are often
+measured in 400-character manuscript pages), and each market has its own
+expectations. For those books, ask the user for the norms of the market
+and the publishers they are targeting, and report the count without a
+verdict.
+
 These ranges are rough industry conventions for debut novels in the
 English-language trade market. They vary by agent, publisher, country, and
 year. Always tell the user the manuscript's count and the range, and ask

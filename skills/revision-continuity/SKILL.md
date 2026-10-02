@@ -11,7 +11,7 @@ Revise existing Story Skills projects without losing continuity. Use this skill 
 
 ## Prerequisites
 
-A story project must already exist. Verify by checking for `story.md` in the project root, then run or inspect `story report .` when CLI access is available.
+A story project must already exist. Verify by checking for `story.md` in the project root, then run or inspect `story report .` when CLI access is available. Read `story.md` `language` (a missing field means `en`) and write every revision in that language; when a `story prose` or `story voices` check is reported as skipped for the language, do that check by reading.
 
 ## Named Revision Passes
 

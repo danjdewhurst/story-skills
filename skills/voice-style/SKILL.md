@@ -22,6 +22,19 @@ A story project with `story.md` in the root. `story init` scaffolds
 . --force`, which only adds missing files, or by copying
 `references/style-sheet-guide.md`'s frontmatter block by hand.
 
+## Language
+
+Read `language` in `story.md` (a BCP 47 tag; a missing field means `en`).
+The style sheet records the conventions of that language, and the voice
+description is written about prose in it. `dialect: british` and
+`american` and the built-in word lists behind filter words, -ly adverbs,
+and said-bookisms are English. For another language, set
+`dialect: unspecified`, record spelling variants as `preferred` entries,
+and settle dialogue and punctuation with
+`../line-editing/references/language-conventions.md`. When `story prose`
+or `story voices` reports a check skipped for the book's language, do that
+pass by reading (see `references/prose-checks.md`, Other languages).
+
 ## When to Use
 
 - Starting a project, once the first chapter or a writing sample exists
@@ -45,7 +58,8 @@ A story project with `story.md` in the root. `story init` scaffolds
    makes; do not invent new ones silently. When the draft is inconsistent
    (both *grey* and *gray*), ask the user which form wins.
 3. Set the frontmatter:
-   - `dialect: british | american | unspecified`
+   - `dialect: british | american | unspecified` (`unspecified` for a
+     book not in English)
    - one `preferred` entry per variant: `use` is the house form, `avoid`
      the form to flag. Repeat entries for several variants of one word.
    - `watch-words`: words or phrases this book overuses
@@ -138,6 +152,13 @@ When two voices blur, differentiate them on more than one axis (sentence
 length, contractions, vocabulary, what they ask about) and see
 `dialogue-subtext.md` in the `scene-craft` skill for the tag-swap test.
 
+Attribution and contraction rates are built around English quote marks,
+speech verbs, and contractions. For a book in another language, if the
+report attributes few or none of the lines the book has, or skips the
+check for the language, compare the voices by reading: the levers
+are the same (sentence length, vocabulary, forms of address, what each
+avoids saying).
+
 ### 5. Act on the findings
 
 1. Fix avoided spellings everywhere; they are always errors of consistency.
@@ -177,4 +198,5 @@ story links .
 ## Reference Files
 
 - **`references/style-sheet-guide.md`** - What goes in each style-sheet section, the frontmatter format, and how to extract a voice description from sample prose
-- **`references/prose-checks.md`** - What each `story prose` count measures, its threshold, and when to keep the flagged text
+- **`references/prose-checks.md`** - What each `story prose` count measures, its threshold, when to keep the flagged text, and what to do for a book not in English
+- **`../line-editing/references/language-conventions.md`** - Dialogue and punctuation conventions by language, for the style sheet's Dialogue And Punctuation section

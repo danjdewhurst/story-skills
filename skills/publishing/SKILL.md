@@ -23,10 +23,23 @@ exists and read `title`, `status`, `author` or `authors`, `genre`,
 `status` is not `complete`, say that metadata and launch planning can start
 now but the files must be rebuilt after the last revision.
 
+## Language And Market
+
+Read `language` in `story.md` (a missing field means `en`) and ask which
+countries the author is publishing in. The book's language decides the
+language of the description, keywords, and copyright page; the market
+decides the ISBN agency, subject schemes, retailers, and pricing rules.
+The references start from the US and UK English-language market and
+note the rest: Thema subjects and ISBN agencies elsewhere in
+`references/metadata-checklist.md`, other retail routes and fixed book
+prices in `references/launch-plan.md`, and rights by language and
+territory in `references/rights-one-sheet.md`. Never assume a US retailer, scheme, or
+law applies elsewhere; say what to check.
+
 ## When to Use
 
 - Filling retailer metadata: ISBN, publisher, date, description, keywords,
-  BISAC subjects, language, cover alt text, AI disclosure
+  BISAC and Thema subjects, language, cover alt text, AI disclosure
 - Writing the copyright page or checking epigraph and lyric permissions
 - Building and checking the EPUB or the print interior; choosing trim size
 - Choosing retailers and exclusivity, setting prices, planning a launch
@@ -95,6 +108,10 @@ Fill the `story.md` fields with `references/metadata-checklist.md`:
 `keywords`, `subjects`, `copyright`, `cover-alt`, `ai-disclosure`, and
 `authors` for co-written books. Take the description from
 `submission/blurb.md` when it exists (the `submission` skill drafts it).
+Write the description and keywords in the book's language. `subjects`
+holds BISAC codes only; when the author's distributors ask for Thema,
+choose the codes from the checklist and record them in
+`publishing/launch-plan.md`.
 Rebuild the sheet and repeat until the checklist is clean:
 
 ```shell
@@ -105,8 +122,9 @@ story build . --format metadata
 ### 3. ISBNs and copyright page
 
 1. Explain the ISBN choices in `references/metadata-checklist.md`: one
-   ISBN per format and edition, who issues them in the author's country,
-   and the trade-offs of a free retailer ISBN. Record the ebook or print
+   ISBN per format and edition, who issues them in the author's country
+   (outside the English-speaking markets too), and the trade-offs of a
+   free retailer ISBN. Record the ebook or print
    ISBN the author supplies in `isbn`.
 2. Create the copyright page and fill it from
    `references/copyright-page.md`:
@@ -161,7 +179,9 @@ Follow `references/print-interior.md`:
 
 Lay out the options in `references/launch-plan.md`: KDP, IngramSpark,
 Draft2Digital or another aggregator, and direct sales, plus the trade-off
-between exclusivity (KDP Select and Kindle Unlimited) and going wide. The
+between exclusivity (KDP Select and Kindle Unlimited) and going wide.
+For a book sold outside the US and UK, or not in English, add the routes
+and fixed-price rules in its Outside the US and UK section. The
 author decides; record the choices in `publishing/launch-plan.md`. Discuss
 pricing with the considerations in the same reference, not a formula.
 
@@ -188,7 +208,8 @@ results they did not give you.
 1. Keep `publishing/rights.md` from the inventory in
    `references/rights-one-sheet.md`: every right (print, ebook, audio,
    translation by language or territory, film and TV, and the rest), who
-   holds it, the term, and the reversion terms.
+   holds it, the term, and the reversion terms. The original-language
+   rows use the book's own language, not English by default.
 2. When the author has a contract offer, read it against
    `references/contract-red-flags.md` and list each clause that matches a
    red flag with the question to ask. State that this is not legal advice
@@ -231,9 +252,9 @@ story build . --format metadata
 
 ## Reference Files
 
-- **`references/metadata-checklist.md`** - Every publishing field, ISBN sources and trade-offs, keywords, BISAC subjects, descriptions, AI disclosure, and CIP or PCN notes
+- **`references/metadata-checklist.md`** - Every publishing field, ISBN agencies and trade-offs, keywords, BISAC and Thema subjects, descriptions, AI disclosure, and CIP or PCN notes
 - **`references/copyright-page.md`** - Copyright page template, optional lines, permissions credits, and legal deposit notes
 - **`references/print-interior.md`** - Trim size choice, page-count estimates, rendering to PDF, printer checks, cover wrap, and proofs
-- **`references/launch-plan.md`** - Distribution and exclusivity, pricing considerations, and the T-90 to T+30 launch timeline with ARCs, newsletter, and ad testing
+- **`references/launch-plan.md`** - Distribution and exclusivity, routes outside the US and UK, pricing considerations including fixed book prices, and the T-90 to T+30 launch timeline with ARCs, newsletter, and ad testing
 - **`references/contract-red-flags.md`** - Clause-by-clause red flags for publishing and rights contracts, and where to get a professional review
-- **`references/rights-one-sheet.md`** - Rights inventory template and one-sheets for foreign, audio, and film rights
+- **`references/rights-one-sheet.md`** - Rights inventory template by language and territory, and one-sheets for foreign, audio, and film rights

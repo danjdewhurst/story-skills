@@ -18,9 +18,22 @@ skill prepares materials and records outcomes.
 
 A story project with a complete or near-complete draft. Verify `story.md`
 exists in the project root and read its `status`, `genre`, `sub-genre`,
-`premise`, `author` (or `authors` for a co-written book), and `contact` fields. If `status` is not `complete` or
+`premise`, `author` (or `authors` for a co-written book), `contact`, and `language` fields. If `status` is not `complete` or
 `revising`, tell the user the package can be drafted now but the readiness
 check will fail until the draft is finished.
+
+## Language And Market
+
+`language` (a missing field means `en`) is the book's language. Ask which
+market the user is submitting to. The query letter, Shunn manuscript
+format, comp conventions, and word-count norms in the references are the
+English-language (mainly US and UK) market's. Other markets have their
+own practice: some publishers take submissions directly rather than
+through agents, and many ask for a synopsis and sample pages in their own
+format. Ask the user for the guidelines of the agents or publishers they
+are targeting and follow those; never present English-market conventions
+as universal. Write the package in the language the agent or publisher
+reads, which is usually the book's.
 
 ## When to Use
 
@@ -74,9 +87,11 @@ Then check what the CLI cannot:
 3. Every chapter has `status: revised`, `final`, or `complete`. List any
    still at `outline` or `draft`.
 4. The total word count sits inside the range for the category in
-   `references/word-count-norms.md`. Those ranges are rough conventions:
-   state the number and the range, and ask the user to confirm current
-   norms for their market. Never pad or cut to hit a number without the
+   `references/word-count-norms.md`. Those ranges are rough conventions
+   for the English-language market only: state the number and the range,
+   and ask the user to confirm current norms for their market. For a book
+   in another language, report the count and ask for that market's norms
+   instead. Never pad or cut to hit a number without the
    user's direction.
 5. No `[TODO` markers remain in chapter prose. `story validate` warns about
    each chapter that still has one.
@@ -235,5 +250,5 @@ story prose .
 - **`references/query-letter.md`** - Query structure (hook, book paragraphs, metadata line, bio), length, personalization, and common mistakes
 - **`references/blurb.md`** - Back-cover and retailer description formulas for genre fiction, length, and taglines
 - **`references/comp-titles.md`** - How to choose comparable titles, how to phrase them, and the verification rule
-- **`references/word-count-norms.md`** - Rough word-count ranges by category, to confirm with the user
+- **`references/word-count-norms.md`** - Rough word-count ranges by category for the English-language market only, to confirm with the user
 - **`references/tracker-template.md`** - `submission/tracker.md` template and status definitions

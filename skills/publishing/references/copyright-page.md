@@ -15,6 +15,9 @@ from the template. Without this page, every build except Shunn (markdown,
 EPUB, DOCX, HTML, print, and `story export`) generates a minimal one from
 `copyright`.
 Ask the author for every name, credit, and number; never invent them.
+The template wording is English. For a book in another language
+(`language` in `story.md`), write the page in that language, following
+the conventions of copyright pages in the author's market.
 
 This template reflects common practice. It is not legal advice. For
 questions about registration, permissions, or liability, the author should
@@ -106,8 +109,9 @@ Edited by {name}
   available. Other countries have no registration system.
 - Many countries require publishers to deposit copies with the national
   library (legal deposit), for example the British Library in the UK, the
-  Library of Congress in the US for works published there, and Library and
-  Archives Canada. Self-publishers usually count as publishers. Check the
+  Library of Congress in the US for works published there, Library and
+  Archives Canada, the Bibliothèque nationale de France, and the Deutsche
+  Nationalbibliothek. Self-publishers usually count as publishers. Check the
   national library's current rules for print and ebook deposit.
 - These are notes to prompt the author, not advice. Point them to the
   national copyright office or library for the rules that apply.
