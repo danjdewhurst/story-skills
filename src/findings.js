@@ -98,6 +98,7 @@ export const FINDING_CODES = {
   "session-without-characters": "warning",
   "invalid-language": "error",
   "unsupported-writing-mode": "error",
+  "unsupported-chapter-numerals": "error",
   "invalid-isbn": "error",
   "invalid-subject": "error",
   "too-many-keywords": "warning",

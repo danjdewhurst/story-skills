@@ -45,6 +45,7 @@
         "ai-disclosure": { "type": "string" },
         "chapter-label": { "type": "string", "description": "Word for generated chapter headings, such as Kapitel; {n} places the number. Defaults to the language pack's word (Chapter in English). Same as a labels chapter entry, which wins." },
         "writing-mode": { "enum": ["horizontal", "vertical"], "description": "How builds set the text. vertical sets columns top to bottom, right to left, with pages turned right to left; story validate allows it only for a language written that way, such as ja, zh, zh-Hant, or ko. Defaults to horizontal." },
+        "chapter-numerals": { "enum": ["western", "native"], "description": "Numerals for the numbers in generated chapter headings. native prints the language's own: Han numerals in Japanese and Chinese (第十二章), the script's digits in Arabic, Persian, Hindi, Thai, and others; story validate allows it only for a language that has them. Ids, file names, and anchors keep 0-9. Defaults to western." },
         "contents-label": { "type": "string", "description": "Heading for generated tables of contents, such as Inhalt. Defaults to the language pack's heading (Contents in English). Same as a labels contents entry, which wins." },
         "labels": {
           "type": "array",

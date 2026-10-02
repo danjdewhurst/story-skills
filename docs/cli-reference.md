@@ -2425,6 +2425,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `unused-target` | warning | `story.md` or a chapter sets a target in the unit the book does not count in (`target-words` in a book counted in characters, or the reverse), so nothing measures it. |
 | `session-without-characters` | warning | In a book counted in characters, `progress.md` sessions logged with no `characters` (before the book counted them), which `story progress` leaves out of its pace. `story progress` reports it too. |
 | `invalid-language` | error | `story.md` `language` is not a BCP 47 tag. |
+| `unsupported-chapter-numerals` | error | `story.md` sets `chapter-numerals: native` for a language whose script has no numerals of its own, such as English or Korean. |
 | `unsupported-writing-mode` | error | `story.md` sets `writing-mode: vertical` for a language that is not set in vertical columns (or for traditional Mongolian, not supported yet). |
 | `invalid-isbn` | error | `story.md` `isbn` is not a valid ISBN. |
 | `invalid-subject` | error | A `story.md` `subjects` entry is not a BISAC code. |
