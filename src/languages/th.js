@@ -5,5 +5,6 @@ export default {
   code: "th",
   name: "Thai",
   cased: false,
+  script: "Thai",
   segmentation: "dictionary"
 };

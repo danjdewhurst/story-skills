@@ -4,7 +4,7 @@
 // renumbers it; `stamp` names the build so a note can say which one it means.
 // The print interior is HTML with CSS paged media, rendered to PDF by a
 // paged-media engine such as Paged.js, WeasyPrint, or Prince.
-import { textDirection } from "./publishing.js";
+import { typesetting } from "./typesetting.js";
 import { usageError } from "./exit-codes.js";
 import { wordSpans } from "./words.js";
 
@@ -75,7 +75,8 @@ function noteHref(noteUrl, label, stamp, text) {
 // form, prefilled with the label, the stamp, and the paragraph's first words.
 export function reviewHtml(book, { stamp = "", noteUrl = "" } = {}) {
   const contents = book.contentsLabel ?? "Contents";
-  const rtl = textDirection(book.language) === "rtl";
+  const type = typesetting(book.language, book.writingMode);
+  const rtl = type.rtl;
   const toc = [];
   const sections = [];
   for (const part of book.parts) {
@@ -110,7 +111,7 @@ ${htmlRoot(book.language)}
 :root { --bg: #fdfcf8; --fg: #1d1b16; --muted: #6b665c; --rule: #ddd6c8; --accent: #7c3aed; }
 @media (prefers-color-scheme: dark) { :root { --bg: #16150f; --fg: #ece8dd; --muted: #a39e92; --rule: #3a372f; --accent: #b794f4; } }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--fg); font: 1.1rem/1.65 Georgia, "Iowan Old Style", "Palatino Linotype", serif; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 1.1rem/1.65 ${type.fonts.body}; }
 main { max-width: 38rem; margin: 0 auto; padding: 2rem 1rem 6rem; }
 header h1 { font-size: 2rem; line-height: 1.2; margin: 2rem 0 0.25rem; }
 .byline, .note { color: var(--muted); margin: 0 0 1rem; }
@@ -136,7 +137,7 @@ p:hover .note-link, p:target .note-link, .note-link:focus { opacity: 1; }
 [dir="rtl"] .anchor { left: auto; right: -5.5rem; text-align: left; }
 @media (max-width: 52rem) { [dir="rtl"] .anchor { text-align: right; } }
 ${noteUrl === "" ? "" : `[dir="rtl"] .note-link { left: auto; right: -5.5rem; text-align: left; }
-`}` : ""}</style>
+`}` : ""}${type.vertical ? REVIEW_VERTICAL : ""}</style>
 </head>
 <body>
 <main>
@@ -155,6 +156,30 @@ ${sections.join("\n")}
 `;
 }
 
+// The review copy set in vertical columns, right to left: lines run down
+// the page, so the reading column becomes a band across it, and spacing,
+// rules, and labels move from the top and left to the right and top.
+const REVIEW_VERTICAL = `html { writing-mode: vertical-rl; }
+main { max-width: none; max-height: 38rem; margin: auto 0; padding: 1rem 2rem 1rem 6rem; }
+header h1 { margin: 0; margin-block: 2rem 0.25rem; }
+.byline, .note, p { margin: 0; margin-block-end: 1rem; }
+.note { border-left: 0; padding-left: 0; border-top: 3px solid var(--accent); padding-top: 0.75rem; }
+nav ol { padding-left: 0; padding-top: 1.25rem; }
+section { border-top: 0; margin-top: 0; padding-top: 0; border-right: 1px solid var(--rule); margin-right: 3rem; padding-right: 1rem; }
+h2 { margin: 0; margin-block: 1rem 1.5rem; }
+.anchor, .note-link { position: static; display: block; width: auto; margin: 0; text-align: start; opacity: 0.6; }
+blockquote { margin: 0; margin-inline-start: 1.5rem; margin-block-end: 1rem; }
+.scene-break { margin: 0 2rem; }
+`;
+
+// The print interior set in vertical columns, right to left. The chapter
+// sink drops the heading down its column; quotations indent from the top.
+const PRINT_VERTICAL = `html { writing-mode: vertical-rl; }
+h1 { margin: 1in 0 0 0.5in; }
+blockquote { margin: 1.5em 0.8em; }
+p.scene-break { margin: 0 0.8em; }
+`;
+
 export function printHtml(book, trimName = DEFAULT_TRIM) {
   const trim = TRIM_SIZES.get(trimName);
   if (!trim) {
@@ -163,12 +188,17 @@ export function printHtml(book, trimName = DEFAULT_TRIM) {
   const pages = estimateBookPages(book, trimName);
   const inside = insideMargin(pages);
   const author = book.authors.join(" and ");
-  // An RTL book opens from the other side: its recto pages are left-hand
-  // pages, so chapters start on the left and the running heads swap. The
-  // margins follow the physical page, so the spine side does not change.
-  const rtl = textDirection(book.language) === "rtl";
-  const recto = rtl ? "left" : "right";
-  const verso = rtl ? "right" : "left";
+  // An RTL or vertical book opens from the other side: its recto pages are
+  // left-hand pages, so chapters start on the left and the running heads
+  // swap. The margins follow the physical page, so the spine side does not
+  // change.
+  const type = typesetting(book.language, book.writingMode);
+  const rtl = type.rtl;
+  const recto = rtl || type.vertical ? "left" : "right";
+  const verso = rtl || type.vertical ? "right" : "left";
+  // Running heads are italic, and small caps and the raised initial set,
+  // only in a script with capitals and italics to set them in.
+  const heads = `${type.cased ? "italic " : ""}9pt ${type.fonts.heads}`;
   const toc = [];
   const sections = [];
   for (const part of book.parts) {
@@ -210,43 +240,44 @@ ${htmlRoot(book.language)}
        npx pagedjs-cli book.print.html -o book.pdf
        weasyprint book.print.html book.pdf
        prince book.print.html -o book.pdf
-     Check the printer's current specs for margins, bleed, and fonts before upload. -->
+${type.vertical ? "     Vertical text needs an engine that sets it, such as Vivliostyle or Prince.\n" : ""}     Check the printer's current specs for margins, bleed, and fonts before upload. -->
 <style>
 @page { size: ${trim.width} ${trim.height}; margin: 0.75in 0.5in 0.75in ${inside}; }
 @page :left { margin-left: 0.5in; margin-right: ${inside}; }
 @page :${verso} {
-  @top-center { content: "${cssString(author || book.title)}"; font: italic 9pt Georgia, serif; } }
+  @top-center { content: "${cssString(author || book.title)}"; font: ${heads}; } }
 @page :${recto} {
-  @top-center { content: string(chapter-title, first-except); font: italic 9pt Georgia, serif; } }
-@page chapter { @bottom-center { content: counter(page); font: 9pt Georgia, serif; } }
+  @top-center { content: string(chapter-title, first-except); font: ${heads}; } }
+@page chapter { @bottom-center { content: counter(page); font: 9pt ${type.fonts.heads}; } }
 @page :blank { @top-center { content: none; } @bottom-center { content: none; } }
 @page front { @top-center { content: none; } @bottom-center { content: none; } }
-html { font: 11pt/1.4 Georgia, "Iowan Old Style", "Palatino Linotype", serif; }
+html { font: 11pt/1.4 ${type.fonts.body}; }
 body { margin: 0; hyphens: auto; }
 .title-page, .toc, section.front { page: front; break-before: ${recto}; }
 section.front.copyright-page { break-before: page; font-size: 9pt; }
 .title-page { text-align: center; padding-top: 30%; }
 .title-page h1 { font-size: 26pt; font-weight: normal; margin: 0 0 1em; }
-.title-page .author { font-size: 14pt; font-variant: small-caps; letter-spacing: 0.05em; }
-.toc h1 { font-size: 14pt; font-weight: normal; text-align: center; font-variant: small-caps; }
+.title-page .author { font-size: 14pt${type.cased ? "; font-variant: small-caps; letter-spacing: 0.05em" : ""}; }
+.toc h1 { font-size: 14pt; font-weight: normal; text-align: center${type.cased ? "; font-variant: small-caps" : ""}; }
 .toc ol { list-style: none; padding: 0; }
 .toc a { color: inherit; text-decoration: none; }
-.toc a::after { content: " " target-counter(attr(href), page); float: ${rtl ? "left" : "right"}; }
+.toc a::after { content: " " target-counter(attr(href), page); float: ${type.vertical ? "none" : rtl ? "left" : "right"}; }
 section.chapter, section.back { page: chapter; break-before: ${recto}; }
 section.chapter > h1, section.back > h1, section.back > .running-head { string-set: chapter-title content(text); }
 .running-head { height: 0; margin: 0; }
 h1 { font-size: 16pt; font-weight: normal; text-align: center; margin: 1.5in 0 0.5in; break-after: avoid; }
 p { margin: 0; text-indent: 1.5em; text-align: justify; widows: 2; orphans: 2; }
 p.first, p.scene-break + p { text-indent: 0; }
-/* A raised initial: floated drop caps render inconsistently across engines. */
+${type.cased ? `/* A raised initial: floated drop caps render inconsistently across engines. */
 section.chapter > h1 + p.first::first-letter { font-size: 2.4em; line-height: 1; }
-p.scene-break { text-align: center; text-indent: 0; margin: 0.8em 0; break-after: avoid; }
+` : ""}p.scene-break { text-align: center; text-indent: 0; margin: 0.8em 0; break-after: avoid; }
 blockquote { margin: 0.8em 1.5em; }
 blockquote p { text-indent: 0; text-align: start; }
 section.front p, section.back p { text-indent: 0; margin-bottom: 0.6em; text-align: ${rtl ? "right" : "left"}; }
 section.front:not(.copyright-page) p { text-align: center; }
 @media screen { body { max-width: ${trim.width}; margin: 2rem auto; padding: 0 1rem; } section { margin-top: 3rem; } }
-</style>
+${type.vertical ? `${PRINT_VERTICAL}@media screen { body { max-width: none; max-height: ${trim.height}; margin: auto 2rem; padding: 1rem 0; } section { margin-top: 0; margin-right: 3rem; } }
+` : ""}</style>
 </head>
 <body>
 <section class="title-page"><h1>${escapeHtml(book.title)}</h1>${author === "" ? "" : `<p class="author">${escapeHtml(author)}</p>`}</section>
@@ -263,7 +294,7 @@ ${afterToc.join("\n")}
 // The root element: `dir="rtl"` for a right-to-left language, since
 // browsers and paged-media engines do not infer direction from `lang`.
 function htmlRoot(language) {
-  const dir = textDirection(language) === "rtl" ? ` dir="rtl"` : "";
+  const dir = typesetting(language).rtl ? ` dir="rtl"` : "";
   return `<html lang="${escapeHtml(language)}"${dir}>`;
 }
 

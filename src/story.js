@@ -24,6 +24,7 @@ import { SCENE_SETTINGS, fountainScript } from "./fountain.js";
 import { inkSource } from "./ink.js";
 import { TWEE_LINK_UNSAFE, derivedIfid, isIfid, tweeSource } from "./twee.js";
 import { htmlBook, writeDocx, writeEpub, writeShunnDocx, writeShunnMarkdown } from "./packaging.js";
+import { validateWritingMode, WRITING_MODES } from "./typesetting.js";
 import { applySeverity, validateCliConfig } from "./config.js";
 import { DEFAULT_PASSES, addedPassNotes, nextPass, passChecks, readPasses, updatePasses, validatePasses } from "./passes.js";
 import { CHAPTER_HOOKS, SCENE_OUTCOMES, buildPacing } from "./pacing.js";
@@ -6523,6 +6524,11 @@ function validateStoryFrontmatter(project, errors) {
   if (data["draft-mode"] !== undefined) {
     requireScalar(data, "draft-mode", "story.md", errors);
     validateEnum(data, "draft-mode", DRAFT_MODES, "story.md", errors);
+  }
+  if (data["writing-mode"] !== undefined) {
+    requireScalar(data, "writing-mode", "story.md", errors);
+    validateEnum(data, "writing-mode", WRITING_MODES, "story.md", errors);
+    validateWritingMode(data, errors);
   }
   validateCover(project, errors);
   validatePasses(data, "story.md", errors);

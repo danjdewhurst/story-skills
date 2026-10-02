@@ -4,5 +4,6 @@ export default {
   code: "hi",
   name: "Hindi",
   cased: false,
+  script: "Deva",
   segmentation: "space"
 };

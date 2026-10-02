@@ -5,5 +5,6 @@ export default {
   code: "zh",
   name: "Chinese",
   cased: false,
+  script: "Hans",
   segmentation: "character"
 };

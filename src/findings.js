@@ -94,6 +94,7 @@ export const FINDING_CODES = {
   "backslash-path": "warning",
   "form-length-range": "warning",
   "invalid-language": "error",
+  "unsupported-writing-mode": "error",
   "invalid-isbn": "error",
   "invalid-subject": "error",
   "too-many-keywords": "warning",

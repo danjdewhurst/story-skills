@@ -341,7 +341,7 @@ tense: past
 | `severity` | list of mappings | no | Named warnings promoted to errors or turned off. See [CLI defaults and severity](#cli-defaults-and-severity). |
 | `cover` | path | no | Cover image inside the project: `.jpg`, `.jpeg`, `.png`, `.gif`, or `.webp`. `story build --format epub` embeds it. |
 | `ifid` | UUID | no | The interactive fiction id `story build --format twee` and `--format ink` write, a version 4 UUID such as `3F2C9A61-7B1D-4E8A-9C3B-2A6D5E4F1B07`. Without it the build derives one from the story id, the same on every build, and warns with the line to add: a title change changes the derived IFID, and two books with the same title share it. `story validate` and the build error on a value that is not a version 4 UUID. See [Branching chapters](#branching-chapters). |
-| `authors`, `language`, `isbn`, `publisher`, `publication-date`, `description`, `keywords`, `subjects`, `copyright`, `cover-alt`, `ai-disclosure`, `chapter-label`, `contents-label` | various | no | Publishing metadata read by `story build`. See [Publishing metadata](#publishing-metadata). |
+| `authors`, `language`, `isbn`, `publisher`, `publication-date`, `description`, `keywords`, `subjects`, `copyright`, `cover-alt`, `ai-disclosure`, `chapter-label`, `contents-label`, `writing-mode` | various | no | Publishing metadata read by `story build`. See [Publishing metadata](#publishing-metadata). |
 
 `story validate` errors when `cover` names a missing file, a file outside the project, or an unsupported extension. The craft fields `premise`, `counter-premise`, and `season-goal` have no CLI flags: edit `story.md` directly. See the [theme-craft](../skills/theme-craft/SKILL.md), [genre-craft](../skills/genre-craft/SKILL.md), and [discovery-drafting](../skills/discovery-drafting/SKILL.md) skills for how they are used.
 
@@ -468,6 +468,7 @@ These optional fields describe the published edition. Edit them in `story.md` by
 | `ai-disclosure` | string | A short statement of how AI tools were used, for retailer and agent disclosure forms. |
 | `chapter-label` | string | The word for generated chapter headings, in place of `Chapter` (`Kapitel`). A `{n}` in it places the number (`第{n}章`). |
 | `contents-label` | string | The generated table of contents heading, in place of `Contents` (`Inhalt`). |
+| `writing-mode` | `horizontal` or `vertical` | How builds set the text. Default `horizontal`. `vertical` sets columns top to bottom and right to left, with pages turned right to left, and is valid only for a language written in Chinese characters (`ja`, `zh`, `zh-Hant`, `ko-Hani`); `story validate` errors with `unsupported-writing-mode` otherwise, and with `unsupported-value` on any other value. See [Typesetting other scripts](manuscripts.md#typesetting-other-scripts). |
 
 The scalar fields must be text (an unquoted ISBN-13 is also accepted), and `authors`, `keywords`, and `subjects` must be lists of text; `story validate` errors otherwise:
 
