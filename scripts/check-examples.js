@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { checkProjectSchema } from "./check-schema.js";
+import { characterCount } from "../src/markdown.js";
 import { buildBook, checkProjectContinuity, computeWordCounts, reindexProject, seriesReport, validateLinks, validateProject } from "../src/story.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -26,6 +27,23 @@ export const EXPECTED_CONTINUITY = {
     ]
   }
 };
+
+// Character counts for Chinese and Japanese books split text into grapheme
+// clusters with Intl.Segmenter, which no example exercises yet, so CI's
+// Node matrix checks these directly: punctuation counts, whitespace (a
+// full-width indent included) and markup do not, and a cluster counts once.
+export const CHARACTER_COUNT_CASES = [
+  ["　吾輩は猫である。名前はまだ無い。", 16],
+  ["「你好，世界！」她说。", 11],
+  ["**猫**と_犬_\n\n* * *\n\n[鳥](birds.md)", 4],
+  ["e\u0301 👍🏽 👩‍👩‍👧 か\u3099", 4]
+];
+
+export function characterCountFailures(cases = CHARACTER_COUNT_CASES) {
+  return cases
+    .filter(([text, expected]) => characterCount(text) !== expected)
+    .map(([text, expected]) => `characterCount(${JSON.stringify(text)}) is ${characterCount(text)}, expected ${expected}`);
+}
 
 export function collectResult(failures, exampleName, command, result) {
   for (const error of result.errors) {
@@ -88,7 +106,7 @@ export function interactiveBuildFindings(root, format) {
 }
 
 function main() {
-  const failures = [];
+  const failures = characterCountFailures();
   const summaries = [];
 
   for (const name of fs.readdirSync(examplesRoot).sort()) {

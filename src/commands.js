@@ -340,8 +340,8 @@ export const COMMANDS = [
         return reportJson(io, "progress", progress, { writes: progress.logged ? [progress.logged.file] : [] });
       }
       if (progress.logged) {
-        const { characters, words } = progress.logged;
-        io.stdout.write(`Logged ${characters === undefined ? `${words} words` : `${characters} characters`} for ${progress.logged.date} in ${progress.logged.file}\n`);
+        const { characterCount, words } = progress.logged;
+        io.stdout.write(`Logged ${characterCount === null ? `${words} words` : `${characterCount} characters`} for ${progress.logged.date} in ${progress.logged.file}\n`);
       }
       io.stdout.write(formatProgress(progress));
       return reportResult(io, progress, "Progress checked", "Progress check failed");

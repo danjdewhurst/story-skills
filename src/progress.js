@@ -33,56 +33,51 @@ function sessionDate(session) {
   return String(session?.date ?? "").trim();
 }
 
-// Valid sessions only, in date order, as { date, words } with the count
-// from `field` ("characters" for a project counted in characters, where an
-// entry logged without one is left out); validate reports the malformed
-// ones.
-export function cleanSessions(value, field = "words") {
+// Valid sessions only, in date order, as { date, words, characters }, with
+// `characters` null when the entry has none (one logged while the book was
+// counted in words); validate reports the malformed ones.
+export function cleanSessions(value) {
   const sessions = [];
+  const count = (number) => Number.isInteger(number) && number >= 0;
   for (const entry of Array.isArray(value) ? value : []) {
-    if (entry && typeof entry === "object" && parseClockDate(sessionDate(entry)) && Number.isInteger(entry.words) && entry.words >= 0
-      && Number.isInteger(entry[field]) && entry[field] >= 0) {
-      sessions.push({ date: sessionDate(entry), words: entry[field] });
+    if (entry && typeof entry === "object" && parseClockDate(sessionDate(entry)) && count(entry.words)) {
+      sessions.push({ date: sessionDate(entry), words: entry.words, characters: count(entry.characters) ? entry.characters : null });
     }
   }
   return sessions.sort((left, right) => left.date.localeCompare(right.date, "en"));
 }
 
-// Progress in the count unit. The inputs call every count `words`; for a
-// project counted in characters (`unit` "characters") they are characters,
-// and the result names them so: `characters` in place of each `words`, and
-// `unit: "characters"`.
-export function computeProgress({ unit = "words", ...input }) {
-  const result = progressIn(input);
-  if (unit !== "characters") {
-    return result;
-  }
-  const rename = ({ words, ...rest }) => ({ characters: words, ...rest });
-  const { words, ...rest } = result;
-  return {
-    unit,
-    characters: words,
-    ...rest,
-    chapters: rest.chapters.map((chapter) => {
-      const { id, ...counts } = chapter;
-      return { id, ...rename(counts) };
-    }),
-    lastSession: rest.lastSession === null ? null : { date: rest.lastSession.date, ...rename({ words: rest.lastSession.words, since: rest.lastSession.since }) }
-  };
-}
-
-function progressIn({ words, target, deadline, today, chapters, sessions }) {
+// Progress in the count unit (`unit`, "words" or "characters"). `words`
+// stays the word count in every book and `characterCount` is the character
+// count, or null in a book counted in words; `target`, `percent`,
+// `remaining`, `perDay`, `since`, and `pace` are in the unit. Chapters and
+// the last session carry both counts too. A session without the unit's
+// count (one logged before the book was counted in characters) is left out
+// of `sessions`, the last session, and the pace.
+export function computeProgress({ unit = "words", words, characters = null, target, deadline, today, chapters, sessions }) {
+  const characterBook = unit === "characters";
+  const inUnit = (entry) => (characterBook ? entry.characters ?? null : entry.words);
+  const length = characterBook ? characters : words;
+  const measured = (Array.isArray(sessions) ? sessions : []).filter((session) => inUnit(session) !== null);
   const todayDays = parseClockDate(today).days;
   const result = {
+    unit,
     words,
+    characterCount: characterBook ? characters : null,
     target: target ?? null,
-    percent: target ? (words * 100) / target : null,
-    remaining: target ? Math.max(0, target - words) : null,
+    percent: target ? (length * 100) / target : null,
+    remaining: target ? Math.max(0, target - length) : null,
     deadline: null,
     chapters: chapters
       .filter((chapter) => chapter.target > 0)
-      .map((chapter) => ({ ...chapter, percent: (chapter.words * 100) / chapter.target })),
-    sessions: sessions.length,
+      .map((chapter) => ({
+        id: chapter.id,
+        words: chapter.words,
+        characterCount: characterBook ? chapter.characters : null,
+        target: chapter.target,
+        percent: (inUnit(chapter) * 100) / chapter.target
+      })),
+    sessions: measured.length,
     lastSession: null,
     pace: null,
     projected: null
@@ -99,15 +94,15 @@ function progressIn({ words, target, deadline, today, chapters, sessions }) {
     };
   }
 
-  if (sessions.length > 0) {
-    const last = sessions[sessions.length - 1];
-    result.lastSession = { date: last.date, words: last.words, since: words - last.words };
+  if (measured.length > 0) {
+    const last = measured[measured.length - 1];
+    result.lastSession = { date: last.date, words: last.words, characterCount: characterBook ? last.characters : null, since: length - inUnit(last) };
     // Pace is measured across the most recent sessions, per calendar day.
-    const recent = sessions.slice(-PACE_SESSIONS);
+    const recent = measured.slice(-PACE_SESSIONS);
     const span = parseClockDate(recent[recent.length - 1].date).days - parseClockDate(recent[0].date).days;
     if (recent.length > 1 && span > 0) {
-      result.pace = (recent[recent.length - 1].words - recent[0].words) / span;
-      // A pace that rounds to 0 words a day, or a finish past the horizon,
+      result.pace = (inUnit(recent[recent.length - 1]) - inUnit(recent[0])) / span;
+      // A pace that rounds to 0 a day, or a finish past the horizon,
       // projects nothing.
       const daysNeeded = Math.ceil(result.remaining / result.pace);
       if (result.remaining > 0 && Math.round(result.pace) > 0 && daysNeeded <= PROJECTION_HORIZON_DAYS) {
@@ -121,7 +116,7 @@ function progressIn({ words, target, deadline, today, chapters, sessions }) {
 export function formatProgress(progress) {
   const characters = progress.unit === "characters";
   const noun = characters ? "character" : "word";
-  const count = (entry) => (characters ? entry.characters : entry.words);
+  const count = (entry) => (characters ? entry.characterCount : entry.words);
   const lines = [];
   if (progress.target === null) {
     lines.push(`Progress: ${formatNumber(count(progress))} ${noun}s (no target-${noun}s in story.md)`);

@@ -211,8 +211,35 @@ describe("--json result envelope", () => {
     const { envelope } = invokeJson(root, ["progress", "--log", "--date", "2026-01-02", "--json"]);
     const file = path.join(root, "progress.md");
     expect(envelope.writes).toEqual([file]);
-    expect(envelope.data.logged).toEqual({ file, date: "2026-01-02", words: 0 });
+    expect(envelope.data.logged).toEqual({ file, date: "2026-01-02", words: 0, characterCount: null });
+    expect(envelope.data).toMatchObject({ unit: "words", characterCount: null });
     expect(fs.existsSync(file)).toBe(true);
+  });
+
+  test("report, pacing, and progress --json for a book counted in characters match the schema", () => {
+    const cwd = makeTempDir();
+    const { root } = createStoryProject({ cwd, title: "Zh Json", language: "zh", force: false });
+    fs.writeFileSync(path.join(root, "story.md"), fs.readFileSync(path.join(root, "story.md"), "utf8").replace("language: zh\n", "language: zh\ntarget-characters: 100\n"), "utf8");
+    writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft\ntarget-characters: 20", "## Chapter Text\n\n你好，世界！她说。\n");
+    writeMarkdown(path.join(root, "progress.md"), "type: progress-log\nsessions:\n  - date: 2026-01-01\n    words: 3", "# Progress Log\n");
+
+    const progress = invokeJson(root, ["progress", "--log", "--date", "2026-01-02", "--json"]).envelope;
+    expect(progress.data).toMatchObject({ unit: "characters", words: 6, characterCount: 9, target: 100, remaining: 91, sessions: 1 });
+    expect(progress.data.logged).toMatchObject({ words: 6, characterCount: 9 });
+    expect(progress.data.chapters).toEqual([{ id: "chapter-01", words: 6, characterCount: 9, target: 20, percent: 45 }]);
+    expect(progress.data.lastSession).toEqual({ date: "2026-01-02", words: 6, characterCount: 9, since: 0 });
+    expect(progress.diagnostics.map((entry) => entry.code)).toEqual(["session-without-characters"]);
+
+    const pacing = invokeJson(root, ["pacing", "--json"]).envelope;
+    expect(pacing.data).toMatchObject({ unit: "characters", medianWords: 6, medianCharacterCount: 9 });
+    expect(pacing.data.rows[0]).toMatchObject({ words: 6, characterCount: 9 });
+
+    const report = invokeJson(root, ["report", "--json"]).envelope;
+    expect(report.data).toMatchObject({ unit: "characters", targetWords: null, targetCharacters: 100, counts: { words: 6, characterCount: 9 } });
+    expect(report.data.chapters[0]).toMatchObject({ wordCount: 6, characterCount: 9 });
+
+    const english = invokeJson(createStoryProject({ cwd, title: "En Json", force: false }).root, ["report", "--json"]).envelope;
+    expect(english.data).toMatchObject({ unit: "words", targetCharacters: null, counts: { characterCount: null } });
   });
 
   test("prose --json with similar names and style-sheet spellings matches the schema", () => {

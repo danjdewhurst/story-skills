@@ -87,6 +87,7 @@ var FINDING_CODES = {
   "backslash-path": "warning",
   "form-length-range": "warning",
   "unused-target": "warning",
+  "session-without-characters": "warning",
   "invalid-language": "error",
   "unsupported-writing-mode": "error",
   "invalid-isbn": "error",
@@ -6883,43 +6884,38 @@ function withSession(sessions, date, counts) {
 function sessionDate(session) {
   return String(session?.date ?? "").trim();
 }
-function cleanSessions(value, field = "words") {
+function cleanSessions(value) {
   const sessions = [];
+  const count = (number) => Number.isInteger(number) && number >= 0;
   for (const entry of Array.isArray(value) ? value : []) {
-    if (entry && typeof entry === "object" && parseClockDate(sessionDate(entry)) && Number.isInteger(entry.words) && entry.words >= 0 && Number.isInteger(entry[field]) && entry[field] >= 0) {
-      sessions.push({ date: sessionDate(entry), words: entry[field] });
+    if (entry && typeof entry === "object" && parseClockDate(sessionDate(entry)) && count(entry.words)) {
+      sessions.push({ date: sessionDate(entry), words: entry.words, characters: count(entry.characters) ? entry.characters : null });
     }
   }
   return sessions.sort((left, right) => left.date.localeCompare(right.date, "en"));
 }
-function computeProgress({ unit = "words", ...input }) {
-  const result = progressIn(input);
-  if (unit !== "characters") {
-    return result;
-  }
-  const rename = ({ words, ...rest }) => ({ characters: words, ...rest });
-  const { words, ...rest } = result;
-  return {
-    unit,
-    characters: words,
-    ...rest,
-    chapters: rest.chapters.map((chapter) => {
-      const { id, ...counts } = chapter;
-      return { id, ...rename(counts) };
-    }),
-    lastSession: rest.lastSession === null ? null : { date: rest.lastSession.date, ...rename({ words: rest.lastSession.words, since: rest.lastSession.since }) }
-  };
-}
-function progressIn({ words, target, deadline, today, chapters, sessions }) {
+function computeProgress({ unit = "words", words, characters = null, target, deadline, today, chapters, sessions }) {
+  const characterBook = unit === "characters";
+  const inUnit = (entry) => characterBook ? entry.characters ?? null : entry.words;
+  const length = characterBook ? characters : words;
+  const measured = (Array.isArray(sessions) ? sessions : []).filter((session) => inUnit(session) !== null);
   const todayDays = parseClockDate(today).days;
   const result = {
+    unit,
     words,
+    characterCount: characterBook ? characters : null,
     target: target ?? null,
-    percent: target ? words * 100 / target : null,
-    remaining: target ? Math.max(0, target - words) : null,
+    percent: target ? length * 100 / target : null,
+    remaining: target ? Math.max(0, target - length) : null,
     deadline: null,
-    chapters: chapters.filter((chapter) => chapter.target > 0).map((chapter) => ({ ...chapter, percent: chapter.words * 100 / chapter.target })),
-    sessions: sessions.length,
+    chapters: chapters.filter((chapter) => chapter.target > 0).map((chapter) => ({
+      id: chapter.id,
+      words: chapter.words,
+      characterCount: characterBook ? chapter.characters : null,
+      target: chapter.target,
+      percent: inUnit(chapter) * 100 / chapter.target
+    })),
+    sessions: measured.length,
     lastSession: null,
     pace: null,
     projected: null
@@ -6933,13 +6929,13 @@ function progressIn({ words, target, deadline, today, chapters, sessions }) {
       perDay: result.remaining !== null && daysLeft >= 0 ? Math.ceil(result.remaining / Math.max(daysLeft, 1)) : null
     };
   }
-  if (sessions.length > 0) {
-    const last = sessions[sessions.length - 1];
-    result.lastSession = { date: last.date, words: last.words, since: words - last.words };
-    const recent = sessions.slice(-PACE_SESSIONS);
+  if (measured.length > 0) {
+    const last = measured[measured.length - 1];
+    result.lastSession = { date: last.date, words: last.words, characterCount: characterBook ? last.characters : null, since: length - inUnit(last) };
+    const recent = measured.slice(-PACE_SESSIONS);
     const span = parseClockDate(recent[recent.length - 1].date).days - parseClockDate(recent[0].date).days;
     if (recent.length > 1 && span > 0) {
-      result.pace = (recent[recent.length - 1].words - recent[0].words) / span;
+      result.pace = (inUnit(recent[recent.length - 1]) - inUnit(recent[0])) / span;
       const daysNeeded = Math.ceil(result.remaining / result.pace);
       if (result.remaining > 0 && Math.round(result.pace) > 0 && daysNeeded <= PROJECTION_HORIZON_DAYS) {
         result.projected = formatDate(todayDays + daysNeeded);
@@ -6951,7 +6947,7 @@ function progressIn({ words, target, deadline, today, chapters, sessions }) {
 function formatProgress(progress) {
   const characters = progress.unit === "characters";
   const noun = characters ? "character" : "word";
-  const count = (entry) => characters ? entry.characters : entry.words;
+  const count = (entry) => characters ? entry.characterCount : entry.words;
   const lines = [];
   if (progress.target === null) {
     lines.push(`Progress: ${formatNumber2(count(progress))} ${noun}s (no target-${noun}s in story.md)`);
@@ -7665,6 +7661,9 @@ function formRangeWarning(form, count, label, ranges = STORY_FORMS, unit = COUNT
   const range = ranges?.get(form);
   if (!range || range.min === null || !Number.isInteger(count) || count <= 0) {
     return "";
+  }
+  if (range.max === null) {
+    return count < range.min ? `${label} ${count} is under the usual ${form} minimum of ${range.min} ${unit.name}` : "";
   }
   if (count < range.min || count > range.max) {
     return `${label} ${count} is outside the usual ${form} range of ${range.min}-${range.max} ${unit.name}`;
@@ -9296,8 +9295,9 @@ var EASY_WIN_RUN = 3;
 var NO_SEQUEL_RUN = 4;
 var RESOLUTION_RUN = 3;
 function buildPacing(project) {
-  const characters = project.unit?.name === "characters";
-  const key = characters ? "characters" : "words";
+  const characterBook = project.unit?.name === "characters";
+  const inUnit = (row) => characterBook ? row.characterCount : row.words;
+  const noun = characterBook ? "characters" : "words";
   const chapters = [...project.chapters].sort((left, right) => left.number - right.number || left.id.localeCompare(right.id, "en"));
   const files = new Map(chapters.map((chapter) => [chapter.id, project.root === undefined ? null : path10.relative(project.root, chapter.file)]));
   const warnings = [];
@@ -9315,7 +9315,8 @@ function buildPacing(project) {
     rows.push({
       id: chapter.id,
       number: chapter.number,
-      [key]: characters ? chapter.count : chapter.wordCount,
+      words: chapter.wordCount,
+      characterCount: characterBook ? chapter.count : null,
       scenes: scenes.filter((scene) => !scene.sequel).length,
       sequels: scenes.filter((scene) => scene.sequel).length,
       outcomes,
@@ -9354,22 +9355,23 @@ function buildPacing(project) {
     }
   }
   flushRun(resolutions, RESOLUTION_RUN, warnings, (run) => warn("pacing-resolution-run", `${run.length} chapters in a row end on resolution (${span(run)}): readers can put the book down`));
-  const written = rows.filter((row) => row[key] > 0);
-  const median = medianOf(written.map((row) => row[key]));
+  const written = rows.filter((row) => inUnit(row) > 0);
+  const median = medianOf(written.map(inUnit));
   if (written.length >= 3) {
     for (const row of written) {
-      if (row[key] > median * 2) {
-        warnings.push(warn("pacing-long-chapter", `${row.id} runs ${row[key]} ${key}, over twice the median chapter (${formatMedian(median)}): consider splitting it`, files.get(row.id)));
-      } else if (row[key] < median / 2) {
-        warnings.push(warn("pacing-short-chapter", `${row.id} runs ${row[key]} ${key}, under half the median chapter (${formatMedian(median)}): check it earns its place`, files.get(row.id)));
+      if (inUnit(row) > median * 2) {
+        warnings.push(warn("pacing-long-chapter", `${row.id} runs ${inUnit(row)} ${noun}, over twice the median chapter (${formatMedian(median)}): consider splitting it`, files.get(row.id)));
+      } else if (inUnit(row) < median / 2) {
+        warnings.push(warn("pacing-short-chapter", `${row.id} runs ${inUnit(row)} ${noun}, under half the median chapter (${formatMedian(median)}): check it earns its place`, files.get(row.id)));
       }
     }
   }
   const recorded = units.filter((unit) => !unit.sequel && SCENE_OUTCOMES.has(unit.outcome));
   return {
-    ...characters ? { unit: "characters" } : {},
+    unit: characterBook ? "characters" : "words",
     rows,
-    [characters ? "medianCharacters" : "medianWords"]: formatMedian(median),
+    medianWords: characterBook ? formatMedian(medianOf(rows.filter((row) => row.words > 0).map((row) => row.words))) : formatMedian(median),
+    medianCharacterCount: characterBook ? formatMedian(median) : null,
     totals: {
       scenes: units.filter((unit) => !unit.sequel).length,
       sequels: units.filter((unit) => unit.sequel).length,
@@ -9403,12 +9405,12 @@ function medianOf(values) {
 }
 function formatPacing(pacing) {
   const { totals } = pacing;
-  const characters = pacing.unit === "characters";
+  const characterBook = pacing.unit === "characters";
   const setbackShare = totals.outcomesRecorded === 0 ? "no outcomes recorded" : `${Math.round(totals.setbacks * 100 / totals.outcomesRecorded)}% of recorded outcomes are setbacks or complications`;
   const lines = [
     `Pacing: ${plural(totals.scenes, "scene")}, ${plural(totals.sequels, "sequel")}, ${totals.hooks} of ${plural(pacing.rows.length, "chapter")} with hooks`,
     `Outcomes: ${setbackShare}`,
-    characters ? `Median chapter: ${pacing.medianCharacters} characters` : `Median chapter: ${pacing.medianWords} words`,
+    characterBook ? `Median chapter: ${pacing.medianCharacterCount} characters` : `Median chapter: ${pacing.medianWords} words`,
     ""
   ];
   if (pacing.rows.length === 0) {
@@ -9420,7 +9422,7 @@ function formatPacing(pacing) {
   const outcomesOf = (row) => `${row.outcomes.yes}/${row.outcomes.no}/${row.outcomes["yes-but"]}/${row.outcomes["no-and"]}`;
   const columns = [
     { title: "Ch", value: (row) => String(row.number) },
-    characters ? { title: "Characters", value: (row) => String(row.characters) } : { title: "Words", value: (row) => String(row.words) },
+    characterBook ? { title: "Characters", value: (row) => String(row.characterCount) } : { title: "Words", value: (row) => String(row.words) },
     { title: "Scenes", value: (row) => String(row.scenes) },
     { title: "Sequels", value: (row) => String(row.sequels) },
     { title: "Outcomes (yes/no/yes-but/no-and)", value: outcomesOf, left: true }
@@ -10180,6 +10182,7 @@ function validateProjectOf(project) {
   validateMatter(project, errors, warnings);
   validateResearch(project, errors, warnings);
   validateProgressLog(project, errors);
+  warnings.push(...sessionsWithoutCharacters(project));
   validateFormRange(project, warnings);
   if (!project.story.unreadable) {
     unusedTargetWarnings(project, "story.md", project.story.data, warnings);
@@ -10709,7 +10712,6 @@ function projectReport(root, options = {}) {
   return {
     root: project.root,
     title: project.title,
-    ...characters ? { unit: "characters", targetCharacters: Number.isInteger(targetCharacters) ? targetCharacters : null } : {},
     storyId: project.storyId,
     schemaVersion: project.story.data["schema-version"],
     series: project.story.data.series,
@@ -10720,7 +10722,9 @@ function projectReport(root, options = {}) {
     status: project.story.data.status,
     pov: project.story.data.pov,
     tense: project.story.data.tense,
+    unit: project.unit.name,
     targetWords: Number.isInteger(project.story.data["target-words"]) ? project.story.data["target-words"] : null,
+    targetCharacters: characters && Number.isInteger(targetCharacters) ? targetCharacters : null,
     counts: {
       characters: project.characters.length,
       locations: project.locations.length,
@@ -10736,7 +10740,7 @@ function projectReport(root, options = {}) {
       glossaryTerms: project.glossaryTerms.length,
       research: project.research.length,
       words: totalWords,
-      ...characters ? { proseCharacters: project.chapters.reduce((sum, chapter) => sum + chapter.count, 0) } : {}
+      characterCount: characters ? project.chapters.reduce((sum, chapter) => sum + chapter.count, 0) : null
     },
     chapters: project.chapters.map((chapter) => ({
       number: chapter.number,
@@ -10744,7 +10748,7 @@ function projectReport(root, options = {}) {
       status: chapter.status,
       pov: chapter.pov,
       wordCount: chapter.wordCount,
-      ...characters ? { characterCount: chapter.count } : {}
+      characterCount: characters ? chapter.count : null
     })),
     arcs: project.arcs.map((arc) => ({
       name: arc.name,
@@ -10759,7 +10763,7 @@ function projectReport(root, options = {}) {
   };
 }
 function reportLengthLines(report) {
-  const [name, total, target] = report.unit === "characters" ? ["characters", report.counts.proseCharacters, report.targetCharacters] : ["words", report.counts.words, report.targetWords];
+  const [name, total, target] = report.unit === "characters" ? ["characters", report.counts.characterCount, report.targetCharacters] : ["words", report.counts.words, report.targetWords];
   return [
     `- Total ${name}: ${total}`,
     ...target > 0 ? [`- Target ${name}: ${target} (${formatPercent(total * 100 / target, 0)}%)`] : []
@@ -10937,6 +10941,7 @@ function keepRegistryFrontmatter(existing, contents) {
   }
   return replaceFrontmatter(existing, { ...current, ...next.data }, next.body);
 }
+var VALUE_HEADING_ALIASES = [["Total Word Count", "Total Character Count"]];
 function customSections(existing, generated) {
   const valuePattern = /:\s*\d[\d,]*$/;
   const valueHeadings = new Set;
@@ -10946,6 +10951,7 @@ function customSections(existing, generated) {
     const key = hasValue ? heading.text.replace(valuePattern, "") : heading.text;
     if (hasValue) {
       valueHeadings.add(key);
+      VALUE_HEADING_ALIASES.filter((aliases) => aliases.includes(key)).flat().forEach((alias) => valueHeadings.add(alias));
     }
     unclaimed.set(key, (unclaimed.get(key) ?? 0) + 1);
   }
@@ -11361,7 +11367,7 @@ function projectProgress(root, options = {}) {
     const sessions = withSession(asArray(existing?.data.sessions), today, counts);
     const contents = existing === null ? progressLogFile(sessions, unit) : replaceFrontmatter(existing.rawMarkdown, { ...existing.data, sessions });
     writeFile(filePath, contents, { root: project.root });
-    logged = { file: filePath, date: today, ...counts };
+    logged = { file: filePath, date: today, words, characterCount: counts.characters ?? null };
     project = scanProject(root);
   }
   const data = project.story.data;
@@ -11374,18 +11380,30 @@ function projectProgress(root, options = {}) {
   return {
     ok: errors.length === 0,
     errors,
-    warnings: [],
+    warnings: sessionsWithoutCharacters(project),
     logged,
     ...computeProgress({
-      ...characters ? { unit: unit.name } : {},
-      words: characters ? counts.characters : words,
+      unit: unit.name,
+      words,
+      characters: counts.characters ?? null,
       target: Number.isInteger(target) && target > 0 ? target : null,
       deadline: typeof data.deadline === "string" ? data.deadline : null,
       today,
-      chapters: project.chapters.map((chapter) => ({ id: chapter.id, words: chapter.count, target: chapter.targetCount })),
-      sessions: cleanSessions(project.progressLog?.data.sessions, unit.name)
+      chapters: project.chapters.map((chapter) => ({ id: chapter.id, words: chapter.wordCount, characters: chapter.count, target: chapter.targetCount })),
+      sessions: cleanSessions(project.progressLog?.data.sessions)
     })
   };
+}
+function sessionsWithoutCharacters(project) {
+  if (project.unit.name !== "characters" || project.progressLog === null) {
+    return [];
+  }
+  const unlogged = new Set(asArray(project.progressLog.data.sessions).filter((entry) => entry && typeof entry === "object" && entry.characters === undefined).map((entry) => String(entry.date ?? "").trim()));
+  const dates = cleanSessions(project.progressLog.data.sessions).filter((session) => unlogged.has(session.date)).map((session) => session.date);
+  if (dates.length === 0) {
+    return [];
+  }
+  return [warn("session-without-characters", `${PROGRESS_FILE} ${dates.length === 1 ? "session" : "sessions"} ${dates.join(", ")} ${dates.length === 1 ? "has" : "have"} no characters, so story progress leaves ${dates.length === 1 ? "it" : "them"} out of the pace: this book counts characters, so add characters by hand or remove ${dates.length === 1 ? "it" : "them"}`, PROGRESS_FILE)];
 }
 function progressLogFile(sessions, unit) {
   const counts = unit.name === "characters" ? "word and character counts" : "word count";
@@ -15816,7 +15834,8 @@ function importManuscript(options) {
   if (chapters.length === 0) {
     throw usageError("No chapter content found in import source");
   }
-  const characters = countUnit(target === null ? null : existingStoryData(target), pack).name === "characters";
+  const existing = target === null ? null : existingStoryData(target);
+  const characters = (existing === null ? countUnit(null, pack) : countUnit(existing, languagePack(projectLanguage(existing)))).name === "characters";
   let totalWords = 0;
   let totalCharacters = 0;
   const chapterFiles = chapters.map((chapter, index) => {
@@ -16667,8 +16686,8 @@ var COMMANDS = [
         return reportJson(io, "progress", progress, { writes: progress.logged ? [progress.logged.file] : [] });
       }
       if (progress.logged) {
-        const { characters, words } = progress.logged;
-        io.stdout.write(`Logged ${characters === undefined ? `${words} words` : `${characters} characters`} for ${progress.logged.date} in ${progress.logged.file}
+        const { characterCount, words } = progress.logged;
+        io.stdout.write(`Logged ${characterCount === null ? `${words} words` : `${characterCount} characters`} for ${progress.logged.date} in ${progress.logged.file}
 `);
       }
       io.stdout.write(formatProgress(progress));

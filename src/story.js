@@ -933,6 +933,7 @@ export function validateProjectOf(project) {
   validateMatter(project, errors, warnings);
   validateResearch(project, errors, warnings);
   validateProgressLog(project, errors);
+  warnings.push(...sessionsWithoutCharacters(project));
   validateFormRange(project, warnings);
   if (!project.story.unreadable) {
     unusedTargetWarnings(project, "story.md", project.story.data, warnings);
@@ -1577,15 +1578,15 @@ export function projectReport(root, options = {}) {
   const project = scanProject(root);
   const { validation, links, continuity } = projectChecks(project, options.overrides);
   const totalWords = project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
-  // A project counted in characters adds its character counts and target
-  // beside the word counts, which keep their meaning.
+  // `unit` is the count unit. The word counts keep their meaning in every
+  // book; the character counts and target are null in a book counted in
+  // words.
   const characters = project.unit.name === "characters";
   const targetCharacters = project.story.data["target-characters"];
 
   return {
     root: project.root,
     title: project.title,
-    ...(characters ? { unit: "characters", targetCharacters: Number.isInteger(targetCharacters) ? targetCharacters : null } : {}),
     storyId: project.storyId,
     schemaVersion: project.story.data["schema-version"],
     series: project.story.data.series,
@@ -1596,7 +1597,9 @@ export function projectReport(root, options = {}) {
     status: project.story.data.status,
     pov: project.story.data.pov,
     tense: project.story.data.tense,
+    unit: project.unit.name,
     targetWords: Number.isInteger(project.story.data["target-words"]) ? project.story.data["target-words"] : null,
+    targetCharacters: characters && Number.isInteger(targetCharacters) ? targetCharacters : null,
     counts: {
       characters: project.characters.length,
       locations: project.locations.length,
@@ -1612,7 +1615,7 @@ export function projectReport(root, options = {}) {
       glossaryTerms: project.glossaryTerms.length,
       research: project.research.length,
       words: totalWords,
-      ...(characters ? { proseCharacters: project.chapters.reduce((sum, chapter) => sum + chapter.count, 0) } : {})
+      characterCount: characters ? project.chapters.reduce((sum, chapter) => sum + chapter.count, 0) : null
     },
     chapters: project.chapters.map((chapter) => ({
       number: chapter.number,
@@ -1620,7 +1623,7 @@ export function projectReport(root, options = {}) {
       status: chapter.status,
       pov: chapter.pov,
       wordCount: chapter.wordCount,
-      ...(characters ? { characterCount: chapter.count } : {})
+      characterCount: characters ? chapter.count : null
     })),
     arcs: project.arcs.map((arc) => ({
       name: arc.name,
@@ -1638,7 +1641,7 @@ export function projectReport(root, options = {}) {
 // The manuscript's length and target in the report's count unit.
 function reportLengthLines(report) {
   const [name, total, target] = report.unit === "characters"
-    ? ["characters", report.counts.proseCharacters, report.targetCharacters]
+    ? ["characters", report.counts.characterCount, report.targetCharacters]
     : ["words", report.counts.words, report.targetWords];
   return [
     `- Total ${name}: ${total}`,
@@ -1852,6 +1855,11 @@ function keepRegistryFrontmatter(existing, contents) {
   return replaceFrontmatter(existing, { ...current, ...next.data }, next.body);
 }
 
+// Generated value headings that replace each other: the chapter registry's
+// total is in the book's count unit, so switching units must not keep the
+// old total as a hand-written section.
+const VALUE_HEADING_ALIASES = [["Total Word Count", "Total Character Count"]];
+
 function customSections(existing, generated) {
   // Only a generated heading that carries a value (`## Total Word Count: 993`)
   // is matched without it; every other heading must match exactly, so a
@@ -1866,6 +1874,7 @@ function customSections(existing, generated) {
     const key = hasValue ? heading.text.replace(valuePattern, "") : heading.text;
     if (hasValue) {
       valueHeadings.add(key);
+      VALUE_HEADING_ALIASES.filter((aliases) => aliases.includes(key)).flat().forEach((alias) => valueHeadings.add(alias));
     }
     unclaimed.set(key, (unclaimed.get(key) ?? 0) + 1);
   }
@@ -2404,7 +2413,7 @@ export function projectProgress(root, options = {}) {
       ? progressLogFile(sessions, unit)
       : replaceFrontmatter(existing.rawMarkdown, { ...existing.data, sessions });
     writeFile(filePath, contents, { root: project.root });
-    logged = { file: filePath, date: today, ...counts };
+    logged = { file: filePath, date: today, words, characterCount: counts.characters ?? null };
     project = scanProject(root);
   }
   const data = project.story.data;
@@ -2418,18 +2427,35 @@ export function projectProgress(root, options = {}) {
   return {
     ok: errors.length === 0,
     errors,
-    warnings: [],
+    warnings: sessionsWithoutCharacters(project),
     logged,
     ...computeProgress({
-      ...(characters ? { unit: unit.name } : {}),
-      words: characters ? counts.characters : words,
+      unit: unit.name,
+      words,
+      characters: counts.characters ?? null,
       target: Number.isInteger(target) && target > 0 ? target : null,
       deadline: typeof data.deadline === "string" ? data.deadline : null,
       today,
-      chapters: project.chapters.map((chapter) => ({ id: chapter.id, words: chapter.count, target: chapter.targetCount })),
-      sessions: cleanSessions(project.progressLog?.data.sessions, unit.name)
+      chapters: project.chapters.map((chapter) => ({ id: chapter.id, words: chapter.wordCount, characters: chapter.count, target: chapter.targetCount })),
+      sessions: cleanSessions(project.progressLog?.data.sessions)
     })
   };
+}
+
+// In a book counted in characters, the progress.md sessions logged with no
+// `characters` (before the book counted them), which progress leaves out of
+// its pace, as one warning.
+function sessionsWithoutCharacters(project) {
+  if (project.unit.name !== "characters" || project.progressLog === null) {
+    return [];
+  }
+  // A malformed `characters` is a validate error instead.
+  const unlogged = new Set(asArray(project.progressLog.data.sessions).filter((entry) => entry && typeof entry === "object" && entry.characters === undefined).map((entry) => String(entry.date ?? "").trim()));
+  const dates = cleanSessions(project.progressLog.data.sessions).filter((session) => unlogged.has(session.date)).map((session) => session.date);
+  if (dates.length === 0) {
+    return [];
+  }
+  return [warn("session-without-characters", `${PROGRESS_FILE} ${dates.length === 1 ? "session" : "sessions"} ${dates.join(", ")} ${dates.length === 1 ? "has" : "have"} no characters, so story progress leaves ${dates.length === 1 ? "it" : "them"} out of the pace: this book counts characters, so add characters by hand or remove ${dates.length === 1 ? "it" : "them"}`, PROGRESS_FILE)];
 }
 
 function progressLogFile(sessions, unit) {

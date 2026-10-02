@@ -302,8 +302,9 @@ In a book counted in characters:
 
 - `story wordcount` prints each chapter's characters and `Total: N characters`, and `--write` records `character-count` beside `word-count` in each chapter. `story validate` warns when either is missing or stale (`declares 10 characters but contains 32`), with the same `stale-word-count` code. `story import` and `story add chapter` write both fields.
 - `target-characters` in `story.md` and in chapters is the target: `story progress`, `story report`, `story context`, and the form range read it. A `target-words` there is not measured, and `story validate` says so (`unused-target`); the same goes for `target-characters` in a book counted in words.
-- `story progress --log` records `characters` beside `words` in each `progress.md` session, and pace is measured from the sessions that have it.
-- The chapter registry's column and total are `Character Count`; `story report`, `story pacing`, and `story progress` give lengths in characters.
+- `story progress --log` records `characters` beside `words` in each `progress.md` session, and pace is measured from the sessions that have it. Sessions logged before the book counted characters have none: `story validate` and `story progress` name them (`session-without-characters`), so add `characters` by hand or remove them.
+- Switching `count-unit` (or `language`) changes the registry's generated total heading, and `story reindex` replaces the old `## Total Word Count` or `## Total Character Count` heading rather than keeping it as a section of your own.
+- The chapter registry's column and total are `Character Count`; `story report`, `story pacing`, and `story progress` give lengths in characters. In `--json`, every `report`, `pacing`, and `progress` result has `unit` (`words` or `characters`); word counts (`words`, `wordCount`, `medianWords`) are word counts in every book, and the character counts beside them (`characterCount`, `medianCharacterCount`, `targetCharacters`) are null in a book counted in words. A target and what is measured against it (`target`, `percent`, `remaining`, `perDay`, `since`, `pace`) follow `unit`.
 - `story build --format metadata` gives a `Character count`, the Shunn title page says `Approximately N characters`, the print page estimate uses characters a page, and the narration script times the book at 300 characters a minute.
 
 Everything else stays in words: word-based analysis (`story prose`, `story voices`, `story compare`, `story similarity`), the POV balance in `story timeline`, and the empty-chapter checks, which look for prose at all.
@@ -384,18 +385,19 @@ The ranges are advisory. `story validate` warns when `target-words` falls outsid
 warning: story.md target-words 30000 is outside the usual novel range of 40000-200000 words [form-length-range]
 ```
 
-A book counted in characters is checked against character ranges for its language, with `target-characters`. Neither Chinese nor Japanese draws its lines where English does, and neither has a novelette, so the ranges below are broad. The Chinese ones follow the China Writers Association's prize rules, which count 版面字数, a page-layout count of lines times characters a line that runs above a count of characters: 小小说 under 2,000, 短篇小说 under 25,000, and 中篇小说 25,000 to 130,000 ([Lu Xun Literary Prize call for entries, 2022](https://www.chinawriter.com.cn/n1/2022/0315/c403937-32375409.html)), and 长篇小说 130,000 and up ([Mao Dun Literature Prize rules, 2023](https://www.chinawriter.com.cn/n1/2023/0315/c403937-32644335.html)). Japanese has no official lines: 中編 is usually about 100 to 300 sheets of 400字 (40,000 to 120,000 characters), 短編 under 100 sheets, and 長編 300 sheets and up ([中編小説, Wikipedia](https://ja.wikipedia.org/wiki/%E4%B8%AD%E7%B7%A8%E5%B0%8F%E8%AA%AC)), and ショートショート about 10 sheets, with the Hoshi Shinichi Award taking up to 10,000 characters ([ショートショート, Wikipedia](https://ja.wikipedia.org/wiki/%E3%82%B7%E3%83%A7%E3%83%BC%E3%83%88%E3%82%B7%E3%83%A7%E3%83%BC%E3%83%88)). No source sets the novelette, picture-book, or chapter-book ranges, so those are wide guesses; check the market or contest you write for.
+A book counted in characters is checked against character ranges for its language, with `target-characters`, but only for the forms a source sets: `flash`, `short-story`, `novella`, and `novel`. Neither Chinese nor Japanese has a novelette, and no source sets picture-book or chapter-book lengths in characters, so those forms are not checked and `story init --form` writes no target for them; set one by hand if you want it measured. A novel has a minimum and no maximum, because the sources set none.
+
+The Chinese ranges follow the China Writers Association's prize rules: 小小说 under 2,000, 短篇小说 under 25,000, and 中篇小说 25,000 to 130,000 ([Lu Xun Literary Prize call for entries, 2022](https://www.chinawriter.com.cn/n1/2022/0315/c403937-32375409.html)), and 长篇小说 130,000 and up ([Mao Dun Literature Prize rules, 2023](https://www.chinawriter.com.cn/n1/2023/0315/c403937-32644335.html)). Those rules count 版面字数, a page-layout count of lines times characters a line, which runs above a count of characters, since short lines and blank space count.
+
+Japanese has no official lines. 中編 is usually about 100 to 300 sheets of 400字 manuscript paper (40,000 to 120,000), 短編 up to 100 sheets, and 長編 300 sheets and up ([中編小説, Wikipedia](https://ja.wikipedia.org/wiki/%E4%B8%AD%E7%B7%A8%E5%B0%8F%E8%AA%AC)), and ショートショート about 10 sheets ([ショートショート, Wikipedia](https://ja.wikipedia.org/wiki/%E3%82%B7%E3%83%A7%E3%83%BC%E3%83%88%E3%82%B7%E3%83%A7%E3%83%BC%E3%83%88)). The flash cap of 10,000 is a contest rule, not a definition: the Hoshi Shinichi Award takes entries of up to 10,000 characters ([日経「星新一賞」](https://hoshiaward.nikkei.co.jp/)). Like 版面字数, sheets times 400 overstates a count of characters: the end of each paragraph and the short lines of dialogue leave cells blank, so a 300-sheet manuscript holds well under 120,000 characters. Check the market or contest you write for.
 
 | `form` | Chinese (characters) | Default | Japanese (characters) | Default |
 |--------|----------------------|---------|-----------------------|---------|
 | `flash` | up to 2,000 | 1,500 | up to 10,000 | 4,000 |
 | `short-story` | 2,000 to 25,000 | 10,000 | 4,000 to 40,000 | 20,000 |
-| `novelette` | 10,000 to 40,000 | 20,000 | 20,000 to 60,000 | 40,000 |
 | `novella` | 25,000 to 130,000 | 60,000 | 40,000 to 120,000 | 80,000 |
-| `novel` | 130,000 to 1,000,000 | 200,000 | 120,000 to 600,000 | 150,000 |
-| `serial` | no range | none | no range | none |
-| `picture-book` | up to 3,000 | 1,000 | up to 3,000 | 1,000 |
-| `chapter-book` | 3,000 to 30,000 | 10,000 | 3,000 to 30,000 | 10,000 |
+| `novel` | 130,000 and up | 200,000 | 120,000 and up | 150,000 |
+| `novelette`, `serial`, `picture-book`, `chapter-book` | not checked | none | not checked | none |
 
 Another language counted in characters (`count-unit: characters`) has no ranges, so its length is not checked against its form.
 

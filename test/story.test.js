@@ -173,7 +173,8 @@ describe("story project operations", () => {
       clues: 0,
       glossaryTerms: 0,
       research: 0,
-      words: 3
+      words: 3,
+      characterCount: null
     });
     expect(report.validation.ok).toBe(true);
     expect(report.links.ok).toBe(true);

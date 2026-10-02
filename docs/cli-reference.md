@@ -1096,7 +1096,7 @@ story progress [path] [--log] [--date <YYYY-MM-DD>]
 
 Reports the manuscript word count against `target-words` in `story.md`, the days left to `deadline` and the words a day needed to meet it, per-chapter `target-words`, and pace from the session log in `progress.md`.
 
-A book [counted in characters](project-format.md#counting-in-characters) reports characters against `target-characters` instead (`Progress: 52,300 of 120,000 characters (43.6%)`), and `--log` records `characters` beside `words` in the session. Its `--json` data has `unit: "characters"` and a `characters` count wherever a book counted in words has `words` (top level, each chapter, and `lastSession`); `target`, `remaining`, `perDay`, and `pace` are in characters.
+A book [counted in characters](project-format.md#counting-in-characters) reports characters against `target-characters` instead (`Progress: 52,300 of 120,000 characters (43.6%)`), and `--log` records `characters` beside `words` in the session. In `--json`, `data.unit` is `words` or `characters`. `words` is the word count in every book, and `characterCount` (top level, `logged`, each chapter, and `lastSession`) the character count, or null in a book counted in words; `target`, `percent`, `remaining`, `perDay`, `since`, and `pace` are in the unit. Sessions logged with no `characters` are left out of the pace and reported as a `session-without-characters` warning.
 
 | Option | Effect |
 |---|---|
@@ -1322,7 +1322,7 @@ See [Series](series.md).
 story report [path] [--actionable]
 ```
 
-Prints a project summary: metadata (with a `Form:` line when `story.md` sets `form`), entity counts, total words (and percentage of `target-words`, when set), a line per chapter and arc, and the result of `validate`, `links`, and `continuity`. A book [counted in characters](project-format.md#counting-in-characters) gives total characters against `target-characters` and each chapter's characters; its `--json` data adds `unit: "characters"`, `targetCharacters`, `counts.proseCharacters`, and a `characterCount` on each chapter, and keeps the word counts. A metadata field that `story.md` does not set, such as `status` or `pov`, prints as `unset`, and a missing `title` shows the project folder name.
+Prints a project summary: metadata (with a `Form:` line when `story.md` sets `form`), entity counts, total words (and percentage of `target-words`, when set), a line per chapter and arc, and the result of `validate`, `links`, and `continuity`. A book [counted in characters](project-format.md#counting-in-characters) gives total characters against `target-characters` and each chapter's characters; In `--json`, `data.unit` is the count unit, and `targetCharacters`, `counts.characterCount` (the prose, not `counts.characters`, the cast), and each chapter's `characterCount` sit beside the word counts, null in a book counted in words. A metadata field that `story.md` does not set, such as `status` or `pov`, prints as `unset`, and a missing `title` shows the project folder name.
 
 | Option | Effect |
 |---|---|
@@ -1467,7 +1467,7 @@ The rules behind each report, and how to act on them, are in [Continuity and ana
 story pacing [path]
 ```
 
-A pacing dashboard built from frontmatter. For each chapter it shows the prose word count (characters in a book [counted in characters](project-format.md#counting-in-characters), whose `--json` data then has `unit: "characters"`, a `characters` count on each row in place of `words`, and `medianCharacters` in place of `medianWords`), the number of scenes and sequels (scene records with `sequel: true`), the tally of scene `outcome` values, and the chapter-ending `hook`. Record outcomes with `story add scene --outcome` and hooks with `story add chapter --hook` (see [add](#add)), or edit the fields by hand.
+A pacing dashboard built from frontmatter. For each chapter it shows the prose word count (characters in a book [counted in characters](project-format.md#counting-in-characters), which the long and short chapter findings then measure; in `--json`, `data.unit` is the count unit, and each row's `characterCount` and `medianCharacterCount` sit beside `words` and `medianWords`, null in a book counted in words), the number of scenes and sequels (scene records with `sequel: true`), the tally of scene `outcome` values, and the chapter-ending `hook`. Record outcomes with `story add scene --outcome` and hooks with `story add chapter --hook` (see [add](#add)), or edit the fields by hand.
 
 | Field | Values |
 |---|---|
@@ -2422,6 +2422,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `backslash-path` | warning | A `story.md` path (`follows`, `precedes`, `cover`) uses a backslash. |
 | `form-length-range` | warning | The target or finished length is outside the usual range for the story's `form`, in the book's count unit. |
 | `unused-target` | warning | `story.md` or a chapter sets a target in the unit the book does not count in (`target-words` in a book counted in characters, or the reverse), so nothing measures it. |
+| `session-without-characters` | warning | In a book counted in characters, `progress.md` sessions logged with no `characters` (before the book counted them), which `story progress` leaves out of its pace. `story progress` reports it too. |
 | `invalid-language` | error | `story.md` `language` is not a BCP 47 tag. |
 | `unsupported-writing-mode` | error | `story.md` sets `writing-mode: vertical` for a language that is not set in vertical columns (or for traditional Mongolian, not supported yet). |
 | `invalid-isbn` | error | `story.md` `isbn` is not a valid ISBN. |

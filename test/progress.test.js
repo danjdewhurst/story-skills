@@ -34,7 +34,7 @@ describe("story progress", () => {
 
     expect(progress).toMatchObject({ ok: true, words: 250, target: 1000, percent: 25, remaining: 750, logged: null, sessions: 0 });
     expect(progress.deadline).toEqual({ date: "2026-10-01", daysLeft: 10, perDay: 75 });
-    expect(progress.chapters).toEqual([{ id: "chapter-01", words: 100, target: 400, percent: 25 }]);
+    expect(progress.chapters).toEqual([{ id: "chapter-01", words: 100, characterCount: null, target: 400, percent: 25 }]);
   });
 
   test("--log creates progress.md, replaces a same-day entry, and computes pace", () => {
@@ -56,7 +56,7 @@ describe("story progress", () => {
     expect(progress.sessions).toBe(2);
     expect(progress.pace).toBe(20);
     expect(progress.projected).toBe("2026-10-06");
-    expect(progress.lastSession).toEqual({ date: "2026-09-06", words: 400, since: 0 });
+    expect(progress.lastSession).toEqual({ date: "2026-09-06", words: 400, characterCount: null, since: 0 });
     expect(messages(validateProject(root).errors)).toEqual([]);
     expect(messages(validateProject(root).warnings).join("\n")).not.toContain("progress.md");
     expect(checkProjectSchema(root)).toEqual([]);
