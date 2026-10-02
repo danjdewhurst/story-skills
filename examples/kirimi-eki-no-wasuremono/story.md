@@ -15,6 +15,7 @@ target-characters: 2000
 author: 浅野 千尋
 language: ja
 writing-mode: vertical
+chapter-numerals: native
 description: "廃線の日、祖母の家を片づけに来た遥は、駅員が三十年預かってきた青い封筒を受け取る。"
 keywords:
   - 廃線
@@ -28,7 +29,7 @@ keywords:
 
 霧見線が廃止される日、森田遥は亡き祖母ふみの家を片づけるために霧見駅に降り、駅員の大島から「三十年預かっているもの」があると告げられる。祖母の箪笥の奥からは、昭和六十一年の時刻表が出てくる。上りの一本にだけ、鉛筆の丸がついていた。最終列車が出たあと、待合室で大島が差し出した青い封筒には、使われなかった切符と〈待っています。〉の一行が入っていたが、差出人の名前はなかった。
 
-This example is a book in Japanese: `language: ja` counts its length in characters (`target-characters`, `character-count`), dialogue is set in corner brackets (「」), and `writing-mode: vertical` sets the EPUB, HTML, print, and DOCX builds in vertical columns read right to left. Chapter headings come from the Japanese labels (`第1章　最後の日`).
+This example is a book in Japanese: `language: ja` counts its length in characters (`target-characters`, `character-count`), dialogue is set in corner brackets (「」), and `writing-mode: vertical` sets the EPUB, HTML, print, and DOCX builds in vertical columns read right to left. Chapter headings come from the Japanese labels, and `chapter-numerals: native` writes their numbers in kanji to match the vertical text (`第一章　最後の日`).
 
 ## Tone & Style
 
