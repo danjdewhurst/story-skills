@@ -307,6 +307,11 @@ Examples in this repository:
 - [`examples/harbor-of-second-light/`](examples/harbor-of-second-light/): a near-future coastal mystery with memory technology, a posthumous witness arc, populated continuity state, and a drafted first chapter.
 - [`examples/the-gull-rock-light/`](examples/the-gull-rock-light/): a short branching story whose chapters carry `choices`; `story build --format twee` turns it into a Twine story and `--format ink` into an ink story.
 - [`examples/the-unraveled-thread/`](examples/the-unraveled-thread/): a deliberately broken project that demonstrates the main kinds of finding the continuity engine reports.
+- [`examples/quatre-heures-dix-sept/`](examples/quatre-heures-dix-sept/): a short story in French (`language: fr`), with dialogue in guillemets and French no-break spaces, checked by the French word lists, and built with French chapter headings and labels.
+- [`examples/kirimi-eki-no-wasuremono/`](examples/kirimi-eki-no-wasuremono/): a short story in Japanese (`language: ja`), counted in characters and set in vertical columns (`writing-mode: vertical`), with dialogue in corner brackets.
+- [`examples/laysat-lil-bay/`](examples/laysat-lil-bay/): a short story in Arabic (`language: ar`), built right to left, with Arabic punctuation.
+
+[Writing in other languages](docs/languages.md) covers what works in each language and script.
 
 ## More install options
 
