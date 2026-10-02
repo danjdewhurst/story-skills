@@ -4,14 +4,26 @@ import da from "./da.js";
 import deCh from "./de-ch.js";
 import de from "./de.js";
 import en from "./en.js";
+import es from "./es.js";
+import fa from "./fa.js";
 import fi from "./fi.js";
+import fr from "./fr.js";
 import he from "./he.js";
 import hi from "./hi.js";
+import it from "./it.js";
 import ja from "./ja.js";
 import ko from "./ko.js";
+import nl from "./nl.js";
+import pl from "./pl.js";
+import ptPt from "./pt-pt.js";
+import pt from "./pt.js";
+import ru from "./ru.js";
 import sv from "./sv.js";
 import th from "./th.js";
+import tr from "./tr.js";
+import uk from "./uk.js";
 import zh from "./zh.js";
+import zhHant from "./zh-hant.js";
 
 // Language packs: the conventions and word lists the analysis commands use
 // for a story's language, from story.md `language`. A pack is plain data
@@ -24,7 +36,7 @@ export const DEFAULT_LANGUAGE = "en";
 
 // Every pack, by code. A regional pack (en-GB) is keyed by its tag in lower
 // case and holds only what differs from its language's pack.
-const PACKS = new Map([ar, da, de, deCh, en, fi, he, hi, ja, ko, sv, th, zh].map((pack) => [pack.code, pack]));
+const PACKS = new Map([ar, da, de, deCh, en, es, fa, fi, fr, he, hi, it, ja, ko, nl, pl, pt, ptPt, ru, sv, th, tr, uk, zh, ...zhHant].map((pack) => [pack.code, pack]));
 
 // The shape of a language tag, as story.schema.json checks it. Validity
 // depends on this alone, never on the runtime's Intl data, so extlang tags
@@ -40,7 +52,8 @@ export function isLanguageTag(value) {
 const LANGUAGE_ALIASES = {
   iw: "he", in: "id", ji: "yi", jw: "jv", mo: "ro",
   ara: "ar", chi: "zh", zho: "zh", deu: "de", ger: "de", eng: "en", spa: "es", fra: "fr", fre: "fr",
-  heb: "he", hin: "hi", ita: "it", jpn: "ja", kor: "ko", nld: "nl", dut: "nl", por: "pt", rus: "ru", tha: "th"
+  fas: "fa", per: "fa", heb: "he", hin: "hi", ita: "it", jpn: "ja", kor: "ko", nld: "nl", dut: "nl", pol: "pl", por: "pt", rus: "ru",
+  swe: "sv", tha: "th", tur: "tr", ukr: "uk"
 };
 
 // Grandfathered tags with a modern form, in lower case, as [tag, macrolanguage].
@@ -194,4 +207,33 @@ export function skippedCheck(pack, { check, label, lists }) {
 // The text output's notes for skipped checks, one line each.
 export function skippedLines(skipped) {
   return skipped.map((entry) => `Note: ${entry.message}`);
+}
+
+// Every build label's key, as the English pack lists them.
+export const LABEL_KEYS = Object.freeze(Object.keys(en.labels));
+
+// A build label with each `{name}` replaced from `values`, in one pass so a
+// value is never read as a placeholder. `labels` is a pack's or a book's
+// labels; a key they lack is English. `escape` applies to the label's own
+// text and not to the values, so a value can be markup.
+export function fillLabel(labels, key, values = {}, escape = (text) => text) {
+  const template = String(labels?.[key] ?? en.labels[key] ?? "");
+  let text = "";
+  let last = 0;
+  for (const match of template.matchAll(/\{([a-z]+)\}/g)) {
+    if (values[match[1]] !== undefined) {
+      text += `${escape(template.slice(last, match.index))}${values[match[1]]}`;
+      last = match.index + match[0].length;
+    }
+  }
+  return `${text}${escape(template.slice(last))}`;
+}
+
+// Names joined pair by pair with the `and` label: "A and B and C". An `and`
+// label that leaves out {a} or {b} would drop a name, so names are then
+// joined with a comma instead: a byline never loses an author.
+export function joinNames(names, labels) {
+  const template = String(labels?.and ?? en.labels.and);
+  const joiner = template.includes("{a}") && template.includes("{b}") ? labels : { and: "{a}, {b}" };
+  return names.length === 0 ? "" : names.reduce((joined, name) => fillLabel(joiner, "and", { a: joined, b: name }));
 }

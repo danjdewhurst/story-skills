@@ -95,6 +95,8 @@ var FINDING_CODES = {
   "too-many-keywords": "warning",
   "todo-placeholder": "warning",
   "author-and-authors": "warning",
+  "unknown-label": "warning",
+  "blank-label": "warning",
   "missing-reference": "error",
   "missing-backlink": "error",
   "backlink-type-mismatch": "error",
@@ -1028,479 +1030,48 @@ function withoutLeadingFrontmatter(text) {
   return text.slice(match[0].length);
 }
 
-// src/words.js
-var CJK = "\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}\\u30FC";
-var SOUTHEAST_ASIAN = "\\p{Script=Thai}\\p{Script=Lao}\\p{Script=Khmer}\\p{Script=Myanmar}";
-var JOINER = "\\u00AD\\u200C\\u200D";
-var UNSPACED_LETTERS = `${CJK}${SOUTHEAST_ASIAN}`;
-var UNSPACED = new RegExp(`[${CJK}]|[${SOUTHEAST_ASIAN}](?:[${SOUTHEAST_ASIAN}]|[${JOINER}]+(?=[${SOUTHEAST_ASIAN}]))*`, "gu");
-var CJK_CHARACTER = new RegExp(`^[${CJK}]$`, "u");
-var WINDOW = 1e4;
-var RESTART_WORDS = 4;
-var segmenter;
-function segmentRun(run, window = WINDOW) {
-  segmenter ??= new Intl.Segmenter("en", { granularity: "word" });
-  const words = [];
-  let offset = 0;
-  while (offset < run.length) {
-    const end = offset + window;
-    const found = [];
-    for (const { segment, index, isWordLike } of segmenter.segment(run.slice(offset, end))) {
-      if (isWordLike) {
-        found.push([segment, offset + index]);
-      }
-    }
-    const restart = end < run.length && found.length > RESTART_WORDS ? found[found.length - RESTART_WORDS][1] : end;
-    for (const word of found) {
-      if (word[1] < restart) {
-        words.push(word);
-      }
-    }
-    offset = restart;
-  }
-  return words;
-}
-function wordSpans(text, pattern) {
-  const source = String(text);
-  const spans = [];
-  let last = 0;
-  const between = (end) => {
-    if (end > last) {
-      for (const match of source.slice(last, end).matchAll(pattern)) {
-        spans.push({ word: match[0], start: last + match.index, end: last + match.index + match[0].length });
-      }
-    }
-  };
-  for (const match of source.matchAll(UNSPACED)) {
-    between(match.index);
-    if (CJK_CHARACTER.test(match[0])) {
-      spans.push({ word: match[0], start: match.index, end: match.index + match[0].length });
-    } else {
-      for (const [word, offset] of segmentRun(match[0])) {
-        spans.push({ word, start: match.index + offset, end: match.index + offset + word.length });
-      }
-    }
-    last = match.index + match[0].length;
-  }
-  between(source.length);
-  return spans;
-}
-function unspacedBoundaries(text) {
-  const boundaries = new Set;
-  for (const { start, end } of wordSpans(text, /(?!)/gu)) {
-    boundaries.add(start);
-    boundaries.add(end);
-  }
-  return boundaries;
-}
-
-// src/markdown.js
-var LATIN_FOLDS = {
-  "Æ": "AE",
-  "æ": "ae",
-  "Ø": "O",
-  "ø": "o",
-  "Ł": "L",
-  "ł": "l",
-  "ß": "ss",
-  "ẞ": "SS",
-  "Đ": "D",
-  "đ": "d",
-  "Ð": "D",
-  "ð": "d",
-  "Þ": "Th",
-  "þ": "th",
-  "Œ": "OE",
-  "œ": "oe",
-  "Ħ": "H",
-  "ħ": "h",
-  "Ŧ": "T",
-  "ŧ": "t",
-  "Ŋ": "Ng",
-  "ŋ": "ng",
-  "ı": "i",
-  "ĸ": "k"
-};
-var LATIN_FOLD_PATTERN = new RegExp(`[${Object.keys(LATIN_FOLDS).join("")}]`, "g");
-function foldLatin(value) {
-  return String(value).replace(LATIN_FOLD_PATTERN, (letter) => LATIN_FOLDS[letter]).normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
-}
-var CYRILLIC = {
-  а: "a",
-  б: "b",
-  в: "v",
-  г: "g",
-  д: "d",
-  е: "e",
-  ё: "e",
-  ж: "zh",
-  з: "z",
-  и: "i",
-  й: "y",
-  к: "k",
-  л: "l",
-  м: "m",
-  н: "n",
-  о: "o",
-  п: "p",
-  р: "r",
-  с: "s",
-  т: "t",
-  у: "u",
-  ф: "f",
-  х: "kh",
-  ц: "ts",
-  ч: "ch",
-  ш: "sh",
-  щ: "shch",
-  ъ: "",
-  ы: "y",
-  ь: "",
-  э: "e",
-  ю: "yu",
-  я: "ya",
-  є: "ye",
-  і: "i",
-  ї: "yi",
-  ґ: "g",
-  ў: "u",
-  ђ: "dj",
-  ј: "j",
-  љ: "lj",
-  њ: "nj",
-  ћ: "c",
-  џ: "dz",
-  ѓ: "gj",
-  ќ: "kj",
-  ѕ: "dz",
-  ѐ: "e",
-  ѝ: "i"
-};
-var GREEK_DIGRAPHS = { αυ: "av", ευ: "ev", ηυ: "iv", ου: "ou", γγ: "ng", γξ: "nx", γχ: "nch" };
-var GREEK = {
-  α: "a",
-  β: "v",
-  γ: "g",
-  δ: "d",
-  ε: "e",
-  ζ: "z",
-  η: "i",
-  θ: "th",
-  ι: "i",
-  κ: "k",
-  λ: "l",
-  μ: "m",
-  ν: "n",
-  ξ: "x",
-  ο: "o",
-  π: "p",
-  ρ: "r",
-  σ: "s",
-  ς: "s",
-  τ: "t",
-  υ: "y",
-  φ: "f",
-  χ: "ch",
-  ψ: "ps",
-  ω: "o",
-  ϊ: "i",
-  ϋ: "y"
-};
-var TRANSLITERATIONS = { ...GREEK_DIGRAPHS, ...CYRILLIC, ...GREEK };
-var TRANSLITERATION_PATTERN = new RegExp(`${Object.keys(GREEK_DIGRAPHS).join("|")}|[${Object.keys(CYRILLIC).join("")}${Object.keys(GREEK).join("")}]`, "g");
-var UNTRANSLITERATED_LETTER = /[\p{Script=Cyrillic}\p{Script=Greek}]/u;
-function transliterate(value) {
-  const spelled = String(value).toLowerCase().normalize("NFD").replace(/([\u0370-\u03ff])([\u0300-\u036f]+)/g, (_, letter, marks) => letter + (marks.includes("̈") ? "̈" : "")).normalize("NFC").replace(/\u02bc/g, "").replace(TRANSLITERATION_PATTERN, (letters) => TRANSLITERATIONS[letters]);
-  return UNTRANSLITERATED_LETTER.test(spelled) ? null : spelled;
-}
-function kebabCase(value, { transliterate: scripts = true } = {}) {
-  return foldLatin((scripts ? transliterate(value) : null) ?? value).replace(/['‘’]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-}
-function titleCaseSlug(slug) {
-  return String(slug).split("-").filter(Boolean).map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`).join(" ");
-}
-function chapterHeading(number, title, word = "Chapter") {
-  const text = String(title ?? "").trim();
-  const name = String(word ?? "").trim() || "Chapter";
-  const label = name.includes("{n}") ? name.replace(/\{n\}/g, String(number)) : `${name} ${number}`;
-  return text === "" || text.toLowerCase() === label.toLowerCase() ? label : `${label}: ${text}`;
-}
-var WORD_CHARS = "\\p{L}\\p{M}\\p{N}\\u200C\\u200D\\u00AD";
-var URL_PLACEHOLDER = "";
-var WORD_PATTERN = new RegExp(`${URL_PLACEHOLDER}|[\\p{L}\\p{N}][${WORD_CHARS}]*(?:(?:['’‐‑-]|(?<=\\p{N})[.,:](?=\\p{N}))[\\p{L}\\p{N}][${WORD_CHARS}]*)*`, "gu");
-var URL_OR_EMAIL = /(?<![a-z0-9+.-])(?:[a-z][a-z0-9+.-]*:\/\/|www\.)[^\s<>()[\]`]*[^\s<>()[\]`.,;:!?'"\u2019\u201d*_~]|(?<![\p{L}\p{N}._%+-])[\p{L}\p{N}][\p{L}\p{N}._%+-]*@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/giu;
-function plainLinks(text) {
-  return String(text).replace(/!\[[^\]]{0,1000}\]\([^)]{0,1000}\)/g, "").replace(/\[([^\]]{0,1000})\]\([^)]{0,1000}\)/g, "$1");
-}
-function flattenHeadings(text) {
-  return String(text).replace(/^(#+)(?:[ \t]+([^\n]*))?$/gm, (line, hashes, content) => {
-    const heading = String(content ?? "").replace(/(?:^|[ \t]+)#+[ \t]*$/, "").trim();
-    if (heading !== "") {
-      return heading;
-    }
-    return hashes === "#" ? "#" : "";
-  });
-}
-function splitWords(markdown) {
-  const urls = [];
-  const normalized = plainLinks(withoutFenceMarkers(String(markdown).replace(/\uE000/g, " "))).replace(URL_OR_EMAIL, (match) => {
-    urls.push(match);
-    return ` ${URL_PLACEHOLDER} `;
-  }).replace(/\\([!-/:-@[-`{-~])/g, "$1").replace(/[#>*_~|`]/g, " ").replace(/(?<!\p{N}):|:(?!\p{N})/gu, " ");
-  let next = 0;
-  return wordSpans(normalized, WORD_PATTERN).map(({ word }) => word === URL_PLACEHOLDER ? urls[next++] : word);
-}
-function isSceneBreak(paragraph) {
-  const text = String(paragraph).replace(/\\([*_~-])/g, "$1").trim();
-  return text === "#" || /^([*_~-])( ?\1){2,}$/.test(text);
-}
-function wordCount(markdown) {
-  return splitWords(markdown).length;
-}
-var graphemes;
-function characterCount(markdown) {
-  const text = plainLinks(withoutFenceMarkers(String(markdown).replace(//g, " "))).split(`
-`).filter((line) => !isSceneBreak(line)).join(`
-`).replace(/\\([!-/:-@[-`{-~])/g, "$1").replace(/[#>*_~|`\s]+/gu, "");
-  graphemes ??= new Intl.Segmenter("en", { granularity: "grapheme" });
-  let count = 0;
-  for (const _ of graphemes.segment(text)) {
-    count += 1;
-  }
-  return count;
-}
-function chapterProse(markdownBody, commentReplacement = "") {
-  return scanComments(proseSection(markdownBody), commentReplacement).text;
-}
-function hasUnclosedComment(prose) {
-  return scanComments(String(prose)).unclosed;
-}
-function countTodoMarkers(prose) {
-  return (String(prose).match(/\[TODO\b/gi) ?? []).length;
-}
-function scanComments(text, replacement = "") {
-  const source = String(text);
-  const { ranges, unclosed } = scanMarkup(source);
-  let result = "";
-  let position = 0;
-  for (const range of ranges) {
-    if (range.kind === "comment") {
-      result += source.slice(position, range.start) + replacement;
-      position = range.end;
-    }
-  }
-  return { text: result + source.slice(position), unclosed };
-}
-function maskMarkup(text) {
-  const source = String(text);
-  let result = "";
-  let position = 0;
-  for (const range of scanMarkup(source).ranges) {
-    result += source.slice(position, range.start) + source.slice(range.start, range.end).replace(/[^\r\n]/g, " ");
-    position = range.end;
-  }
-  return result + source.slice(position);
-}
-function scanMarkup(text) {
-  const ranges = [];
-  let unclosed = false;
-  let fenceLimit = Infinity;
-  let nextOpen = -2;
-  let position = 0;
-  while (position < text.length) {
-    const newline = text.indexOf(`
-`, position);
-    const lineEnd = newline === -1 ? text.length : newline;
-    if (position === 0 || text[position - 1] === `
-`) {
-      const marker = /^ {0,3}(`{3,})/.exec(text.slice(position, lineEnd));
-      if (marker && marker[1].length < fenceLimit) {
-        const end = fenceEnd(text, lineEnd, marker[1].length);
-        if (end === -1) {
-          fenceLimit = marker[1].length;
-        } else {
-          ranges.push({ kind: "fence", start: position, end });
-          position = end;
-          continue;
-        }
-      }
-    }
-    if (nextOpen !== -1 && nextOpen < position) {
-      nextOpen = text.indexOf("<!--", position);
-    }
-    const open = nextOpen !== -1 && nextOpen < lineEnd ? nextOpen : -1;
-    const tick = text.indexOf("`", position);
-    if (tick !== -1 && tick < lineEnd && (open === -1 || tick < open)) {
-      position = codeSpanEnd(text, tick, lineEnd);
-      continue;
-    }
-    if (open === -1) {
-      position = lineEnd + 1;
-      continue;
-    }
-    const close = text.indexOf("-->", open + 4);
-    if (close === -1) {
-      unclosed = true;
-      nextOpen = -1;
-      position = open + 4;
-      continue;
-    }
-    ranges.push({ kind: "comment", start: open, end: close + 3 });
-    position = close + 3;
-  }
-  return { ranges, unclosed };
-}
-function fenceEnd(text, openerEnd, length) {
-  for (let lineStart = openerEnd + 1;lineStart < text.length; ) {
-    const next = text.indexOf(`
-`, lineStart);
-    const lineEnd = next === -1 ? text.length : next;
-    const line = text.slice(lineStart, lineEnd);
-    const marker = /^ {0,3}(`{3,})/.exec(line);
-    if (marker && marker[1].length >= length && line.trim() === marker[1]) {
-      return Math.min(lineEnd + 1, text.length);
-    }
-    lineStart = lineEnd + 1;
-  }
-  return -1;
-}
-function codeSpanEnd(text, tick, lineEnd) {
-  let runEnd = tick;
-  while (text[runEnd] === "`") {
-    runEnd += 1;
-  }
-  const length = runEnd - tick;
-  let search = runEnd;
-  while (search < lineEnd) {
-    const start = text.indexOf("`", search);
-    if (start === -1 || start >= lineEnd) {
-      break;
-    }
-    let end = start;
-    while (text[end] === "`") {
-      end += 1;
-    }
-    if (end - start === length) {
-      return end;
-    }
-    search = end;
-  }
-  return runEnd;
-}
-function fencedLineIndexes(lines) {
-  const fenced = new Set;
-  for (const [start, end] of closedFences(lines)) {
-    for (let inside = start;inside <= end; inside += 1) {
-      fenced.add(inside);
-    }
-  }
-  return fenced;
-}
-function closedFences(lines) {
-  const fences = [];
-  let open = null;
-  for (const [index, line] of lines.entries()) {
-    const marker = /^ {0,3}(`{3,})/.exec(line);
-    if (!marker) {
-      continue;
-    }
-    if (open === null) {
-      open = { index, fence: marker[1] };
-    } else if (marker[1].length >= open.fence.length && line.trim() === marker[1]) {
-      fences.push([open.index, index]);
-      open = null;
-    }
-  }
-  return fences;
-}
-function withoutFenceMarkers(text) {
-  const lines = String(text).split(/(?<=\n)/);
-  const markers = new Set(closedFences(lines.map((line) => line.replace(/\r?\n$/, ""))).flat());
-  return lines.map((line, index) => markers.has(index) ? `
-` : line).join("");
-}
-function withoutFencedCode(text) {
-  return splitFences(text).map((part) => part.fenced ? " " : part.text).join("");
-}
-function splitFences(text) {
-  const lines = text.split(/(?<=\n)/);
-  const fenced = fencedLineIndexes(lines.map((line) => line.replace(/\r?\n$/, "")));
-  const parts = [];
-  for (const [index, line] of lines.entries()) {
-    const isFenced = fenced.has(index);
-    const last = parts[parts.length - 1];
-    if (last && last.fenced === isFenced) {
-      last.text += line;
-    } else {
-      parts.push({ fenced: isFenced, text: line });
-    }
-  }
-  return parts;
-}
-function sectionHeadingPattern(heading) {
-  return new RegExp(`^ {0,3}##[ \\t]+${escapeRegExp(heading)}(?:[ \\t]+#+)?[ \\t]*\\r?$`, "im");
-}
-var NEXT_SECTION = /^ {0,3}##(?:[ \t]|\r?$)/m;
-function proseSection(markdownBody) {
-  const masked = maskMarkup(markdownBody);
-  const chapterTextMatch = sectionHeadingPattern("Chapter Text").exec(masked);
-  if (chapterTextMatch) {
-    return markdownBody.slice(chapterTextMatch.index + chapterTextMatch[0].length);
-  }
-  const outlineMatch = sectionHeadingPattern("Outline").exec(masked);
-  if (!outlineMatch) {
-    return markdownBody.slice(leadingHeadingLength(masked));
-  }
-  const start = outlineMatch.index + outlineMatch[0].length;
-  return markdownBody.slice(outlineDivider(masked, start) ?? start);
-}
-function outlineDivider(masked, start) {
-  const lines = masked.slice(start).split(`
-`);
-  let offset = start + lines[0].length + 1;
-  let previous = "blank";
-  for (const line of lines.slice(1)) {
-    const lineStart = offset;
-    offset += line.length + 1;
-    const text = line.replace(/\r$/, "");
-    if (text.trim() === "") {
-      previous = "blank";
-    } else if (text.trim() === "---") {
-      return lineStart + line.length;
-    } else if (/^\s*(?:[-*+]|\d+[.)])(?:[ \t]|$)/.test(text) || /^ {0,3}#{2,}(?:[ \t]|$)/.test(text) || /^[ \t]+\S/.test(text)) {
-      previous = "outline";
-    } else if (previous !== "outline") {
-      return null;
-    }
-  }
-  return null;
-}
-function extractSection(markdown, heading) {
-  const masked = maskMarkup(markdown);
-  const match = sectionHeadingPattern(heading).exec(masked);
-  if (!match) {
-    return "";
-  }
-  const start = match.index + match[0].length;
-  const next = NEXT_SECTION.exec(masked.slice(start));
-  const rest = markdown.slice(start);
-  return (next ? rest.slice(0, next.index) : rest).trim();
-}
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-function leadingHeadingLength(masked) {
-  const match = /^(?:[ \t]*\r?\n)*(?:[ \t]{0,3}#(?!#)[ \t]+[^\r\n]*|[ \t]{0,3}\S[^\r\n]*\r?\n[ \t]{0,3}=+[ \t]*)(?:\r?\n|$)/.exec(masked);
-  return match ? match[0].length : 0;
-}
-
 // src/languages/ar.js
 var ar_default = {
   code: "ar",
   name: "Arabic",
   cased: false,
   script: "Arab",
-  segmentation: "space"
+  segmentation: "space",
+  narrationRate: 95,
+  labels: {
+    chapter: "الفصل {n}",
+    "chapter-heading": "{chapter}: {title}",
+    contents: "المحتويات",
+    and: "{a} و{b}",
+    copyright: "حقوق النشر",
+    "all-rights-reserved": "جميع الحقوق محفوظة.",
+    "published-by": "الناشر: {publisher}",
+    "scene-break": "فاصل بين المشاهد",
+    "cover-alt": "غلاف كتاب {title}",
+    "start-of-content": "بداية المحتوى",
+    "accessibility-summary": "كتاب نصي فقط، فيه فهرس محتويات قابل للتنقل، وعنوان لكل فصل، وترتيب قراءة منطقي واحد.",
+    "accessibility-summary-cover": "كتاب نصي مع صورة غلاف موصوفة، وفهرس محتويات قابل للتنقل، وعنوان لكل فصل، وترتيب قراءة منطقي واحد.",
+    "review-title": "{title}: نسخة المراجعة",
+    "review-intro": "نسخة المراجعة.",
+    "review-intro-build": "نسخة المراجعة، الإصدار {build}.",
+    "review-labels": "لكل فقرة تسمية مثل {label} (الفصل 3، الفقرة 12).",
+    "review-quote": "اذكر التسمية في كل ملاحظة مع الكلمات الأولى من الفقرة، ليتمكن المؤلف من العثور على الموضع بدقة حتى بعد تغيّر النص.",
+    "review-quote-build": "اذكر التسمية والإصدار في كل ملاحظة مع الكلمات الأولى من الفقرة، ليتمكن المؤلف من العثور على الموضع بدقة حتى بعد تغيّر النص.",
+    "review-note-link": "يفتح رابط «ملاحظة» بجانب كل تسمية ملاحظةً مملوءة بهذه البيانات مسبقًا.",
+    note: "ملاحظة",
+    "note-title": "اكتب ملاحظة على {label}",
+    "anchor-title": "رابط إلى {label}",
+    by: "بقلم",
+    "approximate-words": "نحو {words} كلمة",
+    "approximate-characters": "نحو {characters} حرف",
+    "narration-opening": "{title}. تأليف {authors}. بصوت {narrator}.",
+    "narration-opening-anonymous": "{title}. بصوت {narrator}.",
+    "narration-closing": "النهاية. استمعتم إلى {title}، تأليف {authors}، بصوت {narrator}.",
+    "narration-closing-anonymous": "النهاية. استمعتم إلى {title}، بصوت {narrator}.",
+    "screenplay-credit": "تأليف",
+    "screenplay-source": "مقتبس من عمل {authors}",
+    "screenplay-source-anonymous": "مقتبس من عمل أدبي"
+  }
 };
 
 // src/languages/base.js
@@ -1528,6 +1099,7 @@ var base_default = {
   dialogueDash: "—",
   dashStartsLine: false,
   labels: {},
+  narrationRate: 155,
   checks: {}
 };
 
@@ -1549,7 +1121,42 @@ var de_ch_default = {
 var de_default = {
   code: "de",
   name: "German",
-  quotes: [["„", "“"], ["‚", "‘"], ["»", "«"], ["›", "‹"], ["“", "”"], ['"', '"']]
+  quotes: [["„", "“"], ["‚", "‘"], ["»", "«"], ["›", "‹"], ["“", "”"], ['"', '"']],
+  narrationRate: 120,
+  labels: {
+    chapter: "Kapitel {n}",
+    "chapter-heading": "{chapter}: {title}",
+    contents: "Inhalt",
+    and: "{a} und {b}",
+    copyright: "Impressum",
+    "all-rights-reserved": "Alle Rechte vorbehalten.",
+    "published-by": "Erschienen bei {publisher}",
+    "scene-break": "Szenenwechsel",
+    "cover-alt": "Cover von {title}",
+    "start-of-content": "Beginn des Inhalts",
+    "accessibility-summary": "Buch, das nur aus Text besteht, mit navigierbarem Inhaltsverzeichnis, einer Überschrift für jedes Kapitel und einer einzigen logischen Lesereihenfolge.",
+    "accessibility-summary-cover": "Buch mit Text und beschriebenem Coverbild, navigierbarem Inhaltsverzeichnis, einer Überschrift für jedes Kapitel und einer einzigen logischen Lesereihenfolge.",
+    "review-title": "{title}: Leseexemplar",
+    "review-intro": "Leseexemplar.",
+    "review-intro-build": "Leseexemplar, Fassung {build}.",
+    "review-labels": "Jeder Absatz hat eine Kennung wie {label} (Kapitel 3, Absatz 12).",
+    "review-quote": "Geben Sie bei jeder Anmerkung die Kennung und die ersten Wörter des Absatzes an, damit sich die Stelle auch nach Änderungen am Text genau finden lässt.",
+    "review-quote-build": "Geben Sie bei jeder Anmerkung die Kennung, die Fassung und die ersten Wörter des Absatzes an, damit sich die Stelle auch nach Änderungen am Text genau finden lässt.",
+    "review-note-link": "Der Link „Anmerkung“ neben jeder Kennung öffnet eine Anmerkung, in der diese Angaben schon ausgefüllt sind.",
+    note: "Anmerkung",
+    "note-title": "Anmerkung zu {label} schreiben",
+    "anchor-title": "Link zu {label}",
+    by: "von",
+    "approximate-words": "Etwa {words} Wörter",
+    "approximate-characters": "Etwa {characters} Zeichen",
+    "narration-opening": "{title}. Geschrieben von {authors}. Gelesen von {narrator}.",
+    "narration-opening-anonymous": "{title}. Gelesen von {narrator}.",
+    "narration-closing": "Ende. Sie hörten {title}, geschrieben von {authors}, gelesen von {narrator}.",
+    "narration-closing-anonymous": "Ende. Sie hörten {title}, gelesen von {narrator}.",
+    "screenplay-credit": "Geschrieben von",
+    "screenplay-source": "Nach einer Vorlage von {authors}",
+    "screenplay-source-anonymous": "Nach einer literarischen Vorlage"
+  }
 };
 
 // src/languages/en.js
@@ -2052,6 +1659,123 @@ var en_default = {
       "young",
       "little"
     ]
+  },
+  labels: {
+    chapter: "Chapter {n}",
+    "chapter-heading": "{chapter}: {title}",
+    contents: "Contents",
+    and: "{a} and {b}",
+    copyright: "Copyright",
+    "all-rights-reserved": "All rights reserved.",
+    "published-by": "Published by {publisher}",
+    "scene-break": "Scene break",
+    "cover-alt": "Cover of {title}",
+    "start-of-content": "Start of Content",
+    "accessibility-summary": "Text-only book with a navigable table of contents, headings for each chapter, and a single logical reading order.",
+    "accessibility-summary-cover": "Text book with a described cover image, a navigable table of contents, headings for each chapter, and a single logical reading order.",
+    "review-title": "{title}: review copy",
+    "review-intro": "Review copy.",
+    "review-intro-build": "Review copy, build {build}.",
+    "review-labels": "Every paragraph has a label such as {label} (chapter 3, paragraph 12).",
+    "review-quote": "Quote the label with each note, with the paragraph's first few words, so the author can find the exact spot after the text changes.",
+    "review-quote-build": "Quote the label and the build with each note, with the paragraph's first few words, so the author can find the exact spot after the text changes.",
+    "review-note-link": "The Note link beside each label opens a note with these filled in.",
+    note: "Note",
+    "note-title": "Write a note on {label}",
+    "anchor-title": "Link to {label}",
+    by: "by",
+    "approximate-words": "Approximately {words} words",
+    "approximate-characters": "Approximately {characters} characters",
+    "narration-opening": "{title}. Written by {authors}. Narrated by {narrator}.",
+    "narration-opening-anonymous": "{title}. Narrated by {narrator}.",
+    "narration-closing": "The end. You have been listening to {title}, written by {authors}, narrated by {narrator}.",
+    "narration-closing-anonymous": "The end. You have been listening to {title}, narrated by {narrator}.",
+    "screenplay-credit": "Written by",
+    "screenplay-source": "Based on the {form} by {authors}",
+    "screenplay-source-anonymous": "Based on the {form}"
+  }
+};
+
+// src/languages/es.js
+var es_default = {
+  code: "es",
+  name: "Spanish",
+  narrationRate: 150,
+  labels: {
+    chapter: "Capítulo {n}",
+    "chapter-heading": "{chapter}: {title}",
+    contents: "Índice",
+    and: "{a} y {b}",
+    copyright: "Derechos de autor",
+    "all-rights-reserved": "Todos los derechos reservados.",
+    "published-by": "Publicado por {publisher}",
+    "scene-break": "Cambio de escena",
+    "cover-alt": "Portada de {title}",
+    "start-of-content": "Inicio del contenido",
+    "accessibility-summary": "Libro solo de texto con un índice navegable, encabezados para cada capítulo y un único orden de lectura lógico.",
+    "accessibility-summary-cover": "Libro con texto e imagen de portada descrita, con un índice navegable, encabezados para cada capítulo y un único orden de lectura lógico.",
+    "review-title": "{title}: copia de revisión",
+    "review-intro": "Copia de revisión.",
+    "review-intro-build": "Copia de revisión, versión {build}.",
+    "review-labels": "Cada párrafo tiene una etiqueta como {label} (capítulo 3, párrafo 12).",
+    "review-quote": "Cite la etiqueta en cada nota, junto con las primeras palabras del párrafo, para que el autor encuentre el lugar exacto aunque el texto cambie.",
+    "review-quote-build": "Cite la etiqueta y la versión en cada nota, junto con las primeras palabras del párrafo, para que el autor encuentre el lugar exacto aunque el texto cambie.",
+    "review-note-link": "El enlace Nota junto a cada etiqueta abre una nota con estos datos ya rellenados.",
+    note: "Nota",
+    "note-title": "Escribir una nota sobre {label}",
+    "anchor-title": "Enlace a {label}",
+    by: "por",
+    "approximate-words": "Aproximadamente {words} palabras",
+    "approximate-characters": "Aproximadamente {characters} caracteres",
+    "narration-opening": "{title}. Escrito por {authors}. Narrado por {narrator}.",
+    "narration-opening-anonymous": "{title}. Narrado por {narrator}.",
+    "narration-closing": "Fin. Ha escuchado {title}, escrito por {authors}, narrado por {narrator}.",
+    "narration-closing-anonymous": "Fin. Ha escuchado {title}, narrado por {narrator}.",
+    "screenplay-credit": "Escrito por",
+    "screenplay-source": "Basado en la obra de {authors}",
+    "screenplay-source-anonymous": "Basado en la obra original"
+  }
+};
+
+// src/languages/fa.js
+var fa_default = {
+  code: "fa",
+  name: "Persian",
+  cased: false,
+  segmentation: "space",
+  labels: {
+    chapter: "فصل {n}",
+    "chapter-heading": "{chapter}: {title}",
+    contents: "فهرست مطالب",
+    and: "{a} و {b}",
+    copyright: "حق نشر",
+    "all-rights-reserved": "همهٔ حقوق محفوظ است.",
+    "published-by": "ناشر: {publisher}",
+    "scene-break": "تغییر صحنه",
+    "cover-alt": "جلد کتاب {title}",
+    "start-of-content": "آغاز محتوا",
+    "accessibility-summary": "کتابی فقط متنی، با فهرست مطالب پیمایش‌پذیر، عنوانی برای هر فصل و یک ترتیب خواندن منطقی واحد.",
+    "accessibility-summary-cover": "کتابی متنی با تصویر جلد توصیف‌شده، فهرست مطالب پیمایش‌پذیر، عنوانی برای هر فصل و یک ترتیب خواندن منطقی واحد.",
+    "review-title": "{title}: نسخهٔ بازبینی",
+    "review-intro": "نسخهٔ بازبینی.",
+    "review-intro-build": "نسخهٔ بازبینی، ویرایش {build}.",
+    "review-labels": "هر بند برچسبی مانند {label} دارد (فصل 3، بند 12).",
+    "review-quote": "در هر یادداشت، برچسب و چند واژهٔ نخست بند را بیاورید تا نویسنده حتی پس از تغییر متن، جای دقیق را پیدا کند.",
+    "review-quote-build": "در هر یادداشت، برچسب، ویرایش و چند واژهٔ نخست بند را بیاورید تا نویسنده حتی پس از تغییر متن، جای دقیق را پیدا کند.",
+    "review-note-link": "پیوند «یادداشت» کنار هر برچسب، یادداشتی باز می‌کند که این موارد از پیش در آن پر شده‌اند.",
+    note: "یادداشت",
+    "note-title": "نوشتن یادداشت برای {label}",
+    "anchor-title": "پیوند به {label}",
+    by: "نوشتهٔ",
+    "approximate-words": "حدود {words} واژه",
+    "approximate-characters": "حدود {characters} نویسه",
+    "narration-opening": "{title}. نوشتهٔ {authors}. با صدای {narrator}.",
+    "narration-opening-anonymous": "{title}. با صدای {narrator}.",
+    "narration-closing": "پایان. شما {title}، نوشتهٔ {authors}، را با صدای {narrator} شنیدید.",
+    "narration-closing-anonymous": "پایان. شما {title} را با صدای {narrator} شنیدید.",
+    "screenplay-credit": "نوشتهٔ",
+    "screenplay-source": "برگرفته از اثری از {authors}",
+    "screenplay-source-anonymous": "برگرفته از یک اثر ادبی"
   }
 };
 
@@ -2064,13 +1788,89 @@ var fi_default = {
   dashStartsLine: true
 };
 
+// src/languages/fr.js
+var fr_default = {
+  code: "fr",
+  name: "French",
+  narrationRate: 135,
+  labels: {
+    chapter: "Chapitre {n}",
+    "chapter-heading": "{chapter} : {title}",
+    contents: "Table des matières",
+    and: "{a} et {b}",
+    copyright: "Droits d’auteur",
+    "all-rights-reserved": "Tous droits réservés.",
+    "published-by": "Publié par {publisher}",
+    "scene-break": "Changement de scène",
+    "cover-alt": "Couverture de {title}",
+    "start-of-content": "Début du contenu",
+    "accessibility-summary": "Livre entièrement textuel, avec une table des matières navigable, un titre pour chaque chapitre et un ordre de lecture logique unique.",
+    "accessibility-summary-cover": "Livre textuel avec une image de couverture décrite, une table des matières navigable, un titre pour chaque chapitre et un ordre de lecture logique unique.",
+    "review-title": "{title} : exemplaire de relecture",
+    "review-intro": "Exemplaire de relecture.",
+    "review-intro-build": "Exemplaire de relecture, version {build}.",
+    "review-labels": "Chaque paragraphe porte une étiquette comme {label} (chapitre 3, paragraphe 12).",
+    "review-quote": "Citez l’étiquette dans chaque note, avec les premiers mots du paragraphe, pour que l’auteur retrouve l’endroit exact même après une modification du texte.",
+    "review-quote-build": "Citez l’étiquette et la version dans chaque note, avec les premiers mots du paragraphe, pour que l’auteur retrouve l’endroit exact même après une modification du texte.",
+    "review-note-link": "Le lien Note à côté de chaque étiquette ouvre une note où ces informations sont déjà remplies.",
+    note: "Note",
+    "note-title": "Écrire une note sur {label}",
+    "anchor-title": "Lien vers {label}",
+    by: "par",
+    "approximate-words": "Environ {words} mots",
+    "approximate-characters": "Environ {characters} caractères",
+    "narration-opening": "{title}. Écrit par {authors}. Lu par {narrator}.",
+    "narration-opening-anonymous": "{title}. Lu par {narrator}.",
+    "narration-closing": "Fin. Vous venez d’écouter {title}, écrit par {authors}, lu par {narrator}.",
+    "narration-closing-anonymous": "Fin. Vous venez d’écouter {title}, lu par {narrator}.",
+    "screenplay-credit": "Écrit par",
+    "screenplay-source": "D’après l’œuvre de {authors}",
+    "screenplay-source-anonymous": "D’après l’œuvre originale"
+  }
+};
+
 // src/languages/he.js
 var he_default = {
   code: "he",
   name: "Hebrew",
   cased: false,
   script: "Hebr",
-  segmentation: "space"
+  segmentation: "space",
+  narrationRate: 125,
+  labels: {
+    chapter: "פרק {n}",
+    "chapter-heading": "{chapter}: {title}",
+    contents: "תוכן העניינים",
+    and: "{a} ו{b}",
+    copyright: "זכויות יוצרים",
+    "all-rights-reserved": "כל הזכויות שמורות.",
+    "published-by": "בהוצאת {publisher}",
+    "scene-break": "מעבר סצנה",
+    "cover-alt": "כריכת הספר {title}",
+    "start-of-content": "תחילת התוכן",
+    "accessibility-summary": "ספר טקסט בלבד, עם תוכן עניינים ניתן לניווט, כותרת לכל פרק וסדר קריאה לוגי יחיד.",
+    "accessibility-summary-cover": "ספר טקסט עם תמונת כריכה מתוארת, תוכן עניינים ניתן לניווט, כותרת לכל פרק וסדר קריאה לוגי יחיד.",
+    "review-title": "{title}: עותק לקריאה",
+    "review-intro": "עותק לקריאה.",
+    "review-intro-build": "עותק לקריאה, גרסה {build}.",
+    "review-labels": "לכל פסקה יש תווית, למשל {label} (פרק 3, פסקה 12).",
+    "review-quote": "ציינו בכל הערה את התווית ואת המילים הראשונות של הפסקה, כדי שאפשר יהיה למצוא את המקום המדויק גם אחרי שהטקסט ישתנה.",
+    "review-quote-build": "ציינו בכל הערה את התווית, את הגרסה ואת המילים הראשונות של הפסקה, כדי שאפשר יהיה למצוא את המקום המדויק גם אחרי שהטקסט ישתנה.",
+    "review-note-link": 'הקישור "הערה" שליד כל תווית פותח הערה שהפרטים האלה כבר מולאו בה.',
+    note: "הערה",
+    "note-title": "כתיבת הערה על {label}",
+    "anchor-title": "קישור אל {label}",
+    by: "מאת",
+    "approximate-words": "כ־{words} מילים",
+    "approximate-characters": "כ־{characters} תווים",
+    "narration-opening": "{title}. מאת {authors}. בקריאת {narrator}.",
+    "narration-opening-anonymous": "{title}. בקריאת {narrator}.",
+    "narration-closing": "הסוף. האזנתם לספר {title} מאת {authors}, בקריאת {narrator}.",
+    "narration-closing-anonymous": "הסוף. האזנתם לספר {title}, בקריאת {narrator}.",
+    "screenplay-credit": "נכתב על ידי",
+    "screenplay-source": "על פי היצירה מאת {authors}",
+    "screenplay-source-anonymous": "על פי יצירה ספרותית"
+  }
 };
 
 // src/languages/hi.js
@@ -2079,7 +1879,82 @@ var hi_default = {
   name: "Hindi",
   cased: false,
   script: "Deva",
-  segmentation: "space"
+  segmentation: "space",
+  labels: {
+    chapter: "अध्याय {n}",
+    "chapter-heading": "{chapter}: {title}",
+    contents: "विषय-सूची",
+    and: "{a} और {b}",
+    copyright: "कॉपीराइट",
+    "all-rights-reserved": "सर्वाधिकार सुरक्षित।",
+    "published-by": "प्रकाशक: {publisher}",
+    "scene-break": "दृश्य परिवर्तन",
+    "cover-alt": "{title} का आवरण",
+    "start-of-content": "सामग्री का आरंभ",
+    "accessibility-summary": "केवल पाठ वाली पुस्तक, जिसमें नेविगेट करने योग्य विषय-सूची, हर अध्याय का शीर्षक और एक ही तार्किक पठन क्रम है।",
+    "accessibility-summary-cover": "पाठ वाली पुस्तक, जिसमें वर्णित आवरण चित्र, नेविगेट करने योग्य विषय-सूची, हर अध्याय का शीर्षक और एक ही तार्किक पठन क्रम है।",
+    "review-title": "{title}: समीक्षा प्रति",
+    "review-intro": "समीक्षा प्रति।",
+    "review-intro-build": "समीक्षा प्रति, संस्करण {build}।",
+    "review-labels": "हर अनुच्छेद का एक लेबल है, जैसे {label} (अध्याय 3, अनुच्छेद 12)।",
+    "review-quote": "हर टिप्पणी में लेबल और अनुच्छेद के पहले कुछ शब्द लिखें, ताकि पाठ बदलने के बाद भी लेखक ठीक वही जगह ढूँढ सके।",
+    "review-quote-build": "हर टिप्पणी में लेबल, संस्करण और अनुच्छेद के पहले कुछ शब्द लिखें, ताकि पाठ बदलने के बाद भी लेखक ठीक वही जगह ढूँढ सके।",
+    "review-note-link": "हर लेबल के पास का टिप्पणी लिंक एक टिप्पणी खोलता है, जिसमें ये जानकारियाँ पहले से भरी होती हैं।",
+    note: "टिप्पणी",
+    "note-title": "{label} पर टिप्पणी लिखें",
+    "anchor-title": "{label} का लिंक",
+    by: "लेखक",
+    "approximate-words": "लगभग {words} शब्द",
+    "approximate-characters": "लगभग {characters} वर्ण",
+    "narration-opening": "{title}। लेखक: {authors}। वाचक: {narrator}।",
+    "narration-opening-anonymous": "{title}। वाचक: {narrator}।",
+    "narration-closing": "समाप्त। आप {title} सुन रहे थे, लेखक {authors}, वाचक {narrator}।",
+    "narration-closing-anonymous": "समाप्त। आप {title} सुन रहे थे, वाचक {narrator}।",
+    "screenplay-credit": "लेखक",
+    "screenplay-source": "{authors} की रचना पर आधारित",
+    "screenplay-source-anonymous": "मूल रचना पर आधारित"
+  }
+};
+
+// src/languages/it.js
+var it_default = {
+  code: "it",
+  name: "Italian",
+  narrationRate: 130,
+  labels: {
+    chapter: "Capitolo {n}",
+    "chapter-heading": "{chapter}. {title}",
+    contents: "Indice",
+    and: "{a} e {b}",
+    copyright: "Copyright",
+    "all-rights-reserved": "Tutti i diritti riservati.",
+    "published-by": "Pubblicato da {publisher}",
+    "scene-break": "Cambio di scena",
+    "cover-alt": "Copertina di {title}",
+    "start-of-content": "Inizio del contenuto",
+    "accessibility-summary": "Libro di solo testo con indice navigabile, un titolo per ogni capitolo e un unico ordine di lettura logico.",
+    "accessibility-summary-cover": "Libro testuale con immagine di copertina descritta, indice navigabile, un titolo per ogni capitolo e un unico ordine di lettura logico.",
+    "review-title": "{title}: copia di revisione",
+    "review-intro": "Copia di revisione.",
+    "review-intro-build": "Copia di revisione, versione {build}.",
+    "review-labels": "Ogni paragrafo ha un’etichetta come {label} (capitolo 3, paragrafo 12).",
+    "review-quote": "Riportate l’etichetta in ogni nota, insieme alle prime parole del paragrafo, così l’autore potrà trovare il punto esatto anche dopo modifiche al testo.",
+    "review-quote-build": "Riportate l’etichetta e la versione in ogni nota, insieme alle prime parole del paragrafo, così l’autore potrà trovare il punto esatto anche dopo modifiche al testo.",
+    "review-note-link": "Il link Nota accanto a ogni etichetta apre una nota con questi dati già compilati.",
+    note: "Nota",
+    "note-title": "Scrivete una nota su {label}",
+    "anchor-title": "Link a {label}",
+    by: "di",
+    "approximate-words": "Circa {words} parole",
+    "approximate-characters": "Circa {characters} caratteri",
+    "narration-opening": "{title}. Scritto da {authors}. Letto da {narrator}.",
+    "narration-opening-anonymous": "{title}. Letto da {narrator}.",
+    "narration-closing": "Fine. Avete ascoltato {title}, scritto da {authors}, letto da {narrator}.",
+    "narration-closing-anonymous": "Fine. Avete ascoltato {title}, letto da {narrator}.",
+    "screenplay-credit": "Scritto da",
+    "screenplay-source": "Tratto dall’opera di {authors}",
+    "screenplay-source-anonymous": "Tratto dall’opera originale"
+  }
 };
 
 // src/languages/ja.js
@@ -2097,6 +1972,41 @@ var ja_default = {
     "short-story": { min: 4000, max: 40000, target: 20000 },
     novella: { min: 40000, max: 120000, target: 80000 },
     novel: { min: 120000, max: null, target: 150000 }
+  },
+  narrationRate: 300,
+  labels: {
+    chapter: "第{n}章",
+    "chapter-heading": "{chapter}　{title}",
+    contents: "目次",
+    and: "{a}、{b}",
+    copyright: "著作権",
+    "all-rights-reserved": "本書の無断転載・複製を禁じます。",
+    "published-by": "発行所：{publisher}",
+    "scene-break": "場面転換",
+    "cover-alt": "『{title}』の表紙",
+    "start-of-content": "本文",
+    "accessibility-summary": "テキストのみの書籍です。ナビゲーション可能な目次、各章の見出し、単一の論理的な読み順を備えています。",
+    "accessibility-summary-cover": "説明付きの表紙画像があるテキストの書籍です。ナビゲーション可能な目次、各章の見出し、単一の論理的な読み順を備えています。",
+    "review-title": "{title}（レビュー用原稿）",
+    "review-intro": "レビュー用の原稿です。",
+    "review-intro-build": "レビュー用の原稿です（ビルド {build}）。",
+    "review-labels": "各段落には {label}（第3章の第12段落）のようなラベルが付いています。",
+    "review-quote": "コメントには、ラベルと段落の書き出しを添えてください。本文が変わっても、著者が正確な箇所を見つけられます。",
+    "review-quote-build": "コメントには、ラベルとビルド、段落の書き出しを添えてください。本文が変わっても、著者が正確な箇所を見つけられます。",
+    "review-note-link": "各ラベルの横にある「コメント」リンクを開くと、これらが入力済みのコメントを書けます。",
+    note: "コメント",
+    "note-title": "{label} にコメントを書く",
+    "anchor-title": "{label} へのリンク",
+    by: "",
+    "approximate-words": "約{words}語",
+    "approximate-characters": "約{characters}字",
+    "narration-opening": "『{title}』。作、{authors}。朗読、{narrator}。",
+    "narration-opening-anonymous": "『{title}』。朗読、{narrator}。",
+    "narration-closing": "おわり。お聴きいただいたのは、{authors}作『{title}』、朗読は{narrator}でした。",
+    "narration-closing-anonymous": "おわり。お聴きいただいたのは『{title}』、朗読は{narrator}でした。",
+    "screenplay-credit": "脚本",
+    "screenplay-source": "原作：{authors}",
+    "screenplay-source-anonymous": "原作に基づく"
   }
 };
 
@@ -2106,7 +2016,222 @@ var ko_default = {
   name: "Korean",
   cased: false,
   script: "Kore",
-  segmentation: "space"
+  segmentation: "space",
+  narrationRate: 100,
+  labels: {
+    chapter: "제{n}장",
+    "chapter-heading": "{chapter} {title}",
+    contents: "차례",
+    and: "{a}, {b}",
+    copyright: "저작권",
+    "all-rights-reserved": "이 책의 무단 전재와 복제를 금합니다.",
+    "published-by": "펴낸곳: {publisher}",
+    "scene-break": "장면 전환",
+    "cover-alt": "『{title}』 표지",
+    "start-of-content": "본문",
+    "accessibility-summary": "텍스트로만 된 책으로, 탐색할 수 있는 차례, 장마다 제목, 하나의 논리적인 읽기 순서를 갖추고 있습니다.",
+    "accessibility-summary-cover": "설명이 있는 표지 이미지가 포함된 텍스트 책으로, 탐색할 수 있는 차례, 장마다 제목, 하나의 논리적인 읽기 순서를 갖추고 있습니다.",
+    "review-title": "{title}: 검토용 원고",
+    "review-intro": "검토용 원고입니다.",
+    "review-intro-build": "검토용 원고입니다(빌드 {build}).",
+    "review-labels": "모든 문단에는 {label}(3장 12번째 문단) 같은 라벨이 붙어 있습니다.",
+    "review-quote": "의견마다 라벨과 문단의 첫 몇 단어를 함께 적어 주세요. 그러면 본문이 바뀌어도 저자가 정확한 위치를 찾을 수 있습니다.",
+    "review-quote-build": "의견마다 라벨과 빌드, 문단의 첫 몇 단어를 함께 적어 주세요. 그러면 본문이 바뀌어도 저자가 정확한 위치를 찾을 수 있습니다.",
+    "review-note-link": "각 라벨 옆의 ‘의견’ 링크를 누르면 이 내용이 미리 채워진 의견이 열립니다.",
+    note: "의견",
+    "note-title": "{label} 의견 쓰기",
+    "anchor-title": "{label} 링크",
+    by: "",
+    "approximate-words": "약 {words}단어",
+    "approximate-characters": "약 {characters}자",
+    "narration-opening": "『{title}』. {authors} 지음. {narrator} 낭독.",
+    "narration-opening-anonymous": "『{title}』. {narrator} 낭독.",
+    "narration-closing": "끝. 지금까지 들으신 작품은 『{title}』, {authors} 지음, {narrator} 낭독이었습니다.",
+    "narration-closing-anonymous": "끝. 지금까지 들으신 작품은 『{title}』, {narrator} 낭독이었습니다.",
+    "screenplay-credit": "각본",
+    "screenplay-source": "원작: {authors}",
+    "screenplay-source-anonymous": "원작을 바탕으로 함"
+  }
+};
+
+// src/languages/nl.js
+var nl_default = {
+  code: "nl",
+  name: "Dutch",
+  narrationRate: 135,
+  labels: {
+    chapter: "Hoofdstuk {n}",
+    "chapter-heading": "{chapter}: {title}",
+    contents: "Inhoud",
+    and: "{a} en {b}",
+    copyright: "Colofon",
+    "all-rights-reserved": "Alle rechten voorbehouden.",
+    "published-by": "Uitgegeven door {publisher}",
+    "scene-break": "Scènewisseling",
+    "cover-alt": "Omslag van {title}",
+    "start-of-content": "Begin van de inhoud",
+    "accessibility-summary": "Boek met alleen tekst, met een navigeerbare inhoudsopgave, een kop voor elk hoofdstuk en één logische leesvolgorde.",
+    "accessibility-summary-cover": "Boek met tekst en een beschreven omslagafbeelding, met een navigeerbare inhoudsopgave, een kop voor elk hoofdstuk en één logische leesvolgorde.",
+    "review-title": "{title}: leesexemplaar",
+    "review-intro": "Leesexemplaar.",
+    "review-intro-build": "Leesexemplaar, versie {build}.",
+    "review-labels": "Elke alinea heeft een label zoals {label} (hoofdstuk 3, alinea 12).",
+    "review-quote": "Vermeld bij elke notitie het label en de eerste woorden van de alinea, zodat de auteur de precieze plek terugvindt, ook als de tekst verandert.",
+    "review-quote-build": "Vermeld bij elke notitie het label, de versie en de eerste woorden van de alinea, zodat de auteur de precieze plek terugvindt, ook als de tekst verandert.",
+    "review-note-link": "De link Notitie naast elk label opent een notitie waarin deze gegevens al zijn ingevuld.",
+    note: "Notitie",
+    "note-title": "Notitie schrijven bij {label}",
+    "anchor-title": "Link naar {label}",
+    by: "door",
+    "approximate-words": "Ongeveer {words} woorden",
+    "approximate-characters": "Ongeveer {characters} tekens",
+    "narration-opening": "{title}. Geschreven door {authors}. Voorgelezen door {narrator}.",
+    "narration-opening-anonymous": "{title}. Voorgelezen door {narrator}.",
+    "narration-closing": "Einde. U luisterde naar {title}, geschreven door {authors}, voorgelezen door {narrator}.",
+    "narration-closing-anonymous": "Einde. U luisterde naar {title}, voorgelezen door {narrator}.",
+    "screenplay-credit": "Geschreven door",
+    "screenplay-source": "Naar het werk van {authors}",
+    "screenplay-source-anonymous": "Naar het oorspronkelijke werk"
+  }
+};
+
+// src/languages/pl.js
+var pl_default = {
+  code: "pl",
+  name: "Polish",
+  narrationRate: 115,
+  labels: {
+    chapter: "Rozdział {n}",
+    "chapter-heading": "{chapter}. {title}",
+    contents: "Spis treści",
+    and: "{a} i {b}",
+    copyright: "Prawa autorskie",
+    "all-rights-reserved": "Wszelkie prawa zastrzeżone.",
+    "published-by": "Wydawca: {publisher}",
+    "scene-break": "Zmiana sceny",
+    "cover-alt": "Okładka książki „{title}”",
+    "start-of-content": "Początek treści",
+    "accessibility-summary": "Książka wyłącznie tekstowa z nawigowalnym spisem treści, nagłówkiem każdego rozdziału i jedną logiczną kolejnością czytania.",
+    "accessibility-summary-cover": "Książka tekstowa z opisaną ilustracją na okładce, nawigowalnym spisem treści, nagłówkiem każdego rozdziału i jedną logiczną kolejnością czytania.",
+    "review-title": "{title}: egzemplarz do recenzji",
+    "review-intro": "Egzemplarz do recenzji.",
+    "review-intro-build": "Egzemplarz do recenzji, wersja {build}.",
+    "review-labels": "Każdy akapit ma etykietę, na przykład {label} (rozdział 3, akapit 12).",
+    "review-quote": "W każdej uwadze podaj etykietę i pierwsze słowa akapitu, aby autor mógł znaleźć dokładne miejsce nawet po zmianach w tekście.",
+    "review-quote-build": "W każdej uwadze podaj etykietę, wersję i pierwsze słowa akapitu, aby autor mógł znaleźć dokładne miejsce nawet po zmianach w tekście.",
+    "review-note-link": "Link Uwaga obok każdej etykiety otwiera uwagę z już wypełnionymi danymi.",
+    note: "Uwaga",
+    "note-title": "Napisz uwagę do {label}",
+    "anchor-title": "Link do {label}",
+    by: "",
+    "approximate-words": "Około {words} słów",
+    "approximate-characters": "Około {characters} znaków",
+    "narration-opening": "{title}. Autor: {authors}. Czyta: {narrator}.",
+    "narration-opening-anonymous": "{title}. Czyta: {narrator}.",
+    "narration-closing": "Koniec. Wysłuchaliście audiobooka {title}. Autor: {authors}. Czyta: {narrator}.",
+    "narration-closing-anonymous": "Koniec. Wysłuchaliście audiobooka {title}. Czyta: {narrator}.",
+    "screenplay-credit": "Scenariusz",
+    "screenplay-source": "Na podstawie utworu (autor: {authors})",
+    "screenplay-source-anonymous": "Na podstawie utworu literackiego"
+  }
+};
+
+// src/languages/pt-pt.js
+var pt_pt_default = {
+  code: "pt-pt",
+  name: "European Portuguese",
+  labels: {
+    copyright: "Direitos de autor",
+    "review-labels": "Cada parágrafo tem uma etiqueta como {label} (capítulo 3, parágrafo 12).",
+    "review-quote": "Cite a etiqueta em cada nota, com as primeiras palavras do parágrafo, para que o autor encontre o ponto exato mesmo depois de o texto mudar.",
+    "review-quote-build": "Cite a etiqueta e a versão em cada nota, com as primeiras palavras do parágrafo, para que o autor encontre o ponto exato mesmo depois de o texto mudar.",
+    "review-note-link": "A ligação Nota ao lado de cada etiqueta abre uma nota com estes dados já preenchidos.",
+    "anchor-title": "Ligação para {label}",
+    "narration-closing": "Fim. Ouviu {title}, escrito por {authors}, narrado por {narrator}.",
+    "narration-closing-anonymous": "Fim. Ouviu {title}, narrado por {narrator}."
+  }
+};
+
+// src/languages/pt.js
+var pt_default = {
+  code: "pt",
+  name: "Portuguese",
+  narrationRate: 125,
+  labels: {
+    chapter: "Capítulo {n}",
+    "chapter-heading": "{chapter}: {title}",
+    contents: "Índice",
+    and: "{a} e {b}",
+    copyright: "Direitos autorais",
+    "all-rights-reserved": "Todos os direitos reservados.",
+    "published-by": "Publicado por {publisher}",
+    "scene-break": "Mudança de cena",
+    "cover-alt": "Capa de {title}",
+    "start-of-content": "Início do conteúdo",
+    "accessibility-summary": "Livro só de texto, com índice navegável, um título para cada capítulo e uma única ordem de leitura lógica.",
+    "accessibility-summary-cover": "Livro com texto e imagem de capa descrita, com índice navegável, um título para cada capítulo e uma única ordem de leitura lógica.",
+    "review-title": "{title}: cópia de revisão",
+    "review-intro": "Cópia de revisão.",
+    "review-intro-build": "Cópia de revisão, versão {build}.",
+    "review-labels": "Cada parágrafo tem um rótulo como {label} (capítulo 3, parágrafo 12).",
+    "review-quote": "Cite o rótulo em cada nota, com as primeiras palavras do parágrafo, para que o autor encontre o ponto exato mesmo depois de o texto mudar.",
+    "review-quote-build": "Cite o rótulo e a versão em cada nota, com as primeiras palavras do parágrafo, para que o autor encontre o ponto exato mesmo depois de o texto mudar.",
+    "review-note-link": "O link Nota ao lado de cada rótulo abre uma nota com esses dados já preenchidos.",
+    note: "Nota",
+    "note-title": "Escrever uma nota sobre {label}",
+    "anchor-title": "Link para {label}",
+    by: "por",
+    "approximate-words": "Aproximadamente {words} palavras",
+    "approximate-characters": "Aproximadamente {characters} caracteres",
+    "narration-opening": "{title}. Escrito por {authors}. Narrado por {narrator}.",
+    "narration-opening-anonymous": "{title}. Narrado por {narrator}.",
+    "narration-closing": "Fim. Você ouviu {title}, escrito por {authors}, narrado por {narrator}.",
+    "narration-closing-anonymous": "Fim. Você ouviu {title}, narrado por {narrator}.",
+    "screenplay-credit": "Escrito por",
+    "screenplay-source": "Baseado na obra de {authors}",
+    "screenplay-source-anonymous": "Baseado na obra original"
+  }
+};
+
+// src/languages/ru.js
+var ru_default = {
+  code: "ru",
+  name: "Russian",
+  narrationRate: 125,
+  labels: {
+    chapter: "Глава {n}",
+    "chapter-heading": "{chapter}. {title}",
+    contents: "Содержание",
+    and: "{a} и {b}",
+    copyright: "Авторские права",
+    "all-rights-reserved": "Все права защищены.",
+    "published-by": "Издатель: {publisher}",
+    "scene-break": "Смена сцены",
+    "cover-alt": "Обложка книги «{title}»",
+    "start-of-content": "Начало текста",
+    "accessibility-summary": "Книга, содержащая только текст, с навигационным оглавлением, заголовком у каждой главы и единым логическим порядком чтения.",
+    "accessibility-summary-cover": "Текстовая книга с описанным изображением обложки, навигационным оглавлением, заголовком у каждой главы и единым логическим порядком чтения.",
+    "review-title": "{title}: экземпляр для рецензирования",
+    "review-intro": "Экземпляр для рецензирования.",
+    "review-intro-build": "Экземпляр для рецензирования, версия {build}.",
+    "review-labels": "У каждого абзаца есть метка, например {label} (глава 3, абзац 12).",
+    "review-quote": "Указывайте метку в каждом замечании вместе с первыми словами абзаца, чтобы автор мог найти точное место даже после правок в тексте.",
+    "review-quote-build": "Указывайте метку и версию в каждом замечании вместе с первыми словами абзаца, чтобы автор мог найти точное место даже после правок в тексте.",
+    "review-note-link": "Ссылка «Замечание» рядом с каждой меткой открывает замечание с уже заполненными данными.",
+    note: "Замечание",
+    "note-title": "Написать замечание к {label}",
+    "anchor-title": "Ссылка на {label}",
+    by: "",
+    "approximate-words": "Около {words} слов",
+    "approximate-characters": "Около {characters} знаков",
+    "narration-opening": "{title}. Автор: {authors}. Читает {narrator}.",
+    "narration-opening-anonymous": "{title}. Читает {narrator}.",
+    "narration-closing": "Конец. Вы слушали книгу «{title}». Автор: {authors}. Читает {narrator}.",
+    "narration-closing-anonymous": "Конец. Вы слушали книгу «{title}». Читает {narrator}.",
+    "screenplay-credit": "Сценарий",
+    "screenplay-source": "По произведению (автор: {authors})",
+    "screenplay-source-anonymous": "По литературному произведению"
+  }
 };
 
 // src/languages/sv.js
@@ -2115,7 +2240,42 @@ var sv_default = {
   name: "Swedish",
   quotes: [["”", "”"], ["’", "’"], ["»", "»"], ["“", "”"], ['"', '"']],
   dialogueDash: ["–", "—"],
-  dashStartsLine: true
+  dashStartsLine: true,
+  narrationRate: 135,
+  labels: {
+    chapter: "Kapitel {n}",
+    "chapter-heading": "{chapter}: {title}",
+    contents: "Innehåll",
+    and: "{a} och {b}",
+    copyright: "Upphovsrätt",
+    "all-rights-reserved": "Alla rättigheter förbehållna.",
+    "published-by": "Utgiven av {publisher}",
+    "scene-break": "Scenbyte",
+    "cover-alt": "Omslag till {title}",
+    "start-of-content": "Början av innehållet",
+    "accessibility-summary": "Bok med enbart text, med navigerbar innehållsförteckning, en rubrik för varje kapitel och en enda logisk läsordning.",
+    "accessibility-summary-cover": "Bok med text och en beskriven omslagsbild, med navigerbar innehållsförteckning, en rubrik för varje kapitel och en enda logisk läsordning.",
+    "review-title": "{title}: läsexemplar",
+    "review-intro": "Läsexemplar.",
+    "review-intro-build": "Läsexemplar, version {build}.",
+    "review-labels": "Varje stycke har en etikett som {label} (kapitel 3, stycke 12).",
+    "review-quote": "Ange etiketten i varje anteckning, tillsammans med styckets första ord, så att författaren hittar exakt rätt ställe även när texten har ändrats.",
+    "review-quote-build": "Ange etiketten och versionen i varje anteckning, tillsammans med styckets första ord, så att författaren hittar exakt rätt ställe även när texten har ändrats.",
+    "review-note-link": "Länken Anteckning bredvid varje etikett öppnar en anteckning där detta redan är ifyllt.",
+    note: "Anteckning",
+    "note-title": "Skriv en anteckning om {label}",
+    "anchor-title": "Länk till {label}",
+    by: "av",
+    "approximate-words": "Cirka {words} ord",
+    "approximate-characters": "Cirka {characters} tecken",
+    "narration-opening": "{title}. Skriven av {authors}. Uppläst av {narrator}.",
+    "narration-opening-anonymous": "{title}. Uppläst av {narrator}.",
+    "narration-closing": "Slut. Du har lyssnat på {title}, skriven av {authors}, uppläst av {narrator}.",
+    "narration-closing-anonymous": "Slut. Du har lyssnat på {title}, uppläst av {narrator}.",
+    "screenplay-credit": "Skriven av",
+    "screenplay-source": "Baserad på verket av {authors}",
+    "screenplay-source-anonymous": "Baserad på originalverket"
+  }
 };
 
 // src/languages/th.js
@@ -2125,6 +2285,88 @@ var th_default = {
   cased: false,
   script: "Thai",
   segmentation: "dictionary"
+};
+
+// src/languages/tr.js
+var tr_default = {
+  code: "tr",
+  name: "Turkish",
+  narrationRate: 115,
+  labels: {
+    chapter: "Bölüm {n}",
+    "chapter-heading": "{chapter}: {title}",
+    contents: "İçindekiler",
+    and: "{a} ve {b}",
+    copyright: "Telif hakkı",
+    "all-rights-reserved": "Tüm hakları saklıdır.",
+    "published-by": "Yayıncı: {publisher}",
+    "scene-break": "Sahne geçişi",
+    "cover-alt": "Kapak: {title}",
+    "start-of-content": "İçeriğin başlangıcı",
+    "accessibility-summary": "Gezinilebilir içindekiler tablosu, her bölüm için bir başlık ve tek bir mantıksal okuma sırası olan, yalnızca metinden oluşan kitap.",
+    "accessibility-summary-cover": "Açıklamalı kapak görseli, gezinilebilir içindekiler tablosu, her bölüm için bir başlık ve tek bir mantıksal okuma sırası olan metin tabanlı kitap.",
+    "review-title": "{title}: okuma nüshası",
+    "review-intro": "Okuma nüshası.",
+    "review-intro-build": "Okuma nüshası, sürüm {build}.",
+    "review-labels": "Her paragrafın {label} gibi bir etiketi vardır (bölüm 3, paragraf 12).",
+    "review-quote": "Metin değişse bile yazarın tam yeri bulabilmesi için her notta etiketi ve paragrafın ilk birkaç kelimesini belirtin.",
+    "review-quote-build": "Metin değişse bile yazarın tam yeri bulabilmesi için her notta etiketi, sürümü ve paragrafın ilk birkaç kelimesini belirtin.",
+    "review-note-link": "Her etiketin yanındaki Not bağlantısı, bu bilgilerin önceden doldurulduğu bir not açar.",
+    note: "Not",
+    "note-title": "Not yaz: {label}",
+    "anchor-title": "Bağlantı: {label}",
+    by: "",
+    "approximate-words": "Yaklaşık {words} kelime",
+    "approximate-characters": "Yaklaşık {characters} karakter",
+    "narration-opening": "{title}. Yazan: {authors}. Seslendiren: {narrator}.",
+    "narration-opening-anonymous": "{title}. Seslendiren: {narrator}.",
+    "narration-closing": "Son. {title} adlı kitabı dinlediniz. Yazan: {authors}. Seslendiren: {narrator}.",
+    "narration-closing-anonymous": "Son. {title} adlı kitabı dinlediniz. Seslendiren: {narrator}.",
+    "screenplay-credit": "Yazan",
+    "screenplay-source": "{authors} tarafından yazılan eserden uyarlanmıştır",
+    "screenplay-source-anonymous": "Özgün bir eserden uyarlanmıştır"
+  }
+};
+
+// src/languages/uk.js
+var uk_default = {
+  code: "uk",
+  name: "Ukrainian",
+  narrationRate: 125,
+  labels: {
+    chapter: "Розділ {n}",
+    "chapter-heading": "{chapter}. {title}",
+    contents: "Зміст",
+    and: "{a} і {b}",
+    copyright: "Авторські права",
+    "all-rights-reserved": "Усі права захищено.",
+    "published-by": "Видавець: {publisher}",
+    "scene-break": "Зміна сцени",
+    "cover-alt": "Обкладинка книжки «{title}»",
+    "start-of-content": "Початок тексту",
+    "accessibility-summary": "Книжка, що містить лише текст, із навігаційним змістом, заголовком кожного розділу та єдиним логічним порядком читання.",
+    "accessibility-summary-cover": "Текстова книжка з описаним зображенням обкладинки, навігаційним змістом, заголовком кожного розділу та єдиним логічним порядком читання.",
+    "review-title": "{title}: примірник для рецензування",
+    "review-intro": "Примірник для рецензування.",
+    "review-intro-build": "Примірник для рецензування, версія {build}.",
+    "review-labels": "Кожен абзац має мітку, наприклад {label} (розділ 3, абзац 12).",
+    "review-quote": "Зазначайте мітку в кожному зауваженні разом із першими словами абзацу, щоб автор міг знайти точне місце навіть після змін у тексті.",
+    "review-quote-build": "Зазначайте мітку й версію в кожному зауваженні разом із першими словами абзацу, щоб автор міг знайти точне місце навіть після змін у тексті.",
+    "review-note-link": "Посилання «Зауваження» біля кожної мітки відкриває зауваження з уже заповненими даними.",
+    note: "Зауваження",
+    "note-title": "Написати зауваження до {label}",
+    "anchor-title": "Посилання на {label}",
+    by: "",
+    "approximate-words": "Близько {words} слів",
+    "approximate-characters": "Близько {characters} знаків",
+    "narration-opening": "{title}. Автор: {authors}. Читає {narrator}.",
+    "narration-opening-anonymous": "{title}. Читає {narrator}.",
+    "narration-closing": "Кінець. Ви слухали книжку «{title}». Автор: {authors}. Читає {narrator}.",
+    "narration-closing-anonymous": "Кінець. Ви слухали книжку «{title}». Читає {narrator}.",
+    "screenplay-credit": "Сценарій",
+    "screenplay-source": "За твором (автор: {authors})",
+    "screenplay-source-anonymous": "За літературним твором"
+  }
 };
 
 // src/languages/zh.js
@@ -2141,12 +2383,89 @@ var zh_default = {
     "short-story": { min: 2000, max: 25000, target: 1e4 },
     novella: { min: 25000, max: 130000, target: 60000 },
     novel: { min: 130000, max: null, target: 200000 }
+  },
+  narrationRate: 300,
+  labels: {
+    chapter: "第{n}章",
+    "chapter-heading": "{chapter}　{title}",
+    contents: "目录",
+    and: "{a}、{b}",
+    copyright: "版权",
+    "all-rights-reserved": "版权所有，侵权必究。",
+    "published-by": "出版者：{publisher}",
+    "scene-break": "场景转换",
+    "cover-alt": "《{title}》封面",
+    "start-of-content": "正文",
+    "accessibility-summary": "纯文本图书，包含可导航的目录、每章的标题和单一的逻辑阅读顺序。",
+    "accessibility-summary-cover": "文本图书，包含带描述的封面图片、可导航的目录、每章的标题和单一的逻辑阅读顺序。",
+    "review-title": "{title}（审阅本）",
+    "review-intro": "审阅本。",
+    "review-intro-build": "审阅本，版本 {build}。",
+    "review-labels": "每个段落都有一个标签，例如 {label}（第3章第12段）。",
+    "review-quote": "每条意见请注明标签和该段开头的几个词，这样即使文本有改动，作者也能找到确切位置。",
+    "review-quote-build": "每条意见请注明标签、版本和该段开头的几个词，这样即使文本有改动，作者也能找到确切位置。",
+    "review-note-link": "每个标签旁的“意见”链接会打开一条已填好这些信息的意见。",
+    note: "意见",
+    "note-title": "为 {label} 写意见",
+    "anchor-title": "链接到 {label}",
+    by: "",
+    "approximate-words": "约{words}词",
+    "approximate-characters": "约{characters}字",
+    "narration-opening": "《{title}》。作者：{authors}。演播：{narrator}。",
+    "narration-opening-anonymous": "《{title}》。演播：{narrator}。",
+    "narration-closing": "全书完。您收听的是《{title}》，作者{authors}，演播{narrator}。",
+    "narration-closing-anonymous": "全书完。您收听的是《{title}》，演播{narrator}。",
+    "screenplay-credit": "编剧",
+    "screenplay-source": "改编自{authors}的作品",
+    "screenplay-source-anonymous": "改编自原著"
   }
 };
 
+// src/languages/zh-hant.js
+var labels = {
+  chapter: "第{n}章",
+  "chapter-heading": "{chapter}　{title}",
+  contents: "目錄",
+  and: "{a}、{b}",
+  copyright: "版權",
+  "all-rights-reserved": "版權所有，翻印必究。",
+  "published-by": "出版者：{publisher}",
+  "scene-break": "場景轉換",
+  "cover-alt": "《{title}》封面",
+  "start-of-content": "正文",
+  "accessibility-summary": "純文字圖書，包含可導覽的目錄、每章的標題和單一的邏輯閱讀順序。",
+  "accessibility-summary-cover": "文字圖書，包含附描述的封面圖片、可導覽的目錄、每章的標題和單一的邏輯閱讀順序。",
+  "review-title": "{title}（審閱本）",
+  "review-intro": "審閱本。",
+  "review-intro-build": "審閱本，版本 {build}。",
+  "review-labels": "每個段落都有一個標籤，例如 {label}（第3章第12段）。",
+  "review-quote": "每則意見請註明標籤和該段開頭的幾個詞，這樣即使文字有改動，作者也能找到確切位置。",
+  "review-quote-build": "每則意見請註明標籤、版本和該段開頭的幾個詞，這樣即使文字有改動，作者也能找到確切位置。",
+  "review-note-link": "每個標籤旁的「意見」連結會開啟一則已填好這些資訊的意見。",
+  note: "意見",
+  "note-title": "為 {label} 寫意見",
+  "anchor-title": "連結到 {label}",
+  by: "",
+  "approximate-words": "約{words}詞",
+  "approximate-characters": "約{characters}字",
+  "narration-opening": "《{title}》。作者：{authors}。朗讀：{narrator}。",
+  "narration-opening-anonymous": "《{title}》。朗讀：{narrator}。",
+  "narration-closing": "全書完。您收聽的是《{title}》，作者{authors}，朗讀{narrator}。",
+  "narration-closing-anonymous": "全書完。您收聽的是《{title}》，朗讀{narrator}。",
+  "screenplay-credit": "編劇",
+  "screenplay-source": "改編自{authors}的作品",
+  "screenplay-source-anonymous": "改編自原著"
+};
+var chinese = { cased: false, segmentation: "character", countUnit: "characters", dialogueDash: null, narrationRate: 300 };
+var zh_hant_default = [
+  ...["zh-hant", "zh-tw", "zh-hk", "zh-mo"].map((code) => ({ code, name: "Chinese (Traditional)", script: "Hant", labels })),
+  { code: "yue", name: "Cantonese", ...chinese, script: "Hant", labels },
+  { code: "lzh", name: "Classical Chinese", ...chinese, script: "Hant", labels }
+];
+
 // src/languages/index.js
 var DEFAULT_LANGUAGE = "en";
-var PACKS = new Map([ar_default, da_default, de_default, de_ch_default, en_default, fi_default, he_default, hi_default, ja_default, ko_default, sv_default, th_default, zh_default].map((pack) => [pack.code, pack]));
+var PACKS = new Map([ar_default, da_default, de_default, de_ch_default, en_default, es_default, fa_default, fi_default, fr_default, he_default, hi_default, it_default, ja_default, ko_default, nl_default, pl_default, pt_default, pt_pt_default, ru_default, sv_default, th_default, tr_default, uk_default, zh_default, ...zh_hant_default].map((pack) => [pack.code, pack]));
 var TAG_PATTERN = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/;
 function isLanguageTag(value) {
   return typeof value === "string" && TAG_PATTERN.test(value.trim());
@@ -2166,6 +2485,8 @@ var LANGUAGE_ALIASES = {
   spa: "es",
   fra: "fr",
   fre: "fr",
+  fas: "fa",
+  per: "fa",
   heb: "he",
   hin: "hi",
   ita: "it",
@@ -2173,9 +2494,13 @@ var LANGUAGE_ALIASES = {
   kor: "ko",
   nld: "nl",
   dut: "nl",
+  pol: "pl",
   por: "pt",
   rus: "ru",
-  tha: "th"
+  swe: "sv",
+  tha: "th",
+  tur: "tr",
+  ukr: "uk"
 };
 var GRANDFATHERED = {
   "en-gb-oed": ["en-gb-oxendict", null],
@@ -2283,6 +2608,490 @@ function skippedCheck(pack, { check, label, lists }) {
 }
 function skippedLines(skipped) {
   return skipped.map((entry) => `Note: ${entry.message}`);
+}
+var LABEL_KEYS = Object.freeze(Object.keys(en_default.labels));
+function fillLabel(labels, key, values = {}, escape = (text) => text) {
+  const template = String(labels?.[key] ?? en_default.labels[key] ?? "");
+  let text = "";
+  let last = 0;
+  for (const match of template.matchAll(/\{([a-z]+)\}/g)) {
+    if (values[match[1]] !== undefined) {
+      text += `${escape(template.slice(last, match.index))}${values[match[1]]}`;
+      last = match.index + match[0].length;
+    }
+  }
+  return `${text}${escape(template.slice(last))}`;
+}
+function joinNames(names, labels) {
+  const template = String(labels?.and ?? en_default.labels.and);
+  const joiner = template.includes("{a}") && template.includes("{b}") ? labels : { and: "{a}, {b}" };
+  return names.length === 0 ? "" : names.reduce((joined, name) => fillLabel(joiner, "and", { a: joined, b: name }));
+}
+
+// src/words.js
+var CJK = "\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}\\u30FC";
+var SOUTHEAST_ASIAN = "\\p{Script=Thai}\\p{Script=Lao}\\p{Script=Khmer}\\p{Script=Myanmar}";
+var JOINER = "\\u00AD\\u200C\\u200D";
+var UNSPACED_LETTERS = `${CJK}${SOUTHEAST_ASIAN}`;
+var UNSPACED = new RegExp(`[${CJK}]|[${SOUTHEAST_ASIAN}](?:[${SOUTHEAST_ASIAN}]|[${JOINER}]+(?=[${SOUTHEAST_ASIAN}]))*`, "gu");
+var CJK_CHARACTER = new RegExp(`^[${CJK}]$`, "u");
+var WINDOW = 1e4;
+var RESTART_WORDS = 4;
+var segmenter;
+function segmentRun(run, window = WINDOW) {
+  segmenter ??= new Intl.Segmenter("en", { granularity: "word" });
+  const words = [];
+  let offset = 0;
+  while (offset < run.length) {
+    const end = offset + window;
+    const found = [];
+    for (const { segment, index, isWordLike } of segmenter.segment(run.slice(offset, end))) {
+      if (isWordLike) {
+        found.push([segment, offset + index]);
+      }
+    }
+    const restart = end < run.length && found.length > RESTART_WORDS ? found[found.length - RESTART_WORDS][1] : end;
+    for (const word of found) {
+      if (word[1] < restart) {
+        words.push(word);
+      }
+    }
+    offset = restart;
+  }
+  return words;
+}
+function wordSpans(text, pattern) {
+  const source = String(text);
+  const spans = [];
+  let last = 0;
+  const between = (end) => {
+    if (end > last) {
+      for (const match of source.slice(last, end).matchAll(pattern)) {
+        spans.push({ word: match[0], start: last + match.index, end: last + match.index + match[0].length });
+      }
+    }
+  };
+  for (const match of source.matchAll(UNSPACED)) {
+    between(match.index);
+    if (CJK_CHARACTER.test(match[0])) {
+      spans.push({ word: match[0], start: match.index, end: match.index + match[0].length });
+    } else {
+      for (const [word, offset] of segmentRun(match[0])) {
+        spans.push({ word, start: match.index + offset, end: match.index + offset + word.length });
+      }
+    }
+    last = match.index + match[0].length;
+  }
+  between(source.length);
+  return spans;
+}
+function unspacedBoundaries(text) {
+  const boundaries = new Set;
+  for (const { start, end } of wordSpans(text, /(?!)/gu)) {
+    boundaries.add(start);
+    boundaries.add(end);
+  }
+  return boundaries;
+}
+
+// src/markdown.js
+var LATIN_FOLDS = {
+  "Æ": "AE",
+  "æ": "ae",
+  "Ø": "O",
+  "ø": "o",
+  "Ł": "L",
+  "ł": "l",
+  "ß": "ss",
+  "ẞ": "SS",
+  "Đ": "D",
+  "đ": "d",
+  "Ð": "D",
+  "ð": "d",
+  "Þ": "Th",
+  "þ": "th",
+  "Œ": "OE",
+  "œ": "oe",
+  "Ħ": "H",
+  "ħ": "h",
+  "Ŧ": "T",
+  "ŧ": "t",
+  "Ŋ": "Ng",
+  "ŋ": "ng",
+  "ı": "i",
+  "ĸ": "k"
+};
+var LATIN_FOLD_PATTERN = new RegExp(`[${Object.keys(LATIN_FOLDS).join("")}]`, "g");
+function foldLatin(value) {
+  return String(value).replace(LATIN_FOLD_PATTERN, (letter) => LATIN_FOLDS[letter]).normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
+}
+var CYRILLIC = {
+  а: "a",
+  б: "b",
+  в: "v",
+  г: "g",
+  д: "d",
+  е: "e",
+  ё: "e",
+  ж: "zh",
+  з: "z",
+  и: "i",
+  й: "y",
+  к: "k",
+  л: "l",
+  м: "m",
+  н: "n",
+  о: "o",
+  п: "p",
+  р: "r",
+  с: "s",
+  т: "t",
+  у: "u",
+  ф: "f",
+  х: "kh",
+  ц: "ts",
+  ч: "ch",
+  ш: "sh",
+  щ: "shch",
+  ъ: "",
+  ы: "y",
+  ь: "",
+  э: "e",
+  ю: "yu",
+  я: "ya",
+  є: "ye",
+  і: "i",
+  ї: "yi",
+  ґ: "g",
+  ў: "u",
+  ђ: "dj",
+  ј: "j",
+  љ: "lj",
+  њ: "nj",
+  ћ: "c",
+  џ: "dz",
+  ѓ: "gj",
+  ќ: "kj",
+  ѕ: "dz",
+  ѐ: "e",
+  ѝ: "i"
+};
+var GREEK_DIGRAPHS = { αυ: "av", ευ: "ev", ηυ: "iv", ου: "ou", γγ: "ng", γξ: "nx", γχ: "nch" };
+var GREEK = {
+  α: "a",
+  β: "v",
+  γ: "g",
+  δ: "d",
+  ε: "e",
+  ζ: "z",
+  η: "i",
+  θ: "th",
+  ι: "i",
+  κ: "k",
+  λ: "l",
+  μ: "m",
+  ν: "n",
+  ξ: "x",
+  ο: "o",
+  π: "p",
+  ρ: "r",
+  σ: "s",
+  ς: "s",
+  τ: "t",
+  υ: "y",
+  φ: "f",
+  χ: "ch",
+  ψ: "ps",
+  ω: "o",
+  ϊ: "i",
+  ϋ: "y"
+};
+var TRANSLITERATIONS = { ...GREEK_DIGRAPHS, ...CYRILLIC, ...GREEK };
+var TRANSLITERATION_PATTERN = new RegExp(`${Object.keys(GREEK_DIGRAPHS).join("|")}|[${Object.keys(CYRILLIC).join("")}${Object.keys(GREEK).join("")}]`, "g");
+var UNTRANSLITERATED_LETTER = /[\p{Script=Cyrillic}\p{Script=Greek}]/u;
+function transliterate(value) {
+  const spelled = String(value).toLowerCase().normalize("NFD").replace(/([\u0370-\u03ff])([\u0300-\u036f]+)/g, (_, letter, marks) => letter + (marks.includes("̈") ? "̈" : "")).normalize("NFC").replace(/\u02bc/g, "").replace(TRANSLITERATION_PATTERN, (letters) => TRANSLITERATIONS[letters]);
+  return UNTRANSLITERATED_LETTER.test(spelled) ? null : spelled;
+}
+function kebabCase(value, { transliterate: scripts = true } = {}) {
+  return foldLatin((scripts ? transliterate(value) : null) ?? value).replace(/['‘’]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+function titleCaseSlug(slug) {
+  return String(slug).split("-").filter(Boolean).map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`).join(" ");
+}
+function chapterHeading(number, title, labels = undefined) {
+  const text = String(title ?? "").trim();
+  const n = String(number);
+  const label = fillLabel(labels, "chapter", { n }).trim() || fillLabel(undefined, "chapter", { n });
+  return text === "" || text.toLowerCase() === label.toLowerCase() ? label : fillLabel(labels, "chapter-heading", { chapter: label, title: text });
+}
+var WORD_CHARS = "\\p{L}\\p{M}\\p{N}\\u200C\\u200D\\u00AD";
+var URL_PLACEHOLDER = "";
+var WORD_PATTERN = new RegExp(`${URL_PLACEHOLDER}|[\\p{L}\\p{N}][${WORD_CHARS}]*(?:(?:['’‐‑-]|(?<=\\p{N})[.,:](?=\\p{N}))[\\p{L}\\p{N}][${WORD_CHARS}]*)*`, "gu");
+var URL_OR_EMAIL = /(?<![a-z0-9+.-])(?:[a-z][a-z0-9+.-]*:\/\/|www\.)[^\s<>()[\]`]*[^\s<>()[\]`.,;:!?'"\u2019\u201d*_~]|(?<![\p{L}\p{N}._%+-])[\p{L}\p{N}][\p{L}\p{N}._%+-]*@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/giu;
+function plainLinks(text) {
+  return String(text).replace(/!\[[^\]]{0,1000}\]\([^)]{0,1000}\)/g, "").replace(/\[([^\]]{0,1000})\]\([^)]{0,1000}\)/g, "$1");
+}
+function flattenHeadings(text) {
+  return String(text).replace(/^(#+)(?:[ \t]+([^\n]*))?$/gm, (line, hashes, content) => {
+    const heading = String(content ?? "").replace(/(?:^|[ \t]+)#+[ \t]*$/, "").trim();
+    if (heading !== "") {
+      return heading;
+    }
+    return hashes === "#" ? "#" : "";
+  });
+}
+function splitWords(markdown) {
+  const urls = [];
+  const normalized = plainLinks(withoutFenceMarkers(String(markdown).replace(/\uE000/g, " "))).replace(URL_OR_EMAIL, (match) => {
+    urls.push(match);
+    return ` ${URL_PLACEHOLDER} `;
+  }).replace(/\\([!-/:-@[-`{-~])/g, "$1").replace(/[#>*_~|`]/g, " ").replace(/(?<!\p{N}):|:(?!\p{N})/gu, " ");
+  let next = 0;
+  return wordSpans(normalized, WORD_PATTERN).map(({ word }) => word === URL_PLACEHOLDER ? urls[next++] : word);
+}
+function isSceneBreak(paragraph) {
+  const text = String(paragraph).replace(/\\([*_~-])/g, "$1").trim();
+  return text === "#" || /^([*_~-])( ?\1){2,}$/.test(text);
+}
+function wordCount(markdown) {
+  return splitWords(markdown).length;
+}
+var graphemes;
+function characterCount(markdown) {
+  const text = plainLinks(withoutFenceMarkers(String(markdown).replace(//g, " "))).split(`
+`).filter((line) => !isSceneBreak(line)).join(`
+`).replace(/\\([!-/:-@[-`{-~])/g, "$1").replace(/[#>*_~|`\s]+/gu, "");
+  graphemes ??= new Intl.Segmenter("en", { granularity: "grapheme" });
+  let count = 0;
+  for (const _ of graphemes.segment(text)) {
+    count += 1;
+  }
+  return count;
+}
+function chapterProse(markdownBody, commentReplacement = "") {
+  return scanComments(proseSection(markdownBody), commentReplacement).text;
+}
+function hasUnclosedComment(prose) {
+  return scanComments(String(prose)).unclosed;
+}
+function countTodoMarkers(prose) {
+  return (String(prose).match(/\[TODO\b/gi) ?? []).length;
+}
+function scanComments(text, replacement = "") {
+  const source = String(text);
+  const { ranges, unclosed } = scanMarkup(source);
+  let result = "";
+  let position = 0;
+  for (const range of ranges) {
+    if (range.kind === "comment") {
+      result += source.slice(position, range.start) + replacement;
+      position = range.end;
+    }
+  }
+  return { text: result + source.slice(position), unclosed };
+}
+function maskMarkup(text) {
+  const source = String(text);
+  let result = "";
+  let position = 0;
+  for (const range of scanMarkup(source).ranges) {
+    result += source.slice(position, range.start) + source.slice(range.start, range.end).replace(/[^\r\n]/g, " ");
+    position = range.end;
+  }
+  return result + source.slice(position);
+}
+function scanMarkup(text) {
+  const ranges = [];
+  let unclosed = false;
+  let fenceLimit = Infinity;
+  let nextOpen = -2;
+  let position = 0;
+  while (position < text.length) {
+    const newline = text.indexOf(`
+`, position);
+    const lineEnd = newline === -1 ? text.length : newline;
+    if (position === 0 || text[position - 1] === `
+`) {
+      const marker = /^ {0,3}(`{3,})/.exec(text.slice(position, lineEnd));
+      if (marker && marker[1].length < fenceLimit) {
+        const end = fenceEnd(text, lineEnd, marker[1].length);
+        if (end === -1) {
+          fenceLimit = marker[1].length;
+        } else {
+          ranges.push({ kind: "fence", start: position, end });
+          position = end;
+          continue;
+        }
+      }
+    }
+    if (nextOpen !== -1 && nextOpen < position) {
+      nextOpen = text.indexOf("<!--", position);
+    }
+    const open = nextOpen !== -1 && nextOpen < lineEnd ? nextOpen : -1;
+    const tick = text.indexOf("`", position);
+    if (tick !== -1 && tick < lineEnd && (open === -1 || tick < open)) {
+      position = codeSpanEnd(text, tick, lineEnd);
+      continue;
+    }
+    if (open === -1) {
+      position = lineEnd + 1;
+      continue;
+    }
+    const close = text.indexOf("-->", open + 4);
+    if (close === -1) {
+      unclosed = true;
+      nextOpen = -1;
+      position = open + 4;
+      continue;
+    }
+    ranges.push({ kind: "comment", start: open, end: close + 3 });
+    position = close + 3;
+  }
+  return { ranges, unclosed };
+}
+function fenceEnd(text, openerEnd, length) {
+  for (let lineStart = openerEnd + 1;lineStart < text.length; ) {
+    const next = text.indexOf(`
+`, lineStart);
+    const lineEnd = next === -1 ? text.length : next;
+    const line = text.slice(lineStart, lineEnd);
+    const marker = /^ {0,3}(`{3,})/.exec(line);
+    if (marker && marker[1].length >= length && line.trim() === marker[1]) {
+      return Math.min(lineEnd + 1, text.length);
+    }
+    lineStart = lineEnd + 1;
+  }
+  return -1;
+}
+function codeSpanEnd(text, tick, lineEnd) {
+  let runEnd = tick;
+  while (text[runEnd] === "`") {
+    runEnd += 1;
+  }
+  const length = runEnd - tick;
+  let search = runEnd;
+  while (search < lineEnd) {
+    const start = text.indexOf("`", search);
+    if (start === -1 || start >= lineEnd) {
+      break;
+    }
+    let end = start;
+    while (text[end] === "`") {
+      end += 1;
+    }
+    if (end - start === length) {
+      return end;
+    }
+    search = end;
+  }
+  return runEnd;
+}
+function fencedLineIndexes(lines) {
+  const fenced = new Set;
+  for (const [start, end] of closedFences(lines)) {
+    for (let inside = start;inside <= end; inside += 1) {
+      fenced.add(inside);
+    }
+  }
+  return fenced;
+}
+function closedFences(lines) {
+  const fences = [];
+  let open = null;
+  for (const [index, line] of lines.entries()) {
+    const marker = /^ {0,3}(`{3,})/.exec(line);
+    if (!marker) {
+      continue;
+    }
+    if (open === null) {
+      open = { index, fence: marker[1] };
+    } else if (marker[1].length >= open.fence.length && line.trim() === marker[1]) {
+      fences.push([open.index, index]);
+      open = null;
+    }
+  }
+  return fences;
+}
+function withoutFenceMarkers(text) {
+  const lines = String(text).split(/(?<=\n)/);
+  const markers = new Set(closedFences(lines.map((line) => line.replace(/\r?\n$/, ""))).flat());
+  return lines.map((line, index) => markers.has(index) ? `
+` : line).join("");
+}
+function withoutFencedCode(text) {
+  return splitFences(text).map((part) => part.fenced ? " " : part.text).join("");
+}
+function splitFences(text) {
+  const lines = text.split(/(?<=\n)/);
+  const fenced = fencedLineIndexes(lines.map((line) => line.replace(/\r?\n$/, "")));
+  const parts = [];
+  for (const [index, line] of lines.entries()) {
+    const isFenced = fenced.has(index);
+    const last = parts[parts.length - 1];
+    if (last && last.fenced === isFenced) {
+      last.text += line;
+    } else {
+      parts.push({ fenced: isFenced, text: line });
+    }
+  }
+  return parts;
+}
+function sectionHeadingPattern(heading) {
+  return new RegExp(`^ {0,3}##[ \\t]+${escapeRegExp(heading)}(?:[ \\t]+#+)?[ \\t]*\\r?$`, "im");
+}
+var NEXT_SECTION = /^ {0,3}##(?:[ \t]|\r?$)/m;
+function proseSection(markdownBody) {
+  const masked = maskMarkup(markdownBody);
+  const chapterTextMatch = sectionHeadingPattern("Chapter Text").exec(masked);
+  if (chapterTextMatch) {
+    return markdownBody.slice(chapterTextMatch.index + chapterTextMatch[0].length);
+  }
+  const outlineMatch = sectionHeadingPattern("Outline").exec(masked);
+  if (!outlineMatch) {
+    return markdownBody.slice(leadingHeadingLength(masked));
+  }
+  const start = outlineMatch.index + outlineMatch[0].length;
+  return markdownBody.slice(outlineDivider(masked, start) ?? start);
+}
+function outlineDivider(masked, start) {
+  const lines = masked.slice(start).split(`
+`);
+  let offset = start + lines[0].length + 1;
+  let previous = "blank";
+  for (const line of lines.slice(1)) {
+    const lineStart = offset;
+    offset += line.length + 1;
+    const text = line.replace(/\r$/, "");
+    if (text.trim() === "") {
+      previous = "blank";
+    } else if (text.trim() === "---") {
+      return lineStart + line.length;
+    } else if (/^\s*(?:[-*+]|\d+[.)])(?:[ \t]|$)/.test(text) || /^ {0,3}#{2,}(?:[ \t]|$)/.test(text) || /^[ \t]+\S/.test(text)) {
+      previous = "outline";
+    } else if (previous !== "outline") {
+      return null;
+    }
+  }
+  return null;
+}
+function extractSection(markdown, heading) {
+  const masked = maskMarkup(markdown);
+  const match = sectionHeadingPattern(heading).exec(masked);
+  if (!match) {
+    return "";
+  }
+  const start = match.index + match[0].length;
+  const next = NEXT_SECTION.exec(masked.slice(start));
+  const rest = markdown.slice(start);
+  return (next ? rest.slice(0, next.index) : rest).trim();
+}
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function leadingHeadingLength(masked) {
+  const match = /^(?:[ \t]*\r?\n)*(?:[ \t]{0,3}#(?!#)[ \t]+[^\r\n]*|[ \t]{0,3}\S[^\r\n]*\r?\n[ \t]{0,3}=+[ \t]*)(?:\r?\n|$)/.exec(masked);
+  return match ? match[0].length : 0;
 }
 
 // src/languages/locale.js
@@ -6265,18 +7074,20 @@ function isPlaceholder(value) {
 var RTL_LANGUAGES = new Set(["ar", "arc", "ckb", "dv", "fa", "he", "iw", "ji", "ks", "ku", "ps", "sd", "syr", "ug", "ur", "yi"]);
 var RTL_SCRIPTS = new Set(["adlm", "arab", "hebr", "mand", "nkoo", "rohg", "samr", "syrc", "thaa"]);
 function textDirection(language) {
-  const [primary, ...subtags] = String(language ?? "").trim().toLowerCase().split("-");
+  const [lookup, macrolanguage] = lookupTag(String(language ?? "").trim() || DEFAULT_LANGUAGE);
+  const [primary, ...subtags] = lookup.split("-");
   const script = subtags.find((subtag) => /^[a-z]{4}$/.test(subtag));
   if (script !== undefined) {
     return RTL_SCRIPTS.has(script) ? "rtl" : "ltr";
   }
-  return RTL_LANGUAGES.has(primary) ? "rtl" : "ltr";
+  return RTL_LANGUAGES.has(primary) || RTL_LANGUAGES.has(macrolanguage) ? "rtl" : "ltr";
 }
 function publishingMeta(data) {
   const text = (field) => typeof data[field] === "string" && !isPlaceholder(data[field]) ? data[field].trim() : "";
   const list = (field) => Array.isArray(data[field]) ? data[field].filter((item) => typeof item === "string" && item.trim() !== "" && !isPlaceholder(item)).map((item) => item.trim()) : [];
   const authors = list("authors");
   const author = text("author");
+  const pack = languagePack(projectLanguage(data));
   return {
     authors: authors.length > 0 ? authors : author === "" ? [] : [author],
     language: text("language") || "en",
@@ -6290,9 +7101,36 @@ function publishingMeta(data) {
     copyright: text("copyright"),
     coverAlt: text("cover-alt"),
     aiDisclosure: text("ai-disclosure"),
-    chapterLabel: text("chapter-label") || "Chapter",
-    contentsLabel: text("contents-label") || "Contents"
+    labels: buildLabels(data, pack),
+    narrationRate: pack.narrationRate,
+    countUnit: pack.countUnit
   };
+}
+function buildLabels(data, pack = languagePack(projectLanguage(data))) {
+  const labels = { ...languagePack("en").labels, ...pack.labels };
+  const set = (key, value) => {
+    if (typeof value !== "string" || isPlaceholder(value) || isBlankLabel(key, value)) {
+      return;
+    }
+    labels[key] = key !== "chapter" ? value : value.includes("{n}") ? value.trim() : `${value.trim()} {n}`;
+  };
+  set("chapter", data["chapter-label"]);
+  set("contents", typeof data["contents-label"] === "string" ? data["contents-label"].trim() : undefined);
+  for (const [key, value] of labelEntries(data.labels)) {
+    if (LABEL_KEYS.includes(key)) {
+      set(key, value);
+    }
+  }
+  return labels;
+}
+function labelEntries(value) {
+  return Array.isArray(value) ? value.filter(isEntry).flatMap((entry) => Object.entries(entry)) : [];
+}
+function isBlankLabel(key, value) {
+  return key !== "by" && value.trim() === "";
+}
+function isEntry(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 function validatePublishing(data, errors, warnings) {
   for (const field of SCALAR_FIELDS) {
@@ -6303,6 +7141,23 @@ function validatePublishing(data, errors, warnings) {
   for (const field of ["keywords", "subjects", "authors"]) {
     if (data[field] !== undefined && (!Array.isArray(data[field]) || data[field].some((item) => typeof item !== "string"))) {
       errors.push(err("field-not-list", `story.md frontmatter field ${field} must be a list of text`, "story.md"));
+    }
+  }
+  if (data.labels !== undefined) {
+    if (!Array.isArray(data.labels) || !data.labels.every(isEntry)) {
+      errors.push(err("field-not-list", "story.md frontmatter field labels must be a list of label: text entries, such as - chapter: Teil {n}", "story.md"));
+    } else {
+      for (const [key, value] of labelEntries(data.labels)) {
+        if (!LABEL_KEYS.includes(key)) {
+          warnings.push(warn("unknown-label", `story.md labels entry ${key} is not a build label; builds ignore it (see docs/manuscripts.md#build-labels)`, "story.md"));
+        } else if (typeof value !== "string") {
+          errors.push(err("field-not-text", `story.md labels entry ${key} must be text`, "story.md"));
+        } else if (isPlaceholder(value)) {
+          warnings.push(warn("todo-placeholder", `story.md labels entry ${key} is still a [TODO] placeholder; builds use the language's own text`, "story.md"));
+        } else if (isBlankLabel(key, value)) {
+          warnings.push(warn("blank-label", `story.md labels entry ${key} is blank; builds use the language's own text`, "story.md"));
+        }
+      }
     }
   }
   if (typeof data.language === "string" && !isPlaceholder(data.language) && !isLanguageTag(data.language)) {
@@ -6352,9 +7207,9 @@ function normalizeIsbn(value) {
   return "";
 }
 function copyrightPage(meta) {
-  const lines = [meta.copyright, "", "All rights reserved."];
+  const lines = [meta.copyright, "", fillLabel(meta.labels, "all-rights-reserved")];
   if (meta.publisher !== "") {
-    lines.push("", `Published by ${meta.publisher}`);
+    lines.push("", fillLabel(meta.labels, "published-by", { publisher: meta.publisher }));
   }
   if (meta.isbn !== "") {
     lines.push("", `ISBN ${meta.isbn}`);
@@ -6609,7 +7464,9 @@ function noteHref(noteUrl, label, stamp, text) {
   return `${base}${base.includes("?") ? "&" : "?"}${query}${fragment}`;
 }
 function reviewHtml(book, { stamp = "", noteUrl = "" } = {}) {
-  const contents = book.contentsLabel ?? "Contents";
+  const labels = book.labels;
+  const label = (key, values) => fillLabel(labels, key, values);
+  const contents = label("contents");
   const type = typesetting(book.language, book.writingMode);
   const rtl = type.rtl;
   const toc = [];
@@ -6620,12 +7477,12 @@ function reviewHtml(book, { stamp = "", noteUrl = "" } = {}) {
     const body = [];
     for (const entry of labelledParagraphs(part)) {
       if (entry === null) {
-        body.push({ quote: false, markup: `<hr class="scene-break" aria-label="Scene break">` });
+        body.push({ quote: false, markup: `<hr class="scene-break" aria-label="${escapeHtml(label("scene-break"))}">` });
         continue;
       }
       const { label: anchor, paragraph } = entry;
-      const note = noteUrl === "" ? "" : `<a class="note-link" href="${escapeHtml(noteHref(noteUrl, anchor, stamp, paragraph.text))}" title="Write a note on ${anchor}" target="_blank" rel="noopener">Note</a>`;
-      body.push({ quote: paragraph.quote, markup: `<p id="${anchor}"><a class="anchor" href="#${anchor}" title="Link to ${anchor}">${anchor}</a>${note}${paragraph.html}</p>` });
+      const note = noteUrl === "" ? "" : `<a class="note-link" href="${escapeHtml(noteHref(noteUrl, anchor, stamp, paragraph.text))}" title="${escapeHtml(label("note-title", { label: anchor }))}" target="_blank" rel="noopener">${escapeHtml(label("note"))}</a>`;
+      body.push({ quote: paragraph.quote, markup: `<p id="${anchor}"><a class="anchor" href="#${anchor}" title="${escapeHtml(label("anchor-title", { label: anchor }))}">${anchor}</a>${note}${paragraph.html}</p>` });
     }
     const heading = part.heading ? `<h2>${escapeHtml(part.title)}</h2>` : `<h2 class="visually-hidden">${escapeHtml(part.title)}</h2>`;
     sections.push(`<section id="${sectionId}" class="${part.kind}">${heading}
@@ -6633,13 +7490,21 @@ ${withBlockquotes(body).join(`
 `)}
 </section>`);
   }
-  const byline = book.authors.length === 0 ? "" : `<p class="byline">${escapeHtml(book.authors.join(" and "))}</p>`;
+  const byline = book.authors.length === 0 ? "" : `<p class="byline">${escapeHtml(joinNames(book.authors, labels))}</p>`;
+  const sentence = (key, values) => fillLabel(labels, key, values, escapeHtml);
+  const code = (text) => `<code>${escapeHtml(text)}</code>`;
+  const intro = joinSentences([
+    stamp === "" ? sentence("review-intro") : sentence("review-intro-build", { build: code(stamp) }),
+    sentence("review-labels", { label: code("ch03-p12") }),
+    sentence(stamp === "" ? "review-quote" : "review-quote-build"),
+    noteUrl === "" ? "" : sentence("review-note-link")
+  ]);
   return `<!DOCTYPE html>
 ${htmlRoot(book.language)}
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(book.title)}: review copy</title>
+<title>${escapeHtml(label("review-title", { title: book.title }))}</title>
 <style>
 :root { --bg: #fdfcf8; --fg: #1d1b16; --muted: #6b665c; --rule: #ddd6c8; --accent: #7c3aed; }
 @media (prefers-color-scheme: dark) { :root { --bg: #16150f; --fg: #ece8dd; --muted: #a39e92; --rule: #3a372f; --accent: #b794f4; } }
@@ -6677,7 +7542,7 @@ ${noteUrl === "" ? "" : `[dir="rtl"] .note-link { left: auto; right: -5.5rem; te
 <header>
 <h1>${escapeHtml(book.title)}</h1>
 ${byline}
-<p class="note">Review copy${stamp === "" ? "" : `, build <code>${escapeHtml(stamp)}</code>`}. Every paragraph has a label such as <code>ch03-p12</code> (chapter 3, paragraph 12). Quote the label${stamp === "" ? "" : " and the build"} with each note, with the paragraph's first few words, so the author can find the exact spot after the text changes.${noteUrl === "" ? "" : " The Note link beside each label opens a note with these filled in."}</p>
+<p class="note">${intro}</p>
 </header>
 <nav aria-label="${escapeHtml(contents)}"><h2>${escapeHtml(contents)}</h2><ol>
 ${toc.join(`
@@ -6714,7 +7579,7 @@ function printHtml(book, trimName = DEFAULT_TRIM) {
   }
   const pages = estimateBookPages(book, trimName);
   const inside = insideMargin(pages);
-  const author = book.authors.join(" and ");
+  const author = joinNames(book.authors, book.labels);
   const type = typesetting(book.language, book.writingMode);
   const rtl = type.rtl;
   const recto = rtl || type.vertical ? "left" : "right";
@@ -6727,7 +7592,7 @@ function printHtml(book, trimName = DEFAULT_TRIM) {
     let first = true;
     for (const paragraph of part.paragraphs) {
       if (paragraph === null) {
-        paragraphs.push({ quote: false, markup: `<p class="scene-break" aria-label="Scene break">*&#8195;*&#8195;*</p>` });
+        paragraphs.push({ quote: false, markup: `<p class="scene-break" aria-label="${escapeHtml(fillLabel(book.labels, "scene-break"))}">*&#8195;*&#8195;*</p>` });
         first = true;
         continue;
       }
@@ -6800,7 +7665,7 @@ ${type.vertical ? `${PRINT_VERTICAL}@media screen { body { max-width: none; max-
 <section class="title-page"><h1>${escapeHtml(book.title)}</h1>${author === "" ? "" : `<p class="author">${escapeHtml(author)}</p>`}</section>
 ${beforeToc.join(`
 `)}
-<nav class="toc"><h1>${escapeHtml(book.contentsLabel ?? "Contents")}</h1><ol>
+<nav class="toc"><h1>${escapeHtml(fillLabel(book.labels, "contents"))}</h1><ol>
 ${toc.join(`
 `)}
 </ol></nav>
@@ -6809,6 +7674,9 @@ ${afterToc.join(`
 </body>
 </html>
 `;
+}
+function joinSentences(sentences) {
+  return sentences.filter((sentence) => sentence !== "").reduce((text, sentence) => text === "" || /[。！？]$/u.test(text) ? `${text}${sentence}` : `${text} ${sentence}`, "");
 }
 function htmlRoot(language) {
   const dir = typesetting(language).rtl ? ` dir="rtl"` : "";
@@ -8291,9 +9159,20 @@ function timelineText(text) {
 // src/narration.js
 var NARRATION_WORDS_PER_MINUTE = 155;
 var NARRATION_CHARACTERS_PER_MINUTE = 300;
+function narrationUnit(manuscript) {
+  return manuscript?.unit === "characters" ? "characters" : "words";
+}
+function narrationRate(meta, unit = "words") {
+  const fallback = unit === "characters" ? NARRATION_CHARACTERS_PER_MINUTE : NARRATION_WORDS_PER_MINUTE;
+  return typeof meta?.narrationRate === "number" && (meta.countUnit ?? "words") === unit ? meta.narrationRate : fallback;
+}
 function narrationScript(manuscript, guide) {
-  const authors = manuscript.meta.authors.join(" and ");
-  const [rate, unit, count] = manuscript.unit === "characters" ? [NARRATION_CHARACTERS_PER_MINUTE, "characters", characterCount] : [NARRATION_WORDS_PER_MINUTE, "words", wordCount];
+  const labels = manuscript.meta.labels;
+  const unit = narrationUnit(manuscript);
+  const rate = narrationRate(manuscript.meta, unit);
+  const count = unit === "characters" ? characterCount : wordCount;
+  const authors = joinNames(manuscript.meta.authors, labels);
+  const narrator = "[narrator]";
   const sections = [
     ...manuscript.front.filter((entry) => !entry.copyright).map((entry) => ({ title: entry.title, body: entry.body })),
     ...manuscript.chapters.map((chapter) => ({ title: chapter.heading, body: chapter.body })),
@@ -8316,7 +9195,8 @@ function narrationScript(manuscript, guide) {
       lines.push(`| ${cell2(entry.name)} | ${cell2(entry.pronunciation)} | ${entry.kind} |`);
     }
   }
-  lines.push("", "## Opening Credits", "", `${manuscript.title}${/[.!?…]["”’')\]]*$/.test(manuscript.title) ? "" : "."}${authors === "" ? "" : ` Written by ${authors}.`} Narrated by [narrator].`);
+  const credit = (key) => fillLabel(labels, authors === "" ? `${key}-anonymous` : key, { title: manuscript.title, authors, narrator });
+  lines.push("", "## Opening Credits", "", withoutDoubledStop(credit("narration-opening"), manuscript.title));
   let wordsSoFar = 0;
   for (const section of sections) {
     const before = Math.round(wordsSoFar / rate);
@@ -8324,9 +9204,13 @@ function narrationScript(manuscript, guide) {
     const minutes = Math.round(wordsSoFar / rate) - before;
     lines.push("", `## ${section.title}`, "", `[${minutes < 1 ? "under 1 min" : `about ${minutes} min`}]`, "", narrationBody(section.body));
   }
-  lines.push("", "## Closing Credits", "", `The end. You have been listening to ${manuscript.title}${authors === "" ? "" : `, written by ${authors}`}, narrated by [narrator].`, "");
+  lines.push("", "## Closing Credits", "", credit("narration-closing"), "");
   return lines.join(`
 `);
+}
+function withoutDoubledStop(text, title) {
+  const ending = /[.!?…。！？]["”’')\]」』》]*$/u;
+  return text.startsWith(title) && ending.test(title) && /^[.。।]/u.test(text.slice(title.length)) ? `${title}${text.slice(title.length + 1)}` : text;
 }
 function pronunciationGuide(project) {
   const guide = [];
@@ -8386,12 +9270,13 @@ var FORM_NOUNS = {
 function fountainScript(input) {
   const pack = input.pack ?? languagePack();
   const lines = [`Title: ${inline(input.title)}`];
-  const authors = input.authors.map(inline).filter(Boolean).join(" and ");
+  const authors = joinNames(input.authors.map(inline).filter(Boolean), input.labels);
+  const label = (key, values) => fillLabel(input.labels, key, values, escapeText).trim();
   if (authors !== "") {
-    lines.push("Credit: Written by", `Author: ${authors}`);
+    lines.push(`Credit: ${label("screenplay-credit")}`, `Author: ${authors}`);
   }
-  const noun = FORM_NOUNS[input.form] ?? "book";
-  lines.push(`Source: Based on the ${noun}${authors === "" ? "" : ` by ${authors}`}`, "");
+  const form = FORM_NOUNS[input.form] ?? "book";
+  lines.push(`Source: ${authors === "" ? label("screenplay-source-anonymous", { form }) : label("screenplay-source", { form, authors })}`, "");
   lines.push("[[Scene skeleton built by story build from the scene records. Notes and synopses are not printed. Draft the action and dialogue under each heading, and merge, cut, or reorder scenes as the adaptation needs.]]");
   for (const chapter of input.chapters) {
     lines.push("", `## ${sectionText(chapter.heading)}`);
@@ -8449,7 +9334,10 @@ function timeOfDay(value, pack = languagePack()) {
   return upperCase(text, pack);
 }
 function inline(value) {
-  return String(value ?? "").replace(/[\s\u0000-\u001f\u007f-\u009f]+/g, " ").trim().replace(/[\\*_]/g, "\\$&").replace(/\[(?=\[)/g, "[ ").replace(/\](?=\])/g, "] ");
+  return escapeText(String(value ?? "").replace(/[\s\u0000-\u001f\u007f-\u009f]+/g, " ").trim());
+}
+function escapeText(text) {
+  return String(text).replace(/[\s\u0000-\u001f\u007f-\u009f]+/g, " ").replace(/[\\*_]/g, "\\$&").replace(/\[(?=\[)/g, "[ ").replace(/\](?=\])/g, "] ");
 }
 function sectionText(value) {
   return inline(value).replace(/^#+\s*/, "") || "Untitled";
@@ -8600,7 +9488,7 @@ function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
   const coverSpine = [];
   if (manuscript.cover) {
     const href = `images/cover.${manuscript.cover.extension}`;
-    const alt = meta.coverAlt === "" ? `Cover of ${manuscript.title}` : meta.coverAlt;
+    const alt = meta.coverAlt === "" ? fillLabel(meta.labels, "cover-alt", { title: manuscript.title }) : meta.coverAlt;
     coverEntries.push({ name: `OEBPS/${href}`, content: fs6.readFileSync(manuscript.cover.filePath) }, { name: "OEBPS/cover.xhtml", content: `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(manuscript.title)}</title>${head}</head><body epub:type="cover"><img src="${href}" alt="${xmlEscape(alt)}"/></body></html>` });
     coverItems.push(`<item id="cover-image" href="${href}" media-type="${manuscript.cover.mediaType}" properties="cover-image"/>`, `<item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>`);
     coverMeta.push(`<meta name="cover" content="cover-image"/>`);
@@ -8615,7 +9503,7 @@ function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
     ...meta.subjects.map((subject) => `<dc:subject>${xmlEscape(subject)}</dc:subject>`),
     meta.copyright === "" ? "" : `<dc:rights>${xmlEscape(meta.copyright)}</dc:rights>`
   ].join("");
-  const accessibility = epubAccessibilityMeta(Boolean(manuscript.cover));
+  const accessibility = epubAccessibilityMeta(Boolean(manuscript.cover), meta.labels);
   const items = documents.map((doc) => `<item id="${doc.id}" href="${doc.id}.xhtml" media-type="application/xhtml+xml"/>`);
   const spine = documents.map((doc) => `<itemref idref="${doc.id}"/>`);
   const modified = epubModifiedTimestamp();
@@ -8623,7 +9511,7 @@ function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
     { name: "mimetype", content: "application/epub+zip", stored: true },
     { name: "META-INF/container.xml", content: `<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>` },
     { name: "OEBPS/content.opf", content: `<?xml version="1.0" encoding="UTF-8"?><package version="3.0" unique-identifier="book-id" xmlns="http://www.idpf.org/2007/opf"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book-id">${identifier}</dc:identifier><dc:title>${xmlEscape(manuscript.title)}</dc:title>${creator}<dc:language>${lang}</dc:language>${optional}<meta property="dcterms:modified">${modified}</meta>${accessibility}${coverMeta.join("")}${type.vertical ? `<meta name="primary-writing-mode" content="vertical-rl"/>` : ""}</metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>${stylesheet === "" ? "" : `<item id="style" href="style.css" media-type="text/css"/>`}${coverItems.join("")}${items.join("")}</manifest><spine${rtl || type.vertical ? ` page-progression-direction="rtl"` : ""}>${coverSpine.join("")}${spine.join("")}</spine></package>` },
-    { name: "OEBPS/nav.xhtml", content: navXhtml(manuscript.title, documents, root, meta.contentsLabel, head) },
+    { name: "OEBPS/nav.xhtml", content: navXhtml(manuscript.title, documents, root, meta.labels, head) },
     ...stylesheet === "" ? [] : [{ name: "OEBPS/style.css", content: stylesheet }],
     ...coverEntries,
     ...documents.map((doc) => ({ name: `OEBPS/${doc.id}.xhtml`, content: doc.content }))
@@ -8641,15 +9529,15 @@ function epubStylesheet(type) {
 `)}
 `;
 }
-function navXhtml(title, documents, root, contentsLabel = "Contents", head = "") {
+function navXhtml(title, documents, root, labels, head = "") {
   const links = documents.map((doc) => `<li><a href="${doc.id}.xhtml">${xmlEscape(doc.label)}</a></li>`);
   const start = documents.find((doc) => doc.bodymatter);
-  const landmarks = start ? `<nav epub:type="landmarks" hidden="hidden"><ol><li><a epub:type="bodymatter" href="${start.id}.xhtml">Start of Content</a></li></ol></nav>` : "";
-  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(title)}</title>${head}</head><body><nav epub:type="toc" id="toc"><h1>${xmlEscape(contentsLabel)}</h1><ol>${links.join("")}</ol></nav>${landmarks}</body></html>`;
+  const landmarks = start ? `<nav epub:type="landmarks" hidden="hidden"><ol><li><a epub:type="bodymatter" href="${start.id}.xhtml">${xmlEscape(fillLabel(labels, "start-of-content"))}</a></li></ol></nav>` : "";
+  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(title)}</title>${head}</head><body><nav epub:type="toc" id="toc"><h1>${xmlEscape(fillLabel(labels, "contents"))}</h1><ol>${links.join("")}</ol></nav>${landmarks}</body></html>`;
 }
-function epubAccessibilityMeta(hasCover) {
+function epubAccessibilityMeta(hasCover, labels) {
   const features = ["tableOfContents", "readingOrder", "structuralNavigation", ...hasCover ? ["alternativeText"] : []];
-  const summary = hasCover ? "Text book with a described cover image, a navigable table of contents, headings for each chapter, and a single logical reading order." : "Text-only book with a navigable table of contents, headings for each chapter, and a single logical reading order.";
+  const summary = xmlEscape(fillLabel(labels, hasCover ? "accessibility-summary-cover" : "accessibility-summary"));
   return [
     `<meta property="schema:accessMode">textual</meta>`,
     ...hasCover ? [`<meta property="schema:accessMode">visual</meta>`] : [],
@@ -8722,7 +9610,7 @@ function htmlBook(manuscript) {
     authors: manuscript.meta.authors,
     language: manuscript.meta.language,
     writingMode: manuscript.meta.writingMode,
-    contentsLabel: manuscript.meta.contentsLabel,
+    labels: manuscript.meta.labels,
     words: manuscript.chapters.reduce((sum, chapter) => sum + wordCount(chapter.body), 0),
     parts
   };
@@ -8795,14 +9683,19 @@ function shunnWordCount(words, pack = languagePack()) {
   return formatNumber(rounded, pack);
 }
 function shunnLength(meta) {
-  return meta.characters === undefined ? `Approximately ${shunnWordCount(meta.words, meta.pack)} words` : `Approximately ${shunnWordCount(meta.characters, meta.pack)} characters`;
+  return meta.characters === undefined ? fillLabel(meta.labels, "approximate-words", { words: shunnWordCount(meta.words, meta.pack) }) : fillLabel(meta.labels, "approximate-characters", { characters: shunnWordCount(meta.characters, meta.pack) });
+}
+function shunnByline(meta) {
+  if (!meta.author) {
+    return [];
+  }
+  const by = fillLabel(meta.labels, "by");
+  return by === "" ? [meta.author] : [by, meta.author];
 }
 function shunnTitlePageXml(script, meta) {
   const line = (text, decoration) => shunnParagraphXml(script, shunnRunXml(script, text, decoration), true);
   const lines = [line(meta.title, { strong: true })];
-  if (meta.author) {
-    lines.push(line("by"), line(meta.author));
-  }
+  lines.push(...shunnByline(meta).map((text) => line(text)));
   lines.push(line(shunnLength(meta)));
   for (const contactLine of meta.contact) {
     lines.push(line(String(contactLine)));
@@ -8835,10 +9728,7 @@ function writeShunnDocx(outFile, manuscript, meta, writeOptions = {}) {
 }
 function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {}) {
   const lines = [meta.title];
-  if (meta.author) {
-    lines.push("by", meta.author);
-  }
-  lines.push("", shunnLength(meta), "");
+  lines.push(...shunnByline(meta), "", shunnLength(meta), "");
   for (const contactLine of meta.contact) {
     lines.push(String(contactLine));
   }
@@ -11824,6 +12714,7 @@ function screenplayOutline(project, book) {
   return {
     title: project.title,
     authors: book.meta.authors,
+    labels: book.meta.labels,
     form: typeof project.story.data.form === "string" ? project.story.data.form : "",
     pack: project.pack,
     chapters,
@@ -12012,9 +12903,11 @@ function truncateWords(text, budget) {
 }
 function shunnMeta(project) {
   const data = project.story.data;
+  const meta = publishingMeta(data);
   return {
     title: project.title,
-    author: publishingMeta(data).authors.join(" and "),
+    author: joinNames(meta.authors, meta.labels),
+    labels: meta.labels,
     contact: asArray(data.contact),
     words: project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0),
     pack: project.pack,
@@ -14209,7 +15102,7 @@ function bookChapters(project, action = "build") {
       title,
       numbered,
       displayNumber,
-      heading: numbered ? chapterHeading(displayNumber, title, meta.chapterLabel) : title,
+      heading: numbered ? chapterHeading(displayNumber, title, meta.labels) : title,
       body: chapterProse(markdown.body).replace(/\r\n?/g, `
 `).trim()
     };
@@ -14239,11 +15132,11 @@ function manuscriptParts(project, action = "build") {
   const back = matter("back");
   const hasCopyrightPage = [...front, ...back].some((entry) => entry.copyright);
   if (meta.copyright !== "" && !hasCopyrightPage) {
-    front.unshift({ id: "copyright", title: "Copyright", heading: false, copyright: true, body: copyrightPage(meta) });
+    front.unshift({ id: "copyright", title: fillLabel(meta.labels, "copyright"), heading: false, copyright: true, body: copyrightPage(meta) });
   }
   return {
     title: project.title,
-    author: meta.authors.join(" and "),
+    author: joinNames(meta.authors, meta.labels),
     meta,
     unit: project.unit.name,
     front,

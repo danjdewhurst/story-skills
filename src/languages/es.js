@@ -1,0 +1,41 @@
+// Spanish: build labels and narration pace. No word lists yet.
+
+export default {
+  code: "es",
+  name: "Spanish",
+  narrationRate: 150,
+  labels: {
+    chapter: "Capítulo {n}",
+    "chapter-heading": "{chapter}: {title}",
+    contents: "Índice",
+    and: "{a} y {b}",
+    copyright: "Derechos de autor",
+    "all-rights-reserved": "Todos los derechos reservados.",
+    "published-by": "Publicado por {publisher}",
+    "scene-break": "Cambio de escena",
+    "cover-alt": "Portada de {title}",
+    "start-of-content": "Inicio del contenido",
+    "accessibility-summary": "Libro solo de texto con un índice navegable, encabezados para cada capítulo y un único orden de lectura lógico.",
+    "accessibility-summary-cover": "Libro con texto e imagen de portada descrita, con un índice navegable, encabezados para cada capítulo y un único orden de lectura lógico.",
+    "review-title": "{title}: copia de revisión",
+    "review-intro": "Copia de revisión.",
+    "review-intro-build": "Copia de revisión, versión {build}.",
+    "review-labels": "Cada párrafo tiene una etiqueta como {label} (capítulo 3, párrafo 12).",
+    "review-quote": "Cite la etiqueta en cada nota, junto con las primeras palabras del párrafo, para que el autor encuentre el lugar exacto aunque el texto cambie.",
+    "review-quote-build": "Cite la etiqueta y la versión en cada nota, junto con las primeras palabras del párrafo, para que el autor encuentre el lugar exacto aunque el texto cambie.",
+    "review-note-link": "El enlace Nota junto a cada etiqueta abre una nota con estos datos ya rellenados.",
+    note: "Nota",
+    "note-title": "Escribir una nota sobre {label}",
+    "anchor-title": "Enlace a {label}",
+    by: "por",
+    "approximate-words": "Aproximadamente {words} palabras",
+    "approximate-characters": "Aproximadamente {characters} caracteres",
+    "narration-opening": "{title}. Escrito por {authors}. Narrado por {narrator}.",
+    "narration-opening-anonymous": "{title}. Narrado por {narrator}.",
+    "narration-closing": "Fin. Ha escuchado {title}, escrito por {authors}, narrado por {narrator}.",
+    "narration-closing-anonymous": "Fin. Ha escuchado {title}, narrado por {narrator}.",
+    "screenplay-credit": "Escrito por",
+    "screenplay-source": "Basado en la obra de {authors}",
+    "screenplay-source-anonymous": "Basado en la obra original"
+  }
+};

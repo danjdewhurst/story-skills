@@ -6,6 +6,7 @@
 // paged-media engine such as Paged.js, WeasyPrint, or Prince.
 import { typesetting } from "./typesetting.js";
 import { usageError } from "./exit-codes.js";
+import { fillLabel, joinNames } from "./languages/index.js";
 import { wordSpans } from "./words.js";
 
 // Trim sizes and how much text a typical page holds, for the page estimate.
@@ -78,7 +79,9 @@ function noteHref(noteUrl, label, stamp, text) {
 // one <blockquote>. With `noteUrl`, each label gets a "Note" link to that
 // form, prefilled with the label, the stamp, and the paragraph's first words.
 export function reviewHtml(book, { stamp = "", noteUrl = "" } = {}) {
-  const contents = book.contentsLabel ?? "Contents";
+  const labels = book.labels;
+  const label = (key, values) => fillLabel(labels, key, values);
+  const contents = label("contents");
   const type = typesetting(book.language, book.writingMode);
   const rtl = type.rtl;
   const toc = [];
@@ -92,25 +95,35 @@ export function reviewHtml(book, { stamp = "", noteUrl = "" } = {}) {
     const body = [];
     for (const entry of labelledParagraphs(part)) {
       if (entry === null) {
-        body.push({ quote: false, markup: `<hr class="scene-break" aria-label="Scene break">` });
+        body.push({ quote: false, markup: `<hr class="scene-break" aria-label="${escapeHtml(label("scene-break"))}">` });
         continue;
       }
       const { label: anchor, paragraph } = entry;
       const note = noteUrl === ""
         ? ""
-        : `<a class="note-link" href="${escapeHtml(noteHref(noteUrl, anchor, stamp, paragraph.text))}" title="Write a note on ${anchor}" target="_blank" rel="noopener">Note</a>`;
-      body.push({ quote: paragraph.quote, markup: `<p id="${anchor}"><a class="anchor" href="#${anchor}" title="Link to ${anchor}">${anchor}</a>${note}${paragraph.html}</p>` });
+        : `<a class="note-link" href="${escapeHtml(noteHref(noteUrl, anchor, stamp, paragraph.text))}" title="${escapeHtml(label("note-title", { label: anchor }))}" target="_blank" rel="noopener">${escapeHtml(label("note"))}</a>`;
+      body.push({ quote: paragraph.quote, markup: `<p id="${anchor}"><a class="anchor" href="#${anchor}" title="${escapeHtml(label("anchor-title", { label: anchor }))}">${anchor}</a>${note}${paragraph.html}</p>` });
     }
     const heading = part.heading ? `<h2>${escapeHtml(part.title)}</h2>` : `<h2 class="visually-hidden">${escapeHtml(part.title)}</h2>`;
     sections.push(`<section id="${sectionId}" class="${part.kind}">${heading}\n${withBlockquotes(body).join("\n")}\n</section>`);
   }
-  const byline = book.authors.length === 0 ? "" : `<p class="byline">${escapeHtml(book.authors.join(" and "))}</p>`;
+  const byline = book.authors.length === 0 ? "" : `<p class="byline">${escapeHtml(joinNames(book.authors, labels))}</p>`;
+  // The note under the title, a sentence at a time: the labels' text is
+  // escaped and the code spans they place are markup.
+  const sentence = (key, values) => fillLabel(labels, key, values, escapeHtml);
+  const code = (text) => `<code>${escapeHtml(text)}</code>`;
+  const intro = joinSentences([
+    stamp === "" ? sentence("review-intro") : sentence("review-intro-build", { build: code(stamp) }),
+    sentence("review-labels", { label: code("ch03-p12") }),
+    sentence(stamp === "" ? "review-quote" : "review-quote-build"),
+    noteUrl === "" ? "" : sentence("review-note-link")
+  ]);
   return `<!DOCTYPE html>
 ${htmlRoot(book.language)}
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(book.title)}: review copy</title>
+<title>${escapeHtml(label("review-title", { title: book.title }))}</title>
 <style>
 :root { --bg: #fdfcf8; --fg: #1d1b16; --muted: #6b665c; --rule: #ddd6c8; --accent: #7c3aed; }
 @media (prefers-color-scheme: dark) { :root { --bg: #16150f; --fg: #ece8dd; --muted: #a39e92; --rule: #3a372f; --accent: #b794f4; } }
@@ -148,7 +161,7 @@ ${noteUrl === "" ? "" : `[dir="rtl"] .note-link { left: auto; right: -5.5rem; te
 <header>
 <h1>${escapeHtml(book.title)}</h1>
 ${byline}
-<p class="note">Review copy${stamp === "" ? "" : `, build <code>${escapeHtml(stamp)}</code>`}. Every paragraph has a label such as <code>ch03-p12</code> (chapter 3, paragraph 12). Quote the label${stamp === "" ? "" : " and the build"} with each note, with the paragraph's first few words, so the author can find the exact spot after the text changes.${noteUrl === "" ? "" : " The Note link beside each label opens a note with these filled in."}</p>
+<p class="note">${intro}</p>
 </header>
 <nav aria-label="${escapeHtml(contents)}"><h2>${escapeHtml(contents)}</h2><ol>
 ${toc.join("\n")}
@@ -191,7 +204,7 @@ export function printHtml(book, trimName = DEFAULT_TRIM) {
   }
   const pages = estimateBookPages(book, trimName);
   const inside = insideMargin(pages);
-  const author = book.authors.join(" and ");
+  const author = joinNames(book.authors, book.labels);
   // An RTL or vertical book opens from the other side: its recto pages are
   // left-hand pages, so chapters start on the left and the running heads
   // swap. The margins follow the physical page, so the spine side does not
@@ -210,7 +223,7 @@ export function printHtml(book, trimName = DEFAULT_TRIM) {
     let first = true;
     for (const paragraph of part.paragraphs) {
       if (paragraph === null) {
-        paragraphs.push({ quote: false, markup: `<p class="scene-break" aria-label="Scene break">*&#8195;*&#8195;*</p>` });
+        paragraphs.push({ quote: false, markup: `<p class="scene-break" aria-label="${escapeHtml(fillLabel(book.labels, "scene-break"))}">*&#8195;*&#8195;*</p>` });
         first = true;
         continue;
       }
@@ -286,13 +299,19 @@ ${type.vertical ? `${PRINT_VERTICAL}@media screen { body { max-width: none; max-
 <body>
 <section class="title-page"><h1>${escapeHtml(book.title)}</h1>${author === "" ? "" : `<p class="author">${escapeHtml(author)}</p>`}</section>
 ${beforeToc.join("\n")}
-<nav class="toc"><h1>${escapeHtml(book.contentsLabel ?? "Contents")}</h1><ol>
+<nav class="toc"><h1>${escapeHtml(fillLabel(book.labels, "contents"))}</h1><ol>
 ${toc.join("\n")}
 </ol></nav>
 ${afterToc.join("\n")}
 </body>
 </html>
 `;
+}
+
+// Sentences joined with a space, except after a full stop that carries its
+// own spacing (。！？), as Chinese and Japanese set them. Empty ones go.
+function joinSentences(sentences) {
+  return sentences.filter((sentence) => sentence !== "").reduce((text, sentence) => (text === "" || /[。！？]$/u.test(text) ? `${text}${sentence}` : `${text} ${sentence}`), "");
 }
 
 // The root element: `dir="rtl"` for a right-to-left language, since

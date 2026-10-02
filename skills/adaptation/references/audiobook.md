@@ -13,12 +13,19 @@ scene breaks as `[pause]`, and the total runtime. Actual pace varies by
 narrator and genre; thrillers read faster than literary fiction. Use the
 total to budget, not to promise.
 
-155 words per minute is an English narration rate. Speech rate in words
-differs by language, because words differ in length, so for a book in
-another language (`language` in `story.md`) time the narrator reading a
-sample chapter and rescale the totals. For Chinese and Japanese, where
-`story wordcount` counts each character as a word, the build's runtimes
-are not a usable estimate: time a sample and work from that.
+155 words per minute is the English narration rate. Speech rate in words
+differs by language, because words differ in length, so the build uses
+the rate in the language pack for `language` in `story.md` (120 words a
+minute for German) and English's rate for a language with none. A book
+counted in characters (Chinese and Japanese, or `count-unit: characters`)
+is timed at 300 characters a minute; Mandarin narration runs a little
+slower, and the count includes punctuation. The script's first line names the rate it
+used. These are starting estimates: time the narrator reading a sample
+chapter and rescale the totals.
+
+The opening and closing credits are in the book's language, from the
+pack's build labels; the headings and `[narrator]` marker stay in
+English. Check the credits with the user before recording.
 
 Rebuild after every manuscript or pronunciation change. The file is
 generated; keep narrator notes in `production.md`, not in the script.

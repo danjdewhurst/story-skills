@@ -1723,7 +1723,7 @@ The skill first adds `pronunciation` (plain respelling with the stressed syllabl
 story build . --format narration --out adaptations/audiobook/narration-script.md
 ```
 
-The script opens with the runtime and a pronunciation guide, then gives each chapter with its estimated finished runtime at 155 words per minute, scene breaks as `[pause]`:
+The script opens with the runtime and a pronunciation guide, then gives each chapter with its estimated finished runtime at the language's narration pace (155 words per minute in English), scene breaks as `[pause]`:
 
 ```text
 # The Gannet Point Light: Narration Script

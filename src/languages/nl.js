@@ -1,0 +1,41 @@
+// Dutch: build labels and narration pace. No word lists yet.
+
+export default {
+  code: "nl",
+  name: "Dutch",
+  narrationRate: 135,
+  labels: {
+    chapter: "Hoofdstuk {n}",
+    "chapter-heading": "{chapter}: {title}",
+    contents: "Inhoud",
+    and: "{a} en {b}",
+    copyright: "Colofon",
+    "all-rights-reserved": "Alle rechten voorbehouden.",
+    "published-by": "Uitgegeven door {publisher}",
+    "scene-break": "Scènewisseling",
+    "cover-alt": "Omslag van {title}",
+    "start-of-content": "Begin van de inhoud",
+    "accessibility-summary": "Boek met alleen tekst, met een navigeerbare inhoudsopgave, een kop voor elk hoofdstuk en één logische leesvolgorde.",
+    "accessibility-summary-cover": "Boek met tekst en een beschreven omslagafbeelding, met een navigeerbare inhoudsopgave, een kop voor elk hoofdstuk en één logische leesvolgorde.",
+    "review-title": "{title}: leesexemplaar",
+    "review-intro": "Leesexemplaar.",
+    "review-intro-build": "Leesexemplaar, versie {build}.",
+    "review-labels": "Elke alinea heeft een label zoals {label} (hoofdstuk 3, alinea 12).",
+    "review-quote": "Vermeld bij elke notitie het label en de eerste woorden van de alinea, zodat de auteur de precieze plek terugvindt, ook als de tekst verandert.",
+    "review-quote-build": "Vermeld bij elke notitie het label, de versie en de eerste woorden van de alinea, zodat de auteur de precieze plek terugvindt, ook als de tekst verandert.",
+    "review-note-link": "De link Notitie naast elk label opent een notitie waarin deze gegevens al zijn ingevuld.",
+    note: "Notitie",
+    "note-title": "Notitie schrijven bij {label}",
+    "anchor-title": "Link naar {label}",
+    by: "door",
+    "approximate-words": "Ongeveer {words} woorden",
+    "approximate-characters": "Ongeveer {characters} tekens",
+    "narration-opening": "{title}. Geschreven door {authors}. Voorgelezen door {narrator}.",
+    "narration-opening-anonymous": "{title}. Voorgelezen door {narrator}.",
+    "narration-closing": "Einde. U luisterde naar {title}, geschreven door {authors}, voorgelezen door {narrator}.",
+    "narration-closing-anonymous": "Einde. U luisterde naar {title}, voorgelezen door {narrator}.",
+    "screenplay-credit": "Geschreven door",
+    "screenplay-source": "Naar het werk van {authors}",
+    "screenplay-source-anonymous": "Naar het oorspronkelijke werk"
+  }
+};

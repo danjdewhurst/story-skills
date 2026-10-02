@@ -360,7 +360,7 @@ tense: past
 | `severity` | list of mappings | no | Named warnings promoted to errors or turned off. See [CLI defaults and severity](#cli-defaults-and-severity). |
 | `cover` | path | no | Cover image inside the project: `.jpg`, `.jpeg`, `.png`, `.gif`, or `.webp`. `story build --format epub` embeds it. |
 | `ifid` | UUID | no | The interactive fiction id `story build --format twee` and `--format ink` write, a version 4 UUID such as `3F2C9A61-7B1D-4E8A-9C3B-2A6D5E4F1B07`. Without it the build derives one from the story id, the same on every build, and warns with the line to add: a title change changes the derived IFID, and two books with the same title share it. `story validate` and the build error on a value that is not a version 4 UUID. See [Branching chapters](#branching-chapters). |
-| `authors`, `language`, `isbn`, `publisher`, `publication-date`, `description`, `keywords`, `subjects`, `copyright`, `cover-alt`, `ai-disclosure`, `chapter-label`, `contents-label`, `writing-mode` | various | no | Publishing metadata read by `story build`. See [Publishing metadata](#publishing-metadata). |
+| `authors`, `language`, `isbn`, `publisher`, `publication-date`, `description`, `keywords`, `subjects`, `copyright`, `cover-alt`, `ai-disclosure`, `chapter-label`, `contents-label`, `labels`, `writing-mode` | various | no | Publishing metadata read by `story build`. See [Publishing metadata](#publishing-metadata). |
 
 `story validate` errors when `cover` names a missing file, a file outside the project, or an unsupported extension. The craft fields `premise`, `counter-premise`, and `season-goal` have no CLI flags: edit `story.md` directly. See the [theme-craft](../skills/theme-craft/SKILL.md), [genre-craft](../skills/genre-craft/SKILL.md), and [discovery-drafting](../skills/discovery-drafting/SKILL.md) skills for how they are used.
 
@@ -499,11 +499,12 @@ These optional fields describe the published edition. Edit them in `story.md` by
 | `keywords` | list of strings | Retailer search keywords. `story validate` warns over 7. |
 | `subjects` | list of strings | BISAC subject codes such as `FIC022000`. `story validate` errors on any other shape. Written as EPUB subjects. |
 | `copyright` | string | The copyright line, such as `© 2026 Jane Doe`. See below. |
-| `cover-alt` | string | Alt text for the EPUB cover image. Default `Cover of <title>`. |
+| `cover-alt` | string | Alt text for the EPUB cover image. Default `Cover of <title>`, in the book's language. |
 | `ai-disclosure` | string | A short statement of how AI tools were used, for retailer and agent disclosure forms. |
-| `chapter-label` | string | The word for generated chapter headings, in place of `Chapter` (`Kapitel`). A `{n}` in it places the number (`第{n}章`). |
-| `contents-label` | string | The generated table of contents heading, in place of `Contents` (`Inhalt`). |
+| `chapter-label` | string | The word for generated chapter headings, in place of the language's own (`Chapter` in English). A `{n}` in it places the number (`第{n}章`). The same as a `chapter` entry in `labels`. |
+| `contents-label` | string | The generated table of contents heading, in place of the language's own (`Contents` in English). The same as a `contents` entry in `labels`. |
 | `writing-mode` | `horizontal` or `vertical` | How builds set the text. Default `horizontal`. `vertical` sets columns top to bottom and right to left, with pages turned right to left, and is valid only for Japanese, Chinese, or Korean (`ja`, `zh`, `zh-Hant`, `ko`); `story validate` errors with `unsupported-writing-mode` otherwise, and with `unsupported-value` on any other value. See [Typesetting other scripts](manuscripts.md#typesetting-other-scripts). |
+| `labels` | list | Replacements for any generated build text, as `- key: text` entries, such as `- chapter: Teil {n}`. The language pack supplies the rest. See [Build labels](manuscripts.md#build-labels). |
 
 The scalar fields must be text (an unquoted ISBN-13 is also accepted), and `authors`, `keywords`, and `subjects` must be lists of text; `story validate` errors otherwise:
 

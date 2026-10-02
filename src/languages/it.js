@@ -1,0 +1,41 @@
+// Italian: build labels and narration pace. No word lists yet.
+
+export default {
+  code: "it",
+  name: "Italian",
+  narrationRate: 130,
+  labels: {
+    chapter: "Capitolo {n}",
+    "chapter-heading": "{chapter}. {title}",
+    contents: "Indice",
+    and: "{a} e {b}",
+    copyright: "Copyright",
+    "all-rights-reserved": "Tutti i diritti riservati.",
+    "published-by": "Pubblicato da {publisher}",
+    "scene-break": "Cambio di scena",
+    "cover-alt": "Copertina di {title}",
+    "start-of-content": "Inizio del contenuto",
+    "accessibility-summary": "Libro di solo testo con indice navigabile, un titolo per ogni capitolo e un unico ordine di lettura logico.",
+    "accessibility-summary-cover": "Libro testuale con immagine di copertina descritta, indice navigabile, un titolo per ogni capitolo e un unico ordine di lettura logico.",
+    "review-title": "{title}: copia di revisione",
+    "review-intro": "Copia di revisione.",
+    "review-intro-build": "Copia di revisione, versione {build}.",
+    "review-labels": "Ogni paragrafo ha un’etichetta come {label} (capitolo 3, paragrafo 12).",
+    "review-quote": "Riportate l’etichetta in ogni nota, insieme alle prime parole del paragrafo, così l’autore potrà trovare il punto esatto anche dopo modifiche al testo.",
+    "review-quote-build": "Riportate l’etichetta e la versione in ogni nota, insieme alle prime parole del paragrafo, così l’autore potrà trovare il punto esatto anche dopo modifiche al testo.",
+    "review-note-link": "Il link Nota accanto a ogni etichetta apre una nota con questi dati già compilati.",
+    note: "Nota",
+    "note-title": "Scrivete una nota su {label}",
+    "anchor-title": "Link a {label}",
+    by: "di",
+    "approximate-words": "Circa {words} parole",
+    "approximate-characters": "Circa {characters} caratteri",
+    "narration-opening": "{title}. Scritto da {authors}. Letto da {narrator}.",
+    "narration-opening-anonymous": "{title}. Letto da {narrator}.",
+    "narration-closing": "Fine. Avete ascoltato {title}, scritto da {authors}, letto da {narrator}.",
+    "narration-closing-anonymous": "Fine. Avete ascoltato {title}, letto da {narrator}.",
+    "screenplay-credit": "Scritto da",
+    "screenplay-source": "Tratto dall’opera di {authors}",
+    "screenplay-source-anonymous": "Tratto dall’opera originale"
+  }
+};

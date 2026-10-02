@@ -1,6 +1,6 @@
 import { storyDateError } from "./continuity.js";
 import { err, warn } from "./findings.js";
-import { isLanguageTag } from "./languages/index.js";
+import { DEFAULT_LANGUAGE, fillLabel, isLanguageTag, LABEL_KEYS, languagePack, lookupTag, projectLanguage } from "./languages/index.js";
 import { isBookNumber, seriesDisplayName } from "./series.js";
 
 // Publishing metadata kept in story.md: what retailers, distributors, and the
@@ -24,13 +24,17 @@ export function isPlaceholder(value) {
 const RTL_LANGUAGES = new Set(["ar", "arc", "ckb", "dv", "fa", "he", "iw", "ji", "ks", "ku", "ps", "sd", "syr", "ug", "ur", "yi"]);
 const RTL_SCRIPTS = new Set(["adlm", "arab", "hebr", "mand", "nkoo", "rohg", "samr", "syrc", "thaa"]);
 
+// The tag is read as the language packs read it (lookupTag), so an alias
+// (fas, per, heb, iw) or an extlang under a right-to-left macrolanguage
+// (ar-arz) gets the same direction as its pack's language.
 export function textDirection(language) {
-  const [primary, ...subtags] = String(language ?? "").trim().toLowerCase().split("-");
+  const [lookup, macrolanguage] = lookupTag(String(language ?? "").trim() || DEFAULT_LANGUAGE);
+  const [primary, ...subtags] = lookup.split("-");
   const script = subtags.find((subtag) => /^[a-z]{4}$/.test(subtag));
   if (script !== undefined) {
     return RTL_SCRIPTS.has(script) ? "rtl" : "ltr";
   }
-  return RTL_LANGUAGES.has(primary) ? "rtl" : "ltr";
+  return RTL_LANGUAGES.has(primary) || RTL_LANGUAGES.has(macrolanguage) ? "rtl" : "ltr";
 }
 
 export function publishingMeta(data) {
@@ -38,6 +42,7 @@ export function publishingMeta(data) {
   const list = (field) => (Array.isArray(data[field]) ? data[field].filter((item) => typeof item === "string" && item.trim() !== "" && !isPlaceholder(item)).map((item) => item.trim()) : []);
   const authors = list("authors");
   const author = text("author");
+  const pack = languagePack(projectLanguage(data));
   return {
     authors: authors.length > 0 ? authors : author === "" ? [] : [author],
     language: text("language") || "en",
@@ -53,11 +58,50 @@ export function publishingMeta(data) {
     copyright: text("copyright"),
     coverAlt: text("cover-alt"),
     aiDisclosure: text("ai-disclosure"),
-    // Generated labels for a book not in English: "Kapitel" for the chapter
-    // headings and "Inhalt" for the table of contents.
-    chapterLabel: text("chapter-label") || "Chapter",
-    contentsLabel: text("contents-label") || "Contents"
+    // Generated text in the language's words, and its narration pace in
+    // the pack's count unit (`countUnit`), which story.md can override.
+    labels: buildLabels(data, pack),
+    narrationRate: pack.narrationRate,
+    countUnit: pack.countUnit
   };
+}
+
+// The build labels for a book: English, then the language pack's, then
+// story.md's `chapter-label` and `contents-label`, then its `labels:` list.
+// A chapter label without `{n}` takes the number after it ("Teil 3"). A
+// blank label is unset, so no title, heading, or landmark comes out empty,
+// except `by`, where blank leaves the Shunn byline's "by" line out.
+export function buildLabels(data, pack = languagePack(projectLanguage(data))) {
+  const labels = { ...languagePack("en").labels, ...pack.labels };
+  const set = (key, value) => {
+    if (typeof value !== "string" || isPlaceholder(value) || isBlankLabel(key, value)) {
+      return;
+    }
+    labels[key] = key !== "chapter" ? value : value.includes("{n}") ? value.trim() : `${value.trim()} {n}`;
+  };
+  set("chapter", data["chapter-label"]);
+  set("contents", typeof data["contents-label"] === "string" ? data["contents-label"].trim() : undefined);
+  for (const [key, value] of labelEntries(data.labels)) {
+    if (LABEL_KEYS.includes(key)) {
+      set(key, value);
+    }
+  }
+  return labels;
+}
+
+// story.md `labels:` as [key, value] pairs. The frontmatter has no nested
+// maps, so it is a list of `- key: text` entries.
+function labelEntries(value) {
+  return Array.isArray(value) ? value.filter(isEntry).flatMap((entry) => Object.entries(entry)) : [];
+}
+
+// Whether a label value counts as unset for being blank.
+function isBlankLabel(key, value) {
+  return key !== "by" && value.trim() === "";
+}
+
+function isEntry(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 export function validatePublishing(data, errors, warnings) {
@@ -69,6 +113,23 @@ export function validatePublishing(data, errors, warnings) {
   for (const field of ["keywords", "subjects", "authors"]) {
     if (data[field] !== undefined && (!Array.isArray(data[field]) || data[field].some((item) => typeof item !== "string"))) {
       errors.push(err("field-not-list", `story.md frontmatter field ${field} must be a list of text`, "story.md"));
+    }
+  }
+  if (data.labels !== undefined) {
+    if (!Array.isArray(data.labels) || !data.labels.every(isEntry)) {
+      errors.push(err("field-not-list", "story.md frontmatter field labels must be a list of label: text entries, such as - chapter: Teil {n}", "story.md"));
+    } else {
+      for (const [key, value] of labelEntries(data.labels)) {
+        if (!LABEL_KEYS.includes(key)) {
+          warnings.push(warn("unknown-label", `story.md labels entry ${key} is not a build label; builds ignore it (see docs/manuscripts.md#build-labels)`, "story.md"));
+        } else if (typeof value !== "string") {
+          errors.push(err("field-not-text", `story.md labels entry ${key} must be text`, "story.md"));
+        } else if (isPlaceholder(value)) {
+          warnings.push(warn("todo-placeholder", `story.md labels entry ${key} is still a [TODO] placeholder; builds use the language's own text`, "story.md"));
+        } else if (isBlankLabel(key, value)) {
+          warnings.push(warn("blank-label", `story.md labels entry ${key} is blank; builds use the language's own text`, "story.md"));
+        }
+      }
     }
   }
   if (typeof data.language === "string" && !isPlaceholder(data.language) && !isLanguageTag(data.language)) {
@@ -124,9 +185,9 @@ export function normalizeIsbn(value) {
 // The generated copyright page, used when story.md sets `copyright` and no
 // matter page already covers it.
 export function copyrightPage(meta) {
-  const lines = [meta.copyright, "", "All rights reserved."];
+  const lines = [meta.copyright, "", fillLabel(meta.labels, "all-rights-reserved")];
   if (meta.publisher !== "") {
-    lines.push("", `Published by ${meta.publisher}`);
+    lines.push("", fillLabel(meta.labels, "published-by", { publisher: meta.publisher }));
   }
   if (meta.isbn !== "") {
     lines.push("", `ISBN ${meta.isbn}`);
