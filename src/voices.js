@@ -66,23 +66,33 @@ function buildVoiceRules(pack) {
     tagAfterQuote: null,
     tagBeforeQuote: null,
     dashTag: null,
+    // A tag inside a quote (« Viens, dit-il, nous partons. »), in a pack
+    // with `inciseTags`, or null.
+    incise: null,
     // Words that open with an apostrophe rather than a single quote.
-    elision: new RegExp(`^(?:${elisions.map(escape).join("|") || NEVER})(?![\\p{L}\\p{N}])`, "iu"),
+    elision: new RegExp(`^(?:${elisions.map(listWord).join("|") || NEVER})(?![\\p{L}\\p{N}])`, "iu"),
     // 's is counted only after words where it cannot be a possessive (it's,
     // that's, let's), so "Tom's" is never a contraction.
     contraction: suffixes === null || contractedIs === null
       ? null
-      : new RegExp(`[\\p{L}](?:${suffixes.map(apostrophe).join("|") || NEVER})\\b|(?<![\\p{L}\\p{N}])(?:${contractedIs.map(escape).join("|") || NEVER})['’]s(?![\\p{L}\\p{N}])`, "giu"),
+      : new RegExp(`[\\p{L}](?:${suffixes.map(apostrophe).join("|") || NEVER})\\b|(?<![\\p{L}\\p{N}])(?:${contractedIs.map(listWord).join("|") || NEVER})['’]s(?![\\p{L}\\p{N}])`, "giu"),
     stopwords: checkSet(pack, "voiceStopwords")
   };
   if (verbs === null || pronouns === null) {
     return rules;
   }
-  const verbAlternation = verbs.map((verb) => escape(verb).replace(/ /g, "\\s+")).join("|") || NEVER;
-  const pronounAlternation = pronouns.map(escape).join("|") || NEVER;
+  const verbAlternation = verbs.map(listWord).join("|") || NEVER;
+  const pronounAlternation = pronouns.map(listWord).join("|") || NEVER;
   // An inverted tag joined by a hyphen (dit-il, demanda-t-elle), in a pack
   // with `inversionLinks`.
-  const links = (checkList(pack, "inversionLinks") ?? []).map(escape).join("|");
+  const links = (checkList(pack, "inversionLinks") ?? []).map(listWord).join("|");
+  // French sets a tag inside the speech: after a comma, and closed by
+  // another or by the end of the quote (« Viens, dit-il, nous partons. »),
+  // or after ? or ! (— Viens ! s'exclama-t-il.). The prose check's tags
+  // count as well as the speech verbs.
+  const inciseVerbs = [...new Set([...verbs, ...(checkList(pack, "plainTags") ?? []), ...(checkList(pack, "saidBookisms") ?? [])])].map(listWord).join("|");
+  const inciseCore = `(?:(?:${inciseVerbs})(?:${links || NEVER})(?:${pronounAlternation})|(?:${inciseVerbs})\\s+\\p{Lu}[\\p{L}'’-]*(?:\\s+\\p{Lu}[\\p{L}'’-]*){0,2}|(?:${pronounAlternation})\\s+(?:${inciseVerbs}))(?![\\p{L}\\p{N}])`;
+  const inciseDash = pack.inciseTags === true ? `|(?<=[?!…])\\s+(?=${inciseCore})` : "";
   const inverted = links === "" ? "" : `|(?:${verbAlternation})(?:${links})(?:${pronounAlternation})`;
   const pronounTag = `(?:(?:${pronounAlternation})\\s+(?:${verbAlternation})|(?:${verbAlternation})\\s+(?:${pronounAlternation})${inverted})(?![\\p{L}\\p{N}])`;
   return {
@@ -96,7 +106,8 @@ function buildVoiceRules(pack) {
     tagBeforeQuote: new RegExp(`(?<![\\p{L}\\p{N}])${pronounTag}[\\s,:…()—–-]*$`, "iu"),
     // Dialogue set with a leading dash (— Line, said Cy.) runs to a closing
     // dash or to a tag after a comma.
-    dashTag: new RegExp(`,\\s+(?:(?:${verbAlternation})\\s+\\p{Lu}|(?:${pronounAlternation})\\s+(?:${verbAlternation})(?![\\p{L}\\p{N}])${inverted === "" ? "" : `${inverted}(?![\\p{L}\\p{N}])`}|\\p{Lu}[\\p{L}'’-]*(?:\\s+\\p{Lu}[\\p{L}'’-]*){0,2}\\s+(?:${verbAlternation})(?![\\p{L}\\p{N}]))`, "u")
+    incise: pack.inciseTags === true ? new RegExp(`(?:,|(?<=[?!…]))\\s+${inciseCore}\\s*(?:,|[.!?…]?\\s*$)`, "u") : null,
+    dashTag: new RegExp(`(?:,\\s+(?:(?:${verbAlternation})\\s+\\p{Lu}|(?:${pronounAlternation})\\s+(?:${verbAlternation})(?![\\p{L}\\p{N}])${inverted === "" ? "" : `${inverted}(?![\\p{L}\\p{N}])`}|\\p{Lu}[\\p{L}'’-]*(?:\\s+\\p{Lu}[\\p{L}'’-]*){0,2}\\s+(?:${verbAlternation})(?![\\p{L}\\p{N}]))${inciseDash})`, "u")
   };
 }
 
@@ -225,7 +236,7 @@ function hasPronounTag(paragraph, pack) {
 function speakerPatterns(characters, pack, rules) {
   const verbs = rules.verbs === null ? null : rules.verbs
     .flatMap((verb) => [verb, `${verb[0].toUpperCase()}${verb.slice(1)}`])
-    .map((verb) => escape(verb).replace(/ /g, "\\s+"))
+    .map(listWord)
     .join("|") || NEVER;
   return characters
     .filter((character) => character.status !== "cut")
@@ -357,10 +368,26 @@ export function quoteMatches(paragraph, pack = languagePack()) {
       index += 1;
       continue;
     }
-    matches.push({ start: index, end: close + 1, text: paragraph.slice(index + 1, close).trim() });
+    matches.push(...splitIncise({ start: index, end: close + 1, text: paragraph.slice(index + 1, close).trim() }, paragraph, rules));
     index = close + 1;
   }
   return matches;
+}
+
+// A quote with a tag inside it (« Viens, dit-il, nous partons. ») as the
+// speech either side of the tag, so the tag reads as narration. The first
+// part ends where the tag starts, so the tag follows it as it follows a
+// closed quote; a tag at the end of the quote leaves one part.
+function splitIncise(match, paragraph, rules) {
+  const tag = rules.incise === null ? null : rules.incise.exec(paragraph.slice(match.start + 1, match.end - 1));
+  if (tag === null) {
+    return [match];
+  }
+  const tagStart = match.start + 1 + tag.index;
+  const tagEnd = tagStart + tag[0].length;
+  const first = { start: match.start, end: tagStart, text: paragraph.slice(match.start + 1, tagStart).trim() };
+  const rest = paragraph.slice(tagEnd, match.end - 1).trim();
+  return rest === "" ? [first] : [first, { start: tagEnd - 1, end: match.end, text: rest }];
 }
 
 // Speech in a paragraph that opens with the dialogue dash, added to
@@ -652,6 +679,12 @@ function similarVoices(left, right) {
 function phrasePattern(phrase, pack) {
   const edge = `(?![${UNSPACED_LETTERS}])[\\p{L}\\p{M}\\p{N}]`;
   return new RegExp(`(?<!${edge})${escape(matchingCase(String(phrase).trim(), pack)).replace(/['’]/g, "['’]")}(?!${edge})`, "giu");
+}
+
+// A word-list entry as a pattern: an apostrophe matches a straight or
+// curly one, and a space any run of spaces.
+function listWord(word) {
+  return escape(word).replace(/'/g, "['’]").replace(/ /g, "\\s+");
 }
 
 function escape(value) {

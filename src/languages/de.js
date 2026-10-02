@@ -19,12 +19,23 @@
 //   a written possessive takes no apostrophe (Annas Buch).
 // - No elisions: an apostrophe is not a quote mark in German.
 // - Every noun is capitalised, so import's name candidates need
-//   `determiners` and `nounSuffixes`: a word that follows an article (die
-//   Tür, der alte Hund) or ends like a noun (Hoffnung) is a common noun;
-//   see extractNameCandidates in ../import.js.
+//   `determiners`, `relativeWords`, and `nounSuffixes`: a word that follows
+//   an article (die Tür, der alte Hund), or ends like a noun (Hoffnung) and
+//   follows one at least once, is a common noun, unless it also follows a
+//   title or stands by a speech verb (Herr Jung, sagte Gretchen); see
+//   extractNameCandidates in ../import.js. Common nouns that go without an
+//   article (vor Angst, mit Kindern) are candidateStopwords.
+// - Headings: an ordinal, or a number with a full stop, may come before
+//   the heading word (Erstes Kapitel, 1. Kapitel, Zweiter Teil), in
+//   `ordinalWords`.
 // - A full stop after a number marks an ordinal (am 3. Mai), so
 //   `ordinalStop` keeps the sentence going before a calendar word or a
 //   word in lower case.
+
+// Ordinals in every ending an ordinal before a heading word takes.
+const ORDINALS = [
+  "erst", "zweit", "dritt", "viert", "fünft", "sechst", "siebt", "siebent", "acht", "neunt", "zehnt", "elft", "zwölft"
+].flatMap((stem) => ["e", "er", "es", "en"].map((ending) => `${stem}${ending}`));
 
 export default {
   code: "de",
@@ -80,10 +91,12 @@ export default {
       "bellte", "erkundigte", "fauchte", "frotzelte", "gluckste", "grinste", "grunzte", "gurrte", "höhnte",
       "jammerte", "japste", "keuchte", "kicherte", "knurrte", "konterte", "kreischte", "lachte", "lächelte",
       "maulte", "nörgelte", "schluchzte", "schnappte", "schnaubte", "schnurrte", "seufzte", "spie",
-      "spottete", "stöhnte", "säuselte", "verkündete", "versetzte", "witzelte", "zischte", "ächzte"
+      "spottete", "stöhnte", "säuselte", "verkündete", "witzelte", "zischte", "ächzte", "hauchte",
+      "schmunzelte", "blaffte", "schnauzte"
     ],
 
-    plainTags: ["sagte", "fragte", "sagt", "fragt"],
+    // Versetzte is an old-fashioned but plain "replied".
+    plainTags: ["sagte", "sagten", "fragte", "fragten", "sagt", "fragt", "versetzte"],
 
     beatPronouns: ["er", "sie", "es", "ich", "wir", "ihr", "du"],
 
@@ -133,8 +146,10 @@ export default {
     ],
 
     // Sentence splitting: Dr. Weber and bzw. never end a sentence; usw. and
-    // Nr. may. Single letters (z. B., d. h., u. a.) are initials.
-    titleAbbreviations: ["Dr", "Prof", "Hr", "Hrn", "Fr", "Frl", "St", "bzw", "ca", "vgl", "ggf", "evtl", "inkl", "zzgl", "Str", "Mio", "Mrd"],
+    // Nr. may. Single letters (z. B., d. h., u. a.) are initials. Mio. and
+    // Mrd. stay titles: every German noun is capitalised, so as context
+    // words they would end the sentence before the noun (3 Mio. Euro).
+    titleAbbreviations: ["Dr", "Prof", "Hr", "Hrn", "Fr", "Frl", "St", "bzw", "bspw", "ca", "ehem", "sog", "vgl", "ggf", "evtl", "inkl", "zzgl", "Str", "Mio", "Mrd"],
     contextAbbreviations: ["usw", "etc", "Nr", "Jh", "Std", "Min"],
 
     // Capitalised in German like every noun, and never names.
@@ -163,6 +178,9 @@ export default {
       ],
       joiners: ["und"]
     },
+    // Ordinals before the heading word (Erstes Kapitel, Zweiter Teil); a
+    // number with a full stop (1. Kapitel) is read as one too.
+    ordinalWords: ORDINALS,
 
     // Formal Sie and Ihr are capitalised mid-sentence.
     candidateStopwords: [
@@ -172,8 +190,20 @@ export default {
       "Ihnen", "Ihr", "Ihre", "Ihrem", "Ihren", "Ihrer", "Im", "In", "Ja", "Jetzt", "Kein", "Keine", "Man",
       "Mein", "Meine", "Mit", "Nach", "Nein", "Nicht", "Noch", "Nun", "Nur", "Ob", "Oder", "Sein", "Seine",
       "Sie", "So", "Über", "Um", "Und", "Uns", "Unter", "Von", "Vor", "Was", "Wenn", "Wer", "Wie", "Wir",
-      "Wo", "Zu", "Zum", "Zur"
+      "Wo", "Zu", "Zum", "Zur",
+      // Common nouns that often go without an article (vor Angst, mit
+      // Kindern), so the article rule below cannot catch them.
+      "Abend", "Angst", "Arbeit", "Augen", "Blut", "Brot", "Durst", "Ende", "Erde", "Feuer", "Frauen",
+      "Freude", "Geld", "Glück", "Gott", "Hand", "Händen", "Hause", "Haus", "Häusern", "Herz", "Hilfe",
+      "Himmel", "Hunger", "Jahre", "Jahren", "Kinder", "Kindern", "Kraft", "Leben", "Leute", "Leuten",
+      "Licht", "Liebe", "Luft", "Lust", "Männer", "Männern", "Menschen", "Minuten", "Morgen", "Musik", "Mut",
+      "Nacht", "Recht", "Regen", "Ruhe", "Schuld", "Schule", "Sorge", "Sorgen", "Spaß", "Stunden", "Tag",
+      "Tage", "Tagen", "Tod", "Uhr", "Wasser", "Wein", "Welt", "Wind", "Zeit"
     ],
+
+    // Determiners that are also relative pronouns (die Frau, die Lena
+    // kannte): after a comma they start a clause, not a noun phrase.
+    relativeWords: ["der", "die", "das", "den", "dem", "deren", "dessen", "denen"],
 
     // Words that make the capitalised word after them, with up to two
     // lower-case words between (der alte Hund), a common noun: articles,

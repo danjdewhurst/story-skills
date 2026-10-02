@@ -20,6 +20,7 @@ export const STYLE_LISTS = {
   "inversion-links": { list: "inversionLinks" },
   "adverb-suffixes": { list: "adverbSuffixes" },
   "adverb-exceptions": { list: "adverbExceptions" },
+  "adverb-blockers": { list: "adverbBlockers" },
   "echo-stopwords": { list: "echoStopwords" },
   "phrase-stopwords": { list: "phraseStopwords" },
   // british/american pairs: colour/color.
@@ -30,18 +31,21 @@ export const STYLE_LISTS = {
   "contracted-is": { list: "contractedIs" },
   "elisions": { list: "elisions" },
   "voice-stopwords": { list: "voiceStopwords" },
-  "title-abbreviations": { list: "titleAbbreviations", cased: true },
-  "context-abbreviations": { list: "contextAbbreviations", cased: true },
+  // Written with or without their full stop (Sig. or Sig).
+  "title-abbreviations": { list: "titleAbbreviations", cased: true, abbreviation: true },
+  "context-abbreviations": { list: "contextAbbreviations", cased: true, abbreviation: true },
   "calendar-words": { list: "calendarWords", cased: true },
   "chapter-words": { list: "chapterWords" },
   "section-words": { list: "sectionWords" },
   "part-words": { list: "partWords" },
   "front-matter-words": { list: "frontMatterWords" },
+  "ordinal-words": { list: "ordinalWords" },
   // The `words` and `joiners` of numberWords; see wordNumeral in ../import.js.
   "number-words": { list: "numberWords", part: "words" },
   "number-joiners": { list: "numberWords", part: "joiners" },
   "candidate-stopwords": { list: "candidateStopwords", cased: true },
   "determiners": { list: "determiners" },
+  "relative-words": { list: "relativeWords" },
   "noun-suffixes": { list: "nounSuffixes" },
   "title-words": { list: "titleWords" }
 };
@@ -58,16 +62,20 @@ function isEntry(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-// The words an entry's value gives: comma-separated text, or [] for none.
-// Null for a value of another type, which validate reports.
+// The words an entry's value gives: comma-separated text, a flow list
+// ([sintió, "vio"]), or [] for none. Null for a value of another type,
+// which validate reports.
 export function styleWords(value) {
-  if (Array.isArray(value) && value.length === 0) {
-    return [];
+  if (Array.isArray(value)) {
+    return value.every((word) => typeof word === "string") ? value.map((word) => word.trim()).filter((word) => word !== "") : null;
   }
   if (typeof value !== "string") {
     return null;
   }
-  return value.split(",").map((word) => word.trim()).filter((word) => word !== "");
+  const flow = /^\[(.*)\]$/s.exec(value.trim());
+  return (flow === null ? value : flow[1]).split(",")
+    .map((word) => word.trim().replace(/^(["'])(.*)\1$/s, "$2").trim())
+    .filter((word) => word !== "");
 }
 
 // The pack with the style sheet's `replace-words` and `add-words` applied,
@@ -84,11 +92,12 @@ export function withStyleLists(pack, styleData) {
   const checks = { ...pack.checks };
   const cleared = new Set();
   for (const { replace, key, words } of changes) {
-    const { list, part, cased = false } = STYLE_LISTS[key];
+    const { list, part, cased = false, abbreviation = false } = STYLE_LISTS[key];
     const written = words.map((word) => {
-      const straight = word.replace(/’/g, "'");
+      const apostrophe = word.replace(/’/g, "'");
+      const straight = abbreviation ? apostrophe.replace(/\.$/, "") : apostrophe;
       return cased ? straight : lowerCase(straight, pack);
-    });
+    }).filter((word) => word !== "");
     const fresh = replace && !cleared.has(key);
     cleared.add(key);
     if (part !== undefined) {

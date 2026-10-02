@@ -6,11 +6,12 @@ import { runCli } from "../src/cli.js";
 import { extractNameCandidates, importManuscript } from "../src/import.js";
 import { checkList, languagePack } from "../src/languages/index.js";
 import { lowerCase } from "../src/languages/locale.js";
-import { STYLE_LISTS, withStyleLists } from "../src/languages/style.js";
+import { STYLE_LISTS, styleWords, withStyleLists } from "../src/languages/style.js";
 import { givenName } from "../src/names.js";
 import { adverbLabel, analyzeChapter, proseRules } from "../src/prose.js";
 import { splitSentences } from "../src/sentences.js";
-import { createStoryProject, proseReport, scanProject, validateProject, voicesReport } from "../src/story.js";
+import { createStoryProject, existingStyleData, proseReport, scanProject, validateProject, voicesReport } from "../src/story.js";
+import { narrationOnly, quoteMatches } from "../src/voices.js";
 import { RESULT_SCHEMA_PATH, SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
 import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
@@ -124,7 +125,7 @@ describe("Spanish, French, and German packs", () => {
       "« Pourquoi ? » demanda-t-elle.",
       "« Bon. » Il sourit."
     ].join("\n\n"), rules);
-    expect(analysis.filterWords).toEqual([{ word: "sentit", count: 1 }, { word: "vit", count: 1 }]);
+    expect(analysis.filterWords).toEqual([{ word: "sentit", count: 1 }]);
     expect(analysis.adverbs).toEqual([{ word: "lentement", count: 2 }, { word: "vraiment", count: 1 }]);
     expect(analysis.plainTags).toEqual([{ word: "demanda", count: 1 }, { word: "dit", count: 1 }]);
     expect(analysis.bookisms).toEqual([{ word: "s'exclama", count: 1 }]);
@@ -349,5 +350,113 @@ describe("style-sheet word lists", () => {
     const data = { type: "style-sheet", "replace-words": [{ "filter-words": "sintió, vio" }, { "said-bookisms": [] }], "add-words": [{ "title-words": "don" }] };
     expect(validateAgainstSchema(data, storySchema.$defs.styleSheet, storySchema)).toEqual([]);
     expect(validateAgainstSchema({ type: "style-sheet", "add-words": "filter-words" }, storySchema.$defs.styleSheet, storySchema)).not.toEqual([]);
+  });
+});
+
+describe("language edge cases", () => {
+  test("French adverbs skip nouns and verbs after an article, pronoun, or elision", () => {
+    const rules = proseRules({}, [], languagePack("fr"));
+    const analysis = analyzeChapter([
+      "Dans l’appartement, le mouvement de l’élément était lent. Elle avançait lentement, vraiment lentement, et le bâillement du chat dura un moment.",
+      "Les flammes s’enflamment et ils aiment le parlement. Avec étonnement, il comprit qu’évidemment rien n’allait.",
+      "D’un grognement, il rangea le paiement et l'aliment. Son rangement était parfaitement net."
+    ].join("\n\n"), rules);
+    expect(analysis.adverbs).toEqual([{ word: "lentement", count: 2 }, { word: "évidemment", count: 1 }, { word: "parfaitement", count: 1 }, { word: "vraiment", count: 1 }]);
+    const spanish = analyzeChapter("Tenía la mente en blanco. Espero que lo lamente. Caminaba lentamente.", proseRules({}, [], languagePack("es")));
+    expect(spanish.adverbs).toEqual([{ word: "lentamente", count: 1 }]);
+  });
+
+  test("French tags inside the speech, and after ? or ! in dash dialogue, are tags", () => {
+    const french = languagePack("fr");
+    const paragraphs = ["« Viens, dit-il, nous partons. »", "— Viens ! s’exclama-t-il.", "— Pourquoi ? demanda Marie.", "« Pourquoi ? demanda-t-elle. »"];
+    expect(paragraphs.map((paragraph) => quoteMatches(paragraph, french).map((match) => match.text)))
+      .toEqual([["Viens", "nous partons."], ["Viens !"], ["Pourquoi ?"], ["Pourquoi ?"]]);
+    expect(narrationOnly(paragraphs[0], french)).toContain("dit-il");
+    const analysis = analyzeChapter(paragraphs.join("\n\n"), proseRules({}, [], french));
+    expect(analysis.plainTags).toEqual([{ word: "demanda", count: 2 }, { word: "dit", count: 1 }]);
+    expect(analysis.bookisms).toEqual([{ word: "s'exclama", count: 1 }]);
+    // English has no incise: the comma inside a quote is speech.
+    expect(quoteMatches("\"Come, said he, we leave.\"").map((match) => match.text)).toEqual(["Come, said he, we leave."]);
+
+    const { root } = languageProject("fr");
+    writeCharacter(root, "mara-quill", "Mara Quill");
+    writeCharacter(root, "tom-reed", "Tom Reed");
+    writeChapter(root, 1, ["« Viens, dit Mara, nous partons. »", "« Non ! » s’écria Tom.", "— Pourquoi ? demanda Mara."]);
+    const report = voicesReport(root);
+    expect(report.profiles.map((entry) => `${entry.id}:${entry.lines}`).sort()).toEqual(["mara-quill:3", "tom-reed:1"]);
+  });
+
+  test("German names survive relative pronouns, spoken articles, and noun-like endings", () => {
+    const prose = Array.from({ length: 3 }, () => [
+      "Die Frau, die Lena kannte, kam aus Hamburg. Lena lachte.",
+      "„Komm her“, rief der Peter. „Wo ist der Peter?“ Dann sagte Peter nichts mehr.",
+      "Herr Jung nickte. „Ja“, sagte Gretchen, und Jannis sah Gretchen an. Jannis wartete.",
+      "Vor Angst trank sie Wasser. Mit Kindern aus Häusern spielte sie, mit Kindern und mit Wasser, aus Angst.",
+      "Die Hoffnung blieb. Sie sprach von der Hoffnung und von Hoffnung."
+    ].join(" ")).join("\n\n");
+    expect(extractNameCandidates(prose, languagePack("de")).map((entry) => entry.name)).toEqual(["Peter", "Gretchen", "Hamburg", "Jannis", "Jung", "Lena"]);
+    // A name at the very start of the text has nothing before it.
+    expect(extractNameCandidates("Nur Lena lachte. Dann kam Lena. Sie sah Lena.", languagePack("de"))).toEqual([{ name: "Lena", count: 3 }]);
+  });
+
+  test("headings with the number first, unaccented, and in Belgian or Swiss French", () => {
+    const books = {
+      de: ["# Erster Teil\n\nVorher.\n\n# Erstes Kapitel\n\nEins.\n\n# 2. Kapitel: Der Hafen\n\nZwei.\n", ["Opening", "Chapter 2", "Der Hafen"]],
+      es: ["# Primera parte\n\nAntes.\n\n# Capitulo 7\n\nUno.\n\n# Prologo\n\nDos.\n", ["Opening", "Chapter 2", "Prologo"]],
+      fr: ["# Première partie\n\nAvant.\n\n# Chapitre septante-deux\n\nUn.\n\n# Deuxième partie\n\n# Chapitre nonante : La fin\n\nDeux.\n", ["Opening", "Chapter 2", "La fin"]]
+    };
+    for (const [code, [book, titles]] of Object.entries(books)) {
+      const cwd = makeTempDir();
+      fs.writeFileSync(path.join(cwd, "book.md"), book);
+      const result = importManuscript({ source: "book.md", title: "Book", cwd, language: code });
+      expect(`${code} ${scanProject(result.root).chapters.map((chapter) => chapter.title).join(", ")}`).toBe(`${code} ${titles.join(", ")}`);
+    }
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "buch.txt"), "Erstes Kapitel\n\nEins.\n\n2. Kapitel\n\nZwei.\n");
+    expect(importManuscript({ source: "buch.txt", title: "Buch", cwd, language: "de" }).chapters).toBe(2);
+  });
+
+  test("sentences keep EE. UU., p. m., av. J.-C., accented initials, and sog.", () => {
+    expect(splitSentences("Viajó a EE. UU. en mayo. Volvió a las 9 p. m. Luego durmió.", { pack: languagePack("es") }))
+      .toEqual(["Viajó a EE. UU. en mayo.", "Volvió a las 9 p. m.", "Luego durmió."]);
+    expect(splitSentences("César mourut en 44 av. J.-C. Puis vint É. Zola. Il partit.", { pack: languagePack("fr") }))
+      .toEqual(["César mourut en 44 av. J.-C.", "Puis vint É. Zola.", "Il partit."]);
+    expect(splitSentences("Der sog. Experte kam. Es kostete 3 Mio. Euro. Dann ging er.", { pack: languagePack("de") }))
+      .toEqual(["Der sog. Experte kam.", "Es kostete 3 Mio. Euro.", "Dann ging er."]);
+    expect(splitSentences("Then came Ö. Lind. He left.")).toEqual(["Then came Ö. Lind.", "He left."]);
+  });
+
+  test("plural tags count", () => {
+    const counts = (code, text) => analyzeChapter(text, proseRules({}, [], languagePack(code))).plainTags;
+    expect(counts("es", "—Vamos —dijeron ellos.")).toEqual([{ word: "dijeron", count: 1 }]);
+    expect(counts("fr", "« Allons », dirent-ils.")).toEqual([{ word: "dirent", count: 1 }]);
+    expect(counts("de", "„Gehen wir“, sagten sie.")).toEqual([{ word: "sagten", count: 1 }]);
+  });
+
+  test("style-sheet values may be flow lists, and abbreviations may keep their stop", () => {
+    expect(styleWords("[sintió, \"vio\", 'oyó']")).toEqual(["sintió", "vio", "oyó"]);
+    expect(styleWords(["a", " b "])).toEqual(["a", "b"]);
+    expect(styleWords([1])).toBeNull();
+    const { root } = languageProject("it");
+    writeStyleSheet(root, "add-words:\n  - filter-words: [sentì, vide]\n  - title-abbreviations: Sig., Sig.ra");
+    const project = scanProject(root);
+    expect(checkList(project.pack, "filterWords")).toEqual(["sentì", "vide"]);
+    expect(checkList(project.pack, "titleAbbreviations")).toEqual(["Sig", "Sig.ra"]);
+    expect(splitSentences("Il Sig. Rossi arrivò. Partì.", { pack: project.pack })).toEqual(["Il Sig. Rossi arrivò.", "Partì."]);
+    expect(validateProject(root).errors).toEqual([]);
+    const data = { type: "style-sheet", "add-words": [{ "filter-words": ["sentì", "vide"] }] };
+    expect(validateAgainstSchema(data, storySchema.$defs.styleSheet, storySchema)).toEqual([]);
+  });
+
+  test("import reads a style sheet in a folder without story.md", () => {
+    const cwd = makeTempDir();
+    fs.mkdirSync(path.join(cwd, "libro"));
+    writeStyleSheet(path.join(cwd, "libro"), "add-words:\n  - chapter-words: capitolo");
+    expect(existingStyleData(path.join(cwd, "libro"))).toMatchObject({ "add-words": [{ "chapter-words": "capitolo" }] });
+    fs.writeFileSync(path.join(cwd, "libro.md"), "# Capitolo 1\n\nUno.\n\n# Capitolo 2\n\nDue.\n");
+    expect(importManuscript({ source: "libro.md", title: "Libro", cwd, dir: "libro", language: "it", force: true }).chapters).toBe(2);
+    // A file where the folder should be has no style sheet.
+    fs.writeFileSync(path.join(cwd, "file"), "");
+    expect(existingStyleData(path.join(cwd, "file"))).toBeNull();
   });
 });

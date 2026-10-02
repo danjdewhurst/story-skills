@@ -131,6 +131,9 @@ export function proseRules(styleData, names, pack = languagePack()) {
     inversionLinks: checkList(pack, "inversionLinks") ?? [],
     adverbSuffixes: checkList(pack, "adverbExceptions") === null ? null : checkList(pack, "adverbSuffixes"),
     adverbExceptions: checkSet(pack, "adverbExceptions"),
+    // Words after which an adverb-shaped word is a noun or verb (le
+    // moment, ils aiment), and the elisions among them (l'appartement).
+    adverbBlockers: checkSet(pack, "adverbBlockers"),
     echoStopwords: checkSet(pack, "echoStopwords"),
     phraseStopwords: checkSet(pack, "phraseStopwords"),
     nameTokens
@@ -147,7 +150,7 @@ export function analyzeChapter(prose, rules) {
 
   // A skipped check counts nothing.
   const filterWords = rules.filterWords === null ? [] : countMatching(narration, (word) => rules.filterWords.has(word), rules.pack);
-  const adverbs = rules.adverbSuffixes === null ? [] : countMatching(narration, (word) => isAdverb(word, rules), rules.pack);
+  const adverbs = rules.adverbSuffixes === null ? [] : countAdverbs(narration, rules);
   const tags = rules.plainTags === null ? { plain: [], bookisms: [] } : dialogueTags(paragraphs, rules);
   // Watch words and avoided spellings match in the story's casing.
   const cased = rules.watch.length + rules.variants.length === 0 ? null : matchingText(text, rules.pack);
@@ -518,6 +521,27 @@ function tagKind(quoted, nextWord, rules) {
     return rules.beatPronouns.has(lowerCase(nextWord, rules.pack)) ? "none" : "plain";
   }
   return "any";
+}
+
+// Adverbs among the narration words. With `adverbBlockers`, a word after
+// one, or joined to one by an elision, is not an adverb, and an adverb is
+// counted without an elision it carries (qu'évidemment).
+function countAdverbs(words, rules) {
+  if (rules.adverbBlockers === null) {
+    return countMatching(words, (word) => isAdverb(word, rules), rules.pack);
+  }
+  const counts = new Map();
+  let previous = "";
+  for (const raw of words) {
+    const word = normalizeWord(raw, rules.pack);
+    const elision = /^\p{L}{1,2}'(?=\p{L})/u.exec(word)?.[0] ?? "";
+    const bare = word.slice(elision.length);
+    if (!rules.adverbBlockers.has(previous) && !rules.adverbBlockers.has(elision) && isAdverb(bare, rules)) {
+      increment(counts, bare);
+    }
+    previous = word;
+  }
+  return sortCounts(counts, rules.pack);
 }
 
 function isAdverb(word, rules) {
