@@ -21,21 +21,33 @@ outline divider.
 
 ## Other languages
 
-The filter-word, -ly adverb, said-bookism, plain-tag, and dialect-pair
-lists are English, and so are the function words that echoes and
-repeated phrases ignore. Read `language` in `story.md` (missing means
-`en`). For a book in another language:
+Read `language` in `story.md` (missing means `en`). The word lists come
+from a language pack: English (`en`), Spanish (`es`), French (`fr`), and
+German (`de`) have them, and a regional tag (`es-MX`, `fr-CA`, `de-CH`)
+uses its language's. Spanish counts *-mente* adverbs and French *-ment*
+adverbs; German has no adverb ending, so its adverb check is skipped.
+French inverted tags count as their verb (*dit-il* is *dit*). The dialect
+pairs are English only. Any other language has no lists. For a book not in
+English:
 
 - If the report says a check was skipped for the book's language, do that
   pass by reading, looking for the same effect in that language (verbs of
   perceiving that announce instead of show, adverbs propping up weak
   verbs, tags that tell the reader how to hear a line).
-- If a check ran with English word lists on a non-English book, ignore its
+- If the author wants a skipped check run, or a pack's list changed (a
+  verb the book uses as a plain tag, a regional said-bookism), ask which
+  words, then add them to `style-sheet.md` under `add-words` or
+  `replace-words` as `- list-name: word, word` entries (see
+  `docs/project-format.md`, Word lists, for the list names), and run
+  `story validate`. Never fill a list from a translation of the English
+  one: ask for the language's own words.
+- If a check ran with English word lists on a non-English book (the book
+  has no `language` set), set `language` and rerun rather than reading the
   counts: they measure English words the book rarely contains.
-- Never translate an English list into `watch-words` to stand in for a
-  missing check. Use `watch-words` for this book's own tics.
+- Never use `watch-words` to stand in for a missing check. Use
+  `watch-words` for this book's own tics.
 - Avoided spellings, watch words, sentence rhythm, and similar names do
-  not depend on English lists.
+  not depend on the word lists.
 
 ## Limits
 

@@ -35,6 +35,7 @@ import { PROGRESS_FILE, cleanSessions, computeProgress, formatPercent, localDate
 import { plural } from "./plural.js";
 import { BASELINE_CHECKS, PROSE_THRESHOLDS, analyzeChapter, baselineFigures, baselineFindings, baselineProfile, chapterFindings, contentWords, proseRules, proseThresholds, repeatedPhrases, sentenceLengths, similarNames } from "./prose.js";
 import { fillLabel, isLanguageTag, joinNames, languagePack, projectLanguage, skippedChecks } from "./languages/index.js";
+import { STYLE_LISTS, STYLE_LIST_FIELDS, styleListEntries, styleWords, withStyleLists } from "./languages/style.js";
 import { lowerCase } from "./languages/locale.js";
 import { endsSentence, splitSentences } from "./sentences.js";
 import { areSiblingBooks, buildSeries, canonicalPath, discoverSeriesBooks, isBookNumber, linksInclude, readBookFrontmatter, seriesId, seriesLinkPath, seriesLinks, validateSeriesLinks, withSeriesBacklink } from "./series.js";
@@ -412,6 +413,13 @@ function inheritedStoryFields(data) {
 
 // The frontmatter of an existing story.md, {} when it does not parse, or
 // null when there is none.
+// The style-sheet.md frontmatter of the project at `root`, or null when it
+// has none or it cannot be read (validate reports that).
+export function existingStyleData(root) {
+  const errors = [];
+  return lstatIfExists(path.join(root, "story.md")) ? readStyleSheet(root, errors)?.data ?? null : null;
+}
+
 export function existingStoryData(root) {
   if (!lstatIfExists(path.join(root, "story.md"))) {
     return null;
@@ -676,7 +684,8 @@ export function scanProject(root) {
     // Display title: story.md `title`, else the folder name.
     title: titleText || path.basename(projectRoot),
     // story.md `language` (en when unset) and its language pack, which the
-    // analysis commands take their word lists from.
+    // analysis commands take their word lists from, with the style sheet's
+    // `replace-words` and `add-words` applied (below, once it is read).
     language,
     pack,
     // The unit lengths are counted in (see forms.js): words, or characters
@@ -870,6 +879,7 @@ export function scanProject(root) {
     progressLog: readOptionalRootFile(projectRoot, PROGRESS_FILE, scanErrors),
     continuity
   };
+  project.pack = withStyleLists(project.pack, project.styleSheet?.data);
   sortScenesByChapter(project);
   return project;
 }
@@ -7304,6 +7314,9 @@ function validateStyleSheet(project, errors, warnings) {
   });
   validateStringArray(data, "watch-words", label, errors);
   validateStringArray(data, "allow-words", label, errors);
+  for (const field of STYLE_LIST_FIELDS) {
+    validateStyleLists(data, field, label, errors, warnings);
+  }
   validateStringArray(data, "samples", label, errors);
   for (const entry of asArray(data.samples)) {
     if (typeof entry !== "string" || entry.trim() === "") {
@@ -7317,6 +7330,26 @@ function validateStyleSheet(project, errors, warnings) {
       if (problem !== null) {
         warnings.push(problem);
       }
+    }
+  }
+}
+
+// `replace-words` and `add-words`: a list of `- list-name: word, word`
+// entries naming the language pack's lists.
+function validateStyleLists(data, field, label, errors, warnings) {
+  const value = data[field];
+  if (value === undefined) {
+    return;
+  }
+  if (!Array.isArray(value) || !value.every((entry) => entry !== null && typeof entry === "object" && !Array.isArray(entry))) {
+    errors.push(err("field-not-list", `${label} frontmatter field ${field} must be a list of list: words entries, such as - filter-words: sintió, vio`, label));
+    return;
+  }
+  for (const [key, words] of styleListEntries(value)) {
+    if (!Object.prototype.hasOwnProperty.call(STYLE_LISTS, key)) {
+      warnings.push(warn("unknown-word-list", `${label} ${field} entry ${key} is not a word list; the checks ignore it (see docs/project-format.md#word-lists)`, label));
+    } else if (styleWords(words) === null) {
+      errors.push(err("field-not-text", `${label} ${field} entry ${key} must be text: words separated by commas, or [] for none`, label));
     }
   }
 }

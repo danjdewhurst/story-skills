@@ -69,7 +69,9 @@ function buildRules(pack) {
   const startLetter = pack.cased === false ? "\\p{L}\\p{N}" : "\\p{Lu}\\p{Lo}\\p{N}";
   return {
     title: new RegExp(`(?:^|[\\s${openers}(])(?:${[...words("titleAbbreviations"), INITIALS].join("|")})$`),
-    context: new RegExp(`(?:^|[\\s${openers}(])(?:${either(words("contextAbbreviations"))})$`),
+    // In a pack with `ordinalStop`, a number before the stop is an ordinal
+    // (am 3. Mai) and is read like a context abbreviation.
+    context: new RegExp(`(?:^|[\\s${openers}(])(?:${either([...words("contextAbbreviations"), ...(pack.ordinalStop === true ? ["\\d+"] : [])])})$`),
     calendar: new RegExp(`^(?:${either(words("calendarWords"))})(?![\\p{L}\\p{N}])`, "u"),
     // A sentence ends at a run of stops plus any closing quotes, brackets,
     // or emphasis marks, before a space or the end of the text. A

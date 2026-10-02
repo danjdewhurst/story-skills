@@ -794,16 +794,27 @@ To see the same plant-to-reveal flow as a picture, run [`story diagram clues`](#
 
 `story prose`, `story voices`, and `story names` use word lists: filter words, said-bookisms, `-ly` adverbs, speech verbs, contractions, stopwords, and the titles stripped from a name. These come from a language pack chosen by `language` in `story.md` (see [Publishing metadata](project-format.md#publishing-metadata)). `fr-CA` uses a French-Canadian pack if there is one, then a French pack, then a generic base pack with no word lists. The tag is read the same way on every system: `eng` is English, `iw` is Hebrew, `zh-yue` (Cantonese) uses the Chinese pack, and `en-GB-oed` the English one. A book with no `language` uses English. A `language` that is set but not a valid tag (`fr_FR`) is still not English: its first subtag picks the pack (French here), or the base pack when that is not a language either, and `story validate` reports it. `story import --language` sets the language for an imported manuscript.
 
-Only English has word lists so far. In a book in any other language, a check that needs a list the pack lacks is skipped, never run with English words, so a French manuscript gets no English false positives. Each skipped check prints a note under the report heading, and its per-chapter line is left out:
+English, Spanish (`es`), French (`fr`), and German (`de`) have word lists, and a regional tag (`es-MX`, `fr-CA`, `de-CH`) uses its language's. Each list follows its language: Spanish and French verbs in the past tenses fiction narrates in (`sintió`, `sentit`), said-bookisms such as `exclamó`, `s'exclama`, and `knurrte`, and the import headings `Capítulo`, `Chapitre`, and `Kapitel`, with their prologues and spelled-out numbers (`Capítulo veintiuno`, `Chapitre vingt et un`, `Kapitel Einundzwanzig`). Where English's checks do not carry over, the pack leaves the list out, and the check is skipped:
+
+- **Adverbs.** Spanish counts `-mente adverbs` and French `-ment adverbs` (`lentement`, `vraiment`, `constamment`), leaving out nouns and verbs with the same ending (`moment`, `mouvement`, `aiment`). German has no adverb ending, so its adverb check is skipped.
+- **Dialogue tags.** French inverted tags count as their verb: `dit-il` is `dit`, and `demanda-t-elle` attributes speech in `story voices` as `she asked` does.
+- **Contractions.** Only English and German count them (German `geht's`, `auf'm`). Spanish `al` and `del` and French elision (`l'homme`, `j'ai`) are compulsory, so they say nothing about a voice, and the count is skipped.
+- **Dialect.** The `british` and `american` spelling pairs are English; in another language a `dialect` other than `unspecified` is skipped. Record a variant's spellings as `preferred` entries.
+- **Import names.** German capitalises every noun, so a capitalised word that follows an article or possessive in a third or more of its uses (`die Tür`, `der alte Hund`, `etwas Neues`), or that ends like a noun (`-ung`, `-heit`, `-keit`), is not offered as a name.
+- **Ordinals.** In German a full stop after a number marks an ordinal, so `am 3. Mai` does not end a sentence.
+
+`style-sheet.md` can add to or replace any list, or supply the lists for a language with no pack, with `add-words` and `replace-words` (see [Word lists](project-format.md#word-lists)). `story prose`, `story voices`, `story names`, and `story import` (into an existing project) all read them.
+
+In a book in any other language, a check that needs a list the pack lacks is skipped, never run with English words, so an Italian manuscript gets no English false positives. Each skipped check prints a note under the report heading, and its per-chapter line is left out:
 
 ```text
 $ story prose
 Prose report: 1 chapter, 1489 words
-Note: Filter words skipped: no filterWords list for language fr
-Note: Adverbs skipped: no adverbSuffixes or adverbExceptions list for language fr
-Note: Dialogue tags skipped: no plainTags, saidBookisms, or beatPronouns list for language fr
-Note: Echoes skipped: no echoStopwords list for language fr
-Note: Repeated phrases skipped: no phraseStopwords list for language fr
+Note: Filter words skipped: no filterWords list for language it
+Note: Adverbs skipped: no adverbSuffixes or adverbExceptions list for language it
+Note: Dialogue tags skipped: no plainTags, saidBookisms, or beatPronouns list for language it
+Note: Echoes skipped: no echoStopwords list for language it
+Note: Repeated phrases skipped: no phraseStopwords list for language it
 ```
 
 Sentence counts, the style sheet's watch words and `preferred` spellings, the baseline's sentence, paragraph, and dialogue measures, and similar names still run. A `british` or `american` `dialect` is skipped too. A baseline leaves out the filter-word and adverb rates and the signature words. In `story voices`, speech tags, contraction counts, and signature words are skipped: lines are attributed by action beats alone, and characters are compared on sentence length, questions, and exclamations. `story names` compares a name from its first word, since no titles are known. `--json` lists the skipped checks in `data.skipped`. Skipping never changes the exit code.

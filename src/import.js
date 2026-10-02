@@ -3,13 +3,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { warn } from "./findings.js";
 import { parseFrontmatter, stringifyFrontmatter, withoutLeadingFrontmatter } from "./frontmatter.js";
-import { checkList, isLanguageTag, languagePack, projectLanguage } from "./languages/index.js";
-import { compareText } from "./languages/locale.js";
+import { checkList, checkSet, isLanguageTag, languagePack, projectLanguage } from "./languages/index.js";
+import { compareText, lowerCase } from "./languages/locale.js";
+import { withStyleLists } from "./languages/style.js";
 import { chapterHeading, characterCount, escapeRegExp, fencedLineIndexes, scanComments, splitFences, titleCaseSlug, wordCount } from "./markdown.js";
 import { countUnit } from "./forms.js";
 import { MAX_READ_BYTES } from "./files.js";
 import { STDIN_ARG, decodeUtf8 } from "./stdin.js";
-import { assertProjectParses, createStoryProject, existingStoryData, existingStoryLanguage, newProjectRoot, reindexProject, scanProject, writeFile } from "./story.js";
+import { assertProjectParses, createStoryProject, existingStoryData, existingStoryLanguage, existingStyleData, newProjectRoot, reindexProject, scanProject, writeFile } from "./story.js";
 import { EXIT_CODES, usageError, withDefaultExitCode } from "./exit-codes.js";
 
 // A lone "I" before a word is the pronoun ("Chapter I Am Legend"), not a numeral.
@@ -51,16 +52,36 @@ function buildImportRules(pack) {
     // A part heading groups chapters; it is prose, never a chapter or the title.
     partHeading: new RegExp(`^(?:${either("partWords")})(?![A-Za-z])`, "i"),
     frontMatter: new RegExp(`^(?:${either("frontMatterWords")})\\b`, "i"),
-    candidateStopwords: new Set([...(checkList(pack, "candidateStopwords") ?? []), ...(checkList(pack, "calendarWords") ?? [])])
+    candidateStopwords: new Set([...(checkList(pack, "candidateStopwords") ?? []), ...(checkList(pack, "calendarWords") ?? [])]),
+    // For a language that capitalises its nouns; see extractNameCandidates.
+    determiners: checkSet(pack, "determiners"),
+    nounSuffixes: checkList(pack, "nounSuffixes") ?? []
   };
 }
 
-// Spelled-out chapter numbers below a thousand ("Chapter Twenty-One"), as a
-// pattern followed by `|`, or "" when the pack has no number words.
+// Spelled-out chapter numbers, as a pattern followed by `|`, or "" when the
+// pack has no number words. English lists units, teens, tens, `hundred`,
+// and `and`, for numbers below a thousand ("Chapter Twenty-One"). A pack
+// whose numbers compound freely lists `words` and `joiners` instead: a
+// numeral is any run of those words, joined by a space, a hyphen, nothing,
+// or a joiner ("vingt et un", "quatre-vingt-dix", "einundzwanzig"). A pack
+// may have both, as English does when a style sheet adds number words.
 function wordNumeral(words) {
   if (words === null) {
     return "";
   }
+  return `${words.units === undefined ? "" : unitNumeral(words)}${words.words === undefined ? "" : compoundNumeral(words)}`;
+}
+
+function compoundNumeral({ words, joiners = [] }) {
+  // Longest first, so "dieciséis" is not read as "diez" and a title.
+  const longestFirst = (list) => [...list].sort((left, right) => right.length - left.length || (left < right ? -1 : 1)).map(escapeRegExp).join("|");
+  const word = `(?:${longestFirst(words) || NEVER})`;
+  const joiner = joiners.length === 0 ? "" : `(?:(?:${longestFirst(joiners)})[-\\s]?)?`;
+  return `${word}(?:[-\\s]?${joiner}${word})*|`;
+}
+
+function unitNumeral(words) {
   const units = words.units.join("|");
   const belowHundred = `(?:(?:${words.tens.join("|")})(?:[-\\s](?:${units}))?|${words.teens.join("|")}|${units})`;
   // Hundreds come first, so "One Hundred" is not read as "One" and a title.
@@ -106,12 +127,13 @@ export function importManuscript(options) {
   // Heading words, number words, and candidate stopwords come from the
   // manuscript's language pack: --language, else the language of the
   // story.md being imported into, else English. A new story.md records an
-  // explicit --language.
+  // explicit --language. The style sheet of a project being imported into
+  // changes the lists with its `replace-words` and `add-words`.
   if (options.language !== undefined && !isLanguageTag(options.language)) {
     throw usageError(`--language ${options.language} must be a BCP 47 tag such as en, en-GB, or fr`);
   }
   const target = newProjectRoot({ title: options.title, cwd, dir: options.dir });
-  const pack = languagePack(options.language ?? (target === null ? null : existingStoryLanguage(target)));
+  const pack = withStyleLists(languagePack(options.language ?? (target === null ? null : existingStoryLanguage(target))), target === null ? null : existingStyleData(target));
   const rules = importRules(pack);
   const warnings = [];
   const documents = fromStdin
@@ -225,17 +247,33 @@ const MID_SENTENCE = /\p{Ll}[,;:]?\s$/u;
 // even where a sentence starts.
 const DISTINCTIVE_NAME = /^\p{Lu}.*\p{Lu}/u;
 
+// In a language that capitalises every noun (German), a pack lists
+// `determiners` and `nounSuffixes`. A single word that ends like a noun,
+// or follows a determiner (die Tür, der alte Hund) in at least a third of
+// its uses, is then a common noun, not a name; a name is seldom set after
+// an article (die kleine Anna), so an occasional one keeps it.
+const DETERMINED_SHARE = 1 / 3;
+
 export function extractNameCandidates(prose, pack = languagePack()) {
-  const stopwords = importRules(pack).candidateStopwords;
+  const rules = importRules(pack);
+  const stopwords = rules.candidateStopwords;
   const counts = new Map();
+  const determined = new Map();
+  const nounRule = rules.determiners !== null;
 
   for (const match of prose.matchAll(NAME_RUN_PATTERN)) {
     const words = match[0].replace(/\s+/g, " ").split(" ");
-    while (words.length > 0 && stopwords.has(words[0])) {
+    let article = false;
+    while (words.length > 0 && (stopwords.has(words[0]) || (nounRule && rules.determiners.has(lowerCase(words[0], pack))))) {
+      article ||= nounRule && rules.determiners.has(lowerCase(words[0], pack));
       words.shift();
     }
     if (words.length > 0) {
-      addCandidate(counts, withoutPossessive(words.join(" ")));
+      const name = withoutPossessive(words.join(" "));
+      addCandidate(counts, name);
+      if (nounRule && words.length === 1 && (article || afterDeterminer(prose, match.index, rules.determiners, pack))) {
+        addCandidate(determined, name);
+      }
     }
   }
 
@@ -246,14 +284,41 @@ export function extractNameCandidates(prose, pack = languagePack()) {
     }
     if (DISTINCTIVE_NAME.test(name) || MID_SENTENCE.test(prose.slice(Math.max(0, match.index - 3), match.index))) {
       addCandidate(counts, name);
+      if (nounRule && afterDeterminer(prose, match.index, rules.determiners, pack)) {
+        addCandidate(determined, name);
+      }
     }
   }
 
+  const commonNoun = (name, count) => nounRule && !name.includes(" ")
+    && ((determined.get(name) ?? 0) >= count * DETERMINED_SHARE || rules.nounSuffixes.some((suffix) => lowerCase(name, pack).endsWith(suffix)));
   return [...counts.entries()]
-    .filter(([, count]) => count >= CANDIDATE_THRESHOLD)
+    .filter(([name, count]) => count >= CANDIDATE_THRESHOLD && !commonNoun(name, count))
     .sort((left, right) => right[1] - left[1] || compareText(pack)(left[0], right[0]))
     .slice(0, CANDIDATE_LIMIT)
     .map(([name, count]) => ({ name, count }));
+}
+
+// Whether the word at `index` follows a determiner, with up to two
+// lower-case words between ("die Tür", "der alte graue Hund"). Only spaces
+// may separate them: a comma or full stop ends the phrase.
+const PHRASE_BEFORE = /(?<![\p{L}\p{M}'’-])(?:[\p{L}\p{M}'’-]+\s+){1,3}$/u;
+
+function afterDeterminer(prose, index, determiners, pack) {
+  const phrase = PHRASE_BEFORE.exec(prose.slice(Math.max(0, index - 80), index));
+  if (phrase === null) {
+    return false;
+  }
+  const words = phrase[0].trim().split(/\s+/);
+  for (let position = words.length - 1; position >= 0; position -= 1) {
+    if (determiners.has(lowerCase(words[position], pack))) {
+      return true;
+    }
+    if (!/^\p{Ll}/u.test(words[position])) {
+      return false;
+    }
+  }
+  return false;
 }
 
 // "Élodie’s" counts as "Élodie"; "King’s Road" keeps its inner possessive.

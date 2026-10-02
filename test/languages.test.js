@@ -162,33 +162,33 @@ describe("language packs", () => {
 
   test("checkList, checkSet, and hasLists answer whether a pack has a list", () => {
     const english = languagePack("en");
-    const french = languagePack("fr");
+    const italian = languagePack("it");
     expect(checkList(english, "plainTags")).toEqual(["said", "asked", "says", "asks"]);
-    expect(checkList(french, "plainTags")).toBeNull();
+    expect(checkList(italian, "plainTags")).toBeNull();
     expect(checkSet(english, "plainTags").has("said")).toBe(true);
     expect(checkSet(english, "plainTags")).toBe(checkSet(english, "plainTags"));
-    expect(checkSet(french, "plainTags")).toBeNull();
+    expect(checkSet(italian, "plainTags")).toBeNull();
     expect(hasLists(english, ["filterWords", "plainTags"])).toBe(true);
-    expect(hasLists(french, ["filterWords"])).toBe(false);
+    expect(hasLists(italian, ["filterWords"])).toBe(false);
   });
 
   test("skipped checks name the check, the language, and the missing lists", () => {
-    const french = languagePack("fr");
+    const italian = languagePack("it");
     const definitions = [
       { check: "one", label: "One list", lists: ["filterWords"] },
       { check: "two", label: "Two lists", lists: ["filterWords", "plainTags"] },
       { check: "three", label: "Three lists", lists: ["filterWords", "plainTags", "echoStopwords"] }
     ];
-    const skipped = skippedChecks(french, definitions);
+    const skipped = skippedChecks(italian, definitions);
     expect(skipped.map((entry) => entry.message)).toEqual([
-      "One list skipped: no filterWords list for language fr",
-      "Two lists skipped: no filterWords or plainTags list for language fr",
-      "Three lists skipped: no filterWords, plainTags, or echoStopwords list for language fr"
+      "One list skipped: no filterWords list for language it",
+      "Two lists skipped: no filterWords or plainTags list for language it",
+      "Three lists skipped: no filterWords, plainTags, or echoStopwords list for language it"
     ]);
-    expect(skipped[1]).toMatchObject({ check: "two", language: "fr", missing: ["filterWords", "plainTags"] });
+    expect(skipped[1]).toMatchObject({ check: "two", language: "it", missing: ["filterWords", "plainTags"] });
     expect(skippedChecks(languagePack("en"), definitions)).toEqual([]);
     expect(skippedCheck(languagePack("en"), definitions[0]).missing).toEqual([]);
-    expect(skippedLines(skipped.slice(0, 1))).toEqual(["Note: One list skipped: no filterWords list for language fr"]);
+    expect(skippedLines(skipped.slice(0, 1))).toEqual(["Note: One list skipped: no filterWords list for language it"]);
   });
 
   test("scanProject carries the story's language and pack", () => {
@@ -200,8 +200,8 @@ describe("language packs", () => {
 });
 
 describe("analysis without a language's word lists", () => {
-  test("story prose skips the English-list checks for a French project and says so", () => {
-    const { root, cwd } = languageProject("fr");
+  test("story prose skips the English-list checks for a Italian project and says so", () => {
+    const { root, cwd } = languageProject("it");
     writeChapter(root, 1, ENGLISH_BAIT);
     const report = proseReport(root);
     expect(report.ok).toBe(true);
@@ -217,8 +217,8 @@ describe("analysis without a language's word lists", () => {
 
     const text = invoke(cwd, ["prose", root]);
     expect(text.code).toBe(0);
-    expect(text.out).toContain("Note: Filter words skipped: no filterWords list for language fr\n");
-    expect(text.out).toContain("Note: Repeated phrases skipped: no phraseStopwords list for language fr\n");
+    expect(text.out).toContain("Note: Filter words skipped: no filterWords list for language it\n");
+    expect(text.out).toContain("Note: Repeated phrases skipped: no phraseStopwords list for language it\n");
     expect(text.out).not.toContain("Filter words:");
     expect(text.out).not.toContain("-ly adverbs:");
     expect(text.out).not.toContain("Dialogue tags:");
@@ -231,7 +231,7 @@ describe("analysis without a language's word lists", () => {
     const result = JSON.parse(json.out);
     expect(validateAgainstSchema(result, schema)).toEqual([]);
     expect(result.data.skipped.map((entry) => entry.check)).toEqual(["filter-words", "adverbs", "dialogue-tags", "echoes", "repeated-phrases"]);
-    expect(result.data.skipped[0]).toEqual({ check: "filter-words", language: "fr", missing: ["filterWords"], message: "Filter words skipped: no filterWords list for language fr" });
+    expect(result.data.skipped[0]).toEqual({ check: "filter-words", language: "it", missing: ["filterWords"], message: "Filter words skipped: no filterWords list for language it" });
     expect(result.diagnostics).toEqual([]);
   });
 
@@ -243,8 +243,8 @@ describe("analysis without a language's word lists", () => {
     expect(report.warnings.map((warning) => warning.code)).toContain("prose-filter-words");
   });
 
-  test("a passage piped into a French project's prose check is skipped the same way", () => {
-    const { root, cwd } = languageProject("fr");
+  test("a passage piped into a Italian project's prose check is skipped the same way", () => {
+    const { root, cwd } = languageProject("it");
     const report = proseReport(root, { passage: ENGLISH_BAIT.join("\n\n") });
     expect(report.skipped.map((entry) => entry.check)).toContain("filter-words");
     expect(report.warnings).toEqual([]);
@@ -259,14 +259,14 @@ describe("analysis without a language's word lists", () => {
   });
 
   test("the dialect pairs and the baseline's signature words are skipped only when asked for", () => {
-    const { root } = languageProject("fr");
+    const { root } = languageProject("it");
     writeMarkdown(path.join(root, "style-sheet.md"), "type: style-sheet\ndialect: british\nsamples:\n  - ../samples", "# Style Sheet\n");
     fs.mkdirSync(path.join(root, "..", "samples"));
     fs.writeFileSync(path.join(root, "..", "samples", "one.md"), ENGLISH_BAIT.join("\n\n"));
     writeChapter(root, 1, ENGLISH_BAIT);
     const report = proseReport(root);
     expect(report.skipped.map((entry) => entry.check)).toEqual(["filter-words", "adverbs", "dialogue-tags", "echoes", "repeated-phrases", "dialect-spellings", "signature-words"]);
-    expect(report.skipped.at(-2).message).toBe("British and American spellings skipped: no dialectPairs list for language fr");
+    expect(report.skipped.at(-2).message).toBe("British and American spellings skipped: no dialectPairs list for language it");
     expect(report.baseline).toMatchObject({ usable: false, signatureWords: null, filterPerThousand: null, adverbsPerThousand: null });
     // Too few sample words, and no fixed filter-word or adverb limits to fall back on.
     expect(report.warnings.find((warning) => warning.code === "prose-baseline-small").message).toMatch(/\(at least 2000\)$/);
@@ -275,13 +275,13 @@ describe("analysis without a language's word lists", () => {
   });
 
   test("a usable baseline leaves out the measures the language skips", () => {
-    const { root, cwd } = languageProject("fr");
+    const { root, cwd } = languageProject("it");
     writeMarkdown(path.join(root, "style-sheet.md"), "type: style-sheet\nsamples:\n  - ../samples", "# Style Sheet\n");
     fs.mkdirSync(path.join(root, "..", "samples"));
     fs.writeFileSync(path.join(root, "..", "samples", "one.md"), Array.from({ length: 4 }, () => ENGLISH_BAIT.join("\n\n")).join("\n\n"));
     writeChapter(root, 1, ENGLISH_BAIT);
     const report = proseReport(root);
-    expect(report.language).toBe("fr");
+    expect(report.language).toBe("it");
     expect(report.baseline).toMatchObject({ usable: true, signatureWords: null, filterPerThousand: null, adverbsPerThousand: null });
     expect(report.chapters[0].baseline).toMatchObject({ filterPerThousand: null, adverbsPerThousand: null, signatureWordsUsed: null });
     expect(report.warnings.map((warning) => warning.code)).toEqual([]);
@@ -300,7 +300,7 @@ describe("analysis without a language's word lists", () => {
   test("the adverb label and the small-baseline note come from the pack", () => {
     const english = languagePack("en");
     expect(adverbLabel(english)).toBe("-ly adverbs");
-    expect(adverbLabel(languagePack("fr"))).toBe("adverbs");
+    expect(adverbLabel(languagePack("it"))).toBe("adverbs");
     const { root } = languageProject("en");
     writeMarkdown(path.join(root, "style-sheet.md"), "type: style-sheet\nsamples:\n  - ../samples", "# Style Sheet\n");
     fs.mkdirSync(path.join(root, "..", "samples"));
@@ -309,17 +309,17 @@ describe("analysis without a language's word lists", () => {
   });
 
   test("prose helpers take the pack and fall back to English", () => {
-    const french = languagePack("fr");
-    const rules = proseRules({}, [], french);
+    const italian = languagePack("it");
+    const rules = proseRules({}, [], italian);
     expect(contentWords("Harbour lights harbour lights.", rules)).toEqual([]);
     expect(contentWords("Harbour lights harbour lights.", proseRules({}, []))).toEqual(["harbour", "lights", "harbour", "lights"]);
-    expect(sentenceLengths("Mr. Hale left. He went.", french)).toEqual([1, 2, 2]);
+    expect(sentenceLengths("Mr. Hale left. He went.", italian)).toEqual([1, 2, 2]);
     expect(sentenceLengths("Mr. Hale left. He went.")).toEqual([3, 2]);
-    expect(repeatedPhrases([{ phraseSentences: [["a", "b", "c", "d"], ["a", "b", "c", "d"], ["a", "b", "c", "d"]] }], undefined, french)).toEqual([]);
+    expect(repeatedPhrases([{ phraseSentences: [["a", "b", "c", "d"], ["a", "b", "c", "d"], ["a", "b", "c", "d"]] }], undefined, italian)).toEqual([]);
   });
 
   test("story voices attributes by action beats alone and skips tags, contractions, and signature words", () => {
-    const { root, cwd } = languageProject("fr");
+    const { root, cwd } = languageProject("it");
     writeCharacter(root, "mara-quill", "Mara Quill");
     writeCharacter(root, "tom-reed", "Tom Reed");
     const lines = [];
@@ -338,12 +338,12 @@ describe("analysis without a language's word lists", () => {
     expect(tom.lines).toBe(5);
     expect(tom.contractions).toBeNull();
     expect(tom.signature).toEqual([]);
-    expect(quoteMatches("— Peut-être, dit Tom.", languagePack("fr"))[0].text).toBe("Peut-être, dit Tom.");
+    expect(quoteMatches("— Peut-être, dit Tom.", languagePack("it"))[0].text).toBe("Peut-être, dit Tom.");
     expect(quoteMatches("— Maybe, said Tom.")[0].text).toBe("Maybe");
 
     const text = invoke(cwd, ["voices", root]);
     expect(text.code).toBe(0);
-    expect(text.out).toContain("Note: Speech-tag attribution skipped: no speechVerbs or speechPronouns list for language fr\n");
+    expect(text.out).toContain("Note: Speech-tag attribution skipped: no speechVerbs or speechPronouns list for language it\n");
     expect(text.out).toContain("  Sentence length");
     expect(text.out).not.toContain("contractions");
     expect(text.out).not.toContain("  Signature words:");
@@ -355,7 +355,7 @@ describe("analysis without a language's word lists", () => {
   });
 
   test("voices compares sound-alike speakers without contractions when they are skipped", () => {
-    const { root } = languageProject("fr");
+    const { root } = languageProject("it");
     writeCharacter(root, "mara-quill", "Mara Quill");
     writeCharacter(root, "tom-reed", "Tom Reed");
     const lines = [];
@@ -369,18 +369,18 @@ describe("analysis without a language's word lists", () => {
   });
 
   test("names keep a title as the given name when the pack has no title words", () => {
-    expect(givenName("Lord Maren", languagePack("fr"))).toBe("Lord");
+    expect(givenName("Lord Maren", languagePack("it"))).toBe("Lord");
     expect(givenName("Lord Maren")).toBe("Maren");
-    const { root } = languageProject("fr");
+    const { root } = languageProject("it");
     writeCharacter(root, "lord-maren", "Lord Maren");
     expect(namesReport(root, ["Maren"]).errors).toEqual([]);
     expect(namesReport(root, ["Lord Maren"]).errors.map((error) => error.code)).toEqual(["name-clash"]);
   });
 
   test("splitSentences keeps initials but not English abbreviations without a list", () => {
-    const french = languagePack("fr");
-    expect(splitSentences("M. Dupont arriva. Il partit.", { pack: french })).toEqual(["M. Dupont arriva.", "Il partit."]);
-    expect(splitSentences("Dr. Hale arriva. Il partit.", { pack: french })).toEqual(["Dr.", "Hale arriva.", "Il partit."]);
+    const italian = languagePack("it");
+    expect(splitSentences("M. Dupont arriva. Il partit.", { pack: italian })).toEqual(["M. Dupont arriva.", "Il partit."]);
+    expect(splitSentences("Dr. Hale arriva. Il partit.", { pack: italian })).toEqual(["Dr.", "Hale arriva.", "Il partit."]);
     expect(splitSentences("Dr. Hale arrived. He left.")).toEqual(["Dr. Hale arrived.", "He left."]);
   });
 
@@ -389,20 +389,20 @@ describe("analysis without a language's word lists", () => {
     fs.writeFileSync(path.join(cwd, "book.md"), "# Chapter One\n\nMara Quill walked. Mara Quill ran. Mara Quill hid.\n\n# Chapter Two\n\nThe end, on Monday.\n");
     const english = importManuscript({ source: "book.md", title: "English", cwd, dir: "english" });
     expect(english.chapters).toBe(2);
-    const french = importManuscript({ source: "book.md", title: "French", cwd, dir: "french", language: "fr" });
-    expect(french.chapters).toBe(1);
-    expect(french.candidates).toEqual([{ name: "Mara Quill", count: 3 }]);
-    expect(extractNameCandidates("We met on Monday. You left on Monday. I stayed on Monday.", languagePack("fr"))).toEqual([{ name: "Monday", count: 3 }]);
+    const italian = importManuscript({ source: "book.md", title: "French", cwd, dir: "italian", language: "it" });
+    expect(italian.chapters).toBe(1);
+    expect(italian.candidates).toEqual([{ name: "Mara Quill", count: 3 }]);
+    expect(extractNameCandidates("We met on Monday. You left on Monday. I stayed on Monday.", languagePack("it"))).toEqual([{ name: "Monday", count: 3 }]);
     expect(extractNameCandidates("We met on Monday. You left on Monday. I stayed on Monday.")).toEqual([]);
     expect(["chapter-2.md", "preface.md", "chapter-1.md"].sort(compareImportNames)).toEqual(["preface.md", "chapter-1.md", "chapter-2.md"]);
   });
 
   test("the synopsis splits sentences with the project's pack", () => {
-    const { root } = languageProject("fr");
+    const { root } = languageProject("it");
     const storyPath = path.join(root, "story.md");
     fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("Add a 2-3 sentence synopsis here.", "Dr. Hale arriva. Il partit."));
     expect(synopsisBook(root).text).toContain("Logline: Dr.\n");
-    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("language: fr\n", ""));
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("language: it\n", ""));
     expect(synopsisBook(root).text).toContain("Logline: Dr. Hale arriva.\n");
   });
 
