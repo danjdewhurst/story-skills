@@ -1,11 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
+import fs from "node:fs";
 import { pathToFileURL } from "node:url";
 import { mapLabels } from "../src/compare.js";
+import { openingWords } from "../src/html.js";
 import { splitWords, wordCount } from "../src/markdown.js";
 import { tokenizeDocument } from "../src/similarity.js";
-import { wordSpans } from "../src/words.js";
+import { createStoryProject, synopsisBook } from "../src/story.js";
+import { segmentRun, wordSpans } from "../src/words.js";
+import { makeTempDir } from "./helpers.js";
 
 // Sentences whose dictionary segmentation is the same under Bun and Node 18,
 // 20, 22, and 24: short, common words with no ambiguous split.
@@ -61,16 +65,63 @@ describe("#307 scripts written without spaces", () => {
     expect(thai[0]).toMatchObject({ status: "edited", to: "ch01-p1", similarity: 1 });
   });
 
-  test("Node splits them the same way", () => {
+  test("a soft hyphen or zero-width joiner inside a word keeps it one word", () => {
+    expect(splitWords("แม\u00ADว")).toEqual(["แม\u00ADว"]);
+    expect(splitWords("แม\u200Cว แม\u200Dว")).toHaveLength(2);
+    expect(wordCount("แมว\u00AD")).toBe(1);
+  });
+
+  test("a long unbroken run is segmented in windows with the same result", () => {
+    // Seeded, so the run is the same every time but not one repeated phrase.
+    const pieces = ["ฉัน", "รัก", "แมว", "แมวกินปลา", "สวัสดีครับ"];
+    let seed = 7;
+    let run = "";
+    while (run.length < 25000) {
+      seed = (seed * 48271) % 2147483647;
+      run += pieces[seed % pieces.length];
+    }
+    const whole = segmentRun(run, Infinity);
+    expect(whole.length).toBeGreaterThan(5000);
+    expect(segmentRun(run)).toEqual(whole);
+    expect(segmentRun(run, 1000)).toEqual(whole);
+    // A window with no words in it still moves on.
+    expect(segmentRun("\u104B".repeat(50), 10)).toEqual([]);
+  });
+
+  test("opening words quote a few words of a paragraph without spaces", () => {
+    expect(openingWords(`${BURMESE}။`, 3)).toBe("ကျွန်တော်ကြောင်ကို\u2026");
+    expect(openingWords("灯台守は階段を数えた。")).toBe("灯台守は階段\u2026");
+    expect(openingWords("“Wait,” she said — and then, at last, she ran.")).toBe("“Wait,” she said — and then, at\u2026");
+  });
+
+  test("a synopsis over budget is cut inside a paragraph without spaces", () => {
+    const { root } = createStoryProject({ cwd: makeTempDir(), title: "Cats", force: false });
+    const storyFile = path.join(root, "story.md");
+    const story = fs.readFileSync(storyFile, "utf8");
+    fs.writeFileSync(storyFile, story.replace(/## Synopsis\n[\s\S]*?(\n## |$)/, `## Synopsis\n\n${THAI.repeat(200)}\n$1`));
+    const { text } = synopsisBook(root);
+    expect(wordCount(text)).toBe(500);
+    expect(text).toContain(`Logline: ${THAI}`);
+  });
+
+  test("Node splits them the same way, and a long run quickly", () => {
     const probe = spawnSync("node", ["--version"], { encoding: "utf8" });
     if (probe.error || probe.status !== 0) {
       console.warn("Skipping the Node segmentation check: node is not on PATH.");
       return;
     }
     const markdown = pathToFileURL(path.join(import.meta.dirname, "..", "src", "markdown.js")).href;
-    const script = `import(${JSON.stringify(markdown)}).then(({ splitWords }) => console.log(JSON.stringify(${JSON.stringify([THAI, LAO, KHMER, BURMESE])}.map(splitWords))))`;
+    // Unwindowed, Node 18 and 20 take over ten seconds on this run.
+    const script = `import(${JSON.stringify(markdown)}).then(({ splitWords }) => {
+      const started = Date.now();
+      const long = splitWords(${JSON.stringify(THAI)}.repeat(22000)).length;
+      console.log(JSON.stringify({ words: ${JSON.stringify([THAI, LAO, KHMER, BURMESE])}.map(splitWords), long, ms: Date.now() - started }));
+    })`;
     const result = spawnSync("node", ["-e", script], { encoding: "utf8" });
     expect(result.stderr).toBe("");
-    expect(JSON.parse(result.stdout)).toEqual([THAI, LAO, KHMER, BURMESE].map(splitWords));
+    const output = JSON.parse(result.stdout);
+    expect(output.words).toEqual([THAI, LAO, KHMER, BURMESE].map(splitWords));
+    expect(output.long).toBe(66000);
+    expect(output.ms).toBeLessThan(5000);
   });
 });

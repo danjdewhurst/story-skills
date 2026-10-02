@@ -11,19 +11,44 @@ const CJK = "\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}\\u30FC";
 // split by Intl.Segmenter's dictionary. That dictionary is the runtime's ICU
 // data, so a count can shift slightly between Node and Bun versions.
 const SOUTHEAST_ASIAN = "\\p{Script=Thai}\\p{Script=Lao}\\p{Script=Khmer}\\p{Script=Myanmar}";
-const UNSPACED = new RegExp(`[${CJK}]|[${SOUTHEAST_ASIAN}]+`, "gu");
+// Soft hyphens and zero-width joiners inside a word keep the run going, so
+// the segmenter sees the whole word.
+const JOINER = "\\u00AD\\u200C\\u200D";
+const UNSPACED = new RegExp(`[${CJK}]|[${SOUTHEAST_ASIAN}](?:[${SOUTHEAST_ASIAN}]|[${JOINER}]+(?=[${SOUTHEAST_ASIAN}]))*`, "gu");
 const CJK_CHARACTER = new RegExp(`^[${CJK}]$`, "u");
 
-// Node 18+ and Bun ship Intl.Segmenter with full ICU data.
-const SEGMENTER = new Intl.Segmenter("en", { granularity: "word" });
+// Node 18 and 20 segment a long unbroken run in more than linear time (a
+// 200,000-character run takes seconds), so a run is segmented this many
+// characters at a time. The last few words of a window may be cut short or
+// split differently once the text after them is seen, so the next window
+// starts again at the RESTART_WORDS-th word from the end.
+const WINDOW = 10000;
+const RESTART_WORDS = 4;
+
+// Created on first use, so text without these scripts never needs it.
+let segmenter;
 
 // The words of one run of Southeast Asian script, as [word, offset] pairs.
-function segmentRun(run) {
+// `window` is the window size, which tests shrink.
+export function segmentRun(run, window = WINDOW) {
+  segmenter ??= new Intl.Segmenter("en", { granularity: "word" });
   const words = [];
-  for (const { segment, index, isWordLike } of SEGMENTER.segment(run)) {
-    if (isWordLike) {
-      words.push([segment, index]);
+  let offset = 0;
+  while (offset < run.length) {
+    const end = offset + window;
+    const found = [];
+    for (const { segment, index, isWordLike } of segmenter.segment(run.slice(offset, end))) {
+      if (isWordLike) {
+        found.push([segment, offset + index]);
+      }
     }
+    const restart = end < run.length && found.length > RESTART_WORDS ? found[found.length - RESTART_WORDS][1] : end;
+    for (const word of found) {
+      if (word[1] < restart) {
+        words.push(word);
+      }
+    }
+    offset = restart;
   }
   return words;
 }

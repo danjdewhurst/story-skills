@@ -1028,15 +1028,31 @@ function withoutLeadingFrontmatter(text) {
 // src/words.js
 var CJK = "\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}\\u30FC";
 var SOUTHEAST_ASIAN = "\\p{Script=Thai}\\p{Script=Lao}\\p{Script=Khmer}\\p{Script=Myanmar}";
-var UNSPACED = new RegExp(`[${CJK}]|[${SOUTHEAST_ASIAN}]+`, "gu");
+var JOINER = "\\u00AD\\u200C\\u200D";
+var UNSPACED = new RegExp(`[${CJK}]|[${SOUTHEAST_ASIAN}](?:[${SOUTHEAST_ASIAN}]|[${JOINER}]+(?=[${SOUTHEAST_ASIAN}]))*`, "gu");
 var CJK_CHARACTER = new RegExp(`^[${CJK}]$`, "u");
-var SEGMENTER = new Intl.Segmenter("en", { granularity: "word" });
-function segmentRun(run) {
+var WINDOW = 1e4;
+var RESTART_WORDS = 4;
+var segmenter;
+function segmentRun(run, window = WINDOW) {
+  segmenter ??= new Intl.Segmenter("en", { granularity: "word" });
   const words = [];
-  for (const { segment, index, isWordLike } of SEGMENTER.segment(run)) {
-    if (isWordLike) {
-      words.push([segment, index]);
+  let offset = 0;
+  while (offset < run.length) {
+    const end = offset + window;
+    const found = [];
+    for (const { segment, index, isWordLike } of segmenter.segment(run.slice(offset, end))) {
+      if (isWordLike) {
+        found.push([segment, offset + index]);
+      }
     }
+    const restart = end < run.length && found.length > RESTART_WORDS ? found[found.length - RESTART_WORDS][1] : end;
+    for (const word of found) {
+      if (word[1] < restart) {
+        words.push(word);
+      }
+    }
+    offset = restart;
   }
   return words;
 }
@@ -5701,8 +5717,11 @@ function paragraphLabels(book) {
   return book.parts.flatMap((part) => labelledParagraphs(part).filter((entry) => entry !== null).map((entry) => ({ label: entry.label, key: part.key, text: entry.paragraph.text })));
 }
 function openingWords(text, count = 6) {
-  const words = String(text).split(/\s+/).filter((word) => word !== "");
-  return words.length > count ? `${words.slice(0, count).join(" ")}…` : words.join(" ");
+  const source = String(text);
+  const words = wordSpans(source, /\S*[\p{L}\p{N}]\S*/gu);
+  const opening = words.length > count ? source.slice(0, words[count].start) : source;
+  const collapsed = opening.split(/\s+/).filter((word) => word !== "").join(" ");
+  return words.length > count ? `${collapsed}…` : collapsed;
 }
 function noteHref(noteUrl, label, stamp, text) {
   const params = [["title", `[${label}] `], ["anchor", label]];
@@ -10860,6 +10879,20 @@ function lowercaseCommonStart(text) {
   const first = /^[A-Za-z]+(?=\s)/.exec(text)?.[0] ?? "";
   return COMMON_OPENERS.has(first.toLowerCase()) ? `${text[0].toLowerCase()}${text.slice(1)}` : text;
 }
+function longestFittingPrefix(token, room) {
+  const ends = wordSpans(token, /(?!)/gu).map((word) => word.end);
+  let low = 0;
+  let high = ends.length;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (wordCount(token.slice(0, ends[middle - 1])) <= room) {
+      low = middle;
+    } else {
+      high = middle - 1;
+    }
+  }
+  return low === 0 ? "" : token.slice(0, ends[low - 1]);
+}
 function truncateWords(text, budget) {
   const kept = [];
   let used = 0;
@@ -10875,6 +10908,10 @@ function truncateWords(text, budget) {
     for (const token of line.split(/\s+/).filter((part) => part !== "")) {
       const tokenWords = wordCount(token);
       if (used + tokenWords > budget) {
+        const cut = longestFittingPrefix(token, budget - used);
+        if (cut !== "") {
+          tokens.push(cut);
+        }
         break;
       }
       tokens.push(token);
