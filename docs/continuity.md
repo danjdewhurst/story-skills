@@ -792,7 +792,7 @@ To see the same plant-to-reveal flow as a picture, run [`story diagram clues`](#
 
 ## Books not in English
 
-`story prose`, `story voices`, and `story names` use word lists: filter words, said-bookisms, `-ly` adverbs, speech verbs, contractions, stopwords, and the titles stripped from a name. These come from a language pack chosen by `language` in `story.md` (see [Publishing metadata](project-format.md#publishing-metadata)). `fr-CA` uses a French-Canadian pack if there is one, then a French pack, then a generic base pack with no word lists. A book with no `language` uses English.
+`story prose`, `story voices`, and `story names` use word lists: filter words, said-bookisms, `-ly` adverbs, speech verbs, contractions, stopwords, and the titles stripped from a name. These come from a language pack chosen by `language` in `story.md` (see [Publishing metadata](project-format.md#publishing-metadata)). `fr-CA` uses a French-Canadian pack if there is one, then a French pack, then a generic base pack with no word lists. The tag is read in its canonical form, so `eng` is English and `iw` is Hebrew. A book with no `language` uses English. A `language` that is set but not a valid tag (`fr_FR`) is still not English: its first subtag picks the pack (French here), or the base pack when that is not a language either, and `story validate` reports it. `story import --language` sets the language for an imported manuscript.
 
 Only English has word lists so far. In a book in any other language, a check that needs a list the pack lacks is skipped, never run with English words, so a French manuscript gets no English false positives. Each skipped check prints a note under the report heading, and its per-chapter line is left out:
 
@@ -806,7 +806,7 @@ Note: Echoes skipped: no echoStopwords list for language fr
 Note: Repeated phrases skipped: no phraseStopwords list for language fr
 ```
 
-Sentence counts, the style sheet's watch words and `preferred` spellings, the baseline's sentence, paragraph, and dialogue measures, and similar names still run. A `british` or `american` `dialect` is skipped too, as are a baseline's signature words. In `story voices`, speech tags, contraction counts, and signature words are skipped: lines are attributed by action beats alone, and characters are compared on sentence length, questions, and exclamations. `story names` compares a name from its first word, since no titles are known. `--json` lists the skipped checks in `data.skipped`. Skipping never changes the exit code.
+Sentence counts, the style sheet's watch words and `preferred` spellings, the baseline's sentence, paragraph, and dialogue measures, and similar names still run. A `british` or `american` `dialect` is skipped too. A baseline leaves out the filter-word and adverb rates and the signature words. In `story voices`, speech tags, contraction counts, and signature words are skipped: lines are attributed by action beats alone, and characters are compared on sentence length, questions, and exclamations. `story names` compares a name from its first word, since no titles are known. `--json` lists the skipped checks in `data.skipped`. Skipping never changes the exit code.
 
 ## Story prose
 

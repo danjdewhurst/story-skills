@@ -507,6 +507,8 @@ Each chapter is written to `chapters/chapter-NN.md` with `status: draft` and its
 
 `import` accepts `--dir`, `--genre`, `--sub-genre`, `--setting-era`, `--theme`, `--themes`, `--pov`, `--tense`, `--synopsis`, and `--force`, with the same meaning as for `init`, and writes the same `.gitignore` (or prints the same note about a kept one). The series options (`--series`, `--book-number`, `--follows`, `--precedes`) and `--form` are errors (`--form does not apply to story import`); add `form` to `story.md` by hand after importing. Without `--synopsis`, the synopsis placeholder names the source file.
 
+`--language <tag>` names the manuscript's language, a BCP 47 tag such as `fr` or `pt-BR`; a value that is not one is a usage error. It picks the language pack whose heading words (`Chapter`, `Prologue`, `Part`, spelled-out numbers) split the chapters and whose stopwords filter the entity candidates; only English has those words so far, so in another language only the markdown or text structure is used, never English headings. A new project records the tag as `language` in its `story.md`. Without `--language`, `import --force` into an existing project uses that project's `story.md` `language`, and a new project uses English and writes no `language`. A `--language` that differs from a kept `story.md` is named in the `kept-story-options` warning, since `story.md` is not changed.
+
 > [!WARNING]
 > With `--force` on an existing directory, `import` deletes every `chapter-NN.md` in `chapters/` before writing the imported chapters, and the frontmatter you filled in on those chapters is lost. Commit or back up the project first. It first checks that every other project file parses, and changes nothing if one does not. It keeps the existing `story.md` (warning about a `--title` or other `story.md` option it did not apply) and prints a note to run `story links`, since scenes and bible entries may point at chapters that are gone or changed.
 
@@ -1165,7 +1167,7 @@ An advisory prose lint. For each chapter it reports sentence count, average and 
 
 Style findings are warnings, so `prose` exits 1 only when a file's frontmatter fails to parse, or when a `severity` entry in `story.md` promotes a prose warning to an error (see [Defaults and severity from story.md](#defaults-and-severity-from-storymd)).
 
-The word lists (filter words, `-ly` adverbs and their exceptions, dialogue tags and said-bookisms, echo and phrase stopwords, British and American spellings) come from the language pack for `story.md` `language`. Only English has them so far. In another language, each check whose list the pack lacks is skipped rather than run with English words: `filter-words`, `adverbs`, `dialogue-tags`, `echoes`, `repeated-phrases`, plus `dialect-spellings` when the style sheet sets a `dialect` and `signature-words` when a baseline is on. The text output prints `Note: Filter words skipped: no filterWords list for language fr` under the heading for each one and leaves its line out, and `--json` lists them in `data.skipped` as `{ check, language, missing, message }` (`[]` for English). Skipping never changes the exit code. See [Books not in English](continuity.md#books-not-in-english).
+The word lists (filter words, `-ly` adverbs and their exceptions, dialogue tags and said-bookisms, echo and phrase stopwords, British and American spellings) come from the language pack for `story.md` `language`. Only English has them so far. In another language, each check whose list the pack lacks is skipped rather than run with English words: `filter-words`, `adverbs`, `dialogue-tags`, `echoes`, `repeated-phrases`, plus `dialect-spellings` when the style sheet sets a `dialect` and `signature-words` when a baseline is on. The text output prints `Note: Filter words skipped: no filterWords list for language fr` under the heading for each one and leaves its line out, and `--json` lists them in `data.skipped` as `{ check, language, missing, message }` (`[]` for English), and `data.language` gives the tag. A baseline leaves the skipped measures out of its text, and `--json` sets them to `null`: `filterPerThousand`, `adverbsPerThousand`, and `signatureWords` in `data.baseline`, and the matching figures and `signatureWordsUsed` in `chapters[].baseline`. Skipping never changes the exit code. See [Books not in English](continuity.md#books-not-in-english).
 
 Three flags change the warning thresholds. Each takes a number 0 or more; set them for every run with `cli-defaults` in `story.md`.
 
@@ -1547,7 +1549,7 @@ It warns when:
 
 `voices` exits 1 only when a file fails to parse.
 
-Speech verbs, pronouns, contractions, and stopwords come from the language pack for `story.md` `language`. Only English has them so far, so in another language the `speech-tags`, `contractions`, and `signature-words` checks are skipped: lines are attributed by action beats alone, `contractions` is `null` in `--json`, and the sound-alike comparison leaves contractions out. The text output prints a `Note:` line for each skipped check, and `--json` lists them in `data.skipped` (`[]` for English). See [Books not in English](continuity.md#books-not-in-english).
+Speech verbs, pronouns, contractions, and stopwords come from the language pack for `story.md` `language`. Only English has them so far, so in another language the `speech-tags`, `contractions`, and `signature-words` checks are skipped: lines are attributed by action beats alone, `contractions` is `null` in `--json`, and the sound-alike comparison leaves contractions out. The text output prints a `Note:` line for each skipped check, and `--json` lists them in `data.skipped` (`[]` for English), and `data.language` gives the tag. See [Books not in English](continuity.md#books-not-in-english).
 
 `story voices -` fingerprints the dialogue in a passage from stdin instead of the chapters, against the characters of the project given by `--path` or the current directory; outside a project it is an error. As for `prose -`, a broken chapter or scene file does not fail the check. Findings name the passage as `stdin`: `warning: kael-voss says "soldiers", which is in their voice-avoid list (stdin)`. The five-line thresholds still apply, so a short passage only reports `voice-avoid` words.
 
@@ -1576,7 +1578,7 @@ With no attributed dialogue it prints `- None: tag dialogue with a character's n
 story names <name...> [--path <project>]
 ```
 
-Checks one or more candidate names against every name in the story bible: characters (full name, given name, and `aliases`, skipping characters with `status: cut`), locations, factions, artifacts, systems, and glossary terms with their aliases. Quote a name that contains spaces. Each candidate gets one status line on stdout: A given name skips leading titles (`Lord`, `Captain`, `the`) from the language pack of `story.md` `language`; a language without a title list compares a name from its first word.
+Checks one or more candidate names against every name in the story bible: characters (full name, given name, and `aliases`, skipping characters with `status: cut`), locations, factions, artifacts, systems, and glossary terms with their aliases. Quote a name that contains spaces. Each candidate gets one status line on stdout:
 
 | Status | Meaning | Reported as |
 |---|---|---|
@@ -1584,7 +1586,7 @@ Checks one or more candidate names against every name in the story bible: charac
 | `check` | It looks like an existing name (same first four letters, or one or two letters different), or shares an initial with a protagonist, antagonist, deuteragonist, or narrator | Warning |
 | `clear` | No clash or look-alike | Nothing |
 
-Titles such as `Lord`, `Captain`, or `The` are skipped when finding a given name, so `Lord Maren` is compared as `Maren`. `names` exits 1 when any candidate is `taken`, and with no names it prints its usage line and exits 2.
+Titles such as `Lord`, `Captain`, or `The` are skipped when finding a given name, so `Lord Maren` is compared as `Maren`. The titles come from the language pack for `story.md` `language`; a language without a title list compares a name from its first word. `names` exits 1 when any candidate is `taken`, and with no names it prints its usage line and exits 2.
 
 In The Salt Road:
 
@@ -2673,6 +2675,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--tense` | `<tense>` | `init`, `import` | `past`, `present`, `future`, `mixed` |
 | `--form` | `<form>` | `init` | `novel`, `novella`, `novelette`, `short-story`, `flash`, `serial`, `picture-book`, `chapter-book`; sets `target-words` |
 | `--synopsis` | `<text>` | `init`, `import` | |
+| `--language` | `<tag>` | `import` | A BCP 47 tag such as `fr`; defaults to the language of an existing `story.md`, else English, and is written to a new `story.md` |
 | `--series` | `<id>` | `init` | Kebab-case |
 | `--book-number` | `<n>` | `init` | Positive integer |
 | `--follows` | `<path>` | `init` | Repeatable |

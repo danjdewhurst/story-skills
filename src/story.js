@@ -33,7 +33,7 @@ import { wordSpans } from "./words.js";
 import { PROGRESS_FILE, cleanSessions, computeProgress, formatPercent, localDate, withSession } from "./progress.js";
 import { plural } from "./plural.js";
 import { BASELINE_CHECKS, PROSE_THRESHOLDS, analyzeChapter, baselineFigures, baselineFindings, baselineProfile, chapterFindings, contentWords, proseRules, proseThresholds, repeatedPhrases, sentenceLengths, similarNames } from "./prose.js";
-import { languagePack, projectLanguage, skippedChecks } from "./languages/index.js";
+import { isLanguageTag, languagePack, projectLanguage, skippedChecks } from "./languages/index.js";
 import { splitSentences } from "./sentences.js";
 import { areSiblingBooks, buildSeries, canonicalPath, discoverSeriesBooks, isBookNumber, linksInclude, readBookFrontmatter, seriesId, seriesLinkPath, seriesLinks, validateSeriesLinks, withSeriesBacklink } from "./series.js";
 import { err, warn } from "./findings.js";
@@ -182,6 +182,26 @@ const SYMMETRIC_RELATIONSHIPS = new Set([
   "love-interest"
 ]);
 
+// The folder init and import make a project in: --dir, else the story id.
+// A title with no ASCII letters or digits (a translated edition, say) takes
+// its story id from the project folder, as scanProject does. The default
+// folder is the story id: the title's ASCII slug when it has one (Война и
+// мир 2 goes in 2/, matching its id), else the transliterated title (Война
+// и мир goes in voyna-i-mir/), which the id then comes from. Null when
+// neither gives a folder.
+export function newProjectRoot({ title, cwd = process.cwd(), dir }) {
+  const text = String(title ?? "").trim();
+  const titleId = kebabCase(text, { transliterate: false }) || kebabCase(text);
+  return !titleId && dir === undefined ? null : path.resolve(cwd, dir ?? titleId);
+}
+
+// The language of the story.md already at `root`, or null when there is
+// none, so import into an existing project reads it as that book's language.
+export function existingStoryLanguage(root) {
+  const data = existingStoryData(root);
+  return data === null ? null : projectLanguage(data);
+}
+
 export function createStoryProject(options) {
   const title = String(options.title ?? "").trim();
   if (!title) {
@@ -189,16 +209,13 @@ export function createStoryProject(options) {
   }
 
   const cwd = options.cwd ?? process.cwd();
-  // A title with no ASCII letters or digits (a translated edition, say) takes
-  // its story id from the project folder, as scanProject does. The default
-  // folder is the story id: the title's ASCII slug when it has one (Война и
-  // мир 2 goes in 2/, matching its id), else the transliterated title (Война
-  // и мир goes in voyna-i-mir/), which the id then comes from.
-  const titleId = kebabCase(title, { transliterate: false }) || kebabCase(title);
-  if (!titleId && options.dir === undefined) {
+  const root = newProjectRoot({ title, cwd, dir: options.dir });
+  if (root === null) {
     throw usageError('Cannot derive a story id from title "' + title + '": pass --dir with an ASCII folder name, or use a title containing ASCII letters or digits');
   }
-  const root = path.resolve(cwd, options.dir ?? titleId);
+  if (options.language !== undefined && !isLanguageTag(options.language)) {
+    throw usageError(`--language ${options.language} must be a BCP 47 tag such as en, en-GB, or fr`);
+  }
   // `--force` keeps an existing story.md, so new registries take the story id
   // from its title, and the options it would have set are reported unused.
   const existingStory = existingStoryData(root);
@@ -266,7 +283,8 @@ export function createStoryProject(options) {
     pov: options.pov ?? inherited.pov ?? "third-person-limited",
     tense: options.tense ?? inherited.tense ?? "past",
     form: options.form,
-    inherited: inheritedStoryFields(inherited),
+    // An explicit --language replaces one inherited from a linked book.
+    inherited: { ...inheritedStoryFields(inherited), ...(options.language === undefined ? {} : { language: options.language.trim() }) },
     synopsis: options.synopsis ?? options.defaultSynopsis ?? "Add a 2-3 sentence synopsis here."
   }), { root });
   writeStarterFile(path.join(root, "characters", "_index.md"), characterIndex(storyId, [], "", ""), { root });
@@ -413,6 +431,10 @@ function unappliedStoryOptions(existing, title, options) {
     if (value !== undefined && !(Array.isArray(value) && value.length === 0)) {
       ignored.push(flag);
     }
+  }
+  // A --language that matches the kept story.md is not lost.
+  if (options.language !== undefined && options.language.trim() !== projectLanguage(existing)) {
+    ignored.push("--language");
   }
   return ignored;
 }
@@ -2490,6 +2512,7 @@ export function proseReport(root, options = {}) {
     similarNames: similar,
     thresholds: thresholdSummary(thresholds),
     baseline: profile,
+    language: rules.pack.tag,
     skipped: proseSkipped(rules, profile)
   };
 }
@@ -2499,12 +2522,12 @@ export function proseReport(root, options = {}) {
 function lintProse(label, title, prose, rules, thresholds, profile, warnings) {
   const analysis = analyzeChapter(prose, rules);
   const compared = profile !== null && profile.usable;
-  warnings.push(...chapterFindings(label, analysis, thresholds, { baseline: compared }));
+  warnings.push(...chapterFindings(label, analysis, thresholds, { baseline: compared, pack: rules.pack }));
   if (profile === null) {
     return { file: label, title, analysis };
   }
   const figures = baselineFigures(analysis, profile, contentWords(prose, rules));
-  warnings.push(...baselineFindings(label, analysis, figures, profile));
+  warnings.push(...baselineFindings(label, analysis, figures, profile, undefined, rules.pack));
   return { file: label, title, analysis, baseline: figures };
 }
 
@@ -2552,9 +2575,12 @@ function proseBaseline(project, rules, options, warnings) {
       samples.push({ file: document.file, analysis: analyzeChapter(prose, rules), sentenceLengths: sentenceLengths(prose, rules.pack), contentWords: contentWords(prose, rules) });
     }
   }
-  const profile = baselineProfile(samples);
+  const profile = baselineProfile(samples, rules.pack);
   if (!profile.usable) {
-    warnings.push(warn("prose-baseline-small", `${STYLE_SHEET_FILE} samples hold ${profile.narrationWords} narration words, too few to compare with (at least 2000): the fixed filter-word and adverb limits apply instead`, STYLE_SHEET_FILE));
+    // Name only the fixed limits the language pack runs.
+    const limits = [rules.filterWords === null ? null : "filter-word", rules.adverbSuffixes === null ? null : "adverb"].filter(Boolean);
+    const fallback = limits.length === 0 ? "" : `: the fixed ${limits.join(" and ")} ${limits.length === 1 ? "limit applies" : "limits apply"} instead`;
+    warnings.push(warn("prose-baseline-small", `${STYLE_SHEET_FILE} samples hold ${profile.narrationWords} narration words, too few to compare with (at least 2000)${fallback}`, STYLE_SHEET_FILE));
   }
   return profile;
 }
@@ -2611,6 +2637,7 @@ function prosePassageReport(root, passage, thresholds, options = {}) {
     similarNames: [],
     thresholds: thresholdSummary(thresholds),
     baseline: profile,
+    language: rules.pack.tag,
     skipped: proseSkipped(rules, profile)
   };
 }
@@ -2893,14 +2920,14 @@ const SCAFFOLD_SENTENCES = new Set([
 ]);
 
 function synopsisPremise(project) {
-  const sentences = synopsisSentences(extractSection(project.story.body, "Synopsis"))
+  const sentences = synopsisSentences(extractSection(project.story.body, "Synopsis"), project.pack)
     .filter((sentence) => !/^Imported from .+\.$/.test(sentence));
   return sentences.length > 0 ? sentences[0] : "No logline recorded.";
 }
 
 // Sentences of a synopsis section: list markers are dropped and each list
 // item ends as a sentence, and scaffold text and HTML comments are skipped.
-function synopsisSentences(section) {
+function synopsisSentences(section, pack) {
   const text = scanComments(String(section), " ").text
     .split(/\r?\n/)
     .map((line) => {
@@ -2912,11 +2939,11 @@ function synopsisSentences(section) {
       return /[.!?]$/.test(content) ? content : `${content}.`;
     })
     .join("\n");
-  return splitSentences(text, { capitalStart: false }).filter((sentence) => !SCAFFOLD_SENTENCES.has(sentence));
+  return splitSentences(text, { capitalStart: false, pack }).filter((sentence) => !SCAFFOLD_SENTENCES.has(sentence));
 }
 
-function takeSentences(text, count) {
-  return synopsisSentences(text).slice(0, count);
+function takeSentences(text, count, pack) {
+  return synopsisSentences(text, pack).slice(0, count);
 }
 
 // The logline is the first sentence of story.md's ## Synopsis; the skills
@@ -2927,18 +2954,18 @@ function renderSynopsis(title, premise, project, level, detail) {
   for (const arc of project.arcs) {
     const markdown = readMarkdown(arc.file, project.root);
     lines.push(`## ${arc.name}`, "");
-    const setup = takeSentences(extractSection(markdown.body, "Setup"), detail.setup);
+    const setup = takeSentences(extractSection(markdown.body, "Setup"), detail.setup, project.pack);
     if (setup.length > 0) {
       lines.push(setup.join(" "), "");
     }
     if (level === 0) {
-      const rising = takeSentences(extractSection(markdown.body, "Rising Action"), detail.rising);
+      const rising = takeSentences(extractSection(markdown.body, "Rising Action"), detail.rising, project.pack);
       if (rising.length > 0) {
         lines.push(rising.join(" "), "");
       }
     }
-    const climax = takeSentences(extractSection(markdown.body, "Climax"), detail.climax);
-    const resolution = level < 2 ? takeSentences(extractSection(markdown.body, "Resolution"), detail.resolution) : [];
+    const climax = takeSentences(extractSection(markdown.body, "Climax"), detail.climax, project.pack);
+    const resolution = level < 2 ? takeSentences(extractSection(markdown.body, "Resolution"), detail.resolution, project.pack) : [];
     const chain = climax.concat(resolution);
     if (chain.length > 0) {
       lines.push(`Because ${lowercaseCommonStart(chain.join(" "))}`, "");

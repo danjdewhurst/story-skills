@@ -168,6 +168,7 @@ export function buildVoices(project, chapters) {
     profiles: profiles.sort((left, right) => right.words - left.words || left.id.localeCompare(right.id, "en")),
     unattributed,
     warnings,
+    language: pack.tag,
     skipped: skippedChecks(pack, VOICE_CHECKS)
   };
 }

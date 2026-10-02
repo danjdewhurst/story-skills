@@ -1470,6 +1470,14 @@ function leadingHeadingLength(masked) {
   return match ? match[0].length : 0;
 }
 
+// src/languages/ar.js
+var ar_default = {
+  code: "ar",
+  name: "Arabic",
+  cased: false,
+  segmentation: "space"
+};
+
 // src/languages/base.js
 var base_default = {
   code: "und",
@@ -1539,6 +1547,7 @@ var en_default = {
     plainTags: ["said", "asked", "says", "asks"],
     beatPronouns: ["he", "she", "they", "i", "we", "it", "you"],
     adverbSuffixes: ["ly"],
+    adverbLabel: "-ly adverbs",
     adverbExceptions: [
       "ally",
       "anomaly",
@@ -1983,27 +1992,92 @@ var en_default = {
   }
 };
 
+// src/languages/he.js
+var he_default = {
+  code: "he",
+  name: "Hebrew",
+  cased: false,
+  segmentation: "space"
+};
+
+// src/languages/hi.js
+var hi_default = {
+  code: "hi",
+  name: "Hindi",
+  cased: false,
+  segmentation: "space"
+};
+
+// src/languages/ja.js
+var ja_default = {
+  code: "ja",
+  name: "Japanese",
+  cased: false,
+  segmentation: "character"
+};
+
+// src/languages/ko.js
+var ko_default = {
+  code: "ko",
+  name: "Korean",
+  cased: false,
+  segmentation: "space"
+};
+
+// src/languages/th.js
+var th_default = {
+  code: "th",
+  name: "Thai",
+  cased: false,
+  segmentation: "dictionary"
+};
+
+// src/languages/zh.js
+var zh_default = {
+  code: "zh",
+  name: "Chinese",
+  cased: false,
+  segmentation: "character"
+};
+
 // src/languages/index.js
 var DEFAULT_LANGUAGE = "en";
-var PACKS = new Map([en_default].map((pack) => [pack.code, pack]));
-var TAG_PATTERN = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
+var PACKS = new Map([ar_default, en_default, he_default, hi_default, ja_default, ko_default, th_default, zh_default].map((pack) => [pack.code, pack]));
+var TAG_PATTERN = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/;
+function canonicalTag(value) {
+  if (typeof value !== "string" || !TAG_PATTERN.test(value.trim())) {
+    return null;
+  }
+  try {
+    return Intl.getCanonicalLocales(value.trim())[0];
+  } catch {
+    return null;
+  }
+}
 function isLanguageTag(value) {
-  return typeof value === "string" && TAG_PATTERN.test(value.trim());
+  return canonicalTag(value) !== null;
 }
 function projectLanguage(storyData) {
   const value = storyData?.language;
-  return isLanguageTag(value) ? value.trim() : DEFAULT_LANGUAGE;
+  if (value === undefined || value === null || typeof value === "string" && (value.trim() === "" || /^\[TODO\b/i.test(value.trim()))) {
+    return DEFAULT_LANGUAGE;
+  }
+  return String(value).trim();
 }
 var RESOLVED = new Map;
 function languagePack(tag = DEFAULT_LANGUAGE) {
-  const language = isLanguageTag(tag) ? tag.trim() : DEFAULT_LANGUAGE;
+  const language = String(tag ?? "").trim() || DEFAULT_LANGUAGE;
   if (!RESOLVED.has(language)) {
     RESOLVED.set(language, resolvePack(language));
   }
   return RESOLVED.get(language);
 }
+function resolveLocale(language) {
+  return canonicalTag(language) ?? canonicalTag(language.split(/[-_]/)[0]) ?? "und";
+}
 function resolvePack(language) {
-  const subtags = language.toLowerCase().split("-");
+  const locale = resolveLocale(language);
+  const subtags = locale.toLowerCase().split("-");
   const layers = [base_default];
   for (let length = 1;length <= subtags.length; length += 1) {
     const pack = PACKS.get(subtags.slice(0, length).join("-"));
@@ -2019,6 +2093,7 @@ function resolvePack(language) {
     });
   }
   pack.tag = language;
+  pack.locale = locale;
   return deepFreeze(pack);
 }
 function deepFreeze(value) {
@@ -2392,6 +2467,7 @@ function buildVoices(project, chapters) {
     profiles: profiles.sort((left, right) => right.words - left.words || left.id.localeCompare(right.id, "en")),
     unattributed,
     warnings,
+    language: pack.tag,
     skipped: skippedChecks(pack, VOICE_CHECKS)
   };
 }
@@ -2695,6 +2771,12 @@ var BASELINE_CHECKS = [
   { check: "signature-words", label: "Baseline signature words", lists: ["echoStopwords", "phraseStopwords"] }
 ];
 var DIALECT_CHECK = { check: "dialect-spellings", label: "British and American spellings", lists: ["dialectPairs"] };
+function checkRuns(pack, check) {
+  return hasLists(pack, [...PROSE_CHECKS, ...BASELINE_CHECKS].find((definition) => definition.check === check).lists);
+}
+function adverbLabel(pack) {
+  return checkList(pack, "adverbLabel") ?? "adverbs";
+}
 var PROSE_THRESHOLDS = {
   filterPerThousand: 10,
   adverbsPerThousand: 12,
@@ -2803,7 +2885,7 @@ function analyzeChapter(prose, rules) {
     phraseSentences: sentenceList.map((sentence) => splitWords(sentence).map(normalizeWord))
   };
 }
-function chapterFindings(label, analysis, thresholds = PROSE_THRESHOLDS, { baseline = false } = {}) {
+function chapterFindings(label, analysis, thresholds = PROSE_THRESHOLDS, { baseline = false, pack = languagePack() } = {}) {
   const findings = [];
   for (const variant of analysis.variants) {
     findings.push(warn("prose-avoided-spelling", `${label} uses "${variant.avoid}" ${times(variant.count)}; ${variant.source} prefers "${variant.use}"`, label));
@@ -2815,7 +2897,7 @@ function chapterFindings(label, analysis, thresholds = PROSE_THRESHOLDS, { basel
   }
   const adverbRate = perThousand(total(analysis.adverbs), analysis.narrationWords);
   if (!baseline && rated && adverbRate > thresholds.adverbsPerThousand) {
-    findings.push(warn("prose-adverbs", `${label} has ${formatAgainst(adverbRate, thresholds.adverbsPerThousand, "over")} -ly adverbs per 1,000 narration words (over ${thresholds.adverbsPerThousand}): ${formatCounts(analysis.adverbs, 5)}`, label));
+    findings.push(warn("prose-adverbs", `${label} has ${formatAgainst(adverbRate, thresholds.adverbsPerThousand, "over")} ${adverbLabel(pack)} per 1,000 narration words (over ${thresholds.adverbsPerThousand}): ${formatCounts(analysis.adverbs, 5)}`, label));
   }
   const bookisms = total(analysis.bookisms);
   if (bookisms > thresholds.maxBookisms) {
@@ -2838,7 +2920,7 @@ var BASELINE_TOLERANCES = {
   signatureWords: 20,
   signatureMinCount: 3
 };
-function baselineProfile(samples) {
+function baselineProfile(samples, pack = languagePack()) {
   const analyses = samples.map((sample) => sample.analysis);
   const sum = (pick) => analyses.reduce((total, analysis) => total + pick(analysis), 0);
   const words = sum((analysis) => analysis.words);
@@ -2857,9 +2939,9 @@ function baselineProfile(samples) {
     sentences: sentenceStats(lengths),
     paragraphMean: sum((analysis) => analysis.paragraphs) === 0 ? 0 : words / sum((analysis) => analysis.paragraphs),
     dialogueShare: words === 0 ? 0 : (words - narrationWords) * 100 / words,
-    filterPerThousand: perThousand(sum((analysis) => total(analysis.filterWords)), narrationWords),
-    adverbsPerThousand: perThousand(sum((analysis) => total(analysis.adverbs)), narrationWords),
-    signatureWords: sortCounts(counts).filter((entry) => entry.count >= BASELINE_TOLERANCES.signatureMinCount).slice(0, BASELINE_TOLERANCES.signatureWords).map((entry) => entry.word),
+    filterPerThousand: checkRuns(pack, "filter-words") ? perThousand(sum((analysis) => total(analysis.filterWords)), narrationWords) : null,
+    adverbsPerThousand: checkRuns(pack, "adverbs") ? perThousand(sum((analysis) => total(analysis.adverbs)), narrationWords) : null,
+    signatureWords: checkRuns(pack, "signature-words") ? sortCounts(counts).filter((entry) => entry.count >= BASELINE_TOLERANCES.signatureMinCount).slice(0, BASELINE_TOLERANCES.signatureWords).map((entry) => entry.word) : null,
     usable: narrationWords >= BASELINE_TOLERANCES.minSampleWords
   };
 }
@@ -2880,12 +2962,12 @@ function baselineFigures(analysis, profile, chapterWords) {
     sentenceMean: analysis.sentences.mean,
     paragraphMean: analysis.paragraphs === 0 ? 0 : analysis.words / analysis.paragraphs,
     dialogueShare: analysis.words === 0 ? 0 : (analysis.words - analysis.narrationWords) * 100 / analysis.words,
-    filterPerThousand: perThousand(total(analysis.filterWords), analysis.narrationWords),
-    adverbsPerThousand: perThousand(total(analysis.adverbs), analysis.narrationWords),
-    signatureWordsUsed: profile.signatureWords.filter((word) => used.has(word)).length
+    filterPerThousand: profile.filterPerThousand === null ? null : perThousand(total(analysis.filterWords), analysis.narrationWords),
+    adverbsPerThousand: profile.adverbsPerThousand === null ? null : perThousand(total(analysis.adverbs), analysis.narrationWords),
+    signatureWordsUsed: profile.signatureWords === null ? null : profile.signatureWords.filter((word) => used.has(word)).length
   };
 }
-function baselineFindings(label, analysis, figures, profile, tolerances = BASELINE_TOLERANCES) {
+function baselineFindings(label, analysis, figures, profile, tolerances = BASELINE_TOLERANCES, pack = languagePack()) {
   const findings = [];
   if (!profile.usable || analysis.words < PROSE_THRESHOLDS.minRateWords) {
     return findings;
@@ -2903,6 +2985,9 @@ function baselineFindings(label, analysis, figures, profile, tolerances = BASELI
     findings.push(warn("prose-baseline-dialogue", `${label} is ${formatRate(figures.dialogueShare)}% dialogue, ${direction(figures.dialogueShare, profile.dialogueShare, "more", "less")} than your samples' ${formatRate(profile.dialogueShare)}% (tolerance ${tolerances.dialogueShare} points)`, label));
   }
   const rateDrift = (name, field) => {
+    if (profile[field] === null) {
+      return null;
+    }
     const allowed = Math.max(tolerances.rateFloor, profile[field] * tolerances.rateShare);
     return Math.abs(figures[field] - profile[field]) > allowed ? `${label} has ${formatRate(figures[field])} ${name} per 1,000 narration words, ${direction(figures[field], profile[field], "more", "fewer")} than your samples' ${formatRate(profile[field])} (tolerance ${formatRate(allowed)})` : null;
   };
@@ -2910,7 +2995,7 @@ function baselineFindings(label, analysis, figures, profile, tolerances = BASELI
   if (filterDrift !== null) {
     findings.push(warn("prose-baseline-filter-words", filterDrift, label));
   }
-  const adverbDrift = rated ? rateDrift("-ly adverbs", "adverbsPerThousand") : null;
+  const adverbDrift = rated ? rateDrift(adverbLabel(pack), "adverbsPerThousand") : null;
   if (adverbDrift !== null) {
     findings.push(warn("prose-baseline-adverbs", adverbDrift, label));
   }
@@ -2962,11 +3047,24 @@ function formatProseReport(report) {
   const skipped = report.skipped ?? [];
   lines.push(...skippedLines(skipped));
   const runs = (check) => !skipped.some((entry) => entry.check === check);
+  const adverbs = adverbLabel(languagePack(report.language));
   const profile = report.baseline;
   if (profile) {
     const stats = profile.sentences;
-    lines.push(`Baseline from ${profile.samples.length} ${profile.samples.length === 1 ? "sample" : "samples"} (${profile.words} words): sentences ${formatRate(stats.mean)} words (spread ${formatRate(stats.spread)}), paragraphs ${formatRate(profile.paragraphMean)} words, ${formatRate(profile.dialogueShare)}% dialogue, ${formatRate(profile.filterPerThousand)} filter words and ${formatRate(profile.adverbsPerThousand)} -ly adverbs per 1k narration words`);
-    lines.push(profile.usable ? `  Signature words: ${profile.signatureWords.join(", ") || "none"}` : `  Too few sample words to compare with (${profile.narrationWords} of ${BASELINE_TOLERANCES.minSampleWords} narration words): the fixed limits apply`);
+    const rates = [];
+    if (profile.filterPerThousand !== null) {
+      rates.push(`${formatRate(profile.filterPerThousand)} filter words`);
+    }
+    if (profile.adverbsPerThousand !== null) {
+      rates.push(`${formatRate(profile.adverbsPerThousand)} ${adverbs}`);
+    }
+    const rateText = rates.length === 0 ? "" : `, ${rates.join(" and ")} per 1k narration words`;
+    lines.push(`Baseline from ${profile.samples.length} ${profile.samples.length === 1 ? "sample" : "samples"} (${profile.words} words): sentences ${formatRate(stats.mean)} words (spread ${formatRate(stats.spread)}), paragraphs ${formatRate(profile.paragraphMean)} words, ${formatRate(profile.dialogueShare)}% dialogue${rateText}`);
+    if (!profile.usable) {
+      lines.push(`  Too few sample words to compare with (${profile.narrationWords} of ${BASELINE_TOLERANCES.minSampleWords} narration words): the fixed limits apply`);
+    } else if (profile.signatureWords !== null) {
+      lines.push(`  Signature words: ${profile.signatureWords.join(", ") || "none"}`);
+    }
   }
   for (const chapter of report.chapters) {
     const analysis = chapter.analysis;
@@ -2977,14 +3075,15 @@ function formatProseReport(report) {
       lines.push(`  Filter words: ${formatRate(perThousand(total(analysis.filterWords), analysis.narrationWords))} per 1k narration words${countSuffix(analysis.filterWords)}`);
     }
     if (runs("adverbs")) {
-      lines.push(`  -ly adverbs: ${formatRate(perThousand(total(analysis.adverbs), analysis.narrationWords))} per 1k narration words${countSuffix(analysis.adverbs)}`);
+      lines.push(`  ${adverbs[0].toUpperCase()}${adverbs.slice(1)}: ${formatRate(perThousand(total(analysis.adverbs), analysis.narrationWords))} per 1k narration words${countSuffix(analysis.adverbs)}`);
     }
     if (runs("dialogue-tags")) {
       lines.push(`  Dialogue tags: ${formatCounts(analysis.plainTags, 4) || "none plain"}; said-bookisms: ${formatCounts(analysis.bookisms, 5) || "none"}`);
     }
     if (chapter.baseline && profile.usable) {
       const figures = chapter.baseline;
-      lines.push(`  Against the baseline: paragraphs ${formatRate(figures.paragraphMean)} words, ${formatRate(figures.dialogueShare)}% dialogue, signature words ${figures.signatureWordsUsed} of ${profile.signatureWords.length}`);
+      const signature = figures.signatureWordsUsed === null ? "" : `, signature words ${figures.signatureWordsUsed} of ${profile.signatureWords.length}`;
+      lines.push(`  Against the baseline: paragraphs ${formatRate(figures.paragraphMean)} words, ${formatRate(figures.dialogueShare)}% dialogue${signature}`);
     }
     if (runs("echoes")) {
       lines.push(`  Echoes within ${PROSE_THRESHOLDS.echoWindow} words: ${formatCounts(analysis.echoes, 5) || "none"}`);
@@ -3176,6 +3275,7 @@ var OPTIONS = [
   { name: "tense", value: "<tense>", help: ["Narrative tense for init or import"] },
   { name: "form", value: "<form>", help: ["Story form for init (novel, novella, novelette,", "short-story, flash, serial, picture-book,", "chapter-book); sets a default target-words"] },
   { name: "synopsis", value: "<text>", help: ["Starter synopsis for init or import"] },
+  { name: "language", value: "<tag>", help: ["Manuscript language for import, a BCP 47 tag", "such as fr; defaults to the existing story.md"] },
   { name: "series", value: "<id>", help: ["Series id for init"] },
   { name: "book-number", value: "<n>", help: ["Publication order for init"] },
   { name: "follows", value: "<path>", repeatable: true, help: ["Init a sequel set after this story project;", "repeatable"] },
@@ -8862,17 +8962,28 @@ var SYMMETRIC_RELATIONSHIPS = new Set([
   "confidant",
   "love-interest"
 ]);
+function newProjectRoot({ title, cwd = process.cwd(), dir }) {
+  const text = String(title ?? "").trim();
+  const titleId = kebabCase(text, { transliterate: false }) || kebabCase(text);
+  return !titleId && dir === undefined ? null : path11.resolve(cwd, dir ?? titleId);
+}
+function existingStoryLanguage(root) {
+  const data = existingStoryData(root);
+  return data === null ? null : projectLanguage(data);
+}
 function createStoryProject(options) {
   const title = String(options.title ?? "").trim();
   if (!title) {
     throw usageError("A story title is required");
   }
   const cwd = options.cwd ?? process.cwd();
-  const titleId = kebabCase(title, { transliterate: false }) || kebabCase(title);
-  if (!titleId && options.dir === undefined) {
+  const root = newProjectRoot({ title, cwd, dir: options.dir });
+  if (root === null) {
     throw usageError('Cannot derive a story id from title "' + title + '": pass --dir with an ASCII folder name, or use a title containing ASCII letters or digits');
   }
-  const root = path11.resolve(cwd, options.dir ?? titleId);
+  if (options.language !== undefined && !isLanguageTag(options.language)) {
+    throw usageError(`--language ${options.language} must be a BCP 47 tag such as en, en-GB, or fr`);
+  }
   const existingStory = existingStoryData(root);
   const storyId = deriveStoryId(existingStory ? existingStory.title : title, root);
   assertPortableId(storyId, "story");
@@ -8924,7 +9035,7 @@ function createStoryProject(options) {
     pov: options.pov ?? inherited.pov ?? "third-person-limited",
     tense: options.tense ?? inherited.tense ?? "past",
     form: options.form,
-    inherited: inheritedStoryFields(inherited),
+    inherited: { ...inheritedStoryFields(inherited), ...options.language === undefined ? {} : { language: options.language.trim() } },
     synopsis: options.synopsis ?? options.defaultSynopsis ?? "Add a 2-3 sentence synopsis here."
   }), { root });
   writeStarterFile(path11.join(root, "characters", "_index.md"), characterIndex(storyId, [], "", ""), { root });
@@ -9052,6 +9163,9 @@ function unappliedStoryOptions(existing, title, options) {
     if (value !== undefined && !(Array.isArray(value) && value.length === 0)) {
       ignored.push(flag);
     }
+  }
+  if (options.language !== undefined && options.language.trim() !== projectLanguage(existing)) {
+    ignored.push("--language");
   }
   return ignored;
 }
@@ -10754,18 +10868,19 @@ function proseReport(root, options = {}) {
     similarNames: similar,
     thresholds: thresholdSummary(thresholds),
     baseline: profile,
+    language: rules.pack.tag,
     skipped: proseSkipped(rules, profile)
   };
 }
 function lintProse(label, title, prose, rules, thresholds, profile, warnings) {
   const analysis = analyzeChapter(prose, rules);
   const compared = profile !== null && profile.usable;
-  warnings.push(...chapterFindings(label, analysis, thresholds, { baseline: compared }));
+  warnings.push(...chapterFindings(label, analysis, thresholds, { baseline: compared, pack: rules.pack }));
   if (profile === null) {
     return { file: label, title, analysis };
   }
   const figures = baselineFigures(analysis, profile, contentWords(prose, rules));
-  warnings.push(...baselineFindings(label, analysis, figures, profile));
+  warnings.push(...baselineFindings(label, analysis, figures, profile, undefined, rules.pack));
   return { file: label, title, analysis, baseline: figures };
 }
 function proseBaseline(project, rules, options, warnings) {
@@ -10807,9 +10922,11 @@ function proseBaseline(project, rules, options, warnings) {
       samples.push({ file: document.file, analysis: analyzeChapter(prose, rules), sentenceLengths: sentenceLengths(prose, rules.pack), contentWords: contentWords(prose, rules) });
     }
   }
-  const profile = baselineProfile(samples);
+  const profile = baselineProfile(samples, rules.pack);
   if (!profile.usable) {
-    warnings.push(warn("prose-baseline-small", `${STYLE_SHEET_FILE} samples hold ${profile.narrationWords} narration words, too few to compare with (at least 2000): the fixed filter-word and adverb limits apply instead`, STYLE_SHEET_FILE));
+    const limits = [rules.filterWords === null ? null : "filter-word", rules.adverbSuffixes === null ? null : "adverb"].filter(Boolean);
+    const fallback = limits.length === 0 ? "" : `: the fixed ${limits.join(" and ")} ${limits.length === 1 ? "limit applies" : "limits apply"} instead`;
+    warnings.push(warn("prose-baseline-small", `${STYLE_SHEET_FILE} samples hold ${profile.narrationWords} narration words, too few to compare with (at least 2000)${fallback}`, STYLE_SHEET_FILE));
   }
   return profile;
 }
@@ -10852,6 +10969,7 @@ function prosePassageReport(root, passage, thresholds, options = {}) {
     similarNames: [],
     thresholds: thresholdSummary(thresholds),
     baseline: profile,
+    language: rules.pack.tag,
     skipped: proseSkipped(rules, profile)
   };
 }
@@ -11089,10 +11207,10 @@ var SCAFFOLD_SENTENCES = new Set([
   "What changes because of this arc."
 ]);
 function synopsisPremise(project) {
-  const sentences = synopsisSentences(extractSection(project.story.body, "Synopsis")).filter((sentence) => !/^Imported from .+\.$/.test(sentence));
+  const sentences = synopsisSentences(extractSection(project.story.body, "Synopsis"), project.pack).filter((sentence) => !/^Imported from .+\.$/.test(sentence));
   return sentences.length > 0 ? sentences[0] : "No logline recorded.";
 }
-function synopsisSentences(section) {
+function synopsisSentences(section, pack) {
   const text = scanComments(String(section), " ").text.split(/\r?\n/).map((line) => {
     const item = /^\s*(?:[-*+]|\d+[.)])\s+(.*)$/.exec(line);
     if (!item) {
@@ -11102,28 +11220,28 @@ function synopsisSentences(section) {
     return /[.!?]$/.test(content) ? content : `${content}.`;
   }).join(`
 `);
-  return splitSentences(text, { capitalStart: false }).filter((sentence) => !SCAFFOLD_SENTENCES.has(sentence));
+  return splitSentences(text, { capitalStart: false, pack }).filter((sentence) => !SCAFFOLD_SENTENCES.has(sentence));
 }
-function takeSentences(text, count) {
-  return synopsisSentences(text).slice(0, count);
+function takeSentences(text, count, pack) {
+  return synopsisSentences(text, pack).slice(0, count);
 }
 function renderSynopsis(title, premise, project, level, detail) {
   const lines = [`# Synopsis: ${title}`, "", `Logline: ${premise}`, ""];
   for (const arc of project.arcs) {
     const markdown = readMarkdown(arc.file, project.root);
     lines.push(`## ${arc.name}`, "");
-    const setup = takeSentences(extractSection(markdown.body, "Setup"), detail.setup);
+    const setup = takeSentences(extractSection(markdown.body, "Setup"), detail.setup, project.pack);
     if (setup.length > 0) {
       lines.push(setup.join(" "), "");
     }
     if (level === 0) {
-      const rising = takeSentences(extractSection(markdown.body, "Rising Action"), detail.rising);
+      const rising = takeSentences(extractSection(markdown.body, "Rising Action"), detail.rising, project.pack);
       if (rising.length > 0) {
         lines.push(rising.join(" "), "");
       }
     }
-    const climax = takeSentences(extractSection(markdown.body, "Climax"), detail.climax);
-    const resolution = level < 2 ? takeSentences(extractSection(markdown.body, "Resolution"), detail.resolution) : [];
+    const climax = takeSentences(extractSection(markdown.body, "Climax"), detail.climax, project.pack);
+    const resolution = level < 2 ? takeSentences(extractSection(markdown.body, "Resolution"), detail.resolution, project.pack) : [];
     const chain = climax.concat(resolution);
     if (chain.length > 0) {
       lines.push(`Because ${lowercaseCommonStart(chain.join(" "))}`, "");
@@ -15008,7 +15126,11 @@ function importManuscript(options) {
   if (!fromStdin && fs8.statSync(source).isDirectory() && fs8.existsSync(path12.join(source, "story.md"))) {
     throw usageError(`${rawSource} is already a story project (it has story.md); import reads manuscript files, so point it at the draft instead`);
   }
-  const pack = languagePack(options.language);
+  if (options.language !== undefined && !isLanguageTag(options.language)) {
+    throw usageError(`--language ${options.language} must be a BCP 47 tag such as en, en-GB, or fr`);
+  }
+  const target = newProjectRoot({ title: options.title, cwd, dir: options.dir });
+  const pack = languagePack(options.language ?? (target === null ? null : existingStoryLanguage(target)));
   const rules = importRules(pack);
   const warnings = [];
   const documents = fromStdin ? [{ name: "stdin", text: options.readStdin(), untitled: true }] : readImportSource(source, rules);
@@ -15041,6 +15163,7 @@ function importManuscript(options) {
     pov: options.pov,
     tense: options.tense,
     synopsis: options.synopsis,
+    language: options.language,
     defaultSynopsis: `Imported from ${fromStdin ? "stdin" : path12.basename(source)}. Replace with a 2-3 sentence synopsis.`,
     force: options.force,
     beforeWrite(root, hasStory) {
@@ -15644,7 +15767,7 @@ var COMMANDS = [
     summary: ["Split an existing manuscript into a new story project;", "- reads the manuscript from stdin"],
     project: "none",
     args: 1,
-    options: ["title", "dir", "genre", "sub-genre", "setting-era", "theme", "themes", "pov", "tense", "synopsis", "force"],
+    options: ["title", "dir", "genre", "sub-genre", "setting-era", "theme", "themes", "pov", "tense", "synopsis", "language", "force"],
     run({ parsed, io, cwd }) {
       const result = importManuscript({
         source: parsed.positionals[1],
@@ -15659,6 +15782,7 @@ var COMMANDS = [
         pov: parsed.options.pov,
         tense: parsed.options.tense,
         synopsis: parsed.options.synopsis,
+        language: parsed.options.language,
         force: isTruthy(parsed.options.force)
       });
       io.stdout.write(`Imported ${result.chapters} ${result.chapters === 1 ? "chapter" : "chapters"} (${result.words} ${result.words === 1 ? "word" : "words"}) into ${result.root}
