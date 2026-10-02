@@ -2044,18 +2044,69 @@ var zh_default = {
 var DEFAULT_LANGUAGE = "en";
 var PACKS = new Map([ar_default, en_default, he_default, hi_default, ja_default, ko_default, th_default, zh_default].map((pack) => [pack.code, pack]));
 var TAG_PATTERN = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/;
-function canonicalTag(value) {
-  if (typeof value !== "string" || !TAG_PATTERN.test(value.trim())) {
-    return null;
+function isLanguageTag(value) {
+  return typeof value === "string" && TAG_PATTERN.test(value.trim());
+}
+var LANGUAGE_ALIASES = {
+  iw: "he",
+  in: "id",
+  ji: "yi",
+  jw: "jv",
+  mo: "ro",
+  ara: "ar",
+  chi: "zh",
+  zho: "zh",
+  deu: "de",
+  ger: "de",
+  eng: "en",
+  spa: "es",
+  fra: "fr",
+  fre: "fr",
+  heb: "he",
+  hin: "hi",
+  ita: "it",
+  jpn: "ja",
+  kor: "ko",
+  nld: "nl",
+  dut: "nl",
+  por: "pt",
+  rus: "ru",
+  tha: "th"
+};
+var GRANDFATHERED = {
+  "en-gb-oed": ["en-gb-oxendict", null],
+  "i-klingon": ["tlh", null],
+  "no-bok": ["nb", "no"],
+  "no-nyn": ["nn", "no"],
+  "sgn-be-fr": ["sfb", null],
+  "sgn-be-nl": ["vgt", null],
+  "sgn-ch-de": ["sgg", null],
+  "zh-guoyu": ["cmn", "zh"],
+  "zh-hakka": ["hak", "zh"],
+  "zh-min-nan": ["nan", "zh"],
+  "zh-xiang": ["hsn", "zh"]
+};
+function lookupTag(language) {
+  const lower = language.toLowerCase();
+  if (GRANDFATHERED[lower] !== undefined) {
+    return GRANDFATHERED[lower];
   }
+  const subtags = TAG_PATTERN.test(language) ? lower.split("-") : [lower.split(/[-_]/)[0]].filter((subtag) => /^[a-z]{2,3}$/.test(subtag));
+  if (subtags.length === 0) {
+    return ["und", null];
+  }
+  subtags[0] = LANGUAGE_ALIASES[subtags[0]] ?? subtags[0];
+  if (subtags.length > 1 && /^[a-z]{3}$/.test(subtags[1])) {
+    return [subtags.slice(1).join("-"), subtags[0]];
+  }
+  return [subtags.join("-"), null];
+}
+function canonicalTag(value) {
   try {
-    return Intl.getCanonicalLocales(value.trim())[0];
+    return typeof value === "string" ? Intl.getCanonicalLocales(value)[0] ?? null : null;
   } catch {
     return null;
   }
-}
-function isLanguageTag(value) {
-  return canonicalTag(value) !== null;
 }
 function projectLanguage(storyData) {
   const value = storyData?.language;
@@ -2072,19 +2123,11 @@ function languagePack(tag = DEFAULT_LANGUAGE) {
   }
   return RESOLVED.get(language);
 }
-function resolveLocale(language) {
-  return canonicalTag(language) ?? canonicalTag(language.split(/[-_]/)[0]) ?? "und";
-}
 function resolvePack(language) {
-  const locale = resolveLocale(language);
-  const subtags = locale.toLowerCase().split("-");
-  const layers = [base_default];
-  for (let length = 1;length <= subtags.length; length += 1) {
-    const pack = PACKS.get(subtags.slice(0, length).join("-"));
-    if (pack !== undefined) {
-      layers.push(pack);
-    }
-  }
+  const [lookup, macrolanguage] = lookupTag(language);
+  const subtags = lookup.split("-");
+  const keys = [macrolanguage, ...subtags.map((_, index) => subtags.slice(0, index + 1).join("-"))];
+  const layers = [base_default, ...keys.map((key) => PACKS.get(key)).filter((pack) => pack !== undefined)];
   const pack = {};
   for (const layer of layers) {
     Object.assign(pack, layer, {
@@ -2093,7 +2136,7 @@ function resolvePack(language) {
     });
   }
   pack.tag = language;
-  pack.locale = locale;
+  pack.locale = canonicalTag(lookup) ?? canonicalTag(subtags[0]) ?? "und";
   return deepFreeze(pack);
 }
 function deepFreeze(value) {

@@ -8,7 +8,7 @@ import { DEFAULT_LANGUAGE, canonicalTag, checkList, checkSet, hasLists, isLangua
 import { givenName } from "../src/names.js";
 import { adverbLabel, contentWords, proseRules, repeatedPhrases, sentenceLengths } from "../src/prose.js";
 import { splitSentences } from "../src/sentences.js";
-import { createStoryProject, existingStoryLanguage, namesReport, newProjectRoot, proseReport, scanProject, synopsisBook, voicesReport } from "../src/story.js";
+import { createStoryProject, existingStoryLanguage, namesReport, newProjectRoot, proseReport, scanProject, synopsisBook, validateProject, voicesReport } from "../src/story.js";
 import { formatVoices, quoteMatches } from "../src/voices.js";
 import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
 import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
@@ -97,12 +97,34 @@ describe("language packs", () => {
     expect(canonicalTag("abc-de-fg-hi")).toBeNull();
     expect(isLanguageTag("ja-JP-u-ca-japanese")).toBe(true);
     expect(isLanguageTag("zh-Hant-TW")).toBe(true);
-    expect(isLanguageTag("en-GB-GB")).toBe(false);
+    // Validity is the tag's shape, never the runtime's Intl data.
+    expect(isLanguageTag("en-GB-GB")).toBe(true);
     expect(isLanguageTag("fr_FR")).toBe(false);
     expect(isLanguageTag("english")).toBe(false);
+    expect(isLanguageTag(3)).toBe(false);
     // Every locale is safe to hand to Intl.
-    for (const tag of ["en-GB-GB", "abc-de-fg-hi", "fr_FR", "not a tag", "3", "ja-JP-u-ca-japanese"]) {
+    for (const tag of ["en-GB-GB", "abc-de-fg-hi", "fr_FR", "not a tag", "3", "ja-JP-u-ca-japanese", "zh-yue", "zh-min-nan", "en-GB-oed", "sgn-BE-FR"]) {
       expect(() => new Intl.Collator(languagePack(tag).locale)).not.toThrow();
+    }
+  });
+
+  test("extlang and grandfathered tags are valid and find their packs without Intl", () => {
+    for (const tag of ["zh-yue", "zh-cmn-Hans", "zh-min-nan", "en-GB-oed", "sgn-BE-FR", "no-bok"]) {
+      expect(isLanguageTag(tag)).toBe(true);
+    }
+    // An extlang tag drops its macrolanguage for the locale and keeps it for the pack.
+    expect(languagePack("zh-yue")).toMatchObject({ tag: "zh-yue", locale: "yue", code: "zh", segmentation: "character" });
+    expect(languagePack("zh-cmn-Hans")).toMatchObject({ locale: "cmn-Hans", code: "zh" });
+    expect(languagePack("zh-min-nan")).toMatchObject({ locale: "nan", code: "zh" });
+    expect(languagePack("en-GB-oed")).toMatchObject({ tag: "en-GB-oed", locale: "en-GB-oxendict", code: "en" });
+    expect(languagePack("en-GB-oed").checks.filterWords).toContain("felt");
+    expect(languagePack("sgn-BE-FR")).toMatchObject({ locale: "sfb", code: "und" });
+    // Packs come from the lookup tables, so a region Intl rewrites on one
+    // runtime (en-UK) finds the same pack everywhere.
+    expect(languagePack("en-UK").code).toBe("en");
+    for (const tag of ["zh-yue", "zh-cmn-Hans", "en-GB-oed", "ja-JP-u-ca-japanese"]) {
+      const { root } = languageProject(tag);
+      expect(validateProject(root).errors.map((error) => error.code)).not.toContain("invalid-language");
     }
   });
 
@@ -406,7 +428,7 @@ describe("story import --language", () => {
     expect(bad.code).toBe(2);
     expect(bad.err).toContain("--language fr_FR must be a BCP 47 tag such as en, en-GB, or fr");
     expect(fs.existsSync(path.join(cwd, "bad"))).toBe(false);
-    expect(() => createStoryProject({ cwd, title: "Worse", language: "en-GB-GB" })).toThrow("--language en-GB-GB must be a BCP 47 tag");
+    expect(() => createStoryProject({ cwd, title: "Worse", language: "english" })).toThrow("--language english must be a BCP 47 tag");
   });
 
   test("into an existing project defaults to its language and reports a different one as not applied", () => {
