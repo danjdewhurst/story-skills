@@ -1,6 +1,7 @@
 import { isSceneBreak, withoutFencedCode } from "./markdown.js";
 import { openingWords } from "./html.js";
 import { formatPercent } from "./progress.js";
+import { wordSpans } from "./words.js";
 
 // Compares two versions of a manuscript chapter by chapter. Chapters match by
 // id (chapter-NN), except that a chapter whose paragraphs match another id's
@@ -220,9 +221,11 @@ function normalise(text) {
 }
 
 // Lowercased words (letters, digits, and inner apostrophes) with counts.
+// Chinese and Japanese are a word per character, and Thai, Lao, Khmer, and
+// Burmese are split by dictionary, as story wordcount counts them.
 function wordBag(text) {
   const bag = new Map();
-  for (const word of String(text).toLowerCase().match(/[\p{L}\p{N}]+(?:['\u2019][\p{L}\p{N}]+)*/gu) ?? []) {
+  for (const { word } of wordSpans(String(text).toLowerCase(), /[\p{L}\p{N}]+(?:['\u2019][\p{L}\p{N}]+)*/gu)) {
     bag.set(word, (bag.get(word) ?? 0) + 1);
   }
   return bag;

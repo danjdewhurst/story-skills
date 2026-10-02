@@ -1025,6 +1025,47 @@ function withoutLeadingFrontmatter(text) {
   return text.slice(match[0].length);
 }
 
+// src/words.js
+var CJK = "\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}\\u30FC";
+var SOUTHEAST_ASIAN = "\\p{Script=Thai}\\p{Script=Lao}\\p{Script=Khmer}\\p{Script=Myanmar}";
+var UNSPACED = new RegExp(`[${CJK}]|[${SOUTHEAST_ASIAN}]+`, "gu");
+var CJK_CHARACTER = new RegExp(`^[${CJK}]$`, "u");
+var SEGMENTER = new Intl.Segmenter("en", { granularity: "word" });
+function segmentRun(run) {
+  const words = [];
+  for (const { segment, index, isWordLike } of SEGMENTER.segment(run)) {
+    if (isWordLike) {
+      words.push([segment, index]);
+    }
+  }
+  return words;
+}
+function wordSpans(text, pattern) {
+  const source = String(text);
+  const spans = [];
+  let last = 0;
+  const between = (end) => {
+    if (end > last) {
+      for (const match of source.slice(last, end).matchAll(pattern)) {
+        spans.push({ word: match[0], start: last + match.index, end: last + match.index + match[0].length });
+      }
+    }
+  };
+  for (const match of source.matchAll(UNSPACED)) {
+    between(match.index);
+    if (CJK_CHARACTER.test(match[0])) {
+      spans.push({ word: match[0], start: match.index, end: match.index + match[0].length });
+    } else {
+      for (const [word, offset] of segmentRun(match[0])) {
+        spans.push({ word, start: match.index + offset, end: match.index + offset + word.length });
+      }
+    }
+    last = match.index + match[0].length;
+  }
+  between(source.length);
+  return spans;
+}
+
 // src/markdown.js
 var LATIN_FOLDS = {
   "Æ": "AE",
@@ -1159,7 +1200,6 @@ function chapterHeading(number, title, word = "Chapter") {
 var WORD_CHARS = "\\p{L}\\p{M}\\p{N}\\u200C\\u200D\\u00AD";
 var URL_PLACEHOLDER = "";
 var WORD_PATTERN = new RegExp(`${URL_PLACEHOLDER}|[\\p{L}\\p{N}][${WORD_CHARS}]*(?:(?:['’‐‑-]|(?<=\\p{N})[.,:](?=\\p{N}))[\\p{L}\\p{N}][${WORD_CHARS}]*)*`, "gu");
-var CJK_CHARACTER = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\u30FC]/gu;
 var URL_OR_EMAIL = /(?<![a-z0-9+.-])(?:[a-z][a-z0-9+.-]*:\/\/|www\.)[^\s<>()[\]`]*[^\s<>()[\]`.,;:!?'"\u2019\u201d*_~]|(?<![\p{L}\p{N}._%+-])[\p{L}\p{N}][\p{L}\p{N}._%+-]*@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/giu;
 function plainLinks(text) {
   return String(text).replace(/!\[[^\]]{0,1000}\]\([^)]{0,1000}\)/g, "").replace(/\[([^\]]{0,1000})\]\([^)]{0,1000}\)/g, "$1");
@@ -1178,9 +1218,9 @@ function splitWords(markdown) {
   const normalized = plainLinks(withoutFenceMarkers(String(markdown).replace(/\uE000/g, " "))).replace(URL_OR_EMAIL, (match) => {
     urls.push(match);
     return ` ${URL_PLACEHOLDER} `;
-  }).replace(/\\([!-/:-@[-`{-~])/g, "$1").replace(/[#>*_~|`]/g, " ").replace(/(?<!\p{N}):|:(?!\p{N})/gu, " ").replace(CJK_CHARACTER, " $& ");
+  }).replace(/\\([!-/:-@[-`{-~])/g, "$1").replace(/[#>*_~|`]/g, " ").replace(/(?<!\p{N}):|:(?!\p{N})/gu, " ");
   let next = 0;
-  return (normalized.match(WORD_PATTERN) ?? []).map((word) => word === URL_PLACEHOLDER ? urls[next++] : word);
+  return wordSpans(normalized, WORD_PATTERN).map(({ word }) => word === URL_PLACEHOLDER ? urls[next++] : word);
 }
 function isSceneBreak(paragraph) {
   const text = String(paragraph).replace(/\\([*_~-])/g, "$1").trim();
@@ -6211,7 +6251,7 @@ function normalise(text) {
 }
 function wordBag(text) {
   const bag = new Map;
-  for (const word of String(text).toLowerCase().match(/[\p{L}\p{N}]+(?:['\u2019][\p{L}\p{N}]+)*/gu) ?? []) {
+  for (const { word } of wordSpans(String(text).toLowerCase(), /[\p{L}\p{N}]+(?:['\u2019][\p{L}\p{N}]+)*/gu)) {
     bag.set(word, (bag.get(word) ?? 0) + 1);
   }
   return bag;
@@ -6261,9 +6301,7 @@ var SIMILARITY_DEFAULTS = { minWords: 8 };
 var MIN_SHINGLE = 5;
 var MAX_PLACES = 1000;
 var QUOTE_WORDS = 24;
-var CJK = "\\p{sc=Han}\\p{sc=Hiragana}\\p{sc=Katakana}";
-var WORD_CHAR = `(?:(?![${CJK}])[\\p{L}\\p{N}\\p{M}])`;
-var WORD_PATTERN2 = new RegExp(`[${CJK}]|${WORD_CHAR}+(?:['’ʼ]${WORD_CHAR}+)*`, "gu");
+var WORD_PATTERN2 = /[\p{L}\p{N}\p{M}]+(?:['’ʼ][\p{L}\p{N}\p{M}]+)*/gu;
 function similarityOptions(options = {}) {
   const settings = { ...SIMILARITY_DEFAULTS };
   const raw = options["min-words"];
@@ -6279,13 +6317,8 @@ function similarityOptions(options = {}) {
 function tokenizeDocument(paragraphs) {
   const words = [];
   paragraphs.forEach((paragraph, index) => {
-    for (const match of paragraph.text.normalize("NFC").matchAll(WORD_PATTERN2)) {
-      words.push({
-        word: match[0].toLowerCase().replace(/[’ʼ]/g, "'"),
-        paragraph: index,
-        start: match.index,
-        end: match.index + match[0].length
-      });
+    for (const { word, start, end } of wordSpans(paragraph.text.normalize("NFC"), WORD_PATTERN2)) {
+      words.push({ word: word.toLowerCase().replace(/[’ʼ]/g, "'"), paragraph: index, start, end });
     }
   });
   return words;
