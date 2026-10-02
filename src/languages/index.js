@@ -17,29 +17,71 @@ import zh from "./zh.js";
 
 export const DEFAULT_LANGUAGE = "en";
 
-// Every pack, by code. A regional pack (en-GB) is keyed by its canonical
-// tag in lower case and holds only what differs from its language's pack.
+// Every pack, by code. A regional pack (en-GB) is keyed by its tag in lower
+// case and holds only what differs from its language's pack.
 const PACKS = new Map([ar, en, he, hi, ja, ko, th, zh].map((pack) => [pack.code, pack]));
 
-// The shape story.schema.json also checks; Intl then checks the subtags
-// (no repeated region, say).
+// The shape of a language tag, as story.schema.json checks it. Validity
+// depends on this alone, never on the runtime's Intl data, so extlang tags
+// (zh-yue) and grandfathered tags (en-GB-oed) stay valid everywhere.
 const TAG_PATTERN = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/;
 
-// The canonical form of a BCP 47 tag ("eng" is en, "iw" is he, "zh-hant-tw"
-// is zh-Hant-TW), safe to pass to Intl, or null when it is not a tag.
-export function canonicalTag(value) {
-  if (typeof value !== "string" || !TAG_PATTERN.test(value.trim())) {
-    return null;
+export function isLanguageTag(value) {
+  return typeof value === "string" && TAG_PATTERN.test(value.trim());
+}
+
+// Language subtags written another way: deprecated codes (iw, in) and
+// three-letter codes for languages that have a two-letter one (eng).
+const LANGUAGE_ALIASES = {
+  iw: "he", in: "id", ji: "yi", jw: "jv", mo: "ro",
+  ara: "ar", chi: "zh", zho: "zh", deu: "de", ger: "de", eng: "en", spa: "es", fra: "fr", fre: "fr",
+  heb: "he", hin: "hi", ita: "it", jpn: "ja", kor: "ko", nld: "nl", dut: "nl", por: "pt", rus: "ru", tha: "th"
+};
+
+// Grandfathered tags with a modern form, in lower case, as [tag, macrolanguage].
+const GRANDFATHERED = {
+  "en-gb-oed": ["en-gb-oxendict", null],
+  "i-klingon": ["tlh", null],
+  "no-bok": ["nb", "no"],
+  "no-nyn": ["nn", "no"],
+  "sgn-be-fr": ["sfb", null],
+  "sgn-be-nl": ["vgt", null],
+  "sgn-ch-de": ["sgg", null],
+  "zh-guoyu": ["cmn", "zh"],
+  "zh-hakka": ["hak", "zh"],
+  "zh-min-nan": ["nan", "zh"],
+  "zh-xiang": ["hsn", "zh"]
+};
+
+// The tag packs are looked up by, in lower case, and its macrolanguage, or
+// null. Worked out from the tables above, not from Intl, so the same tag
+// finds the same pack on every runtime. An extlang tag drops its
+// macrolanguage (zh-yue is yue, under zh); a tag that is not valid keeps
+// only a first subtag that is a language (fr_FR is fr), else it is und.
+function lookupTag(language) {
+  const lower = language.toLowerCase();
+  if (GRANDFATHERED[lower] !== undefined) {
+    return GRANDFATHERED[lower];
   }
+  const subtags = TAG_PATTERN.test(language) ? lower.split("-") : [lower.split(/[-_]/)[0]].filter((subtag) => /^[a-z]{2,3}$/.test(subtag));
+  if (subtags.length === 0) {
+    return ["und", null];
+  }
+  subtags[0] = LANGUAGE_ALIASES[subtags[0]] ?? subtags[0];
+  if (subtags.length > 1 && /^[a-z]{3}$/.test(subtags[1])) {
+    return [subtags.slice(1).join("-"), subtags[0]];
+  }
+  return [subtags.join("-"), null];
+}
+
+// The tag in the runtime's canonical form ("zh-hant-tw" is zh-Hant-TW), or
+// null when Intl rejects it.
+export function canonicalTag(value) {
   try {
-    return Intl.getCanonicalLocales(value.trim())[0];
+    return typeof value === "string" ? Intl.getCanonicalLocales(value)[0] ?? null : null;
   } catch {
     return null;
   }
-}
-
-export function isLanguageTag(value) {
-  return canonicalTag(value) !== null;
 }
 
 // The language story.md names, as written: English only when `language` is
@@ -56,12 +98,13 @@ export function projectLanguage(storyData) {
 
 const RESOLVED = new Map();
 
-// The pack for a language tag. `tag` is the tag as written (the skip notes
-// name it); `locale` its canonical form for Intl, or for a tag that is not
-// valid, the canonical form of its first subtag (fr_FR is fr) or "und"; and
-// `code` the most specific pack found ("und" for the base pack alone).
-// Fields of later layers replace earlier ones; `checks` and `labels` merge
-// by key. The result is frozen and the same object for the same tag.
+// The pack for a language tag: the base pack, then the packs for the
+// macrolanguage (zh for zh-yue) and each prefix of the lookup tag (fr, then
+// fr-ca), whichever exist. `tag` is the tag as written (the skip notes name
+// it) and `code` the most specific pack found ("und" for the base pack
+// alone). Fields of later layers replace earlier ones; `checks` and
+// `labels` merge by key. The result is frozen and the same object for the
+// same tag.
 export function languagePack(tag = DEFAULT_LANGUAGE) {
   const language = String(tag ?? "").trim() || DEFAULT_LANGUAGE;
   if (!RESOLVED.has(language)) {
@@ -70,20 +113,11 @@ export function languagePack(tag = DEFAULT_LANGUAGE) {
   return RESOLVED.get(language);
 }
 
-function resolveLocale(language) {
-  return canonicalTag(language) ?? canonicalTag(language.split(/[-_]/)[0]) ?? "und";
-}
-
 function resolvePack(language) {
-  const locale = resolveLocale(language);
-  const subtags = locale.toLowerCase().split("-");
-  const layers = [base];
-  for (let length = 1; length <= subtags.length; length += 1) {
-    const pack = PACKS.get(subtags.slice(0, length).join("-"));
-    if (pack !== undefined) {
-      layers.push(pack);
-    }
-  }
+  const [lookup, macrolanguage] = lookupTag(language);
+  const subtags = lookup.split("-");
+  const keys = [macrolanguage, ...subtags.map((_, index) => subtags.slice(0, index + 1).join("-"))];
+  const layers = [base, ...keys.map((key) => PACKS.get(key)).filter((pack) => pack !== undefined)];
   const pack = {};
   for (const layer of layers) {
     Object.assign(pack, layer, {
@@ -92,7 +126,11 @@ function resolvePack(language) {
     });
   }
   pack.tag = language;
-  pack.locale = locale;
+  // Only for passing to Intl APIs (collation, plural rules, segmenting): the
+  // lookup tag in the runtime's canonical form, so it never makes Intl
+  // throw. Runtimes can differ here (Node writes en-UK as en-GB, Bun keeps
+  // it), so nothing else may depend on it.
+  pack.locale = canonicalTag(lookup) ?? canonicalTag(subtags[0]) ?? "und";
   return deepFreeze(pack);
 }
 
