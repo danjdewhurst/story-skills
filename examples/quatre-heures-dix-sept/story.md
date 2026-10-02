@@ -27,7 +27,7 @@ keywords:
 
 En novembre 1957, Lucienne Marchal revient à Montrevel, dans le Jura, au chevet de son père, l’horloger Émile Marchal, qu’une attaque a laissé presque sans voix. Sur l’établi, elle trouve une montre de gousset gravée M. F., apportée par une inconnue et arrêtée par son père à quatre heures dix-sept. Une page arrachée du registre et un second couvercle lui apprennent ce que cette heure signifie, sans lui dire qui est M. F.
 
-This example is a book in French: `language: fr`, dialogue in guillemets with no-break spaces inside them, and a narrow no-break space before `;`, `!`, and `?`. Builds use the French labels (`Chapitre 1 : La montre arrêtée`).
+This example is a book in French: `language: fr`, dialogue in guillemets with no-break spaces inside them, and a narrow no-break space before `;`, `!`, and `?`. Builds use the French labels (`Chapitre 1 : La montre arrêtée`), and `story prose` and `story voices` use the French word lists (filter words such as *regarda*, `-ment` adverbs, and tags such as *dit-elle*).
 
 ## Tone & Style
 

@@ -52,6 +52,7 @@ Pick the route that matches what you came to do. Each one takes four pages; read
 | [Core concepts](concepts.md) | The project model: files, frontmatter, entity kinds, ids, registries, backlinks, word counts, and how the work is split between skills and CLI |
 | [Writing workflows](writing-workflows.md) | End-to-end sessions: testing a premise, plotting first, discovery drafting, scene craft, theme and voice, research, revision passes, line editing, feedback and editorial review, submission, self-publishing, and adaptation |
 | [Continuity and analysis](continuity.md) | The continuity engine (including travel times over location routes), exemptions, and the `knowledge`, `context`, `timeline`, `prose`, `voices`, `pacing`, `clues`, `names`, `diagram`, `progress`, `compare`, `report`, `next`, and `doctor` commands |
+| [Writing in other languages](languages.md) | What works in each language and script: counting in words or characters, dialogue and sentences, word lists, build labels, fonts, right-to-left and vertical text, ids, and adding a language pack |
 | [Series](series.md) | Linking sequels and prequels, `story series`, and carrying characters and facts between books |
 | [Import, export, and builds](manuscripts.md) | Importing an existing draft, front and back matter, publishing metadata, and building markdown, EPUB, DOCX, Shunn, HTML review copy, print interior, narration script, retailer metadata sheet, Fountain screenplay skeleton, and synopsis output |
 | [Automation and CI](automation.md) | The GitHub Actions templates (checks, scheduled drafting, and the review copy with its reader-note issue form), exit codes and output streams, and pre-commit hooks |
@@ -96,6 +97,7 @@ Pick the route that matches what you came to do. Each one takes four pages; read
 | Revise in named passes, from structure down to proof | [Writing workflows](writing-workflows.md) (`story passes`) |
 | Line edit or copyedit without losing the author's voice | [Writing workflows](writing-workflows.md) and the line-editing entry in the [Skills catalogue](skills.md) |
 | Work with sensitivity readers, editors, permissions, or a co-author | [Writing workflows](writing-workflows.md) and the editorial-review entry in the [Skills catalogue](skills.md) |
+| Write a book in a language other than English | [Writing in other languages](languages.md) |
 | Write a sequel or prequel | [Series](series.md) |
 | Build an EPUB, DOCX, or submission manuscript | [Import, export, and builds](manuscripts.md#build-a-book) |
 | Build an HTML review copy, a print interior, a narration script, a retailer metadata sheet, or a screenplay skeleton | [Import, export, and builds](manuscripts.md) |
@@ -118,7 +120,7 @@ The repository includes eight sample projects in [`examples/`](../examples/). Th
 | [`harbor-of-second-light`](../examples/harbor-of-second-light/) | A science-fiction coastal mystery with populated continuity state, knowledge entries, publishing metadata, a location route, and a pronunciation |
 | [`the-gull-rock-light`](../examples/the-gull-rock-light/) | A short second-person branching story: chapter `choices` for `story build --format twee` and `--format ink` |
 | [`the-unraveled-thread`](../examples/the-unraveled-thread/) | A village mystery that is broken on purpose to show the main kinds of continuity finding, plus clues (one a red herring) for `story clues` and scene outcomes and chapter hooks for `story pacing` |
-| [`quatre-heures-dix-sept`](../examples/quatre-heures-dix-sept/) | A short story in French (`language: fr`): dialogue in guillemets with French no-break spaces, and French build labels |
+| [`quatre-heures-dix-sept`](../examples/quatre-heures-dix-sept/) | A short story in French (`language: fr`): dialogue in guillemets with French no-break spaces, the French word lists, and French build labels |
 | [`kirimi-eki-no-wasuremono`](../examples/kirimi-eki-no-wasuremono/) | A short story in Japanese (`language: ja`): counted in characters, `target-characters`, corner-bracket dialogue, and `writing-mode: vertical` |
 | [`laysat-lil-bay`](../examples/laysat-lil-bay/) | A short story in Arabic (`language: ar`): right-to-left builds and Arabic punctuation |
 
