@@ -32,32 +32,44 @@ const DIGIT_ZEROS = {
   tibt: 0x0f20,
   mymr: 0x1040,
   khmr: 0x17e0,
-  mong: 0x1810
+  mong: 0x1810,
+  mtei: 0xabf0
 };
 
 // The digits a script's books print, by ISO 15924 script.
 const SCRIPT_DIGITS = {
   Arab: "arab", Nkoo: "nkoo", Deva: "deva", Beng: "beng", Guru: "guru", Gujr: "gujr", Orya: "orya",
   Taml: "tamldec", Telu: "telu", Knda: "knda", Mlym: "mlym", Thai: "thai", Laoo: "laoo", Tibt: "tibt",
-  Mymr: "mymr", Khmr: "khmr", Mong: "mong"
+  Mymr: "mymr", Khmr: "khmr", Mong: "mong", Mtei: "mtei"
 };
 
+// The script a tag without a script subtag is written in, where the
+// typesetting table (languageScript) has none of its own: N'Ko, Manipuri
+// in Bengali script, Dari, and Azerbaijani in Iran and Uzbek in
+// Afghanistan, which are written in Arabic script there. Keyed by language
+// and region, then language.
+const NUMERAL_SCRIPTS = { nqo: "Nkoo", mni: "Beng", prs: "Arab", "az-ir": "Arab", "uz-af": "Arab" };
+
 // Languages in Arabic script that write the Persian forms of 4, 5, and 6
-// (۴ ۵ ۶): Persian, Urdu, Pashto, Kashmiri, and Punjabi in Shahmukhi.
-const EXTENDED_ARABIC = new Set(["fa", "ur", "ps", "ks", "pa"]);
+// (۴ ۵ ۶), as CLDR has them: Persian and Dari, Urdu, Pashto, Kashmiri,
+// Punjabi in Shahmukhi, and Azerbaijani and Uzbek in Arabic script.
+const EXTENDED_ARABIC = new Set(["fa", "prs", "ur", "ps", "ks", "pa", "az", "uz"]);
 
 // Han numerals: Japanese (jpan), Simplified Chinese (hans), and
 // Traditional Chinese (hant), by the script's characters.
 const HAN_DIGITS = "〇一二三四五六七八九";
 const HAN_UNITS = ["", "十", "百", "千"];
-const HAN_GROUPS = { jpan: ["", "万", "億"], hans: ["", "万", "亿"], hant: ["", "萬", "億"] };
+// Units for each group of four digits, up to 兆 (10^12), which covers every
+// safe integer. Simplified Chinese has no settled unit for 10^12, so it
+// writes 万亿, or 万 before a 亿 group of its own (一万二千亿).
+const HAN_GROUPS = { jpan: ["", "万", "億", "兆"], hans: ["", "万", "亿", "万亿"], hant: ["", "萬", "億", "兆"] };
 
 // The native numeral system for `language` (a CLDR name such as arab, deva,
 // or jpan), or null when its script has none the builds print: Latin,
 // Cyrillic, Hebrew, Korean, and the rest keep 0-9.
 export function nativeNumerals(language) {
-  const script = languageScript(language);
-  const { primary } = parseTag(language);
+  const { primary, script: subtag, region } = parseTag(language);
+  const script = subtag ?? NUMERAL_SCRIPTS[`${primary}-${region}`] ?? NUMERAL_SCRIPTS[primary] ?? languageScript(language);
   if (script === "Jpan" || script === "Hira" || script === "Kana" || (script === "Hani" && primary === "ja")) {
     return "jpan";
   }
@@ -90,13 +102,13 @@ export function formatNumeral(value, system = "latn") {
   if (DIGIT_ZEROS[system] !== undefined && /^\d+$/.test(text)) {
     return text.replace(/\d/g, (digit) => String.fromCodePoint(DIGIT_ZEROS[system] + Number(digit)));
   }
-  if (HAN_GROUPS[system] !== undefined && Number.isSafeInteger(value) && value >= 0 && value < 1e12) {
+  if (HAN_GROUPS[system] !== undefined && Number.isSafeInteger(value) && value >= 0) {
     return hanNumeral(value, system);
   }
   return text;
 }
 
-// A number below 10^12 in Han numerals, in groups of four digits (万, 億).
+// A safe integer in Han numerals, in groups of four digits (万, 億, 兆).
 // Japanese drops 一 before 十, 百, and 千 (百一, 千十) and writes no zero
 // within a number. Chinese drops 一 only before a leading 十 (十二, but
 // 一百一十), writes one 零 for each run of zeros between digits (一百零一,
@@ -122,7 +134,8 @@ function hanNumeral(value, system) {
     if (chinese && text !== "" && (gap || group < 1000)) {
       text += "零";
     }
-    text += hanGroup(group, chinese, text === "") + HAN_GROUPS[system][index];
+    const unit = system === "hans" && index === 3 && groups[2] !== 0 ? "万" : HAN_GROUPS[system][index];
+    text += hanGroup(group, chinese, text === "") + unit;
     gap = false;
   }
   return text;
