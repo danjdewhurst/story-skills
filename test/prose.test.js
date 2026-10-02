@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
+import { languagePack } from "../src/languages/index.js";
 import { analyzeChapter, proseRules, repeatedPhrases, similarNames } from "../src/prose.js";
 import { createEntity, createStoryProject, proseReport, validateProject } from "../src/story.js";
 import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
@@ -173,6 +174,19 @@ describe("prose analysis", () => {
   test("matches multi-word watch words", () => {
     const analysis = analyze("A beat of silence. Then another beat  of silence. Very well.", { "watch-words": ["beat of silence", "very"] });
     expect(analysis.watch).toEqual([{ word: "beat of silence", count: 2 }, { word: "very", count: 1 }]);
+  });
+
+  test("matches watch words and avoided spellings in the story's casing", () => {
+    const turkish = analyzeChapter("ILIK bir rüzgâr. İnce bir ses, ınce değil. Ilık su.", proseRules({
+      "watch-words": ["ılık", "ince"],
+      preferred: [{ use: "ince", avoid: "ılık" }]
+    }, [], languagePack("tr")));
+    expect(turkish.watch).toEqual([{ word: "ılık", count: 2 }, { word: "ince", count: 1 }]);
+    expect(turkish.variants.map((entry) => entry.count)).toEqual([2]);
+    // In English İ lower-cases one longer; the capital of a name is still
+    // read from the text as written after it.
+    const english = analyze("İzmir had Gray Morn at the gray sea.", { dialect: "british" }, ["Gray Morn"]);
+    expect(english.variants).toEqual([{ use: "grey", avoid: "gray", source: "british dialect", count: 1 }]);
   });
 
   test("finds repeated phrases that are not all stopwords", () => {

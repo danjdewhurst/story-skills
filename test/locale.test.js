@@ -5,7 +5,7 @@ import path from "node:path";
 import { fountainScript } from "../src/fountain.js";
 import { extractNameCandidates } from "../src/import.js";
 import { languagePack } from "../src/languages/index.js";
-import { compareText, formatNumber, lowerCase, upperCase } from "../src/languages/locale.js";
+import { compareText, formatNumber, lowerCase, lowerCaseText, upperCase } from "../src/languages/locale.js";
 import { shunnWordCount } from "../src/packaging.js";
 import { analyzeChapter, proseRules } from "../src/prose.js";
 import { buildSeries } from "../src/series.js";
@@ -51,6 +51,24 @@ describe("locale-aware text", () => {
     expect(lowerCase("IŞIK İZMİR", languagePack("tr"))).toBe("ışık izmir");
     expect(upperCase("istanbul", languagePack("en"))).toBe("ISTANBUL");
     expect(upperCase("straße", languagePack("de"))).toBe("STRASSE");
+  });
+
+  test("lower-cases text for matching and maps spans back to the text as written", () => {
+    const same = lowerCaseText("IŞIK İnce", languagePack("tr"));
+    expect(same.text).toBe("ışık ince");
+    expect(same.original(5, 9)).toEqual([5, 9]);
+    // Outside Turkish İ lower-cases to i and a combining dot, one longer.
+    const english = lowerCaseText("İnce Road", languagePack("en"));
+    expect(english.text).toBe("i̇nce road");
+    expect(english.original(6, 10)).toEqual([5, 9]);
+    expect(english.original(0, 1)).toEqual([0, 1]);
+    expect(english.original(1, 4)).toEqual([0, 3]);
+    // Turkish drops a dot written after I, one shorter.
+    const turkish = lowerCaseText("İnce yol", languagePack("tr"));
+    expect(turkish.text).toBe("ince yol");
+    expect(turkish.original(5, 8)).toEqual([6, 9]);
+    expect(turkish.original(0, 4)).toEqual([0, 5]);
+    expect(turkish.original(0, 1)).toEqual([0, 2]);
   });
 
   test("writes reader-facing numbers in the language, always with 0-9 digits", () => {
