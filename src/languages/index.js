@@ -1,5 +1,12 @@
+import ar from "./ar.js";
 import base from "./base.js";
 import en from "./en.js";
+import he from "./he.js";
+import hi from "./hi.js";
+import ja from "./ja.js";
+import ko from "./ko.js";
+import th from "./th.js";
+import zh from "./zh.js";
 
 // Language packs: the conventions and word lists the analysis commands use
 // for a story's language, from story.md `language`. A pack is plain data
@@ -10,39 +17,66 @@ import en from "./en.js";
 
 export const DEFAULT_LANGUAGE = "en";
 
-// Every pack, by code. A regional pack (en-GB) is keyed by its full tag in
-// lower case and holds only what differs from its language's pack.
-const PACKS = new Map([en].map((pack) => [pack.code, pack]));
+// Every pack, by code. A regional pack (en-GB) is keyed by its canonical
+// tag in lower case and holds only what differs from its language's pack.
+const PACKS = new Map([ar, en, he, hi, ja, ko, th, zh].map((pack) => [pack.code, pack]));
 
-const TAG_PATTERN = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
+// The shape story.schema.json also checks; Intl then checks the subtags
+// (no repeated region, say).
+const TAG_PATTERN = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/;
 
-export function isLanguageTag(value) {
-  return typeof value === "string" && TAG_PATTERN.test(value.trim());
+// The canonical form of a BCP 47 tag ("eng" is en, "iw" is he, "zh-hant-tw"
+// is zh-Hant-TW), safe to pass to Intl, or null when it is not a tag.
+export function canonicalTag(value) {
+  if (typeof value !== "string" || !TAG_PATTERN.test(value.trim())) {
+    return null;
+  }
+  try {
+    return Intl.getCanonicalLocales(value.trim())[0];
+  } catch {
+    return null;
+  }
 }
 
-// The language a project's story.md names, or the default when it names
-// none or a value that is not a tag (validate reports that one).
+export function isLanguageTag(value) {
+  return canonicalTag(value) !== null;
+}
+
+// The language story.md names, as written: English only when `language` is
+// unset (missing, blank, or a [TODO] placeholder). A value that is set but
+// not a tag is kept, so its pack comes from its first subtag or the base
+// pack, never from English; validate reports it.
 export function projectLanguage(storyData) {
   const value = storyData?.language;
-  return isLanguageTag(value) ? value.trim() : DEFAULT_LANGUAGE;
+  if (value === undefined || value === null || (typeof value === "string" && (value.trim() === "" || /^\[TODO\b/i.test(value.trim())))) {
+    return DEFAULT_LANGUAGE;
+  }
+  return String(value).trim();
 }
 
 const RESOLVED = new Map();
 
-// The pack for a BCP 47 tag: `tag` is the tag as given (the skip notes name
-// it), `code` the most specific pack found ("und" for the base pack alone).
+// The pack for a language tag. `tag` is the tag as written (the skip notes
+// name it); `locale` its canonical form for Intl, or for a tag that is not
+// valid, the canonical form of its first subtag (fr_FR is fr) or "und"; and
+// `code` the most specific pack found ("und" for the base pack alone).
 // Fields of later layers replace earlier ones; `checks` and `labels` merge
 // by key. The result is frozen and the same object for the same tag.
 export function languagePack(tag = DEFAULT_LANGUAGE) {
-  const language = isLanguageTag(tag) ? tag.trim() : DEFAULT_LANGUAGE;
+  const language = String(tag ?? "").trim() || DEFAULT_LANGUAGE;
   if (!RESOLVED.has(language)) {
     RESOLVED.set(language, resolvePack(language));
   }
   return RESOLVED.get(language);
 }
 
+function resolveLocale(language) {
+  return canonicalTag(language) ?? canonicalTag(language.split(/[-_]/)[0]) ?? "und";
+}
+
 function resolvePack(language) {
-  const subtags = language.toLowerCase().split("-");
+  const locale = resolveLocale(language);
+  const subtags = locale.toLowerCase().split("-");
   const layers = [base];
   for (let length = 1; length <= subtags.length; length += 1) {
     const pack = PACKS.get(subtags.slice(0, length).join("-"));
@@ -58,6 +92,7 @@ function resolvePack(language) {
     });
   }
   pack.tag = language;
+  pack.locale = locale;
   return deepFreeze(pack);
 }
 

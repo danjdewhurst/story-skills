@@ -3,11 +3,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { warn } from "./findings.js";
 import { parseFrontmatter, stringifyFrontmatter, withoutLeadingFrontmatter } from "./frontmatter.js";
-import { checkList, languagePack } from "./languages/index.js";
+import { checkList, isLanguageTag, languagePack } from "./languages/index.js";
 import { chapterHeading, escapeRegExp, fencedLineIndexes, scanComments, splitFences, titleCaseSlug, wordCount } from "./markdown.js";
 import { MAX_READ_BYTES } from "./files.js";
 import { STDIN_ARG, decodeUtf8 } from "./stdin.js";
-import { assertProjectParses, createStoryProject, reindexProject, scanProject, writeFile } from "./story.js";
+import { assertProjectParses, createStoryProject, existingStoryLanguage, newProjectRoot, reindexProject, scanProject, writeFile } from "./story.js";
 import { EXIT_CODES, usageError, withDefaultExitCode } from "./exit-codes.js";
 
 // A lone "I" before a word is the pronoun ("Chapter I Am Legend"), not a numeral.
@@ -102,9 +102,14 @@ export function importManuscript(options) {
   }
 
   // Heading words, number words, and candidate stopwords come from the
-  // manuscript's language pack: `language` is a BCP 47 tag, English when
-  // unset.
-  const pack = languagePack(options.language);
+  // manuscript's language pack: --language, else the language of the
+  // story.md being imported into, else English. A new story.md records an
+  // explicit --language.
+  if (options.language !== undefined && !isLanguageTag(options.language)) {
+    throw usageError(`--language ${options.language} must be a BCP 47 tag such as en, en-GB, or fr`);
+  }
+  const target = newProjectRoot({ title: options.title, cwd, dir: options.dir });
+  const pack = languagePack(options.language ?? (target === null ? null : existingStoryLanguage(target)));
   const rules = importRules(pack);
   const warnings = [];
   const documents = fromStdin
@@ -146,6 +151,7 @@ export function importManuscript(options) {
     pov: options.pov,
     tense: options.tense,
     synopsis: options.synopsis,
+    language: options.language,
     defaultSynopsis: `Imported from ${fromStdin ? "stdin" : path.basename(source)}. Replace with a 2-3 sentence synopsis.`,
     force: options.force,
     // Check an existing project parses before deleting its chapters, as the

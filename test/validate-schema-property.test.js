@@ -43,6 +43,7 @@ const EXCEPTIONS = [
   { kind: "story", field: "publication-date", side: "validate", match: /real YYYY-MM-DD calendar day/, reason: "as for deadline" },
   { kind: "story", field: "publication-date", side: "schema", match: /does not match/, reason: "validate reads a blank value or a [TODO] placeholder in a publishing field as not set yet, and warns (todo-placeholder); the schema describes finished values" },
   { kind: "story", field: "language", side: "schema", match: /does not match/, reason: "as for publication-date" },
+  { kind: "story", field: "language", side: "validate", match: /^invalid-language/, reason: "a tag's subtags must also be well formed (no repeated region, say), which Intl checks and a pattern cannot" },
   { kind: "story", field: "cli-defaults", side: "validate", match: /^invalid-cli-config/, reason: "a cli-defaults entry's other keys are flags, checked against the command and option registries" },
   { kind: "story", field: "severity", side: "validate", match: /^invalid-cli-config/, reason: "an unknown key in a severity entry is rejected, and the schema checker has no additionalProperties" },
   { kind: "character", field: "progressions", side: "validate", reason: "a progression's value is checked by the rules of the field it changes (a status enum), which depend on the entity kind" },

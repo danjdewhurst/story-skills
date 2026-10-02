@@ -34,6 +34,8 @@ export default {
     // A word longer than four letters with one of these endings counts as a
     // manner adverb, unless it is an exception.
     adverbSuffixes: ["ly"],
+    // What the report calls those adverbs.
+    adverbLabel: "-ly adverbs",
 
     // Words ending in -ly that are not manner adverbs.
     adverbExceptions: [

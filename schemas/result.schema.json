@@ -396,8 +396,9 @@
     },
     "data-prose": {
       "type": "object",
-      "required": ["styleSheet", "words", "chapters", "phrases", "similarNames", "thresholds", "baseline", "skipped"],
+      "required": ["styleSheet", "words", "chapters", "phrases", "similarNames", "thresholds", "baseline", "language", "skipped"],
       "properties": {
+        "language": { "type": "string", "description": "story.md language as written (en when unset), which picks the language pack." },
         "skipped": { "$ref": "#/$defs/skipped-checks" },
         "styleSheet": { "type": "boolean" },
         "baseline": {
@@ -415,9 +416,9 @@
             },
             "paragraphMean": { "type": "number", "minimum": 0 },
             "dialogueShare": { "type": "number", "minimum": 0, "description": "Percent of words inside dialogue." },
-            "filterPerThousand": { "type": "number", "minimum": 0 },
-            "adverbsPerThousand": { "type": "number", "minimum": 0 },
-            "signatureWords": { "type": "array", "items": { "type": "string" } },
+            "filterPerThousand": { "type": ["number", "null"], "minimum": 0, "description": "Null when the filter-word check is skipped for the language." },
+            "adverbsPerThousand": { "type": ["number", "null"], "minimum": 0, "description": "Null when the adverb check is skipped for the language." },
+            "signatureWords": { "type": ["array", "null"], "items": { "type": "string" }, "description": "Null when signature words are skipped for the language." },
             "usable": { "type": "boolean", "description": "False when the samples hold too little narration to compare with; the fixed limits then apply." }
           }
         },
@@ -448,9 +449,9 @@
                   "sentenceMean": { "type": "number" },
                   "paragraphMean": { "type": "number" },
                   "dialogueShare": { "type": "number" },
-                  "filterPerThousand": { "type": "number" },
-                  "adverbsPerThousand": { "type": "number" },
-                  "signatureWordsUsed": { "$ref": "#/$defs/count" }
+                  "filterPerThousand": { "type": ["number", "null"] },
+                  "adverbsPerThousand": { "type": ["number", "null"] },
+                  "signatureWordsUsed": { "type": ["integer", "null"], "minimum": 0 }
                 }
               },
               "analysis": {
@@ -513,8 +514,9 @@
     },
     "data-voices": {
       "type": "object",
-      "required": ["profiles", "unattributed", "skipped"],
+      "required": ["profiles", "unattributed", "language", "skipped"],
       "properties": {
+        "language": { "type": "string", "description": "story.md language as written (en when unset), which picks the language pack." },
         "skipped": { "$ref": "#/$defs/skipped-checks" },
         "profiles": {
           "type": "array",

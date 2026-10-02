@@ -4,11 +4,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { compareImportNames, extractNameCandidates, importManuscript } from "../src/import.js";
-import { DEFAULT_LANGUAGE, checkList, checkSet, hasLists, isLanguageTag, languagePack, projectLanguage, skippedCheck, skippedChecks, skippedLines } from "../src/languages/index.js";
+import { DEFAULT_LANGUAGE, canonicalTag, checkList, checkSet, hasLists, isLanguageTag, languagePack, projectLanguage, skippedCheck, skippedChecks, skippedLines } from "../src/languages/index.js";
 import { givenName } from "../src/names.js";
-import { contentWords, proseRules, repeatedPhrases, sentenceLengths } from "../src/prose.js";
+import { adverbLabel, contentWords, proseRules, repeatedPhrases, sentenceLengths } from "../src/prose.js";
 import { splitSentences } from "../src/sentences.js";
-import { createStoryProject, namesReport, proseReport, scanProject, voicesReport } from "../src/story.js";
+import { createStoryProject, existingStoryLanguage, namesReport, newProjectRoot, proseReport, scanProject, synopsisBook, voicesReport } from "../src/story.js";
 import { formatVoices, quoteMatches } from "../src/voices.js";
 import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
 import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
@@ -79,18 +79,62 @@ describe("language packs", () => {
     expect(french.labels).toEqual({});
     expect(french.quotes).toContainEqual(["“", "”"]);
 
-    expect(languagePack("not a tag").tag).toBe(DEFAULT_LANGUAGE);
     expect(languagePack(" de ").tag).toBe("de");
+    expect(languagePack("").tag).toBe(DEFAULT_LANGUAGE);
+    expect(languagePack(null)).toBe(english);
   });
 
-  test("projectLanguage reads story.md language, falling back to English", () => {
+  test("tags are canonicalised for lookup and Intl, and kept as written for messages", () => {
+    expect(languagePack("eng").code).toBe("en");
+    expect(languagePack("eng").locale).toBe("en");
+    expect(languagePack("eng").tag).toBe("eng");
+    expect(languagePack("EN-gb").locale).toBe("en-GB");
+    expect(languagePack("iw").code).toBe("he");
+    expect(languagePack("in").locale).toBe("id");
+    expect(languagePack("zh-hant-tw").locale).toBe("zh-Hant-TW");
+    expect(canonicalTag("jpn")).toBe("ja");
+    expect(canonicalTag(3)).toBeNull();
+    expect(canonicalTag("abc-de-fg-hi")).toBeNull();
+    expect(isLanguageTag("ja-JP-u-ca-japanese")).toBe(true);
+    expect(isLanguageTag("zh-Hant-TW")).toBe(true);
+    expect(isLanguageTag("en-GB-GB")).toBe(false);
+    expect(isLanguageTag("fr_FR")).toBe(false);
+    expect(isLanguageTag("english")).toBe(false);
+    // Every locale is safe to hand to Intl.
+    for (const tag of ["en-GB-GB", "abc-de-fg-hi", "fr_FR", "not a tag", "3", "ja-JP-u-ca-japanese"]) {
+      expect(() => new Intl.Collator(languagePack(tag).locale)).not.toThrow();
+    }
+  });
+
+  test("a set but invalid language resolves from its first subtag or the base pack, never English", () => {
+    expect(languagePack("fr_FR")).toMatchObject({ tag: "fr_FR", locale: "fr", code: "und" });
+    expect(languagePack("en_GB")).toMatchObject({ tag: "en_GB", locale: "en", code: "en" });
+    expect(languagePack("en-GB-GB")).toMatchObject({ locale: "en", code: "en" });
+    expect(languagePack("not a tag")).toMatchObject({ tag: "not a tag", locale: "und", code: "und" });
+    expect(languagePack("english").checks).toEqual({});
+  });
+
+  test("script packs set case and word segmentation", () => {
+    expect(languagePack("ja")).toMatchObject({ cased: false, segmentation: "character" });
+    expect(languagePack("zh-Hans")).toMatchObject({ code: "zh", cased: false, segmentation: "character" });
+    expect(languagePack("ko")).toMatchObject({ cased: false, segmentation: "space" });
+    expect(languagePack("th")).toMatchObject({ cased: false, segmentation: "dictionary" });
+    for (const tag of ["ar", "he", "hi"]) {
+      expect(languagePack(tag)).toMatchObject({ code: tag, cased: false, segmentation: "space" });
+    }
+    expect(languagePack("ja").checks).toEqual({});
+    expect(languagePack("fr")).toMatchObject({ cased: true, segmentation: "space" });
+  });
+
+  test("projectLanguage uses English only when language is unset", () => {
     expect(projectLanguage({ language: " fr " })).toBe("fr");
     expect(projectLanguage({ language: "[TODO: author to supply]" })).toBe("en");
-    expect(projectLanguage({ language: 3 })).toBe("en");
+    expect(projectLanguage({ language: "  " })).toBe("en");
+    expect(projectLanguage({ language: null })).toBe("en");
     expect(projectLanguage({})).toBe("en");
     expect(projectLanguage(undefined)).toBe("en");
-    expect(isLanguageTag("zh-Hant-TW")).toBe(true);
-    expect(isLanguageTag("english")).toBe(false);
+    expect(projectLanguage({ language: "fr_FR" })).toBe("fr_FR");
+    expect(projectLanguage({ language: 3 })).toBe("3");
   });
 
   test("checkList, checkSet, and hasLists answer whether a pack has a list", () => {
@@ -200,9 +244,45 @@ describe("analysis without a language's word lists", () => {
     const report = proseReport(root);
     expect(report.skipped.map((entry) => entry.check)).toEqual(["filter-words", "adverbs", "dialogue-tags", "echoes", "repeated-phrases", "dialect-spellings", "signature-words"]);
     expect(report.skipped.at(-2).message).toBe("British and American spellings skipped: no dialectPairs list for language fr");
-    expect(report.baseline.signatureWords).toEqual([]);
+    expect(report.baseline).toMatchObject({ usable: false, signatureWords: null, filterPerThousand: null, adverbsPerThousand: null });
+    // Too few sample words, and no fixed filter-word or adverb limits to fall back on.
+    expect(report.warnings.find((warning) => warning.code === "prose-baseline-small").message).toMatch(/\(at least 2000\)$/);
     expect(report.chapters[0].analysis.variants).toEqual([]);
     expect(proseReport(root, { baseline: "false" }).skipped.map((entry) => entry.check)).not.toContain("signature-words");
+  });
+
+  test("a usable baseline leaves out the measures the language skips", () => {
+    const { root, cwd } = languageProject("fr");
+    writeMarkdown(path.join(root, "style-sheet.md"), "type: style-sheet\nsamples:\n  - ../samples", "# Style Sheet\n");
+    fs.mkdirSync(path.join(root, "..", "samples"));
+    fs.writeFileSync(path.join(root, "..", "samples", "one.md"), Array.from({ length: 4 }, () => ENGLISH_BAIT.join("\n\n")).join("\n\n"));
+    writeChapter(root, 1, ENGLISH_BAIT);
+    const report = proseReport(root);
+    expect(report.language).toBe("fr");
+    expect(report.baseline).toMatchObject({ usable: true, signatureWords: null, filterPerThousand: null, adverbsPerThousand: null });
+    expect(report.chapters[0].baseline).toMatchObject({ filterPerThousand: null, adverbsPerThousand: null, signatureWordsUsed: null });
+    expect(report.warnings.map((warning) => warning.code)).toEqual([]);
+
+    const text = invoke(cwd, ["prose", root]).out;
+    expect(text).toMatch(/% dialogue\n/);
+    expect(text).not.toContain("filter words and");
+    expect(text).not.toContain("  Signature words:");
+    expect(text).not.toContain(", signature words");
+    expect(text).toMatch(/Against the baseline: paragraphs [\d.]+ words, [\d.]+% dialogue\n/);
+    const json = JSON.parse(invoke(cwd, ["prose", root, "--json"]).out);
+    expect(validateAgainstSchema(json, schema)).toEqual([]);
+    expect(json.data.baseline.filterPerThousand).toBeNull();
+  });
+
+  test("the adverb label and the small-baseline note come from the pack", () => {
+    const english = languagePack("en");
+    expect(adverbLabel(english)).toBe("-ly adverbs");
+    expect(adverbLabel(languagePack("fr"))).toBe("adverbs");
+    const { root } = languageProject("en");
+    writeMarkdown(path.join(root, "style-sheet.md"), "type: style-sheet\nsamples:\n  - ../samples", "# Style Sheet\n");
+    fs.mkdirSync(path.join(root, "..", "samples"));
+    fs.writeFileSync(path.join(root, "..", "samples", "one.md"), "A short sample.");
+    expect(proseReport(root).warnings.find((warning) => warning.code === "prose-baseline-small").message).toMatch(/: the fixed filter-word and adverb limits apply instead$/);
   });
 
   test("prose helpers take the pack and fall back to English", () => {
@@ -291,5 +371,64 @@ describe("analysis without a language's word lists", () => {
     expect(extractNameCandidates("We met on Monday. You left on Monday. I stayed on Monday.", languagePack("fr"))).toEqual([{ name: "Monday", count: 3 }]);
     expect(extractNameCandidates("We met on Monday. You left on Monday. I stayed on Monday.")).toEqual([]);
     expect(["chapter-2.md", "preface.md", "chapter-1.md"].sort(compareImportNames)).toEqual(["preface.md", "chapter-1.md", "chapter-2.md"]);
+  });
+
+  test("the synopsis splits sentences with the project's pack", () => {
+    const { root } = languageProject("fr");
+    const storyPath = path.join(root, "story.md");
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("Add a 2-3 sentence synopsis here.", "Dr. Hale arriva. Il partit."));
+    expect(synopsisBook(root).text).toContain("Logline: Dr.\n");
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("language: fr\n", ""));
+    expect(synopsisBook(root).text).toContain("Logline: Dr. Hale arriva.\n");
+  });
+});
+
+describe("story import --language", () => {
+  const BOOK = "# Chapter One\n\nThe start.\n\n# Chapter Two\n\nThe end.\n";
+
+  test("splits with that language and records it in the new story.md", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "book.md"), BOOK);
+    const result = invoke(cwd, ["import", "book.md", "--title", "Le Livre", "--language", "fr-CA"]);
+    expect(result.code).toBe(0);
+    expect(result.out).toContain("Imported 1 chapter");
+    const project = scanProject(path.join(cwd, "le-livre"));
+    expect(project.language).toBe("fr-CA");
+    expect(project.story.data.language).toBe("fr-CA");
+  });
+
+  test("writes no language when none is given, and rejects a value that is not a tag", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "book.md"), BOOK);
+    expect(invoke(cwd, ["import", "book.md", "--title", "Plain"]).out).toContain("Imported 2 chapters");
+    expect(scanProject(path.join(cwd, "plain")).story.data.language).toBeUndefined();
+    const bad = invoke(cwd, ["import", "book.md", "--title", "Bad", "--language", "fr_FR"]);
+    expect(bad.code).toBe(2);
+    expect(bad.err).toContain("--language fr_FR must be a BCP 47 tag such as en, en-GB, or fr");
+    expect(fs.existsSync(path.join(cwd, "bad"))).toBe(false);
+    expect(() => createStoryProject({ cwd, title: "Worse", language: "en-GB-GB" })).toThrow("--language en-GB-GB must be a BCP 47 tag");
+  });
+
+  test("into an existing project defaults to its language and reports a different one as not applied", () => {
+    const { root, cwd } = languageProject("fr");
+    fs.writeFileSync(path.join(cwd, "book.md"), BOOK);
+    const kept = invoke(cwd, ["import", "book.md", "--title", "Language Story", "--force"]);
+    expect(kept.code).toBe(0);
+    expect(kept.out).toContain("Imported 1 chapter");
+    expect(kept.err).not.toContain("--language");
+    expect(invoke(cwd, ["import", "book.md", "--title", "Language Story", "--force", "--language", "fr"]).err).not.toContain("--language");
+    const english = invoke(cwd, ["import", "book.md", "--title", "Language Story", "--force", "--language", "en"]);
+    expect(english.out).toContain("Imported 2 chapters");
+    expect(english.err).toContain("--language was not applied");
+    expect(scanProject(root).language).toBe("fr");
+  });
+
+  test("a new project from a title with no folder imports in English", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "book.md"), BOOK);
+    expect(newProjectRoot({ title: "", cwd })).toBeNull();
+    expect(newProjectRoot({ title: "", cwd, dir: "here" })).toBe(path.join(cwd, "here"));
+    expect(existingStoryLanguage(cwd)).toBeNull();
+    expect(() => importManuscript({ source: "book.md", cwd })).toThrow("A story title is required");
   });
 });
