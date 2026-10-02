@@ -93,8 +93,8 @@ Then check what the CLI cannot:
    in another language, report the count and ask for that market's norms
    instead. A Chinese or Japanese book is counted in characters: report
    `story wordcount .`'s character total, and `story validate .` checks
-   `target-characters` against broad per-form character ranges. Never pad
-   or cut to hit a number without the user's direction.
+   `target-characters` against per-form character ranges where a source
+   sets one. Never pad or cut to hit a number without the user's direction.
 5. No `[TODO` markers remain in chapter prose. `story validate` warns about
    each chapter that still has one.
 6. Open questions and planted promises are resolved, or deliberately left

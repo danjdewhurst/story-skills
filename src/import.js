@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { warn } from "./findings.js";
 import { parseFrontmatter, stringifyFrontmatter, withoutLeadingFrontmatter } from "./frontmatter.js";
-import { checkList, isLanguageTag, languagePack } from "./languages/index.js";
+import { checkList, isLanguageTag, languagePack, projectLanguage } from "./languages/index.js";
 import { compareText } from "./languages/locale.js";
 import { chapterHeading, characterCount, escapeRegExp, fencedLineIndexes, scanComments, splitFences, titleCaseSlug, wordCount } from "./markdown.js";
 import { countUnit } from "./forms.js";
@@ -127,8 +127,10 @@ export function importManuscript(options) {
   // the size story reads would leave a project no command can open.
   // A book counted in characters (Chinese, Japanese, or story.md
   // `count-unit`) records character-count too, as story wordcount --write
-  // does.
-  const characters = countUnit(target === null ? null : existingStoryData(target), pack).name === "characters";
+  // does. An existing story.md is kept, so its count-unit and language
+  // decide, whatever --language says.
+  const existing = target === null ? null : existingStoryData(target);
+  const characters = (existing === null ? countUnit(null, pack) : countUnit(existing, languagePack(projectLanguage(existing)))).name === "characters";
   let totalWords = 0;
   let totalCharacters = 0;
   const chapterFiles = chapters.map((chapter, index) => {

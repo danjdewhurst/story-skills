@@ -20,6 +20,7 @@ import {
   pacingReport,
   validateProject
 } from "../src/story.js";
+import { characterCountFailures } from "../scripts/check-examples.js";
 import { makeTempDir, memoryIo, messages, writeMarkdown } from "./helpers.js";
 
 function invoke(cwd, argv) {
@@ -85,18 +86,15 @@ describe("count unit", () => {
     expect(countUnit(null, undefined)).toBe(COUNT_UNITS.get("words"));
   });
 
-  test("character ranges cover every form and come from the pack", () => {
+  test("character ranges cover only the sourced forms and come from the pack", () => {
     for (const code of ["ja", "zh"]) {
       const ranges = formRanges(COUNT_UNITS.get("characters"), languagePack(code));
-      expect([...ranges.keys()].sort()).toEqual([...STORY_FORMS.keys()].sort());
-      for (const [form, range] of ranges) {
-        if (range.min !== null) {
-          expect(range.min).toBeLessThanOrEqual(range.target);
-          expect(range.target).toBeLessThanOrEqual(range.max);
-        } else {
-          expect(form).toBe("serial");
-        }
+      expect([...ranges.keys()].sort()).toEqual(["flash", "novel", "novella", "short-story"]);
+      for (const range of ranges.values()) {
+        expect(range.min).toBeLessThanOrEqual(range.target);
+        expect(range.max === null || range.target <= range.max).toBe(true);
       }
+      expect(ranges.get("novel").max).toBeNull();
     }
     expect(formRanges(COUNT_UNITS.get("words"), languagePack("ja"))).toBe(STORY_FORMS);
     expect(formRanges(COUNT_UNITS.get("characters"), languagePack("ko"))).toBeNull();
@@ -106,8 +104,15 @@ describe("count unit", () => {
     const characters = COUNT_UNITS.get("characters");
     const zh = formRanges(characters, languagePack("zh"));
     expect(formRangeWarning("novel", 100000, "story.md target-characters", zh, characters))
-      .toBe("story.md target-characters 100000 is outside the usual novel range of 130000-1000000 characters");
+      .toBe("story.md target-characters 100000 is under the usual novel minimum of 130000 characters");
+    expect(formRangeWarning("novel", 5000000, "story.md target-characters", zh, characters)).toBe("");
     expect(formRangeWarning("novella", 100000, "story.md target-characters", zh, characters)).toBe("");
+    expect(formRangeWarning("short-story", 30000, "story.md target-characters", zh, characters))
+      .toBe("story.md target-characters 30000 is outside the usual short-story range of 2000-25000 characters");
+    // No source sets a novelette, picture-book, or chapter-book range.
+    for (const form of ["novelette", "picture-book", "chapter-book"]) {
+      expect(formRangeWarning(form, 999999999, "x", zh, characters)).toBe("");
+    }
     expect(formRangeWarning("novel", 100000, "x", null, characters)).toBe("");
     expect(formRangeWarning("novel", 30000, "story.md target-words")).toBe("story.md target-words 30000 is outside the usual novel range of 40000-200000 words");
   });
@@ -189,11 +194,11 @@ describe("a book counted in characters", () => {
 
     editStory(root, "target-words: 90000\n", "target-characters: 90000\n");
     const warnings = messages(validateProject(root).warnings);
-    expect(warnings).toContain("story.md target-characters 90000 is outside the usual novel range of 120000-600000 characters");
+    expect(warnings).toContain("story.md target-characters 90000 is under the usual novel minimum of 120000 characters");
     expect(warnings.some((message) => message.includes("not measured"))).toBe(false);
 
     editStory(root, "status: planning", "status: complete");
-    expect(messages(validateProject(root).warnings)).toContain("Manuscript length 32 is outside the usual novel range of 120000-600000 characters");
+    expect(messages(validateProject(root).warnings)).toContain("Manuscript length 32 is under the usual novel minimum of 120000 characters");
 
     editStory(root, "form: novel\n", "form: novel\ncount-unit: pages\n");
     expect(messages(validateProject(root).errors)).toContain("story.md frontmatter field count-unit has unsupported value pages");
@@ -218,12 +223,11 @@ describe("a book counted in characters", () => {
     const file = path.join(root, "chapters", "chapter-01.md");
     fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("status: draft", "status: draft\ntarget-characters: 64"), "utf8");
     const progress = projectProgress(root, { log: true, date: "2026-01-02" });
-    expect(progress.logged).toMatchObject({ date: "2026-01-02", words: 27, characters: 32 });
+    expect(progress.logged).toMatchObject({ date: "2026-01-02", words: 27, characterCount: 32 });
     expect(fs.readFileSync(path.join(root, "progress.md"), "utf8")).toContain("  - date: 2026-01-02\n    words: 27\n    characters: 32\n");
     expect(fs.readFileSync(path.join(root, "progress.md"), "utf8")).toContain("Set `target-characters` and `deadline`");
-    expect(progress).toMatchObject({ unit: "characters", characters: 32, target: 100, remaining: 68, lastSession: { date: "2026-01-02", characters: 32, since: 0 } });
-    expect(progress.words).toBeUndefined();
-    expect(progress.chapters).toEqual([{ id: "chapter-01", characters: 32, target: 64, percent: 50 }]);
+    expect(progress).toMatchObject({ unit: "characters", words: 27, characterCount: 32, target: 100, remaining: 68, lastSession: { date: "2026-01-02", words: 27, characterCount: 32, since: 0 } });
+    expect(progress.chapters).toEqual([{ id: "chapter-01", words: 27, characterCount: 32, target: 64, percent: 50 }]);
     const text = formatProgress(progress);
     expect(text).toContain("Progress: 32 of 100 characters (32.0%)");
     expect(text).toContain("Remaining: 68 characters");
@@ -232,29 +236,41 @@ describe("a book counted in characters", () => {
     expect(validateProject(root).ok).toBe(true);
   });
 
-  test("sessions logged without characters are left out of the pace", () => {
-    const progress = computeProgress({ unit: "characters", words: 500, target: null, deadline: null, today: "2026-01-10", chapters: [], sessions: [] });
+  test("sessions logged without characters are left out of the pace and reported", () => {
+    const progress = computeProgress({ unit: "characters", words: 400, characters: 500, target: null, deadline: null, today: "2026-01-10", chapters: [], sessions: [] });
     expect(formatProgress(progress)).toBe("Progress: 500 characters (no target-characters in story.md)\nSessions: none logged (run story progress --log after a writing session)\n");
+    const paced = computeProgress({
+      unit: "characters", words: 400, characters: 500, target: 1000, deadline: null, today: "2026-01-10", chapters: [],
+      sessions: [{ date: "2026-01-01", words: 10, characters: null }, { date: "2026-01-02", words: 20, characters: 100 }, { date: "2026-01-04", words: 30, characters: 300 }]
+    });
+    expect(paced).toMatchObject({ sessions: 2, pace: 100, lastSession: { date: "2026-01-04", words: 30, characterCount: 300, since: 200 } });
+
     const root = japaneseProject();
+    fs.writeFileSync(path.join(root, "progress.md"), "---\ntype: progress-log\nsessions:\n  - date: 2026-01-01\n    words: 10\n  - date: 2026-01-02\n    words: 20\n---\n# Progress Log\n", "utf8");
+    const warning = "progress.md sessions 2026-01-01, 2026-01-02 have no characters, so story progress leaves them out of the pace: this book counts characters, so add characters by hand or remove them";
+    expect(messages(validateProject(root).warnings)).toContain(warning);
+    const report = projectProgress(root, { date: "2026-01-03" });
+    expect(report.sessions).toBe(0);
+    expect(messages(report.warnings)).toEqual([warning]);
+
     fs.writeFileSync(path.join(root, "progress.md"), "---\ntype: progress-log\nsessions:\n  - date: 2026-01-01\n    words: 10\n  - date: 2026-01-02\n    words: 20\n    characters: -1\n---\n# Progress Log\n", "utf8");
     expect(messages(validateProject(root).errors)).toContain("progress.md sessions[1] characters must be a non-negative integer");
-    expect(projectProgress(root, { date: "2026-01-03" }).sessions).toBe(0);
+    expect(messages(validateProject(root).warnings)).toContain("progress.md session 2026-01-01 has no characters, so story progress leaves it out of the pace: this book counts characters, so add characters by hand or remove it");
   });
 
   test("report, pacing, and context give lengths in characters", () => {
     const root = japaneseProject();
     editStory(root, "language: ja\n", "language: ja\ntarget-characters: 64\n");
     const report = projectReport(root);
-    expect(report).toMatchObject({ unit: "characters", targetCharacters: 64, counts: { words: 27, proseCharacters: 32 } });
+    expect(report).toMatchObject({ unit: "characters", targetCharacters: 64, counts: { words: 27, characterCount: 32 } });
     expect(report.chapters[0]).toMatchObject({ wordCount: 27, characterCount: 32 });
     const text = formatProjectReport(report);
     expect(text).toContain("- Total characters: 32\n- Target characters: 64 (50%)\n");
     expect(text).toContain("- 1. One (draft, 32 characters, POV: unspecified)");
 
     const pacing = pacingReport(root);
-    expect(pacing).toMatchObject({ unit: "characters", medianCharacters: 32 });
-    expect(pacing.rows[0].characters).toBe(32);
-    expect(pacing.rows[0].words).toBeUndefined();
+    expect(pacing).toMatchObject({ unit: "characters", medianWords: 27, medianCharacterCount: 32 });
+    expect(pacing.rows[0]).toMatchObject({ words: 27, characterCount: 32 });
     const out = invoke(root, ["pacing"]).out;
     expect(out).toContain("Median chapter: 32 characters");
     expect(out).toContain("Ch  Characters  Scenes");
@@ -290,7 +306,8 @@ describe("a book counted in characters", () => {
     const root = japaneseProject();
     editStory(root, "language: ja\n", "language: ja\ncount-unit: words\n");
     expect(computeWordCounts(root)).toEqual({ chapters: [{ number: 1, title: "One", file: "chapters/chapter-01.md", wordCount: 27 }], total: 27 });
-    expect(projectReport(root).unit).toBeUndefined();
+    expect(projectReport(root)).toMatchObject({ unit: "words", targetCharacters: null, counts: { characterCount: null } });
+    expect(pacingReport(root)).toMatchObject({ unit: "words", medianCharacterCount: null });
   });
 
   test("import records character-count for a Japanese manuscript", () => {
@@ -301,5 +318,43 @@ describe("a book counted in characters", () => {
     const chapter = fs.readFileSync(path.join(cwd, "cat", "chapters", "chapter-01.md"), "utf8");
     expect(chapter).toContain("word-count: 27\ncharacter-count: 32\n");
     expect(validateProject(path.join(cwd, "cat")).warnings.filter((warning) => warning.code === "stale-word-count")).toEqual([]);
+  });
+
+  test("import into a kept story.md counts in that book's unit, whatever --language says", () => {
+    const cwd = makeTempDir();
+    createStoryProject({ cwd, title: "Kept", language: "zh" });
+    fs.writeFileSync(path.join(cwd, "draft.md"), "# Chapter 1\n\n你好，世界！\n", "utf8");
+    const result = invoke(cwd, ["import", "draft.md", "--title", "Kept", "--dir", "kept", "--language", "en", "--force"]);
+    expect(result.code).toBe(0);
+    expect(result.out).toContain("(6 characters)");
+    expect(fs.readFileSync(path.join(cwd, "kept", "chapters", "chapter-01.md"), "utf8")).toContain("character-count: 6\n");
+
+    createStoryProject({ cwd, title: "Kept Words", language: "en" });
+    const words = invoke(cwd, ["import", "draft.md", "--title", "Kept Words", "--dir", "kept-words", "--language", "zh", "--force"]);
+    expect(words.out).toContain("(4 words)");
+    expect(fs.readFileSync(path.join(cwd, "kept-words", "chapters", "chapter-01.md"), "utf8")).not.toContain("character-count");
+  });
+
+  test("switching the count unit replaces the registry's generated total", () => {
+    const root = japaneseProject();
+    editStory(root, "language: ja\n", "language: ja\ncount-unit: words\n");
+    reindexProject(root);
+    const registry = path.join(root, "chapters", "_index.md");
+    expect(fs.readFileSync(registry, "utf8")).toContain("## Total Word Count: 27\n");
+    fs.appendFileSync(registry, "\n## Notes\n\nKeep me.\n", "utf8");
+    editStory(root, "count-unit: words\n", "");
+    reindexProject(root);
+    const text = fs.readFileSync(registry, "utf8");
+    expect(text).toContain("## Total Character Count: 32\n");
+    expect(text).not.toContain("Total Word Count");
+    expect(text).toContain("## Notes\n\nKeep me.");
+    editStory(root, "language: ja\n", "language: ja\ncount-unit: words\n");
+    reindexProject(root);
+    expect(fs.readFileSync(registry, "utf8")).not.toContain("Total Character Count");
+  });
+
+  test("the Node example check counts characters as Bun does", () => {
+    expect(characterCountFailures()).toEqual([]);
+    expect(characterCountFailures([["猫。", 1]])).toEqual(["characterCount(\"猫。\") is 2, expected 1"]);
   });
 });

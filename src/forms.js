@@ -34,6 +34,9 @@ export function countUnit(storyData, pack) {
 
 // Each form's { min, max, target } in the unit, or null when the pack has
 // no ranges for it (a language counted in characters without its own).
+// A character range covers only the forms a source sets, and `max` is null
+// where the source gives only a minimum; a form without a range, and a book
+// with none, is never checked.
 export function formRanges(unit, pack) {
   if (unit.name === "words") {
     return STORY_FORMS;
@@ -46,6 +49,9 @@ export function formRangeWarning(form, count, label, ranges = STORY_FORMS, unit 
   const range = ranges?.get(form);
   if (!range || range.min === null || !Number.isInteger(count) || count <= 0) {
     return "";
+  }
+  if (range.max === null) {
+    return count < range.min ? `${label} ${count} is under the usual ${form} minimum of ${range.min} ${unit.name}` : "";
   }
   if (count < range.min || count > range.max) {
     return `${label} ${count} is outside the usual ${form} range of ${range.min}-${range.max} ${unit.name}`;

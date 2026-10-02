@@ -51,6 +51,7 @@ describe("story pacing", () => {
       id: "chapter-01",
       number: 1,
       words: 100,
+      characterCount: null,
       scenes: 2,
       sequels: 1,
       outcomes: { yes: 0, no: 0, "yes-but": 1, "no-and": 1 },
