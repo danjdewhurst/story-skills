@@ -5156,9 +5156,10 @@ var SPACED_LETTER = `(?![${UNSPACED_LETTERS}])[\\p{L}\\p{M}\\p{N}]`;
 var UNSPACED_LETTER = new RegExp(`[${UNSPACED_LETTERS}]`, "u");
 var UNSPACED_START = new RegExp(`^[${UNSPACED_LETTERS}]`, "u");
 var UNSPACED_END = new RegExp(`[${UNSPACED_LETTERS}]$`, "u");
+var JOINER_CHARACTER = new RegExp(`[${JOINER}]`, "u");
 function wholeWords(body, phrase) {
   const before = UNSPACED_START.test(phrase) ? "" : `(?<!${SPACED_LETTER})`;
-  const after = UNSPACED_END.test(phrase) ? "" : `(?!${SPACED_LETTER})`;
+  const after = UNSPACED_END.test(phrase) ? "(?!\\p{M})" : `(?!${SPACED_LETTER})`;
   return `${before}${body}${after}`;
 }
 function wordMatcher(text, cased = null) {
@@ -5172,11 +5173,11 @@ function wordMatcher(text, cased = null) {
     while ((match = pattern.exec(searched)) !== null) {
       const end = match.index + match[0].length;
       const span = cased === null ? [match.index, end] : cased.original(match.index, end);
-      const edges = span.filter((offset) => UNSPACED_LETTER.test(source[offset - 1] ?? "") && UNSPACED_LETTER.test(source[offset] ?? ""));
+      const edges = span.map((offset) => joinedEdge(source, offset)).filter(Boolean);
       if (edges.length > 0) {
         boundaries ??= unspacedBoundaries(source);
       }
-      if (edges.every((offset) => boundaries.has(offset))) {
+      if (edges.every(([from, to]) => boundaries.has(from) || boundaries.has(to))) {
         spans.push(span);
         if (first) {
           break;
@@ -5189,6 +5190,17 @@ function wordMatcher(text, cased = null) {
     pattern.lastIndex = 0;
     return spans;
   };
+}
+function joinedEdge(text, offset) {
+  let from = offset;
+  let to = offset;
+  while (from > 0 && JOINER_CHARACTER.test(text[from - 1])) {
+    from -= 1;
+  }
+  while (to < text.length && JOINER_CHARACTER.test(text[to])) {
+    to += 1;
+  }
+  return UNSPACED_LETTER.test(text[from - 1] ?? "") && UNSPACED_LETTER.test(text[to] ?? "") ? [from, to] : null;
 }
 function nextCharacter(text, index) {
   return index + (text.codePointAt(index) > 65535 ? 2 : 1);

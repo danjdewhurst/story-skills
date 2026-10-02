@@ -207,6 +207,19 @@ describe("prose analysis", () => {
     expect(thai.watch).toEqual([{ word: "รัก", count: 2 }, { word: "แมว", count: 2 }]);
   });
 
+  test("a joiner or combining mark inside an unspaced word hides no edge", () => {
+    // A soft hyphen or zero-width joiner keeps แ­มว and รัก‍แมว one word each,
+    // as story wordcount counts them, so neither มว nor แมว is in them.
+    const thai = analyzeChapter("แ­มว ฉันรัก‍แมว แมว", proseRules({ "watch-words": ["มว", "แมว"] }, [], languagePack("th")));
+    expect(thai.watch).toEqual([{ word: "แมว", count: 1 }]);
+    // A Chinese or Japanese character is a word, joiner or not.
+    const japanese = analyzeChapter("東‍京へ行く。", proseRules({ "watch-words": ["東", "京"] }, [], languagePack("ja")));
+    expect(japanese.watch).toEqual([{ word: "東", count: 1 }, { word: "京", count: 1 }]);
+    // か followed by a combining dakuten is が, not か.
+    const kana = analyzeChapter("がか", proseRules({ "watch-words": ["か"] }, [], languagePack("ja")));
+    expect(kana.watch).toEqual([{ word: "か", count: 1 }]);
+  });
+
   test("matches unspaced watch words in long chapters quickly", () => {
     const chapter = "彼女はとても静かだった。ฉันรักแมว ".repeat(20000);
     const started = Date.now();
