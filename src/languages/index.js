@@ -92,6 +92,52 @@ export function lookupTag(language) {
   return [subtags.join("-"), null];
 }
 
+// A language tag read as lookupTag reads it: { primary, macrolanguage,
+// script, region, subtags }, with the script in title case (Latn) or null.
+// Only the subtag after the language can be a script and only the one
+// after that (or after the language) a region, so a private-use or
+// extension subtag (en-x-hani, ar-u-nu-latn) never counts.
+export function parseTag(language) {
+  const [lookup, macrolanguage] = lookupTag(String(language ?? "").trim() || DEFAULT_LANGUAGE);
+  const subtags = lookup.split("-");
+  const [primary, ...rest] = subtags;
+  const script = /^[a-z]{4}$/.test(rest[0] ?? "") ? `${rest[0][0].toUpperCase()}${rest[0].slice(1)}` : null;
+  const region = rest[script === null ? 0 : 1] ?? "";
+  return { primary, macrolanguage, script, region: /^(?:[a-z]{2}|\d{3})$/.test(region) ? region : null, subtags };
+}
+
+// The Chinese languages, with the script each is written in when the tag
+// names none: Mandarin (cmn) and the other spoken varieties in Simplified
+// characters, Cantonese (yue) and Classical Chinese (lzh) in Traditional.
+// Any extlang under zh (zh-yue, zh-min-nan) is Chinese too.
+const CHINESE_SCRIPTS = {
+  zh: "Hans", cmn: "Hans", wuu: "Hans", hak: "Hans", nan: "Hans", gan: "Hans", hsn: "Hans", cjy: "Hans",
+  yue: "Hant", lzh: "Hant"
+};
+
+// Chinese is written in Traditional characters in Taiwan, Hong Kong, and
+// Macau unless the tag names a script.
+const TRADITIONAL_REGIONS = new Set(["tw", "hk", "mo"]);
+
+// Which Chinese characters, Simplified (Hans) or Traditional (Hant), a tag
+// is written in: its script subtag when that is one of the two, else
+// Traditional for a Taiwan, Hong Kong, or Macau region, else the language's
+// usual script, else Simplified. The Chinese packs and the builds' fonts
+// both come from this, so labels and typesetting always agree.
+export function hanScript(language) {
+  const { primary, script, region } = parseTag(language);
+  if (script === "Hans" || script === "Hant") {
+    return script;
+  }
+  return TRADITIONAL_REGIONS.has(region) ? "Hant" : CHINESE_SCRIPTS[primary] ?? "Hans";
+}
+
+// hanScript for a Chinese language (zh, cmn, yue, zh-yue), else null.
+export function chineseScript(language) {
+  const { primary, macrolanguage } = parseTag(language);
+  return CHINESE_SCRIPTS[primary] !== undefined || macrolanguage === "zh" ? hanScript(language) : null;
+}
+
 // The tag in the runtime's canonical form ("zh-hant-tw" is zh-Hant-TW), or
 // null when Intl rejects it.
 export function canonicalTag(value) {
@@ -118,7 +164,8 @@ const RESOLVED = new Map();
 
 // The pack for a language tag: the base pack, then the packs for the
 // macrolanguage (zh for zh-yue) and each prefix of the lookup tag (fr, then
-// fr-ca), whichever exist. `tag` is the tag as written (the skip notes name
+// fr-ca), whichever exist. A Chinese language (cmn, yue, zh-yue) layers zh,
+// then zh-hant when chineseScript says Traditional, before its own pack. `tag` is the tag as written (the skip notes name
 // it) and `code` the most specific pack found ("und" for the base pack
 // alone). Fields of later layers replace earlier ones; `checks` and
 // `labels` merge by key. The result is frozen and the same object for the
@@ -134,8 +181,13 @@ export function languagePack(tag = DEFAULT_LANGUAGE) {
 function resolvePack(language) {
   const [lookup, macrolanguage] = lookupTag(language);
   const subtags = lookup.split("-");
-  const keys = [macrolanguage, ...subtags.map((_, index) => subtags.slice(0, index + 1).join("-"))];
-  const layers = [base, ...keys.map((key) => PACKS.get(key)).filter((pack) => pack !== undefined)];
+  const chinese = chineseScript(language);
+  const keys = new Set([
+    chinese === null ? macrolanguage : "zh",
+    chinese === "Hant" ? "zh-hant" : null,
+    ...subtags.map((_, index) => subtags.slice(0, index + 1).join("-"))
+  ]);
+  const layers = [base, ...[...keys].map((key) => PACKS.get(key)).filter((pack) => pack !== undefined)];
   const pack = {};
   for (const layer of layers) {
     Object.assign(pack, layer, {

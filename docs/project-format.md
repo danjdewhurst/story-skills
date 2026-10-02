@@ -294,7 +294,7 @@ Word counts and builds remove an HTML comment without leaving a gap, so `really<
 
 ### Counting in characters
 
-Chinese and Japanese manuscripts are measured in characters (10万字, sheets of 400字 manuscript paper), not words, so a book whose `language` is `zh` or `ja` (any tag under them, such as `zh-Hant-TW`) counts its length in characters. `count-unit` in `story.md` overrides the language either way: `count-unit: characters` for another language, or `count-unit: words` to keep a Chinese or Japanese book in words.
+Chinese and Japanese manuscripts are measured in characters (10万字, sheets of 400字 manuscript paper), not words, so a book whose `language` is `zh` or `ja` (any tag under them, such as `zh-Hant-TW`, and the other Chinese languages, such as `cmn`, `yue`, and `lzh`) counts its length in characters. `count-unit` in `story.md` overrides the language either way: `count-unit: characters` for another language, or `count-unit: words` to keep a Chinese or Japanese book in words.
 
 A character is a grapheme cluster that is not whitespace, after the same markdown handling as word counts: comments, images, link targets, fence lines, scene break lines, and the markdown characters `` # > * _ ~ | ` `` are left out, and a backslash escape is the character it escapes. Punctuation counts (`「どこで」と言った。` is 10 characters), as it fills a square of manuscript paper; whitespace, including a full-width indent (`　`), does not. A base character with its combining marks, or an emoji with its modifiers, counts once.
 
