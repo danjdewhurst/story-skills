@@ -6,6 +6,7 @@ import { escapeRegExp, scanComments, splitWords, withoutFenceMarkers } from "./m
 import { givenName } from "./names.js";
 import { splitSentences } from "./sentences.js";
 import { narrationOnly, quoteMatches, replaceQuotes } from "./voices.js";
+import { wholeWords, wordMatcher } from "./words.js";
 
 // Deterministic prose checks for `story prose`. Everything here is counting:
 // no scoring, no rewriting. Thresholds only decide which counts are raised as
@@ -152,8 +153,9 @@ export function analyzeChapter(prose, rules) {
   const filterWords = rules.filterWords === null ? [] : countMatching(narration, (word) => rules.filterWords.has(word), rules.pack);
   const adverbs = rules.adverbSuffixes === null ? [] : countAdverbs(narration, rules);
   const tags = rules.plainTags === null ? { plain: [], bookisms: [] } : dialogueTags(paragraphs, rules);
-  // Watch words and avoided spellings match in the story's casing.
-  const cased = rules.watch.length + rules.variants.length === 0 ? null : matchingText(text, rules.pack);
+  // Watch words and avoided spellings match in the story's casing, as whole
+  // words, which in an unspaced script are found by wordSpans.
+  const find = rules.watch.length + rules.variants.length === 0 ? null : wordMatcher(text, matchingText(text, rules.pack));
 
   return {
     words: words.length,
@@ -165,8 +167,8 @@ export function analyzeChapter(prose, rules) {
     plainTags: tags.plain,
     bookisms: tags.bookisms,
     echoes: echoes(words, rules),
-    watch: rules.watch.map(({ word, pattern }) => ({ word, count: countPattern(cased.text, pattern) })).filter((entry) => entry.count > 0),
-    variants: rules.variants.map(({ use, avoid, source, pattern }) => ({ use, avoid, source, count: countVariant(text, cased, pattern, rules) })).filter((entry) => entry.count > 0),
+    watch: rules.watch.map(({ word, pattern }) => ({ word, count: find(pattern).length })).filter((entry) => entry.count > 0),
+    variants: rules.variants.map(({ use, avoid, source, pattern }) => ({ use, avoid, source, count: countVariant(text, find(pattern), rules) })).filter((entry) => entry.count > 0),
     phraseSentences: sentenceList.map((sentence) => splitWords(sentence).map((word) => normalizeWord(word, rules.pack)))
   };
 }
@@ -564,12 +566,11 @@ function nameKey(word, pack) {
 }
 
 // Uses of an avoided spelling, minus capitalised uses that are part of a
-// name in the bible (Dorian Gray, Center Point). `cased` is `text` as
-// matchingText gives it; the capital is looked for as written.
-function countVariant(text, cased, pattern, rules) {
+// name in the bible (Dorian Gray, Center Point). `spans` are its matches in
+// `text`, as written, where the capital is looked for.
+function countVariant(text, spans, rules) {
   let count = 0;
-  for (const match of cased.text.matchAll(pattern)) {
-    const [start, end] = cased.original(match.index, match.index + match[0].length);
+  for (const [start, end] of spans) {
     const first = splitWords(text.slice(start, end))[0] ?? "";
     if (/^\p{Lu}/u.test(first) && isName(first, rules)) {
       continue;
@@ -618,16 +619,12 @@ function countMatching(words, predicate, pack) {
   return sortCounts(counts, pack);
 }
 
-// A watch word or avoided spelling, to match against matchingText.
+// A watch word or avoided spelling, for wordMatcher on matchingText.
 function phrasePattern(phrase, pack) {
   const body = matchingCase(phrase.trim(), pack).split(/\s+/).map((word) => escapeRegExp(word).replace(/['’]/g, "['’]")).join("\\s+");
   // Letter boundaries only, so compounds ("grey-haired") and possessives
   // still count as uses of the word.
-  return new RegExp(`(?<![\\p{L}\\p{M}\\p{N}])${body}(?![\\p{L}\\p{M}\\p{N}])`, "giu");
-}
-
-function countPattern(text, pattern) {
-  return (text.match(pattern) ?? []).length;
+  return new RegExp(wholeWords(body, phrase.trim()), "giu");
 }
 
 // A rate printed on the warned side of its threshold: 4.975 against "under

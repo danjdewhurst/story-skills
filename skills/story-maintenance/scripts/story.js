@@ -5152,6 +5152,47 @@ function unspacedBoundaries(text) {
   }
   return boundaries;
 }
+var SPACED_LETTER = `(?![${UNSPACED_LETTERS}])[\\p{L}\\p{M}\\p{N}]`;
+var UNSPACED_LETTER = new RegExp(`[${UNSPACED_LETTERS}]`, "u");
+var UNSPACED_START = new RegExp(`^[${UNSPACED_LETTERS}]`, "u");
+var UNSPACED_END = new RegExp(`[${UNSPACED_LETTERS}]$`, "u");
+function wholeWords(body, phrase) {
+  const before = UNSPACED_START.test(phrase) ? "" : `(?<!${SPACED_LETTER})`;
+  const after = UNSPACED_END.test(phrase) ? "" : `(?!${SPACED_LETTER})`;
+  return `${before}${body}${after}`;
+}
+function wordMatcher(text, cased = null) {
+  const source = String(text);
+  const searched = cased?.text ?? source;
+  let boundaries = null;
+  return (pattern, { first = false } = {}) => {
+    const spans = [];
+    pattern.lastIndex = 0;
+    let match;
+    while ((match = pattern.exec(searched)) !== null) {
+      const end = match.index + match[0].length;
+      const span = cased === null ? [match.index, end] : cased.original(match.index, end);
+      const edges = span.filter((offset) => UNSPACED_LETTER.test(source[offset - 1] ?? "") && UNSPACED_LETTER.test(source[offset] ?? ""));
+      if (edges.length > 0) {
+        boundaries ??= unspacedBoundaries(source);
+      }
+      if (edges.every((offset) => boundaries.has(offset))) {
+        spans.push(span);
+        if (first) {
+          break;
+        }
+        pattern.lastIndex = end > match.index ? end : nextCharacter(searched, match.index);
+      } else {
+        pattern.lastIndex = nextCharacter(searched, match.index);
+      }
+    }
+    pattern.lastIndex = 0;
+    return spans;
+  };
+}
+function nextCharacter(text, index) {
+  return index + (text.codePointAt(index) > 65535 ? 2 : 1);
+}
 
 // src/markdown.js
 var LATIN_FOLDS = {
@@ -6054,12 +6095,12 @@ function buildVoices(project, chapters) {
   const profiles = project.characters.map((character) => profile(character, lines.get(character.id), pack, rules)).filter((entry) => entry.lines > 0);
   signatureWords(profiles, pack);
   const warnings = [];
-  const casedLines = new Map;
+  const matchers = new Map;
   const says = (pattern, line) => {
-    if (!casedLines.has(line)) {
-      casedLines.set(line, matchingText(line.text, pack));
+    if (!matchers.has(line)) {
+      matchers.set(line, wordMatcher(line.text, matchingText(line.text, pack)));
     }
-    return containsWords(pattern, line.text, casedLines.get(line));
+    return matchers.get(line)(pattern, { first: true }).length > 0;
   };
   for (const character of project.characters) {
     const said = lines.get(character.id);
@@ -6124,34 +6165,19 @@ function speakerPatterns(characters, pack, rules) {
     return {
       id: character.id,
       keys,
-      name: new RegExp(`(?<!${SPACED_LETTER})(?:${alternatives})(?!${SPACED_LETTER})`, "gu"),
+      name: new RegExp(`(?<!${SPACED_LETTER2})(?:${alternatives})(?!${SPACED_LETTER2})`, "gu"),
       subject: verbs === null ? null : new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternatives})\\s+(?:${verbs})(?![\\p{L}\\p{N}])`, "u"),
       inverted: verbs === null ? null : new RegExp(`(?<![\\p{L}\\p{N}])(?:${verbs})\\s+(?:${alternatives})(?![\\p{L}\\p{N}])`, "u")
     };
   }).filter(Boolean);
 }
 var NON_WORD = /[^\p{L}\p{N}]+/u;
-var SPACED_LETTER = `(?![${UNSPACED_LETTERS}])[\\p{L}\\p{N}]`;
-var UNSPACED_LETTER = new RegExp(`[${UNSPACED_LETTERS}]`, "u");
-function containsWords(pattern, text, cased = null) {
-  let boundaries = null;
-  for (const match of (cased?.text ?? text).matchAll(pattern)) {
-    const span = [match.index, match.index + match[0].length];
-    const edges = (cased === null ? span : cased.original(...span)).filter((offset) => UNSPACED_LETTER.test(text[offset - 1] ?? "") && UNSPACED_LETTER.test(text[offset] ?? ""));
-    if (edges.length === 0) {
-      return true;
-    }
-    boundaries ??= unspacedBoundaries(text);
-    if (edges.every((offset) => boundaries.has(offset))) {
-      return true;
-    }
-  }
-  return false;
-}
+var SPACED_LETTER2 = `(?![${UNSPACED_LETTERS}])[\\p{L}\\p{N}]`;
+var UNSPACED_LETTER2 = new RegExp(`[${UNSPACED_LETTERS}]`, "u");
 function attribute(paragraph, allSpeakers, pack) {
   const narration = `${splitOpenSpeech(paragraph, pack).narration} `;
   const words = new Set(narration.split(NON_WORD));
-  const speakers = allSpeakers.filter((speaker) => [...speaker.keys].some((key) => key === "" || words.has(key) || UNSPACED_LETTER.test(key) && narration.includes(key)));
+  const speakers = allSpeakers.filter((speaker) => [...speaker.keys].some((key) => key === "" || words.has(key) || UNSPACED_LETTER2.test(key) && narration.includes(key)));
   for (const form of ["subject", "inverted"]) {
     const tagged = speakers.filter((speaker) => speaker[form] !== null && speaker[form].test(narration));
     if (tagged.length === 1) {
@@ -6164,7 +6190,8 @@ function attribute(paragraph, allSpeakers, pack) {
   if (hasPronounTag(paragraph, pack)) {
     return null;
   }
-  const named = speakers.filter((speaker) => containsWords(speaker.name, narration));
+  const findWords = wordMatcher(narration);
+  const named = speakers.filter((speaker) => findWords(speaker.name, { first: true }).length > 0);
   return named.length === 1 ? named[0].id : null;
 }
 var LETTER = /[\p{L}\p{N}]/u;
@@ -6431,8 +6458,8 @@ function similarVoices(left, right) {
   return close(left.sentenceLength, right.sentenceLength, limits.sentenceLength) && (left.contractions === null || close(left.contractions, right.contractions, limits.contractions)) && close(left.questions, right.questions, limits.questions) && close(left.exclamations, right.exclamations, limits.exclamations);
 }
 function phrasePattern(phrase, pack) {
-  const edge = `(?![${UNSPACED_LETTERS}])[\\p{L}\\p{M}\\p{N}]`;
-  return new RegExp(`(?<!${edge})${escape(matchingCase(String(phrase).trim(), pack)).replace(/['’]/g, "['’]")}(?!${edge})`, "giu");
+  const trimmed = String(phrase).trim();
+  return new RegExp(wholeWords(escape(matchingCase(trimmed, pack)).replace(/['’]/g, "['’]"), trimmed), "giu");
 }
 function listWord(word) {
   return escape(word).replace(/'/g, "['’]").replace(/ /g, "\\s+");
@@ -6575,7 +6602,7 @@ function analyzeChapter(prose, rules) {
   const filterWords = rules.filterWords === null ? [] : countMatching(narration, (word) => rules.filterWords.has(word), rules.pack);
   const adverbs = rules.adverbSuffixes === null ? [] : countAdverbs(narration, rules);
   const tags = rules.plainTags === null ? { plain: [], bookisms: [] } : dialogueTags(paragraphs, rules);
-  const cased = rules.watch.length + rules.variants.length === 0 ? null : matchingText(text, rules.pack);
+  const find = rules.watch.length + rules.variants.length === 0 ? null : wordMatcher(text, matchingText(text, rules.pack));
   return {
     words: words.length,
     narrationWords: narration.length,
@@ -6586,8 +6613,8 @@ function analyzeChapter(prose, rules) {
     plainTags: tags.plain,
     bookisms: tags.bookisms,
     echoes: echoes(words, rules),
-    watch: rules.watch.map(({ word, pattern }) => ({ word, count: countPattern(cased.text, pattern) })).filter((entry) => entry.count > 0),
-    variants: rules.variants.map(({ use, avoid, source, pattern }) => ({ use, avoid, source, count: countVariant(text, cased, pattern, rules) })).filter((entry) => entry.count > 0),
+    watch: rules.watch.map(({ word, pattern }) => ({ word, count: find(pattern).length })).filter((entry) => entry.count > 0),
+    variants: rules.variants.map(({ use, avoid, source, pattern }) => ({ use, avoid, source, count: countVariant(text, find(pattern), rules) })).filter((entry) => entry.count > 0),
     phraseSentences: sentenceList.map((sentence) => splitWords(sentence).map((word) => normalizeWord(word, rules.pack)))
   };
 }
@@ -6891,10 +6918,9 @@ function normalizeWord(word, pack) {
 function nameKey(word, pack) {
   return normalizeWord(word, pack).replace(/'s$/, "");
 }
-function countVariant(text, cased, pattern, rules) {
+function countVariant(text, spans, rules) {
   let count = 0;
-  for (const match of cased.text.matchAll(pattern)) {
-    const [start, end] = cased.original(match.index, match.index + match[0].length);
+  for (const [start, end] of spans) {
     const first = splitWords(text.slice(start, end))[0] ?? "";
     if (/^\p{Lu}/u.test(first) && isName(first, rules)) {
       continue;
@@ -6941,10 +6967,7 @@ function countMatching(words, predicate, pack) {
 }
 function phrasePattern2(phrase, pack) {
   const body = matchingCase(phrase.trim(), pack).split(/\s+/).map((word) => escapeRegExp(word).replace(/['’]/g, "['’]")).join("\\s+");
-  return new RegExp(`(?<![\\p{L}\\p{M}\\p{N}])${body}(?![\\p{L}\\p{M}\\p{N}])`, "giu");
-}
-function countPattern(text, pattern) {
-  return (text.match(pattern) ?? []).length;
+  return new RegExp(wholeWords(body, phrase.trim()), "giu");
 }
 function formatAgainst(value, threshold, side) {
   for (let places = 1;places < 6; places += 1) {

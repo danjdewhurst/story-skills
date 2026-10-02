@@ -223,4 +223,14 @@ describe("story voices across conventions", () => {
     fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("status: alive", "status: alive\nvoice-avoid:\n  - 絶対"));
     expect(voicesReport(root).warnings.map((warning) => warning.code)).toEqual(["voice-avoid"]);
   });
+
+  test("an unspaced voice phrase matches against a word in another script", () => {
+    const root = languageProject("ja", [["mina", "ミナ"]], ["「絶対OK。」とミナは言った。"]);
+    const file = path.join(root, "characters", "mina.md");
+    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("status: alive", "status: alive\nvoice-avoid:\n  - 絶対\n  - ok"));
+    expect(voicesReport(root).warnings.map((warning) => warning.message)).toEqual([
+      "mina says \"絶対\", which is in their voice-avoid list (chapter-01)",
+      "mina says \"ok\", which is in their voice-avoid list (chapter-01)"
+    ]);
+  });
 });

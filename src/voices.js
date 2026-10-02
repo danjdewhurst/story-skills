@@ -6,7 +6,7 @@ import { givenName } from "./names.js";
 import { plural } from "./plural.js";
 import { EXCLAMATION_MARKS, QUESTION_MARKS, anyOf, charClass, punctuation } from "./punctuation.js";
 import { splitSentences } from "./sentences.js";
-import { UNSPACED_LETTERS, unspacedBoundaries } from "./words.js";
+import { UNSPACED_LETTERS, wholeWords, wordMatcher } from "./words.js";
 
 // Dialogue voice fingerprints for `story voices`. Speech is attributed only
 // when the paragraph says who spoke: a tag naming the speaker next to a
@@ -182,12 +182,12 @@ export function buildVoices(project, chapters) {
   const warnings = [];
   // Voice phrases match in the story's casing, so each line is prepared
   // once, when a phrase is first looked for in it.
-  const casedLines = new Map();
+  const matchers = new Map();
   const says = (pattern, line) => {
-    if (!casedLines.has(line)) {
-      casedLines.set(line, matchingText(line.text, pack));
+    if (!matchers.has(line)) {
+      matchers.set(line, wordMatcher(line.text, matchingText(line.text, pack)));
     }
-    return containsWords(pattern, line.text, casedLines.get(line));
+    return matchers.get(line)(pattern, { first: true }).length > 0;
   };
   for (const character of project.characters) {
     const said = lines.get(character.id);
@@ -282,31 +282,10 @@ const NON_WORD = /[^\p{L}\p{N}]+/u;
 
 // A letter or digit of a script written with spaces. Chinese, Japanese, Thai,
 // Lao, Khmer, and Burmese put none between words, so a name in them sits
-// against the next word: `containsWords` checks those edges with wordSpans
+// against the next word: wordMatcher checks those edges with wordSpans
 // instead.
 const SPACED_LETTER = `(?![${UNSPACED_LETTERS}])[\\p{L}\\p{N}]`;
 const UNSPACED_LETTER = new RegExp(`[${UNSPACED_LETTERS}]`, "u");
-
-// Whether the global `pattern`, bounded by SPACED_LETTER, matches `text`
-// as whole words: an edge between two letters of an unspaced script must
-// fall between two of its words. With `cased`, `text` as matchingText gives
-// it, the pattern runs on that and its edges map back to `text`.
-function containsWords(pattern, text, cased = null) {
-  let boundaries = null;
-  for (const match of (cased?.text ?? text).matchAll(pattern)) {
-    const span = [match.index, match.index + match[0].length];
-    const edges = (cased === null ? span : cased.original(...span))
-      .filter((offset) => UNSPACED_LETTER.test(text[offset - 1] ?? "") && UNSPACED_LETTER.test(text[offset] ?? ""));
-    if (edges.length === 0) {
-      return true;
-    }
-    boundaries ??= unspacedBoundaries(text);
-    if (edges.every((offset) => boundaries.has(offset))) {
-      return true;
-    }
-  }
-  return false;
-}
 
 function attribute(paragraph, allSpeakers, pack) {
   const narration = `${splitOpenSpeech(paragraph, pack).narration} `;
@@ -333,7 +312,8 @@ function attribute(paragraph, allSpeakers, pack) {
   if (hasPronounTag(paragraph, pack)) {
     return null;
   }
-  const named = speakers.filter((speaker) => containsWords(speaker.name, narration));
+  const findWords = wordMatcher(narration);
+  const named = speakers.filter((speaker) => findWords(speaker.name, { first: true }).length > 0);
   return named.length === 1 ? named[0].id : null;
 }
 
@@ -685,11 +665,11 @@ function similarVoices(left, right) {
     && close(left.exclamations, right.exclamations, limits.exclamations);
 }
 
-// A voice-words or voice-avoid phrase as whole words, for containsWords on
+// A voice-words or voice-avoid phrase as whole words, for wordMatcher on
 // matchingText.
 function phrasePattern(phrase, pack) {
-  const edge = `(?![${UNSPACED_LETTERS}])[\\p{L}\\p{M}\\p{N}]`;
-  return new RegExp(`(?<!${edge})${escape(matchingCase(String(phrase).trim(), pack)).replace(/['’]/g, "['’]")}(?!${edge})`, "giu");
+  const trimmed = String(phrase).trim();
+  return new RegExp(wholeWords(escape(matchingCase(trimmed, pack)).replace(/['’]/g, "['’]"), trimmed), "giu");
 }
 
 // A word-list entry as a pattern: an apostrophe matches a straight or

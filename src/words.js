@@ -98,3 +98,67 @@ export function unspacedBoundaries(text) {
   }
   return boundaries;
 }
+
+// One letter of a script written with spaces, as a regex source: the edge a
+// name or phrase pattern stops at. A letter of an unspaced script is left to
+// wordMatcher, which checks those edges against the words around them.
+const SPACED_LETTER = `(?![${UNSPACED_LETTERS}])[\\p{L}\\p{M}\\p{N}]`;
+const UNSPACED_LETTER = new RegExp(`[${UNSPACED_LETTERS}]`, "u");
+const UNSPACED_START = new RegExp(`^[${UNSPACED_LETTERS}]`, "u");
+const UNSPACED_END = new RegExp(`[${UNSPACED_LETTERS}]$`, "u");
+
+// `body`, the regex source for `phrase`, bounded by SPACED_LETTER as whole
+// words, for wordMatcher. An end of the phrase in an unspaced script needs
+// no bound: a letter of another script beside it starts a new word, as
+// wordSpans splits them, and one of its own is checked by wordMatcher.
+export function wholeWords(body, phrase) {
+  const before = UNSPACED_START.test(phrase) ? "" : `(?<!${SPACED_LETTER})`;
+  const after = UNSPACED_END.test(phrase) ? "" : `(?!${SPACED_LETTER})`;
+  return `${before}${body}${after}`;
+}
+
+// A finder for whole-word matches in `text`, for names and author-supplied
+// phrases (watch words, avoided spellings, voice phrases). Call it with a
+// global pattern bounded by SPACED_LETTER (or a narrower spaced letter): it
+// returns each match's [start, end] in `text` whose edges between two
+// letters of an unspaced script fall between two of its words, so a Chinese
+// or Japanese phrase matches at any character and a Thai one only at the
+// segmenter's word boundaries. Matches do not overlap; with `first`, only
+// the first is returned. With `cased`, `text` as matchingText gives it,
+// patterns run on that and their spans map back to `text`. The boundaries
+// are found once, the first time an edge needs them, so one finder serves
+// every pattern looked for in the same text.
+export function wordMatcher(text, cased = null) {
+  const source = String(text);
+  const searched = cased?.text ?? source;
+  let boundaries = null;
+  return (pattern, { first = false } = {}) => {
+    const spans = [];
+    pattern.lastIndex = 0;
+    let match;
+    while ((match = pattern.exec(searched)) !== null) {
+      const end = match.index + match[0].length;
+      const span = cased === null ? [match.index, end] : cased.original(match.index, end);
+      const edges = span.filter((offset) => UNSPACED_LETTER.test(source[offset - 1] ?? "") && UNSPACED_LETTER.test(source[offset] ?? ""));
+      if (edges.length > 0) {
+        boundaries ??= unspacedBoundaries(source);
+      }
+      if (edges.every((offset) => boundaries.has(offset))) {
+        spans.push(span);
+        if (first) {
+          break;
+        }
+        pattern.lastIndex = end > match.index ? end : nextCharacter(searched, match.index);
+      } else {
+        // A match cut off mid-word may overlap a whole one further on.
+        pattern.lastIndex = nextCharacter(searched, match.index);
+      }
+    }
+    pattern.lastIndex = 0;
+    return spans;
+  };
+}
+
+function nextCharacter(text, index) {
+  return index + (text.codePointAt(index) > 0xffff ? 2 : 1);
+}
