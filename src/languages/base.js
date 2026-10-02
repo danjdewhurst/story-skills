@@ -18,11 +18,27 @@ export default {
   // "character" (each character is a word), or "dictionary" (a word
   // segmenter is needed).
   segmentation: "space",
-  // Marks that can end a sentence.
-  sentenceEnd: [".", "!", "?", "…", "。", "！", "？"],
-  // Quotation marks for speech, as [open, close] pairs.
-  quotes: [["“", "”"], ["‘", "’"], ["\"", "\""], ["'", "'"]],
+  // Marks that can end a sentence: the full stop, question and exclamation
+  // marks, and ellipsis; the full-width CJK stops (。！？), which need no
+  // space after them; the Arabic question mark (؟), the Urdu full stop (۔),
+  // the Devanagari danda (। ॥), and the Ethiopic full stop (።). Spanish ¿
+  // and ¡ open a sentence in every language; see ../punctuation.js.
+  sentenceEnd: [".", "!", "?", "…", "。", "！", "？", "؟", "۔", "।", "॥", "።"],
+  // Quotation marks for speech, as [open, close] pairs: curly and straight
+  // quotes, guillemets pointing out (« », as in French, Spanish, Italian, and
+  // Russian), low-high quotes („ “ as in German and Czech, „ ” as in
+  // Polish), and corner brackets (「 」 『 』). A mark that opens in one
+  // language and closes in another (» in German and Danish, ” in Swedish)
+  // is left to that language's pack. A closing mark that can be an
+  // apostrophe (’ or ') closes only before a non-letter.
+  quotes: [
+    ["“", "”"], ["‘", "’"], ["\"", "\""], ["'", "'"],
+    ["«", "»"], ["‹", "›"], ["„", "“"], ["„", "”"], ["‚", "‘"],
+    ["「", "」"], ["『", "』"]
+  ],
   // The dash that opens a line of dialogue (— Line, said Cy.), or null.
+  // Speech runs to a closing dash or a tag after a comma, and resumes after
+  // the next dash (—Ya voy —dijo ella—. Espera.).
   dialogueDash: "—",
   // Generated text in builds, by key.
   labels: {},

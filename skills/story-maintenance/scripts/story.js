@@ -87,7 +87,6 @@ var FINDING_CODES = {
   "backslash-path": "warning",
   "form-length-range": "warning",
   "invalid-language": "error",
-  "unsupported-writing-mode": "error",
   "invalid-isbn": "error",
   "invalid-subject": "error",
   "too-many-keywords": "warning",
@@ -1030,6 +1029,7 @@ function withoutLeadingFrontmatter(text) {
 var CJK = "\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}\\u30FC";
 var SOUTHEAST_ASIAN = "\\p{Script=Thai}\\p{Script=Lao}\\p{Script=Khmer}\\p{Script=Myanmar}";
 var JOINER = "\\u00AD\\u200C\\u200D";
+var UNSPACED_LETTERS = `${CJK}${SOUTHEAST_ASIAN}`;
 var UNSPACED = new RegExp(`[${CJK}]|[${SOUTHEAST_ASIAN}](?:[${SOUTHEAST_ASIAN}]|[${JOINER}]+(?=[${SOUTHEAST_ASIAN}]))*`, "gu");
 var CJK_CHARACTER = new RegExp(`^[${CJK}]$`, "u");
 var WINDOW = 1e4;
@@ -1081,6 +1081,14 @@ function wordSpans(text, pattern) {
   }
   between(source.length);
   return spans;
+}
+function unspacedBoundaries(text) {
+  const boundaries = new Set;
+  for (const { start, end } of wordSpans(text, /(?!)/gu)) {
+    boundaries.add(start);
+    boundaries.add(end);
+  }
+  return boundaries;
 }
 
 // src/markdown.js
@@ -1476,7 +1484,6 @@ var ar_default = {
   code: "ar",
   name: "Arabic",
   cased: false,
-  script: "Arab",
   segmentation: "space"
 };
 
@@ -1485,20 +1492,52 @@ var base_default = {
   code: "und",
   name: "Generic",
   cased: true,
-  script: null,
   segmentation: "space",
-  sentenceEnd: [".", "!", "?", "…", "。", "！", "？"],
-  quotes: [["“", "”"], ["‘", "’"], ['"', '"'], ["'", "'"]],
+  sentenceEnd: [".", "!", "?", "…", "。", "！", "？", "؟", "۔", "।", "॥", "።"],
+  quotes: [
+    ["“", "”"],
+    ["‘", "’"],
+    ['"', '"'],
+    ["'", "'"],
+    ["«", "»"],
+    ["‹", "›"],
+    ["„", "“"],
+    ["„", "”"],
+    ["‚", "‘"],
+    ["「", "」"],
+    ["『", "』"]
+  ],
   dialogueDash: "—",
   labels: {},
   checks: {}
+};
+
+// src/languages/da.js
+var da_default = {
+  code: "da",
+  name: "Danish",
+  quotes: [["»", "«"], ["›", "‹"], ["„", "“"]]
+};
+
+// src/languages/de-ch.js
+var de_ch_default = {
+  code: "de-ch",
+  name: "Swiss German",
+  quotes: [["«", "»"], ["‹", "›"], ["„", "“"], ["‚", "‘"]]
+};
+
+// src/languages/de.js
+var de_default = {
+  code: "de",
+  name: "German",
+  quotes: [["„", "“"], ["‚", "‘"], ["»", "«"], ["›", "‹"]]
 };
 
 // src/languages/en.js
 var en_default = {
   code: "en",
   name: "English",
-  script: "Latn",
+  quotes: [["“", "”"], ["‘", "’"], ['"', '"'], ["'", "'"]],
   checks: {
     filterWords: [
       "felt",
@@ -1996,12 +2035,19 @@ var en_default = {
   }
 };
 
+// src/languages/fi.js
+var fi_default = {
+  code: "fi",
+  name: "Finnish",
+  quotes: [["”", "”"], ["’", "’"], ["»", "»"]],
+  dialogueDash: "–"
+};
+
 // src/languages/he.js
 var he_default = {
   code: "he",
   name: "Hebrew",
   cased: false,
-  script: "Hebr",
   segmentation: "space"
 };
 
@@ -2010,7 +2056,6 @@ var hi_default = {
   code: "hi",
   name: "Hindi",
   cased: false,
-  script: "Deva",
   segmentation: "space"
 };
 
@@ -2019,8 +2064,9 @@ var ja_default = {
   code: "ja",
   name: "Japanese",
   cased: false,
-  script: "Jpan",
-  segmentation: "character"
+  segmentation: "character",
+  quotes: [["「", "」"], ["『", "』"], ["“", "”"], ["〝", "〟"]],
+  dialogueDash: null
 };
 
 // src/languages/ko.js
@@ -2028,8 +2074,15 @@ var ko_default = {
   code: "ko",
   name: "Korean",
   cased: false,
-  script: "Kore",
   segmentation: "space"
+};
+
+// src/languages/sv.js
+var sv_default = {
+  code: "sv",
+  name: "Swedish",
+  quotes: [["”", "”"], ["’", "’"], ["»", "»"]],
+  dialogueDash: "–"
 };
 
 // src/languages/th.js
@@ -2037,7 +2090,6 @@ var th_default = {
   code: "th",
   name: "Thai",
   cased: false,
-  script: "Thai",
   segmentation: "dictionary"
 };
 
@@ -2046,13 +2098,13 @@ var zh_default = {
   code: "zh",
   name: "Chinese",
   cased: false,
-  script: "Hans",
-  segmentation: "character"
+  segmentation: "character",
+  dialogueDash: null
 };
 
 // src/languages/index.js
 var DEFAULT_LANGUAGE = "en";
-var PACKS = new Map([ar_default, en_default, he_default, hi_default, ja_default, ko_default, th_default, zh_default].map((pack) => [pack.code, pack]));
+var PACKS = new Map([ar_default, da_default, de_default, de_ch_default, en_default, fi_default, he_default, hi_default, ja_default, ko_default, sv_default, th_default, zh_default].map((pack) => [pack.code, pack]));
 var TAG_PATTERN = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/;
 function isLanguageTag(value) {
   return typeof value === "string" && TAG_PATTERN.test(value.trim());
@@ -2333,48 +2385,112 @@ function formatNames(report) {
 `;
 }
 
+// src/punctuation.js
+var SENTENCE_OPENERS = "¿¡";
+var QUESTION_MARKS = "?？؟";
+var EXCLAMATION_MARKS = "!！";
+var QUOTATION_DASH = "―";
+var FULL_WIDTH = /^[　-〿＀-￯]$/u;
+var APOSTROPHES = new Set(["'", "’"]);
+var CACHE = new WeakMap;
+function punctuation(pack = languagePack()) {
+  if (!CACHE.has(pack)) {
+    CACHE.set(pack, buildPunctuation(pack));
+  }
+  return CACHE.get(pack);
+}
+function buildPunctuation(pack) {
+  const pairs = (pack.quotes ?? []).map(([open, close]) => ({
+    open,
+    close,
+    kind: APOSTROPHES.has(close) ? "single" : open === close ? "straight" : "explicit"
+  }));
+  const byOpener = new Map;
+  for (const pair of pairs) {
+    byOpener.set(pair.open, [...byOpener.get(pair.open) ?? [], pair]);
+  }
+  const ends = pack.sentenceEnd ?? [];
+  return {
+    pairs,
+    byOpener,
+    openers: unique(pairs.map((pair) => pair.open)),
+    closers: unique(pairs.map((pair) => pair.close)),
+    spacedEnds: unique(ends.filter((mark) => !FULL_WIDTH.test(mark))),
+    fullWidthEnds: unique(ends.filter((mark) => FULL_WIDTH.test(mark))),
+    dashes: pack.dialogueDash ? unique([pack.dialogueDash, QUOTATION_DASH]) : ""
+  };
+}
+function unique(marks) {
+  return [...new Set(marks.join(""))].join("");
+}
+function charClass(marks) {
+  return marks.replace(/[\\\]\[^-]/g, "\\$&");
+}
+function anyOf(marks) {
+  return marks === "" ? "(?!)" : `[${charClass(marks)}]`;
+}
+
 // src/sentences.js
 var INITIALS = "(?:[A-Za-z]\\.)*[A-Za-z]";
 var NEVER = "(?!)";
-var ABBREVIATIONS = new WeakMap;
-function abbreviations(pack) {
-  if (!ABBREVIATIONS.has(pack)) {
-    const words = (name) => (checkList(pack, name) ?? []).map(escapeRegExp);
-    const either = (list) => list.length === 0 ? NEVER : list.join("|");
-    ABBREVIATIONS.set(pack, {
-      title: new RegExp(`(?:^|[\\s(“"‘'])(?:${[...words("titleAbbreviations"), INITIALS].join("|")})$`),
-      context: new RegExp(`(?:^|[\\s(“"‘'])(?:${either(words("contextAbbreviations"))})$`),
-      calendar: new RegExp(`^(?:${either(words("calendarWords"))})(?![\\p{L}\\p{N}])`, "u")
-    });
-  }
-  return ABBREVIATIONS.get(pack);
-}
-var SENTENCE_END = /[.!?…]+["”’')\]*_]*(?= |$)|[。！？]+[」』）”’"')\]*_]*/g;
 var CONTEXT_WINDOW = 64;
-var SENTENCE_START = /^["'“‘(\[*_]*[\p{Lu}\p{N}]/u;
+var CLOSING_MARKS = ")\\]*_";
+var OPENING_MARKS = "(\\[*_";
+var FULL_WIDTH_CLOSERS = "」』）";
+var SPACED_CLOSERS = "»›";
+var RULES = new WeakMap;
+function sentenceRules(pack) {
+  if (!RULES.has(pack)) {
+    RULES.set(pack, buildRules(pack));
+  }
+  return RULES.get(pack);
+}
+function buildRules(pack) {
+  const words = (name) => (checkList(pack, name) ?? []).map(escapeRegExp);
+  const either = (list) => list.length === 0 ? NEVER : list.join("|");
+  const marks = punctuation(pack);
+  const openers = charClass(marks.openers + SENTENCE_OPENERS);
+  const closers = charClass(marks.closers);
+  const spacedClosers = [...SPACED_CLOSERS].filter((mark) => marks.closers.includes(mark) && !marks.openers.includes(mark)).join("");
+  const ends = [
+    marks.spacedEnds === "" ? null : `${anyOf(marks.spacedEnds)}+(?: ${anyOf(spacedClosers)})?[${closers}${CLOSING_MARKS}]*(?= |$)`,
+    marks.fullWidthEnds === "" ? null : `${anyOf(marks.fullWidthEnds)}+[${closers}${CLOSING_MARKS}${FULL_WIDTH_CLOSERS}]*`
+  ].filter(Boolean);
+  const startLetter = pack.cased === false ? "\\p{L}\\p{N}" : "\\p{Lu}\\p{Lo}\\p{N}";
+  return {
+    title: new RegExp(`(?:^|[\\s${openers}(])(?:${[...words("titleAbbreviations"), INITIALS].join("|")})$`),
+    context: new RegExp(`(?:^|[\\s${openers}(])(?:${either(words("contextAbbreviations"))})$`),
+    calendar: new RegExp(`^(?:${either(words("calendarWords"))})(?![\\p{L}\\p{N}])`, "u"),
+    end: new RegExp(ends.join("|") || NEVER, "g"),
+    fullWidth: new RegExp(`^${anyOf(marks.fullWidthEnds)}`),
+    start: new RegExp(`^[${openers}${OPENING_MARKS}]*[${startLetter}]`, "u"),
+    finished: new RegExp(`${anyOf(marks.spacedEnds + marks.fullWidthEnds)}(?: ${anyOf(spacedClosers)})?[${closers})\\]${FULL_WIDTH_CLOSERS}]*$`),
+    firstWord: new RegExp(`^[${openers}${OPENING_MARKS}]*([\\p{L}\\p{N}'’]+)`, "u")
+  };
+}
 function splitSentences(text, { capitalStart = true, pack = languagePack() } = {}) {
   const normalized = String(text).replace(/\s+/g, " ").trim();
   if (normalized === "") {
     return [];
   }
-  const rules = abbreviations(pack);
+  const rules = sentenceRules(pack);
   const sentences = [];
   let start = 0;
-  for (const match of normalized.matchAll(SENTENCE_END)) {
+  for (const match of normalized.matchAll(rules.end)) {
     const end = match.index + match[0].length;
-    if (/^[。！？]/.test(match[0])) {
+    if (rules.fullWidth.test(match[0])) {
       sentences.push(normalized.slice(start, end).trim());
       start = end;
       continue;
     }
     const next = normalized.slice(end + 1, end + 1 + CONTEXT_WINDOW);
-    if (capitalStart && next !== "" && !SENTENCE_START.test(next)) {
+    if (capitalStart && next !== "" && !rules.start.test(next)) {
       continue;
     }
     const from = Math.max(start, match.index - CONTEXT_WINDOW);
     const before = `${from > start ? "x" : ""}${normalized.slice(from, match.index)}`;
     const abbreviation = match[0] === "." && (rules.context.test(before) ? /^[\p{Ll}\p{N}]/u.test(next) || rules.calendar.test(next) : rules.title.test(before));
-    const stammer = /^(?:…|\.\.\.)/.test(match[0]) && isStammer(before, next);
+    const stammer = /^(?:…|\.\.\.)/.test(match[0]) && isStammer(before, next, rules);
     if (abbreviation || stammer) {
       continue;
     }
@@ -2383,13 +2499,13 @@ function splitSentences(text, { capitalStart = true, pack = languagePack() } = {
   }
   const tail = normalized.slice(start).trim();
   if (tail !== "") {
-    sentences.push(/[.!?…。！？]["”’')\]」』）]*$/.test(tail) ? tail : `${tail}.`);
+    sentences.push(rules.finished.test(tail) ? tail : `${tail}.`);
   }
   return sentences.filter((sentence) => sentence !== "");
 }
-function isStammer(before, next) {
+function isStammer(before, next, rules) {
   const last = /([\p{L}\p{N}'’]+)$/u.exec(before);
-  const first = /^["'“‘(\[*_]*([\p{L}\p{N}'’]+)/u.exec(next);
+  const first = rules.firstWord.exec(next);
   return Boolean(last && first) && last[1].toLowerCase() === first[1].toLowerCase();
 }
 
@@ -2423,12 +2539,12 @@ var VOICE_CHECKS = [
   { check: "signature-words", label: "Signature words", lists: ["voiceStopwords"] }
 ];
 var NEVER2 = "(?!)";
-var RULES = new WeakMap;
+var RULES2 = new WeakMap;
 function voiceRules(pack) {
-  if (!RULES.has(pack)) {
-    RULES.set(pack, buildVoiceRules(pack));
+  if (!RULES2.has(pack)) {
+    RULES2.set(pack, buildVoiceRules(pack));
   }
-  return RULES.get(pack);
+  return RULES2.get(pack);
 }
 function buildVoiceRules(pack) {
   const verbs = checkList(pack, "speechVerbs");
@@ -2437,7 +2553,17 @@ function buildVoiceRules(pack) {
   const contractedIs = checkList(pack, "contractedIs");
   const elisions = checkList(pack, "elisions") ?? [];
   const apostrophe = (word) => escape(word).replace(/'/g, "['’]");
+  const marks = punctuation(pack);
+  const closers = `[${charClass(marks.closers)})]*$`;
   const rules = {
+    marks,
+    opensWithQuote: new RegExp(`^${anyOf(marks.openers)}`),
+    dashOpen: marks.dashes === "" ? null : new RegExp(`^${anyOf(marks.dashes)}\\s*`),
+    dashClose: new RegExp(`\\s${anyOf(marks.dashes)}`),
+    dash: new RegExp(anyOf(marks.dashes)),
+    singleOpen: new Map(marks.pairs.filter((pair) => pair.kind === "single" && pair.open !== pair.close).map((pair) => [pair, new RegExp(`(?<![\\p{L}\\p{N}])${anyOf(pair.open)}`, "u")])),
+    question: new RegExp(`${anyOf(QUESTION_MARKS)}${closers}`),
+    exclamation: new RegExp(`${anyOf(EXCLAMATION_MARKS)}${closers}`),
     verbs: null,
     tagAfterQuote: null,
     tagBeforeQuote: null,
@@ -2484,7 +2610,7 @@ function buildVoices(project, chapters) {
       }
     };
     for (const paragraph of chapter.paragraphs) {
-      const continues = (pending.length > 0 || chainSpeaker !== null) && OPENS_WITH_QUOTE.test(paragraph);
+      const continues = (pending.length > 0 || chainSpeaker !== null) && rules.opensWithQuote.test(paragraph);
       if (!continues) {
         credit(null, pending);
         pending = [];
@@ -2516,7 +2642,7 @@ function buildVoices(project, chapters) {
     const said = lines.get(character.id);
     for (const phrase of stringList(character.voiceAvoid)) {
       const pattern = phrasePattern(phrase);
-      const chaptersUsing = [...new Set(said.filter((line) => pattern.test(line.text)).map((line) => line.chapter))];
+      const chaptersUsing = [...new Set(said.filter((line) => containsWords(pattern, line.text)).map((line) => line.chapter))];
       if (chaptersUsing.length > 0) {
         warnings.push(warn("voice-avoid", `${character.id} says "${phrase}", which is in their voice-avoid list (${chaptersUsing.join(", ")})`));
       }
@@ -2524,7 +2650,7 @@ function buildVoices(project, chapters) {
     if (said.length >= VOICE_THRESHOLDS.minLines) {
       for (const phrase of stringList(character.voiceWords)) {
         const pattern = phrasePattern(phrase);
-        if (!said.some((line) => pattern.test(line.text))) {
+        if (!said.some((line) => containsWords(pattern, line.text))) {
           warnings.push(warn("voice-words-unused", `${character.id} does not say "${phrase}" from their voice-words list in ${said.length} attributed lines of dialogue`));
         }
       }
@@ -2575,18 +2701,33 @@ function speakerPatterns(characters, pack, rules) {
     return {
       id: character.id,
       keys,
-      name: new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternatives})(?![\\p{L}\\p{N}])`, "u"),
+      name: new RegExp(`(?<!${SPACED_LETTER})(?:${alternatives})(?!${SPACED_LETTER})`, "gu"),
       subject: verbs === null ? null : new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternatives})\\s+(?:${verbs})(?![\\p{L}\\p{N}])`, "u"),
       inverted: verbs === null ? null : new RegExp(`(?<![\\p{L}\\p{N}])(?:${verbs})\\s+(?:${alternatives})(?![\\p{L}\\p{N}])`, "u")
     };
   }).filter(Boolean);
 }
 var NON_WORD = /[^\p{L}\p{N}]+/u;
-var OPENS_WITH_QUOTE = /^["“‘']/;
+var SPACED_LETTER = `(?![${UNSPACED_LETTERS}])[\\p{L}\\p{N}]`;
+var UNSPACED_LETTER = new RegExp(`[${UNSPACED_LETTERS}]`, "u");
+function containsWords(pattern, text) {
+  let boundaries = null;
+  for (const match of text.matchAll(pattern)) {
+    const edges = [match.index, match.index + match[0].length].filter((offset) => UNSPACED_LETTER.test(text[offset - 1] ?? "") && UNSPACED_LETTER.test(text[offset] ?? ""));
+    if (edges.length === 0) {
+      return true;
+    }
+    boundaries ??= unspacedBoundaries(text);
+    if (edges.every((offset) => boundaries.has(offset))) {
+      return true;
+    }
+  }
+  return false;
+}
 function attribute(paragraph, allSpeakers, pack) {
   const narration = `${splitOpenSpeech(paragraph, pack).narration} `;
   const words = new Set(narration.split(NON_WORD));
-  const speakers = allSpeakers.filter((speaker) => [...speaker.keys].some((key) => key === "" || words.has(key)));
+  const speakers = allSpeakers.filter((speaker) => [...speaker.keys].some((key) => key === "" || words.has(key) || UNSPACED_LETTER.test(key) && narration.includes(key)));
   for (const form of ["subject", "inverted"]) {
     const tagged = speakers.filter((speaker) => speaker[form] !== null && speaker[form].test(narration));
     if (tagged.length === 1) {
@@ -2599,43 +2740,28 @@ function attribute(paragraph, allSpeakers, pack) {
   if (hasPronounTag(paragraph, pack)) {
     return null;
   }
-  const named = speakers.filter((speaker) => speaker.name.test(narration));
+  const named = speakers.filter((speaker) => containsWords(speaker.name, narration));
   return named.length === 1 ? named[0].id : null;
 }
 var LETTER = /[\p{L}\p{N}]/u;
-var DASH_OPEN = /^[—―]\s*/;
 function quoteMatches(paragraph, pack = languagePack()) {
   const rules = voiceRules(pack);
   const matches = [];
-  const next = { "”": -1, '"': -1 };
+  const next = new Map;
   const find = (key, from) => {
-    if (next[key] !== Infinity && next[key] < from) {
+    const known = next.get(key) ?? -1;
+    if (known !== Infinity && known < from) {
       const found = paragraph.indexOf(key, from);
-      next[key] = found === -1 ? Infinity : found;
+      next.set(key, found === -1 ? Infinity : found);
     }
-    return next[key];
+    return next.get(key);
   };
   const singles = singleQuoteMarks(paragraph, rules);
-  let index = 0;
-  const dash = DASH_OPEN.exec(paragraph);
-  if (dash) {
-    const body = paragraph.slice(dash[0].length);
-    const tag = rules.dashTag === null ? null : rules.dashTag.exec(body);
-    const closing = /\s[—―]/.exec(body);
-    const stop = Math.min(tag ? tag.index : Infinity, closing ? closing.index + 1 : Infinity);
-    const close = stop === Infinity ? paragraph.length : dash[0].length + stop;
-    matches.push({ start: 0, end: Math.min(close + 1, paragraph.length), text: paragraph.slice(dash[0].length, close) });
-    index = close + 1;
-  }
+  let index = dashMatches(paragraph, rules, matches);
   while (index < paragraph.length) {
-    const char = paragraph[index];
     let close = Infinity;
-    if (char === "“") {
-      close = find("”", index + 1);
-    } else if (char === '"') {
-      close = find('"', index + 1);
-    } else if (char === "‘" || char === "'") {
-      close = singleClose(singles[char], index);
+    for (const pair of rules.marks.byOpener.get(paragraph[index]) ?? []) {
+      close = Math.min(close, pair.kind === "single" ? singleClose(singles.get(pair), index) : find(pair.close, index + 1));
     }
     if (close === Infinity) {
       index += 1;
@@ -2646,27 +2772,68 @@ function quoteMatches(paragraph, pack = languagePack()) {
   }
   return matches;
 }
+function dashMatches(paragraph, rules, matches) {
+  const dash = rules.dashOpen === null ? null : rules.dashOpen.exec(paragraph);
+  if (!dash) {
+    return 0;
+  }
+  const search = (pattern) => {
+    const global = new RegExp(pattern.source, `${pattern.flags.replace("g", "")}g`);
+    let found = { index: -1 };
+    return (from) => {
+      if (found !== null && found.index < from) {
+        global.lastIndex = from;
+        found = global.exec(paragraph);
+      }
+      return found === null ? Infinity : found.index;
+    };
+  };
+  const nextTag = rules.dashTag === null ? () => Infinity : search(rules.dashTag);
+  const nextClosing = search(rules.dashClose);
+  const nextDash = search(rules.dash);
+  let start = 0;
+  let from = dash[0].length;
+  let index;
+  do {
+    const tag = nextTag(from);
+    const closing = nextClosing(from) + 1;
+    const close = Math.min(tag, closing, paragraph.length);
+    matches.push({ start, end: Math.min(close + 1, paragraph.length), text: paragraph.slice(from, close) });
+    index = close + 1;
+    start = closing < Math.min(tag, paragraph.length) ? nextDash(index) : Infinity;
+    from = start === Infinity ? Infinity : start + 1 + /^[\s.,;:]*/.exec(paragraph.slice(start + 1, start + 65))[0].length;
+  } while (from < paragraph.length);
+  return index;
+}
 function singleQuoteMarks(paragraph, rules) {
-  const marks = { "‘": { open: [], close: [] }, "'": { open: [], close: [] } };
-  for (let index = 0;index < paragraph.length; index += 1) {
-    const char = paragraph[index];
-    const before = paragraph[index - 1] ?? "";
-    const after = paragraph[index + 1] ?? "";
-    if (char === "‘" && !LETTER.test(before)) {
-      marks["‘"].open.push(index);
-    } else if (char === "’" && !LETTER.test(after)) {
-      marks["‘"].close.push(index);
-    } else if (char === "'") {
-      if (!LETTER.test(before) && LETTER.test(after) && !rules.elision.test(paragraph.slice(index + 1))) {
-        marks["'"].open.push(index);
-      } else if (!LETTER.test(after) && before !== "" && !/\s/.test(before)) {
-        marks["'"].close.push(index);
+  const marks = new Map;
+  for (const pair of rules.marks.pairs) {
+    if (pair.kind !== "single") {
+      continue;
+    }
+    const open = [];
+    const close = [];
+    for (let index = paragraph.indexOf(pair.open);index !== -1; index = paragraph.indexOf(pair.open, index + 1)) {
+      const before = paragraph[index - 1] ?? "";
+      const after = paragraph[index + 1] ?? "";
+      if (pair.open === pair.close) {
+        if (!LETTER.test(before) && LETTER.test(after) && !rules.elision.test(paragraph.slice(index + 1))) {
+          open.push(index);
+        } else if (!LETTER.test(after) && before !== "" && !/\s/.test(before)) {
+          close.push(index);
+        }
+      } else if (!LETTER.test(before)) {
+        open.push(index);
       }
     }
-  }
-  for (const key of Object.keys(marks)) {
-    marks[key].opens = new Set(marks[key].open);
-    marks[key].paragraph = paragraph;
+    if (pair.open !== pair.close) {
+      for (let index = paragraph.indexOf(pair.close);index !== -1; index = paragraph.indexOf(pair.close, index + 1)) {
+        if (!LETTER.test(paragraph[index + 1] ?? "")) {
+          close.push(index);
+        }
+      }
+    }
+    marks.set(pair, { open, close, opens: new Set(open), paragraph });
   }
   return marks;
 }
@@ -2718,23 +2885,22 @@ function quotedSpans(paragraph, pack = languagePack()) {
 }
 function splitOpenSpeech(paragraph, pack = languagePack()) {
   const text = replaceQuotes(paragraph, pack);
-  const cuts = [];
-  const curly = text.indexOf("“", text.lastIndexOf("”") + 1);
-  if (curly !== -1) {
-    cuts.push(curly);
-  }
-  const straight = text.indexOf('"');
-  if (straight !== -1) {
-    cuts.push(straight);
-  }
-  const lastSingleClose = text.lastIndexOf("’");
-  const single = /(?<![\p{L}\p{N}])‘/u.exec(text.slice(lastSingleClose + 1));
-  if (single) {
-    cuts.push(lastSingleClose + 1 + single.index);
-  }
-  if (/^'[\p{L}\p{N}]/u.test(text) && !voiceRules(pack).elision.test(text.slice(1))) {
-    cuts.push(0);
-  }
+  const rules = voiceRules(pack);
+  const cuts = rules.marks.pairs.map((pair) => {
+    const { open, close, kind } = pair;
+    if (kind === "straight") {
+      return text.indexOf(open);
+    }
+    if (kind === "explicit") {
+      return text.indexOf(open, text.lastIndexOf(close) + 1);
+    }
+    if (open !== close) {
+      const lastClose = text.lastIndexOf(close);
+      const single = rules.singleOpen.get(pair).exec(text.slice(lastClose + 1));
+      return single ? lastClose + 1 + single.index : -1;
+    }
+    return text.startsWith(open) && /^[\s\S][\p{L}\p{N}]/u.test(text) && !rules.elision.test(text.slice(1)) ? 0 : -1;
+  }).filter((cut) => cut !== -1);
   if (cuts.length === 0) {
     return { narration: text, open: null };
   }
@@ -2749,8 +2915,8 @@ function profile(character, said, pack, rules) {
   const text = said.map((line) => line.text).join(" ");
   const words = splitWords(text);
   const sentences = said.flatMap((line) => splitSentences(line.text, { pack }).filter((sentence) => splitWords(sentence).length > 0));
-  const questions = sentences.filter((sentence) => /\?["'”’)]*$/.test(sentence.trim())).length;
-  const exclamations = sentences.filter((sentence) => /!["'”’)]*$/.test(sentence.trim())).length;
+  const questions = sentences.filter((sentence) => rules.question.test(sentence.trim())).length;
+  const exclamations = sentences.filter((sentence) => rules.exclamation.test(sentence.trim())).length;
   return {
     id: character.id,
     lines: said.length,
@@ -2808,7 +2974,8 @@ function similarVoices(left, right) {
   return close(left.sentenceLength, right.sentenceLength, limits.sentenceLength) && (left.contractions === null || close(left.contractions, right.contractions, limits.contractions)) && close(left.questions, right.questions, limits.questions) && close(left.exclamations, right.exclamations, limits.exclamations);
 }
 function phrasePattern(phrase) {
-  return new RegExp(`(?<![\\p{L}\\p{M}\\p{N}])${escape(String(phrase).trim()).replace(/['’]/g, "['’]")}(?![\\p{L}\\p{M}\\p{N}])`, "iu");
+  const edge = `(?![${UNSPACED_LETTERS}])[\\p{L}\\p{M}\\p{N}]`;
+  return new RegExp(`(?<!${edge})${escape(String(phrase).trim()).replace(/['’]/g, "['’]")}(?!${edge})`, "giu");
 }
 function escape(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -6021,7 +6188,6 @@ function publishingMeta(data) {
   return {
     authors: authors.length > 0 ? authors : author === "" ? [] : [author],
     language: text("language") || "en",
-    writingMode: text("writing-mode") || "horizontal",
     isbn: normalizeIsbn(typeof data.isbn === "number" ? String(data.isbn) : text("isbn")),
     publisher: text("publisher"),
     publicationDate: text("publication-date"),
@@ -6171,143 +6337,6 @@ function tableCell(value) {
   return String(value).replace(/\|/g, "\\|").replace(/\n/g, " ");
 }
 
-// src/typesetting.js
-var WRITING_MODES = new Set(["horizontal", "vertical"]);
-var CASED_SCRIPTS = new Set(["Latn", "Cyrl", "Grek", "Armn", "Copt", "Glag", "Adlm", "Osge", "Dsrt"]);
-var VERTICAL_SCRIPTS = new Set(["Jpan", "Hani", "Hans", "Hant", "Hira", "Kana", "Bopo", "Kore", "Hang"]);
-var EAST_ASIAN_SCRIPTS = new Set(["Jpan", "Hani", "Hans", "Hant", "Hira", "Kana", "Bopo", "Kore", "Hang"]);
-var COMPLEX_SCRIPTS = new Set(["Arab", "Hebr", "Syrc", "Thaa", "Nkoo", "Deva", "Beng", "Guru", "Gujr", "Orya", "Taml", "Telu", "Knda", "Mlym", "Sinh", "Thai", "Laoo", "Khmr", "Mymr", "Tibt"]);
-var LIKELY_SCRIPTS = {
-  Cyrl: ["ru", "uk", "be", "bg", "mk", "sr", "kk", "ky", "mn", "tg", "tt", "ba", "cv", "os"],
-  Grek: ["el"],
-  Armn: ["hy"],
-  Geor: ["ka"],
-  Arab: ["fa", "ur", "ps", "sd", "ug", "ckb", "ks"],
-  Hebr: ["yi"],
-  Deva: ["mr", "ne", "sa", "kok", "mai", "bho"],
-  Beng: ["bn", "as"],
-  Guru: ["pa"],
-  Gujr: ["gu"],
-  Orya: ["or"],
-  Taml: ["ta"],
-  Telu: ["te"],
-  Knda: ["kn"],
-  Mlym: ["ml"],
-  Sinh: ["si"],
-  Laoo: ["lo"],
-  Khmr: ["km"],
-  Mymr: ["my"],
-  Tibt: ["bo", "dz"],
-  Ethi: ["am", "ti"],
-  Thaa: ["dv"],
-  Syrc: ["syr"],
-  Cher: ["chr"],
-  Hans: ["cmn", "wuu", "hak", "nan", "gan", "hsn", "cjy"],
-  Hant: ["yue", "lzh"]
-};
-var SCRIPT_OF = new Map(Object.entries(LIKELY_SCRIPTS).flatMap(([script, codes]) => codes.map((code) => [code, script])));
-var TRADITIONAL_REGIONS = new Set(["tw", "hk", "mo"]);
-var LATIN_SERIF = `Georgia, "Iowan Old Style", "Palatino Linotype", serif`;
-var FONT_STACKS = {
-  Cyrl: `Georgia, "Palatino Linotype", "Times New Roman", "Noto Serif", "DejaVu Serif", serif`,
-  Jpan: `"Hiragino Mincho ProN", "Yu Mincho", YuMincho, "MS Mincho", "Noto Serif JP", "Noto Serif CJK JP", serif`,
-  Hans: `"Songti SC", STSong, SimSun, "Noto Serif SC", "Noto Serif CJK SC", serif`,
-  Hant: `"Songti TC", PMingLiU, MingLiU, "Noto Serif TC", "Noto Serif CJK TC", serif`,
-  Kore: `AppleMyungjo, Batang, "Nanum Myeongjo", "Noto Serif KR", "Noto Serif CJK KR", serif`,
-  Arab: `"Noto Naskh Arabic", "Geeza Pro", "Times New Roman", "Traditional Arabic", serif`,
-  Hebr: `"Noto Serif Hebrew", "Times New Roman", David, "Arial Hebrew", serif`,
-  Deva: `"Noto Serif Devanagari", "Kohinoor Devanagari", "Devanagari Sangam MN", Mangal, "Nirmala UI", serif`,
-  Thai: `"Noto Serif Thai", Thonburi, "Leelawadee UI", Tahoma, serif`,
-  Cher: `"Plantagenet Cherokee", Gadugi, "Noto Sans Cherokee", serif`
-};
-FONT_STACKS.Grek = FONT_STACKS.Cyrl;
-var DOCX_EAST_ASIA = { Jpan: "MS Mincho", Hans: "SimSun", Hant: "PMingLiU", Kore: "Batang" };
-var DOCX_COMPLEX = { Deva: "Mangal", Thai: "Tahoma" };
-function parseTag(language) {
-  const subtags = lookupTag(String(language ?? "").trim() || "en")[0].split("-");
-  const [primary, ...rest] = subtags;
-  const script = /^[a-z]{4}$/.test(rest[0] ?? "") ? `${rest[0][0].toUpperCase()}${rest[0].slice(1)}` : null;
-  const region = rest[script === null ? 0 : 1] ?? "";
-  return { primary, script, region: /^(?:[a-z]{2}|\d{3})$/.test(region) ? region : null, subtags };
-}
-function writtenTag(language) {
-  const { script, region, subtags } = parseTag(language);
-  const at = script === null ? 1 : 2;
-  return subtags.map((subtag, index) => {
-    if (index === 1 && script !== null) {
-      return script;
-    }
-    return index === at && region !== null ? subtag.toUpperCase() : subtag;
-  }).join("-");
-}
-function languageScript(language) {
-  const { primary, script, region } = parseTag(language);
-  if (script !== null) {
-    return script;
-  }
-  const pack = languagePack(language);
-  const own = pack.code.split("-")[0] === primary ? pack.script : null;
-  const found = own ?? SCRIPT_OF.get(primary) ?? pack.script ?? "Latn";
-  return found === "Hans" && TRADITIONAL_REGIONS.has(region) ? "Hant" : found;
-}
-function fontScript(script, language) {
-  if (script === "Hira" || script === "Kana") {
-    return "Jpan";
-  }
-  if (script === "Hang") {
-    return "Kore";
-  }
-  if (script === "Bopo") {
-    return "Hant";
-  }
-  if (script === "Hani") {
-    const { primary, region } = parseTag(language);
-    if (primary === "ja" || primary === "ko") {
-      return primary === "ja" ? "Jpan" : "Kore";
-    }
-    return SCRIPT_OF.get(primary) === "Hant" || TRADITIONAL_REGIONS.has(region) ? "Hant" : "Hans";
-  }
-  return script;
-}
-function supportsVertical(language) {
-  return VERTICAL_SCRIPTS.has(languageScript(language));
-}
-var SETTINGS = new Map;
-function typesetting(language = "en", writingMode = "horizontal") {
-  const key = `${language}\x00${writingMode}`;
-  if (!SETTINGS.has(key)) {
-    const script = languageScript(language);
-    const explicit = parseTag(language).script !== null;
-    const fonts = fontScript(script, language);
-    const body = FONT_STACKS[fonts] ?? LATIN_SERIF;
-    SETTINGS.set(key, Object.freeze({
-      script,
-      cased: CASED_SCRIPTS.has(script) && (explicit || languagePack(language).cased),
-      rtl: textDirection(language) === "rtl",
-      vertical: writingMode === "vertical" && VERTICAL_SCRIPTS.has(script),
-      fonts: Object.freeze({ body, heads: body === LATIN_SERIF ? "Georgia, serif" : body, latin: body === LATIN_SERIF }),
-      docx: Object.freeze({
-        eastAsia: DOCX_EAST_ASIA[fonts] ?? null,
-        cs: DOCX_COMPLEX[fonts] ?? null,
-        eastAsian: EAST_ASIAN_SCRIPTS.has(script),
-        complex: COMPLEX_SCRIPTS.has(script)
-      })
-    }));
-  }
-  return SETTINGS.get(key);
-}
-function validateWritingMode(data, errors) {
-  if (data["writing-mode"] !== "vertical") {
-    return;
-  }
-  const language = projectLanguage(data);
-  if (languageScript(language) === "Mong") {
-    errors.push(err("unsupported-writing-mode", `story.md writing-mode vertical is not supported yet for ${language}: traditional Mongolian runs its columns left to right (vertical-lr), so builds ignore it`, "story.md"));
-  } else if (!supportsVertical(language)) {
-    errors.push(err("unsupported-writing-mode", `story.md writing-mode vertical needs a language set in vertical columns, such as ja, zh, zh-Hant, or ko; ${language} is set horizontally, so builds ignore it`, "story.md"));
-  }
-}
-
 // src/html.js
 var TRIM_SIZES = new Map([
   ["5x8", { width: "5in", height: "8in", wordsPerPage: 230 }],
@@ -6351,8 +6380,7 @@ function noteHref(noteUrl, label, stamp, text) {
 }
 function reviewHtml(book, { stamp = "", noteUrl = "" } = {}) {
   const contents = book.contentsLabel ?? "Contents";
-  const type = typesetting(book.language, book.writingMode);
-  const rtl = type.rtl;
+  const rtl = textDirection(book.language) === "rtl";
   const toc = [];
   const sections = [];
   for (const part of book.parts) {
@@ -6385,7 +6413,7 @@ ${htmlRoot(book.language)}
 :root { --bg: #fdfcf8; --fg: #1d1b16; --muted: #6b665c; --rule: #ddd6c8; --accent: #7c3aed; }
 @media (prefers-color-scheme: dark) { :root { --bg: #16150f; --fg: #ece8dd; --muted: #a39e92; --rule: #3a372f; --accent: #b794f4; } }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--fg); font: 1.1rem/1.65 ${type.fonts.body}; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 1.1rem/1.65 Georgia, "Iowan Old Style", "Palatino Linotype", serif; }
 main { max-width: 38rem; margin: 0 auto; padding: 2rem 1rem 6rem; }
 header h1 { font-size: 2rem; line-height: 1.2; margin: 2rem 0 0.25rem; }
 .byline, .note { color: var(--muted); margin: 0 0 1rem; }
@@ -6411,7 +6439,7 @@ p:hover .note-link, p:target .note-link, .note-link:focus { opacity: 1; }
 [dir="rtl"] .anchor { left: auto; right: -5.5rem; text-align: left; }
 @media (max-width: 52rem) { [dir="rtl"] .anchor { text-align: right; } }
 ${noteUrl === "" ? "" : `[dir="rtl"] .note-link { left: auto; right: -5.5rem; text-align: left; }
-`}` : ""}${type.vertical ? REVIEW_VERTICAL : ""}</style>
+`}` : ""}</style>
 </head>
 <body>
 <main>
@@ -6431,23 +6459,6 @@ ${sections.join(`
 </html>
 `;
 }
-var REVIEW_VERTICAL = `html { writing-mode: vertical-rl; }
-main { max-width: none; max-height: 38rem; margin: auto 0; padding: 1rem 2rem 1rem 6rem; }
-header h1 { margin: 0; margin-block: 2rem 0.25rem; }
-.byline, .note, p { margin: 0; margin-block-end: 1rem; }
-.note { border-left: 0; padding-left: 0; border-top: 3px solid var(--accent); padding-top: 0.75rem; }
-nav ol { padding-left: 0; padding-top: 1.25rem; }
-section { border-top: 0; margin-top: 0; padding-top: 0; border-right: 1px solid var(--rule); margin-right: 3rem; padding-right: 1rem; }
-h2 { margin: 0; margin-block: 1rem 1.5rem; }
-.anchor, .note-link { position: static; display: block; width: auto; margin: 0; text-align: start; opacity: 0.6; }
-blockquote { margin: 0; margin-inline-start: 1.5rem; margin-block-end: 1rem; }
-.scene-break { margin: 0 2rem; }
-`;
-var PRINT_VERTICAL = `html { writing-mode: vertical-rl; }
-h1 { margin: 1in 0 0 0.5in; }
-blockquote { margin: 1.5em 0.8em; }
-p.scene-break { margin: 0 0.8em; }
-`;
 function printHtml(book, trimName = DEFAULT_TRIM) {
   const trim = TRIM_SIZES.get(trimName);
   if (!trim) {
@@ -6456,11 +6467,9 @@ function printHtml(book, trimName = DEFAULT_TRIM) {
   const pages = estimateBookPages(book, trimName);
   const inside = insideMargin(pages);
   const author = book.authors.join(" and ");
-  const type = typesetting(book.language, book.writingMode);
-  const rtl = type.rtl;
-  const recto = rtl || type.vertical ? "left" : "right";
-  const verso = rtl || type.vertical ? "right" : "left";
-  const heads = `${type.cased ? "italic " : ""}9pt ${type.fonts.heads}`;
+  const rtl = textDirection(book.language) === "rtl";
+  const recto = rtl ? "left" : "right";
+  const verso = rtl ? "right" : "left";
   const toc = [];
   const sections = [];
   for (const part of book.parts) {
@@ -6497,45 +6506,43 @@ ${htmlRoot(book.language)}
        npx pagedjs-cli book.print.html -o book.pdf
        weasyprint book.print.html book.pdf
        prince book.print.html -o book.pdf
-${type.vertical ? `     Vertical text needs an engine that sets it, such as Vivliostyle or Prince.
-` : ""}     Check the printer's current specs for margins, bleed, and fonts before upload. -->
+     Check the printer's current specs for margins, bleed, and fonts before upload. -->
 <style>
 @page { size: ${trim.width} ${trim.height}; margin: 0.75in 0.5in 0.75in ${inside}; }
 @page :left { margin-left: 0.5in; margin-right: ${inside}; }
 @page :${verso} {
-  @top-center { content: "${cssString(author || book.title)}"; font: ${heads}; } }
+  @top-center { content: "${cssString(author || book.title)}"; font: italic 9pt Georgia, serif; } }
 @page :${recto} {
-  @top-center { content: string(chapter-title, first-except); font: ${heads}; } }
-@page chapter { @bottom-center { content: counter(page); font: 9pt ${type.fonts.heads}; } }
+  @top-center { content: string(chapter-title, first-except); font: italic 9pt Georgia, serif; } }
+@page chapter { @bottom-center { content: counter(page); font: 9pt Georgia, serif; } }
 @page :blank { @top-center { content: none; } @bottom-center { content: none; } }
 @page front { @top-center { content: none; } @bottom-center { content: none; } }
-html { font: 11pt/1.4 ${type.fonts.body}; }
+html { font: 11pt/1.4 Georgia, "Iowan Old Style", "Palatino Linotype", serif; }
 body { margin: 0; hyphens: auto; }
 .title-page, .toc, section.front { page: front; break-before: ${recto}; }
 section.front.copyright-page { break-before: page; font-size: 9pt; }
 .title-page { text-align: center; padding-top: 30%; }
 .title-page h1 { font-size: 26pt; font-weight: normal; margin: 0 0 1em; }
-.title-page .author { font-size: 14pt${type.cased ? "; font-variant: small-caps; letter-spacing: 0.05em" : ""}; }
-.toc h1 { font-size: 14pt; font-weight: normal; text-align: center${type.cased ? "; font-variant: small-caps" : ""}; }
+.title-page .author { font-size: 14pt; font-variant: small-caps; letter-spacing: 0.05em; }
+.toc h1 { font-size: 14pt; font-weight: normal; text-align: center; font-variant: small-caps; }
 .toc ol { list-style: none; padding: 0; }
 .toc a { color: inherit; text-decoration: none; }
-.toc a::after { content: " " target-counter(attr(href), page); float: ${type.vertical ? "none" : rtl ? "left" : "right"}; }
+.toc a::after { content: " " target-counter(attr(href), page); float: ${rtl ? "left" : "right"}; }
 section.chapter, section.back { page: chapter; break-before: ${recto}; }
 section.chapter > h1, section.back > h1, section.back > .running-head { string-set: chapter-title content(text); }
 .running-head { height: 0; margin: 0; }
 h1 { font-size: 16pt; font-weight: normal; text-align: center; margin: 1.5in 0 0.5in; break-after: avoid; }
 p { margin: 0; text-indent: 1.5em; text-align: justify; widows: 2; orphans: 2; }
 p.first, p.scene-break + p { text-indent: 0; }
-${type.cased ? `/* A raised initial: floated drop caps render inconsistently across engines. */
+/* A raised initial: floated drop caps render inconsistently across engines. */
 section.chapter > h1 + p.first::first-letter { font-size: 2.4em; line-height: 1; }
-` : ""}p.scene-break { text-align: center; text-indent: 0; margin: 0.8em 0; break-after: avoid; }
+p.scene-break { text-align: center; text-indent: 0; margin: 0.8em 0; break-after: avoid; }
 blockquote { margin: 0.8em 1.5em; }
 blockquote p { text-indent: 0; text-align: start; }
 section.front p, section.back p { text-indent: 0; margin-bottom: 0.6em; text-align: ${rtl ? "right" : "left"}; }
 section.front:not(.copyright-page) p { text-align: center; }
 @media screen { body { max-width: ${trim.width}; margin: 2rem auto; padding: 0 1rem; } section { margin-top: 3rem; } }
-${type.vertical ? `${PRINT_VERTICAL}@media screen { body { max-width: none; max-height: ${trim.height}; margin: auto 2rem; padding: 1rem 0; } section { margin-top: 0; margin-right: 3rem; } }
-` : ""}</style>
+</style>
 </head>
 <body>
 <section class="title-page"><h1>${escapeHtml(book.title)}</h1>${author === "" ? "" : `<p class="author">${escapeHtml(author)}</p>`}</section>
@@ -6552,7 +6559,7 @@ ${afterToc.join(`
 `;
 }
 function htmlRoot(language) {
-  const dir = typesetting(language).rtl ? ` dir="rtl"` : "";
+  const dir = textDirection(language) === "rtl" ? ` dir="rtl"` : "";
   return `<html lang="${escapeHtml(language)}"${dir}>`;
 }
 var OPENING_SINK_PAGES = 0.3;
@@ -8277,23 +8284,20 @@ function epubModifiedTimestamp() {
 function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
   const meta = manuscript.meta ?? publishingMeta({});
   const lang = xmlEscape(meta.language);
-  const type = typesetting(meta.language, meta.writingMode);
-  const rtl = type.rtl;
+  const rtl = textDirection(meta.language) === "rtl";
   const root = `xml:lang="${lang}" lang="${lang}"${rtl ? ` dir="rtl"` : ""}`;
-  const stylesheet = epubStylesheet(type);
-  const head = stylesheet === "" ? "" : `<link rel="stylesheet" type="text/css" href="style.css"/>`;
   const documents = [];
   const pushMatter = (placement) => (entry) => documents.push({
     id: `${placement}-${entry.id}`,
     label: entry.title,
-    content: matterXhtml(entry, placement, root, head)
+    content: matterXhtml(entry, placement, root)
   });
   manuscript.front.forEach(pushMatter("front"));
   for (const chapter of manuscript.chapters) {
     documents.push({
       id: `chapter-${String(chapter.number).padStart(2, "0")}`,
       label: chapter.heading,
-      content: chapterXhtml(chapter, root, head),
+      content: chapterXhtml(chapter, root),
       bodymatter: true
     });
   }
@@ -8305,7 +8309,7 @@ function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
   if (manuscript.cover) {
     const href = `images/cover.${manuscript.cover.extension}`;
     const alt = meta.coverAlt === "" ? `Cover of ${manuscript.title}` : meta.coverAlt;
-    coverEntries.push({ name: `OEBPS/${href}`, content: fs6.readFileSync(manuscript.cover.filePath) }, { name: "OEBPS/cover.xhtml", content: `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(manuscript.title)}</title>${head}</head><body epub:type="cover"><img src="${href}" alt="${xmlEscape(alt)}"/></body></html>` });
+    coverEntries.push({ name: `OEBPS/${href}`, content: fs6.readFileSync(manuscript.cover.filePath) }, { name: "OEBPS/cover.xhtml", content: `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(manuscript.title)}</title></head><body epub:type="cover"><img src="${href}" alt="${xmlEscape(alt)}"/></body></html>` });
     coverItems.push(`<item id="cover-image" href="${href}" media-type="${manuscript.cover.mediaType}" properties="cover-image"/>`, `<item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>`);
     coverMeta.push(`<meta name="cover" content="cover-image"/>`);
     coverSpine.push(`<itemref idref="cover"/>`);
@@ -8326,30 +8330,17 @@ function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
   writeZip(outFile, [
     { name: "mimetype", content: "application/epub+zip", stored: true },
     { name: "META-INF/container.xml", content: `<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>` },
-    { name: "OEBPS/content.opf", content: `<?xml version="1.0" encoding="UTF-8"?><package version="3.0" unique-identifier="book-id" xmlns="http://www.idpf.org/2007/opf"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book-id">${identifier}</dc:identifier><dc:title>${xmlEscape(manuscript.title)}</dc:title>${creator}<dc:language>${lang}</dc:language>${optional}<meta property="dcterms:modified">${modified}</meta>${accessibility}${coverMeta.join("")}${type.vertical ? `<meta name="primary-writing-mode" content="vertical-rl"/>` : ""}</metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>${stylesheet === "" ? "" : `<item id="style" href="style.css" media-type="text/css"/>`}${coverItems.join("")}${items.join("")}</manifest><spine${rtl || type.vertical ? ` page-progression-direction="rtl"` : ""}>${coverSpine.join("")}${spine.join("")}</spine></package>` },
-    { name: "OEBPS/nav.xhtml", content: navXhtml(manuscript.title, documents, root, meta.contentsLabel, head) },
-    ...stylesheet === "" ? [] : [{ name: "OEBPS/style.css", content: stylesheet }],
+    { name: "OEBPS/content.opf", content: `<?xml version="1.0" encoding="UTF-8"?><package version="3.0" unique-identifier="book-id" xmlns="http://www.idpf.org/2007/opf"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book-id">${identifier}</dc:identifier><dc:title>${xmlEscape(manuscript.title)}</dc:title>${creator}<dc:language>${lang}</dc:language>${optional}<meta property="dcterms:modified">${modified}</meta>${accessibility}${coverMeta.join("")}</metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>${coverItems.join("")}${items.join("")}</manifest><spine${rtl ? ` page-progression-direction="rtl"` : ""}>${coverSpine.join("")}${spine.join("")}</spine></package>` },
+    { name: "OEBPS/nav.xhtml", content: navXhtml(manuscript.title, documents, root, meta.contentsLabel) },
     ...coverEntries,
     ...documents.map((doc) => ({ name: `OEBPS/${doc.id}.xhtml`, content: doc.content }))
   ], writeOptions);
 }
-function epubStylesheet(type) {
-  const rules = [];
-  if (type.vertical) {
-    rules.push("html { -epub-writing-mode: vertical-rl; -webkit-writing-mode: vertical-rl; writing-mode: vertical-rl; }");
-  }
-  if (!type.fonts.latin) {
-    rules.push(`body { font-family: ${type.fonts.body}; }`);
-  }
-  return rules.length === 0 ? "" : `${rules.join(`
-`)}
-`;
-}
-function navXhtml(title, documents, root, contentsLabel = "Contents", head = "") {
+function navXhtml(title, documents, root, contentsLabel = "Contents") {
   const links = documents.map((doc) => `<li><a href="${doc.id}.xhtml">${xmlEscape(doc.label)}</a></li>`);
   const start = documents.find((doc) => doc.bodymatter);
   const landmarks = start ? `<nav epub:type="landmarks" hidden="hidden"><ol><li><a epub:type="bodymatter" href="${start.id}.xhtml">Start of Content</a></li></ol></nav>` : "";
-  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(title)}</title>${head}</head><body><nav epub:type="toc" id="toc"><h1>${xmlEscape(contentsLabel)}</h1><ol>${links.join("")}</ol></nav>${landmarks}</body></html>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(title)}</title></head><body><nav epub:type="toc" id="toc"><h1>${xmlEscape(contentsLabel)}</h1><ol>${links.join("")}</ol></nav>${landmarks}</body></html>`;
 }
 function epubAccessibilityMeta(hasCover) {
   const features = ["tableOfContents", "readingOrder", "structuralNavigation", ...hasCover ? ["alternativeText"] : []];
@@ -8369,18 +8360,18 @@ function xhtmlParagraphs(body) {
     markup: paragraph.sceneBreak ? "<p>* * *</p>" : `<p>${inlineRuns(paragraph.text).map((run) => runMarkup(run, xmlEscape, "<br/>")).join("")}</p>`
   }))).join("");
 }
-function xhtmlDocument(title, root, head, bodyType, content) {
-  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(title)}</title>${head}</head><body epub:type="${bodyType}">${content}</body></html>`;
+function xhtmlDocument(title, root, bodyType, content) {
+  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(title)}</title></head><body epub:type="${bodyType}">${content}</body></html>`;
 }
-function chapterXhtml(chapter, root, head) {
+function chapterXhtml(chapter, root) {
   const heading = chapter.heading;
   const title = String(chapter.title ?? "").trim() || heading;
-  return xhtmlDocument(title, root, head, "bodymatter chapter", `<h1>${xmlEscape(heading)}</h1>${xhtmlParagraphs(chapter.body)}`);
+  return xhtmlDocument(title, root, "bodymatter chapter", `<h1>${xmlEscape(heading)}</h1>${xhtmlParagraphs(chapter.body)}`);
 }
-function matterXhtml(entry, placement, root, head) {
+function matterXhtml(entry, placement, root) {
   const heading = entry.heading ? `<h1>${xmlEscape(entry.title)}</h1>` : "";
   const bodyType = entry.copyright ? `${placement}matter copyright-page` : `${placement}matter`;
-  return xhtmlDocument(entry.title, root, head, bodyType, `${heading}${xhtmlParagraphs(entry.body)}`);
+  return xhtmlDocument(entry.title, root, bodyType, `${heading}${xhtmlParagraphs(entry.body)}`);
 }
 function htmlBook(manuscript) {
   const paragraphs = (body) => markdownParagraphs(body).map((paragraph) => {
@@ -8421,21 +8412,19 @@ function htmlBook(manuscript) {
     title: manuscript.title,
     authors: manuscript.meta.authors,
     language: manuscript.meta.language,
-    writingMode: manuscript.meta.writingMode,
     contentsLabel: manuscript.meta.contentsLabel,
     words: manuscript.chapters.reduce((sum, chapter) => sum + wordCount(chapter.body), 0),
     parts
   };
 }
 function writeDocx(outFile, manuscript, writeOptions = {}) {
-  const script = docxScript(manuscript.meta);
-  const bodyParts = [paragraphXml(script, manuscript.title, "Title")];
+  const bodyParts = [paragraphXml(manuscript.title, "Title")];
   const pushSection = (heading, body) => {
     if (heading !== null) {
-      bodyParts.push(paragraphXml(script, heading, "Heading1"));
+      bodyParts.push(paragraphXml(heading, "Heading1"));
     }
     for (const paragraph of markdownParagraphs(body)) {
-      bodyParts.push(paragraph.sceneBreak ? paragraphXml(script, "* * *", "SceneBreak") : paragraphXml(script, paragraph.text, paragraph.quote ? "Quote" : "", inlineRuns(paragraph.text)));
+      bodyParts.push(paragraph.sceneBreak ? paragraphXml("* * *", "SceneBreak") : paragraphXml(paragraph.text, paragraph.quote ? "Quote" : "", inlineRuns(paragraph.text)));
     }
   };
   const pushMatter = (entry) => pushSection(entry.heading ? entry.title : null, entry.body);
@@ -8444,91 +8433,71 @@ function writeDocx(outFile, manuscript, writeOptions = {}) {
     pushSection(chapter.heading, chapter.body);
   }
   manuscript.back.forEach(pushMatter);
-  writeZip(outFile, docxPackageEntries(script, bodyParts.join("")), writeOptions);
+  writeZip(outFile, docxPackageEntries(bodyParts.join("")), writeOptions);
 }
-function docxScript(meta) {
-  const language = meta?.language ?? "en";
-  const type = typesetting(language, meta?.writingMode);
-  const { eastAsia, cs, eastAsian, complex } = type.docx;
-  const written = writtenTag(language);
-  const tag = xmlEscape(written);
-  const font = (name) => `"${name ?? "Times New Roman"}"`;
-  return {
-    lang: written === "en" || written === "und" ? "" : `<w:lang w:val="${tag}"${eastAsian ? ` w:eastAsia="${tag}"` : ""}${complex ? ` w:bidi="${tag}"` : ""}/>`,
-    bidi: type.rtl ? "<w:bidi/>" : "",
-    rtl: type.rtl ? "<w:rtl/>" : "",
-    bold: complex ? "<w:b/><w:bCs/>" : "<w:b/>",
-    italic: complex ? "<w:i/><w:iCs/>" : "<w:i/>",
-    sizeCs: complex,
-    fonts: `<w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:eastAsia=${font(eastAsia)} w:cs=${font(cs)}${eastAsian ? ` w:hint="eastAsia"` : ""}/>`,
-    section: type.vertical ? `<w:sectPr><w:textDirection w:val="tbRl"/></w:sectPr>` : type.rtl ? `<w:sectPr><w:bidi/></w:sectPr>` : "<w:sectPr/>"
-  };
-}
-function docxPackageEntries(script, body) {
+function docxPackageEntries(body) {
   return [
     { name: "[Content_Types].xml", content: `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>` },
     { name: "_rels/.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>` },
     { name: "word/_rels/document.xml.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
-    { name: "word/styles.xml", content: docxStyles(script) },
-    { name: "word/document.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}${script.section}</w:body></w:document>` }
+    { name: "word/styles.xml", content: DOCX_STYLES },
+    { name: "word/document.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr/></w:body></w:document>` }
   ];
 }
-function docxStyles(script) {
-  return `<?xml version="1.0" encoding="UTF-8"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` + `<w:docDefaults><w:rPrDefault><w:rPr>${script.fonts}<w:sz w:val="24"/><w:szCs w:val="24"/>${script.lang}</w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="360" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>` + `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/><w:pPr><w:ind w:firstLine="720"/></w:pPr></w:style>` + `<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:rPr>${script.bold}<w:sz w:val="56"/>${script.sizeCs ? `<w:szCs w:val="56"/>` : ""}</w:rPr></w:style>` + `<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="480" w:after="240"/><w:ind w:firstLine="0"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr>${script.bold}<w:sz w:val="32"/>${script.sizeCs ? `<w:szCs w:val="32"/>` : ""}</w:rPr></w:style>` + `<w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:before="120" w:after="120"/><w:ind w:left="720" w:right="720" w:firstLine="0"/></w:pPr></w:style>` + `<w:style w:type="paragraph" w:customStyle="1" w:styleId="SceneBreak"><w:name w:val="Scene Break"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:before="240" w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr></w:style>` + `</w:styles>`;
-}
-var SHUNN_FONT = `<w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/>`;
-var SHUNN_SIZE = `<w:sz w:val="24"/>`;
+var DOCX_STYLES = `<?xml version="1.0" encoding="UTF-8"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` + `<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:eastAsia="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="360" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>` + `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/><w:pPr><w:ind w:firstLine="720"/></w:pPr></w:style>` + `<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:rPr><w:b/><w:sz w:val="56"/></w:rPr></w:style>` + `<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="480" w:after="240"/><w:ind w:firstLine="0"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style>` + `<w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:before="120" w:after="120"/><w:ind w:left="720" w:right="720" w:firstLine="0"/></w:pPr></w:style>` + `<w:style w:type="paragraph" w:customStyle="1" w:styleId="SceneBreak"><w:name w:val="Scene Break"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:before="240" w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr></w:style>` + `</w:styles>`;
+var SHUNN_RUN_FONTS = `<w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/><w:sz w:val="24"/>`;
 var SHUNN_PARAGRAPH_SPACING = `<w:spacing w:line="480" w:lineRule="auto"/>`;
-function shunnRunXml(script, text, { strong = false, em = false } = {}) {
-  return `<w:r><w:rPr>${SHUNN_FONT}${strong ? script.bold : ""}${em ? script.italic : ""}${SHUNN_SIZE}${script.rtl}</w:rPr>${docxTextXml(text)}</w:r>`;
+function shunnRunXml(text, decoration) {
+  return `<w:r><w:rPr>${SHUNN_RUN_FONTS}${decoration}</w:rPr>${docxTextXml(text)}</w:r>`;
 }
-function shunnParagraphXml(script, runXml, centered, quote = false) {
+function shunnTextRunXml(run) {
+  return shunnRunXml(run.text, `${run.strong ? "<w:b/>" : ""}${run.em ? "<w:i/>" : ""}`);
+}
+function shunnParagraphXml(runXml, centered, quote = false) {
   const layout = centered ? `<w:ind w:firstLine="0"/><w:jc w:val="center"/>` : quote ? `<w:ind w:left="720" w:right="720" w:firstLine="0"/>` : `<w:ind w:firstLine="720"/>`;
-  return `<w:p><w:pPr>${script.bidi}${SHUNN_PARAGRAPH_SPACING}${layout}</w:pPr>${runXml}</w:p>`;
+  return `<w:p><w:pPr>${SHUNN_PARAGRAPH_SPACING}${layout}</w:pPr>${runXml}</w:p>`;
 }
-function shunnChapterHeadingXml(script, text) {
-  return `<w:p><w:pPr>${script.bidi}${SHUNN_PARAGRAPH_SPACING}<w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:r>${script.rtl === "" ? "" : `<w:rPr>${script.rtl}</w:rPr>`}<w:br w:type="page"/></w:r>${shunnRunXml(script, text, { strong: true })}</w:p>`;
+function shunnChapterHeadingXml(text) {
+  return `<w:p><w:pPr>${SHUNN_PARAGRAPH_SPACING}<w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:r><w:br w:type="page"/></w:r>${shunnRunXml(text, "<w:b/>")}</w:p>`;
 }
 function shunnWordCount(words, pack = languagePack()) {
   const step = words < 1000 ? 1 : words < 40000 ? 100 : 1000;
   const rounded = Math.round(words / step) * step;
   return formatNumber(rounded, pack);
 }
-function shunnTitlePageXml(script, meta) {
-  const line = (text, decoration) => shunnParagraphXml(script, shunnRunXml(script, text, decoration), true);
-  const lines = [line(meta.title, { strong: true })];
+function shunnTitlePageXml(meta) {
+  const lines = [shunnParagraphXml(shunnRunXml(meta.title, "<w:b/>"), true)];
   if (meta.author) {
-    lines.push(line("by"), line(meta.author));
+    lines.push(shunnParagraphXml(shunnRunXml("by", ""), true), shunnParagraphXml(shunnRunXml(meta.author, ""), true));
   }
-  lines.push(line(`Approximately ${shunnWordCount(meta.words, meta.pack)} words`));
+  lines.push(shunnParagraphXml(shunnRunXml(`Approximately ${shunnWordCount(meta.words, meta.pack)} words`, ""), true));
   for (const contactLine of meta.contact) {
-    lines.push(line(String(contactLine)));
+    lines.push(shunnParagraphXml(shunnRunXml(String(contactLine), ""), true));
   }
   return lines;
 }
 function writeShunnDocx(outFile, manuscript, meta, writeOptions = {}) {
-  const script = docxScript(manuscript.meta);
-  const paragraphs = [...shunnTitlePageXml(script, meta)];
+  const paragraphs = [...shunnTitlePageXml(meta)];
   const sceneBreak = meta.shortForm ? "#" : "* * *";
-  const hash = shunnParagraphXml(script, shunnRunXml(script, "#"), true);
+  const hash = shunnParagraphXml(shunnRunXml("#", ""), true);
   if (meta.shortForm) {
-    paragraphs.push(shunnParagraphXml(script, "", true));
+    paragraphs.push(shunnParagraphXml("", true));
   }
   let sections = 0;
   for (const chapter of manuscript.chapters) {
     const body = markdownParagraphs(chapter.body);
     if (!meta.shortForm) {
-      paragraphs.push(shunnChapterHeadingXml(script, chapter.heading));
+      paragraphs.push(shunnChapterHeadingXml(chapter.heading));
     } else if (body.length === 0) {
       continue;
     } else if (sections++ > 0) {
       paragraphs.push(hash);
     }
     for (const paragraph of body) {
-      paragraphs.push(paragraph.sceneBreak ? shunnParagraphXml(script, shunnRunXml(script, sceneBreak), true) : shunnParagraphXml(script, inlineRuns(paragraph.text).map((run) => shunnRunXml(script, run.text, run)).join(""), false, paragraph.quote));
+      paragraphs.push(paragraph.sceneBreak ? shunnParagraphXml(shunnRunXml(sceneBreak, ""), true) : shunnParagraphXml(inlineRuns(paragraph.text).map(shunnTextRunXml).join(""), false, paragraph.quote));
     }
   }
-  writeZip(outFile, docxPackageEntries(script, paragraphs.join("")), writeOptions);
+  writeZip(outFile, docxPackageEntries(paragraphs.join("")), writeOptions);
 }
 function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {}) {
   const lines = [meta.title];
@@ -8570,11 +8539,10 @@ ${prefix}`)}`, "");
 function docxTextXml(text) {
   return String(text).split(LINE_BREAK).map((part) => `<w:t xml:space="preserve">${xmlEscape(part)}</w:t>`).join("<w:br/>");
 }
-function paragraphXml(script, text, style = "", runs = [{ text }]) {
-  const properties = `${style ? `<w:pStyle w:val="${style}"/>` : ""}${script.bidi}`;
-  const styleXml = properties === "" ? "" : `<w:pPr>${properties}</w:pPr>`;
+function paragraphXml(text, style = "", runs = [{ text }]) {
+  const styleXml = style ? `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>` : "";
   const runXml = runs.map((run) => {
-    const decoration = `${run.strong ? script.bold : ""}${run.em ? script.italic : ""}${script.rtl}`;
+    const decoration = `${run.strong ? "<w:b/>" : ""}${run.em ? "<w:i/>" : ""}`;
     const runStyle = decoration === "" ? "" : `<w:rPr>${decoration}</w:rPr>`;
     return `<w:r>${runStyle}${docxTextXml(run.text)}</w:r>`;
   });
@@ -14456,11 +14424,6 @@ function validateStoryFrontmatter(project, errors) {
     requireScalar(data, "draft-mode", "story.md", errors);
     validateEnum(data, "draft-mode", DRAFT_MODES, "story.md", errors);
   }
-  if (data["writing-mode"] !== undefined) {
-    requireScalar(data, "writing-mode", "story.md", errors);
-    validateEnum(data, "writing-mode", WRITING_MODES, "story.md", errors);
-    validateWritingMode(data, errors);
-  }
   validateCover(project, errors);
   validatePasses(data, "story.md", errors);
   validateCliConfig(data, errors);
@@ -15357,12 +15320,12 @@ var GENERATED_MARKER = /<!--\s*Generated by story (?:export|build)\.\s*-->/g;
 var CANDIDATE_THRESHOLD = 3;
 var CANDIDATE_LIMIT = 25;
 var NEVER3 = "(?!)";
-var RULES2 = new WeakMap;
+var RULES3 = new WeakMap;
 function importRules(pack) {
-  if (!RULES2.has(pack)) {
-    RULES2.set(pack, buildImportRules(pack));
+  if (!RULES3.has(pack)) {
+    RULES3.set(pack, buildImportRules(pack));
   }
-  return RULES2.get(pack);
+  return RULES3.get(pack);
 }
 function buildImportRules(pack) {
   const either = (name) => (checkList(pack, name) ?? []).map(escapeRegExp).join("|") || NEVER3;

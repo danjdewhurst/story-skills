@@ -330,9 +330,10 @@ describe("analysis without a language's word lists", () => {
     expect(report.skipped.map((entry) => entry.check)).toEqual(["speech-tags", "contractions", "signature-words"]);
     const mara = report.profiles.find((entry) => entry.id === "mara-quill");
     const tom = report.profiles.find((entry) => entry.id === "tom-reed");
-    // "she said" is not a tag without speech verbs, and Tom's dash line has
-    // no tag to stop at, so it runs to the paragraph end.
-    expect(mara).toBeUndefined();
+    // Mara's guillemets are speech in French, "she said" is not a tag without
+    // speech verbs, and Tom's dash line has no tag to stop at, so it runs to
+    // the paragraph end.
+    expect(mara.lines).toBe(5);
     expect(tom.lines).toBe(5);
     expect(tom.contractions).toBeNull();
     expect(tom.signature).toEqual([]);
