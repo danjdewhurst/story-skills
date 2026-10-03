@@ -399,7 +399,7 @@ Write the next chapter.
 
 The [`chapter-writing`](../skills/chapter-writing/SKILL.md) skill works outline-first:
 
-1. **Gather context.** It runs `story context` for the chapter and drafts from that packed context. If context leaves items out to fit the budget, it reruns with a larger `--budget` or takes their filtered text from `--json`, rather than opening the listed files, which also hold later chapters. Apart from the `language` field in `story.md`, it opens no other project file for background, including `continuity/state.md`, the timeline, the registries, and the active arcs.
+1. **Gather context.** It runs `story context` for the chapter and drafts from that packed context. If context leaves items out to fit the budget, it reruns with a larger `--budget` or takes their filtered text from `--json`, rather than opening the listed files, which also hold later chapters. It opens no other project file for background, including `story.md` (the packed story essentials carry the book's language), `continuity/state.md`, the timeline, the registries, and the active arcs.
 2. **Agree the scope.** It asks what the chapter covers, whose POV it uses, and where it is set.
 3. **Outline.** It proposes a beat-by-beat outline, including what each scene's outcome should be and how the chapter ends, and revises it until you approve it.
 4. **Draft.** It writes the prose in the POV and tense from `story.md`, using the character's voice notes and the location details.

@@ -202,9 +202,9 @@ jobs:
             1. Run `story next ${{ env.STORY_DIR }}`. Do not open
                continuity/state.md, the registries, the timeline, active arc
                files, or other project files for background. The
-               chapter-writing skill drafts from `story context`. The one
-               extra read is the `language` field in story.md frontmatter,
-               which context does not print. If context leaves items out to
+               chapter-writing skill drafts from `story context`, whose story
+               essentials carry the book's language, so do not open story.md
+               either. If context leaves items out to
                fit the budget, rerun it with a larger --budget instead of
                opening the files it lists.
             2. If the next actions report any P0 maintenance issues, fix those

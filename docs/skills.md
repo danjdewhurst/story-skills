@@ -452,7 +452,7 @@ It never fixes an audit finding by adding a speech or narration that explains th
 
 When `story.md` links other books, reveals the series depends on get a stable `fact` id (see [Series](series.md)). Revising or continuity-checking an existing chapter belongs to [revision-continuity](#revision-continuity); line edits, copyedits, and proofing belong to [line-editing](#line-editing).
 
-**Reads.** `story context` for the chapter or scene, which packs the style rules, the POV character's knowledge and state at that point, cards for the cast and locations, open threads, and recent scene summaries, with nothing from later chapters. If context leaves items out to fit the budget, it reruns with a larger `--budget` or takes their filtered text from `--json`, rather than opening the listed files, which also hold later chapters. Apart from the `language` field in `story.md`, it opens no other project file for background (the packed context does not print `language`), so it does not open the synopsis, the notes, `continuity/state.md`, the timeline, the registries, the previous chapter, or active arc files.
+**Reads.** `story context` for the chapter or scene, which packs the style rules, the POV character's knowledge and state at that point, cards for the cast and locations, open threads, and recent scene summaries, with nothing from later chapters. If context leaves items out to fit the budget, it reruns with a larger `--budget` or takes their filtered text from `--json`, rather than opening the listed files, which also hold later chapters. It opens no project file for background (the packed story essentials carry the book's `language`), so it does not open `story.md`, the synopsis, the notes, `continuity/state.md`, the timeline, the registries, the previous chapter, or active arc files.
 
 **Prose pass and companion skill.** The [line-editing](#line-editing) skill ships with Story Skills and owns the prose-quality pass; run it on a drafted chapter before marking it `revised`. The separate [`better-writing`](https://github.com/forjd/better-writing) skill is an optional complement: before drafting, chapter-writing checks for it and uses it for voice calibration and a final pass. If it is missing, the skill offers you the link and asks before any install, then continues with its own `writing-guidelines.md`.
 
@@ -723,7 +723,7 @@ story compare . --against ../the-tide-room-draft-1
 
 feedback-triage treats persona agreement as one signal, not convergence, confirms each note in the text before planning a fix, and reads a simulated `ready` as ready for human readers, nothing more. The sensitivity persona only flags passages for a paid human reader and never clears a portrayal.
 
-**Reads.** `style-sheet.md`, the chapters in range, `story context` output (which leaves out the synopsis), and only the `language` field of `story.md`, so every persona reads as a reader of the book's language would.
+**Reads.** `style-sheet.md`, the chapters in range, and `story context` output (which leaves out the synopsis but carries the book's `language`), so every persona reads as a reader of the book's language would.
 
 **Writes.** `feedback/round-N/{persona}.md`.
 

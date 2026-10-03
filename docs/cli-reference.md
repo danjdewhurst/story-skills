@@ -880,7 +880,7 @@ story context chapter-02 --budget 200
 ```text
 # Drafting context: chapter-02
 
-Chapter 2: The Millpond. About 187 of 200 tokens
+Chapter 2: The Millpond. About 197 of 200 tokens
 (estimated at 4 tokens per 3 words in spaced text; 2 per 3 Han or katakana characters, 1 per 2 hiragana, and 1 per Thai, Lao, Khmer, or Burmese word). Nothing from later chapters is included.
 
 ## Target

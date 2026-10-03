@@ -458,7 +458,7 @@ describe("story context on the examples", () => {
     const root = path.join(EXAMPLES, "kirimi-eki-no-wasuremono");
     const context = contextOf(root, "chapter-02");
     const text = textOf(context);
-    expect(context.estimatedTokens).toBe(881);
+    expect(context.estimatedTokens).toBe(905);
     expect(text).toContain("Chapter 2:");
     expect(text).toContain("(estimated at 4 tokens per 3 words in spaced text; 2 per 3 Han or katakana characters, 1 per 2 hiragana, and 1 per Thai, Lao, Khmer, or Burmese word). Nothing from later chapters is included.");
     const tight = contextOf(root, "chapter-02", { budget: "297" });
