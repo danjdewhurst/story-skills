@@ -10108,7 +10108,7 @@ ${body}`)));
   sections.push({ id: "essentials", title: "Story essentials", items: essentials });
   const povItems = [];
   if (pov !== "") {
-    const known = [];
+    const known = { reader: [], character: [] };
     for (const entry of project.continuity ? asList(project.continuity.data["knowledge-state"]) : []) {
       if (!isMapping(entry) || idText(entry.character) !== pov || String(entry.knows ?? "").trim() === "") {
         continue;
@@ -10127,10 +10127,14 @@ ${body}`)));
         scene = String(recorded.scene);
       }
       const mark = formatKnowledgeMark(learnedIn, audience, { atChapterId: target.chapter.id, scene });
-      known.push(`- ${entry.knows} (${mark})`);
+      known[audience].push(`- ${entry.knows} (${mark})`);
     }
-    if (known.length > 0) {
-      povItems.push(item(`knowledge:${pov}`, `What ${nameOf(pov)} knows`, statePath, lines(`### What ${nameOf(pov)} knows`, ...known)));
+    if (known.reader.length > 0) {
+      povItems.push(item(`knowledge:${pov}`, `What ${nameOf(pov)} knows`, statePath, lines(`### What ${nameOf(pov)} knows`, ...known.reader)));
+    }
+    if (known.character.length > 0) {
+      const heading = `What ${nameOf(pov)} knows that the reader has not seen`;
+      povItems.push(item(`hidden-knowledge:${pov}`, heading, statePath, lines(`### ${heading} (do not reveal)`, ...known.character)));
     }
     const state = [];
     const stateSources = new Set;

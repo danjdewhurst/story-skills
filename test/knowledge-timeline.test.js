@@ -121,6 +121,37 @@ describe("dual-timeline knowledge (#341)", () => {
     expect(envelope.data.entries.map((entry) => entry.audience)).toEqual(["reader", "character", "reader"]);
   });
 
+  test("context keeps hidden facts in their own item, packed after what the reader has seen", () => {
+    const { root } = dualTimelineProject();
+    const statePath = path.join(root, "continuity", "state.md");
+    fs.writeFileSync(statePath, fs.readFileSync(statePath, "utf8").replace(
+      "    knows: the mill burned\n",
+      "    knows: \"the mill burned\\nand Ada lit the match herself, in the dry spring, with the doors barred\"\n"
+    ), "utf8");
+
+    const full = draftingContext(root, "chapter-01");
+    const items = full.sections.flatMap((entry) => entry.items);
+    const seen = items.find((candidate) => candidate.id === "knowledge:ada");
+    const hidden = items.find((candidate) => candidate.id === "hidden-knowledge:ada");
+    expect(seen.text).not.toContain("the mill burned");
+    expect(seen.text).not.toContain("character-knowledge");
+    // The whole multiline fact sits under one heading that can be removed as a unit.
+    expect(hidden.text).toBe(
+      "### What Ada (ada) knows that the reader has not seen (do not reveal)\n" +
+      `- the mill burned\nand Ada lit the match herself, in the dry spring, with the doors barred (${MILL})`
+    );
+    expect(items.indexOf(hidden)).toBe(items.indexOf(seen) + 1);
+
+    // A budget that fits everything up to the seen facts but not the hidden
+    // item keeps the seen facts.
+    const before = items.slice(0, items.indexOf(seen) + 1).reduce((sum, candidate) => sum + candidate.tokens, 0);
+    const tight = draftingContext(root, "chapter-01", { budget: before + hidden.tokens - 1 });
+    const text = formatContext(tight);
+    expect(text).toContain("- the city is gone (reader-knowledge, learned in this chapter)");
+    expect(text).not.toContain("the mill burned");
+    expect(tight.omitted.map((entry) => entry.id)).toContain("hidden-knowledge:ada");
+  });
+
   test("a death in the earlier story-time chapter still applies to the later-dated prologue", () => {
     const { root } = dualTimelineProject();
     writeMarkdown(path.join(root, "characters", "ada.md"), `
