@@ -8899,7 +8899,7 @@ function checkQuestions(project, context, errors, warnings) {
     if (question.status === "open" && question.resolved) {
       errors.push(err("question-open-but-resolved", `${label} records resolved chapter ${question.resolved} but status is still open`, label));
     }
-    if (question.status === "open" && !question.resolved) {
+    if (question.status === "open" && !question.resolved && context.draftedChapters.has(question.introduced)) {
       const unanswered = unansweredQuestionWarning(label, question.introduced, context.chapterNumbers.get(question.introduced), context);
       if (unanswered) {
         warnings.push(warn("question-unanswered", unanswered, label));
