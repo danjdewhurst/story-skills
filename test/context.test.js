@@ -197,13 +197,142 @@ describe("story context", () => {
     expect(first).toContain("### Edran Vale\n- Id: edran-vale\n- Role: minor\n- Status: deceased (died in chapter-01)");
     expect(first).not.toContain("SPOILER");
 
+    expect(first).not.toContain("The ledger names the buyer");
+    expect(first).not.toContain("possibly in a later scene");
+
     const second = textOf(contextOf(root, "chapter-02-scene-02"));
-    // Dated only by chapter, so it may come later in the chapter.
-    expect(second).toContain("- The ledger names the buyer (learned in this chapter, possibly in a later scene)");
+    // Learned in this chapter, and no earlier scene records it.
+    expect(second).not.toContain("The ledger names the buyer");
+    expect(second).not.toContain("possibly in a later scene");
+    expect(second).toContain("- The letter is forged (learned in chapter-01)");
     expect(second).toContain("- **chapter-02 scene 1: chapter-02 scene 1** (POV mara-finn, outcome yes-but)\n  Mara opens the letter.");
     // Its own purpose is the thing being drafted.
     expect(second).toContain("Scene purpose:\n\nSPOILER-SCENE-2-2");
     expect(second).not.toContain("SPOILER-LATER-SCENE");
+  });
+
+  test("a scene includes a same-chapter fact only when an earlier scene records it", () => {
+    const { root } = contextProject();
+    const statePath = path.join(root, "continuity", "state.md");
+    fs.writeFileSync(statePath, fs.readFileSync(statePath, "utf8").replace(
+      "    knows: The ledger names the buyer\n    learned-in: chapter-02",
+      `    knows: The ledger names the buyer
+    fact: ledger-buyer
+    learned-in: chapter-02
+  - character: mara-finn
+    knows: The tide chart is wrong.
+    learned-in: chapter-02
+  - character: mara-finn
+    knows: The door is locked
+    fact: door-locked
+    learned-in: chapter-02
+  - character: mara-finn
+    knows: The window is open
+    fact: window-open
+    learned-in: chapter-02
+  - character: mara-finn
+    knows: .
+    learned-in: chapter-02
+  - character: mara-finn
+    knows: The buyer is the miller
+    fact: miller-buyer
+    learned-in: chapter-02`
+    ), "utf8");
+
+    // An earlier chapter recording the secret does not make it known in
+    // this chapter's first scene: learned-in still says this chapter.
+    const earlier = path.join(root, "scenes", "chapter-01-scene-01.md");
+    fs.writeFileSync(earlier, fs.readFileSync(earlier, "utf8").replace(
+      "  - loose",
+      `  - loose
+  - character: mara-finn
+    fact: miller-buyer
+    knowledge: recorded too early`
+    ), "utf8");
+
+    writeMarkdown(
+      path.join(root, "scenes", "chapter-02-scene-01.md"),
+      `title: chapter-02 scene 1
+chapter: chapter-02
+scene: 1
+status: draft
+pov: mara-finn
+outcome: yes-but
+characters:
+  - mara-finn
+  - edran-vale
+state-changes:
+  - loose
+  - character: jonas-reed
+    knowledge: The buyer is the miller
+  - character: mara-finn
+    physical: cut hand
+  - character: mara-finn
+    knowledge: 1
+  - character: mara-finn
+    fact: other-fact
+    knowledge: something else
+  - character: mara-finn
+    fact: ledger-buyer
+    knowledge: She finds the name in the margin
+  - character: mara-finn
+    knowledge: the tide chart is wrong
+  - character: mara-finn
+    fact: wrong-id
+    knowledge: The door is locked!
+  - character: mara-finn
+    knowledge: "  The   window is open.  "`,
+      "# Scene\n\n## Purpose\n\nMara opens the letter.\n"
+    );
+    writeMarkdown(
+      path.join(root, "scenes", "chapter-02-scene-04.md"),
+      `title: chapter-02 scene 4
+chapter: chapter-02
+scene: 4
+status: draft
+pov: mara-finn
+state-changes:
+  - character: mara-finn
+    fact: miller-buyer
+    knowledge: The buyer is the miller`,
+      "# Scene\n\n## Purpose\n\nThe reveal.\n"
+    );
+    writeMarkdown(
+      path.join(root, "scenes", "chapter-02-scene-05.md"),
+      "title: chapter-02 scene 5\nchapter: chapter-02\nscene: 5\nstatus: draft\npov: mara-finn",
+      "# Scene\n\n## Purpose\n\nAfter the reveal.\n"
+    );
+
+    const chapter = textOf(contextOf(root, "chapter-02"));
+    expect(chapter).toContain("- The ledger names the buyer (learned in this chapter)");
+    expect(chapter).toContain("- The tide chart is wrong. (learned in this chapter)");
+    expect(chapter).toContain("- The door is locked (learned in this chapter)");
+    expect(chapter).toContain("- The window is open (learned in this chapter)");
+    expect(chapter).toContain("- The buyer is the miller (learned in this chapter)");
+    expect(chapter).not.toContain("possibly in a later scene");
+
+    const scene1 = textOf(contextOf(root, "chapter-02-scene-01"));
+    expect(scene1).toContain("- The letter is forged (learned in chapter-01)");
+    expect(scene1).toContain("- The mill had two owners (before the story)");
+    expect(scene1).not.toContain("The ledger names the buyer");
+    expect(scene1).not.toContain("The tide chart is wrong");
+    expect(scene1).not.toContain("The door is locked");
+    expect(scene1).not.toContain("The window is open");
+    expect(scene1).not.toContain("The buyer is the miller");
+
+    const scene2 = textOf(contextOf(root, "chapter-02-scene-02"));
+    expect(scene2).toContain("- The ledger names the buyer (learned in this chapter, scene 1)");
+    expect(scene2).toContain("- The tide chart is wrong. (learned in this chapter, scene 1)");
+    expect(scene2).toContain("- The door is locked (learned in this chapter, scene 1)");
+    expect(scene2).toContain("- The window is open (learned in this chapter, scene 1)");
+    expect(scene2).not.toContain("The buyer is the miller");
+    expect(scene2).not.toContain("possibly in a later scene");
+
+    const scene4 = textOf(contextOf(root, "chapter-02-scene-04"));
+    expect(scene4).not.toContain("The buyer is the miller");
+
+    const scene5 = textOf(contextOf(root, "chapter-02-scene-05"));
+    expect(scene5).toContain("- The buyer is the miller (learned in this chapter, scene 4)");
   });
 
   test("a scene with no POV of its own uses its chapter's", () => {
