@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { writeFile } from "../src/files.js";
-import { LOCK_FILE, withProjectLock } from "../src/lock.js";
+import { FOREIGN_LOCK_STALE_MS, LOCK_FILE, withProjectLock } from "../src/lock.js";
 import {
   createEntity,
   moveEntity,
@@ -343,11 +343,45 @@ describe("lock edge cases", () => {
     expect(() => createEntity(root, { kind: "character", name: "Bo" })).toThrow("another story command is modifying this project");
   });
 
-  test("a lock from another machine is never taken over", () => {
+  test("a lock from another machine with no timestamp is not taken over", () => {
     const root = newProject();
     fs.writeFileSync(path.join(root, LOCK_FILE), "1\nsome-other-host\n");
     process.env.STORY_LOCK_WAIT_MS = "0";
     expect(() => createEntity(root, { kind: "character", name: "Bo" })).toThrow("another story command (process 1 on some-other-host) is modifying this project");
+  });
+
+  test("a fresh lock from another machine is left for the user to delete (#349)", () => {
+    const root = newProject();
+    // Dead here, so a pid check on this machine would take the lock. The
+    // timestamp is what keeps a live command on another host.
+    const dead = 2147483647;
+    const written = new Date().toISOString();
+    fs.writeFileSync(path.join(root, LOCK_FILE), `${dead}\nsome-other-host\n${written}\n`);
+    process.env.STORY_LOCK_WAIT_MS = "0";
+    expect(() => createEntity(root, { kind: "character", name: "Bo" })).toThrow(`another story command (process ${dead} on some-other-host) is modifying this project; nothing was changed. Run write commands one at a time. If no story command is running, delete ${LOCK_FILE}`);
+    expect(fs.existsSync(path.join(root, "characters", "bo.md"))).toBe(false);
+    expect(fs.readFileSync(path.join(root, LOCK_FILE), "utf8")).toBe(`${dead}\nsome-other-host\n${written}\n`);
+  });
+
+  test("a stale lock from another machine is taken over (#349)", () => {
+    const root = newProject();
+    // This process is alive. The other hostname and the old timestamp are
+    // what make the lock stale.
+    const written = new Date(Date.now() - FOREIGN_LOCK_STALE_MS - 1000).toISOString();
+    fs.writeFileSync(path.join(root, LOCK_FILE), `${process.pid}\nsome-other-host\n${written}\n`);
+    process.env.STORY_LOCK_WAIT_MS = "0";
+    createEntity(root, { kind: "character", name: "Bo" });
+    expect(fs.existsSync(path.join(root, "characters", "bo.md"))).toBe(true);
+    expect(fs.existsSync(path.join(root, LOCK_FILE))).toBe(false);
+  });
+
+  test("a lock on this machine stays while its process is alive, however old its timestamp", () => {
+    const root = newProject();
+    const written = new Date(Date.now() - FOREIGN_LOCK_STALE_MS - 1000).toISOString();
+    fs.writeFileSync(path.join(root, LOCK_FILE), `${process.pid}\n${os.hostname()}\n${written}\n`);
+    process.env.STORY_LOCK_WAIT_MS = "0";
+    expect(() => createEntity(root, { kind: "character", name: "Bo" })).toThrow(`another story command (process ${process.pid}) is modifying this project`);
+    expect(fs.existsSync(path.join(root, "characters", "bo.md"))).toBe(false);
   });
 
   test("writeFile refuses when the file it read has been deleted", () => {

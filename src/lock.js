@@ -13,6 +13,12 @@ export const LOCK_FILE = ".story.lock";
 const DEFAULT_WAIT_MS = 10000;
 const POLL_MS = 50;
 
+// A lock from another host (a container, a cloud agent, or a share) cannot
+// be checked by pid. One older than this is taken over. Ten minutes is
+// longer than a rename or reindex, so a command still running elsewhere is
+// not stolen by a second agent.
+export const FOREIGN_LOCK_STALE_MS = 10 * 60 * 1000;
+
 // Projects this process already holds, so a command that calls another
 // locked one (add reindexes) does not wait on itself.
 const held = new Map();
@@ -92,15 +98,23 @@ function readOwner(lockPath) {
   } catch {
     return null;
   }
-  const [pidText, host] = text.split("\n");
+  const [pidText, host, writtenAt] = text.split("\n");
   const pid = Number.parseInt(pidText, 10);
   if (!Number.isInteger(pid) || pid <= 0) {
     // Being written right now, or damaged: treat a damaged one as live, so
     // the wait ends with the hint to delete it.
     return { text, pid: null, host: null, alive: true };
   }
-  // A lock from another machine (a shared folder) cannot be checked.
-  return { text, pid, host, alive: (host && host !== os.hostname()) || processAlive(pid) };
+  // A lock from another host cannot be checked by pid. One older than the
+  // bound is stale; a fresh one, or one with no timestamp, stays, so the
+  // wait ends with the hint to delete it.
+  const foreign = host && host !== os.hostname();
+  return { text, pid, host, alive: foreign ? !foreignLockStale(writtenAt) : processAlive(pid) };
+}
+
+function foreignLockStale(writtenAt) {
+  const written = Date.parse(writtenAt);
+  return Number.isFinite(written) && Date.now() - written > FOREIGN_LOCK_STALE_MS;
 }
 
 function processAlive(pid) {
