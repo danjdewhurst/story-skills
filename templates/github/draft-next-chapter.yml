@@ -200,10 +200,13 @@ jobs:
             continuity/); the workflow refuses a commit that touches anything else.
 
             1. Run `story next ${{ env.STORY_DIR }}`. Do not open
-               continuity/state.md, the registries, the timeline, or active
-               arc files for background. The chapter-writing skill drafts
-               from `story context`, and the only extra reads are the files
-               that command lists under "Left out to fit the budget".
+               continuity/state.md, the registries, the timeline, active arc
+               files, or other project files for background. The
+               chapter-writing skill drafts from `story context`. The one
+               extra read is the `language` field in story.md frontmatter,
+               which context does not print. If context leaves items out to
+               fit the budget, rerun it with a larger --budget instead of
+               opening the files it lists.
             2. If the next actions report any P0 maintenance issues, fix those
                first on a new branch named draft/maintenance-<YYYY-MM-DD> (today's
                date) instead, commit, and stop.
