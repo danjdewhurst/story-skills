@@ -16,10 +16,12 @@ import { wordSpans } from "./words.js";
 export const DEFAULT_CONTEXT_BUDGET = 6000;
 export const DEFAULT_CONTEXT_SCENES = 5;
 
-// A fixed, deterministic estimate, not a tokenizer count. Words are the ones
-// `story wordcount` counts: whitespace-separated runs in spaced text, one
-// word per Chinese or Japanese character, and a dictionary word for Thai,
-// Lao, Khmer, and Burmese (see wordSpans). Spaced text stays at 4 tokens per
+// A fixed, deterministic estimate, not a tokenizer count. Unspaced scripts
+// are split into words as `story wordcount` splits them: one word per
+// Chinese or Japanese character, and a dictionary word for Thai, Lao, Khmer,
+// and Burmese (see wordSpans). Everything else, punctuation left between
+// those words included, counts as whitespace-separated runs, as before (not
+// wordcount's letters-and-digits words). Spaced text stays at 4 tokens per
 // 3 words, so text with no unspaced script costs ceil(words * 4 / 3) as
 // before. The other rates are tokens per such word. Han is about 0.62 tokens
 // per character on the GPT-4 and GPT-4o tokenizers, and Japanese text overall
