@@ -1115,17 +1115,24 @@ function sceneWindow(days, time) {
 }
 
 // Location routes give the fastest journey between places. A character seen
-// at two different places needs at least the shortest route time between the
-// sightings, which may pass through other places. Every earlier sighting is
-// checked, not just the last one, and each gap is taken at its most generous
-// reading of the scene times, so only journeys impossible on any reading are
-// reported, once per scene. Two different places at the same exact minute
-// are reported whatever the routes say, since no journey takes no time.
+// at two different places in the same chapter strand needs at least the
+// shortest route time between the sightings, which may pass through other
+// places. Strands partition sightings the way the clock does: chapters
+// without `strand` share one strand, and a sighting in another strand is a
+// different timeline, not the other end of a journey. The scene schema has
+// no field that says a character crossed strands, so a real crossing is not
+// inferred; it stays one strand, or an exemption when a finding is
+// intentional. Every earlier sighting in the strand is checked, not just
+// the last one, and each gap is taken at its most generous reading of the
+// scene times, so only journeys impossible on any reading are reported,
+// once per scene. Two different places at the same exact minute are
+// reported whatever the routes say, since no journey takes no time.
 function checkRouteTravel(project, errors) {
   const graph = routeGraph(project.locations);
   // A scene with no pov of its own is told by its chapter's POV, as story
-  // timeline shows it.
+  // timeline shows it. Strand is the chapter's, as the clock reads it.
   const chapterPov = new Map(project.chapters.map((chapter) => [chapter.id, idText(chapter.pov)]));
+  const chapterStrand = new Map(project.chapters.map((chapter) => [chapter.id, String(chapter.strand ?? "")]));
   const sightings = new Map();
   for (const scene of project.scenes) {
     const parsed = parseClockDate(scene.date);
@@ -1138,10 +1145,13 @@ function checkRouteTravel(project, errors) {
     if (pov !== "") {
       present.add(pov);
     }
+    const strand = chapterStrand.get(scene.chapter) ?? "";
     for (const characterId of present) {
-      const list = sightings.get(characterId) ?? [];
+      const byStrand = sightings.get(characterId) ?? new Map();
+      const list = byStrand.get(strand) ?? [];
       list.push({ scene, label: relative(project, scene.file), ...window });
-      sightings.set(characterId, list);
+      byStrand.set(strand, list);
+      sightings.set(characterId, byStrand);
     }
   }
 
@@ -1162,43 +1172,52 @@ function checkRouteTravel(project, errors) {
       longestRoute += hours;
     }
   }
-  for (const [characterId, list] of [...sightings.entries()].sort(([left], [right]) => left.localeCompare(right, "en"))) {
-    list.sort((left, right) => left.earliest - right.earliest || left.latest - right.latest || left.label.localeCompare(right.label, "en"));
-    for (let index = 1; index < list.length; index += 1) {
-      const current = list[index];
-      for (let back = index - 1; back >= 0; back -= 1) {
-        const previous = list[back];
-        // Sightings are sorted by earliest time, so this part of the gap only
-        // grows as the search moves back; once it passes every route, no
-        // earlier sighting can conflict. The other reading below can jump
-        // for a wide window (an untimed day, `night`), so it must not stop
-        // the search.
-        const forwardGap = (current.latest - previous.earliest) / 60;
-        if (forwardGap > 0 && forwardGap >= longestRoute) {
-          break;
-        }
-        const from = previous.scene.location;
-        const to = current.scene.location;
-        if (from === to) {
-          continue;
-        }
-        // Overlapping windows (an untimed day and a time on it) could fall in
-        // either order, so the gap is the larger of the two readings.
-        const elapsed = Math.max(forwardGap, (previous.latest - current.earliest) / 60);
-        const needed = graph.has(from) && graph.has(to) ? distance(from, to) : undefined;
-        if (needed === undefined && elapsed === 0 && previous.exact && current.exact) {
-          errors.push(err("route-same-time", `${current.label} puts ${characterId} at ${to} at the same time as ${previous.label} at ${from}`, current.label, chapterOf(current.scene)));
-          break;
-        }
-        // Route legs are decimal hours, so their float sum can overshoot an
-        // exact fit (0.1h + 0.2h against 18 minutes) by a rounding error.
-        if (needed !== undefined && elapsed < needed - 1e-9) {
-          // Round the gap down and the route up so a near miss (10.98h
-          // against 11h) never reads as equal.
-          const gap = previous.exact && current.exact ? formatHours(elapsed, Math.floor) : `at most ${formatHours(elapsed, Math.floor)}`;
-          errors.push(err("route-too-fast", `${current.label} puts ${characterId} at ${to} ${gap} after ${previous.label} at ${from}, but the fastest route takes ${formatHours(needed, Math.ceil)}`, current.label, chapterOf(current.scene)));
-          break;
-        }
+  for (const [characterId, byStrand] of [...sightings.entries()].sort(([left], [right]) => left.localeCompare(right, "en"))) {
+    const strands = [...byStrand.keys()].sort((left, right) => left.localeCompare(right, "en"));
+    for (const strand of strands) {
+      checkStrandRoutes(characterId, byStrand.get(strand), errors, graph, distance, longestRoute);
+    }
+  }
+}
+
+// One strand's sightings of one character, in time order. The comparison is
+// the same inside every strand.
+function checkStrandRoutes(characterId, list, errors, graph, distance, longestRoute) {
+  list.sort((left, right) => left.earliest - right.earliest || left.latest - right.latest || left.label.localeCompare(right.label, "en"));
+  for (let index = 1; index < list.length; index += 1) {
+    const current = list[index];
+    for (let back = index - 1; back >= 0; back -= 1) {
+      const previous = list[back];
+      // Sightings are sorted by earliest time, so this part of the gap only
+      // grows as the search moves back; once it passes every route, no
+      // earlier sighting can conflict. The other reading below can jump
+      // for a wide window (an untimed day, `night`), so it must not stop
+      // the search.
+      const forwardGap = (current.latest - previous.earliest) / 60;
+      if (forwardGap > 0 && forwardGap >= longestRoute) {
+        break;
+      }
+      const from = previous.scene.location;
+      const to = current.scene.location;
+      if (from === to) {
+        continue;
+      }
+      // Overlapping windows (an untimed day and a time on it) could fall in
+      // either order, so the gap is the larger of the two readings.
+      const elapsed = Math.max(forwardGap, (previous.latest - current.earliest) / 60);
+      const needed = graph.has(from) && graph.has(to) ? distance(from, to) : undefined;
+      if (needed === undefined && elapsed === 0 && previous.exact && current.exact) {
+        errors.push(err("route-same-time", `${current.label} puts ${characterId} at ${to} at the same time as ${previous.label} at ${from}`, current.label, chapterOf(current.scene)));
+        break;
+      }
+      // Route legs are decimal hours, so their float sum can overshoot an
+      // exact fit (0.1h + 0.2h against 18 minutes) by a rounding error.
+      if (needed !== undefined && elapsed < needed - 1e-9) {
+        // Round the gap down and the route up so a near miss (10.98h
+        // against 11h) never reads as equal.
+        const gap = previous.exact && current.exact ? formatHours(elapsed, Math.floor) : `at most ${formatHours(elapsed, Math.floor)}`;
+        errors.push(err("route-too-fast", `${current.label} puts ${characterId} at ${to} ${gap} after ${previous.label} at ${from}, but the fastest route takes ${formatHours(needed, Math.ceil)}`, current.label, chapterOf(current.scene)));
+        break;
       }
     }
   }

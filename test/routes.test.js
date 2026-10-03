@@ -106,6 +106,40 @@ describe("location routes", () => {
     expect(messages(checkProjectContinuity(root).errors)).toEqual([]);
   });
 
+  test("route travel stays inside one strand (#345)", () => {
+    const root = routeProject();
+    createEntity(root, { kind: "character", name: "Ada" });
+    // mill -> keep is 5h. Twenty minutes on one calendar is not a journey
+    // when the chapters are different strands.
+    writeLocation(root, "mill", "routes:\n  - to: keep\n    hours: 5");
+    writeMarkdown(path.join(root, "chapters", "chapter-01.md"), `
+title: The Mill
+number: 1
+status: draft
+strand: "1990"
+`, "## Chapter Text\n\nWords.\n");
+    writeMarkdown(path.join(root, "chapters", "chapter-02.md"), `
+title: The Keep
+number: 2
+status: draft
+strand: "2020"
+`, "## Chapter Text\n\nWords.\n");
+    writeScene(root, "chapter-01", 1, "location: mill\ndate: 1990-06-01\ntime: \"09:00\"\ncharacters:\n  - ada");
+    writeScene(root, "chapter-02", 1, "location: keep\ndate: 1990-06-01\ntime: \"09:20\"\ncharacters:\n  - ada");
+    expect(messages(checkProjectContinuity(root).errors)).toEqual([]);
+
+    // The same twenty minutes inside one strand still outruns the route.
+    writeMarkdown(path.join(root, "chapters", "chapter-02.md"), `
+title: The Keep
+number: 2
+status: draft
+strand: "1990"
+`, "## Chapter Text\n\nWords.\n");
+    expect(messages(checkProjectContinuity(root).errors)).toEqual([
+      "scenes/chapter-02-scene-01.md puts ada at keep 0.3h after scenes/chapter-01-scene-01.md at mill, but the fastest route takes 5h"
+    ]);
+  });
+
   test("rename and remove keep route targets current", () => {
     const root = routeProject();
     renameEntity(root, { kind: "location", id: "mill", name: "Old Mill" });

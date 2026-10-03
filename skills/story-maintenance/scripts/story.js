@@ -9531,6 +9531,7 @@ function sceneWindow(days, time) {
 function checkRouteTravel(project, errors) {
   const graph = routeGraph(project.locations);
   const chapterPov = new Map(project.chapters.map((chapter) => [chapter.id, idText(chapter.pov)]));
+  const chapterStrand = new Map(project.chapters.map((chapter) => [chapter.id, String(chapter.strand ?? "")]));
   const sightings = new Map;
   for (const scene of project.scenes) {
     const parsed = parseClockDate(scene.date);
@@ -9543,10 +9544,13 @@ function checkRouteTravel(project, errors) {
     if (pov !== "") {
       present.add(pov);
     }
+    const strand = chapterStrand.get(scene.chapter) ?? "";
     for (const characterId of present) {
-      const list = sightings.get(characterId) ?? [];
+      const byStrand = sightings.get(characterId) ?? new Map;
+      const list = byStrand.get(strand) ?? [];
       list.push({ scene, label: relative(project, scene.file), ...window });
-      sightings.set(characterId, list);
+      byStrand.set(strand, list);
+      sightings.set(characterId, byStrand);
     }
   }
   const routesFrom = new Map;
@@ -9562,32 +9566,38 @@ function checkRouteTravel(project, errors) {
       longestRoute += hours;
     }
   }
-  for (const [characterId, list] of [...sightings.entries()].sort(([left], [right]) => left.localeCompare(right, "en"))) {
-    list.sort((left, right) => left.earliest - right.earliest || left.latest - right.latest || left.label.localeCompare(right.label, "en"));
-    for (let index = 1;index < list.length; index += 1) {
-      const current = list[index];
-      for (let back = index - 1;back >= 0; back -= 1) {
-        const previous = list[back];
-        const forwardGap = (current.latest - previous.earliest) / 60;
-        if (forwardGap > 0 && forwardGap >= longestRoute) {
-          break;
-        }
-        const from = previous.scene.location;
-        const to = current.scene.location;
-        if (from === to) {
-          continue;
-        }
-        const elapsed = Math.max(forwardGap, (previous.latest - current.earliest) / 60);
-        const needed = graph.has(from) && graph.has(to) ? distance(from, to) : undefined;
-        if (needed === undefined && elapsed === 0 && previous.exact && current.exact) {
-          errors.push(err("route-same-time", `${current.label} puts ${characterId} at ${to} at the same time as ${previous.label} at ${from}`, current.label, chapterOf(current.scene)));
-          break;
-        }
-        if (needed !== undefined && elapsed < needed - 0.000000001) {
-          const gap = previous.exact && current.exact ? formatHours(elapsed, Math.floor) : `at most ${formatHours(elapsed, Math.floor)}`;
-          errors.push(err("route-too-fast", `${current.label} puts ${characterId} at ${to} ${gap} after ${previous.label} at ${from}, but the fastest route takes ${formatHours(needed, Math.ceil)}`, current.label, chapterOf(current.scene)));
-          break;
-        }
+  for (const [characterId, byStrand] of [...sightings.entries()].sort(([left], [right]) => left.localeCompare(right, "en"))) {
+    const strands = [...byStrand.keys()].sort((left, right) => left.localeCompare(right, "en"));
+    for (const strand of strands) {
+      checkStrandRoutes(characterId, byStrand.get(strand), errors, graph, distance, longestRoute);
+    }
+  }
+}
+function checkStrandRoutes(characterId, list, errors, graph, distance, longestRoute) {
+  list.sort((left, right) => left.earliest - right.earliest || left.latest - right.latest || left.label.localeCompare(right.label, "en"));
+  for (let index = 1;index < list.length; index += 1) {
+    const current = list[index];
+    for (let back = index - 1;back >= 0; back -= 1) {
+      const previous = list[back];
+      const forwardGap = (current.latest - previous.earliest) / 60;
+      if (forwardGap > 0 && forwardGap >= longestRoute) {
+        break;
+      }
+      const from = previous.scene.location;
+      const to = current.scene.location;
+      if (from === to) {
+        continue;
+      }
+      const elapsed = Math.max(forwardGap, (previous.latest - current.earliest) / 60);
+      const needed = graph.has(from) && graph.has(to) ? distance(from, to) : undefined;
+      if (needed === undefined && elapsed === 0 && previous.exact && current.exact) {
+        errors.push(err("route-same-time", `${current.label} puts ${characterId} at ${to} at the same time as ${previous.label} at ${from}`, current.label, chapterOf(current.scene)));
+        break;
+      }
+      if (needed !== undefined && elapsed < needed - 0.000000001) {
+        const gap = previous.exact && current.exact ? formatHours(elapsed, Math.floor) : `at most ${formatHours(elapsed, Math.floor)}`;
+        errors.push(err("route-too-fast", `${current.label} puts ${characterId} at ${to} ${gap} after ${previous.label} at ${from}, but the fastest route takes ${formatHours(needed, Math.ceil)}`, current.label, chapterOf(current.scene)));
+        break;
       }
     }
   }
