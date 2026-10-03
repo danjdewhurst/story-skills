@@ -733,7 +733,9 @@ function checkStateAgainstStory(project, context, warnings) {
   }
 }
 
-function normalizeKnowledge(value) {
+// Folds a knowledge text for matching: case, spacing, and a trailing full
+// stop or exclamation mark are ignored. `story context` matches the same way.
+export function normalizeKnowledge(value) {
   return typeof value === "string" ? value.trim().toLowerCase().replace(/\s+/g, " ").replace(/[.!]+$/, "") : "";
 }
 

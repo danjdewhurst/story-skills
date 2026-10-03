@@ -1,6 +1,6 @@
 import path from "node:path";
 import { chapterChronology, deathWindow } from "./chronology.js";
-import { idText } from "./continuity.js";
+import { idText, normalizeKnowledge } from "./continuity.js";
 import { warn } from "./findings.js";
 import { entityStateAt } from "./progressions.js";
 import { projectError, usageError } from "./exit-codes.js";
@@ -571,8 +571,8 @@ export function buildContext(project, targetId, readBody, options = {}) {
 // knowledge-state entry. Matched the way continuity pairs a scene knowledge
 // change with an entry: the same `fact` id, or the same text aside from
 // case, spacing, and a trailing full stop or exclamation mark. A paraphrase
-// that matches neither stays out,
-// so an unrelated change in an earlier scene cannot pull the fact in.
+// that matches neither stays out, so an unrelated change in an earlier scene
+// cannot pull the fact in.
 function sceneRecordsFact(scene, characterId, entry) {
   const fact = entry.fact === undefined ? "" : String(entry.fact);
   const knows = normalizeKnowledge(entry.knows);
@@ -601,15 +601,6 @@ function sameFact(fact, change) {
 
 function sameKnowledgeText(knows, knowledge) {
   return knows !== "" && normalizeKnowledge(knowledge) === knows;
-}
-
-// Same folding continuity uses when it compares a scene's `knowledge` text
-// with a `knows` value.
-function normalizeKnowledge(value) {
-  if (typeof value !== "string") {
-    return "";
-  }
-  return value.trim().toLowerCase().replace(/\s+/g, " ").replace(/[.!]+$/, "");
 }
 
 // Scenes before the target in reading order: every scene of an earlier
