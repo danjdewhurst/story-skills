@@ -346,6 +346,13 @@ describe("context helpers", () => {
     expect(estimateTokens("ーー")).toBe(2);
     expect(estimateTokens("ああ")).toBe(1);
     expect(estimateTokens("コーヒー")).toBe(3);
+    // A combining mark belongs to the character before it, so decomposed
+    // Japanese costs what composed Japanese does.
+    expect(estimateTokens("か\u3099")).toBe(estimateTokens("が"));
+    expect(estimateTokens("か\u3099".repeat(6))).toBe(estimateTokens("が".repeat(6)));
+    expect(estimateTokens("ハ\u309Aン")).toBe(estimateTokens("パン"));
+    expect(estimateTokens("葛\uDB40\uDD00城")).toBe(estimateTokens("葛城"));
+    expect(estimateTokens("か\u3099 word")).toBe(estimateTokens("が word"));
     // Dictionary words: one token each. A soft hyphen keeps one Thai word.
     expect(estimateTokens("ฉันรักแมว")).toBe(3);
     expect(estimateTokens("ຂ້ອຍຮັກແມວ")).toBe(3);

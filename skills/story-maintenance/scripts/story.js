@@ -9822,6 +9822,7 @@ var LAO_CHAR = /^\p{Script=Lao}$/u;
 var KHMER_CHAR = /^\p{Script=Khmer}$/u;
 var NOT_JOINER = /[^\u00AD\u200C\u200D]/u;
 var KATAKANA_MARK = 12540;
+var TRAILING_MARKS = /\p{M}*/uy;
 function unspacedScript(word) {
   const letter = word.codePointAt(word.search(NOT_JOINER));
   const ch = String.fromCodePoint(letter);
@@ -9853,7 +9854,9 @@ function estimateTokens(text) {
   for (const span of wordSpans(source, /(?!)/gu)) {
     parts.push(source.slice(last, span.start));
     sixths += TOKEN_SIXTHS[unspacedScript(span.word)];
-    last = span.end;
+    TRAILING_MARKS.lastIndex = span.end;
+    TRAILING_MARKS.exec(source);
+    last = TRAILING_MARKS.lastIndex;
   }
   parts.push(source.slice(last));
   sixths += parts.join(" ").split(/\s+/).filter(Boolean).length * SPACED_SIXTHS;
