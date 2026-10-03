@@ -3,7 +3,7 @@ You ran `story context chapter-03 --path . --budget 900`. Its output:
 # Drafting context: chapter-03
 
 Chapter 3: The Lock. About 610 of 900 tokens
-(estimated at 4 tokens per 3 words in spaced text; 2 per 3 Han or katakana characters, 1 per 2 hiragana, and 1 per Thai, Lao, Khmer, or Burmese word). Nothing from later chapters is included.
+(estimated at 4 tokens per 3 words in spaced text; 2 per 3 Han or katakana characters, 1 per 2 hiragana, and 1 per Thai, Lao, Khmer, or Burmese word). Later chapters are left out. A fact marked character-knowledge is known in story time; do not reveal it.
 
 ## Target
 
@@ -40,8 +40,8 @@ Spare, dry, short sentences. Feelings shown through action, never named.
 
 ## POV knowledge at chapter-03
 
-- Found a brass key on the lamp-room door at dusk (chapter-01)
-- Petra's boat called on Thursday; he said nothing about the key (chapter-02)
+- Found a brass key on the lamp-room door at dusk (reader-knowledge, learned in chapter-01)
+- Petra's boat called on Thursday; he said nothing about the key (reader-knowledge, learned in chapter-02)
 
 ## Open questions
 
