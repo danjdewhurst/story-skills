@@ -21,6 +21,14 @@ const POLL_MS = 50;
 // behind ours does not make its fresh lock look stale.
 export const FOREIGN_LOCK_STALE_MS = 10 * 60 * 1000;
 
+// A stale lock is removed only while holding this second lock, so two
+// commands that find the same stale lock cannot both remove it: the second
+// would delete the lock the first has just taken. It is held for one read
+// and one delete, so one older than this was left by a killed command. The
+// name matches the `.story-*.tmp` line in a new project's .gitignore.
+export const TAKEOVER_FILE = ".story-takeover.tmp";
+const TAKEOVER_STALE_MS = 2000;
+
 // Projects this process already holds, so a command that calls another
 // locked one (add reindexes) does not wait on itself.
 const held = new Map();
@@ -39,7 +47,8 @@ export function withProjectLock(root, run) {
   const lockPath = path.join(projectRoot, LOCK_FILE);
   // A folder that is not a project, or one this user cannot write to, gets
   // its own error from the command (or needs no write at all).
-  if (!fs.existsSync(path.join(projectRoot, "story.md")) || !acquire(lockPath)) {
+  const ours = fs.existsSync(path.join(projectRoot, "story.md")) && acquire(lockPath);
+  if (!ours) {
     return run();
   }
   held.set(key, 1);
@@ -47,22 +56,23 @@ export function withProjectLock(root, run) {
     return run();
   } finally {
     held.delete(key);
-    fs.rmSync(lockPath, { force: true });
+    // Only our own lock goes: one another command took over meanwhile stays.
+    if (readOwner(lockPath)?.text === ours) {
+      fs.rmSync(lockPath, { force: true });
+    }
   }
 }
 
-// Returns true once the lock file is created, false when the folder cannot
-// take one. Throws when another live command keeps it past the wait.
+// Returns the text of the lock once this call creates it, false when the
+// folder cannot take one. Throws when another live command keeps it past
+// the wait.
 function acquire(lockPath) {
   const deadline = Date.now() + lockWaitMs();
   let removedStale = false;
   let created;
   while ((created = tryCreate(lockPath)) === null) {
     const owner = readOwner(lockPath);
-    if (owner && !owner.alive && !removedStale) {
-      // A command killed before it could remove its lock. Another command
-      // may have replaced it meanwhile, so only the same stale lock goes.
-      removeStale(lockPath, owner.text);
+    if (owner && !owner.alive && !removedStale && removeStale(lockPath, owner.text)) {
       removedStale = true;
       continue;
     }
@@ -75,44 +85,42 @@ function acquire(lockPath) {
   return created;
 }
 
-// Moves the lock aside before deleting it, so a lock another command took
-// between our check and the removal is seen and put back rather than
-// deleted. Several agents can find the same stale lock at once.
+// A command killed before it could remove its lock. Another command may
+// have replaced it meanwhile, so only the same stale lock goes, checked and
+// deleted while holding the takeover lock. Returns false when another
+// command holds that, so the caller waits and looks again.
 function removeStale(lockPath, staleText) {
-  const aside = `${lockPath}.${process.pid}.stale`;
-  try {
-    fs.renameSync(lockPath, aside);
-  } catch {
-    return;
+  const guard = path.join(path.dirname(lockPath), TAKEOVER_FILE);
+  let created = tryCreate(guard);
+  if (created === null && Date.now() - modifiedAt(guard) > TAKEOVER_STALE_MS) {
+    fs.rmSync(guard, { force: true });
+    created = tryCreate(guard);
   }
-  let text = null;
-  try {
-    text = fs.readFileSync(aside, "utf8");
-  } catch {
-    // Unreadable once moved: put it back, as for a lock we did not check.
+  if (!created) {
+    return false;
   }
-  if (text !== staleText) {
-    try {
-      // link, unlike rename, never replaces a lock created meanwhile.
-      fs.linkSync(aside, lockPath);
-    } catch {
-      // A newer lock is already in place, or links are not supported.
+  try {
+    if (readOwner(lockPath)?.text === staleText) {
+      fs.rmSync(lockPath, { force: true });
     }
+  } finally {
+    fs.rmSync(guard, { force: true });
   }
-  fs.rmSync(aside, { force: true });
+  return true;
 }
 
-// true when this call created the lock, null when one already exists, false
-// when the folder cannot take one.
+// The text written when this call created the lock, null when one already
+// exists, false when the folder cannot take one.
 function tryCreate(lockPath) {
   try {
     const descriptor = fs.openSync(lockPath, "wx", 0o644);
+    const text = `${process.pid}\n${os.hostname()}\n${new Date().toISOString()}\n`;
     try {
-      fs.writeFileSync(descriptor, `${process.pid}\n${os.hostname()}\n${new Date().toISOString()}\n`, "utf8");
+      fs.writeFileSync(descriptor, text, "utf8");
     } finally {
       fs.closeSync(descriptor);
     }
-    return true;
+    return text;
   } catch (error) {
     return error.code === "EEXIST" ? null : false;
   }
@@ -120,8 +128,15 @@ function tryCreate(lockPath) {
 
 function readOwner(lockPath) {
   let text;
+  let modified;
   try {
-    text = fs.readFileSync(lockPath, "utf8");
+    const descriptor = fs.openSync(lockPath, "r");
+    try {
+      modified = fs.fstatSync(descriptor).mtimeMs;
+      text = fs.readFileSync(descriptor, "utf8");
+    } finally {
+      fs.closeSync(descriptor);
+    }
   } catch {
     return null;
   }
@@ -136,17 +151,20 @@ function readOwner(lockPath) {
   // bound is stale; a fresh one, or one with no timestamp, stays, so the
   // wait ends with the hint to delete it.
   const foreign = host && host !== os.hostname();
-  return { text, pid, host, alive: foreign ? !foreignLockStale(lockPath, writtenAt) : processAlive(pid) };
+  return { text, pid, host, alive: foreign ? !foreignLockStale(Date.parse(writtenAt), modified) : processAlive(pid) };
 }
 
-function foreignLockStale(lockPath, writtenAt) {
-  const written = Date.parse(writtenAt);
-  if (!Number.isFinite(written)) {
-    return false;
+function foreignLockStale(written, modified) {
+  return Number.isFinite(written) && Date.now() - Math.max(written, modified) > FOREIGN_LOCK_STALE_MS;
+}
+
+// A file that cannot be checked counts as just written.
+function modifiedAt(file) {
+  try {
+    return fs.statSync(file).mtimeMs;
+  } catch {
+    return Date.now();
   }
-  // Gone since it was read: not stale, and the next try creates a new one.
-  const modified = fs.statSync(lockPath, { throwIfNoEntry: false })?.mtimeMs ?? Date.now();
-  return Date.now() - Math.max(written, modified) > FOREIGN_LOCK_STALE_MS;
 }
 
 function processAlive(pid) {

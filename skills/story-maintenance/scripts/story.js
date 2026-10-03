@@ -11462,6 +11462,8 @@ var LOCK_FILE = ".story.lock";
 var DEFAULT_WAIT_MS = 1e4;
 var POLL_MS = 50;
 var FOREIGN_LOCK_STALE_MS = 10 * 60 * 1000;
+var TAKEOVER_FILE = ".story-takeover.tmp";
+var TAKEOVER_STALE_MS = 2000;
 var held = new Map;
 function withProjectLock(root, run) {
   const projectRoot = path8.resolve(root);
@@ -11475,7 +11477,8 @@ function withProjectLock(root, run) {
     }
   }
   const lockPath = path8.join(projectRoot, LOCK_FILE);
-  if (!fs5.existsSync(path8.join(projectRoot, "story.md")) || !acquire(lockPath)) {
+  const ours = fs5.existsSync(path8.join(projectRoot, "story.md")) && acquire(lockPath);
+  if (!ours) {
     return run();
   }
   held.set(key, 1);
@@ -11483,7 +11486,9 @@ function withProjectLock(root, run) {
     return run();
   } finally {
     held.delete(key);
-    fs5.rmSync(lockPath, { force: true });
+    if (readOwner(lockPath)?.text === ours) {
+      fs5.rmSync(lockPath, { force: true });
+    }
   }
 }
 function acquire(lockPath) {
@@ -11492,8 +11497,7 @@ function acquire(lockPath) {
   let created;
   while ((created = tryCreate(lockPath)) === null) {
     const owner = readOwner(lockPath);
-    if (owner && !owner.alive && !removedStale) {
-      removeStale(lockPath, owner.text);
+    if (owner && !owner.alive && !removedStale && removeStale(lockPath, owner.text)) {
       removedStale = true;
       continue;
     }
@@ -11506,43 +11510,52 @@ function acquire(lockPath) {
   return created;
 }
 function removeStale(lockPath, staleText) {
-  const aside = `${lockPath}.${process.pid}.stale`;
-  try {
-    fs5.renameSync(lockPath, aside);
-  } catch {
-    return;
+  const guard = path8.join(path8.dirname(lockPath), TAKEOVER_FILE);
+  let created = tryCreate(guard);
+  if (created === null && Date.now() - modifiedAt(guard) > TAKEOVER_STALE_MS) {
+    fs5.rmSync(guard, { force: true });
+    created = tryCreate(guard);
   }
-  let text = null;
-  try {
-    text = fs5.readFileSync(aside, "utf8");
-  } catch {}
-  if (text !== staleText) {
-    try {
-      fs5.linkSync(aside, lockPath);
-    } catch {}
+  if (!created) {
+    return false;
   }
-  fs5.rmSync(aside, { force: true });
+  try {
+    if (readOwner(lockPath)?.text === staleText) {
+      fs5.rmSync(lockPath, { force: true });
+    }
+  } finally {
+    fs5.rmSync(guard, { force: true });
+  }
+  return true;
 }
 function tryCreate(lockPath) {
   try {
     const descriptor = fs5.openSync(lockPath, "wx", 420);
-    try {
-      fs5.writeFileSync(descriptor, `${process.pid}
+    const text = `${process.pid}
 ${os.hostname()}
 ${new Date().toISOString()}
-`, "utf8");
+`;
+    try {
+      fs5.writeFileSync(descriptor, text, "utf8");
     } finally {
       fs5.closeSync(descriptor);
     }
-    return true;
+    return text;
   } catch (error) {
     return error.code === "EEXIST" ? null : false;
   }
 }
 function readOwner(lockPath) {
   let text;
+  let modified;
   try {
-    text = fs5.readFileSync(lockPath, "utf8");
+    const descriptor = fs5.openSync(lockPath, "r");
+    try {
+      modified = fs5.fstatSync(descriptor).mtimeMs;
+      text = fs5.readFileSync(descriptor, "utf8");
+    } finally {
+      fs5.closeSync(descriptor);
+    }
   } catch {
     return null;
   }
@@ -11553,15 +11566,17 @@ function readOwner(lockPath) {
     return { text, pid: null, host: null, alive: true };
   }
   const foreign = host && host !== os.hostname();
-  return { text, pid, host, alive: foreign ? !foreignLockStale(lockPath, writtenAt) : processAlive(pid) };
+  return { text, pid, host, alive: foreign ? !foreignLockStale(Date.parse(writtenAt), modified) : processAlive(pid) };
 }
-function foreignLockStale(lockPath, writtenAt) {
-  const written = Date.parse(writtenAt);
-  if (!Number.isFinite(written)) {
-    return false;
+function foreignLockStale(written, modified) {
+  return Number.isFinite(written) && Date.now() - Math.max(written, modified) > FOREIGN_LOCK_STALE_MS;
+}
+function modifiedAt(file) {
+  try {
+    return fs5.statSync(file).mtimeMs;
+  } catch {
+    return Date.now();
   }
-  const modified = fs5.statSync(lockPath, { throwIfNoEntry: false })?.mtimeMs ?? Date.now();
-  return Date.now() - Math.max(written, modified) > FOREIGN_LOCK_STALE_MS;
 }
 function processAlive(pid) {
   try {
