@@ -9122,7 +9122,7 @@ function checkPosthumousLearning(character, learnedIn, entryLabel, file, context
   if (!character.diedIn) {
     return;
   }
-  const window = deathWindow(character, context.chronology, { planned: true });
+  const window = deathWindow(character, context.chronology);
   if (window && window.deadIn(learnedIn)) {
     errors.push(err("posthumous-learning", `${entryLabel} has ${character.id} learn something in ${learnedIn}, after they died in ${character.diedIn}`, file, learnedIn));
   }

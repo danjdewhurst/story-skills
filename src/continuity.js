@@ -597,10 +597,11 @@ function checkPosthumousLearning(character, learnedIn, entryLabel, file, context
   if (!character.diedIn) {
     return;
   }
-  // Learning stays on the scheduled death, including one whose chapter is
-  // still an outline. A `learned-in` on an outline chapter counting as known
-  // is a separate question and is unchanged here.
-  const window = deathWindow(character, context.chronology, { planned: true });
+  // Like a cast appearance, learning is checked against the dead window, which
+  // a revival ends and which stays closed while the death chapter is still an
+  // outline. Whether a `learned-in` on an outline chapter counts as known is a
+  // separate question (story knowledge) and is unchanged here.
+  const window = deathWindow(character, context.chronology);
   if (window && window.deadIn(learnedIn)) {
     errors.push(err("posthumous-learning", `${entryLabel} has ${character.id} learn something in ${learnedIn}, after they died in ${character.diedIn}`, file, learnedIn));
   }

@@ -149,7 +149,7 @@ A character with `status: deceased` and no `died-in` died before the story start
 Some story shapes need more than one death chapter:
 
 - **Posthumous narrator.** A chapter or scene whose `pov` is also in its `mentions` is narrated by someone who is not physically there, such as a ghost or a narrator looking back after their death. It is not a posthumous appearance, and the POV-not-in-characters warning is skipped.
-- **Planned death.** While the `died-in` chapter is still `status: outline`, the death is planned, not in force. The character may stay `status: alive`, and a later chapter or scene may still list them. Set `status: deceased` when you draft that chapter; later casts are then posthumous appearances.
+- **Planned death.** While the `died-in` chapter is still `status: outline`, the death is planned, not in force. The character may stay `status: alive`, and a later chapter or scene may still list them or have them learn something. Set `status: deceased` when you draft that chapter; later casts and learning are then posthumous.
 - **Resurrection.** `revived-in: chapter-NN` ends the dead window. Casts after `died-in` and before `revived-in` are still errors; from the revival chapter on, the character may appear again. Once the revival chapter is drafted, the status must no longer be `deceased`.
 - **Non-linear chronology.** "Later" means later in story time when both chapters are dated (a chapter's `date`, or else its earliest dated scene), and later by chapter number otherwise. A character who dies in a 2024 chapter 3 cannot appear in a 2034 prologue read as chapter 1, and in a dual-timeline book a death in the 2020 strand does not stop the character appearing in the 1990 strand.
 

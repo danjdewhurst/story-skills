@@ -2522,7 +2522,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `state-duplicate-character` | warning | `character-state` repeats a character. |
 | `state-duplicate-artifact` | warning | `object-state` repeats an artifact for the same `since` chapter. |
 | `state-status-conflict` | warning | An artifact's latest `object-state` status differs from its file. |
-| `posthumous-learning` | error | A character learns something after their death. |
+| `posthumous-learning` | error | A character learns something after a written death. A `died-in` chapter still at `outline` is planned, so later learning is allowed. |
 | `deceased-learning` | warning | A character who died before the story learns something. |
 | `progression-deceased-learning` | warning | A character, with no `died-in`, learns something after a progression makes them `deceased`. |
 | `learner-not-in-cast` | warning | A character learns something in a chapter that does not list them. |

@@ -162,8 +162,9 @@ describe("#246 destroyed artifacts and dead characters in later books", () => {
   test("continuity errors when a character learns something after their death chapter", () => {
     const cwd = makeTempDir();
     const root = book(cwd, "Solo");
+    // Drafted, since an outline death is planned and not in force yet.
     for (const title of ["One", "Two"]) {
-      expect(invoke(root, ["add", "chapter", title]).code).toBe(0);
+      expect(invoke(root, ["add", "chapter", title, "--status", "draft"]).code).toBe(0);
     }
     expect(invoke(root, ["add", "character", "Ann Lee", "--status", "deceased"]).code).toBe(0);
     setFields(path.join(root, "characters", "ann-lee.md"), { "died-in": "chapter-01" });
