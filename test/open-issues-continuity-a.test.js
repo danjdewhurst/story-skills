@@ -321,7 +321,10 @@ knowledge-state:
     learned-in: chapter-03
 `);
     expect(knowledgeAtChapter(root, "bob", "chapter-02")).toEqual([]);
-    expect(knowledgeAtChapter(root, "bob", "chapter-01").map((entry) => entry.learnedIn)).toEqual(["chapter-01", "chapter-03"]);
+    expect(knowledgeAtChapter(root, "bob", "chapter-01")).toEqual([
+      { knows: "who the traitor was", learnedIn: "chapter-01", audience: "reader" },
+      { knows: "the ring is fake", learnedIn: "chapter-03", audience: "character" }
+    ]);
   });
 
   test("a character who dies in 2024 cannot appear in a 2034 prologue", () => {

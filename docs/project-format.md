@@ -956,7 +956,7 @@ Entry fields:
 | | `learned-in` | Chapter id. Leave it out when the character knew the fact before the book began. |
 | | `fact` | Stable kebab-case id for the knowledge. A character may list each `fact` once. `story series` matches facts across books by this id. |
 
-`story knowledge <character-id> --at <chapter-id>` lists the `knowledge-state` entries a character knew at that chapter: entries learned at or before it, plus entries with no `learned-in`. When both chapters are dated, "at or before" is by date, so knowledge learned in a flash-forward prologue is not known in the chapters set before it.
+`story knowledge <character-id> --at <chapter-id>` and the POV knowledge in `story context` list the `knowledge-state` entries a character knew at that chapter in story time: entries whose `learned-in` is not after it, plus entries with no `learned-in`. When both chapters are dated, "not after" is by date, so knowledge learned in a flash-forward prologue is not known in the chapters set before it, and knowledge learned in a later-read flashback is known. Each line is marked `reader-knowledge` when the learning chapter has already been read (or the fact is pre-existing) and `character-knowledge` with `do not reveal` when the reader has not reached that chapter. See [Story knowledge](continuity.md#story-knowledge).
 
 The body holds human-readable tables of the same state. `story reindex` never rewrites the body; it only corrects the `story` field.
 

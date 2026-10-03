@@ -267,10 +267,15 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["knows", "learnedIn"],
+            "required": ["knows", "learnedIn", "audience"],
             "properties": {
               "knows": { "type": "string" },
-              "learnedIn": { "type": "string", "description": "The chapter id it was learned in, or empty for pre-existing knowledge." }
+              "learnedIn": { "type": "string", "description": "The chapter id it was learned in, or empty for pre-existing knowledge." },
+              "audience": {
+                "type": "string",
+                "enum": ["reader", "character"],
+                "description": "reader: already shown to the reader, or known before the book. character: known in story time from a chapter the reader has not reached; do not reveal."
+              }
             }
           }
         },

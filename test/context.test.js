@@ -143,9 +143,9 @@ describe("story context", () => {
     expect(text).toContain("#### Tone & Style\n\nSpare and cold.");
     expect(text).toContain("#### Setting\n\nA drowned mill town.");
 
-    expect(text).toContain("- The mill had two owners (before the story)");
-    expect(text).toContain("- The letter is forged (learned in chapter-01)");
-    expect(text).toContain("- The ledger names the buyer (learned in this chapter)");
+    expect(text).toContain("- The mill had two owners (reader-knowledge, pre-existing)");
+    expect(text).toContain("- The letter is forged (reader-knowledge, learned in chapter-01)");
+    expect(text).toContain("- The ledger names the buyer (reader-knowledge, learned in this chapter)");
     expect(text).toContain("- As of chapter 1: location the-mill; emotional wary");
     expect(text).toContain("- chapter-01 scene 1: physical cut hand");
     expect(text).toContain("- chapter-01 scene 1: target brass-key; owner mara-finn; change finds the key");
@@ -170,19 +170,23 @@ describe("story context", () => {
     expect(text).not.toContain("Left out to fit the budget");
   });
 
-  test("includes nothing from chapters after the target", () => {
+  test("includes nothing from chapters after the target, except a labeled unread flashback fact", () => {
     const { root } = contextProject();
     const context = contextOf(root, "chapter-02");
     const text = textOf(context);
     const json = JSON.stringify(context);
     const { envelope, out } = invokeJson(path.dirname(root), ["context", "chapter-02", "--path", root]);
     expect(envelope.data.target.id).toBe("chapter-02");
+    // Chapter 3 is dated before chapter 2, so Mara already knows this and
+    // the reader has not been shown it. The fact stays, marked do not reveal.
+    const flashback = "SPOILER-KNOWLEDGE-3 read later but dated earlier (character-knowledge, learned in chapter-03; not yet shown to the reader, do not reveal)";
+    expect(text).toContain(flashback);
     for (const output of [text, json, out]) {
-      expect(output).not.toContain("SPOILER");
+      expect(output.split(flashback).join("")).not.toContain("SPOILER");
     }
+    expect(text.split(flashback).join("")).not.toContain("chapter-03");
     expect(text).not.toContain("closed-promise");
     expect(text).not.toContain("later-promise");
-    expect(text).not.toContain("chapter-03");
     expect(text).not.toContain("chapter-04");
   });
 
@@ -195,7 +199,9 @@ describe("story context", () => {
     expect(first).toContain("- Outcome: yes-but");
     expect(first).toContain("Scene purpose:\n\nMara opens the letter.");
     expect(first).toContain("### Edran Vale\n- Id: edran-vale\n- Role: minor\n- Status: deceased (died in chapter-01)");
-    expect(first).not.toContain("SPOILER");
+    const flashback = "SPOILER-KNOWLEDGE-3 read later but dated earlier (character-knowledge, learned in chapter-03; not yet shown to the reader, do not reveal)";
+    expect(first).toContain(flashback);
+    expect(first.split(flashback).join("")).not.toContain("SPOILER");
 
     expect(first).not.toContain("The ledger names the buyer");
     expect(first).not.toContain("possibly in a later scene");
@@ -204,7 +210,7 @@ describe("story context", () => {
     // Learned in this chapter, and no earlier scene records it.
     expect(second).not.toContain("The ledger names the buyer");
     expect(second).not.toContain("possibly in a later scene");
-    expect(second).toContain("- The letter is forged (learned in chapter-01)");
+    expect(second).toContain("- The letter is forged (reader-knowledge, learned in chapter-01)");
     expect(second).toContain("- **chapter-02 scene 1: chapter-02 scene 1** (POV mara-finn, outcome yes-but)\n  Mara opens the letter.");
     // Its own purpose is the thing being drafted.
     expect(second).toContain("Scene purpose:\n\nSPOILER-SCENE-2-2");
@@ -304,16 +310,16 @@ state-changes:
     );
 
     const chapter = textOf(contextOf(root, "chapter-02"));
-    expect(chapter).toContain("- The ledger names the buyer (learned in this chapter)");
-    expect(chapter).toContain("- The tide chart is wrong. (learned in this chapter)");
-    expect(chapter).toContain("- The door is locked (learned in this chapter)");
-    expect(chapter).toContain("- The window is open (learned in this chapter)");
-    expect(chapter).toContain("- The buyer is the miller (learned in this chapter)");
+    expect(chapter).toContain("- The ledger names the buyer (reader-knowledge, learned in this chapter)");
+    expect(chapter).toContain("- The tide chart is wrong. (reader-knowledge, learned in this chapter)");
+    expect(chapter).toContain("- The door is locked (reader-knowledge, learned in this chapter)");
+    expect(chapter).toContain("- The window is open (reader-knowledge, learned in this chapter)");
+    expect(chapter).toContain("- The buyer is the miller (reader-knowledge, learned in this chapter)");
     expect(chapter).not.toContain("possibly in a later scene");
 
     const scene1 = textOf(contextOf(root, "chapter-02-scene-01"));
-    expect(scene1).toContain("- The letter is forged (learned in chapter-01)");
-    expect(scene1).toContain("- The mill had two owners (before the story)");
+    expect(scene1).toContain("- The letter is forged (reader-knowledge, learned in chapter-01)");
+    expect(scene1).toContain("- The mill had two owners (reader-knowledge, pre-existing)");
     expect(scene1).not.toContain("The ledger names the buyer");
     expect(scene1).not.toContain("The tide chart is wrong");
     expect(scene1).not.toContain("The door is locked");
@@ -321,10 +327,10 @@ state-changes:
     expect(scene1).not.toContain("The buyer is the miller");
 
     const scene2 = textOf(contextOf(root, "chapter-02-scene-02"));
-    expect(scene2).toContain("- The ledger names the buyer (learned in this chapter, scene 1)");
-    expect(scene2).toContain("- The tide chart is wrong. (learned in this chapter, scene 1)");
-    expect(scene2).toContain("- The door is locked (learned in this chapter, scene 1)");
-    expect(scene2).toContain("- The window is open (learned in this chapter, scene 1)");
+    expect(scene2).toContain("- The ledger names the buyer (reader-knowledge, learned in this chapter, scene 1)");
+    expect(scene2).toContain("- The tide chart is wrong. (reader-knowledge, learned in this chapter, scene 1)");
+    expect(scene2).toContain("- The door is locked (reader-knowledge, learned in this chapter, scene 1)");
+    expect(scene2).toContain("- The window is open (reader-knowledge, learned in this chapter, scene 1)");
     expect(scene2).not.toContain("The buyer is the miller");
     expect(scene2).not.toContain("possibly in a later scene");
 
@@ -332,7 +338,7 @@ state-changes:
     expect(scene4).not.toContain("The buyer is the miller");
 
     const scene5 = textOf(contextOf(root, "chapter-02-scene-05"));
-    expect(scene5).toContain("- The buyer is the miller (learned in this chapter, scene 4)");
+    expect(scene5).toContain("- The buyer is the miller (reader-knowledge, learned in this chapter, scene 4)");
   });
 
   test("a scene with no POV of its own uses its chapter's", () => {
@@ -599,9 +605,10 @@ describe("story context on the examples", () => {
     const root = path.join(EXAMPLES, "kirimi-eki-no-wasuremono");
     const context = contextOf(root, "chapter-02");
     const text = textOf(context);
-    expect(context.estimatedTokens).toBe(905);
+    // The knowledge line's "reader-knowledge, " mark is one more spaced word.
+    expect(context.estimatedTokens).toBe(906);
     expect(text).toContain("Chapter 2:");
-    expect(text).toContain("(estimated at 4 tokens per 3 words in spaced text; 2 per 3 Han or katakana characters, 1 per 2 hiragana, and 1 per Thai, Lao, Khmer, or Burmese word). Nothing from later chapters is included.");
+    expect(text).toContain("(estimated at 4 tokens per 3 words in spaced text; 2 per 3 Han or katakana characters, 1 per 2 hiragana, and 1 per Thai, Lao, Khmer, or Burmese word). Later chapters are left out. A fact marked character-knowledge is known in story time; do not reveal it.");
     const tight = contextOf(root, "chapter-02", { budget: "297" });
     expect(tight.estimatedTokens).toBeLessThanOrEqual(297);
     expect(tight.omitted.length).toBeGreaterThan(0);
@@ -693,7 +700,7 @@ describe("story context with progressions", () => {
     expect(text).toContain("## Where it happens\n\n### The Mill\n- Id: the-mill\n- Type: building\n- Region: Mill Row\n- Status: burned\n- Controlled by: the bank\n- From this chapter: status burned\n- From this chapter: controlled-by the bank");
     const { out } = invokeJson(cwd, ["context", "chapter-02", "--path", root]);
     for (const output of [text, out]) {
-      expect(output).not.toContain("SPOILER");
+      expect(output.split("SPOILER-KNOWLEDGE-3").join("")).not.toContain("SPOILER");
     }
     // At chapter 1 the location has not changed yet.
     const first = textOf(contextOf(root, "chapter-01-scene-01"));

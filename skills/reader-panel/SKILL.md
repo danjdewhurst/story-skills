@@ -83,7 +83,7 @@ promised so far), run `story context` on the last chapter in range:
 story context chapter-{NN} --path . --budget 4000
 ```
 
-It includes nothing from later chapters and leaves out the synopsis. Do not
+It leaves out later chapters and the synopsis. A POV line marked `character-knowledge` and `do not reveal` is a fact from a chapter the reader has not reached: ignore it. Do not
 read `story.md` (the context already gives its `language`), `plot/`, arc files, promise payoffs, or chapters after the
 range: a persona
 that knows the ending cannot tell whether the setup works. When the

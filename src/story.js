@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { checkContinuity, idText, storyDateError, storyTimeError } from "./continuity.js";
-import { chapterChronology, renumberedChronology } from "./chronology.js";
+import { chapterChronology, knowledgeAudience, renumberedChronology } from "./chronology.js";
 import { PROGRESSION_KINDS, entityStateAt, sortProgressions, validateProgressions } from "./progressions.js";
 import { FRONTMATTER_PATTERN, parseFrontmatter, replaceFrontmatter, stringifyFrontmatter, withoutLeadingFrontmatter } from "./frontmatter.js";
 import { buildContext, DEFAULT_CONTEXT_BUDGET, DEFAULT_CONTEXT_SCENES } from "./context.js";
@@ -1473,11 +1473,12 @@ export function checkProjectContinuity(root) {
   return checkContinuity(scanProject(root));
 }
 
-// Returns knowledge-state entries for a character that the character knew at
-// (or before) a chapter: entries without learned-in are pre-existing
-// knowledge, the rest must be learned in a chapter at or before the target in
-// story time (by date when both chapters are dated, else by number). File
-// order is preserved. `project` skips the scan for a command that has one.
+// Returns knowledge-state entries the character knows at a chapter, in file
+// order. Story time decides (by date when both chapters are dated, else by
+// number), the same clock as deaths. Each entry has `audience`: "reader"
+// when that chapter has been read or the fact is pre-existing, "character"
+// when it comes from a flashback the reader has not reached. `project`
+// skips the scan for a command that has one.
 export function knowledgeAtChapter(root, characterId, atChapterId, project = scanProject(root)) {
   const characters = new Map(project.characters.map((character) => [character.id, character]));
   if (!characters.has(characterId)) {
@@ -1514,14 +1515,9 @@ export function knowledgeAtChapter(root, characterId, atChapterId, project = sca
       throw projectError(`${path.join("continuity", "state.md")} knowledge-state[${index}] is missing knows`);
     }
     const learnedIn = idText(entry["learned-in"]);
-    if (learnedIn === "") {
-      entries.push({ knows: String(entry.knows ?? ""), learnedIn: "" });
-      continue;
-    }
-    // Story time, not reading order: when both chapters are dated, a 2034
-    // prologue read first is learned after a 2024 chapter 2.
-    if (chapterNumbers.has(learnedIn) && !chronology.after(learnedIn, atChapterId)) {
-      entries.push({ knows: String(entry.knows ?? ""), learnedIn });
+    const audience = knowledgeAudience(chronology, learnedIn, atChapterId);
+    if (audience !== null) {
+      entries.push({ knows: String(entry.knows ?? ""), learnedIn, audience });
     }
   }
   return entries;

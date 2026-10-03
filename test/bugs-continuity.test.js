@@ -123,7 +123,7 @@ describe("story knowledge (#60)", () => {
   test("fails when a chapter does not parse", () => {
     const root = baseProject(3);
     writeState(root, "knowledge-state:\n  - character: ann\n    knows: the code\n    learned-in: chapter-02");
-    expect(knowledgeAtChapter(root, "ann", "chapter-03")).toEqual([{ knows: "the code", learnedIn: "chapter-02" }]);
+    expect(knowledgeAtChapter(root, "ann", "chapter-03")).toEqual([{ knows: "the code", learnedIn: "chapter-02", audience: "reader" }]);
 
     const chapter = path.join(root, "chapters", "chapter-02.md");
     fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace(/^---\n/, ""), "utf8");
@@ -582,7 +582,7 @@ knowledge-state:
     fs.writeFileSync(artifact, fs.readFileSync(artifact, "utf8").replace(/^status: .*$/m, "status: active"), "utf8");
     const errors = messages(continuity(root).errors).join("\n");
     expect(errors).not.toContain("references missing");
-    expect(knowledgeAtChapter(root, "47", "chapter-04")).toEqual([{ knows: "x", learnedIn: "" }]);
+    expect(knowledgeAtChapter(root, "47", "chapter-04")).toEqual([{ knows: "x", learnedIn: "", audience: "reader" }]);
 
     const character = path.join(root, "characters", "47.md");
     fs.writeFileSync(character, fs.readFileSync(character, "utf8").replace(/^status: .*$/m, "status: deceased\ndied-in: chapter-02"), "utf8");

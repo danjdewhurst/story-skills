@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { formatClueMatrix } from "./clues.js";
+import { formatKnowledgeMark } from "./chronology.js";
 import { formatContext } from "./context.js";
 import { formatComparison, formatLabelMapping } from "./compare.js";
 import { applySeverity } from "./config.js";
@@ -229,7 +230,8 @@ export const COMMANDS = [
     name: "knowledge",
     usage: "knowledge <id>",
     summary: [
-      "List what a character knew at a chapter, and the",
+      "List what a character knew at a chapter, marked",
+      "reader-knowledge or character-knowledge, and the",
       "changes its progressions made by then; requires --at"
     ],
     project: "flag",
@@ -254,8 +256,7 @@ export const COMMANDS = [
         io.stdout.write(`No recorded knowledge for ${characterId} at ${atChapterId}\n`);
       }
       for (const entry of entries) {
-        const source = entry.learnedIn === "" ? "pre-existing knowledge" : `learned in ${entry.learnedIn}`;
-        io.stdout.write(`- ${entry.knows} (${source})\n`);
+        io.stdout.write(`- ${entry.knows} (${formatKnowledgeMark(entry.learnedIn, entry.audience)})\n`);
       }
       io.stdout.write(formatStateChanges(changes, atChapterId));
       return 0;
@@ -266,7 +267,8 @@ export const COMMANDS = [
     usage: "context <id>",
     summary: [
       "Pack drafting context for a chapter or scene within",
-      "a token budget, with nothing from later chapters"
+      "a token budget. An unread flashback fact is marked",
+      "character-knowledge; do not reveal it"
     ],
     project: "flag",
     args: 1,
