@@ -146,6 +146,17 @@ describe("characterLifeline", () => {
     expect(life.deadAtEnd).toBe(true);
   });
 
+  test("an outline death still counts at the end of the book", () => {
+    const root = book(makeTempDir(), "Planned", {
+      characters: { eli: "status: alive\ndied-in: chapter-05" }
+    });
+    const chapter = path.join(root, "chapters", "chapter-05.md");
+    fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace("status: draft", "status: outline"), "utf8");
+    const life = lifeline(root, "eli").life;
+    expect(life.deadAtEnd).toBe(true);
+    expect(life.events).toEqual([{ type: "death", chapter: "chapter-05", source: "died-in" }]);
+  });
+
   test("a book with no chapters reads the frontmatter status", () => {
     const root = book(makeTempDir(), "Empty", { count: 0, characters: { ghost: `status: deceased\n${progression(["chapter-02", "alive"])}` } });
     expect(lifeline(root, "ghost").life).toEqual({ deadAtStart: true, deadAtEnd: true, events: [] });

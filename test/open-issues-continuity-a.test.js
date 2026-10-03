@@ -133,13 +133,28 @@ describe("resurrection, narrators, planned deaths (#172)", () => {
   });
 
   test("a death in an outline chapter is planned, so the character stays alive", () => {
-    const root = baseProject(5);
+    const root = baseProject(6);
     writeChapter(root, 5, "", "outline");
+    writeChapter(root, 6, "pov: ann\ncharacters:\n  - ann");
+    writeScene(root, 6, 1, "characters:\n  - ann");
     setCharacter(root, "ann", "alive", "died-in: chapter-05");
     expect(messages(continuity(root).errors)).toEqual([]);
 
     writeChapter(root, 5, "");
-    expect(messages(continuity(root).errors)).toContain("characters/ann.md has died-in chapter-05 but status alive; set status: deceased");
+    const drafted = messages(continuity(root).errors);
+    expect(drafted).toContain("characters/ann.md has died-in chapter-05 but status alive; set status: deceased");
+    expect(drafted).toContain("chapters/chapter-06.md lists ann, who died in chapter-05; move posthumous appearances to mentions");
+    expect(drafted).toContain("scenes/chapter-06-scene-01.md lists ann, who died in chapter-05; move posthumous appearances to mentions");
+  });
+
+  // Learning after a scheduled death stays an error. Whether a fact learned in
+  // an outline chapter counts as known is issue 357, and is not part of this.
+  test("learning after an outline death is still posthumous", () => {
+    const root = baseProject(6);
+    writeChapter(root, 5, "", "outline");
+    setCharacter(root, "ann", "alive", "died-in: chapter-05");
+    writeState(root, "knowledge-state:\n  - character: ann\n    knows: the plan\n    learned-in: chapter-06", 6);
+    expect(messages(continuity(root).errors)).toContain("continuity/state.md knowledge-state[0] has ann learn something in chapter-06, after they died in chapter-05");
   });
 });
 

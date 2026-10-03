@@ -568,7 +568,7 @@ arc: redemption
 
 Status notes:
 
-- `status: deceased` with `died-in` lets `story continuity` report the character in the cast of any later chapter or scene. `died-in` with any other status is an error, unless the `died-in` chapter is still an `outline` (a planned death) or a drafted `revived-in` chapter has brought the character back. Characters who died before chapter 1 use `status: deceased` without `died-in`; `story continuity` warns when one is in a chapter or scene cast, since they can appear only in `mentions`.
+- `status: deceased` with `died-in` lets `story continuity` report the character in the cast of any later chapter or scene. `died-in` with any other status is an error, unless the `died-in` chapter is still an `outline` (a planned death, so later casts are allowed until that chapter is drafted) or a drafted `revived-in` chapter has brought the character back. Characters who died before chapter 1 use `status: deceased` without `died-in`; `story continuity` warns when one is in a chapter or scene cast, since they can appear only in `mentions`.
 - "Later" is story time when both chapters are dated: a chapter's `date`, or else its earliest dated scene. A 2034 prologue read first comes after a 2024 death. Otherwise chapters compare by number.
 - `status: cut` keeps the file for a character removed during discovery drafting, out of canon but on record.
 

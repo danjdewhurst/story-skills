@@ -307,8 +307,10 @@ function exemptionProject() {
   for (const name of ["Ann", "Joann"]) {
     createEntity(root, { kind: "character", name });
   }
+  // An outline died-in is planned, not in force, so the death chapter is drafted
+  // before a later cast can be posthumous.
   for (const number of [1, 2, 3]) {
-    createEntity(root, { kind: "chapter", name: `C${number}`, number });
+    createEntity(root, { kind: "chapter", name: `C${number}`, number, status: "draft" });
   }
   for (const id of ["ann", "joann"]) {
     editFile(path.join(root, "characters", `${id}.md`), (text) => text.replace("status: alive", "status: deceased\ndied-in: chapter-01"));

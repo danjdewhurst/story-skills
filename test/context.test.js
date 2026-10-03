@@ -565,6 +565,18 @@ describe("context helpers", () => {
     // so the status is left out rather than shown either way.
     expect(characterStateAt({ status: "deceased", diedIn: "chapter-03" }, chronology, "chapter-02").status).toBe("");
   });
+
+  test("an outline death is not in force in a later chapter", () => {
+    const { root } = contextProject();
+    const death = path.join(root, "chapters", "chapter-04.md");
+    fs.writeFileSync(death, fs.readFileSync(death, "utf8").replace("status: draft", "status: outline"), "utf8");
+    writeMarkdown(path.join(root, "chapters", "chapter-05.md"), "title: Chapter 5\nnumber: 5\nstatus: draft\n", "# Chapter 5\n");
+    const project = scanProject(root);
+    const chronology = chapterChronology(project);
+    const jonas = project.characters.find((character) => character.id === "jonas-reed");
+    expect(characterStateAt(jonas, chronology, "chapter-04").status).toBe("dies in this chapter");
+    expect(characterStateAt(jonas, chronology, "chapter-05").status).toBe("alive");
+  });
 });
 
 describe("story context on the examples", () => {
