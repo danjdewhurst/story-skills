@@ -108,7 +108,7 @@ warning: continuity/state.md object-state[0] status active conflicts with worldb
 
 [Fixing the unraveled thread](#worked-example-fixing-the-unraveled-thread) walks through repairing each of these.
 
-Reader-order ledgers use chapter numbers: `planted` and `payoff` on a promise or clue, and `introduced` and `resolved` on a question. Deaths, revivals, progressions, and knowledge use story time when both chapters are dated (a chapter's `date`, or else its earliest dated scene), and chapter number otherwise. Those fields are chapter ids (`chapter-02`).
+Reader-order ledgers use chapter numbers: `planted` and `payoff` on a promise or clue, and `introduced` and `resolved` on a question. Deaths and revivals (`died-in`, `revived-in`), progressions (`from`), knowledge (`learned-in`), and object history (`since`) use story time when both chapters are dated on different days (a chapter's `date`, or else its earliest dated scene), and chapter number otherwise. All of these fields are chapter ids (`chapter-02`).
 
 ### How findings are reported
 

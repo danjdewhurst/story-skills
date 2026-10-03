@@ -10,7 +10,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ### Fixed
 
-- The continuity guide's opening now matches the checks: reader-order ledgers (`planted`, `payoff`, `introduced`, and `resolved`) use chapter numbers, and deaths, revivals, progressions, and knowledge use story time when both chapters are dated. ([#350](https://github.com/danjdewhurst/story-skills/issues/350))
+- The continuity guide's opening now matches the checks: reader-order ledgers (`planted`, `payoff`, `introduced`, and `resolved`) use chapter numbers, and deaths, revivals, progressions, knowledge, and object-state `since` history use story time when both chapters are dated. ([#350](https://github.com/danjdewhurst/story-skills/issues/350))
 
 ## [0.19.0] - 2026-10-03
 
