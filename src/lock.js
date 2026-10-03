@@ -16,7 +16,9 @@ const POLL_MS = 50;
 // A lock from another host (a container, a cloud agent, or a share) cannot
 // be checked by pid. One older than this is taken over. Ten minutes is
 // longer than a rename or reindex, so a command still running elsewhere is
-// not stolen by a second agent.
+// not stolen by a second agent. Both the time written in the lock and the
+// file's modification time must be this old, so a host whose clock runs
+// behind ours does not make its fresh lock look stale.
 export const FOREIGN_LOCK_STALE_MS = 10 * 60 * 1000;
 
 // Projects this process already holds, so a command that calls another
@@ -60,9 +62,7 @@ function acquire(lockPath) {
     if (owner && !owner.alive && !removedStale) {
       // A command killed before it could remove its lock. Another command
       // may have replaced it meanwhile, so only the same stale lock goes.
-      if (readOwner(lockPath)?.text === owner.text) {
-        fs.rmSync(lockPath, { force: true });
-      }
+      removeStale(lockPath, owner.text);
       removedStale = true;
       continue;
     }
@@ -73,6 +73,33 @@ function acquire(lockPath) {
     sleep(Math.min(POLL_MS, Math.max(1, deadline - Date.now())));
   }
   return created;
+}
+
+// Moves the lock aside before deleting it, so a lock another command took
+// between our check and the removal is seen and put back rather than
+// deleted. Several agents can find the same stale lock at once.
+function removeStale(lockPath, staleText) {
+  const aside = `${lockPath}.${process.pid}.stale`;
+  try {
+    fs.renameSync(lockPath, aside);
+  } catch {
+    return;
+  }
+  let text = null;
+  try {
+    text = fs.readFileSync(aside, "utf8");
+  } catch {
+    // Unreadable once moved: put it back, as for a lock we did not check.
+  }
+  if (text !== staleText) {
+    try {
+      // link, unlike rename, never replaces a lock created meanwhile.
+      fs.linkSync(aside, lockPath);
+    } catch {
+      // A newer lock is already in place, or links are not supported.
+    }
+  }
+  fs.rmSync(aside, { force: true });
 }
 
 // true when this call created the lock, null when one already exists, false
@@ -109,12 +136,17 @@ function readOwner(lockPath) {
   // bound is stale; a fresh one, or one with no timestamp, stays, so the
   // wait ends with the hint to delete it.
   const foreign = host && host !== os.hostname();
-  return { text, pid, host, alive: foreign ? !foreignLockStale(writtenAt) : processAlive(pid) };
+  return { text, pid, host, alive: foreign ? !foreignLockStale(lockPath, writtenAt) : processAlive(pid) };
 }
 
-function foreignLockStale(writtenAt) {
+function foreignLockStale(lockPath, writtenAt) {
   const written = Date.parse(writtenAt);
-  return Number.isFinite(written) && Date.now() - written > FOREIGN_LOCK_STALE_MS;
+  if (!Number.isFinite(written)) {
+    return false;
+  }
+  // Gone since it was read: not stale, and the next try creates a new one.
+  const modified = fs.statSync(lockPath, { throwIfNoEntry: false })?.mtimeMs ?? Date.now();
+  return Date.now() - Math.max(written, modified) > FOREIGN_LOCK_STALE_MS;
 }
 
 function processAlive(pid) {
