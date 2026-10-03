@@ -128,6 +128,11 @@ strand: "2020"
     writeScene(root, "chapter-02", 1, "location: keep\ndate: 1990-06-01\ntime: \"09:20\"\ncharacters:\n  - ada");
     expect(messages(checkProjectContinuity(root).errors)).toEqual([]);
 
+    // The same exact minute at unrouted places is not a clash across strands.
+    writeScene(root, "chapter-02", 2, "location: harbour\ndate: 1990-06-01\ntime: \"09:00\"\ncharacters:\n  - ada");
+    expect(messages(checkProjectContinuity(root).errors)).toEqual([]);
+    fs.rmSync(path.join(root, "scenes", "chapter-02-scene-02.md"));
+
     // The same twenty minutes inside one strand still outruns the route.
     writeMarkdown(path.join(root, "chapters", "chapter-02.md"), `
 title: The Keep
