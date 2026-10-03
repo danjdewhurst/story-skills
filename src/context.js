@@ -380,8 +380,29 @@ export function buildContext(project, targetId, readBody, options = {}) {
       const learnedIn = idText(entry["learned-in"]);
       if (learnedIn === "") {
         known.push(`- ${entry.knows} (before the story)`);
-      } else if (upToTarget(learnedIn) && !chronology.after(learnedIn, target.chapter.id)) {
-        known.push(`- ${entry.knows} (learned in ${learnedIn !== target.chapter.id ? learnedIn : target.scene ? "this chapter, possibly in a later scene" : "this chapter"})`);
+        continue;
+      }
+      // Not read yet (a later chapter number, or an unknown chapter), or
+      // learned in a flash-forward that was read earlier but happens later
+      // in story time: the character does not know it at the target.
+      if (!upToTarget(learnedIn) || chronology.after(learnedIn, target.chapter.id)) {
+        continue;
+      }
+      if (learnedIn !== target.chapter.id) {
+        known.push(`- ${entry.knows} (learned in ${learnedIn})`);
+        continue;
+      }
+      // A chapter target is what is known by the end of the chapter.
+      if (!target.scene) {
+        known.push(`- ${entry.knows} (learned in this chapter)`);
+        continue;
+      }
+      // Knowledge is stored per chapter. For a scene, a same-chapter fact
+      // is on the page only once an earlier scene's state-changes records
+      // it; otherwise the fact text would spoil a later reveal.
+      const recorded = earlierScenes(project, target, () => false).find((scene) => sceneRecordsFact(scene, pov, entry));
+      if (recorded) {
+        known.push(`- ${entry.knows} (learned in this chapter, scene ${recorded.scene})`);
       }
     }
     if (known.length > 0) {
@@ -544,6 +565,50 @@ export function buildContext(project, targetId, readBody, options = {}) {
     omitted,
     warnings
   };
+}
+
+// Whether this scene's state-changes record the POV character learning the
+// knowledge-state entry. Matched the way continuity pairs a scene knowledge
+// change with an entry: the same `fact` id, or the same text aside from
+// case and a final full stop. A paraphrase that matches neither stays out,
+// so an unrelated change in an earlier scene cannot pull the fact in.
+function sceneRecordsFact(scene, characterId, entry) {
+  const fact = entry.fact === undefined ? "" : String(entry.fact);
+  const knows = normalizeKnowledge(entry.knows);
+  for (const change of scene.stateChanges) {
+    if (!recordsKnowledge(change, characterId)) {
+      continue;
+    }
+    if (sameFact(fact, change) || sameKnowledgeText(knows, change.knowledge)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function recordsKnowledge(change, characterId) {
+  return isMapping(change) && idText(change.character) === characterId && change.knowledge !== undefined;
+}
+
+function sameFact(fact, change) {
+  if (fact === "") {
+    return false;
+  }
+  const changeFact = change.fact === undefined ? "" : String(change.fact);
+  return changeFact === fact;
+}
+
+function sameKnowledgeText(knows, knowledge) {
+  return knows !== "" && normalizeKnowledge(knowledge) === knows;
+}
+
+// Same folding continuity uses when it compares a scene's `knowledge` text
+// with a `knows` value.
+function normalizeKnowledge(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+  return value.trim().toLowerCase().replace(/\s+/g, " ").replace(/[.!]+$/, "");
 }
 
 // Scenes before the target in reading order: every scene of an earlier

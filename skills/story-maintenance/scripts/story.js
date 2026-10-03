@@ -10060,8 +10060,22 @@ ${body}`)));
       const learnedIn = idText(entry["learned-in"]);
       if (learnedIn === "") {
         known.push(`- ${entry.knows} (before the story)`);
-      } else if (upToTarget(learnedIn) && !chronology.after(learnedIn, target.chapter.id)) {
-        known.push(`- ${entry.knows} (learned in ${learnedIn !== target.chapter.id ? learnedIn : target.scene ? "this chapter, possibly in a later scene" : "this chapter"})`);
+        continue;
+      }
+      if (!upToTarget(learnedIn) || chronology.after(learnedIn, target.chapter.id)) {
+        continue;
+      }
+      if (learnedIn !== target.chapter.id) {
+        known.push(`- ${entry.knows} (learned in ${learnedIn})`);
+        continue;
+      }
+      if (!target.scene) {
+        known.push(`- ${entry.knows} (learned in this chapter)`);
+        continue;
+      }
+      const recorded = earlierScenes(project, target, () => false).find((scene) => sceneRecordsFact(scene, pov, entry));
+      if (recorded) {
+        known.push(`- ${entry.knows} (learned in this chapter, scene ${recorded.scene})`);
       }
     }
     if (known.length > 0) {
@@ -10176,6 +10190,38 @@ ${body}`)));
     omitted,
     warnings
   };
+}
+function sceneRecordsFact(scene, characterId, entry) {
+  const fact = entry.fact === undefined ? "" : String(entry.fact);
+  const knows = normalizeKnowledge2(entry.knows);
+  for (const change of scene.stateChanges) {
+    if (!recordsKnowledge(change, characterId)) {
+      continue;
+    }
+    if (sameFact(fact, change) || sameKnowledgeText(knows, change.knowledge)) {
+      return true;
+    }
+  }
+  return false;
+}
+function recordsKnowledge(change, characterId) {
+  return isMapping(change) && idText(change.character) === characterId && change.knowledge !== undefined;
+}
+function sameFact(fact, change) {
+  if (fact === "") {
+    return false;
+  }
+  const changeFact = change.fact === undefined ? "" : String(change.fact);
+  return changeFact === fact;
+}
+function sameKnowledgeText(knows, knowledge) {
+  return knows !== "" && normalizeKnowledge2(knowledge) === knows;
+}
+function normalizeKnowledge2(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+  return value.trim().toLowerCase().replace(/\s+/g, " ").replace(/[.!]+$/, "");
 }
 function earlierScenes(project, target, upToTarget) {
   return project.scenes.filter((scene) => {
