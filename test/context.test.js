@@ -135,6 +135,10 @@ describe("story context", () => {
     expect(text).toContain("- Target words: 2500");
     expect(text).toContain("Chapter outline:\n\n1. Mara finds the letter\n2. Jonas lies\n\nScenes planned:\n\n1. chapter-02 scene 1 (outcome: yes-but)\n2. chapter-02 scene 2");
 
+    expect(text).toContain("- Language: en");
+    expect(text).toContain("- Writing mode: horizontal");
+    expect(text).toContain("- Chapter numerals: western");
+    expect(text).toContain("- Count unit: words");
     expect(text).toContain("- Premise: Truth costs more than silence");
     expect(text).toContain("#### Tone & Style\n\nSpare and cold.");
     expect(text).toContain("#### Setting\n\nA drowned mill town.");
@@ -446,6 +450,18 @@ describe("story context on the examples", () => {
     expect(tight.estimatedTokens).toBeLessThanOrEqual(297);
     expect(tight.omitted.length).toBeGreaterThan(0);
     expect(textOf(tight)).toContain("## Left out to fit the budget");
+  });
+
+  test("kirimi-eki-no-wasuremono packs the language contract", () => {
+    const root = path.join(EXAMPLES, "kirimi-eki-no-wasuremono");
+    for (const target of ["chapter-01", "chapter-03"]) {
+      const text = textOf(contextOf(root, target));
+      const essentials = text.split("## Story essentials")[1].split(/^## /m)[0];
+      expect(essentials).toContain("- Language: ja");
+      expect(essentials).toContain("- Writing mode: vertical");
+      expect(essentials).toContain("- Chapter numerals: native");
+      expect(essentials).toContain("- Count unit: characters");
+    }
   });
 
   test("the-last-ember packs the style sheet and both cards", () => {

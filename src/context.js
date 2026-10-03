@@ -328,7 +328,8 @@ export function buildContext(project, targetId, readBody, options = {}) {
   }
   sections.push({ id: "target", title: "Target", items: [item(`target:${target.id}`, "Target", [target.chapter, target.scene].filter(Boolean).map((entry) => relative(entry.file)).join(", "), lines(...targetLines))] });
 
-  // 2. story.md essentials and style-sheet rules.
+  // 2. story.md essentials and style-sheet rules. The language contract is a
+  // property of the book, not of a chapter, so it is included at every target.
   const essentials = [];
   const story = project.story.data;
   const storyText = lines(
@@ -338,6 +339,10 @@ export function buildContext(project, targetId, readBody, options = {}) {
     field("POV", story.pov),
     field("Tense", story.tense),
     field("Form", story.form),
+    field("Language", project.language),
+    field("Writing mode", story["writing-mode"] || "horizontal"),
+    field("Chapter numerals", story["chapter-numerals"] || "western"),
+    field("Count unit", project.unit.name),
     field("Themes", Array.isArray(story.themes) ? story.themes : [story.themes].filter(Boolean)),
     field("Premise", story.premise),
     ...STORY_SECTIONS.map((heading) => subsection(heading, section(project.story.body ?? "", heading)))

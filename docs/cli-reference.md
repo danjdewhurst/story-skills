@@ -853,7 +853,7 @@ story context <chapter-or-scene-id> [--budget <tokens>] [--scenes <n>] [--json] 
 Prints, as markdown, the slice of the project an agent needs to draft one chapter or scene, packed into a token budget. It reads files and writes nothing. Items are added in this priority order:
 
 1. **Target**: the chapter or scene's POV, cast, mentions, locations, arcs, date, outcome, hook, and `target-words`, the chapter's `## Outline` (up to the `---` rule above the prose), and the chapter's planned scenes or, for a scene, its `## Purpose`.
-2. **Story essentials**: `story.md` genre, setting era, POV, tense, form, themes, and `premise`, plus its `## Tone & Style`, `## Setting`, and `## Central Conflict` sections; then `style-sheet.md`, when present: `dialect`, `preferred`, `watch-words`, and its body.
+2. **Story essentials**: `story.md` genre, setting era, POV, tense, form, `language` (`en` when unset), `writing-mode` (`horizontal` when unset), `chapter-numerals` (`western` when unset), `count-unit` (the unit lengths are counted in, including the one `language` implies), themes, and `premise`, plus its `## Tone & Style`, `## Setting`, and `## Central Conflict` sections; then `style-sheet.md`, when present: `dialect`, `preferred`, `watch-words`, and its body. Language, writing mode, chapter numerals, and count unit belong to the book, not to a chapter, so they are included at every target.
 3. **POV knowledge and state**: the POV character's `knowledge-state` entries known at the target, the `character-state` entry from `continuity/state.md` when its `current-chapter` is before the target, the `state-changes` of earlier scenes whose `character` is the POV character or whose `owner` hands them an artifact, and the POV character's [progressions](project-format.md#progressions) applied by the target.
 4. **Characters on the page**: a card for the POV character and each character in the target's `characters`: role, status at the target, aliases, `voice-words`, `voice-avoid`, the progressions applied by the target, and the `## Appearance`, `## Personality & Traits`, `## Motivations & Goals`, and `## Voice & Speech Patterns` sections.
 5. **Where it happens**: each of the chapter's `locations`, or the scene's `location`, with its type, region, status, and `controlled-by` after its progressions, and the progressions applied.
@@ -904,6 +904,10 @@ Scenes planned:
 - POV: third-person-limited
 - Tense: past
 - Form: novel
+- Language: en
+- Writing mode: horizontal
+- Chapter numerals: western
+- Count unit: words
 - Themes: guilt, small-town secrets
 
 ## Characters on the page
@@ -928,15 +932,17 @@ Scenes planned:
 ## Open promises, clues, and questions
 
 - **The Sealed Letter** (promise; planted in chapter-01)
-- **The Constable's Silence** (clue; plant in this chapter; red herring)
-  Jonas says nothing to the constable about the letter. It points suspicion at Jonas.
+
+## Previous scenes
+
+- **chapter-01 scene 1: The Ash and the Ledger** (POV jonas-reed, at the-mill-row, outcome yes-but)
 
 ## Left out to fit the budget
 
 Read these files directly if you need them:
 
 - Clue: Edran's Margin Notes: continuity/clues/edrans-margin-notes.md (about 48 tokens)
-- Scene: The Ash and the Ledger: scenes/chapter-01-scene-01.md (about 20 tokens)
+- Clue: The Constable's Silence: continuity/clues/the-constables-silence.md (about 34 tokens)
 ```
 
 The chapter's outline is still the starter text `story add` writes, so it is skipped. The Burned Page, The Broken Compass, and Who Burned The Mill are left out because they are planted or raised in chapter 3, and Jonas's knowledge of the firestarter's page because its `learned-in` chapter does not exist.
