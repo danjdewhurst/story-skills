@@ -112,7 +112,7 @@ describe("dual-timeline knowledge (#341)", () => {
     const flashback = formatContext(draftingContext(root, "chapter-02"));
     expect(flashback).toContain("- the mill burned (reader-knowledge, learned in this chapter)");
     expect(flashback).not.toContain("the city is gone");
-    expect(flashback).not.toContain("do not reveal");
+    expect(flashback).not.toContain("the mill burned (character-knowledge");
 
     const json = invoke(cwd, ["knowledge", "ada", "--at", "chapter-01", "--path", root, "--json"]);
     expect(json.err).toBe("");
