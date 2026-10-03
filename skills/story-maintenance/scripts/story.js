@@ -432,9 +432,6 @@ function formatClueMatrix(matrix) {
 `;
 }
 
-// src/context.js
-import path6 from "node:path";
-
 // src/continuity.js
 import path5 from "node:path";
 
@@ -9814,6 +9811,27 @@ function chronologyFrom(numbers, days) {
   };
   return { numbers, days, after };
 }
+function knowledgeAudience(chronology, learnedIn, atChapterId) {
+  if (learnedIn === "") {
+    return "reader";
+  }
+  if (!chronology.numbers.has(learnedIn) || chronology.after(learnedIn, atChapterId)) {
+    return null;
+  }
+  return chronology.numbers.get(learnedIn) <= chronology.numbers.get(atChapterId) ? "reader" : "character";
+}
+function formatKnowledgeMark(learnedIn, audience, { atChapterId = "", scene = "" } = {}) {
+  if (audience === "character") {
+    return `character-knowledge, learned in ${learnedIn}; not yet shown to the reader, do not reveal`;
+  }
+  if (learnedIn === "") {
+    return "reader-knowledge, pre-existing";
+  }
+  if (atChapterId !== "" && learnedIn === atChapterId) {
+    return scene === "" ? "reader-knowledge, learned in this chapter" : `reader-knowledge, learned in this chapter, scene ${scene}`;
+  }
+  return `reader-knowledge, learned in ${learnedIn}`;
+}
 function renumberedChronology(chronology, oldId, newId, number) {
   const numbers = new Map(chronology.numbers);
   const days = new Map(chronology.days);
@@ -9847,6 +9865,7 @@ function deathWindow(character, chronology, options = {}) {
 }
 
 // src/context.js
+import path6 from "node:path";
 var DEFAULT_CONTEXT_BUDGET = 6000;
 var DEFAULT_CONTEXT_SCENES = 5;
 var SPACED_SIXTHS = 8;
@@ -10095,25 +10114,20 @@ ${body}`)));
         continue;
       }
       const learnedIn = idText(entry["learned-in"]);
-      if (learnedIn === "") {
-        known.push(`- ${entry.knows} (before the story)`);
+      const audience = knowledgeAudience(chronology, learnedIn, target.chapter.id);
+      if (audience === null) {
         continue;
       }
-      if (!upToTarget(learnedIn) || chronology.after(learnedIn, target.chapter.id)) {
-        continue;
+      let scene = "";
+      if (target.scene && learnedIn === target.chapter.id) {
+        const recorded = earlierScenes(project, target, () => false).find((candidate) => sceneRecordsFact(candidate, pov, entry));
+        if (!recorded) {
+          continue;
+        }
+        scene = String(recorded.scene);
       }
-      if (learnedIn !== target.chapter.id) {
-        known.push(`- ${entry.knows} (learned in ${learnedIn})`);
-        continue;
-      }
-      if (!target.scene) {
-        known.push(`- ${entry.knows} (learned in this chapter)`);
-        continue;
-      }
-      const recorded = earlierScenes(project, target, () => false).find((scene) => sceneRecordsFact(scene, pov, entry));
-      if (recorded) {
-        known.push(`- ${entry.knows} (learned in this chapter, scene ${recorded.scene})`);
-      }
+      const mark = formatKnowledgeMark(learnedIn, audience, { atChapterId: target.chapter.id, scene });
+      known.push(`- ${entry.knows} (${mark})`);
     }
     if (known.length > 0) {
       povItems.push(item(`knowledge:${pov}`, `What ${nameOf(pov)} knows`, statePath, lines(`### What ${nameOf(pov)} knows`, ...known)));
@@ -10277,7 +10291,7 @@ function formatContext(context) {
     `# Drafting context: ${target.id}`,
     "",
     `Chapter ${target.number}: ${target.title}. About ${context.estimatedTokens} of ${context.budget} tokens`,
-    "(estimated at 4 tokens per 3 words in spaced text; 2 per 3 Han or katakana characters, 1 per 2 hiragana, and 1 per Thai, Lao, Khmer, or Burmese word). Nothing from later chapters is included."
+    "(estimated at 4 tokens per 3 words in spaced text; 2 per 3 Han or katakana characters, 1 per 2 hiragana, and 1 per Thai, Lao, Khmer, or Burmese word). Later chapters are left out. A fact marked character-knowledge is known in story time; do not reveal it."
   ];
   for (const entry of context.sections) {
     const included = entry.items.filter((candidate) => candidate.included);
@@ -14553,12 +14567,9 @@ function knowledgeAtChapter(root, characterId, atChapterId, project = scanProjec
       throw projectError(`${path11.join("continuity", "state.md")} knowledge-state[${index}] is missing knows`);
     }
     const learnedIn = idText(entry["learned-in"]);
-    if (learnedIn === "") {
-      entries.push({ knows: String(entry.knows ?? ""), learnedIn: "" });
-      continue;
-    }
-    if (chapterNumbers.has(learnedIn) && !chronology.after(learnedIn, atChapterId)) {
-      entries.push({ knows: String(entry.knows ?? ""), learnedIn });
+    const audience = knowledgeAudience(chronology, learnedIn, atChapterId);
+    if (audience !== null) {
+      entries.push({ knows: String(entry.knows ?? ""), learnedIn, audience });
     }
   }
   return entries;
@@ -20585,7 +20596,8 @@ var COMMANDS = [
     name: "knowledge",
     usage: "knowledge <id>",
     summary: [
-      "List what a character knew at a chapter, and the",
+      "List what a character knew at a chapter, marked",
+      "reader-knowledge or character-knowledge, and the",
       "changes its progressions made by then; requires --at"
     ],
     project: "flag",
@@ -20609,8 +20621,7 @@ var COMMANDS = [
 `);
       }
       for (const entry of entries) {
-        const source = entry.learnedIn === "" ? "pre-existing knowledge" : `learned in ${entry.learnedIn}`;
-        io.stdout.write(`- ${entry.knows} (${source})
+        io.stdout.write(`- ${entry.knows} (${formatKnowledgeMark(entry.learnedIn, entry.audience)})
 `);
       }
       io.stdout.write(formatStateChanges(changes, atChapterId));
@@ -20622,7 +20633,8 @@ var COMMANDS = [
     usage: "context <id>",
     summary: [
       "Pack drafting context for a chapter or scene within",
-      "a token budget, with nothing from later chapters"
+      "a token budget. An unread flashback fact is marked",
+      "character-knowledge; do not reveal it"
     ],
     project: "flag",
     args: 1,

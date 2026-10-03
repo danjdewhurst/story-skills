@@ -44,6 +44,42 @@ export function chronologyFrom(numbers, days) {
   return { numbers, days, after };
 }
 
+// How a knowledge-state fact stands at `atChapterId`.
+//
+// Story time decides whether the character knows it, the same clock as
+// deaths: when both chapters are dated, by date, otherwise by chapter
+// number. Reading order decides whether the reader has been shown it.
+// Returns "reader" when the reader has reached the learning chapter (or
+// the fact is pre-existing), "character" when only the character knows it
+// (learned in a flashback the reader has not reached), and null when the
+// character does not know it yet or `learnedIn` names no chapter.
+export function knowledgeAudience(chronology, learnedIn, atChapterId) {
+  if (learnedIn === "") {
+    return "reader";
+  }
+  if (!chronology.numbers.has(learnedIn) || chronology.after(learnedIn, atChapterId)) {
+    return null;
+  }
+  return chronology.numbers.get(learnedIn) <= chronology.numbers.get(atChapterId) ? "reader" : "character";
+}
+
+// The parenthetical `story knowledge` and `story context` both print.
+// Pass `atChapterId` when the line is for the chapter being drafted, so a
+// fact learned there says "this chapter", and `scene` (the number of the
+// earlier scene whose state-changes record it) for a scene target.
+export function formatKnowledgeMark(learnedIn, audience, { atChapterId = "", scene = "" } = {}) {
+  if (audience === "character") {
+    return `character-knowledge, learned in ${learnedIn}; not yet shown to the reader, do not reveal`;
+  }
+  if (learnedIn === "") {
+    return "reader-knowledge, pre-existing";
+  }
+  if (atChapterId !== "" && learnedIn === atChapterId) {
+    return scene === "" ? "reader-knowledge, learned in this chapter" : `reader-knowledge, learned in this chapter, scene ${scene}`;
+  }
+  return `reader-knowledge, learned in ${learnedIn}`;
+}
+
 // The chronology after chapter `oldId` is renumbered to `newId`: the chapter
 // keeps its date and takes the new number.
 export function renumberedChronology(chronology, oldId, newId, number) {

@@ -1,5 +1,5 @@
 import path from "node:path";
-import { chapterChronology, deathWindow } from "./chronology.js";
+import { chapterChronology, deathWindow, formatKnowledgeMark, knowledgeAudience } from "./chronology.js";
 import { idText, normalizeKnowledge } from "./continuity.js";
 import { warn } from "./findings.js";
 import { entityStateAt } from "./progressions.js";
@@ -10,8 +10,9 @@ import { wordSpans } from "./words.js";
 // `story context` packs the slice of a project an agent needs to draft one
 // chapter or scene. buildContext is pure over the scanned project (the caller
 // supplies readBody for entity bodies) and returns the data; formatContext
-// turns it into markdown. Nothing dated to a chapter after the target in
-// reading order is included, so the context never spoils later chapters.
+// turns it into markdown. Nothing from a later chapter is included, except a
+// fact the POV character already knows in story time, marked
+// character-knowledge so the draft does not reveal it.
 
 export const DEFAULT_CONTEXT_BUDGET = 6000;
 export const DEFAULT_CONTEXT_SCENES = 5;
@@ -378,32 +379,27 @@ export function buildContext(project, targetId, readBody, options = {}) {
         continue;
       }
       const learnedIn = idText(entry["learned-in"]);
-      if (learnedIn === "") {
-        known.push(`- ${entry.knows} (before the story)`);
+      // Story time decides whether the POV knows it, as `story knowledge`
+      // does; reading order decides whether the reader has seen it. A fact
+      // learned later in story time (or in an unknown chapter) is left out.
+      const audience = knowledgeAudience(chronology, learnedIn, target.chapter.id);
+      if (audience === null) {
         continue;
       }
-      // Not read yet (a later chapter number, or an unknown chapter), or
-      // learned in a flash-forward that was read earlier but happens later
-      // in story time: the character does not know it at the target.
-      if (!upToTarget(learnedIn) || chronology.after(learnedIn, target.chapter.id)) {
-        continue;
+      // Knowledge is stored per chapter. A chapter target is what is known
+      // by the end of the chapter. For a scene, a same-chapter fact is on
+      // the page only once an earlier scene's state-changes records it;
+      // otherwise the fact text would spoil a later reveal.
+      let scene = "";
+      if (target.scene && learnedIn === target.chapter.id) {
+        const recorded = earlierScenes(project, target, () => false).find((candidate) => sceneRecordsFact(candidate, pov, entry));
+        if (!recorded) {
+          continue;
+        }
+        scene = String(recorded.scene);
       }
-      if (learnedIn !== target.chapter.id) {
-        known.push(`- ${entry.knows} (learned in ${learnedIn})`);
-        continue;
-      }
-      // A chapter target is what is known by the end of the chapter.
-      if (!target.scene) {
-        known.push(`- ${entry.knows} (learned in this chapter)`);
-        continue;
-      }
-      // Knowledge is stored per chapter. For a scene, a same-chapter fact
-      // is on the page only once an earlier scene's state-changes records
-      // it; otherwise the fact text would spoil a later reveal.
-      const recorded = earlierScenes(project, target, () => false).find((scene) => sceneRecordsFact(scene, pov, entry));
-      if (recorded) {
-        known.push(`- ${entry.knows} (learned in this chapter, scene ${recorded.scene})`);
-      }
+      const mark = formatKnowledgeMark(learnedIn, audience, { atChapterId: target.chapter.id, scene });
+      known.push(`- ${entry.knows} (${mark})`);
     }
     if (known.length > 0) {
       povItems.push(item(`knowledge:${pov}`, `What ${nameOf(pov)} knows`, statePath, lines(`### What ${nameOf(pov)} knows`, ...known)));
@@ -635,7 +631,7 @@ export function formatContext(context) {
     `# Drafting context: ${target.id}`,
     "",
     `Chapter ${target.number}: ${target.title}. About ${context.estimatedTokens} of ${context.budget} tokens`,
-    "(estimated at 4 tokens per 3 words in spaced text; 2 per 3 Han or katakana characters, 1 per 2 hiragana, and 1 per Thai, Lao, Khmer, or Burmese word). Nothing from later chapters is included."
+    "(estimated at 4 tokens per 3 words in spaced text; 2 per 3 Han or katakana characters, 1 per 2 hiragana, and 1 per Thai, Lao, Khmer, or Burmese word). Later chapters are left out. A fact marked character-knowledge is known in story time; do not reveal it."
   ];
   for (const entry of context.sections) {
     const included = entry.items.filter((candidate) => candidate.included);

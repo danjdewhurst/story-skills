@@ -595,16 +595,18 @@ If the file is missing or does not parse, no exemptions apply. If it is refused 
 story knowledge <character-id> --at <chapter-id> [--path <project>]
 ```
 
-`story knowledge` answers "did she know this yet?" from the `knowledge-state` list in `continuity/state.md`. For the given character it lists, in file order:
+`story knowledge` answers "did she know this yet?" from the `knowledge-state` list in `continuity/state.md`. `story context` uses the same rule for the POV character's knowledge. For the given character it lists, in file order, every fact the character knows at the chapter in story time:
 
-- every entry without `learned-in`, marked `pre-existing knowledge`, and
-- every entry whose `learned-in` chapter comes at or before the `--at` chapter, marked `learned in <chapter>`. When both chapters are dated (a chapter's `date`, or else its earliest dated scene), this compares story dates, so knowledge learned in a 2034 prologue read as chapter 1 is not known in a 2024 chapter 2. Otherwise it compares chapter numbers.
+- every entry without `learned-in`, marked `reader-knowledge, pre-existing`, and
+- every entry whose `learned-in` chapter is not after the `--at` chapter. When both chapters are dated (a chapter's `date`, or else its earliest dated scene), this compares story dates, so knowledge learned in a 2034 prologue read as chapter 1 is not known in a 2024 chapter 2, and knowledge learned in that 2024 chapter is known in the prologue. Otherwise it compares chapter numbers.
+
+A fact the reader has already been shown (its `learned-in` chapter number is at or before `--at`) is marked `reader-knowledge, learned in <chapter>`. A fact the character knows from a later chapter that is earlier in story time is marked `character-knowledge, learned in <chapter>; not yet shown to the reader, do not reveal`: the character may act on it, and the fact must not be stated. In `story context`, a fact learned in the chapter being drafted is marked `reader-knowledge, learned in this chapter` (and, for a scene, `possibly in a later scene`).
 
 From [`examples/the-last-ember`](../examples/the-last-ember/), where Kael's knowledge carries over from the previous book:
 
 ```text
 $ story knowledge kael-voss --at chapter-01 --path examples/the-last-ember
-- The tunnels from the Vale side reach the Whisper Gate into the High Keep (pre-existing knowledge)
+- The tunnels from the Vale side reach the Whisper Gate into the High Keep (reader-knowledge, pre-existing)
 ```
 
 In the repaired unraveled thread, Jonas learns which page matters in chapter 4:
@@ -613,7 +615,7 @@ In the repaired unraveled thread, Jonas learns which page matters in chapter 4:
 $ story knowledge jonas-reed --at chapter-03
 No recorded knowledge for jonas-reed at chapter-03
 $ story knowledge jonas-reed --at chapter-04
-- which ledger page names the firestarter (learned in chapter-04)
+- which ledger page names the firestarter (reader-knowledge, learned in chapter-04)
 ```
 
 The command exits 2 with `Unknown character <id>` or `Unknown chapter <id>` if either id does not exist, exits 3 with the parse error instead (such as `characters/mara.md: is missing YAML frontmatter`) when the character's file fails to parse, and exits 2 with the usage line if you leave out the character or `--at`. Entries whose `learned-in` chapter does not exist are skipped here; `story continuity` reports them as errors.

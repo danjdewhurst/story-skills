@@ -219,8 +219,9 @@ jobs:
                or a new one to add) following the chapter-writing skill. Once the
                chapter file exists with its pov and characters, run
                `story context chapter-<number> --path ${{ env.STORY_DIR }}`
-               and draft from the context it prints (it holds nothing from
-               later chapters). Outline first, then prose under "## Chapter Text",
+               and draft from the context it prints. Later chapters are left
+               out. A line marked character-knowledge, do not reveal, is known
+               to the POV and must not be stated. Outline first, then prose under "## Chapter Text",
                between ${{ env.MIN_WORDS }} and ${{ env.MAX_WORDS }} words, with
                accurate frontmatter (pov, status, word-count, locations, characters, mentions, arcs-advanced).
                Add matching scene records and update continuity/state.md,

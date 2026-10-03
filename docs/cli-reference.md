@@ -51,8 +51,8 @@ Absolute paths in output are shortened to `~/stories/...`.
 | | [`wordcount [path]`](#wordcount) | Count chapter prose words | With `--write` |
 | | [`links [path]`](#links) | Check cross-references and backlinks | No |
 | Analysis | [`continuity [path]`](#continuity) | Check deaths, casts, promises, questions, clues, prop custody, clock and travel time, routes, and state | No |
-| | [`knowledge <id>`](#knowledge) | List what a character knew at a chapter, and how their progressions had changed them | No |
-| | [`context <id>`](#context) | Pack drafting context for a chapter or scene within a token budget, with no spoilers | No |
+| | [`knowledge <id>`](#knowledge) | List what a character knew at a chapter, marked reader-knowledge or character-knowledge | No |
+| | [`context <id>`](#context) | Pack drafting context for a chapter or scene; unread flashback facts are marked do not reveal | No |
 | | [`compare [path]`](#compare) | Compare chapters with an earlier draft | No |
 | | [`similarity [path]`](#similarity) | Find passages that share a run of words with other text: earlier books, a draft, or a source | No |
 | | [`progress [path]`](#progress) | Show words against targets and deadline | With `--log` |
@@ -793,7 +793,7 @@ Every rule, and how to write exemptions, is in [Continuity and analysis](continu
 story knowledge <character-id> --at <chapter-id> [--path <project>]
 ```
 
-Lists the `knowledge-state` entries in `continuity/state.md` that a character knew by a given chapter. An entry counts if its `learned-in` chapter is at or before `--at` (by story date when both chapters are dated, else by chapter number); an entry with no `learned-in` is pre-existing knowledge and always counts. It exits 3 with the parse error when a chapter file, the character file, or `continuity/state.md` fails to parse, and when one of the character's entries has no `knows`.
+Lists the `knowledge-state` entries in `continuity/state.md` that a character knew by a given chapter, using the same rule as [`context`](#context). An entry counts when its `learned-in` chapter is not after `--at` in story time (by story date when both chapters are dated, else by chapter number); an entry with no `learned-in` is pre-existing knowledge and always counts. Each line is marked `reader-knowledge` when the learning chapter's number is at or before `--at` (the reader has been shown it, or it is pre-existing) and `character-knowledge` with `do not reveal` when the character learned it in a later chapter that is earlier in story time (a flashback the reader has not reached). A fact learned later in story time is left out, including one the reader already read in a flash-forward. It exits 3 with the parse error when a chapter file, the character file, or `continuity/state.md` fails to parse, and when one of the character's entries has no `knows`.
 
 | Option | Effect |
 |---|---|
@@ -807,7 +807,7 @@ story knowledge mara-quill --at chapter-01
 ```
 
 ```text
-- the Afterimage Archive was active during the Blackout Night (learned in chapter-01)
+- the Afterimage Archive was active during the Blackout Night (reader-knowledge, learned in chapter-01)
 ```
 
 In [`examples/the-last-ember`](../examples/the-last-ember/):
@@ -817,7 +817,7 @@ story knowledge kael-voss --at chapter-01
 ```
 
 ```text
-- The tunnels from the Vale side reach the Whisper Gate into the High Keep (pre-existing knowledge)
+- The tunnels from the Vale side reach the Whisper Gate into the High Keep (reader-knowledge, pre-existing)
 ```
 
 After the knowledge, it prints the character's [progressions](project-format.md#progressions) that apply by that chapter, oldest first, each with the value it replaced. A progression from the `--at` chapter itself counts. A character with `status: alive` and a progression `from: chapter-02` to `missing` prints, at `chapter-03`:
@@ -829,7 +829,7 @@ State at chapter-03:
 - scar: jaw to collarbone (from chapter-03)
 ```
 
-With `--json`, `data` holds `character`, `at`, and `entries` (each `knows` and `learnedIn`). It also holds `state`, the character's frontmatter with the applied progressions and without `progressions`, and `changes`, one `{ field, value, from, previous }` per applied progression, oldest first. `previous` is absent when the field was not set before.
+With `--json`, `data` holds `character`, `at`, and `entries` (each `knows`, `learnedIn`, and `audience`). `audience` is `reader` or `character`, matching the line's mark. It also holds `state`, the character's frontmatter with the applied progressions and without `progressions`, and `changes`, one `{ field, value, from, previous }` per applied progression, oldest first. `previous` is absent when the field was not set before.
 
 With nothing recorded, it prints `No recorded knowledge for <id> at <chapter-id>` and exits 0. A missing argument or an unknown character or chapter exits 2; a character file that fails to parse exits 3. A broken character file prints its parse error, such as `characters/mara.md: is missing YAML frontmatter`, rather than `Unknown character`:
 
@@ -860,7 +860,7 @@ Prints, as markdown, the slice of the project an agent needs to draft one chapte
 6. **Open promises, clues, and questions**: each one planted or introduced by the target chapter and not paid off or resolved before it, with its `## Setup`, `## Clue`, or `## Question` section. Those planted, raised, paid off, or answered in the target chapter itself say so; `dropped` and `abandoned` ones are left out.
 7. **Previous scenes**: the `--scenes` scene records just before the target, each with its POV, location, outcome, and `## Purpose`.
 
-It includes nothing from a chapter after the target in reading order (chapter number), so the context never spoils what comes later. A thread, knowledge entry, or scene is dated by its chapter, and one whose chapter is later or unknown is left out. Progressions count only from chapters read by the target (a planned `chapter-NN` by its number) and are then applied in story time, as `story knowledge` applies them; a progression that dates an alias is how to keep a later alias off earlier cards. Knowledge is also checked in story time, as [`knowledge`](#knowledge) does, so a fact learned in a flash-forward read earlier is not known yet. The sections that tend to describe the future are never read: the `story.md` synopsis and notes, a character's backstory, arc, and timeline, and the payoff, evidence, and resolution plans of promises, clues, and questions. A character's status is the one at the target: one who dies in the target chapter shows `dies in this chapter`, and one who died earlier shows `deceased (died in <chapter>)`. A `died-in` chapter that is still `outline` is planned, not in force, so a later chapter shows the character as `alive`. A character whose `died-in` chapter comes later, or does not exist yet, shows as `alive`; in a flash-forward set after that death the status is left out, and so is a `deceased` status with no `died-in` and a status a later-read `revived-in` would change. A scene with no `pov` of its own uses its chapter's. Sections still holding the starter text `story add` and `story init` write, including the starter outline and style sheet, are skipped. For a scene target, threads and deaths dated to the target chapter are marked as happening in this chapter, since the project does not record which scene. A fact whose `learned-in` is the target chapter is included only when an earlier scene's `state-changes` records it for the POV character, matched by `fact` id or by the same text aside from case, spacing, and a trailing full stop or exclamation mark, and it then reads `learned in this chapter, scene N`. Drafting the chapter still includes every fact known by the end of that chapter (`learned in this chapter`).
+Threads, scenes, and progressions dated to a chapter after the target in reading order (chapter number) are left out, so the context does not spoil what comes later. A thread or scene whose chapter is later or unknown is left out. Progressions count only from chapters read by the target (a planned `chapter-NN` by its number) and are then applied in story time, as `story knowledge` applies them; a progression that dates an alias is how to keep a later alias off earlier cards. Knowledge uses the same rule as [`knowledge`](#knowledge): a fact is included when the character knows it in story time, and each line is marked `reader-knowledge` or `character-knowledge`. A fact learned in a flash-forward read earlier is not known yet, so it is left out. A fact learned in a flashback the reader has not reached is included and marked `character-knowledge` with `do not reveal`: the character knows it, and the draft must not state it. That chapter's prose, outline, and other entries stay out. The sections that tend to describe the future are never read: the `story.md` synopsis and notes, a character's backstory, arc, and timeline, and the payoff, evidence, and resolution plans of promises, clues, and questions. A character's status is the one at the target: one who dies in the target chapter shows `dies in this chapter`, and one who died earlier shows `deceased (died in <chapter>)`. A `died-in` chapter that is still `outline` is planned, not in force, so a later chapter shows the character as `alive`. A character whose `died-in` chapter comes later, or does not exist yet, shows as `alive`; in a flash-forward set after that death the status is left out, and so is a `deceased` status with no `died-in` and a status a later-read `revived-in` would change. A scene with no `pov` of its own uses its chapter's. Sections still holding the starter text `story add` and `story init` write, including the starter outline and style sheet, are skipped. For a scene target, threads and deaths dated to the target chapter are marked as happening in this chapter, since the project does not record which scene. A fact whose `learned-in` is the target chapter is included only when an earlier scene's `state-changes` records it for the POV character, matched by `fact` id or by the same text aside from case, spacing, and a trailing full stop or exclamation mark, and it then reads `reader-knowledge, learned in this chapter, scene N`. Drafting the chapter still includes every fact known by the end of that chapter (`reader-knowledge, learned in this chapter`).
 
 The budget is an estimate, not a tokenizer count. Chinese, Japanese, Thai, Lao, Khmer, and Burmese are split into words as [`wordcount`](#wordcount) splits them: one word per Chinese or Japanese character, and a dictionary word for Thai, Lao, Khmer, and Burmese. Everything else, including punctuation between those words, counts as whitespace-separated runs. An item costs the sum of those words' rates, rounded up once: 4 tokens per 3 words in spaced text, 2 per 3 Han or katakana characters (the katakana long-vowel mark included), 1 per 2 hiragana, and 1 per Thai, Lao, Khmer, or Burmese word. Spaced text on its own still costs `ceil(words × 4 ÷ 3)`. The headings between sections are not counted. Items are packed whole in the order above. One that does not fit is left out, a later, smaller one may still fit, and every item left out is listed at the end with the file to read instead. Previous scenes are packed nearest first and printed in reading order.
 
@@ -881,7 +881,7 @@ story context chapter-02 --budget 200
 # Drafting context: chapter-02
 
 Chapter 2: The Millpond. About 197 of 200 tokens
-(estimated at 4 tokens per 3 words in spaced text; 2 per 3 Han or katakana characters, 1 per 2 hiragana, and 1 per Thai, Lao, Khmer, or Burmese word). Nothing from later chapters is included.
+(estimated at 4 tokens per 3 words in spaced text; 2 per 3 Han or katakana characters, 1 per 2 hiragana, and 1 per Thai, Lao, Khmer, or Burmese word). Later chapters are left out. A fact marked character-knowledge is known in story time; do not reveal it.
 
 ## Target
 

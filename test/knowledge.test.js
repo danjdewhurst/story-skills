@@ -60,22 +60,22 @@ describe("knowledge queries", () => {
   test("returns pre-existing and learned-in-order knowledge in file order", () => {
     const { root } = knowledgeProject();
     expect(knowledgeAtChapter(root, "mara-finn", "chapter-02")).toEqual([
-      { knows: "The miller keeps a ledger", learnedIn: "" },
-      { knows: "The ledger page is burned", learnedIn: "chapter-02" }
+      { knows: "The miller keeps a ledger", learnedIn: "", audience: "reader" },
+      { knows: "The ledger page is burned", learnedIn: "chapter-02", audience: "reader" }
     ]);
   });
 
   test("excludes knowledge learned after the requested chapter", () => {
     const { root } = knowledgeProject();
     expect(knowledgeAtChapter(root, "mara-finn", "chapter-01")).toEqual([
-      { knows: "The miller keeps a ledger", learnedIn: "" }
+      { knows: "The miller keeps a ledger", learnedIn: "", audience: "reader" }
     ]);
   });
 
   test("scopes entries to the requested character", () => {
     const { root } = knowledgeProject();
     expect(knowledgeAtChapter(root, "jonas-reed", "chapter-03")).toEqual([
-      { knows: "The tide schedule", learnedIn: "chapter-01" }
+      { knows: "The tide schedule", learnedIn: "chapter-01", audience: "reader" }
     ]);
   });
 
@@ -94,8 +94,8 @@ describe("knowledge queries", () => {
       "learned-in: chapter-99"
     ), "utf8");
     expect(knowledgeAtChapter(root, "mara-finn", "chapter-03")).toEqual([
-      { knows: "The miller keeps a ledger", learnedIn: "" },
-      { knows: "The ledger page is burned", learnedIn: "chapter-02" }
+      { knows: "The miller keeps a ledger", learnedIn: "", audience: "reader" },
+      { knows: "The ledger page is burned", learnedIn: "chapter-02", audience: "reader" }
     ]);
   });
 
@@ -104,8 +104,8 @@ describe("knowledge queries", () => {
     const result = invoke(cwd, ["knowledge", "mara-finn", "--at", "chapter-02", "--path", root]);
     expect(result.code).toBe(0);
     expect(result.out).toBe(
-      "- The miller keeps a ledger (pre-existing knowledge)\n" +
-      "- The ledger page is burned (learned in chapter-02)\n"
+      "- The miller keeps a ledger (reader-knowledge, pre-existing)\n" +
+      "- The ledger page is burned (reader-knowledge, learned in chapter-02)\n"
     );
   });
 

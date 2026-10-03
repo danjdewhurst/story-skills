@@ -180,8 +180,8 @@ The CLI is for maintenance only. Agents write story content directly to markdown
 
 | Command | Purpose |
 |---------|---------|
-| `story knowledge sera-voss --at chapter-03` | Show what a character knew at a chapter, from timeline-scoped knowledge state |
-| `story context chapter-03 --budget 6000` | Pack the drafting context for a chapter or scene (style rules, POV knowledge, cast cards, open threads, recent scenes) into a token budget, with nothing from later chapters |
+| `story knowledge sera-voss --at chapter-03` | Show what a character knew at a chapter, marked reader-knowledge or character-knowledge |
+| `story context chapter-03 --budget 6000` | Pack the drafting context for a chapter or scene into a token budget. Later chapters are left out; an unread flashback fact is marked character-knowledge, do not reveal |
 | `story timeline [path]` | Show scenes in story-time order from their `date`/`time` (marking scenes told out of order), POV balance by words, and each character's presence and longest absence |
 | `story prose [path]` | Lint chapter prose: filter words, adverbs, said-bookisms, echoes, sentence rhythm, repeated phrases, similar names, and `style-sheet.md` spellings and watch words. Word lists follow the book's `language` (English, Spanish, French, and German built in); a check with no list for the language is skipped with a note |
 | `story voices [path]` | Fingerprint each character's attributed dialogue (sentence length, contractions, questions, signature words) and flag `voice-avoid` words and characters who sound alike. Only named speech tags and single-name action beats count; pronoun tags do not |
