@@ -853,7 +853,7 @@ story context <chapter-or-scene-id> [--budget <tokens>] [--scenes <n>] [--json] 
 Prints, as markdown, the slice of the project an agent needs to draft one chapter or scene, packed into a token budget. It reads files and writes nothing. Items are added in this priority order:
 
 1. **Target**: the chapter or scene's POV, cast, mentions, locations, arcs, date, outcome, hook, and `target-words`, the chapter's `## Outline` (up to the `---` rule above the prose), and the chapter's planned scenes or, for a scene, its `## Purpose`.
-2. **Story essentials**: `story.md` genre, setting era, POV, tense, form, `language` (`en` when unset), `writing-mode` (`horizontal` when unset), `chapter-numerals` (`western` when unset), `count-unit` (the unit lengths are counted in, including the one `language` implies), themes, and `premise`, plus its `## Tone & Style`, `## Setting`, and `## Central Conflict` sections; then `style-sheet.md`, when present: `dialect`, `preferred`, `watch-words`, and its body. Language, writing mode, chapter numerals, and count unit belong to the book, not to a chapter, so they are included at every target.
+2. **Story essentials**: first the book's language contract from `story.md`: `language` (`en` when unset), `writing-mode` (`horizontal` when unset), `chapter-numerals` (`western` when unset), and `count-unit` (the unit lengths are counted in, including the one `language` implies). These belong to the book, not to a chapter, so they are included at every target, and they are a separate small item, so a budget too small for the rest of `story.md` still packs them. Then `story.md` genre, setting era, POV, tense, form, themes, and `premise`, plus its `## Tone & Style`, `## Setting`, and `## Central Conflict` sections; then `style-sheet.md`, when present: `dialect`, `preferred`, `watch-words`, and its body.
 3. **POV knowledge and state**: the POV character's `knowledge-state` entries known at the target, the `character-state` entry from `continuity/state.md` when its `current-chapter` is before the target, the `state-changes` of earlier scenes whose `character` is the POV character or whose `owner` hands them an artifact, and the POV character's [progressions](project-format.md#progressions) applied by the target.
 4. **Characters on the page**: a card for the POV character and each character in the target's `characters`: role, status at the target, aliases, `voice-words`, `voice-avoid`, the progressions applied by the target, and the `## Appearance`, `## Personality & Traits`, `## Motivations & Goals`, and `## Voice & Speech Patterns` sections.
 5. **Where it happens**: each of the chapter's `locations`, or the scene's `location`, with its type, region, status, and `controlled-by` after its progressions, and the progressions applied.
@@ -898,16 +898,18 @@ Scenes planned:
 
 ## Story essentials
 
+### Language contract
+- Language: en
+- Writing mode: horizontal
+- Chapter numerals: western
+- Count unit: words
+
 ### The Unraveled Thread
 - Genre: mystery / village-noir
 - Setting era: 1920s
 - POV: third-person-limited
 - Tense: past
 - Form: novel
-- Language: en
-- Writing mode: horizontal
-- Chapter numerals: western
-- Count unit: words
 - Themes: guilt, small-town secrets
 
 ## Characters on the page
