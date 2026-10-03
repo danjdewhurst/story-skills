@@ -11493,9 +11493,7 @@ function acquire(lockPath) {
   while ((created = tryCreate(lockPath)) === null) {
     const owner = readOwner(lockPath);
     if (owner && !owner.alive && !removedStale) {
-      if (readOwner(lockPath)?.text === owner.text) {
-        fs5.rmSync(lockPath, { force: true });
-      }
+      removeStale(lockPath, owner.text);
       removedStale = true;
       continue;
     }
@@ -11506,6 +11504,24 @@ function acquire(lockPath) {
     sleep(Math.min(POLL_MS, Math.max(1, deadline - Date.now())));
   }
   return created;
+}
+function removeStale(lockPath, staleText) {
+  const aside = `${lockPath}.${process.pid}.stale`;
+  try {
+    fs5.renameSync(lockPath, aside);
+  } catch {
+    return;
+  }
+  let text = null;
+  try {
+    text = fs5.readFileSync(aside, "utf8");
+  } catch {}
+  if (text !== staleText) {
+    try {
+      fs5.linkSync(aside, lockPath);
+    } catch {}
+  }
+  fs5.rmSync(aside, { force: true });
 }
 function tryCreate(lockPath) {
   try {
@@ -11537,11 +11553,15 @@ function readOwner(lockPath) {
     return { text, pid: null, host: null, alive: true };
   }
   const foreign = host && host !== os.hostname();
-  return { text, pid, host, alive: foreign ? !foreignLockStale(writtenAt) : processAlive(pid) };
+  return { text, pid, host, alive: foreign ? !foreignLockStale(lockPath, writtenAt) : processAlive(pid) };
 }
-function foreignLockStale(writtenAt) {
+function foreignLockStale(lockPath, writtenAt) {
   const written = Date.parse(writtenAt);
-  return Number.isFinite(written) && Date.now() - written > FOREIGN_LOCK_STALE_MS;
+  if (!Number.isFinite(written)) {
+    return false;
+  }
+  const modified = fs5.statSync(lockPath, { throwIfNoEntry: false })?.mtimeMs ?? Date.now();
+  return Date.now() - Math.max(written, modified) > FOREIGN_LOCK_STALE_MS;
 }
 function processAlive(pid) {
   try {

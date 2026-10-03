@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -368,11 +368,73 @@ describe("lock edge cases", () => {
     // This process is alive. The other hostname and the old timestamp are
     // what make the lock stale.
     const written = new Date(Date.now() - FOREIGN_LOCK_STALE_MS - 1000).toISOString();
-    fs.writeFileSync(path.join(root, LOCK_FILE), `${process.pid}\nsome-other-host\n${written}\n`);
+    const lockPath = path.join(root, LOCK_FILE);
+    fs.writeFileSync(lockPath, `${process.pid}\nsome-other-host\n${written}\n`);
+    fs.utimesSync(lockPath, new Date(written), new Date(written));
     process.env.STORY_LOCK_WAIT_MS = "0";
     createEntity(root, { kind: "character", name: "Bo" });
     expect(fs.existsSync(path.join(root, "characters", "bo.md"))).toBe(true);
     expect(fs.existsSync(path.join(root, LOCK_FILE))).toBe(false);
+  });
+
+  test("a foreign lock with an old timestamp but a fresh file is not taken over", () => {
+    // The other host's clock runs behind ours, so its fresh lock carries an
+    // old timestamp. The file's modification time shows it is new.
+    const root = newProject();
+    const written = new Date(Date.now() - FOREIGN_LOCK_STALE_MS - 1000).toISOString();
+    fs.writeFileSync(path.join(root, LOCK_FILE), `${process.pid}\nsome-other-host\n${written}\n`);
+    process.env.STORY_LOCK_WAIT_MS = "0";
+    expect(() => createEntity(root, { kind: "character", name: "Bo" })).toThrow(`another story command (process ${process.pid} on some-other-host) is modifying this project`);
+    expect(fs.existsSync(path.join(root, LOCK_FILE))).toBe(true);
+  });
+
+  test("a lock another command takes while a stale one is removed is put back", () => {
+    const root = newProject();
+    const lockPath = path.join(root, LOCK_FILE);
+    const written = new Date(Date.now() - FOREIGN_LOCK_STALE_MS - 1000).toISOString();
+    fs.writeFileSync(lockPath, `1\nsome-other-host\n${written}\n`);
+    fs.utimesSync(lockPath, new Date(written), new Date(written));
+    // Another agent removes the stale lock and takes its own just before
+    // this command moves the lock aside.
+    const live = `2\nsome-other-host\n${new Date().toISOString()}\n`;
+    const rename = fs.renameSync;
+    const spy = spyOn(fs, "renameSync").mockImplementation((from, to) => {
+      if (from === lockPath) {
+        fs.rmSync(lockPath);
+        fs.writeFileSync(lockPath, live);
+      }
+      return rename(from, to);
+    });
+    process.env.STORY_LOCK_WAIT_MS = "0";
+    try {
+      expect(() => createEntity(root, { kind: "character", name: "Bo" })).toThrow("another story command (process 2 on some-other-host) is modifying this project");
+    } finally {
+      spy.mockRestore();
+    }
+    expect(fs.readFileSync(lockPath, "utf8")).toBe(live);
+    expect(fs.readdirSync(root).filter((name) => name.startsWith(`${LOCK_FILE}.`))).toEqual([]);
+    expect(fs.existsSync(path.join(root, "characters", "bo.md"))).toBe(false);
+  });
+
+  test("a stale lock that vanishes before it is moved aside is not an error", () => {
+    const root = newProject();
+    const lockPath = path.join(root, LOCK_FILE);
+    fs.writeFileSync(lockPath, "2147483647\n" + os.hostname() + "\n");
+    const rename = fs.renameSync;
+    const spy = spyOn(fs, "renameSync").mockImplementation((from, to) => {
+      if (from === lockPath) {
+        fs.rmSync(lockPath);
+      }
+      return rename(from, to);
+    });
+    process.env.STORY_LOCK_WAIT_MS = "0";
+    try {
+      createEntity(root, { kind: "character", name: "Bo" });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(fs.existsSync(path.join(root, "characters", "bo.md"))).toBe(true);
+    expect(fs.existsSync(lockPath)).toBe(false);
   });
 
   test("a lock on this machine stays while its process is alive, however old its timestamp", () => {
