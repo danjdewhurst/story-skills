@@ -252,6 +252,21 @@ describe("story context", () => {
     expect(textOf(tiny)).not.toContain("## Target");
   });
 
+  test("the language contract fits a budget the story essentials do not", () => {
+    const { root } = contextProject();
+    const full = contextOf(root, "chapter-02", { budget: "100000" });
+    const tokensOf = (id) => full.sections.flatMap((section) => section.items).find((entry) => entry.id === id).tokens;
+    expect(tokensOf("story")).toBeGreaterThan(tokensOf("language"));
+    const budget = tokensOf("target:chapter-02") + tokensOf("language");
+    const context = contextOf(root, "chapter-02", { budget: String(budget) });
+    const essentials = context.sections.find((section) => section.id === "essentials").items;
+    expect(essentials.find((entry) => entry.id === "language").included).toBe(true);
+    expect(essentials.find((entry) => entry.id === "story").included).toBe(false);
+    const text = textOf(context);
+    expect(text).toContain("## Story essentials\n\n### Language contract\n- Language: en\n- Writing mode: horizontal\n- Chapter numerals: western\n- Count unit: words");
+    expect(text).toContain("- story.md essentials: story.md");
+  });
+
   test("the CLI prints the context and reports bad input", () => {
     const { root, cwd } = contextProject();
     const ok = invoke(cwd, ["context", "chapter-02", "--path", root, "--budget", "5000"]);

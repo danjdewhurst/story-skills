@@ -330,8 +330,17 @@ export function buildContext(project, targetId, readBody, options = {}) {
 
   // 2. story.md essentials and style-sheet rules. The language contract is a
   // property of the book, not of a chapter, so it is included at every target.
+  // It is its own small item, packed first, so a long Tone & Style or Setting
+  // section that does not fit the budget cannot take it out of the pack.
   const essentials = [];
   const story = project.story.data;
+  essentials.push(item("language", "Language contract", "story.md", lines(
+    "### Language contract",
+    field("Language", project.language),
+    field("Writing mode", story["writing-mode"] || "horizontal"),
+    field("Chapter numerals", story["chapter-numerals"] || "western"),
+    field("Count unit", project.unit.name)
+  )));
   const storyText = lines(
     `### ${project.title}`,
     field("Genre", [story.genre, story["sub-genre"]].filter(Boolean).join(" / ")),
@@ -339,10 +348,6 @@ export function buildContext(project, targetId, readBody, options = {}) {
     field("POV", story.pov),
     field("Tense", story.tense),
     field("Form", story.form),
-    field("Language", project.language),
-    field("Writing mode", story["writing-mode"] || "horizontal"),
-    field("Chapter numerals", story["chapter-numerals"] || "western"),
-    field("Count unit", project.unit.name),
     field("Themes", Array.isArray(story.themes) ? story.themes : [story.themes].filter(Boolean)),
     field("Premise", story.premise),
     ...STORY_SECTIONS.map((heading) => subsection(heading, section(project.story.body ?? "", heading)))
