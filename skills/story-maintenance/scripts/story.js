@@ -10193,7 +10193,7 @@ ${body}`)));
 }
 function sceneRecordsFact(scene, characterId, entry) {
   const fact = entry.fact === undefined ? "" : String(entry.fact);
-  const knows = normalizeKnowledge2(entry.knows);
+  const knows = normalizeKnowledge(entry.knows);
   for (const change of scene.stateChanges) {
     if (!recordsKnowledge(change, characterId)) {
       continue;
@@ -10215,13 +10215,7 @@ function sameFact(fact, change) {
   return changeFact === fact;
 }
 function sameKnowledgeText(knows, knowledge) {
-  return knows !== "" && normalizeKnowledge2(knowledge) === knows;
-}
-function normalizeKnowledge2(value) {
-  if (typeof value !== "string") {
-    return "";
-  }
-  return value.trim().toLowerCase().replace(/\s+/g, " ").replace(/[.!]+$/, "");
+  return knows !== "" && normalizeKnowledge(knowledge) === knows;
 }
 function earlierScenes(project, target, upToTarget) {
   return project.scenes.filter((scene) => {
