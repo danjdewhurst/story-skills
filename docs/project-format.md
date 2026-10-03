@@ -787,7 +787,7 @@ word-count: 1489
 | `mode` | string | no | `discovered` marks a discovery-drafted chapter that must go through the [discovery-drafting](../skills/discovery-drafting/SKILL.md) reconcile loop; `outlined` marks one written outline-first. Any other value is a validate error. Set it with `story add chapter --mode discovered`. `story next` counts the loop done only when `## Chapter Notes (post-hoc)` sits above `## Chapter Text`. |
 | `date` | `YYYY-MM-DD` | no | Story date; enables clock checks. |
 | `time` | string | no | Story time of day (see [Dates and times](#dates-and-times)). |
-| `strand` | string | no | Timeline strand, such as `1990` and `2020` in a dual-timeline book. `story continuity` checks clock order within each strand, so switching strands never runs backward. Chapters without it share one strand. |
+| `strand` | string | no | Timeline strand, such as `1990` and `2020` in a dual-timeline book. `story continuity` checks clock order and route travel within each strand, so switching strands never runs backward and is not a journey. Chapters without it share one strand. A crossing between strands is not inferred. |
 | `episode-question` | string | no | The installment's dramatic question, for serial fiction. |
 | `time-skip` | string | no | Free-form `from → to` note of a skipped interval. Not checked. |
 | `hook` | enum | no | How the chapter ending pulls the reader on: `cliffhanger`, `question`, `revelation`, `reversal`, `decision`, `emotional`, or `resolution`. Set it with `story add chapter --hook <name>`. Read by [`story pacing`](#pacing). |
