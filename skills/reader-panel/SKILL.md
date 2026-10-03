@@ -54,9 +54,9 @@ the panel.
    and which personas to run (default: all five). Take genre, form, POV,
    and tense from the `story context` output in step 2 (its Story
    essentials section), not from `story.md`, whose Synopsis may describe
-   the ending. The genre reader needs the genre. Also read `language` from
-   `story.md` frontmatter only (a missing field means `en`): it is no
-   spoiler, and every persona reads the book as a reader of that
+   the ending. The genre reader needs the genre. Take `language` from the
+   same section (or from `story.md` frontmatter only, where a missing
+   field means `en`): it is no spoiler, and every persona reads the book as a reader of that
    language would.
 2. Pick the round number: the next free `N` under `feedback/`. A panel
    gets its own round. Never add simulated reads to a round of human
