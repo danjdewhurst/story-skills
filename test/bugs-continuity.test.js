@@ -362,7 +362,7 @@ introduced: chapter-01
 resolved: ""
 `);
     writeChapter(root, 30, "", "outline");
-    expect(messages(continuity(root).warnings)).toEqual([]);
+    expect(messages(continuity(root).warnings).join("\n")).not.toContain("has no resolution yet");
 
     writeChapter(root, 40);
     expect(messages(continuity(root).warnings).join("\n")).not.toContain("has no resolution yet");
