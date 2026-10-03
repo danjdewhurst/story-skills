@@ -972,7 +972,7 @@ Files: `continuity/questions/<question-id>.md`, for open questions the reader or
 | `resolved` | chapter id | no | Chapter that answers it. |
 | `characters` | list of character ids | no | Characters involved. |
 
-`story continuity` errors when `resolved` comes before `introduced`, when an `answered` or `resolved` question has no `resolved` chapter, and when an `open` question already records one.
+`story continuity` errors when `resolved` comes before `introduced`, when an `answered` or `resolved` question has no `resolved` chapter, and when an `open` question already records one. It warns (`question-unanswered`) when an `open` question with no `resolved` chapter was introduced twelve or more chapter files before the latest chapter past `outline`; see [Unfired setups](continuity.md#unfired-setups-the-chekhov-warning).
 
 ### Promises
 
@@ -1503,7 +1503,7 @@ Scene status is not read by any check beyond validation; chapter status drives t
 
 | Value | Meaning | CLI behaviour |
 |-------|---------|---------------|
-| `open` | Raised and not yet answered. | `story add question` default without `--resolved`. Error if `resolved` is set, and when `story.md` is `complete`. Counted by `story next`. |
+| `open` | Raised and not yet answered. | `story add question` default without `--resolved`. Error if `resolved` is set, and when `story.md` is `complete`. Warns `question-unanswered` once twelve drafted chapters follow `introduced` with no `resolved` chapter. Counted by `story next`. |
 | `answered`, `resolved` | Answered on the page. | `story add question --resolved` defaults to `answered`. Error if no `resolved` chapter is recorded. The CLI treats the two the same. |
 | `dropped` | Deliberately left unanswered, but still part of the book. | Still checked: `resolved` must not come before `introduced`. |
 | `abandoned` | Cut from the book, kept on record. | Skipped entirely by `story continuity`. |
