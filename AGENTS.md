@@ -163,3 +163,16 @@ than forcing it.
 
 Stop. Do not commit and do not stash — both make it worse for whoever else is in there. Create
 your worktree, re-apply your changes in it, and say what happened on the task.
+
+## Cursor Cloud specific instructions
+
+Use the development commands above. Two details are specific to Cloud Agent VMs:
+
+- Bun must be exactly `1.4.2` (`packageManager` in `package.json`). `build:fallback` and `check:fallback` refuse any other version. Install it with `curl -fsSL https://bun.sh/install | bash -s "bun-v1.4.2"` and symlink `~/.bun/bin/bun` to `/usr/local/bin/bun`. Login shells skip `~/.bashrc`, so a Bun that lives only under `~/.bun/bin` is invisible to later commands. Node 18 or later is already on the default image; this checkout uses Node 22.
+- The VM signs git commits (`commit.gpgsign=true`). After a few commits the signing helper can stall, and `bun test` then times out in `test/draft-workflow.test.js` on `git commit`. Run the suite with signing turned off for child git processes:
+
+```shell
+GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=commit.gpgsign GIT_CONFIG_VALUE_0=false bun run test
+```
+
+Use the same prefix for `bun run test:coverage`. Keep commit signing enabled when you commit your own work. Four ink tests stay skipped unless `INKLECATE` points at an inklecate binary; that skip is expected.
