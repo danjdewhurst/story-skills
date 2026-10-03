@@ -44,6 +44,9 @@ const LAO_CHAR = /^\p{Script=Lao}$/u;
 const KHMER_CHAR = /^\p{Script=Khmer}$/u;
 const NOT_JOINER = /[^\u00AD\u200C\u200D]/u;
 const KATAKANA_MARK = 0x30fc;
+// Combining marks right after an unspaced word, such as a dakuten written
+// as U+3099 or a variation selector after a Han character, belong to it.
+const TRAILING_MARKS = /\p{M}*/uy;
 
 // The script of one unspaced word, which is one character for Chinese and
 // Japanese and a dictionary word otherwise. A soft hyphen or zero-width
@@ -81,7 +84,9 @@ export function estimateTokens(text) {
   for (const span of wordSpans(source, /(?!)/gu)) {
     parts.push(source.slice(last, span.start));
     sixths += TOKEN_SIXTHS[unspacedScript(span.word)];
-    last = span.end;
+    TRAILING_MARKS.lastIndex = span.end;
+    TRAILING_MARKS.exec(source);
+    last = TRAILING_MARKS.lastIndex;
   }
   parts.push(source.slice(last));
   // A space stands in for each unspaced word, so the spaced words on either
