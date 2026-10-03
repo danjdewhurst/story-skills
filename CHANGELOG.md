@@ -8,6 +8,8 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-10-03
+
 ### Added
 
 - Language packs keyed by `story.md` `language`. `story prose`, `story voices`, and `story names` now take their word lists (filter words, said-bookisms, `-ly` adverbs, speech verbs, contractions, stopwords, British and American spellings, and the titles stripped from a name) from a pack for the book's language, resolved from the BCP 47 tag (`fr-CA`, then `fr`, then a generic base pack). Only English has word lists so far, and English output is unchanged. In a book in another language, a check whose list the pack lacks is skipped instead of run with English words, so a French manuscript no longer gets English false positives: the text output prints a `Note:` line naming each skipped check and the language, and `--json` lists them in `data.skipped` (`[]` for English). In `story voices`, lines are then attributed by action beats alone and `contractions` is `null`; a `story prose` baseline leaves out the skipped rates and signature words (`null` in `--json`), and `--json` adds `data.language`. Packs are found from fixed tables, the same on every runtime: `eng` is English and `iw` Hebrew, an extlang tag such as `zh-yue` uses the `zh` pack, and a grandfathered tag such as `en-GB-oed` uses its modern form. A `language` that is set but not a valid tag (`fr_FR`) picks its pack by its first subtag, never English. `story validate` now also accepts tags with one-character subtags, such as `ja-JP-u-ca-japanese`, and rejects no tag it accepted before. The synopsis splits sentences with the book's pack. `story import --language <tag>` splits the manuscript with that language's heading words and writes `language` to the new `story.md`; without it, an import into an existing project uses that project's language. Exit codes are unchanged. ([#306](https://github.com/danjdewhurst/story-skills/issues/306))
@@ -251,7 +253,8 @@ Added the release script. `rename` and `remove` no longer corrupt prose and unre
 
 First tagged release.
 
-[Unreleased]: https://github.com/danjdewhurst/story-skills/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/danjdewhurst/story-skills/compare/v0.19.0...HEAD
+[0.19.0]: https://github.com/danjdewhurst/story-skills/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/danjdewhurst/story-skills/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/danjdewhurst/story-skills/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/danjdewhurst/story-skills/compare/v0.15.0...v0.16.0
