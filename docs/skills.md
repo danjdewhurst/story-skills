@@ -138,7 +138,7 @@ The main handoffs:
 | [theme-craft](#theme-craft) | `story.md` premise fields, character arc fields, `continuity/theme-audit.md` | `reindex`, `links`, `validate` |
 | [genre-craft](#genre-craft) | `continuity/clues/`, promises, `story.md` genre fields | `add clue`, `clues`, `diagram clues`, `pacing`, `reindex`, `links`, `validate`, `continuity` |
 | [research](#research) | `research/*.md` | `add research`, `reindex`, `links`, `validate` |
-| [chapter-writing](#chapter-writing) | `chapters/chapter-NN.md`, `scenes/*.md`, timeline, continuity | `wordcount --write`, `reindex`, `links`, `validate`, `next`, `pacing`, `progress --log` |
+| [chapter-writing](#chapter-writing) | `chapters/chapter-NN.md`, `scenes/*.md`, timeline, continuity | `wordcount --write`, `reindex`, `links`, `validate`, `continuity`, `next`, `pacing`, `progress --log` |
 | [discovery-drafting](#discovery-drafting) | Chapters, post-hoc notes, reconciled bible files | `wordcount --write`, `reindex`, `links`, `validate`, `continuity`, `progress --log` |
 | [scene-craft](#scene-craft) | `scenes/*.md` planning fields and sections, chapter `hook` | `reindex`, `links`, `validate`, `continuity`, `pacing` |
 | [voice-style](#voice-style) | `style-sheet.md`, character `voice-words`/`voice-avoid`, chapter prose | `prose`, `voices`, `names`, `validate`, `wordcount --write`, `links`, `rename character` |
@@ -452,13 +452,13 @@ It never fixes an audit finding by adding a speech or narration that explains th
 
 When `story.md` links other books, reveals the series depends on get a stable `fact` id (see [Series](series.md)). Revising or continuity-checking an existing chapter belongs to [revision-continuity](#revision-continuity); line edits, copyedits, and proofing belong to [line-editing](#line-editing).
 
-**Reads.** `story.md` (including `language`, which it drafts in), `style-sheet.md` (when present), `chapters/_index.md`, `plot/_index.md`, `plot/timeline.md`, `scenes/_index.md`, `continuity/state.md`, the questions and promises registries, and the POV character's file. After chapter one it also reads the previous chapter and the active arcs.
+**Reads.** `story context` for the chapter or scene, which packs the style rules, the POV character's knowledge and state at that point, cards for the cast and locations, open threads, and recent scene summaries, with nothing from later chapters. The only extra reads are the files that command lists under "Left out to fit the budget". It reads the `language` field in `story.md` frontmatter (the packed context does not print it) and does not open the synopsis or notes. It does not open `continuity/state.md`, the timeline, the registries, the previous chapter, or active arc files unless that omitted list names them.
 
 **Prose pass and companion skill.** The [line-editing](#line-editing) skill ships with Story Skills and owns the prose-quality pass; run it on a drafted chapter before marking it `revised`. The separate [`better-writing`](https://github.com/forjd/better-writing) skill is an optional complement: before drafting, chapter-writing checks for it and uses it for voice calibration and a final pass. If it is missing, the skill offers you the link and asks before any install, then continues with its own `writing-guidelines.md`.
 
-**Writes.** `chapters/chapter-NN.md`, `chapters/_index.md`, `scenes/*.md`, `plot/timeline.md`, arc files, `continuity/` records, and `progress.md` when you keep a log.
+**Writes.** `chapters/chapter-NN.md`, `scenes/*.md`, `plot/timeline.md`, arc files, `continuity/` records (including `continuity/state.md` after the draft, not as drafting context), and `progress.md` when you keep a log. Registry tables, including `chapters/_index.md`, are rebuilt by `story reindex` and are not edited by hand.
 
-**CLI.** `story add chapter` and `story add scene` for scaffolds, then `story wordcount . --write`, `story reindex .`, `story links .`, `story validate .`, `story next .`, `story pacing .`, and `story progress . --log`. `story pacing` shows the new chapter's words, scene outcomes, and hook beside the rest of the book. It skips `--log` if you don't keep a progress log.
+**CLI.** `story add chapter` and `story add scene` for scaffolds, then `story wordcount . --write`, `story reindex .`, `story links .`, `story validate .`, `story continuity .`, `story next .`, `story pacing .`, and `story progress . --log`. `story continuity` is the continuity result: `story next` can name continuity errors and still exit 0. `story pacing` shows the new chapter's words, scene outcomes, and hook beside the rest of the book. It skips `--log` if you don't keep a progress log.
 
 **References.**
 

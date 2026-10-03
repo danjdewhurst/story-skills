@@ -11,6 +11,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 ### Fixed
 
 - The continuity guide's opening now matches the checks: reader-order ledgers (`planted`, `payoff`, `introduced`, and `resolved`) use chapter numbers, and deaths, revivals, progressions, knowledge, and object-state `since` history use story time when both chapters are dated. ([#350](https://github.com/danjdewhurst/story-skills/issues/350))
+- `chapter-writing` drafts from `story context` and treats the files under "Left out to fit the budget" as the only extra reads. It no longer opens `continuity/state.md`, the timeline, the promise and question indexes, or active arc files while gathering context, which was undoing the spoiler boundary. After drafting it runs `story continuity` with the other maintenance commands, in the same place discovery-drafting does, because `story next` can name continuity errors and still exit 0. Registry rows, including `chapters/_index.md`, are left to `story reindex`. ([#342](https://github.com/danjdewhurst/story-skills/issues/342))
 
 ## [0.19.0] - 2026-10-03
 

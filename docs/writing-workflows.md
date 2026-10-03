@@ -416,11 +416,11 @@ Write the next chapter.
 
 [`chapter-writing`](../skills/chapter-writing/SKILL.md) follows the same five steps every time:
 
-1. **Gather context.** It runs [`story context chapter-NN`](cli-reference.md#context), which packs the style rules, the POV character's knowledge and state, cards for the cast, open threads, and recent scene summaries into a token budget with nothing from later chapters. It then reads what that leaves out as needed: `story.md`, `style-sheet.md`, the chapter, plot, and scene registries, `plot/timeline.md`, `continuity/state.md`, the open questions and promises, the previous chapter, and the active arcs.
-2. **Scope the chapter.** It asks what the chapter covers, whose POV, and which locations, and suggests the next beats from the arcs.
+1. **Gather context.** It runs [`story context chapter-NN`](cli-reference.md#context), which packs the style rules, the POV character's knowledge and state, cards for the cast, open threads, and recent scene summaries into a token budget with nothing from later chapters. The only extra reads are the files that command lists under "Left out to fit the budget". It does not open `continuity/state.md`, the timeline, the registries, the previous chapter, or the active arcs unless that list names them.
+2. **Scope the chapter.** It asks what the chapter covers, whose POV, and which locations, and suggests the next beats from the packed context.
 3. **Outline.** It proposes a beat-by-beat outline: what each beat accomplishes, POV and location, which plot points advance, what to plant or pay off, which state changes to record, each scene's intended `outcome` (`yes`, `no`, `yes-but`, `no-and`), and how the chapter ends. You approve or revise it before any prose is written.
-4. **Draft.** It writes the prose in the POV character's voice and the tense from `story.md`, into `chapters/chapter-NN.md`, with the approved outline kept above `## Chapter Text`. Word counts start at that heading, so the outline never inflates them. Each speaker uses the `voice-words` and avoids the `voice-avoid` words in their character file. It also creates a `scenes/chapter-NN-scene-NN.md` record for each scene.
-5. **Update everything else.** Chapter registry, timeline, arc plot points, scene records, `continuity/state.md`, foreshadowing status. It sets each scene's `outcome` and the chapter's `hook` (`cliffhanger`, `question`, `revelation`, `reversal`, `decision`, `emotional`, `resolution`) to what actually happened on the page, not what the outline planned. It flags character changes (an injury, a revelation) for you to confirm.
+4. **Draft.** It writes the prose in the POV character's voice and the tense from the packed context, into `chapters/chapter-NN.md`, with the approved outline kept above `## Chapter Text`. Word counts start at that heading, so the outline never inflates them. Each speaker uses the `voice-words` and avoids the `voice-avoid` words from their packed character card. It also creates a `scenes/chapter-NN-scene-NN.md` record for each scene.
+5. **Update everything else.** Timeline, arc plot points, scene records, `continuity/state.md`, foreshadowing status. Registry tables, including `chapters/_index.md`, are rebuilt by `story reindex` and are not edited by hand. It sets each scene's `outcome` and the chapter's `hook` (`cliffhanger`, `question`, `revelation`, `reversal`, `decision`, `emotional`, `resolution`) to what actually happened on the page, not what the outline planned. It flags character changes (an injury, a revelation) for you to confirm.
 
 The in-repo [`line-editing`](../skills/line-editing/SKILL.md) skill owns the prose-quality pass on a drafted chapter; see [Line editing](#line-editing). The chapter-writing skill also checks whether the separate [`better-writing`](https://github.com/forjd/better-writing) skill is installed, an optional complement. If it is, the agent uses it for a final prose pass. If not, the agent asks before installing anything and otherwise falls back to its own [writing guidelines](../skills/chapter-writing/references/writing-guidelines.md).
 
@@ -440,10 +440,13 @@ story wordcount . --write
 story reindex .
 story links .
 story validate .
+story continuity .
 story next .
 story pacing .
 story progress . --log
 ```
+
+`story continuity .` prints each finding and exits non-zero on errors. `story next .` can name those same errors as a P0 line and still exit 0, without the findings, so the continuity command is the check.
 
 `story pacing .` shows the new chapter beside the rest of the book. Later in the draft, with three short chapters of *The Gannet Point Light* written:
 
@@ -1804,7 +1807,7 @@ Which commands each skill runs when it finishes. All take the project path, `.` 
 | Project setup (`story-init`) | | | | ✓ | | `init --form`, `next` (suggested) |
 | Plot (`plot-structure`) | | ✓ | ✓ | ✓ | | `timeline`, `pacing`, `clues`, `diagram timeline`/`arcs`/`clues` |
 | Character, world (`character-management`, `worldbuilding`) | | ✓ | ✓ | ✓ | | `names`, `diagram relationships`/`locations` |
-| Outline-first chapter (`chapter-writing`) | ✓ | ✓ | ✓ | ✓ | | `next`, `pacing`, `progress --log` |
+| Outline-first chapter (`chapter-writing`) | ✓ | ✓ | ✓ | ✓ | ✓ | `next`, `pacing`, `progress --log` |
 | Discovery chapter (`discovery-drafting`) | ✓ | ✓ | ✓ | ✓ | ✓ | `progress --log` |
 | Scene craft (`scene-craft`) | | ✓ | ✓ | ✓ | ✓ | `pacing` |
 | Theme (`theme-craft`) | | ✓ | ✓ | ✓ | | |
