@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-// commands.js imports story.js, which imports this module for validation, so
-// the import is circular. COMMANDS is only read inside functions, after every
-// module has finished loading.
+// validate.js imports this module, and commands.js imports story.js, which
+// imports validate.js, so this import is circular. COMMANDS is only read
+// inside functions, after every module has finished loading.
 import { COMMANDS } from "./commands.js";
 import { dismissByExemptions, readExemptionLog } from "./exemptions.js";
 import { FINDING_CODES, PROJECTLESS_CODES, err, severityCodes } from "./findings.js";
