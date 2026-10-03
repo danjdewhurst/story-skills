@@ -972,7 +972,7 @@ Files: `continuity/questions/<question-id>.md`, for open questions the reader or
 | `resolved` | chapter id | no | Chapter that answers it. |
 | `characters` | list of character ids | no | Characters involved. |
 
-`story continuity` errors when `resolved` comes before `introduced`, when an `answered` or `resolved` question has no `resolved` chapter, and when an `open` question already records one. It warns (`question-unanswered`) when an `open` question with no `resolved` chapter was introduced twelve or more chapter files before the latest chapter past `outline`; see [Unfired setups](continuity.md#unfired-setups-the-chekhov-warning).
+`story continuity` errors when `resolved` comes before `introduced`, when an `answered` or `resolved` question has no `resolved` chapter, and when an `open` question already records one. It warns (`question-unanswered`) when an `open` question with no `resolved` chapter was introduced, in a chapter past `outline`, twelve or more chapter files before the latest chapter past `outline`; see [Unfired setups](continuity.md#unfired-setups-the-chekhov-warning).
 
 ### Promises
 

@@ -327,7 +327,9 @@ function checkQuestions(project, context, errors, warnings) {
 
     // A recorded resolved chapter is already an error while the question is
     // open, so the gap warning covers only a question with nowhere to land.
-    if (question.status === "open" && !question.resolved) {
+    // An open question may be introduced in a chapter still in outline; it is
+    // not on the page yet, so it does not age until that chapter is drafted.
+    if (question.status === "open" && !question.resolved && context.draftedChapters.has(question.introduced)) {
       const unanswered = unansweredQuestionWarning(label, question.introduced, context.chapterNumbers.get(question.introduced), context);
       if (unanswered) {
         warnings.push(warn("question-unanswered", unanswered, label));

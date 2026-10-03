@@ -273,7 +273,7 @@ A promise or clue with `status: planted` gets a warning as soon as its recorded 
 
 Fix it by paying the setup off and setting `status: paid-off`, by recording a future `payoff` chapter, by setting `status: dropped` or `abandoned` if you cut the thread, or with an [exemption](#exemptions) if the gap is deliberate (for example, the payoff is in the next book).
 
-An open question with no `resolved` chapter gets the same kind of warning, on a wider gap. It fires once twelve or more chapters follow its `introduced` chapter, up to the latest drafted chapter. The count is the same one: chapter files, not chapter numbers, and outline chapters scaffolded past the draft do not count. Twelve is the default because a mystery's central question is often the book and should stay open through a long stretch of chapters. The finding is a warning, `question-unanswered`. An unanswered question is an error only when `story.md` is `status: complete`.
+An open question with no `resolved` chapter gets the same kind of warning, on a wider gap. It fires once twelve or more chapters follow its `introduced` chapter, up to the latest drafted chapter, and only once the `introduced` chapter itself is past `outline`: a question scheduled into an outline chapter is not on the page yet. The count is the same one: chapter files, not chapter numbers, and outline chapters scaffolded past the draft do not count. Twelve is the default because a mystery's central question is often the book and should stay open through a long stretch of chapters. The finding is a warning, `question-unanswered`. An unanswered question is an error only when `story.md` is `status: complete`.
 
 | Situation | Result |
 |-----------|--------|

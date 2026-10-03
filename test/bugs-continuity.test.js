@@ -368,6 +368,22 @@ resolved: ""
     expect(messages(continuity(root).warnings).join("\n")).not.toContain("has no resolution yet");
   });
 
+  test("a question introduced in an outline chapter does not age until that chapter is drafted", () => {
+    const root = baseProject(QUESTION_CHAPTER_GAP + 1);
+    writeChapter(root, 1, "", "outline");
+    writeQuestion(root, "who-kept-the-key", `
+status: open
+introduced: chapter-01
+resolved: ""
+`);
+    expect(messages(continuity(root).warnings).join("\n")).not.toContain("has no resolution yet");
+
+    writeChapter(root, 1);
+    expect(messages(continuity(root).warnings)).toContain(
+      `continuity/questions/who-kept-the-key.md was introduced in chapter-01, ${QUESTION_CHAPTER_GAP} chapters ago, and has no resolution yet`
+    );
+  });
+
   test("a resolved, dropped, abandoned, or unintroduced question does not warn", () => {
     const root = baseProject(QUESTION_CHAPTER_GAP + 1);
     writeQuestion(root, "answered", `
