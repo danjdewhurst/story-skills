@@ -324,11 +324,67 @@ describe("story context", () => {
 });
 
 describe("context helpers", () => {
-  test("estimateTokens is ceil(words * 4 / 3)", () => {
+  test("estimateTokens is ceil(words * 4 / 3) for spaced text", () => {
     expect(estimateTokens("")).toBe(0);
     expect(estimateTokens("one")).toBe(2);
     expect(estimateTokens("one two three")).toBe(4);
     expect(estimateTokens("  a\n b\tc d  ")).toBe(6);
+    // Punctuation stays with the whitespace-separated run, as before.
+    expect(estimateTokens("hello, world")).toBe(3);
+    expect(estimateTokens("hello , world")).toBe(4);
+  });
+
+  test("estimateTokens prices unspaced scripts by the words wordcount uses", () => {
+    // Han and katakana are 2/3 of a token per character; hiragana is 1/2.
+    expect(estimateTokens("字")).toBe(1);
+    expect(estimateTokens("字".repeat(3))).toBe(2);
+    expect(estimateTokens("字".repeat(1520))).toBe(1014);
+    expect(estimateTokens("𠀀𠀀")).toBe(2);
+    expect(estimateTokens("あ")).toBe(1);
+    expect(estimateTokens("あ".repeat(6))).toBe(3);
+    expect(estimateTokens("字".repeat(6))).toBe(4);
+    expect(estimateTokens("ーー")).toBe(2);
+    expect(estimateTokens("ああ")).toBe(1);
+    expect(estimateTokens("コーヒー")).toBe(3);
+    // Dictionary words: one token each. A soft hyphen keeps one Thai word.
+    expect(estimateTokens("ฉันรักแมว")).toBe(3);
+    expect(estimateTokens("ຂ້ອຍຮັກແມວ")).toBe(3);
+    expect(estimateTokens("ខ្ញុំស្រលាញ់ឆ្មា")).toBe(3);
+    expect(estimateTokens("ကျွန်တော်ကြောင်ကိုချစ်တယ်")).toBe(5);
+    expect(estimateTokens("แม\u00ADว")).toBe(1);
+    // Spaced words on either side of an unspaced word stay apart, and the
+    // rates add before the single rounding.
+    expect(estimateTokens("cat猫dog")).toBe(4);
+    expect(estimateTokens("one two 三")).toBe(4);
+    expect(estimateTokens("one あ")).toBe(2);
+  });
+
+  test("a long Chinese card costs by the character and is left out of a budget that used to hold it", () => {
+    const { root } = contextProject();
+    const cardPath = path.join(root, "characters", "mara-finn.md");
+    const han = "字".repeat(1520);
+    fs.writeFileSync(cardPath, fs.readFileSync(cardPath, "utf8").replace("Salt-grey hair.", `Salt-grey hair. ${han}`), "utf8");
+    const context = contextOf(root, "chapter-02");
+    const card = context.sections.find((section) => section.id === "characters").items.find((item) => item.id === "character:mara-finn");
+    expect(card.tokens).toBeGreaterThan(1000);
+    let used = 0;
+    for (const section of context.sections) {
+      for (const item of section.items) {
+        if (item.id === card.id) {
+          const tight = contextOf(root, "chapter-02", { budget: String(used + 10) });
+          expect(tight.omitted.find((entry) => entry.id === card.id).tokens).toBe(card.tokens);
+          expect(tight.estimatedTokens).toBeLessThanOrEqual(used + 10);
+          const text = textOf(tight);
+          expect(text).toContain("## Left out to fit the budget");
+          expect(text).not.toContain(han.slice(0, 32));
+          return;
+        }
+        if (item.included) {
+          used += item.tokens;
+        }
+      }
+    }
+    throw new Error("missing character card");
   });
 
   test("characterStateAt resolves death and revival at the chapter", () => {
@@ -370,6 +426,19 @@ describe("story context on the examples", () => {
     expect(text).not.toContain("which ledger page names the firestarter");
     expect(text).not.toContain("the margin notes on that page become the schedule");
     expect(text).not.toContain("Nessa");
+  });
+
+  test("kirimi chapter 2 prices Japanese prose, and the old 297-token figure leaves text out", () => {
+    const root = path.join(EXAMPLES, "kirimi-eki-no-wasuremono");
+    const context = contextOf(root, "chapter-02");
+    const text = textOf(context);
+    expect(context.estimatedTokens).toBe(881);
+    expect(text).toContain("Chapter 2:");
+    expect(text).toContain("(estimated at 4 tokens per 3 words in spaced text; 2 per 3 Han or katakana characters, 1 per 2 hiragana, and 1 per Thai, Lao, Khmer, or Burmese word). Nothing from later chapters is included.");
+    const tight = contextOf(root, "chapter-02", { budget: "297" });
+    expect(tight.estimatedTokens).toBeLessThanOrEqual(297);
+    expect(tight.omitted.length).toBeGreaterThan(0);
+    expect(textOf(tight)).toContain("## Left out to fit the budget");
   });
 
   test("the-last-ember packs the style sheet and both cards", () => {

@@ -9812,9 +9812,52 @@ function deathWindow(character, chronology) {
 // src/context.js
 var DEFAULT_CONTEXT_BUDGET = 6000;
 var DEFAULT_CONTEXT_SCENES = 5;
+var SPACED_SIXTHS = 8;
+var TOKEN_SIXTHS = { han: 4, hiragana: 3, katakana: 4, thai: 6, lao: 6, khmer: 6, myanmar: 6 };
+var HAN_CHAR = /^\p{Script=Han}$/u;
+var HIRAGANA_CHAR = /^\p{Script=Hiragana}$/u;
+var KATAKANA_CHAR = /^\p{Script=Katakana}$/u;
+var THAI_CHAR = /^\p{Script=Thai}$/u;
+var LAO_CHAR = /^\p{Script=Lao}$/u;
+var KHMER_CHAR = /^\p{Script=Khmer}$/u;
+var NOT_JOINER = /[^\u00AD\u200C\u200D]/u;
+var KATAKANA_MARK = 12540;
+function unspacedScript(word) {
+  const letter = word.codePointAt(word.search(NOT_JOINER));
+  const ch = String.fromCodePoint(letter);
+  if (HAN_CHAR.test(ch)) {
+    return "han";
+  }
+  if (HIRAGANA_CHAR.test(ch)) {
+    return "hiragana";
+  }
+  if (letter === KATAKANA_MARK || KATAKANA_CHAR.test(ch)) {
+    return "katakana";
+  }
+  if (THAI_CHAR.test(ch)) {
+    return "thai";
+  }
+  if (LAO_CHAR.test(ch)) {
+    return "lao";
+  }
+  if (KHMER_CHAR.test(ch)) {
+    return "khmer";
+  }
+  return "myanmar";
+}
 function estimateTokens(text) {
-  const words = String(text).split(/\s+/).filter(Boolean).length;
-  return Math.ceil(words * 4 / 3);
+  const source = String(text);
+  const parts = [];
+  let last = 0;
+  let sixths = 0;
+  for (const span of wordSpans(source, /(?!)/gu)) {
+    parts.push(source.slice(last, span.start));
+    sixths += TOKEN_SIXTHS[unspacedScript(span.word)];
+    last = span.end;
+  }
+  parts.push(source.slice(last));
+  sixths += parts.join(" ").split(/\s+/).filter(Boolean).length * SPACED_SIXTHS;
+  return Math.ceil(sixths / 6);
 }
 var STORY_SECTIONS = ["Tone & Style", "Setting", "Central Conflict"];
 var CARD_SECTIONS = ["Appearance", "Personality & Traits", "Motivations & Goals", "Voice & Speech Patterns"];
@@ -10153,7 +10196,7 @@ function formatContext(context) {
     `# Drafting context: ${target.id}`,
     "",
     `Chapter ${target.number}: ${target.title}. About ${context.estimatedTokens} of ${context.budget} tokens`,
-    "(estimated at 4 tokens per 3 words). Nothing from later chapters is included."
+    "(estimated at 4 tokens per 3 words in spaced text; 2 per 3 Han or katakana characters, 1 per 2 hiragana, and 1 per Thai, Lao, Khmer, or Burmese word). Nothing from later chapters is included."
   ];
   for (const entry of context.sections) {
     const included = entry.items.filter((candidate) => candidate.included);

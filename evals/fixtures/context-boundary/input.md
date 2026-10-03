@@ -3,7 +3,7 @@ You ran `story context chapter-03 --path . --budget 900`. Its output:
 # Drafting context: chapter-03
 
 Chapter 3: The Lock. About 610 of 900 tokens
-(estimated at 4 tokens per 3 words). Nothing from later chapters is included.
+(estimated at 4 tokens per 3 words in spaced text; 2 per 3 Han or katakana characters, 1 per 2 hiragana, and 1 per Thai, Lao, Khmer, or Burmese word). Nothing from later chapters is included.
 
 ## Target
 
