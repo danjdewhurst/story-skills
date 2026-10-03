@@ -41,18 +41,18 @@ story context chapter-{NN} --path .
 
 It prints, within a token budget (`--budget`, default 6000), the chapter's outline and cast, the `story.md` essentials and `style-sheet.md` rules, the POV character's knowledge and state at that point, cards for the characters on the page and the chapter's locations (with their `progressions` applied at this chapter), open promises, clues, and questions, and summaries of the previous scenes. It includes nothing from later chapters, so it is safe to draft from. Add `--json` if you would rather read the items as data. For a new chapter, run it after step 2 instead.
 
-Draft from that output. The only extra reads are the files listed under "Left out to fit the budget" (the line "Read these files directly if you need them"). With `--json`, that list is `omitted`. Do not open any other project file for background. Context already left out anything past the target: `continuity/state.md` is the full current snapshot, and a character's state from it is included only when `current-chapter` is before the target. `plot/timeline.md`, `continuity/questions/_index.md`, `continuity/promises/_index.md`, `plot/_index.md`, active arc files in `plot/arcs/`, the previous chapter, and the other `_index.md` registries hold later beats or whole-book state. Open one of them only when that omitted-file list names it.
+Draft from that output. The only extra reads are the files listed under "Left out to fit the budget" (the line "Read these files directly if you need them"). With `--json`, that list is `omitted`. Do not open any other project file for background. Context already left out anything past the target: `continuity/state.md` is the full current snapshot, and a character's state from it is included only when `current-chapter` is before the target. `plot/timeline.md`, `continuity/questions/_index.md`, `continuity/promises/_index.md`, `plot/_index.md`, active arc files in `plot/arcs/`, and the other `_index.md` registries hold later beats or whole-book state, and the previous chapter is already covered by the recent scene summaries. Open one of them only when that omitted-file list names it.
 
 `language` is a BCP 47 tag in `story.md` frontmatter (a missing field means `en`). The packed context does not print it, so read only that field, not the synopsis, the notes, or any other section. Draft in that language, with its dialogue punctuation as the style sheet records it. If the style sheet records none and the book is not in English, settle it with the user first (see `../line-editing/references/language-conventions.md`). If the packed context has no style-sheet section and the omitted list does not name `style-sheet.md`, the file is missing: draft normally and suggest the `voice-style` skill once a chapter exists.
 
 ### 2. Determine Chapter Scope
 
 Ask the user:
-- What should this chapter cover? (or, once you have packed context, suggest from the arcs and open promises it already includes)
+- What should this chapter cover?
 - Whose POV?
 - Which location(s)?
 
-Suggest the next beats from that packed context. Do not open arc files to find them.
+For a planned chapter, suggest the next beats from its packed context: its outline, the arcs it advances, and the open promises, clues, and questions. For a new chapter there is no packed context yet, so take the scope from the user and the `story next` suggestion. Do not open arc files or `plot/_index.md` to find beats.
 
 Once the scope is agreed, give the chapter its POV and cast so the packed context can include them: create a new chapter with `story add chapter "Title" --pov <character-id> --character <character-id> --location <location-id>`, or set `pov`, `characters`, and `locations` in an existing chapter's frontmatter. Then run `story context chapter-{NN} --path .` (or pass a scene id, `chapter-{NN}-scene-{NN}`, to draft one scene) and build the outline and prose from it.
 
