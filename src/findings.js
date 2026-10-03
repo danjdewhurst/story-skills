@@ -153,6 +153,7 @@ export const FINDING_CODES = {
   "question-resolved-before-introduced": "error",
   "question-resolution-missing": "error",
   "question-open-but-resolved": "error",
+  "question-unanswered": "warning",
   "clue-payoff-before-plant": "error",
   "clue-payoff-missing": "error",
   "clue-plant-missing": "error",

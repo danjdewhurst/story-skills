@@ -69,7 +69,7 @@ Every finding starts with a severity and, usually, a file path. Match the rest o
 | `whose progressions make them deceased`, `sets status … while <id> is dead`, `when they die in`, `which still holds when they are revived` | `continuity` | [Status progressions](#status-progressions) |
 | `POV character <id> is not listed in characters`, `but its scenes are told by`, `does not list them in characters or mentions`, `does not list that location`, `who has status: cut`, `Chapter numbering skips` | `continuity` | [Casts and locations](#casts-and-locations) |
 | `pays off in … before it is planted`, `resolves in … before it is introduced`, `no payoff chapter`, `no planted chapter`, `no plant chapter`, `has no resolved chapter`, `status is still open`, `status is still planned` | `continuity` | [Promises, questions, and clues](#promises-questions-and-clues) |
-| `has no payoff yet`, `payoff chapter … has passed` | `continuity` | [Unfired setups](#unfired-setups-the-chekhov-warning) |
+| `has no payoff yet`, `payoff chapter … has passed`, `has no resolution yet` | `continuity` | [Unfired setups](#unfired-setups-the-chekhov-warning) |
 | `story.md is complete but` | `continuity` | [Finishing the book](#finishing-the-book) |
 | `current-chapter … is behind`, `current-chapter … is ahead`, `state.md … references missing`, `is missing knows`, `repeats fact`, `must be a kebab-case id`, `conflicts with`, `must be a mapping` | `continuity` | [Continuity state](#continuity-state) |
 | `uses <artifact>, destroyed/lost since`, `mentions <artifact>, destroyed/lost since`, `destroyed/lost before the story`, `references missing since chapter` | `continuity` | [Prop custody](#prop-custody) |
@@ -271,7 +271,18 @@ A promise or clue with `status: planted` gets a warning as soon as its recorded 
 | No `payoff` recorded, planted fewer than 3 chapters ago | No warning |
 | No `payoff` recorded, planted 3 or more chapters ago | warning: `<file> was planted in <chapter>, <n> chapters ago, and has no payoff yet` |
 
-Fix it by paying the setup off and setting `status: paid-off`, by recording a future `payoff` chapter, by setting `status: dropped` or `abandoned` if you cut the thread, or with an [exemption](#exemptions) if the gap is deliberate (for example, the payoff is in the next book). Questions have no gap warning.
+Fix it by paying the setup off and setting `status: paid-off`, by recording a future `payoff` chapter, by setting `status: dropped` or `abandoned` if you cut the thread, or with an [exemption](#exemptions) if the gap is deliberate (for example, the payoff is in the next book).
+
+An open question with no `resolved` chapter gets the same kind of warning, on a wider gap. It fires once twelve or more chapters follow its `introduced` chapter, up to the latest drafted chapter. The count is the same one: chapter files, not chapter numbers, and outline chapters scaffolded past the draft do not count. Twelve is the default because a mystery's central question is often the book and should stay open through a long stretch of chapters. The finding is a warning, `question-unanswered`. An unanswered question is an error only when `story.md` is `status: complete`.
+
+| Situation | Result |
+|-----------|--------|
+| `status: open`, no `resolved`, introduced fewer than 12 chapters ago | No warning |
+| `status: open`, no `resolved`, introduced 12 or more chapters ago | warning: `<file> was introduced in <chapter>, <n> chapters ago, and has no resolution yet` |
+| `status: open` with `resolved` set | The error in the table above (`status is still open`); no gap warning |
+| `answered`, `resolved`, `dropped`, or `abandoned` | No gap warning |
+
+Answer it and set `status: answered` or `resolved`, or set `status: dropped` or `abandoned` if you cut the thread. A question meant to stay open — the central mystery, or one that pays off in the next book — takes an [exemption](#exemptions) with `code: question-unanswered` and the question's `file`. To silence the warning for every open question, set that code's [`severity`](cli-reference.md#defaults-and-severity-from-storymd) to `off` in `story.md`. Recording a future `resolved` chapter while the status is still `open` is the error above, so it does not schedule the answer the way a promise's `payoff` does.
 
 #### Finishing the book
 

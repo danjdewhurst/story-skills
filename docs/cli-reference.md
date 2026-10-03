@@ -747,7 +747,7 @@ These commands read the project and never change story files. The one exception 
 story continuity [path]
 ```
 
-Runs the deterministic continuity engine over frontmatter: characters appearing after they die (by `died-in`, or by a status [progression](project-format.md#progressions) to `deceased`, resolved in story order), status progressions that contradict `died-in` or `revived-in`, promises and clues paid off before they are planted, questions resolved before they are introduced, planted setups with no payoff, POV characters missing from a chapter's cast or from all of its scenes, `status: cut` characters still listed in a cast, arc, or relationship, destroyed or lost artifacts used later, impossible clock and travel times (including journeys faster than the shortest path through location `routes`, and a character at two different places at the same exact time), and references in `continuity/state.md`. Findings matching an entry in `continuity/exemptions.md` are reported as `dismissed` and do not fail the run; an entry matches by the finding's `code`, `file`, `chapter`, or text.
+Runs the deterministic continuity engine over frontmatter: characters appearing after they die (by `died-in`, or by a status [progression](project-format.md#progressions) to `deceased`, resolved in story order), status progressions that contradict `died-in` or `revived-in`, promises and clues paid off before they are planted, questions resolved before they are introduced, planted setups with no payoff, open questions left unanswered for twelve or more drafted chapters, POV characters missing from a chapter's cast or from all of its scenes, `status: cut` characters still listed in a cast, arc, or relationship, destroyed or lost artifacts used later, impossible clock and travel times (including journeys faster than the shortest path through location `routes`, and a character at two different places at the same exact time), and references in `continuity/state.md`. Findings matching an entry in `continuity/exemptions.md` are reported as `dismissed` and do not fail the run; an entry matches by the finding's `code`, `file`, `chapter`, or text.
 
 Using a copy of [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/), which is broken on purpose:
 
@@ -2499,6 +2499,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `question-resolved-before-introduced` | error | A question resolves before it is introduced. |
 | `question-resolution-missing` | error | An answered or resolved question has no resolved chapter. |
 | `question-open-but-resolved` | error | An open question records a resolved chapter. |
+| `question-unanswered` | warning | An open question was introduced twelve or more drafted chapters ago and has no resolution yet. |
 | `clue-payoff-before-plant` | error | A clue pays off before it is planted. |
 | `clue-payoff-missing` | error | A paid-off clue has no payoff chapter. |
 | `clue-plant-missing` | error | A planted clue has no plant chapter. |
