@@ -570,7 +570,8 @@ export function buildContext(project, targetId, readBody, options = {}) {
 // Whether this scene's state-changes record the POV character learning the
 // knowledge-state entry. Matched the way continuity pairs a scene knowledge
 // change with an entry: the same `fact` id, or the same text aside from
-// case and a final full stop. A paraphrase that matches neither stays out,
+// case, spacing, and a trailing full stop or exclamation mark. A paraphrase
+// that matches neither stays out,
 // so an unrelated change in an earlier scene cannot pull the fact in.
 function sceneRecordsFact(scene, characterId, entry) {
   const fact = entry.fact === undefined ? "" : String(entry.fact);
