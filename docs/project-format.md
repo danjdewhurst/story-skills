@@ -1346,15 +1346,17 @@ Chapters and scenes can carry a story `date` and `time`; `story continuity` and 
 
 ### Route travel
 
-When locations declare [`routes`](#routes), `story continuity` follows each character through the dated scenes they are in (the scene's `characters` plus its `pov`), in story-time order rather than reading order. When two sightings are at different locations joined by routes, the story time between them must be at least the fastest route, which may pass through other locations. Otherwise it is an error:
+When locations declare [`routes`](#routes), `story continuity` follows each character through the dated scenes they are in (the scene's `characters` plus its `pov`), within one chapter [`strand`](#chapters), in story-time order rather than reading order. Chapters without `strand` share one strand. When two sightings in that strand are at different locations joined by routes, the story time between them must be at least the fastest route, which may pass through other locations. Otherwise it is an error:
 
 ```text
 error: scenes/chapter-01-scene-02.md puts mara-quill at town-b 2h after scenes/chapter-01-scene-01.md at port-a, but the fastest route takes 6h
 ```
 
+A sighting in another strand is not the other end of a journey, and a crossing between strands is not inferred.
+
 Only scene `date`, `time`, and `location` count; chapter dates and undated scenes are not used. The gap is always read as generously as the times allow, so only journeys impossible on any reading are reported. An exact `HH:MM` is a single moment. A named time covers a span: `dawn` 04:00 to 06:59, `morning` 05:00 to 11:59, `midday` 11:00 to 13:59, `afternoon` 12:00 to 17:59, `evening` 17:00 to 21:59, and `night` 20:00 to 23:59. A scene with no time covers the whole day.
 
-A character in two scenes at different places at the same exact `HH:MM` on the same day is an error even without a route between the places:
+A character in two scenes of the same strand at different places at the same exact `HH:MM` on the same day is an error even without a route between the places:
 
 ```text
 error: scenes/chapter-01-scene-02.md puts ann at gamma at the same time as scenes/chapter-01-scene-01.md at alpha

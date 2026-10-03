@@ -485,7 +485,7 @@ Scene times are read generously, so only journeys that are impossible on any rea
 
 Scenes without a valid `date` or without a `location` are left out. The route check runs alongside the `travel-hours` check and does not replace it.
 
-No journey takes no time, so a character in two scenes at different places at the same exact `HH:MM` on the same day is an error even when the places have no route between them, or the project has no routes at all. Places joined by a route get the route message instead. A named time or an untimed scene could be a different moment, so it never triggers this.
+No journey takes no time, so a character in two scenes of the same strand at different places at the same exact `HH:MM` on the same day is an error even when the places have no route between them, or the project has no routes at all. Places joined by a route get the route message instead. A named time or an untimed scene could be a different moment, so it never triggers this.
 
 From a copy of [`examples/harbor-of-second-light`](../examples/harbor-of-second-light/), whose Port Kestrel file carries the route above. The copy dates chapter 1's reef scene `2041-03-02` at `"05:40"`, and adds a second scene in which Mara is on the council steps in Port Kestrel twenty minutes later (`story add scene "Council Steps" --chapter chapter-01 --location port-kestrel --pov mara-quill --character mara-quill --date 2041-03-02 --time 06:00`):
 
