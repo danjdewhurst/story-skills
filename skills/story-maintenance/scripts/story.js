@@ -11461,6 +11461,7 @@ import path8 from "node:path";
 var LOCK_FILE = ".story.lock";
 var DEFAULT_WAIT_MS = 1e4;
 var POLL_MS = 50;
+var FOREIGN_LOCK_STALE_MS = 10 * 60 * 1000;
 var held = new Map;
 function withProjectLock(root, run) {
   const projectRoot = path8.resolve(root);
@@ -11529,13 +11530,18 @@ function readOwner(lockPath) {
   } catch {
     return null;
   }
-  const [pidText, host] = text.split(`
+  const [pidText, host, writtenAt] = text.split(`
 `);
   const pid = Number.parseInt(pidText, 10);
   if (!Number.isInteger(pid) || pid <= 0) {
     return { text, pid: null, host: null, alive: true };
   }
-  return { text, pid, host, alive: host && host !== os.hostname() || processAlive(pid) };
+  const foreign = host && host !== os.hostname();
+  return { text, pid, host, alive: foreign ? !foreignLockStale(writtenAt) : processAlive(pid) };
+}
+function foreignLockStale(writtenAt) {
+  const written = Date.parse(writtenAt);
+  return Number.isFinite(written) && Date.now() - written > FOREIGN_LOCK_STALE_MS;
 }
 function processAlive(pid) {
   try {
