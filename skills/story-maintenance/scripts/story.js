@@ -5282,7 +5282,7 @@ function characterLifeline(character, chronology) {
   if (!character.diedIn && statusProgressions(character).length === 0) {
     return { deadAtStart, deadAtEnd: deadAtStart, events: [] };
   }
-  const window = deathWindow(character, chronology);
+  const window = deathWindow(character, chronology, { planned: true });
   const events = [];
   let dead = deadAtStart;
   for (const chapter of chapters) {
@@ -8729,6 +8729,9 @@ function checkCharacterDeaths(project, context, errors, warnings) {
     checkProgressionDeath(character, label, context.chronology, warnings);
     checkStatusAppearances(project, character, context.chronology, warnings);
     const window = deathWindow(character, context.chronology);
+    if (!window) {
+      continue;
+    }
     for (const chapter of project.chapters) {
       if (window.deadIn(chapter.id) && castIncludes(chapter, character.id)) {
         errors.push(err("posthumous-appearance", `${relative(project, chapter.file)} lists ${character.id}, who died in ${character.diedIn}; move posthumous appearances to mentions`, relative(project, chapter.file), chapter.id));
@@ -9119,7 +9122,7 @@ function checkPosthumousLearning(character, learnedIn, entryLabel, file, context
   if (!character.diedIn) {
     return;
   }
-  const window = deathWindow(character, context.chronology);
+  const window = deathWindow(character, context.chronology, { planned: true });
   if (window && window.deadIn(learnedIn)) {
     errors.push(err("posthumous-learning", `${entryLabel} has ${character.id} learn something in ${learnedIn}, after they died in ${character.diedIn}`, file, learnedIn));
   }
@@ -9822,9 +9825,12 @@ function renumberedChronology(chronology, oldId, newId, number) {
   }
   return chronologyFrom(numbers, days);
 }
-function deathWindow(character, chronology) {
+function deathWindow(character, chronology, options = {}) {
   const died = character.diedIn;
   if (!died || !chronology.numbers.has(died)) {
+    return null;
+  }
+  if (options.planned !== true && chronology.outline.has(died)) {
     return null;
   }
   const revived = character.revivedIn && chronology.numbers.has(character.revivedIn) ? character.revivedIn : "";

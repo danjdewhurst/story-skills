@@ -108,7 +108,12 @@ function checkCharacterDeaths(project, context, errors, warnings) {
     checkProgressionDeath(character, label, context.chronology, warnings);
     checkStatusAppearances(project, character, context.chronology, warnings);
 
+    // Outline deaths are not in force: deathWindow returns null, and a later
+    // cast is not a posthumous appearance until the death chapter is drafted.
     const window = deathWindow(character, context.chronology);
+    if (!window) {
+      continue;
+    }
     for (const chapter of project.chapters) {
       if (window.deadIn(chapter.id) && castIncludes(chapter, character.id)) {
         errors.push(err("posthumous-appearance", `${relative(project, chapter.file)} lists ${character.id}, who died in ${character.diedIn}; move posthumous appearances to mentions`, relative(project, chapter.file), chapter.id));
@@ -592,9 +597,10 @@ function checkPosthumousLearning(character, learnedIn, entryLabel, file, context
   if (!character.diedIn) {
     return;
   }
-  // Like a cast appearance, learning is checked against the dead window, which
-  // a revival ends.
-  const window = deathWindow(character, context.chronology);
+  // Learning stays on the scheduled death, including one whose chapter is
+  // still an outline. A `learned-in` on an outline chapter counting as known
+  // is a separate question and is unchanged here.
+  const window = deathWindow(character, context.chronology, { planned: true });
   if (window && window.deadIn(learnedIn)) {
     errors.push(err("posthumous-learning", `${entryLabel} has ${character.id} learn something in ${learnedIn}, after they died in ${character.diedIn}`, file, learnedIn));
   }

@@ -85,9 +85,11 @@ export function progressionDeathFrom(character, chapterId, chronology) {
 // chapter a status progression makes them deceased until one changes it
 // back; `status: deceased` with no died-in is dead before the story, as it
 // is with died-in when a status progression brings them back first. These
-// are the rules story continuity checks casts with, so the death chapter
-// itself ends dead and the revival chapter ends alive. Every chapter counts,
-// planned `outline` ones included, as they do for continuity's cast checks.
+// match the cast checks, so the death chapter itself ends dead and the
+// revival chapter ends alive, except that planned `outline` chapters count
+// here. Series and diagram read the end of the book with that death still
+// in the plan. Continuity's cast check does not: an outline `died-in` is
+// not in force until that chapter is drafted.
 //
 // With no chapters, or a died-in the book has no chapter for, there is no
 // timeline to place a death on, so the frontmatter status alone decides:
@@ -109,7 +111,7 @@ export function characterLifeline(character, chronology) {
   if (!character.diedIn && statusProgressions(character).length === 0) {
     return { deadAtStart, deadAtEnd: deadAtStart, events: [] };
   }
-  const window = deathWindow(character, chronology);
+  const window = deathWindow(character, chronology, { planned: true });
   const events = [];
   let dead = deadAtStart;
   for (const chapter of chapters) {
