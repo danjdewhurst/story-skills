@@ -5,6 +5,7 @@ import { warn } from "./findings.js";
 import { entityStateAt } from "./progressions.js";
 import { projectError, usageError } from "./exit-codes.js";
 import { extractSection } from "./markdown.js";
+import { wordSpans } from "./words.js";
 
 // `story context` packs the slice of a project an agent needs to draft one
 // chapter or scene. buildContext is pure over the scanned project (the caller
@@ -15,11 +16,76 @@ import { extractSection } from "./markdown.js";
 export const DEFAULT_CONTEXT_BUDGET = 6000;
 export const DEFAULT_CONTEXT_SCENES = 5;
 
-// A fixed, deterministic estimate: English prose runs about 3 words to 4
-// tokens, so tokens = ceil(words * 4 / 3), counting whitespace-separated runs.
+// A fixed, deterministic estimate, not a tokenizer count. Words are the ones
+// `story wordcount` counts: whitespace-separated runs in spaced text, one
+// word per Chinese or Japanese character, and a dictionary word for Thai,
+// Lao, Khmer, and Burmese (see wordSpans). Spaced text stays at 4 tokens per
+// 3 words, so text with no unspaced script costs ceil(words * 4 / 3) as
+// before. The other rates are tokens per such word. Han is about 0.62 tokens
+// per character on the GPT-4 and GPT-4o tokenizers, and Japanese text overall
+// about 0.53 (Land & Arnett, "BPE Stays on SCRIPT", 2025, Table 4); Thai is
+// about 0.32 to 0.43 tokens per character there, and a dictionary word is
+// about three characters. Rates round up from those figures, so a budget
+// errs toward leaving text out:
+//   Han and katakana, including the long-vowel mark (its own word) → 2/3
+//   Hiragana, the part of Japanese that merges into particles and endings → 1/2
+//   Thai, and Lao, Khmer, and Burmese (not in that table, so they keep
+//   Thai's rate) → 1 per dictionary word
+// Costs are summed in sixths of a token and rounded up once.
+const SPACED_SIXTHS = 8;
+const TOKEN_SIXTHS = { han: 4, hiragana: 3, katakana: 4, thai: 6, lao: 6, khmer: 6, myanmar: 6 };
+const HAN_CHAR = /^\p{Script=Han}$/u;
+const HIRAGANA_CHAR = /^\p{Script=Hiragana}$/u;
+const KATAKANA_CHAR = /^\p{Script=Katakana}$/u;
+const THAI_CHAR = /^\p{Script=Thai}$/u;
+const LAO_CHAR = /^\p{Script=Lao}$/u;
+const KHMER_CHAR = /^\p{Script=Khmer}$/u;
+const NOT_JOINER = /[^\u00AD\u200C\u200D]/u;
+const KATAKANA_MARK = 0x30fc;
+
+// The script of one unspaced word, which is one character for Chinese and
+// Japanese and a dictionary word otherwise. A soft hyphen or zero-width
+// joiner inside a word is skipped. The katakana long-vowel mark has no
+// script of its own, so it is priced with katakana.
+function unspacedScript(word) {
+  const letter = word.codePointAt(word.search(NOT_JOINER));
+  const ch = String.fromCodePoint(letter);
+  if (HAN_CHAR.test(ch)) {
+    return "han";
+  }
+  if (HIRAGANA_CHAR.test(ch)) {
+    return "hiragana";
+  }
+  if (letter === KATAKANA_MARK || KATAKANA_CHAR.test(ch)) {
+    return "katakana";
+  }
+  if (THAI_CHAR.test(ch)) {
+    return "thai";
+  }
+  if (LAO_CHAR.test(ch)) {
+    return "lao";
+  }
+  if (KHMER_CHAR.test(ch)) {
+    return "khmer";
+  }
+  return "myanmar";
+}
+
 export function estimateTokens(text) {
-  const words = String(text).split(/\s+/).filter(Boolean).length;
-  return Math.ceil((words * 4) / 3);
+  const source = String(text);
+  const parts = [];
+  let last = 0;
+  let sixths = 0;
+  for (const span of wordSpans(source, /(?!)/gu)) {
+    parts.push(source.slice(last, span.start));
+    sixths += TOKEN_SIXTHS[unspacedScript(span.word)];
+    last = span.end;
+  }
+  parts.push(source.slice(last));
+  // A space stands in for each unspaced word, so the spaced words on either
+  // side stay two words ("cat猫dog" is cat and dog, not catdog).
+  sixths += parts.join(" ").split(/\s+/).filter(Boolean).length * SPACED_SIXTHS;
+  return Math.ceil(sixths / 6);
 }
 
 // story.md sections safe to show at any chapter. The synopsis and free-form
@@ -495,7 +561,7 @@ export function formatContext(context) {
     `# Drafting context: ${target.id}`,
     "",
     `Chapter ${target.number}: ${target.title}. About ${context.estimatedTokens} of ${context.budget} tokens`,
-    "(estimated at 4 tokens per 3 words). Nothing from later chapters is included."
+    "(estimated at 4 tokens per 3 words in spaced text; 2 per 3 Han or katakana characters, 1 per 2 hiragana, and 1 per Thai, Lao, Khmer, or Burmese word). Nothing from later chapters is included."
   ];
   for (const entry of context.sections) {
     const included = entry.items.filter((candidate) => candidate.included);
