@@ -144,6 +144,7 @@ var FINDING_CODES = {
   "question-resolved-before-introduced": "error",
   "question-resolution-missing": "error",
   "question-open-but-resolved": "error",
+  "question-unanswered": "warning",
   "clue-payoff-before-plant": "error",
   "clue-payoff-missing": "error",
   "clue-plant-missing": "error",
@@ -8654,6 +8655,7 @@ function dismissByExemptions(result, exemptions, { errors: withErrors }) {
 
 // src/continuity.js
 var CHEKHOV_CHAPTER_GAP = 3;
+var QUESTION_CHAPTER_GAP = 12;
 function checkContinuity(project) {
   const errors = [];
   const warnings = [];
@@ -8678,7 +8680,7 @@ function checkContinuity(project) {
   checkCutCharacters(project, warnings);
   checkChapterSequence(project, warnings);
   checkPromises(project, context, errors, warnings);
-  checkQuestions(project, context, errors);
+  checkQuestions(project, context, errors, warnings);
   checkClues(project, context, errors, warnings);
   checkStoryCompletion(project, errors);
   checkContinuityState(project, context, errors, warnings);
@@ -8882,7 +8884,7 @@ function checkPromises(project, context, errors, warnings) {
     }
   }
 }
-function checkQuestions(project, context, errors) {
+function checkQuestions(project, context, errors, warnings) {
   for (const question of project.questions) {
     if (question.status === "abandoned") {
       continue;
@@ -8896,6 +8898,12 @@ function checkQuestions(project, context, errors) {
     }
     if (question.status === "open" && question.resolved) {
       errors.push(err("question-open-but-resolved", `${label} records resolved chapter ${question.resolved} but status is still open`, label));
+    }
+    if (question.status === "open" && !question.resolved) {
+      const unanswered = unansweredQuestionWarning(label, question.introduced, context.chapterNumbers.get(question.introduced), context);
+      if (unanswered) {
+        warnings.push(warn("question-unanswered", unanswered, label));
+      }
     }
   }
 }
@@ -8966,12 +8974,18 @@ function referencedChapterNumber(chapterNumbers, id) {
   const match = /^chapter-(\d+)$/.exec(id);
   return match ? Number.parseInt(match[1], 10) : undefined;
 }
+function chaptersSince(fromNumber, context) {
+  if (fromNumber === undefined) {
+    return null;
+  }
+  return context.chapterNumberList.filter((number) => number > fromNumber && number <= context.latestChapter).length;
+}
 function chekhovWarning(label, planted, plantedNumber, payoff, payoffNumber, context) {
-  if (plantedNumber === undefined) {
+  const since = chaptersSince(plantedNumber, context);
+  if (since === null) {
     return null;
   }
   const latestChapter = context.latestChapter;
-  const since = context.chapterNumberList.filter((number) => number > plantedNumber && number <= latestChapter).length;
   if (payoff && payoffNumber !== undefined) {
     const drafted = context.chapterNumbers.has(payoff) ? context.draftedChapters.has(payoff) : payoffNumber <= latestChapter;
     return drafted ? { passed: true, message: `${label} payoff chapter ${payoff} has passed and status is still planted` } : null;
@@ -8980,6 +8994,13 @@ function chekhovWarning(label, planted, plantedNumber, payoff, payoffNumber, con
     return null;
   }
   return { passed: false, message: `${label} was planted in ${planted}, ${since} chapters ago, and has no payoff yet` };
+}
+function unansweredQuestionWarning(label, introduced, introducedNumber, context) {
+  const since = chaptersSince(introducedNumber, context);
+  if (since === null || since < QUESTION_CHAPTER_GAP) {
+    return "";
+  }
+  return `${label} was introduced in ${introduced}, ${since} chapters ago, and has no resolution yet`;
 }
 function checkContinuityState(project, context, errors, warnings) {
   if (!project.continuity) {

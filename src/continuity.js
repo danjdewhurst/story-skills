@@ -7,6 +7,13 @@ import { progressionDeathAt, progressionDeathFrom, progressionStatusAt, statusPr
 import { happensAfter } from "./progressions.js";
 
 const CHEKHOV_CHAPTER_GAP = 3;
+// A mystery's central question is often the book, so the same three-chapter
+// gap used for promises and clues would warn on it almost as soon as it is
+// asked. Twelve drafted chapters is wide enough that the question can run
+// through a long stretch of the draft, and still leaves a warning to exempt
+// when the hold is deliberate. It stays a warning: an open question is an
+// error only once story.md is complete.
+export const QUESTION_CHAPTER_GAP = 12;
 
 export function checkContinuity(project) {
   const errors = [];
@@ -20,9 +27,10 @@ export function checkContinuity(project) {
     locations: new Set(project.locations.map((location) => location.id)),
     artifacts: new Map(project.artifacts.map((artifact) => [artifact.id, artifact])),
     factions: new Set(project.factions.map((faction) => faction.id)),
-    // Chekhov gaps and the stale-state warning measure against chapters that
-    // have prose; outline-only chapters scaffolded ahead of drafting do not
-    // count. `highestChapter` still bounds current-chapter from above.
+    // Chekhov gaps, the open-question gap, and the stale-state warning
+    // measure against chapters that have prose; outline-only chapters
+    // scaffolded ahead of drafting do not count. `highestChapter` still
+    // bounds current-chapter from above.
     latestChapter: project.chapters
       .filter((chapter) => chapter.status !== "outline")
       .reduce((max, chapter) => Math.max(max, chapter.number), 0),
@@ -40,7 +48,7 @@ export function checkContinuity(project) {
   checkCutCharacters(project, warnings);
   checkChapterSequence(project, warnings);
   checkPromises(project, context, errors, warnings);
-  checkQuestions(project, context, errors);
+  checkQuestions(project, context, errors, warnings);
   checkClues(project, context, errors, warnings);
   checkStoryCompletion(project, errors);
   checkContinuityState(project, context, errors, warnings);
@@ -299,7 +307,7 @@ function checkPromises(project, context, errors, warnings) {
   }
 }
 
-function checkQuestions(project, context, errors) {
+function checkQuestions(project, context, errors, warnings) {
   for (const question of project.questions) {
     if (question.status === "abandoned") {
       continue;
@@ -315,6 +323,15 @@ function checkQuestions(project, context, errors) {
 
     if (question.status === "open" && question.resolved) {
       errors.push(err("question-open-but-resolved", `${label} records resolved chapter ${question.resolved} but status is still open`, label));
+    }
+
+    // A recorded resolved chapter is already an error while the question is
+    // open, so the gap warning covers only a question with nowhere to land.
+    if (question.status === "open" && !question.resolved) {
+      const unanswered = unansweredQuestionWarning(label, question.introduced, context.chapterNumbers.get(question.introduced), context);
+      if (unanswered) {
+        warnings.push(warn("question-unanswered", unanswered, label));
+      }
     }
   }
 }
@@ -403,14 +420,22 @@ function referencedChapterNumber(chapterNumbers, id) {
   return match ? Number.parseInt(match[1], 10) : undefined;
 }
 
-// The gap since the plant counts chapter positions, not chapter numbers, so
-// gaps in the numbering do not inflate it.
+// The gap since a plant or an introduction counts chapter positions, not
+// chapter numbers, so gaps in the numbering do not inflate it. Outline
+// chapters past the latest drafted chapter do not count.
+function chaptersSince(fromNumber, context) {
+  if (fromNumber === undefined) {
+    return null;
+  }
+  return context.chapterNumberList.filter((number) => number > fromNumber && number <= context.latestChapter).length;
+}
+
 function chekhovWarning(label, planted, plantedNumber, payoff, payoffNumber, context) {
-  if (plantedNumber === undefined) {
+  const since = chaptersSince(plantedNumber, context);
+  if (since === null) {
     return null;
   }
   const latestChapter = context.latestChapter;
-  const since = context.chapterNumberList.filter((number) => number > plantedNumber && number <= latestChapter).length;
   // A recorded payoff chapter that has been drafted should have paid off,
   // however soon after the plant it came. A payoff chapter with no file is
   // judged by its number against the latest drafted chapter.
@@ -422,6 +447,14 @@ function chekhovWarning(label, planted, plantedNumber, payoff, payoffNumber, con
     return null;
   }
   return { passed: false, message: `${label} was planted in ${planted}, ${since} chapters ago, and has no payoff yet` };
+}
+
+function unansweredQuestionWarning(label, introduced, introducedNumber, context) {
+  const since = chaptersSince(introducedNumber, context);
+  if (since === null || since < QUESTION_CHAPTER_GAP) {
+    return "";
+  }
+  return `${label} was introduced in ${introduced}, ${since} chapters ago, and has no resolution yet`;
 }
 
 function checkContinuityState(project, context, errors, warnings) {

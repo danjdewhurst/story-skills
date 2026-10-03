@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
-import { checkContinuity } from "../src/continuity.js";
+import { QUESTION_CHAPTER_GAP, checkContinuity } from "../src/continuity.js";
 import { formatTimeline } from "../src/timeline.js";
 import {
   createEntity,
@@ -316,6 +316,165 @@ planted: chapter-01
 payoff: ""
 `, "# P\n");
     expect(messages(continuity(root).warnings)).toContain("continuity/promises/p.md was planted in chapter-01, 4 chapters ago, and has no payoff yet");
+  });
+});
+
+describe("unanswered questions (#347)", () => {
+  function writeQuestion(root, id, fields) {
+    writeMarkdown(path.join(root, "continuity", "questions", `${id}.md`), `
+title: ${id}
+${fields}
+`, `# ${id}\n`);
+  }
+
+  function setStoryStatus(root, status) {
+    const file = path.join(root, "story.md");
+    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace(/^status: .*$/m, `status: ${status}`), "utf8");
+  }
+
+  test("an open question warns after the wide gap and stays a warning", () => {
+    const root = baseProject(QUESTION_CHAPTER_GAP);
+    writeQuestion(root, "who-kept-the-key", `
+status: open
+introduced: chapter-01
+resolved: ""
+`);
+    expect(continuity(root)).toMatchObject({ ok: true, errors: [], warnings: [] });
+
+    writeChapter(root, QUESTION_CHAPTER_GAP + 1);
+    writeState(root, "character-state: []\nobject-state: []\nknowledge-state: []", QUESTION_CHAPTER_GAP + 1);
+    const result = continuity(root);
+    expect(result.ok).toBe(true);
+    expect(result.errors).toEqual([]);
+    expect(result.warnings).toEqual([{
+      code: "question-unanswered",
+      message: `continuity/questions/who-kept-the-key.md was introduced in chapter-01, ${QUESTION_CHAPTER_GAP} chapters ago, and has no resolution yet`,
+      file: "continuity/questions/who-kept-the-key.md",
+      chapter: null
+    }]);
+  });
+
+  test("outline chapters ahead and numbering gaps do not age a question", () => {
+    const root = baseProject(2);
+    writeQuestion(root, "who-kept-the-key", `
+status: open
+introduced: chapter-01
+resolved: ""
+`);
+    writeChapter(root, 30, "", "outline");
+    expect(messages(continuity(root).warnings)).toEqual([]);
+
+    writeChapter(root, 40);
+    expect(messages(continuity(root).warnings).join("\n")).not.toContain("has no resolution yet");
+  });
+
+  test("a resolved, dropped, abandoned, or unintroduced question does not warn", () => {
+    const root = baseProject(QUESTION_CHAPTER_GAP + 1);
+    writeQuestion(root, "answered", `
+status: answered
+introduced: chapter-01
+resolved: chapter-02
+`);
+    writeQuestion(root, "dropped", `
+status: dropped
+introduced: chapter-01
+resolved: ""
+`);
+    writeQuestion(root, "abandoned", `
+status: abandoned
+introduced: chapter-01
+resolved: ""
+`);
+    writeQuestion(root, "unplaced", `
+status: open
+introduced: ""
+resolved: ""
+`);
+    writeQuestion(root, "scheduled", `
+status: open
+introduced: chapter-99
+resolved: ""
+`);
+    expect(messages(continuity(root).warnings).join("\n")).not.toContain("has no resolution yet");
+    expect(messages(continuity(root).errors)).toEqual([]);
+  });
+
+  test("an open question that already names a resolved chapter stays an error, with no gap warning", () => {
+    const root = baseProject(QUESTION_CHAPTER_GAP + 1);
+    writeQuestion(root, "lingering", `
+status: open
+introduced: chapter-01
+resolved: chapter-02
+`);
+    const result = continuity(root);
+    expect(result.ok).toBe(false);
+    expect(messages(result.errors)).toEqual([
+      "continuity/questions/lingering.md records resolved chapter chapter-02 but status is still open"
+    ]);
+    expect(messages(result.warnings).join("\n")).not.toContain("has no resolution yet");
+  });
+
+  test("a deliberate hold is exempted the way an unpaid promise is", () => {
+    const root = baseProject(QUESTION_CHAPTER_GAP + 1);
+    writeQuestion(root, "who-kept-the-key", `
+status: open
+introduced: chapter-01
+resolved: ""
+`);
+    writeQuestion(root, "where-is-the-boat", `
+status: open
+introduced: chapter-01
+resolved: ""
+`);
+    writeMarkdown(path.join(root, "continuity", "exemptions.md"), `
+type: exemption-log
+story: base
+exemptions:
+  - code: question-unanswered
+    file: continuity/questions/who-kept-the-key.md
+    reason: Pays off in book two
+`, "# Exemptions\n");
+    const result = continuity(root);
+    expect(result.ok).toBe(true);
+    expect(result.errors).toEqual([]);
+    expect(result.warnings.map((finding) => finding.file)).toEqual(["continuity/questions/where-is-the-boat.md"]);
+    expect(result.dismissed).toEqual([{
+      finding: expect.objectContaining({ code: "question-unanswered", file: "continuity/questions/who-kept-the-key.md" }),
+      reason: "Pays off in book two",
+      index: 0
+    }]);
+  });
+
+  test("completing the book is an error whether or not the gap has passed", () => {
+    const short = baseProject(3);
+    writeQuestion(short, "who-kept-the-key", `
+status: open
+introduced: chapter-01
+resolved: ""
+`);
+    setStoryStatus(short, "complete");
+    const early = continuity(short);
+    expect(early.ok).toBe(false);
+    expect(messages(early.errors)).toEqual([
+      "story.md is complete but continuity/questions/who-kept-the-key.md is still open"
+    ]);
+    expect(messages(early.warnings).join("\n")).not.toContain("has no resolution yet");
+
+    const root = baseProject(QUESTION_CHAPTER_GAP + 1);
+    writeQuestion(root, "who-kept-the-key", `
+status: open
+introduced: chapter-01
+resolved: ""
+`);
+    setStoryStatus(root, "complete");
+    const done = continuity(root);
+    expect(done.ok).toBe(false);
+    expect(messages(done.errors)).toEqual([
+      "story.md is complete but continuity/questions/who-kept-the-key.md is still open"
+    ]);
+    expect(messages(done.warnings)).toEqual([
+      `continuity/questions/who-kept-the-key.md was introduced in chapter-01, ${QUESTION_CHAPTER_GAP} chapters ago, and has no resolution yet`
+    ]);
   });
 });
 
