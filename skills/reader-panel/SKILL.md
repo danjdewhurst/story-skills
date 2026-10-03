@@ -84,7 +84,7 @@ story context chapter-{NN} --path . --budget 4000
 ```
 
 It includes nothing from later chapters and leaves out the synopsis. Do not
-read `story.md` beyond its `language` field, `plot/`, arc files, promise payoffs, or chapters after the
+read `story.md` (the context already gives its `language`), `plot/`, arc files, promise payoffs, or chapters after the
 range: a persona
 that knows the ending cannot tell whether the setup works. When the
 genre reader needs the genre's promises, take them from the chapters and
