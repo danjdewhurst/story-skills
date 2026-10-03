@@ -717,7 +717,7 @@ story compare . --against ../the-tide-room-draft-1
 **Workflow.**
 
 1. **Scope.** Asks for the chapter range and which of the five personas to run: target-genre reader, line editor, sensitivity reader, continuity-minded reader, and first-page reader. The panel gets its own `feedback/round-{N}/`, never shared with human readers, and a stamped HTML build (`story build . --format html --stamp panel-round-{N}`) so its notes cite the same paragraph labels human readers use.
-2. **Context without spoilers.** Each persona reads only the chapters in range, with `story context` on the last of them for background. It reads nothing from `plot/`, arc files, or later chapters, and it ignores a line marked `character-knowledge` and `do not reveal`, so it cannot know how a setup pays off.
+2. **Context without spoilers.** Each persona reads only the chapters in range, with `story context` on the last of them for background. It reads nothing from `plot/`, arc files, or later chapters, and lines marked `character-knowledge` and `do not reveal` are deleted from the context before it sees them, so it cannot know how a setup pays off.
 3. **Independent reads.** One persona at a time, in its own subagent where possible, following its reference file. Every problem cites a paragraph label and quoted words; a persona that finds nothing says so instead of padding.
 4. **Write and hand off.** Writes `feedback/round-{N}/{persona}.md` with `source: simulated` and `persona` in the frontmatter, then hands the round to feedback-triage.
 
