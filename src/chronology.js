@@ -62,8 +62,8 @@ export function renumberedChronology(chronology, oldId, newId, number) {
 // the revival chapter. Returns null for a character with no usable death.
 // A death whose chapter is still `outline` is planned, not in force, so the
 // window stays closed until that chapter is drafted. Pass `{ planned: true }`
-// to count that scheduled death anyway (posthumous learning, and the
-// end-of-book lifeline series and diagram read).
+// to count that scheduled death anyway (the end-of-book lifeline series and
+// diagram read).
 export function deathWindow(character, chronology, options = {}) {
   const died = character.diedIn;
   if (!died || !chronology.numbers.has(died)) {
