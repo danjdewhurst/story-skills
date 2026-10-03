@@ -399,7 +399,7 @@ Write the next chapter.
 
 The [`chapter-writing`](../skills/chapter-writing/SKILL.md) skill works outline-first:
 
-1. **Gather context.** It reads `story.md`, `style-sheet.md`, the chapter and scene registries, `plot/_index.md`, `plot/timeline.md`, `continuity/state.md`, and the open questions and promises.
+1. **Gather context.** It runs `story context` for the chapter and drafts from that packed context. The only extra reads are the files context lists under "Left out to fit the budget". It does not open `continuity/state.md`, the timeline, the registries, or the active arcs unless that list names them.
 2. **Agree the scope.** It asks what the chapter covers, whose POV it uses, and where it is set.
 3. **Outline.** It proposes a beat-by-beat outline, including what each scene's outcome should be and how the chapter ends, and revises it until you approve it.
 4. **Draft.** It writes the prose in the POV and tense from `story.md`, using the character's voice notes and the location details.
@@ -502,6 +502,8 @@ Project is valid: 0 errors, 0 warnings, 0 dismissed
 | `story reindex .` | Rebuilds every `_index.md` registry table from the entity files |
 | `story links .` | Checks that every id reference points at a real file and that backlinks exist |
 | `story validate .` | Checks required files, the schema version, frontmatter fields and values, and registries |
+
+The skill's post-write list also runs `story continuity .` before `story next .`, in the same place discovery-drafting does. `story next` can name continuity errors and still exit 0, so the continuity command is the check. `story reindex` in that list rebuilds `chapters/_index.md`; the skill does not edit registry rows by hand.
 
 Then check the story itself and ask what to do next. The output below assumes the skill set `current-chapter: 1` in `continuity/state.md` after drafting; if you are running the commands yourself, set it first, or `story continuity` warns `continuity/state.md current-chapter 0 is behind the latest chapter 1`.
 

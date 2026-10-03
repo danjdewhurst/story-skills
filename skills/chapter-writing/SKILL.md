@@ -7,7 +7,7 @@ description: This skill should be used when the user asks to "write a chapter", 
 
 ## Overview
 
-Write story chapters using an outline-first workflow. Gathers context from all other story elements (characters, world, plot) to maintain consistency, builds a beat-by-beat outline for approval, then writes full prose. After writing, updates all cross-references (chapter index, timeline, foreshadowing).
+Write story chapters using an outline-first workflow. Gathers context with `story context`, which keeps later chapters out, builds a beat-by-beat outline for approval, then writes full prose. After writing, updates the timeline, continuity state, and foreshadowing in the entity files, and rebuilds registries with `story reindex`.
 
 ## Prerequisites
 
@@ -39,31 +39,20 @@ If the chapter you are drafting already has a file with its `pov` and `character
 story context chapter-{NN} --path .
 ```
 
-It prints, within a token budget (`--budget`, default 6000), the chapter's outline and cast, the `story.md` essentials and `style-sheet.md` rules, the POV character's knowledge and state at that point, cards for the characters on the page and the chapter's locations (with their `progressions` applied at this chapter), open promises, clues, and questions, and summaries of the previous scenes. It includes nothing from later chapters, so it is safe to draft from. Add `--json` if you would rather read the items as data. Read the files it lists under "Left out to fit the budget" when you need them. For a new chapter, run it after step 2 instead.
+It prints, within a token budget (`--budget`, default 6000), the chapter's outline and cast, the `story.md` essentials and `style-sheet.md` rules, the POV character's knowledge and state at that point, cards for the characters on the page and the chapter's locations (with their `progressions` applied at this chapter), open promises, clues, and questions, and summaries of the previous scenes. It includes nothing from later chapters, so it is safe to draft from. Add `--json` if you would rather read the items as data. For a new chapter, run it after step 2 instead.
 
-Read what the packed context leaves out, as needed:
+Draft from that output. The only extra reads are the files listed under "Left out to fit the budget" (the line "Read these files directly if you need them"). With `--json`, that list is `omitted`. Do not open any other project file for background. Context already left out anything past the target: `continuity/state.md` is the full current snapshot, and a character's state from it is included only when `current-chapter` is before the target. `plot/timeline.md`, `continuity/questions/_index.md`, `continuity/promises/_index.md`, `plot/_index.md`, active arc files in `plot/arcs/`, the previous chapter, and the other `_index.md` registries hold later beats or whole-book state. Open one of them only when that omitted-file list names it.
 
-- `story.md` - genre, themes, POV, tense, and `language` (a BCP 47 tag; a missing field means `en`). Draft in that language, with its dialogue punctuation as the style sheet records it. If the style sheet records none and the book is not in English, settle it with the user first (see `../line-editing/references/language-conventions.md`)
-- `style-sheet.md`, when present - voice, house spellings, dialogue punctuation, character voices, and watch words. If it is missing, draft normally and suggest the `voice-style` skill once a chapter exists
-- `chapters/_index.md` - what's been written, current word count
-- `plot/_index.md` - arc status, what needs to happen next
-- `plot/timeline.md` - chronological position
-- `scenes/_index.md` - scene state already recorded
-- `continuity/state.md` - character, object, and knowledge state
-- `continuity/questions/_index.md` and `continuity/promises/_index.md` - unresolved mysteries and setup/payoff commitments
-
-If this isn't the first chapter, also read:
-- The previous chapter file - for continuity (ending state, cliffhangers, emotional tone)
-- Active arc files in `plot/arcs/` - for upcoming plot beats
+`language` is a BCP 47 tag in `story.md` frontmatter (a missing field means `en`). The packed context does not print it, so read only that field, not the synopsis, the notes, or any other section. Draft in that language, with its dialogue punctuation as the style sheet records it. If the style sheet records none and the book is not in English, settle it with the user first (see `../line-editing/references/language-conventions.md`). If the packed context has no style-sheet section and the omitted list does not name `style-sheet.md`, the file is missing: draft normally and suggest the `voice-style` skill once a chapter exists.
 
 ### 2. Determine Chapter Scope
 
 Ask the user:
-- What should this chapter cover? (or suggest based on plot arcs)
+- What should this chapter cover? (or, once you have packed context, suggest from the arcs and open promises it already includes)
 - Whose POV?
 - Which location(s)?
 
-If plot arcs exist, suggest the next logical beats to advance.
+Suggest the next beats from that packed context. Do not open arc files to find them.
 
 Once the scope is agreed, give the chapter its POV and cast so the packed context can include them: create a new chapter with `story add chapter "Title" --pov <character-id> --character <character-id> --location <location-id>`, or set `pov`, `characters`, and `locations` in an existing chapter's frontmatter. Then run `story context chapter-{NN} --path .` (or pass a scene id, `chapter-{NN}-scene-{NN}`, to draft one scene) and build the outline and prose from it.
 
@@ -77,7 +66,7 @@ Create a beat-by-beat outline listing:
 - Any machine-readable state changes the scene should record
 - Each scene's intended `outcome` (`yes`, `no`, `yes-but`, `no-and`) and how the chapter ends (`hook`)
 
-Load the POV character's file for voice reference. Load relevant location files for setting details.
+Use the POV character card and the location cards from the packed context for voice and setting. Open a character or location file only when "Left out to fit the budget" names it.
 
 Present the outline to the user for approval. Revise until approved.
 
@@ -85,11 +74,11 @@ Present the outline to the user for approval. Revise until approved.
 
 With the approved outline, write the full prose:
 
-- Write in the book's `language` and follow the POV and tense from `story.md`. The craft advice in `references/writing-guidelines.md` and `scene-craft` is written for English; in another language keep its aims and use that language's own conventions
-- Use the POV character's voice and speech patterns from their profile
-- Ground scenes in location details from worldbuilding files
+- Write in the book's `language` and follow the POV and tense from the packed context (they come from `story.md`). The craft advice in `references/writing-guidelines.md` and `scene-craft` is written for English; in another language keep its aims and use that language's own conventions
+- Use the POV character's voice and speech patterns from their packed card
+- Ground scenes in the location details from the packed context
 - Consult `references/writing-guidelines.md` for quick prose craft guidance. For the deep reference — the Scene/Sequel unit, dialogue subtext and voice-differentiation, deep POV and psychic distance — use the `scene-craft` skill.
-- Give each speaker their recorded voice, using `voice-words` and avoiding `voice-avoid` from their character file
+- Give each speaker their recorded voice, using `voice-words` and avoiding `voice-avoid` from their packed character card
 - When available, apply the `better-writing` skill before finalizing prose; the `line-editing` skill handles the fuller prose pass afterwards
 - To check a drafted scene before saving it, pipe it to `story prose -` (style sheet, filter words, echoes) and `story voices -` (`voice-avoid` words) from the project folder. If either reports a check skipped for the book's language, reread the scene for that check instead
 - Use the chapter template from `references/chapter-template.md`
@@ -105,11 +94,11 @@ Write chapter prose directly into the chapter markdown file. Do not stage prose 
 
 After the chapter is written:
 
-1. **Update `chapters/_index.md`** - add chapter to registry, update total word count
+1. **Leave the registries alone.** Every `_index.md` registry, including `chapters/_index.md` and the question, promise, and clue indexes, is generated. `story reindex` rebuilds those tables from the entity files, and `story wordcount . --write` refreshes the chapter word counts and then reindexes. Do not add or edit registry rows by hand.
 2. **Update `plot/timeline.md`** - add events from this chapter in chronological order
 3. **Update arc files** - mark advanced plot points with chapter reference
 4. **Update scene records** - make sure every scene has a corresponding `scenes/` file
-5. **Update continuity** - carry forward character state, object ownership, knowledge, open questions, and promises/payoffs. The CLI reads the frontmatter of `continuity/state.md`, not its body tables (those are optional notes), so record state there:
+5. **Update continuity** - after the prose is saved, carry forward character state, object ownership, knowledge, open questions, and promises/payoffs. This is the one time to open `continuity/state.md`: recording the new state, not reading it for drafting context. The CLI reads its frontmatter, not its body tables (those are optional notes), so record state there:
 
    ```yaml
    current-chapter: 3
@@ -139,10 +128,13 @@ story wordcount . --write
 story reindex .
 story links .
 story validate .
+story continuity .
 story next .
 story pacing .
 story progress . --log
 ```
+
+`story continuity .` is the continuity check, in the same place discovery-drafting runs it, after `story validate`. It prints each finding and exits non-zero when there are errors. Repair those errors before treating the chapter as done. `story next .` can name the same errors as a P0 line and still exit 0, without printing the findings, so its exit code is not a continuity result.
 
 `story pacing .` shows the new chapter's words, scene outcomes, and hook alongside the rest of the book, and warns about runs of `yes` outcomes, missing sequels, length outliers, or a missing `hook`.
 
@@ -160,7 +152,7 @@ When asked to revise or continuity-check an existing chapter, use the `revision-
 
 ## CLI Maintenance
 
-Use the Story CLI when it is available. If `story` is not installed, use `bun run story --` from the Story Skills repository checkout or the bundled fallback `node ../story-maintenance/scripts/story.js` with the same arguments, resolving the path relative to this skill folder. If no CLI is available, perform the registry, backlink, and word-count checks manually.
+Use the Story CLI when it is available. If `story` is not installed, use `bun run story --` from the Story Skills repository checkout or the bundled fallback `node ../story-maintenance/scripts/story.js` with the same arguments, resolving the path relative to this skill folder. Registry updates go through `story reindex` only. If no CLI is available, perform the registry, backlink, word-count, and continuity checks manually, and still do not hand-edit generated `_index.md` tables.
 
 ## Reference Files
 
