@@ -55,6 +55,28 @@ function codes(result, code) {
   return [...result.errors, ...result.warnings].filter((finding) => finding.code === code).map((finding) => finding.message);
 }
 
+function brassKey(root) {
+  writeMarkdown(path.join(root, "worldbuilding", "artifacts", "brass-key.md"), `
+name: Brass Key
+type: tool
+status: active
+`, "# Key\n");
+}
+
+// One scene in the chapter, with `changes` as its state-changes list.
+function scene(root, number, changes) {
+  writeMarkdown(path.join(root, "scenes", `${id(number)}-scene-01.md`), `
+title: Scene ${number}
+chapter: ${id(number)}
+scene: 1
+pov: mara-finn
+characters:
+  - mara-finn
+state-changes:
+${changes}
+`, "# Scene\n");
+}
+
 // Chapter 1 offers a fight (2) or a flight (3); both lead on to 4.
 function diamond() {
   const root = project("Diamond");
@@ -295,6 +317,125 @@ state-changes:
     const result = checkProjectContinuity(root);
     expect(codes(result, "state-differs-by-path")).toEqual([]);
     expect(codes(result, "object-not-recorded")).toHaveLength(1);
+  });
+
+  test("one fact learned on two separate branches takes one entry per branch", () => {
+    const root = diamond();
+    for (const number of [2, 3]) {
+      scene(root, number, "  - character: mara-finn\n    fact: bridge-out\n    knowledge: The bridge is out");
+    }
+    const entries = (chapters) => chapters.map((number) => `  - character: mara-finn
+    fact: bridge-out
+    knows: The bridge is out
+    learned-in: ${id(number)}
+`).join("");
+    setState(root, 4, { "knowledge-state": entries([2, 3]) });
+    const result = checkProjectContinuity(root);
+    expect(codes(result, "state-duplicate-fact")).toEqual([]);
+    expect(codes(result, "knowledge-not-recorded")).toEqual([]);
+
+    // On one path, the second entry is still a repeat.
+    const again = diamond();
+    setState(again, 4, { "knowledge-state": entries([2, 4]) });
+    expect(codes(checkProjectContinuity(again), "state-duplicate-fact")).toHaveLength(1);
+  });
+
+  test("a change made before the split still holds on the branch that keeps it", () => {
+    const root = diamond();
+    brassKey(root);
+    scene(root, 1, "  - target: brass-key\n    owner: mara-finn");
+    scene(root, 2, "  - target: brass-key\n    owner: jonas-reed");
+    setState(root, 4, { "object-state": "  - artifact: brass-key\n    owner: jonas-reed\n" });
+    expect(codes(checkProjectContinuity(root), "state-differs-by-path")).toHaveLength(1);
+  });
+
+  test("an object-state entry from where the branches rejoin settles the difference", () => {
+    const root = diamond();
+    brassKey(root);
+    scene(root, 2, "  - target: brass-key\n    owner: mara-finn");
+    scene(root, 3, "  - target: brass-key\n    owner: jonas-reed");
+    setState(root, 4, { "object-state": "  - artifact: brass-key\n    owner: jonas-reed\n    since: chapter-04\n" });
+    const result = checkProjectContinuity(root);
+    expect(codes(result, "state-differs-by-path")).toEqual([]);
+    expect(codes(result, "state-object-drift")).toEqual([]);
+  });
+
+  test("progressions apply in path order when the path runs against chapter numbers", () => {
+    const root = project("Path order");
+    character(root, "mara-finn", `progressions:
+  - from: chapter-02
+    field: location
+    value: the-ford
+  - from: chapter-03
+    field: location
+    value: the-bank
+  - from: chapter-05
+    field: location
+    value: the-mill`);
+    chapter(root, 1, { links: [5, 3] });
+    chapter(root, 2, { links: [4] });
+    chapter(root, 3, { links: [4] });
+    chapter(root, 4);
+    chapter(root, 5, { links: [2] });
+    expect(entityStateAtChapter(root, "character", "mara-finn", "chapter-02").state.location).toBe("the-ford");
+    expect(entityStateAtChapter(root, "character", "mara-finn", "chapter-03").state.location).toBe("the-bank");
+    expect(entityStateAtChapter(root, "character", "mara-finn", "chapter-04").state.location).toBe("the-ford");
+  });
+
+  test("a revival on another branch does not excuse a status change while dead", () => {
+    const root = project("Revival conflict");
+    character(root, "mara-finn");
+    character(root, "jonas-reed", `died-in: chapter-02
+revived-in: chapter-03
+progressions:
+  - from: chapter-02
+    field: status
+    value: deceased
+  - from: chapter-03
+    field: status
+    value: alive
+  - from: chapter-04
+    field: status
+    value: missing`);
+    chapter(root, 1, { links: [2] });
+    chapter(root, 2, { links: [3, 4], cast: ["jonas-reed"] });
+    chapter(root, 3, { cast: ["jonas-reed"] });
+    chapter(root, 4);
+    const messages = codes(checkProjectContinuity(root), "progression-death-conflict");
+    expect(messages.some((message) => message.includes("from chapter-04"))).toBe(true);
+  });
+
+  test("dated progressions on one path apply in story time", () => {
+    const root = project("Dated progressions");
+    character(root, "mara-finn", `progressions:
+  - from: chapter-03
+    field: location
+    value: the-ford
+  - from: chapter-02
+    field: location
+    value: the-mill`);
+    chapter(root, 1, { links: [2] });
+    chapter(root, 2, { links: [3], extra: "date: 2020-05-01\n" });
+    chapter(root, 3, { links: [4], extra: "date: 2019-01-01\n" });
+    chapter(root, 4, { extra: "date: 2021-01-01\n" });
+    expect(entityStateAtChapter(root, "character", "mara-finn", "chapter-04").state.location).toBe("the-mill");
+  });
+
+  test("an object change in a chapter no path reaches is superseded in number order", () => {
+    const root = project("Unreached object");
+    character(root, "mara-finn");
+    character(root, "jonas-reed");
+    brassKey(root);
+    chapter(root, 1, { links: [3] });
+    chapter(root, 2);
+    chapter(root, 3, { links: [4] });
+    chapter(root, 4);
+    scene(root, 2, "  - target: brass-key\n    owner: jonas-reed");
+    scene(root, 3, "  - target: brass-key\n    owner: mara-finn");
+    setState(root, 4, { "object-state": "  - artifact: brass-key\n    owner: mara-finn\n" });
+    const result = checkProjectContinuity(root);
+    expect(codes(result, "state-object-drift")).toEqual([]);
+    expect(codes(result, "state-differs-by-path")).toEqual([]);
   });
 
   test("the whole-book lifeline still reads chapter-number order", () => {

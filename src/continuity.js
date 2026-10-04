@@ -172,8 +172,14 @@ function checkProgressionDeath(character, label, chronology, warnings) {
   if (atDeath.status !== "deceased" && atDeath.from !== "") {
     warnings.push(warn("progression-death-conflict", `${label} progressions[${progressionIndex(character, atDeath.from)}] leaves ${character.id} ${atDeath.status} when they die in ${died}; add a status progression to deceased from ${died}`, label, died));
   }
+  // In a branching book the death window decides, so a revival on another
+  // branch does not end the death on this one.
+  const window = chronology.branching ? deathWindow(character, chronology, { planned: true }) : null;
+  const deadAt = (from) => (window && chronology.numbers.has(from)
+    ? window.deadIn(from)
+    : happensAfter(chronology, from, died) && (revived === "" || happensAfter(chronology, revived, from)));
   for (const { index, from, value } of statusProgressions(character)) {
-    if (value !== "deceased" && happensAfter(chronology, from, died) && (revived === "" || happensAfter(chronology, revived, from))) {
+    if (value !== "deceased" && deadAt(from)) {
       const fix = revived === "" ? `set revived-in: ${from} if they come back` : `move it to ${revived}, when they are revived`;
       warnings.push(warn("progression-death-conflict", `${label} progressions[${index}] sets status ${value} from ${from}, while ${character.id} is dead after dying in ${died}; ${fix}`, label, from));
     }
@@ -519,11 +525,16 @@ function checkContinuityState(project, context, errors, warnings) {
         errors.push(err("state-fact-not-kebab", `${entryLabel} fact ${fact || "(empty)"} must be a kebab-case id`, label));
       } else if (character) {
         // With no character the entry is already reported as missing one.
+        // In a branching book a character may learn the same fact on two
+        // branches, one entry each, when neither learning chapter leads to
+        // the other.
         const key = `${character}\u0000${fact}`;
-        if (knownFacts.has(key)) {
-          errors.push(err("state-duplicate-fact", `${entryLabel} repeats fact ${fact} for ${character} from knowledge-state[${knownFacts.get(key)}]`, label));
+        const learnedIn = idText(entry["learned-in"]);
+        const earlier = (knownFacts.get(key) ?? []).find((other) => !onSeparateBranches(context.chronology, other.learnedIn, learnedIn));
+        if (earlier) {
+          errors.push(err("state-duplicate-fact", `${entryLabel} repeats fact ${fact} for ${character} from knowledge-state[${earlier.index}]`, label));
         } else {
-          knownFacts.set(key, index);
+          knownFacts.set(key, [...(knownFacts.get(key) ?? []), { index, learnedIn }]);
         }
       }
     }
@@ -578,6 +589,14 @@ function checkContinuityState(project, context, errors, warnings) {
       warnings.push(warn("state-status-conflict", `${entryLabel} status ${entry.status} conflicts with ${relative(project, artifact.file)} status ${artifact.status}`, label));
     }
   }
+}
+
+// Whether two chapters lie on separate branches of a branching book: both
+// written and on paths of choices, with neither at or before the other.
+function onSeparateBranches(chronology, left, right) {
+  return Boolean(chronology.branching) && chronology.numbers.has(left) && chronology.numbers.has(right)
+    && chronology.placed(left) && chronology.placed(right)
+    && !chronology.atOrBefore(left, right) && !chronology.atOrBefore(right, left);
 }
 
 // Learning a fact is an on-page event: a character cannot learn one after
@@ -747,8 +766,8 @@ function checkStateAgainstStory(project, context, warnings) {
   // The latest scene state change that sets an artifact's owner or location,
   // up to current-chapter, should match the artifact's latest entry.
   // In a branching book each chapter keeps its own last change, and a change
-  // counts as latest when no later chapter on a path to current-chapter
-  // changes it again.
+  // still holds at current-chapter when some path from it gets there
+  // without passing another chapter that changes the same field.
   const lastSet = new Map();
   for (const { unit: scene, isChapter } of readingUnits(project)) {
     if (isChapter || !tracked(scene.chapter)) {
@@ -767,8 +786,17 @@ function checkStateAgainstStory(project, context, warnings) {
       }
     }
   }
-  const latestSets = [...lastSet.values()].filter((set, _, all) => !byPath
-    || !all.some((other) => other.artifact === set.artifact && other.field === set.field && chronology.readAfter(other.scene.chapter, set.scene.chapter)));
+  const latestSets = [...lastSet.values()].filter((set, _, all) => {
+    if (!byPath || set.scene.chapter === current.id) {
+      return true;
+    }
+    const others = all.filter((other) => other.artifact === set.artifact && other.field === set.field && other.scene.chapter !== set.scene.chapter);
+    // A chapter no path reaches is superseded by any chapter read after it.
+    if (!chronology.placed(set.scene.chapter) || !chronology.placed(current.id)) {
+      return !others.some((other) => chronology.readAfter(other.scene.chapter, set.scene.chapter));
+    }
+    return chronology.reachesAvoiding(set.scene.chapter, current.id, new Set(others.map((other) => other.scene.chapter)));
+  });
   const byField = new Map();
   for (const set of latestSets) {
     const key = `${set.artifact}\u0000${set.field}`;
@@ -778,8 +806,15 @@ function checkStateAgainstStory(project, context, warnings) {
   for (const sets of byField.values()) {
     const values = [...new Set(sets.map((set) => set.value))];
     // With no object-state entry, object-not-recorded is the finding.
-    if (values.length === 1 || !latestObjectEntry(data, sets[0].artifact, context)) {
+    const entry = latestObjectEntry(data, sets[0].artifact, context);
+    if (values.length === 1 || !entry) {
       settled.push(sets[sets.length - 1]);
+      continue;
+    }
+    // An entry recorded after every branch's change, where they rejoin,
+    // settles the difference, as a newer entry does for one change.
+    const since = idText(entry.since);
+    if (since !== "" && context.chapterNumbers.has(since) && sets.every((set) => chronology.after(since, set.scene.chapter))) {
       continue;
     }
     // Branches that lead to current-chapter leave it in different states,

@@ -5129,14 +5129,15 @@ function happensAtOrBefore(chronology, earlier, later) {
   return !happensAfter(chronology, earlier, later);
 }
 function storyCompare(chronology, left, right) {
-  if (happensAfter(chronology, left, right)) {
-    return 1;
+  if (chronology.rank && chronology.numbers.has(left) && chronology.numbers.has(right)) {
+    const leftDays = chronology.days.get(left);
+    const rightDays = chronology.days.get(right);
+    if (leftDays !== undefined && rightDays !== undefined && leftDays !== rightDays) {
+      return leftDays > rightDays ? 1 : -1;
+    }
+    return Math.sign(chronology.rank(left) - chronology.rank(right));
   }
-  if (happensAfter(chronology, right, left)) {
-    return -1;
-  }
-  const linear = chronology.linear;
-  return linear ? happensAfter(linear, left, right) ? 1 : happensAfter(linear, right, left) ? -1 : 0 : 0;
+  return happensAfter(chronology, left, right) ? 1 : happensAfter(chronology, right, left) ? -1 : 0;
 }
 function sortProgressions(list, chronology) {
   const known = [];
@@ -8789,8 +8790,10 @@ function checkProgressionDeath(character, label, chronology, warnings) {
   if (atDeath.status !== "deceased" && atDeath.from !== "") {
     warnings.push(warn("progression-death-conflict", `${label} progressions[${progressionIndex(character, atDeath.from)}] leaves ${character.id} ${atDeath.status} when they die in ${died}; add a status progression to deceased from ${died}`, label, died));
   }
+  const window = chronology.branching ? deathWindow(character, chronology, { planned: true }) : null;
+  const deadAt = (from) => window && chronology.numbers.has(from) ? window.deadIn(from) : happensAfter(chronology, from, died) && (revived === "" || happensAfter(chronology, revived, from));
   for (const { index, from, value } of statusProgressions(character)) {
-    if (value !== "deceased" && happensAfter(chronology, from, died) && (revived === "" || happensAfter(chronology, revived, from))) {
+    if (value !== "deceased" && deadAt(from)) {
       const fix = revived === "" ? `set revived-in: ${from} if they come back` : `move it to ${revived}, when they are revived`;
       warnings.push(warn("progression-death-conflict", `${label} progressions[${index}] sets status ${value} from ${from}, while ${character.id} is dead after dying in ${died}; ${fix}`, label, from));
     }
@@ -9071,10 +9074,12 @@ function checkContinuityState(project, context, errors, warnings) {
         errors.push(err("state-fact-not-kebab", `${entryLabel} fact ${fact || "(empty)"} must be a kebab-case id`, label));
       } else if (character) {
         const key = `${character}\x00${fact}`;
-        if (knownFacts.has(key)) {
-          errors.push(err("state-duplicate-fact", `${entryLabel} repeats fact ${fact} for ${character} from knowledge-state[${knownFacts.get(key)}]`, label));
+        const learnedIn = idText(entry["learned-in"]);
+        const earlier = (knownFacts.get(key) ?? []).find((other) => !onSeparateBranches(context.chronology, other.learnedIn, learnedIn));
+        if (earlier) {
+          errors.push(err("state-duplicate-fact", `${entryLabel} repeats fact ${fact} for ${character} from knowledge-state[${earlier.index}]`, label));
         } else {
-          knownFacts.set(key, index);
+          knownFacts.set(key, [...knownFacts.get(key) ?? [], { index, learnedIn }]);
         }
       }
     }
@@ -9125,6 +9130,9 @@ function checkContinuityState(project, context, errors, warnings) {
       warnings.push(warn("state-status-conflict", `${entryLabel} status ${entry.status} conflicts with ${relative(project, artifact.file)} status ${artifact.status}`, label));
     }
   }
+}
+function onSeparateBranches(chronology, left, right) {
+  return Boolean(chronology.branching) && chronology.numbers.has(left) && chronology.numbers.has(right) && chronology.placed(left) && chronology.placed(right) && !chronology.atOrBefore(left, right) && !chronology.atOrBefore(right, left);
 }
 function checkPosthumousLearning(character, learnedIn, entryLabel, file, context, errors, warnings) {
   if (!character || !context.chapterNumbers.has(learnedIn)) {
@@ -9269,7 +9277,16 @@ function checkStateAgainstStory(project, context, warnings) {
       }
     }
   }
-  const latestSets = [...lastSet.values()].filter((set, _, all) => !byPath || !all.some((other) => other.artifact === set.artifact && other.field === set.field && chronology.readAfter(other.scene.chapter, set.scene.chapter)));
+  const latestSets = [...lastSet.values()].filter((set, _, all) => {
+    if (!byPath || set.scene.chapter === current.id) {
+      return true;
+    }
+    const others = all.filter((other) => other.artifact === set.artifact && other.field === set.field && other.scene.chapter !== set.scene.chapter);
+    if (!chronology.placed(set.scene.chapter) || !chronology.placed(current.id)) {
+      return !others.some((other) => chronology.readAfter(other.scene.chapter, set.scene.chapter));
+    }
+    return chronology.reachesAvoiding(set.scene.chapter, current.id, new Set(others.map((other) => other.scene.chapter)));
+  });
   const byField = new Map;
   for (const set of latestSets) {
     const key = `${set.artifact}\x00${set.field}`;
@@ -9278,8 +9295,13 @@ function checkStateAgainstStory(project, context, warnings) {
   const settled = [];
   for (const sets of byField.values()) {
     const values = [...new Set(sets.map((set) => set.value))];
-    if (values.length === 1 || !latestObjectEntry(data, sets[0].artifact, context)) {
+    const entry = latestObjectEntry(data, sets[0].artifact, context);
+    if (values.length === 1 || !entry) {
       settled.push(sets[sets.length - 1]);
+      continue;
+    }
+    const since = idText(entry.since);
+    if (since !== "" && context.chapterNumbers.has(since) && sets.every((set) => chronology.after(since, set.scene.chapter))) {
       continue;
     }
     const { artifact, field } = sets[0];
@@ -11859,11 +11881,12 @@ function pathChronology(linear, passages) {
   const links = new Map(passages.map((passage) => [passage.chapter.id, passage.links.map((link) => link.to)]));
   const downstream = new Map;
   const reach = (from, avoid = "") => {
+    const blocked = avoid instanceof Set ? avoid : new Set([avoid]);
     const seen = new Set;
     const queue = [...links.get(from) ?? []];
     while (queue.length > 0) {
       const id = queue.shift();
-      if (seen.has(id) || id === avoid) {
+      if (seen.has(id) || blocked.has(id)) {
         continue;
       }
       seen.add(id);
@@ -11907,15 +11930,32 @@ function pathChronology(linear, passages) {
     return order === null ? numbers.get(later) > numbers.get(earlier) : order === 1;
   };
   const readAfter = (later, earlier) => {
-    if (later === earlier) {
-      return false;
-    }
     if (!placed(later) || !placed(earlier)) {
       return numbers.get(later) > numbers.get(earlier);
     }
     const order = pathOrder(later, earlier);
     return order === null ? numbers.get(later) > numbers.get(earlier) : order === 1;
   };
+  const rank = new Map;
+  const ids = [...numbers.keys()].sort((left, right) => numbers.get(left) - numbers.get(right) || (left < right ? -1 : left > right ? 1 : 0));
+  const incoming = new Map(ids.map((id) => [id, 0]));
+  for (const id of ids) {
+    for (const to of new Set(links.get(id) ?? [])) {
+      if (to !== id && incoming.has(to)) {
+        incoming.set(to, incoming.get(to) + 1);
+      }
+    }
+  }
+  while (rank.size < ids.length) {
+    const left = ids.filter((id) => !rank.has(id));
+    const next = left.find((id) => id === start && !rank.size) ?? left.find((id) => incoming.get(id) === 0) ?? left[0];
+    rank.set(next, rank.size);
+    for (const to of new Set(links.get(next) ?? [])) {
+      if (to !== next && incoming.has(to)) {
+        incoming.set(to, incoming.get(to) - 1);
+      }
+    }
+  }
   return {
     numbers,
     days,
@@ -11925,7 +11965,8 @@ function pathChronology(linear, passages) {
     readBy: (earlier, later) => numbers.has(earlier) && numbers.has(later) && (earlier === later || readAfter(later, earlier)),
     readAfter: (later, earlier) => numbers.has(later) && numbers.has(earlier) && readAfter(later, earlier),
     placed,
-    reachesAvoiding: (from, to, avoid) => reach(from, avoid).has(to)
+    reachesAvoiding: (from, to, avoid) => reach(from, avoid).has(to),
+    rank: (id) => rank.get(id)
   };
 }
 function chronologyFrom(numbers, days) {
