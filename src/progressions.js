@@ -74,18 +74,21 @@ export function happensAtOrBefore(chronology, earlier, later) {
   return !happensAfter(chronology, earlier, later);
 }
 
-// Story order for sorting: -1, 0, or 1. Chapters on sibling branches, which
-// the branching chronology leaves unordered, fall back to the book's number
-// order, so the sort stays deterministic.
+// Story order for sorting: -1, 0, or 1. In a branching book, where chapters
+// on sibling branches have no order, two written chapters compare by date
+// when both are dated on different days and otherwise by the chronology's
+// total reading order, so the sort never mixes path order with a fallback
+// that could disagree with it.
 function storyCompare(chronology, left, right) {
-  if (happensAfter(chronology, left, right)) {
-    return 1;
+  if (chronology.rank && chronology.numbers.has(left) && chronology.numbers.has(right)) {
+    const leftDays = chronology.days.get(left);
+    const rightDays = chronology.days.get(right);
+    if (leftDays !== undefined && rightDays !== undefined && leftDays !== rightDays) {
+      return leftDays > rightDays ? 1 : -1;
+    }
+    return Math.sign(chronology.rank(left) - chronology.rank(right));
   }
-  if (happensAfter(chronology, right, left)) {
-    return -1;
-  }
-  const linear = chronology.linear;
-  return linear ? (happensAfter(linear, left, right) ? 1 : happensAfter(linear, right, left) ? -1 : 0) : 0;
+  return happensAfter(chronology, left, right) ? 1 : happensAfter(chronology, right, left) ? -1 : 0;
 }
 
 // A `progressions` list in story order, stable, so entries from the same

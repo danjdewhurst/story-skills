@@ -49,14 +49,15 @@ function pathChronology(linear, passages) {
   const { numbers, days } = linear;
   const links = new Map(passages.map((passage) => [passage.chapter.id, passage.links.map((link) => link.to)]));
   const downstream = new Map();
-  // The chapters reachable from `from` by one or more choices, skipping
-  // `avoid` when given.
+  // The chapters reachable from `from` by one or more choices, skipping the
+  // chapters in `avoid` (an id or a set of ids) when given.
   const reach = (from, avoid = "") => {
+    const blocked = avoid instanceof Set ? avoid : new Set([avoid]);
     const seen = new Set();
     const queue = [...(links.get(from) ?? [])];
     while (queue.length > 0) {
       const id = queue.shift();
-      if (seen.has(id) || id === avoid) {
+      if (seen.has(id) || blocked.has(id)) {
         continue;
       }
       seen.add(id);
@@ -104,15 +105,36 @@ function pathChronology(linear, passages) {
   };
   // Reading order: `later` is read after `earlier` on some path.
   const readAfter = (later, earlier) => {
-    if (later === earlier) {
-      return false;
-    }
     if (!placed(later) || !placed(earlier)) {
       return numbers.get(later) > numbers.get(earlier);
     }
     const order = pathOrder(later, earlier);
     return order === null ? numbers.get(later) > numbers.get(earlier) : order === 1;
   };
+  // A total reading order for sorting: a topological order of the choices
+  // from the first chapter, taking the lowest-numbered ready chapter first,
+  // and inside a loop (or for chapters no path reaches) the lowest-numbered
+  // chapter left.
+  const rank = new Map();
+  const ids = [...numbers.keys()].sort((left, right) => numbers.get(left) - numbers.get(right) || (left < right ? -1 : left > right ? 1 : 0));
+  const incoming = new Map(ids.map((id) => [id, 0]));
+  for (const id of ids) {
+    for (const to of new Set(links.get(id) ?? [])) {
+      if (to !== id && incoming.has(to)) {
+        incoming.set(to, incoming.get(to) + 1);
+      }
+    }
+  }
+  while (rank.size < ids.length) {
+    const left = ids.filter((id) => !rank.has(id));
+    const next = left.find((id) => id === start && !rank.size) ?? left.find((id) => incoming.get(id) === 0) ?? left[0];
+    rank.set(next, rank.size);
+    for (const to of new Set(links.get(next) ?? [])) {
+      if (to !== next && incoming.has(to)) {
+        incoming.set(to, incoming.get(to) - 1);
+      }
+    }
+  }
   return {
     numbers,
     days,
@@ -125,7 +147,9 @@ function pathChronology(linear, passages) {
     placed,
     // Whether some path of choices leads from `from` to `to` without
     // passing through `avoid`.
-    reachesAvoiding: (from, to, avoid) => reach(from, avoid).has(to)
+    reachesAvoiding: (from, to, avoid) => reach(from, avoid).has(to),
+    // A chapter's place in the total reading order `rank` builds.
+    rank: (id) => rank.get(id)
   };
 }
 

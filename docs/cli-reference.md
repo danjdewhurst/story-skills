@@ -2518,7 +2518,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `state-missing-chapter` | error | A `learned-in` or `since` chapter does not exist. |
 | `state-missing-knows` | error | A `knowledge-state` entry has no `knows`. |
 | `state-fact-not-kebab` | error | A `knowledge-state` `fact` id is not kebab-case. |
-| `state-duplicate-fact` | error | A character learns the same `fact` twice. |
+| `state-duplicate-fact` | error | A character learns the same `fact` twice (on one path, in a branching book). |
 | `state-duplicate-character` | warning | `character-state` repeats a character. |
 | `state-duplicate-artifact` | warning | `object-state` repeats an artifact for the same `since` chapter. |
 | `state-status-conflict` | warning | An artifact's latest `object-state` status differs from its file. |
