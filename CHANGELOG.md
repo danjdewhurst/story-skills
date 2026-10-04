@@ -8,6 +8,8 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-10-04
+
 ### Fixed
 
 - The continuity guide's opening now matches the checks: reader-order ledgers (`planted`, `payoff`, `introduced`, and `resolved`) use chapter numbers, and deaths, revivals, progressions, knowledge, and object-state `since` history use story time when both chapters are dated. ([#350](https://github.com/danjdewhurst/story-skills/issues/350))
@@ -266,7 +268,8 @@ Added the release script. `rename` and `remove` no longer corrupt prose and unre
 
 First tagged release.
 
-[Unreleased]: https://github.com/danjdewhurst/story-skills/compare/v0.19.0...HEAD
+[Unreleased]: https://github.com/danjdewhurst/story-skills/compare/v0.20.0...HEAD
+[0.20.0]: https://github.com/danjdewhurst/story-skills/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/danjdewhurst/story-skills/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/danjdewhurst/story-skills/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/danjdewhurst/story-skills/compare/v0.16.0...v0.17.0
