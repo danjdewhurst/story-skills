@@ -88,7 +88,7 @@ defaults:
 
 env:
   STORY_DIR: "."
-  STORY_REF: "v0.20.0"
+  STORY_REF: "v0.21.0"
   # Budgets. Scheduled runs use the defaults after ||; a manual run can
   # override them. A chapter outside the word range opens a draft pull request
   # and fails the run; the turn and dollar limits stop the agent.

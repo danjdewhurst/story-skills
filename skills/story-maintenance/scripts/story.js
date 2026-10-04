@@ -21397,7 +21397,7 @@ function findingLine(finding) {
 }
 
 // src/version.js
-var VERSION = "0.20.0";
+var VERSION = "0.21.0";
 
 // src/cli.js
 var COMMANDS_BY_NAME = new Map(COMMANDS.map((command) => [command.name, command]));

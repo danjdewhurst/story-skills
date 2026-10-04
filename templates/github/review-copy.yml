@@ -52,7 +52,7 @@ concurrency:
 
 env:
   STORY_DIR: "."
-  STORY_REF: "v0.20.0"
+  STORY_REF: "v0.21.0"
 
 jobs:
   build:
