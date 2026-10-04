@@ -636,7 +636,13 @@ function checkStateAgainstStory(project, context, warnings) {
   const data = project.continuity.data;
   const { chronology } = context;
   const currentChapter = Number.isInteger(data["current-chapter"]) ? data["current-chapter"] : -Infinity;
-  const tracked = (chapterId) => (context.chapterNumbers.get(chapterId) ?? Infinity) <= currentChapter;
+  const current = project.chapters.find((chapter) => chapter.number === currentChapter);
+  // Up to current-chapter: in a branching book, only the chapters on a path
+  // of choices that leads to it.
+  const byPath = Boolean(chronology.branching && current);
+  const tracked = byPath
+    ? (chapterId) => chronology.readBy(chapterId, current.id)
+    : (chapterId) => (context.chapterNumbers.get(chapterId) ?? Infinity) <= currentChapter;
   const windows = new Map();
   for (const character of project.characters) {
     const window = character.diedIn && !chronology.outline.has(character.diedIn) ? deathWindow(character, chronology) : null;
@@ -686,7 +692,7 @@ function checkStateAgainstStory(project, context, warnings) {
         continue;
       }
       const known = knowledge.filter((entry) => entry.character === character
-        && (entry.learnedIn === "" || (context.chapterNumbers.has(entry.learnedIn) && !chronology.after(entry.learnedIn, scene.chapter))));
+        && (entry.learnedIn === "" || (context.chapterNumbers.has(entry.learnedIn) && chronology.atOrBefore(entry.learnedIn, scene.chapter))));
       const fact = change.fact === undefined ? "" : String(change.fact);
       const text = normalizeKnowledge(change.knowledge);
       const matches = known.filter((entry) => (fact !== "" && entry.fact === fact) || (text !== "" && entry.knows === text));
@@ -706,7 +712,6 @@ function checkStateAgainstStory(project, context, warnings) {
     warnings.push(warn("knowledge-not-recorded", `${relative(project, scene.file)} state-changes record ${character} learning "${String(change.knowledge).trim()}" but ${label} has no knowledge-state entry for it learned by ${scene.chapter}`, relative(project, scene.file), chapterOf(scene)));
   }
 
-  const current = project.chapters.find((chapter) => chapter.number === currentChapter);
   for (const [index, entry] of stateEntries(data["character-state"]).entries()) {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
       continue;
@@ -741,6 +746,9 @@ function checkStateAgainstStory(project, context, warnings) {
 
   // The latest scene state change that sets an artifact's owner or location,
   // up to current-chapter, should match the artifact's latest entry.
+  // In a branching book each chapter keeps its own last change, and a change
+  // counts as latest when no later chapter on a path to current-chapter
+  // changes it again.
   const lastSet = new Map();
   for (const { unit: scene, isChapter } of readingUnits(project)) {
     if (isChapter || !tracked(scene.chapter)) {
@@ -753,12 +761,34 @@ function checkStateAgainstStory(project, context, warnings) {
       const artifact = idText(change.target);
       for (const field of ["owner", "location"]) {
         if (artifact && context.artifacts.has(artifact) && idText(change[field]) !== "") {
-          lastSet.set(`${artifact}\u0000${field}`, { artifact, field, value: idText(change[field]), scene });
+          const key = byPath ? `${artifact}\u0000${field}\u0000${scene.chapter}` : `${artifact}\u0000${field}`;
+          lastSet.set(key, { artifact, field, value: idText(change[field]), scene });
         }
       }
     }
   }
-  for (const { artifact, field, value, scene } of lastSet.values()) {
+  const latestSets = [...lastSet.values()].filter((set, _, all) => !byPath
+    || !all.some((other) => other.artifact === set.artifact && other.field === set.field && chronology.readAfter(other.scene.chapter, set.scene.chapter)));
+  const byField = new Map();
+  for (const set of latestSets) {
+    const key = `${set.artifact}\u0000${set.field}`;
+    byField.set(key, [...(byField.get(key) ?? []), set]);
+  }
+  const settled = [];
+  for (const sets of byField.values()) {
+    const values = [...new Set(sets.map((set) => set.value))];
+    // With no object-state entry, object-not-recorded is the finding.
+    if (values.length === 1 || !latestObjectEntry(data, sets[0].artifact, context)) {
+      settled.push(sets[sets.length - 1]);
+      continue;
+    }
+    // Branches that lead to current-chapter leave it in different states,
+    // so no one snapshot matches every path.
+    const { artifact, field } = sets[0];
+    const where = sets.map((set) => `${relative(project, set.scene.file)} sets ${set.value}`).join(", ");
+    warnings.push(warn("state-differs-by-path", `${label} object-state for ${artifact} cannot match every path to ${current.id}: ${where}; set ${artifact} ${field} again in a chapter the branches share, or check each path by hand`, label, current.id));
+  }
+  for (const { artifact, field, value, scene } of settled) {
     const entry = latestObjectEntry(data, artifact, context);
     if (!entry) {
       warnings.push(warn("object-not-recorded", `${relative(project, scene.file)} state-changes set ${artifact} ${field} ${value} but ${label} has no object-state entry for ${artifact}`, relative(project, scene.file), chapterOf(scene)));

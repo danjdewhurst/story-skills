@@ -94,7 +94,10 @@ export function progressionDeathFrom(character, chapterId, chronology) {
 // With no chapters, or a died-in the book has no chapter for, there is no
 // timeline to place a death on, so the frontmatter status alone decides:
 // deceased is dead throughout, with no events.
-export function characterLifeline(character, chronology) {
+export function characterLifeline(character, bookChronology) {
+  // The lifeline reads the whole book in one order, so a branching book is
+  // read in chapter-number order.
+  const chronology = bookChronology.linear ?? bookChronology;
   const status = String(character.status ?? "");
   const chapters = storyOrder(chronology);
   if (chapters.length === 0 || (character.diedIn && !chronology.numbers.has(character.diedIn))) {
@@ -140,7 +143,8 @@ export function characterLifeline(character, chronology) {
 // Whether a lifeline has the character come back to life in or before
 // chapter `chapterId`: a revival event in that chapter or an earlier one. A
 // chapter the book does not have gets no revival.
-export function revivedBy(lifeline, chapterId, chronology) {
+export function revivedBy(lifeline, chapterId, bookChronology) {
+  const chronology = bookChronology.linear ?? bookChronology;
   return chronology.numbers.has(chapterId) && lifeline.events.some((event) => event.type === "revival" && !happensAfter(chronology, event.chapter, chapterId));
 }
 

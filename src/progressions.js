@@ -64,6 +64,30 @@ export function happensAfter(chronology, later, earlier) {
   return chapterPosition(chronology, later) > chapterPosition(chronology, earlier);
 }
 
+// Whether chapter `earlier` happens at or before `later` in story time. In a
+// branching book two chapters on sibling branches are neither, so a change
+// on one branch stays off the other.
+export function happensAtOrBefore(chronology, earlier, later) {
+  if (chronology.numbers.has(later) && chronology.numbers.has(earlier) && chronology.atOrBefore) {
+    return chronology.atOrBefore(earlier, later);
+  }
+  return !happensAfter(chronology, earlier, later);
+}
+
+// Story order for sorting: -1, 0, or 1. Chapters on sibling branches, which
+// the branching chronology leaves unordered, fall back to the book's number
+// order, so the sort stays deterministic.
+function storyCompare(chronology, left, right) {
+  if (happensAfter(chronology, left, right)) {
+    return 1;
+  }
+  if (happensAfter(chronology, right, left)) {
+    return -1;
+  }
+  const linear = chronology.linear;
+  return linear ? (happensAfter(linear, left, right) ? 1 : happensAfter(linear, right, left) ? -1 : 0) : 0;
+}
+
 // A `progressions` list in story order, stable, so entries from the same
 // chapter keep their file order. Entries with no known chapter keep their
 // place relative to each other at the end. Used by `story move chapter`,
@@ -75,7 +99,7 @@ export function sortProgressions(list, chronology) {
     const from = item && typeof item === "object" && !Array.isArray(item) ? idText(item.from) : "";
     (Number.isNaN(chapterPosition(chronology, from)) ? unknown : known).push({ item, from });
   }
-  known.sort((left, right) => (happensAfter(chronology, left.from, right.from) ? 1 : happensAfter(chronology, right.from, left.from) ? -1 : 0));
+  known.sort((left, right) => storyCompare(chronology, left.from, right.from));
   return [...known, ...unknown].map((entry) => entry.item);
 }
 
@@ -100,9 +124,9 @@ export function entityStateAt(data, atChapterId, chronology) {
   }
   const entries = (Array.isArray(data?.progressions) ? data.progressions : [])
     .map(progressionEntry)
-    .filter((entry) => entry !== null && !Number.isNaN(chapterPosition(chronology, entry.from)) && !happensAfter(chronology, entry.from, atChapterId));
+    .filter((entry) => entry !== null && !Number.isNaN(chapterPosition(chronology, entry.from)) && happensAtOrBefore(chronology, entry.from, atChapterId));
   // Stable, so entries from the same chapter keep their file order.
-  entries.sort((left, right) => (happensAfter(chronology, left.from, right.from) ? 1 : happensAfter(chronology, right.from, left.from) ? -1 : 0));
+  entries.sort((left, right) => storyCompare(chronology, left.from, right.from));
   const changes = [];
   for (const entry of entries) {
     changes.push({ field: entry.field, value: entry.value, from: entry.from, previous: Object.hasOwn(state, entry.field) ? state[entry.field] : undefined });
@@ -169,7 +193,9 @@ export function validateProgressions(data, label, rules, chronology, errors) {
     if (Number.isNaN(chapterPosition(chronology, from))) {
       continue;
     }
-    if (latest && happensAfter(chronology, latest.from, from)) {
+    // The list is checked in the book's number order: in a branching book
+    // that is the order `story move` sorts it into.
+    if (latest && happensAfter(chronology.linear ?? chronology, latest.from, from)) {
       errors.push(err("progression-out-of-order", `${entryLabel} from ${from} comes before progressions[${latest.index}] from ${latest.from} in the story; list progressions in story order`, label));
       continue;
     }

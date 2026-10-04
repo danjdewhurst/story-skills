@@ -176,6 +176,7 @@ var FINDING_CODES = {
   "state-location-drift": "warning",
   "object-not-recorded": "warning",
   "state-object-drift": "warning",
+  "state-differs-by-path": "warning",
   "gone-artifact-used": "error",
   "gone-artifact-mentioned": "error",
   "malformed-date": "warning",
@@ -321,6 +322,7 @@ var CHAPTER_CODES = [
   "state-location-drift",
   "object-not-recorded",
   "state-object-drift",
+  "state-differs-by-path",
   "gone-artifact-used",
   "gone-artifact-mentioned",
   "malformed-date",
@@ -5120,6 +5122,22 @@ function happensAfter(chronology, later, earlier) {
   }
   return chapterPosition(chronology, later) > chapterPosition(chronology, earlier);
 }
+function happensAtOrBefore(chronology, earlier, later) {
+  if (chronology.numbers.has(later) && chronology.numbers.has(earlier) && chronology.atOrBefore) {
+    return chronology.atOrBefore(earlier, later);
+  }
+  return !happensAfter(chronology, earlier, later);
+}
+function storyCompare(chronology, left, right) {
+  if (happensAfter(chronology, left, right)) {
+    return 1;
+  }
+  if (happensAfter(chronology, right, left)) {
+    return -1;
+  }
+  const linear = chronology.linear;
+  return linear ? happensAfter(linear, left, right) ? 1 : happensAfter(linear, right, left) ? -1 : 0 : 0;
+}
 function sortProgressions(list, chronology) {
   const known = [];
   const unknown = [];
@@ -5127,7 +5145,7 @@ function sortProgressions(list, chronology) {
     const from = item && typeof item === "object" && !Array.isArray(item) ? idText(item.from) : "";
     (Number.isNaN(chapterPosition(chronology, from)) ? unknown : known).push({ item, from });
   }
-  known.sort((left, right) => happensAfter(chronology, left.from, right.from) ? 1 : happensAfter(chronology, right.from, left.from) ? -1 : 0);
+  known.sort((left, right) => storyCompare(chronology, left.from, right.from));
   return [...known, ...unknown].map((entry) => entry.item);
 }
 function entityStateAt(data, atChapterId, chronology) {
@@ -5140,8 +5158,8 @@ function entityStateAt(data, atChapterId, chronology) {
       setOwn(state, key, value);
     }
   }
-  const entries = (Array.isArray(data?.progressions) ? data.progressions : []).map(progressionEntry).filter((entry) => entry !== null && !Number.isNaN(chapterPosition(chronology, entry.from)) && !happensAfter(chronology, entry.from, atChapterId));
-  entries.sort((left, right) => happensAfter(chronology, left.from, right.from) ? 1 : happensAfter(chronology, right.from, left.from) ? -1 : 0);
+  const entries = (Array.isArray(data?.progressions) ? data.progressions : []).map(progressionEntry).filter((entry) => entry !== null && !Number.isNaN(chapterPosition(chronology, entry.from)) && happensAtOrBefore(chronology, entry.from, atChapterId));
+  entries.sort((left, right) => storyCompare(chronology, left.from, right.from));
   const changes = [];
   for (const entry of entries) {
     changes.push({ field: entry.field, value: entry.value, from: entry.from, previous: Object.hasOwn(state, entry.field) ? state[entry.field] : undefined });
@@ -5201,7 +5219,7 @@ function validateProgressions(data, label, rules, chronology, errors) {
     if (Number.isNaN(chapterPosition(chronology, from))) {
       continue;
     }
-    if (latest && happensAfter(chronology, latest.from, from)) {
+    if (latest && happensAfter(chronology.linear ?? chronology, latest.from, from)) {
       errors.push(err("progression-out-of-order", `${entryLabel} from ${from} comes before progressions[${latest.index}] from ${latest.from} in the story; list progressions in story order`, label));
       continue;
     }
@@ -5267,7 +5285,8 @@ function progressionDeathFrom(character, chapterId, chronology) {
   }
   return deadFrom;
 }
-function characterLifeline(character, chronology) {
+function characterLifeline(character, bookChronology) {
+  const chronology = bookChronology.linear ?? bookChronology;
   const status = String(character.status ?? "");
   const chapters = storyOrder(chronology);
   if (chapters.length === 0 || character.diedIn && !chronology.numbers.has(character.diedIn)) {
@@ -5296,7 +5315,8 @@ function characterLifeline(character, chronology) {
   }
   return { deadAtStart, deadAtEnd: dead, events };
 }
-function revivedBy(lifeline, chapterId, chronology) {
+function revivedBy(lifeline, chapterId, bookChronology) {
+  const chronology = bookChronology.linear ?? bookChronology;
   return chronology.numbers.has(chapterId) && lifeline.events.some((event) => event.type === "revival" && !happensAfter(chronology, event.chapter, chapterId));
 }
 function storyOrder(chronology) {
@@ -9143,7 +9163,9 @@ function checkStateAgainstStory(project, context, warnings) {
   const data = project.continuity.data;
   const { chronology } = context;
   const currentChapter = Number.isInteger(data["current-chapter"]) ? data["current-chapter"] : -Infinity;
-  const tracked = (chapterId) => (context.chapterNumbers.get(chapterId) ?? Infinity) <= currentChapter;
+  const current = project.chapters.find((chapter) => chapter.number === currentChapter);
+  const byPath = Boolean(chronology.branching && current);
+  const tracked = byPath ? (chapterId) => chronology.readBy(chapterId, current.id) : (chapterId) => (context.chapterNumbers.get(chapterId) ?? Infinity) <= currentChapter;
   const windows = new Map;
   for (const character of project.characters) {
     const window = character.diedIn && !chronology.outline.has(character.diedIn) ? deathWindow(character, chronology) : null;
@@ -9185,7 +9207,7 @@ function checkStateAgainstStory(project, context, warnings) {
       if (!character) {
         continue;
       }
-      const known = knowledge.filter((entry) => entry.character === character && (entry.learnedIn === "" || context.chapterNumbers.has(entry.learnedIn) && !chronology.after(entry.learnedIn, scene.chapter)));
+      const known = knowledge.filter((entry) => entry.character === character && (entry.learnedIn === "" || context.chapterNumbers.has(entry.learnedIn) && chronology.atOrBefore(entry.learnedIn, scene.chapter)));
       const fact = change.fact === undefined ? "" : String(change.fact);
       const text = normalizeKnowledge(change.knowledge);
       const matches = known.filter((entry) => fact !== "" && entry.fact === fact || text !== "" && entry.knows === text);
@@ -9204,7 +9226,6 @@ function checkStateAgainstStory(project, context, warnings) {
     }
     warnings.push(warn("knowledge-not-recorded", `${relative(project, scene.file)} state-changes record ${character} learning "${String(change.knowledge).trim()}" but ${label} has no knowledge-state entry for it learned by ${scene.chapter}`, relative(project, scene.file), chapterOf(scene)));
   }
-  const current = project.chapters.find((chapter) => chapter.number === currentChapter);
   for (const [index, entry] of stateEntries(data["character-state"]).entries()) {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
       continue;
@@ -9242,12 +9263,30 @@ function checkStateAgainstStory(project, context, warnings) {
       const artifact = idText(change.target);
       for (const field of ["owner", "location"]) {
         if (artifact && context.artifacts.has(artifact) && idText(change[field]) !== "") {
-          lastSet.set(`${artifact}\x00${field}`, { artifact, field, value: idText(change[field]), scene });
+          const key = byPath ? `${artifact}\x00${field}\x00${scene.chapter}` : `${artifact}\x00${field}`;
+          lastSet.set(key, { artifact, field, value: idText(change[field]), scene });
         }
       }
     }
   }
-  for (const { artifact, field, value, scene } of lastSet.values()) {
+  const latestSets = [...lastSet.values()].filter((set, _, all) => !byPath || !all.some((other) => other.artifact === set.artifact && other.field === set.field && chronology.readAfter(other.scene.chapter, set.scene.chapter)));
+  const byField = new Map;
+  for (const set of latestSets) {
+    const key = `${set.artifact}\x00${set.field}`;
+    byField.set(key, [...byField.get(key) ?? [], set]);
+  }
+  const settled = [];
+  for (const sets of byField.values()) {
+    const values = [...new Set(sets.map((set) => set.value))];
+    if (values.length === 1 || !latestObjectEntry(data, sets[0].artifact, context)) {
+      settled.push(sets[sets.length - 1]);
+      continue;
+    }
+    const { artifact, field } = sets[0];
+    const where = sets.map((set) => `${relative(project, set.scene.file)} sets ${set.value}`).join(", ");
+    warnings.push(warn("state-differs-by-path", `${label} object-state for ${artifact} cannot match every path to ${current.id}: ${where}; set ${artifact} ${field} again in a chapter the branches share, or check each path by hand`, label, current.id));
+  }
+  for (const { artifact, field, value, scene } of settled) {
     const entry = latestObjectEntry(data, artifact, context);
     if (!entry) {
       warnings.push(warn("object-not-recorded", `${relative(project, scene.file)} state-changes set ${artifact} ${field} ${value} but ${label} has no object-state entry for ${artifact}`, relative(project, scene.file), chapterOf(scene)));
@@ -9777,6 +9816,2016 @@ function parseClockTime(value) {
   return hours * 60 + minutes;
 }
 
+// src/scan.js
+import fs3 from "node:fs";
+import path6 from "node:path";
+
+// src/forms.js
+var STORY_FORMS = new Map([
+  ["flash", { min: 1, max: 1500, target: 1000 }],
+  ["short-story", { min: 1000, max: 7500, target: 5000 }],
+  ["novelette", { min: 7500, max: 17500, target: 12000 }],
+  ["novella", { min: 17500, max: 40000, target: 30000 }],
+  ["novel", { min: 40000, max: 200000, target: 80000 }],
+  ["serial", { min: null, max: null, target: null }],
+  ["picture-book", { min: 1, max: 1000, target: 500 }],
+  ["chapter-book", { min: 4000, max: 15000, target: 1e4 }]
+]);
+var COUNT_UNITS = new Map([
+  ["words", { name: "words", noun: "word", title: "Words", countField: "word-count", targetField: "target-words" }],
+  ["characters", { name: "characters", noun: "character", title: "Characters", countField: "character-count", targetField: "target-characters" }]
+]);
+function countUnit(storyData, pack) {
+  const value = storyData?.["count-unit"];
+  return COUNT_UNITS.get(COUNT_UNITS.has(value) ? value : pack?.countUnit) ?? COUNT_UNITS.get("words");
+}
+function formRanges(unit, pack) {
+  if (unit.name === "words") {
+    return STORY_FORMS;
+  }
+  const ranges = pack?.characterForms;
+  return ranges ? new Map(Object.entries(ranges)) : null;
+}
+function formRangeWarning(form, count, label, ranges = STORY_FORMS, unit = COUNT_UNITS.get("words")) {
+  const range = ranges?.get(form);
+  if (!range || range.min === null || !Number.isInteger(count) || count <= 0) {
+    return "";
+  }
+  if (range.max === null) {
+    return count < range.min ? `${label} ${count} is under the usual ${form} minimum of ${range.min} ${unit.name}` : "";
+  }
+  if (count < range.min || count > range.max) {
+    return `${label} ${count} is outside the usual ${form} range of ${range.min}-${range.max} ${unit.name}`;
+  }
+  return "";
+}
+
+// src/twee.js
+import crypto from "node:crypto";
+var TWEE_LINK_UNSAFE = /[[\]|\r\n]|->|<-|<$/;
+var UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function isIfid(value) {
+  return typeof value === "string" && UUID_V4.test(value);
+}
+function derivedIfid(storyId) {
+  const hex = crypto.createHash("sha256").update(`story-skills-ifid:${storyId}`).digest("hex").slice(0, 32).split("");
+  hex[12] = "4";
+  hex[16] = (Number.parseInt(hex[16], 16) & 3 | 8).toString(16);
+  const text = hex.join("");
+  return `${text.slice(0, 8)}-${text.slice(8, 12)}-${text.slice(12, 16)}-${text.slice(16, 20)}-${text.slice(20)}`.toUpperCase();
+}
+function passageText(text) {
+  return text.replace(/^::/gm, "\\::");
+}
+function tweeSource(story) {
+  const data = JSON.stringify({ ifid: story.ifid.toUpperCase(), start: story.start }, null, 2);
+  const lines = [":: StoryTitle", passageText(story.title), "", ":: StoryData", data, ""];
+  for (const passage of story.passages) {
+    lines.push(`:: ${passage.name}`);
+    if (passage.body !== "") {
+      lines.push(passageText(passage.body));
+    }
+    if (passage.body !== "" && passage.links.length > 0) {
+      lines.push("");
+    }
+    for (const link of passage.links) {
+      lines.push(`[[${link.text}->${link.to}]]`);
+    }
+    lines.push("");
+  }
+  return `${lines.join(`
+`).trimEnd()}
+`;
+}
+
+// src/progress.js
+var PROGRESS_FILE = "progress.md";
+var PACE_SESSIONS = 7;
+var PROJECTION_HORIZON_DAYS = 100 * 366;
+function withSession(sessions, date, counts) {
+  let found = false;
+  const kept = (Array.isArray(sessions) ? sessions : []).map((session) => {
+    if (!found && session && typeof session === "object" && sessionDate(session) === date) {
+      found = true;
+      return { ...session, ...counts };
+    }
+    return session;
+  });
+  if (!found) {
+    kept.push({ date, ...counts });
+  }
+  return kept.sort((left, right) => sessionDate(left).localeCompare(sessionDate(right), "en"));
+}
+function sessionDate(session) {
+  return String(session?.date ?? "").trim();
+}
+function cleanSessions(value) {
+  const sessions = [];
+  const count = (number) => Number.isInteger(number) && number >= 0;
+  for (const entry of Array.isArray(value) ? value : []) {
+    if (entry && typeof entry === "object" && parseClockDate(sessionDate(entry)) && count(entry.words)) {
+      sessions.push({ date: sessionDate(entry), words: entry.words, characters: count(entry.characters) ? entry.characters : null });
+    }
+  }
+  return sessions.sort((left, right) => left.date.localeCompare(right.date, "en"));
+}
+function computeProgress({ unit = "words", words, characters = null, target, deadline, today, chapters, sessions }) {
+  const characterBook = unit === "characters";
+  const inUnit = (entry) => characterBook ? entry.characters ?? null : entry.words;
+  const length = characterBook ? characters : words;
+  const measured = (Array.isArray(sessions) ? sessions : []).filter((session) => inUnit(session) !== null);
+  const todayDays = parseClockDate(today).days;
+  const result = {
+    unit,
+    words,
+    characterCount: characterBook ? characters : null,
+    target: target ?? null,
+    percent: target ? length * 100 / target : null,
+    remaining: target ? Math.max(0, target - length) : null,
+    deadline: null,
+    chapters: chapters.filter((chapter) => chapter.target > 0).map((chapter) => ({
+      id: chapter.id,
+      words: chapter.words,
+      characterCount: characterBook ? chapter.characters : null,
+      target: chapter.target,
+      percent: inUnit(chapter) * 100 / chapter.target
+    })),
+    sessions: measured.length,
+    lastSession: null,
+    pace: null,
+    projected: null
+  };
+  const deadlineDate = deadline ? parseClockDate(deadline) : undefined;
+  if (deadlineDate) {
+    const daysLeft = deadlineDate.days - todayDays;
+    result.deadline = {
+      date: deadlineDate.text,
+      daysLeft,
+      perDay: result.remaining !== null && daysLeft >= 0 ? Math.ceil(result.remaining / Math.max(daysLeft, 1)) : null
+    };
+  }
+  if (measured.length > 0) {
+    const last = measured[measured.length - 1];
+    result.lastSession = { date: last.date, words: last.words, characterCount: characterBook ? last.characters : null, since: length - inUnit(last) };
+    const recent = measured.slice(-PACE_SESSIONS);
+    const span = parseClockDate(recent[recent.length - 1].date).days - parseClockDate(recent[0].date).days;
+    if (recent.length > 1 && span > 0) {
+      result.pace = (inUnit(recent[recent.length - 1]) - inUnit(recent[0])) / span;
+      const daysNeeded = Math.ceil(result.remaining / result.pace);
+      if (result.remaining > 0 && Math.round(result.pace) > 0 && daysNeeded <= PROJECTION_HORIZON_DAYS) {
+        result.projected = formatDate(todayDays + daysNeeded);
+      }
+    }
+  }
+  return result;
+}
+function formatProgress(progress) {
+  const characters = progress.unit === "characters";
+  const noun = characters ? "character" : "word";
+  const count = (entry) => characters ? entry.characterCount : entry.words;
+  const lines = [];
+  if (progress.target === null) {
+    lines.push(`Progress: ${formatNumber2(count(progress))} ${noun}s (no target-${noun}s in story.md)`);
+  } else {
+    lines.push(`Progress: ${formatNumber2(count(progress))} of ${formatNumber2(progress.target)} ${noun}s (${formatPercent(progress.percent, 1)}%)`);
+    lines.push(`Remaining: ${plural2(progress.remaining, noun, formatNumber2)}`);
+  }
+  if (progress.deadline) {
+    const { date, daysLeft, perDay } = progress.deadline;
+    if (daysLeft < 0) {
+      lines.push(`Deadline: ${date} passed ${plural2(-daysLeft, "day")} ago`);
+    } else if (perDay === null) {
+      lines.push(`Deadline: ${date} (${daysLeft === 0 ? "today" : `${plural2(daysLeft, "day")} left`})`);
+    } else if (daysLeft === 0) {
+      lines.push(`Deadline: ${date} (today): ${plural2(perDay, noun, formatNumber2)} needed`);
+    } else {
+      lines.push(`Deadline: ${date} (${plural2(daysLeft, "day")} left): ${formatNumber2(perDay)} ${noun}s a day needed`);
+    }
+  }
+  if (progress.lastSession) {
+    const { date, since } = progress.lastSession;
+    lines.push(`Sessions: ${progress.sessions} logged; last ${date} (${since >= 0 ? "+" : ""}${formatNumber2(since)} ${noun}s since)`);
+  } else {
+    lines.push("Sessions: none logged (run story progress --log after a writing session)");
+  }
+  if (progress.pace !== null) {
+    lines.push(`Pace: ${formatNumber2(Math.round(progress.pace))} ${noun}s a day over the last ${Math.min(progress.sessions, PACE_SESSIONS)} sessions`);
+  }
+  if (progress.projected) {
+    lines.push(`Projected finish at this pace: ${progress.projected}`);
+  }
+  if (progress.chapters.length > 0) {
+    lines.push("", "Chapter targets:");
+    for (const chapter of progress.chapters) {
+      lines.push(`- ${chapter.id}: ${formatNumber2(count(chapter))} of ${formatNumber2(chapter.target)} ${noun}s (${formatPercent(chapter.percent, 0)}%)`);
+    }
+  }
+  return `${lines.join(`
+`)}
+`;
+}
+function localDate(now = new Date) {
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+function formatDate(days) {
+  return new Date(days * 86400000).toISOString().slice(0, 10);
+}
+function plural2(count, noun, format = String) {
+  return `${format(count)} ${noun}${count === 1 ? "" : "s"}`;
+}
+function formatPercent(percent, places) {
+  const scale = 10 ** places;
+  let value = Math.round(percent * scale) / scale;
+  if (value >= 100 && percent < 100) {
+    value = Math.floor(percent * scale) / scale;
+  }
+  return value.toFixed(places);
+}
+function formatNumber2(value) {
+  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+// src/languages/style.js
+var STYLE_LISTS = {
+  "filter-words": { list: "filterWords" },
+  "said-bookisms": { list: "saidBookisms" },
+  "plain-tags": { list: "plainTags" },
+  "beat-pronouns": { list: "beatPronouns" },
+  "inversion-links": { list: "inversionLinks" },
+  "adverb-suffixes": { list: "adverbSuffixes" },
+  "adverb-exceptions": { list: "adverbExceptions" },
+  "adverb-blockers": { list: "adverbBlockers" },
+  "echo-stopwords": { list: "echoStopwords" },
+  "phrase-stopwords": { list: "phraseStopwords" },
+  "dialect-pairs": { list: "dialectPairs" },
+  "speech-verbs": { list: "speechVerbs" },
+  "speech-pronouns": { list: "speechPronouns" },
+  "contraction-suffixes": { list: "contractionSuffixes" },
+  "contracted-is": { list: "contractedIs" },
+  elisions: { list: "elisions" },
+  "voice-stopwords": { list: "voiceStopwords" },
+  "title-abbreviations": { list: "titleAbbreviations", cased: true, abbreviation: true },
+  "context-abbreviations": { list: "contextAbbreviations", cased: true, abbreviation: true },
+  "calendar-words": { list: "calendarWords", cased: true },
+  "chapter-words": { list: "chapterWords" },
+  "section-words": { list: "sectionWords" },
+  "part-words": { list: "partWords" },
+  "front-matter-words": { list: "frontMatterWords" },
+  "ordinal-words": { list: "ordinalWords" },
+  "number-words": { list: "numberWords", part: "words" },
+  "number-joiners": { list: "numberWords", part: "joiners" },
+  "candidate-stopwords": { list: "candidateStopwords", cased: true },
+  determiners: { list: "determiners" },
+  "relative-words": { list: "relativeWords" },
+  "noun-suffixes": { list: "nounSuffixes" },
+  "title-words": { list: "titleWords" }
+};
+var STYLE_LIST_FIELDS = ["replace-words", "add-words"];
+function styleListEntries(value) {
+  return Array.isArray(value) ? value.filter(isEntry2).flatMap((entry) => Object.entries(entry)) : [];
+}
+function isEntry2(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function styleWords(value) {
+  if (Array.isArray(value)) {
+    return value.every((word) => typeof word === "string") ? value.map((word) => word.trim()).filter((word) => word !== "") : null;
+  }
+  if (typeof value !== "string") {
+    return null;
+  }
+  const flow = /^\[(.*)\]$/s.exec(value.trim());
+  return (flow === null ? value : flow[1]).split(",").map((word) => word.trim().replace(/^(["'])(.*)\1$/s, "$2").trim()).filter((word) => word !== "");
+}
+function withStyleLists(pack, styleData) {
+  const changes = STYLE_LIST_FIELDS.flatMap((field) => styleListEntries(styleData?.[field]).filter(([key, value]) => Object.prototype.hasOwnProperty.call(STYLE_LISTS, key) && styleWords(value) !== null).map(([key, value]) => ({ replace: field === "replace-words", key, words: styleWords(value) })));
+  if (changes.length === 0) {
+    return pack;
+  }
+  const checks = { ...pack.checks };
+  const cleared = new Set;
+  for (const { replace, key, words } of changes) {
+    const { list, part, cased = false, abbreviation = false } = STYLE_LISTS[key];
+    const written = words.map((word) => {
+      const apostrophe = word.replace(/’/g, "'");
+      const straight = abbreviation ? apostrophe.replace(/\.$/, "") : apostrophe;
+      return cased ? straight : lowerCase(straight, pack);
+    }).filter((word) => word !== "");
+    const fresh = replace && !cleared.has(key);
+    cleared.add(key);
+    if (part !== undefined) {
+      const current = fresh && part === "words" ? { joiners: checks.numberWords?.joiners ?? [] } : { ...checks.numberWords };
+      checks.numberWords = { ...current, [part]: unique2([...fresh ? [] : current[part] ?? [], ...written]) };
+    } else if (list === "dialectPairs") {
+      const pairs = written.map((pair) => pair.split("/").map((word) => word.trim())).filter((pair) => pair.length === 2 && pair.every((word) => word !== ""));
+      checks.dialectPairs = [...fresh ? [] : checks.dialectPairs ?? [], ...pairs];
+    } else {
+      checks[list] = unique2([...fresh ? [] : checks[list] ?? [], ...written]);
+    }
+  }
+  return deepFreeze({ ...pack, checks });
+}
+function unique2(words) {
+  return [...new Set(words)];
+}
+
+// src/scan.js
+var STORY_SCHEMA_VERSION = 2;
+var REQUIRED_PATHS = [
+  "story.md",
+  "characters/_index.md",
+  "worldbuilding/_index.md",
+  "plot/_index.md",
+  "plot/timeline.md",
+  "chapters/_index.md",
+  "scenes/_index.md",
+  "continuity/state.md",
+  "continuity/questions/_index.md",
+  "continuity/promises/_index.md",
+  "continuity/clues/_index.md",
+  "glossary/_index.md"
+];
+var PROJECT_DIRECTORIES = [
+  "characters",
+  path6.join("worldbuilding", "locations"),
+  path6.join("worldbuilding", "systems"),
+  path6.join("worldbuilding", "factions"),
+  path6.join("worldbuilding", "artifacts"),
+  path6.join("plot", "arcs"),
+  "chapters",
+  "scenes",
+  path6.join("continuity", "questions"),
+  path6.join("continuity", "promises"),
+  path6.join("continuity", "clues"),
+  path6.join("glossary", "terms")
+];
+var INDEX_SCHEMAS = [
+  [path6.join("characters", "_index.md"), "character-registry"],
+  [path6.join("worldbuilding", "_index.md"), "world-registry"],
+  [path6.join("plot", "_index.md"), "plot-registry"],
+  [path6.join("plot", "timeline.md"), "timeline"],
+  [path6.join("chapters", "_index.md"), "chapter-registry"],
+  [path6.join("scenes", "_index.md"), "scene-registry"],
+  [path6.join("continuity", "questions", "_index.md"), "question-registry"],
+  [path6.join("continuity", "promises", "_index.md"), "promise-registry"],
+  [path6.join("continuity", "clues", "_index.md"), "clue-registry"],
+  [path6.join("glossary", "_index.md"), "glossary-registry"]
+];
+var STORY_STATUSES = new Set(["planning", "drafting", "in-progress", "revising", "complete", "abandoned"]);
+var STORY_TENSES = new Set(["past", "present", "future", "mixed"]);
+var CHARACTER_ROLES = new Set(["protagonist", "antagonist", "supporting", "minor", "narrator", "deuteragonist"]);
+var CHARACTER_STATUSES = new Set(["alive", "deceased", "unknown", "missing", "cut"]);
+var ARC_TYPES = new Set(["main", "subplot", "character", "thematic"]);
+var ARC_STATUSES = new Set(["planned", "in-progress", "resolved"]);
+var CHAPTER_STATUSES = new Set(["outline", "draft", "revised", "final", "complete"]);
+var CHARACTER_ARC_TYPES = new Set(["change-positive", "change-negative", "flat"]);
+var DRAFT_MODES = new Set(["discovered", "outlined"]);
+var SCENE_STATUSES = new Set(["outline", "draft", "revised", "final", "complete"]);
+var FACTION_TYPES = new Set(["family", "guild", "government", "military", "religion", "company", "community", "criminal", "other"]);
+var FACTION_STATUSES = new Set(["active", "hidden", "declining", "defeated", "disbanded", "unknown"]);
+var ARTIFACT_TYPES = new Set(["object", "weapon", "document", "technology", "relic", "symbol", "resource", "other"]);
+var ARTIFACT_STATUSES = new Set(["active", "lost", "destroyed", "hidden", "transferred", "unknown"]);
+var QUESTION_STATUSES = new Set(["open", "answered", "resolved", "dropped", "abandoned"]);
+var PROMISE_STATUSES = new Set(["planned", "planted", "paid-off", "dropped", "abandoned"]);
+var CLUE_STATUSES = new Set(["planned", "planted", "paid-off", "dropped", "abandoned"]);
+var TERM_CATEGORIES = new Set(["person", "place", "faction", "artifact", "concept", "term", "other"]);
+var STYLE_DIALECTS = new Set(["british", "american", "unspecified"]);
+var STYLE_SHEET_FILE = "style-sheet.md";
+var MATTER_PLACEMENTS = new Set(["front", "back"]);
+var MATTER_PERMISSIONS = new Set(["not-needed", "pending", "granted", "public-domain"]);
+var MATTER_DIR = "matter";
+var RESEARCH_STATUSES = new Set(["open", "verified", "disputed"]);
+var RESEARCH_ACCURACY = new Set(["must-be-accurate", "blended", "invented"]);
+var RESEARCH_CONFIDENCE = new Set(["high", "medium", "low"]);
+var RESEARCH_METHODS = new Set(["fact", "interview", "site-visit", "expert-review", "reading"]);
+var RESEARCH_RISKS = new Set(["legal", "medical", "weapons", "safety", "cultural", "defamation", "technical"]);
+var RESEARCH_DIR = "research";
+var SETTLED_CHAPTER_STATUSES = new Set(["final", "complete"]);
+var WRITTEN_CHAPTER_STATUSES = new Set(["revised", "final", "complete"]);
+var COVER_MEDIA_TYPES = {
+  ".gif": "image/gif",
+  ".jpeg": "image/jpeg",
+  ".jpg": "image/jpeg",
+  ".png": "image/png",
+  ".webp": "image/webp"
+};
+function existingStoryLanguage(root) {
+  const data = existingStoryData(root);
+  return data === null ? null : projectLanguage(data);
+}
+function existingStyleData(root) {
+  try {
+    return readStyleSheet(root, [])?.data ?? null;
+  } catch {
+    return null;
+  }
+}
+function existingStoryData(root) {
+  if (!lstatIfExists(path6.join(root, "story.md"))) {
+    return null;
+  }
+  try {
+    return readBookFrontmatter(root) ?? {};
+  } catch {
+    return {};
+  }
+}
+function deriveStoryId(title, root) {
+  return kebabCase(String(title ?? ""), { transliterate: false }) || kebabCase(path6.basename(root), { transliterate: false });
+}
+function chapterLength(unit, data, markdown) {
+  const prose = chapterProse(markdown.body);
+  const words = wordCount(prose);
+  const declared = data[unit.countField];
+  const target = data[unit.targetField];
+  return {
+    wordCount: words,
+    count: unit.name === "characters" ? characterCount(prose) : words,
+    declaredCount: declared === undefined ? 0 : Number.isInteger(declared) ? declared : null,
+    countMissing: declared === undefined,
+    targetCount: Number.isInteger(target) && target > 0 ? target : 0
+  };
+}
+function scanProject(root) {
+  const projectRoot = path6.resolve(root);
+  const scanErrors = [];
+  const storyPath = requireStoryFile(projectRoot);
+  let story;
+  try {
+    story = readMarkdown(storyPath, projectRoot);
+  } catch (error) {
+    scanErrors.push(err("unreadable-file", `story.md: ${error.message}`, "story.md"));
+    story = { data: { title: path6.basename(projectRoot) }, body: "", rawMarkdown: "", unreadable: true };
+  }
+  const storyId = deriveStoryId(story.data.title, projectRoot);
+  const titleText = typeof story.data.title === "string" || typeof story.data.title === "number" ? String(story.data.title).trim() : "";
+  let continuity = null;
+  const continuityPath = path6.join(projectRoot, "continuity", "state.md");
+  if (fs3.existsSync(continuityPath)) {
+    try {
+      continuity = readMarkdown(continuityPath, projectRoot);
+    } catch (error) {
+      scanErrors.push(err("unreadable-file", `${path6.join("continuity", "state.md")}: ${error.message}`, path6.join("continuity", "state.md")));
+      continuity = null;
+    }
+  }
+  const language = projectLanguage(story.data);
+  const pack = languagePack(language);
+  const unit = countUnit(story.data, pack);
+  const project = {
+    root: projectRoot,
+    story,
+    storyId,
+    title: titleText || path6.basename(projectRoot),
+    language,
+    pack,
+    unit,
+    fileErrors: scanErrors,
+    characters: readEntityFiles(projectRoot, "characters", (id, file, data) => ({
+      id,
+      file,
+      name: data.name ?? titleCaseSlug(id),
+      role: data.role ?? "",
+      status: data.status ?? "",
+      arc: String(data.arc ?? ""),
+      diedIn: String(data["died-in"] ?? ""),
+      revivedIn: String(data["revived-in"] ?? ""),
+      relationships: asArray(data.relationships),
+      locations: asArray(data.locations),
+      aliases: asArray(data.aliases),
+      voiceWords: asArray(data["voice-words"]),
+      voiceAvoid: asArray(data["voice-avoid"]),
+      pronunciation: data.pronunciation
+    }), scanErrors),
+    locations: readEntityFiles(projectRoot, path6.join("worldbuilding", "locations"), (id, file, data) => ({
+      id,
+      file,
+      name: data.name ?? titleCaseSlug(id),
+      type: data.type ?? "",
+      region: data.region ?? "",
+      notableCharacters: asArray(data["notable-characters"]),
+      routes: asArray(data.routes),
+      setting: typeof data.setting === "string" ? data.setting : "",
+      pronunciation: data.pronunciation
+    }), scanErrors),
+    systems: readEntityFiles(projectRoot, path6.join("worldbuilding", "systems"), (id, file, data) => ({
+      id,
+      file,
+      name: data.name ?? titleCaseSlug(id),
+      type: data.type ?? "",
+      pronunciation: data.pronunciation
+    }), scanErrors),
+    factions: readEntityFiles(projectRoot, path6.join("worldbuilding", "factions"), (id, file, data) => ({
+      id,
+      file,
+      name: data.name ?? titleCaseSlug(id),
+      type: data.type ?? "",
+      status: data.status ?? "",
+      members: asArray(data.members),
+      locations: asArray(data.locations),
+      pronunciation: data.pronunciation
+    }), scanErrors),
+    artifacts: readEntityFiles(projectRoot, path6.join("worldbuilding", "artifacts"), (id, file, data) => ({
+      id,
+      file,
+      name: data.name ?? titleCaseSlug(id),
+      type: data.type ?? "",
+      status: data.status ?? "",
+      owner: data.owner ?? "",
+      location: data.location ?? "",
+      pronunciation: data.pronunciation
+    }), scanErrors),
+    arcs: readEntityFiles(projectRoot, path6.join("plot", "arcs"), (id, file, data) => ({
+      id,
+      file,
+      name: data.name ?? titleCaseSlug(id),
+      type: data.type ?? "",
+      status: data.status ?? "",
+      characters: asArray(data.characters),
+      themes: asArray(data.themes)
+    }), scanErrors),
+    chapters: readEntityFiles(projectRoot, "chapters", (id, file, data, markdown) => ({
+      id,
+      file,
+      title: data.title ?? titleCaseSlug(id),
+      number: chapterNumber(data.number, file),
+      numberValid: data.number === undefined || isPositiveIntegerValue(data.number),
+      pov: scanId(data.pov),
+      status: data.status ?? "",
+      characters: asIdArray(data.characters),
+      mentions: asIdArray(data.mentions),
+      locations: asIdArray(data.locations),
+      arcsAdvanced: asArray(data["arcs-advanced"]),
+      declaredWordCount: data["word-count"] === undefined ? 0 : Number.isInteger(data["word-count"]) ? data["word-count"] : null,
+      wordCountMissing: data["word-count"] === undefined,
+      targetWords: Number.isInteger(data["target-words"]) && data["target-words"] > 0 ? data["target-words"] : 0,
+      ...chapterLength(unit, data, markdown),
+      unclosedComment: hasUnclosedComment(chapterProse(markdown.body)),
+      todoMarkers: countTodoMarkers(chapterProse(markdown.body)),
+      date: String(data.date ?? ""),
+      time: String(data.time ?? ""),
+      mode: String(data.mode ?? ""),
+      strand: String(data.strand ?? ""),
+      hasPostHocNotes: hasPostHocNotes(markdown.body),
+      hook: typeof data.hook === "string" ? data.hook : "",
+      choices: data.choices
+    }), scanErrors).sort((left, right) => left.number - right.number || left.file.localeCompare(right.file, "en")),
+    scenes: readEntityFiles(projectRoot, "scenes", (id, file, data) => ({
+      id,
+      file,
+      title: data.title ?? titleCaseSlug(id),
+      chapter: String(data.chapter ?? sceneChapterFromFile(file) ?? ""),
+      scene: Number(data.scene ?? sceneNumberFromFile(file) ?? 0),
+      pov: scanId(data.pov),
+      location: scanId(data.location),
+      status: data.status ?? "",
+      characters: asIdArray(data.characters),
+      mentions: asIdArray(data.mentions),
+      arcsAdvanced: asArray(data["arcs-advanced"]),
+      stateChanges: asArray(data["state-changes"]),
+      date: String(data.date ?? ""),
+      time: String(data.time ?? ""),
+      travelHours: typeof data["travel-hours"] === "number" ? data["travel-hours"] : 0,
+      sequel: typeof data.sequel === "boolean" ? data.sequel : false,
+      outcome: typeof data.outcome === "string" ? data.outcome : "",
+      dilemma: String(data.dilemma ?? ""),
+      flashbackTo: String(data["flashback-to"] ?? ""),
+      setting: typeof data.setting === "string" ? data.setting : ""
+    }), scanErrors),
+    questions: readEntityFiles(projectRoot, path6.join("continuity", "questions"), (id, file, data) => ({
+      id,
+      file,
+      title: data.title ?? titleCaseSlug(id),
+      status: data.status ?? "",
+      introduced: String(data.introduced ?? ""),
+      resolved: String(data.resolved ?? ""),
+      characters: asArray(data.characters)
+    }), scanErrors),
+    promises: readEntityFiles(projectRoot, path6.join("continuity", "promises"), (id, file, data) => ({
+      id,
+      file,
+      title: data.title ?? titleCaseSlug(id),
+      status: data.status ?? "",
+      planted: String(data.planted ?? ""),
+      payoff: String(data.payoff ?? ""),
+      arcs: asArray(data.arcs),
+      characters: asArray(data.characters)
+    }), scanErrors),
+    clues: readEntityFiles(projectRoot, path6.join("continuity", "clues"), (id, file, data) => ({
+      id,
+      file,
+      title: data.title ?? titleCaseSlug(id),
+      status: data.status ?? "",
+      planted: String(data.planted ?? ""),
+      payoff: String(data.payoff ?? ""),
+      significanceDelayed: data["significance-delayed"] === true,
+      redHerring: data["red-herring"] === true,
+      characters: asArray(data.characters),
+      arcs: asArray(data.arcs)
+    }), scanErrors),
+    glossaryTerms: readEntityFiles(projectRoot, path6.join("glossary", "terms"), (id, file, data) => ({
+      id,
+      file,
+      term: data.term ?? titleCaseSlug(id),
+      category: data.category ?? "",
+      aliases: asArray(data.aliases),
+      pronunciation: data.pronunciation
+    }), scanErrors),
+    research: readEntityFiles(projectRoot, RESEARCH_DIR, (id, file, data) => ({
+      id,
+      file,
+      title: data.title ?? titleCaseSlug(id),
+      status: data.status ?? "",
+      sources: asArray(data.sources),
+      usedIn: asArray(data["used-in"]),
+      accuracy: typeof data.accuracy === "string" ? data.accuracy : "",
+      risk: asArray(data.risk),
+      reviewedBy: asArray(data["reviewed-by"])
+    }), scanErrors),
+    matter: readEntityFiles(projectRoot, MATTER_DIR, (id, file, data, markdown) => ({
+      id,
+      file,
+      title: String(data.title ?? titleCaseSlug(id)),
+      placement: String(data.placement ?? ""),
+      order: Number.isInteger(data.order) ? data.order : 0,
+      heading: data.heading !== false,
+      permission: typeof data.permission === "string" ? data.permission : "",
+      empty: chapterProse(markdown.body).trim() === ""
+    }), scanErrors).sort((left, right) => left.order - right.order || left.id.localeCompare(right.id, "en")),
+    exemptions: readExemptions(projectRoot, scanErrors),
+    styleSheet: readStyleSheet(projectRoot, scanErrors),
+    progressLog: readOptionalRootFile(projectRoot, PROGRESS_FILE, scanErrors),
+    continuity
+  };
+  project.pack = withStyleLists(project.pack, project.styleSheet?.data);
+  sortScenesByChapter(project);
+  return project;
+}
+function sortScenesByChapter(project) {
+  const numbers = new Map(project.chapters.map((chapter) => [chapter.id, chapter.number]));
+  const chapterOrder = (id) => {
+    const number = numbers.get(id);
+    if (Number.isFinite(number)) {
+      return number;
+    }
+    const match = /-(\d+)$/.exec(id);
+    return match ? Number(match[1]) : Number.POSITIVE_INFINITY;
+  };
+  project.scenes.sort((left, right) => {
+    const leftOrder = chapterOrder(left.chapter);
+    const rightOrder = chapterOrder(right.chapter);
+    return (leftOrder === rightOrder ? 0 : leftOrder < rightOrder ? -1 : 1) || left.chapter.localeCompare(right.chapter, "en") || left.scene - right.scene || left.file.localeCompare(right.file, "en");
+  });
+}
+function assertProjectParses(project, action, ignore = () => false) {
+  const ignored = [STYLE_SHEET_FILE, PROGRESS_FILE, path6.join("continuity", "exemptions.md")];
+  const errors = (project.fileErrors ?? []).filter((error) => !ignored.includes(error.file) && !ignore(error));
+  if (errors.length > 0) {
+    throw projectError(`Cannot ${action}: fix ${errors.length === 1 ? "this file first (story validate reports it)" : "these files first (story validate reports them)"}:
+${errors.map((error) => `- ${error.message}`).join(`
+`)}`);
+  }
+}
+function newerSchemaVersion(value) {
+  const version = typeof value === "string" && /^\d+$/.test(value.trim()) ? Number(value) : value;
+  return typeof version === "number" && Number.isFinite(version) && version > STORY_SCHEMA_VERSION ? version : null;
+}
+function newerSchemaMessage(version) {
+  return `story.md uses schema-version ${version}, newer than this CLI (${STORY_SCHEMA_VERSION}); upgrade story-skills`;
+}
+function canonicalChapterId(number) {
+  return `chapter-${String(number).padStart(2, "0")}`;
+}
+var LINK_OR_URL_PATTERN = /(\]\([^)\n]*\)|<[a-z][a-z0-9+.-]*:[^>\s]*>|\b[a-z][a-z0-9+.-]*:\/\/[^\s<>)\]]*)/gi;
+function mapOutsideLinks(body, transform) {
+  return body.split(LINK_OR_URL_PATTERN).map((part, index) => index % 2 === 1 ? part : transform(part)).join("");
+}
+function storyBible(options) {
+  const data = {
+    title: options.title,
+    "schema-version": STORY_SCHEMA_VERSION
+  };
+  if (options.series !== undefined) {
+    data.series = options.series;
+  }
+  if (options.inherited?.["series-title"] !== undefined) {
+    data["series-title"] = options.inherited["series-title"];
+  }
+  if (options.bookNumber !== undefined) {
+    data["book-number"] = options.bookNumber;
+  }
+  Object.assign(data, {
+    genre: options.genre,
+    "sub-genre": options.subGenre,
+    "setting-era": options.settingEra,
+    status: "planning",
+    themes: options.themes,
+    pov: options.pov,
+    tense: options.tense
+  });
+  for (const field of ["author", "authors", "language", "count-unit"]) {
+    if (options.inherited?.[field] !== undefined) {
+      data[field] = options.inherited[field];
+    }
+  }
+  if (options.form !== undefined) {
+    data.form = options.form;
+    const target = formRanges(options.unit, options.pack)?.get(options.form)?.target ?? null;
+    if (target !== null) {
+      data[options.unit.targetField] = target;
+    }
+  }
+  for (const field of ["follows", "precedes"]) {
+    if (options[field].length > 0) {
+      data[field] = options[field];
+    }
+  }
+  return `${stringifyFrontmatter(data)}# ${options.title}
+
+## Synopsis
+
+${options.synopsis}
+
+## Tone & Style
+
+Add notes on the story's voice, texture, and emotional register.
+
+## Notes
+
+`;
+}
+function cell2(value) {
+  return String(value ?? "").replace(/\r?\n|\r/g, " ").replace(/\|/g, "\\|");
+}
+function characterIndex(storyId, characters, relationshipMap, familyTrees) {
+  const rows = characters.length === 0 ? ["| *No characters yet* | | | |"] : characters.map((character) => `| ${cell2(character.name)} | ${cell2(character.role)} | ${cell2(character.status)} | [${character.id}](${character.id}.md) |`);
+  return `${stringifyFrontmatter({ type: "character-registry", story: storyId })}# Characters
+
+## Registry
+
+| Name | Role | Status | File |
+|------|------|--------|------|
+${rows.join(`
+`)}
+
+## Relationship Map
+
+${relationshipMap || "*No relationships defined yet.*"}
+
+## Family Trees
+
+${familyTrees || "*No family trees defined yet.*"}
+`;
+}
+function worldIndex(storyId, locations, systems, factions, artifacts, overview) {
+  const locationRows = locations.length === 0 ? ["| *No locations yet* | | | |"] : locations.map((location) => `| ${cell2(location.name)} | ${cell2(titleCaseSlug(location.type))} | ${cell2(location.region)} | [${location.id}](locations/${location.id}.md) |`);
+  const systemRows = systems.length === 0 ? ["| *No systems yet* | | |"] : systems.map((system) => `| ${cell2(system.name)} | ${cell2(titleCaseSlug(system.type))} | [${system.id}](systems/${system.id}.md) |`);
+  const factionRows = factions.length === 0 ? ["| *No factions yet* | | | |"] : factions.map((faction) => `| ${cell2(faction.name)} | ${cell2(titleCaseSlug(faction.type))} | ${cell2(faction.status)} | [${faction.id}](factions/${faction.id}.md) |`);
+  const artifactRows = artifacts.length === 0 ? ["| *No artifacts yet* | | | |"] : artifacts.map((artifact) => `| ${cell2(artifact.name)} | ${cell2(titleCaseSlug(artifact.type))} | ${cell2(artifact.status)} | [${artifact.id}](artifacts/${artifact.id}.md) |`);
+  return `${stringifyFrontmatter({ type: "world-registry", story: storyId })}# Worldbuilding
+
+## World Overview
+
+${overview || "*Describe the world at a high level here.*"}
+
+## Locations
+
+| Name | Type | Region | File |
+|------|------|--------|------|
+${locationRows.join(`
+`)}
+
+## Systems
+
+| Name | Type | File |
+|------|------|------|
+${systemRows.join(`
+`)}
+
+## Factions
+
+| Name | Type | Status | File |
+|------|------|--------|------|
+${factionRows.join(`
+`)}
+
+## Artifacts
+
+| Name | Type | Status | File |
+|------|------|--------|------|
+${artifactRows.join(`
+`)}
+`;
+}
+function plotIndex(storyId, structure, arcs, storyStructure, themeTracking) {
+  const arcRows = arcs.length === 0 ? ["| *No arcs yet* | | | |"] : arcs.map((arc) => `| ${cell2(arc.name)} | ${cell2(arc.type)} | ${cell2(arc.status)} | [${arc.id}](arcs/${arc.id}.md) |`);
+  return `${stringifyFrontmatter({ type: "plot-registry", story: storyId, structure })}# Plot Structure
+
+## Story Structure
+
+${storyStructure || "**Model:** Three-Act Structure (adjust as needed)"}
+
+## Arcs
+
+| Name | Type | Status | File |
+|------|------|--------|------|
+${arcRows.join(`
+`)}
+
+## Theme Tracking
+
+${themeTracking || `| Theme | Arcs | Chapters |
+|-------|------|----------|
+| *No themes tracked yet* | | |`}
+`;
+}
+function chapterIndex(storyId, chapters, unit = COUNT_UNITS.get("words")) {
+  const rows = chapters.length === 0 ? ["| *No chapters yet* | | | | | |"] : chapters.map((chapter) => `| ${cell2(chapter.number)} | ${cell2(chapter.title)} | ${cell2(chapter.pov)} | ${cell2(chapter.status)} | ${cell2(chapter.count)} | [${chapter.id}](${path6.basename(chapter.file)}) |`);
+  const total = chapters.reduce((sum, chapter) => sum + chapter.count, 0);
+  const heading = `${unit.noun[0].toUpperCase()}${unit.noun.slice(1)} Count`;
+  return `${stringifyFrontmatter({ type: "chapter-registry", story: storyId })}# Chapters
+
+## Registry
+
+| # | Title | POV | Status | ${heading} | File |
+|---|-------|-----|--------|${"-".repeat(heading.length + 2)}|------|
+${rows.join(`
+`)}
+
+## Total ${heading}: ${total}
+`;
+}
+function timeline(storyId) {
+  return `${stringifyFrontmatter({ type: "timeline", story: storyId })}# Story Timeline
+
+| When | Event | Arc | Chapter |
+|------|-------|-----|---------|
+| *No events yet* | | | |
+`;
+}
+function sceneIndex(storyId, scenes) {
+  const rows = scenes.length === 0 ? ["| *No scenes yet* | | | | | |"] : scenes.map((scene) => `| ${cell2(scene.chapter)} | ${cell2(scene.scene)} | ${cell2(scene.title)} | ${cell2(scene.pov)} | ${cell2(scene.status)} | [${scene.id}](${scene.id}.md) |`);
+  return `${stringifyFrontmatter({ type: "scene-registry", story: storyId })}# Scenes
+
+## Registry
+
+| Chapter | Scene | Title | POV | Status | File |
+|---------|-------|-------|-----|--------|------|
+${rows.join(`
+`)}
+`;
+}
+function continuityState(storyId) {
+  return `${stringifyFrontmatter({
+    type: "continuity-state",
+    story: storyId,
+    "current-chapter": 0,
+    "character-state": [],
+    "object-state": [],
+    "knowledge-state": []
+  })}# Continuity State
+
+## Current Story State
+
+Track facts that must carry forward between chapters. The CLI reads the
+\`character-state\`, \`object-state\`, and \`knowledge-state\` lists in the
+frontmatter above; the tables below are optional notes it does not read.
+
+## Character State
+
+| Character | Location | Physical State | Emotional State | Knowledge |
+|-----------|----------|----------------|-----------------|-----------|
+| *No state entries yet* | | | | |
+
+## Object State
+
+| Artifact | Owner | Location | Status |
+|----------|-------|----------|--------|
+| *No object state entries yet* | | | |
+
+## Knowledge State
+
+| Character | Knows | Learned In |
+|-----------|-------|------------|
+| *No knowledge entries yet* | | |
+`;
+}
+function questionIndex(storyId, questions) {
+  const rows = questions.length === 0 ? ["| *No questions yet* | | | |"] : questions.map((question) => `| ${cell2(question.title)} | ${cell2(question.status)} | ${cell2(question.introduced)} | [${question.id}](${question.id}.md) |`);
+  return `${stringifyFrontmatter({ type: "question-registry", story: storyId })}# Continuity Questions
+
+## Registry
+
+| Question | Status | Introduced | File |
+|----------|--------|------------|------|
+${rows.join(`
+`)}
+`;
+}
+function promiseIndex(storyId, promises) {
+  const rows = promises.length === 0 ? ["| *No promises yet* | | | |"] : promises.map((promise) => `| ${cell2(promise.title)} | ${cell2(promise.status)} | ${cell2(promise.planted)} | [${promise.id}](${promise.id}.md) |`);
+  return `${stringifyFrontmatter({ type: "promise-registry", story: storyId })}# Promises And Payoffs
+
+## Registry
+
+| Promise | Status | Planted | File |
+|---------|--------|---------|------|
+${rows.join(`
+`)}
+`;
+}
+function clueIndex(storyId, clues) {
+  const rows = clues.length === 0 ? ["| *No clues yet* | | | |"] : clues.map((clue) => `| ${cell2(clue.title)} | ${cell2(clue.status)} | ${cell2(clue.planted)} | [${clue.id}](${clue.id}.md) |`);
+  return `${stringifyFrontmatter({ type: "clue-registry", story: storyId })}# Clue Ledger
+
+## Registry
+
+| Clue | Status | Planted | File |
+|------|--------|---------|------|
+${rows.join(`
+`)}
+`;
+}
+function glossaryIndex(storyId, terms) {
+  const rows = terms.length === 0 ? ["| *No terms yet* | | |"] : terms.map((term) => `| ${cell2(term.term)} | ${cell2(term.category)} | [${term.id}](terms/${term.id}.md) |`);
+  return `${stringifyFrontmatter({ type: "glossary-registry", story: storyId })}# Glossary
+
+## Registry
+
+| Term | Category | File |
+|------|----------|------|
+${rows.join(`
+`)}
+`;
+}
+function matterIndex(storyId, pages) {
+  const rows = pages.length === 0 ? ["| *No matter pages yet* | | | |"] : pages.map((page) => `| ${cell2(page.title)} | ${cell2(page.placement)} | ${cell2(page.order)} | [${page.id}](${page.id}.md) |`);
+  return `${stringifyFrontmatter({ type: "matter-registry", story: storyId })}# Front And Back Matter
+
+## Registry
+
+| Title | Placement | Order | File |
+|-------|-----------|-------|------|
+${rows.join(`
+`)}
+`;
+}
+function researchIndex(storyId, notes) {
+  const rows = notes.length === 0 ? ["| *No research notes yet* | | | |"] : notes.map((note) => `| ${cell2(note.title)} | ${cell2(note.status)} | ${cell2(note.usedIn.join(", "))} | [${note.id}](${note.id}.md) |`);
+  return `${stringifyFrontmatter({ type: "research-registry", story: storyId })}# Research
+
+## Registry
+
+| Title | Status | Used In | File |
+|-------|--------|---------|------|
+${rows.join(`
+`)}
+`;
+}
+function styleSheet() {
+  return `${stringifyFrontmatter({
+    type: "style-sheet",
+    dialect: "unspecified",
+    preferred: [],
+    "watch-words": [],
+    "allow-words": []
+  })}# Style Sheet
+
+The book's house decisions, kept the way a copyeditor keeps them. Read this before drafting or revising prose. \`story prose\` enforces the lists in the frontmatter: \`dialect\` (british, american, or unspecified) flags the other dialect's common spellings, each \`preferred\` entry flags its \`avoid\` form, \`watch-words\` are counted in every chapter, and \`allow-words\` silences a built-in filter word or adverb. Add a \`samples\` list of your own prose (\`../book-one\`, approved chapters) and \`story prose\` compares each chapter with it instead of fixed limits.
+
+## Voice
+
+Narrative distance, sentence rhythm, register, and what this prose never does. Quote two or three sentences that sound exactly right.
+
+## Spelling And Usage
+
+Record one \`preferred\` entry per variant (\`use: grey\`, \`avoid: gray\`) and note usage rules here.
+
+## Capitalisation
+
+Titles, ranks, institutions, invented terms, and deities. Invented terms also belong in the glossary.
+
+## Hyphenation And Compounds
+
+## Numbers, Dates, And Time
+
+Spelled-out or numerals, and how in-world dates and times are written.
+
+## Dialogue And Punctuation
+
+Quote marks, dash style, ellipses, italics for thought or foreign words, and the default dialogue tags.
+
+## Character Voices
+
+One entry per POV character or major speaker: vocabulary, sentence length, verbal tics, and words they never use.
+
+## Watch List
+
+Why each \`watch-words\` entry is there.
+`;
+}
+function requireSingleLineName(name, kind) {
+  if (/[\r\n]/.test(name)) {
+    throw usageError(`A ${kind} name must be a single line`);
+  }
+}
+function buildEntity(project, kind, name, options) {
+  const requestedId = requestedEntityId(kind, options.id);
+  if (kind === "chapter") {
+    const number = options.number === undefined ? project.chapters.reduce((max, chapter) => Math.max(max, chapter.number), 0) + 1 : requirePositiveInteger(options.number, "chapter number");
+    const id = `chapter-${String(number).padStart(2, "0")}`;
+    return entityResult(project, kind, id, chapterFile(name, number, options, project.unit));
+  }
+  if (kind === "scene") {
+    if (options.chapter === undefined && project.chapters.length === 0) {
+      throw usageError("No chapters yet: add one with story add chapter before adding a scene");
+    }
+    const chapter = String(options.chapter ?? project.chapters.at(-1).id).trim();
+    requireKebabId(chapter, "chapter id");
+    if (!project.chapters.some((entry) => entry.id === chapter)) {
+      throw usageError(`chapter ${chapter} does not exist: add it with story add chapter, or pass --chapter with an existing chapter id`);
+    }
+    const scene = options.scene === undefined ? nextSceneNumber(project, chapter) : requirePositiveInteger(options.scene, "scene number");
+    const id = `${chapter}-scene-${String(scene).padStart(2, "0")}`;
+    return entityResult(project, kind, id, sceneFile(name, chapter, scene, options));
+  }
+  const id = requestedId ?? kebabCase(name);
+  if (!id) {
+    throw usageError(undeducibleIdMessage(kind, name));
+  }
+  switch (kind) {
+    case "character":
+      return entityResult(project, kind, id, characterFile(name, options));
+    case "location":
+      return entityResult(project, kind, id, locationFile(name, options));
+    case "system":
+      return entityResult(project, kind, id, systemFile(name, options));
+    case "faction":
+      return entityResult(project, kind, id, factionFile(name, options));
+    case "artifact":
+      return entityResult(project, kind, id, artifactFile(name, options));
+    case "arc":
+      return entityResult(project, kind, id, arcFile(name, options));
+    case "question":
+      return entityResult(project, kind, id, questionFile(name, options));
+    case "promise":
+      return entityResult(project, kind, id, promiseFile(name, options));
+    case "clue":
+      return entityResult(project, kind, id, clueFile(name, options));
+    case "term":
+      return entityResult(project, kind, id, termFile(name, options));
+    case "matter":
+      return entityResult(project, kind, id, matterFile(project, name, options));
+    case "research":
+      return entityResult(project, kind, id, researchFile(name, options));
+  }
+}
+function entityResult(project, kind, id, markdown) {
+  const config = entityConfig(kind);
+  return { id, markdown, file: path6.join(project.root, config.dir, `${id}.md`) };
+}
+function entityConfig(kind) {
+  const configs = {
+    character: { dir: "characters", titleField: "name" },
+    location: { dir: path6.join("worldbuilding", "locations"), titleField: "name" },
+    system: { dir: path6.join("worldbuilding", "systems"), titleField: "name" },
+    faction: { dir: path6.join("worldbuilding", "factions"), titleField: "name" },
+    artifact: { dir: path6.join("worldbuilding", "artifacts"), titleField: "name" },
+    arc: { dir: path6.join("plot", "arcs"), titleField: "name" },
+    chapter: { dir: "chapters", titleField: "title" },
+    scene: { dir: "scenes", titleField: "title" },
+    question: { dir: path6.join("continuity", "questions"), titleField: "title" },
+    promise: { dir: path6.join("continuity", "promises"), titleField: "title" },
+    clue: { dir: path6.join("continuity", "clues"), titleField: "title" },
+    term: { dir: path6.join("glossary", "terms"), titleField: "term" },
+    matter: { dir: MATTER_DIR, titleField: "title" },
+    research: { dir: RESEARCH_DIR, titleField: "title" }
+  };
+  return configs[kind];
+}
+var KIND_ALIASES = {
+  character: "character",
+  characters: "character",
+  location: "location",
+  locations: "location",
+  system: "system",
+  systems: "system",
+  faction: "faction",
+  factions: "faction",
+  artifact: "artifact",
+  artifacts: "artifact",
+  arc: "arc",
+  arcs: "arc",
+  chapter: "chapter",
+  chapters: "chapter",
+  scene: "scene",
+  scenes: "scene",
+  question: "question",
+  questions: "question",
+  promise: "promise",
+  promises: "promise",
+  clue: "clue",
+  clues: "clue",
+  term: "term",
+  terms: "term",
+  "glossary-term": "term",
+  "glossary-terms": "term",
+  glossary: "term",
+  matter: "matter",
+  research: "research",
+  "research-note": "research",
+  "research-notes": "research"
+};
+function normalizeKind(kind) {
+  const normalized = String(kind ?? "").trim().toLowerCase();
+  const expected = [...new Set(Object.values(KIND_ALIASES))].join(", ");
+  if (normalized === "") {
+    throw usageError(`An entity kind is required: expected one of ${expected}`);
+  }
+  if (!Object.hasOwn(KIND_ALIASES, normalized)) {
+    throw usageError(`Unsupported entity kind: ${kind}: expected one of ${expected}`);
+  }
+  return KIND_ALIASES[normalized];
+}
+var WINDOWS_RESERVED_ID = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/;
+function assertPortableFolderName(name) {
+  if (WINDOWS_RESERVED_ID.test(name.split(".")[0].trim().toLowerCase())) {
+    throw usageError(`Cannot use folder ${name}: Windows reserves that name. Choose another --dir`);
+  }
+  if (/[. ]$/.test(name)) {
+    throw usageError(`Cannot use folder "${name}": Windows does not allow a folder name ending in a dot or space. Choose another --dir`);
+  }
+  if (/[<>:"|?*\x00-\x1f]/.test(name)) {
+    throw usageError(`Cannot use folder "${name}": Windows does not allow < > : " | ? * or control characters in folder names. Choose another --dir`);
+  }
+}
+function assertPortableId(id, kind) {
+  if (WINDOWS_RESERVED_ID.test(id)) {
+    const file = kind === "story" ? id : `${id}.md`;
+    throw usageError(`Cannot use ${kind} id ${id}: Windows reserves the file name ${file}. Choose a longer name, such as "${id} ${kind}"`);
+  }
+}
+function requireKebabId(id, label) {
+  if (!isKebabId2(id)) {
+    throw usageError(`${label} must be a kebab-case id, got "${id}"`);
+  }
+}
+function requestedEntityId(kind, value) {
+  const id = String(value ?? "").trim();
+  if (id === "") {
+    return;
+  }
+  if (kind === "chapter" || kind === "scene") {
+    throw usageError(`--id does not apply to a ${kind}: a ${kind} id comes from its number. Use --number for a chapter, or --chapter and --scene for a scene`);
+  }
+  requireKebabId(id, `${kind} id`);
+  return id;
+}
+function undeducibleIdMessage(kind, name) {
+  return `Cannot derive a kebab-case id from ${kind} name "${name}": pass --id with a kebab-case id, or use a name containing ASCII letters or digits`;
+}
+function parseDecimalInteger(value) {
+  if (typeof value === "number") {
+    return Number.isSafeInteger(value) ? value : null;
+  }
+  const text = typeof value === "string" ? value.trim() : "";
+  if (!/^\d+$/.test(text)) {
+    return null;
+  }
+  const number = Number(text);
+  return Number.isSafeInteger(number) ? number : null;
+}
+function requireBookNumber(value) {
+  const text = typeof value === "string" ? value.trim() : typeof value === "number" ? String(value) : "";
+  const number = /^\d+(?:\.\d+)?$/.test(text) ? Number(text) : NaN;
+  if (!isBookNumber(number)) {
+    throw usageError(`Book number must be 0 or a positive number, such as 2, 0 for a prequel, or 1.5 for a novella; got ${value}`);
+  }
+  return number;
+}
+function requirePositiveInteger(value, label) {
+  const number = parseDecimalInteger(value);
+  if (number === null || number <= 0) {
+    throw usageError(`${label} must be a positive integer, got ${value}`);
+  }
+  return number;
+}
+function isKebabId2(value) {
+  const text = String(value ?? "").trim();
+  return text !== "" && text === kebabCase(text);
+}
+function characterFile(name, options) {
+  return `${stringifyFrontmatter({
+    name,
+    role: options.role ?? "supporting",
+    status: options.status ?? "alive",
+    aliases: [],
+    relationships: [],
+    locations: listOption(options, "locations", "location"),
+    tags: [],
+    arc: options.arc ?? ""
+  })}# ${name}
+
+## Appearance
+
+Add physical details that matter on the page.
+
+## Personality & Traits
+
+Add behavior, temperament, habits, and contradictions.
+
+## Backstory
+
+Add only story-relevant history.
+
+## Motivations & Goals
+
+External want, internal need, and the conflict between them.
+
+## Voice & Speech Patterns
+
+Add 2-3 example lines.
+
+## Character Arc
+
+- **Starting state:**
+- **Key turning points:**
+- **Ending state:**
+
+## Timeline
+
+| When | Event | Relevance |
+|------|-------|-----------|
+| | | |
+`;
+}
+function locationFile(name, options) {
+  return `${stringifyFrontmatter({
+    name,
+    type: options.type ?? "other",
+    region: options.region ?? "",
+    population: options.population ?? "",
+    "controlled-by": options["controlled-by"] ?? "",
+    "notable-characters": listOption(options, "characters", "character"),
+    tags: [],
+    status: options.status ?? "unknown"
+  })}# ${name}
+
+## Description
+
+Add sensory details and first impressions.
+
+## History
+
+Add relevant history.
+
+## Culture & Customs
+
+Add social norms, rituals, or local patterns.
+
+## Notable Features
+
+Add landmarks or practical story elements.
+
+## Current State
+
+Add what is true at the current story moment.
+`;
+}
+function systemFile(name, options) {
+  return `${stringifyFrontmatter({
+    name,
+    type: options.type ?? "other",
+    prevalence: options.prevalence ?? "uncommon"
+  })}# ${name}
+
+## Overview
+
+Summarize the system and why it matters.
+
+## Rules & Limitations
+
+Define costs, limits, and exceptions.
+
+## History
+
+Add origin and changes over time.
+
+## Practitioners
+
+Add users, institutions, or gatekeepers.
+
+## Impact on Society
+
+Add consequences for daily life and conflict.
+`;
+}
+function factionFile(name, options) {
+  return `${stringifyFrontmatter({
+    name,
+    type: options.type ?? "other",
+    status: options.status ?? "active",
+    members: listOption(options, "members", "member", "characters", "character"),
+    locations: listOption(options, "locations", "location"),
+    tags: []
+  })}# ${name}
+
+## Purpose
+
+What the faction wants and why it exists.
+
+## Power Base
+
+Resources, influence, territory, leverage, or rituals.
+
+## Members
+
+Important members and their roles.
+
+## Conflicts
+
+Internal and external pressures.
+`;
+}
+function artifactFile(name, options) {
+  return `${stringifyFrontmatter({
+    name,
+    type: options.type ?? "object",
+    status: options.status ?? "active",
+    owner: options.owner ?? "",
+    location: options.location ?? "",
+    tags: []
+  })}# ${name}
+
+## Description
+
+What it is and how readers recognize it.
+
+## Function
+
+What it can do, cannot do, costs, and constraints.
+
+## History
+
+Where it came from and why it matters.
+
+## Current State
+
+Who has it, where it is, and what changed recently.
+`;
+}
+function arcFile(name, options) {
+  return `${stringifyFrontmatter({
+    name,
+    type: options.type ?? "subplot",
+    status: options.status ?? "planned",
+    characters: listOption(options, "characters", "character"),
+    themes: listOption(options, "themes", "theme"),
+    acts: listOption(options, "acts", "act")
+  })}# ${name}
+
+## Setup
+
+Initial state and inciting pressure.
+
+## Rising Action
+
+1. First escalation
+2. Second escalation
+3. Reversal or complication
+
+## Climax
+
+Decision point or highest tension.
+
+## Resolution
+
+What changes because of this arc.
+
+## Plot Points
+
+| # | Plot Point | Act | Chapter | Status | Notes |
+|---|------------|-----|---------|--------|-------|
+| 1 | | | | planned | |
+
+## Foreshadowing
+
+| Planted | Payoff | Chapter Planted | Chapter Payoff | Status |
+|---------|--------|-----------------|----------------|--------|
+| | | | | planned |
+`;
+}
+function chapterFile(title, number, options, unit) {
+  const dateError = storyDateError(options.date);
+  if (dateError) {
+    throw usageError(dateError);
+  }
+  const timeError = storyTimeError(options.time);
+  if (timeError) {
+    throw usageError(timeError);
+  }
+  return `${stringifyFrontmatter({
+    title,
+    number,
+    pov: options.pov ?? "",
+    locations: listOption(options, "locations", "location"),
+    characters: castWithPov(options),
+    mentions: listOption(options, "mentions", "mention"),
+    "arcs-advanced": listOption(options, "arcs", "arc"),
+    status: options.status ?? "outline",
+    mode: options.mode ?? "",
+    date: options.date ?? "",
+    time: options.time ?? "",
+    ...options.hook === undefined ? {} : { hook: options.hook },
+    "word-count": 0,
+    ...unit.name === "characters" ? { "character-count": 0 } : {}
+  })}# ${chapterHeading(number, title)}
+
+## Outline
+
+1. Opening beat
+2. Escalation
+3. Turn or decision
+
+---
+
+## Chapter Text
+
+`;
+}
+function sceneFile(title, chapter, scene, options) {
+  const dateError = storyDateError(options.date);
+  if (dateError) {
+    throw usageError(dateError);
+  }
+  const timeError = storyTimeError(options.time);
+  if (timeError) {
+    throw usageError(timeError);
+  }
+  const travelHoursOption = options["travel-hours"];
+  let travelHours;
+  if (travelHoursOption !== undefined && travelHoursOption !== "") {
+    travelHours = Number(travelHoursOption);
+    if (!Number.isFinite(travelHours)) {
+      throw usageError(`travel-hours must be a number, got ${travelHoursOption}`);
+    }
+    if (travelHours < 0) {
+      throw usageError(`travel-hours must be zero or positive, got ${travelHoursOption}`);
+    }
+  }
+  const frontmatter = {
+    title,
+    chapter,
+    scene,
+    pov: options.pov ?? "",
+    location: options.location ?? "",
+    characters: castWithPov(options),
+    mentions: listOption(options, "mentions", "mention"),
+    "arcs-advanced": listOption(options, "arcs", "arc"),
+    status: options.status ?? "outline",
+    date: options.date ?? "",
+    time: options.time ?? "",
+    sequel: options.sequel ?? false,
+    ...options.outcome === undefined ? {} : { outcome: options.outcome },
+    dilemma: options.dilemma ?? "",
+    "state-changes": []
+  };
+  if (travelHours !== undefined) {
+    frontmatter["travel-hours"] = travelHours;
+  }
+  return `${stringifyFrontmatter(frontmatter)}# ${title}
+
+## Purpose
+
+What this scene changes.
+
+## Continuity Notes
+
+Character state, object state, knowledge changes, and timeline facts.
+`;
+}
+function castWithPov(options) {
+  const characters = listOption(options, "characters", "character");
+  const pov = String(options.pov ?? "").trim();
+  return pov === "" || characters.includes(pov) ? characters : [pov, ...characters];
+}
+function questionFile(title, options) {
+  const resolved = String(options.resolved ?? "").trim();
+  if (resolved !== "" && options.status === "open") {
+    throw usageError("A question with --resolved cannot have status open: use --status answered or resolved");
+  }
+  return `${stringifyFrontmatter({
+    title,
+    status: options.status ?? (resolved === "" ? "open" : "answered"),
+    introduced: options.introduced ?? "",
+    resolved: options.resolved ?? "",
+    characters: listOption(options, "characters", "character")
+  })}# ${title}
+
+## Question
+
+What the reader or continuity tracker needs answered.
+
+## Evidence
+
+Known clues, constraints, and contradictions.
+
+## Resolution Plan
+
+How and when this should resolve.
+`;
+}
+function promiseFile(title, options) {
+  return `${stringifyFrontmatter({
+    title,
+    status: options.status ?? plantedDefaultStatus(options),
+    planted: options.planted ?? "",
+    payoff: options.payoff ?? "",
+    arcs: listOption(options, "arcs", "arc"),
+    characters: listOption(options, "characters", "character")
+  })}# ${title}
+
+## Setup
+
+What is promised to the reader.
+
+## Payoff
+
+How the story should answer the setup.
+
+## Tracking Notes
+
+Keep planted and payoff chapters current.
+`;
+}
+function plantedDefaultStatus(options) {
+  return String(options.planted ?? "").trim() !== "" ? "planted" : "planned";
+}
+function clueFile(title, options) {
+  return `${stringifyFrontmatter({
+    title,
+    status: options.status ?? plantedDefaultStatus(options),
+    planted: options.planted ?? "",
+    payoff: options.payoff ?? "",
+    "significance-delayed": options["significance-delayed"] ?? false,
+    ...options["red-herring"] ? { "red-herring": true } : {},
+    characters: listOption(options, "characters", "character"),
+    arcs: listOption(options, "arcs", "arc")
+  })}# ${title}
+
+## Clue
+
+What the reader sees and why it matters.
+
+## Planting Plan
+
+How and when to plant it.
+
+## Payoff Plan
+
+How the payoff lands.
+
+## Tracking Notes
+
+Keep planted and payoff chapters current.
+`;
+}
+function termFile(term, options) {
+  return `${stringifyFrontmatter({
+    term,
+    category: options.category ?? "term",
+    aliases: listOption(options, "aliases", "alias")
+  })}# ${term}
+
+## Definition
+
+Define the term in story context.
+
+## Usage Notes
+
+How agents should use this term consistently.
+`;
+}
+function researchFile(title, options) {
+  return `${stringifyFrontmatter({
+    title,
+    status: options.status ?? "open",
+    sources: [...new Set(asArray(options.sources).concat(asArray(options.source)).map((source) => String(source).trim()).filter(Boolean))],
+    "used-in": listOption(options, "used-in"),
+    ...researchOptionalFields(options)
+  })}# ${title}
+
+## Question
+
+What the story needs to get right.
+
+## Findings
+
+The facts, with the source for each.
+
+## Story Use
+
+How the chapters use these facts, and what was changed on purpose.
+`;
+}
+function researchOptionalFields(options) {
+  const fields = {};
+  for (const key of ["accuracy", "confidence", "method"]) {
+    if (options[key] !== undefined) {
+      fields[key] = String(options[key]);
+    }
+  }
+  const risks = listOption(options, "risk");
+  for (const risk of risks) {
+    if (!RESEARCH_RISKS.has(risk)) {
+      throw usageError(`Unsupported risk "${risk}": expected one of ${[...RESEARCH_RISKS].join(", ")}`);
+    }
+  }
+  if (risks.length > 0) {
+    fields.risk = risks;
+  }
+  return fields;
+}
+function matterFile(project, title, options) {
+  const placement = String(options.placement ?? "front");
+  let order;
+  if (options.order === undefined) {
+    order = project.matter.filter((matter) => matter.placement === placement).reduce((max, matter) => Math.max(max, matter.order), 0) + 1;
+  } else {
+    order = parseDecimalInteger(options.order);
+    if (order === null) {
+      throw usageError(`matter order must be a non-negative integer, got ${options.order}`);
+    }
+  }
+  const heading = options.heading === undefined ? true : isTruthy(options.heading);
+  return `${stringifyFrontmatter({ title, placement, order, heading })}# ${title}
+
+`;
+}
+function nextSceneNumber(project, chapter) {
+  return project.scenes.filter((scene) => scene.chapter === chapter).reduce((max, scene) => Math.max(max, scene.scene), 0) + 1;
+}
+var LINK_DEFINITION_PATTERN = /^( {0,3}\[)([^\]\n]+)\]:[ \t]*(<[^>\n]*>|[^\s]+)/gm;
+var REGISTRY_HINT = " (it is a registry: run story reindex to rebuild it)";
+var SKIPPED_SCAN_DIRECTORIES = new Set(["dist", "node_modules"]);
+function markdownFiles(root, { maxFiles = MAX_SCAN_FILES } = {}, depth = 0, collected = null) {
+  const files = collected ?? [];
+  for (const entry of fs3.readdirSync(root, { withFileTypes: true })) {
+    const fullPath = path6.join(root, entry.name);
+    if (entry.isDirectory() && !SKIPPED_SCAN_DIRECTORIES.has(entry.name) && !entry.name.startsWith(".")) {
+      if (depth < MAX_SCAN_DEPTH && !fs3.existsSync(path6.join(fullPath, "story.md"))) {
+        markdownFiles(fullPath, { maxFiles }, depth + 1, files);
+      }
+    } else if (entry.isFile() && entry.name.endsWith(".md") && !entry.name.startsWith(".")) {
+      files.push(fullPath);
+      if (files.length > maxFiles) {
+        throw projectError(`Too many markdown files in the project: the scan exceeds the ${MAX_SCAN_FILES} file limit`);
+      }
+    }
+  }
+  if (depth === 0) {
+    files.sort();
+  }
+  return files;
+}
+function chapterChoices(chapter, label) {
+  const choices = [];
+  const problems = [];
+  if (chapter.choices === undefined) {
+    return { choices, problems };
+  }
+  if (!Array.isArray(chapter.choices)) {
+    problems.push(err("field-not-list", `${label} frontmatter field choices must be a list of { text, to } entries`, label));
+    return { choices, problems };
+  }
+  chapter.choices.forEach((choice, index) => {
+    const at = `${label} choices[${index}]`;
+    if (!choice || typeof choice !== "object" || Array.isArray(choice)) {
+      problems.push(err("invalid-choice", `${at} must have text and to, such as { text: Follow the light, to: chapter-02 }`, label));
+      return;
+    }
+    const text = typeof choice.text === "string" ? choice.text.trim() : "";
+    const to = typeof choice.to === "string" ? choice.to : "";
+    const before = problems.length;
+    if (text === "") {
+      problems.push(err("invalid-choice", `${at} needs text: the words the reader picks, quoted if they look like a number`, label));
+    } else if (TWEE_LINK_UNSAFE.test(text)) {
+      problems.push(err("invalid-choice", `${at} text cannot contain [, ], |, ->, <-, or a line break, or end in <, which Twine reads as link syntax`, label));
+    }
+    if (to.trim() === "") {
+      problems.push(err("invalid-choice", `${at} needs to: the id of the chapter it leads to, such as chapter-02`, label));
+    } else if (to !== kebabCase(to)) {
+      problems.push(err("id-not-kebab", `${at} to ${to} must be a kebab-case chapter id`, label));
+    }
+    if (problems.length === before) {
+      choices.push({ text, to, index });
+    }
+  });
+  return { choices, problems };
+}
+function branchGraph(project) {
+  const ids = new Set(project.chapters.map((chapter) => chapter.id));
+  const parsed = project.chapters.map((chapter) => {
+    const label = relative2(project, chapter.file);
+    return { chapter, label, ...chapterChoices(chapter, label) };
+  });
+  const branching = parsed.some((entry) => entry.choices.length > 0);
+  const problems = parsed.flatMap((entry) => entry.problems);
+  const missing = [];
+  const warnings = [];
+  const passages = parsed.map((entry, position) => {
+    if (!branching) {
+      const next = project.chapters[position + 1];
+      return { chapter: entry.chapter, links: next ? [{ text: "Continue", to: next.id }] : [] };
+    }
+    for (const choice of entry.choices) {
+      if (!ids.has(choice.to)) {
+        missing.push({ to: choice.to, finding: err("missing-reference", `${entry.label} choices[${choice.index}] references missing chapter ${choice.to}`, entry.label) });
+      }
+    }
+    return { chapter: entry.chapter, links: entry.choices.filter((choice) => ids.has(choice.to)).map(({ text, to }) => ({ text, to })) };
+  });
+  if (branching) {
+    const byId = new Map(passages.map((passage) => [passage.chapter.id, passage]));
+    const start = passages[0].chapter.id;
+    const reached = new Set([start]);
+    const queue = [start];
+    while (queue.length > 0) {
+      for (const link of byId.get(queue.shift()).links) {
+        if (!reached.has(link.to)) {
+          reached.add(link.to);
+          queue.push(link.to);
+        }
+      }
+    }
+    for (const passage of passages) {
+      if (!reached.has(passage.chapter.id)) {
+        warnings.push(warn("unreachable-chapter", `${relative2(project, passage.chapter.file)} cannot be reached: no choice path from ${start} leads to it`, relative2(project, passage.chapter.file)));
+      }
+    }
+  }
+  return { branching, passages, problems, missing, warnings };
+}
+var MAX_SCAN_FILE_BYTES = 5 * 1024 * 1024;
+var MAX_SCAN_FILES = 5000;
+var MAX_SCAN_DEPTH = 10;
+var MAX_COVER_BYTES = 50 * 1024 * 1024;
+function assertFileSizeWithinLimit(filePath, limit = MAX_SCAN_FILE_BYTES) {
+  const size = fs3.statSync(filePath).size;
+  if (size > limit) {
+    throw projectError("Refusing to read oversized file " + filePath + ": " + size + " bytes exceeds the " + limit + " byte limit");
+  }
+}
+function readEntityFiles(root, relativeDir, mapEntity, scanErrors) {
+  const directory = path6.join(root, relativeDir);
+  if (!fs3.existsSync(directory)) {
+    return [];
+  }
+  assertSafeProjectDirectory(directory, root);
+  const entities = [];
+  const files = fs3.readdirSync(directory, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".md") && !entry.name.startsWith(".") && entry.name !== "_index.md").map((entry) => entry.name).sort();
+  if (files.length > MAX_SCAN_FILES) {
+    throw projectError("Too many files in " + relativeDir + ": " + files.length + " exceeds the " + MAX_SCAN_FILES + " file limit");
+  }
+  for (const file of files) {
+    const fullPath = path6.join(directory, file);
+    const label = path6.join(relativeDir, file);
+    try {
+      const markdown = readMarkdown(fullPath, root);
+      const entity = mapEntity(path6.basename(file, ".md"), fullPath, markdown.data, markdown);
+      Object.defineProperty(entity, "frontmatter", { value: markdown.data, enumerable: false });
+      entities.push(entity);
+    } catch (error) {
+      const message = error.message.startsWith(`${fullPath} `) ? error.message.slice(fullPath.length + 1) : error.message;
+      scanErrors.push(err("unreadable-file", `${label}: ${message}`, label));
+    }
+  }
+  return entities;
+}
+function hasPostHocNotes(body) {
+  const chapterText = /^## Chapter Text\s*$/im.exec(body);
+  return chapterText !== null && /^## Chapter Notes \(post-hoc\)\s*$/m.test(body.slice(0, chapterText.index));
+}
+function parentProjectHint(projectRoot) {
+  let current = path6.dirname(projectRoot);
+  while (!fs3.existsSync(path6.join(current, "story.md"))) {
+    if (path6.dirname(current) === current) {
+      return "";
+    }
+    current = path6.dirname(current);
+  }
+  const relative = path6.relative(process.cwd(), current) || ".";
+  const shown = relative.length < current.length ? relative : current;
+  return ` (the project root looks like ${shown}; pass that path instead)`;
+}
+function requireStoryFile(projectRoot) {
+  const storyPath = path6.join(projectRoot, "story.md");
+  if (!fs3.existsSync(storyPath)) {
+    if (fs3.statSync(projectRoot, { throwIfNoEntry: false })?.isFile()) {
+      throw projectError(`${projectRoot} is a file; pass the folder that contains it`);
+    }
+    const hint = path6.basename(projectRoot).startsWith("-") ? `; ${path6.basename(projectRoot)} is not an option (run story help)` : parentProjectHint(projectRoot);
+    throw projectError(`${projectRoot} is not a story project: missing story.md${hint}`);
+  }
+  return storyPath;
+}
+function readExemptions(root, scanErrors) {
+  const exemptionsPath = path6.join(root, "continuity", "exemptions.md");
+  if (!lstatIfExists(exemptionsPath)) {
+    return [];
+  }
+  let raw;
+  try {
+    raw = readTextFile(exemptionsPath);
+  } catch (error) {
+    scanErrors.push(err("unreadable-file", `${path6.join("continuity", "exemptions.md")}: ${relativePathError(error, exemptionsPath, root).message}`, path6.join("continuity", "exemptions.md")));
+    return [];
+  }
+  let data;
+  try {
+    data = parseFrontmatter(raw, exemptionsPath).data;
+  } catch {
+    return [];
+  }
+  return parseExemptions(data.exemptions);
+}
+function readOptionalRootFile(root, name, scanErrors) {
+  const filePath = path6.join(root, name);
+  if (!lstatIfExists(filePath)) {
+    return null;
+  }
+  try {
+    const markdown = readMarkdown(filePath, root);
+    return { file: filePath, data: markdown.data, rawMarkdown: markdown.rawMarkdown };
+  } catch (error) {
+    scanErrors.push(err("unreadable-file", `${name}: ${error.message}`, name));
+    return null;
+  }
+}
+function readStyleSheet(root, scanErrors) {
+  const filePath = path6.join(root, STYLE_SHEET_FILE);
+  if (!lstatIfExists(filePath)) {
+    return null;
+  }
+  try {
+    const markdown = readMarkdown(filePath, root);
+    return { file: filePath, data: markdown.data, body: markdown.body };
+  } catch (error) {
+    scanErrors.push(err("unreadable-file", `${STYLE_SHEET_FILE}: ${error.message}`, STYLE_SHEET_FILE));
+    return null;
+  }
+}
+function readMarkdown(filePath, root) {
+  let rawMarkdown;
+  try {
+    if (root) {
+      assertSafeProjectPath(filePath, root);
+    }
+    rawMarkdown = readTextFile(filePath);
+  } catch (error) {
+    throw root ? relativePathError(error, filePath, root) : error;
+  }
+  try {
+    return { ...parseFrontmatter(rawMarkdown, filePath), rawMarkdown };
+  } catch (error) {
+    throw projectError(error.message.startsWith(`${filePath} `) ? error.message.slice(filePath.length + 1) : error.message);
+  }
+}
+function relativePathError(error, filePath, root) {
+  const relativePath = path6.relative(root, filePath);
+  return projectError(error.message.split(filePath).join(relativePath).split(path6.resolve(root, relativePath)).join(relativePath));
+}
+function safeRead(filePath, root) {
+  if (!fs3.existsSync(filePath)) {
+    return "";
+  }
+  if (root) {
+    assertSafeProjectPath(filePath, root);
+  }
+  return readTextFile(filePath);
+}
+var ENTITY_SCAN_DIRS = [
+  "characters",
+  "chapters",
+  "scenes",
+  path6.join("worldbuilding", "locations"),
+  path6.join("worldbuilding", "systems"),
+  path6.join("worldbuilding", "factions"),
+  path6.join("worldbuilding", "artifacts"),
+  path6.join("plot", "arcs"),
+  path6.join("continuity", "questions"),
+  path6.join("continuity", "promises"),
+  path6.join("continuity", "clues"),
+  path6.join("glossary", "terms"),
+  MATTER_DIR,
+  RESEARCH_DIR
+];
+function fileStem(storyId) {
+  if (storyId.length <= 100) {
+    return storyId;
+  }
+  const cut = storyId.slice(0, 100);
+  return cut.slice(0, cut.lastIndexOf("-") > 0 ? cut.lastIndexOf("-") : 100);
+}
+var SOURCE_ROOT_FILES = new Set(["story.md", STYLE_SHEET_FILE, PROGRESS_FILE]);
+var SOURCE_DIRECTORIES = ["characters", "chapters", "scenes", "worldbuilding", "plot", "continuity", "glossary", MATTER_DIR, RESEARCH_DIR];
+function scanId(value) {
+  return typeof value === "number" || typeof value === "boolean" ? String(value) : value ?? "";
+}
+function asIdArray(value) {
+  return asArray(value).map((item) => typeof item === "number" || typeof item === "boolean" ? String(item) : item);
+}
+function asArray(value) {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  if (value === undefined || value === null || value === "") {
+    return [];
+  }
+  return [value];
+}
+function listOption(options, ...names) {
+  const list = [];
+  for (const name of names) {
+    for (const value of normalizeList(options[name], [])) {
+      if (!list.includes(value)) {
+        list.push(value);
+      }
+    }
+  }
+  return list;
+}
+function normalizeList(value, fallback) {
+  const values = value === undefined || value === true ? [] : Array.isArray(value) ? value : [value];
+  const list = [];
+  for (const valueItem of values) {
+    for (const part of String(valueItem).split(",")) {
+      const trimmed = part.trim();
+      if (trimmed) {
+        list.push(trimmed);
+      }
+    }
+  }
+  return list.length > 0 ? list : fallback;
+}
+function coverIsReady(project) {
+  if (project.story.data.cover === undefined) {
+    return false;
+  }
+  try {
+    coverImage(project);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function coverImage(project) {
+  const cover = String(project.story.data.cover).trim();
+  const mediaType = COVER_MEDIA_TYPES[path6.extname(cover).toLowerCase()];
+  if (mediaType === undefined) {
+    throw projectError(`story.md cover ${cover} must be a ${Object.keys(COVER_MEDIA_TYPES).join(", ")} image`);
+  }
+  const filePath = path6.resolve(project.root, cover);
+  if (!isPathInside(project.root, filePath)) {
+    throw projectError(`story.md cover ${cover} must be inside the project`);
+  }
+  const stats = lstatIfExists(filePath);
+  if (!stats) {
+    throw projectError(`story.md cover ${cover} does not exist`);
+  }
+  assertSafeProjectPath(filePath, project.root);
+  if (!stats.isFile()) {
+    throw projectError(`story.md cover ${cover} is not a file`);
+  }
+  assertFileSizeWithinLimit(filePath, MAX_COVER_BYTES);
+  return { filePath, mediaType, extension: mediaType === "image/jpeg" ? "jpg" : path6.extname(cover).slice(1).toLowerCase() };
+}
+var CHAPTER_FILENAME_PATTERN = /^chapter-(\d+)\.md$/;
+var SCENE_FILENAME_PATTERN = /^(.+)-scene-(\d+)\.md$/;
+function isPositiveIntegerValue(value) {
+  const number = Number(value);
+  return value !== "" && value !== null && typeof value !== "boolean" && Number.isInteger(number) && number > 0;
+}
+function chapterNumber(value, file) {
+  return value !== undefined && isPositiveIntegerValue(value) ? Number(value) : chapterNumberFromFile(file);
+}
+function chapterNumberFromFile(file) {
+  const match = CHAPTER_FILENAME_PATTERN.exec(path6.basename(file));
+  return match ? Number.parseInt(match[1], 10) : 0;
+}
+function sceneNumberFromFile(file) {
+  const match = SCENE_FILENAME_PATTERN.exec(path6.basename(file));
+  return match ? Number.parseInt(match[2], 10) : 0;
+}
+function sceneChapterFromFile(file) {
+  const match = SCENE_FILENAME_PATTERN.exec(path6.basename(file));
+  return match ? match[1] : "";
+}
+function relative2(project, file) {
+  return path6.relative(project.root, file);
+}
+
 // src/chronology.js
 function chapterChronology(project) {
   const numbers = new Map(project.chapters.map((chapter) => [chapter.id, chapter.number]));
@@ -9798,7 +11847,86 @@ function chapterChronology(project) {
     days.set(id, value);
   }
   const outline = new Set(project.chapters.filter((chapter) => chapter.status === "outline").map((chapter) => chapter.id));
-  return { ...chronologyFrom(numbers, days), outline };
+  const linear = { ...chronologyFrom(numbers, days), outline };
+  const graph = project.chapters.length > 0 ? branchGraph(project) : null;
+  if (!graph || !graph.branching) {
+    return linear;
+  }
+  return { ...pathChronology(linear, graph.passages), outline, linear };
+}
+function pathChronology(linear, passages) {
+  const { numbers, days } = linear;
+  const links = new Map(passages.map((passage) => [passage.chapter.id, passage.links.map((link) => link.to)]));
+  const downstream = new Map;
+  const reach = (from, avoid = "") => {
+    const seen = new Set;
+    const queue = [...links.get(from) ?? []];
+    while (queue.length > 0) {
+      const id = queue.shift();
+      if (seen.has(id) || id === avoid) {
+        continue;
+      }
+      seen.add(id);
+      queue.push(...links.get(id) ?? []);
+    }
+    return seen;
+  };
+  const reaches = (from, to) => {
+    if (!downstream.has(from)) {
+      downstream.set(from, reach(from));
+    }
+    return downstream.get(from).has(to);
+  };
+  const start = passages[0].chapter.id;
+  const onPath = new Set([start, ...reach(start)]);
+  const placed = (id) => onPath.has(id);
+  const pathOrder = (later, earlier) => {
+    const forward = reaches(earlier, later);
+    const back = reaches(later, earlier);
+    if (forward && back) {
+      return null;
+    }
+    return forward ? 1 : back ? -1 : 0;
+  };
+  const after = (later, earlier) => {
+    if (later === earlier) {
+      return false;
+    }
+    if (!placed(later) || !placed(earlier)) {
+      return linear.after(later, earlier);
+    }
+    const order = pathOrder(later, earlier);
+    if (order === 0) {
+      return false;
+    }
+    const laterDays = days.get(later);
+    const earlierDays = days.get(earlier);
+    if (laterDays !== undefined && earlierDays !== undefined && laterDays !== earlierDays) {
+      return laterDays > earlierDays;
+    }
+    return order === null ? numbers.get(later) > numbers.get(earlier) : order === 1;
+  };
+  const readAfter = (later, earlier) => {
+    if (later === earlier) {
+      return false;
+    }
+    if (!placed(later) || !placed(earlier)) {
+      return numbers.get(later) > numbers.get(earlier);
+    }
+    const order = pathOrder(later, earlier);
+    return order === null ? numbers.get(later) > numbers.get(earlier) : order === 1;
+  };
+  return {
+    numbers,
+    days,
+    branching: true,
+    after,
+    atOrBefore: (earlier, later) => earlier === later || after(later, earlier),
+    readBy: (earlier, later) => numbers.has(earlier) && numbers.has(later) && (earlier === later || readAfter(later, earlier)),
+    readAfter: (later, earlier) => numbers.has(later) && numbers.has(earlier) && readAfter(later, earlier),
+    placed,
+    reachesAvoiding: (from, to, avoid) => reach(from, avoid).has(to)
+  };
 }
 function chronologyFrom(numbers, days) {
   const after = (later, earlier) => {
@@ -9809,16 +11937,23 @@ function chronologyFrom(numbers, days) {
     }
     return numbers.get(later) > numbers.get(earlier);
   };
-  return { numbers, days, after };
+  return {
+    numbers,
+    days,
+    branching: false,
+    after,
+    atOrBefore: (earlier, later) => !after(earlier, later),
+    readBy: (earlier, later) => numbers.has(earlier) && numbers.has(later) && numbers.get(earlier) <= numbers.get(later)
+  };
 }
 function knowledgeAudience(chronology, learnedIn, atChapterId) {
   if (learnedIn === "") {
     return "reader";
   }
-  if (!chronology.numbers.has(learnedIn) || chronology.after(learnedIn, atChapterId)) {
+  if (!chronology.numbers.has(learnedIn) || !chronology.atOrBefore(learnedIn, atChapterId)) {
     return null;
   }
-  return chronology.numbers.get(learnedIn) <= chronology.numbers.get(atChapterId) ? "reader" : "character";
+  return chronology.readBy(learnedIn, atChapterId) ? "reader" : "character";
 }
 function formatKnowledgeMark(learnedIn, audience, { atChapterId = "", scene = "" } = {}) {
   if (audience === "character") {
@@ -9859,13 +11994,19 @@ function deathWindow(character, chronology, options = {}) {
       if (!chronology.numbers.has(chapterId) || !chronology.after(chapterId, died)) {
         return false;
       }
-      return revived === "" || chronology.after(revived, chapterId);
+      if (!chronology.branching || revived === "" || ![chapterId, died, revived].every(chronology.placed)) {
+        return revived === "" || chronology.after(revived, chapterId);
+      }
+      if (chapterId === revived) {
+        return false;
+      }
+      return !chronology.after(chapterId, revived) || chronology.reachesAvoiding(died, chapterId, revived);
     }
   };
 }
 
 // src/context.js
-import path6 from "node:path";
+import path7 from "node:path";
 var DEFAULT_CONTEXT_BUDGET = 6000;
 var DEFAULT_CONTEXT_SCENES = 5;
 var SPACED_SIXTHS = 8;
@@ -10009,8 +12150,10 @@ function entityStateAtTarget(frontmatter, chronology, chapterId) {
   const targetNumber = chronology.numbers.get(chapterId);
   const readBy = (from) => {
     const id = idText(from);
-    const number = chronology.numbers.has(id) ? chronology.numbers.get(id) : Number(/^chapter-(\d+)$/.exec(id)?.[1]);
-    return number <= targetNumber;
+    if (chronology.numbers.has(id)) {
+      return chronology.readBy(id, chapterId);
+    }
+    return Number(/^chapter-(\d+)$/.exec(id)?.[1]) <= targetNumber;
   };
   const data = frontmatter ?? {};
   const progressions = asList(data.progressions).filter((entry) => isMapping(entry) && readBy(entry.from));
@@ -10029,7 +12172,7 @@ function statusAt(character, state, changes, chronology, chapterId) {
   if (died === chapterId) {
     return "dies in this chapter";
   }
-  const readBy = (id) => chronology.numbers.has(id) && chronology.numbers.get(id) <= chronology.numbers.get(chapterId);
+  const readBy = (id) => chronology.readBy(id, chapterId);
   const deadIn = (revivedIn) => {
     const window = deathWindow({ ...character, revivedIn }, chronology);
     return window !== null && window.deadIn(chapterId);
@@ -10056,14 +12199,14 @@ function buildContext(project, targetId, readBody, options = {}) {
   const target = resolveTarget(project, targetId);
   const chronology = chapterChronology(project);
   const targetNumber = target.chapter.number;
-  const upToTarget = (chapterId) => chronology.numbers.has(chapterId) && chronology.numbers.get(chapterId) <= targetNumber;
+  const upToTarget = (chapterId) => chronology.readBy(chapterId, target.chapter.id);
   const characters = new Map(project.characters.map((character) => [character.id, character]));
   const nameOf = (id) => characters.has(id) ? `${characters.get(id).name} (${id})` : id;
   const unit = target.scene ?? target.chapter;
   const pov = idText(unit.pov) || idText(target.chapter.pov);
   const cast = [...new Set([pov, ...unit.characters.map(idText)].filter(Boolean))];
-  const relative = (file) => path6.relative(project.root, file);
-  const statePath = path6.join("continuity", "state.md");
+  const relative = (file) => path7.relative(project.root, file);
+  const statePath = path7.join("continuity", "state.md");
   const sections = [];
   const chapterBody = readBody(target.chapter.file);
   const chapterScenes = project.scenes.filter((scene) => scene.chapter === target.chapter.id);
@@ -10629,154 +12772,6 @@ function cssString(value) {
   return String(value).replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/</g, "\\3C ").replace(/>/g, "\\3E ").replace(/&/g, "\\26 ").replace(/[\r\n]+/g, " ");
 }
 
-// src/progress.js
-var PROGRESS_FILE = "progress.md";
-var PACE_SESSIONS = 7;
-var PROJECTION_HORIZON_DAYS = 100 * 366;
-function withSession(sessions, date, counts) {
-  let found = false;
-  const kept = (Array.isArray(sessions) ? sessions : []).map((session) => {
-    if (!found && session && typeof session === "object" && sessionDate(session) === date) {
-      found = true;
-      return { ...session, ...counts };
-    }
-    return session;
-  });
-  if (!found) {
-    kept.push({ date, ...counts });
-  }
-  return kept.sort((left, right) => sessionDate(left).localeCompare(sessionDate(right), "en"));
-}
-function sessionDate(session) {
-  return String(session?.date ?? "").trim();
-}
-function cleanSessions(value) {
-  const sessions = [];
-  const count = (number) => Number.isInteger(number) && number >= 0;
-  for (const entry of Array.isArray(value) ? value : []) {
-    if (entry && typeof entry === "object" && parseClockDate(sessionDate(entry)) && count(entry.words)) {
-      sessions.push({ date: sessionDate(entry), words: entry.words, characters: count(entry.characters) ? entry.characters : null });
-    }
-  }
-  return sessions.sort((left, right) => left.date.localeCompare(right.date, "en"));
-}
-function computeProgress({ unit = "words", words, characters = null, target, deadline, today, chapters, sessions }) {
-  const characterBook = unit === "characters";
-  const inUnit = (entry) => characterBook ? entry.characters ?? null : entry.words;
-  const length = characterBook ? characters : words;
-  const measured = (Array.isArray(sessions) ? sessions : []).filter((session) => inUnit(session) !== null);
-  const todayDays = parseClockDate(today).days;
-  const result = {
-    unit,
-    words,
-    characterCount: characterBook ? characters : null,
-    target: target ?? null,
-    percent: target ? length * 100 / target : null,
-    remaining: target ? Math.max(0, target - length) : null,
-    deadline: null,
-    chapters: chapters.filter((chapter) => chapter.target > 0).map((chapter) => ({
-      id: chapter.id,
-      words: chapter.words,
-      characterCount: characterBook ? chapter.characters : null,
-      target: chapter.target,
-      percent: inUnit(chapter) * 100 / chapter.target
-    })),
-    sessions: measured.length,
-    lastSession: null,
-    pace: null,
-    projected: null
-  };
-  const deadlineDate = deadline ? parseClockDate(deadline) : undefined;
-  if (deadlineDate) {
-    const daysLeft = deadlineDate.days - todayDays;
-    result.deadline = {
-      date: deadlineDate.text,
-      daysLeft,
-      perDay: result.remaining !== null && daysLeft >= 0 ? Math.ceil(result.remaining / Math.max(daysLeft, 1)) : null
-    };
-  }
-  if (measured.length > 0) {
-    const last = measured[measured.length - 1];
-    result.lastSession = { date: last.date, words: last.words, characterCount: characterBook ? last.characters : null, since: length - inUnit(last) };
-    const recent = measured.slice(-PACE_SESSIONS);
-    const span = parseClockDate(recent[recent.length - 1].date).days - parseClockDate(recent[0].date).days;
-    if (recent.length > 1 && span > 0) {
-      result.pace = (inUnit(recent[recent.length - 1]) - inUnit(recent[0])) / span;
-      const daysNeeded = Math.ceil(result.remaining / result.pace);
-      if (result.remaining > 0 && Math.round(result.pace) > 0 && daysNeeded <= PROJECTION_HORIZON_DAYS) {
-        result.projected = formatDate(todayDays + daysNeeded);
-      }
-    }
-  }
-  return result;
-}
-function formatProgress(progress) {
-  const characters = progress.unit === "characters";
-  const noun = characters ? "character" : "word";
-  const count = (entry) => characters ? entry.characterCount : entry.words;
-  const lines = [];
-  if (progress.target === null) {
-    lines.push(`Progress: ${formatNumber2(count(progress))} ${noun}s (no target-${noun}s in story.md)`);
-  } else {
-    lines.push(`Progress: ${formatNumber2(count(progress))} of ${formatNumber2(progress.target)} ${noun}s (${formatPercent(progress.percent, 1)}%)`);
-    lines.push(`Remaining: ${plural2(progress.remaining, noun, formatNumber2)}`);
-  }
-  if (progress.deadline) {
-    const { date, daysLeft, perDay } = progress.deadline;
-    if (daysLeft < 0) {
-      lines.push(`Deadline: ${date} passed ${plural2(-daysLeft, "day")} ago`);
-    } else if (perDay === null) {
-      lines.push(`Deadline: ${date} (${daysLeft === 0 ? "today" : `${plural2(daysLeft, "day")} left`})`);
-    } else if (daysLeft === 0) {
-      lines.push(`Deadline: ${date} (today): ${plural2(perDay, noun, formatNumber2)} needed`);
-    } else {
-      lines.push(`Deadline: ${date} (${plural2(daysLeft, "day")} left): ${formatNumber2(perDay)} ${noun}s a day needed`);
-    }
-  }
-  if (progress.lastSession) {
-    const { date, since } = progress.lastSession;
-    lines.push(`Sessions: ${progress.sessions} logged; last ${date} (${since >= 0 ? "+" : ""}${formatNumber2(since)} ${noun}s since)`);
-  } else {
-    lines.push("Sessions: none logged (run story progress --log after a writing session)");
-  }
-  if (progress.pace !== null) {
-    lines.push(`Pace: ${formatNumber2(Math.round(progress.pace))} ${noun}s a day over the last ${Math.min(progress.sessions, PACE_SESSIONS)} sessions`);
-  }
-  if (progress.projected) {
-    lines.push(`Projected finish at this pace: ${progress.projected}`);
-  }
-  if (progress.chapters.length > 0) {
-    lines.push("", "Chapter targets:");
-    for (const chapter of progress.chapters) {
-      lines.push(`- ${chapter.id}: ${formatNumber2(count(chapter))} of ${formatNumber2(chapter.target)} ${noun}s (${formatPercent(chapter.percent, 0)}%)`);
-    }
-  }
-  return `${lines.join(`
-`)}
-`;
-}
-function localDate(now = new Date) {
-  const pad = (value) => String(value).padStart(2, "0");
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-}
-function formatDate(days) {
-  return new Date(days * 86400000).toISOString().slice(0, 10);
-}
-function plural2(count, noun, format = String) {
-  return `${format(count)} ${noun}${count === 1 ? "" : "s"}`;
-}
-function formatPercent(percent, places) {
-  const scale = 10 ** places;
-  let value = Math.round(percent * scale) / scale;
-  if (value >= 100 && percent < 100) {
-    value = Math.floor(percent * scale) / scale;
-  }
-  return value.toFixed(places);
-}
-function formatNumber2(value) {
-  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-}
-
 // src/compare.js
 var MOVED_SHARE = 0.5;
 function compareChapters(previous, current) {
@@ -10990,8 +12985,8 @@ function formatNumber3(value) {
 }
 
 // src/config.js
-import fs3 from "node:fs";
-import path7 from "node:path";
+import fs4 from "node:fs";
+import path8 from "node:path";
 
 // src/similarity.js
 var SIMILARITY_DEFAULTS = { minWords: 8 };
@@ -11209,7 +13204,7 @@ var EMPTY_CONFIG = Object.freeze({ defaults: {}, severity: {}, exemptions: [], e
 function readCliConfig(root) {
   let data;
   try {
-    data = parseFrontmatter(fs3.readFileSync(path7.join(root, "story.md"), "utf8")).data;
+    data = parseFrontmatter(fs4.readFileSync(path8.join(root, "story.md"), "utf8")).data;
   } catch {
     return EMPTY_CONFIG;
   }
@@ -11397,139 +13392,15 @@ import { Buffer as Buffer4 } from "node:buffer";
 import fs12 from "node:fs";
 import path17 from "node:path";
 
-// src/languages/style.js
-var STYLE_LISTS = {
-  "filter-words": { list: "filterWords" },
-  "said-bookisms": { list: "saidBookisms" },
-  "plain-tags": { list: "plainTags" },
-  "beat-pronouns": { list: "beatPronouns" },
-  "inversion-links": { list: "inversionLinks" },
-  "adverb-suffixes": { list: "adverbSuffixes" },
-  "adverb-exceptions": { list: "adverbExceptions" },
-  "adverb-blockers": { list: "adverbBlockers" },
-  "echo-stopwords": { list: "echoStopwords" },
-  "phrase-stopwords": { list: "phraseStopwords" },
-  "dialect-pairs": { list: "dialectPairs" },
-  "speech-verbs": { list: "speechVerbs" },
-  "speech-pronouns": { list: "speechPronouns" },
-  "contraction-suffixes": { list: "contractionSuffixes" },
-  "contracted-is": { list: "contractedIs" },
-  elisions: { list: "elisions" },
-  "voice-stopwords": { list: "voiceStopwords" },
-  "title-abbreviations": { list: "titleAbbreviations", cased: true, abbreviation: true },
-  "context-abbreviations": { list: "contextAbbreviations", cased: true, abbreviation: true },
-  "calendar-words": { list: "calendarWords", cased: true },
-  "chapter-words": { list: "chapterWords" },
-  "section-words": { list: "sectionWords" },
-  "part-words": { list: "partWords" },
-  "front-matter-words": { list: "frontMatterWords" },
-  "ordinal-words": { list: "ordinalWords" },
-  "number-words": { list: "numberWords", part: "words" },
-  "number-joiners": { list: "numberWords", part: "joiners" },
-  "candidate-stopwords": { list: "candidateStopwords", cased: true },
-  determiners: { list: "determiners" },
-  "relative-words": { list: "relativeWords" },
-  "noun-suffixes": { list: "nounSuffixes" },
-  "title-words": { list: "titleWords" }
-};
-var STYLE_LIST_FIELDS = ["replace-words", "add-words"];
-function styleListEntries(value) {
-  return Array.isArray(value) ? value.filter(isEntry2).flatMap((entry) => Object.entries(entry)) : [];
-}
-function isEntry2(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-function styleWords(value) {
-  if (Array.isArray(value)) {
-    return value.every((word) => typeof word === "string") ? value.map((word) => word.trim()).filter((word) => word !== "") : null;
-  }
-  if (typeof value !== "string") {
-    return null;
-  }
-  const flow = /^\[(.*)\]$/s.exec(value.trim());
-  return (flow === null ? value : flow[1]).split(",").map((word) => word.trim().replace(/^(["'])(.*)\1$/s, "$2").trim()).filter((word) => word !== "");
-}
-function withStyleLists(pack, styleData) {
-  const changes = STYLE_LIST_FIELDS.flatMap((field) => styleListEntries(styleData?.[field]).filter(([key, value]) => Object.prototype.hasOwnProperty.call(STYLE_LISTS, key) && styleWords(value) !== null).map(([key, value]) => ({ replace: field === "replace-words", key, words: styleWords(value) })));
-  if (changes.length === 0) {
-    return pack;
-  }
-  const checks = { ...pack.checks };
-  const cleared = new Set;
-  for (const { replace, key, words } of changes) {
-    const { list, part, cased = false, abbreviation = false } = STYLE_LISTS[key];
-    const written = words.map((word) => {
-      const apostrophe = word.replace(/’/g, "'");
-      const straight = abbreviation ? apostrophe.replace(/\.$/, "") : apostrophe;
-      return cased ? straight : lowerCase(straight, pack);
-    }).filter((word) => word !== "");
-    const fresh = replace && !cleared.has(key);
-    cleared.add(key);
-    if (part !== undefined) {
-      const current = fresh && part === "words" ? { joiners: checks.numberWords?.joiners ?? [] } : { ...checks.numberWords };
-      checks.numberWords = { ...current, [part]: unique2([...fresh ? [] : current[part] ?? [], ...written]) };
-    } else if (list === "dialectPairs") {
-      const pairs = written.map((pair) => pair.split("/").map((word) => word.trim())).filter((pair) => pair.length === 2 && pair.every((word) => word !== ""));
-      checks.dialectPairs = [...fresh ? [] : checks.dialectPairs ?? [], ...pairs];
-    } else {
-      checks[list] = unique2([...fresh ? [] : checks[list] ?? [], ...written]);
-    }
-  }
-  return deepFreeze({ ...pack, checks });
-}
-function unique2(words) {
-  return [...new Set(words)];
-}
-
-// src/forms.js
-var STORY_FORMS = new Map([
-  ["flash", { min: 1, max: 1500, target: 1000 }],
-  ["short-story", { min: 1000, max: 7500, target: 5000 }],
-  ["novelette", { min: 7500, max: 17500, target: 12000 }],
-  ["novella", { min: 17500, max: 40000, target: 30000 }],
-  ["novel", { min: 40000, max: 200000, target: 80000 }],
-  ["serial", { min: null, max: null, target: null }],
-  ["picture-book", { min: 1, max: 1000, target: 500 }],
-  ["chapter-book", { min: 4000, max: 15000, target: 1e4 }]
-]);
-var COUNT_UNITS = new Map([
-  ["words", { name: "words", noun: "word", title: "Words", countField: "word-count", targetField: "target-words" }],
-  ["characters", { name: "characters", noun: "character", title: "Characters", countField: "character-count", targetField: "target-characters" }]
-]);
-function countUnit(storyData, pack) {
-  const value = storyData?.["count-unit"];
-  return COUNT_UNITS.get(COUNT_UNITS.has(value) ? value : pack?.countUnit) ?? COUNT_UNITS.get("words");
-}
-function formRanges(unit, pack) {
-  if (unit.name === "words") {
-    return STORY_FORMS;
-  }
-  const ranges = pack?.characterForms;
-  return ranges ? new Map(Object.entries(ranges)) : null;
-}
-function formRangeWarning(form, count, label, ranges = STORY_FORMS, unit = COUNT_UNITS.get("words")) {
-  const range = ranges?.get(form);
-  if (!range || range.min === null || !Number.isInteger(count) || count <= 0) {
-    return "";
-  }
-  if (range.max === null) {
-    return count < range.min ? `${label} ${count} is under the usual ${form} minimum of ${range.min} ${unit.name}` : "";
-  }
-  if (count < range.min || count > range.max) {
-    return `${label} ${count} is outside the usual ${form} range of ${range.min}-${range.max} ${unit.name}`;
-  }
-  return "";
-}
-
 // src/stdin.js
 import { Buffer as Buffer2 } from "node:buffer";
-import fs4 from "node:fs";
+import fs5 from "node:fs";
 import tty from "node:tty";
 var STDIN_ARG = "-";
 var MAX_STDIN_BYTES = 5 * 1024 * 1024;
 var CHUNK_BYTES = 64 * 1024;
 var RETRY_MS = 10;
-function readStdin(command, { fd = 0, isatty = tty.isatty, readSync = fs4.readSync, maxBytes = MAX_STDIN_BYTES } = {}) {
+function readStdin(command, { fd = 0, isatty = tty.isatty, readSync = fs5.readSync, maxBytes = MAX_STDIN_BYTES } = {}) {
   if (isatty(fd)) {
     throw usageError(`story ${command} - reads from stdin, but stdin is a terminal: pipe the text in, such as story ${command} - < draft.md`);
   }
@@ -11597,7 +13468,7 @@ import os2 from "node:os";
 import path16 from "node:path";
 
 // src/timeline.js
-import path8 from "node:path";
+import path9 from "node:path";
 function buildTimeline(project) {
   const chapters = [...project.chapters].sort((left, right) => left.number - right.number || left.id.localeCompare(right.id, "en"));
   const chapterById = new Map(chapters.map((chapter) => [chapter.id, chapter]));
@@ -11687,7 +13558,7 @@ function timelineEntry(project, { unit, chapter, isChapter, orphan }, reading) {
   const minutes = parseClockTime(time || "");
   return {
     id: unit.id,
-    file: path8.relative(project.root, unit.file),
+    file: path9.relative(project.root, unit.file),
     title: unit.title,
     chapterNumber: Number.isFinite(chapter.number) ? chapter.number : chapter.id,
     orphanOf: orphan ? chapter.id : "",
@@ -12034,7 +13905,7 @@ function timelineText(text) {
 
 // src/packaging.js
 import { Buffer as Buffer3 } from "node:buffer";
-import fs5 from "node:fs";
+import fs6 from "node:fs";
 import { deflateRawSync } from "node:zlib";
 function epubModifiedTimestamp() {
   const raw = process.env.SOURCE_DATE_EPOCH;
@@ -12077,7 +13948,7 @@ function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
   if (manuscript.cover) {
     const href = `images/cover.${manuscript.cover.extension}`;
     const alt = meta.coverAlt === "" ? fillLabel(meta.labels, "cover-alt", { title: manuscript.title }) : meta.coverAlt;
-    coverEntries.push({ name: `OEBPS/${href}`, content: fs5.readFileSync(manuscript.cover.filePath) }, { name: "OEBPS/cover.xhtml", content: `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(manuscript.title)}</title>${head}</head><body epub:type="cover"><img src="${href}" alt="${xmlEscape(alt)}"/></body></html>` });
+    coverEntries.push({ name: `OEBPS/${href}`, content: fs6.readFileSync(manuscript.cover.filePath) }, { name: "OEBPS/cover.xhtml", content: `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(manuscript.title)}</title>${head}</head><body epub:type="cover"><img src="${href}" alt="${xmlEscape(alt)}"/></body></html>` });
     coverItems.push(`<item id="cover-image" href="${href}" media-type="${manuscript.cover.mediaType}" properties="cover-image"/>`, `<item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>`);
     coverMeta.push(`<meta name="cover" content="cover-image"/>`);
     coverSpine.push(`<itemref idref="cover"/>`);
@@ -12765,7 +14636,7 @@ function formatPasses(passes, command = "story passes") {
 }
 
 // src/pacing.js
-import path9 from "node:path";
+import path10 from "node:path";
 var SCENE_OUTCOMES = new Set(["yes", "no", "yes-but", "no-and"]);
 var CHAPTER_HOOKS = new Set(["cliffhanger", "question", "revelation", "reversal", "decision", "emotional", "resolution"]);
 var DRAFTED_STATUSES = new Set(["draft", "revised", "final", "complete"]);
@@ -12777,7 +14648,7 @@ function buildPacing(project) {
   const inUnit = (row) => characterBook ? row.characterCount : row.words;
   const noun = characterBook ? "characters" : "words";
   const chapters = [...project.chapters].sort((left, right) => left.number - right.number || left.id.localeCompare(right.id, "en"));
-  const files = new Map(chapters.map((chapter) => [chapter.id, project.root === undefined ? null : path9.relative(project.root, chapter.file)]));
+  const files = new Map(chapters.map((chapter) => [chapter.id, project.root === undefined ? null : path10.relative(project.root, chapter.file)]));
   const warnings = [];
   const rows = [];
   const units = [];
@@ -12913,1744 +14784,6 @@ function formatPacing(pacing) {
   return `${lines.join(`
 `)}
 `;
-}
-
-// src/scan.js
-import fs6 from "node:fs";
-import path10 from "node:path";
-
-// src/twee.js
-import crypto from "node:crypto";
-var TWEE_LINK_UNSAFE = /[[\]|\r\n]|->|<-|<$/;
-var UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-function isIfid(value) {
-  return typeof value === "string" && UUID_V4.test(value);
-}
-function derivedIfid(storyId) {
-  const hex = crypto.createHash("sha256").update(`story-skills-ifid:${storyId}`).digest("hex").slice(0, 32).split("");
-  hex[12] = "4";
-  hex[16] = (Number.parseInt(hex[16], 16) & 3 | 8).toString(16);
-  const text = hex.join("");
-  return `${text.slice(0, 8)}-${text.slice(8, 12)}-${text.slice(12, 16)}-${text.slice(16, 20)}-${text.slice(20)}`.toUpperCase();
-}
-function passageText(text) {
-  return text.replace(/^::/gm, "\\::");
-}
-function tweeSource(story) {
-  const data = JSON.stringify({ ifid: story.ifid.toUpperCase(), start: story.start }, null, 2);
-  const lines = [":: StoryTitle", passageText(story.title), "", ":: StoryData", data, ""];
-  for (const passage of story.passages) {
-    lines.push(`:: ${passage.name}`);
-    if (passage.body !== "") {
-      lines.push(passageText(passage.body));
-    }
-    if (passage.body !== "" && passage.links.length > 0) {
-      lines.push("");
-    }
-    for (const link of passage.links) {
-      lines.push(`[[${link.text}->${link.to}]]`);
-    }
-    lines.push("");
-  }
-  return `${lines.join(`
-`).trimEnd()}
-`;
-}
-
-// src/scan.js
-var STORY_SCHEMA_VERSION = 2;
-var REQUIRED_PATHS = [
-  "story.md",
-  "characters/_index.md",
-  "worldbuilding/_index.md",
-  "plot/_index.md",
-  "plot/timeline.md",
-  "chapters/_index.md",
-  "scenes/_index.md",
-  "continuity/state.md",
-  "continuity/questions/_index.md",
-  "continuity/promises/_index.md",
-  "continuity/clues/_index.md",
-  "glossary/_index.md"
-];
-var PROJECT_DIRECTORIES = [
-  "characters",
-  path10.join("worldbuilding", "locations"),
-  path10.join("worldbuilding", "systems"),
-  path10.join("worldbuilding", "factions"),
-  path10.join("worldbuilding", "artifacts"),
-  path10.join("plot", "arcs"),
-  "chapters",
-  "scenes",
-  path10.join("continuity", "questions"),
-  path10.join("continuity", "promises"),
-  path10.join("continuity", "clues"),
-  path10.join("glossary", "terms")
-];
-var INDEX_SCHEMAS = [
-  [path10.join("characters", "_index.md"), "character-registry"],
-  [path10.join("worldbuilding", "_index.md"), "world-registry"],
-  [path10.join("plot", "_index.md"), "plot-registry"],
-  [path10.join("plot", "timeline.md"), "timeline"],
-  [path10.join("chapters", "_index.md"), "chapter-registry"],
-  [path10.join("scenes", "_index.md"), "scene-registry"],
-  [path10.join("continuity", "questions", "_index.md"), "question-registry"],
-  [path10.join("continuity", "promises", "_index.md"), "promise-registry"],
-  [path10.join("continuity", "clues", "_index.md"), "clue-registry"],
-  [path10.join("glossary", "_index.md"), "glossary-registry"]
-];
-var STORY_STATUSES = new Set(["planning", "drafting", "in-progress", "revising", "complete", "abandoned"]);
-var STORY_TENSES = new Set(["past", "present", "future", "mixed"]);
-var CHARACTER_ROLES = new Set(["protagonist", "antagonist", "supporting", "minor", "narrator", "deuteragonist"]);
-var CHARACTER_STATUSES = new Set(["alive", "deceased", "unknown", "missing", "cut"]);
-var ARC_TYPES = new Set(["main", "subplot", "character", "thematic"]);
-var ARC_STATUSES = new Set(["planned", "in-progress", "resolved"]);
-var CHAPTER_STATUSES = new Set(["outline", "draft", "revised", "final", "complete"]);
-var CHARACTER_ARC_TYPES = new Set(["change-positive", "change-negative", "flat"]);
-var DRAFT_MODES = new Set(["discovered", "outlined"]);
-var SCENE_STATUSES = new Set(["outline", "draft", "revised", "final", "complete"]);
-var FACTION_TYPES = new Set(["family", "guild", "government", "military", "religion", "company", "community", "criminal", "other"]);
-var FACTION_STATUSES = new Set(["active", "hidden", "declining", "defeated", "disbanded", "unknown"]);
-var ARTIFACT_TYPES = new Set(["object", "weapon", "document", "technology", "relic", "symbol", "resource", "other"]);
-var ARTIFACT_STATUSES = new Set(["active", "lost", "destroyed", "hidden", "transferred", "unknown"]);
-var QUESTION_STATUSES = new Set(["open", "answered", "resolved", "dropped", "abandoned"]);
-var PROMISE_STATUSES = new Set(["planned", "planted", "paid-off", "dropped", "abandoned"]);
-var CLUE_STATUSES = new Set(["planned", "planted", "paid-off", "dropped", "abandoned"]);
-var TERM_CATEGORIES = new Set(["person", "place", "faction", "artifact", "concept", "term", "other"]);
-var STYLE_DIALECTS = new Set(["british", "american", "unspecified"]);
-var STYLE_SHEET_FILE = "style-sheet.md";
-var MATTER_PLACEMENTS = new Set(["front", "back"]);
-var MATTER_PERMISSIONS = new Set(["not-needed", "pending", "granted", "public-domain"]);
-var MATTER_DIR = "matter";
-var RESEARCH_STATUSES = new Set(["open", "verified", "disputed"]);
-var RESEARCH_ACCURACY = new Set(["must-be-accurate", "blended", "invented"]);
-var RESEARCH_CONFIDENCE = new Set(["high", "medium", "low"]);
-var RESEARCH_METHODS = new Set(["fact", "interview", "site-visit", "expert-review", "reading"]);
-var RESEARCH_RISKS = new Set(["legal", "medical", "weapons", "safety", "cultural", "defamation", "technical"]);
-var RESEARCH_DIR = "research";
-var SETTLED_CHAPTER_STATUSES = new Set(["final", "complete"]);
-var WRITTEN_CHAPTER_STATUSES = new Set(["revised", "final", "complete"]);
-var COVER_MEDIA_TYPES = {
-  ".gif": "image/gif",
-  ".jpeg": "image/jpeg",
-  ".jpg": "image/jpeg",
-  ".png": "image/png",
-  ".webp": "image/webp"
-};
-function existingStoryLanguage(root) {
-  const data = existingStoryData(root);
-  return data === null ? null : projectLanguage(data);
-}
-function existingStyleData(root) {
-  try {
-    return readStyleSheet(root, [])?.data ?? null;
-  } catch {
-    return null;
-  }
-}
-function existingStoryData(root) {
-  if (!lstatIfExists(path10.join(root, "story.md"))) {
-    return null;
-  }
-  try {
-    return readBookFrontmatter(root) ?? {};
-  } catch {
-    return {};
-  }
-}
-function deriveStoryId(title, root) {
-  return kebabCase(String(title ?? ""), { transliterate: false }) || kebabCase(path10.basename(root), { transliterate: false });
-}
-function chapterLength(unit, data, markdown) {
-  const prose = chapterProse(markdown.body);
-  const words = wordCount(prose);
-  const declared = data[unit.countField];
-  const target = data[unit.targetField];
-  return {
-    wordCount: words,
-    count: unit.name === "characters" ? characterCount(prose) : words,
-    declaredCount: declared === undefined ? 0 : Number.isInteger(declared) ? declared : null,
-    countMissing: declared === undefined,
-    targetCount: Number.isInteger(target) && target > 0 ? target : 0
-  };
-}
-function scanProject(root) {
-  const projectRoot = path10.resolve(root);
-  const scanErrors = [];
-  const storyPath = requireStoryFile(projectRoot);
-  let story;
-  try {
-    story = readMarkdown(storyPath, projectRoot);
-  } catch (error) {
-    scanErrors.push(err("unreadable-file", `story.md: ${error.message}`, "story.md"));
-    story = { data: { title: path10.basename(projectRoot) }, body: "", rawMarkdown: "", unreadable: true };
-  }
-  const storyId = deriveStoryId(story.data.title, projectRoot);
-  const titleText = typeof story.data.title === "string" || typeof story.data.title === "number" ? String(story.data.title).trim() : "";
-  let continuity = null;
-  const continuityPath = path10.join(projectRoot, "continuity", "state.md");
-  if (fs6.existsSync(continuityPath)) {
-    try {
-      continuity = readMarkdown(continuityPath, projectRoot);
-    } catch (error) {
-      scanErrors.push(err("unreadable-file", `${path10.join("continuity", "state.md")}: ${error.message}`, path10.join("continuity", "state.md")));
-      continuity = null;
-    }
-  }
-  const language = projectLanguage(story.data);
-  const pack = languagePack(language);
-  const unit = countUnit(story.data, pack);
-  const project = {
-    root: projectRoot,
-    story,
-    storyId,
-    title: titleText || path10.basename(projectRoot),
-    language,
-    pack,
-    unit,
-    fileErrors: scanErrors,
-    characters: readEntityFiles(projectRoot, "characters", (id, file, data) => ({
-      id,
-      file,
-      name: data.name ?? titleCaseSlug(id),
-      role: data.role ?? "",
-      status: data.status ?? "",
-      arc: String(data.arc ?? ""),
-      diedIn: String(data["died-in"] ?? ""),
-      revivedIn: String(data["revived-in"] ?? ""),
-      relationships: asArray(data.relationships),
-      locations: asArray(data.locations),
-      aliases: asArray(data.aliases),
-      voiceWords: asArray(data["voice-words"]),
-      voiceAvoid: asArray(data["voice-avoid"]),
-      pronunciation: data.pronunciation
-    }), scanErrors),
-    locations: readEntityFiles(projectRoot, path10.join("worldbuilding", "locations"), (id, file, data) => ({
-      id,
-      file,
-      name: data.name ?? titleCaseSlug(id),
-      type: data.type ?? "",
-      region: data.region ?? "",
-      notableCharacters: asArray(data["notable-characters"]),
-      routes: asArray(data.routes),
-      setting: typeof data.setting === "string" ? data.setting : "",
-      pronunciation: data.pronunciation
-    }), scanErrors),
-    systems: readEntityFiles(projectRoot, path10.join("worldbuilding", "systems"), (id, file, data) => ({
-      id,
-      file,
-      name: data.name ?? titleCaseSlug(id),
-      type: data.type ?? "",
-      pronunciation: data.pronunciation
-    }), scanErrors),
-    factions: readEntityFiles(projectRoot, path10.join("worldbuilding", "factions"), (id, file, data) => ({
-      id,
-      file,
-      name: data.name ?? titleCaseSlug(id),
-      type: data.type ?? "",
-      status: data.status ?? "",
-      members: asArray(data.members),
-      locations: asArray(data.locations),
-      pronunciation: data.pronunciation
-    }), scanErrors),
-    artifacts: readEntityFiles(projectRoot, path10.join("worldbuilding", "artifacts"), (id, file, data) => ({
-      id,
-      file,
-      name: data.name ?? titleCaseSlug(id),
-      type: data.type ?? "",
-      status: data.status ?? "",
-      owner: data.owner ?? "",
-      location: data.location ?? "",
-      pronunciation: data.pronunciation
-    }), scanErrors),
-    arcs: readEntityFiles(projectRoot, path10.join("plot", "arcs"), (id, file, data) => ({
-      id,
-      file,
-      name: data.name ?? titleCaseSlug(id),
-      type: data.type ?? "",
-      status: data.status ?? "",
-      characters: asArray(data.characters),
-      themes: asArray(data.themes)
-    }), scanErrors),
-    chapters: readEntityFiles(projectRoot, "chapters", (id, file, data, markdown) => ({
-      id,
-      file,
-      title: data.title ?? titleCaseSlug(id),
-      number: chapterNumber(data.number, file),
-      numberValid: data.number === undefined || isPositiveIntegerValue(data.number),
-      pov: scanId(data.pov),
-      status: data.status ?? "",
-      characters: asIdArray(data.characters),
-      mentions: asIdArray(data.mentions),
-      locations: asIdArray(data.locations),
-      arcsAdvanced: asArray(data["arcs-advanced"]),
-      declaredWordCount: data["word-count"] === undefined ? 0 : Number.isInteger(data["word-count"]) ? data["word-count"] : null,
-      wordCountMissing: data["word-count"] === undefined,
-      targetWords: Number.isInteger(data["target-words"]) && data["target-words"] > 0 ? data["target-words"] : 0,
-      ...chapterLength(unit, data, markdown),
-      unclosedComment: hasUnclosedComment(chapterProse(markdown.body)),
-      todoMarkers: countTodoMarkers(chapterProse(markdown.body)),
-      date: String(data.date ?? ""),
-      time: String(data.time ?? ""),
-      mode: String(data.mode ?? ""),
-      strand: String(data.strand ?? ""),
-      hasPostHocNotes: hasPostHocNotes(markdown.body),
-      hook: typeof data.hook === "string" ? data.hook : "",
-      choices: data.choices
-    }), scanErrors).sort((left, right) => left.number - right.number || left.file.localeCompare(right.file, "en")),
-    scenes: readEntityFiles(projectRoot, "scenes", (id, file, data) => ({
-      id,
-      file,
-      title: data.title ?? titleCaseSlug(id),
-      chapter: String(data.chapter ?? sceneChapterFromFile(file) ?? ""),
-      scene: Number(data.scene ?? sceneNumberFromFile(file) ?? 0),
-      pov: scanId(data.pov),
-      location: scanId(data.location),
-      status: data.status ?? "",
-      characters: asIdArray(data.characters),
-      mentions: asIdArray(data.mentions),
-      arcsAdvanced: asArray(data["arcs-advanced"]),
-      stateChanges: asArray(data["state-changes"]),
-      date: String(data.date ?? ""),
-      time: String(data.time ?? ""),
-      travelHours: typeof data["travel-hours"] === "number" ? data["travel-hours"] : 0,
-      sequel: typeof data.sequel === "boolean" ? data.sequel : false,
-      outcome: typeof data.outcome === "string" ? data.outcome : "",
-      dilemma: String(data.dilemma ?? ""),
-      flashbackTo: String(data["flashback-to"] ?? ""),
-      setting: typeof data.setting === "string" ? data.setting : ""
-    }), scanErrors),
-    questions: readEntityFiles(projectRoot, path10.join("continuity", "questions"), (id, file, data) => ({
-      id,
-      file,
-      title: data.title ?? titleCaseSlug(id),
-      status: data.status ?? "",
-      introduced: String(data.introduced ?? ""),
-      resolved: String(data.resolved ?? ""),
-      characters: asArray(data.characters)
-    }), scanErrors),
-    promises: readEntityFiles(projectRoot, path10.join("continuity", "promises"), (id, file, data) => ({
-      id,
-      file,
-      title: data.title ?? titleCaseSlug(id),
-      status: data.status ?? "",
-      planted: String(data.planted ?? ""),
-      payoff: String(data.payoff ?? ""),
-      arcs: asArray(data.arcs),
-      characters: asArray(data.characters)
-    }), scanErrors),
-    clues: readEntityFiles(projectRoot, path10.join("continuity", "clues"), (id, file, data) => ({
-      id,
-      file,
-      title: data.title ?? titleCaseSlug(id),
-      status: data.status ?? "",
-      planted: String(data.planted ?? ""),
-      payoff: String(data.payoff ?? ""),
-      significanceDelayed: data["significance-delayed"] === true,
-      redHerring: data["red-herring"] === true,
-      characters: asArray(data.characters),
-      arcs: asArray(data.arcs)
-    }), scanErrors),
-    glossaryTerms: readEntityFiles(projectRoot, path10.join("glossary", "terms"), (id, file, data) => ({
-      id,
-      file,
-      term: data.term ?? titleCaseSlug(id),
-      category: data.category ?? "",
-      aliases: asArray(data.aliases),
-      pronunciation: data.pronunciation
-    }), scanErrors),
-    research: readEntityFiles(projectRoot, RESEARCH_DIR, (id, file, data) => ({
-      id,
-      file,
-      title: data.title ?? titleCaseSlug(id),
-      status: data.status ?? "",
-      sources: asArray(data.sources),
-      usedIn: asArray(data["used-in"]),
-      accuracy: typeof data.accuracy === "string" ? data.accuracy : "",
-      risk: asArray(data.risk),
-      reviewedBy: asArray(data["reviewed-by"])
-    }), scanErrors),
-    matter: readEntityFiles(projectRoot, MATTER_DIR, (id, file, data, markdown) => ({
-      id,
-      file,
-      title: String(data.title ?? titleCaseSlug(id)),
-      placement: String(data.placement ?? ""),
-      order: Number.isInteger(data.order) ? data.order : 0,
-      heading: data.heading !== false,
-      permission: typeof data.permission === "string" ? data.permission : "",
-      empty: chapterProse(markdown.body).trim() === ""
-    }), scanErrors).sort((left, right) => left.order - right.order || left.id.localeCompare(right.id, "en")),
-    exemptions: readExemptions(projectRoot, scanErrors),
-    styleSheet: readStyleSheet(projectRoot, scanErrors),
-    progressLog: readOptionalRootFile(projectRoot, PROGRESS_FILE, scanErrors),
-    continuity
-  };
-  project.pack = withStyleLists(project.pack, project.styleSheet?.data);
-  sortScenesByChapter(project);
-  return project;
-}
-function sortScenesByChapter(project) {
-  const numbers = new Map(project.chapters.map((chapter) => [chapter.id, chapter.number]));
-  const chapterOrder = (id) => {
-    const number = numbers.get(id);
-    if (Number.isFinite(number)) {
-      return number;
-    }
-    const match = /-(\d+)$/.exec(id);
-    return match ? Number(match[1]) : Number.POSITIVE_INFINITY;
-  };
-  project.scenes.sort((left, right) => {
-    const leftOrder = chapterOrder(left.chapter);
-    const rightOrder = chapterOrder(right.chapter);
-    return (leftOrder === rightOrder ? 0 : leftOrder < rightOrder ? -1 : 1) || left.chapter.localeCompare(right.chapter, "en") || left.scene - right.scene || left.file.localeCompare(right.file, "en");
-  });
-}
-function assertProjectParses(project, action, ignore = () => false) {
-  const ignored = [STYLE_SHEET_FILE, PROGRESS_FILE, path10.join("continuity", "exemptions.md")];
-  const errors = (project.fileErrors ?? []).filter((error) => !ignored.includes(error.file) && !ignore(error));
-  if (errors.length > 0) {
-    throw projectError(`Cannot ${action}: fix ${errors.length === 1 ? "this file first (story validate reports it)" : "these files first (story validate reports them)"}:
-${errors.map((error) => `- ${error.message}`).join(`
-`)}`);
-  }
-}
-function newerSchemaVersion(value) {
-  const version = typeof value === "string" && /^\d+$/.test(value.trim()) ? Number(value) : value;
-  return typeof version === "number" && Number.isFinite(version) && version > STORY_SCHEMA_VERSION ? version : null;
-}
-function newerSchemaMessage(version) {
-  return `story.md uses schema-version ${version}, newer than this CLI (${STORY_SCHEMA_VERSION}); upgrade story-skills`;
-}
-function canonicalChapterId(number) {
-  return `chapter-${String(number).padStart(2, "0")}`;
-}
-var LINK_OR_URL_PATTERN = /(\]\([^)\n]*\)|<[a-z][a-z0-9+.-]*:[^>\s]*>|\b[a-z][a-z0-9+.-]*:\/\/[^\s<>)\]]*)/gi;
-function mapOutsideLinks(body, transform) {
-  return body.split(LINK_OR_URL_PATTERN).map((part, index) => index % 2 === 1 ? part : transform(part)).join("");
-}
-function storyBible(options) {
-  const data = {
-    title: options.title,
-    "schema-version": STORY_SCHEMA_VERSION
-  };
-  if (options.series !== undefined) {
-    data.series = options.series;
-  }
-  if (options.inherited?.["series-title"] !== undefined) {
-    data["series-title"] = options.inherited["series-title"];
-  }
-  if (options.bookNumber !== undefined) {
-    data["book-number"] = options.bookNumber;
-  }
-  Object.assign(data, {
-    genre: options.genre,
-    "sub-genre": options.subGenre,
-    "setting-era": options.settingEra,
-    status: "planning",
-    themes: options.themes,
-    pov: options.pov,
-    tense: options.tense
-  });
-  for (const field of ["author", "authors", "language", "count-unit"]) {
-    if (options.inherited?.[field] !== undefined) {
-      data[field] = options.inherited[field];
-    }
-  }
-  if (options.form !== undefined) {
-    data.form = options.form;
-    const target = formRanges(options.unit, options.pack)?.get(options.form)?.target ?? null;
-    if (target !== null) {
-      data[options.unit.targetField] = target;
-    }
-  }
-  for (const field of ["follows", "precedes"]) {
-    if (options[field].length > 0) {
-      data[field] = options[field];
-    }
-  }
-  return `${stringifyFrontmatter(data)}# ${options.title}
-
-## Synopsis
-
-${options.synopsis}
-
-## Tone & Style
-
-Add notes on the story's voice, texture, and emotional register.
-
-## Notes
-
-`;
-}
-function cell2(value) {
-  return String(value ?? "").replace(/\r?\n|\r/g, " ").replace(/\|/g, "\\|");
-}
-function characterIndex(storyId, characters, relationshipMap, familyTrees) {
-  const rows = characters.length === 0 ? ["| *No characters yet* | | | |"] : characters.map((character) => `| ${cell2(character.name)} | ${cell2(character.role)} | ${cell2(character.status)} | [${character.id}](${character.id}.md) |`);
-  return `${stringifyFrontmatter({ type: "character-registry", story: storyId })}# Characters
-
-## Registry
-
-| Name | Role | Status | File |
-|------|------|--------|------|
-${rows.join(`
-`)}
-
-## Relationship Map
-
-${relationshipMap || "*No relationships defined yet.*"}
-
-## Family Trees
-
-${familyTrees || "*No family trees defined yet.*"}
-`;
-}
-function worldIndex(storyId, locations, systems, factions, artifacts, overview) {
-  const locationRows = locations.length === 0 ? ["| *No locations yet* | | | |"] : locations.map((location) => `| ${cell2(location.name)} | ${cell2(titleCaseSlug(location.type))} | ${cell2(location.region)} | [${location.id}](locations/${location.id}.md) |`);
-  const systemRows = systems.length === 0 ? ["| *No systems yet* | | |"] : systems.map((system) => `| ${cell2(system.name)} | ${cell2(titleCaseSlug(system.type))} | [${system.id}](systems/${system.id}.md) |`);
-  const factionRows = factions.length === 0 ? ["| *No factions yet* | | | |"] : factions.map((faction) => `| ${cell2(faction.name)} | ${cell2(titleCaseSlug(faction.type))} | ${cell2(faction.status)} | [${faction.id}](factions/${faction.id}.md) |`);
-  const artifactRows = artifacts.length === 0 ? ["| *No artifacts yet* | | | |"] : artifacts.map((artifact) => `| ${cell2(artifact.name)} | ${cell2(titleCaseSlug(artifact.type))} | ${cell2(artifact.status)} | [${artifact.id}](artifacts/${artifact.id}.md) |`);
-  return `${stringifyFrontmatter({ type: "world-registry", story: storyId })}# Worldbuilding
-
-## World Overview
-
-${overview || "*Describe the world at a high level here.*"}
-
-## Locations
-
-| Name | Type | Region | File |
-|------|------|--------|------|
-${locationRows.join(`
-`)}
-
-## Systems
-
-| Name | Type | File |
-|------|------|------|
-${systemRows.join(`
-`)}
-
-## Factions
-
-| Name | Type | Status | File |
-|------|------|--------|------|
-${factionRows.join(`
-`)}
-
-## Artifacts
-
-| Name | Type | Status | File |
-|------|------|--------|------|
-${artifactRows.join(`
-`)}
-`;
-}
-function plotIndex(storyId, structure, arcs, storyStructure, themeTracking) {
-  const arcRows = arcs.length === 0 ? ["| *No arcs yet* | | | |"] : arcs.map((arc) => `| ${cell2(arc.name)} | ${cell2(arc.type)} | ${cell2(arc.status)} | [${arc.id}](arcs/${arc.id}.md) |`);
-  return `${stringifyFrontmatter({ type: "plot-registry", story: storyId, structure })}# Plot Structure
-
-## Story Structure
-
-${storyStructure || "**Model:** Three-Act Structure (adjust as needed)"}
-
-## Arcs
-
-| Name | Type | Status | File |
-|------|------|--------|------|
-${arcRows.join(`
-`)}
-
-## Theme Tracking
-
-${themeTracking || `| Theme | Arcs | Chapters |
-|-------|------|----------|
-| *No themes tracked yet* | | |`}
-`;
-}
-function chapterIndex(storyId, chapters, unit = COUNT_UNITS.get("words")) {
-  const rows = chapters.length === 0 ? ["| *No chapters yet* | | | | | |"] : chapters.map((chapter) => `| ${cell2(chapter.number)} | ${cell2(chapter.title)} | ${cell2(chapter.pov)} | ${cell2(chapter.status)} | ${cell2(chapter.count)} | [${chapter.id}](${path10.basename(chapter.file)}) |`);
-  const total = chapters.reduce((sum, chapter) => sum + chapter.count, 0);
-  const heading = `${unit.noun[0].toUpperCase()}${unit.noun.slice(1)} Count`;
-  return `${stringifyFrontmatter({ type: "chapter-registry", story: storyId })}# Chapters
-
-## Registry
-
-| # | Title | POV | Status | ${heading} | File |
-|---|-------|-----|--------|${"-".repeat(heading.length + 2)}|------|
-${rows.join(`
-`)}
-
-## Total ${heading}: ${total}
-`;
-}
-function timeline(storyId) {
-  return `${stringifyFrontmatter({ type: "timeline", story: storyId })}# Story Timeline
-
-| When | Event | Arc | Chapter |
-|------|-------|-----|---------|
-| *No events yet* | | | |
-`;
-}
-function sceneIndex(storyId, scenes) {
-  const rows = scenes.length === 0 ? ["| *No scenes yet* | | | | | |"] : scenes.map((scene) => `| ${cell2(scene.chapter)} | ${cell2(scene.scene)} | ${cell2(scene.title)} | ${cell2(scene.pov)} | ${cell2(scene.status)} | [${scene.id}](${scene.id}.md) |`);
-  return `${stringifyFrontmatter({ type: "scene-registry", story: storyId })}# Scenes
-
-## Registry
-
-| Chapter | Scene | Title | POV | Status | File |
-|---------|-------|-------|-----|--------|------|
-${rows.join(`
-`)}
-`;
-}
-function continuityState(storyId) {
-  return `${stringifyFrontmatter({
-    type: "continuity-state",
-    story: storyId,
-    "current-chapter": 0,
-    "character-state": [],
-    "object-state": [],
-    "knowledge-state": []
-  })}# Continuity State
-
-## Current Story State
-
-Track facts that must carry forward between chapters. The CLI reads the
-\`character-state\`, \`object-state\`, and \`knowledge-state\` lists in the
-frontmatter above; the tables below are optional notes it does not read.
-
-## Character State
-
-| Character | Location | Physical State | Emotional State | Knowledge |
-|-----------|----------|----------------|-----------------|-----------|
-| *No state entries yet* | | | | |
-
-## Object State
-
-| Artifact | Owner | Location | Status |
-|----------|-------|----------|--------|
-| *No object state entries yet* | | | |
-
-## Knowledge State
-
-| Character | Knows | Learned In |
-|-----------|-------|------------|
-| *No knowledge entries yet* | | |
-`;
-}
-function questionIndex(storyId, questions) {
-  const rows = questions.length === 0 ? ["| *No questions yet* | | | |"] : questions.map((question) => `| ${cell2(question.title)} | ${cell2(question.status)} | ${cell2(question.introduced)} | [${question.id}](${question.id}.md) |`);
-  return `${stringifyFrontmatter({ type: "question-registry", story: storyId })}# Continuity Questions
-
-## Registry
-
-| Question | Status | Introduced | File |
-|----------|--------|------------|------|
-${rows.join(`
-`)}
-`;
-}
-function promiseIndex(storyId, promises) {
-  const rows = promises.length === 0 ? ["| *No promises yet* | | | |"] : promises.map((promise) => `| ${cell2(promise.title)} | ${cell2(promise.status)} | ${cell2(promise.planted)} | [${promise.id}](${promise.id}.md) |`);
-  return `${stringifyFrontmatter({ type: "promise-registry", story: storyId })}# Promises And Payoffs
-
-## Registry
-
-| Promise | Status | Planted | File |
-|---------|--------|---------|------|
-${rows.join(`
-`)}
-`;
-}
-function clueIndex(storyId, clues) {
-  const rows = clues.length === 0 ? ["| *No clues yet* | | | |"] : clues.map((clue) => `| ${cell2(clue.title)} | ${cell2(clue.status)} | ${cell2(clue.planted)} | [${clue.id}](${clue.id}.md) |`);
-  return `${stringifyFrontmatter({ type: "clue-registry", story: storyId })}# Clue Ledger
-
-## Registry
-
-| Clue | Status | Planted | File |
-|------|--------|---------|------|
-${rows.join(`
-`)}
-`;
-}
-function glossaryIndex(storyId, terms) {
-  const rows = terms.length === 0 ? ["| *No terms yet* | | |"] : terms.map((term) => `| ${cell2(term.term)} | ${cell2(term.category)} | [${term.id}](terms/${term.id}.md) |`);
-  return `${stringifyFrontmatter({ type: "glossary-registry", story: storyId })}# Glossary
-
-## Registry
-
-| Term | Category | File |
-|------|----------|------|
-${rows.join(`
-`)}
-`;
-}
-function matterIndex(storyId, pages) {
-  const rows = pages.length === 0 ? ["| *No matter pages yet* | | | |"] : pages.map((page) => `| ${cell2(page.title)} | ${cell2(page.placement)} | ${cell2(page.order)} | [${page.id}](${page.id}.md) |`);
-  return `${stringifyFrontmatter({ type: "matter-registry", story: storyId })}# Front And Back Matter
-
-## Registry
-
-| Title | Placement | Order | File |
-|-------|-----------|-------|------|
-${rows.join(`
-`)}
-`;
-}
-function researchIndex(storyId, notes) {
-  const rows = notes.length === 0 ? ["| *No research notes yet* | | | |"] : notes.map((note) => `| ${cell2(note.title)} | ${cell2(note.status)} | ${cell2(note.usedIn.join(", "))} | [${note.id}](${note.id}.md) |`);
-  return `${stringifyFrontmatter({ type: "research-registry", story: storyId })}# Research
-
-## Registry
-
-| Title | Status | Used In | File |
-|-------|--------|---------|------|
-${rows.join(`
-`)}
-`;
-}
-function styleSheet() {
-  return `${stringifyFrontmatter({
-    type: "style-sheet",
-    dialect: "unspecified",
-    preferred: [],
-    "watch-words": [],
-    "allow-words": []
-  })}# Style Sheet
-
-The book's house decisions, kept the way a copyeditor keeps them. Read this before drafting or revising prose. \`story prose\` enforces the lists in the frontmatter: \`dialect\` (british, american, or unspecified) flags the other dialect's common spellings, each \`preferred\` entry flags its \`avoid\` form, \`watch-words\` are counted in every chapter, and \`allow-words\` silences a built-in filter word or adverb. Add a \`samples\` list of your own prose (\`../book-one\`, approved chapters) and \`story prose\` compares each chapter with it instead of fixed limits.
-
-## Voice
-
-Narrative distance, sentence rhythm, register, and what this prose never does. Quote two or three sentences that sound exactly right.
-
-## Spelling And Usage
-
-Record one \`preferred\` entry per variant (\`use: grey\`, \`avoid: gray\`) and note usage rules here.
-
-## Capitalisation
-
-Titles, ranks, institutions, invented terms, and deities. Invented terms also belong in the glossary.
-
-## Hyphenation And Compounds
-
-## Numbers, Dates, And Time
-
-Spelled-out or numerals, and how in-world dates and times are written.
-
-## Dialogue And Punctuation
-
-Quote marks, dash style, ellipses, italics for thought or foreign words, and the default dialogue tags.
-
-## Character Voices
-
-One entry per POV character or major speaker: vocabulary, sentence length, verbal tics, and words they never use.
-
-## Watch List
-
-Why each \`watch-words\` entry is there.
-`;
-}
-function requireSingleLineName(name, kind) {
-  if (/[\r\n]/.test(name)) {
-    throw usageError(`A ${kind} name must be a single line`);
-  }
-}
-function buildEntity(project, kind, name, options) {
-  const requestedId = requestedEntityId(kind, options.id);
-  if (kind === "chapter") {
-    const number = options.number === undefined ? project.chapters.reduce((max, chapter) => Math.max(max, chapter.number), 0) + 1 : requirePositiveInteger(options.number, "chapter number");
-    const id = `chapter-${String(number).padStart(2, "0")}`;
-    return entityResult(project, kind, id, chapterFile(name, number, options, project.unit));
-  }
-  if (kind === "scene") {
-    if (options.chapter === undefined && project.chapters.length === 0) {
-      throw usageError("No chapters yet: add one with story add chapter before adding a scene");
-    }
-    const chapter = String(options.chapter ?? project.chapters.at(-1).id).trim();
-    requireKebabId(chapter, "chapter id");
-    if (!project.chapters.some((entry) => entry.id === chapter)) {
-      throw usageError(`chapter ${chapter} does not exist: add it with story add chapter, or pass --chapter with an existing chapter id`);
-    }
-    const scene = options.scene === undefined ? nextSceneNumber(project, chapter) : requirePositiveInteger(options.scene, "scene number");
-    const id = `${chapter}-scene-${String(scene).padStart(2, "0")}`;
-    return entityResult(project, kind, id, sceneFile(name, chapter, scene, options));
-  }
-  const id = requestedId ?? kebabCase(name);
-  if (!id) {
-    throw usageError(undeducibleIdMessage(kind, name));
-  }
-  switch (kind) {
-    case "character":
-      return entityResult(project, kind, id, characterFile(name, options));
-    case "location":
-      return entityResult(project, kind, id, locationFile(name, options));
-    case "system":
-      return entityResult(project, kind, id, systemFile(name, options));
-    case "faction":
-      return entityResult(project, kind, id, factionFile(name, options));
-    case "artifact":
-      return entityResult(project, kind, id, artifactFile(name, options));
-    case "arc":
-      return entityResult(project, kind, id, arcFile(name, options));
-    case "question":
-      return entityResult(project, kind, id, questionFile(name, options));
-    case "promise":
-      return entityResult(project, kind, id, promiseFile(name, options));
-    case "clue":
-      return entityResult(project, kind, id, clueFile(name, options));
-    case "term":
-      return entityResult(project, kind, id, termFile(name, options));
-    case "matter":
-      return entityResult(project, kind, id, matterFile(project, name, options));
-    case "research":
-      return entityResult(project, kind, id, researchFile(name, options));
-  }
-}
-function entityResult(project, kind, id, markdown) {
-  const config = entityConfig(kind);
-  return { id, markdown, file: path10.join(project.root, config.dir, `${id}.md`) };
-}
-function entityConfig(kind) {
-  const configs = {
-    character: { dir: "characters", titleField: "name" },
-    location: { dir: path10.join("worldbuilding", "locations"), titleField: "name" },
-    system: { dir: path10.join("worldbuilding", "systems"), titleField: "name" },
-    faction: { dir: path10.join("worldbuilding", "factions"), titleField: "name" },
-    artifact: { dir: path10.join("worldbuilding", "artifacts"), titleField: "name" },
-    arc: { dir: path10.join("plot", "arcs"), titleField: "name" },
-    chapter: { dir: "chapters", titleField: "title" },
-    scene: { dir: "scenes", titleField: "title" },
-    question: { dir: path10.join("continuity", "questions"), titleField: "title" },
-    promise: { dir: path10.join("continuity", "promises"), titleField: "title" },
-    clue: { dir: path10.join("continuity", "clues"), titleField: "title" },
-    term: { dir: path10.join("glossary", "terms"), titleField: "term" },
-    matter: { dir: MATTER_DIR, titleField: "title" },
-    research: { dir: RESEARCH_DIR, titleField: "title" }
-  };
-  return configs[kind];
-}
-var KIND_ALIASES = {
-  character: "character",
-  characters: "character",
-  location: "location",
-  locations: "location",
-  system: "system",
-  systems: "system",
-  faction: "faction",
-  factions: "faction",
-  artifact: "artifact",
-  artifacts: "artifact",
-  arc: "arc",
-  arcs: "arc",
-  chapter: "chapter",
-  chapters: "chapter",
-  scene: "scene",
-  scenes: "scene",
-  question: "question",
-  questions: "question",
-  promise: "promise",
-  promises: "promise",
-  clue: "clue",
-  clues: "clue",
-  term: "term",
-  terms: "term",
-  "glossary-term": "term",
-  "glossary-terms": "term",
-  glossary: "term",
-  matter: "matter",
-  research: "research",
-  "research-note": "research",
-  "research-notes": "research"
-};
-function normalizeKind(kind) {
-  const normalized = String(kind ?? "").trim().toLowerCase();
-  const expected = [...new Set(Object.values(KIND_ALIASES))].join(", ");
-  if (normalized === "") {
-    throw usageError(`An entity kind is required: expected one of ${expected}`);
-  }
-  if (!Object.hasOwn(KIND_ALIASES, normalized)) {
-    throw usageError(`Unsupported entity kind: ${kind}: expected one of ${expected}`);
-  }
-  return KIND_ALIASES[normalized];
-}
-var WINDOWS_RESERVED_ID = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/;
-function assertPortableFolderName(name) {
-  if (WINDOWS_RESERVED_ID.test(name.split(".")[0].trim().toLowerCase())) {
-    throw usageError(`Cannot use folder ${name}: Windows reserves that name. Choose another --dir`);
-  }
-  if (/[. ]$/.test(name)) {
-    throw usageError(`Cannot use folder "${name}": Windows does not allow a folder name ending in a dot or space. Choose another --dir`);
-  }
-  if (/[<>:"|?*\x00-\x1f]/.test(name)) {
-    throw usageError(`Cannot use folder "${name}": Windows does not allow < > : " | ? * or control characters in folder names. Choose another --dir`);
-  }
-}
-function assertPortableId(id, kind) {
-  if (WINDOWS_RESERVED_ID.test(id)) {
-    const file = kind === "story" ? id : `${id}.md`;
-    throw usageError(`Cannot use ${kind} id ${id}: Windows reserves the file name ${file}. Choose a longer name, such as "${id} ${kind}"`);
-  }
-}
-function requireKebabId(id, label) {
-  if (!isKebabId2(id)) {
-    throw usageError(`${label} must be a kebab-case id, got "${id}"`);
-  }
-}
-function requestedEntityId(kind, value) {
-  const id = String(value ?? "").trim();
-  if (id === "") {
-    return;
-  }
-  if (kind === "chapter" || kind === "scene") {
-    throw usageError(`--id does not apply to a ${kind}: a ${kind} id comes from its number. Use --number for a chapter, or --chapter and --scene for a scene`);
-  }
-  requireKebabId(id, `${kind} id`);
-  return id;
-}
-function undeducibleIdMessage(kind, name) {
-  return `Cannot derive a kebab-case id from ${kind} name "${name}": pass --id with a kebab-case id, or use a name containing ASCII letters or digits`;
-}
-function parseDecimalInteger(value) {
-  if (typeof value === "number") {
-    return Number.isSafeInteger(value) ? value : null;
-  }
-  const text = typeof value === "string" ? value.trim() : "";
-  if (!/^\d+$/.test(text)) {
-    return null;
-  }
-  const number = Number(text);
-  return Number.isSafeInteger(number) ? number : null;
-}
-function requireBookNumber(value) {
-  const text = typeof value === "string" ? value.trim() : typeof value === "number" ? String(value) : "";
-  const number = /^\d+(?:\.\d+)?$/.test(text) ? Number(text) : NaN;
-  if (!isBookNumber(number)) {
-    throw usageError(`Book number must be 0 or a positive number, such as 2, 0 for a prequel, or 1.5 for a novella; got ${value}`);
-  }
-  return number;
-}
-function requirePositiveInteger(value, label) {
-  const number = parseDecimalInteger(value);
-  if (number === null || number <= 0) {
-    throw usageError(`${label} must be a positive integer, got ${value}`);
-  }
-  return number;
-}
-function isKebabId2(value) {
-  const text = String(value ?? "").trim();
-  return text !== "" && text === kebabCase(text);
-}
-function characterFile(name, options) {
-  return `${stringifyFrontmatter({
-    name,
-    role: options.role ?? "supporting",
-    status: options.status ?? "alive",
-    aliases: [],
-    relationships: [],
-    locations: listOption(options, "locations", "location"),
-    tags: [],
-    arc: options.arc ?? ""
-  })}# ${name}
-
-## Appearance
-
-Add physical details that matter on the page.
-
-## Personality & Traits
-
-Add behavior, temperament, habits, and contradictions.
-
-## Backstory
-
-Add only story-relevant history.
-
-## Motivations & Goals
-
-External want, internal need, and the conflict between them.
-
-## Voice & Speech Patterns
-
-Add 2-3 example lines.
-
-## Character Arc
-
-- **Starting state:**
-- **Key turning points:**
-- **Ending state:**
-
-## Timeline
-
-| When | Event | Relevance |
-|------|-------|-----------|
-| | | |
-`;
-}
-function locationFile(name, options) {
-  return `${stringifyFrontmatter({
-    name,
-    type: options.type ?? "other",
-    region: options.region ?? "",
-    population: options.population ?? "",
-    "controlled-by": options["controlled-by"] ?? "",
-    "notable-characters": listOption(options, "characters", "character"),
-    tags: [],
-    status: options.status ?? "unknown"
-  })}# ${name}
-
-## Description
-
-Add sensory details and first impressions.
-
-## History
-
-Add relevant history.
-
-## Culture & Customs
-
-Add social norms, rituals, or local patterns.
-
-## Notable Features
-
-Add landmarks or practical story elements.
-
-## Current State
-
-Add what is true at the current story moment.
-`;
-}
-function systemFile(name, options) {
-  return `${stringifyFrontmatter({
-    name,
-    type: options.type ?? "other",
-    prevalence: options.prevalence ?? "uncommon"
-  })}# ${name}
-
-## Overview
-
-Summarize the system and why it matters.
-
-## Rules & Limitations
-
-Define costs, limits, and exceptions.
-
-## History
-
-Add origin and changes over time.
-
-## Practitioners
-
-Add users, institutions, or gatekeepers.
-
-## Impact on Society
-
-Add consequences for daily life and conflict.
-`;
-}
-function factionFile(name, options) {
-  return `${stringifyFrontmatter({
-    name,
-    type: options.type ?? "other",
-    status: options.status ?? "active",
-    members: listOption(options, "members", "member", "characters", "character"),
-    locations: listOption(options, "locations", "location"),
-    tags: []
-  })}# ${name}
-
-## Purpose
-
-What the faction wants and why it exists.
-
-## Power Base
-
-Resources, influence, territory, leverage, or rituals.
-
-## Members
-
-Important members and their roles.
-
-## Conflicts
-
-Internal and external pressures.
-`;
-}
-function artifactFile(name, options) {
-  return `${stringifyFrontmatter({
-    name,
-    type: options.type ?? "object",
-    status: options.status ?? "active",
-    owner: options.owner ?? "",
-    location: options.location ?? "",
-    tags: []
-  })}# ${name}
-
-## Description
-
-What it is and how readers recognize it.
-
-## Function
-
-What it can do, cannot do, costs, and constraints.
-
-## History
-
-Where it came from and why it matters.
-
-## Current State
-
-Who has it, where it is, and what changed recently.
-`;
-}
-function arcFile(name, options) {
-  return `${stringifyFrontmatter({
-    name,
-    type: options.type ?? "subplot",
-    status: options.status ?? "planned",
-    characters: listOption(options, "characters", "character"),
-    themes: listOption(options, "themes", "theme"),
-    acts: listOption(options, "acts", "act")
-  })}# ${name}
-
-## Setup
-
-Initial state and inciting pressure.
-
-## Rising Action
-
-1. First escalation
-2. Second escalation
-3. Reversal or complication
-
-## Climax
-
-Decision point or highest tension.
-
-## Resolution
-
-What changes because of this arc.
-
-## Plot Points
-
-| # | Plot Point | Act | Chapter | Status | Notes |
-|---|------------|-----|---------|--------|-------|
-| 1 | | | | planned | |
-
-## Foreshadowing
-
-| Planted | Payoff | Chapter Planted | Chapter Payoff | Status |
-|---------|--------|-----------------|----------------|--------|
-| | | | | planned |
-`;
-}
-function chapterFile(title, number, options, unit) {
-  const dateError = storyDateError(options.date);
-  if (dateError) {
-    throw usageError(dateError);
-  }
-  const timeError = storyTimeError(options.time);
-  if (timeError) {
-    throw usageError(timeError);
-  }
-  return `${stringifyFrontmatter({
-    title,
-    number,
-    pov: options.pov ?? "",
-    locations: listOption(options, "locations", "location"),
-    characters: castWithPov(options),
-    mentions: listOption(options, "mentions", "mention"),
-    "arcs-advanced": listOption(options, "arcs", "arc"),
-    status: options.status ?? "outline",
-    mode: options.mode ?? "",
-    date: options.date ?? "",
-    time: options.time ?? "",
-    ...options.hook === undefined ? {} : { hook: options.hook },
-    "word-count": 0,
-    ...unit.name === "characters" ? { "character-count": 0 } : {}
-  })}# ${chapterHeading(number, title)}
-
-## Outline
-
-1. Opening beat
-2. Escalation
-3. Turn or decision
-
----
-
-## Chapter Text
-
-`;
-}
-function sceneFile(title, chapter, scene, options) {
-  const dateError = storyDateError(options.date);
-  if (dateError) {
-    throw usageError(dateError);
-  }
-  const timeError = storyTimeError(options.time);
-  if (timeError) {
-    throw usageError(timeError);
-  }
-  const travelHoursOption = options["travel-hours"];
-  let travelHours;
-  if (travelHoursOption !== undefined && travelHoursOption !== "") {
-    travelHours = Number(travelHoursOption);
-    if (!Number.isFinite(travelHours)) {
-      throw usageError(`travel-hours must be a number, got ${travelHoursOption}`);
-    }
-    if (travelHours < 0) {
-      throw usageError(`travel-hours must be zero or positive, got ${travelHoursOption}`);
-    }
-  }
-  const frontmatter = {
-    title,
-    chapter,
-    scene,
-    pov: options.pov ?? "",
-    location: options.location ?? "",
-    characters: castWithPov(options),
-    mentions: listOption(options, "mentions", "mention"),
-    "arcs-advanced": listOption(options, "arcs", "arc"),
-    status: options.status ?? "outline",
-    date: options.date ?? "",
-    time: options.time ?? "",
-    sequel: options.sequel ?? false,
-    ...options.outcome === undefined ? {} : { outcome: options.outcome },
-    dilemma: options.dilemma ?? "",
-    "state-changes": []
-  };
-  if (travelHours !== undefined) {
-    frontmatter["travel-hours"] = travelHours;
-  }
-  return `${stringifyFrontmatter(frontmatter)}# ${title}
-
-## Purpose
-
-What this scene changes.
-
-## Continuity Notes
-
-Character state, object state, knowledge changes, and timeline facts.
-`;
-}
-function castWithPov(options) {
-  const characters = listOption(options, "characters", "character");
-  const pov = String(options.pov ?? "").trim();
-  return pov === "" || characters.includes(pov) ? characters : [pov, ...characters];
-}
-function questionFile(title, options) {
-  const resolved = String(options.resolved ?? "").trim();
-  if (resolved !== "" && options.status === "open") {
-    throw usageError("A question with --resolved cannot have status open: use --status answered or resolved");
-  }
-  return `${stringifyFrontmatter({
-    title,
-    status: options.status ?? (resolved === "" ? "open" : "answered"),
-    introduced: options.introduced ?? "",
-    resolved: options.resolved ?? "",
-    characters: listOption(options, "characters", "character")
-  })}# ${title}
-
-## Question
-
-What the reader or continuity tracker needs answered.
-
-## Evidence
-
-Known clues, constraints, and contradictions.
-
-## Resolution Plan
-
-How and when this should resolve.
-`;
-}
-function promiseFile(title, options) {
-  return `${stringifyFrontmatter({
-    title,
-    status: options.status ?? plantedDefaultStatus(options),
-    planted: options.planted ?? "",
-    payoff: options.payoff ?? "",
-    arcs: listOption(options, "arcs", "arc"),
-    characters: listOption(options, "characters", "character")
-  })}# ${title}
-
-## Setup
-
-What is promised to the reader.
-
-## Payoff
-
-How the story should answer the setup.
-
-## Tracking Notes
-
-Keep planted and payoff chapters current.
-`;
-}
-function plantedDefaultStatus(options) {
-  return String(options.planted ?? "").trim() !== "" ? "planted" : "planned";
-}
-function clueFile(title, options) {
-  return `${stringifyFrontmatter({
-    title,
-    status: options.status ?? plantedDefaultStatus(options),
-    planted: options.planted ?? "",
-    payoff: options.payoff ?? "",
-    "significance-delayed": options["significance-delayed"] ?? false,
-    ...options["red-herring"] ? { "red-herring": true } : {},
-    characters: listOption(options, "characters", "character"),
-    arcs: listOption(options, "arcs", "arc")
-  })}# ${title}
-
-## Clue
-
-What the reader sees and why it matters.
-
-## Planting Plan
-
-How and when to plant it.
-
-## Payoff Plan
-
-How the payoff lands.
-
-## Tracking Notes
-
-Keep planted and payoff chapters current.
-`;
-}
-function termFile(term, options) {
-  return `${stringifyFrontmatter({
-    term,
-    category: options.category ?? "term",
-    aliases: listOption(options, "aliases", "alias")
-  })}# ${term}
-
-## Definition
-
-Define the term in story context.
-
-## Usage Notes
-
-How agents should use this term consistently.
-`;
-}
-function researchFile(title, options) {
-  return `${stringifyFrontmatter({
-    title,
-    status: options.status ?? "open",
-    sources: [...new Set(asArray(options.sources).concat(asArray(options.source)).map((source) => String(source).trim()).filter(Boolean))],
-    "used-in": listOption(options, "used-in"),
-    ...researchOptionalFields(options)
-  })}# ${title}
-
-## Question
-
-What the story needs to get right.
-
-## Findings
-
-The facts, with the source for each.
-
-## Story Use
-
-How the chapters use these facts, and what was changed on purpose.
-`;
-}
-function researchOptionalFields(options) {
-  const fields = {};
-  for (const key of ["accuracy", "confidence", "method"]) {
-    if (options[key] !== undefined) {
-      fields[key] = String(options[key]);
-    }
-  }
-  const risks = listOption(options, "risk");
-  for (const risk of risks) {
-    if (!RESEARCH_RISKS.has(risk)) {
-      throw usageError(`Unsupported risk "${risk}": expected one of ${[...RESEARCH_RISKS].join(", ")}`);
-    }
-  }
-  if (risks.length > 0) {
-    fields.risk = risks;
-  }
-  return fields;
-}
-function matterFile(project, title, options) {
-  const placement = String(options.placement ?? "front");
-  let order;
-  if (options.order === undefined) {
-    order = project.matter.filter((matter) => matter.placement === placement).reduce((max, matter) => Math.max(max, matter.order), 0) + 1;
-  } else {
-    order = parseDecimalInteger(options.order);
-    if (order === null) {
-      throw usageError(`matter order must be a non-negative integer, got ${options.order}`);
-    }
-  }
-  const heading = options.heading === undefined ? true : isTruthy(options.heading);
-  return `${stringifyFrontmatter({ title, placement, order, heading })}# ${title}
-
-`;
-}
-function nextSceneNumber(project, chapter) {
-  return project.scenes.filter((scene) => scene.chapter === chapter).reduce((max, scene) => Math.max(max, scene.scene), 0) + 1;
-}
-var LINK_DEFINITION_PATTERN = /^( {0,3}\[)([^\]\n]+)\]:[ \t]*(<[^>\n]*>|[^\s]+)/gm;
-var REGISTRY_HINT = " (it is a registry: run story reindex to rebuild it)";
-var SKIPPED_SCAN_DIRECTORIES = new Set(["dist", "node_modules"]);
-function markdownFiles(root, { maxFiles = MAX_SCAN_FILES } = {}, depth = 0, collected = null) {
-  const files = collected ?? [];
-  for (const entry of fs6.readdirSync(root, { withFileTypes: true })) {
-    const fullPath = path10.join(root, entry.name);
-    if (entry.isDirectory() && !SKIPPED_SCAN_DIRECTORIES.has(entry.name) && !entry.name.startsWith(".")) {
-      if (depth < MAX_SCAN_DEPTH && !fs6.existsSync(path10.join(fullPath, "story.md"))) {
-        markdownFiles(fullPath, { maxFiles }, depth + 1, files);
-      }
-    } else if (entry.isFile() && entry.name.endsWith(".md") && !entry.name.startsWith(".")) {
-      files.push(fullPath);
-      if (files.length > maxFiles) {
-        throw projectError(`Too many markdown files in the project: the scan exceeds the ${MAX_SCAN_FILES} file limit`);
-      }
-    }
-  }
-  if (depth === 0) {
-    files.sort();
-  }
-  return files;
-}
-function chapterChoices(chapter, label) {
-  const choices = [];
-  const problems = [];
-  if (chapter.choices === undefined) {
-    return { choices, problems };
-  }
-  if (!Array.isArray(chapter.choices)) {
-    problems.push(err("field-not-list", `${label} frontmatter field choices must be a list of { text, to } entries`, label));
-    return { choices, problems };
-  }
-  chapter.choices.forEach((choice, index) => {
-    const at = `${label} choices[${index}]`;
-    if (!choice || typeof choice !== "object" || Array.isArray(choice)) {
-      problems.push(err("invalid-choice", `${at} must have text and to, such as { text: Follow the light, to: chapter-02 }`, label));
-      return;
-    }
-    const text = typeof choice.text === "string" ? choice.text.trim() : "";
-    const to = typeof choice.to === "string" ? choice.to : "";
-    const before = problems.length;
-    if (text === "") {
-      problems.push(err("invalid-choice", `${at} needs text: the words the reader picks, quoted if they look like a number`, label));
-    } else if (TWEE_LINK_UNSAFE.test(text)) {
-      problems.push(err("invalid-choice", `${at} text cannot contain [, ], |, ->, <-, or a line break, or end in <, which Twine reads as link syntax`, label));
-    }
-    if (to.trim() === "") {
-      problems.push(err("invalid-choice", `${at} needs to: the id of the chapter it leads to, such as chapter-02`, label));
-    } else if (to !== kebabCase(to)) {
-      problems.push(err("id-not-kebab", `${at} to ${to} must be a kebab-case chapter id`, label));
-    }
-    if (problems.length === before) {
-      choices.push({ text, to, index });
-    }
-  });
-  return { choices, problems };
-}
-function branchGraph(project) {
-  const ids = new Set(project.chapters.map((chapter) => chapter.id));
-  const parsed = project.chapters.map((chapter) => {
-    const label = relative2(project, chapter.file);
-    return { chapter, label, ...chapterChoices(chapter, label) };
-  });
-  const branching = parsed.some((entry) => entry.choices.length > 0);
-  const problems = parsed.flatMap((entry) => entry.problems);
-  const missing = [];
-  const warnings = [];
-  const passages = parsed.map((entry, position) => {
-    if (!branching) {
-      const next = project.chapters[position + 1];
-      return { chapter: entry.chapter, links: next ? [{ text: "Continue", to: next.id }] : [] };
-    }
-    for (const choice of entry.choices) {
-      if (!ids.has(choice.to)) {
-        missing.push({ to: choice.to, finding: err("missing-reference", `${entry.label} choices[${choice.index}] references missing chapter ${choice.to}`, entry.label) });
-      }
-    }
-    return { chapter: entry.chapter, links: entry.choices.filter((choice) => ids.has(choice.to)).map(({ text, to }) => ({ text, to })) };
-  });
-  if (branching) {
-    const byId = new Map(passages.map((passage) => [passage.chapter.id, passage]));
-    const start = passages[0].chapter.id;
-    const reached = new Set([start]);
-    const queue = [start];
-    while (queue.length > 0) {
-      for (const link of byId.get(queue.shift()).links) {
-        if (!reached.has(link.to)) {
-          reached.add(link.to);
-          queue.push(link.to);
-        }
-      }
-    }
-    for (const passage of passages) {
-      if (!reached.has(passage.chapter.id)) {
-        warnings.push(warn("unreachable-chapter", `${relative2(project, passage.chapter.file)} cannot be reached: no choice path from ${start} leads to it`, relative2(project, passage.chapter.file)));
-      }
-    }
-  }
-  return { branching, passages, problems, missing, warnings };
-}
-var MAX_SCAN_FILE_BYTES = 5 * 1024 * 1024;
-var MAX_SCAN_FILES = 5000;
-var MAX_SCAN_DEPTH = 10;
-var MAX_COVER_BYTES = 50 * 1024 * 1024;
-function assertFileSizeWithinLimit(filePath, limit = MAX_SCAN_FILE_BYTES) {
-  const size = fs6.statSync(filePath).size;
-  if (size > limit) {
-    throw projectError("Refusing to read oversized file " + filePath + ": " + size + " bytes exceeds the " + limit + " byte limit");
-  }
-}
-function readEntityFiles(root, relativeDir, mapEntity, scanErrors) {
-  const directory = path10.join(root, relativeDir);
-  if (!fs6.existsSync(directory)) {
-    return [];
-  }
-  assertSafeProjectDirectory(directory, root);
-  const entities = [];
-  const files = fs6.readdirSync(directory, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".md") && !entry.name.startsWith(".") && entry.name !== "_index.md").map((entry) => entry.name).sort();
-  if (files.length > MAX_SCAN_FILES) {
-    throw projectError("Too many files in " + relativeDir + ": " + files.length + " exceeds the " + MAX_SCAN_FILES + " file limit");
-  }
-  for (const file of files) {
-    const fullPath = path10.join(directory, file);
-    const label = path10.join(relativeDir, file);
-    try {
-      const markdown = readMarkdown(fullPath, root);
-      const entity = mapEntity(path10.basename(file, ".md"), fullPath, markdown.data, markdown);
-      Object.defineProperty(entity, "frontmatter", { value: markdown.data, enumerable: false });
-      entities.push(entity);
-    } catch (error) {
-      const message = error.message.startsWith(`${fullPath} `) ? error.message.slice(fullPath.length + 1) : error.message;
-      scanErrors.push(err("unreadable-file", `${label}: ${message}`, label));
-    }
-  }
-  return entities;
-}
-function hasPostHocNotes(body) {
-  const chapterText = /^## Chapter Text\s*$/im.exec(body);
-  return chapterText !== null && /^## Chapter Notes \(post-hoc\)\s*$/m.test(body.slice(0, chapterText.index));
-}
-function parentProjectHint(projectRoot) {
-  let current = path10.dirname(projectRoot);
-  while (!fs6.existsSync(path10.join(current, "story.md"))) {
-    if (path10.dirname(current) === current) {
-      return "";
-    }
-    current = path10.dirname(current);
-  }
-  const relative = path10.relative(process.cwd(), current) || ".";
-  const shown = relative.length < current.length ? relative : current;
-  return ` (the project root looks like ${shown}; pass that path instead)`;
-}
-function requireStoryFile(projectRoot) {
-  const storyPath = path10.join(projectRoot, "story.md");
-  if (!fs6.existsSync(storyPath)) {
-    if (fs6.statSync(projectRoot, { throwIfNoEntry: false })?.isFile()) {
-      throw projectError(`${projectRoot} is a file; pass the folder that contains it`);
-    }
-    const hint = path10.basename(projectRoot).startsWith("-") ? `; ${path10.basename(projectRoot)} is not an option (run story help)` : parentProjectHint(projectRoot);
-    throw projectError(`${projectRoot} is not a story project: missing story.md${hint}`);
-  }
-  return storyPath;
-}
-function readExemptions(root, scanErrors) {
-  const exemptionsPath = path10.join(root, "continuity", "exemptions.md");
-  if (!lstatIfExists(exemptionsPath)) {
-    return [];
-  }
-  let raw;
-  try {
-    raw = readTextFile(exemptionsPath);
-  } catch (error) {
-    scanErrors.push(err("unreadable-file", `${path10.join("continuity", "exemptions.md")}: ${relativePathError(error, exemptionsPath, root).message}`, path10.join("continuity", "exemptions.md")));
-    return [];
-  }
-  let data;
-  try {
-    data = parseFrontmatter(raw, exemptionsPath).data;
-  } catch {
-    return [];
-  }
-  return parseExemptions(data.exemptions);
-}
-function readOptionalRootFile(root, name, scanErrors) {
-  const filePath = path10.join(root, name);
-  if (!lstatIfExists(filePath)) {
-    return null;
-  }
-  try {
-    const markdown = readMarkdown(filePath, root);
-    return { file: filePath, data: markdown.data, rawMarkdown: markdown.rawMarkdown };
-  } catch (error) {
-    scanErrors.push(err("unreadable-file", `${name}: ${error.message}`, name));
-    return null;
-  }
-}
-function readStyleSheet(root, scanErrors) {
-  const filePath = path10.join(root, STYLE_SHEET_FILE);
-  if (!lstatIfExists(filePath)) {
-    return null;
-  }
-  try {
-    const markdown = readMarkdown(filePath, root);
-    return { file: filePath, data: markdown.data, body: markdown.body };
-  } catch (error) {
-    scanErrors.push(err("unreadable-file", `${STYLE_SHEET_FILE}: ${error.message}`, STYLE_SHEET_FILE));
-    return null;
-  }
-}
-function readMarkdown(filePath, root) {
-  let rawMarkdown;
-  try {
-    if (root) {
-      assertSafeProjectPath(filePath, root);
-    }
-    rawMarkdown = readTextFile(filePath);
-  } catch (error) {
-    throw root ? relativePathError(error, filePath, root) : error;
-  }
-  try {
-    return { ...parseFrontmatter(rawMarkdown, filePath), rawMarkdown };
-  } catch (error) {
-    throw projectError(error.message.startsWith(`${filePath} `) ? error.message.slice(filePath.length + 1) : error.message);
-  }
-}
-function relativePathError(error, filePath, root) {
-  const relativePath = path10.relative(root, filePath);
-  return projectError(error.message.split(filePath).join(relativePath).split(path10.resolve(root, relativePath)).join(relativePath));
-}
-function safeRead(filePath, root) {
-  if (!fs6.existsSync(filePath)) {
-    return "";
-  }
-  if (root) {
-    assertSafeProjectPath(filePath, root);
-  }
-  return readTextFile(filePath);
-}
-var ENTITY_SCAN_DIRS = [
-  "characters",
-  "chapters",
-  "scenes",
-  path10.join("worldbuilding", "locations"),
-  path10.join("worldbuilding", "systems"),
-  path10.join("worldbuilding", "factions"),
-  path10.join("worldbuilding", "artifacts"),
-  path10.join("plot", "arcs"),
-  path10.join("continuity", "questions"),
-  path10.join("continuity", "promises"),
-  path10.join("continuity", "clues"),
-  path10.join("glossary", "terms"),
-  MATTER_DIR,
-  RESEARCH_DIR
-];
-function fileStem(storyId) {
-  if (storyId.length <= 100) {
-    return storyId;
-  }
-  const cut = storyId.slice(0, 100);
-  return cut.slice(0, cut.lastIndexOf("-") > 0 ? cut.lastIndexOf("-") : 100);
-}
-var SOURCE_ROOT_FILES = new Set(["story.md", STYLE_SHEET_FILE, PROGRESS_FILE]);
-var SOURCE_DIRECTORIES = ["characters", "chapters", "scenes", "worldbuilding", "plot", "continuity", "glossary", MATTER_DIR, RESEARCH_DIR];
-function scanId(value) {
-  return typeof value === "number" || typeof value === "boolean" ? String(value) : value ?? "";
-}
-function asIdArray(value) {
-  return asArray(value).map((item) => typeof item === "number" || typeof item === "boolean" ? String(item) : item);
-}
-function asArray(value) {
-  if (Array.isArray(value)) {
-    return value;
-  }
-  if (value === undefined || value === null || value === "") {
-    return [];
-  }
-  return [value];
-}
-function listOption(options, ...names) {
-  const list = [];
-  for (const name of names) {
-    for (const value of normalizeList(options[name], [])) {
-      if (!list.includes(value)) {
-        list.push(value);
-      }
-    }
-  }
-  return list;
-}
-function normalizeList(value, fallback) {
-  const values = value === undefined || value === true ? [] : Array.isArray(value) ? value : [value];
-  const list = [];
-  for (const valueItem of values) {
-    for (const part of String(valueItem).split(",")) {
-      const trimmed = part.trim();
-      if (trimmed) {
-        list.push(trimmed);
-      }
-    }
-  }
-  return list.length > 0 ? list : fallback;
-}
-function coverIsReady(project) {
-  if (project.story.data.cover === undefined) {
-    return false;
-  }
-  try {
-    coverImage(project);
-    return true;
-  } catch {
-    return false;
-  }
-}
-function coverImage(project) {
-  const cover = String(project.story.data.cover).trim();
-  const mediaType = COVER_MEDIA_TYPES[path10.extname(cover).toLowerCase()];
-  if (mediaType === undefined) {
-    throw projectError(`story.md cover ${cover} must be a ${Object.keys(COVER_MEDIA_TYPES).join(", ")} image`);
-  }
-  const filePath = path10.resolve(project.root, cover);
-  if (!isPathInside(project.root, filePath)) {
-    throw projectError(`story.md cover ${cover} must be inside the project`);
-  }
-  const stats = lstatIfExists(filePath);
-  if (!stats) {
-    throw projectError(`story.md cover ${cover} does not exist`);
-  }
-  assertSafeProjectPath(filePath, project.root);
-  if (!stats.isFile()) {
-    throw projectError(`story.md cover ${cover} is not a file`);
-  }
-  assertFileSizeWithinLimit(filePath, MAX_COVER_BYTES);
-  return { filePath, mediaType, extension: mediaType === "image/jpeg" ? "jpg" : path10.extname(cover).slice(1).toLowerCase() };
-}
-var CHAPTER_FILENAME_PATTERN = /^chapter-(\d+)\.md$/;
-var SCENE_FILENAME_PATTERN = /^(.+)-scene-(\d+)\.md$/;
-function isPositiveIntegerValue(value) {
-  const number = Number(value);
-  return value !== "" && value !== null && typeof value !== "boolean" && Number.isInteger(number) && number > 0;
-}
-function chapterNumber(value, file) {
-  return value !== undefined && isPositiveIntegerValue(value) ? Number(value) : chapterNumberFromFile(file);
-}
-function chapterNumberFromFile(file) {
-  const match = CHAPTER_FILENAME_PATTERN.exec(path10.basename(file));
-  return match ? Number.parseInt(match[1], 10) : 0;
-}
-function sceneNumberFromFile(file) {
-  const match = SCENE_FILENAME_PATTERN.exec(path10.basename(file));
-  return match ? Number.parseInt(match[2], 10) : 0;
-}
-function sceneChapterFromFile(file) {
-  const match = SCENE_FILENAME_PATTERN.exec(path10.basename(file));
-  return match ? match[1] : "";
-}
-function relative2(project, file) {
-  return path10.relative(project.root, file);
 }
 
 // src/validate.js

@@ -2531,6 +2531,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `state-location-drift` | warning | `character-state` puts a character somewhere their last scene does not. |
 | `object-not-recorded` | warning | A scene changes an artifact that has no `object-state` entry. |
 | `state-object-drift` | warning | An artifact's `object-state` differs from the last scene that changed it. |
+| `state-differs-by-path` | warning | In a branching book, the branches that lead to `current-chapter` last set an artifact's owner or location to different values, so no one `object-state` entry matches every path. |
 | `gone-artifact-used` | error | A scene uses an artifact after it was destroyed or lost. |
 | `gone-artifact-mentioned` | error | A chapter or scene mentions an artifact after it was destroyed or lost. |
 | `malformed-date` | warning | A chapter or scene `date` is not a real date. |
