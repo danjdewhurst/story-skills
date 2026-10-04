@@ -1,4 +1,5 @@
 import { parseClockDate } from "./continuity.js";
+import { branchGraph } from "./scan.js";
 
 // Story-time order of chapters, shared by the death, knowledge, and state
 // checks. Two chapters that are both dated compare by date, so a 2034
@@ -26,7 +27,106 @@ export function chapterChronology(project) {
     days.set(id, value);
   }
   const outline = new Set(project.chapters.filter((chapter) => chapter.status === "outline").map((chapter) => chapter.id));
-  return { ...chronologyFrom(numbers, days), outline };
+  const linear = { ...chronologyFrom(numbers, days), outline };
+  const graph = project.chapters.length > 0 ? branchGraph(project) : null;
+  if (!graph || !graph.branching) {
+    return linear;
+  }
+  return { ...pathChronology(linear, graph.passages), outline, linear };
+}
+
+// A branching book's chronology: chapters compare only along a path of
+// choices, so a death, fact, or change on one branch does not reach its
+// sibling branches. `after(later, earlier)` is true when `later` follows
+// `earlier` on some path from the first chapter: by date when both are dated
+// on different days (a flashback reached later stays earlier), otherwise by
+// the choices. Two chapters in the same loop, each reaching the other,
+// compare as a linear book does, by date then number. A chapter no path
+// reaches compares with everything by date then number, as before the
+// choices were written. `linear` keeps the number-order chronology for the
+// whole-book reads (series and diagram lifelines, sorting progressions).
+function pathChronology(linear, passages) {
+  const { numbers, days } = linear;
+  const links = new Map(passages.map((passage) => [passage.chapter.id, passage.links.map((link) => link.to)]));
+  const downstream = new Map();
+  // The chapters reachable from `from` by one or more choices, skipping
+  // `avoid` when given.
+  const reach = (from, avoid = "") => {
+    const seen = new Set();
+    const queue = [...(links.get(from) ?? [])];
+    while (queue.length > 0) {
+      const id = queue.shift();
+      if (seen.has(id) || id === avoid) {
+        continue;
+      }
+      seen.add(id);
+      queue.push(...(links.get(id) ?? []));
+    }
+    return seen;
+  };
+  const reaches = (from, to) => {
+    if (!downstream.has(from)) {
+      downstream.set(from, reach(from));
+    }
+    return downstream.get(from).has(to);
+  };
+  const start = passages[0].chapter.id;
+  const onPath = new Set([start, ...reach(start)]);
+  const placed = (id) => onPath.has(id);
+  // The order two chapters on paths are read in: 1 when `later` comes after
+  // `earlier`, 0 when neither path leads from one to the other, and null
+  // when each leads to the other (a loop).
+  const pathOrder = (later, earlier) => {
+    const forward = reaches(earlier, later);
+    const back = reaches(later, earlier);
+    if (forward && back) {
+      return null;
+    }
+    return forward ? 1 : back ? -1 : 0;
+  };
+  const after = (later, earlier) => {
+    if (later === earlier) {
+      return false;
+    }
+    if (!placed(later) || !placed(earlier)) {
+      return linear.after(later, earlier);
+    }
+    const order = pathOrder(later, earlier);
+    if (order === 0) {
+      return false;
+    }
+    const laterDays = days.get(later);
+    const earlierDays = days.get(earlier);
+    if (laterDays !== undefined && earlierDays !== undefined && laterDays !== earlierDays) {
+      return laterDays > earlierDays;
+    }
+    return order === null ? numbers.get(later) > numbers.get(earlier) : order === 1;
+  };
+  // Reading order: `later` is read after `earlier` on some path.
+  const readAfter = (later, earlier) => {
+    if (later === earlier) {
+      return false;
+    }
+    if (!placed(later) || !placed(earlier)) {
+      return numbers.get(later) > numbers.get(earlier);
+    }
+    const order = pathOrder(later, earlier);
+    return order === null ? numbers.get(later) > numbers.get(earlier) : order === 1;
+  };
+  return {
+    numbers,
+    days,
+    branching: true,
+    after,
+    atOrBefore: (earlier, later) => earlier === later || after(later, earlier),
+    readBy: (earlier, later) => numbers.has(earlier) && numbers.has(later) && (earlier === later || readAfter(later, earlier)),
+    // `later` is read strictly after `earlier` on some path.
+    readAfter: (later, earlier) => numbers.has(later) && numbers.has(earlier) && readAfter(later, earlier),
+    placed,
+    // Whether some path of choices leads from `from` to `to` without
+    // passing through `avoid`.
+    reachesAvoiding: (from, to, avoid) => reach(from, avoid).has(to)
+  };
 }
 
 // The story-time order over chapter numbers and days, as { numbers, days,
@@ -41,7 +141,16 @@ export function chronologyFrom(numbers, days) {
     }
     return numbers.get(later) > numbers.get(earlier);
   };
-  return { numbers, days, after };
+  return {
+    numbers,
+    days,
+    branching: false,
+    after,
+    // `earlier` happens at or before `later` in story time.
+    atOrBefore: (earlier, later) => !after(earlier, later),
+    // `earlier` is read at or before `later`: by chapter number.
+    readBy: (earlier, later) => numbers.has(earlier) && numbers.has(later) && numbers.get(earlier) <= numbers.get(later)
+  };
 }
 
 // How a knowledge-state fact stands at `atChapterId`.
@@ -57,10 +166,10 @@ export function knowledgeAudience(chronology, learnedIn, atChapterId) {
   if (learnedIn === "") {
     return "reader";
   }
-  if (!chronology.numbers.has(learnedIn) || chronology.after(learnedIn, atChapterId)) {
+  if (!chronology.numbers.has(learnedIn) || !chronology.atOrBefore(learnedIn, atChapterId)) {
     return null;
   }
-  return chronology.numbers.get(learnedIn) <= chronology.numbers.get(atChapterId) ? "reader" : "character";
+  return chronology.readBy(learnedIn, atChapterId) ? "reader" : "character";
 }
 
 // The parenthetical `story knowledge` and `story context` both print.
@@ -117,7 +226,16 @@ export function deathWindow(character, chronology, options = {}) {
       if (!chronology.numbers.has(chapterId) || !chronology.after(chapterId, died)) {
         return false;
       }
-      return revived === "" || chronology.after(revived, chapterId);
+      if (!chronology.branching || revived === "" || ![chapterId, died, revived].every(chronology.placed)) {
+        return revived === "" || chronology.after(revived, chapterId);
+      }
+      // In a branching book the revival only counts on its own paths: still
+      // dead when the revival is on another branch or later, or when some
+      // path from the death reaches the chapter without passing it.
+      if (chapterId === revived) {
+        return false;
+      }
+      return !chronology.after(chapterId, revived) || chronology.reachesAvoiding(died, chapterId, revived);
     }
   };
 }

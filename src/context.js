@@ -213,8 +213,10 @@ export function entityStateAtTarget(frontmatter, chronology, chapterId) {
   const targetNumber = chronology.numbers.get(chapterId);
   const readBy = (from) => {
     const id = idText(from);
-    const number = chronology.numbers.has(id) ? chronology.numbers.get(id) : Number(/^chapter-(\d+)$/.exec(id)?.[1]);
-    return number <= targetNumber;
+    if (chronology.numbers.has(id)) {
+      return chronology.readBy(id, chapterId);
+    }
+    return Number(/^chapter-(\d+)$/.exec(id)?.[1]) <= targetNumber;
   };
   const data = frontmatter ?? {};
   const progressions = asList(data.progressions).filter((entry) => isMapping(entry) && readBy(entry.from));
@@ -241,7 +243,7 @@ function statusAt(character, state, changes, chronology, chapterId) {
     return "dies in this chapter";
   }
   // Read by the target: at or before it in reading order.
-  const readBy = (id) => chronology.numbers.has(id) && chronology.numbers.get(id) <= chronology.numbers.get(chapterId);
+  const readBy = (id) => chronology.readBy(id, chapterId);
   const deadIn = (revivedIn) => {
     const window = deathWindow({ ...character, revivedIn }, chronology);
     return window !== null && window.deadIn(chapterId);
@@ -282,8 +284,9 @@ export function buildContext(project, targetId, readBody, options = {}) {
   const chronology = chapterChronology(project);
   const targetNumber = target.chapter.number;
   // Reading order: a chapter id counts only when it is known and not after
-  // the target chapter.
-  const upToTarget = (chapterId) => chronology.numbers.has(chapterId) && chronology.numbers.get(chapterId) <= targetNumber;
+  // the target chapter. In a branching book, only the chapters on a path of
+  // choices to it count.
+  const upToTarget = (chapterId) => chronology.readBy(chapterId, target.chapter.id);
   const characters = new Map(project.characters.map((character) => [character.id, character]));
   const nameOf = (id) => (characters.has(id) ? `${characters.get(id).name} (${id})` : id);
   const unit = target.scene ?? target.chapter;

@@ -8,6 +8,10 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ## [Unreleased]
 
+### Added
+
+- `story continuity`, `story knowledge`, and `story context` follow the paths of choices in a branching book. Once any chapter has `choices`, a chapter counts as later than another only when a path of choices leads from one to the other, so a death, revival, fact, or progression on one branch no longer reaches its sibling branches: a character killed on the fight branch may appear on the flight branch without a `posthumous-appearance`, and may learn there without a `posthumous-learning`. A chapter two branches rejoin at is checked against both, so a character who dies on either branch is dead there, and a revival counts only when every path from the death passes through it. Two chapters dated on different days still compare by date. Chapters in one loop, and chapters no path reaches, compare by date and then by number, as in a linear book. `story knowledge` lists only facts learned on a path to `--at`; `story context` leaves out sibling branches' facts, scenes, threads, and deaths. `continuity/state.md` is checked against the paths that lead to `current-chapter`, and the new `state-differs-by-path` warning reports an artifact those paths leave with different owners or locations, in place of a `state-object-drift` that no snapshot could fix. Linear books are unchanged, as are promise, question, and clue ledgers, the clock and route checks, and the `story series` and `story diagram` lifelines, which still read chapter numbers. ([#358](https://github.com/danjdewhurst/story-skills/issues/358))
+
 ## [0.20.0] - 2026-10-04
 
 ### Fixed
