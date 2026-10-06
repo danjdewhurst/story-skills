@@ -8684,11 +8684,13 @@ var OPTIONS = [
   { name: "anchor", value: "<label>", repeatable: true, help: ["Review-copy paragraph label (ch03-p12) to find", "in the current text for compare; repeatable"] },
   { name: "path", value: "<path>", help: ["Project root for every command except init and", "import"] },
   { name: "out", value: "<file>", help: ["Output path for export/build/synopsis/diagram"] },
-  { name: "format", value: "<name>", help: ["Output format for build (markdown, epub, docx,", "shunn, html, print, narration, metadata,", "fountain, twee, ink)"] },
+  { name: "format", value: "<name>", help: ["Output format for build (markdown, epub, docx,", "shunn, html, print, narration, metadata,", "fountain, twee, ink) or grid (markdown, csv)"] },
   { name: "trim", value: "<size>", help: ["Trim size for build --format print (5x8,", "5.25x8, 5.5x8.5, 6x9, a5; default 5.5x8.5)"] },
   { name: "stamp", value: "<label>", help: ["Build label printed in build --format html (a", "date, commit, or review round)"] },
   { name: "note-url", value: "<url>", help: ["Note form linked, prefilled, from every label in", "build --format html (a GitHub new-issue link)"] },
   { name: "shunn", help: ["Apply Shunn manuscript formatting (with --format", "docx)"] },
+  { name: "from", value: "<chapter>", help: ["First chapter (id or number) grid shows"] },
+  { name: "to", value: "<chapter>", help: ["Last chapter (id or number) grid shows"] },
   { name: "at", value: "<chapter-id>", help: ["Chapter id for knowledge: what the character knew", "and how their progressions had changed them"] },
   { name: "budget", value: "<tokens>", help: ["Token budget for context (default 6000)"] },
   { name: "scenes", value: "<n>", help: ["Earlier scenes to summarise for context", "(default 5)"] },
@@ -12889,6 +12891,253 @@ function formatContext(context) {
 `;
 }
 
+// src/pacing.js
+var SCENE_OUTCOMES = new Set(["yes", "no", "yes-but", "no-and"]);
+var CHAPTER_HOOKS = new Set(["cliffhanger", "question", "revelation", "reversal", "decision", "emotional", "resolution"]);
+var DRAFTED_STATUSES = new Set(["draft", "revised", "final", "complete"]);
+var EASY_WIN_RUN = 3;
+var NO_SEQUEL_RUN = 4;
+var RESOLUTION_RUN = 3;
+function buildPacing(project) {
+  const characterBook = project.unit?.name === "characters";
+  const inUnit = (row) => characterBook ? row.characterCount : row.words;
+  const noun = characterBook ? "characters" : "words";
+  const chapters = [...project.chapters].sort((left, right) => left.number - right.number || left.id.localeCompare(right.id, "en"));
+  const files = new Map(chapters.map((chapter) => [chapter.id, project.root === undefined ? null : projectPath(project.root, chapter.file)]));
+  const warnings = [];
+  const rows = [];
+  const units = [];
+  for (const chapter of chapters) {
+    const scenes = project.scenes.filter((scene) => scene.chapter === chapter.id).sort((left, right) => left.scene - right.scene || left.id.localeCompare(right.id, "en"));
+    const outcomes = { yes: 0, no: 0, "yes-but": 0, "no-and": 0 };
+    for (const scene of scenes) {
+      if (!scene.sequel && SCENE_OUTCOMES.has(scene.outcome)) {
+        outcomes[scene.outcome] += 1;
+      }
+      units.push(scene);
+    }
+    rows.push({
+      id: chapter.id,
+      number: chapter.number,
+      words: chapter.wordCount,
+      characterCount: characterBook ? chapter.count : null,
+      scenes: scenes.filter((scene) => !scene.sequel).length,
+      sequels: scenes.filter((scene) => scene.sequel).length,
+      outcomes,
+      hook: chapter.hook,
+      status: chapter.status
+    });
+    if (chapter.hook === "" && DRAFTED_STATUSES.has(chapter.status)) {
+      warnings.push(warn("pacing-no-hook", `${chapter.id} has no hook: record how the chapter ending pulls the reader on`, files.get(chapter.id)));
+    }
+  }
+  let easyWins = [];
+  let withoutSequel = [];
+  for (const unit of units) {
+    if (unit.sequel) {
+      flushRun(withoutSequel, NO_SEQUEL_RUN, warnings, (run) => warn("pacing-no-sequel", `${run.length} scene units in a row with no sequel (${span(run)}): give the POV character room to react and decide`));
+      withoutSequel = [];
+      continue;
+    }
+    withoutSequel.push(unit);
+    if (unit.outcome === "yes") {
+      easyWins.push(unit);
+    } else {
+      flushRun(easyWins, EASY_WIN_RUN, warnings, (run) => warn("pacing-easy-wins", `${run.length} scenes in a row end in an outright yes (${span(run)}): raise the cost with yes-but or no-and`));
+      easyWins = [];
+    }
+  }
+  flushRun(easyWins, EASY_WIN_RUN, warnings, (run) => warn("pacing-easy-wins", `${run.length} scenes in a row end in an outright yes (${span(run)}): raise the cost with yes-but or no-and`));
+  flushRun(withoutSequel, NO_SEQUEL_RUN, warnings, (run) => warn("pacing-no-sequel", `${run.length} scene units in a row with no sequel (${span(run)}): give the POV character room to react and decide`));
+  let resolutions = [];
+  for (const row of rows) {
+    if (row.hook === "resolution") {
+      resolutions.push(row);
+    } else {
+      flushRun(resolutions, RESOLUTION_RUN, warnings, (run) => warn("pacing-resolution-run", `${run.length} chapters in a row end on resolution (${span(run)}): readers can put the book down`));
+      resolutions = [];
+    }
+  }
+  flushRun(resolutions, RESOLUTION_RUN, warnings, (run) => warn("pacing-resolution-run", `${run.length} chapters in a row end on resolution (${span(run)}): readers can put the book down`));
+  const written = rows.filter((row) => inUnit(row) > 0);
+  const median = medianOf(written.map(inUnit));
+  if (written.length >= 3) {
+    for (const row of written) {
+      if (inUnit(row) > median * 2) {
+        warnings.push(warn("pacing-long-chapter", `${row.id} runs ${inUnit(row)} ${noun}, over twice the median chapter (${formatMedian(median)}): consider splitting it`, files.get(row.id)));
+      } else if (inUnit(row) < median / 2) {
+        warnings.push(warn("pacing-short-chapter", `${row.id} runs ${inUnit(row)} ${noun}, under half the median chapter (${formatMedian(median)}): check it earns its place`, files.get(row.id)));
+      }
+    }
+  }
+  const recorded = units.filter((unit) => !unit.sequel && SCENE_OUTCOMES.has(unit.outcome));
+  return {
+    unit: characterBook ? "characters" : "words",
+    rows,
+    medianWords: characterBook ? formatMedian(medianOf(rows.filter((row) => row.words > 0).map((row) => row.words))) : formatMedian(median),
+    medianCharacterCount: characterBook ? formatMedian(median) : null,
+    totals: {
+      scenes: units.filter((unit) => !unit.sequel).length,
+      sequels: units.filter((unit) => unit.sequel).length,
+      outcomesRecorded: recorded.length,
+      setbacks: recorded.filter((unit) => unit.outcome !== "yes").length,
+      hooks: rows.filter((row) => row.hook !== "").length
+    },
+    warnings
+  };
+}
+function flushRun(run, minimum, warnings, message) {
+  if (run.length >= minimum) {
+    warnings.push(message(run));
+  }
+}
+function span(run) {
+  const first = run[0].id;
+  const last = run[run.length - 1].id;
+  return first === last ? first : `${first} to ${last}`;
+}
+function formatMedian(median) {
+  return Math.round(median);
+}
+function medianOf(values) {
+  if (values.length === 0) {
+    return 0;
+  }
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+function formatPacing(pacing) {
+  const { totals } = pacing;
+  const characterBook = pacing.unit === "characters";
+  const setbackShare = totals.outcomesRecorded === 0 ? "no outcomes recorded" : `${Math.round(totals.setbacks * 100 / totals.outcomesRecorded)}% of recorded outcomes are setbacks or complications`;
+  const lines = [
+    `Pacing: ${plural(totals.scenes, "scene")}, ${plural(totals.sequels, "sequel")}, ${totals.hooks} of ${plural(pacing.rows.length, "chapter")} with hooks`,
+    `Outcomes: ${setbackShare}`,
+    characterBook ? `Median chapter: ${pacing.medianCharacterCount} characters` : `Median chapter: ${pacing.medianWords} words`,
+    ""
+  ];
+  if (pacing.rows.length === 0) {
+    lines.push("- None: add chapters with story add chapter");
+    return `${lines.join(`
+`)}
+`;
+  }
+  const outcomesOf = (row) => `${row.outcomes.yes}/${row.outcomes.no}/${row.outcomes["yes-but"]}/${row.outcomes["no-and"]}`;
+  const columns = [
+    { title: "Ch", value: (row) => String(row.number) },
+    characterBook ? { title: "Characters", value: (row) => String(row.characterCount) } : { title: "Words", value: (row) => String(row.words) },
+    { title: "Scenes", value: (row) => String(row.scenes) },
+    { title: "Sequels", value: (row) => String(row.sequels) },
+    { title: "Outcomes (yes/no/yes-but/no-and)", value: outcomesOf, left: true }
+  ].map((column) => ({ ...column, width: Math.max(column.title.length, ...pacing.rows.map((row) => column.value(row).length)) }));
+  const cellText = (column, text) => column.left ? text.padEnd(column.width) : text.padStart(column.width);
+  lines.push(`${columns.map((column) => column.title.padEnd(column.width)).join("  ")}  Hook`);
+  for (const row of pacing.rows) {
+    lines.push(`${columns.map((column) => cellText(column, column.value(row))).join("  ")}  ${row.hook || "-"}`);
+  }
+  return `${lines.join(`
+`)}
+`;
+}
+
+// src/grid.js
+var GRID_FORMATS = ["markdown", "csv"];
+var HOOK_ROW = "(hook)";
+var OUTCOME_ROW = "(outcomes)";
+function buildGrid(project, options = {}) {
+  const all = [...project.chapters].sort((left, right) => left.number - right.number || left.id.localeCompare(right.id, "en"));
+  const start = options.from === undefined ? 0 : chapterIndex2(all, options.from, "--from");
+  const end = options.to === undefined ? all.length - 1 : chapterIndex2(all, options.to, "--to");
+  if (all.length > 0 && start > end) {
+    throw usageError(`--from ${options.from} comes after --to ${options.to}: give the earlier chapter first`);
+  }
+  const advanced = new Map(all.map((chapter) => [chapter.id, new Set(chapter.arcsAdvanced.map(String))]));
+  const scenes = new Map(all.map((chapter) => [chapter.id, []]));
+  for (const scene of project.scenes) {
+    if (!advanced.has(scene.chapter)) {
+      continue;
+    }
+    scene.arcsAdvanced.forEach((arcId) => advanced.get(scene.chapter).add(String(arcId)));
+    scenes.get(scene.chapter).push(scene);
+  }
+  const first = new Map;
+  all.forEach((chapter, index) => {
+    for (const arcId of advanced.get(chapter.id)) {
+      if (!first.has(arcId)) {
+        first.set(arcId, index);
+      }
+    }
+  });
+  const byFirst = (left, right) => (first.get(left.id) ?? Infinity) - (first.get(right.id) ?? Infinity) || left.id.localeCompare(right.id, "en");
+  const known = new Set(project.arcs.map((arc) => arc.id));
+  const arcs = [
+    ...project.arcs.map((arc) => ({ id: arc.id, name: String(arc.name), status: String(arc.status), known: true })).sort(byFirst),
+    ...[...first.keys()].filter((id) => !known.has(id)).map((id) => ({ id, name: null, status: null, known: false })).sort(byFirst)
+  ];
+  const chapters = all.slice(start, end + 1);
+  return {
+    range: { from: chapters[0]?.id ?? null, to: chapters.at(-1)?.id ?? null, total: all.length },
+    chapters: chapters.map((chapter) => ({
+      id: chapter.id,
+      number: chapter.number,
+      title: String(chapter.title),
+      hook: chapter.hook,
+      outcomes: scenes.get(chapter.id).filter((scene) => !scene.sequel && SCENE_OUTCOMES.has(scene.outcome)).sort((left, right) => left.scene - right.scene || left.id.localeCompare(right.id, "en")).map((scene) => scene.outcome)
+    })),
+    rows: arcs.map((arc) => ({ ...arc, cells: chapters.map((chapter) => advanced.get(chapter.id).has(arc.id)) }))
+  };
+}
+function chapterIndex2(chapters, value, flag) {
+  const text = String(value).trim();
+  let index = chapters.findIndex((chapter) => chapter.id === text);
+  if (index === -1 && /^\d+$/.test(text)) {
+    index = chapters.findIndex((chapter) => chapter.number === Number(text));
+  }
+  if (index === -1) {
+    throw usageError(`${flag} ${value} is not a chapter in this project: give a chapter id (chapter-03) or number (3)`);
+  }
+  return index;
+}
+function gridFormat(value) {
+  const format = value === undefined ? "markdown" : String(value);
+  if (!GRID_FORMATS.includes(format)) {
+    throw usageError(`Unknown grid format: ${value} (use ${GRID_FORMATS.join(" or ")})`);
+  }
+  return format;
+}
+function gridTable(grid) {
+  const header = ["Arc", ...grid.chapters.map((chapter) => String(chapter.number))];
+  const arcRows = grid.rows.map((row) => [row.known ? row.id : `${row.id} (unknown)`, ...row.cells.map((cell) => cell ? "x" : "")]);
+  return [
+    header,
+    ...arcRows,
+    [HOOK_ROW, ...grid.chapters.map((chapter) => chapter.hook)],
+    [OUTCOME_ROW, ...grid.chapters.map((chapter) => chapter.outcomes.join(", "))]
+  ];
+}
+function formatGrid(grid, format = "markdown") {
+  const table = gridTable(grid);
+  return format === "csv" ? formatCsv(table) : formatMarkdown(table);
+}
+function formatMarkdown(table) {
+  const escaped = table.map((row) => row.map((cell) => cell.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\r?\n/g, " ")));
+  const widths = escaped[0].map((_, column) => Math.max(3, ...escaped.map((row) => row[column].length)));
+  const line = (cells) => `| ${cells.map((cell, column) => cell.padEnd(widths[column])).join(" | ")} |`;
+  const rule = `|${widths.map((width, column) => column === 0 ? "-".repeat(width + 2) : `:${"-".repeat(width)}:`).join("|")}|`;
+  return `${[line(escaped[0]), rule, ...escaped.slice(1).map(line)].join(`
+`)}
+`;
+}
+function formatCsv(table) {
+  return table.map((row) => row.map(csvCell).join(",")).join(`
+`) + `
+`;
+}
+function csvCell(value) {
+  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
 // src/html.js
 var TRIM_SIZES = new Map([
   ["5x8", { width: "5in", height: "8in", wordsPerPage: 230, charactersPerPage: 480 }],
@@ -15057,156 +15306,6 @@ function formatPasses(passes, command = "story passes") {
   }
   const upcoming = nextPass(passes);
   lines.push("", upcoming === null ? "All passes done." : `Next: ${upcoming.pass}${upcoming.status === "in-progress" ? " (in progress)" : ""}; mark it with ${command} --done ${upcoming.pass}`);
-  return `${lines.join(`
-`)}
-`;
-}
-
-// src/pacing.js
-var SCENE_OUTCOMES = new Set(["yes", "no", "yes-but", "no-and"]);
-var CHAPTER_HOOKS = new Set(["cliffhanger", "question", "revelation", "reversal", "decision", "emotional", "resolution"]);
-var DRAFTED_STATUSES = new Set(["draft", "revised", "final", "complete"]);
-var EASY_WIN_RUN = 3;
-var NO_SEQUEL_RUN = 4;
-var RESOLUTION_RUN = 3;
-function buildPacing(project) {
-  const characterBook = project.unit?.name === "characters";
-  const inUnit = (row) => characterBook ? row.characterCount : row.words;
-  const noun = characterBook ? "characters" : "words";
-  const chapters = [...project.chapters].sort((left, right) => left.number - right.number || left.id.localeCompare(right.id, "en"));
-  const files = new Map(chapters.map((chapter) => [chapter.id, project.root === undefined ? null : projectPath(project.root, chapter.file)]));
-  const warnings = [];
-  const rows = [];
-  const units = [];
-  for (const chapter of chapters) {
-    const scenes = project.scenes.filter((scene) => scene.chapter === chapter.id).sort((left, right) => left.scene - right.scene || left.id.localeCompare(right.id, "en"));
-    const outcomes = { yes: 0, no: 0, "yes-but": 0, "no-and": 0 };
-    for (const scene of scenes) {
-      if (!scene.sequel && SCENE_OUTCOMES.has(scene.outcome)) {
-        outcomes[scene.outcome] += 1;
-      }
-      units.push(scene);
-    }
-    rows.push({
-      id: chapter.id,
-      number: chapter.number,
-      words: chapter.wordCount,
-      characterCount: characterBook ? chapter.count : null,
-      scenes: scenes.filter((scene) => !scene.sequel).length,
-      sequels: scenes.filter((scene) => scene.sequel).length,
-      outcomes,
-      hook: chapter.hook,
-      status: chapter.status
-    });
-    if (chapter.hook === "" && DRAFTED_STATUSES.has(chapter.status)) {
-      warnings.push(warn("pacing-no-hook", `${chapter.id} has no hook: record how the chapter ending pulls the reader on`, files.get(chapter.id)));
-    }
-  }
-  let easyWins = [];
-  let withoutSequel = [];
-  for (const unit of units) {
-    if (unit.sequel) {
-      flushRun(withoutSequel, NO_SEQUEL_RUN, warnings, (run) => warn("pacing-no-sequel", `${run.length} scene units in a row with no sequel (${span(run)}): give the POV character room to react and decide`));
-      withoutSequel = [];
-      continue;
-    }
-    withoutSequel.push(unit);
-    if (unit.outcome === "yes") {
-      easyWins.push(unit);
-    } else {
-      flushRun(easyWins, EASY_WIN_RUN, warnings, (run) => warn("pacing-easy-wins", `${run.length} scenes in a row end in an outright yes (${span(run)}): raise the cost with yes-but or no-and`));
-      easyWins = [];
-    }
-  }
-  flushRun(easyWins, EASY_WIN_RUN, warnings, (run) => warn("pacing-easy-wins", `${run.length} scenes in a row end in an outright yes (${span(run)}): raise the cost with yes-but or no-and`));
-  flushRun(withoutSequel, NO_SEQUEL_RUN, warnings, (run) => warn("pacing-no-sequel", `${run.length} scene units in a row with no sequel (${span(run)}): give the POV character room to react and decide`));
-  let resolutions = [];
-  for (const row of rows) {
-    if (row.hook === "resolution") {
-      resolutions.push(row);
-    } else {
-      flushRun(resolutions, RESOLUTION_RUN, warnings, (run) => warn("pacing-resolution-run", `${run.length} chapters in a row end on resolution (${span(run)}): readers can put the book down`));
-      resolutions = [];
-    }
-  }
-  flushRun(resolutions, RESOLUTION_RUN, warnings, (run) => warn("pacing-resolution-run", `${run.length} chapters in a row end on resolution (${span(run)}): readers can put the book down`));
-  const written = rows.filter((row) => inUnit(row) > 0);
-  const median = medianOf(written.map(inUnit));
-  if (written.length >= 3) {
-    for (const row of written) {
-      if (inUnit(row) > median * 2) {
-        warnings.push(warn("pacing-long-chapter", `${row.id} runs ${inUnit(row)} ${noun}, over twice the median chapter (${formatMedian(median)}): consider splitting it`, files.get(row.id)));
-      } else if (inUnit(row) < median / 2) {
-        warnings.push(warn("pacing-short-chapter", `${row.id} runs ${inUnit(row)} ${noun}, under half the median chapter (${formatMedian(median)}): check it earns its place`, files.get(row.id)));
-      }
-    }
-  }
-  const recorded = units.filter((unit) => !unit.sequel && SCENE_OUTCOMES.has(unit.outcome));
-  return {
-    unit: characterBook ? "characters" : "words",
-    rows,
-    medianWords: characterBook ? formatMedian(medianOf(rows.filter((row) => row.words > 0).map((row) => row.words))) : formatMedian(median),
-    medianCharacterCount: characterBook ? formatMedian(median) : null,
-    totals: {
-      scenes: units.filter((unit) => !unit.sequel).length,
-      sequels: units.filter((unit) => unit.sequel).length,
-      outcomesRecorded: recorded.length,
-      setbacks: recorded.filter((unit) => unit.outcome !== "yes").length,
-      hooks: rows.filter((row) => row.hook !== "").length
-    },
-    warnings
-  };
-}
-function flushRun(run, minimum, warnings, message) {
-  if (run.length >= minimum) {
-    warnings.push(message(run));
-  }
-}
-function span(run) {
-  const first = run[0].id;
-  const last = run[run.length - 1].id;
-  return first === last ? first : `${first} to ${last}`;
-}
-function formatMedian(median) {
-  return Math.round(median);
-}
-function medianOf(values) {
-  if (values.length === 0) {
-    return 0;
-  }
-  const sorted = [...values].sort((left, right) => left - right);
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
-}
-function formatPacing(pacing) {
-  const { totals } = pacing;
-  const characterBook = pacing.unit === "characters";
-  const setbackShare = totals.outcomesRecorded === 0 ? "no outcomes recorded" : `${Math.round(totals.setbacks * 100 / totals.outcomesRecorded)}% of recorded outcomes are setbacks or complications`;
-  const lines = [
-    `Pacing: ${plural(totals.scenes, "scene")}, ${plural(totals.sequels, "sequel")}, ${totals.hooks} of ${plural(pacing.rows.length, "chapter")} with hooks`,
-    `Outcomes: ${setbackShare}`,
-    characterBook ? `Median chapter: ${pacing.medianCharacterCount} characters` : `Median chapter: ${pacing.medianWords} words`,
-    ""
-  ];
-  if (pacing.rows.length === 0) {
-    lines.push("- None: add chapters with story add chapter");
-    return `${lines.join(`
-`)}
-`;
-  }
-  const outcomesOf = (row) => `${row.outcomes.yes}/${row.outcomes.no}/${row.outcomes["yes-but"]}/${row.outcomes["no-and"]}`;
-  const columns = [
-    { title: "Ch", value: (row) => String(row.number) },
-    characterBook ? { title: "Characters", value: (row) => String(row.characterCount) } : { title: "Words", value: (row) => String(row.words) },
-    { title: "Scenes", value: (row) => String(row.scenes) },
-    { title: "Sequels", value: (row) => String(row.sequels) },
-    { title: "Outcomes (yes/no/yes-but/no-and)", value: outcomesOf, left: true }
-  ].map((column) => ({ ...column, width: Math.max(column.title.length, ...pacing.rows.map((row) => column.value(row).length)) }));
-  const cellText = (column, text) => column.left ? text.padEnd(column.width) : text.padStart(column.width);
-  lines.push(`${columns.map((column) => column.title.padEnd(column.width)).join("  ")}  Hook`);
-  for (const row of pacing.rows) {
-    lines.push(`${columns.map((column) => cellText(column, column.value(row))).join("  ")}  ${row.hook || "-"}`);
-  }
   return `${lines.join(`
 `)}
 `;
@@ -20316,6 +20415,11 @@ function clueReport(root) {
   const matrix = buildClueMatrix(project);
   return { ok: project.fileErrors.length === 0, errors: [...project.fileErrors], ...matrix };
 }
+function gridReport(root, options = {}) {
+  const project = scanProject(root);
+  const ok = project.fileErrors.length === 0;
+  return { ok, errors: [...project.fileErrors], warnings: [], ...buildGrid(project, ok ? options : {}) };
+}
 function diagramProject(root, options = {}) {
   const project = scanProject(root);
   const text = buildDiagram(project, options.kind);
@@ -21938,6 +22042,29 @@ var COMMANDS = [
       }
       io.stdout.write(formatClueMatrix(report));
       return reportResult(io, report, "Clue check complete", "Clue check failed");
+    }
+  },
+  {
+    name: "grid",
+    usage: "grid [path]",
+    summary: [
+      "Print the plot grid: arcs by chapter from",
+      "arcs-advanced, with each chapter's hook and scene",
+      "outcomes, as a markdown table or --format csv"
+    ],
+    project: "positional",
+    options: ["format", "from", "to", "json"],
+    run({ parsed, io, root }) {
+      const format = gridFormat(parsed.options.format);
+      const report = gridReport(root(), { from: parsed.options.from, to: parsed.options.to });
+      if (wantsJson(parsed)) {
+        return reportJson(io, "grid", report);
+      }
+      if (report.ok) {
+        io.stdout.write(formatGrid(report, format));
+        return 0;
+      }
+      return reportResult(io, report, "Grid built", "Grid failed");
     }
   },
   {
