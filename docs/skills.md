@@ -74,7 +74,7 @@ Every skill that drafts, edits, or critiques prose reads `language` in `story.md
 | Process notes from alpha or beta readers, or send them a review copy | [feedback-triage](#feedback-triage) | "Triage the beta feedback" |
 | Brief a sensitivity reader, clear permissions, disclose AI use, or work with an editor or co-author | [editorial-review](#editorial-review) | "Do I need a sensitivity reader?" |
 | Write a sequel, prequel, or companion book | [series-continuity](#series-continuity) | "Start a prequel to The Last Ember" |
-| Query agents, write a blurb, or track submissions | [submission](#submission) | "Help me query agents" |
+| Query agents, submit short stories to magazines, order a collection, write a blurb, or track submissions | [submission](#submission) | "Help me query agents" |
 | Self-publish: ISBNs, metadata, print interior, launch, rights | [publishing](#publishing) | "Help me self-publish this book" |
 | Make an audiobook script, screenplay, picture book, comic, or translation, or turn a linear book into an interactive edition | [adaptation](#adaptation) | "Make an audiobook narration script" |
 | Find out what a character knew at a given chapter | [story-maintenance](#story-maintenance) (`story knowledge`) | "What did Kael know by chapter 4?" |
@@ -843,9 +843,9 @@ Anchors are paragraph positions, so a revision moves them. Rebuild and resend th
 
 ### submission
 
-**Purpose.** Gets a finished manuscript ready to submit: a readiness check, the submission package (pitch, comp titles, query letter, synopses, blurb), a Shunn-format build, and a tracker of where the book has gone. See [Import, export, and builds](manuscripts.md) for the build formats.
+**Purpose.** Gets a finished manuscript ready to submit: a readiness check, the submission package (pitch, comp titles, query letter, synopses, blurb), a Shunn-format build, and a tracker of where the book has gone. For short fiction it covers magazine, anthology, and contest submissions and assembling a story collection. See [Import, export, and builds](manuscripts.md) for the build formats.
 
-**Triggers.** "Write a query letter", "query", "querying", "pitch", "blurb", "back cover copy", "jacket copy", "comp titles", "comparable titles", "synopsis for agents", "submit to agents", "submission tracker", "self-publishing description", "retailer description".
+**Triggers.** "Write a query letter", "query", "querying", "pitch", "blurb", "back cover copy", "jacket copy", "comp titles", "comparable titles", "synopsis for agents", "submit to agents", "submission tracker", "self-publishing description", "retailer description", "ready to query", "submission readiness check", "submit a short story", "magazine submission", "short-fiction markets", "simultaneous submission", "reprint rights", "order a short story collection".
 
 **Not for.** Self-publishing production (ISBNs, retailer metadata, print interiors, launch, rights): use [publishing](#publishing), which reuses the blurb and retailer description this skill drafts. Also not for revising the manuscript ([revision-continuity](#revision-continuity)) or reader feedback rounds ([feedback-triage](#feedback-triage)).
 
@@ -857,6 +857,7 @@ Anchors are paragraph positions, so a revision moves them. Rebuild and resend th
 2. **Package.** Drafts the pitch (using the logline recipe in `story-init`'s `title-logline.md`), comp titles, query letter, 1- and 3-page synopses, and blurb. The synopses start from a `story synopsis` scaffold that the agent rewrites into prose.
 3. **Build.** `story build . --format docx --shunn` or `--format shunn` for agents and magazines. Self-publishing builds (EPUB, print) hand off to [publishing](#publishing). `story build . --format metadata` gives a one-page sheet to check the pitch facts against: title, series, author, word count, description length against retailer limits, keywords, subjects, and missing fields. When you self-publish, it keeps `submission/blurb.md` and the `description` field in `story.md` in step. If `story.md` has an `ai-disclosure`, it asks you to check each agent's or market's policy on AI-assisted work.
 4. **Track.** Creates `submission/tracker.md` the first time you report a submission and records only what you tell it.
+5. **Short fiction and collections.** For magazines, anthologies, and contests, the story goes out in full with a short cover letter instead of the query package. The tracker gains columns for exclusive or simultaneous submission and the rights on offer, the statuses `submitted` and `held`, and a publication history. To assemble a collection, it helps choose the stories, find their linking threads, propose an order, and draft the previously-published acknowledgements.
 
 [Submission prep](writing-workflows.md#submission-prep) walks through each step, with the length and format rules for every file.
 
@@ -872,9 +873,10 @@ Anchors are paragraph positions, so a revision moves them. Rebuild and resend th
 - [`blurb.md`](../skills/submission/references/blurb.md): back-cover and retailer description formulas, length, and taglines.
 - [`comp-titles.md`](../skills/submission/references/comp-titles.md): choosing and phrasing comparable titles, and the verification rule.
 - [`word-count-norms.md`](../skills/submission/references/word-count-norms.md): rough word-count ranges by category for the English-language market only, to confirm with you for your market.
-
-The query letter, Shunn format, and these norms are English-language market conventions; for another market the skill asks for the guidelines of the agents or publishers you are targeting.
 - [`tracker-template.md`](../skills/submission/references/tracker-template.md): the tracker template and what each status means.
+- [`short-fiction-markets.md`](../skills/submission/references/short-fiction-markets.md): magazine, anthology, and contest submissions (simultaneous and exclusive submissions, first, reprint, and audio rights, response windows and status queries, tracker columns, publication history) and assembling a story collection (choosing, linking, ordering, acknowledgements).
+
+The query letter, Shunn format, word-count norms, and short-fiction practices are English-language market conventions; for another market the skill asks for the guidelines of the agents, publishers, or magazines you are targeting. It never quotes a market's pay rate, rights terms, or response time from memory.
 
 ### publishing
 
