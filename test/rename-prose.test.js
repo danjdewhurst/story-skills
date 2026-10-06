@@ -107,7 +107,8 @@ describe("story rename --prose", () => {
         { file: "chapters/chapter-01.md", line: 12, endLine: 12, column: 1, from: "Edran", to: "Mara" }
       ],
       aliases: 0,
-      shared: 0
+      shared: 0,
+      ambiguous: []
     });
     expect(prose(file)).toBe("Mara Holt smiled.\n\nMara left.\n");
   });
@@ -206,6 +207,75 @@ describe("story rename --prose", () => {
     expect(prose(file)).toBe("Bea Lee waved. Ann waved back.\n");
     expect(out).toContain("Renamed 1 name in 1 chapter\n");
     expect(err).toContain("--prose left 1 name that character ann-lee shares with another entity as written: chapters/chapter-01.md:10:16. Check them [prose-name-shared]");
+  });
+
+  test("leaves link and image targets, autolinks, URLs, and reference definitions as written, and renames link text", () => {
+    const cwd = makeTempDir();
+    const { root } = createStoryProject({ cwd, title: "Links", force: false });
+    character(root, "ines-achebe", "name: Ines Achebe");
+    const file = chapter(root, 1, [
+      "![Ines](img/Ines.png) waved. [Ines](https://en.wikipedia.org/wiki/Ines_Achebe) wrote from <https://example.com/Ines>, Ines@example.com.",
+      "",
+      "See [Ines] at https://example.com/Ines, said Ines.",
+      "",
+      "[Ines]: https://example.com/Ines"
+    ].join("\n"));
+    const { code, out } = invoke(root, ["rename", "character", "ines-achebe", "Ruth Achebe", "--prose"]);
+    expect(code).toBe(0);
+    expect(out).toContain("Renamed 3 names in 1 chapter\n");
+    expect(prose(file)).toBe([
+      "![Ruth](img/Ines.png) waved. [Ruth](https://en.wikipedia.org/wiki/Ines_Achebe) wrote from <https://example.com/Ines>, Ines@example.com.",
+      "",
+      "See [Ines] at https://example.com/Ines, said Ruth.",
+      "",
+      "[Ines]: https://example.com/Ines",
+      ""
+    ].join("\n"));
+  });
+
+  test("never renames an initial as a given name", () => {
+    const root = project();
+    character(root, "j-r-dunn", "name: J. R. Dunn");
+    const file = chapter(root, 1, "J. R. Dunn wrote the letter J. Edran nodded.");
+    expect(invoke(root, ["rename", "character", "j-r-dunn", "Kim Dunn", "--prose"]).code).toBe(0);
+    // A new given name that is an initial gives the whole new name.
+    expect(invoke(root, ["rename", "character", "edran-vale", "K. Holt", "--prose"]).code).toBe(0);
+    expect(prose(file)).toBe("Kim Dunn wrote the letter J. K. Holt nodded.\n");
+  });
+
+  test("lists a one-word match that may be an ordinary word instead of rewriting it", () => {
+    const root = project();
+    character(root, "may-dunn", "name: May Dunn");
+    character(root, "rose-hale", "name: Rose Hale");
+    const file = chapter(root, 1, "\"May I come in?\" May Dunn asked. It was late in May.\n\nShe cut a rose. Rose from her chair, she told Rose.");
+    const before = fs.readFileSync(file, "utf8");
+    const preview = invoke(root, ["rename", "character", "may-dunn", "June Dunn", "--prose", "--dry-run"]);
+    expect(preview.code).toBe(0);
+    expect(fs.readFileSync(file, "utf8")).toBe(before);
+    expect(preview.out).toStartWith([
+      "chapters/chapter-01.md:10:18: May Dunn → June Dunn",
+      "Renamed 1 name in 1 chapter",
+      "Left 2 matches as written that may be ordinary words; check each and rename it by hand if it is the name:",
+      "chapters/chapter-01.md:10:2: May: \"May I come in?\" May Dunn asked. It was late in May.",
+      "chapters/chapter-01.md:10:49: May: \"May I come in?\" May Dunn asked. It was late in May.",
+      "update  chapters/_index.md",
+      ""
+    ].join("\n"));
+    const real = JSON.parse(invoke(root, ["rename", "character", "may-dunn", "June Dunn", "--prose", "--json"]).out);
+    expect(real.data.prose.edits.map((edit) => edit.to)).toEqual(["June Dunn"]);
+    expect(real.data.prose.ambiguous).toEqual([
+      { file: "chapters/chapter-01.md", line: 10, column: 2, text: "May", excerpt: "\"May I come in?\" May Dunn asked. It was late in May." },
+      { file: "chapters/chapter-01.md", line: 10, column: 49, text: "May", excerpt: "\"May I come in?\" May Dunn asked. It was late in May." }
+    ]);
+    // "Rose" opening a sentence in a chapter that also says "a rose".
+    const rose = invoke(root, ["rename", "character", "rose-hale", "Iris Hale", "--prose"]);
+    expect(rose.out).toContain([
+      "Renamed 1 name in 1 chapter",
+      "Left 1 match as written that may be an ordinary word; check it and rename it by hand if it is the name:",
+      "chapters/chapter-01.md:12:17: Rose: She cut a rose. Rose from her chair, she told Rose.",
+      ""
+    ].join("\n"));
+    expect(prose(file)).toBe("\"May I come in?\" June Dunn asked. It was late in May.\n\nShe cut a rose. Rose from her chair, she told Iris.\n");
   });
 
   test("renames a name between compatibility ideographs that change length", () => {

@@ -1206,12 +1206,18 @@ function formatProseRenames(result) {
   if (!result.prose) {
     return "";
   }
-  const { edits, aliases } = result.prose;
+  const { edits, aliases, ambiguous } = result.prose;
   const plural = (count, word, words = `${word}s`) => `${count} ${count === 1 ? word : words}`;
   const lines = edits.map((edit) => `${edit.file}:${edit.line}:${edit.column}: ${edit.from.replace(/\s+/gu, " ")} → ${edit.to.replace(/\s+/gu, " ")}${edit.endLine > edit.line ? ` (wraps to line ${edit.endLine})` : ""}\n`);
   const files = new Set(edits.map((edit) => edit.file)).size;
   const summary = edits.length === 0 ? "No names to rename in chapter prose" : `Renamed ${plural(edits.length, "name")} in ${plural(files, "chapter")}`;
-  return `${lines.join("")}${summary}${aliases > 0 ? `; left ${plural(aliases, "alias", "aliases")} as written` : ""}\n`;
+  // Matches that may be ordinary words, listed as story mentions lists them.
+  const one = ambiguous.length === 1;
+  const unsure = ambiguous.length === 0 ? "" : [
+    `Left ${plural(ambiguous.length, "match", "matches")} as written that may be ${one ? "an ordinary word" : "ordinary words"}; check ${one ? "it" : "each"} and rename it by hand if it is the name:`,
+    ...ambiguous.map((entry) => `${entry.file}:${entry.line}:${entry.column}: ${entry.text}: ${entry.excerpt}`)
+  ].map((line) => `${line}\n`).join("");
+  return `${lines.join("")}${summary}${aliases > 0 ? `; left ${plural(aliases, "alias", "aliases")} as written` : ""}\n${unsure}`;
 }
 
 // story doctor --fix: applies the safe repairs under the project lock (or,

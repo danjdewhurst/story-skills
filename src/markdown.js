@@ -311,6 +311,56 @@ export function maskMarkup(text) {
   return result + source.slice(position);
 }
 
+// A reference-style link definition (`[label]: url "Title"`), as a line.
+// A footnote (`[^1]: text`) is prose, and is not one.
+const LINK_DEFINITION_LINE = /^ {0,3}\[(?!\^)([^\]\n]{1,1000})\]:[^\n]*/gm;
+// After a link's `]`: an inline destination and title, with one level of
+// parentheses inside (`(https://en.wikipedia.org/wiki/Ines_(name))`), or a
+// full reference's label. Also an autolink. Bounded, so a long run of
+// unclosed `(` stays linear.
+const LINK_TARGET = /(?<=\])\((?:[^()\n]|\([^()\n]{0,1000}\)){0,1000}\)|(?<=\])\[[^[\]\n]{0,1000}\]|<[a-z][a-z0-9+.-]{0,31}:[^<>\s]*>/gi;
+// A shortcut (`[Ines]`) or collapsed (`[Ines][]`) reference: its text is
+// its label.
+const REFERENCE_TEXT = /\[([^[\]\n]{1,1000})\](?:\[\])?(?![([])/g;
+
+// The text with link and image destinations, their titles, reference
+// labels and definitions, autolinks, and bare URLs and email addresses
+// blanked with `blank`, keeping line breaks, so offsets still match: the
+// parts of a link a reader does not see as prose. A shortcut or collapsed
+// reference whose label a definition gives is blanked too, since its text
+// is the label. Link text and image alt text are kept.
+export function maskLinkTargets(text, blank = " ") {
+  const source = String(text);
+  const ranges = [];
+  const labels = new Set();
+  const label = (value) => value.trim().replace(/\s+/g, " ").toLowerCase();
+  for (const match of source.matchAll(LINK_DEFINITION_LINE)) {
+    labels.add(label(match[1]));
+    ranges.push([match.index, match.index + match[0].length]);
+  }
+  for (const pattern of [LINK_TARGET, URL_OR_EMAIL]) {
+    for (const match of source.matchAll(pattern)) {
+      ranges.push([match.index, match.index + match[0].length]);
+    }
+  }
+  for (const match of labels.size === 0 ? [] : source.matchAll(REFERENCE_TEXT)) {
+    if (labels.has(label(match[1]))) {
+      ranges.push([match.index + 1, match.index + 1 + match[1].length]);
+    }
+  }
+  ranges.sort((left, right) => left[0] - right[0]);
+  let result = "";
+  let position = 0;
+  for (const [start, end] of ranges) {
+    if (end > position) {
+      const from = Math.max(start, position);
+      result += source.slice(position, from) + source.slice(from, end).replace(/[^\r\n]/g, blank);
+      position = end;
+    }
+  }
+  return result + source.slice(position);
+}
+
 // One left-to-right pass over comments, closed backtick fences, and code
 // spans: whichever opens first owns the text until it closes. A `<!--`
 // inside a fence or code span is literal, and a fence inside a comment is

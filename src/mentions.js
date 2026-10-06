@@ -1,8 +1,8 @@
 import { warn } from "./findings.js";
 import { projectPath } from "./files.js";
-import { checkSet, languagePack } from "./languages/index.js";
+import { checkList, checkSet, languagePack } from "./languages/index.js";
 import { lowerCase, upperCase } from "./languages/locale.js";
-import { escapeRegExp, maskMarkup, proseStart } from "./markdown.js";
+import { escapeRegExp, maskLinkTargets, maskMarkup, proseStart } from "./markdown.js";
 import { existingNames, givenName } from "./names.js";
 import { readMarkdown } from "./scan.js";
 import { nfc } from "./unicode.js";
@@ -33,7 +33,9 @@ const BLANKED = "\u0000";
 // Every name and alias to look for, cut characters included, each once per
 // entity, in NFC, with its pattern. A name that opens with titles or articles (the
 // pack's `titleWords`) is also looked for without them, so "The Hollow" is
-// found in "the whole Hollow" and "Captain Edran Vale" as "Edran Vale".
+// found in "the whole Hollow" and "Captain Edran Vale" as "Edran Vale". A
+// given name of one character is an initial (see proseGivenName) and is
+// not looked for alone.
 export function mentionNames(project) {
   const pack = project.pack ?? languagePack();
   const titles = checkSet(pack, "titleWords");
@@ -47,11 +49,27 @@ export function mentionNames(project) {
     }
   };
   for (const entry of existingNames(project, { cut: true })) {
+    // A given name is a word of a longer name; a one-word name is itself.
+    if (entry.given && entry.name !== entry.full && isInitial(entry.name)) {
+      continue;
+    }
     const name = nfc(entry.name);
     add(entry.kind, entry.id, name);
     add(entry.kind, entry.id, withoutTitles(name, titles, pack));
   }
   return names;
+}
+
+// A character's given name (see givenName) as prose uses it alone, or ""
+// when it has none or it is one character long: the J of "J. R. Dunn" is
+// an initial, and "the letter J" does not name the character.
+function proseGivenName(name, pack) {
+  const given = givenName(name, pack);
+  return isInitial(given) ? "" : given;
+}
+
+function isInitial(word) {
+  return Array.from(word).length < 2;
 }
 
 // `name` without the titles and articles it opens with (`titles`, the
@@ -140,8 +158,8 @@ export function findMentions(text, names) {
 // Whether a one-word name at `start` opens a sentence while the chapter
 // also uses it as an ordinary lower-case word ("Rose from her chair" in a
 // chapter with "a rose"), so the capital may be the sentence's, not the
-// name's. Used only by the continuity check; story mentions lists every
-// match.
+// name's. Used by the continuity check and rename --prose; story mentions
+// lists every match.
 export function ambiguousMention(text, mention, pack, find = wordMatcher(text)) {
   if (/\s/u.test(mention.text)) {
     return false;
@@ -335,10 +353,13 @@ const NAME_GAP = /([^\S\n]+|[^\S\n]*\n[^\S\n]*)/u;
 // may use, each with the form of `newName` it becomes, the longest first.
 // The full name and the name without its titles ("Edran Vale" for "Captain
 // Edran Vale") become the new name in the same form, and a character's
-// given name alone becomes the new given name. An old name with no titles
-// becomes the new name without its titles too, since a title the prose
-// puts before it ("Captain Edran Vale" for a character named "Edran Vale")
-// stays in the prose.
+// given name alone becomes the new given name, or the whole new name when
+// that has no given name prose uses alone (see proseGivenName). An old
+// given name that is an initial is not a form, so renaming "J. R. Dunn"
+// leaves "the letter J" alone. An old name with no titles becomes the new
+// name without its titles too, since a title the prose puts before it
+// ("Captain Edran Vale" for a character named "Edran Vale") stays in the
+// prose.
 function renameForms(project, kind, id, newName, pack, titles) {
   const [collection, field] = RENAME_COLLECTIONS[kind];
   const entity = project[collection].find((entry) => entry.id === id);
@@ -347,9 +368,9 @@ function renameForms(project, kind, id, newName, pack, titles) {
   const oldBare = withoutTitles(oldName, titles, pack);
   const targetBare = withoutTitles(target, titles, pack);
   const forms = [[oldName, oldBare === oldName ? targetBare : target], [oldBare, targetBare]];
-  const given = kind === "character" ? givenName(oldName, pack) : "";
+  const given = kind === "character" ? proseGivenName(oldName, pack) : "";
   if (given !== "") {
-    forms.push([given, givenName(target, pack) || target]);
+    forms.push([given, proseGivenName(target, pack) || target]);
   }
   return forms.map(([from, to]) => ({ pattern: new RegExp(`^(?:${namePattern(from, pack).source})$`, "u"), from, to }));
 }
@@ -375,18 +396,22 @@ function renameClash(forms, names, kind, id, pack) {
 }
 
 // story rename --prose: the edits that rename entity `kind` `id` to
-// `newName` in drafted chapter prose, found as story mentions finds them,
-// with each form of the name replaced as renameForms gives it. Aliases are
-// left as written, since a nickname usually outlives a change of name, and
-// so is a span the name shares with another entity, which `shared` lists.
-// A possessive or hyphenated suffix stays, since it lies outside the match.
-// Returns { clash } when the new name would be another entity's in the
-// prose (see renameClash), and otherwise { files, edits, aliases, shared }:
-// `files` maps each chapter file to { original, next }, `edits` lists each
-// replacement as { file, line, endLine, column, from, to }, where endLine
-// is the last line of a name wrapped across lines, `aliases` counts the
-// alias mentions left, and `shared` lists the shared spans as { file,
-// line, column, text }.
+// `newName` in drafted chapter prose, found as story mentions finds them
+// outside link destinations, reference definitions, and URLs (see
+// maskLinkTargets), so no link or address changes, with each form of the
+// name replaced as renameForms gives it. Aliases are left as written, since
+// a nickname usually outlives a change of name, and so is a span the name
+// shares with another entity, which `shared` lists, and a one-word match
+// that may not be the name at all (see uncertainRename), which `ambiguous`
+// lists. A possessive or hyphenated suffix stays, since it lies outside the
+// match. Returns { clash } when the new name would be another entity's in
+// the prose (see renameClash), and otherwise { files, edits, aliases,
+// shared, ambiguous }: `files` maps each chapter file to { original, next
+// }, `edits` lists each replacement as { file, line, endLine, column, from,
+// to }, where endLine is the last line of a name wrapped across lines,
+// `aliases` counts the alias mentions left, `shared` lists the shared
+// spans as { file, line, column, text }, and `ambiguous` the uncertain
+// ones as { file, line, column, text, excerpt }.
 export function proseRenames(project, kind, id, newName) {
   const pack = project.pack ?? languagePack();
   const titles = checkSet(pack, "titleWords");
@@ -396,14 +421,17 @@ export function proseRenames(project, kind, id, newName) {
   if (clash) {
     return { clash };
   }
-  const result = { files: new Map(), edits: [], aliases: 0, shared: [] };
+  const calendar = new Set((checkList(pack, "calendarWords") ?? []).map((word) => lowerCase(nfc(word), pack)));
+  const result = { files: new Map(), edits: [], aliases: 0, shared: [], ambiguous: [] };
   // A chapter that cannot be read is left out; the scan has reported it.
   const drafted = project.chapters.filter((entry) => entry.status !== "outline")
     .map((chapter) => [chapter, chapterText(project, chapter)])
     .filter(([, prose]) => prose !== null);
   for (const [chapter, prose] of drafted) {
     const file = projectPath(project.root, chapter.file);
-    const own = findMentions(prose.text, names).filter((mention) => mention.entities.some((entry) => entry.kind === kind && entry.id === id));
+    const text = maskLinkTargets(prose.text, BLANKED);
+    const find = wordMatcher(text);
+    const own = findMentions(text, names).filter((mention) => mention.entities.some((entry) => entry.kind === kind && entry.id === id));
     const located = locateMentions(prose, own);
     let next = "";
     let copied = 0;
@@ -423,6 +451,10 @@ export function proseRenames(project, kind, id, newName) {
       if (replacement === mention.text) {
         return;
       }
+      if (uncertainRename(text, mention, pack, find, calendar)) {
+        result.ambiguous.push({ ...where, text: mention.text, excerpt: located[index].excerpt });
+        return;
+      }
       const start = prose.offset + mention.start;
       next += `${prose.raw.slice(copied, start)}${replacement}`;
       copied = prose.offset + mention.end;
@@ -434,6 +466,15 @@ export function proseRenames(project, kind, id, newName) {
     }
   }
   return result;
+}
+
+// Whether a one-word match may be an ordinary word rather than the name,
+// so rename --prose lists it instead of rewriting it: a word that opens a
+// sentence while the chapter also uses it in lower case (ambiguousMention,
+// "Rose from her chair"), or a day or month of the pack's calendarWords
+// ("May I come in?", "late in May" for a character called May Dunn).
+function uncertainRename(text, mention, pack, find, calendar) {
+  return ambiguousMention(text, mention, pack, find) || (!/\s/u.test(mention.text) && calendar.has(lowerCase(nfc(mention.text), pack)));
 }
 
 // `to` in the shape of `written`, the prose's match for name form `from`:
