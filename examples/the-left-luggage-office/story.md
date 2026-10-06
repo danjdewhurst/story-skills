@@ -13,6 +13,8 @@ tense: past
 form: serial
 daily-target-words: 500
 writing-days: [mon, tue, thu, fri]
+release-every: 7
+release-start: 2026-09-04
 season-goal: Find out what Aunty Fola hid at Harrowgate Street station, and keep it from Raymond Sallis.
 premise: A family secret kept to protect someone ends up endangering them, until someone chooses to carry it in the open.
 ---
@@ -31,14 +33,9 @@ Cosy but uneasy: a small, warm workplace at night with something wrong underneat
 
 ## Release Schedule
 
-Weekly, on Fridays at 18:00 UK time, about 500 words an episode. The frontmatter has no release field, so the schedule lives here.
+Weekly, on Fridays at 18:00 UK time, about 500 words an episode. `release-start` and `release-every` above put episode 1 (chapter-01) out on 2026-09-04 and each later episode seven days after the one before, so `story progress` and `story next` show the next episode due and warn when one is close or past with no prose. A chapter's own `release-date` would move just that episode, such as a holiday week.
 
-| Episode | Chapter | Release | Episode question | Hook |
-|---------|---------|---------|------------------|------|
-| 1 | chapter-01 | 2026-09-04 | Will Ines hand the suitcase to the man with its ticket? | cliffhanger |
-| 2 | chapter-02 | 2026-09-11 | Who wrote Ines's name on the counterfoil? | reversal |
-| 3 | chapter-03 | 2026-09-18 | Who took the suitcase out in Ines's name? | revelation |
-| 4 | chapter-04 | 2026-09-25 | Planned: Sallis comes back for the ledger | |
+Episode 4 is planned but has no chapter yet: Sallis comes back for the ledger.
 
 ## Notes
 

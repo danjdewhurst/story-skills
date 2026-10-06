@@ -256,6 +256,8 @@ export const FINDING_CODES = {
   "name-shared-initial": "warning",
   // story context
   "context-file-skipped": "warning",
+  // story progress and story next
+  "release-undrafted": "warning",
   // story compare
   "story-missing-at-ref": "warning",
   // story similarity

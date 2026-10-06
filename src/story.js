@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { checkContinuity, idText, storyDateError } from "./continuity.js";
+import { checkContinuity, idText } from "./continuity.js";
 import { chapterChronology, knowledgeAudience } from "./chronology.js";
 import { PROGRESSION_KINDS, entityStateAt } from "./progressions.js";
 import {
@@ -30,7 +30,8 @@ import { buildPacing } from "./pacing.js";
 import { compareChapters, mapLabels, proseParagraphs } from "./compare.js";
 import { compareSimilarity, similarityOptions } from "./similarity.js";
 import { existingSnapshot } from "./snapshots.js";
-import { PROGRESS_FILE, cleanSessions, computeProgress, historyWeeks, localDate, withSession, writingDays } from "./progress.js";
+import { projectRelease, releaseData } from "./release-schedule.js";
+import { PROGRESS_FILE, cleanSessions, computeProgress, historyWeeks, todayOption, withSession, writingDays } from "./progress.js";
 import {
   BASELINE_CHECKS,
   PROSE_THRESHOLDS,
@@ -74,6 +75,7 @@ import {
   sampleProblem,
   validateDailyTarget,
   validateDeadline,
+  validateReleaseCadence,
   validateProgressLog,
   requireInteger
 } from "./validate.js";
@@ -660,11 +662,7 @@ function textDocument(file, name, prose = null) {
 // target-words, and the progress.md session log. With `log`, records the
 // day's total in progress.md first (replacing an entry for the same date).
 export function projectProgress(root, options = {}) {
-  const today = options.date === undefined ? localDate() : String(options.date).trim();
-  const dateError = storyDateError(today);
-  if (dateError !== "" || today.trim() === "") {
-    throw usageError(`progress --date ${dateError || "must be a YYYY-MM-DD date"}`);
-  }
+  const today = todayOption(options.date, "progress");
   const weeks = historyWeeks(options);
   let project = scanProject(root);
   const words = project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
@@ -705,12 +703,14 @@ export function projectProgress(root, options = {}) {
   }
   validateDeadline(data, errors);
   validateDailyTarget(data, errors);
+  validateReleaseCadence(data, errors);
+  const release = projectRelease(project, today);
   const target = data[unit.targetField];
   const dailyTarget = data[unit.dailyTargetField];
   return {
     ok: errors.length === 0,
     errors,
-    warnings: sessionsWithoutCharacters(project),
+    warnings: [...sessionsWithoutCharacters(project), ...(release?.warnings ?? [])],
     logged,
     ...computeProgress({
       unit: unit.name,
@@ -724,7 +724,8 @@ export function projectProgress(root, options = {}) {
       weeks,
       chapters: project.chapters.map((chapter) => ({ id: chapter.id, words: chapter.wordCount, characters: chapter.count, target: chapter.targetCount })),
       sessions: cleanSessions(project.progressLog?.data.sessions)
-    })
+    }),
+    release: releaseData(release)
   };
 }
 

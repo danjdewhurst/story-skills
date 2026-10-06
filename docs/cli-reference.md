@@ -1255,7 +1255,9 @@ $ story similarity --against ../notes --min-words 3
 story progress [path] [--log] [--date <YYYY-MM-DD>] [--weeks <n>] [--dry-run] [--json]
 ```
 
-Reports the manuscript word count against `target-words` in `story.md`, the days left to `deadline` and the words a day needed to meet it, per-chapter `target-words`, and pace from the session log in `progress.md`. Once a session is logged, it also reports today's words (against `daily-target-words` when set), the current and longest writing streak, and the words written in each of the last four weeks (`--weeks` for more or fewer); see [Story progress](continuity.md#story-progress) for how each is counted.
+Reports the manuscript word count against `target-words` in `story.md`, the days left to `deadline` and the words a day needed to meet it, the next serial episode due by the [release schedule](project-format.md#release-schedule), per-chapter `target-words`, and pace from the session log in `progress.md`. Once a session is logged, it also reports today's words (against `daily-target-words` when set), the current and longest writing streak, and the words written in each of the last four weeks (`--weeks` for more or fewer); see [Story progress](continuity.md#story-progress) for how each is counted.
+
+In `--json`, `data.release` is null for a book with no release schedule. Otherwise it holds `every` and `start` (the cadence, or null), `next` (the first release today or later: `episode`, `chapter` and `file`, both null for an episode with no chapter yet, `date`, `drafted`, and `daysUntil`, or null when nothing is scheduled), and `episodes`, each chapter with a release date (`episode`, `chapter`, `file`, `date`, and `drafted`). An episode due within 3 days, or past due, with no prose is a [`release-undrafted`](#codes-progress-and-next) warning.
 
 In `--json`, `data.daily` holds `target` (the daily target, or null), `writingDays` (the `writing-days` as `mon` to `sun`, or null), `today` (`date`, `scheduled`, `written`, `remaining`, and `met`; `written` is null with no session logged before today), `streak` (`current` and `longest`, in days), and `weeks`, one per `--weeks`, oldest first (`start` and `end`, Monday to Sunday, `written`, `days` that gained words, and `target`, the daily target times the writing days in that week, or null).
 
@@ -1264,7 +1266,7 @@ A book [counted in characters](project-format.md#counting-in-characters) reports
 | Option | Effect |
 |---|---|
 | `--log` | Record today's total word count in `progress.md`, creating the file if needed. A second log on the same date replaces the first |
-| `--date <YYYY-MM-DD>` | Use this date as "today", for the deadline, today's words, the streak, the weekly history, and `--log`. Default: the local date |
+| `--date <YYYY-MM-DD>` | Use this date as "today", for the deadline, the next release, today's words, the streak, the weekly history, and `--log`. Default: the local date |
 | `--weeks <n>` | How many weeks of history to show, ending with the current week: a whole number 1 to 52, default `4`. With `1` the heading reads `This week:`. Anything else is a usage error (exit 2). A `story.md` [`cli-defaults`](#defaults-and-severity-from-storymd) entry can set it |
 | `--dry-run` | With `--log`, list the file it would write, print the report as it would be after logging, and change nothing (see [Previewing changes](#previewing-changes-with---dry-run)) |
 
@@ -1550,15 +1552,15 @@ Next Actions:
 ### next
 
 ```text
-story next [path]
+story next [path] [--date <YYYY-MM-DD>] [--json]
 ```
 
-Runs `validate`, `links`, and `continuity`, then lists prioritised actions:
+Runs `validate`, `links`, and `continuity`, then lists prioritised actions. A serial with a [release schedule](project-format.md#release-schedule) also gets a `Next release:` line under the checks, and a `[P1] Draft the scheduled episode` action for each [`release-undrafted`](#codes-progress-and-next) warning: an episode due within 3 days, or past due, with no prose or no chapter yet. `--date` sets "today" for the schedule (default the local date). In `--json`, `data.release` is the schedule as [`progress`](#progress) reports it, and the warnings are diagnostics with `check` `next`.
 
 | Priority | Actions |
 |---|---|
 | `P0` | Fix validation errors, broken references, or continuity contradictions |
-| `P1` | Review continuity warnings, refresh stale word counts, add scene records for chapters without them, reconcile `mode: discovered` chapters that have no `## Chapter Notes (post-hoc)` heading; when `story.md` has `status: revising`, plan revision passes or work the next one |
+| `P1` | Draft a serial episode that is due, review continuity warnings, refresh stale word counts, add scene records for chapters without them, reconcile `mode: discovered` chapters that have no `## Chapter Notes (post-hoc)` heading; when `story.md` has `status: revising`, plan revision passes or work the next one |
 | `P2` | Track open questions, review pending promises and open clues, draft the next chapter, create a first character |
 | `P3` | Nothing is blocking the next writing pass |
 
@@ -3240,6 +3242,12 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | Code | Level | Reported when |
 |---|---|---|
 | `context-file-skipped` | warning | A file the context would draw on fails to parse and is left out. |
+
+### Codes: progress and next
+
+| Code | Level | Reported when |
+|---|---|---|
+| `release-undrafted` | warning | A serial episode's release date is past or within 3 days and its chapter has no prose yet, or, with a `release-every` cadence, the episode has no chapter yet (see [Release schedule](project-format.md#release-schedule)). |
 
 ### Codes: compare
 

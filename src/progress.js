@@ -1,5 +1,6 @@
-import { parseClockDate } from "./continuity.js";
+import { parseClockDate, storyDateError } from "./continuity.js";
 import { usageError } from "./exit-codes.js";
+import { formatNextRelease } from "./release-schedule.js";
 
 // Progress in words or characters against the book target, per-chapter targets, the
 // deadline, and the session log in progress.md. Pure functions: story.js
@@ -266,6 +267,11 @@ export function formatProgress(progress) {
     }
   }
 
+  const release = formatNextRelease(progress.release);
+  if (release !== null) {
+    lines.push(release);
+  }
+
   if (progress.lastSession) {
     const { date, since } = progress.lastSession;
     lines.push(`Sessions: ${progress.sessions} logged; last ${date} (${since >= 0 ? "+" : ""}${formatNumber(since)} ${noun}s since)`);
@@ -321,6 +327,17 @@ function formatDaily(daily, hasSessions, noun) {
     lines.push(`- ${week.start}: ${amount} ${noun}s on ${plural(week.days, "day")}`);
   }
   return lines;
+}
+
+// "Today" for `command` from its --date option, or the local date: a
+// real YYYY-MM-DD day, else a usage error.
+export function todayOption(date, command) {
+  const today = date === undefined ? localDate() : String(date).trim();
+  const dateError = storyDateError(today);
+  if (dateError !== "" || today === "") {
+    throw usageError(`${command} --date ${dateError || "must be a YYYY-MM-DD date"}`);
+  }
+  return today;
 }
 
 export function localDate(now = new Date()) {
