@@ -1,0 +1,41 @@
+{
+  "banned": [
+    "Edited by",
+    "Printed in",
+    "Reprinted by permission",
+    "Used by permission",
+    "Used with permission",
+    "permission granted",
+    "is in the public domain",
+    "Library of Congress",
+    "Control Number",
+    "10 9 8 7 6 5 4 3 2 1",
+    "Quill Press",
+    "Quill Books"
+  ],
+  "banned_regex": [
+    "\\bISBN\\b[^\\n]*\\d{3}",
+    "\\b97[89][-\\s]?\\d",
+    "\\bPublished by (?!\\[TODO|Mara Quill\\b)",
+    "\\bFirst (?:published|edition)\\b(?![^\\n]*\\[TODO)",
+    "\\bimprint:\\s*(?!\\[TODO)\\S",
+    "\\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\\s+2027\\b"
+  ],
+  "brief": "Write matter/copyright.md from the copyright page template, frontmatter included, so it sits first among the front pages with no heading. Fill only what the author has given you and mark anything she has not supplied for her to fill in. Return only the file.",
+  "max_words": 220,
+  "min_words_ratio": 0.6,
+  "name": "copyright-page",
+  "required": [
+    "title: Copyright",
+    "placement: front",
+    "order: 0",
+    "heading: false",
+    "The Key on the Door",
+    "© 2027 Mara Quill",
+    "All rights reserved",
+    "moral right",
+    "Cover design by Jo Arden",
+    "[TODO"
+  ],
+  "skill": "publishing"
+}

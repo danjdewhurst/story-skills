@@ -1,0 +1,48 @@
+{
+  "banned": [
+    "71,482",
+    "logbook",
+    "meant to leave",
+    "hands the light over",
+    "handed the light over",
+    "goes ashore with Petra",
+    "went ashore with Petra",
+    "bestseller",
+    "bestselling",
+    "award-winning",
+    "fiction novel",
+    "What would you do",
+    "a story about"
+  ],
+  "banned_regex": [
+    "\\?",
+    "\\breaders of (?!\\[TODO)",
+    "\\bfans of (?!\\[TODO)",
+    "\\bmeets\\b[^.\\n]{0,40}\\bmeets\\b"
+  ],
+  "brief": "Draft the query letter for submission/query.md from the query-letter template: frontmatter, the one-sentence pitch, and the letter. Use only the facts given, and mark anything the author has not supplied for the author to fill in. Return only the file.",
+  "expected_overlaps": {
+    "in_input": [
+      ["71,482"],
+      ["logbook"],
+      ["meant to leave"],
+      ["hands the light over"],
+      ["goes ashore with Petra"]
+    ]
+  },
+  "max_words": 400,
+  "min_words_ratio": 0.6,
+  "name": "query-letter",
+  "required": [
+    "type: query",
+    "THE KEY ON THE DOOR",
+    "71,000",
+    "Tomas",
+    "brass key",
+    "sea-chest",
+    "Board",
+    "[TODO",
+    "mara.quill@example.com"
+  ],
+  "skill": "submission"
+}

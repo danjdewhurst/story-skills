@@ -1,0 +1,43 @@
+{
+  "banned": [
+    "for free",
+    "free of charge",
+    "unpaid",
+    "volunteer",
+    "a free copy",
+    "in exchange for",
+    "exposure",
+    "guarantee",
+    "certify",
+    "sign off on",
+    "is this okay",
+    "is it okay",
+    "speak for the community",
+    "on behalf of the community"
+  ],
+  "banned_regex": [
+    "[£$€]\\s?\\d",
+    "\\b\\d+\\s*(?:pounds|dollars|euros|per word|per hour|an hour)\\b",
+    "\\b20\\d\\d-\\d\\d-\\d\\d\\b",
+    "\\b\\d{1,2}(?:st|nd|rd|th)?\\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\\b",
+    "\\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\\s+\\d{1,2}\\b",
+    "\\bDr\\.?\\s+[A-Z]"
+  ],
+  "brief": "Draft the reading brief for a sensitivity reader with lived experience of sight loss, from the brief template, one header field per line. Use only the facts given: anything the author has not settled stays a marked placeholder for the author. Return only the brief.",
+  "max_words": 520,
+  "min_words_ratio": 0.6,
+  "name": "sensitivity-brief",
+  "required": [
+    "Reading brief",
+    "macular degeneration",
+    "Tomas",
+    "Specific questions",
+    "inspector",
+    "Deadline",
+    "Fee",
+    "[TODO",
+    "Credit",
+    "sighted"
+  ],
+  "skill": "editorial-review"
+}

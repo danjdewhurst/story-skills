@@ -1,0 +1,34 @@
+{
+  "banned": [
+    "status: automated",
+    "status: unmanned",
+    "status: abandoned",
+    "hours: 3",
+    "hours: 0.75",
+    "hours: 90"
+  ],
+  "banned_regex": [
+    "(?:^|\\n)(?:power|lamp|keeper|automated|electric|fuel)\\s*:",
+    "\\bfield:\\s*(?:notable-characters|routes|tags|members|locations)\\b",
+    "\\bfrom:\\s*chapter-0?[1-8]\\b",
+    "\\bto:\\s*(?!skerry-harbour\\b)[a-z]"
+  ],
+  "brief": "Record both in worldbuilding/locations/greywidow-light.md so the CLI can check them and chapters before the change never see it. Keep every opening value as it is. Return only the updated frontmatter.",
+  "max_words": 120,
+  "min_words_ratio": 0.2,
+  "name": "location-routes",
+  "required": [
+    "Greywidow Light",
+    "controlled-by: the-board",
+    "tomas-reyes",
+    "status: manned",
+    "routes:",
+    "to: skerry-harbour",
+    "hours: 1.5",
+    "mode:",
+    "progressions:",
+    "from: chapter-09",
+    "field: status"
+  ],
+  "skill": "worldbuilding"
+}

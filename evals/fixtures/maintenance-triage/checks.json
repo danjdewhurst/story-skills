@@ -1,0 +1,32 @@
+{
+  "banned": [
+    "status: paid-off",
+    "status: abandoned",
+    "status: planning",
+    "status: revising",
+    "level: off",
+    "removed the TODO",
+    "removed the [TODO",
+    "deleted the [TODO",
+    "resolved the [TODO",
+    "moved the [TODO",
+    "copy scripts/story.js"
+  ],
+  "banned_regex": [
+    "\\b(?:I(?:'ll| will)?|we(?:'ll| will)?|now)\\s+(?:mark|set|change|move)\\b[^.\\n]{0,40}\\b(?:the-brass-key|promise)\\b[^.\\n]{0,30}\\b(?:paid|abandoned|planned)\\b",
+    "\\b(?:mark|set|change)\\b[^.\\n]{0,20}\\bstory\\.md\\b[^.\\n]{0,30}\\b(?:planning|revising|draft)\\b",
+    "\\bdelete\\b[^.\\n]{0,30}\\bpetra-lindqvist\\b"
+  ],
+  "brief": "Read this story check output. Say which findings you fix now, with the individual commands in a fenced shell block, and which you leave and why, naming the skill or the person each one goes to. Change no prose and make no story decision. Under 300 words.",
+  "max_words": 300,
+  "min_words_ratio": 0.5,
+  "name": "maintenance-triage",
+  "required": [
+    "story reindex",
+    "story wordcount",
+    "the-brass-key",
+    "revision-continuity",
+    "TODO"
+  ],
+  "skill": "story-maintenance"
+}
