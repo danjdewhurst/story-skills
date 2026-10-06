@@ -5902,7 +5902,7 @@ function buildSeries(startRoot, scan) {
     warnings.push(warn("series-id-missing", `Linked books ${unnamed.map((book) => book.title).join(", ")} set no series id; add series: ${seriesIds[0]}`));
   }
   for (const book of books.filter((candidate) => candidate.invalidBookNumber)) {
-    errors.push(err("invalid-book-number", `${book.label}: story.md book-number ${JSON.stringify(book.project.story.data["book-number"])} is not a number 0 or more; the book is listed as unnumbered`, path2.join(book.label, "story.md")));
+    errors.push(err("invalid-book-number", `${book.label}: story.md book-number ${JSON.stringify(book.project.story.data["book-number"])} is not a number 0 or more; the book is listed as unnumbered`, path2.posix.join(book.label, "story.md")));
   }
   const seriesTitles = [...new Set(books.map((book) => book.seriesTitle).filter((title) => title !== undefined))].sort();
   if (seriesTitles.length > 1) {
@@ -6009,7 +6009,7 @@ function discoverBooks(startRoot, scan, errors) {
       continue;
     }
     for (const scanError of project.fileErrors ?? []) {
-      errors.push({ ...scanError, message: `${label}: ${scanError.message}`, file: path2.join(label, scanError.file) });
+      errors.push({ ...scanError, message: `${label}: ${scanError.message}`, file: path2.posix.join(label, scanError.file) });
     }
     if (project.story?.unreadable) {
       visited.set(effective, null);
@@ -16820,7 +16820,7 @@ function validateProgressLog(project, errors) {
 function validateOptionalRegistry(project, directory, expectedType, errors) {
   const indexPath = path6.join(project.root, directory, "_index.md");
   if (fs7.existsSync(indexPath)) {
-    const label = path6.join(directory, "_index.md");
+    const label = path6.posix.join(directory, "_index.md");
     const data = readRegistryValidationData(indexPath, project.root, label, errors);
     if (data && data.type !== expectedType) {
       errors.push(err("wrong-type", `${label} type must be ${expectedType}`, label));
@@ -18255,7 +18255,7 @@ function resolveSeriesOptions(root, cwd, options) {
       try {
         data = readBookFrontmatter(bookRoot);
       } catch (error) {
-        throw projectError(`--${field} ${value}: ${path10.join(value, "story.md")}: ${error.message}`);
+        throw projectError(`--${field} ${value}: ${path10.posix.join(portablePath(value), "story.md")}: ${error.message}`);
       }
       if (!data) {
         throw projectError(`--${field} ${value} is not a story project: missing story.md`);
@@ -18783,7 +18783,7 @@ function missingReferenceWarnings(root, kind, data) {
 }
 function registryLists(root, kind, file) {
   const dir = entityConfig(kind).dir;
-  const registry = [dir, path10.dirname(dir)].map((entry) => path10.join(entry, "_index.md")).find((entry) => REGISTRY_FILES.has(entry));
+  const registry = [dir, path10.posix.dirname(dir)].map((entry) => path10.posix.join(entry, "_index.md")).find((entry) => REGISTRY_FILES.has(entry));
   const registryPath = registry && path10.join(root, registry);
   if (!registryPath || !fs11.existsSync(registryPath)) {
     return false;

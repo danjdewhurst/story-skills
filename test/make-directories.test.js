@@ -121,7 +121,8 @@ describe("issue #279: creating output folders", () => {
     const dir = makeTempDir();
     fs.writeFileSync(path.join(dir, "taken"), "");
     expect(() => makeDirectories(path.join(dir, "taken"))).toThrow(`Cannot create directory ${path.join(dir, "taken")}: ENOTDIR`);
-    expect(() => writeFile(path.join(dir, "taken", "sub", "out.md"), "text")).toThrow("ENOTDIR");
+    // Windows reports a file in the middle of the path as ENOENT.
+    expect(() => writeFile(path.join(dir, "taken", "sub", "out.md"), "text")).toThrow(process.platform === "win32" ? "ENOENT" : "ENOTDIR");
   });
 
   test("an existing folder, or a symlink to one, needs nothing created", () => {

@@ -15,10 +15,9 @@ import {
   validateProject,
   writeFile
 } from "../src/story.js";
-import { makeTempDir, memoryIo, messages } from "./helpers.js";
+import { CHMOD_IGNORED, makeTempDir, memoryIo, messages } from "./helpers.js";
 
 const BIN = path.join(import.meta.dir, "..", "bin", "story.js");
-const isRoot = process.getuid?.() === 0;
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -103,12 +102,14 @@ describe("atomic writes (#190, #197)", () => {
     }
     expect(renames).toEqual([[`.chapter.md.story-${process.pid}.tmp`, "chapter.md"]]);
     expect(fs.readFileSync(target, "utf8")).toBe("new");
-    expect(fs.statSync(target).mode & 0o777).toBe(0o640);
+    if (!CHMOD_IGNORED) {
+      expect(fs.statSync(target).mode & 0o777).toBe(0o640);
+    }
     expect(fs.readdirSync(dir)).toEqual(["chapter.md"]);
   });
 
   test("a read-only file stays refused", () => {
-    if (isRoot) {
+    if (CHMOD_IGNORED) {
       return;
     }
     const dir = makeTempDir();
@@ -166,7 +167,7 @@ describe("unreadable files name their path once (#383)", () => {
     fs.appendFileSync(path.join(root, "characters", "_index.md"), Buffer.from([0xff]));
     fs.writeFileSync(path.join(root, "chapters", "chapter-02.md"), "a".repeat(5 * 1024 * 1024 + 1));
     fs.symlinkSync(path.join(root, "story.md"), path.join(root, "continuity", "exemptions.md"));
-    if (!isRoot) {
+    if (!CHMOD_IGNORED) {
       fs.chmodSync(path.join(root, "characters", "mara.md"), 0o000);
     }
     const errors = messages(validateProject(root).errors);
@@ -179,7 +180,7 @@ describe("unreadable files name their path once (#383)", () => {
     expect(errors).toContain(`${"chapters/chapter-02.md"}: Refusing to read oversized file: ${5 * 1024 * 1024 + 1} bytes exceeds the ${5 * 1024 * 1024} byte limit`);
     expect(errors).toContain(`${"continuity/exemptions.md"}: Refusing to read through symlink`);
     expect(errors.filter((error) => error.startsWith(`${"characters/_index.md"}: is not valid UTF-8`))).toHaveLength(1);
-    if (!isRoot) {
+    if (!CHMOD_IGNORED) {
       expect(errors).toContain(`${"characters/mara.md"}: Cannot read: permission denied`);
     }
   });
@@ -255,7 +256,7 @@ describe("interrupted move (#191, #193, #194)", () => {
   });
 
   test("move scene adds the cast before deleting the old scene, so a rerun finishes", () => {
-    if (isRoot) {
+    if (CHMOD_IGNORED) {
       return;
     }
     const root = book();
@@ -290,7 +291,7 @@ describe("interrupted move (#191, #193, #194)", () => {
 
 describe("interrupted add (#202)", () => {
   test("rerunning an add whose backlink step failed finishes it", () => {
-    if (isRoot) {
+    if (CHMOD_IGNORED) {
       return;
     }
     const root = newProject();
@@ -306,7 +307,7 @@ describe("interrupted add (#202)", () => {
   });
 
   test("rerunning an unnumbered scene add does not create a second copy", () => {
-    if (isRoot) {
+    if (CHMOD_IGNORED) {
       return;
     }
     const root = newProject();

@@ -5,7 +5,7 @@ import { runCli } from "../src/cli.js";
 import { parseFrontmatter } from "../src/frontmatter.js";
 import { buildSeries } from "../src/series.js";
 import { createEntity, createStoryProject, renameEntity, scanProject, validateLinks } from "../src/story.js";
-import { makeTempDir, memoryIo, messages } from "./helpers.js";
+import { CHMOD_IGNORED, makeTempDir, memoryIo, messages } from "./helpers.js";
 
 const EXAMPLES = path.join(import.meta.dir, "..", "examples");
 
@@ -158,7 +158,7 @@ describe("#113 init never nests a project inside another", () => {
 });
 
 describe("#200 init --follows cannot leave a half-linked book", () => {
-  test.skipIf(process.getuid?.() === 0)("an unwritable linked book is refused before anything is created", () => {
+  test.skipIf(CHMOD_IGNORED)("an unwritable linked book is refused before anything is created", () => {
     const cwd = makeTempDir();
     const one = createStoryProject({ cwd, title: "Book One", dir: "book1", series: "s", bookNumber: 1 }).root;
     const storyPath = path.join(one, "story.md");

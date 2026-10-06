@@ -14,10 +14,9 @@ import {
   validateLinks,
   validateProject
 } from "../src/story.js";
-import { makeTempDir, memoryIo, messages } from "./helpers.js";
+import { CHMOD_IGNORED, makeTempDir, memoryIo, messages } from "./helpers.js";
 
 const EXAMPLES = path.join(import.meta.dir, "..", "examples");
-const isRoot = process.getuid?.() === 0;
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -130,7 +129,7 @@ describe("project lock (#196)", () => {
 });
 
 describe("write preflight (#198)", () => {
-  test.skipIf(isRoot)("rename refuses before any write when a file it must rewrite is read-only", () => {
+  test.skipIf(CHMOD_IGNORED)("rename refuses before any write when a file it must rewrite is read-only", () => {
     const root = copyExample("harbor-of-second-light");
     const arc = path.join(root, "plot", "arcs", "the-drowned-witness.md");
     fs.chmodSync(arc, 0o444);
@@ -144,7 +143,7 @@ describe("write preflight (#198)", () => {
     expect(messages(validateLinks(root).errors)).toEqual([]);
   });
 
-  test.skipIf(isRoot)("move and remove check the folders they write into", () => {
+  test.skipIf(CHMOD_IGNORED)("move and remove check the folders they write into", () => {
     const root = newProject();
     createEntity(root, { kind: "chapter", name: "One" });
     createEntity(root, { kind: "scene", name: "Opening", chapter: "chapter-01" });
@@ -316,7 +315,7 @@ describe("lock edge cases", () => {
     expect(withProjectLock(path.join(dir, "missing"), () => "ran")).toBe("ran");
   });
 
-  test.skipIf(isRoot)("a project folder the user cannot write to runs without a lock", () => {
+  test.skipIf(CHMOD_IGNORED)("a project folder the user cannot write to runs without a lock", () => {
     const root = newProject();
     fs.chmodSync(root, 0o555);
     try {

@@ -9,7 +9,7 @@ import { previewChanges } from "../src/preview.js";
 import { createEntity } from "../src/story.js";
 import { MAX_SERIES_BOOKS } from "../src/series.js";
 import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { CHMOD_IGNORED, makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
 const schema = JSON.parse(fs.readFileSync(RESULT_SCHEMA_PATH, "utf8"));
 const examplesRoot = path.resolve(import.meta.dir, "..", "examples");
@@ -178,7 +178,7 @@ describe("--dry-run", () => {
       expect(taken.err).toContain("character jonas-reed already exists");
       const missing = invoke(root, ["remove", "character", "nobody", "--dry-run"]);
       expect(missing.code).toBe(2);
-      if (process.getuid?.() !== 0) {
+      if (!CHMOD_IGNORED) {
         fs.chmodSync(path.join(root, "characters", "_index.md"), 0o444);
         const readOnly = invoke(root, ["rename", "character", "edran-vale", "Edran Vane", "--dry-run"]);
         expect(readOnly.code).toBe(4);
@@ -220,7 +220,7 @@ describe("--dry-run", () => {
   });
 
   test("a dry run meets what the real run meets: unreadable and oversized notes, other projects, assets, and unwritable folders", () => {
-    if (process.getuid?.() === 0) {
+    if (CHMOD_IGNORED) {
       return;
     }
     const root = copyExample("the-unraveled-thread");
@@ -359,7 +359,7 @@ describe("--dry-run", () => {
   });
 
   test("a dry run copies symlinks and read-only folders without touching the project", () => {
-    if (process.getuid?.() === 0) {
+    if (CHMOD_IGNORED) {
       return;
     }
     const root = copyExample("the-unraveled-thread");

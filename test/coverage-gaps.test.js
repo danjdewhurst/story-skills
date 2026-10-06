@@ -110,7 +110,8 @@ describe("compare --ref git failures", () => {
     expect(() => withPath(empty, () => compareProject(root, { ref: "HEAD" }))).toThrow("compare --ref needs git, which was not found on PATH");
   });
 
-  test("reports the first line of an unexpected git error", () => {
+  // The fake git is a shell script, which Windows cannot run from PATH.
+  test.skipIf(process.platform === "win32")("reports the first line of an unexpected git error", () => {
     const root = newProject();
     const bin = makeTempDir();
     const fake = path.join(bin, "git");

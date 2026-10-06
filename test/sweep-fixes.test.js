@@ -27,7 +27,7 @@ import {
   validateLinks,
   validateProject
 } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
+import { CHMOD_IGNORED, makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -613,7 +613,7 @@ describe("round three", () => {
     expect(performance.now() - started).toBeLessThan(5000);
   });
 
-  test("a device file is refused rather than read", async () => {
+  test.skipIf(!fs.existsSync("/dev/null"))("a device file is refused rather than read", async () => {
     const { readTextFile } = await import("../src/files.js");
     expect(() => readTextFile("/dev/null")).toThrow("not a regular file");
   });
@@ -827,7 +827,7 @@ describe("round four", () => {
   });
 
   test("writes keep file permissions and refuse read-only files", () => {
-    if (process.getuid?.() === 0) {
+    if (CHMOD_IGNORED) {
       return;
     }
     const root = newProject();
@@ -850,13 +850,15 @@ describe("round four", () => {
     fs.chmodSync(target, 0o640);
     fs.linkSync(target, path.join(outDir, "other.md"));
     exportManuscript(root, { out: target });
-    expect(fs.statSync(target).mode & 0o777).toBe(0o640);
+    if (!CHMOD_IGNORED) {
+      expect(fs.statSync(target).mode & 0o777).toBe(0o640);
+    }
     expect(fs.readFileSync(path.join(outDir, "other.md"), "utf8")).toBe("old");
     expect(fs.readdirSync(outDir).sort()).toEqual(["book.md", "other.md"]);
   });
 
   test("a failed hard-link replacement leaves no temporary file", async () => {
-    if (process.getuid?.() === 0) {
+    if (CHMOD_IGNORED) {
       return;
     }
     const { writeFile } = await import("../src/story.js");
@@ -1062,7 +1064,7 @@ describe("round five", () => {
   });
 
   test("a failed hard-link replacement names the target", async () => {
-    if (process.getuid?.() === 0) {
+    if (CHMOD_IGNORED) {
       return;
     }
     const { writeFile } = await import("../src/story.js");

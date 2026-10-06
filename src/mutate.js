@@ -12,6 +12,7 @@ import {
   assertSafeProjectPath,
   lstatIfExists,
   makeDirectories,
+  portablePath,
   projectPath,
   readTextFile,
   recordChanges,
@@ -413,7 +414,7 @@ function resolveSeriesOptions(root, cwd, options) {
       try {
         data = readBookFrontmatter(bookRoot);
       } catch (error) {
-        throw projectError(`--${field} ${value}: ${path.join(value, "story.md")}: ${error.message}`);
+        throw projectError(`--${field} ${value}: ${path.posix.join(portablePath(value), "story.md")}: ${error.message}`);
       }
       if (!data) {
         throw projectError(`--${field} ${value} is not a story project: missing story.md`);
@@ -1153,7 +1154,7 @@ function missingReferenceWarnings(root, kind, data) {
 // link, so an entity added by a finished `story add` is always listed).
 function registryLists(root, kind, file) {
   const dir = entityConfig(kind).dir;
-  const registry = [dir, path.dirname(dir)].map((entry) => path.join(entry, "_index.md")).find((entry) => REGISTRY_FILES.has(entry));
+  const registry = [dir, path.posix.dirname(dir)].map((entry) => path.posix.join(entry, "_index.md")).find((entry) => REGISTRY_FILES.has(entry));
   const registryPath = registry && path.join(root, registry);
   if (!registryPath || !fs.existsSync(registryPath)) {
     return false;
