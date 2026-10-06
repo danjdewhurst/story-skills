@@ -80,8 +80,10 @@ export function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
   if (manuscript.cover) {
     const href = `images/cover.${manuscript.cover.extension}`;
     const alt = meta.coverAlt === "" ? fillLabel(meta.labels, "cover-alt", { title: manuscript.title }) : meta.coverAlt;
+    // Every cover type (GIF, JPEG, PNG, WebP) is compressed already, so the
+    // image is stored without trying to deflate it.
     coverEntries.push(
-      { name: `OEBPS/${href}`, content: readFileBytes(manuscript.cover.filePath, manuscript.cover.maxBytes) },
+      { name: `OEBPS/${href}`, content: readFileBytes(manuscript.cover.filePath, manuscript.cover.maxBytes), stored: true },
       { name: "OEBPS/cover.xhtml", content: `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(manuscript.title)}</title>${head}</head><body epub:type="cover"><img src="${href}" alt="${xmlEscape(alt)}"/></body></html>` }
     );
     coverItems.push(`<item id="cover-image" href="${href}" media-type="${manuscript.cover.mediaType}" properties="cover-image"/>`, `<item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>`);
@@ -933,11 +935,12 @@ export function writeZip(outFile, entries, writeOptions = {}) {
     const name = Buffer.from(entry.name, "utf8");
     const content = Buffer.isBuffer(entry.content) ? entry.content : Buffer.from(entry.content, "utf8");
     const crc = crc32(content);
-    // Entries marked stored must not be compressed (the EPUB mimetype).
-    // Everything else deflates, except where deflating would not shrink it,
-    // as with already-compressed cover images. The deflate is the CLI's own
-    // (src/deflate.js), not node:zlib, whose bytes differ between Bun and
-    // Node, so the archive is byte-identical on every runtime.
+    // Entries marked stored are not compressed: the EPUB mimetype, which
+    // must not be, and cover images, which are compressed already.
+    // Everything else deflates, except where deflating would not shrink it.
+    // The deflate is the CLI's own (src/deflate.js), not node:zlib, whose
+    // bytes differ between Bun and Node, so the archive is byte-identical on
+    // every runtime.
     const deflated = entry.stored ? null : deflateRaw(content);
     const compressed = deflated !== null && deflated.length < content.length;
     const body = compressed ? deflated : content;
@@ -994,7 +997,7 @@ export function writeZip(outFile, entries, writeOptions = {}) {
   writeFile(outFile, Buffer.concat(localParts.concat(centralParts, end)), writeOptions);
 }
 
-function crc32(buffer) {
+export function crc32(buffer) {
   let crc = 0xffffffff;
   for (const byte of buffer) {
     crc = CRC_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);

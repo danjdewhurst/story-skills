@@ -17860,6 +17860,9 @@ var WINDOW_MASK = WINDOW_SIZE - 1;
 var MIN_MATCH = 3;
 var MAX_MATCH = 258;
 var MAX_CHAIN = 256;
+var NICE_MATCH = 128;
+var GOOD_MATCH = 32;
+var TRIES_PER_BYTE = 16;
 var FAR_MATCH = 4096;
 var HASH_BITS = 15;
 var HASH_MASK = (1 << HASH_BITS) - 1;
@@ -17890,19 +17893,22 @@ var FIXED_LITERAL_LENGTHS = Array.from({ length: 288 }, (_, symbol) => symbol < 
 var FIXED_DISTANCE_LENGTHS = new Array(30).fill(5);
 var FIXED_LITERAL_CODES = canonicalCodes(FIXED_LITERAL_LENGTHS);
 var FIXED_DISTANCE_CODES = canonicalCodes(FIXED_DISTANCE_LENGTHS);
-function deflateRaw(data) {
+function deflateRaw(data, { blockSymbols = BLOCK_SYMBOLS, codeBits = MAX_CODE_BITS, codeLengthBits = MAX_CODE_LENGTH_BITS, stats = {} } = {}) {
   const length = data.length;
   const writer = bitWriter(length);
+  const limits = { codeBits, codeLengthBits };
+  stats.blocks = [];
   const head = new Int32Array(HASH_MASK + 1).fill(-1);
   const prev = new Int32Array(WINDOW_SIZE);
   const block = {
-    values: new Uint16Array(BLOCK_SYMBOLS),
-    distances: new Uint16Array(BLOCK_SYMBOLS),
+    values: new Uint16Array(blockSymbols),
+    distances: new Uint16Array(blockSymbols),
     count: 0,
     literals: new Array(286).fill(0),
     distanceCodes: new Array(30).fill(0)
   };
   let foundDistance = 0;
+  let tries = 0;
   const hashAt = (position) => (data[position] << 10 ^ data[position + 1] << 5 ^ data[position + 2]) & HASH_MASK;
   const insert = (position) => {
     if (position + MIN_MATCH <= length) {
@@ -17911,14 +17917,16 @@ function deflateRaw(data) {
       head[hash] = position;
     }
   };
-  const longestMatch = (position) => {
+  const longestMatch = (position, chain) => {
     if (position + MIN_MATCH > length) {
       return 0;
     }
     const limit = Math.min(MAX_MATCH, length - position);
+    const enough = Math.min(NICE_MATCH, limit);
     let best = 0;
     let candidate = head[hashAt(position)];
-    for (let chain = MAX_CHAIN;candidate >= 0 && position - candidate <= WINDOW_SIZE && chain > 0; chain -= 1) {
+    for (let left = Math.min(chain, TRIES_PER_BYTE * position + MAX_CHAIN - tries);left > 0 && candidate >= 0 && position - candidate <= WINDOW_SIZE; left -= 1) {
+      tries += 1;
       if (data[candidate + best] === data[position + best]) {
         let run = 0;
         while (run < limit && data[candidate + run] === data[position + run]) {
@@ -17927,7 +17935,7 @@ function deflateRaw(data) {
         if (run > best) {
           best = run;
           foundDistance = position - candidate;
-          if (best === limit) {
+          if (best >= enough) {
             break;
           }
         }
@@ -17937,8 +17945,8 @@ function deflateRaw(data) {
     return best < MIN_MATCH || best === MIN_MATCH && foundDistance > FAR_MATCH ? 0 : best;
   };
   const emit = (value, distance, symbol) => {
-    if (block.count === BLOCK_SYMBOLS) {
-      writeBlock(writer, block, false);
+    if (block.count === blockSymbols) {
+      stats.blocks.push(writeBlock(writer, block, false, limits));
     }
     block.values[block.count] = value;
     block.distances[block.count] = distance;
@@ -17951,12 +17959,12 @@ function deflateRaw(data) {
   const emitLiteral = (byte) => emit(byte, 0, byte);
   const emitMatch = (matchLength, distance) => emit(matchLength, distance, 257 + LENGTH_CODE[matchLength]);
   let position = 0;
-  let matchLength = longestMatch(0);
+  let matchLength = longestMatch(0, MAX_CHAIN);
   let matchDistance = foundDistance;
   while (position < length) {
     insert(position);
-    if (matchLength > 0 && matchLength < MAX_MATCH) {
-      const nextLength = longestMatch(position + 1);
+    if (matchLength > 0 && matchLength < NICE_MATCH) {
+      const nextLength = longestMatch(position + 1, matchLength >= GOOD_MATCH ? MAX_CHAIN >> 2 : MAX_CHAIN);
       if (nextLength > matchLength) {
         emitLiteral(data[position]);
         position += 1;
@@ -17975,10 +17983,11 @@ function deflateRaw(data) {
       emitLiteral(data[position]);
       position += 1;
     }
-    matchLength = longestMatch(position);
+    matchLength = longestMatch(position, MAX_CHAIN);
     matchDistance = foundDistance;
   }
-  writeBlock(writer, block, true);
+  stats.blocks.push(writeBlock(writer, block, true, limits));
+  stats.tries = tries;
   return writer.finish();
 }
 function bitWriter(size) {
@@ -18013,15 +18022,16 @@ function bitWriter(size) {
     }
   };
 }
-function writeBlock(writer, block, final) {
+function writeBlock(writer, block, final, limits) {
   block.literals[END_OF_BLOCK] = 1;
-  const literalLengths = huffmanLengths(block.literals, MAX_CODE_BITS);
-  const distanceLengths = huffmanLengths(block.distanceCodes, MAX_CODE_BITS);
-  const header = dynamicHeader(literalLengths, distanceLengths);
+  const literalLengths = huffmanLengths(block.literals, limits.codeBits);
+  const distanceLengths = huffmanLengths(block.distanceCodes, limits.codeBits);
+  const header = dynamicHeader(literalLengths, distanceLengths, limits.codeLengthBits);
   const dynamicBits = header.bits + codedBits(block.literals, literalLengths) + codedBits(block.distanceCodes, distanceLengths);
   const fixedBits = codedBits(block.literals, FIXED_LITERAL_LENGTHS) + codedBits(block.distanceCodes, FIXED_DISTANCE_LENGTHS);
+  const type = fixedBits <= dynamicBits ? "fixed" : "dynamic";
   writer.write(final ? 1 : 0, 1);
-  if (fixedBits <= dynamicBits) {
+  if (type === "fixed") {
     writer.write(1, 2);
     writeSymbols(writer, block, FIXED_LITERAL_CODES, FIXED_LITERAL_LENGTHS, FIXED_DISTANCE_CODES, FIXED_DISTANCE_LENGTHS);
   } else {
@@ -18032,6 +18042,7 @@ function writeBlock(writer, block, final) {
   block.count = 0;
   block.literals.fill(0);
   block.distanceCodes.fill(0);
+  return type;
 }
 function writeSymbols(writer, block, literalCodes, literalLengths, distanceCodes, distanceLengths) {
   for (let index = 0;index < block.count; index += 1) {
@@ -18057,7 +18068,7 @@ function codedBits(frequencies, lengths) {
   }
   return bits;
 }
-function dynamicHeader(literalLengths, distanceLengths) {
+function dynamicHeader(literalLengths, distanceLengths, codeLengthBits) {
   const literalCount = lastUsed(literalLengths) + 1;
   const distanceCount = lastUsed(distanceLengths) + 1;
   const items = runLengths([...literalLengths.slice(0, literalCount), ...distanceLengths.slice(0, distanceCount)]);
@@ -18065,7 +18076,7 @@ function dynamicHeader(literalLengths, distanceLengths) {
   for (const [symbol] of items) {
     frequencies[symbol] += 1;
   }
-  const lengths = huffmanLengths(frequencies, MAX_CODE_LENGTH_BITS);
+  const lengths = huffmanLengths(frequencies, codeLengthBits);
   const codes = canonicalCodes(lengths);
   let orderCount = CODE_LENGTH_ORDER.length;
   while (orderCount > 4 && lengths[CODE_LENGTH_ORDER[orderCount - 1]] === 0) {
@@ -18248,7 +18259,7 @@ function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
   if (manuscript.cover) {
     const href = `images/cover.${manuscript.cover.extension}`;
     const alt = meta.coverAlt === "" ? fillLabel(meta.labels, "cover-alt", { title: manuscript.title }) : meta.coverAlt;
-    coverEntries.push({ name: `OEBPS/${href}`, content: readFileBytes(manuscript.cover.filePath, manuscript.cover.maxBytes) }, { name: "OEBPS/cover.xhtml", content: `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(manuscript.title)}</title>${head}</head><body epub:type="cover"><img src="${href}" alt="${xmlEscape(alt)}"/></body></html>` });
+    coverEntries.push({ name: `OEBPS/${href}`, content: readFileBytes(manuscript.cover.filePath, manuscript.cover.maxBytes), stored: true }, { name: "OEBPS/cover.xhtml", content: `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(manuscript.title)}</title>${head}</head><body epub:type="cover"><img src="${href}" alt="${xmlEscape(alt)}"/></body></html>` });
     coverItems.push(`<item id="cover-image" href="${href}" media-type="${manuscript.cover.mediaType}" properties="cover-image"/>`, `<item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>`);
     coverMeta.push(`<meta name="cover" content="cover-image"/>`);
     coverSpine.push(`<itemref idref="cover"/>`);

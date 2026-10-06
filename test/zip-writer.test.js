@@ -3,6 +3,7 @@ import { Buffer } from "node:buffer";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { deflateRaw } from "../src/deflate.js";
 import { buildBook, createStoryProject } from "../src/story.js";
 import { makeTempDir, readArchiveEntries, writeMarkdown } from "./helpers.js";
 
@@ -12,7 +13,8 @@ const UTF8_NAME_FLAG = 0x0800;
 const STORED = 0;
 const DEFLATED = 8;
 
-function bookProject(cover = false) {
+// `cover` is the bytes of a cover.png, if the book has one.
+function bookProject(cover = null) {
   const cwd = makeTempDir();
   const { root } = createStoryProject({ cwd, title: "Zip Story", force: false });
   writeMarkdown(
@@ -22,7 +24,7 @@ function bookProject(cover = false) {
     `## Chapter Text\n\n${"The lamps came on along the harbor wall. ".repeat(60)}\n`
   );
   if (cover) {
-    fs.writeFileSync(path.join(root, "cover.png"), PNG_BYTES);
+    fs.writeFileSync(path.join(root, "cover.png"), cover);
     const storyPath = path.join(root, "story.md");
     fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("schema-version: 2\n", "schema-version: 2\ncover: cover.png\n"), "utf8");
   }
@@ -67,15 +69,27 @@ describe("zip writer", () => {
   });
 
   test("an incompressible cover image is stored rather than grown", () => {
-    const entries = readArchiveEntries(buildBook(bookProject(true), { format: "epub" }).outFile);
+    const entries = readArchiveEntries(buildBook(bookProject(PNG_BYTES), { format: "epub" }).outFile);
     const cover = entries.find((entry) => entry.name === "OEBPS/images/cover.png");
 
     expect(cover.method).toBe(STORED);
     expect(cover.content.equals(PNG_BYTES)).toBe(true);
   });
 
+  test("a cover image is stored without trying to deflate it, even when that would shrink it (#589)", () => {
+    // Every cover type is compressed already, so a crafted cover cannot make
+    // the build spend time deflating it.
+    const padded = Buffer.concat([PNG_BYTES, Buffer.alloc(20000)]);
+    const entries = readArchiveEntries(buildBook(bookProject(padded), { format: "epub" }).outFile);
+    const cover = entries.find((entry) => entry.name === "OEBPS/images/cover.png");
+
+    expect(deflateRaw(padded).length).toBeLessThan(padded.length);
+    expect(cover.method).toBe(STORED);
+    expect(cover.content.equals(padded)).toBe(true);
+  });
+
   test("repeated builds stay byte-identical", () => {
-    const root = bookProject(true);
+    const root = bookProject(PNG_BYTES);
     for (const format of ["epub", "docx"]) {
       const first = buildBook(root, { format, out: `dist/first.${format}` });
       const second = buildBook(root, { format, out: `dist/second.${format}` });
@@ -89,14 +103,28 @@ describe("zip writer", () => {
       console.warn("Skipping the cross-runtime build test: node is not on PATH.");
       return;
     }
-    const root = bookProject(true);
+    const root = bookProject(PNG_BYTES);
+    // A long chapter of varied prose, so its entry spans several deflate
+    // blocks.
+    const words = "lamp harbor wall tide rope keeper gull salt light stair window bell night storm boat".split(" ");
+    let seed = 7;
+    const sentences = Array.from({ length: 6000 }, () => {
+      seed = (seed * 48271) % 2147483647;
+      return `${Array.from({ length: 6 + (seed % 9) }, (_, index) => words[(seed >> index) % words.length]).join(" ")} ${seed % 1000}.`;
+    });
+    writeMarkdown(path.join(root, "chapters", "chapter-02.md"), "title: Night\nnumber: 2\nstatus: final", `## Chapter Text\n\n${sentences.join(" ")}\n`);
     const runners = {
       node: path.join(repoRoot, "bin", "story.js"),
       fallback: path.join(repoRoot, "skills", "story-maintenance", "scripts", "story.js")
     };
     for (const [format, shunn] of [["epub", false], ["docx", false], ["docx", true]]) {
       const name = `${shunn ? "shunn" : "book"}.${format}`;
-      const built = fs.readFileSync(buildBook(root, { format, shunn, out: `dist/bun-${name}` }).outFile);
+      const bunFile = buildBook(root, { format, shunn, out: `dist/bun-${name}` }).outFile;
+      const built = fs.readFileSync(bunFile);
+      const largest = readArchiveEntries(bunFile).reduce((most, entry) => (entry.size > most.size ? entry : most));
+      const stats = {};
+      deflateRaw(largest.content, { stats });
+      expect(stats.blocks.length).toBeGreaterThan(1);
       for (const [runner, script] of Object.entries(runners)) {
         const out = path.join(root, "dist", `${runner}-${name}`);
         const result = spawnSync("node", [script, "build", root, "--format", format, ...(shunn ? ["--shunn"] : []), "--out", out], { encoding: "utf8" });

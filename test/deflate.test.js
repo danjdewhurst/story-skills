@@ -1,12 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { Buffer } from "node:buffer";
+import { spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { deflateRawSync, inflateRawSync } from "node:zlib";
 import { deflateRaw, huffmanLengths } from "../src/deflate.js";
 
 const repoRoot = path.resolve(import.meta.dir, "..");
+const FALLBACK = path.join(repoRoot, "skills", "story-maintenance", "scripts", "story.js");
 
 // xorshift32, so every run tests the same bytes.
 function seededBytes(size, range, seed = 1) {
@@ -26,8 +29,15 @@ const PROSE = Buffer.from(
   "utf8"
 );
 
-function roundTrips(input) {
-  return inflateRawSync(deflateRaw(input)).equals(input);
+// Every four bytes are a fixed prefix and then varying letters, so each hash
+// chain is long and every match is short: the search's worst case.
+function crowdedChains(prefix, count, seed) {
+  const letters = seededBytes(count * 2, 26, seed);
+  return Buffer.from(Array.from({ length: count }, (_, index) => `${prefix}${String.fromCharCode(65 + letters[2 * index], 65 + letters[2 * index + 1])}`).join(""));
+}
+
+function roundTrips(input, options) {
+  return inflateRawSync(deflateRaw(input, options)).equals(input);
 }
 
 // Kraft's sum for a set of code lengths, scaled so a complete code sums to
@@ -44,6 +54,8 @@ function fibonacci(count) {
   }
   return values.slice(0, count);
 }
+
+const nodeMissing = () => spawnSync("node", ["--version"]).status !== 0;
 
 describe("deflate (#589)", () => {
   test("zlib inflates every stream back to its input", () => {
@@ -82,22 +94,73 @@ describe("deflate (#589)", () => {
     expect(blockType(deflateRaw(PROSE))).toBe(2);
   });
 
+  test("fixed blocks that are not the last, and a dynamic block before a fixed one, inflate", () => {
+    const short = Buffer.from("Hello, hello, hello.");
+    const smallBlocks = {};
+    expect(roundTrips(short, { blockSymbols: 4, stats: smallBlocks })).toBe(true);
+    expect(smallBlocks.blocks).toEqual(["fixed", "fixed", "fixed"]);
+
+    // A full block of random literals takes its own codes; the few left over
+    // are cheaper with the fixed ones.
+    const random = seededBytes(16384 + 40, 256, 21);
+    const switched = {};
+    expect(roundTrips(random, { stats: switched })).toBe(true);
+    expect(switched.blocks).toEqual(["dynamic", "fixed"]);
+  });
+
   test("compresses within a few percent of zlib's best level", () => {
-    for (const file of ["docs/cli-reference.md", "skills/story-maintenance/scripts/story.js"]) {
-      const text = fs.readFileSync(path.join(repoRoot, file));
-      expect(deflateRaw(text).length).toBeLessThan(deflateRawSync(text, { level: 9 }).length * 1.03);
+    for (const file of ["docs/cli-reference.md", FALLBACK]) {
+      const text = fs.readFileSync(path.resolve(repoRoot, file));
+      const stream = deflateRaw(text);
+      expect(inflateRawSync(stream).equals(text)).toBe(true);
+      expect(stream.length).toBeLessThan(deflateRawSync(text, { level: 9 }).length * 1.03);
     }
     const random = seededBytes(70000, 256, 3);
-    expect(deflateRaw(random).length).toBeLessThan(random.length * 1.01);
+    const stream = deflateRaw(random);
+    expect(inflateRawSync(stream).equals(random)).toBe(true);
+    expect(stream.length).toBeLessThan(random.length * 1.01);
   });
 
   test("its bytes are pinned", () => {
     // Pinned so a change to the encoder, which changes every EPUB and DOCX
-    // build, is a deliberate one. The cross-runtime build test in
-    // zip-writer.test.js checks Node gives these bytes too.
+    // build, is a deliberate one. The next test checks Node gives the same
+    // bytes as Bun.
     const input = Buffer.concat([PROSE, seededBytes(20000, 256, 13), Buffer.alloc(5000)]);
-    const digest = crypto.createHash("sha256").update(deflateRaw(input)).digest("hex");
-    expect(digest).toBe("f01078944f1716c231feb5d1907af3cbe8fbd0422f4a1f472ab5002ee5fb7a3a");
+    const stream = deflateRaw(input);
+    expect(inflateRawSync(stream).equals(input)).toBe(true);
+    expect(crypto.createHash("sha256").update(stream).digest("hex")).toBe("f01078944f1716c231feb5d1907af3cbe8fbd0422f4a1f472ab5002ee5fb7a3a");
+  });
+
+  test("node deflates a multi-block input to the same bytes as bun", () => {
+    // process.execPath is Bun under `bun test`, so Node is looked up on PATH.
+    if (nodeMissing()) {
+      console.warn("Skipping the cross-runtime deflate test: node is not on PATH.");
+      return;
+    }
+    const stats = {};
+    const stream = deflateRaw(fs.readFileSync(FALLBACK), { stats });
+    expect(stats.blocks.length).toBeGreaterThan(5);
+    const script = [
+      `import crypto from "node:crypto";`,
+      `import fs from "node:fs";`,
+      `import { deflateRaw } from ${JSON.stringify(pathToFileURL(path.join(repoRoot, "src", "deflate.js")).href)};`,
+      `process.stdout.write(crypto.createHash("sha256").update(deflateRaw(fs.readFileSync(process.argv[1]))).digest("hex"));`
+    ].join("\n");
+    const result = spawnSync("node", ["--input-type=module", "-e", script, FALLBACK], { encoding: "utf8" });
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toBe(crypto.createHash("sha256").update(stream).digest("hex"));
+  });
+
+  test("crafted input that crowds the hash chains costs linear work", () => {
+    // Each byte adds 16 tries to the search budget, on top of one chain of
+    // 256. Both inputs use it all; without it they take about 60 a byte.
+    for (const [prefix, seed] of [["xy", 9], ["ABC", 17]]) {
+      const input = crowdedChains(prefix, 1 << 18, seed);
+      const stats = {};
+      expect(roundTrips(input, { stats })).toBe(true);
+      expect(stats.tries).toBeLessThanOrEqual(16 * input.length + 256);
+      expect(stats.tries).toBeGreaterThan(15 * input.length);
+    }
   });
 
   test("Huffman code lengths stay within the limit and form a complete code", () => {
@@ -105,14 +168,27 @@ describe("deflate (#589)", () => {
     // symbols, and 18 for 19.
     const literals = [...fibonacci(25), ...new Array(261).fill(0)];
     expect(Math.max(...huffmanLengths(literals, 30))).toBe(24);
-    const literalLengths = huffmanLengths(literals, 15);
-    expect(Math.max(...literalLengths)).toBeLessThanOrEqual(15);
-    expect(kraft(literalLengths)).toBe(2 ** 15);
+    const codeLengths = huffmanLengths(fibonacci(19), 30);
+    expect(Math.max(...codeLengths)).toBe(18);
+    for (const [weights, limit] of [[literals, 15], [fibonacci(19), 7], [literals, 9], [fibonacci(19), 5]]) {
+      const lengths = huffmanLengths(weights, limit);
+      expect(Math.max(...lengths)).toBeLessThanOrEqual(limit);
+      expect(kraft(lengths)).toBe(2 ** 15);
+      // Flattening never drops a symbol in use.
+      expect(weights.map((weight, symbol) => weight > 0 && lengths[symbol] === 0).filter(Boolean)).toEqual([]);
+    }
+  });
 
-    expect(Math.max(...huffmanLengths(fibonacci(19), 30))).toBe(18);
-    const codeLengths = huffmanLengths(fibonacci(19), 7);
-    expect(Math.max(...codeLengths)).toBeLessThanOrEqual(7);
-    expect(kraft(codeLengths)).toBe(2 ** 15);
+  test("streams whose Huffman codes had to be flattened still inflate", () => {
+    // Real text rarely needs codes longer than 15 bits or code length codes
+    // longer than 7, so the limits are lowered until this text does.
+    const text = fs.readFileSync(path.join(repoRoot, "docs", "cli-reference.md"));
+    const plain = deflateRaw(text);
+    for (const options of [{ codeBits: 9 }, { codeBits: 12 }, { codeLengthBits: 5 }]) {
+      const flattened = deflateRaw(text, options);
+      expect(flattened.equals(plain)).toBe(false);
+      expect(inflateRawSync(flattened).equals(text)).toBe(true);
+    }
   });
 
   test("a code with fewer than two symbols in use gets two one-bit codes", () => {
