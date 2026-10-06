@@ -489,8 +489,16 @@ var IGNORABLE_CHARACTERS = /\p{Default_Ignorable_Code_Point}/gu;
 function fileSystemName(name) {
   return name.split(":")[0].replace(IGNORABLE_CHARACTERS, "").replace(/[. ]+$/, "").toLowerCase();
 }
+function isShortNameOf(name, longName) {
+  const match = /^([^~.]{1,6})~\d+(?:\.([^.]{1,3}))?$/.exec(name);
+  const dot = longName.lastIndexOf(".");
+  const base = (dot > 0 ? longName.slice(0, dot) : longName).replace(/[. ]/g, "");
+  const extension = dot > 0 ? longName.slice(dot + 1, dot + 4) : "";
+  return match !== null && match[1] === base.slice(0, 6) && (match[2] ?? "") === extension;
+}
 function isGitDirectoryName(name) {
-  return /^(?:\.git|git~\d+)$/.test(fileSystemName(name));
+  const lookedUp = fileSystemName(name);
+  return lookedUp === ".git" || isShortNameOf(lookedUp, ".git");
 }
 function isInsideGitDirectory(target, base) {
   const resolved = path.resolve(target);
@@ -25806,13 +25814,15 @@ function assertNotProjectSource(project, outFile) {
   assertNotSourcePath(project, outFile, realRoot, realTarget);
   assertNotSourcePath(project, outFile, realRoot.toLowerCase(), realTarget.toLowerCase());
 }
+var PROTECTED_NAMES = [...SOURCE_ROOT_FILES, ...SOURCE_DIRECTORIES, ...HAND_EDITED_DIRECTORIES];
 function assertNotSourcePath(project, outFile, root, target) {
   const relativePath = path14.relative(root, target);
   if (relativePath === "" || relativePath.startsWith("..") || path14.isAbsolute(relativePath)) {
     return;
   }
-  const lower = relativePath.split(path14.sep).map(fileSystemName).join("/");
-  const [first] = lower.split("/");
+  const [top, ...rest] = relativePath.split(path14.sep).map(fileSystemName);
+  const first = PROTECTED_NAMES.find((name) => isShortNameOf(top, name)) ?? top;
+  const lower = [first, ...rest].join("/");
   if (SOURCE_ROOT_FILES.has(lower) || SOURCE_DIRECTORIES.includes(first)) {
     throw refusedError(`Refusing to write generated output to ${projectPath(project.root, outFile)}: it is project source. Use a path such as dist/ instead`);
   }

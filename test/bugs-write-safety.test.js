@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
-import { fileSystemName, isGitDirectoryName, isInsideGitDirectory, readTextFile } from "../src/files.js";
+import { fileSystemName, isGitDirectoryName, isInsideGitDirectory, isShortNameOf, readTextFile } from "../src/files.js";
 import {
   computeWordCounts,
   createEntity,
@@ -680,6 +680,13 @@ describe("generated output and new projects stay out of .git", () => {
       expect(isGitDirectoryName(name), JSON.stringify(name)).toBe(false);
     }
     expect(fileSystemName("Story.MD::$DATA")).toBe("story.md");
+    // NTFS short names: six letters, `~N`, and three of the extension.
+    for (const [name, longName] of [["git~1", ".git"], ["git~12", ".git"], ["chapte~1", "chapters"], ["worldb~3", "worldbuilding"], ["style-~1.md", "style-sheet.md"], ["story~1.md", "story.md"]]) {
+      expect(isShortNameOf(name, longName), `${name} ${longName}`).toBe(true);
+    }
+    for (const [name, longName] of [["gi~1", ".git"], ["chap~1", "chapters"], ["chapter~1", "chapters"], ["chapte~1.md", "chapters"], ["style-~1", "style-sheet.md"], ["ch1a2b~1", "chapters"], ["chapte~", "chapters"], ["chapters", "chapters"]]) {
+      expect(isShortNameOf(name, longName), `${name} ${longName}`).toBe(false);
+    }
     expect(fileSystemName("Chap\u200Cters. ")).toBe("chapters");
   });
 
@@ -745,24 +752,29 @@ describe("generated output and new projects stay out of .git", () => {
     expect(tree()).toEqual(before);
   });
 
-  test("--out names project source under the names NTFS, vfat and HFS+ read as it (#603)", () => {
+  test("--out names project source under the names NTFS, vfat and HFS+ read as it, short names included (#603)", () => {
     const root = gitProject();
-    const notes = path.join(root, "feedback\u200B", "notes.md");
-    fs.mkdirSync(path.dirname(notes));
-    fs.writeFileSync(notes, "Keep.\n");
+    // Hand-edited notes under names that HFS+ or NTFS reads as feedback/
+    // and submission/.
+    for (const folder of ["feedback\u200B", "SUBMIS~1"]) {
+      fs.mkdirSync(path.join(root, folder));
+      fs.writeFileSync(path.join(root, folder, "notes.md"), "Keep.\n");
+    }
     const tree = () => fs.readdirSync(root, { recursive: true }).map(String).sort();
     const before = tree();
-    for (const out of ["story.md::$DATA", "Story.md.", "style-sheet.md ", "progress.md:x", "chapters::$INDEX_ALLOCATION/chapter-01.md", "chap\u200Cters/x.md", "Chapters./x.md", "\uFEFFplot/s.md"]) {
+    for (const out of ["story.md::$DATA", "Story.md.", "style-sheet.md ", "progress.md:x", "STYLE-~1.MD", "CHAPTE~1/x.md", "worldb~1/x.md", "chapters::$INDEX_ALLOCATION/chapter-01.md", "chap\u200Cters/x.md", "Chapters./x.md", "\uFEFFplot/s.md"]) {
       for (const at of [out, path.join(root, out)]) {
         const result = invoke(root, ["export", ".", "--out", at]);
         expect(result.code, JSON.stringify(at)).toBe(4);
         expect(result.err, JSON.stringify(at)).toContain("it is project source");
       }
     }
-    const kept = invoke(root, ["export", ".", "--out", "feedback\u200B/notes.md"]);
-    expect(kept.code).toBe(4);
-    expect(kept.err).toContain("may hold hand-written work");
-    expect(fs.readFileSync(notes, "utf8")).toBe("Keep.\n");
+    for (const kept of ["feedback\u200B/notes.md", "SUBMIS~1/notes.md"]) {
+      const result = invoke(root, ["export", ".", "--out", kept]);
+      expect(result.code, kept).toBe(4);
+      expect(result.err, kept).toContain("may hold hand-written work");
+      expect(read(root, kept)).toBe("Keep.\n");
+    }
     expect(tree()).toEqual(before);
   });
 

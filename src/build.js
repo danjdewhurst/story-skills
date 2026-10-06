@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { chapterChronology } from "./chronology.js";
 import { entityStateAt } from "./progressions.js";
-import { fileSystemName, isInsideGitDirectory, isPlanning, lstatIfExists, nearestExistingAncestor, projectPath, readFilePrefix, removeDirectory, removeFile, writeFile } from "./files.js";
+import { fileSystemName, isInsideGitDirectory, isPlanning, isShortNameOf, lstatIfExists, nearestExistingAncestor, projectPath, readFilePrefix, removeDirectory, removeFile, writeFile } from "./files.js";
 import { CODEX_GENERATOR, CODEX_KINDS, codexPages } from "./codex.js";
 import { PROGRESS_FILE } from "./progress.js";
 import {
@@ -812,17 +812,21 @@ function assertNotProjectSource(project, outFile) {
   assertNotSourcePath(project, outFile, realRoot.toLowerCase(), realTarget.toLowerCase());
 }
 
+// The names --out may not write, or (skill-owned folders) not replace in.
+const PROTECTED_NAMES = [...SOURCE_ROOT_FILES, ...SOURCE_DIRECTORIES, ...HAND_EDITED_DIRECTORIES];
+
 // `target` below `root` names project source, or an existing file in a
 // skill-owned folder. Each name is compared as a file system may look it up,
-// so `Chapters/x.md`, `chapters::$INDEX_ALLOCATION/x.md` and `story.md.`
-// count too.
+// so `Chapters/x.md`, `chapters::$INDEX_ALLOCATION/x.md`, `story.md.` and
+// the short name `CHAPTE~1/x.md` count too.
 function assertNotSourcePath(project, outFile, root, target) {
   const relativePath = path.relative(root, target);
   if (relativePath === "" || relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
     return;
   }
-  const lower = relativePath.split(path.sep).map(fileSystemName).join("/");
-  const [first] = lower.split("/");
+  const [top, ...rest] = relativePath.split(path.sep).map(fileSystemName);
+  const first = PROTECTED_NAMES.find((name) => isShortNameOf(top, name)) ?? top;
+  const lower = [first, ...rest].join("/");
   if (SOURCE_ROOT_FILES.has(lower) || SOURCE_DIRECTORIES.includes(first)) {
     throw refusedError(`Refusing to write generated output to ${projectPath(project.root, outFile)}: it is project source. Use a path such as dist/ instead`);
   }

@@ -641,10 +641,25 @@ export function fileSystemName(name) {
   return name.split(":")[0].replace(IGNORABLE_CHARACTERS, "").replace(/[. ]+$/, "").toLowerCase();
 }
 
+// NTFS also gives a long name a short one, unless the volume turns that
+// off: its first six letters without dots or spaces, `~` and a number, and
+// its extension cut to three letters (`GIT~1` for .git, `CHAPTE~1` for
+// chapters, `STYLE-~1.MD` for style-sheet.md). Both names are as
+// fileSystemName gives them. The hashed form NTFS falls back to once four
+// names start alike (`CH1A2B~1`) is not matched.
+export function isShortNameOf(name, longName) {
+  const match = /^([^~.]{1,6})~\d+(?:\.([^.]{1,3}))?$/.exec(name);
+  const dot = longName.lastIndexOf(".");
+  const base = (dot > 0 ? longName.slice(0, dot) : longName).replace(/[. ]/g, "");
+  const extension = dot > 0 ? longName.slice(dot + 1, dot + 4) : "";
+  return match !== null && match[1] === base.slice(0, 6) && (match[2] ?? "") === extension;
+}
+
 // A folder name git reads as its own folder: `.git` in any letter case or
-// under any name above, and the short name `GIT~1` that NTFS gives it.
+// under any name above, or its short name `GIT~1`.
 export function isGitDirectoryName(name) {
-  return /^(?:\.git|git~\d+)$/.test(fileSystemName(name));
+  const lookedUp = fileSystemName(name);
+  return lookedUp === ".git" || isShortNameOf(lookedUp, ".git");
 }
 
 // A git folder on the way from `base` (the project, or the folder a new
