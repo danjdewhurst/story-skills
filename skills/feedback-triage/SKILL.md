@@ -40,22 +40,38 @@ readers have read. Verify `story.md` exists in the project root.
 2. Create the round folder: `feedback/round-{N}/`.
 3. Give readers a review copy they can open without a terminal. Build it
    from text you can get back, so the round can be rebuilt and old labels
-   mapped later (step 3 of Collect). In a git project, run `git status`
-   first: the copy is built from the working tree, but a tag points at the
-   last commit, so uncommitted changes would make them differ. Show the
-   user any changes and ask before committing and before tagging. With
-   their approval:
+   mapped later (step 2 of Collect). Save that text first:
+
+   - **Git project:** check that `.gitignore` lists `dist/` (`story init`
+     writes one that does; add the line if it is missing), so earlier
+     review copies stay out of the commit. Then run
+     `git status --untracked-files=all -- .` and show the user what it
+     lists: the copy is built from the working tree, but a tag points at
+     the last commit, so uncommitted changes would make the two differ.
+     Ask before committing and before tagging. With approval, commit the
+     project folder only (skip the commit when the tree is already clean)
+     and tag that commit:
+
+     ```shell
+     git add -A -- .
+     git commit -m "Feedback round {N}" -- .
+     git tag feedback-round-{N}
+     ```
+
+     If the user declines the commit, never tag the last commit over an
+     uncommitted tree: take a snapshot as below, or stop.
+   - **Project without git, or the user declined the commit:** take a
+     snapshot with `story snapshot feedback-round-{N} --path .`.
+
+   Then build the stamped HTML copy from that text:
 
    ```shell
-   git add -A && git commit -m "Feedback round {N}"
-   git tag feedback-round-{N}
    story build . --format html --stamp feedback-round-{N}
    ```
 
-   Skip the commit when the tree is already clean, and never push, move,
-   or delete a tag without approval. In a project without git, take a
-   snapshot instead (`story snapshot feedback-round-{N} --path .`) and
-   build after it. The single-file HTML copy in `dist/` has a table of
+   Never push, and never move or delete a tag, without the user's
+   approval: a push to `main` can publish the manuscript through the
+   review-copy workflow below. The single-file HTML copy in `dist/` has a table of
    contents, the build stamp at the top, and a paragraph label beside every
    paragraph (`ch03-p12` is chapter 3, paragraph 12). A label is the
    chapter and the paragraph's position in that build, not a permanent id:
@@ -91,7 +107,7 @@ readers have read. Verify `story.md` exists in the project root.
    when several readers stopped at the same place), `Pulled me out for a
    moment` is `minor`, `Barely noticed` is `nit`, and no answer is left
    blank. A `Typo or wording` note is a `nit` unless the reader says more.
-3. **Map old labels to the current text.** When a note's build is older
+2. **Map old labels to the current text.** When a note's build is older
    than the manuscript, its label may point at a different paragraph now.
    Resolve every label from the round in one run against the tag (or the
    short commit in the note's build stamp):
@@ -111,10 +127,10 @@ readers have read. Verify `story.md` exists in the project root.
    Record the current label in the **Where** line, keeping the reader's
    original label in brackets. Sensitivity and authenticity reads use the same file shape;
    see the `editorial-review` skill for commissioning them.
-4. Run the **canon check** on each problem note: verified against the bible,
+3. Run the **canon check** on each problem note: verified against the bible,
    contradicts canon (usually a setup problem — note the canon file), or
    outside canon scope. Record the result in the file.
-5. **Do NOT revise until all feedback for the round is in.** Revising on
+4. **Do NOT revise until all feedback for the round is in.** Revising on
    partial feedback optimizes for the first reader and invalidates the
    others' reads. If a reader is late, either wait or formally close the
    round without them (note it in the synthesis) — never silently proceed

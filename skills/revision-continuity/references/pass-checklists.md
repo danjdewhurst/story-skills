@@ -171,16 +171,19 @@ polished and then cut. Track it as a custom pass with
      outliers, runs of sequels, and chapters whose scenes advance no arc.
      Expanding, give words to short outliers, scene runs with no sequel,
      and arcs with missing plot points. Keep the budgets summing to the
-     book target and write each one, as a whole number, to the chapter's
-     `target-words` (`target-characters`): `story progress .` then lists every chapter
-     against its budget (`chapter-01: 101 of 70 words (144%)`), and
-     `story context <chapter>` shows it when the chapter is redrafted.
+     book target, as whole numbers, and write nothing yet.
   4. Budget each arc: add up the counts of the chapters whose
      `arcs-advanced` lists it and compare its share of the book with its
      weight in `plot/_index.md`. A subplot that takes a quarter of the book
      for one late payoff is the first cut; a main arc squeezed into a few
      chapters is where an expansion goes.
-  5. After each batch of edits, `story wordcount . --write` and
+  5. Put the chapter budgets and the cuts they imply in the revision plan
+     (step 4 of the Revision Workflow in `SKILL.md`). Once the user
+     approves it, write each budget to the chapter's `target-words`
+     (`target-characters`): `story progress .` then lists every chapter
+     against its budget (`chapter-01: 101 of 70 words (144%)`), and
+     `story context <chapter>` shows it when the chapter is redrafted.
+  6. After each batch of edits, `story wordcount . --write` and
      `story progress .` again, until the total is within the tolerance
      agreed with the user (say 2%).
 - **Read:** `story.md` (`target-words`, `form`), `chapters/_index.md`,
