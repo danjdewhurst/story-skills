@@ -68,9 +68,9 @@ describe("narration build", () => {
     const cwd = makeTempDir();
     const { root } = createStoryProject({ cwd, title: "Slash", force: false });
     writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft", "## Chapter Text\n\nHi.\n");
-    writeMarkdown(path.join(root, "glossary", "terms", "either.md"), "term: Either \\| Or\ncategory: term\npronunciation: EE-ther \\ OR", "# E\n");
+    writeMarkdown(path.join(root, "glossary", "terms", "either.md"), "term: Either \\| Or\ncategory: term\npronunciation: EE-ther \\*OR\\*", "# E\n");
     const text = fs.readFileSync(buildBook(root, { format: "narration" }).outFile, "utf8");
-    expect(text).toContain("| Either \\\\\\| Or | EE-ther \\\\ OR | term |");
+    expect(text).toContain("| Either \\\\\\| Or | EE-ther \\*OR\\* | term |");
   });
 
   test("formatRuntime rounds to minutes", () => {
