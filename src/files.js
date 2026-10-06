@@ -395,8 +395,12 @@ export function makeDirectories(directory) {
     // mkdir needs a folder this user can write to (a dangling symlink in
     // the way fails here too, as ENOENT).
     if (missing.length > 0) {
+      // Windows finds no entry below a file, rather than ENOTDIR, so a
+      // file in the way is checked through its would-be child, which fails
+      // as mkdir there would.
+      const blocked = fs.statSync(ancestor, { throwIfNoEntry: false })?.isFile() === true;
       try {
-        fs.accessSync(ancestor, fs.constants.W_OK);
+        fs.accessSync(blocked ? path.join(ancestor, missing[0]) : ancestor, fs.constants.W_OK);
       } catch (error) {
         throw directoryError(path.join(ancestor, missing[0]), error.code ?? error.message);
       }
