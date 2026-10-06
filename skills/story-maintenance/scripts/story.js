@@ -18588,15 +18588,162 @@ import { Buffer as Buffer6 } from "node:buffer";
 import fs14 from "node:fs";
 import path16 from "node:path";
 
+// src/lock.js
+import fs7 from "node:fs";
+import os2 from "node:os";
+import path10 from "node:path";
+var LOCK_FILE = ".story.lock";
+var DEFAULT_WAIT_MS = 1e4;
+var POLL_MS = 50;
+var FOREIGN_LOCK_STALE_MS = 10 * 60 * 1000;
+var TAKEOVER_FILE = ".story-takeover.tmp";
+var TAKEOVER_STALE_MS = 2000;
+var held = new Map;
+function withProjectLock(root, run) {
+  const projectRoot = path10.resolve(root);
+  const key = realPath(projectRoot);
+  if (held.has(key)) {
+    held.set(key, held.get(key) + 1);
+    try {
+      return run();
+    } finally {
+      held.set(key, held.get(key) - 1);
+    }
+  }
+  const lockPath = path10.join(projectRoot, LOCK_FILE);
+  const ours = fs7.existsSync(path10.join(projectRoot, "story.md")) && acquire(lockPath);
+  if (!ours) {
+    return run();
+  }
+  held.set(key, 1);
+  try {
+    return run();
+  } finally {
+    held.delete(key);
+    if (readOwner(lockPath)?.text === ours) {
+      fs7.rmSync(lockPath, { force: true });
+    }
+  }
+}
+function acquire(lockPath) {
+  const deadline = Date.now() + lockWaitMs();
+  let removedStale = false;
+  let created;
+  while ((created = tryCreate(lockPath)) === null) {
+    const owner = readOwner(lockPath);
+    if (owner && !owner.alive && !removedStale && removeStale(lockPath, owner.text)) {
+      removedStale = true;
+      continue;
+    }
+    if (Date.now() >= deadline) {
+      const who = owner?.pid ? `another story command (process ${owner.pid}${owner.host && owner.host !== os2.hostname() ? ` on ${owner.host}` : ""})` : "another story command";
+      throw refusedError(`${who} is modifying this project; nothing was changed. Run write commands one at a time. If no story command is running, delete ${LOCK_FILE} in the project folder and try again`);
+    }
+    sleep(Math.min(POLL_MS, Math.max(1, deadline - Date.now())));
+  }
+  return created;
+}
+function removeStale(lockPath, staleText) {
+  const guard = path10.join(path10.dirname(lockPath), TAKEOVER_FILE);
+  let created = tryCreate(guard);
+  if (created === null && Date.now() - modifiedAt(guard) > TAKEOVER_STALE_MS) {
+    fs7.rmSync(guard, { force: true });
+    created = tryCreate(guard);
+  }
+  if (!created) {
+    return false;
+  }
+  try {
+    if (readOwner(lockPath)?.text === staleText) {
+      fs7.rmSync(lockPath, { force: true });
+    }
+  } finally {
+    fs7.rmSync(guard, { force: true });
+  }
+  return true;
+}
+function tryCreate(lockPath) {
+  try {
+    const descriptor = fs7.openSync(lockPath, "wx", 420);
+    const text = `${process.pid}
+${os2.hostname()}
+${new Date().toISOString()}
+`;
+    try {
+      fs7.writeFileSync(descriptor, text, "utf8");
+    } finally {
+      fs7.closeSync(descriptor);
+    }
+    return text;
+  } catch (error) {
+    return error.code === "EEXIST" ? null : false;
+  }
+}
+function readOwner(lockPath) {
+  let text;
+  let modified;
+  try {
+    const descriptor = fs7.openSync(lockPath, "r");
+    try {
+      modified = fs7.fstatSync(descriptor).mtimeMs;
+      text = fs7.readFileSync(descriptor, "utf8");
+    } finally {
+      fs7.closeSync(descriptor);
+    }
+  } catch {
+    return null;
+  }
+  const [pidText, host, writtenAt] = text.split(`
+`);
+  const pid = Number.parseInt(pidText, 10);
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return { text, pid: null, host: null, alive: true };
+  }
+  const foreign = host && host !== os2.hostname();
+  return { text, pid, host, alive: foreign ? !foreignLockStale(Date.parse(writtenAt), modified) : processAlive(pid) };
+}
+function foreignLockStale(written, modified) {
+  return Number.isFinite(written) && Date.now() - Math.max(written, modified) > FOREIGN_LOCK_STALE_MS;
+}
+function modifiedAt(file) {
+  try {
+    return fs7.statSync(file).mtimeMs;
+  } catch {
+    return Date.now();
+  }
+}
+function processAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code === "EPERM";
+  }
+}
+function lockWaitMs() {
+  const value = Number.parseInt(process.env.STORY_LOCK_WAIT_MS ?? "", 10);
+  return Number.isInteger(value) && value >= 0 ? value : DEFAULT_WAIT_MS;
+}
+function sleep(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+function realPath(target) {
+  try {
+    return fs7.realpathSync(target);
+  } catch {
+    return target;
+  }
+}
+
 // src/stdin.js
 import { Buffer as Buffer5 } from "node:buffer";
-import fs7 from "node:fs";
+import fs8 from "node:fs";
 import tty from "node:tty";
 var STDIN_ARG = "-";
 var MAX_STDIN_BYTES = 5 * 1024 * 1024;
 var CHUNK_BYTES = 64 * 1024;
 var RETRY_MS = 10;
-function readStdin(command, { fd = 0, isatty = tty.isatty, readSync = fs7.readSync, maxBytes = MAX_STDIN_BYTES } = {}) {
+function readStdin(command, { fd = 0, isatty = tty.isatty, readSync = fs8.readSync, maxBytes = MAX_STDIN_BYTES } = {}) {
   if (isatty(fd)) {
     throw usageError(`story ${command} - reads from stdin, but stdin is a terminal: pipe the text in, such as story ${command} - < draft.md`);
   }
@@ -19301,153 +19448,6 @@ function formatPasses(passes, command = "story passes") {
 // src/snapshots.js
 import fs11 from "node:fs";
 import path13 from "node:path";
-
-// src/lock.js
-import fs8 from "node:fs";
-import os2 from "node:os";
-import path10 from "node:path";
-var LOCK_FILE = ".story.lock";
-var DEFAULT_WAIT_MS = 1e4;
-var POLL_MS = 50;
-var FOREIGN_LOCK_STALE_MS = 10 * 60 * 1000;
-var TAKEOVER_FILE = ".story-takeover.tmp";
-var TAKEOVER_STALE_MS = 2000;
-var held = new Map;
-function withProjectLock(root, run) {
-  const projectRoot = path10.resolve(root);
-  const key = realPath(projectRoot);
-  if (held.has(key)) {
-    held.set(key, held.get(key) + 1);
-    try {
-      return run();
-    } finally {
-      held.set(key, held.get(key) - 1);
-    }
-  }
-  const lockPath = path10.join(projectRoot, LOCK_FILE);
-  const ours = fs8.existsSync(path10.join(projectRoot, "story.md")) && acquire(lockPath);
-  if (!ours) {
-    return run();
-  }
-  held.set(key, 1);
-  try {
-    return run();
-  } finally {
-    held.delete(key);
-    if (readOwner(lockPath)?.text === ours) {
-      fs8.rmSync(lockPath, { force: true });
-    }
-  }
-}
-function acquire(lockPath) {
-  const deadline = Date.now() + lockWaitMs();
-  let removedStale = false;
-  let created;
-  while ((created = tryCreate(lockPath)) === null) {
-    const owner = readOwner(lockPath);
-    if (owner && !owner.alive && !removedStale && removeStale(lockPath, owner.text)) {
-      removedStale = true;
-      continue;
-    }
-    if (Date.now() >= deadline) {
-      const who = owner?.pid ? `another story command (process ${owner.pid}${owner.host && owner.host !== os2.hostname() ? ` on ${owner.host}` : ""})` : "another story command";
-      throw refusedError(`${who} is modifying this project; nothing was changed. Run write commands one at a time. If no story command is running, delete ${LOCK_FILE} in the project folder and try again`);
-    }
-    sleep(Math.min(POLL_MS, Math.max(1, deadline - Date.now())));
-  }
-  return created;
-}
-function removeStale(lockPath, staleText) {
-  const guard = path10.join(path10.dirname(lockPath), TAKEOVER_FILE);
-  let created = tryCreate(guard);
-  if (created === null && Date.now() - modifiedAt(guard) > TAKEOVER_STALE_MS) {
-    fs8.rmSync(guard, { force: true });
-    created = tryCreate(guard);
-  }
-  if (!created) {
-    return false;
-  }
-  try {
-    if (readOwner(lockPath)?.text === staleText) {
-      fs8.rmSync(lockPath, { force: true });
-    }
-  } finally {
-    fs8.rmSync(guard, { force: true });
-  }
-  return true;
-}
-function tryCreate(lockPath) {
-  try {
-    const descriptor = fs8.openSync(lockPath, "wx", 420);
-    const text = `${process.pid}
-${os2.hostname()}
-${new Date().toISOString()}
-`;
-    try {
-      fs8.writeFileSync(descriptor, text, "utf8");
-    } finally {
-      fs8.closeSync(descriptor);
-    }
-    return text;
-  } catch (error) {
-    return error.code === "EEXIST" ? null : false;
-  }
-}
-function readOwner(lockPath) {
-  let text;
-  let modified;
-  try {
-    const descriptor = fs8.openSync(lockPath, "r");
-    try {
-      modified = fs8.fstatSync(descriptor).mtimeMs;
-      text = fs8.readFileSync(descriptor, "utf8");
-    } finally {
-      fs8.closeSync(descriptor);
-    }
-  } catch {
-    return null;
-  }
-  const [pidText, host, writtenAt] = text.split(`
-`);
-  const pid = Number.parseInt(pidText, 10);
-  if (!Number.isInteger(pid) || pid <= 0) {
-    return { text, pid: null, host: null, alive: true };
-  }
-  const foreign = host && host !== os2.hostname();
-  return { text, pid, host, alive: foreign ? !foreignLockStale(Date.parse(writtenAt), modified) : processAlive(pid) };
-}
-function foreignLockStale(written, modified) {
-  return Number.isFinite(written) && Date.now() - Math.max(written, modified) > FOREIGN_LOCK_STALE_MS;
-}
-function modifiedAt(file) {
-  try {
-    return fs8.statSync(file).mtimeMs;
-  } catch {
-    return Date.now();
-  }
-}
-function processAlive(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return error.code === "EPERM";
-  }
-}
-function lockWaitMs() {
-  const value = Number.parseInt(process.env.STORY_LOCK_WAIT_MS ?? "", 10);
-  return Number.isInteger(value) && value >= 0 ? value : DEFAULT_WAIT_MS;
-}
-function sleep(ms) {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-}
-function realPath(target) {
-  try {
-    return fs8.realpathSync(target);
-  } catch {
-    return target;
-  }
-}
 
 // src/mutate.js
 import fs10 from "node:fs";
@@ -21636,7 +21636,7 @@ function createStoryProject(options) {
     throw refusedError(`Refusing to use symlinked project directory: ${root}`);
   }
   if (fs10.existsSync(root) && !options.force) {
-    throw refusedError(`${root} already exists. Use --force to add missing starter files; existing files are never overwritten.`);
+    throw refusedError(`${root} already exists. ${options.forceHint ?? "Use --force to add missing starter files; existing files are never overwritten."}`);
   }
   const enclosing = enclosingStoryProject(root);
   if (enclosing) {
@@ -26520,44 +26520,50 @@ function importManuscript(options) {
     }
     return { name, text };
   });
-  const created = createStoryProject({
-    title: options.title,
-    cwd,
-    dir: options.dir,
-    genre: options.genre,
-    subGenre: options.subGenre,
-    settingEra: options.settingEra,
-    themes: options.themes,
-    pov: options.pov,
-    tense: options.tense,
-    synopsis: options.synopsis,
-    language: options.language,
-    defaultSynopsis: `Imported from ${fromStdin ? "stdin" : path16.basename(source)}. Replace with a 2-3 sentence synopsis.`,
-    force: options.force,
-    beforeWrite(root, hasStory) {
-      if (!hasStory) {
-        return;
+  const write = () => {
+    const project = createStoryProject({
+      title: options.title,
+      cwd,
+      dir: options.dir,
+      genre: options.genre,
+      subGenre: options.subGenre,
+      settingEra: options.settingEra,
+      themes: options.themes,
+      pov: options.pov,
+      tense: options.tense,
+      synopsis: options.synopsis,
+      language: options.language,
+      defaultSynopsis: `Imported from ${fromStdin ? "stdin" : path16.basename(source)}. Replace with a 2-3 sentence synopsis.`,
+      force: options.force,
+      forceHint: "Use --force to import into it: --force deletes every chapters/chapter-NN.md and writes the imported chapters in their place, adds missing starter files, keeps story.md and the other files, and reindexes. Commit or back up the project first.",
+      beforeWrite(root, hasStory) {
+        if (!hasStory) {
+          return;
+        }
+        let scanned;
+        try {
+          scanned = scanProject(root);
+        } catch {
+          return;
+        }
+        assertProjectParses(scanned, "import", (error) => /^chapters[\\/]chapter-\d+\.md$/i.test(error.file));
       }
-      let project;
-      try {
-        project = scanProject(root);
-      } catch {
-        return;
+    });
+    const chaptersDir = path16.join(project.root, "chapters");
+    for (const name of fs14.readdirSync(chaptersDir)) {
+      if (!/^chapter-\d+\.md$/i.test(name)) {
+        continue;
       }
-      assertProjectParses(project, "import", (error) => /^chapters[\\/]chapter-\d+\.md$/i.test(error.file));
+      removeFile(path16.join(chaptersDir, name));
     }
-  });
-  const chaptersDir = path16.join(created.root, "chapters");
-  for (const name of fs14.readdirSync(chaptersDir)) {
-    if (!/^chapter-\d+\.md$/i.test(name)) {
-      continue;
+    for (const chapter of chapterFiles) {
+      writeFile(path16.join(chaptersDir, chapter.name), chapter.text, { root: project.root });
     }
-    removeFile(path16.join(chaptersDir, name));
-  }
-  for (const chapter of chapterFiles) {
-    writeFile(path16.join(chaptersDir, chapter.name), chapter.text, { root: created.root });
-  }
-  reindexProject(created.root);
+    reindexProject(project.root);
+    return project;
+  };
+  const locked = options.force && target !== null && lstatIfExists(target)?.isSymbolicLink() !== true;
+  const created = locked ? withProjectLock(target, write) : write();
   return {
     root: created.root,
     storyId: created.storyId,

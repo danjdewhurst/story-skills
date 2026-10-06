@@ -249,12 +249,12 @@ import uses --dir for the target directory. --path is the project root for other
 Without `--force`, import refuses a target directory that already exists:
 
 ```text
-~/stories/the-salt-road already exists. Use --force to add missing starter files; existing files are never overwritten.
+~/stories/the-salt-road already exists. Use --force to import into it: --force deletes every chapters/chapter-NN.md and writes the imported chapters in their place, adds missing starter files, keeps story.md and the other files, and reindexes. Commit or back up the project first.
 ```
 
 With `--force`, import adds any missing starter files and leaves other existing files alone, with one exception: it **deletes every `chapter-NN.md` file in `chapters/`** before writing the imported chapters.
 
-Before it changes anything, import checks that the project's other files parse, as `story reindex` would; if one does not, it names the file and leaves the project as it was. An existing `story.md` is kept, so a different `--title` or another `story.md` option is not applied, and import says so in a warning. It also prints a note to run `story links`, since scenes, bible entries, and continuity files may name chapters that are gone or changed.
+Before it changes anything, import checks that the project's other files parse, as `story reindex` would; if one does not, it names the file and leaves the project as it was. It holds the [project lock](cli-reference.md#where-commands-write) for the whole run, so while another story command is changing the project it refuses with exit code 4 and changes nothing. An existing `story.md` is kept, so a different `--title` or another `story.md` option is not applied, and import says so in a warning. It also prints a note to run `story links`, since scenes, bible entries, and continuity files may name chapters that are gone or changed.
 
 > [!WARNING]
 > Chapter frontmatter you filled in (POV, locations, characters, status) is lost with the old chapter files. Scene files, bible entries, and `matter/` pages are kept, but scenes may now point at chapters with different content. Commit or back up the project before a forced import. The `story-maintenance` skill asks you before it runs one.
@@ -1427,7 +1427,7 @@ Treat everything in `dist/` as disposable. It is regenerated from the markdown o
 | `No markdown or text files found in <dir>` | The folder has no `.md`, `.markdown`, or `.txt` files at its top level | Point at the folder that contains the chapter files. |
 | `No chapter content found in import source` | Every document was empty after frontmatter was removed | Check the source files. |
 | `Cannot import <file>: it is a zip archive ...`, `... not valid UTF-8 text ...` | The source is a `.docx` or other zip, a binary file, or text in another encoding | Save or export it as UTF-8 markdown or plain text. |
-| `<dir> already exists. Use --force ...` | The import target exists | Choose another `--dir`, or back up and use `--force`. |
+| `<dir> already exists. Use --force to import into it: ...` | The import target exists | Choose another `--dir`, or back up the project and use `--force`, which replaces its chapters. |
 | `<path> is not a story project: missing story.md` | The project path is wrong | Pass the folder that contains `story.md`. |
 | `No chapters found to export` | The project has no chapter files | Add chapters first. |
 | `Duplicate chapter number N: ...` | Two chapters share a `number` | Renumber one of them, then run `story reindex .`. |

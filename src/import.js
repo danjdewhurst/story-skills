@@ -8,7 +8,8 @@ import { compareText, lowerCase } from "./languages/locale.js";
 import { withStyleLists } from "./languages/style.js";
 import { chapterHeading, characterCount, escapeRegExp, fencedLineIndexes, scanComments, splitFences, titleCaseSlug, wordCount } from "./markdown.js";
 import { countUnit } from "./forms.js";
-import { MAX_READ_BYTES, removeFile } from "./files.js";
+import { MAX_READ_BYTES, lstatIfExists, removeFile } from "./files.js";
+import { withProjectLock } from "./lock.js";
 import { STDIN_ARG, decodeUtf8 } from "./stdin.js";
 import { assertProjectParses, createStoryProject, existingStoryData, existingStoryLanguage, existingStyleData, newProjectRoot, reindexProject, scanProject, writeFile } from "./story.js";
 import { EXIT_CODES, usageError, withDefaultExitCode } from "./exit-codes.js";
@@ -196,52 +197,63 @@ export function importManuscript(options) {
     return { name, text };
   });
 
-  const created = createStoryProject({
-    title: options.title,
-    cwd,
-    dir: options.dir,
-    genre: options.genre,
-    subGenre: options.subGenre,
-    settingEra: options.settingEra,
-    themes: options.themes,
-    pov: options.pov,
-    tense: options.tense,
-    synopsis: options.synopsis,
-    language: options.language,
-    defaultSynopsis: `Imported from ${fromStdin ? "stdin" : path.basename(source)}. Replace with a 2-3 sentence synopsis.`,
-    force: options.force,
-    // Check an existing project parses before deleting its chapters, as the
-    // other mutating commands do. The chapter files about to be replaced may
-    // be broken.
-    beforeWrite(root, hasStory) {
-      if (!hasStory) {
-        return;
+  // --force into an existing project deletes and rewrites its chapters, so
+  // it holds the project lock from the first starter file to the reindex,
+  // as the other write commands do: a command already running refuses this
+  // one before anything changes. A symlinked folder is refused unlocked by
+  // createStoryProject, so no lock file is written through it.
+  const write = () => {
+    const project = createStoryProject({
+      title: options.title,
+      cwd,
+      dir: options.dir,
+      genre: options.genre,
+      subGenre: options.subGenre,
+      settingEra: options.settingEra,
+      themes: options.themes,
+      pov: options.pov,
+      tense: options.tense,
+      synopsis: options.synopsis,
+      language: options.language,
+      defaultSynopsis: `Imported from ${fromStdin ? "stdin" : path.basename(source)}. Replace with a 2-3 sentence synopsis.`,
+      force: options.force,
+      forceHint: "Use --force to import into it: --force deletes every chapters/chapter-NN.md and writes the imported chapters in their place, adds missing starter files, keeps story.md and the other files, and reindexes. Commit or back up the project first.",
+      // Check an existing project parses before deleting its chapters, as the
+      // other mutating commands do. The chapter files about to be replaced may
+      // be broken.
+      beforeWrite(root, hasStory) {
+        if (!hasStory) {
+          return;
+        }
+        let scanned;
+        try {
+          scanned = scanProject(root);
+        } catch {
+          // An unsafe layout (a symlinked folder, say) is refused by the
+          // starter-file checks that follow, with their own message.
+          return;
+        }
+        assertProjectParses(scanned, "import", (error) => /^chapters[\\/]chapter-\d+\.md$/i.test(error.file));
       }
-      let project;
-      try {
-        project = scanProject(root);
-      } catch {
-        // An unsafe layout (a symlinked folder, say) is refused by the
-        // starter-file checks that follow, with their own message.
-        return;
+    });
+
+    const chaptersDir = path.join(project.root, "chapters");
+    for (const name of fs.readdirSync(chaptersDir)) {
+      if (!/^chapter-\d+\.md$/i.test(name)) {
+        continue;
       }
-      assertProjectParses(project, "import", (error) => /^chapters[\\/]chapter-\d+\.md$/i.test(error.file));
+      removeFile(path.join(chaptersDir, name));
     }
-  });
 
-  const chaptersDir = path.join(created.root, "chapters");
-  for (const name of fs.readdirSync(chaptersDir)) {
-    if (!/^chapter-\d+\.md$/i.test(name)) {
-      continue;
+    for (const chapter of chapterFiles) {
+      writeFile(path.join(chaptersDir, chapter.name), chapter.text, { root: project.root });
     }
-    removeFile(path.join(chaptersDir, name));
-  }
 
-  for (const chapter of chapterFiles) {
-    writeFile(path.join(chaptersDir, chapter.name), chapter.text, { root: created.root });
-  }
-
-  reindexProject(created.root);
+    reindexProject(project.root);
+    return project;
+  };
+  const locked = options.force && target !== null && lstatIfExists(target)?.isSymbolicLink() !== true;
+  const created = locked ? withProjectLock(target, write) : write();
 
   return {
     root: created.root,

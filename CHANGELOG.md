@@ -8,6 +8,10 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ## [Unreleased]
 
+### Fixed
+
+- `story import` into a folder that already exists no longer says `--force` never overwrites files: the refusal now says that `--force` deletes every `chapters/chapter-NN.md` and writes the imported chapters in their place, adds missing starter files, keeps `story.md` and the other files, and reindexes. `import --force` into an existing project now holds the project lock from its first write to the reindex, as the other write commands do, so while another story command is changing the project it refuses with exit code 4 and changes nothing. Before, it replaced the chapters and created starter files, then failed at the reindex saying nothing was changed. `story init`'s message is unchanged. ([#541](https://github.com/danjdewhurst/story-skills/issues/541))
+
 ## [0.22.0] - 2026-10-06
 
 ### Added
