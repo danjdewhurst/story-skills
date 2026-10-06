@@ -360,6 +360,7 @@ var FINDING_CODES = {
   "invalid-ifid": "error",
   "invalid-cover": "error",
   "invalid-date": "error",
+  "invalid-calendar": "error",
   "invalid-cli-config": "error",
   "invalid-filename": "error",
   "filename-number-mismatch": "error",
@@ -747,6 +748,229 @@ function formatClueMatrix(matrix) {
   return `${lines.join(`
 `)}
 `;
+}
+
+// src/calendar.js
+var CALENDAR_NAME = /^\s*[^\s\d,][^,]*$/u;
+var KINDS = ["month", "era", "weekdays"];
+var DIRECTIONS = ["forward", "backward"];
+function isName(value) {
+  return typeof value === "string" && CALENDAR_NAME.test(value);
+}
+function isCount(value) {
+  return Number.isInteger(value) && value >= 1;
+}
+function fold(value) {
+  return String(value).trim().replace(/\s+/g, " ").toLowerCase();
+}
+function plainName(value) {
+  return String(value).trim().replace(/\s+/g, " ");
+}
+function parseCalendar(value) {
+  if (value === undefined) {
+    return { calendar: null, problems: [] };
+  }
+  const problems = [];
+  if (!Array.isArray(value)) {
+    return { calendar: { invalid: true }, problems: ["must be a list of month, era, and weekdays entries"] };
+  }
+  const months = [];
+  const eras = [];
+  let weekdays = null;
+  let firstWeekday = 0;
+  value.forEach((entry, index) => {
+    const at = `entry ${index + 1}`;
+    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+      problems.push(`${at} must be a month, era, or weekdays entry, such as - month: Thaw then days: 30`);
+      return;
+    }
+    const before = problems.length;
+    for (const key of ["month", "era", "abbrev"]) {
+      if (entry[key] !== undefined && !isName(entry[key])) {
+        problems.push(`${at} ${key} must be a name that does not start with a digit and has no comma, got ${entry[key]}`);
+      }
+    }
+    for (const key of ["days", "years"]) {
+      if (entry[key] !== undefined && !isCount(entry[key])) {
+        problems.push(`${at} ${key} must be a whole number 1 or more, got ${entry[key]}`);
+      }
+    }
+    if (entry.direction !== undefined && !DIRECTIONS.includes(entry.direction)) {
+      problems.push(`${at} direction must be forward or backward, got ${entry.direction}`);
+    }
+    if (entry.weekdays !== undefined && (!Array.isArray(entry.weekdays) || !entry.weekdays.every(isName))) {
+      problems.push(`${at} weekdays must be a list of names that do not start with a digit and have no comma, such as [Hearthday, Stoneday]`);
+    }
+    if (entry["first-weekday"] !== undefined && typeof entry["first-weekday"] !== "string") {
+      problems.push(`${at} first-weekday must be text, got ${entry["first-weekday"]}`);
+    }
+    if (entry.month !== undefined && entry.days === undefined) {
+      problems.push(`${at} month ${entry.month} needs days, such as days: 30`);
+    }
+    const kinds = KINDS.filter((kind) => entry[kind] !== undefined);
+    if (kinds.length !== 1) {
+      problems.push(`${at} must name exactly one of month, era, or weekdays${kinds.length > 1 ? `, not ${kinds.join(" and ")}` : ""}`);
+      return;
+    }
+    if (problems.length > before) {
+      return;
+    }
+    if (kinds[0] === "month") {
+      months.push({ name: plainName(entry.month), days: entry.days });
+    } else if (kinds[0] === "era") {
+      eras.push({
+        name: plainName(entry.era),
+        abbrev: entry.abbrev === undefined ? "" : plainName(entry.abbrev),
+        backward: entry.direction === "backward",
+        years: entry.years ?? null
+      });
+    } else if (weekdays !== null) {
+      problems.push(`${at} repeats weekdays; list them all in one entry`);
+    } else if (entry.weekdays.length === 0) {
+      problems.push(`${at} weekdays needs at least one name`);
+    } else {
+      weekdays = entry.weekdays.map(plainName);
+      if (entry["first-weekday"] !== undefined) {
+        firstWeekday = weekdays.findIndex((name) => fold(name) === fold(entry["first-weekday"]));
+        if (firstWeekday < 0) {
+          problems.push(`${at} first-weekday must be one of the weekdays (${weekdays.join(", ")}), got ${entry["first-weekday"]}`);
+        }
+      }
+    }
+  });
+  if (!value.some((entry) => entry !== null && typeof entry === "object" && entry.month !== undefined)) {
+    problems.push("needs at least one month entry, such as - month: Thaw then days: 30");
+  }
+  repeated(months.map((month) => month.name), "month", problems);
+  repeated(weekdays ?? [], "weekday", problems);
+  repeated(eras.flatMap((era) => [era.name, era.abbrev].filter(Boolean)), "era name or abbrev", problems);
+  eras.forEach((era, index) => {
+    if (era.backward && index > 0) {
+      problems.push(`era ${era.name} counts backward, but only the first era may`);
+    }
+    if (!era.backward && era.years === null && index < eras.length - 1) {
+      problems.push(`era ${era.name} needs years, the number of years it lasts, since another era follows it`);
+    }
+  });
+  if (problems.length > 0) {
+    return { calendar: { invalid: true }, problems };
+  }
+  let start = 1;
+  for (const era of eras) {
+    if (!era.backward) {
+      era.start = start;
+      start += era.years ?? 0;
+    }
+  }
+  let offset = 0;
+  for (const month of months) {
+    month.offset = offset;
+    offset += month.days;
+  }
+  return {
+    calendar: { invalid: false, months, yearDays: offset, weekdays: weekdays ?? [], firstWeekday, eras },
+    problems: []
+  };
+}
+function repeated(names, what, problems) {
+  const seen = new Set;
+  for (const name of names) {
+    if (seen.has(fold(name))) {
+      problems.push(`${what} ${name} appears more than once`);
+    }
+    seen.add(fold(name));
+  }
+}
+function leadingName(text, names) {
+  const lower = text.toLowerCase();
+  const sorted = [...names].sort((left, right) => right.length - left.length);
+  for (const name of sorted) {
+    const key = name.toLowerCase();
+    if (lower.startsWith(key) && (lower.length === key.length || lower[key.length] === " " || lower[key.length] === ",")) {
+      return { name, rest: text.slice(key.length).replace(/^,?\s*/, "") };
+    }
+  }
+  return null;
+}
+function calendarShaped(value, calendar) {
+  const text = plainName(value);
+  return /^\d/.test(text) || calendar.weekdays.length > 0 && leadingName(text, calendar.weekdays) !== null;
+}
+function parseCalendarDate(value, calendar) {
+  const original = String(value).trim();
+  let text = plainName(value);
+  let stated = null;
+  if (calendar.weekdays.length > 0) {
+    const weekday = leadingName(text, calendar.weekdays);
+    if (weekday) {
+      stated = weekday.name;
+      text = weekday.rest;
+    }
+  }
+  let day;
+  let month;
+  let rest;
+  const numeric = /^(\d+)-(\d{1,2})-(\d{1,2})(?: (.+))?$/.exec(text);
+  if (numeric) {
+    const index = Number(numeric[2]);
+    if (index < 1 || index > calendar.months.length) {
+      return { problem: `month ${numeric[2]} is not one of the calendar's ${calendar.months.length} months` };
+    }
+    month = calendar.months[index - 1];
+    day = Number(numeric[3]);
+    rest = `${numeric[1]}${numeric[4] === undefined ? "" : ` ${numeric[4]}`}`;
+  } else {
+    const named = /^(\d+)(?:st|nd|rd|th)? (?:of )?(.+)$/i.exec(text);
+    if (!named) {
+      return { problem: "write it as day, month, and year, such as 3 Thaw 301 AE or 301-02-03 AE" };
+    }
+    const found = leadingName(named[2], calendar.months.map((entry) => entry.name));
+    if (!found) {
+      return { problem: `it names no calendar month (${calendar.months.map((entry) => entry.name).join(", ")})` };
+    }
+    month = calendar.months.find((entry) => entry.name === found.name);
+    day = Number(named[1]);
+    rest = found.rest;
+  }
+  const yearMatch = /^(\d+)(?: (.+))?$/.exec(rest);
+  if (!yearMatch) {
+    return { problem: "the month must be followed by a year, such as 3 Thaw 301 AE" };
+  }
+  if (day < 1 || day > month.days) {
+    return { problem: `${month.name} has ${month.days} days, not ${day}` };
+  }
+  const year = Number(yearMatch[1]);
+  if (year < 1) {
+    return { problem: "years start at 1" };
+  }
+  const absolute = absoluteYear(year, yearMatch[2], calendar);
+  if (absolute.problem) {
+    return absolute;
+  }
+  const days = (absolute.year - 1) * calendar.yearDays + month.offset + day - 1;
+  if (stated !== null) {
+    const actual = calendar.weekdays[mod(days + calendar.firstWeekday, calendar.weekdays.length)];
+    if (actual !== stated) {
+      return { problem: `that day is a ${actual}, not a ${stated}` };
+    }
+  }
+  return { text: original, days };
+}
+function absoluteYear(year, eraText, calendar) {
+  if (calendar.eras.length === 0) {
+    return eraText === undefined ? { year } : { problem: `the calendar has no eras, so ${eraText} is not one` };
+  }
+  const era = eraText === undefined ? calendar.eras[calendar.eras.length - 1] : calendar.eras.find((entry) => fold(entry.name) === fold(eraText) || entry.abbrev !== "" && fold(entry.abbrev) === fold(eraText));
+  if (!era) {
+    return { problem: `${eraText} is not one of the calendar's eras (${calendar.eras.map((entry) => entry.abbrev || entry.name).join(", ")})` };
+  }
+  if (era.years !== null && year > era.years) {
+    return { problem: `${era.name} lasts ${era.years} years, not ${year}` };
+  }
+  return { year: era.backward ? 1 - year : era.start + year - 1 };
+}
+function mod(value, divisor) {
+  return (value % divisor + divisor) % divisor;
 }
 
 // src/exemptions.js
@@ -8337,7 +8561,7 @@ function contentWords(prose, rules) {
   }
   return splitWords(proseParagraphs(prose).join(`
 
-`)).map((word) => normalizeWord(word, rules.pack)).filter((word) => word.length >= 4 && !rules.echoStopwords.has(word) && !rules.phraseStopwords.has(word) && !isName(word, rules) && !/^\p{N}+$/u.test(word));
+`)).map((word) => normalizeWord(word, rules.pack)).filter((word) => word.length >= 4 && !rules.echoStopwords.has(word) && !rules.phraseStopwords.has(word) && !isName2(word, rules) && !/^\p{N}+$/u.test(word));
 }
 function sentenceLengths(prose, pack = languagePack()) {
   return proseParagraphs(prose).flatMap((paragraph) => splitSentences(paragraph, { pack })).map((sentence) => splitWords(sentence).length).filter((count) => count > 0);
@@ -8560,9 +8784,9 @@ function countAdverbs(words, rules) {
   return sortCounts(counts, rules.pack);
 }
 function isAdverb(word, rules) {
-  return word.length > 4 && rules.adverbSuffixes.some((suffix) => word.endsWith(suffix)) && !rules.adverbExceptions.has(word) && !rules.allow.has(word) && !isName(word, rules);
+  return word.length > 4 && rules.adverbSuffixes.some((suffix) => word.endsWith(suffix)) && !rules.adverbExceptions.has(word) && !rules.allow.has(word) && !isName2(word, rules);
 }
-function isName(word, rules) {
+function isName2(word, rules) {
   return rules.nameTokens.has(word) || rules.nameTokens.has(nameKey(word, rules.pack));
 }
 function normalizeWord(word, pack) {
@@ -8575,7 +8799,7 @@ function countVariant(text, spans, rules) {
   let count = 0;
   for (const [start, end] of spans) {
     const first = splitWords(text.slice(start, end))[0] ?? "";
-    if (/^\p{Lu}/u.test(first) && isName(first, rules)) {
+    if (/^\p{Lu}/u.test(first) && isName2(first, rules)) {
       continue;
     }
     count += 1;
@@ -8590,7 +8814,7 @@ function echoes(words, rules) {
   const counts = new Map;
   words.forEach((raw, index) => {
     const word = normalizeWord(raw, rules.pack);
-    if (word.length < PROSE_THRESHOLDS.echoMinLength || rules.echoStopwords.has(word) || isName(word, rules) || rules.allow.has(word) || /^\p{N}+$/u.test(word)) {
+    if (word.length < PROSE_THRESHOLDS.echoMinLength || rules.echoStopwords.has(word) || isName2(word, rules) || rules.allow.has(word) || /^\p{N}+$/u.test(word)) {
       return;
     }
     if (lastSeen.has(word) && index - lastSeen.get(word) <= PROSE_THRESHOLDS.echoWindow) {
@@ -8741,7 +8965,7 @@ var OPTIONS = [
   { name: "role", value: "<name>", help: ["Character role for add character"] },
   { name: "status", value: "<name>", help: ["Entity status for add"] },
   { name: "mode", value: "<name>", help: ["Mode for add chapter (e.g. discovered)"] },
-  { name: "date", value: "<date>", help: ["Story date (YYYY-MM-DD) for add chapter/scene;", "the session date for progress (default today)"] },
+  { name: "date", value: "<date>", help: ["Story date (YYYY-MM-DD, or in the story.md", "calendar) for add chapter/scene; the session", "date for progress (default today)"] },
   { name: "time", value: "<time>", help: ["Story time (HH:MM or dawn, morning, midday,", "afternoon, evening, night) for add chapter/scene"] },
   { name: "travel-hours", value: "<n>", help: ["Travel hours for add scene"] },
   { name: "dilemma", value: "<text>", help: ["Dilemma for add scene sequel unit"] },
@@ -9654,6 +9878,7 @@ function scanProject(root) {
     language,
     pack,
     unit,
+    calendar: parseCalendar(story.data.calendar).calendar,
     fileErrors: scanErrors,
     characters: readEntityFiles(projectRoot, "characters", (id, file, data) => ({
       id,
@@ -10208,7 +10433,7 @@ function buildEntity(project, kind, name, options) {
   if (kind === "chapter") {
     const number = options.number === undefined ? project.chapters.reduce((max, chapter) => Math.max(max, chapter.number), 0) + 1 : requirePositiveInteger(options.number, "chapter number");
     const id = `chapter-${String(number).padStart(2, "0")}`;
-    return entityResult(project, kind, id, chapterFile(name, number, options, project.unit));
+    return entityResult(project, kind, id, chapterFile(name, number, options, project.unit, project.calendar));
   }
   if (kind === "scene") {
     if (options.chapter === undefined && project.chapters.length === 0) {
@@ -10221,7 +10446,7 @@ function buildEntity(project, kind, name, options) {
     }
     const scene = options.scene === undefined ? nextSceneNumber(project, chapter) : requirePositiveInteger(options.scene, "scene number");
     const id = `${chapter}-scene-${String(scene).padStart(2, "0")}`;
-    return entityResult(project, kind, id, sceneFile(name, chapter, scene, options));
+    return entityResult(project, kind, id, sceneFile(name, chapter, scene, options, project.calendar));
   }
   const id = requestedId ?? kebabCase(name);
   if (!id) {
@@ -10589,8 +10814,8 @@ What changes because of this arc.
 | | | | | planned |
 `;
 }
-function chapterFile(title, number, options, unit) {
-  const dateError = storyDateError(options.date);
+function chapterFile(title, number, options, unit, calendar = null) {
+  const dateError = storyDateError(options.date, { calendar });
   if (dateError) {
     throw usageError(dateError);
   }
@@ -10627,8 +10852,8 @@ function chapterFile(title, number, options, unit) {
 
 `;
 }
-function sceneFile(title, chapter, scene, options) {
-  const dateError = storyDateError(options.date);
+function sceneFile(title, chapter, scene, options, calendar = null) {
+  const dateError = storyDateError(options.date, { calendar });
   if (dateError) {
     throw usageError(dateError);
   }
@@ -12232,9 +12457,10 @@ var TIME_RANKS = new Map([
   ["night", 1380]
 ]);
 function checkClock(project, errors, warnings) {
+  const calendarInvalid = project.calendar?.invalid === true;
   for (const scene of project.scenes) {
     const label = relative2(project, scene.file);
-    if (scene.date !== "" && !parseClockDate(scene.date)) {
+    if (scene.date !== "" && !calendarInvalid && !parseStoryDate(scene.date, project.calendar)) {
       warnings.push(warn("malformed-date", `${label} has malformed date "${scene.date}"`, label, chapterOf(scene)));
     }
     if (scene.time !== "" && parseClockTime(scene.time) === undefined) {
@@ -12248,7 +12474,7 @@ function checkClock(project, errors, warnings) {
     }
   }
   for (const chapter of project.chapters) {
-    if (chapter.date !== "" && !parseClockDate(chapter.date)) {
+    if (chapter.date !== "" && !calendarInvalid && !parseStoryDate(chapter.date, project.calendar)) {
       warnings.push(warn("malformed-date", `Chapter ${chapter.number} has malformed date "${chapter.date}"`, relative2(project, chapter.file), chapter.id));
     }
     if (chapter.time !== "" && parseClockTime(chapter.time) === undefined) {
@@ -12262,7 +12488,7 @@ function checkClock(project, errors, warnings) {
       strands.set(strand, []);
     }
     const stamps = strands.get(strand);
-    const parsed = unit.date === "" ? undefined : parseClockDate(unit.date);
+    const parsed = unit.date === "" ? undefined : parseStoryDate(unit.date, project.calendar);
     if (!parsed) {
       continue;
     }
@@ -12393,7 +12619,7 @@ function checkRouteTravel(project, errors) {
   const chapterStrand = new Map(project.chapters.map((chapter) => [chapter.id, String(chapter.strand ?? "")]));
   const sightings = new Map;
   for (const scene of project.scenes) {
-    const parsed = parseClockDate(scene.date);
+    const parsed = parseStoryDate(scene.date, project.calendar);
     if (!parsed || scene.location === "") {
       continue;
     }
@@ -12560,9 +12786,19 @@ function formatHours(hours, round = Math.round) {
   return `${round(Math.round(hours * 1e6) / 1e5) / 10}h`;
 }
 var DATE_SHAPE = /^\d{4}-\d{2}-\d{2}$/;
-function storyDateError(value, { freeText = false } = {}) {
+function storyDateError(value, { freeText = false, calendar = null } = {}) {
   if (value === undefined || value === null || String(value).trim() === "") {
     return "";
+  }
+  if (calendar) {
+    if (calendar.invalid) {
+      return freeText ? "" : "date cannot be read until the story.md calendar is fixed (see story validate)";
+    }
+    if (freeText && !calendarShaped(value, calendar)) {
+      return "";
+    }
+    const parsed = parseCalendarDate(value, calendar);
+    return parsed.problem ? `date ${String(value).trim()} is not a day of the story calendar: ${parsed.problem}` : "";
   }
   if (freeText && !DATE_SHAPE.test(String(value).trim())) {
     return "";
@@ -12571,6 +12807,16 @@ function storyDateError(value, { freeText = false } = {}) {
     return `date must be a real YYYY-MM-DD calendar day, got ${value}`;
   }
   return "";
+}
+function parseStoryDate(value, calendar = null) {
+  if (!calendar) {
+    return parseClockDate(value);
+  }
+  if (calendar.invalid) {
+    return;
+  }
+  const parsed = parseCalendarDate(value, calendar);
+  return parsed.problem ? undefined : parsed;
 }
 function storyTimeError(value) {
   if (value === undefined || value === null || String(value).trim() === "") {
@@ -12624,14 +12870,14 @@ function chapterChronology(project) {
   const numbers = new Map(project.chapters.map((chapter) => [chapter.id, chapter.number]));
   const days = new Map;
   for (const chapter of project.chapters) {
-    const parsed = parseClockDate(String(chapter.date ?? ""));
+    const parsed = parseStoryDate(String(chapter.date ?? ""), project.calendar);
     if (parsed) {
       days.set(chapter.id, parsed.days);
     }
   }
   const sceneDays = new Map;
   for (const scene of project.scenes) {
-    const parsed = parseClockDate(String(scene.date ?? ""));
+    const parsed = parseStoryDate(String(scene.date ?? ""), project.calendar);
     if (parsed && numbers.has(scene.chapter) && !days.has(scene.chapter)) {
       sceneDays.set(scene.chapter, Math.min(sceneDays.get(scene.chapter) ?? Infinity, parsed.days));
     }
@@ -13526,7 +13772,7 @@ import path6 from "node:path";
 
 // src/frontmatter-keys.js
 var FRONTMATTER_KEYS = {
-  story: ["title", "schema-version", "series", "series-title", "book-number", "follows", "precedes", "genre", "sub-genre", "setting-era", "status", "themes", "pov", "tense", "premise", "counter-premise", "author", "contact", "season-goal", "target-words", "target-characters", "count-unit", "language", "isbn", "publisher", "publication-date", "description", "keywords", "subjects", "copyright", "ifid", "cover-alt", "ai-disclosure", "chapter-label", "writing-mode", "chapter-numerals", "contents-label", "labels", "authors", "form", "draft-mode", "cover", "deadline", "daily-target-words", "daily-target-characters", "writing-days", "revision-passes", "cli-defaults", "severity"],
+  story: ["title", "schema-version", "series", "series-title", "book-number", "follows", "precedes", "genre", "sub-genre", "setting-era", "status", "themes", "pov", "tense", "premise", "counter-premise", "author", "contact", "season-goal", "target-words", "target-characters", "count-unit", "language", "isbn", "publisher", "publication-date", "description", "keywords", "subjects", "copyright", "ifid", "cover-alt", "ai-disclosure", "chapter-label", "writing-mode", "chapter-numerals", "contents-label", "labels", "authors", "form", "draft-mode", "cover", "deadline", "daily-target-words", "daily-target-characters", "writing-days", "calendar", "revision-passes", "cli-defaults", "severity"],
   character: ["pronunciation", "id", "name", "role", "status", "died-in", "revived-in", "aliases", "relationships", "locations", "tags", "arc", "arc-type", "lie", "truth", "ghost-wound", "voice-words", "voice-avoid", "progressions"],
   location: ["pronunciation", "id", "name", "type", "region", "population", "controlled-by", "notable-characters", "tags", "status", "setting", "routes", "progressions"],
   system: ["id", "name", "type", "prevalence", "pronunciation"],
@@ -15056,7 +15302,7 @@ function markToldLate(dated) {
   }
 }
 function timelineEntry(project, { unit, chapter, isChapter, orphan }, reading) {
-  const parsedDate = parseClockDate(unit.date || "");
+  const parsedDate = parseStoryDate(unit.date || "", project.calendar);
   const time = unit.time;
   const minutes = parseClockTime(time || "");
   return {
@@ -17440,6 +17686,9 @@ function validateStoryFrontmatter(project, errors, warnings) {
   validateCliConfig(data, errors);
   validateDeadline(data, errors);
   validateDailyTarget(data, errors);
+  for (const problem of parseCalendar(data.calendar).problems) {
+    errors.push(err("invalid-calendar", `story.md calendar ${problem}`, "story.md"));
+  }
   if (data.ifid !== undefined && !isIfid(data.ifid)) {
     errors.push(err("invalid-ifid", "story.md ifid must be a version 4 UUID, such as 3F2C9A61-7B1D-4E8A-9C3B-2A6D5E4F1B07", "story.md"));
   }
@@ -17730,7 +17979,7 @@ function validateChapters(project, errors, warnings) {
     unusedTargetWarnings(project, label, data, warnings);
     if (data.date !== undefined) {
       requireScalar(data, "date", label, errors);
-      validateUnitDate(data, label, errors);
+      validateUnitDate(data, label, project.calendar, errors);
     }
     if (data.time !== undefined) {
       requireScalar(data, "time", label, errors);
@@ -17802,7 +18051,7 @@ function validateScenes(project, errors, warnings) {
     }
     if (data.date !== undefined) {
       requireScalar(data, "date", label, errors);
-      validateUnitDate(data, label, errors);
+      validateUnitDate(data, label, project.calendar, errors);
     }
     if (data.time !== undefined) {
       requireScalar(data, "time", label, errors);
@@ -18217,11 +18466,11 @@ function validateEntityId(id, label, errors) {
     errors.push(err("id-not-kebab", `${label} filename id must be kebab-case`, label));
   }
 }
-function validateUnitDate(data, label, errors) {
+function validateUnitDate(data, label, calendar, errors) {
   if (typeof data.date !== "string") {
     return;
   }
-  const dateError = storyDateError(data.date, { freeText: true });
+  const dateError = storyDateError(data.date, { freeText: true, calendar });
   if (dateError !== "") {
     errors.push(err("invalid-date", `${label} ${dateError}`, label));
   }

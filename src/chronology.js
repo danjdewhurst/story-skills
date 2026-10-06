@@ -1,4 +1,4 @@
-import { parseClockDate } from "./continuity.js";
+import { parseStoryDate } from "./continuity.js";
 import { branchGraph } from "./scan.js";
 
 // Story-time order of chapters, shared by the death, knowledge, and state
@@ -11,14 +11,14 @@ export function chapterChronology(project) {
   const numbers = new Map(project.chapters.map((chapter) => [chapter.id, chapter.number]));
   const days = new Map();
   for (const chapter of project.chapters) {
-    const parsed = parseClockDate(String(chapter.date ?? ""));
+    const parsed = parseStoryDate(String(chapter.date ?? ""), project.calendar);
     if (parsed) {
       days.set(chapter.id, parsed.days);
     }
   }
   const sceneDays = new Map();
   for (const scene of project.scenes) {
-    const parsed = parseClockDate(String(scene.date ?? ""));
+    const parsed = parseStoryDate(String(scene.date ?? ""), project.calendar);
     if (parsed && numbers.has(scene.chapter) && !days.has(scene.chapter)) {
       sceneDays.set(scene.chapter, Math.min(sceneDays.get(scene.chapter) ?? Infinity, parsed.days));
     }

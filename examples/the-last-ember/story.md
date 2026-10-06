@@ -15,6 +15,39 @@ pov: third-person-limited
 tense: past
 follows:
   - ../the-fall-of-the-citadel
+calendar:
+  - month: Frostwane
+    days: 30
+  - month: Thaw
+    days: 30
+  - month: Seedtime
+    days: 30
+  - month: Greening
+    days: 30
+  - month: Bloom
+    days: 30
+  - month: Highsun
+    days: 30
+  - month: Haying
+    days: 30
+  - month: Harvest
+    days: 30
+  - month: Leaffall
+    days: 30
+  - month: Ashwind
+    days: 30
+  - month: Firstfrost
+    days: 30
+  - month: Longnight
+    days: 30
+  - month: Embertide
+    days: 6
+  - weekdays: [Hearthday, Stoneday, Rootday, Windday, Flameday, Ashday]
+  - era: Before the Wells
+    abbrev: BW
+    direction: backward
+  - era: Age of Embers
+    abbrev: AE
 ---
 
 

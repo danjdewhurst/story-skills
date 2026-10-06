@@ -1,6 +1,7 @@
 // Schema and link checks over a scanned project.
 import fs from "node:fs";
 import path from "node:path";
+import { parseCalendar } from "./calendar.js";
 import { idText, storyDateError } from "./continuity.js";
 import { chapterChronology } from "./chronology.js";
 import { validateProgressions } from "./progressions.js";
@@ -1011,6 +1012,9 @@ function validateStoryFrontmatter(project, errors, warnings) {
   validateCliConfig(data, errors);
   validateDeadline(data, errors);
   validateDailyTarget(data, errors);
+  for (const problem of parseCalendar(data.calendar).problems) {
+    errors.push(err("invalid-calendar", `story.md calendar ${problem}`, "story.md"));
+  }
   if (data.ifid !== undefined && !isIfid(data.ifid)) {
     errors.push(err("invalid-ifid", "story.md ifid must be a version 4 UUID, such as 3F2C9A61-7B1D-4E8A-9C3B-2A6D5E4F1B07", "story.md"));
   }
@@ -1334,7 +1338,7 @@ function validateChapters(project, errors, warnings) {
     unusedTargetWarnings(project, label, data, warnings);
     if (data.date !== undefined) {
       requireScalar(data, "date", label, errors);
-      validateUnitDate(data, label, errors);
+      validateUnitDate(data, label, project.calendar, errors);
     }
     if (data.time !== undefined) {
       requireScalar(data, "time", label, errors);
@@ -1414,7 +1418,7 @@ function validateScenes(project, errors, warnings) {
     }
     if (data.date !== undefined) {
       requireScalar(data, "date", label, errors);
-      validateUnitDate(data, label, errors);
+      validateUnitDate(data, label, project.calendar, errors);
     }
     if (data.time !== undefined) {
       requireScalar(data, "time", label, errors);
@@ -1872,12 +1876,14 @@ function validateEntityId(id, label, errors) {
 }
 
 // A chapter or scene date shaped like YYYY-MM-DD must be a real calendar
-// day; story continuity warns about other text.
-function validateUnitDate(data, label, errors) {
+// day, or, under a story.md calendar, one that starts with a digit or a
+// weekday must be a day of that calendar; story continuity warns about
+// other text.
+function validateUnitDate(data, label, calendar, errors) {
   if (typeof data.date !== "string") {
     return;
   }
-  const dateError = storyDateError(data.date, { freeText: true });
+  const dateError = storyDateError(data.date, { freeText: true, calendar });
   if (dateError !== "") {
     errors.push(err("invalid-date", `${label} ${dateError}`, label));
   }

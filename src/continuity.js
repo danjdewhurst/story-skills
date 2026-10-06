@@ -1,4 +1,5 @@
 import path from "node:path";
+import { calendarShaped, parseCalendarDate } from "./calendar.js";
 import { dismissByExemptions } from "./exemptions.js";
 import { err, warn } from "./findings.js";
 import { projectPath } from "./files.js";
@@ -1029,9 +1030,12 @@ const TIME_RANKS = new Map([
 ]);
 
 function checkClock(project, errors, warnings) {
+  // A broken calendar is a validate error; every date it cannot read is
+  // not reported again here.
+  const calendarInvalid = project.calendar?.invalid === true;
   for (const scene of project.scenes) {
     const label = relative(project, scene.file);
-    if (scene.date !== "" && !parseClockDate(scene.date)) {
+    if (scene.date !== "" && !calendarInvalid && !parseStoryDate(scene.date, project.calendar)) {
       warnings.push(warn("malformed-date", `${label} has malformed date "${scene.date}"`, label, chapterOf(scene)));
     }
     if (scene.time !== "" && parseClockTime(scene.time) === undefined) {
@@ -1045,7 +1049,7 @@ function checkClock(project, errors, warnings) {
     }
   }
   for (const chapter of project.chapters) {
-    if (chapter.date !== "" && !parseClockDate(chapter.date)) {
+    if (chapter.date !== "" && !calendarInvalid && !parseStoryDate(chapter.date, project.calendar)) {
       warnings.push(warn("malformed-date", `Chapter ${chapter.number} has malformed date "${chapter.date}"`, relative(project, chapter.file), chapter.id));
     }
     if (chapter.time !== "" && parseClockTime(chapter.time) === undefined) {
@@ -1062,7 +1066,7 @@ function checkClock(project, errors, warnings) {
       strands.set(strand, []);
     }
     const stamps = strands.get(strand);
-    const parsed = unit.date === "" ? undefined : parseClockDate(unit.date);
+    const parsed = unit.date === "" ? undefined : parseStoryDate(unit.date, project.calendar);
     if (!parsed) {
       continue;
     }
@@ -1245,7 +1249,7 @@ function checkRouteTravel(project, errors) {
   const chapterStrand = new Map(project.chapters.map((chapter) => [chapter.id, String(chapter.strand ?? "")]));
   const sightings = new Map();
   for (const scene of project.scenes) {
-    const parsed = parseClockDate(scene.date);
+    const parsed = parseStoryDate(scene.date, project.calendar);
     if (!parsed || scene.location === "") {
       continue;
     }
@@ -1448,10 +1452,23 @@ const DATE_SHAPE = /^\d{4}-\d{2}-\d{2}$/;
 // progress sessions must be a real YYYY-MM-DD day. A chapter or scene `date`
 // passes `freeText`: a value shaped like YYYY-MM-DD must still be a real day
 // (2024-13-45 and 2023-02-29 are errors), but other text is left to story
-// continuity, which warns about it as malformed-date.
-export function storyDateError(value, { freeText = false } = {}) {
+// continuity, which warns about it as malformed-date. A chapter or scene
+// date also passes the story.md `calendar`, when the book has one: then a
+// value that starts with a digit or a weekday must be a day of that
+// calendar, and other text is free text as before.
+export function storyDateError(value, { freeText = false, calendar = null } = {}) {
   if (value === undefined || value === null || String(value).trim() === "") {
     return "";
+  }
+  if (calendar) {
+    if (calendar.invalid) {
+      return freeText ? "" : "date cannot be read until the story.md calendar is fixed (see story validate)";
+    }
+    if (freeText && !calendarShaped(value, calendar)) {
+      return "";
+    }
+    const parsed = parseCalendarDate(value, calendar);
+    return parsed.problem ? `date ${String(value).trim()} is not a day of the story calendar: ${parsed.problem}` : "";
   }
   if (freeText && !DATE_SHAPE.test(String(value).trim())) {
     return "";
@@ -1460,6 +1477,20 @@ export function storyDateError(value, { freeText = false } = {}) {
     return `date must be a real YYYY-MM-DD calendar day, got ${value}`;
   }
   return "";
+}
+
+// A chapter or scene date as `{ text, days }`, read under the story.md
+// calendar when the book has one and as YYYY-MM-DD otherwise, or undefined
+// when it is not a date. An invalid calendar reads no dates.
+export function parseStoryDate(value, calendar = null) {
+  if (!calendar) {
+    return parseClockDate(value);
+  }
+  if (calendar.invalid) {
+    return undefined;
+  }
+  const parsed = parseCalendarDate(value, calendar);
+  return parsed.problem ? undefined : parsed;
 }
 
 export function storyTimeError(value) {

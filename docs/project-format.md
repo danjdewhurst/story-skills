@@ -364,6 +364,7 @@ tense: past
 | `deadline` | `YYYY-MM-DD` | no | Due date; `story progress` reports days left and words a day needed. Must be a real calendar day. |
 | `daily-target-words` | integer ≥ 1 | no | Words a writing day aims for. `story progress` reports today's words against it, and a day counts toward the streak only when it reaches it. A book [counted in characters](#counting-in-characters) sets `daily-target-characters` instead. |
 | `writing-days` | list of weekdays | no | The days you plan to write: `mon`, `tue`, `wed`, `thu`, `fri`, `sat`, `sun`, or the full names, in any letter case. A day not listed never breaks the `story progress` streak. Unset or `[]` means every day. |
+| `calendar` | list of mappings | no | A secondary world's months, weekdays, and eras. Chapter and scene dates are then written in it, such as `3 Thaw 302 AE`. See [Custom calendars](#custom-calendars). |
 | `draft-mode` | string | no | `discovered` marks a discovery-drafted project, `outlined` an outline-first one; any other value is a validate error. In a `discovered` project, `story next` treats a drafted chapter with no `mode` of its own as discovered. |
 | `revision-passes` | list of mappings | no | Named revision passes and their progress. See [Revision passes](#revision-passes). |
 | `cli-defaults` | list of mappings | no | Default flags for `story` commands. See [CLI defaults and severity](#cli-defaults-and-severity). |
@@ -1348,11 +1349,52 @@ Chapters and scenes can carry a story `date` and `time`; `story continuity` and 
 
 | Field | Format |
 |-------|--------|
-| `date` | `YYYY-MM-DD`, and it must be a real calendar day (`2026-02-30` is rejected). |
+| `date` | `YYYY-MM-DD`, and it must be a real calendar day (`2026-02-30` is rejected). A book with a [custom calendar](#custom-calendars) writes dates in that calendar instead. |
 | `time` | `HH:MM` on a 24-hour clock, or one of `dawn`, `morning`, `midday`, `afternoon`, `evening`, `night`. |
 | `travel-hours` | A number of hours, zero or more. Scenes only. |
 
 `story timeline` sorts named times as 05:00 (`dawn`), 07:00 (`morning`), 12:00 (`midday`), 15:00 (`afternoon`), 19:00 (`evening`), and 23:00 (`night`). `story continuity` reads each as the span listed under [Route travel](#route-travel), for clock order and `travel-hours` as well as routes, so it reports only what is impossible on every reading. `story add chapter` and `story add scene` reject a malformed `--date` or `--time`. In hand-edited files, `story validate` errors (`invalid-date`) on a `YYYY-MM-DD` date that is not a real calendar day, such as `2024-13-45` or `2023-02-29`, and `story continuity` reports any malformed value as a warning. The same date format applies to `deadline` and `publication-date` in `story.md` and to `sessions[].date` in `progress.md`.
+
+### Custom calendars
+
+A secondary world can keep its own calendar. Add a `calendar` list to `story.md`: one entry per month in order, an optional `weekdays` entry, and optional `era` entries in order. Chapter and scene `date` values are then read in that calendar, and `story timeline`, the clock and `travel-hours` checks, route travel, `story knowledge`, and progression and death order compare them as they compare `YYYY-MM-DD` dates. Without `calendar`, nothing changes.
+
+```yaml
+calendar:
+  - month: Frostwane
+    days: 30
+  - month: Thaw
+    days: 30
+  # ...one entry per month, in order
+  - month: Embertide
+    days: 6
+  - weekdays: [Hearthday, Stoneday, Rootday, Windday, Flameday, Ashday]
+  - era: Before the Wells
+    abbrev: BW
+    direction: backward
+  - era: Age of Embers
+    abbrev: AE
+```
+
+| Entry | Keys | Meaning |
+|-------|------|---------|
+| month | `month` (name), `days` (integer ≥ 1) | A month, in calendar order. At least one is required. A festival or other days outside the months can be a short month of their own. |
+| weekdays | `weekdays` (list of names), `first-weekday` (optional) | The days of the week, in order, once. `first-weekday` is the weekday of the first day of year 1 of the first forward era; it defaults to the first weekday listed. |
+| era | `era` (name), `abbrev`, `direction`, `years` (all optional) | An era, in order. `direction: backward` counts years down toward the next era, as BC does, and only the first era may. Every forward era except the last needs `years`, how long it lasted, so the next era knows where it starts; on the last, `years` caps the dates. |
+
+Names start with something other than a digit and have no commas, and the months, the weekdays, and the era names and abbreviations must each be unique, ignoring case. Every year has the same length, the sum of the months, so there are no leap days. `time` keeps its 24-hour clock.
+
+Dates take a day, a month name, and a year, then an era name or abbreviation, in any letter case. These all name the same day:
+
+- `3 Thaw 302 AE`
+- `3rd of Thaw, 302 Age of Embers`
+- `302-02-03 AE` (year, month number, day)
+- `3 Thaw 302` (no era: the last era, the present one)
+- `Windday, 3 Thaw 302 AE` (a leading weekday, which must be the right one)
+
+Year 1 of a backward era is the year just before year 1 of the era after it, so the day after `6 Embertide 1 BW` is `1 Frostwane 1 AE`.
+
+`story validate` errors (`invalid-calendar`) on a calendar it cannot read, and then reads no dates against it. Under a valid calendar, a chapter or scene `date` that starts with a digit or a weekday must be a day of the calendar: `31 Thaw 302 AE` in a 30-day month, an unknown month or era, a year past an era's `years`, or the wrong weekday is an `invalid-date` error that says why. Other text, such as `the night of the fire`, is free text, which `story continuity` warns about (`malformed-date`) as before. `story add chapter` and `story add scene` take `--date` in the calendar. A `YYYY-MM-DD` value is read as year, month number, and day of the calendar. `deadline`, `publication-date`, and progress sessions are real-world dates, and stay `YYYY-MM-DD`.
 
 ### Route travel
 
