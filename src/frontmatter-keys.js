@@ -23,41 +23,58 @@ export const FRONTMATTER_KEYS = {
   knowledgeState: ["character", "knows", "fact", "learned-in"]
 };
 
-// Every key some kind defines. A key valid on another kind (`location` on a
-// chapter, `arcs` on a scene) is left alone: it may be deliberate, and
-// guessing the nearest key here would mislead.
-const EVERY_KEY = new Set(Object.values(FRONTMATTER_KEYS).flat());
+// The continuity state entries: lists inside continuity/state.md, not files.
+const STATE_KINDS = new Set(["characterState", "objectState", "knowledgeState"]);
+
+// Every key some kind of file defines. A key valid on another kind
+// (`location` on a chapter, `arcs` on a scene) is left alone: it may be
+// deliberate, and guessing the nearest key here would mislead. State entry
+// keys are left out, so `character` on a chapter still suggests `characters`.
+const EVERY_KEY = new Set(Object.entries(FRONTMATTER_KEYS)
+  .filter(([kind]) => !STATE_KINDS.has(kind))
+  .flatMap(([, keys]) => keys));
 
 // Keys a near miss may extend, such as `since_chapter` or `died-in-ch`.
 const PREFIX_KEYS = new Set(["since", "learned-in", "died-in"]);
 
-// The known key `key` most likely misspells, or undefined. Case, `_` or a
-// space for `-`, and dropped hyphens always count; otherwise the edit
-// distance (a swap of two neighbours counts once) must be at most 1 for a
-// known key of 4 or 5 characters and 2 for a longer one. Distance never
+// The known keys `key` most likely misspells, in `known`'s order, or an
+// empty list. Case, `_` or a space for `-`, and dropped hyphens always
+// count. Otherwise the edit distance (a swap of two neighbours counts once)
+// must be at most 1 for a known key of 4 or 5 characters, and at most 2 for
+// a longer one that starts with the same letter, so `stauts` suggests
+// `status` but a custom `notes` never suggests `routes`. Distance never
 // matches a key under 4 characters or a known key under 4, so short custom
-// fields such as `age` stay quiet.
-export function nearMissKey(key, known) {
+// fields such as `age` stay quiet. Equally close keys all come back, such
+// as `number` and `numbered` for `numberd`.
+export function nearMissKeys(key, known) {
   if (known.includes(key) || EVERY_KEY.has(key)) {
-    return undefined;
+    return [];
   }
   const normalized = key.trim().toLowerCase().replace(/[\s_]+/g, "-");
   const squashed = normalized.replace(/-/g, "");
-  const exact = known.find((candidate) => normalized === candidate
+  const exact = known.filter((candidate) => normalized === candidate
     || squashed === candidate.replace(/-/g, "")
     || (PREFIX_KEYS.has(candidate) && normalized.startsWith(`${candidate}-`)));
-  if (exact !== undefined || EVERY_KEY.has(normalized) || normalized.length < 4) {
+  if (exact.length > 0 || EVERY_KEY.has(normalized) || normalized.length < 4) {
     return exact;
   }
-  let best;
+  let best = [];
   let bestDistance = Infinity;
   for (const candidate of known) {
-    const limit = candidate.length >= 6 ? 2 : candidate.length >= 4 ? 1 : 0;
-    const distance = limit === 0 ? Infinity : typoDistance(normalized, candidate);
-    if (distance <= limit && distance < bestDistance) {
-      best = candidate;
+    const limit = candidate.length < 4 ? 0 : candidate.length < 6 || candidate[0] !== normalized[0] ? 1 : 2;
+    // A length gap wider than the limit needs more edits than it allows.
+    if (limit === 0 || Math.abs(candidate.length - normalized.length) > limit) {
+      continue;
+    }
+    const distance = typoDistance(normalized, candidate);
+    if (distance > limit || distance > bestDistance) {
+      continue;
+    }
+    if (distance < bestDistance) {
+      best = [];
       bestDistance = distance;
     }
+    best.push(candidate);
   }
   return best;
 }
