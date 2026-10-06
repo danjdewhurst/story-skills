@@ -782,8 +782,6 @@ function passageRoot(parsed, cwd, required) {
   return required || fs.existsSync(path.join(cwd, "story.md")) ? path.resolve(cwd) : null;
 }
 
-// Warnings a command reports after its own output, with the story.md
-// severity overrides and code exemptions applied.
 // Runs a write command: `write(projectRoot)` makes the changes and
 // `describe(result)` is the text output. Every file it creates, updates, or
 // deletes is recorded as it happens (recordChanges), so --json lists them.
@@ -829,6 +827,8 @@ function entityOptions(parsed) {
   return options;
 }
 
+// Warnings a command reports after its own output, with the story.md
+// severity overrides and code exemptions applied.
 function checkedWarnings(warnings = [], overrides) {
   return applySeverity({ ok: true, errors: [], warnings }, overrides);
 }

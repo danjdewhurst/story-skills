@@ -17898,7 +17898,6 @@ function realPath(target) {
 import fs10 from "node:fs";
 import os2 from "node:os";
 import path14 from "node:path";
-var SKIPPED_DIRECTORIES = new Set(["node_modules", "dist"]);
 var previews = new Map;
 function previewChanges(root, run) {
   const projectRoot = path14.resolve(root);
@@ -17921,14 +17920,14 @@ function previewChanges(root, run) {
 function sourceRoot(root) {
   return previews.get(path14.resolve(root)) ?? root;
 }
-function copyProject(source, target, roots) {
+function copyProject(source, target, roots, depth = 0) {
   fs10.mkdirSync(target);
   for (const entry of fs10.readdirSync(source, { withFileTypes: true })) {
     const from = path14.join(source, entry.name);
     const to = path14.join(target, entry.name);
     if (entry.isDirectory()) {
-      if (!entry.name.startsWith(".") && !SKIPPED_DIRECTORIES.has(entry.name)) {
-        copyProject(from, to, roots);
+      if (!entry.name.startsWith(".") && !SKIPPED_SCAN_DIRECTORIES.has(entry.name) && depth < MAX_SCAN_DEPTH && !fs10.existsSync(path14.join(from, "story.md"))) {
+        copyProject(from, to, roots, depth + 1);
       }
     } else if (entry.isSymbolicLink()) {
       fs10.symlinkSync(linkTarget(fs10.readlinkSync(from), roots), to);
@@ -17936,19 +17935,32 @@ function copyProject(source, target, roots) {
       copyFile(from, to);
     }
   }
-  fs10.chmodSync(target, fs10.statSync(source).mode & 4095);
+  fs10.chmodSync(target, copyMode(source, true));
 }
 function copyFile(from, to) {
-  if (readable(from)) {
+  const { size } = fs10.statSync(from);
+  if (from.endsWith(".md") && size <= MAX_READ_BYTES && allowed(from, fs10.constants.R_OK)) {
     fs10.copyFileSync(from, to);
   } else {
     fs10.writeFileSync(to, "");
+    fs10.truncateSync(to, size);
   }
-  fs10.chmodSync(to, fs10.statSync(from).mode & 4095);
+  fs10.chmodSync(to, copyMode(from, false));
 }
-function readable(file) {
+function copyMode(source, directory) {
+  let mode = fs10.statSync(source).mode & 4095;
+  const access = [[fs10.constants.R_OK, 292, 256], [fs10.constants.W_OK, 146, 128]];
+  if (directory) {
+    access.push([fs10.constants.X_OK, 73, 64]);
+  }
+  for (const [check, all, owner] of access) {
+    mode = allowed(source, check) ? mode | owner : mode & ~all;
+  }
+  return mode;
+}
+function allowed(file, check) {
   try {
-    fs10.accessSync(file, fs10.constants.R_OK);
+    fs10.accessSync(file, check);
     return true;
   } catch {
     return false;

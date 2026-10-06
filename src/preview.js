@@ -1,19 +1,15 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { isPathInside, recordChanges } from "./files.js";
+import { MAX_READ_BYTES, isPathInside, recordChanges } from "./files.js";
 import { LOCK_FILE, TAKEOVER_FILE } from "./lock.js";
-import { requireStoryFile } from "./scan.js";
+import { MAX_SCAN_DEPTH, SKIPPED_SCAN_DIRECTORIES, requireStoryFile } from "./scan.js";
 
 // --dry-run: a write command runs unchanged on a scratch copy of the
 // project, and the writes, renames, and deletes it records there (see
 // recordChanges) are the preview. The preview is the real run, so it cannot
 // drift from it, and the project itself is only read: no file is written,
 // and its lock is not taken, so a preview never waits on a running command.
-
-// Folders a write command never reads: version control, installed
-// packages, builds, and other hidden folders.
-const SKIPPED_DIRECTORIES = new Set(["node_modules", "dist"]);
 
 // The copy each running preview made, so a check that reads outside the
 // project (a linked book in a series) can resolve paths from the real one.
@@ -49,14 +45,17 @@ export function sourceRoot(root) {
   return previews.get(path.resolve(root)) ?? root;
 }
 
-function copyProject(source, target, roots) {
+// Copies the folders a write command can read, as markdownFiles walks them:
+// not dist/, node_modules/, hidden folders, a subfolder that is another
+// project, or folders deeper than the scan limit.
+function copyProject(source, target, roots, depth = 0) {
   fs.mkdirSync(target);
   for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
     const from = path.join(source, entry.name);
     const to = path.join(target, entry.name);
     if (entry.isDirectory()) {
-      if (!entry.name.startsWith(".") && !SKIPPED_DIRECTORIES.has(entry.name)) {
-        copyProject(from, to, roots);
+      if (!entry.name.startsWith(".") && !SKIPPED_SCAN_DIRECTORIES.has(entry.name) && depth < MAX_SCAN_DEPTH && !fs.existsSync(path.join(from, "story.md"))) {
+        copyProject(from, to, roots, depth + 1);
       }
     } else if (entry.isSymbolicLink()) {
       fs.symlinkSync(linkTarget(fs.readlinkSync(from), roots), to);
@@ -66,24 +65,44 @@ function copyProject(source, target, roots) {
     // A FIFO, socket, or device is never read by a command, so it is not
     // copied (reading a FIFO would block).
   }
-  // Copied last, so a read-only folder still received its files.
-  fs.chmodSync(target, fs.statSync(source).mode & 0o7777);
+  // Set last, so a read-only folder still received its files.
+  fs.chmodSync(target, copyMode(source, true));
 }
 
-// A file this user cannot read is copied as an empty file with the same
-// permissions, so the command meets the same refusal in the copy.
+// Write commands read the text of markdown files only, and no file over
+// the read limit; of any other file (a cover image) they check at most the
+// size. So only readable markdown is copied whole. Every other file is a
+// sparse file of the same size, which takes no disk space, and an
+// unreadable file stays unreadable.
 function copyFile(from, to) {
-  if (readable(from)) {
+  const { size } = fs.statSync(from);
+  if (from.endsWith(".md") && size <= MAX_READ_BYTES && allowed(from, fs.constants.R_OK)) {
     fs.copyFileSync(from, to);
   } else {
     fs.writeFileSync(to, "");
+    fs.truncateSync(to, size);
   }
-  fs.chmodSync(to, fs.statSync(from).mode & 0o7777);
+  fs.chmodSync(to, copyMode(from, false));
 }
 
-function readable(file) {
+// The copy belongs to this user, so its permissions are set to give this
+// user the access the original gives: a file owned by someone else, or on
+// a read-only mount, is refused in the copy as it would be in the project.
+function copyMode(source, directory) {
+  let mode = fs.statSync(source).mode & 0o7777;
+  const access = [[fs.constants.R_OK, 0o444, 0o400], [fs.constants.W_OK, 0o222, 0o200]];
+  if (directory) {
+    access.push([fs.constants.X_OK, 0o111, 0o100]);
+  }
+  for (const [check, all, owner] of access) {
+    mode = allowed(source, check) ? mode | owner : mode & ~all;
+  }
+  return mode;
+}
+
+function allowed(file, check) {
   try {
-    fs.accessSync(file, fs.constants.R_OK);
+    fs.accessSync(file, check);
     return true;
   } catch {
     return false;
