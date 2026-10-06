@@ -30,8 +30,11 @@ const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s/;
 const REMOVE = /story\s+remove\s+(?:chapter|scene)\s+[<{a-z]/g;
 const TAG = /git\s+tag\s+[<{a-z]/g;
 // Every git add, stage, or commit, with any options before the subcommand
-// (`git -C .. add`, `git -c x=y commit`), in code or in prose.
-const GIT_WRITE = /\bgit(?:\s+(?:-[Cc]\s+\S+|--?[\w-]+(?:=\S*)?))*\s+(?:add|stage|commit)\b/g;
+// (`git -C .. add`, `git -c x=y commit`), in code or in prose. Each loop
+// step takes one whole option word, or `-C`/`-c` and the value after it, and
+// no two branches can match the same text, so it cannot backtrack
+// exponentially.
+const GIT_WRITE = /\bgit(?:\s+(?:-[Cc]\s+[^\s-]\S*|-[Cc]\S+|-[^\sCc]\S*))*\s+(?:add|stage|commit)\b/g;
 // The only forms allowed, each ending the command: at the end of the line, a
 // backtick, or `&&`. Anything else fails closed, even a form git would scope
 // correctly (`--message=`); add a form here only after checking that it
@@ -197,6 +200,8 @@ describe("skills and docs commit the book's folder only (#598)", () => {
       "git add --force -A -- .",
       "git stage -A -- .",
       "git -C .. add -A -- .",
+      "git -C.. add -A -- .",
+      "git --git-dir=../.git add -A -- .",
       "git commit",
       "git commit -a",
       'git commit -am "x" -- .',
@@ -206,6 +211,7 @@ describe("skills and docs commit the book's folder only (#598)", () => {
       'git commit -m "x" -- :/',
       'git commit -m "x" -- ..',
       'git -c x=y commit -a -m "x" -- .',
+      'git --no-pager commit -m "x" -- .',
       // Valid, but not an allowed form: fails closed.
       'git commit --message="Draft 1" -- .',
       "git commit -m'x' -- .",
