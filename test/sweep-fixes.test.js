@@ -1303,11 +1303,17 @@ describe("round eight", () => {
     // ...so a rerun finishes the job.
     expect(renameEntity(root, { kind: "character", id: "mara-quill", name: "Mara Tide" }).id).toBe("mara-tide");
     expect(messages(validateLinks(root).errors)).toEqual([]);
-    // Killed after the old file was deleted, only the reindex was missed; a
-    // rerun resumes rather than failing with "does not exist".
+    // Killed after the old file was deleted, only the reindex was missed: the
+    // registry row links the new file but still shows the old name. A rerun
+    // resumes rather than failing with "does not exist" (#579).
+    const index = path.join(root, "characters", "_index.md");
+    fs.writeFileSync(index, fs.readFileSync(index, "utf8").replace("| Mara Tide |", "| Mara Quill |"));
     const resumed = invoke(path.dirname(root), ["rename", "character", "mara-quill", "Mara Tide", "--path", root]);
     expect(resumed.out).toContain("Finished an interrupted rename of character mara-quill to mara-tide");
     expect(resumed).toMatchObject({ code: 0, err: "" });
+    expect(fs.readFileSync(index, "utf8")).toContain("| Mara Tide |");
+    // Once finished, a rerun has no evidence left and is refused.
+    expect(invoke(path.dirname(root), ["rename", "character", "mara-quill", "Mara Tide", "--path", root])).toMatchObject({ code: 2, err: expect.stringContaining("character mara-quill does not exist") });
     // Renaming onto another entity with the same name is still refused.
     createEntity(root, { kind: "character", name: "Other" });
     createEntity(root, { kind: "character", name: "Other Two" });
