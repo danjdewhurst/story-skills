@@ -14,7 +14,9 @@ date: 2026-02-06
 time: "23:49"
 sequel: false
 outcome: yes-but
-state-changes: []
+state-changes:
+  - target: blue-suitcase
+    change: Left on shelf nine on ticket 4417 for a week
 ---
 
 # The Green Coat

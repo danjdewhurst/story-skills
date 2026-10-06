@@ -15,7 +15,9 @@ date: 2026-02-07
 time: "22:05"
 sequel: false
 outcome: "yes"
-state-changes: []
+state-changes:
+  - character: ines-achebe
+    knowledge: Fola collected the suitcase with the ticket that has Ines's tick
 ---
 
 # Under the Clock

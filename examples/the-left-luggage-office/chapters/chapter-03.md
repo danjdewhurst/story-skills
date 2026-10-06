@@ -65,7 +65,7 @@ The old parcels office smelled of dust and engine oil. Her torch found the racks
 
 A ledger. Green cloth, the corners worn white. PARCELS RECEIVED 2013.
 
-She opened it on the counter. Most of the pages were in her father's handwriting, careful and dull: dates, weights, initials. In April the pages stopped being dull. The same consignee every week, for six weeks, and every parcel signed out by the same initials.
+She opened it on the counter. Most of the pages were in her father's handwriting, careful and dull: dates, weights, initials. In April the pages stopped being dull. The same consignee every week, four weeks running, and every parcel signed out by the same initials.
 
 R.S.
 

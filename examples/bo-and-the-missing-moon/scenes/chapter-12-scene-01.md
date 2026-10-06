@@ -12,7 +12,9 @@ status: draft
 time: night
 sequel: false
 outcome: "yes"
-state-changes: []
+state-changes:
+  - character: bo
+    knowledge: nobody took the moon; it was above the fog all along
 ---
 
 # Spread 12

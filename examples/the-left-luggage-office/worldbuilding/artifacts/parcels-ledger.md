@@ -15,7 +15,7 @@ Green cloth, corners worn white: PARCELS RECEIVED 2013. Mostly in Ines's father'
 
 ## Function
 
-Records six weekly parcels signed out by R.S. in April 2013, and a page cut out close to the spine.
+Records four weekly parcels signed out by R.S. in April 2013, and a page cut out close to the spine.
 
 ## History
 

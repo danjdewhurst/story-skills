@@ -8,7 +8,10 @@ character-state:
   - character: nana-bracken
     location: the-hollow
 object-state: []
-knowledge-state: []
+knowledge-state:
+  - character: bo
+    knows: nobody took the moon; it was above the fog all along
+    learned-in: chapter-12
 ---
 
 # Continuity State
@@ -21,7 +24,8 @@ End of the book: Bo is home in the sett with Nana Bracken, burrs in his fur. The
 
 | Character | Location | Physical State | Emotional State | Knowledge |
 |-----------|----------|----------------|-----------------|-----------|
-| *No state entries yet* | | | | |
+| bo | the-hollow | Burrs in his fur | Proud and sleepy | Nobody took the moon |
+| nana-bracken | the-hollow | Woken up | Smiling | What Bo found |
 
 ## Object State
 
@@ -33,4 +37,4 @@ End of the book: Bo is home in the sett with Nana Bracken, burrs in his fur. The
 
 | Character | Knows | Learned In |
 |-----------|-------|------------|
-| *No knowledge entries yet* | | |
+| bo | Nobody took the moon; it was above the fog all along | chapter-12 |

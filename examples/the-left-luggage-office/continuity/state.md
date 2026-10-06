@@ -24,7 +24,10 @@ knowledge-state:
     knows: the woman in the green coat is Aunty Fola
     learned-in: chapter-02
   - character: ines-achebe
-    knows: R.S. signed for six parcels in April 2013 and a ledger page was cut out
+    knows: Fola collected the suitcase with the ticket that has Ines's tick
+    learned-in: chapter-03
+  - character: ines-achebe
+    knows: R.S. signed for four parcels in April 2013 and a ledger page was cut out
     learned-in: chapter-03
 ---
 
@@ -38,16 +41,20 @@ End of episode 3: Ines has her father's 2013 parcels ledger, with a page cut out
 
 | Character | Location | Physical State | Emotional State | Knowledge |
 |-----------|----------|----------------|-----------------|-----------|
-| *No state entries yet* | | | | |
+| ines-achebe | old-parcels-office | Tired, end of a double night | Frightened and determined | Fola left the suitcase and took it back; R.S. and the cut page |
+| pat-dunmore | left-luggage-office | Unharmed | Relieved to have told her | Fola collected the suitcase |
 
 ## Object State
 
 | Artifact | Owner | Location | Status |
 |----------|-------|----------|--------|
-| *No object state entries yet* | | | |
+| blue-suitcase | folake-achebe | Unknown | Active |
+| parcels-ledger | ines-achebe | old-parcels-office | Hidden |
 
 ## Knowledge State
 
 | Character | Knows | Learned In |
 |-----------|-------|------------|
-| *No knowledge entries yet* | | |
+| ines-achebe | The woman in the green coat is Aunty Fola | chapter-02 |
+| ines-achebe | Fola collected the suitcase with the ticket that has Ines's tick | chapter-03 |
+| ines-achebe | R.S. signed for four parcels in April 2013 and a ledger page was cut out | chapter-03 |

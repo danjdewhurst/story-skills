@@ -15,7 +15,9 @@ date: 2026-02-07
 time: "14:00"
 sequel: true
 dilemma: "Let her aunt's suitcase go, as her mother asks, or find out why Fola came back"
-state-changes: []
+state-changes:
+  - character: ines-achebe
+    knowledge: the woman in the green coat is Aunty Fola
 ---
 
 # The Biscuit Tin

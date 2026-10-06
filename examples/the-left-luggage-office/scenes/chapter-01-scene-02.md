@@ -14,7 +14,9 @@ date: 2026-02-07
 time: "01:20"
 sequel: false
 outcome: yes-but
-state-changes: []
+state-changes:
+  - character: raymond-sallis
+    emotional: turned away, and certain he will be back
 ---
 
 # No Pencil Tick
