@@ -402,7 +402,8 @@ describe.skipIf(realEngine === null)("build --pdf with an installed engine", () 
     const root = pdfProject();
     for (const format of ["print", "shunn"]) {
       const io = memoryIo(root);
-      expect(runCli(["build", root, "--format", format, "--pdf"], io)).toBe(0);
+      const code = runCli(["build", root, "--format", format, "--pdf"], io);
+      expect(`${code} ${realEngine.file} ${io.error()}`).toBe(`0 ${realEngine.file} `);
       const file = path.join(root, "dist", format === "print" ? "paper-lanterns.pdf" : "paper-lanterns.shunn.pdf");
       expect(fs.readFileSync(file).subarray(0, 5).toString()).toBe("%PDF-");
     }
