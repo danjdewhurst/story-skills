@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { chapterHeading, chapterProse, extractSection, kebabCase, titleCaseSlug, wordCount } from "../src/markdown.js";
+import { chapterHeading, chapterProse, extractSection, kebabCase, maskLinkTargets, titleCaseSlug, wordCount } from "../src/markdown.js";
 
 describe("markdown utilities", () => {
   test("normalizes labels and counts prose words", () => {
@@ -19,6 +19,29 @@ describe("markdown utilities", () => {
   test("counts the visible text of links but not their targets or images", () => {
     expect(wordCount("She walked to [the old stone mill](../locations/mill.md) at dawn.")).toBe(9);
     expect(wordCount("A map ![harbor chart](map.png) hung there.")).toBe(4);
+  });
+
+  test("masks link targets, URLs, and reference definitions, keeping link text, offsets, and line breaks", () => {
+    const blank = (part) => "_".repeat(part.length);
+    const text = [
+      "![Ines](img/Ines.png) met [Ines](https://en.wikipedia.org/wiki/Ines_(name) \"Ines\") and [Ines][ines-ref].",
+      "Write to <mailto:ines@example.com>, ines.achebe@example.com, or https://example.com/Ines today.",
+      "[Ines] and [Ines][] are defined; [Ruth] is not. [^1] is a note.",
+      "[ines]: https://example.com/Ines \"Ines\"",
+      "[^1]: Ines wrote this."
+    ].join("\n");
+    const masked = maskLinkTargets(text, "_");
+    expect(masked.length).toBe(text.length);
+    expect(masked.split("\n")).toEqual([
+      `![Ines]${blank("(img/Ines.png)")} met [Ines]${blank("(https://en.wikipedia.org/wiki/Ines_(name) \"Ines\")")} and [Ines]${blank("[ines-ref]")}.`,
+      `Write to ${blank("<mailto:ines@example.com>")}, ${blank("ines.achebe@example.com")}, or ${blank("https://example.com/Ines")} today.`,
+      `[${blank("Ines")}] and [${blank("Ines")}]${blank("[]")} are defined; [Ruth] is not. [^1] is a note.`,
+      blank("[ines]: https://example.com/Ines \"Ines\""),
+      "[^1]: Ines wrote this."
+    ]);
+    // Without a definition, a bracketed name is prose; the default blank is a space.
+    expect(maskLinkTargets("[Ines] (Ines) <Ines>")).toBe("[Ines] (Ines) <Ines>");
+    expect(maskLinkTargets("[a](b)")).toBe("[a]   ");
   });
 
   test("counts curly apostrophes, accents, and hyphenated words as single words", () => {

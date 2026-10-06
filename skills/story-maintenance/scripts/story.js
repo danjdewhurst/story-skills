@@ -9697,6 +9697,40 @@ function maskMarkup(text) {
   }
   return result + source.slice(position);
 }
+var LINK_DEFINITION_LINE = /^ {0,3}\[(?!\^)([^\]\n]{1,1000})\]:[^\n]*/gm;
+var LINK_TARGET = /(?<=\])\((?:[^()\n]|\([^()\n]{0,1000}\)){0,1000}\)|(?<=\])\[[^[\]\n]{0,1000}\]|<[a-z][a-z0-9+.-]{0,31}:[^<>\s]*>/gi;
+var REFERENCE_TEXT = /\[([^[\]\n]{1,1000})\](?:\[\])?(?![([])/g;
+function maskLinkTargets(text, blank = " ") {
+  const source = String(text);
+  const ranges = [];
+  const labels = new Set;
+  const label = (value) => value.trim().replace(/\s+/g, " ").toLowerCase();
+  for (const match of source.matchAll(LINK_DEFINITION_LINE)) {
+    labels.add(label(match[1]));
+    ranges.push([match.index, match.index + match[0].length]);
+  }
+  for (const pattern of [LINK_TARGET, URL_OR_EMAIL]) {
+    for (const match of source.matchAll(pattern)) {
+      ranges.push([match.index, match.index + match[0].length]);
+    }
+  }
+  for (const match of labels.size === 0 ? [] : source.matchAll(REFERENCE_TEXT)) {
+    if (labels.has(label(match[1]))) {
+      ranges.push([match.index + 1, match.index + 1 + match[1].length]);
+    }
+  }
+  ranges.sort((left, right) => left[0] - right[0]);
+  let result = "";
+  let position = 0;
+  for (const [start, end] of ranges) {
+    if (end > position) {
+      const from = Math.max(start, position);
+      result += source.slice(position, from) + source.slice(from, end).replace(/[^\r\n]/g, blank);
+      position = end;
+    }
+  }
+  return result + source.slice(position);
+}
 function scanMarkup(text) {
   const ranges = [];
   let unclosed = false;
@@ -13960,11 +13994,21 @@ function mentionNames(project) {
     }
   };
   for (const entry of existingNames(project, { cut: true })) {
+    if (entry.given && entry.name !== entry.full && isInitial(entry.name)) {
+      continue;
+    }
     const name = nfc(entry.name);
     add(entry.kind, entry.id, name);
     add(entry.kind, entry.id, withoutTitles(name, titles, pack));
   }
   return names;
+}
+function proseGivenName(name, pack) {
+  const given = givenName(name, pack);
+  return isInitial(given) ? "" : given;
+}
+function isInitial(word) {
+  return Array.from(word).length < 2;
 }
 function withoutTitles(name, titles, pack) {
   const words = name.split(/\s+/);
@@ -14199,9 +14243,9 @@ function renameForms(project, kind, id, newName, pack, titles) {
   const oldBare = withoutTitles(oldName, titles, pack);
   const targetBare = withoutTitles(target, titles, pack);
   const forms = [[oldName, oldBare === oldName ? targetBare : target], [oldBare, targetBare]];
-  const given = kind === "character" ? givenName(oldName, pack) : "";
+  const given = kind === "character" ? proseGivenName(oldName, pack) : "";
   if (given !== "") {
-    forms.push([given, givenName(target, pack) || target]);
+    forms.push([given, proseGivenName(target, pack) || target]);
   }
   return forms.map(([from, to]) => ({ pattern: new RegExp(`^(?:${namePattern(from, pack).source})$`, "u"), from, to }));
 }
@@ -14229,11 +14273,14 @@ function proseRenames(project, kind, id, newName) {
   if (clash) {
     return { clash };
   }
-  const result = { files: new Map, edits: [], aliases: 0, shared: [] };
+  const calendar = new Set((checkList(pack, "calendarWords") ?? []).map((word) => lowerCase(nfc(word), pack)));
+  const result = { files: new Map, edits: [], aliases: 0, shared: [], ambiguous: [] };
   const drafted = project.chapters.filter((entry) => entry.status !== "outline").map((chapter) => [chapter, chapterText(project, chapter)]).filter(([, prose]) => prose !== null);
   for (const [chapter, prose] of drafted) {
     const file = projectPath(project.root, chapter.file);
-    const own = findMentions(prose.text, names).filter((mention) => mention.entities.some((entry) => entry.kind === kind && entry.id === id));
+    const text = maskLinkTargets(prose.text, BLANKED);
+    const find = wordMatcher(text);
+    const own = findMentions(text, names).filter((mention) => mention.entities.some((entry) => entry.kind === kind && entry.id === id));
     const located = locateMentions(prose, own);
     let next = "";
     let copied = 0;
@@ -14253,6 +14300,10 @@ function proseRenames(project, kind, id, newName) {
       if (replacement === mention.text) {
         return;
       }
+      if (uncertainRename(text, mention, pack, find, calendar)) {
+        result.ambiguous.push({ ...where, text: mention.text, excerpt: located[index].excerpt });
+        return;
+      }
       const start = prose.offset + mention.start;
       next += `${prose.raw.slice(copied, start)}${replacement}`;
       copied = prose.offset + mention.end;
@@ -14264,6 +14315,9 @@ function proseRenames(project, kind, id, newName) {
     }
   }
   return result;
+}
+function uncertainRename(text, mention, pack, find, calendar) {
+  return ambiguousMention(text, mention, pack, find) || !/\s/u.test(mention.text) && calendar.has(lowerCase(nfc(mention.text), pack));
 }
 function renamedText(written, from, to, pack, titles) {
   const gaps = written.split(NAME_GAP).filter((part, index) => index % 2 === 1);
@@ -22782,7 +22836,7 @@ function renameEntityUnlocked(root, options) {
   const reindexed = reindexProject(project.root);
   const result = { kind, oldId, id: newId, file: newFile, changed: [newFile].concat(reindexed.changed), warnings };
   if (prose) {
-    result.prose = { edits: prose.edits, aliases: prose.aliases, shared: prose.shared.length };
+    result.prose = { edits: prose.edits, aliases: prose.aliases, shared: prose.shared.length, ambiguous: prose.ambiguous };
     result.warnings = warnings.concat(prose.warnings);
   }
   return result;
@@ -28868,14 +28922,20 @@ function formatProseRenames(result) {
   if (!result.prose) {
     return "";
   }
-  const { edits, aliases } = result.prose;
+  const { edits, aliases, ambiguous } = result.prose;
   const plural = (count, word, words = `${word}s`) => `${count} ${count === 1 ? word : words}`;
   const lines = edits.map((edit) => `${edit.file}:${edit.line}:${edit.column}: ${edit.from.replace(/\s+/gu, " ")} → ${edit.to.replace(/\s+/gu, " ")}${edit.endLine > edit.line ? ` (wraps to line ${edit.endLine})` : ""}
 `);
   const files = new Set(edits.map((edit) => edit.file)).size;
   const summary = edits.length === 0 ? "No names to rename in chapter prose" : `Renamed ${plural(edits.length, "name")} in ${plural(files, "chapter")}`;
+  const one = ambiguous.length === 1;
+  const unsure = ambiguous.length === 0 ? "" : [
+    `Left ${plural(ambiguous.length, "match", "matches")} as written that may be ${one ? "an ordinary word" : "ordinary words"}; check ${one ? "it" : "each"} and rename it by hand if it is the name:`,
+    ...ambiguous.map((entry) => `${entry.file}:${entry.line}:${entry.column}: ${entry.text}: ${entry.excerpt}`)
+  ].map((line) => `${line}
+`).join("");
   return `${lines.join("")}${summary}${aliases > 0 ? `; left ${plural(aliases, "alias", "aliases")} as written` : ""}
-`;
+${unsure}`;
 }
 function runDoctorFix({ parsed, io, cwd, root }, options) {
   const projectRoot = root();

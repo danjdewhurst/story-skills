@@ -121,6 +121,20 @@ describe("story mentions <kind> <id>", () => {
     expect(checkProjectContinuity(root).warnings.filter((warning) => warning.code === "named-not-listed")).toEqual([]);
   });
 
+  test("a given name of one letter is an initial and is not looked for alone", () => {
+    const root = mentionsProject();
+    writeMarkdown(path.join(root, "characters", "j-r-dunn.md"), "name: J. R. Dunn\nrole: supporting\nstatus: alive", "# Dunn\n");
+    writeMarkdown(path.join(root, "characters", "q.md"), "name: Q\nrole: minor\nstatus: alive", "# Q\n");
+    chapter(root, 1, "characters:\n  - rose-hale", "Rose wrote the letter J.");
+    chapter(root, 2, "characters:\n  - j-r-dunn", "J. R. Dunn signed. J smiled.");
+    const report = mentionsReport(root, { kind: "character", id: "j-r-dunn" });
+    expect(report.names).toEqual(["J. R. Dunn"]);
+    expect(report.matches.map(({ chapter: id, text }) => [id, text])).toEqual([["chapter-02", "J. R. Dunn"]]);
+    // A one-letter name that is the whole name is still a name.
+    expect(mentionsReport(root, { kind: "character", id: "q" }).names).toEqual(["Q"]);
+    expect(checkProjectContinuity(root).warnings.filter((warning) => warning.code === "named-not-listed")).toEqual([]);
+  });
+
   test("the command prints matches on stdout, takes --json, and rejects a bad kind or id", () => {
     const root = mentionsProject();
     chapter(root, 1, "characters:\n  - rose-hale", "Rose waited.");
