@@ -9,7 +9,7 @@ import { previewChanges } from "../src/preview.js";
 import { createEntity } from "../src/story.js";
 import { MAX_SERIES_BOOKS } from "../src/series.js";
 import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
-import { CHMOD_IGNORED, makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { CHMOD_IGNORED, makeTempDir, memoryIo, treeDiff as diff, treeSnapshot as snapshot, writeMarkdown } from "./helpers.js";
 
 const schema = JSON.parse(fs.readFileSync(RESULT_SCHEMA_PATH, "utf8"));
 const examplesRoot = path.resolve(import.meta.dir, "..", "examples");
@@ -31,48 +31,6 @@ function invokeJson(cwd, argv) {
   const envelope = JSON.parse(result.out);
   expect(validateAgainstSchema(envelope, schema)).toEqual([]);
   return { ...result, envelope };
-}
-
-// Every file's bytes and every folder, keyed by path relative to root.
-function snapshot(root) {
-  const entries = {};
-  const walk = (dir) => {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      const full = path.join(dir, entry.name);
-      const key = path.relative(root, full).split(path.sep).join("/");
-      if (entry.isDirectory()) {
-        entries[`${key}/`] = "dir";
-        walk(full);
-      } else if (entry.isSymbolicLink()) {
-        entries[key] = `link ${fs.readlinkSync(full)}`;
-      } else {
-        try {
-          entries[key] = fs.readFileSync(full).toString("base64");
-        } catch {
-          entries[key] = `unreadable ${fs.statSync(full).mode}`;
-        }
-      }
-    }
-  };
-  walk(root);
-  return entries;
-}
-
-// The changes between two snapshots, as recordChanges reports them.
-function diff(before, after) {
-  const changes = [];
-  for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
-    const isDir = key.endsWith("/");
-    const file = isDir ? key.slice(0, -1) : key;
-    if (!(key in before)) {
-      changes.push({ action: isDir ? "mkdir" : "create", path: file });
-    } else if (!(key in after)) {
-      changes.push({ action: "delete", path: file });
-    } else if (before[key] !== after[key]) {
-      changes.push({ action: "update", path: file });
-    }
-  }
-  return changes.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 }
 
 // Commands run on a copy of the-unraveled-thread. `prepare` edits the copy

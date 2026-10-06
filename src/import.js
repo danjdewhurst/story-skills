@@ -8,7 +8,7 @@ import { compareText, lowerCase } from "./languages/locale.js";
 import { withStyleLists } from "./languages/style.js";
 import { chapterHeading, characterCount, escapeRegExp, fencedLineIndexes, scanComments, splitFences, titleCaseSlug, wordCount } from "./markdown.js";
 import { countUnit } from "./forms.js";
-import { MAX_READ_BYTES } from "./files.js";
+import { MAX_READ_BYTES, removeFile } from "./files.js";
 import { STDIN_ARG, decodeUtf8 } from "./stdin.js";
 import { assertProjectParses, createStoryProject, existingStoryData, existingStoryLanguage, existingStyleData, newProjectRoot, reindexProject, scanProject, writeFile } from "./story.js";
 import { EXIT_CODES, usageError, withDefaultExitCode } from "./exit-codes.js";
@@ -234,7 +234,7 @@ export function importManuscript(options) {
     if (!/^chapter-\d+\.md$/i.test(name)) {
       continue;
     }
-    fs.unlinkSync(path.join(chaptersDir, name));
+    removeFile(path.join(chaptersDir, name));
   }
 
   for (const chapter of chapterFiles) {

@@ -534,7 +534,7 @@
     },
     "data-passes": {
       "type": "object",
-      "required": ["passes", "done", "next", "changed", "notes"],
+      "required": ["passes", "done", "next", "changed", "notes", "dryRun", "changes"],
       "properties": {
         "passes": {
           "type": "array",
@@ -552,16 +552,20 @@
         "done": { "$ref": "#/$defs/count" },
         "next": { "type": ["string", "null"], "description": "The pass in progress, else the first not done; null when all are done or none are recorded." },
         "changed": { "type": "boolean", "description": "True when --init, --start, or --done rewrote story.md." },
-        "notes": { "type": "array", "items": { "type": "string" }, "description": "The note: lines the text output prints, such as a custom pass that may be a typo." }
+        "notes": { "type": "array", "items": { "type": "string" }, "description": "The note: lines the text output prints, such as a custom pass that may be a typo." },
+        "dryRun": { "type": "boolean", "description": "True for a --dry-run, which changed nothing: changes lists what the command would do, and writes is empty." },
+        "changes": { "type": "array", "description": "Every file the command created or updated, and every folder it made, sorted by path; empty when it wrote nothing.", "items": { "$ref": "#/$defs/change" } }
       }
     },
     "data-diagram": {
       "type": "object",
-      "required": ["kind", "text", "outFile"],
+      "required": ["kind", "text", "outFile", "dryRun", "changes"],
       "properties": {
         "kind": { "enum": ["relationships", "locations", "timeline", "clues", "arcs"] },
         "text": { "type": "string", "description": "The Mermaid source." },
-        "outFile": { "type": ["string", "null"], "description": "The absolute path --out wrote, else null." }
+        "outFile": { "type": ["string", "null"], "description": "The absolute path --out wrote (or, with --dry-run, would write), else null." },
+        "dryRun": { "type": "boolean", "description": "True for a --dry-run, which changed nothing: changes lists what the command would do, and writes is empty." },
+        "changes": { "type": "array", "description": "Every file the command created or updated, and every folder it made, sorted by path; empty when it wrote nothing.", "items": { "$ref": "#/$defs/change" } }
       }
     },
     "data-snapshot": {
@@ -694,7 +698,7 @@
     },
     "data-synopsis": {
       "type": "object",
-      "required": ["title", "logline", "pages", "budget", "words", "sections", "text", "outFile"],
+      "required": ["title", "logline", "pages", "budget", "words", "sections", "text", "outFile", "dryRun", "changes"],
       "properties": {
         "title": { "type": "string" },
         "logline": { "type": "string" },
@@ -711,7 +715,9 @@
           }
         },
         "text": { "type": "string", "description": "The synopsis markdown, as printed or written." },
-        "outFile": { "type": ["string", "null"], "description": "The absolute path --out wrote, else null." }
+        "outFile": { "type": ["string", "null"], "description": "The absolute path --out wrote (or, with --dry-run, would write), else null." },
+        "dryRun": { "type": "boolean", "description": "True for a --dry-run, which changed nothing: changes lists what the command would do, and writes is empty." },
+        "changes": { "type": "array", "description": "Every file the command created or updated, and every folder it made, sorted by path; empty when it wrote nothing.", "items": { "$ref": "#/$defs/change" } }
       }
     },
     "data-similarity": {
@@ -997,7 +1003,7 @@
     "data-progress": {
       "type": "object",
       "$comment": "target, percent, remaining, deadline.perDay, lastSession.since, and pace are in unit; words is the word count in every book.",
-      "required": ["logged", "unit", "words", "characterCount", "target", "percent", "remaining", "deadline", "chapters", "sessions", "lastSession", "pace", "projected", "daily"],
+      "required": ["logged", "unit", "words", "characterCount", "target", "percent", "remaining", "deadline", "chapters", "sessions", "lastSession", "pace", "projected", "daily", "dryRun", "changes"],
       "properties": {
         "logged": {
           "type": ["object", "null"],
@@ -1064,7 +1070,9 @@
               }
             }
           }
-        }
+        },
+        "dryRun": { "type": "boolean", "description": "True for a --dry-run, which changed nothing: changes lists what the command would do, and writes is empty." },
+        "changes": { "type": "array", "description": "Every file the command created or updated, and every folder it made, sorted by path; empty when it wrote nothing.", "items": { "$ref": "#/$defs/change" } }
       }
     }
   }

@@ -81,7 +81,11 @@ function invalidUtf8Offset(buffer) {
 export function writeFile(filePath, contents, options = {}) {
   const existed = lstatIfExists(path.resolve(filePath)) !== null;
   try {
-    writeWholeFile(filePath, contents, options);
+    if (planning > 0) {
+      planWrite(filePath, options);
+    } else {
+      writeWholeFile(filePath, contents, options);
+    }
   } catch (error) {
     throw withExitCode(error, EXIT_CODES.refused);
   }
@@ -92,7 +96,18 @@ export function writeFile(filePath, contents, options = {}) {
 // that is already gone, as fs.rmSync does.
 export function removeFile(filePath, options = {}) {
   const existed = lstatIfExists(path.resolve(filePath)) !== null;
-  fs.rmSync(filePath, { force: Boolean(options.force) });
+  if (planning > 0) {
+    // As fs.rmSync would: a missing file without force is an error, and a
+    // file can be deleted only from a folder this user can write to.
+    if (!existed && !options.force) {
+      throw Object.assign(new Error(`ENOENT: no such file or directory, lstat '${filePath}'`), { code: "ENOENT", path: filePath, syscall: "lstat" });
+    }
+    if (existed) {
+      fs.accessSync(path.dirname(path.resolve(filePath)), fs.constants.W_OK);
+    }
+  } else {
+    fs.rmSync(filePath, { force: Boolean(options.force) });
+  }
   if (existed) {
     record(filePath, true, "delete");
   }
@@ -134,6 +149,30 @@ export function recordChanges(root, run) {
   return { result, changes: summarizeJournal(root, journal) };
 }
 
+// Like recordChanges, but nothing is written: writeFile, removeFile, and
+// makeDirectories run their checks (a path outside the project, a symlink,
+// a file or folder this user cannot write to) and record the change they
+// would make without making it. A --dry-run of a command that only writes
+// files it never reads back, such as a build or a new project, is planned
+// this way; one that reads back what it wrote runs on a copy instead (see
+// preview.js).
+export function planChanges(root, run) {
+  planning += 1;
+  try {
+    return recordChanges(root, run);
+  } finally {
+    planning -= 1;
+  }
+}
+
+// True inside planChanges, so a command can skip work whose only product is
+// the file it would write (rendering a PDF, say).
+export function isPlanning() {
+  return planning > 0;
+}
+
+let planning = 0;
+
 function summarizeJournal(root, journal) {
   const base = path.resolve(root);
   const changes = [];
@@ -142,7 +181,8 @@ function summarizeJournal(root, journal) {
       : action === "delete" ? (existed ? "delete" : null)
         : existed ? "update" : "create";
     if (kind !== null) {
-      changes.push({ action: kind, path: path.relative(base, file).split(path.sep).join("/") });
+      // The root itself, a new project's folder, is ".".
+      changes.push({ action: kind, path: path.relative(base, file).split(path.sep).join("/") || "." });
     }
   }
   return changes.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
@@ -183,6 +223,25 @@ function writeWholeFile(filePath, contents, options) {
   }
 }
 
+// writeWholeFile's checks, without the write: the target is inside the
+// root and not a symlink, an existing file is writable and unchanged, and a
+// new one's nearest existing folder is writable.
+function planWrite(filePath, options) {
+  const target = prepareWriteTarget(filePath, options.root);
+  const existing = lstatIfExists(target);
+  try {
+    if (existing?.isDirectory()) {
+      throw Object.assign(new Error("EISDIR"), { code: "EISDIR" });
+    }
+    fs.accessSync(existing ? target : nearestExistingAncestor(path.dirname(target)).ancestor, fs.constants.W_OK);
+  } catch (error) {
+    throw Object.assign(new Error(`Cannot write to ${target}: ${error.code ?? error.message}`), { code: error.code, path: target, syscall: "write" });
+  }
+  if (options.unchangedFrom !== undefined && currentText(target) !== options.unchangedFrom) {
+    throw new Error(`${options.root ? projectPath(path.resolve(options.root), target) : target} changed on disk while story was updating it, so it was left as it is. Run the command again`);
+  }
+}
+
 // The file's text now, or null when it is gone or unreadable.
 function currentText(target) {
   try {
@@ -206,12 +265,18 @@ function prepareWriteTarget(filePath, root) {
   const target = path.resolve(filePath);
   if (root) {
     assertLexicallyInsideRoot(target, root);
-    assertExistingAncestorInsideRoot(path.dirname(target), root);
+    // A planned new project (init --dry-run) has no folder to resolve yet;
+    // every folder under it is new, so the lexical check is the whole check.
+    if (planning === 0 || lstatIfExists(path.resolve(root)) !== null) {
+      assertExistingAncestorInsideRoot(path.dirname(target), root);
+    }
   }
 
   makeDirectories(path.dirname(target));
 
-  if (root) {
+  // A planned folder is not made, so the existing ancestor checked above
+  // stands in for it.
+  if (root && lstatIfExists(path.dirname(target)) !== null) {
     assertSafeProjectParent(target, root);
   }
 
@@ -306,6 +371,23 @@ export function makeDirectories(directory) {
   // The existing ancestor may be a symlink to a folder (`--out link/book.md`).
   if (missing.length === 0 && fs.statSync(ancestor, { throwIfNoEntry: false })?.isDirectory() !== true) {
     throw directoryError(ancestor, "ENOTDIR");
+  }
+  if (planning > 0) {
+    // mkdir needs a folder this user can write to (a dangling symlink in
+    // the way fails here too, as ENOENT).
+    if (missing.length > 0) {
+      try {
+        fs.accessSync(ancestor, fs.constants.W_OK);
+      } catch (error) {
+        throw directoryError(path.join(ancestor, missing[0]), error.code ?? error.message);
+      }
+    }
+    let planned = ancestor;
+    for (const name of missing) {
+      planned = path.join(planned, name);
+      record(planned, false, "mkdir");
+    }
+    return;
   }
   let current = ancestor;
   for (const name of missing) {

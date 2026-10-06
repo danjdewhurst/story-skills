@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { MAX_READ_BYTES, isPathInside, recordChanges } from "./files.js";
+import { MAX_READ_BYTES, isPathInside, lstatIfExists, recordChanges } from "./files.js";
+import { usageError } from "./exit-codes.js";
 import { LOCK_FILE, TAKEOVER_FILE } from "./lock.js";
 import { MAX_SCAN_DEPTH, SKIPPED_SCAN_DIRECTORIES, requireStoryFile } from "./scan.js";
 import { MAX_SERIES_BOOKS, readBookFrontmatter, seriesLinks } from "./series.js";
@@ -25,25 +26,69 @@ import { MAX_SERIES_BOOKS, readBookFrontmatter, seriesLinks } from "./series.js"
 export function previewChanges(root, run) {
   const projectRoot = path.resolve(root);
   requireStoryFile(projectRoot);
-  const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "story-dry-run-")));
-  const fsRoot = path.parse(projectRoot).root;
-  const atRoot = projectRoot === fsRoot;
-  // A path's place in the scratch folder. A Windows drive or share becomes
-  // the first folder: C:\book is scratch\C\book.
-  const mirror = (target) => {
-    const drive = path.parse(target).root;
-    return path.join(scratch, drive.replace(/[:\\/]/g, ""), target.slice(drive.length));
-  };
-  const copyRoot = atRoot ? path.join(scratch, "project") : mirror(projectRoot);
-  // Every path into the scratch folder maps back to the path it copies, so a
-  // finding about a linked book names the real book too.
-  const [from, to] = atRoot ? [copyRoot, projectRoot] : [mirror(fsRoot), fsRoot.replace(/[\\/]+$/, "")];
-  try {
-    fs.mkdirSync(path.dirname(copyRoot), { recursive: true });
+  return inScratch(projectRoot, run, (copyRoot, mirror, atRoot) => {
     copyProject(projectRoot, copyRoot, { realSource: realPath(projectRoot), copyRoot });
     if (!atRoot) {
       copyLinkedBooks(projectRoot, mirror);
     }
+  });
+}
+
+// previewChanges for a command that makes a project, story import: `root`
+// is the folder the project would be made in, which may not exist yet, or
+// may be a project or other folder that --force fills. Whatever is there is
+// copied as previewChanges copies a project, and the story.md of each
+// folder above it too, so the check that refuses a project inside another
+// project answers as in the real run.
+export function previewNewProject(root, run) {
+  const target = path.resolve(root);
+  if (target === path.parse(target).root) {
+    throw usageError(`--dry-run cannot preview a project made at ${target}`);
+  }
+  return inScratch(target, run, (copyRoot, mirror) => {
+    for (let folder = path.dirname(target); ; folder = path.dirname(folder)) {
+      const story = path.join(folder, "story.md");
+      if (fs.statSync(story, { throwIfNoEntry: false })?.isFile()) {
+        fs.mkdirSync(mirror(folder), { recursive: true });
+        copyFile(story, mirror(story));
+      }
+      if (path.dirname(folder) === folder) {
+        break;
+      }
+    }
+    const stats = lstatIfExists(target);
+    if (stats?.isSymbolicLink()) {
+      // A symlinked project folder is refused; the copy is a link to
+      // nowhere, so nothing can be written through it.
+      fs.symlinkSync(path.join(path.dirname(copyRoot), ".story-dry-run-link"), copyRoot);
+    } else if (stats?.isDirectory()) {
+      copyProject(target, copyRoot, { realSource: realPath(target), copyRoot });
+    } else if (stats) {
+      copyFile(target, copyRoot);
+    }
+  });
+}
+
+// Runs `run(copyRoot)` in a scratch folder that stands in for the
+// filesystem root, after `prepare(copyRoot, mirror, atRoot)` copies into it
+// what the command reads, and removes the folder afterwards.
+function inScratch(target, run, prepare) {
+  const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "story-dry-run-")));
+  const fsRoot = path.parse(target).root;
+  const atRoot = target === fsRoot;
+  // A path's place in the scratch folder. A Windows drive or share becomes
+  // the first folder: C:\book is scratch\C\book.
+  const mirror = (file) => {
+    const drive = path.parse(file).root;
+    return path.join(scratch, drive.replace(/[:\\/]/g, ""), file.slice(drive.length));
+  };
+  const copyRoot = atRoot ? path.join(scratch, "project") : mirror(target);
+  // Every path into the scratch folder maps back to the path it copies, so a
+  // finding about a linked book names the real book too.
+  const [from, to] = atRoot ? [copyRoot, target] : [mirror(fsRoot), fsRoot.replace(/[\\/]+$/, "")];
+  try {
+    fs.mkdirSync(path.dirname(copyRoot), { recursive: true });
+    prepare(copyRoot, mirror, atRoot);
     const { result, changes } = recordChanges(copyRoot, () => run(copyRoot));
     return { result: mapPaths(result, from, to), changes };
   } catch (error) {
@@ -135,14 +180,14 @@ function copyProject(source, target, roots, depth = 0) {
   fs.chmodSync(target, copyMode(source, true));
 }
 
-// Write commands read the text of markdown files only, and no file over
-// the read limit; of any other file (a cover image) they check at most the
-// size. So only readable markdown is copied whole. Every other file is a
+// Write commands read the text of markdown files only (and import the
+// .gitignore it keeps), and no file over the read limit; of any other file
+// (a cover image) they check at most the size. So only readable markdown is copied whole. Every other file is a
 // sparse file of the same size, which takes no disk space, and an
 // unreadable file stays unreadable.
 function copyFile(from, to) {
   const { size } = fs.statSync(from);
-  if (from.endsWith(".md") && size <= MAX_READ_BYTES && allowed(from, fs.constants.R_OK)) {
+  if ((from.endsWith(".md") || path.basename(from) === ".gitignore") && size <= MAX_READ_BYTES && allowed(from, fs.constants.R_OK)) {
     fs.copyFileSync(from, to);
   } else {
     fs.writeFileSync(to, "");
