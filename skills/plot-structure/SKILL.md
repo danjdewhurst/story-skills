@@ -95,13 +95,13 @@ For mystery clues, `story clues .` prints a clue-by-chapter fair-play matrix and
 
 For durable cross-arc setup/payoff tracking, also maintain `continuity/promises/{promise-kebab}.md` with `status`, `planted`, `payoff`, `arcs`, and `characters`. For mystery or open-continuity tracking, maintain `continuity/questions/{question-kebab}.md`.
 
-Scaffold chapters and scenes with `story add chapter "{Title}" --number {N} --pov {id} --arc {arc-id}` and `story add scene "{Title}" --chapter chapter-{NN} --scene {M} --pov {id} --location {id}`, then write the prose and outline content into the created files. Set `outcome` on scene records and `hook` on chapters as the outline settles them, then run `story reindex .`, `story links .`, `story validate .`, and `story pacing .`.
+Scaffold chapters and scenes with `story add chapter "{Title}" --number {N} --pov {id} --arc {arc-id}` and `story add scene "{Title}" --chapter chapter-{NN} --scene {M} --pov {id} --location {id}`, then write the prose and outline content into the created files. Set `outcome` on scene records and `hook` on chapters as the outline settles them, then run `story reindex .`, `story wordcount . --write`, `story links .`, `story validate .`, and `story pacing .`.
 
 When pacing or the outline calls for reordering, move the files with the CLI rather than renaming them, because chapter and scene ids encode their numbers and clues, promises, questions, and the timeline point at them:
 
 - Move a scene to another chapter with `story move scene chapter-{NN}-scene-{MM} --chapter chapter-{NN} --path .` (next free number; add `--scene {M}` to place it), or reorder within its chapter with `--scene {M}` alone
 - Renumber a chapter with `story move chapter chapter-{NN} --number {N} --path .`. A taken number is refused, so to open a gap move the later chapters up one, highest first, then `story add chapter "{Title}" --number {N}`
-- `move` rewrites ids, links, and bare ids in `plot/timeline.md`, arc files, and the `plot/_index.md` Theme Tracking table, but not `Ch {N}` cells, prose, or outline beats: update those by hand, then run `story wordcount . --write`, `story validate .`, `story links .`, and `story pacing .`
+- `move` rewrites ids, links, and bare ids in `plot/timeline.md`, arc files, and the `plot/_index.md` Theme Tracking table, but not `Ch {N}` cells, prose, or outline beats: update those by hand, then run `story reindex .`, `story wordcount . --write`, `story links .`, `story validate .`, and `story pacing .`
 
 For splits, merges, and the full checklist, follow the `revision-continuity` skill's Structural Edits section.
 

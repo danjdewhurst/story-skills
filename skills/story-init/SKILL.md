@@ -271,10 +271,13 @@ If manual initialization gets tedious, stop and ask the user to install or run t
    - "Set up the style sheet" (triggers voice-style skill) once there is a writing sample
    - "Run `story next .`" to show deterministic next actions
 
-7. When CLI access is available, run a final maintenance check:
+7. When CLI access is available, run the maintenance commands from inside the new project folder (`{story-title-kebab}/`, or the folder given to `--dir`). They matter most after creating the registries by hand:
 
 ```shell
-story validate {story-title-kebab}
+story reindex .
+story wordcount . --write
+story links .
+story validate .
 ```
 
 If `story` is not installed, use `bun run story --` from the Story Skills repository checkout or the bundled fallback `node ../story-maintenance/scripts/story.js` with the same arguments, resolving the path relative to this skill folder.

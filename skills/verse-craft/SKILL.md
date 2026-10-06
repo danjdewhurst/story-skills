@@ -160,9 +160,10 @@ story add matter "Epigraph" --heading false
 4. Run maintenance:
 
 ```shell
-story wordcount --write
-story links
-story validate
+story reindex .
+story wordcount . --write
+story links .
+story validate .
 ```
 
 ## Reference Files
