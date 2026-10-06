@@ -63,6 +63,8 @@ export function checkTemplateStoryVersion(failures, packageVersion, templatesDir
 // setup-bun inputs that choose a Bun, as a block or flow mapping key, quoted
 // or not, with or without a space before the colon.
 const SETUP_BUN_KEY = /(?:^|[\s{,])(?:-\s+)?(["']?)(bun-version|bun-version-file|bun-download-url)\1[ \t]*:(?=\s|$)/g;
+// A step that runs oven-sh/setup-bun, in block or flow style.
+const SETUP_BUN_STEP = /(?:^|[\s{,])uses:\s*["']?oven-sh\/setup-bun(?:[@"'\s,}]|$)/;
 // Bun's install script, which takes the version as a `bun-vX.Y.Z` argument.
 const INSTALL_SCRIPT = /\bbun\.(?:sh|com)\/install/;
 
@@ -101,11 +103,46 @@ function scalarValue(lines, index, rest, flow) {
   return below.join(" ");
 }
 
+// Which lines are inside a block scalar (`run: |`, `body: >-`). They hold
+// text, such as a shell script, not keys.
+function blockScalarLines(lines) {
+  const inside = lines.map(() => false);
+  let openedAt = null;
+  lines.forEach((line, index) => {
+    if (openedAt !== null && (line.trim() === "" || indentOf(line) > openedAt)) {
+      inside[index] = true;
+      return;
+    }
+    openedAt = /:[ \t]*[|>][-+0-9]*[ \t]*$/.test(withoutComment(line)) ? indentOf(line) : null;
+  });
+  return inside;
+}
+
+// The lines of the step that holds line `index`, from its `- ` item to the
+// next key at or left of the dash.
+function stepLines(lines, inside, index) {
+  let start = index;
+  if (!/^\s*-\s/.test(lines[index])) {
+    while (start > 0 && (inside[start] || !/^\s*-\s/.test(lines[start]) || indentOf(lines[start]) >= indentOf(lines[index]))) {
+      start -= 1;
+    }
+  }
+  let end = start + 1;
+  while (end < lines.length && (inside[end] || withoutComment(lines[end]).trim() === "" || indentOf(lines[end]) > indentOf(lines[start]))) {
+    end += 1;
+  }
+  return lines.slice(start, end).filter((line, offset) => !inside[start + offset]);
+}
+
 // The committed fallback bundle only reproduces byte for byte on the pinned
 // Bun, and publish.yml builds the release binaries, so every job in every
 // workflow must install the version `packageManager` names. `workflows` maps
 // each file name in .github/workflows to its text. Lines are read, not YAML:
 // a Bun installed some other way (npm, a container image) is not seen.
+//
+// Each setup-bun step must name its version. Without one, setup-bun v2 reads
+// packageManager only if package.json is already checked out when the step
+// runs, and installs the latest Bun otherwise.
 export function checkWorkflowBunPin(failures, packageManager, workflows) {
   const pinned = parsePinnedBunVersion(packageManager);
   if (!pinned) {
@@ -116,19 +153,26 @@ export function checkWorkflowBunPin(failures, packageManager, workflows) {
   let ciPins = 0;
   for (const [name, text] of Object.entries(workflows)) {
     const lines = text.split(/\r?\n/);
+    const inside = blockScalarLines(lines);
     for (let index = 0; index < lines.length; index += 1) {
       const line = withoutComment(lines[index]);
       const where = `.github/workflows/${name}:${index + 1}`;
-      for (const match of line.matchAll(SETUP_BUN_KEY)) {
-        const key = match[2];
-        if (key !== "bun-version") {
-          failures.push(`${where} sets ${key}, which check:metadata cannot compare with the pin; use bun-version: ${pinned}`);
-          continue;
+      if (!inside[index]) {
+        for (const match of line.matchAll(SETUP_BUN_KEY)) {
+          const key = match[2];
+          if (key !== "bun-version") {
+            failures.push(`${where} sets ${key}, which check:metadata cannot compare with the pin; use bun-version: ${pinned}`);
+            continue;
+          }
+          ciPins += name === "ci.yml" ? 1 : 0;
+          const flow = /\{[^}]*$/.test(line.slice(0, match.index + 1));
+          const value = scalarValue(lines, index, line.slice(match.index + match[0].length), flow);
+          expectEqual(failures, `${where} bun-version`, pinned, value);
         }
-        ciPins += name === "ci.yml" ? 1 : 0;
-        const flow = /\{[^}]*$/.test(line.slice(0, match.index + 1));
-        const value = scalarValue(lines, index, line.slice(match.index + match[0].length), flow);
-        expectEqual(failures, `${where} bun-version`, pinned, value);
+        const choosesBun = (stepLine) => new RegExp(SETUP_BUN_KEY.source).test(withoutComment(stepLine));
+        if (SETUP_BUN_STEP.test(line) && !stepLines(lines, inside, index).some(choosesBun)) {
+          failures.push(`${where} runs oven-sh/setup-bun without bun-version; add bun-version: ${pinned}`);
+        }
       }
       if (!INSTALL_SCRIPT.test(line)) {
         continue;
@@ -149,12 +193,14 @@ export function checkWorkflowBunPin(failures, packageManager, workflows) {
   return failures;
 }
 
-// Every workflow in .github/workflows, keyed by file name.
+// Every workflow file in .github/workflows, keyed by file name. A folder or
+// symlink named like a workflow is not one.
 export function readWorkflows(root) {
   const dir = path.join(root, ".github", "workflows");
   return Object.fromEntries(
-    fs.readdirSync(dir)
-      .filter((name) => /\.ya?ml$/.test(name))
+    fs.readdirSync(dir, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && /\.ya?ml$/.test(entry.name))
+      .map((entry) => entry.name)
       .sort()
       .map((name) => [name, fs.readFileSync(path.join(dir, name), "utf8")])
   );
