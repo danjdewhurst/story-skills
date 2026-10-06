@@ -332,8 +332,9 @@ function makeDirectories(directory) {
   }
   if (planning > 0) {
     if (missing.length > 0) {
+      const blocked = fs.statSync(ancestor, { throwIfNoEntry: false })?.isFile() === true;
       try {
-        fs.accessSync(ancestor, fs.constants.W_OK);
+        fs.accessSync(blocked ? path.join(ancestor, missing[0]) : ancestor, fs.constants.W_OK);
       } catch (error) {
         throw directoryError(path.join(ancestor, missing[0]), error.code ?? error.message);
       }

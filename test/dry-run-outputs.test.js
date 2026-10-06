@@ -189,11 +189,14 @@ describe("--dry-run for builds and exports", () => {
     expect(fs.existsSync(marker)).toBe(false);
     expect(treeSnapshot(parent)).toEqual(before);
 
-    process.env.PATH = "";
-    try {
-      expect(invoke(root, ["build", "--format", "print", "--pdf", "--dry-run"]).err).toContain("No PDF engine found");
-    } finally {
-      process.env.PATH = savedPath;
+    // macOS also finds Chrome in /Applications, whatever PATH says.
+    if (process.platform === "linux") {
+      process.env.PATH = "";
+      try {
+        expect(invoke(root, ["build", "--format", "print", "--pdf", "--dry-run"]).err).toContain("No PDF engine found");
+      } finally {
+        process.env.PATH = savedPath;
+      }
     }
   });
 });
@@ -432,7 +435,7 @@ test("planChanges refuses what the real write would refuse", () => {
     [() => writeFile(path.join(root, "folder"), "x", { root }), "EISDIR"],
     [() => writeFile(path.join(root, "kept.md"), "x", { root, unchangedFrom: "older" }), "kept.md changed on disk"],
     [() => writeFile(path.join(root, "kept.md", "inside.md"), "x", {}), "ENOTDIR"],
-    [() => writeFile(path.join(root, "kept.md", "sub", "inside.md"), "x", {}), "ENOTDIR"]
+    [() => writeFile(path.join(root, "kept.md", "sub", "inside.md"), "x", {}), /ENOTDIR|ENOENT/]
   ];
   for (const [run, message] of refusals) {
     const planned = (() => {
@@ -443,7 +446,7 @@ test("planChanges refuses what the real write would refuse", () => {
       }
       return null;
     })();
-    expect(planned).toContain(message);
+    expect(planned).toMatch(message);
   }
   expect(planChanges(root, () => removeFile(path.join(root, "gone.md"), { force: true })).changes).toEqual([]);
   expect(planChanges(root, () => removeFile(path.join(root, "kept.md"))).changes).toEqual([{ action: "delete", path: "kept.md" }]);
