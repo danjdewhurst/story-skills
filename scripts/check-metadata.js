@@ -60,22 +60,53 @@ export function checkTemplateStoryVersion(failures, packageVersion, templatesDir
   return failures;
 }
 
+// The value of a `bun-version:` line, without quotes or a trailing comment.
+function bunVersionValue(raw) {
+  const value = raw.replace(/(^|\s)#.*$/, "").trim();
+  const quoted = /^(["'])(.*)\1$/.exec(value);
+  return quoted ? quoted[2] : value;
+}
+
 // The committed fallback bundle only reproduces byte for byte on the pinned
-// Bun, so CI must install the same version `packageManager` names.
-export function checkWorkflowBunPin(failures, packageManager, ciWorkflow) {
+// Bun, and publish.yml builds the release binaries, so every job in every
+// workflow must install the version `packageManager` names. `workflows` maps
+// each file name in .github/workflows to its text.
+export function checkWorkflowBunPin(failures, packageManager, workflows) {
   const pinned = parsePinnedBunVersion(packageManager);
   if (!pinned) {
     failures.push(`package.json packageManager must pin an exact Bun version, got ${JSON.stringify(packageManager)}`);
     return failures;
   }
 
-  const match = /^\s*bun-version:\s*(\S+)\s*$/m.exec(ciWorkflow);
-  if (!match) {
-    failures.push(".github/workflows/ci.yml is missing bun-version");
-    return failures;
+  let ciPins = 0;
+  for (const [name, text] of Object.entries(workflows)) {
+    text.split(/\r?\n/).forEach((line, index) => {
+      const match = /^\s*(?:-\s+)?bun-version:(.*)$/.exec(line);
+      if (!match) {
+        return;
+      }
+      if (name === "ci.yml") {
+        ciPins += 1;
+      }
+      expectEqual(failures, `.github/workflows/${name}:${index + 1} bun-version`, pinned, bunVersionValue(match[1]));
+    });
   }
 
-  return expectEqual(failures, ".github/workflows/ci.yml bun-version", pinned, match[1]);
+  if (ciPins === 0) {
+    failures.push(".github/workflows/ci.yml is missing bun-version");
+  }
+  return failures;
+}
+
+// Every workflow in .github/workflows, keyed by file name.
+export function readWorkflows(root) {
+  const dir = path.join(root, ".github", "workflows");
+  return Object.fromEntries(
+    fs.readdirSync(dir)
+      .filter((name) => /\.ya?ml$/.test(name))
+      .sort()
+      .map((name) => [name, fs.readFileSync(path.join(dir, name), "utf8")])
+  );
 }
 
 // docs/development.md tells contributors which Bun to install, so it is the
@@ -214,11 +245,7 @@ export function metadataFailures(root = repoRoot) {
     fs.readFileSync(filePath, "utf8")
   );
 
-  checkWorkflowBunPin(
-    failures,
-    packageJson.packageManager,
-    fs.readFileSync(path.join(root, ".github", "workflows", "ci.yml"), "utf8")
-  );
+  checkWorkflowBunPin(failures, packageJson.packageManager, readWorkflows(root));
 
   checkDocBunPin(failures, packageJson.packageManager, fs.readFileSync(path.join(root, "docs", "development.md"), "utf8"));
 

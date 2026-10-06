@@ -46,8 +46,9 @@ export function bunPinFailure(pinned, local) {
       "rewrites hundreds of cosmetic lines and check:fallback can no longer tell drift from a stale bundle.",
       "Either match the pin:",
       `  curl -fsSL https://bun.sh/install | bash -s "bun-v${pinned}"`,
-      `or move the project to Bun ${local}: set packageManager to "bun@${local}" in package.json and`,
-      "bun-version in .github/workflows/ci.yml, then run bun run build:fallback and commit the new bundle."
+      `or move the project to Bun ${local}: set packageManager to "bun@${local}" in package.json, every`,
+      "bun-version in .github/workflows/, and the Bun version in docs/development.md, then run",
+      "bun run build:fallback and commit the new bundle."
     ].join("\n");
   }
   return null;

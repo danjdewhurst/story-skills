@@ -6,7 +6,7 @@ import { checkCoverage, parseLcov, sourceFiles } from "../scripts/check-coverage
 import { collectResult, compareFindings } from "../scripts/check-examples.js";
 import { anchorsFor, checkLinks, extractLinks, headingText, isSkipped, maskCode, slugify } from "../scripts/check-links.js";
 import { docVersionFiles } from "../scripts/doc-versions.js";
-import { checkDocBunPin, checkDocVersions, checkMarketplaces, checkSkillFrontmatter, checkTemplateStoryVersion, checkVersionModule, checkWorkflowBunPin, expectEqual } from "../scripts/check-metadata.js";
+import { checkDocBunPin, checkDocVersions, checkMarketplaces, checkSkillFrontmatter, checkTemplateStoryVersion, checkVersionModule, checkWorkflowBunPin, expectEqual, readWorkflows } from "../scripts/check-metadata.js";
 import { bunPinFailure, localBunVersion, parsePinnedBunVersion, readPinnedBunVersion } from "../scripts/bun-pin.js";
 import { checkFixtureOverlaps, checkFixtureSkill } from "../scripts/check-evals.js";
 import { MISSING_BUN_MESSAGE, missingBunMessage } from "../scripts/bun-missing.js";
@@ -451,9 +451,11 @@ describe("bun pin", () => {
 });
 
 describe("check-metadata bun pin", () => {
-  test("ci installs the pinned bun", () => {
+  test("every workflow installs the pinned bun", () => {
     const packageJson = JSON.parse(readRepo("package.json"));
-    expect(checkWorkflowBunPin([], packageJson.packageManager, readRepo(".github/workflows/ci.yml"))).toEqual([]);
+    const workflows = readWorkflows(repoRoot);
+    expect(Object.keys(workflows)).toEqual(expect.arrayContaining(["ci.yml", "publish.yml"]));
+    expect(checkWorkflowBunPin([], packageJson.packageManager, workflows)).toEqual([]);
   });
 
   test("the development guide names the pinned bun", () => {
@@ -474,13 +476,62 @@ describe("check-metadata bun pin", () => {
   });
 
   test("flags a ci bun-version that drifts from packageManager", () => {
-    expect(checkWorkflowBunPin([], "bun@1.4.2", "          bun-version: 1.3.14\n")).toEqual([
-      ".github/workflows/ci.yml bun-version mismatch: expected 1.4.2, got 1.3.14"
+    expect(checkWorkflowBunPin([], "bun@1.4.2", { "ci.yml": "          bun-version: 1.3.14\n" })).toEqual([
+      ".github/workflows/ci.yml:1 bun-version mismatch: expected 1.4.2, got 1.3.14"
     ]);
-    expect(checkWorkflowBunPin([], "bun@1.4.2", "name: CI\n")).toEqual([".github/workflows/ci.yml is missing bun-version"]);
-    expect(checkWorkflowBunPin([], "bun@^1.4.2", "          bun-version: 1.4.2\n")).toEqual([
+    expect(checkWorkflowBunPin([], "bun@1.4.2", { "ci.yml": "name: CI\n" })).toEqual([".github/workflows/ci.yml is missing bun-version"]);
+    expect(checkWorkflowBunPin([], "bun@^1.4.2", { "ci.yml": "          bun-version: 1.4.2\n" })).toEqual([
       'package.json packageManager must pin an exact Bun version, got "bun@^1.4.2"'
     ]);
+  });
+
+  // #570: only the first bun-version in ci.yml was read, so a later job or
+  // publish.yml, which builds the release binaries, could drift unnoticed.
+  test("checks every bun-version in every workflow (#570)", () => {
+    const setup = (version) => `      - uses: oven-sh/setup-bun@abc # v2\n        with:\n          bun-version: ${version}\n`;
+    const workflows = {
+      "ci.yml": `jobs:\n${setup("1.4.2")}${setup("1.3.0")}${setup("1.4.2")}`,
+      "codeql.yml": "jobs:\n  analyze:\n    runs-on: ubuntu-latest\n",
+      "publish.yml": `jobs:\n${setup("1.3.0")}`
+    };
+    expect(checkWorkflowBunPin([], "bun@1.4.2", workflows)).toEqual([
+      ".github/workflows/ci.yml:7 bun-version mismatch: expected 1.4.2, got 1.3.0",
+      ".github/workflows/publish.yml:4 bun-version mismatch: expected 1.4.2, got 1.3.0"
+    ]);
+    // A pin only outside ci.yml still leaves CI on an unpinned Bun.
+    expect(checkWorkflowBunPin([], "bun@1.4.2", { "ci.yml": "name: CI\n", "publish.yml": `jobs:\n${setup("1.4.2")}` })).toEqual([
+      ".github/workflows/ci.yml is missing bun-version"
+    ]);
+  });
+
+  test("reads quoted, commented, list, and expression bun-version values (#570)", () => {
+    const ci = [
+      '          bun-version: "1.4.2"',
+      "          bun-version: '1.4.2' # the pin",
+      "          bun-version: 1.4.2   ",
+      "        - bun-version: 1.4.2",
+      "          # bun-version: 0.0.1 is a comment",
+      "          bun-version-file: package.json",
+      "          bun-version: 1.4.2 # 1.3.0 is older",
+      "          bun-version: latest",
+      "          bun-version: ${{ matrix.bun }}",
+      "          bun-version:"
+    ].join("\r\n");
+    expect(checkWorkflowBunPin([], "bun@1.4.2", { "ci.yml": ci })).toEqual([
+      ".github/workflows/ci.yml:8 bun-version mismatch: expected 1.4.2, got latest",
+      ".github/workflows/ci.yml:9 bun-version mismatch: expected 1.4.2, got ${{ matrix.bun }}",
+      ".github/workflows/ci.yml:10 bun-version mismatch: expected 1.4.2, got "
+    ]);
+  });
+
+  test("readWorkflows reads every yml and yaml file in .github/workflows", () => {
+    const root = makeTempDir("story-workflows-");
+    const dir = path.join(root, ".github", "workflows");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "z.yaml"), "z\n");
+    fs.writeFileSync(path.join(dir, "a.yml"), "a\n");
+    fs.writeFileSync(path.join(dir, "notes.md"), "not a workflow\n");
+    expect(readWorkflows(root)).toEqual({ "a.yml": "a\n", "z.yaml": "z\n" });
   });
 });
 
