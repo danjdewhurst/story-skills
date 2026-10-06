@@ -31,6 +31,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - The story id is never empty. When neither the `story.md` title nor the project folder name has ASCII letters or digits, it is the title or folder name transliterated, or `story-` and a hash of the title, and `validate` and `build` warn with `substitute-story-id`; before, builds wrote `dist/.epub` with an empty EPUB identifier, and every such book shared one Twine IFID. ([#577](https://github.com/danjdewhurst/story-skills/issues/577))
 - `--out` no longer replaces the `cover` or `build-style` `css` file that `story.md` names, and a cover whose first bytes are not the image its extension names fails `validate` and the EPUB build. A `cover` or `css` path with a NUL or other control character is now an error that names the field, with exit code 3. ([#577](https://github.com/danjdewhurst/story-skills/issues/577))
 - Export and builds refuse a matter page with text and a blank `title`, which gave an invalid EPUB. ([#577](https://github.com/danjdewhurst/story-skills/issues/577))
+- A markdown build of a book whose story id is `manuscript` now writes `dist/manuscript.book.md`, so it no longer replaces the `dist/manuscript.md` that `story export` writes. ([#526](https://github.com/danjdewhurst/story-skills/issues/526))
 
 ### Security
 

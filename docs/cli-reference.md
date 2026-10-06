@@ -2791,7 +2791,7 @@ Builds a disposable book file in `dist/`. Builds are deterministic: the same sou
 
 | Format | Default output | Contents |
 |---|---|---|
-| `markdown` | `dist/<story-id>.md` | The same manuscript as `export`, with LF line endings |
+| `markdown` | `dist/<story-id>.md`, or `dist/manuscript.book.md` when the story id is `manuscript`, so it does not replace `export`'s file | The same manuscript as `export`, with LF line endings |
 | `epub` | `dist/<story-id>.epub` | EPUB 3 with a navigation document, front and back matter, and accessibility metadata. Reads `author` or `authors`, `language`, `isbn`, `publisher`, `publication-date`, `description`, `subjects`, `copyright`, `cover`, and `cover-alt` from `story.md` when set |
 | `docx` | `dist/<story-id>.docx` | Word document with headings and paragraphs |
 | `docx` with `--shunn` | `dist/<story-id>.shunn.docx` | Shunn format: Courier New 12pt, double-spaced, title page |
