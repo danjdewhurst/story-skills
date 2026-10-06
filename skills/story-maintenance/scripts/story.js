@@ -8198,13 +8198,13 @@ function composedText(text) {
     composed += value;
   };
   const addRun = (from, run) => {
-    const characters = Array.from(run);
-    if (characters.every((character) => nfc(character).length === character.length)) {
-      add(from, nfc(run));
+    const value = nfc(run);
+    if (value === run || value.length === run.length && Array.from(run).every((character) => nfc(character).length === character.length)) {
+      add(from, value);
       return;
     }
     let offset = from;
-    for (const character of characters) {
+    for (const character of run) {
       add(offset, nfc(character));
       offset += character.length;
     }
@@ -9704,11 +9704,11 @@ var titleText = (close) => String.raw`(?:[^${close}\n]|${NEXT_LINE}){0,1000}`;
 var LINK_TITLE = String.raw`(?:"${titleText('"')}"|'${titleText("'")}'|\(${titleText("()")}\))`;
 var LINK_DEFINITION = new RegExp(String.raw`^${QUOTE_MARKERS}[ \t]*\[(?!\^)([^[\]\n]{1,999})\]:(?:${LINK_BREAK}|[ \t]*)(?:<[^<>\n]*>|[^\s<]\S{0,2000})(?:(?:${LINK_BREAK}|[ \t]+)${LINK_TITLE})?[ \t]*$`, "gm");
 var LINK_TARGET = new RegExp([
-  String.raw`(?<=\])\((?:[^()\n]|${NEXT_LINE}|\([^()\n]{0,1000}\)){0,2000}\)`,
   String.raw`(?<=\])\[(?:[^[\]\n]|${NEXT_LINE}){0,999}\]`,
   String.raw`<[a-z][a-z0-9+.-]{1,31}:[^<>\s]*>`,
   String.raw`<\/?[a-z][a-z0-9-]*(?:\s(?:[^<>\n]|${NEXT_LINE}){0,2000})?\/?>`
 ].join("|"), "gim");
+var BARE_ADDRESS = /(?<![a-z0-9+.-])(?:[a-z][a-z0-9+.-]*:\/\/|www\.)[^\s<>]*|(?<![\p{L}\p{N}._%+-])[\p{L}\p{N}][\p{L}\p{N}._%+-]*@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/giu;
 var REFERENCE_TEXT = /\[([^[\]\n]{1,999})\](?:\[\])?(?![([])/g;
 var BLOCK_LINE = /^[ \t>]*(?:#{1,6}(?:[ \t]|\r?$)|([-*_])(?:[ \t]*\1){2,}[ \t]*\r?$)/;
 function maskLinkTargets(text, blank = " ") {
@@ -9729,11 +9729,12 @@ function maskLinkTargets(text, blank = " ") {
       definitionEnd = match.index + match[0].length;
     }
   }
-  for (const pattern of [LINK_TARGET, URL_OR_EMAIL]) {
+  for (const pattern of [LINK_TARGET, BARE_ADDRESS]) {
     for (const match of source.matchAll(pattern)) {
       ranges.push([match.index, match.index + match[0].length]);
     }
   }
+  ranges.push(...inlineDestinations(source, blank));
   ranges.sort((left, right) => left[0] - right[0]);
   const masked = [];
   let result = "";
@@ -9758,6 +9759,35 @@ function maskLinkTargets(text, blank = " ") {
     }
   }
   return { text: result + source.slice(position), references };
+}
+function inlineDestinations(source, blank) {
+  const ranges = [];
+  const open = [];
+  const space = (character) => character === " " || character === "\t" || character === "\r" || character === ">" || character === blank;
+  for (let index = 0;index < source.length; index += 1) {
+    const character = source[index];
+    if (character === "\\" && /[!-/:-@[-`{-~]/.test(source[index + 1] ?? "")) {
+      index += 1;
+    } else if (character === "(") {
+      open.push(index);
+    } else if (character === ")") {
+      const start = open.pop();
+      if (start !== undefined && source[start - 1] === "]") {
+        ranges.push([start, index + 1]);
+      }
+    } else if (character === `
+`) {
+      let next = index + 1;
+      while (next < source.length && space(source[next])) {
+        next += 1;
+      }
+      if (next === source.length || source[next] === `
+`) {
+        open.length = 0;
+      }
+    }
+  }
+  return ranges;
 }
 function scanMarkup(text) {
   const ranges = [];
@@ -14101,16 +14131,23 @@ function findMentions(text, names) {
   }
   return kept.sort((left, right) => left.start - right.start);
 }
-function ambiguousMention(text, mention, pack, find = wordMatcher(text)) {
+function ambiguousMention(text, mention, pack, uses = wordUse(text)) {
   if (/\s/u.test(mention.text)) {
     return false;
   }
   const written = nfc(mention.text);
   const lower = lowerCase(written, pack);
-  if (lower === written || !opensSentence(text, mention.start)) {
-    return false;
-  }
-  return find(new RegExp(wholeWords(escapeRegExp(lower), lower), "gu"), { first: true }).length > 0;
+  return lower !== written && opensSentence(text, mention.start) && uses(lower);
+}
+function wordUse(text) {
+  const find = wordMatcher(text);
+  const known = new Map;
+  return (word) => {
+    if (!known.has(word)) {
+      known.set(word, find(new RegExp(wholeWords(escapeRegExp(word), word), "gu"), { first: true }).length > 0);
+    }
+    return known.get(word);
+  };
 }
 function opensSentence(text, start) {
   const before = text.slice(Math.max(0, start - 200), start).replace(/[ \t"'“”‘’«»„()[\]*_>#—–-]+$/u, "");
@@ -14175,7 +14212,7 @@ function auditMentions(project, { unnamed = false } = {}) {
       continue;
     }
     const label = projectPath(project.root, chapter.file);
-    const find = wordMatcher(prose.text);
+    const uses = wordUse(prose.text);
     const mentions = findMentions(prose.text, names);
     const named = new Set;
     const unlisted = new Map;
@@ -14191,7 +14228,7 @@ function auditMentions(project, { unnamed = false } = {}) {
       if (kind !== "character" || cut.has(id) || listed.has(id) || unlisted.has(id)) {
         continue;
       }
-      if (!ambiguousMention(prose.text, mention, pack, find)) {
+      if (!ambiguousMention(prose.text, mention, pack, uses)) {
         unlisted.set(id, mention.text);
       }
     }
@@ -14308,7 +14345,7 @@ function proseRenames(project, kind, id, newName) {
   for (const [chapter, prose] of drafted) {
     const file = projectPath(project.root, chapter.file);
     const { text, references } = maskLinkTargets(prose.text, BLANKED);
-    const find = wordMatcher(text);
+    const uses = wordUse(text);
     const own = findMentions(text, names).filter((mention) => mention.entities.some((entry) => entry.kind === kind && entry.id === id));
     const located = locateMentions(prose, own);
     let next = "";
@@ -14329,7 +14366,7 @@ function proseRenames(project, kind, id, newName) {
       if (replacement === mention.text) {
         return;
       }
-      const reason = references.some(([start, end]) => mention.start < end && start < mention.end) ? "reference-label" : uncertainRename(text, mention, form, pack, find, calendar) ? "ordinary-word" : null;
+      const reason = references.some(([start, end]) => mention.start < end && start < mention.end) ? "reference-label" : uncertainRename(text, mention, form, pack, uses, calendar) ? "ordinary-word" : null;
       if (reason !== null) {
         result.review.push({ ...where, text: mention.text, excerpt: located[index].excerpt, reason });
         return;
@@ -14346,9 +14383,9 @@ function proseRenames(project, kind, id, newName) {
   }
   return result;
 }
-function uncertainRename(text, mention, form, pack, find, calendar) {
+function uncertainRename(text, mention, form, pack, uses, calendar) {
   const [first] = Array.from(form.from);
-  return first !== lowerCase(first, pack) && ambiguousMention(text, mention, pack, find) || form.part && !/\s/u.test(mention.text) && calendar.has(lowerCase(nfc(mention.text), pack));
+  return form.part && !/\s/u.test(mention.text) && calendar.has(lowerCase(nfc(mention.text), pack)) || first !== lowerCase(first, pack) && ambiguousMention(text, mention, pack, uses);
 }
 function renamedText(written, from, to, pack, titles) {
   const gaps = written.split(NAME_GAP).filter((part, index) => index % 2 === 1);

@@ -325,17 +325,19 @@ const LINK_TITLE = String.raw`(?:"${titleText('"')}"|'${titleText("'")}'|\(${tit
 // not one. A footnote (`[^1]: text`) is prose. Bounded, so it stays
 // linear.
 const LINK_DEFINITION = new RegExp(String.raw`^${QUOTE_MARKERS}[ \t]*\[(?!\^)([^[\]\n]{1,999})\]:(?:${LINK_BREAK}|[ \t]*)(?:<[^<>\n]*>|[^\s<]\S{0,2000})(?:(?:${LINK_BREAK}|[ \t]+)${LINK_TITLE})?[ \t]*$`, "gm");
-// After a link's `]`: an inline destination and title, with one level of
-// parentheses inside (`(https://en.wikipedia.org/wiki/Ines_(name))`), or a
-// full reference's label. An autolink, and an HTML tag with its
-// attributes (`<img src="img/Ines.png" alt="Ines">`). Bounded, so a long
-// run of unclosed `(` or `<` stays linear.
+// A full reference's label, after its text's `]`; an autolink; and an
+// HTML tag with its attributes (`<img src="img/Ines.png" alt="Ines">`).
+// Bounded, so a long run of unclosed `[` or `<` stays linear. Inline
+// destinations are found by inlineDestinations.
 const LINK_TARGET = new RegExp([
-  String.raw`(?<=\])\((?:[^()\n]|${NEXT_LINE}|\([^()\n]{0,1000}\)){0,2000}\)`,
   String.raw`(?<=\])\[(?:[^[\]\n]|${NEXT_LINE}){0,999}\]`,
   String.raw`<[a-z][a-z0-9+.-]{1,31}:[^<>\s]*>`,
   String.raw`<\/?[a-z][a-z0-9-]*(?:\s(?:[^<>\n]|${NEXT_LINE}){0,2000})?\/?>`
 ].join("|"), "gim");
+// A bare URL, to the next space, so parentheses and brackets in it are
+// part of it (`https://example.com/(Ines)`, `http://[::1]/Ines`), and an
+// email address.
+const BARE_ADDRESS = /(?<![a-z0-9+.-])(?:[a-z][a-z0-9+.-]*:\/\/|www\.)[^\s<>]*|(?<![\p{L}\p{N}._%+-])[\p{L}\p{N}][\p{L}\p{N}._%+-]*@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/giu;
 // A shortcut (`[Ines]`) or collapsed (`[Ines][]`) reference: its text is
 // its label.
 const REFERENCE_TEXT = /\[([^[\]\n]{1,999})\](?:\[\])?(?![([])/g;
@@ -372,11 +374,12 @@ export function maskLinkTargets(text, blank = " ") {
       definitionEnd = match.index + match[0].length;
     }
   }
-  for (const pattern of [LINK_TARGET, URL_OR_EMAIL]) {
+  for (const pattern of [LINK_TARGET, BARE_ADDRESS]) {
     for (const match of source.matchAll(pattern)) {
       ranges.push([match.index, match.index + match[0].length]);
     }
   }
+  ranges.push(...inlineDestinations(source, blank));
   ranges.sort((left, right) => left[0] - right[0]);
   const masked = [];
   let result = "";
@@ -403,6 +406,40 @@ export function maskLinkTargets(text, blank = " ") {
     }
   }
   return { text: result + source.slice(position), references };
+}
+
+// The inline link and image destinations in `source`, with their titles,
+// each as [start, end] from the `(` after a `]` to the `)` that closes it.
+// Parentheses nest to any depth, a backslash escapes the character after
+// it as in CommonMark (`img/Ines\(draft.png`), and a destination may run onto the next line
+// of its paragraph, never past a blank line or a line of nothing but
+// `blank`. One pass, with a stack of the parentheses still open.
+function inlineDestinations(source, blank) {
+  const ranges = [];
+  const open = [];
+  const space = (character) => character === " " || character === "\t" || character === "\r" || character === ">" || character === blank;
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    if (character === "\\" && /[!-/:-@[-`{-~]/.test(source[index + 1] ?? "")) {
+      index += 1;
+    } else if (character === "(") {
+      open.push(index);
+    } else if (character === ")") {
+      const start = open.pop();
+      if (start !== undefined && source[start - 1] === "]") {
+        ranges.push([start, index + 1]);
+      }
+    } else if (character === "\n") {
+      let next = index + 1;
+      while (next < source.length && space(source[next])) {
+        next += 1;
+      }
+      if (next === source.length || source[next] === "\n") {
+        open.length = 0;
+      }
+    }
+  }
+  return ranges;
 }
 
 // One left-to-right pass over comments, closed backtick fences, and code
