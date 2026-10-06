@@ -17,7 +17,7 @@ import { validateWritingMode, WRITING_MODES } from "./typesetting.js";
 import { validateCliConfig } from "./config.js";
 import { validatePasses } from "./passes.js";
 import { CHAPTER_HOOKS, SCENE_OUTCOMES } from "./pacing.js";
-import { PROGRESS_FILE, cleanSessions } from "./progress.js";
+import { PROGRESS_FILE, WEEKDAYS, cleanSessions, weekdayName } from "./progress.js";
 import { plural } from "./plural.js";
 import { STYLE_LISTS, STYLE_LIST_FIELDS, styleListEntries, styleWords } from "./languages/style.js";
 import { lowerCase } from "./languages/locale.js";
@@ -1010,6 +1010,7 @@ function validateStoryFrontmatter(project, errors, warnings) {
   validatePasses(data, "story.md", errors);
   validateCliConfig(data, errors);
   validateDeadline(data, errors);
+  validateDailyTarget(data, errors);
   if (data.ifid !== undefined && !isIfid(data.ifid)) {
     errors.push(err("invalid-ifid", "story.md ifid must be a version 4 UUID, such as 3F2C9A61-7B1D-4E8A-9C3B-2A6D5E4F1B07", "story.md"));
   }
@@ -1074,9 +1075,11 @@ function validateFormRange(project, warnings) {
 function unusedTargetWarnings(project, label, data, warnings) {
   const { unit } = project;
   const other = [...COUNT_UNITS.values()].find((entry) => entry !== unit);
-  if (data[other.targetField] !== undefined && data[unit.targetField] === undefined) {
-    const why = project.story.data["count-unit"] === undefined ? `language ${project.language}` : "count-unit";
-    warnings.push(warn("unused-target", `${label} ${other.targetField} is not measured: this book counts ${unit.name} (${why}), so set ${unit.targetField}`, label));
+  for (const field of ["targetField", "dailyTargetField"]) {
+    if (data[other[field]] !== undefined && data[unit[field]] === undefined) {
+      const why = project.story.data["count-unit"] === undefined ? `language ${project.language}` : "count-unit";
+      warnings.push(warn("unused-target", `${label} ${other[field]} is not measured: this book counts ${unit.name} (${why}), so set ${unit[field]}`, label));
+    }
   }
 }
 
@@ -1707,6 +1710,21 @@ export function validateDeadline(data, errors) {
     if (deadlineError !== "") {
       errors.push(err("invalid-date", `story.md deadline ${deadlineError}`, "story.md"));
     }
+  }
+}
+
+// The daily targets, in either unit, and writing-days: the weekdays the
+// streak expects writing on.
+export function validateDailyTarget(data, errors) {
+  for (const unit of COUNT_UNITS.values()) {
+    requireInteger(data, unit.dailyTargetField, "story.md", errors, 1);
+  }
+  const days = data["writing-days"];
+  if (days === undefined) {
+    return;
+  }
+  if (!Array.isArray(days) || days.length === 0 || days.some((day) => weekdayName(day) === null)) {
+    errors.push(err("unsupported-value", `story.md frontmatter field writing-days must be a list of weekdays (${WEEKDAYS.join(", ")}, or full names), got ${Array.isArray(days) ? `[${days.join(", ")}]` : days}`, "story.md"));
   }
 }
 

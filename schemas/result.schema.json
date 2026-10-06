@@ -912,7 +912,7 @@
     "data-progress": {
       "type": "object",
       "$comment": "target, percent, remaining, deadline.perDay, lastSession.since, and pace are in unit; words is the word count in every book.",
-      "required": ["logged", "unit", "words", "characterCount", "target", "percent", "remaining", "deadline", "chapters", "sessions", "lastSession", "pace", "projected"],
+      "required": ["logged", "unit", "words", "characterCount", "target", "percent", "remaining", "deadline", "chapters", "sessions", "lastSession", "pace", "projected", "daily"],
       "properties": {
         "logged": {
           "type": ["object", "null"],
@@ -945,7 +945,41 @@
           "properties": { "date": { "type": "string" }, "words": { "$ref": "#/$defs/count" }, "characterCount": { "type": ["integer", "null"], "minimum": 0, "description": "The session's manuscript in characters, or null in a book counted in words." }, "since": { "type": "integer" } }
         },
         "pace": { "type": ["number", "null"] },
-        "projected": { "type": ["string", "null"] }
+        "projected": { "type": ["string", "null"] },
+        "daily": {
+          "type": "object",
+          "description": "Daily writing from the session log, in unit: a day's words are the gain since the session logged before it, and today's are measured from the manuscript now.",
+          "required": ["target", "writingDays", "today", "streak", "weeks"],
+          "properties": {
+            "target": { "type": ["integer", "null"], "description": "story.md daily-target-words (daily-target-characters in a book counted in characters), or null." },
+            "writingDays": { "type": ["array", "null"], "items": { "enum": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] }, "description": "story.md writing-days, Monday first, or null for every day." },
+            "today": {
+              "type": "object",
+              "required": ["date", "scheduled", "written", "remaining", "met"],
+              "properties": {
+                "date": { "type": "string" },
+                "scheduled": { "type": "boolean", "description": "Whether today is one of the writing days." },
+                "written": { "type": ["integer", "null"], "description": "Gained since the last session before today, or null with none logged." },
+                "remaining": { "type": ["integer", "null"] },
+                "met": { "type": ["boolean", "null"] }
+              }
+            },
+            "streak": {
+              "type": "object",
+              "required": ["current", "longest"],
+              "properties": { "current": { "$ref": "#/$defs/count" }, "longest": { "$ref": "#/$defs/count" } }
+            },
+            "weeks": {
+              "type": "array",
+              "description": "The last four weeks, Monday to Sunday, oldest first, ending with the current week.",
+              "items": {
+                "type": "object",
+                "required": ["start", "end", "written", "days", "target"],
+                "properties": { "start": { "type": "string" }, "end": { "type": "string" }, "written": { "type": "integer" }, "days": { "$ref": "#/$defs/count" }, "target": { "type": ["integer", "null"] } }
+              }
+            }
+          }
+        }
       }
     }
   }

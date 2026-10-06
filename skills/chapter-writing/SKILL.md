@@ -138,7 +138,7 @@ story progress . --log
 
 `story pacing .` shows the new chapter's words, scene outcomes, and hook alongside the rest of the book, and warns about runs of `yes` outcomes, missing sequels, length outliers, or a missing `hook`.
 
-`story progress . --log` records the session in `progress.md` and reports words against `target-words`, the `deadline`, and chapter `target-words`; skip the `--log` flag when the user does not keep a log.
+`story progress . --log` records the session in `progress.md` and reports words against `target-words`, the `deadline`, and chapter `target-words`, plus today's words against `daily-target-words`, the writing streak (which skips days not in `writing-days`), and the last four weeks; report the streak from it rather than counting by hand. Skip the `--log` flag when the user does not keep a log.
 
 Present a summary of all updates made.
 

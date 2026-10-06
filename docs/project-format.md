@@ -362,6 +362,8 @@ tense: past
 | `target-characters` | integer ≥ 1 | no | Character target for a book [counted in characters](#counting-in-characters), used in place of `target-words`. |
 | `count-unit` | `words` or `characters` | no | The unit lengths are counted in. Defaults from `language`: `characters` for Chinese (`zh`) and Japanese (`ja`), `words` otherwise. See [Counting in characters](#counting-in-characters). |
 | `deadline` | `YYYY-MM-DD` | no | Due date; `story progress` reports days left and words a day needed. Must be a real calendar day. |
+| `daily-target-words` | integer ≥ 1 | no | Words a writing day aims for. `story progress` reports today's words against it, and a day counts toward the streak only when it reaches it. A book [counted in characters](#counting-in-characters) sets `daily-target-characters` instead. |
+| `writing-days` | list of weekdays | no | The days you plan to write: `mon`, `tue`, `wed`, `thu`, `fri`, `sat`, `sun`, or the full names, in any letter case. A day not listed never breaks the `story progress` streak. Unset means every day. |
 | `draft-mode` | string | no | `discovered` marks a discovery-drafted project, `outlined` an outline-first one; any other value is a validate error. In a `discovered` project, `story next` treats a drafted chapter with no `mode` of its own as discovered. |
 | `revision-passes` | list of mappings | no | Named revision passes and their progress. See [Revision passes](#revision-passes). |
 | `cli-defaults` | list of mappings | no | Default flags for `story` commands. See [CLI defaults and severity](#cli-defaults-and-severity). |
@@ -1226,7 +1228,7 @@ sessions:
 | `sessions[].words` | integer ≥ 0 | yes | Word count of the whole manuscript on that date. |
 | `sessions[].characters` | integer ≥ 0 | no | Character count on that date, logged in a book [counted in characters](#counting-in-characters). |
 
-`story progress` measures these against `target-words` and `deadline` in `story.md` and against chapter `target-words`, or the `characters` against `target-characters` in a book counted in characters. See [Continuity and analysis](continuity.md#story-progress).
+`story progress` measures these against `target-words`, `deadline`, `daily-target-words`, and `writing-days` in `story.md` and against chapter `target-words`, or the `characters` against `target-characters` and `daily-target-characters` in a book counted in characters. Each day's words are the gain since the session logged before it, which is how it works out the streak and the weekly history. See [Continuity and analysis](continuity.md#story-progress).
 
 ## Registries
 

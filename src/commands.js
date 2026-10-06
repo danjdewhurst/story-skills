@@ -371,7 +371,8 @@ export const COMMANDS = [
     usage: "progress [path]",
     summary: [
       "Show words against target-words, deadline, chapter",
-      "targets, and logged sessions; --log records today"
+      "targets, logged sessions, the daily target, and the",
+      "writing streak; --log records today"
     ],
     project: "positional",
     options: ["log", "date", "json"],

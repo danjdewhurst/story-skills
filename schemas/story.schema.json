@@ -60,6 +60,9 @@
         "draft-mode": { "enum": ["discovered", "outlined"] },
         "cover": { "type": "string", "minLength": 1, "pattern": "[^/\\\\]\\.(?:[Gg][Ii][Ff]|[Jj][Pp][Ee]?[Gg]|[Pp][Nn][Gg]|[Ww][Ee][Bb][Pp])\\s*$", "description": "Cover image path relative to story.md: a .gif, .jpeg, .jpg, .png, or .webp file. story validate also checks the file exists." },
         "deadline": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "daily-target-words": { "type": "integer", "minimum": 1, "description": "Words a writing day aims for; story progress measures today and the streak against it." },
+        "daily-target-characters": { "type": "integer", "minimum": 1, "description": "Characters a writing day aims for, measured when the book counts characters (count-unit)." },
+        "writing-days": { "type": "array", "items": { "type": "string", "pattern": "^\\s*(?:[Mm][Oo][Nn](?:[Dd][Aa][Yy])?|[Tt][Uu][Ee](?:[Ss][Dd][Aa][Yy])?|[Ww][Ee][Dd](?:[Nn][Ee][Ss][Dd][Aa][Yy])?|[Tt][Hh][Uu](?:[Rr][Ss][Dd][Aa][Yy])?|[Ff][Rr][Ii](?:[Dd][Aa][Yy])?|[Ss][Aa][Tt](?:[Uu][Rr][Dd][Aa][Yy])?|[Ss][Uu][Nn](?:[Dd][Aa][Yy])?)\\s*$" }, "description": "The weekdays you plan to write (mon to sun, or full names). Other days never break the story progress streak. Unset means every day." },
         "revision-passes": {
           "type": "array",
           "items": {

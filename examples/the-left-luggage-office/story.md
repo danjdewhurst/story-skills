@@ -11,6 +11,8 @@ themes:
 pov: third-person-limited
 tense: past
 form: serial
+daily-target-words: 500
+writing-days: [mon, tue, thu, fri]
 season-goal: Find out what Aunty Fola hid at Harrowgate Street station, and keep it from Raymond Sallis.
 premise: A family secret kept to protect someone ends up endangering them, until someone chooses to carry it in the open.
 ---
@@ -21,7 +23,7 @@ premise: A family secret kept to protect someone ends up endangering them, until
 
 Ines Achebe works the night shift in the left-luggage office at Harrowgate Street station, where nothing happens. Then a woman in a green coat leaves a blue suitcase she must not open, a man called Sallis arrives with a forged ticket for it, and Ines's own name turns up on the counterfoil, written by the aunt who vanished thirteen years ago. Season one follows the suitcase, Aunty Fola, and a page cut from the ledger Ines's father kept in the old parcels office.
 
-This example is a serial: `form: serial` sets no book-level target, so each episode chapter has its own `target-words`, an `episode-question` it poses and answers, and a `hook` that carries the reader to next week. The `season-goal` above is the question the whole season answers.
+This example is a serial: `form: serial` sets no book-level target, so each episode chapter has its own `target-words`, an `episode-question` it poses and answers, and a `hook` that carries the reader to next week. The `season-goal` above is the question the whole season answers, and `daily-target-words` with `writing-days` sets the writing schedule that `story progress` measures each day and the streak against.
 
 ## Tone & Style
 
