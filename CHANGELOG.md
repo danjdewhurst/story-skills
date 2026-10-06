@@ -12,6 +12,10 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 - A write that finds something already at its temporary file's name now says so in plain words (`Cannot write to chapters/chapter-01.md: something is already at the name of its temporary file (.chapter-01.md.story-<random>.tmp, in the same folder), so it was left as it is. Run the command again`) instead of ending in `EEXIST`. `story validate` now also reports a symlink, folder, or other entry that is not a regular file at a temporary file's name (`interrupted-write`), without following a symlink, and says to delete a symlink itself rather than what it points to; before, it reported only regular files there. ([#602](https://github.com/danjdewhurst/story-skills/issues/602))
 
+### Security
+
+- npm releases now come only from a commit on `main` whose CI run passed. The Publish workflow checks that the `vX.Y.Z` tag names the `package.json` version at a commit on `main`, waits for that commit's CI run, and publishes from the protected `npm` environment once the binaries and release assets are done. A manual run must be dispatched on `main` or on the tag. ([#544](https://github.com/danjdewhurst/story-skills/issues/544))
+
 ## [0.22.1] - 2026-10-06
 
 ### Changed

@@ -167,7 +167,7 @@ describe("release run with stubbed commands", () => {
       "gh release create v0.5.1 --title v0.5.1 --generate-notes --verify-tag"
     ]);
     expect(result.out).toContain("Created GitHub release: https://github.com/danjdewhurst/story-skills/releases/tag/v0.5.1");
-    expect(result.out).toContain("publishing story-skills@0.5.1 to npm");
+    expect(result.out).toContain("publishes story-skills@0.5.1 to npm once CI passes on main for the release commit");
   });
 
   test("refuses an empty Unreleased section before any slow check", () => {
