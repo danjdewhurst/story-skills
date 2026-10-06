@@ -51,9 +51,9 @@ ai-disclosure: No AI was used.`);
   });
 
   test("#438 a backslash before a pipe in a table cell is escaped too", () => {
-    const root = project("publisher: Back\\| Slash");
+    const root = project("publisher: Back\\| Slash \\*one\\*");
     const text = fs.readFileSync(buildBook(root, { format: "metadata" }).outFile, "utf8");
-    expect(text).toContain("| Publisher | Back\\\\\\| Slash |");
+    expect(text).toContain("| Publisher | Back\\\\\\| Slash \\*one\\* |");
   });
 
   test("a copyright matter page counts, and an empty story.md lists everything missing", () => {

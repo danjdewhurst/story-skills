@@ -567,11 +567,13 @@ Add notes on the story's voice, texture, and emotional register.
 }
 
 // A registry table cell: a `|` would start a new column and a newline would
-// end the row, so escape the one and flatten the other. Backslashes are
-// escaped first, so a `\|` in a name stays a backslash and a pipe. A block scalar's
-// closing newline would leave a trailing space, so the cell is trimmed.
+// end the row, so escape the one and flatten the other. Backslashes just
+// before a `|` are doubled too, or `\|` in a name would leave the pipe
+// unescaped (or lose the backslash); other markdown escapes are kept. A
+// block scalar's closing newline would leave a trailing space, so the cell
+// is trimmed.
 function cell(value) {
-  return String(value ?? "").replace(/[ \t]*(?:\r?\n|\r)[ \t]*/g, " ").trim().replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
+  return String(value ?? "").replace(/[ \t]*(?:\r?\n|\r)[ \t]*/g, " ").trim().replace(/(\\*)\|/g, "$1$1\\|");
 }
 
 export function characterIndex(storyId, characters, relationshipMap, familyTrees) {
