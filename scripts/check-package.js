@@ -5,45 +5,91 @@
 // `files` would pass them and still ship a bin that crashes on start.
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+
+// Markdown and HTML link targets that are paths inside the package, without
+// their #fragment. Fenced code is skipped so shell examples are not links.
+export function relativeLinks(markdown) {
+  const prose = markdown.replace(/^```[\s\S]*?^```/gm, "");
+  const pattern = /\]\(([^)\s]+)\)|\b(?:src|href)="([^"]+)"/g;
+  const links = new Set();
+  for (const match of prose.matchAll(pattern)) {
+    const target = (match[1] ?? match[2]).split("#")[0];
+    if (target && !/^[a-z][a-z0-9+.-]*:/i.test(target) && !target.startsWith("/")) {
+      links.add(decodeURIComponent(target));
+    }
+  }
+  return [...links].sort();
+}
 
 function run(command, args, cwd) {
   return execFileSync(command, args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
 }
 
-const work = fs.mkdtempSync(path.join(os.tmpdir(), "story-skills-pack-"));
-try {
-  const packDir = path.join(work, "pack");
-  const installDir = path.join(work, "install");
-  fs.mkdirSync(packDir);
-  fs.mkdirSync(installDir);
+function main() {
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "story-skills-pack-"));
+  try {
+    const packDir = path.join(work, "pack");
+    const installDir = path.join(work, "install");
+    fs.mkdirSync(packDir);
+    fs.mkdirSync(installDir);
 
-  const packed = JSON.parse(run(npm, ["pack", "--json", "--pack-destination", packDir], repoRoot));
-  const tarball = path.join(packDir, packed[0].filename);
-  const version = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf8")).version;
+    const packed = JSON.parse(run(npm, ["pack", "--json", "--pack-destination", packDir], repoRoot));
+    const tarball = path.join(packDir, packed[0].filename);
+    const version = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf8")).version;
 
-  fs.writeFileSync(path.join(installDir, "package.json"), '{ "name": "story-skills-pack-check", "private": true }\n');
-  run(npm, ["install", "--no-audit", "--no-fund", "--ignore-scripts", tarball], installDir);
+    fs.writeFileSync(path.join(installDir, "package.json"), '{ "name": "story-skills-pack-check", "private": true }\n');
+    run(npm, ["install", "--no-audit", "--no-fund", "--ignore-scripts", tarball], installDir);
 
-  const installed = path.join(installDir, "node_modules", "story-skills");
-  const bin = path.join(installDir, "node_modules", ".bin", process.platform === "win32" ? "story.cmd" : "story");
+    const installed = path.join(installDir, "node_modules", "story-skills");
+    const bin = path.join(installDir, "node_modules", ".bin", process.platform === "win32" ? "story.cmd" : "story");
 
-  const printed = run(bin, ["--version"], installDir).trim();
-  if (!printed.includes(version)) {
-    throw new Error(`Installed story --version printed "${printed}", expected ${version}`);
+    const printed = run(bin, ["--version"], installDir).trim();
+    if (!printed.includes(version)) {
+      throw new Error(`Installed story --version printed "${printed}", expected ${version}`);
+    }
+    run(bin, ["validate", path.join(installed, "examples", "the-last-ember")], installDir);
+    run(process.execPath, [path.join(installed, "skills", "story-maintenance", "scripts", "story.js"), "--version"], installDir);
+
+    // The README is read from node_modules too, so a relative link must point
+    // at a file the package ships; anything else needs an absolute URL.
+    const readme = fs.readFileSync(path.join(installed, "README.md"), "utf8");
+    const broken = relativeLinks(readme).filter((link) => !fs.existsSync(path.join(installed, link)));
+    if (broken.length > 0) {
+      throw new Error(`README links to files the package does not ship: ${broken.join(", ")}`);
+    }
+
+    // `exports` keeps package.json and the schemas resolvable and the source private.
+    const requireFromInstall = createRequire(path.join(installDir, "package.json"));
+    requireFromInstall.resolve("story-skills/package.json");
+    requireFromInstall.resolve("story-skills/schemas/story.schema.json");
+    requireFromInstall.resolve("story-skills/schemas/result.schema.json");
+    let leaked = true;
+    try {
+      requireFromInstall.resolve("story-skills/src/cli.js");
+    } catch (error) {
+      if (error.code !== "ERR_PACKAGE_PATH_NOT_EXPORTED") throw error;
+      leaked = false;
+    }
+    if (leaked) {
+      throw new Error("story-skills/src/cli.js resolves, but src/ should not be exported");
+    }
+
+    console.log(`Packed tarball ${packed[0].filename} installs and runs story ${version}`);
+  } catch (error) {
+    console.error(`Package check failed: ${error.message}`);
+    process.exitCode = 1;
+  } finally {
+    fs.rmSync(work, { recursive: true, force: true });
   }
-  run(bin, ["validate", path.join(installed, "examples", "the-last-ember")], installDir);
-  run(process.execPath, [path.join(installed, "skills", "story-maintenance", "scripts", "story.js"), "--version"], installDir);
+}
 
-  console.log(`Packed tarball ${packed[0].filename} installs and runs story ${version}`);
-} catch (error) {
-  console.error(`Package check failed: ${error.message}`);
-  process.exitCode = 1;
-} finally {
-  fs.rmSync(work, { recursive: true, force: true });
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
 }

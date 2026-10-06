@@ -1,6 +1,6 @@
 <div align="center">
 
-<h1><img src="assets/banner.svg" alt="Story Skills" width="508"></h1>
+<h1><img src="https://raw.githubusercontent.com/danjdewhurst/story-skills/main/assets/banner.svg" alt="Story Skills" width="508"></h1>
 
 **Agent Skills for planning, tracking, and drafting fiction in markdown.**
 
@@ -8,7 +8,7 @@ Story Skills gives agents a shared project format for fiction: a story bible, ch
 
 The companion `story` CLI treats the story bible as a checkable contract. Its **continuity engine** catches dead characters walking, payoffs that land before their setup, unfired Chekhov guns, and stale story state, deterministically, before a reader finds them.
 
-<img src="assets/demo.gif" alt="story continuity flags a character who died in chapter 2 but appears in chapter 4, a payoff that lands before its setup, and a question resolved before it is asked" width="900">
+<img src="https://raw.githubusercontent.com/danjdewhurst/story-skills/main/assets/demo.gif" alt="story continuity flags a character who died in chapter 2 but appears in chapter 4, a payoff that lands before its setup, and a question resolved before it is asked" width="900">
 
 Why it works this way: [*Story Skills: a continuity compiler for AI-written fiction*](https://ddewhurst.com/blog/story-skills-continuity-compiler-for-ai-fiction/)
 
@@ -453,7 +453,7 @@ Outside coding agents:
 
 ## Development and releasing
 
-To contribute, start with [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md). User-visible changes are listed in the [changelog](CHANGELOG.md). The [Development guide](docs/development.md) covers the repository layout, CLI architecture, tests, and release process in full. Development uses Bun:
+To contribute, start with [CONTRIBUTING.md](https://github.com/danjdewhurst/story-skills/blob/main/CONTRIBUTING.md) and the [Code of Conduct](https://github.com/danjdewhurst/story-skills/blob/main/CODE_OF_CONDUCT.md). User-visible changes are listed in the [changelog](CHANGELOG.md). The [Development guide](docs/development.md) covers the repository layout, CLI architecture, tests, and release process in full. Development uses Bun:
 
 ```shell
 bun install
@@ -471,7 +471,7 @@ bun run check:fallback
 node skills/story-maintenance/scripts/story.js --help
 ```
 
-The `evals/` harness regression-tests the writing skills. Fixtures seed a drafting brief with known canon and known traps. A dependency-free checker verifies that drafts keep the canon and spring none of the traps, a model runner (requires the `claude` CLI) drafts through a real model and judges for invented canon, and a pairwise comparison measures the skill against a no-skill baseline. See [`evals/README.md`](evals/README.md).
+The `evals/` harness regression-tests the writing skills. Fixtures seed a drafting brief with known canon and known traps. A dependency-free checker verifies that drafts keep the canon and spring none of the traps, a model runner (requires the `claude` CLI) drafts through a real model and judges for invented canon, and a pairwise comparison measures the skill against a no-skill baseline. See [`evals/README.md`](https://github.com/danjdewhurst/story-skills/blob/main/evals/README.md).
 
 ```shell
 bun run check:evals      # validate fixture schemas
