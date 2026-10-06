@@ -52,7 +52,7 @@ Pick the route that matches what you came to do. Each one takes four pages; read
 | [Getting started](getting-started.md) | Installing the skills and CLI, and a first session from `story init` to a clean maintenance pass |
 | [Core concepts](concepts.md) | The project model: files, frontmatter, entity kinds, ids, registries, backlinks, word counts, and how the work is split between skills and CLI |
 | [Writing workflows](writing-workflows.md) | End-to-end sessions: testing a premise, plotting first, discovery drafting, scene craft, theme and voice, research, revision passes, line editing, feedback and editorial review, submission, self-publishing, and adaptation |
-| [Continuity and analysis](continuity.md) | The continuity engine (including travel times over location routes), exemptions, and the `knowledge`, `context`, `timeline`, `prose`, `voices`, `pacing`, `clues`, `names`, `diagram`, `progress`, `compare`, `report`, `next`, and `doctor` commands |
+| [Continuity and analysis](continuity.md) | The continuity engine (including travel times over location routes), exemptions, and the `knowledge`, `context`, `timeline`, `prose`, `voices`, `pacing`, `clues`, `grid`, `names`, `diagram`, `progress`, `compare`, `report`, `next`, and `doctor` commands |
 | [Writing in other languages](languages.md) | What works in each language and script: counting in words or characters, dialogue and sentences, word lists, build labels, fonts, right-to-left and vertical text, ids, and adding a language pack |
 | [Series](series.md) | Linking sequels and prequels, `story series`, carrying characters and facts between books, and laying out a short-story collection or anthology |
 | [Import, export, and builds](manuscripts.md) | Importing an existing draft, front and back matter, publishing metadata, and building markdown, EPUB, DOCX, Shunn, HTML review copy, print interior, narration script, retailer metadata sheet, Fountain screenplay skeleton, and synopsis output |
@@ -92,6 +92,7 @@ Pick the route that matches what you came to do. Each one takes four pages; read
 | Dismiss a finding on purpose | [Continuity and analysis](continuity.md#exemptions) |
 | Check pacing, scene outcomes, and chapter hooks | [Continuity and analysis](continuity.md) (`story pacing`) |
 | Check a mystery's clues play fair | [Continuity and analysis](continuity.md) (`story clues`) |
+| See which chapters advance each arc, as a table or CSV | [Continuity and analysis](continuity.md) (`story grid`) |
 | Check that characters sound different | [Continuity and analysis](continuity.md) (`story voices`) |
 | Check a new name before using it | [Continuity and analysis](continuity.md) (`story names`) |
 | Draw a family tree, route map, timeline, or clue diagram | [Continuity and analysis](continuity.md) (`story diagram`) |

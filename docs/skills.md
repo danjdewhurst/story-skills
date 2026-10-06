@@ -137,7 +137,7 @@ The main handoffs:
 | [story-init](#story-init) | Whole project scaffold, `story.md`, all registries | `init --form`, `validate` (then suggests `next`) |
 | [character-management](#character-management) | `characters/*.md`, `characters/_index.md` | `names`, `add character`, `diagram relationships`, `reindex`, `links`, `validate` |
 | [worldbuilding](#worldbuilding) | `worldbuilding/{locations,systems,factions,artifacts}/*.md` | `names`, `add faction`, `add artifact`, `diagram locations`, `reindex`, `links`, `validate` |
-| [plot-structure](#plot-structure) | `plot/_index.md`, `plot/arcs/*.md`, `plot/timeline.md`, `continuity/{promises,questions}/` | `add arc`, `add chapter`, `add scene`, `timeline`, `pacing`, `clues`, `diagram timeline`/`arcs`/`clues`, `reindex`, `links`, `validate` |
+| [plot-structure](#plot-structure) | `plot/_index.md`, `plot/arcs/*.md`, `plot/timeline.md`, `continuity/{promises,questions}/` | `add arc`, `add chapter`, `add scene`, `timeline`, `pacing`, `clues`, `grid`, `diagram timeline`/`arcs`/`clues`, `reindex`, `links`, `validate` |
 | [theme-craft](#theme-craft) | `story.md` premise fields, character arc fields, `continuity/theme-audit.md` | `reindex`, `links`, `validate` |
 | [genre-craft](#genre-craft) | `continuity/clues/`, promises, `story.md` genre fields | `add clue`, `clues`, `diagram clues`, `pacing`, `reindex`, `links`, `validate`, `continuity` |
 | [research](#research) | `research/*.md` | `add research`, `reindex`, `links`, `validate` |

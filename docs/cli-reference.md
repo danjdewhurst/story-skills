@@ -12,7 +12,7 @@ The CLI never writes story content for you. It scaffolds files, rebuilds registr
 - [Setup commands](#setup-commands): `init`, `import`, `migrate`
 - [Maintenance commands](#maintenance-commands): `validate`, `reindex`, `wordcount`, `links`, `check`
 - [Analysis commands](#analysis-commands): `continuity`, `knowledge`, `context`, `compare`, `similarity`, `progress`, `timeline`, `prose`, `series`, `report`, `next`, `doctor`
-- [Craft and revision commands](#craft-and-revision-commands): `pacing`, `clues`, `voices`, `names`, `diagram`, `passes`
+- [Craft and revision commands](#craft-and-revision-commands): `pacing`, `clues`, `grid`, `voices`, `names`, `diagram`, `passes`
 - [Entity commands](#entity-commands): `add`, `rename`, `move`, `remove`
 - [Output commands](#output-commands): `export`, `build`, `synopsis`
 - [Finding codes](#finding-codes): every error and warning code, by command
@@ -65,6 +65,7 @@ Absolute paths in output are shortened to `~/stories/...`.
 | | [`doctor [path]`](#doctor) | Show health checks and repair steps; `--fix` applies the safe ones | With `--fix` |
 | Craft and revision | [`pacing [path]`](#pacing) | Show scenes, sequels, outcomes, hooks, and length per chapter | No |
 | | [`clues [path]`](#clues) | Show the clue plant and reveal grid and flag fair-play problems | No |
+| | [`grid [path]`](#grid) | Print the plot grid of arcs by chapter, with hooks and scene outcomes, as markdown or CSV | No |
 | | [`voices [path\|-]`](#voices) | Fingerprint each character's tagged dialogue, in the chapters or a passage piped to stdin | No |
 | | [`names <name...>`](#names) | Check candidate names for clashes and look-alikes | No |
 | | [`diagram <kind>`](#diagram) | Print Mermaid source for relationships, locations, timeline, clues, or arcs | With `--out` |
@@ -127,7 +128,7 @@ Every command except `init` and `import` works on one story project: a directory
 
 | Commands | How to give the project | Default |
 |---|---|---|
-| `validate`, `reindex`, `wordcount`, `links`, `check`, `continuity`, `compare`, `similarity`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `series`, `passes`, `report`, `next`, `doctor`, `migrate`, `export`, `build`, `synopsis` | A positional `[path]` **or** `--path <path>` | Current directory |
+| `validate`, `reindex`, `wordcount`, `links`, `check`, `continuity`, `compare`, `similarity`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `grid`, `voices`, `series`, `passes`, `report`, `next`, `doctor`, `migrate`, `export`, `build`, `synopsis` | A positional `[path]` **or** `--path <path>` | Current directory |
 | `knowledge`, `context`, `names`, `diagram`, `add`, `rename`, `move`, `remove` | `--path <path>` only, because their positionals are ids, names, or a diagram kind | Current directory |
 | `init`, `import` | Neither. They create a new project; use `--dir` to choose where | A directory named after the story id |
 
@@ -257,7 +258,7 @@ The CLI prints results to stdout and diagnostics to stderr.
 
 - `validate`, `links`, `continuity`, and `check` write everything to **stderr**: a summary line, then one line per `error:`, `warning:`, and `dismissed:` finding. Nothing goes to stdout. A `warning:` line ends with the warning's [code](#finding-codes) in brackets, as does an `error:` line for a warning `severity` promoted.
 - `compare`, `similarity`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `names`, and `series` write their report to stdout, then the same summary and finding lines to stderr.
-- `diagram` writes the Mermaid source (or, with `--out`, a confirmation) to stdout. If the project has a file that fails to parse, it writes the summary and error lines to stderr instead.
+- `diagram` writes the Mermaid source (or, with `--out`, a confirmation) to stdout, and `grid` the plot grid. If the project has a file that fails to parse, they write the summary and error lines to stderr instead.
 - All other commands write a short confirmation or report to stdout.
 - Errors that stop a command (a bad option, a missing project, an unknown id) print one line to stderr.
 - With `--json`, the command prints one JSON object to stdout and nothing to stderr. See [JSON output](#json-output).
@@ -278,7 +279,7 @@ Findings keep `1`, so `story validate || exit 1` fails on errors as it always ha
 
 ### JSON output
 
-`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. It works on the check and analysis commands: `validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, and `compare`; on the commands that print text to keep: `diagram`, `synopsis`, and `passes`; and on the commands that change the project in place: `add`, `rename`, `move`, `remove`, `reindex`, `migrate`, `wordcount`, and `doctor --fix`. Other commands refuse it (`--json does not apply to story export`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`.
+`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. It works on the check and analysis commands: `validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, and `compare`; on the commands that print text to keep: `diagram`, `grid`, `synopsis`, and `passes`; and on the commands that change the project in place: `add`, `rename`, `move`, `remove`, `reindex`, `migrate`, `wordcount`, and `doctor --fix`. Other commands refuse it (`--json does not apply to story export`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`.
 
 Every result has the same envelope:
 
@@ -1740,6 +1741,42 @@ warning: clue the-burned-page is planted in the chapter before its reveal (chapt
 
 With no clues it prints `- None: add clues with story add clue "Name" --planted chapter-02 --payoff chapter-09`.
 
+### grid
+
+```text
+story grid [path] [--format markdown|csv] [--from <chapter>] [--to <chapter>] [--json]
+```
+
+Prints the plot grid that Plottr and Scrivener's outliner draw: one row per arc, one column per chapter, and an `x` where the chapter, or one of its scenes, lists the arc in `arcs-advanced`. Below the arcs, the `(hook)` row gives each chapter's `hook` and the `(outcomes)` row the `outcome` of each of its scenes, in scene order (sequels have none, so they are left out). The output is a markdown table you can paste into a planning note, or CSV for a spreadsheet with `--format csv`.
+
+Arcs are listed in the order the book first advances them, then the arcs in `plot/arcs/` that no chapter advances yet (an empty row is a dropped or unstarted thread), then any id that `arcs-advanced` names with no arc file, marked `(unknown)`; `story validate` reports those as errors. Columns are in chapter number order. In a [branching book](project-format.md#branching-chapters) every chapter is a column side by side, whichever path reaches it; `story continuity` checks each reader path. Columns are as wide as their widest cell, so chapter 100 lines up with chapter 9 in the source as well as the rendered table.
+
+| Option | Effect | Default |
+|---|---|---|
+| `--format <name>` | `markdown` or `csv` | `markdown` |
+| `--from <chapter>` | First chapter to show, by id (`chapter-12`) or number (`12`), for a book too wide to read at once | The first chapter |
+| `--to <chapter>` | Last chapter to show, by id or number | The last chapter |
+| `--json` | Print a JSON result: `data.range` (`from` and `to`, the chapter ids shown, and `total`, the chapters in the book), `data.chapters` (each column's `id`, `number`, `title`, `hook`, and `outcomes`), and `data.rows` (each arc's `id`, `name`, `status`, `known`, and `cells`, one `true` or `false` per chapter) (see [JSON output](#json-output)) | Off |
+| `--path <path>` | Project root | Current directory |
+
+`grid` prints nothing while any project file fails to parse, because the grid would silently drop chapters; it reports the parse errors on stderr and exits 1. An unknown format, a `--from` or `--to` that names no chapter, and a `--from` after `--to` exit 2.
+
+On a copy of [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/):
+
+```shell
+story grid
+```
+
+```text
+| Arc              | 1        | 2        | 3          | 4           |
+|------------------|:--------:|:--------:|:----------:|:-----------:|
+| the-ledger-trail | x        | x        | x          | x           |
+| (hook)           | question | decision | revelation | cliffhanger |
+| (outcomes)       | yes-but  | no-and   | yes        | yes-but     |
+```
+
+`story diagram arcs` draws the same links as a Mermaid graph, and `story pacing` gives each chapter's hook and outcome counts with findings about slack runs.
+
 ### voices
 
 ```text
@@ -2910,10 +2947,12 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--against` | `<path>` | `compare`, `similarity` | For `compare`, exclusive with `--ref`. For `similarity`, required: a file, folder, or git ref |
 | `--path` | `<path>` | Every command except `init` and `import` | Project root |
 | `--out` | `<file>` | `export`, `build`, `synopsis`, `diagram` | Relative to the project root |
-| `--format` | `<name>` | `build` | `markdown`, `md`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink` |
+| `--format` | `<name>` | `build`, `grid` | For `build`: `markdown`, `md`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`. For `grid`: `markdown` (default), `csv` |
 | `--trim` | `<size>` | `build` | Only with `--format print`: `5x8`, `5.25x8`, `5.5x8.5` (default), `6x9`, `a5` |
 | `--stamp` | `<label>` | `build` | Only with `--format html`: a build label printed in the review copy |
 | `--shunn` | | `build` | Boolean; only with `--format docx` |
+| `--from` | `<chapter>` | `grid` | Chapter id or number; the first column shown |
+| `--to` | `<chapter>` | `grid` | Chapter id or number; the last column shown |
 | `--at` | `<chapter-id>` | `knowledge` | Required for `knowledge` |
 | `--budget` | `<tokens>` | `context` | Positive integer; default `6000` |
 | `--scenes` | `<n>` | `context` | `0` or more earlier scenes to summarise; default `5` |

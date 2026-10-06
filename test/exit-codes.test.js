@@ -77,6 +77,7 @@ const OK_ARGS = {
   names: () => ["names", "Tobin"],
   pacing: () => ["pacing"],
   clues: () => ["clues"],
+  grid: () => ["grid"],
   voices: () => ["voices"],
   series: () => ["series"],
   passes: () => ["passes", "--init"],
@@ -108,6 +109,7 @@ const FINDINGS_ARGS = {
   names: ["names", "Mara Quill"],
   pacing: ["pacing"],
   clues: ["clues"],
+  grid: ["grid"],
   voices: ["voices"],
   series: ["series"]
 };
@@ -311,6 +313,8 @@ describe("exit codes", () => {
     for (const args of [
       ["build", "--format", "pdf"],
       ["diagram", "weather"],
+      ["grid", "--format", "pdf"],
+      ["grid", "--from", "chapter-09"],
       ["knowledge", "nobody", "--at", "chapter-01"],
       ["knowledge", "mara-quill"],
       ["context", "chapter-09"],
