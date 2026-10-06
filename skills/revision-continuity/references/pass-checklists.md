@@ -135,9 +135,10 @@ both read as cheap.
 ## Removability audit (darling-killing)
 
 Find scenes whose removal would change nothing downstream: no state
-changes, no causality, no payoff. Wire such scenes in (give them
-consequence), fold them into an adjacent scene, or cut them, then record
-the decision so nobody re-litigates it.
+changes, no causality, no payoff. For each one, propose a treatment: wire
+it in (give it consequence), fold it into an adjacent scene, or cut it.
+Show the user the list and let them decide; fold or cut only the scenes
+they approve. Then record each decision so nobody re-litigates it.
 
 - **Read:** `scenes/` state-changes, `continuity/state.md`,
   `continuity/promises/`.
@@ -185,7 +186,9 @@ polished and then cut. Track it as a custom pass with
 - **Read:** `story.md` (`target-words`, `form`), `chapters/_index.md`,
   `plot/_index.md` and the arc files, `scenes/` state-changes,
   `continuity/promises/`, `continuity/questions/`, `continuity/clues/`.
-- **Check:** cut biggest first: whole subplots and scenes (the
+- **Check:** agree the cuts with the user before making any. Show them the
+  budget and name each subplot, scene, or chapter you propose to cut or
+  merge, and cut only what they approve. Cut biggest first: whole subplots and scenes (the
   [removability audit](#removability-audit-darling-killing)), then merge
   scenes or chapters that do the same job, then compress (summarise
   transit, repeated sequels, backstory, and description), and trim

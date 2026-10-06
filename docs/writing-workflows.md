@@ -1059,7 +1059,7 @@ Before any pass that touches more than one chapter, the skill takes a snapshot n
 
 ### 4. Plan, edit, and update
 
-The skill reads the chapter, its neighbours, the scene files, and every entity the chapter references, and writes a short plan: what changes, what must stay fixed, and which other files are affected. It then edits the markdown directly and updates what depends on it: chapter `status` (`draft` to `revised`, and to `final` only when appropriate), the timeline, scene records, continuity state and ledgers, arc foreshadowing, and character or location files.
+The skill reads the chapter, its neighbours, the scene files, and every entity the chapter references, and writes a short plan: what changes, what must stay fixed, which other files are affected, and each scene, subplot, or passage it would cut, fold, or move. It shows you the plan and waits for your approval, and it cuts only what you approve; a single edit you have already spelled out, like the request below, counts as approved. It then edits the markdown directly and updates what depends on it: chapter `status` (`draft` to `revised`, and to `final` only when appropriate), the timeline, scene records, continuity state and ledgers, arc foreshadowing, and character or location files.
 
 ```text
 Revise chapter 3 so Nell hides the log instead of burning it. Keep continuity.
