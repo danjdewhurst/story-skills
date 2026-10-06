@@ -41,6 +41,7 @@ Run what CI runs, in this order, before you open a pull request:
 ```shell
 bun run check:metadata
 bun run check:evals
+bun run check:links
 bun run eval:selftest
 bun run test
 bun run test:coverage

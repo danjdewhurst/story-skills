@@ -4,6 +4,7 @@ import path from "node:path";
 import { makeTempDir } from "./helpers.js";
 import { checkCoverage, parseLcov, sourceFiles } from "../scripts/check-coverage.js";
 import { collectResult, compareFindings } from "../scripts/check-examples.js";
+import { anchorsFor, checkLinks, extractLinks, headingText, isSkipped, maskCode, slugify } from "../scripts/check-links.js";
 import { docVersionFiles } from "../scripts/doc-versions.js";
 import { checkDocBunPin, checkDocVersions, checkMarketplaces, checkSkillFrontmatter, checkTemplateStoryRef, checkVersionModule, checkWorkflowBunPin, expectEqual } from "../scripts/check-metadata.js";
 import { bunPinFailure, localBunVersion, parsePinnedBunVersion, readPinnedBunVersion } from "../scripts/bun-pin.js";
@@ -473,6 +474,85 @@ describe("check-examples helpers", () => {
       "demo continuity has unexpected error: c"
     ]);
     expect(compareFindings([], "demo", "warning", ["a"], [{ message: "a" }])).toEqual([]);
+  });
+});
+
+describe("check-links", () => {
+  function linkRepo(files) {
+    const root = makeTempDir("story-links-");
+    for (const [relativePath, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(root, relativePath)), { recursive: true });
+      fs.writeFileSync(path.join(root, relativePath), text);
+    }
+    return root;
+  }
+
+  test("slugs headings the way GitHub does", () => {
+    expect(slugify(headingText("The `story series` command"))).toBe("the-story-series-command");
+    expect(slugify(headingText("What's new? (v2.0)"))).toBe("whats-new-v20");
+    expect(slugify(headingText("[Links](x.md) and _emphasis_ in snake_case"))).toBe("links-and-emphasis-in-snake_case");
+    expect(slugify(headingText("Ünïcode — dash"))).toBe("ünïcode--dash");
+    expect([...anchorsFor("# Notes\n\n## Notes\n\nSetext\n---\n\n## Notes\n\n<a id=\"custom\"></a>\n")]).toEqual(["notes", "notes-1", "setext", "notes-2", "custom"]);
+  });
+
+  test("ignores frontmatter, fenced code, inline code, and comments", () => {
+    const text = "---\nlink: \"[a](front.md)\"\n---\n```md\n[b](fenced.md)\n```\n~~~~\n```\n[c](tilde.md)\n~~~~\n`[d](inline.md)` <!-- [e](comment.md) -->\n[f](real.md)\n";
+    expect(extractLinks(text)).toEqual([{ target: "real.md", line: 12 }]);
+    expect(maskCode(text).split("\n").length).toBe(text.split("\n").length);
+  });
+
+  test("extracts titled links, images, angle links, references, and html", () => {
+    const text = "[a](a.md \"Title\") ![img](pic.png 'Alt')\n[b](<with space.md>) [c](has(paren).md)\n[ref]: ref.md \"t\"\n<img src=\"logo.svg\"> <a href=\"page.md#x\">x</a>\n";
+    expect(extractLinks(text).map((link) => link.target)).toEqual(["a.md", "pic.png", "with space.md", "has(paren).md", "ref.md", "logo.svg", "page.md#x"]);
+  });
+
+  test("skips external links and template placeholders", () => {
+    for (const target of ["https://example.com", "mailto:a@b.c", "//cdn.example.com/x", "characters/{name-kebab}.md", "${dir}/x.md", ""]) {
+      expect(isSkipped(target)).toBe(true);
+    }
+    expect(isSkipped("docs/cli.md#check")).toBe(false);
+  });
+
+  test("reports missing files and anchors and accepts valid ones", () => {
+    const root = linkRepo({
+      "README.md": "[ok](docs/guide.md#second-part) [dir](docs/) [img](assets/logo.png) [self](#top)\n[gone](docs/missing.md)\n[bad](docs/guide.md#nope) [line](docs/guide.md#L3) [yml](ci.yml#anything) [dup](docs/guide.md#intro-1)\n# Top\n",
+      "CONTRIBUTING.md": "[up](README.md#top) [abs](/docs/guide.md) [enc](docs/with%20space.md)\n",
+      "docs/guide.md": "# Intro\n\n## Second part\n\n## Intro\n",
+      "docs/with space.md": "x\n",
+      "skills/demo/SKILL.md": "[ref](references/a.md) [back](../../README.md#nowhere)\n",
+      "skills/demo/references/a.md": "fine\n",
+      "templates/github/notes.md": "[t](../../docs/guide.md#intro)\n",
+      "examples/demo/README.md": "[s](story.md)\n",
+      "examples/demo/chapters/ignored.md": "[x](nothing.md)\n",
+      "assets/logo.png": "",
+      "ci.yml": ""
+    });
+    const { files, failures } = checkLinks(root);
+    expect(files.map((file) => path.relative(root, file))).toEqual([
+      "README.md",
+      "CONTRIBUTING.md",
+      "docs/guide.md",
+      "docs/with space.md",
+      "skills/demo/SKILL.md",
+      "skills/demo/references/a.md",
+      "templates/github/notes.md",
+      "examples/demo/README.md"
+    ]);
+    expect(failures).toEqual([
+      "README.md:2: docs/missing.md points at a missing file",
+      "README.md:3: docs/guide.md#nope has no heading or anchor #nope in docs/guide.md",
+      "skills/demo/SKILL.md:1: ../../README.md#nowhere has no heading or anchor #nowhere in README.md",
+      "examples/demo/README.md:1: story.md points at a missing file"
+    ]);
+  });
+
+  test("the repository's own markdown links resolve", () => {
+    expect(checkLinks().failures).toEqual([]);
+  });
+
+  test("ci runs the link check", () => {
+    expect(JSON.parse(readRepo("package.json")).scripts["check:links"]).toBe("node scripts/check-links.js");
+    expect(readRepo(".github/workflows/ci.yml")).toContain("bun run check:links");
   });
 });
 
