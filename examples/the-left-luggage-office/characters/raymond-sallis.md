@@ -24,7 +24,7 @@ Patient, polite, and certain he will get what he came for.
 
 ## Backstory
 
-Signed for six weekly parcels at Harrowgate Street in April 2013. Calls Fola his wife; nobody has confirmed it.
+Signed for four weekly parcels at Harrowgate Street in April 2013. Calls Fola his wife; nobody has confirmed it.
 
 ## Motivations & Goals
 

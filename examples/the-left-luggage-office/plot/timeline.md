@@ -7,7 +7,7 @@ story: the-left-luggage-office
 
 | When | Event | Arc | Chapter |
 |------|-------|-----|---------|
-| April 2013 | R.S. signs for six weekly parcels; a ledger page is later cut out | folas-suitcase | chapter-03 |
+| April 2013 | R.S. signs for four weekly parcels; a ledger page is later cut out | folas-suitcase | chapter-03 |
 | 2013 | Fola leaves after a row with Ines's father about the station | folas-suitcase | chapter-02 |
 | 2026-02-06 23:49 | Fola leaves the blue suitcase on ticket 4417 | folas-suitcase | chapter-01 |
 | 2026-02-07 01:20 | Ines refuses Sallis's forged ticket | folas-suitcase | chapter-01 |
