@@ -190,25 +190,25 @@ export function validateProjectOf(project) {
   // registry must contain, the file is what the warning names.
   const linksFor = (items, prefix = "") => items.map((item) => [`](${prefix}${path.basename(item.file)})`, projectPath(projectRoot, item.file)]);
   const indexChecks = [
-    [path.join("characters", "_index.md"), linksFor(project.characters)],
-    [path.join("worldbuilding", "_index.md"), linksFor(project.locations, "locations/")
+    ["characters/_index.md", linksFor(project.characters)],
+    ["worldbuilding/_index.md", linksFor(project.locations, "locations/")
       .concat(linksFor(project.systems, "systems/"))
       .concat(linksFor(project.factions, "factions/"))
       .concat(linksFor(project.artifacts, "artifacts/"))],
-    [path.join("plot", "_index.md"), linksFor(project.arcs, "arcs/")],
-    [path.join("chapters", "_index.md"), linksFor(project.chapters)],
-    [path.join("scenes", "_index.md"), linksFor(project.scenes)],
-    [path.join("continuity", "questions", "_index.md"), linksFor(project.questions)],
-    [path.join("continuity", "promises", "_index.md"), linksFor(project.promises)],
-    [path.join("continuity", "clues", "_index.md"), linksFor(project.clues)],
-    [path.join("glossary", "_index.md"), linksFor(project.glossaryTerms, "terms/")],
+    ["plot/_index.md", linksFor(project.arcs, "arcs/")],
+    ["chapters/_index.md", linksFor(project.chapters)],
+    ["scenes/_index.md", linksFor(project.scenes)],
+    ["continuity/questions/_index.md", linksFor(project.questions)],
+    ["continuity/promises/_index.md", linksFor(project.promises)],
+    ["continuity/clues/_index.md", linksFor(project.clues)],
+    ["glossary/_index.md", linksFor(project.glossaryTerms, "terms/")],
     // The matter and research registries are optional; reindex creates each
     // one alongside its folder.
     ...(fs.existsSync(path.join(projectRoot, MATTER_DIR, "_index.md"))
-      ? [[path.join(MATTER_DIR, "_index.md"), linksFor(project.matter)]]
+      ? [[path.posix.join(MATTER_DIR, "_index.md"), linksFor(project.matter)]]
       : []),
     ...(fs.existsSync(path.join(projectRoot, RESEARCH_DIR, "_index.md"))
-      ? [[path.join(RESEARCH_DIR, "_index.md"), linksFor(project.research)]]
+      ? [[path.posix.join(RESEARCH_DIR, "_index.md"), linksFor(project.research)]]
       : [])
   ];
 
@@ -562,14 +562,14 @@ function validateTimelineAndArcBodyRefs(project, chapters, errors, hasScheduledC
     try {
       const raw = readTextFile(timelinePath);
       const body = parseFrontmatter(raw, timelinePath).body ?? raw;
-      checkTokens(path.join("plot", "timeline.md"), body);
+      checkTokens("plot/timeline.md", body);
       for (const target of extractMarkdownLinkTargets(body)) {
-        checkBodyLinkTarget(project, path.join("plot", "timeline.md"), target, errors);
+        checkBodyLinkTarget(project, "plot/timeline.md", target, errors);
       }
     } catch (error) {
-      const message = fileErrorMessage(path.join("plot", "timeline.md"), relativePathError(error, timelinePath, project.root));
+      const message = fileErrorMessage("plot/timeline.md", relativePathError(error, timelinePath, project.root));
       if (!hasMessage(errors, message)) {
-        errors.push(err("unreadable-file", message, path.join("plot", "timeline.md")));
+        errors.push(err("unreadable-file", message, "plot/timeline.md"));
       }
     }
   }
@@ -767,7 +767,7 @@ function entityFileNames(root, relativeDir) {
   if (!fs.existsSync(directory)) {
     return [];
   }
-  return fs.readdirSync(directory).filter((name) => name.endsWith(".md") && !name.startsWith(".") && name !== "_index.md").sort().map((name) => path.join(relativeDir, name));
+  return fs.readdirSync(directory).filter((name) => name.endsWith(".md") && !name.startsWith(".") && name !== "_index.md").sort().map((name) => path.posix.join(relativeDir, name));
 }
 
 function collectStrayFileWarnings(project, warnings) {
@@ -812,7 +812,7 @@ function collectStrayFileWarnings(project, warnings) {
     }
     const linked = fs.readdirSync(directory, { withFileTypes: true })
       .filter((entry) => entry.isSymbolicLink() && entry.name.endsWith(".md") && !entry.name.startsWith(".") && entry.name !== "_index.md")
-      .map((entry) => portablePath(path.join(relativeDir, entry.name)))
+      .map((entry) => path.posix.join(relativeDir, entry.name))
       .sort();
     for (const linkPath of linked) {
       warnings.push(warn("symlinked-file", `${linkPath} is a symlink and is ignored: replace it with the file itself`, linkPath));
@@ -1106,7 +1106,7 @@ function validateIndexFrontmatter(project, errors) {
       errors.push(storyIdMismatch(label, project));
     }
 
-    if (relativePath === path.join("plot", "_index.md")) {
+    if (relativePath === "plot/_index.md") {
       requireFields(data, ["structure"], label, errors);
       requireScalar(data, "structure", label, errors);
     }
@@ -1473,7 +1473,7 @@ const STATE_ENTRY_KEYS = {
 };
 
 function validateContinuityState(project, errors, warnings) {
-  const label = path.join("continuity", "state.md");
+  const label = "continuity/state.md";
   if (!project.continuity) {
     return;
   }

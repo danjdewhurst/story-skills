@@ -124,7 +124,7 @@ describe("fountain build", () => {
 
   test("builds into adaptations/ once and never replaces the draft there", () => {
     const root = lighthouse();
-    const out = path.join("adaptations", "screenplay", "the-key-on-the-door.fountain");
+    const out = "adaptations/screenplay/the-key-on-the-door.fountain";
     buildBook(root, { format: "fountain", out });
     expect(fs.readFileSync(path.join(root, out), "utf8")).toContain("INT. LAMP ROOM - DUSK");
     expect(() => buildBook(root, { format: "fountain", out })).toThrow("Refusing to overwrite adaptations/screenplay/the-key-on-the-door.fountain");
@@ -255,7 +255,7 @@ describe("fountain text", () => {
 describe("fountain build integration", () => {
   test("exit codes: an unknown format is usage, an unbuildable project is 3, a refused --out is 4", () => {
     const root = lighthouse();
-    const out = path.join("adaptations", "screenplay", "script.fountain");
+    const out = "adaptations/screenplay/script.fountain";
     expect(runCli(["build", root, "--format", "fountain", "--out", out], memoryIo(root))).toBe(0);
     const refused = memoryIo(root);
     expect(runCli(["build", root, "--format", "fountain", "--out", out], refused)).toBe(4);

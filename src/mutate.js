@@ -1579,7 +1579,7 @@ function moveChapter(project, oldId, options) {
 function reorderProgressions(project, plan, chronology) {
   const dirs = PROGRESSION_KINDS.map((kind) => entityConfig(kind).dir);
   for (const [file, text] of plan) {
-    if (!dirs.includes(path.relative(project.root, path.dirname(file)))) {
+    if (!dirs.includes(projectPath(project.root, path.dirname(file)))) {
       continue;
     }
     const data = parseFrontmatter(text, file).data;
@@ -1679,8 +1679,8 @@ function idRenamer(oldId, newId) {
 // unless the whole scene id is the one moving, and scene ids of a moved chapter
 // (`chapter-03-scene-02`) follow it too.
 function renameIdTokens(root, file, body, oldId, newId) {
-  const relativePath = path.relative(root, file);
-  if (relativePath !== path.join("plot", "timeline.md") && relativePath !== path.join("plot", "_index.md") && path.dirname(relativePath) !== path.join("plot", "arcs")) {
+  const relativePath = projectPath(root, file);
+  if (relativePath !== "plot/timeline.md" && relativePath !== "plot/_index.md" && path.posix.dirname(relativePath) !== "plot/arcs") {
     return body;
   }
   // Link destinations were already handled by renameLinkTargets, and a URL
@@ -1966,30 +1966,30 @@ function planReferenceRewrites(root, context, overrides, transform, transformBod
 // a skill keeps beside them (continuity/motifs.md, continuity/theme-audit.md)
 // may be plain markdown.
 const FRONTMATTER_FILES = new Set([
-  path.join("plot", "timeline.md"),
-  path.join("continuity", "state.md"),
-  path.join("continuity", "exemptions.md")
+  "plot/timeline.md",
+  "continuity/state.md",
+  "continuity/exemptions.md"
 ]);
 
 // The registries the CLI writes; an `_index.md` elsewhere (a notes site,
 // say) may be plain markdown.
 const REGISTRY_FILES = new Set([
   ...INDEX_SCHEMAS.map(([relativePath]) => relativePath),
-  path.join(MATTER_DIR, "_index.md"),
-  path.join(RESEARCH_DIR, "_index.md")
+  path.posix.join(MATTER_DIR, "_index.md"),
+  path.posix.join(RESEARCH_DIR, "_index.md")
 ]);
 
 // Registries are generated, so a damaged one is rebuilt rather than fixed.
 function registryHint(root, file) {
-  return REGISTRY_FILES.has(path.relative(root, file)) ? REGISTRY_HINT : "";
+  return REGISTRY_FILES.has(projectPath(root, file)) ? REGISTRY_HINT : "";
 }
 
 function isProjectSourceFile(root, file) {
-  const relativePath = path.relative(root, file);
+  const relativePath = projectPath(root, file);
   return SOURCE_ROOT_FILES.has(relativePath)
     || FRONTMATTER_FILES.has(relativePath)
     || REGISTRY_FILES.has(relativePath)
-    || ENTITY_SCAN_DIRS.includes(path.dirname(relativePath));
+    || ENTITY_SCAN_DIRS.includes(path.posix.dirname(relativePath));
 }
 
 // Clearing a removed chapter from a promise, clue, or question also walks
@@ -2128,7 +2128,7 @@ function applyEntityBacklinks(root, kind, id, data) {
   if (kind === "location") {
     for (const characterId of asArray(data["notable-characters"])) {
       if (isKebabId(characterId)) {
-        addFrontmatterListValue(root, path.join("characters", `${characterId}.md`), "locations", id);
+        addFrontmatterListValue(root, `characters/${characterId}.md`, "locations", id);
       }
     }
   }
@@ -2137,9 +2137,9 @@ function applyEntityBacklinks(root, kind, id, data) {
     // The chapter lists everyone and everywhere its scenes use; continuity
     // warns when it does not. Unknown ids stay on the scene only, where
     // links reports them once.
-    const chapterFile = path.join("chapters", `${data.chapter}.md`);
+    const chapterFile = `chapters/${data.chapter}.md`;
     const exists = (dir, id) => fs.existsSync(path.join(root, dir, `${id}.md`));
-    if (isKebabId(data.location) && exists(path.join("worldbuilding", "locations"), data.location)) {
+    if (isKebabId(data.location) && exists("worldbuilding/locations", data.location)) {
       addFrontmatterListValue(root, chapterFile, "locations", data.location);
     }
     const chapterPath = path.join(root, chapterFile);

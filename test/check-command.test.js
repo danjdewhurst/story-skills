@@ -87,7 +87,7 @@ describe("story check", () => {
 
     const { envelope } = invokeJson(root, ["check", "--json"]);
     expect(envelope.diagnostics.filter((entry) => entry.code === "invalid-date")).toEqual([
-      expect.objectContaining({ severity: "error", check: "validate", file: path.join("chapters", "chapter-01.md") })
+      expect.objectContaining({ severity: "error", check: "validate", file: "chapters/chapter-01.md" })
     ]);
     expect(envelope.diagnostics.some((entry) => entry.code === "malformed-date")).toBe(false);
     // data.checks is each check as its own command reports it.

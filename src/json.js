@@ -21,7 +21,7 @@ export function wantsJson(parsed) {
 // Every command with --json output calls this, and nothing else is printed,
 // so stdout parses as a single JSON document.
 export function writeJsonResult(io, { command, ok, exitCode = EXIT_CODES.findings, data = null, diagnostics = [], writes = [] }) {
-  const envelope = { apiVersion: API_VERSION, command, ok: Boolean(ok), data, diagnostics, writes: writes.map((file) => portablePath(file)) };
+  const envelope = { apiVersion: API_VERSION, command, ok: Boolean(ok), data, diagnostics, writes };
   // A field a result leaves undefined prints as null, so every result of a
   // command has the same keys.
   io.stdout.write(`${JSON.stringify(envelope, (key, value) => (value === undefined ? null : value), 2)}\n`);

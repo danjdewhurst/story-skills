@@ -71,7 +71,7 @@ describe("--id for names outside ASCII", () => {
     expect(fs.readdirSync(path.join(root, "characters"))).toEqual(["_index.md"]);
 
     createEntity(root, { kind: "character", name: "Пётр", id: "petr" });
-    expect(() => createEntity(root, { kind: "character", name: "Пётр Второй", id: "petr" })).toThrow(`${path.join("characters", "petr.md")} already exists`);
+    expect(() => createEntity(root, { kind: "character", name: "Пётр Второй", id: "petr" })).toThrow(`${"characters/petr.md"} already exists`);
   });
 
   test("--id is refused for chapters and scenes, whose ids come from numbers", () => {

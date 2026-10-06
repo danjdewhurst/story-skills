@@ -80,7 +80,7 @@ describe("atomic writes (#190, #197)", () => {
     // ulimit -f 4 makes any write past 4 KiB fail with EFBIG, as a full disk would.
     const result = spawnSync("bash", ["-c", `trap '' XFSZ; ulimit -f 4; "${process.execPath}" "${BIN}" wordcount --write`], { cwd: root, encoding: "utf8" });
     expect(result.status).toBe(4);
-    expect(result.stderr).toContain(`Cannot write to ${path.join("chapters", "chapter-01.md")}: the file is too large`);
+    expect(result.stderr).toContain(`Cannot write to ${"chapters/chapter-01.md"}: the file is too large`);
     expect(fs.readFileSync(chapter, "utf8")).toBe(before);
     expect(listDir(root, "chapters")).toEqual(["_index.md", "chapter-01.md"]);
   });
@@ -126,8 +126,8 @@ describe("atomic writes (#190, #197)", () => {
     fs.writeFileSync(path.join(root, "chapters", ".chapter-01.md.story-4242.tmp"), "partial");
     fs.writeFileSync(path.join(root, "chapters", ".story-687110.tmp"), "partial");
     const warnings = messages(validateProject(root).warnings);
-    expect(warnings).toContain(`${path.join("chapters", ".chapter-01.md.story-4242.tmp")} was left by an interrupted write to ${path.join("chapters", "chapter-01.md")}; delete it once the files beside it look right`);
-    expect(warnings).toContain(`${path.join("chapters", ".story-687110.tmp")} was left by an interrupted write; delete it once the files beside it look right`);
+    expect(warnings).toContain(`${"chapters/.chapter-01.md.story-4242.tmp"} was left by an interrupted write to ${"chapters/chapter-01.md"}; delete it once the files beside it look right`);
+    expect(warnings).toContain(`${"chapters/.story-687110.tmp"} was left by an interrupted write; delete it once the files beside it look right`);
   });
 });
 
@@ -141,7 +141,7 @@ describe("invalid UTF-8 (#195)", () => {
     const offset = bytes.indexOf(0x93);
     const validation = invoke(root, ["validate"]);
     expect(validation.code).toBe(1);
-    expect(validation.out + validation.err).toContain(`${path.join("chapters", "chapter-01.md")}: is not valid UTF-8 (byte 0x93 at offset ${offset}): re-save it as UTF-8`);
+    expect(validation.out + validation.err).toContain(`${"chapters/chapter-01.md"}: is not valid UTF-8 (byte 0x93 at offset ${offset}): re-save it as UTF-8`);
     expect(() => computeWordCounts(root, { write: true })).toThrow("is not valid UTF-8");
     expect(() => createEntity(root, { kind: "character", name: "Mara" })).toThrow("is not valid UTF-8");
     expect(fs.readFileSync(chapter).equals(bytes)).toBe(true);
@@ -175,12 +175,12 @@ describe("unreadable files name their path once (#383)", () => {
       expect(error.slice(label.length)).not.toContain(label);
       expect(error).not.toContain(root);
     }
-    expect(errors).toContain(`${path.join("chapters", "chapter-01.md")}: is not valid UTF-8 (byte 0xff at offset ${fs.statSync(path.join(root, "chapters", "chapter-01.md")).size - 1}): re-save it as UTF-8`);
-    expect(errors).toContain(`${path.join("chapters", "chapter-02.md")}: Refusing to read oversized file: ${5 * 1024 * 1024 + 1} bytes exceeds the ${5 * 1024 * 1024} byte limit`);
-    expect(errors).toContain(`${path.join("continuity", "exemptions.md")}: Refusing to read through symlink`);
-    expect(errors.filter((error) => error.startsWith(`${path.join("characters", "_index.md")}: is not valid UTF-8`))).toHaveLength(1);
+    expect(errors).toContain(`${"chapters/chapter-01.md"}: is not valid UTF-8 (byte 0xff at offset ${fs.statSync(path.join(root, "chapters", "chapter-01.md")).size - 1}): re-save it as UTF-8`);
+    expect(errors).toContain(`${"chapters/chapter-02.md"}: Refusing to read oversized file: ${5 * 1024 * 1024 + 1} bytes exceeds the ${5 * 1024 * 1024} byte limit`);
+    expect(errors).toContain(`${"continuity/exemptions.md"}: Refusing to read through symlink`);
+    expect(errors.filter((error) => error.startsWith(`${"characters/_index.md"}: is not valid UTF-8`))).toHaveLength(1);
     if (!isRoot) {
-      expect(errors).toContain(`${path.join("characters", "mara.md")}: Cannot read: permission denied`);
+      expect(errors).toContain(`${"characters/mara.md"}: Cannot read: permission denied`);
     }
   });
 
@@ -194,10 +194,10 @@ describe("unreadable files name their path once (#383)", () => {
     fs.symlinkSync(path.join(root, "story.md"), path.join(root, "research", "_index.md"));
     const once = (errors, label) => errors.filter((error) => error.startsWith(`${label}: `));
     const errors = messages(validateProject(root).errors);
-    expect(once(errors, path.join("plot", "timeline.md"))).toHaveLength(1);
-    expect(once(errors, path.join("matter", "_index.md"))).toEqual([`${path.join("matter", "_index.md")}: is not valid UTF-8 (byte 0xff at offset 1): re-save it as UTF-8 (it is a registry: run story reindex to rebuild it)`]);
-    expect(once(errors, path.join("research", "_index.md"))).toEqual([`${path.join("research", "_index.md")}: Refusing to read through symlink (it is a registry: run story reindex to rebuild it)`]);
-    expect(once(messages(validateLinks(root).errors), path.join("plot", "timeline.md"))).toHaveLength(1);
+    expect(once(errors, "plot/timeline.md")).toHaveLength(1);
+    expect(once(errors, "matter/_index.md")).toEqual([`${"matter/_index.md"}: is not valid UTF-8 (byte 0xff at offset 1): re-save it as UTF-8 (it is a registry: run story reindex to rebuild it)`]);
+    expect(once(errors, "research/_index.md")).toEqual([`${"research/_index.md"}: Refusing to read through symlink (it is a registry: run story reindex to rebuild it)`]);
+    expect(once(messages(validateLinks(root).errors), "plot/timeline.md")).toHaveLength(1);
   });
 });
 

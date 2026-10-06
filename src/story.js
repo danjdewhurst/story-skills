@@ -144,13 +144,13 @@ export function knowledgeAtChapter(root, characterId, atChapterId, project = sca
   const characters = new Map(project.characters.map((character) => [character.id, character]));
   if (!characters.has(characterId)) {
     // A character whose file fails to parse exists; say why it cannot be read.
-    const parseError = project.fileErrors.find((error) => error.file === path.join("characters", `${characterId}.md`));
+    const parseError = project.fileErrors.find((error) => error.file === `characters/${characterId}.md`);
     throw parseError ? projectError(parseError.message) : usageError(`Unknown character ${characterId}`);
   }
 
   // Knowledge is dated by chapter, so a chapter that fails to parse would
   // silently drop what was learned in it.
-  const chapterError = project.fileErrors.find((error) => error.file.startsWith(`chapters${path.sep}`));
+  const chapterError = project.fileErrors.find((error) => error.file.startsWith("chapters/"));
   if (chapterError) {
     throw projectError(chapterError.message);
   }
@@ -161,7 +161,7 @@ export function knowledgeAtChapter(root, characterId, atChapterId, project = sca
     throw usageError(`Unknown chapter ${atChapterId}`);
   }
 
-  const stateError = project.fileErrors.find((error) => error.file === path.join("continuity", "state.md"));
+  const stateError = project.fileErrors.find((error) => error.file === "continuity/state.md");
   if (stateError) {
     throw projectError(stateError.message);
   }
@@ -173,7 +173,7 @@ export function knowledgeAtChapter(root, characterId, atChapterId, project = sca
       continue;
     }
     if (entry.knows === undefined || entry.knows === null || String(entry.knows).trim() === "") {
-      throw projectError(`${path.join("continuity", "state.md")} knowledge-state[${index}] is missing knows`);
+      throw projectError(`${"continuity/state.md"} knowledge-state[${index}] is missing knows`);
     }
     const learnedIn = idText(entry["learned-in"]);
     const audience = knowledgeAudience(chronology, learnedIn, atChapterId);
@@ -195,13 +195,13 @@ export function entityStateAtChapter(root, kind, id, atChapterId, project = scan
   const collection = { character: project.characters, location: project.locations, faction: project.factions }[entityKind];
   const entity = collection.find((entry) => entry.id === id);
   if (!entity) {
-    const entityFile = path.join(entityConfig(entityKind).dir, `${id}.md`);
+    const entityFile = `${entityConfig(entityKind).dir}/${id}.md`;
     const parseError = project.fileErrors.find((error) => error.file === entityFile);
     throw parseError ? projectError(parseError.message) : usageError(`Unknown ${entityKind} ${id}`);
   }
   // Progressions are ordered by chapter, so a chapter that fails to parse
   // would silently misplace them.
-  const chapterError = project.fileErrors.find((error) => error.file.startsWith(`chapters${path.sep}`));
+  const chapterError = project.fileErrors.find((error) => error.file.startsWith("chapters/"));
   if (chapterError) {
     throw projectError(chapterError.message);
   }
@@ -220,9 +220,9 @@ export function draftingContext(root, targetId, options = {}) {
   }
   const project = scanProject(root);
   // A target scene that fails to parse reports why, not "Unknown scene".
-  const blocking = project.fileErrors.find((error) => error.file.startsWith(`chapters${path.sep}`)
-    || error.file === path.join("continuity", "state.md")
-    || error.file === path.join("scenes", `${targetId}.md`));
+  const blocking = project.fileErrors.find((error) => error.file.startsWith("chapters/")
+    || error.file === "continuity/state.md"
+    || error.file === `scenes/${targetId}.md`);
   if (blocking) {
     throw projectError(blocking.message);
   }

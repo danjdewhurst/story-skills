@@ -478,7 +478,7 @@ function checkContinuityState(project, context, errors, warnings) {
     return;
   }
 
-  const label = path.join("continuity", "state.md");
+  const label = "continuity/state.md";
   const data = project.continuity.data;
   const currentChapter = data["current-chapter"];
 
@@ -654,7 +654,7 @@ function checkStateAgainstStory(project, context, warnings) {
   if (!project.continuity) {
     return;
   }
-  const label = path.join("continuity", "state.md");
+  const label = "continuity/state.md";
   const data = project.continuity.data;
   const { chronology } = context;
   const currentChapter = Number.isInteger(data["current-chapter"]) ? data["current-chapter"] : -Infinity;

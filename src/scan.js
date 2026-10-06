@@ -9,6 +9,7 @@ import {
   FILE_ERROR_REASONS,
   isPathInside,
   lstatIfExists,
+  portablePath,
   projectPath,
   readTextFile
 } from "./files.js";
@@ -57,30 +58,30 @@ export const REQUIRED_PATHS = [
 // Every folder init creates; migrate restores any that are missing.
 export const PROJECT_DIRECTORIES = [
   "characters",
-  path.join("worldbuilding", "locations"),
-  path.join("worldbuilding", "systems"),
-  path.join("worldbuilding", "factions"),
-  path.join("worldbuilding", "artifacts"),
-  path.join("plot", "arcs"),
+  "worldbuilding/locations",
+  "worldbuilding/systems",
+  "worldbuilding/factions",
+  "worldbuilding/artifacts",
+  "plot/arcs",
   "chapters",
   "scenes",
-  path.join("continuity", "questions"),
-  path.join("continuity", "promises"),
-  path.join("continuity", "clues"),
-  path.join("glossary", "terms")
+  "continuity/questions",
+  "continuity/promises",
+  "continuity/clues",
+  "glossary/terms"
 ];
 
 export const INDEX_SCHEMAS = [
-  [path.join("characters", "_index.md"), "character-registry"],
-  [path.join("worldbuilding", "_index.md"), "world-registry"],
-  [path.join("plot", "_index.md"), "plot-registry"],
-  [path.join("plot", "timeline.md"), "timeline"],
-  [path.join("chapters", "_index.md"), "chapter-registry"],
-  [path.join("scenes", "_index.md"), "scene-registry"],
-  [path.join("continuity", "questions", "_index.md"), "question-registry"],
-  [path.join("continuity", "promises", "_index.md"), "promise-registry"],
-  [path.join("continuity", "clues", "_index.md"), "clue-registry"],
-  [path.join("glossary", "_index.md"), "glossary-registry"]
+  ["characters/_index.md", "character-registry"],
+  ["worldbuilding/_index.md", "world-registry"],
+  ["plot/_index.md", "plot-registry"],
+  ["plot/timeline.md", "timeline"],
+  ["chapters/_index.md", "chapter-registry"],
+  ["scenes/_index.md", "scene-registry"],
+  ["continuity/questions/_index.md", "question-registry"],
+  ["continuity/promises/_index.md", "promise-registry"],
+  ["continuity/clues/_index.md", "clue-registry"],
+  ["glossary/_index.md", "glossary-registry"]
 ];
 
 export const STORY_STATUSES = new Set(["planning", "drafting", "in-progress", "revising", "complete", "abandoned"]);
@@ -236,7 +237,7 @@ export function scanProject(root) {
     try {
       continuity = readMarkdown(continuityPath, projectRoot);
     } catch (error) {
-      scanErrors.push(err("unreadable-file", fileErrorMessage(path.join("continuity", "state.md"), error), path.join("continuity", "state.md")));
+      scanErrors.push(err("unreadable-file", fileErrorMessage("continuity/state.md", error), "continuity/state.md"));
       continuity = null;
     }
   }
@@ -275,7 +276,7 @@ export function scanProject(root) {
       voiceAvoid: asArray(data["voice-avoid"]),
       pronunciation: data.pronunciation
     }), scanErrors),
-    locations: readEntityFiles(projectRoot, path.join("worldbuilding", "locations"), (id, file, data) => ({
+    locations: readEntityFiles(projectRoot, "worldbuilding/locations", (id, file, data) => ({
       id,
       file,
       name: data.name ?? titleCaseSlug(id),
@@ -286,14 +287,14 @@ export function scanProject(root) {
       setting: typeof data.setting === "string" ? data.setting : "",
       pronunciation: data.pronunciation
     }), scanErrors),
-    systems: readEntityFiles(projectRoot, path.join("worldbuilding", "systems"), (id, file, data) => ({
+    systems: readEntityFiles(projectRoot, "worldbuilding/systems", (id, file, data) => ({
       id,
       file,
       name: data.name ?? titleCaseSlug(id),
       type: data.type ?? "",
       pronunciation: data.pronunciation
     }), scanErrors),
-    factions: readEntityFiles(projectRoot, path.join("worldbuilding", "factions"), (id, file, data) => ({
+    factions: readEntityFiles(projectRoot, "worldbuilding/factions", (id, file, data) => ({
       id,
       file,
       name: data.name ?? titleCaseSlug(id),
@@ -303,7 +304,7 @@ export function scanProject(root) {
       locations: asArray(data.locations),
       pronunciation: data.pronunciation
     }), scanErrors),
-    artifacts: readEntityFiles(projectRoot, path.join("worldbuilding", "artifacts"), (id, file, data) => ({
+    artifacts: readEntityFiles(projectRoot, "worldbuilding/artifacts", (id, file, data) => ({
       id,
       file,
       name: data.name ?? titleCaseSlug(id),
@@ -313,7 +314,7 @@ export function scanProject(root) {
       location: data.location ?? "",
       pronunciation: data.pronunciation
     }), scanErrors),
-    arcs: readEntityFiles(projectRoot, path.join("plot", "arcs"), (id, file, data) => ({
+    arcs: readEntityFiles(projectRoot, "plot/arcs", (id, file, data) => ({
       id,
       file,
       name: data.name ?? titleCaseSlug(id),
@@ -381,7 +382,7 @@ export function scanProject(root) {
       flashbackTo: String(data["flashback-to"] ?? ""),
       setting: typeof data.setting === "string" ? data.setting : ""
     }), scanErrors),
-    questions: readEntityFiles(projectRoot, path.join("continuity", "questions"), (id, file, data) => ({
+    questions: readEntityFiles(projectRoot, "continuity/questions", (id, file, data) => ({
       id,
       file,
       title: data.title ?? titleCaseSlug(id),
@@ -390,7 +391,7 @@ export function scanProject(root) {
       resolved: String(data.resolved ?? ""),
       characters: asArray(data.characters)
     }), scanErrors),
-    promises: readEntityFiles(projectRoot, path.join("continuity", "promises"), (id, file, data) => ({
+    promises: readEntityFiles(projectRoot, "continuity/promises", (id, file, data) => ({
       id,
       file,
       title: data.title ?? titleCaseSlug(id),
@@ -400,7 +401,7 @@ export function scanProject(root) {
       arcs: asArray(data.arcs),
       characters: asArray(data.characters)
     }), scanErrors),
-    clues: readEntityFiles(projectRoot, path.join("continuity", "clues"), (id, file, data) => ({
+    clues: readEntityFiles(projectRoot, "continuity/clues", (id, file, data) => ({
       id,
       file,
       title: data.title ?? titleCaseSlug(id),
@@ -412,7 +413,7 @@ export function scanProject(root) {
       characters: asArray(data.characters),
       arcs: asArray(data.arcs)
     }), scanErrors),
-    glossaryTerms: readEntityFiles(projectRoot, path.join("glossary", "terms"), (id, file, data) => ({
+    glossaryTerms: readEntityFiles(projectRoot, "glossary/terms", (id, file, data) => ({
       id,
       file,
       term: data.term ?? titleCaseSlug(id),
@@ -479,7 +480,7 @@ function sortScenesByChapter(project) {
 export function assertProjectParses(project, action, ignore = () => false) {
   // The style sheet, progress log, and exemptions never feed registries or
   // chapters.
-  const ignored = [STYLE_SHEET_FILE, PROGRESS_FILE, path.join("continuity", "exemptions.md")];
+  const ignored = [STYLE_SHEET_FILE, PROGRESS_FILE, "continuity/exemptions.md"];
   const errors = (project.fileErrors ?? []).filter((error) => !ignored.includes(error.file) && !ignore(error));
   if (errors.length > 0) {
     throw projectError(`Cannot ${action}: fix ${errors.length === 1 ? "this file first (story validate reports it)" : "these files first (story validate reports them)"}:\n${errors.map((error) => `- ${error.message}`).join("\n")}`);
@@ -960,17 +961,17 @@ function entityResult(project, kind, id, markdown) {
 export function entityConfig(kind) {
   const configs = {
     character: { dir: "characters", titleField: "name" },
-    location: { dir: path.join("worldbuilding", "locations"), titleField: "name" },
-    system: { dir: path.join("worldbuilding", "systems"), titleField: "name" },
-    faction: { dir: path.join("worldbuilding", "factions"), titleField: "name" },
-    artifact: { dir: path.join("worldbuilding", "artifacts"), titleField: "name" },
-    arc: { dir: path.join("plot", "arcs"), titleField: "name" },
+    location: { dir: "worldbuilding/locations", titleField: "name" },
+    system: { dir: "worldbuilding/systems", titleField: "name" },
+    faction: { dir: "worldbuilding/factions", titleField: "name" },
+    artifact: { dir: "worldbuilding/artifacts", titleField: "name" },
+    arc: { dir: "plot/arcs", titleField: "name" },
     chapter: { dir: "chapters", titleField: "title" },
     scene: { dir: "scenes", titleField: "title" },
-    question: { dir: path.join("continuity", "questions"), titleField: "title" },
-    promise: { dir: path.join("continuity", "promises"), titleField: "title" },
-    clue: { dir: path.join("continuity", "clues"), titleField: "title" },
-    term: { dir: path.join("glossary", "terms"), titleField: "term" },
+    question: { dir: "continuity/questions", titleField: "title" },
+    promise: { dir: "continuity/promises", titleField: "title" },
+    clue: { dir: "continuity/clues", titleField: "title" },
+    term: { dir: "glossary/terms", titleField: "term" },
     matter: { dir: MATTER_DIR, titleField: "title" },
     research: { dir: RESEARCH_DIR, titleField: "title" }
   };
@@ -1756,7 +1757,7 @@ function readEntityFiles(root, relativeDir, mapEntity, scanErrors) {
   }
   for (const file of files) {
     const fullPath = path.join(directory, file);
-    const label = path.join(relativeDir, file);
+    const label = path.posix.join(relativeDir, file);
     try {
       const markdown = readMarkdown(fullPath, root);
       const entity = mapEntity(path.basename(file, ".md"), fullPath, markdown.data, markdown);
@@ -1822,7 +1823,7 @@ function readExemptions(root, scanErrors) {
   } catch (error) {
     // A refused file (a symlink, say) must not silently drop every
     // exemption, so continuity reports it like a parse error.
-    scanErrors.push(err("unreadable-file", fileErrorMessage(path.join("continuity", "exemptions.md"), relativePathError(error, exemptionsPath, root)), path.join("continuity", "exemptions.md")));
+    scanErrors.push(err("unreadable-file", fileErrorMessage("continuity/exemptions.md", relativePathError(error, exemptionsPath, root)), "continuity/exemptions.md"));
     return [];
   }
 
@@ -1905,7 +1906,8 @@ export function relativePathError(error, filePath, root) {
 // Labels a scan error with the file's project-relative path, once: a message
 // that already starts with that path (a read refusal, a non-UTF-8 file) drops
 // it rather than print it twice.
-export function fileErrorMessage(label, error) {
+export function fileErrorMessage(rawLabel, error) {
+  const label = portablePath(rawLabel);
   for (const prefix of [`${label}: `, `${label} `]) {
     if (error.message.startsWith(prefix)) {
       return `${label}: ${error.message.slice(prefix.length)}`;
@@ -1929,15 +1931,15 @@ export const ENTITY_SCAN_DIRS = [
   "characters",
   "chapters",
   "scenes",
-  path.join("worldbuilding", "locations"),
-  path.join("worldbuilding", "systems"),
-  path.join("worldbuilding", "factions"),
-  path.join("worldbuilding", "artifacts"),
-  path.join("plot", "arcs"),
-  path.join("continuity", "questions"),
-  path.join("continuity", "promises"),
-  path.join("continuity", "clues"),
-  path.join("glossary", "terms"),
+  "worldbuilding/locations",
+  "worldbuilding/systems",
+  "worldbuilding/factions",
+  "worldbuilding/artifacts",
+  "plot/arcs",
+  "continuity/questions",
+  "continuity/promises",
+  "continuity/clues",
+  "glossary/terms",
   MATTER_DIR,
   RESEARCH_DIR
 ];

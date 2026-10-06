@@ -77,8 +77,8 @@ describe("continuity with status progressions", () => {
     const found = findings(root, "progression-deceased-in-cast");
     // The death chapter itself and the earlier chapter are fine.
     expect(found).toEqual([
-      { code: "progression-deceased-in-cast", message: `${path.join("chapters", "chapter-04.md")} lists ada-fenn, whose progressions make them deceased from chapter-03; move appearances after the death to mentions`, file: path.join("chapters", "chapter-04.md"), chapter: "chapter-04" },
-      { code: "progression-deceased-in-cast", message: `${path.join("scenes", "chapter-04-scene-01.md")} lists ada-fenn, whose progressions make them deceased from chapter-03; move appearances after the death to mentions`, file: path.join("scenes", "chapter-04-scene-01.md"), chapter: "chapter-04" }
+      { code: "progression-deceased-in-cast", message: `${"chapters/chapter-04.md"} lists ada-fenn, whose progressions make them deceased from chapter-03; move appearances after the death to mentions`, file: "chapters/chapter-04.md", chapter: "chapter-04" },
+      { code: "progression-deceased-in-cast", message: `${"scenes/chapter-04-scene-01.md"} lists ada-fenn, whose progressions make them deceased from chapter-03; move appearances after the death to mentions`, file: "scenes/chapter-04-scene-01.md", chapter: "chapter-04" }
     ]);
     expect(codes(root)).not.toContain("posthumous-appearance");
     expect(codes(root)).not.toContain("deceased-in-cast");
@@ -91,7 +91,7 @@ describe("continuity with status progressions", () => {
       },
       chapters: { 3: cast("ada-fenn"), 4: cast("ada-fenn"), 5: cast("ada-fenn") }
     });
-    expect(findings(root, "progression-deceased-in-cast").map((finding) => finding.file)).toEqual([path.join("chapters", "chapter-03.md")]);
+    expect(findings(root, "progression-deceased-in-cast").map((finding) => finding.file)).toEqual(["chapters/chapter-03.md"]);
   });
 
   test("a character dead before the story may appear once a progression brings them back", () => {
@@ -102,9 +102,9 @@ describe("continuity with status progressions", () => {
       chapters: { 2: cast("old-tomas"), 3: cast("old-tomas"), 4: cast("old-tomas") },
       state: "current-chapter: 4\nknowledge-state:\n  - character: old-tomas\n    knows: The tide turned\n    learned-in: chapter-02\n  - character: old-tomas\n    knows: The mill burned\n    learned-in: chapter-04"
     });
-    expect(findings(root, "deceased-in-cast").map((finding) => finding.file)).toEqual([path.join("chapters", "chapter-02.md")]);
+    expect(findings(root, "deceased-in-cast").map((finding) => finding.file)).toEqual(["chapters/chapter-02.md"]);
     expect(findings(root, "deceased-learning").map((finding) => finding.message)).toEqual([
-      `${path.join("continuity", "state.md")} knowledge-state[0] has old-tomas learn something in chapter-02, but old-tomas died before the story (deceased with no died-in)`
+      `${"continuity/state.md"} knowledge-state[0] has old-tomas learn something in chapter-02, but old-tomas died before the story (deceased with no died-in)`
     ]);
     expect(codes(root)).not.toContain("progression-deceased-in-cast");
   });
@@ -119,7 +119,7 @@ describe("continuity with status progressions", () => {
     });
     expect(findings(root, "progression-deceased-in-cast")).toEqual([]);
     expect(findings(root, "deceased-in-cast").map((finding) => finding.message)).toEqual([
-      `${path.join("scenes", "chapter-07-scene-01.md")} lists old-tomas, who died before the story (deceased with no died-in); move appearances to mentions`
+      `${"scenes/chapter-07-scene-01.md"} lists old-tomas, who died before the story (deceased with no died-in); move appearances to mentions`
     ]);
   });
 
@@ -143,8 +143,8 @@ describe("continuity with status progressions", () => {
       }
     });
     expect(findings(root, "progression-deceased-in-cast").map((finding) => finding.file)).toEqual([
-      path.join("chapters", "chapter-01.md"),
-      path.join("chapters", "chapter-04.md")
+      "chapters/chapter-01.md",
+      "chapters/chapter-04.md"
     ]);
   });
 
@@ -166,8 +166,8 @@ describe("continuity with status progressions", () => {
       state: "current-chapter: 4\nknowledge-state:\n  - character: ada-fenn\n    knows: The tide turned\n    learned-in: chapter-03\n  - character: ada-fenn\n    knows: The mill burned\n    learned-in: chapter-04"
     });
     expect(findings(root, "progression-deceased-learning").map((finding) => finding.message)).toEqual([
-      `${path.join("continuity", "state.md")} knowledge-state[1] has ada-fenn learn something in chapter-04, but their progressions make them deceased from chapter-03`,
-      `${path.join("scenes", "chapter-04-scene-01.md")} state-change has ada-fenn learn something in chapter-04, but their progressions make them deceased from chapter-03`
+      `${"continuity/state.md"} knowledge-state[1] has ada-fenn learn something in chapter-04, but their progressions make them deceased from chapter-03`,
+      `${"scenes/chapter-04-scene-01.md"} state-change has ada-fenn learn something in chapter-04, but their progressions make them deceased from chapter-03`
     ]);
     expect(codes(root)).not.toContain("deceased-learning");
   });
@@ -180,7 +180,7 @@ describe("more deaths by status", () => {
       chapters: { 2: cast("old-tomas"), 3: cast("old-tomas"), 4: cast("old-tomas") },
       state: "current-chapter: 4\nknowledge-state:\n  - character: old-tomas\n    knows: The mill burned\n    learned-in: chapter-03"
     });
-    expect(findings(root, "deceased-in-cast").map((finding) => finding.file)).toEqual(["02", "03", "04"].map((number) => path.join("chapters", `chapter-${number}.md`)));
+    expect(findings(root, "deceased-in-cast").map((finding) => finding.file)).toEqual(["02", "03", "04"].map((number) => `chapters/chapter-${number}.md`));
     expect(findings(root, "deceased-learning")).toHaveLength(1);
     expect(codes(root)).not.toContain("progression-deceased-in-cast");
     expect(codes(root)).not.toContain("progression-deceased-learning");
@@ -193,7 +193,7 @@ describe("more deaths by status", () => {
       },
       chapters: { 3: cast("ada-fenn"), 4: cast("ada-fenn"), 5: cast("ada-fenn") }
     });
-    expect(findings(root, "progression-deceased-in-cast").map((finding) => finding.file)).toEqual([path.join("chapters", "chapter-05.md")]);
+    expect(findings(root, "progression-deceased-in-cast").map((finding) => finding.file)).toEqual(["chapters/chapter-05.md"]);
     expect(codes(root)).not.toContain("posthumous-appearance");
   });
 
@@ -203,7 +203,7 @@ describe("more deaths by status", () => {
       chapters: { 4: cast("ada-fenn") }
     });
     fs.rmSync(path.join(root, "chapters", "chapter-03.md"));
-    expect(findings(root, "progression-deceased-in-cast").map((finding) => finding.file)).toEqual([path.join("chapters", "chapter-04.md")]);
+    expect(findings(root, "progression-deceased-in-cast").map((finding) => finding.file)).toEqual(["chapters/chapter-04.md"]);
   });
 
   test("continuity state tracking a character dead by progression", () => {
@@ -218,7 +218,7 @@ describe("more deaths by status", () => {
       const { root } = fixture({ characters, chapters: outline ? { 4: "status: outline\ncharacters: []" } : {}, state: state(current) });
       return findings(root, "state-tracks-dead-character").map((finding) => finding.message);
     };
-    const label = path.join("continuity", "state.md");
+    const label = "continuity/state.md";
     expect(tracked(3, true)).toEqual([`${label} character-state[0] tracks ada-fenn, whose progressions make them deceased from chapter-03; remove the entry once they are dead`]);
     expect(tracked(4, true)).toHaveLength(1);
     expect(tracked(4, false)).toHaveLength(2);
@@ -228,7 +228,7 @@ describe("more deaths by status", () => {
 
 describe("status progressions against died-in and revived-in", () => {
   const conflicts = (root) => findings(root, "progression-death-conflict").map((finding) => finding.message);
-  const label = path.join("characters", "ada-fenn.md");
+  const label = "characters/ada-fenn.md";
 
   test("a status other than deceased while the character is dead", () => {
     const { root } = fixture({
@@ -248,7 +248,7 @@ describe("status progressions against died-in and revived-in", () => {
     });
     expect(conflicts(root)).toEqual([
       `${label} progressions[0] sets status alive from chapter-03, while ada-fenn is dead after dying in chapter-02; move it to chapter-04, when they are revived`,
-      `${path.join("characters", "old-tomas.md")} progressions[0] sets status alive from chapter-09, while old-tomas is dead after dying in chapter-02; set revived-in: chapter-09 if they come back`
+      `${"characters/old-tomas.md"} progressions[0] sets status alive from chapter-09, while old-tomas is dead after dying in chapter-02; set revived-in: chapter-09 if they come back`
     ]);
   });
 
@@ -268,7 +268,7 @@ describe("status progressions against died-in and revived-in", () => {
     });
     // The first death is died-in's: one error in chapter 3, and the stale
     // progression is reported once, not again for each later cast.
-    expect(findings(root, "posthumous-appearance").map((finding) => finding.file)).toEqual([path.join("chapters", "chapter-03.md")]);
+    expect(findings(root, "posthumous-appearance").map((finding) => finding.file)).toEqual(["chapters/chapter-03.md"]);
     expect(findings(root, "progression-deceased-in-cast")).toEqual([]);
     expect(conflicts(root)).toEqual([
       `${label} progressions[0] makes ada-fenn deceased from chapter-02, which still holds when they are revived in chapter-04; add a status progression from chapter-04`
@@ -312,7 +312,7 @@ describe("progression findings in the CLI", () => {
       severity: "error",
       code: "progression-deceased-in-cast",
       check: "continuity",
-      file: path.join("chapters", "chapter-03.md")
+      file: "chapters/chapter-03.md"
     }));
   });
 });

@@ -70,7 +70,7 @@ describe("--json result envelope", () => {
     expect(envelope.ok).toBe(false);
     expect(envelope.data.errors).toBeGreaterThan(0);
     const missing = envelope.diagnostics.find((entry) => entry.message.includes("nobody-here"));
-    expect(missing).toMatchObject({ severity: "error", file: path.join("chapters", "chapter-01.md"), code: "missing-reference", check: "links" });
+    expect(missing).toMatchObject({ severity: "error", file: "chapters/chapter-01.md", code: "missing-reference", check: "links" });
     // The text output prints the same findings, so the two stay in step.
     expect(invoke(root, ["links"]).err).toContain(`error: ${missing.message}`);
   });
@@ -97,7 +97,7 @@ describe("--json result envelope", () => {
     const { envelope } = invokeJson(root, ["report", "--json"]);
     const parseErrors = envelope.diagnostics.filter((entry) => entry.message.includes("missing YAML frontmatter"));
     expect(parseErrors).toHaveLength(1);
-    expect(parseErrors[0]).toMatchObject({ code: "unreadable-file", check: "validate", file: path.join("chapters", "chapter-02.md") });
+    expect(parseErrors[0]).toMatchObject({ code: "unreadable-file", check: "validate", file: "chapters/chapter-02.md" });
     const keys = envelope.diagnostics.map((entry) => `${entry.severity} ${entry.message}`);
     expect(new Set(keys).size).toBe(keys.length);
     expect(envelope.data.checks.links.errors).toBeGreaterThan(0);
@@ -115,7 +115,7 @@ describe("--json result envelope", () => {
     expect(code).toBe(0);
     expect(envelope.data.dismissed).toBeGreaterThan(0);
     const dismissed = envelope.diagnostics.find((entry) => entry.severity === "dismissed");
-    expect(dismissed).toMatchObject({ code: "posthumous-appearance", check: "continuity", file: path.join("chapters", "chapter-02.md"), exemption: "Ghost scene" });
+    expect(dismissed).toMatchObject({ code: "posthumous-appearance", check: "continuity", file: "chapters/chapter-02.md", exemption: "Ghost scene" });
   });
 
   test("knowledge --json lists the entries, and a missing --at is a JSON usage error", () => {
@@ -309,9 +309,9 @@ describe("diagnostic files", () => {
     writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft\ndate: 2024-13-40", "## Chapter Text\n\nWords.\n");
     writeMarkdown(path.join(root, "continuity", "clues", "lost-key.md"), "title: Lost Key\nstatus: planted\nplanted: chapter-01", "# Lost Key\n");
     const find = (command, code) => invokeJson(root, [command, "--json"]).envelope.diagnostics.find((entry) => entry.code === code);
-    expect(find("pacing", "pacing-no-hook").file).toBe(path.join("chapters", "chapter-01.md"));
-    expect(find("clues", "clue-no-characters").file).toBe(path.join("continuity", "clues", "lost-key.md"));
-    expect(find("continuity", "malformed-date").file).toBe(path.join("chapters", "chapter-01.md"));
+    expect(find("pacing", "pacing-no-hook").file).toBe("chapters/chapter-01.md");
+    expect(find("clues", "clue-no-characters").file).toBe("continuity/clues/lost-key.md");
+    expect(find("continuity", "malformed-date").file).toBe("chapters/chapter-01.md");
   });
 });
 

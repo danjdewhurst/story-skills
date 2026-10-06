@@ -110,7 +110,7 @@ describe("finding codes", () => {
   test("a chapter with no word-count raises stale-word-count", () => {
     const { root } = project();
     writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft", "## Chapter Text\n\nWords here.\n");
-    expect(validateProject(root).warnings).toContainEqual(warn("stale-word-count", `${path.join("chapters", "chapter-01.md")} has no word-count (contains 2)`, path.join("chapters", "chapter-01.md")));
+    expect(validateProject(root).warnings).toContainEqual(warn("stale-word-count", `${"chapters/chapter-01.md"} has no word-count (contains 2)`, "chapters/chapter-01.md"));
   });
 
   test("the schema lists the same warning codes and levels as the validator", () => {
@@ -152,7 +152,7 @@ describe("severity", () => {
 
   test("an override applies wherever its warning is reported: links, a build, and report", () => {
     const { root, cwd } = branchingProject();
-    const unreachable = `${path.join("chapters", "chapter-03.md")} cannot be reached: no choice path from chapter-01 leads to it`;
+    const unreachable = `${"chapters/chapter-03.md"} cannot be reached: no choice path from chapter-01 leads to it`;
     expect(invoke(cwd, ["links", root]).err).toContain(`warning: ${unreachable} [unreachable-chapter]\n`);
 
     configure(root, "severity:\n  - warning: unreachable-chapter\n    level: error");
@@ -391,7 +391,7 @@ describe("with --json and stdin", () => {
     const json = JSON.parse(result.out);
     expect(json.ok).toBe(false);
     const promoted = json.diagnostics.find((entry) => entry.message.includes("[TODO marker"));
-    expect(promoted).toMatchObject({ severity: "error", file: path.join("chapters", "chapter-01.md"), code: "todo-markers", check: "validate" });
+    expect(promoted).toMatchObject({ severity: "error", file: "chapters/chapter-01.md", code: "todo-markers", check: "validate" });
     const dismissed = json.diagnostics.find((entry) => entry.message.includes("declares 3 words"));
     expect(dismissed).toMatchObject({ severity: "dismissed", exemption: "severity stale-word-count is off in story.md" });
     expect(json.data.errors).toBe(1);

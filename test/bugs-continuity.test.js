@@ -127,10 +127,10 @@ describe("story knowledge (#60)", () => {
 
     const chapter = path.join(root, "chapters", "chapter-02.md");
     fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace(/^---\n/, ""), "utf8");
-    expect(() => knowledgeAtChapter(root, "ann", "chapter-03")).toThrow(path.join("chapters", "chapter-02.md"));
+    expect(() => knowledgeAtChapter(root, "ann", "chapter-03")).toThrow("chapters/chapter-02.md");
     const result = invoke(root, ["knowledge", "ann", "--at", "chapter-02"]);
     expect(result.code).toBe(3);
-    expect(result.err).toContain(path.join("chapters", "chapter-02.md"));
+    expect(result.err).toContain("chapters/chapter-02.md");
   });
 
   test("fails on an entry with no knows instead of printing a blank bullet", () => {

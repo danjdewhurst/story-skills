@@ -355,7 +355,7 @@ jobs:
               echo "$file (not a markdown file)"
             elif [[ "/$file" == */.* ]]; then
               echo "$file (a hidden file or folder)"
-            elif [[ "${name,,}" =~ ^(claude|agents|gemini|skill)\.md$ ]]; then
+            elif [[ "$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')" =~ ^(claude|agents|gemini|skill)\.md$ ]]; then
               echo "$file (instructions for an agent)"
             elif ! [[ "$inside" =~ ^(story|style-sheet|progress)\.md$ || "$inside" =~ ^(chapters|scenes|characters|worldbuilding|plot|continuity|glossary|matter|research)/ ]]; then
               echo "$file (not a story file)"

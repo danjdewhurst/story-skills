@@ -148,7 +148,7 @@ describe("synopsis builder", () => {
     const { root } = synopsisProject();
     writeArc(root, "test-arc", STANDARD_ARC);
 
-    const result = synopsisBook(root, { out: path.join("dist", "the-long-valley.synopsis.md") });
+    const result = synopsisBook(root, { out: "dist/the-long-valley.synopsis.md" });
     expect(result.outFile).toBe(path.join(root, "dist", "the-long-valley.synopsis.md"));
     expect(fs.existsSync(result.outFile)).toBe(true);
     expect(fs.readFileSync(result.outFile, "utf8")).toBe(result.text);
@@ -261,7 +261,7 @@ The valley keeps its secret.`;
 
     const result = invoke(cwd, ["synopsis", root, "--pages", "3", "--out", "dist/the-long-valley.synopsis.md"]);
     expect(result.code).toBe(0);
-    expect(result.out).toContain(path.join("dist", "the-long-valley.synopsis.md"));
+    expect(result.out).toContain("dist/the-long-valley.synopsis.md");
     expect(fs.existsSync(path.join(root, "dist", "the-long-valley.synopsis.md"))).toBe(true);
   });
 
