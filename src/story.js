@@ -923,7 +923,7 @@ export function proseReport(root, options = {}) {
     // Chapters that failed to parse are already in fileErrors, not here.
     const label = relative(project, chapter.file);
     const prose = chapterProse(readMarkdown(chapter.file, project.root).body, " ");
-    chapters.push(lintProse(label, chapter.title, prose, rules, thresholds, profile, warnings, sampled.has(canonicalPath(chapter.file))));
+    chapters.push(lintProse(label, chapter.title, prose, rules, thresholds, profile, warnings, sampled.has(samplePath(chapter.file))));
   }
   const phrases = repeatedPhrases(chapters.map((chapter) => chapter.analysis), PROSE_THRESHOLDS, project.pack);
   const similar = similarNames(project.characters, project.pack);
@@ -982,7 +982,10 @@ function proseBaseline(project, rules, options, warnings, sampled = new Set()) {
   }
   const samples = [];
   const self = canonicalPath(project.root);
-  const own = new Set(project.chapters.map((chapter) => canonicalPath(chapter.file)));
+  // This project's chapters, and those named as samples, are keyed by
+  // samplePath, as duplicate entries are, so a chapter named in another
+  // case on a case-insensitive disk is still known as this project's.
+  const own = new Set(project.chapters.map((chapter) => samplePath(chapter.file)));
   const entries = new Map();
   const read = new Set();
   for (const entry of listed) {
@@ -998,15 +1001,17 @@ function proseBaseline(project, rules, options, warnings, sampled = new Set()) {
     }
     const target = path.resolve(project.root, sample);
     const real = canonicalPath(target);
-    if (own.has(real)) {
-      sampled.add(real);
+    const key = samplePath(target);
+    const chapter = own.has(key);
+    if (chapter) {
+      sampled.add(key);
     }
     let documents;
     try {
       // Only a chapter named on its own is a sample: a folder never makes
       // this project's chapters samples.
       documents = referenceDocuments(real, (file) => displayPath(project.root, target, real, file), self)
-        .filter((document) => own.has(real) || !own.has(canonicalPath(document.path)));
+        .filter((document) => chapter || !own.has(samplePath(document.path)));
     } catch (error) {
       // prose is advisory: one sample it cannot read is reported, not fatal.
       warnings.push(warn("style-sample-unreadable", `${STYLE_SHEET_FILE} samples entry ${sample} cannot be read, so it is left out: ${error.message}`, STYLE_SHEET_FILE));

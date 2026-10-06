@@ -750,29 +750,40 @@ export function sampleProblem(project, sample) {
 
 // A samples entry that names the same file or folder as an earlier one
 // (`./chapters/chapter-01.md` after `chapters/chapter-01.md`), as a warning,
-// or null. `seen` maps the samplePath of each entry so far to the entry as
-// written. validate and prose share it, so both say the same thing.
+// or null. `seen` maps the real path of each entry so far to the entry as
+// written. A path that cannot be resolved (a dangling symlink or a symlink
+// loop) is never a duplicate: prose reports each spelling of it unreadable.
+// validate and prose share it, so both say the same thing.
 export function sampleDuplicate(project, sample, seen) {
-  const real = samplePath(path.resolve(project.root, sample));
+  const real = resolvedSample(path.resolve(project.root, sample));
+  if (real === null) {
+    return null;
+  }
   const first = seen.get(real);
   if (first === undefined) {
     seen.set(real, sample);
     return null;
   }
   const repeat = sample === first ? "is already listed" : `names the same file or folder as ${first}`;
-  return warn("style-sample-duplicate", `${STYLE_SHEET_FILE} samples entry ${sample} ${repeat}, so story prose reads it once: remove one of them`, STYLE_SHEET_FILE);
+  return warn("style-sample-duplicate", `${STYLE_SHEET_FILE} samples entry ${sample} ${repeat}, so story prose leaves it out: remove one of them`, STYLE_SHEET_FILE);
 }
 
-// A sample file or folder as one path however it is spelled: `./` and
-// repeated slashes resolve away, symlinks are followed, and the native real
-// path takes the case the disk stores, so on a case-insensitive disk
-// `Chapters/Chapter-01.md` is `chapters/chapter-01.md`. A path that cannot be
-// resolved (a symlink loop) stands as it is; prose reports it unreadable.
+// A sample file or folder as one path however it is spelled, for telling
+// whether two names are one file: `./` and repeated slashes resolve away,
+// symlinks are followed, and the native real path takes the case the disk
+// stores, so on a case-insensitive disk `Chapters/Chapter-01.md` is
+// `chapters/chapter-01.md`. A path that cannot be resolved falls back to
+// canonicalPath.
 export function samplePath(file) {
+  return resolvedSample(file) ?? canonicalPath(file);
+}
+
+// The native real path of `file`, or null when it cannot be resolved.
+function resolvedSample(file) {
   try {
     return fs.realpathSync.native(file);
   } catch {
-    return file;
+    return null;
   }
 }
 
