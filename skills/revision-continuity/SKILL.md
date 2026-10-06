@@ -1,6 +1,6 @@
 ---
 name: revision-continuity
-description: This skill should be used when the user asks to revise a chapter, continuity check, find inconsistencies, audit character state, check timeline consistency, developmental edit, structural revision, "revision passes", "what pass next", "pacing check" as a revision pass, "clue check", or prepare existing story material for the next revision pass. NOT for planning book structure (use plot-structure), scene-level craft (use scene-craft), or voice consistency (use voice-style).
+description: This skill should be used when the user asks to "revise a chapter", "continuity check", "find inconsistencies", "audit character state", "check timeline consistency", "developmental edit", "structural revision", "revision passes", "what pass next", "pacing check" as a revision pass, or "clue check", or to prepare existing story material for the next revision pass. NOT for planning book structure (use plot-structure), scene-level craft (use scene-craft), or voice consistency (use voice-style).
 ---
 
 # Revision Continuity
@@ -32,9 +32,10 @@ The default ladder is `structure`, `character`, `theme`, `continuity`,
 status `pending`, `in-progress`, or `done`; add a custom kebab-case pass
 (`fact-check`, `sensitivity`) with `story passes . --start <name>`, which
 appends it as `in-progress`. The checks per pass, as `story passes .`
-prints them:
+prints them, and the checklists in `references/pass-checklists.md` that
+each pass works through:
 
-| Pass | Checks | Workflow below |
+| Pass | Checks | Checklists |
 |------|--------|----------------|
 | `structure` | `story timeline .`, `story pacing .`, `story diagram arcs` | Reverse outline, pacing waveform, removability audit |
 | `character` | `story voices .`, `story knowledge <id> --at <chapter>`, `story diagram relationships` | Developmental revision (motivation, arcs) |
@@ -51,19 +52,19 @@ are clean or every remaining finding is a recorded decision. Set story
 
 ## Revision Workflow
 
-1. Clarify the pass type unless the user already specified it:
-   - **Continuity audit** - find contradictions, stale references, timeline problems, missing backlinks, or word-count drift
-   - **Developmental revision** - improve structure, scene purpose, character motivation, pacing, stakes, and arc progression
-   - **Reverse outline** - extract what each chapter actually does in one line per chapter, without looking at the outline or arc files, then diff that against what the plot files say it should do. Reorder, merge, split, or cut where they disagree. Read: every chapter in `chapters/`, `plot/timeline.md`, active arc files. Update: `plot/timeline.md`, arc plot-point tables, `chapters/_index.md` when chapters move, merge, or split.
-   - **Theme audit** - check whether the ending engages the opening's value-question and whether the theme is dramatized through consequence rather than commentary. Verify every motif introduced early is paid off by the end. Read: `story.md` premise and themes, the opening and closing chapters, theme-tracked arcs in `plot/_index.md`. Update: `story.md` premise if the draft argues a different idea, arc `themes` tags. See the `theme-craft` skill for the deep pass.
-   - **Pacing waveform** - map tension per chapter to find dead zones: chapters that neither raise nor vary the tension level. Two peaks back-to-back dilute each other; a flat middle means escalation is missing. Run `story pacing .` for the per-chapter dashboard (words, scene and sequel counts, scene `outcome`s, chapter `hook`) and its warnings: three or more consecutive `yes` outcomes (no pressure), four or more scene units without a sequel (no breath), chapter length outliers, three or more chapters in a row ending on `resolution`, and drafted chapters with no `hook`. Run `story timeline .` for POV balance and characters who vanish for long stretches. Read: the chapters, `scenes/` state-changes, arc climax points. Update: chapter or scene order, or add escalation where the map goes flat.
-   - **Reveal economy** - check that every reveal is earned by planted setup and that reveals are spaced rather than dumped in clusters. Unplanted twists and reveal dumps both read as cheap. Run `story clues .` for the clue-by-chapter matrix and its fair-play warnings (late plants, unplanted payoffs, clues nobody can notice, undebunked red herrings); `story diagram clues` draws the plant-to-reveal flow. Read: `continuity/promises/`, arc foreshadowing tables, `knowledge-state` in `continuity/state.md`. Update: promise/question `status` and chapter fields, foreshadowing rows.
-   - **Removability audit (darling-killing)** - find scenes whose removal would change nothing downstream: no state changes, no causality, no payoff. Wire such scenes in (give them consequence), fold them into an adjacent scene, or cut them — then record the decision so nobody re-litigates it. Read: `scenes/` state-changes, `continuity/state.md`, `continuity/promises/`. Update: scene `state-changes`, promise/question status, `plot/timeline.md`.
-   - **Voice differentiation** - check that each speaker sounds like themselves. Run `story voices .` for per-character dialogue fingerprints: it warns when two characters' fingerprints are near-identical, when a character says a word from their `voice-avoid` list, and when a `voice-words` entry never appears. Update: dialogue in chapters, or the character's `voice-words`/`voice-avoid` when the draft has found a better voice.
-   - **Line edit** - improve clarity, voice, rhythm, dialogue, and sensory specificity without changing plot facts. Read `style-sheet.md` for the recorded voice, and use `story prose .` to find filter words, adverb clusters, said-bookisms, echoes, uniform rhythm, and repeated phrases worth rereading. For a full prose-quality pass, follow the `line-editing` skill
-   - **Copyedit** - distinct from proof/polish: enforce a style baseline (hyphenation, capitalization, naming, numbers) and continuity of surface detail (hair color, room layouts, name spellings). This pass is mechanical consistency, not prose quality — prose quality belongs to the line edit. Read: `style-sheet.md` (create it with the `voice-style` skill if missing), `glossary/`, character and location files. Run `story prose .` and fix every avoided spelling it reports. Update: chapters, `style-sheet.md` when a new convention is settled, `glossary/`, character files where details drifted. The `line-editing` skill has the full copyedit procedure.
-   - **Fact check** - verify real-world details the chapter relies on. Read: `research/` notes whose `used-in` lists the chapter. Update: research notes and their status, and the chapter where it contradicts verified findings. See the `research` skill
-   - **Proof/polish** - fix small wording, grammar, repetition, and formatting issues. Proof a built copy, not the source: `story build . --format print` or `--format html`. See the `line-editing` skill
+1. Clarify the pass type unless the user already specified it, then follow that pass's checklist in `references/pass-checklists.md` (what to run, read, check, and update):
+   - **Continuity audit** - contradictions, stale references, timeline problems, missing backlinks, word-count drift
+   - **Developmental revision** - structure, scene purpose, character motivation, pacing, stakes, arc progression
+   - **Reverse outline** - what each chapter actually does, diffed against what the plot files say it should do
+   - **Theme audit** - whether the ending engages the opening's value-question and early motifs pay off
+   - **Pacing waveform** - tension per chapter and dead zones (`story pacing .`)
+   - **Reveal economy** - every reveal earned by planted setup and spaced out (`story clues .`)
+   - **Removability audit (darling-killing)** - scenes whose removal would change nothing downstream
+   - **Voice differentiation** - each speaker sounds like themselves (`story voices .`)
+   - **Line edit** - clarity, voice, rhythm, dialogue, and sensory detail without changing plot facts (the `line-editing` skill)
+   - **Copyedit** - style baseline and surface-detail consistency, not prose quality (the `line-editing` skill)
+   - **Fact check** - real-world details against `research/` notes (the `research` skill)
+   - **Proof/polish** - small wording, grammar, and formatting fixes on a built copy (the `line-editing` skill)
 2. Snapshot the draft before any multi-chapter pass (see Draft Snapshots below), so the pass can be compared and undone.
 3. Read the relevant context:
    - `story.md`
@@ -166,6 +167,10 @@ Run `story continuity .` first to collect the deterministic findings, then check
 ## Reporting
 
 When the user asks for an audit rather than direct edits, return findings ordered by severity with file references and concrete fixes. When the user asks for revision, summarize the edited files, changed continuity facts, and maintenance results.
+
+## Reference Files
+
+- **`references/pass-checklists.md`** - One checklist per revision pass (run, read, check, update), mapped to the named passes that `story passes` tracks
 
 ## Shared Conventions
 

@@ -26,6 +26,7 @@ Links are relative paths from the book root, and every link needs a matching bac
 - Starting a sequel, prequel, interquel, or companion book to an existing project
 - Carrying characters, locations, systems, factions, artifacts, or glossary terms into another book
 - Revising a book that other books in the series depend on
+- Keeping a series bible, or planning and pitching a series of several books (see `references/series-bible.md`)
 - NOT for a single standalone book (use `story-init`) or for within-book continuity (use `revision-continuity`)
 
 ## Starting a Linked Book
@@ -52,7 +53,7 @@ If the existing book has no `series` yet, pass `--series {series-id}`: `init` al
 
 If the CLI is not available, add the fields to both `story.md` files by hand.
 
-4. Add a `## Series Notes` section to the new `story.md` body. Record where the book sits in the chronology, the time gap, and the canon facts it must not contradict.
+4. Add a `## Series Notes` section to the new `story.md` body. Record where the book sits in the chronology, the time gap, and the canon facts it must not contradict. `references/series-bible.md` covers what to put in it.
 
 ## Carrying Canon Across Books
 
@@ -149,6 +150,10 @@ If `story` is not installed, use `bun run story --` from the Story Skills reposi
 - Entity ids and `name` values stay stable across books; variants go in `aliases`
 - Chronology goes in `follows`/`precedes`, publication order in `book-number`
 - Every link needs a matching backlink in the other book
+
+## Reference Files
+
+- **`references/series-bible.md`** - Where each part of a series bible lives across the linked books, writing `Series Notes`, keeping canon current, planning a multi-book series, and pitching one (query line and `submission/series-pitch.md` template)
 
 ## Shared Conventions
 

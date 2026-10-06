@@ -651,7 +651,7 @@ It also uses line-editing's [`language-conventions.md`](../skills/line-editing/r
 
 **Purpose.** Revises existing chapters without breaking continuity: targeted edits, audits, developmental and structural passes, and checks before the next chapter. It also tracks a full revision as a ladder of named passes. See [Continuity and analysis](continuity.md) for the checks it relies on.
 
-**Triggers.** "Revise a chapter", "continuity check", "find inconsistencies", "audit character state", "check timeline consistency", "developmental edit", "structural revision", "revision passes", "what pass next", "pacing check" (as a revision pass), "clue check", "prepare for the next revision pass".
+**Triggers.** "Revise a chapter", "continuity check", "find inconsistencies", "audit character state", "check timeline consistency", "developmental edit", "structural revision", "revision passes", "what pass next", "pacing check" (as a revision pass), "clue check", or a request to prepare existing material for the next revision pass.
 
 **Not for.** Planning book structure ([plot-structure](#plot-structure)), scene-level craft ([scene-craft](#scene-craft)), voice consistency ([voice-style](#voice-style)). It runs the sentence-level line edit, copyedit, and proof passes by handing them to [line-editing](#line-editing), which owns the "line edit" and "polish this chapter" triggers.
 
@@ -678,7 +678,7 @@ The default ladder is `structure`, `character`, `theme`, `continuity`, `pacing`,
 | `copyedit` | `story prose` and `style-sheet.md` | Copyedit ([line-editing](#line-editing)) |
 | `proof` | `story build --format print`, `story build --format html` | Proof ([line-editing](#line-editing)) |
 
-**Pass types.** It asks which pass you want unless you have said: continuity audit, developmental revision, reverse outline, theme audit, pacing waveform (`story pacing`), reveal economy (`story clues`), removability audit, voice differentiation (`story voices`), line edit, copyedit, fact check, or proof/polish. The line edit, copyedit, and proof hand off to `line-editing` for the full procedure. [Pick a pass](writing-workflows.md#2-pick-a-pass) describes each one and how to ask for it.
+**Pass types.** It asks which pass you want unless you have said: continuity audit, developmental revision, reverse outline, theme audit, pacing waveform (`story pacing`), reveal economy (`story clues`), removability audit, voice differentiation (`story voices`), line edit, copyedit, fact check, or proof/polish, then follows that pass's checklist in [`pass-checklists.md`](../skills/revision-continuity/references/pass-checklists.md). The line edit, copyedit, and proof hand off to `line-editing` for the full procedure. [Pick a pass](writing-workflows.md#2-pick-a-pass) describes each one and how to ask for it.
 
 **Workflow.**
 
@@ -702,7 +702,11 @@ story compare . --against ../the-tide-room-draft-1
 
 `story compare` reports per-chapter word changes, added and removed chapters, and the share of paragraphs left unchanged. Chapters are matched by id, except that a chapter whose paragraphs match another id's better, as after `story move`, is reported as `moved from` its old id. It only reads git; it never commits or tags.
 
-**References.** None. It draws on the references of [scene-craft](#scene-craft), [theme-craft](#theme-craft), [voice-style](#voice-style), [genre-craft](#genre-craft), and [line-editing](#line-editing).
+**References.**
+
+- [`pass-checklists.md`](../skills/revision-continuity/references/pass-checklists.md): one checklist per pass type (what to run, read, check, and update), mapped to the named passes, with a section template for adding a pass.
+
+It also draws on the references of [scene-craft](#scene-craft), [theme-craft](#theme-craft), [voice-style](#voice-style), [genre-craft](#genre-craft), and [line-editing](#line-editing).
 
 ### line-editing
 
@@ -985,7 +989,9 @@ One `story.md` holds one edition's metadata. When the ebook and print ISBNs diff
 
 `story series` orders the linked books by chronology and reports deaths that are undone in a later book, dead characters appearing on the page, facts learned twice across books, name drift, and destroyed artifacts that return. `story links` also checks the series links and their backlinks.
 
-**References.** None; the skill is self-contained.
+**References.**
+
+- [`series-bible.md`](../skills/series-continuity/references/series-bible.md): where each part of the series bible lives across the linked books, writing `Series Notes`, keeping canon current, planning a multi-book series, and pitching it (a query line for book one and a `submission/series-pitch.md` overview).
 
 ## Maintenance
 
