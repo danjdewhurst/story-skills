@@ -43,7 +43,7 @@ All scripts live in `package.json`.
 | Script | What it runs | When to use it |
 | --- | --- | --- |
 | `bun run story -- <args>` | `bin/story.js` from source | Trying CLI changes |
-| `bun run test` | `bun test ./test/*.test.js` | Every change |
+| `bun run test` | `bun test --timeout 60000 ./test/*.test.js` | Every change |
 | `bun run test:coverage` | Tests with lcov coverage, then `scripts/check-coverage.js`, then `check:fallback` | Any change to `src/`, parsing, scanning, validation, or release readiness |
 | `bun run test:examples` | `scripts/check-examples.js` | Changes to examples, the project format, validation, or the schema |
 | `bun run check:metadata` | `scripts/check-metadata.js` | Changes to skills, plugin manifests, templates, or versions |
@@ -328,9 +328,11 @@ bun test ./test/registry.test.js          # one file (keep the ./ prefix)
 bun test ./test/cli.test.js -t "repeated" # tests whose names match a pattern
 ```
 
+`test` and `test:coverage` give each test and hook 60 seconds rather than Bun's 5-second default, so a slow CI runner cannot fail them. Bun 1.4.2 ignores a `timeout` in `bunfig.toml`, and `setDefaultTimeout` in a preload reaches only the first test file, so the flag lives in the scripts. Pass `--timeout 60000` yourself when running `bun test` directly on a slow machine.
+
 `test/helpers.js` provides the shared fixtures:
 
-- `makeTempDir(prefix)` creates a fresh directory under the OS temp directory (`story-skills-*` by default). `test/setup.js`, preloaded through `bunfig.toml`, removes them after each test, so create test directories with it rather than `fs.mkdtempSync`, and inside the test rather than in a `describe` body. The same file raises the per-test timeout to 60 seconds for slow CI runners.
+- `makeTempDir(prefix)` creates a fresh directory under the OS temp directory (`story-skills-*` by default). `test/setup.js`, preloaded through `bunfig.toml`, removes them after each test, so create test directories with it rather than `fs.mkdtempSync`, and inside the test rather than in a `describe` body.
 - `memoryIo(cwd)` is an in-memory `io` object for `runCli`, with `output()` and `error()` accessors.
 - `writeMarkdown(filePath, frontmatter, body)` writes a markdown file with frontmatter, creating parent directories.
 
