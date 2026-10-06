@@ -86,6 +86,7 @@ import {
   asArray,
   coverImage,
   substituteStoryIdWarnings,
+  asciiStoryId,
   SCENE_FILENAME_PATTERN,
   chapterNumberFromFile,
   relative
@@ -930,10 +931,15 @@ function idTokensOutsideLinks(body, pattern) {
   return found;
 }
 
-// With story.md unreadable or untitled, the story id is only the folder name,
-// so comparing every registry's `story` with it would repeat one problem.
+// With story.md unreadable or untitled, or a title with no ASCII letters or
+// digits in a folder with some, the story id is only the folder name, so
+// comparing every registry's `story` with it would repeat one problem. A
+// substitute id is hashed from the title, so it is checked like a title's.
 function storyIdIsFallback(project) {
-  return Boolean(project.story.unreadable) || kebabCase(String(project.story.data.title ?? ""), { transliterate: false }) === "";
+  const title = project.story.data.title;
+  return Boolean(project.story.unreadable)
+    || String(title ?? "").trim() === ""
+    || (kebabCase(String(title), { transliterate: false }) === "" && asciiStoryId(title, project.root) !== "");
 }
 
 // Free-text and id fields the schema types as strings. An unquoted `1984`

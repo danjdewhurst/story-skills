@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -224,19 +225,60 @@ describe("--dry-run", () => {
     }
   });
 
-  test("a dry run checks the cover's first bytes as the real run does", () => {
+  test("a dry run checks the cover's first bytes as the real run does, and copies no other file's bytes", () => {
     const root = copyExample("the-unraveled-thread");
     const storyPath = path.join(root, "story.md");
-    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("schema-version: 2\n", "schema-version: 2\ncover: cover.png\n"));
-    // A PNG, then a review copy saved over it.
-    for (const [bytes, broken] of [[Buffer.from("89504e470d0a1a0a0000000d49484452", "hex"), false], [Buffer.from("<!DOCTYPE html>\n"), true]]) {
-      fs.writeFileSync(path.join(root, "cover.png"), bytes);
-      const preview = invokeJson(root, ["doctor", "--fix", "--dry-run", "--json"]);
-      const real = invokeJson(root, ["doctor", "--fix", "--json"]);
-      expect(real.envelope.diagnostics.some((finding) => finding.code === "invalid-cover")).toBe(broken);
-      expect(preview.envelope.data.checks).toEqual(real.envelope.data.checks);
-      expect(preview.envelope.diagnostics).toEqual(real.envelope.diagnostics);
+    const story = fs.readFileSync(storyPath, "utf8");
+    const webp = Buffer.concat([Buffer.from("RIFF"), Buffer.from([0x24, 0, 0, 0]), Buffer.from("WEBPVP8 ")]);
+    // A PNG, a WebP (its type is in bytes 8 to 11), a review copy saved over
+    // the cover, and a cover this user cannot read.
+    const covers = [
+      ["cover.png", Buffer.from("89504e470d0a1a0a0000000d49484452", "hex"), null],
+      ["cover.webp", webp, null],
+      ["cover.png", Buffer.from("<!DOCTYPE html>\n"), "story.md cover cover.png does not hold a PNG image: its first bytes are not the PNG signature"],
+      ...(CHMOD_IGNORED ? [] : [["cover.png", Buffer.from("89504e470d0a1a0a", "hex"), "story.md cover cover.png: Cannot read: permission denied"]])
+    ];
+    for (const [name, bytes, error] of covers) {
+      fs.writeFileSync(storyPath, story.replace("schema-version: 2\n", `schema-version: 2\ncover: ${name}\n`));
+      fs.rmSync(path.join(root, name), { force: true });
+      fs.writeFileSync(path.join(root, name), bytes);
+      if (error?.includes("permission denied")) {
+        fs.chmodSync(path.join(root, name), 0o000);
+      }
+      try {
+        const preview = invokeJson(root, ["doctor", "--fix", "--dry-run", "--json"]);
+        const real = invokeJson(root, ["doctor", "--fix", "--json"]);
+        expect(real.envelope.diagnostics.filter((finding) => finding.code === "invalid-cover").map((finding) => finding.message)).toEqual(error === null ? [] : [error]);
+        expect(preview.envelope.data.checks).toEqual(real.envelope.data.checks);
+        expect(preview.envelope.diagnostics).toEqual(real.envelope.diagnostics);
+      } finally {
+        fs.chmodSync(path.join(root, name), 0o644);
+      }
     }
+    // Only the cover keeps its first bytes in the scratch copy.
+    fs.writeFileSync(storyPath, story.replace("schema-version: 2\n", "schema-version: 2\ncover: cover.webp\n"));
+    fs.writeFileSync(path.join(root, ".env"), "API_KEY=secret\n");
+    fs.writeFileSync(path.join(root, "notes.txt"), "private notes\n");
+    const copied = previewChanges(root, (copyRoot) => ["cover.webp", ".env", "notes.txt"].map((file) => fs.readFileSync(path.join(copyRoot, file)).toString("hex"))).result;
+    expect(copied).toEqual([
+      Buffer.concat([webp.subarray(0, 12), Buffer.alloc(webp.length - 12)]).toString("hex"),
+      Buffer.alloc(15).toString("hex"),
+      Buffer.alloc(14).toString("hex")
+    ]);
+  });
+
+  test("a dry run of import onto a FIFO answers as the real run, without reading it", () => {
+    if (process.platform === "win32") {
+      return;
+    }
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "draft.md"), "# Chapter 1\n\nText.\n");
+    expect(spawnSync("mkfifo", [path.join(cwd, "pipe")]).status).toBe(0);
+    const argv = ["import", "draft.md", "--title", "Piped", "--dir", "pipe", "--force"];
+    const real = invoke(cwd, argv);
+    const preview = invoke(cwd, [...argv, "--dry-run"]);
+    expect(real.code).not.toBe(0);
+    expect([preview.code, preview.err]).toEqual([real.code, real.err]);
   });
 
   test("a dry run in a series book sees its linked books, as the real run does, and writes none of them", () => {

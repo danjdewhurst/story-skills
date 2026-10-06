@@ -229,25 +229,19 @@ export function asciiStoryId(title, root) {
 }
 
 // The id of a project whose title and folder name have no ASCII letters or
-// digits (a cloned project's folder renamed to its Japanese title, say): the
-// title transliterated (Война и мир gives voyna-i-mir), else the folder name
-// transliterated, else `story-` and eight hex digits of a hash of the title
-// (or of the folder name, without a title), so each book has its own id and
-// keeps it from run to run. A transliteration Windows reserves as a file
-// name (Нул gives nul) is passed over. `from` says which, for the warning.
+// digits (a cloned project's folder renamed to its Japanese title, say):
+// `story-` and eight hex digits of a hash of the title, or of the folder
+// name when there is no title, so each book has its own id. It is never
+// transliterated, as a Cyrillic title could be: a later release that adds
+// letters to the tables would then change the id, and with it the build
+// file names, the EPUB identifier, and the IFID. The text is hashed in NFC,
+// which Unicode keeps stable, so a title saved decomposed (as macOS stores
+// folder names) gives the same id everywhere. `from` names the source, for
+// the warning.
 function substituteStoryId(title, root) {
   const text = String(title ?? "").trim();
-  const folder = path.basename(root);
-  const usable = (value) => kebabCase(value) !== "" && !WINDOWS_RESERVED_ID.test(kebabCase(value));
-  if (usable(text)) {
-    return { id: kebabCase(text), from: "transliterated from the title" };
-  }
-  if (usable(folder)) {
-    return { id: kebabCase(folder), from: "transliterated from the folder name" };
-  }
-  // NFC, so a folder name macOS stores decomposed hashes the same everywhere.
-  const hash = crypto.createHash("sha256").update((text || folder).normalize("NFC")).digest("hex").slice(0, 8);
-  return { id: `story-${hash}`, from: `hashed from the ${text === "" ? "folder name" : "title"}` };
+  const hash = crypto.createHash("sha256").update((text || path.basename(root)).normalize("NFC")).digest("hex").slice(0, 8);
+  return { id: `story-${hash}`, from: text === "" ? "the folder name" : "the title" };
 }
 
 // The warning validate and build give while the story id is a substitute:
@@ -258,7 +252,20 @@ export function substituteStoryIdWarnings(project) {
     return [];
   }
   const { id, from } = substituteStoryId(title, project.root);
-  return [warn("substitute-story-id", `story.md title and the project folder name have no ASCII letters or digits, so the story id is ${id}, ${from}; rename the folder with ASCII letters or digits to choose the id`, "story.md")];
+  return [warn("substitute-story-id", `story.md title and the project folder name have no ASCII letters or digits, so the story id is ${id}, hashed from ${from}; rename the folder with ASCII letters or digits to choose the id, then run story reindex`, "story.md")];
+}
+
+// Characters no path story.md names may hold: the C0 controls, which Windows
+// refuses in names (and a NUL makes every file-system call throw), DEL and
+// the C1 controls, and the bidirectional marks and controls, which can make
+// a path read as another.
+export const PATH_CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u;
+
+// The error for a path in story.md (`label` names the field) that holds one
+// of PATH_CONTROL_CHARACTERS, shown escaped so the message is readable.
+export function controlCharacterError(label, value) {
+  const shown = JSON.stringify(value).replace(/[\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/gu, (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`);
+  return projectError(`story.md ${label} ${shown} must not contain control characters`);
 }
 
 // A chapter's word count and its length in the count unit: `count`, the
@@ -2112,8 +2119,8 @@ export function coverImage(project) {
   const cover = String(project.story.data.cover).trim();
   // Checked before any file-system call, which would throw on a NUL with a
   // message that names neither story.md nor the cover.
-  if (/[\u0000-\u001f\u007f]/u.test(cover)) {
-    throw projectError(`story.md cover ${JSON.stringify(cover)} must not contain control characters`);
+  if (PATH_CONTROL_CHARACTERS.test(cover)) {
+    throw controlCharacterError("cover", cover);
   }
   const mediaType = COVER_MEDIA_TYPES[path.extname(cover).toLowerCase()];
   if (mediaType === undefined) {
@@ -2137,7 +2144,15 @@ export function coverImage(project) {
   // The EPUB declares the media type from the extension, so the bytes must
   // match it, or a file saved over the cover (an HTML build, say) would ship
   // as the cover image.
-  const held = coverFormat(filePath);
+  let held;
+  try {
+    held = coverFormat(filePath);
+  } catch (error) {
+    // Node names the absolute path; the reason alone, in plain words, is
+    // the same in a --dry-run copy.
+    const reason = FILE_ERROR_REASONS[error.code];
+    throw projectError(`story.md cover ${cover}: ${reason ? `Cannot read: ${reason}` : String(error.message).replace(`${filePath}: `, "")}`);
+  }
   if (held !== mediaType) {
     throw projectError(held === null
       ? `story.md cover ${cover} does not hold a ${IMAGE_FORMAT_NAMES[mediaType]} image: its first bytes are not the ${IMAGE_FORMAT_NAMES[mediaType]} signature`
@@ -2149,7 +2164,7 @@ export function coverImage(project) {
 const IMAGE_FORMAT_NAMES = { "image/gif": "GIF", "image/jpeg": "JPEG", "image/png": "PNG", "image/webp": "WebP" };
 
 // How many bytes of an image coverFormat reads. A --dry-run copy keeps
-// this many of every file that is not markdown (see preview.js).
+// this many of the cover (see preview.js).
 export const IMAGE_SIGNATURE_BYTES = 12;
 
 // The media type of a cover image read from its first bytes, the signature
