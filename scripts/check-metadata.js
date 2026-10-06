@@ -47,15 +47,15 @@ export function checkSkillFrontmatter(failures, skillsDir, readFile) {
   return failures;
 }
 
-export function checkTemplateStoryRef(failures, packageVersion, templatesDir, readFile) {
+export function checkTemplateStoryVersion(failures, packageVersion, templatesDir, readFile) {
   for (const name of ["story-checks.yml", "draft-next-chapter.yml", "review-copy.yml"]) {
     const text = readFile(path.join(templatesDir, name));
-    const match = /STORY_REF:\s*"([^"]+)"/.exec(text);
+    const match = /^\s*STORY_VERSION:\s*"([^"]+)"/m.exec(text);
     if (!match) {
-      failures.push(`templates/github/${name} is missing STORY_REF`);
+      failures.push(`templates/github/${name} is missing STORY_VERSION`);
       continue;
     }
-    expectEqual(failures, `templates/github/${name} STORY_REF`, `v${packageVersion}`, match[1]);
+    expectEqual(failures, `templates/github/${name} STORY_VERSION`, packageVersion, match[1]);
   }
   return failures;
 }
@@ -208,7 +208,7 @@ function main() {
 
   checkSkillFrontmatter(failures, path.join(repoRoot, "skills"), (filePath) => fs.readFileSync(filePath, "utf8"));
 
-  checkTemplateStoryRef(failures, packageJson.version, path.join(repoRoot, "templates", "github"), (filePath) =>
+  checkTemplateStoryVersion(failures, packageJson.version, path.join(repoRoot, "templates", "github"), (filePath) =>
     fs.readFileSync(filePath, "utf8")
   );
 

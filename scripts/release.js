@@ -11,7 +11,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const VERSION_FILES = ["package.json", ".codex-plugin/plugin.json", ".claude-plugin/plugin.json"];
 const VERSION_MODULE = "src/version.js";
 const FALLBACK_FILE = "skills/story-maintenance/scripts/story.js";
-const STORY_REF_FILES = ["templates/github/story-checks.yml", "templates/github/draft-next-chapter.yml", "templates/github/review-copy.yml"];
+const STORY_VERSION_FILES = ["templates/github/story-checks.yml", "templates/github/draft-next-chapter.yml", "templates/github/review-copy.yml"];
 const RELEASE_BRANCH = "main";
 // test:coverage gates src line and function coverage, then the fallback bundle.
 // Branch records are gated only when the lcov report contains them.
@@ -217,14 +217,14 @@ export function updateVersionFiles(root, nextVersion) {
   }
   fs.writeFileSync(modulePath, moduleSource.replace(versionPattern, `$1${nextVersion}$2`));
   updated.push(VERSION_MODULE);
-  for (const relativePath of STORY_REF_FILES) {
+  for (const relativePath of STORY_VERSION_FILES) {
     const filePath = path.join(root, relativePath);
     const text = fs.readFileSync(filePath, "utf8");
-    const pattern = /^(\s*STORY_REF:\s*")[^"]*(")/m;
+    const pattern = /^(\s*STORY_VERSION:\s*")[^"]*(")/m;
     if (!pattern.test(text)) {
-      throw new Error(`No STORY_REF found in ${relativePath}.`);
+      throw new Error(`No STORY_VERSION found in ${relativePath}.`);
     }
-    fs.writeFileSync(filePath, text.replace(pattern, `$1v${nextVersion}$2`));
+    fs.writeFileSync(filePath, text.replace(pattern, `$1${nextVersion}$2`));
     updated.push(relativePath);
   }
   // Doc examples name the current release, so bump the ones that still do.
@@ -279,7 +279,7 @@ function main(argv) {
 
   preflight(nextVersion, tag, packageJson.name);
   if (dryRun) {
-    console.log(`Dry run: would bump ${[...VERSION_FILES, VERSION_MODULE].join(", ")}, the STORY_REF templates, and the version examples in README.md and docs/, move the ${CHANGELOG_FILE} Unreleased entries under ${nextVersion}, rebuild the fallback, commit, tag ${tag}, push, and create the GitHub release. The tag push publishes ${packageJson.name}@${nextVersion} to npm from GitHub Actions.`);
+    console.log(`Dry run: would bump ${[...VERSION_FILES, VERSION_MODULE].join(", ")}, the STORY_VERSION templates, and the version examples in README.md and docs/, move the ${CHANGELOG_FILE} Unreleased entries under ${nextVersion}, rebuild the fallback, commit, tag ${tag}, push, and create the GitHub release. The tag push publishes ${packageJson.name}@${nextVersion} to npm from GitHub Actions.`);
     return;
   }
 

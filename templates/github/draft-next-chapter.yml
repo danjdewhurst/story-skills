@@ -15,11 +15,9 @@
 #      npx skills add danjdewhurst/story-skills  (or commit skills/ to .claude/skills/)
 #   3. Adjust STORY_DIR, the budgets, and the cron schedule to taste.
 #
-# The Story CLI is installed from GitHub, pinned to the STORY_REF tag below;
-# bump STORY_REF when you adopt a newer story-skills release. To use the
-# story-skills package from npm instead, replace
-# github:danjdewhurst/story-skills#$STORY_REF with story-skills@<version> in
-# the two "Install the Story CLI" steps.
+# The Story CLI is installed once per job from npm, pinned to the
+# STORY_VERSION release below; bump STORY_VERSION when you adopt a newer
+# story-skills release. Set STORY_PACKAGE to install from a git ref instead.
 #
 # Actions are pinned to commit SHAs with their moving tags in comments, so a
 # compromised tag cannot silently change what this workflow runs. Dependabot
@@ -88,7 +86,11 @@ defaults:
 
 env:
   STORY_DIR: "."
-  STORY_REF: "v0.21.0"
+  STORY_VERSION: "0.21.0"
+  # To run the CLI from GitHub instead of npm (an unreleased fix, a fork),
+  # uncomment STORY_PACKAGE and point it at a tag, branch, or commit; it
+  # replaces story-skills@$STORY_VERSION in the install step.
+  # STORY_PACKAGE: "github:danjdewhurst/story-skills#main"
   # Budgets. Scheduled runs use the defaults after ||; a manual run can
   # override them. A chapter outside the word range opens a draft pull request
   # and fails the run; the turn and dollar limits stop the agent.
@@ -167,7 +169,7 @@ jobs:
         if: steps.guard.outputs.skip != 'true'
         working-directory: ${{ runner.temp }}
         run: |
-          npm install --global --prefix "$RUNNER_TEMP/story-cli" "github:danjdewhurst/story-skills#$STORY_REF"
+          npm install --global --prefix "$RUNNER_TEMP/story-cli" "${STORY_PACKAGE:-story-skills@$STORY_VERSION}"
           echo "$RUNNER_TEMP/story-cli/bin" >> "$GITHUB_PATH"
 
       - name: Draft the next chapter
@@ -309,7 +311,7 @@ jobs:
       - name: Install the Story CLI
         working-directory: ${{ runner.temp }}
         run: |
-          npm install --global --prefix "$RUNNER_TEMP/story-cli" "github:danjdewhurst/story-skills#$STORY_REF"
+          npm install --global --prefix "$RUNNER_TEMP/story-cli" "${STORY_PACKAGE:-story-skills@$STORY_VERSION}"
           echo "$RUNNER_TEMP/story-cli/bin" >> "$GITHUB_PATH"
 
       - name: Fetch the draft bundle

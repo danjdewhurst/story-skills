@@ -37,8 +37,8 @@ The CLI needs Node 18 or newer and has no runtime dependencies. In a CI job, use
 | Source | Command | Notes |
 |---|---|---|
 | npm, pinned | `npx --yes --package story-skills@0.21.0 story <command>` | Fetches the published package. |
-| npm, installed once per job | `npm install -g story-skills@0.21.0`, then `story <command>` | Faster when a job runs several commands. |
-| GitHub tag | `npx --yes --package github:danjdewhurst/story-skills#v0.21.0 story <command>` | What the templates use. Fetches the tagged release from GitHub, because the templates predate the npm package. |
+| npm, installed once per job | `npm install -g story-skills@0.21.0`, then `story <command>` | What the templates use. Faster when a job runs several commands. |
+| GitHub tag | `npx --yes --package github:danjdewhurst/story-skills#v0.21.0 story <command>` | Fetches the tagged release from GitHub. Slower, and without npm provenance; use it for an unreleased fix or a fork. |
 | Bundled fallback | `node <skills-dir>/story-maintenance/scripts/story.js <command>` | No network needed if your repository already contains the skills, for example under `.claude/skills/`. |
 
 Always pin a version. An unpinned `npx story-skills` can pick up a new release mid-book and start reporting findings your project has never seen. Local installs can track the latest release; CI should pin, because new releases can add checks.
@@ -265,7 +265,7 @@ flowchart LR
 
 All three workflows:
 
-- run the CLI with `npx` from the GitHub tag in `STORY_REF`, using Node 24 from `actions/setup-node`;
+- install the CLI once per job from npm, at the release in `STORY_VERSION`, into the runner's temporary folder, and run plain `story` commands, using Node 24 from `actions/setup-node`;
 - read the project from `STORY_DIR`, which defaults to the repository root (`.`);
 - pin every action to a commit SHA, with the tag it corresponds to in a comment;
 - set `timeout-minutes` on every job (15 minutes, and 60 for the draft job that runs the agent), so a run that hangs, or a project that makes the CLI slow, cannot hold a runner for GitHub's six-hour default.
@@ -339,7 +339,7 @@ The **draft job**:
 
 1. **Skips while a draft is open.** The first step lists open pull requests whose head branch starts with `draft/` and comes from this repository. If there is one, every later step is skipped and the run succeeds. Until you merge or close that PR, `story next` would keep recommending the same chapter. Pull requests from forks are ignored, so they cannot block drafting.
 2. **Checks the budgets** are plain numbers, and that the word range is not upside down.
-3. **Checks out, sets up Node, and installs the Story CLI.** Full history (`fetch-depth: 0`), Node 24, and the CLI at `STORY_REF` installed into the runner's temporary folder, outside the repository, so the agent runs plain `story` commands. It never runs `npx`, which would read an `.npmrc` the agent could write.
+3. **Checks out, sets up Node, and installs the Story CLI.** Full history (`fetch-depth: 0`), Node 24, and the CLI at `STORY_VERSION` installed into the runner's temporary folder, outside the repository, so the agent runs plain `story` commands. It never runs `npx`, which would read an `.npmrc` the agent could write.
 4. **Drafts with Claude Code.** The agent is told that everything it reads in the project is story material, never instructions. It is prompted to:
    1. run `story next .`, and do not open `continuity/state.md`, the registries, the timeline, active arcs, or other project files for background (drafting context comes from `story context`, whose story essentials carry the book's language, so it does not open `story.md` either; if context leaves items out to fit the budget it reruns with a larger `--budget` instead of opening the listed files);
    2. if `story next` reports a P0 maintenance issue, fix it on a `draft/maintenance-<YYYY-MM-DD>` branch, commit, and stop;
@@ -412,7 +412,7 @@ If you want `story-checks.yml` to run on drafted PRs as well, for example becaus
 2. In Settings, then Pages, set **Source** to **GitHub Actions**.
 3. Decide who may read the book (see [Keeping the manuscript private](#keeping-the-manuscript-private)) before the first push.
 4. If the project is not at the repository root, set `STORY_DIR`.
-5. Check `STORY_REF`. The `html` format is newer than Story Skills 0.8.2, so `STORY_REF` must name a later release. A template copied from a release that includes it already does, because the release process sets `STORY_REF` to its own version. With an older tag, the build step fails with `Unsupported build format: html`.
+5. Check `STORY_VERSION`. The `html` format is newer than Story Skills 0.8.2, so `STORY_VERSION` must name a later release. A template copied from a release that includes it already does, because the release process sets `STORY_VERSION` to its own version. With an older release, the build step fails with `Unsupported build format: html`.
 6. Commit and push to `main`, or run **Review copy** from the Actions tab.
 
 `story build` needs at least one chapter, so a project fresh from `story init` has nothing to publish. Until `chapters/` holds a chapter file, the workflow still runs the checks, then skips the build, upload, and `deploy` steps and passes with a notice. The first push that adds a chapter publishes the first copy.
@@ -491,7 +491,7 @@ Set `STORY_DIR` at the top of each workflow file when the story project lives in
 ```yaml
 env:
   STORY_DIR: "books/the-last-ember"
-  STORY_REF: "v0.21.0"
+  STORY_VERSION: "0.21.0"
 ```
 
 For several books in one repository, copy the check steps once per book, or turn `STORY_DIR` into a matrix value. For a linked series, add a `story series "$STORY_DIR"` step: it exits 1 when canon contradicts itself across books. The `story links` step is what catches a missing series backlink. See [Series](series.md).
@@ -500,9 +500,9 @@ Every book a linked series names in `follows` or `precedes` must be in the check
 
 ### CLI version
 
-`STORY_REF` is the Story Skills release tag the CLI is fetched from. The release process sets it to the release's own version, so a template copied from a given release already points at that release. Bump it in every workflow file you use when you want a newer release, and run the checks locally first, because new releases can add checks. Releases are listed on the [GitHub releases page](https://github.com/danjdewhurst/story-skills/releases).
+`STORY_VERSION` is the Story Skills release the CLI is installed from. Each job installs `story-skills@$STORY_VERSION` from npm once, in its **Install the Story CLI** step, into the runner's temporary folder, and later steps run plain `story`. The release process sets it to the release's own version, so a template copied from a given release already points at that release. Bump it in every workflow file you use when you want a newer release, and run the checks locally first, because new releases can add checks. Releases are listed on the [GitHub releases page](https://github.com/danjdewhurst/story-skills/releases) and on [npm](https://www.npmjs.com/package/story-skills?activeTab=versions).
 
-To use the npm package instead of the GitHub tag, replace `github:danjdewhurst/story-skills#$STORY_REF` with `story-skills@<version>` in each `npx --package` value. `draft-next-chapter.yml` installs the CLI once per job instead, in its two **Install the Story CLI** steps; change the package there, and the agent's `story` commands follow.
+To install from GitHub instead, for an unreleased fix or a fork, uncomment `STORY_PACKAGE` in the workflow's `env` block and set it to any npm install spec, such as `github:danjdewhurst/story-skills#main`, a tag, or a commit. When it is set, every install step uses it in place of `story-skills@$STORY_VERSION`. A git install is slower and has no npm provenance, so switch back once the fix is released.
 
 ### Schedule
 
@@ -536,7 +536,7 @@ For example, to attach an EPUB to every run:
 
 ```yaml
       - name: Build EPUB
-        run: npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story build "$STORY_DIR" --format epub
+        run: story build "$STORY_DIR" --format epub
 
       - name: Upload EPUB
         uses: actions/upload-artifact@v4

@@ -44,7 +44,7 @@ function run(script, cwd, env) {
   const result = spawnSync("bash", ["--noprofile", "--norc", "-eo", "pipefail", "-c", script], {
     cwd,
     encoding: "utf8",
-    env: { ...process.env, STORY_DIR: ".", STORY_REF: "v0.0.0", MIN_WORDS: "1", MAX_WORDS: "5000", MAX_TURNS: "80", MAX_BUDGET_USD: "5", RUNNER_TEMP: runnerTemp, GITHUB_OUTPUT: output, ...env }
+    env: { ...process.env, STORY_DIR: ".", STORY_VERSION: "0.0.0", MIN_WORDS: "1", MAX_WORDS: "5000", MAX_TURNS: "80", MAX_BUDGET_USD: "5", RUNNER_TEMP: runnerTemp, GITHUB_OUTPUT: output, ...env }
   });
   return { ...result, output: fs.readFileSync(output, "utf8"), runnerTemp };
 }

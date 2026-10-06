@@ -25,11 +25,12 @@
 #
 # The html build format ships in the first story-skills release after 0.8.2,
 # build --stamp in the first release after 0.12.0, and build --note-url (and
-# compare --anchor) in the first release after 0.13.0; STORY_REF must point
-# at that release or later.
+# compare --anchor) in the first release after 0.13.0; STORY_VERSION must
+# name that release or later.
 #
-# The Story CLI runs straight from GitHub, pinned to the STORY_REF tag below;
-# bump STORY_REF when you adopt a newer story-skills release.
+# The Story CLI is installed once per job from npm, pinned to the
+# STORY_VERSION release below; bump STORY_VERSION when you adopt a newer
+# story-skills release. Set STORY_PACKAGE to install from a git ref instead.
 #
 # Actions are pinned to commit SHAs with their moving tags in comments, so a
 # compromised tag cannot silently change what this workflow runs. Dependabot
@@ -52,7 +53,11 @@ concurrency:
 
 env:
   STORY_DIR: "."
-  STORY_REF: "v0.21.0"
+  STORY_VERSION: "0.21.0"
+  # To run the CLI from GitHub instead of npm (an unreleased fix, a fork),
+  # uncomment STORY_PACKAGE and point it at a tag, branch, or commit; it
+  # replaces story-skills@$STORY_VERSION in the install step.
+  # STORY_PACKAGE: "github:danjdewhurst/story-skills#main"
 
 jobs:
   build:
@@ -71,8 +76,14 @@ jobs:
         with:
           node-version: 24
 
+      - name: Install the Story CLI
+        working-directory: ${{ runner.temp }}
+        run: |
+          npm install --global --prefix "$RUNNER_TEMP/story-cli" "${STORY_PACKAGE:-story-skills@$STORY_VERSION}"
+          echo "$RUNNER_TEMP/story-cli/bin" >> "$GITHUB_PATH"
+
       - name: Check the project before publishing it
-        run: npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story check "$STORY_DIR"
+        run: story check "$STORY_DIR"
 
       # story build exits 3 with "No chapters found to export" on a project
       # that has no chapters yet, such as one fresh from story init.
@@ -90,7 +101,7 @@ jobs:
         if: steps.chapters.outputs.has-chapters == 'true'
         run: |
           mkdir -p review-site
-          npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story build "$STORY_DIR" --format html --stamp "$(date -u +%Y-%m-%d) ${GITHUB_SHA::7}" --note-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/issues/new?template=manuscript-note.yml" --out "$GITHUB_WORKSPACE/review-site/index.html"
+          story build "$STORY_DIR" --format html --stamp "$(date -u +%Y-%m-%d) ${GITHUB_SHA::7}" --note-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/issues/new?template=manuscript-note.yml" --out "$GITHUB_WORKSPACE/review-site/index.html"
 
       - name: Keep the review copy as a workflow artifact
         if: steps.chapters.outputs.has-chapters == 'true'
