@@ -11750,6 +11750,7 @@ function releaseCadence(data) {
 }
 function releaseSchedule({ data, chapters, today }) {
   const cadence = releaseCadence(data);
+  const complete = data.status === "complete";
   const todayDays = parseClockDate(today).days;
   const episodes = [];
   chapters.forEach((chapter, index) => {
@@ -11771,7 +11772,7 @@ function releaseSchedule({ data, chapters, today }) {
   const candidates = episodes.filter((episode) => episode.days >= todayDays);
   let unwritten = 0;
   let firstUnwritten = null;
-  if (cadence !== null) {
+  if (cadence !== null && !complete) {
     const upcoming = projected(Math.max(chapters.length, Math.ceil((todayDays - cadence.startDays) / cadence.every)));
     if (upcoming !== null) {
       candidates.push(upcoming);
@@ -11794,6 +11795,7 @@ function releaseSchedule({ data, chapters, today }) {
   return {
     every: cadence?.every ?? null,
     start: cadence?.start ?? null,
+    complete,
     next,
     episodes: episodes.map(({ days, ...episode }) => episode),
     warnings
@@ -11813,12 +11815,17 @@ function formatNextRelease(release) {
     return null;
   }
   if (release.next === null) {
-    return "Next release: none scheduled after today";
+    if (!release.complete) {
+      return "Next release: none scheduled after today";
+    }
+    const last = release.episodes.reduce((latest, entry) => latest === null || entry.date >= latest.date ? entry : latest, null);
+    return `Next release: none, the story is complete${last === null ? "" : `; episode ${last.episode} (${last.chapter}) on ${last.date} was the last`}`;
   }
   const { episode, chapter, date, daysUntil, drafted } = release.next;
   const when = daysUntil === 0 ? "today" : `in ${plural(daysUntil, "day")}`;
   const state = chapter === null ? "no chapter yet" : drafted ? "drafted" : "not drafted";
-  return `Next release: episode ${episode}${chapter === null ? "" : ` (${chapter})`} on ${date}, ${when} (${state})`;
+  const last = release.complete && !release.episodes.some((entry) => entry.date > date || entry.date === date && entry.episode > episode);
+  return `Next release: episode ${episode}${chapter === null ? "" : ` (${chapter})`} on ${date}, ${when} (${state}${last ? ", the last episode" : ""})`;
 }
 function formatDate(days) {
   return new Date(days * 86400000).toISOString().slice(0, 10);

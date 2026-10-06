@@ -1259,7 +1259,7 @@ story progress [path] [--log] [--date <YYYY-MM-DD>] [--weeks <n>] [--dry-run] [-
 
 Reports the manuscript word count against `target-words` in `story.md`, the days left to `deadline` and the words a day needed to meet it, the next serial episode due by the [release schedule](project-format.md#release-schedule), per-chapter `target-words`, and pace from the session log in `progress.md`. Once a session is logged, it also reports today's words (against `daily-target-words` when set), the current and longest writing streak, and the words written in each of the last four weeks (`--weeks` for more or fewer); see [Story progress](continuity.md#story-progress) for how each is counted.
 
-In `--json`, `data.release` is null for a book with no release schedule. Otherwise it holds `every` and `start` (the cadence, or null), `next` (the first release today or later: `episode`, `chapter` and `file`, both null for an episode with no chapter yet, `date`, `drafted`, and `daysUntil`, or null when nothing is scheduled), and `episodes`, each chapter with a release date (`episode`, `chapter`, `file`, `date`, and `drafted`). An episode due within 3 days, or past due, with no prose is a [`release-undrafted`](#codes-progress-and-next) warning.
+In `--json`, `data.release` is null for a book with no release schedule. Otherwise it holds `every` and `start` (the cadence, or null), `complete` (true when `story.md` has `status: complete`, which stops the cadence at the last chapter), `next` (the first release today or later: `episode`, `chapter` and `file`, both null for an episode with no chapter yet, `date`, `drafted`, and `daysUntil`, or null when nothing is scheduled), and `episodes`, each chapter with a release date (`episode`, `chapter`, `file`, `date`, and `drafted`). An episode due within 3 days, or past due, with no prose is a [`release-undrafted`](#codes-progress-and-next) warning.
 
 In `--json`, `data.daily` holds `target` (the daily target, or null), `writingDays` (the `writing-days` as `mon` to `sun`, or null), `today` (`date`, `scheduled`, `written`, `remaining`, and `met`; `written` is null with no session logged before today), `streak` (`current` and `longest`, in days), and `weeks`, one per `--weeks`, oldest first (`start` and `end`, Monday to Sunday, `written`, `days` that gained words, and `target`, the daily target times the writing days in that week, or null).
 
@@ -3249,7 +3249,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 
 | Code | Level | Reported when |
 |---|---|---|
-| `release-undrafted` | warning | A serial episode's release date is past or within 3 days and its chapter has no prose yet, or, with a `release-every` cadence, the episode has no chapter yet (see [Release schedule](project-format.md#release-schedule)). |
+| `release-undrafted` | warning | A serial episode's release date is past or within 3 days and its chapter has no prose yet, or, with a `release-every` cadence, the episode has no chapter yet, unless `story.md` has `status: complete` (see [Release schedule](project-format.md#release-schedule)). |
 
 ### Codes: compare
 
