@@ -7,6 +7,7 @@ import { recordChanges, removeFile, writeFile } from "../src/files.js";
 import { LOCK_FILE } from "../src/lock.js";
 import { previewChanges } from "../src/preview.js";
 import { createEntity } from "../src/story.js";
+import { MAX_SERIES_BOOKS } from "../src/series.js";
 import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
 import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
@@ -270,9 +271,9 @@ describe("--dry-run", () => {
 
     const fixPreview = invokeJson(root, ["doctor", "--fix", "--dry-run", "--json"]);
     const fixReal = invokeJson(root, ["doctor", "--fix", "--json"]);
+    expect(fixPreview.code).toBe(0);
     expect(fixPreview.code).toBe(fixReal.code);
-    expect(fixPreview.envelope.data.links).toEqual(fixReal.envelope.data.links);
-    expect(fixPreview.envelope.data.validation).toEqual(fixReal.envelope.data.validation);
+    expect(fixPreview.envelope.data.checks).toEqual(fixReal.envelope.data.checks);
     expect(fixPreview.envelope.diagnostics).toEqual(fixReal.envelope.diagnostics);
 
     // kael-voss is also defined in the linked book, so both runs warn.
@@ -295,30 +296,54 @@ describe("--dry-run", () => {
     expect(snapshot(sibling)).toEqual(siblingBefore);
   });
 
-  test("a dry run copies only sibling books, keeps a symlinked sibling a symlink, and skips missing or unparsable ones", () => {
+  test("a dry run finds linked books through symlinks and outside the parent folder as the real run does", () => {
     const parent = makeTempDir();
     for (const name of ["the-last-ember", "the-fall-of-the-citadel"]) {
       fs.cpSync(path.join(examplesRoot, name), path.join(parent, name), { recursive: true });
     }
     const root = path.join(parent, "the-last-ember");
+    const far = path.join(makeTempDir(), "far-book");
+    writeMarkdown(path.join(far, "story.md"), "title: Far Book\nseries: the-ember-cycle");
     const story = path.join(root, "story.md");
-    fs.writeFileSync(story, fs.readFileSync(story, "utf8").replace("  - ../the-fall-of-the-citadel\n",
-      "  - ../alias\n  - ../broken\n  - ../missing\n  - ../dangling\n  - ../../elsewhere\n"));
+    const links = ["../alias", "../far-alias", path.relative(root, far), "../broken", "../missing", "../dangling", "../../.."];
+    fs.writeFileSync(story, fs.readFileSync(story, "utf8")
+      .replace("  - ../the-fall-of-the-citadel\n", links.map((link) => `  - ${link}\n`).join("")));
     fs.symlinkSync("the-fall-of-the-citadel", path.join(parent, "alias"));
+    fs.symlinkSync(far, path.join(parent, "far-alias"));
     fs.symlinkSync("nowhere", path.join(parent, "dangling"));
-    fs.mkdirSync(path.join(parent, "broken"));
-    fs.writeFileSync(path.join(parent, "broken", "story.md"), "---\ntitle: [\n---\n");
+    writeMarkdown(path.join(parent, "broken", "story.md"), "title: [");
+    const sibling = path.join(parent, "the-fall-of-the-citadel");
+    const siblingBefore = snapshot(sibling);
+    const farBefore = snapshot(far);
 
-    const { result } = previewChanges(root, (copy) => {
-      const scratch = path.dirname(copy);
-      return { books: fs.readdirSync(scratch).sort(), alias: fs.readlinkSync(path.join(scratch, "alias")) };
-    });
-    expect(result).toEqual({ books: ["alias", "broken", "the-fall-of-the-citadel", "the-last-ember"], alias: "the-fall-of-the-citadel" });
+    const doctor = (cwd) => {
+      const preview = invokeJson(cwd, ["doctor", "--fix", "--dry-run", "--json"]);
+      const real = invokeJson(cwd, ["doctor", "--fix", "--json"]);
+      expect(preview.code).toBe(real.code);
+      expect(preview.envelope.data.checks).toEqual(real.envelope.data.checks);
+      expect(preview.envelope.diagnostics).toEqual(real.envelope.diagnostics);
+      return real.envelope.diagnostics.map((entry) => entry.code);
+    };
+    const codes = doctor(root);
+    expect(codes).toContain("series-link-not-sibling");
+    expect(codes).toContain("series-link-not-project");
+    expect(snapshot(far)).toEqual(farBefore);
 
-    const preview = invokeJson(root, ["doctor", "--fix", "--dry-run", "--json"]);
-    const real = invokeJson(root, ["doctor", "--fix", "--json"]);
-    expect(preview.code).toBe(real.code);
-    expect(preview.envelope.data.links).toEqual(real.envelope.data.links);
+    // The project opened through a symlink: the linked book's backlink to
+    // the real folder name still finds it.
+    fs.writeFileSync(story, fs.readFileSync(path.join(examplesRoot, "the-last-ember", "story.md")));
+    fs.symlinkSync("the-last-ember", path.join(parent, "ember-alias"));
+    expect(doctor(path.join(parent, "ember-alias"))).not.toContain("series-missing-backlink");
+    expect(snapshot(sibling)).toEqual(siblingBefore);
+  });
+
+  test("a dry run copies no more linked books than the series book limit", () => {
+    const parent = makeTempDir();
+    for (let index = 0; index < MAX_SERIES_BOOKS + 3; index += 1) {
+      writeMarkdown(path.join(parent, `book-${index}`, "story.md"), `title: Book ${index}\nprecedes: ../book-${index + 1}`);
+    }
+    const { result } = previewChanges(path.join(parent, "book-0"), (copy) => fs.readdirSync(path.dirname(copy)).length);
+    expect(result).toBe(MAX_SERIES_BOOKS + 1);
   });
 
   test("wordcount --dry-run needs --write, and story.md cannot default it", () => {

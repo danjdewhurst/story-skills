@@ -4,7 +4,7 @@ import path from "node:path";
 import { MAX_READ_BYTES, isPathInside, recordChanges } from "./files.js";
 import { LOCK_FILE, TAKEOVER_FILE } from "./lock.js";
 import { MAX_SCAN_DEPTH, SKIPPED_SCAN_DIRECTORIES, requireStoryFile } from "./scan.js";
-import { readBookFrontmatter, seriesLinks } from "./series.js";
+import { MAX_SERIES_BOOKS, readBookFrontmatter, seriesLinks } from "./series.js";
 
 // --dry-run: a write command runs unchanged on a scratch copy of the
 // project, and the writes, renames, and deletes it records there (see
@@ -12,10 +12,10 @@ import { readBookFrontmatter, seriesLinks } from "./series.js";
 // drift from it, and the project itself is only read: no file is written,
 // and its lock is not taken, so a preview never waits on a running command.
 //
-// The copy sits in a scratch folder that stands in for the project's parent
-// folder, beside copies of the books it is linked to in a series, so links
-// such as `follows: ../book-one` resolve in the copy as they do in the
-// project.
+// The scratch folder stands in for the filesystem root: the copy sits at the
+// project's own absolute path inside it, beside copies of the books it is
+// linked to in a series, so a link such as `follows: ../book-one` resolves in
+// the copy as it does in the project.
 
 // Runs `run(copyRoot)` on a copy of the project at `root` and returns
 // { result, changes }: the command's result with every path into the copy
@@ -26,15 +26,23 @@ export function previewChanges(root, run) {
   const projectRoot = path.resolve(root);
   requireStoryFile(projectRoot);
   const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "story-dry-run-")));
-  const name = path.basename(projectRoot);
-  const copyRoot = path.join(scratch, name || "project");
-  // Every path into the scratch folder maps to the same path beside the
-  // project, so a finding about a linked book names the real book too.
-  const [from, to] = name ? [scratch, path.dirname(projectRoot)] : [copyRoot, projectRoot];
+  const fsRoot = path.parse(projectRoot).root;
+  const atRoot = projectRoot === fsRoot;
+  // A path's place in the scratch folder. A Windows drive or share becomes
+  // the first folder: C:\book is scratch\C\book.
+  const mirror = (target) => {
+    const drive = path.parse(target).root;
+    return path.join(scratch, drive.replace(/[:\\/]/g, ""), target.slice(drive.length));
+  };
+  const copyRoot = atRoot ? path.join(scratch, "project") : mirror(projectRoot);
+  // Every path into the scratch folder maps back to the path it copies, so a
+  // finding about a linked book names the real book too.
+  const [from, to] = atRoot ? [copyRoot, projectRoot] : [mirror(fsRoot), fsRoot.replace(/[\\/]+$/, "")];
   try {
+    fs.mkdirSync(path.dirname(copyRoot), { recursive: true });
     copyProject(projectRoot, copyRoot, { realSource: realPath(projectRoot), copyRoot });
-    if (name) {
-      copyLinkedBooks(projectRoot, scratch);
+    if (!atRoot) {
+      copyLinkedBooks(projectRoot, mirror);
     }
     const { result, changes } = recordChanges(copyRoot, () => run(copyRoot));
     return { result: mapPaths(result, from, to), changes };
@@ -45,40 +53,33 @@ export function previewChanges(root, run) {
   }
 }
 
-// Copies the books the project is linked to through follows/precedes, and
-// the books those are linked to, into `scratch` under their folder names.
-// Like `story series`, only sibling folders are followed: a link elsewhere
-// is reported as an error by the real run and finds no book in the preview.
-// A sibling that is a symlink to another sibling stays a symlink to that
-// book's copy; one that leads out of the parent folder is not copied. The
-// copies are scratch files, so no write reaches a linked book.
-function copyLinkedBooks(projectRoot, scratch) {
+// Copies the books the project links to through follows/precedes, and those
+// its sibling books link to, each to its own path in the scratch folder
+// (mirror), since series checks and links read them there. A book is copied
+// once, at its real path; a link that reaches it through a symlink stays a
+// symlink to that copy, so checks that compare real paths (is it the same
+// book, is it a sibling) answer as they do in the project. The copies are
+// scratch files, so no write reaches a linked book, and copying stops at
+// the series book limit, as `story series` does.
+function copyLinkedBooks(projectRoot, mirror) {
   const parent = path.dirname(projectRoot);
   const realParent = realPath(parent);
-  const queue = [projectRoot];
-  const seen = new Set([path.basename(projectRoot)]);
-  const visit = (name) => {
-    if (seen.has(name)) {
-      return;
-    }
-    seen.add(name);
-    const source = path.join(parent, name);
-    const target = path.join(scratch, name);
-    const stat = fs.lstatSync(source, { throwIfNoEntry: false });
-    if (stat?.isSymbolicLink()) {
-      // realPath returns a dangling link unchanged.
-      const real = realPath(source);
-      if (real !== source && path.dirname(real) === realParent) {
-        fs.symlinkSync(path.basename(real), target);
-        visit(path.basename(real));
-      }
-      return;
-    }
-    if (stat?.isDirectory() && fs.existsSync(path.join(source, "story.md"))) {
-      copyProject(source, target, { realSource: realPath(source), copyRoot: target });
-      queue.push(source);
+  // A real path in the parent folder is named through the parent as the
+  // project names it (on macOS /var links to /private/var), so a sibling's
+  // copy shares the parent folder of the project's copy.
+  const home = (real) => (isPathInside(realParent, real) ? path.join(parent, path.relative(realParent, real)) : real);
+  const alias = (link, book) => {
+    if (link !== book && !fs.existsSync(mirror(link))) {
+      fs.mkdirSync(path.dirname(mirror(link)), { recursive: true });
+      fs.symlinkSync(mirror(book), mirror(link));
     }
   };
+  const projectReal = realPath(projectRoot);
+  // Each book copied, by real path, and the path its copy mirrors.
+  const copies = new Map([[projectReal, projectRoot]]);
+  alias(home(projectReal), projectRoot);
+  const queued = new Set([projectReal]);
+  const queue = [projectRoot];
   while (queue.length > 0) {
     const book = queue.shift();
     let data;
@@ -88,8 +89,23 @@ function copyLinkedBooks(projectRoot, scratch) {
       continue;
     }
     for (const link of ["follows", "precedes"].flatMap((field) => seriesLinks(book, data ?? {}, field))) {
-      if (path.dirname(link) === parent) {
-        visit(path.basename(link));
+      const real = realPath(link);
+      if (!copies.has(real)) {
+        const target = mirror(home(real));
+        // fs.existsSync(target): a folder the copies already sit in, such as
+        // the parent folder.
+        if (copies.size > MAX_SERIES_BOOKS || !fs.existsSync(path.join(real, "story.md")) || fs.existsSync(target)) {
+          continue;
+        }
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        copyProject(real, target, { realSource: real, copyRoot: target });
+        copies.set(real, home(real));
+      }
+      alias(link, copies.get(real));
+      // Like `story series`, only sibling books' links are followed.
+      if (path.dirname(link) === parent && !queued.has(real)) {
+        queued.add(real);
+        queue.push(link);
       }
     }
   }
