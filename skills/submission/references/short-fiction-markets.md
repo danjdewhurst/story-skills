@@ -140,10 +140,11 @@ open, holds, entries past their window, and stories with no submission out.
 ## Assemble a collection
 
 A collection gathers one author's stories; an anthology gathers several
-authors' stories, usually under an editor. The steps below fit both. How to
-lay out a collection as a story project is not settled here; each story is
-an ordinary Story Skills project, and `docs/series.md` shows how separate
-projects link to each other.
+authors' stories, usually under an editor. The steps below fit both. Each
+story stays an ordinary Story Skills project; the book is one more project
+with each story as a chapter, titled by a `chapter-heading: "{title}"` label
+and with no `form`. `docs/series.md`, Short-story collections and
+anthologies, gives the layout, the anthology byline, and the builds.
 
 1. **Choose the stories.** List the candidates with each one's word count,
    form, and publication history from the tracker. Ask the user which to
@@ -169,6 +170,9 @@ projects link to each other.
    publication history. Check that each story's rights have reverted, or
    that its first publisher allows reprinting in a collection, and list any
    that need the user to confirm. Never add a credit the user has not given.
+   In the collection project, put the credits on a back-matter page:
+   `story add matter "Acknowledgements" --placement back`, then write the
+   lines into `matter/acknowledgements.md` and run `story validate .`.
 5. **Check the stories against each other.** In a linked collection, run
    each story's checks (`story validate .`, `story continuity .`) and compare
    shared names, dates, and facts by reading. Note contradictions for the
