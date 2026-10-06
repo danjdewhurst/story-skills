@@ -10,6 +10,7 @@ import { importManuscript } from "./import.js";
 import { recordChanges } from "./files.js";
 import { diagnosticsFrom, resultData, wantsJson, writeJsonResult } from "./json.js";
 import { previewChanges } from "./preview.js";
+import { workflowPinActions } from "./workflows.js";
 import { isTruthy } from "./options.js";
 import { STDIN_ARG, readStdin, stdinText } from "./stdin.js";
 import { formatNames } from "./names.js";
@@ -598,7 +599,7 @@ export const COMMANDS = [
     project: "positional",
     options: ["fix", ...WRITE_OPTIONS],
     run(context) {
-      const { parsed, io, root, overrides } = context;
+      const { parsed, io, cwd, root, overrides } = context;
       const options = { displayPath: displayPath(parsed), overrides };
       if (isTruthy(parsed.options.fix)) {
         return runDoctorFix(context, options);
@@ -606,7 +607,8 @@ export const COMMANDS = [
       if (isTruthy(parsed.options["dry-run"])) {
         throw usageError("--dry-run previews doctor --fix: add --fix");
       }
-      const report = projectActions(root(), options);
+      const projectRoot = root();
+      const report = withWorkflowPins(projectActions(projectRoot, options), projectRoot, cwd);
       if (wantsJson(parsed)) {
         return reportProjectJson(io, "doctor", report);
       }
@@ -820,13 +822,15 @@ function runWrite({ parsed, io, root, overrides }, command, write, describe) {
 // with --dry-run, on a copy, as runWrite does), then prints what it changed
 // and the diagnosis that remains. Unlike doctor, it exits 1 while any check
 // still reports an error, since those need the writer.
-function runDoctorFix({ parsed, io, root }, options) {
+function runDoctorFix({ parsed, io, cwd, root }, options) {
   const projectRoot = root();
   const dryRun = isTruthy(parsed.options["dry-run"]);
   const fix = (target) => fixProject(target, options);
   const { result: report, changes } = dryRun ? previewChanges(projectRoot, fix) : recordChanges(projectRoot, () => fix(projectRoot));
   const ok = report.validation.ok && report.links.ok && report.continuity.ok;
-  const { repairs, stopped, ...diagnosis } = report;
+  const { repairs, stopped, ...rest } = report;
+  // Read from the real project, since a --dry-run diagnoses a copy.
+  const diagnosis = withWorkflowPins(rest, projectRoot, cwd);
   if (wantsJson(parsed)) {
     return reportProjectJson(io, "doctor", { ...diagnosis, fix: { dryRun, repairs, stopped, changes } }, {
       ok,
@@ -835,6 +839,12 @@ function runDoctorFix({ parsed, io, root }, options) {
   }
   io.stdout.write(`${formatRepairs(repairs, stopped, changes, dryRun)}\n${formatDoctorReport(diagnosis)}`);
   return ok ? EXIT_CODES.ok : EXIT_CODES.findings;
+}
+
+// doctor's report with a P3 action for each copied workflow that pins an
+// older CLI or still uses STORY_REF (see workflows.js).
+function withWorkflowPins(report, projectRoot, cwd) {
+  return { ...report, actions: [...report.actions, ...workflowPinActions(projectRoot, cwd)] };
 }
 
 // The repairs doctor --fix applied, each with the changes it made.

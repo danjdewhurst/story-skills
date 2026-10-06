@@ -160,6 +160,7 @@ flowchart LR
 | `src/import.js` | Splits an existing manuscript into a new project and suggests entity candidates. |
 | `src/languages/` | Language packs: `index.js` resolves a BCP 47 tag to a pack (`languagePack`), reads story.md `language` (`projectLanguage`), and answers whether a pack has a word list (`checkList`, `checkSet`, `hasLists`, `skippedChecks`). `base.js` is the generic pack, `en.js` holds every English word list the analysis modules use, and `es.js`, `fr.js`, and `de.js` hold Spanish, French, and German lists. `style.js` applies a style sheet's `add-words` and `replace-words` (`withStyleLists`). `locale.js` sorts, cases, and formats numbers in a pack's language. See [Language packs](#language-packs). |
 | `src/version.js` | `VERSION`, printed by `story --version`. Bumped only by the release script. |
+| `src/workflows.js` | `workflowPinActions`: the `story doctor` P3 actions for copied GitHub Actions workflows (in the project and the git root above it) whose `STORY_VERSION` is older than `VERSION` or that still set `STORY_REF`. It matches the env line by regex and never parses YAML. |
 
 Most commands follow the same pattern. A function takes the project root, calls `scanProject(root)` from `src/scan.js` to read every entity file into one in-memory project object, and passes that object to a pure function in a feature module. For example, `checkProjectContinuity(root)` in `src/story.js` is `checkContinuity(scanProject(root))`. What happens next depends on the kind of command:
 

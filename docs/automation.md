@@ -12,6 +12,7 @@ This page is for writers and maintainers who keep a story project in a git repos
 - [Review copy workflow](#review-copy-workflow)
 - [Manuscript note issue form](#manuscript-note-issue-form)
 - [Customising the workflows](#customising-the-workflows)
+- [Upgrading the workflows](#upgrading-the-workflows)
 - [Checking before each commit](#checking-before-each-commit)
 - [Other CI systems](#other-ci-systems)
 
@@ -500,7 +501,7 @@ Every book a linked series names in `follows` or `precedes` must be in the check
 
 ### CLI version
 
-`STORY_VERSION` is the Story Skills release the CLI is installed from. Each job installs `story-skills@$STORY_VERSION` from npm once, in its **Install the Story CLI** step, into the runner's temporary folder, and later steps run plain `story`. The release process sets it to the release's own version, so a template copied from a given release already points at that release. Bump it in every workflow file you use when you want a newer release, and run the checks locally first, because new releases can add checks. Releases are listed on the [GitHub releases page](https://github.com/danjdewhurst/story-skills/releases) and on [npm](https://www.npmjs.com/package/story-skills?activeTab=versions).
+`STORY_VERSION` is the Story Skills release the CLI is installed from. Each job installs `story-skills@$STORY_VERSION` from npm once, in its **Install the Story CLI** step, into the runner's temporary folder, and later steps run plain `story`. The release process sets it to the release's own version, so a template copied from a given release already points at that release. Bump it in every workflow file you use when you want a newer release, and run the checks locally first, because new releases can add checks. Nothing bumps it for you; see [Upgrading the workflows](#upgrading-the-workflows). Releases are listed on the [GitHub releases page](https://github.com/danjdewhurst/story-skills/releases) and on [npm](https://www.npmjs.com/package/story-skills?activeTab=versions).
 
 To install from GitHub instead, for an unreleased fix or a fork, uncomment `STORY_PACKAGE` in the workflow's `env` block and set it to any npm install spec, such as `github:danjdewhurst/story-skills#main`, a tag, or a commit. When it is set, every install step uses it in place of `story-skills@$STORY_VERSION`. A git install is slower and has no npm provenance, so switch back once the fix is released.
 
@@ -560,6 +561,69 @@ updates:
     schedule:
       interval: "weekly"
 ```
+
+## Upgrading the workflows
+
+A copied workflow keeps installing the release in its `STORY_VERSION` until you change it. Dependabot updates the `uses:` action pins (see [Action pins](#action-pins)) but not an `env` value, so nothing reminds you when a newer Story Skills release is out. Behaviour the workflows rely on can change between releases, such as the review copy's `compare --anchor` labels, so upgrade deliberately.
+
+### Bumping STORY_VERSION
+
+1. Pick the release from the [GitHub releases page](https://github.com/danjdewhurst/story-skills/releases) and read its [changelog](../CHANGELOG.md) entries since your current pin.
+2. Run that release locally on the project, so new findings show up on your machine rather than in CI:
+
+   ```shell
+   npx --yes --package story-skills@0.21.0 story check .
+   ```
+
+3. Change the pin in every workflow file you copied, such as `.github/workflows/story-checks.yml`, `draft-next-chapter.yml`, and `review-copy.yml`. Each has one line to change, without a `v`:
+
+   ```yaml
+   env:
+     STORY_VERSION: "0.21.0"
+   ```
+
+4. Compare each file with the template from the same release in [`templates/github/`](../templates/github/). A release can change steps as well as the version.
+
+### Migrating from STORY_REF
+
+Templates from 0.21.0 and earlier pinned a git tag with `STORY_REF: "v0.20.0"` and fetched the CLI from GitHub with `github:danjdewhurst/story-skills#$STORY_REF`. The current templates install from npm with `STORY_VERSION`, which is faster and carries npm provenance. To migrate a copied workflow:
+
+1. Replace the `STORY_REF` line with `STORY_VERSION` and drop the `v` from the value, so `v0.20.0` becomes `0.20.0`, or name the release you are moving to.
+2. Replace each `npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story ...` step, or the `npm install ... "github:danjdewhurst/story-skills#$STORY_REF"` line, with the template's **Install the Story CLI** step and plain `story` commands. Copying the current template and reapplying your `STORY_DIR`, schedule, and extra steps is usually quickest.
+3. If `STORY_REF` named a branch or commit rather than a release, set `STORY_PACKAGE` to `github:danjdewhurst/story-skills#<ref>` instead (see [CLI version](#cli-version)).
+
+### Getting reminders
+
+`story doctor` reads the workflows in the project's `.github/workflows/`, and in the git repository root above it when the project lives in a subdirectory. It adds a low-priority action for each `STORY_VERSION` older than the CLI you are running, and for each legacy `STORY_REF`, naming the file, the line, and what to change it to, where `<old>` is the pinned release and `<cli>` the one you are running:
+
+```text
+- [P3] Update workflow CLI version: .github/workflows/story-checks.yml:30 installs story-skills <old>, older than this CLI (<cli>); after story check passes locally, change the line to STORY_VERSION: "<cli>".
+- [P3] Rename workflow STORY_REF: .github/workflows/review-copy.yml:47 sets the legacy STORY_REF; change the line to STORY_VERSION: "<cli>" and copy the install step from the current template (see Upgrading the workflows in docs/automation.md).
+```
+
+A legacy `STORY_REF` that names a release newer than the CLI keeps that release in the suggested line.
+
+It reads only the `STORY_VERSION:` and `STORY_REF:` lines, ignores commented-out ones, and says nothing when there is no workflows folder. `story next` and `story report` leave it out. Keeping your local CLI current and running `story doctor` now and then is enough to notice a stale pin.
+
+To get a pull request instead, [Renovate](https://docs.renovatebot.com/) can bump `STORY_VERSION` with a regex manager that reads the line as an npm version. Add this to `renovate.json` in your story repository:
+
+```json
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/[^/]+\\.ya?ml$/"],
+      "matchStrings": ["STORY_VERSION:\\s*\"(?<currentValue>[^\"]+)\""],
+      "depNameTemplate": "story-skills",
+      "datasourceTemplate": "npm"
+    }
+  ]
+}
+```
+
+Renovate then opens a pull request that changes the pin, and `story-checks.yml` runs on it with the new release, so you see what it reports before merging. Read the changelog before you merge it.
 
 ## Checking before each commit
 
