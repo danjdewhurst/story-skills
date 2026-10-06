@@ -15955,16 +15955,15 @@ function epubStylesheet(type, style = CLASSIC_STYLE) {
   if (type.vertical) {
     rules.push("html { -epub-writing-mode: vertical-rl; -webkit-writing-mode: vertical-rl; writing-mode: vertical-rl; }");
   }
+  const fonts = styleFonts(style, type);
+  if (!type.fonts.latin || fonts.body !== type.fonts.body) {
+    rules.push(`body { font-family: ${fonts.body}; }`);
+  }
   if (!style.styled) {
-    if (!type.fonts.latin) {
-      rules.push(`body { font-family: ${type.fonts.body}; }`);
-    }
     return rules.length === 0 ? "" : `${rules.join(`
 `)}
 `;
   }
-  const fonts = styleFonts(style, type);
-  rules.push(`body { font-family: ${fonts.body}; }`);
   if (fonts.heading !== null) {
     rules.push(`h1 { font-family: ${fonts.heading}; }`);
   }
