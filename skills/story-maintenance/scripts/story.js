@@ -20798,7 +20798,35 @@ function chapterReferenceFiles(root, chapterId, excluded) {
   const plan = planReferenceRewrites(root, context, new Map(excluded.map((file) => [file, null])), idRenamer(chapterId, probe), (body, file) => renameIdTokens(root, file, renameLinkTargets(root, file, body, context, probe), chapterId, probe, chapterOnly));
   return [...plan.keys()].map((file) => projectPath(root, file)).filter((file) => !REGISTRY_FILES.has(file)).sort();
 }
-var SPLIT_COPIED_FIELDS = ["numbered", "pov", "locations", "characters", "mentions", "status", "mode", "date", "strand"];
+var SPLIT_COPIED_FIELDS = ["numbered", "pov", "locations", "characters", "mentions", "status", "mode", "date", "time", "strand"];
+function rewrittenFiles(root, kind, ids) {
+  const files = new Set;
+  for (const id of ids) {
+    const context = entityReferenceContext(root, kind, id);
+    const probe = `${id}-restructure-probe`;
+    const plan = planReferenceRewrites(root, context, new Map, idRenamer(id, probe), (body, file) => renameIdTokens(root, file, renameLinkTargets(root, file, body, context, probe), id, probe));
+    plan.forEach((text, file) => files.add(file));
+  }
+  return [...files];
+}
+function assertRestructurable(project, { chapters, scenes, changed, created, chapterTargets }) {
+  const root = project.root;
+  const vacated = new Set(project.chapters.filter((chapter) => chapters.includes(chapter.id)).map((chapter) => chapter.file));
+  const occupied = chapterTargets.find((file) => fs12.existsSync(file) && !vacated.has(file));
+  if (occupied) {
+    throw refusedError(`${relative(project, occupied)} already exists and is not a chapter this command renumbers: fix it first (story validate reports it)`);
+  }
+  const ids = new Set([...chapters, ...chapterTargets.map((file) => path13.basename(file, ".md"))]);
+  for (const scene of project.scenes) {
+    const named = /^(.+)-scene-\d+$/.exec(scene.id)?.[1];
+    const expected = `${scene.chapter}-scene-${String(scene.scene).padStart(2, "0")}`;
+    if (named !== undefined && (ids.has(scene.chapter) || ids.has(named)) && scene.id !== expected) {
+      throw refusedError(`${relative(project, scene.file)} is scene ${scene.scene} of ${scene.chapter} by its frontmatter but not by its file name, so renumbering could collide with it: rename it to scenes/${expected}.md, or fix its chapter and scene fields, first`);
+    }
+  }
+  const fixed = [path13.join("continuity", "state.md"), EXEMPTIONS_FILE, ...REGISTRY_FILES].map((file) => path13.join(root, file));
+  assertWritable(root, [...changed, ...rewrittenFiles(root, "chapter", chapters), ...rewrittenFiles(root, "scene", scenes), ...fixed], created);
+}
 function splitChapterUnlocked(root, options) {
   const project = scanProject(root);
   assertProjectParses(project, "split");
@@ -20824,9 +20852,6 @@ function splitChapterUnlocked(root, options) {
   const newId = canonicalChapterId(number);
   const newFile = path13.join(project.root, "chapters", `${newId}.md`);
   const run = followingRun(project, number);
-  if (fs12.existsSync(newFile) && !run.some((entry) => entry.file === newFile)) {
-    throw refusedError(`${relative(project, newFile)} already exists and is not chapter ${number}: fix it first (story validate reports it)`);
-  }
   const scenes = project.scenes.filter((scene) => scene.chapter === chapter.id).sort((left, right) => left.scene - right.scene);
   const keep = point.atBreak ? point.breaksBefore : point.breaksBefore + 1;
   const moving = scenes.slice(keep);
@@ -20841,7 +20866,16 @@ function splitChapterUnlocked(root, options) {
   if (referencing.length > 0) {
     warnings.push(warn("split-references", `${referencing.join(", ")} still ${referencing.length === 1 ? "names" : "name"} ${chapter.id}, which now holds only the text before the split: check whether ${referencing.length === 1 ? "it" : "any of them"} should name ${newId} instead`, referencing.length === 1 ? referencing[0] : null));
   }
-  assertWritable(project.root, [chapter.file, ...chapterRunFiles(project, run), ...moving.map((scene) => scene.file)], [newFile]);
+  const runIds = new Set(run.map((entry) => entry.id));
+  const chapterTargets = [newFile, ...run.map((entry) => path13.join(project.root, "chapters", `${canonicalChapterId(entry.number + 1)}.md`))];
+  assertRestructurable(project, {
+    chapters: [chapter.id, ...runIds],
+    scenes: [...moving, ...project.scenes.filter((scene) => runIds.has(scene.chapter))].map((scene) => scene.id),
+    changed: [chapter.file, ...chapterRunFiles(project, run), ...moving.map((scene) => scene.file)],
+    created: [...chapterTargets, ...moving.map((scene, index) => path13.join(project.root, "scenes", `${newId}-scene-${String(index + 1).padStart(2, "0")}.md`))],
+    chapterTargets
+  });
+  const dead = new Set(project.characters.filter((character) => character.diedIn === chapter.id).map((character) => character.id));
   restructureWrites(project.root, () => {
     shiftChapters(project.root, run, 1, warnings);
     const current = scanProject(project.root);
@@ -20853,7 +20887,12 @@ function splitChapterUnlocked(root, options) {
 `;
     const { hook, ...kept } = markdown.data;
     const copied = Object.fromEntries(SPLIT_COPIED_FIELDS.filter((key) => Object.hasOwn(markdown.data, key)).map((key) => [key, markdown.data[key]]));
-    const secondBody = `# ${chapterHeading(number, title)}
+    const departed = asArray(copied.characters).filter((id) => dead.has(id));
+    if (departed.length > 0) {
+      copied.characters = asArray(copied.characters).filter((id) => !dead.has(id));
+      copied.mentions = [...new Set([...asArray(copied.mentions), ...departed])];
+    }
+    const secondBody = `# ${markdown.data.numbered === false ? title : chapterHeading(number, title)}
 
 ## Chapter Text
 
@@ -20933,7 +20972,14 @@ function mergeChaptersUnlocked(root, options) {
     throw refusedError(`${relative(project, taken)} already exists; nothing was changed`);
   }
   const run = followingRun(project, second.number + 1);
-  assertWritable(project.root, [first.file, second.file, ...scenes.map((scene) => scene.file), ...chapterRunFiles(project, run)], sceneFiles);
+  const runIds = new Set(run.map((entry) => entry.id));
+  assertRestructurable(project, {
+    chapters: [first.id, second.id, ...runIds],
+    scenes: [...scenes, ...project.scenes.filter((scene) => runIds.has(scene.chapter))].map((scene) => scene.id),
+    changed: [first.file, second.file, ...scenes.map((scene) => scene.file), ...chapterRunFiles(project, run)],
+    created: sceneFiles,
+    chapterTargets: run.map((entry) => path13.join(project.root, "chapters", `${canonicalChapterId(entry.number - 1)}.md`))
+  });
   const warnings = [];
   restructureWrites(project.root, () => {
     for (const [index, scene] of scenes.entries()) {

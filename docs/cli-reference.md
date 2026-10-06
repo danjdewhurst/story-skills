@@ -2510,7 +2510,7 @@ Splits a chapter in two. The text before `--at` stays in the chapter; the rest b
 
 A scene break or marker inside an HTML comment or a code fence never counts, and a scene break just before the split point is dropped too.
 
-The new chapter is titled `<title> (continued)` unless `--title` names it. It gets the chapter's `pov`, `locations`, `characters`, `mentions`, `status`, `mode`, `date`, `strand`, and `numbered`, and its `hook`, which moves to the new chapter because that is where the old chapter now ends. `arcs-advanced` and every other field stay on the first chapter, as do the outline and any notes; the new chapter starts with a `# Chapter N: Title` heading and a `## Chapter Text` section. Both chapters get fresh word counts (and character counts in a book counted in characters). When `continuity/state.md` `current-chapter` was the split chapter, it moves to the new one.
+The new chapter is titled `<title> (continued)` unless `--title` names it. It gets the chapter's `pov`, `locations`, `characters`, `mentions`, `status`, `mode`, `date`, `time`, `strand`, and `numbered`, and its `hook`, which moves to the new chapter because that is where the old chapter now ends, so [`pacing`](#pacing) reports the first chapter as having no hook until you give it one. A character whose `died-in` is the split chapter goes in the new chapter's `mentions` rather than its `characters`, since a later chapter cannot cast them. `arcs-advanced` and every other field stay on the first chapter, as do the outline and any notes; the new chapter starts with a `# Chapter N: Title` heading (the title alone when it is `numbered: false`) and a `## Chapter Text` section. Both chapters get fresh word counts (and character counts in a book counted in characters). When `continuity/state.md` `current-chapter` was the split chapter, it moves to the new one.
 
 Scene records have no position in the chapter text, so they follow it in order: the records of the scenes before the split stay, and the rest move to the new chapter with [`move scene`](#move), numbered from 1. When the split falls inside a scene, that scene's record stays with the first chapter. `split` warns (`split-scenes`) when the number of scene records differs from the number of scenes the breaks mark out, since it then assigned them by order, and when it split inside a scene.
 
@@ -2545,10 +2545,13 @@ The `adopted-references` warning comes from the renumbering: the promise was sch
 | Several lines match | `--at "said" matches 5 lines in chapter-02 (lines 49, 55, 59, 61, 67): quote more of the line so it matches only one` |
 | Nothing would be left on one side | `--at "..." is at the start of the chapter text of chapter-02, so nothing would stay in it: split at a later point` (or `at the end ..., so the new chapter would be empty`) |
 | Two chapters after it share a number | `chapters/chapter-03.md and chapters/chapter-3.md share chapter number 3: give each its own number first (story validate reports it)` |
+| A file is where the renumbering would write a chapter | `chapters/chapter-04.md already exists and is not a chapter this command renumbers: fix it first (story validate reports it)` |
+| A scene file is not named for its `chapter` and `scene` fields | `scenes/chapter-03-scene-01.md is scene 1 of chapter-09 by its frontmatter but not by its file name, so renumbering could collide with it: rename it to scenes/chapter-09-scene-01.md, or fix its chapter and scene fields, first` |
+| A file it would rewrite is read-only | `Cannot write to continuity/clues/the-ticket.md (permission denied); nothing was changed. Fix it and run the command again` |
 
 A branching book (one with `choices`) is refused because a chapter's choices end it: splitting one would make its first half an ending, and the new chapter would be reachable from nothing. Restructure a branching book by hand: [`add`](#add) the new chapter, give the first half a choice that leads to it, and move the original choices across.
 
-Like [`move`](#move), `split` parses every file and checks that each file it will change is writable before it writes anything. It is several moves in a row, though, so one stopped part way (a full disk, say) cannot be finished by running it again: the error says `Some files were already changed, so a rerun cannot finish the job: run story validate and story links to see what is left, or restore the project from git and run the command again`. Preview it with `--dry-run` first.
+Like [`move`](#move), `split` parses every file and checks, before it writes anything, that every file any of its steps will change (the references to each renumbered chapter and scene, `continuity/state.md`, the exemptions log, and the registries) is writable and that nothing is in the way of the files it creates. It is several moves in a row, though, so one stopped part way by something it cannot check first (a full disk, say) cannot be finished by running it again: the error says `Some files were already changed, so a rerun cannot finish the job: run story validate and story links to see what is left, or restore the project from git and run the command again`. Preview it with `--dry-run` first.
 
 ### merge
 
@@ -2587,6 +2590,7 @@ warning: chapter-03 set time "22:05", episode-question "Who took the suitcase ou
 | A chapter lies between them | `chapter-04 does not follow chapter-02: merge takes neighbouring chapters, and chapter-03 comes between them` |
 | The book is branching | `story merge does not work on a branching book: ...`, as for [split](#split) |
 | A moved scene would overwrite a file | `scenes/chapter-02-scene-03.md already exists; nothing was changed` |
+| A file in the way, a misnamed scene file, or a read-only file | as for [split](#split) |
 
 As with `split`, a merge stopped part way cannot be finished by a rerun, so preview it with `--dry-run`. Like `move`, `split` and `merge` never edit prose: a "Chapter 3" in the text stays as it was.
 
