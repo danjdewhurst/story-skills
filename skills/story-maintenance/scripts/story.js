@@ -13549,18 +13549,17 @@ ${body}`)));
     const state = [];
     const stateSources = new Set;
     const currentChapter = project.continuity ? Number(project.continuity.data["current-chapter"]) : NaN;
-    if (Number.isInteger(currentChapter) && currentChapter < targetNumber) {
-      const current = project.chapters.find((chapter) => chapter.number === currentChapter);
-      const onPath = !chronology.branching || !current || chronology.readAfter(target.chapter.id, current.id);
-      const entries = asList(project.continuity.data["character-state"]).filter((entry) => isMapping(entry) && idText(entry.character) === pov);
-      if (entries.length > 0) {
-        stateSources.add(statePath);
-        if (onPath) {
-          state.push(...entries.map((entry) => `- As of chapter ${currentChapter}: ${describeMapping(entry, ["character"])}`));
-        } else {
-          state.push(`- ${statePath} describes chapter ${currentChapter} (${current.id}), which no path of choices leads from to ${target.chapter.id}; its state is left out.`);
-        }
-      }
+    const current = Number.isInteger(currentChapter) ? project.chapters.find((chapter) => chapter.number === currentChapter) : undefined;
+    const byPath = Boolean(chronology.branching && current);
+    const readBefore = byPath ? chronology.readAfter(target.chapter.id, current.id) : Number.isInteger(currentChapter) && currentChapter < targetNumber;
+    const sibling = byPath && !readBefore && current.id !== target.chapter.id && !chronology.readAfter(current.id, target.chapter.id);
+    const stateEntries = project.continuity ? asList(project.continuity.data["character-state"]).filter((entry) => isMapping(entry) && idText(entry.character) === pov) : [];
+    if (stateEntries.length > 0 && readBefore) {
+      state.push(...stateEntries.map((entry) => `- As of chapter ${currentChapter}: ${describeMapping(entry, ["character"])}`));
+      stateSources.add(statePath);
+    } else if (stateEntries.length > 0 && sibling) {
+      state.push(`- ${statePath} describes chapter ${currentChapter} (${current.id}), on a branch no path of choices leads from to ${target.chapter.id}; its state is left out.`);
+      stateSources.add(statePath);
     }
     for (const scene of earlierScenes(project, target, upToTarget)) {
       for (const change of scene.stateChanges) {

@@ -420,22 +420,23 @@ export function buildContext(project, targetId, readBody, options = {}) {
     // Every file the state lines come from, for the omitted-items list.
     const stateSources = new Set();
     // continuity/state.md describes `current-chapter`; it is only safe when
-    // that point is before the target. In a branching book that means read
-    // before it on some path of choices, so a snapshot of a sibling branch
-    // stays out.
+    // that point is read before the target. In a branching book that means
+    // before it on some path of choices, whatever the chapter numbers, so a
+    // snapshot of a sibling branch stays out, with a line saying so. A
+    // `current-chapter` that names no chapter (0 before the first) compares
+    // by number, as in a linear book.
     const currentChapter = project.continuity ? Number(project.continuity.data["current-chapter"]) : NaN;
-    if (Number.isInteger(currentChapter) && currentChapter < targetNumber) {
-      const current = project.chapters.find((chapter) => chapter.number === currentChapter);
-      const onPath = !chronology.branching || !current || chronology.readAfter(target.chapter.id, current.id);
-      const entries = asList(project.continuity.data["character-state"]).filter((entry) => isMapping(entry) && idText(entry.character) === pov);
-      if (entries.length > 0) {
-        stateSources.add(statePath);
-        if (onPath) {
-          state.push(...entries.map((entry) => `- As of chapter ${currentChapter}: ${describeMapping(entry, ["character"])}`));
-        } else {
-          state.push(`- ${statePath} describes chapter ${currentChapter} (${current.id}), which no path of choices leads from to ${target.chapter.id}; its state is left out.`);
-        }
-      }
+    const current = Number.isInteger(currentChapter) ? project.chapters.find((chapter) => chapter.number === currentChapter) : undefined;
+    const byPath = Boolean(chronology.branching && current);
+    const readBefore = byPath ? chronology.readAfter(target.chapter.id, current.id) : Number.isInteger(currentChapter) && currentChapter < targetNumber;
+    const sibling = byPath && !readBefore && current.id !== target.chapter.id && !chronology.readAfter(current.id, target.chapter.id);
+    const stateEntries = project.continuity ? asList(project.continuity.data["character-state"]).filter((entry) => isMapping(entry) && idText(entry.character) === pov) : [];
+    if (stateEntries.length > 0 && readBefore) {
+      state.push(...stateEntries.map((entry) => `- As of chapter ${currentChapter}: ${describeMapping(entry, ["character"])}`));
+      stateSources.add(statePath);
+    } else if (stateEntries.length > 0 && sibling) {
+      state.push(`- ${statePath} describes chapter ${currentChapter} (${current.id}), on a branch no path of choices leads from to ${target.chapter.id}; its state is left out.`);
+      stateSources.add(statePath);
     }
     for (const scene of earlierScenes(project, target, upToTarget)) {
       for (const change of scene.stateChanges) {

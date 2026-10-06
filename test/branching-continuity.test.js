@@ -251,10 +251,32 @@ characters:
       .find((entry) => entry.id === "state:mara-finn");
     // Chapter 3 is the sibling branch: no reader goes from 2 to 3.
     expect(state("chapter-03").text).not.toContain("the-bridge");
-    expect(state("chapter-03").text).toContain("describes chapter 2 (chapter-02), which no path of choices leads from to chapter-03");
+    expect(state("chapter-03").text).toContain("describes chapter 2 (chapter-02), on a branch no path of choices leads from to chapter-03");
     // Chapter 4 follows chapter 2 on the fight path.
     expect(state("chapter-04").text).toContain("As of chapter 2: location the-bridge");
     expect(state("chapter-04").text).not.toContain("left out");
+  });
+
+  test("story context follows the choices, not the numbers, for continuity/state.md", () => {
+    const root = project("Out of order state");
+    character(root, "mara-finn");
+    chapter(root, 1, { links: [3] });
+    chapter(root, 2, {});
+    chapter(root, 3, { links: [2] });
+    setState(root, 3, {
+      "character-state": `  - character: mara-finn
+    location: the-bridge
+`
+    });
+    const scanned = scanProject(root);
+    const text = (target) => JSON.stringify(buildContext(scanned, target, () => "", { budget: 100000 }));
+    // Chapter 3 is read before chapter 2.
+    expect(text("chapter-02")).toContain("As of chapter 3: location the-bridge");
+    // Chapter 3 is later on the same path as chapter 1: left out, as in a
+    // linear book, with no branch note.
+    expect(text("chapter-01")).not.toContain("the-bridge");
+    expect(text("chapter-01")).not.toContain("left out");
+    expect(text("chapter-03")).not.toContain("the-bridge");
   });
 
   test("story context keeps a current-chapter that names no chapter", () => {
