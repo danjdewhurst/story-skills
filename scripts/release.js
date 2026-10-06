@@ -15,7 +15,7 @@ const STORY_REF_FILES = ["templates/github/story-checks.yml", "templates/github/
 const RELEASE_BRANCH = "main";
 // test:coverage gates src line and function coverage, then the fallback bundle.
 // Branch records are gated only when the lcov report contains them.
-export const PREFLIGHT = ["check:metadata", "check:evals", "eval:selftest", "test:coverage", "test:examples", "check:node-help"];
+export const PREFLIGHT = ["check:metadata", "check:evals", "check:links", "eval:selftest", "test:coverage", "test:examples", "check:node-help"];
 
 export function isAbsentGitHubRelease(error) {
   const stderr = `${error.stderr ?? ""}\n${error.message ?? ""}`;

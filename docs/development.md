@@ -48,6 +48,7 @@ All scripts live in `package.json`.
 | `bun run test:examples` | `scripts/check-examples.js` | Changes to examples, the project format, validation, or the schema |
 | `bun run check:metadata` | `scripts/check-metadata.js` | Changes to skills, plugin manifests, templates, or versions |
 | `bun run check:evals` | `scripts/check-evals.js` | Changes to eval fixtures or skill names |
+| `bun run check:links` | `scripts/check-links.js`, which checks relative links and `#anchors` in `README.md`, `CONTRIBUTING.md`, `docs/`, `skills/`, `templates/`, and example READMEs, skipping code, external links, and `{placeholder}` paths | Changes to any of that markdown, or to a heading something links to |
 | `bun run eval:selftest` | `evals/run-evals.js --all evals/examples` | Changes to the eval checker or fixtures |
 | `bun run build:fallback` | `scripts/build-fallback.js`, a `bun build` of `bin/story.js` into the skill folder | After any change to `src/` |
 | `bun run check:fallback` | `scripts/check-fallback.js` | Confirms the committed fallback matches a fresh build from the pinned Bun |
@@ -558,11 +559,12 @@ Every job checks out with `persist-credentials: false`, since none pushes. The `
 1. `bun install`
 2. `bun run check:metadata`
 3. `bun run check:evals`
-4. `bun run eval:selftest`
-5. `bun run test`
-6. `bun run test:coverage` (includes `check:fallback`)
-7. `bun run test:examples`
-8. `node skills/story-maintenance/scripts/story.js --help`
+4. `bun run check:links`
+5. `bun run eval:selftest`
+6. `bun run test`
+7. `bun run test:coverage` (includes `check:fallback`)
+8. `bun run test:examples`
+9. `node skills/story-maintenance/scripts/story.js --help`
 
 The `node` job runs on Node 18, 20, and 22 without Bun. It runs `node scripts/check-examples.js`, then `--version` and `validate examples/the-last-ember` against both the source CLI (`node bin/story.js`) and the bundled fallback. It then copies `skills/story-maintenance` into a temporary folder under a `{ "type": "commonjs" }` `package.json` and runs `--version` and `validate` against that copy, the way a copied install runs. Last, `node scripts/check-package.js` (also `bun run check:package`) runs `npm pack`, installs the tarball into an empty temporary folder, and runs the installed `story --version`, `story validate` on the packaged `the-last-ember` example, and the packaged fallback's `--version`. Every other check runs from the checkout, so this is the one that fails when a file the CLI imports is missing from the `files` list in `package.json`. This is what keeps the Node 18 floor in `engines.node` honest; `test/check-scripts.test.js` fails if the matrix stops including the floor.
 
@@ -579,6 +581,7 @@ To reproduce CI locally before opening a pull request, run the `test` job's step
 ```shell
 bun run check:metadata
 bun run check:evals
+bun run check:links
 bun run eval:selftest
 bun run test
 bun run test:coverage
@@ -613,7 +616,7 @@ Usage: bun run release <patch|minor|major|MAJOR.MINOR.PATCH> [--dry-run]
 
 [`scripts/release.js`](../scripts/release.js) does the following.
 
-1. **Preflight.** Aborts unless the current branch is `main`, the working tree is clean, local `main` matches `origin/main` after fetching `main` and tags, `CHANGELOG.md` has at least one entry under `## [Unreleased]`, the tag does not already exist, `gh` is installed and logged in, no GitHub release exists for the tag, and `npm view story-skills@<version>` shows the version is unpublished. It then runs `check:metadata`, `check:evals`, `eval:selftest`, `test:coverage`, `test:examples`, and `check:node-help`. With `--dry-run` it stops here and prints the plan.
+1. **Preflight.** Aborts unless the current branch is `main`, the working tree is clean, local `main` matches `origin/main` after fetching `main` and tags, `CHANGELOG.md` has at least one entry under `## [Unreleased]`, the tag does not already exist, `gh` is installed and logged in, no GitHub release exists for the tag, and `npm view story-skills@<version>` shows the version is unpublished. It then runs `check:metadata`, `check:evals`, `check:links`, `eval:selftest`, `test:coverage`, `test:examples`, and `check:node-help`. With `--dry-run` it stops here and prints the plan.
 2. **Bump.** Writes the new version into `package.json`, `.codex-plugin/plugin.json`, `.claude-plugin/plugin.json`, and `src/version.js`, and sets `STORY_REF` to `v<version>` in the three workflow templates in `templates/github/`, and bumps the version examples in `README.md` and `docs/` that name the old version. It moves the `Unreleased` entries in `CHANGELOG.md` under a new `## [X.Y.Z] - YYYY-MM-DD` heading (UTC date), leaves an empty `Unreleased` section above it, and updates the compare links at the foot. It then runs `build:fallback` (the fallback inlines the version) and `check:metadata`.
 3. **Commit and tag.** Commits those files, `CHANGELOG.md`, and the fallback as `chore: release X.Y.Z` and creates an annotated tag `vX.Y.Z`.
 4. **Push.** Runs `git push --atomic origin main vX.Y.Z`, so the remote accepts both refs or neither. A published tag can never point at a commit that is not on `main`.
