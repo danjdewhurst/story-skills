@@ -147,6 +147,12 @@ sha256sum -c --ignore-missing story-skills_<version>_checksums.txt        # Linu
 shasum -a 256 -c --ignore-missing story-skills_<version>_checksums.txt    # macOS
 ```
 
+Releases after 0.21.0 also carry a signed build provenance attestation for each archive and for the checksums file. With the [GitHub CLI](https://cli.github.com/), check that a download was built by this repository's release workflow, not only that it matches the checksums file:
+
+```shell
+gh attestation verify story-skills_<version>_<os>_<arch>.tar.gz --repo danjdewhurst/story-skills
+```
+
 Unpack it and put `story` somewhere on your `PATH`. On macOS, a binary downloaded in a browser is quarantined and, being unnotarised, refused by Gatekeeper; clear the flag with `xattr -d com.apple.quarantine story`, or install with Homebrew, which does not quarantine it. The Linux binaries need glibc, so on Alpine and other musl systems use the npm package instead. The binary replaces only the CLI: it runs the same code and reports the same version as the npm package, and it needs no Node. The skills still need Claude Code, Codex, or another agent (see [Install the skills](#install-the-skills)).
 
 Check the installed version:

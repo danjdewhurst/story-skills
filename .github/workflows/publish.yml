@@ -6,9 +6,9 @@ name: Publish
 #
 # It also builds the standalone `story` binaries, each on its own OS so it
 # can be smoke-tested there (and so macOS builds are signed as they need),
-# attaches them and a checksums file to the GitHub release, and, when a
-# HOMEBREW_TAP_DEPLOY_KEY secret is set, updates the formula in
-# danjdewhurst/homebrew-tap.
+# attests their build provenance, attaches them and a checksums file to the
+# GitHub release, and, when a HOMEBREW_TAP_DEPLOY_KEY secret is set, updates
+# the formula in danjdewhurst/homebrew-tap.
 on:
   push:
     tags: ["v*"]
@@ -139,6 +139,9 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: write
+      # Sign and store the build provenance attestation.
+      id-token: write
+      attestations: write
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
     steps:
@@ -158,6 +161,14 @@ jobs:
           sha256sum story-skills_"$version"_* > "story-skills_${version}_checksums.txt"
           cat "story-skills_${version}_checksums.txt"
           [ "$(wc -l < "story-skills_${version}_checksums.txt")" -eq 5 ]
+
+      # Signed SLSA build provenance for each archive and the checksums file,
+      # so `gh attestation verify <file> --repo danjdewhurst/story-skills`
+      # proves a download was built by this workflow from this repository.
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/binaries/story-skills_*
 
       # `bun run release` creates the GitHub release right after pushing the
       # tag, so give it a few minutes to appear.
