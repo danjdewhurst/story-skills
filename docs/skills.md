@@ -959,13 +959,19 @@ One `story.md` holds one edition's metadata. When the ebook and print ISBNs diff
 
 **Purpose.** Runs the deterministic side of a project through the CLI: validation, reindexing, word counts, links, continuity, prose linting, pacing, clue, voice, and name checks, revision-pass tracking, Mermaid diagrams, timeline, progress, comparison, series checks, reports, migration, entity operations, import, export, builds, knowledge queries, and synopses. The creative skills still own story decisions. The [CLI reference](cli-reference.md) documents every command and flag.
 
-**Triggers.** "Validate my story project", "reindex", "repair registries", "check links", "check continuity", "count words", "summarize the project", "import an existing manuscript", "export a manuscript", "build a review copy or print interior", "generate a diagram", "check pacing, clues, voices, or names", "track revision passes", "run the story CLI".
+**Triggers.** "Validate my story project", "reindex", "repair registries", "check links", "run the continuity, pacing, clue, voice, or name checks", "count words", "summarize the project", "import an existing manuscript", "export a manuscript", "build a review copy or print interior", "generate a diagram", "record revision-pass status with `story passes`", "run the story CLI".
+
+**Not for.** Judging a finding or revising the story to fix it. Continuity errors and revision passes go to [revision-continuity](#revision-continuity), pacing to [plot-structure](#plot-structure), voices and prose to [voice-style](#voice-style), and clues and fair play to [genre-craft](#genre-craft). story-maintenance runs the CLI, reads its output, and fixes mechanical problems such as broken references and stale registries.
 
 **When each command fits.** The skill picks commands the same way the rest of the docs describe: [the maintenance loop](writing-workflows.md#the-maintenance-loop) for the five commands that follow most edits, [When to run what](continuity.md#when-to-run-what) for the analysis commands (`pacing`, `clues`, `voices`, `names`, `passes`, `diagram`, `timeline`, `prose`), and the [command summary](cli-reference.md#command-summary) for everything else, including `init --form`, `import`, `migrate`, `add`/`rename`/`move`/`remove`, `knowledge`, `export`, `build` (markdown, EPUB, DOCX, Shunn, HTML review copy, print interior, narration script, metadata sheet, Fountain screenplay skeleton), and `synopsis`.
 
 **Reads.** The CLI's output, and the project files a finding names when it fixes them.
 
 **Failure handling.** It treats CLI errors as findings to fix, and fixes broken references, stale registries, and wrong word counts when the task implies it. It never rewrites prose just to satisfy a check, and it reports warnings that reflect deliberate choices instead of changing them. `story import --force` deletes every `chapter-NN.md` in `chapters/` before writing, so it confirms with you first. If `story reindex` fails on a corrupt `plot/_index.md`, it restores the frontmatter from git or deletes the file so reindex rebuilds it, rather than editing story content.
+
+**References.**
+
+- [`continuity-checks.md`](../skills/story-maintenance/references/continuity-checks.md): the rules behind each check command, `continuity` (deaths and revivals, ledgers, `continuity/state.md`, prop custody, clock and route plausibility, exemptions), `clues`, `add clue`, `pacing`, `voices`, `prose`, `names`, `timeline`, `knowledge`, `context`, `passes`, `compare`, and `similarity`.
 
 **Files.** [`scripts/story.js`](../skills/story-maintenance/scripts/story.js) is the bundled Node fallback of the CLI, generated from `src/` by `bun run build:fallback` (see the [Development guide](development.md#the-bundled-fallback)).
 
