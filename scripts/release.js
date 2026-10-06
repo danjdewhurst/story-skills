@@ -13,8 +13,8 @@ const VERSION_MODULE = "src/version.js";
 const FALLBACK_FILE = "skills/story-maintenance/scripts/story.js";
 const STORY_VERSION_FILES = ["templates/github/story-checks.yml", "templates/github/draft-next-chapter.yml", "templates/github/review-copy.yml"];
 const RELEASE_BRANCH = "main";
-// test:coverage gates src line and function coverage, then the fallback bundle.
-// Branch records are gated only when the lcov report contains them.
+// test:coverage gates src line and function coverage (not branches, which
+// Bun's lcov report does not record), then the fallback bundle.
 export const PREFLIGHT = ["check:metadata", "check:evals", "check:links", "eval:selftest", "test:coverage", "test:examples", "check:node-help"];
 
 export function isAbsentGitHubRelease(error) {

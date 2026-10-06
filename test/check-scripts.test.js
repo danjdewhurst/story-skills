@@ -315,48 +315,18 @@ describe("check-coverage", () => {
     expect(files.every((file) => file.endsWith(".js"))).toBe(true);
   });
 
-  test("parses BRDA branch records for real", () => {
-    const records = parseLcov(
-      "TN:\nSF:/repo/src/a.js\nBRDA:10,0,0,1\nBRDA:10,0,1,-\nBRDA:12,1,0,3\n" +
-      "LF:5\nLH:5\nFNF:1\nFNH:1\nBRF:3\nBRH:2\nend_of_record\n"
-    );
-    const record = records.get(path.resolve("/repo/src/a.js"));
-    expect(record.hasBranchData).toBe(true);
-    expect(record.branches).toEqual({ found: 3, hit: 2 });
-  });
-
-  test("counts BRDA lines when BRF/BRH summaries are absent", () => {
-    const records = parseLcov("TN:\nSF:/repo/src/a.js\nBRDA:1,0,0,2\nBRDA:2,0,0,-\nLF:2\nLH:2\nFNF:0\nFNH:0\nend_of_record\n");
-    const record = records.get(path.resolve("/repo/src/a.js"));
-    expect(record.hasBranchData).toBe(true);
-    expect(record.branches).toEqual({ found: 2, hit: 1 });
-  });
-
-  test("marks files without branch records as having no branch data", () => {
-    const records = parseLcov("TN:\nSF:/repo/src/a.js\nLF:2\nLH:2\nFNF:0\nFNH:0\nend_of_record\n");
-    const record = records.get(path.resolve("/repo/src/a.js"));
-    expect(record.hasBranchData).toBe(false);
-  });
-
-  test("passes full line and function coverage, gating branches only when records exist", () => {
+  test("passes full line and function coverage", () => {
     const file = path.join(repoRoot, "src", "a.js");
-    const lcov = lcovRecord(file, { branches: ["1", "2"] });
-    expect(checkCoverage(lcov, [file])).toEqual({ failures: [], filesWithBranches: 1, filesChecked: 1 });
+    expect(checkCoverage(lcovRecord(file), [file])).toEqual({ failures: [], filesChecked: 1 });
   });
 
-  test("fails a file with an untaken branch", () => {
+  // #570: Bun writes no branch records, so a branch gate never ran while the
+  // summary could still claim one. Branches are not read at all now.
+  test("reads and gates only lines and functions, never branch records (#570)", () => {
     const file = path.join(repoRoot, "src", "a.js");
-    const { failures, filesWithBranches } = checkCoverage(lcovRecord(file, { branches: ["1", "-"] }), [file]);
-    expect(filesWithBranches).toBe(1);
-    expect(failures).toEqual([`${file} branch coverage 1/2`]);
-  });
-
-  test("skips the branch gate only when the report has no branch records", () => {
-    // Bun's lcov reporter emits no BRDA/BRF/BRH records, which is the only
-    // case this skip is for; check-coverage.js prints a skip note in main().
-    const file = path.join(repoRoot, "src", "a.js");
-    const result = checkCoverage(lcovRecord(file), [file]);
-    expect(result).toEqual({ failures: [], filesWithBranches: 0, filesChecked: 1 });
+    const lcov = lcovRecord(file, { branches: ["1", "-"] });
+    expect(parseLcov(lcov).get(file)).toEqual({ file, lines: { found: 10, hit: 10 }, functions: { found: 2, hit: 2 } });
+    expect(checkCoverage(lcov, [file])).toEqual({ failures: [], filesChecked: 1 });
   });
 
   test("still gates lines, functions, and missing records", () => {

@@ -3,6 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+// Line and function counts per source file. Bun's lcov reporter writes no
+// branch records (BRDA, BRF, BRH), so branches are not read or gated: an
+// untaken `??`, `||`, or ternary arm on a line that ran counts as covered.
 export function parseLcov(source) {
   const records = new Map();
   let current = null;
@@ -12,9 +15,7 @@ export function parseLcov(source) {
       current = {
         file: path.resolve(line.slice(3)),
         lines: { found: 0, hit: 0 },
-        functions: { found: 0, hit: 0 },
-        branches: { found: 0, hit: 0 },
-        hasBranchData: false
+        functions: { found: 0, hit: 0 }
       };
       records.set(current.file, current);
     } else if (!current) {
@@ -27,23 +28,6 @@ export function parseLcov(source) {
       current.functions.found = Number(line.slice(4));
     } else if (line.startsWith("FNH:")) {
       current.functions.hit = Number(line.slice(4));
-    } else if (line.startsWith("BRDA:")) {
-      // BRDA:<line>,<block>,<branch>,<taken> where <taken> is "-" when the
-      // branch was never taken. Count branches directly so reports that omit
-      // the BRF:/BRH: summaries are still gated.
-      current.hasBranchData = true;
-      current.branches.found += 1;
-      const taken = line.slice(5).split(",")[3];
-      if (taken !== undefined && taken !== "-" && Number(taken) > 0) {
-        current.branches.hit += 1;
-      }
-    } else if (line.startsWith("BRF:")) {
-      // Summary lines are authoritative when present and come after the BRDA
-      // lines, so they overwrite the derived counts above.
-      current.hasBranchData = true;
-      current.branches.found = Number(line.slice(4));
-    } else if (line.startsWith("BRH:")) {
-      current.branches.hit = Number(line.slice(4));
     }
   }
 
@@ -53,7 +37,6 @@ export function parseLcov(source) {
 export function checkCoverage(lcovText, absoluteSourceFiles) {
   const records = parseLcov(lcovText);
   const failures = [];
-  let filesWithBranches = 0;
 
   for (const filePath of absoluteSourceFiles) {
     const record = records.get(filePath);
@@ -69,16 +52,9 @@ export function checkCoverage(lcovText, absoluteSourceFiles) {
     if (record.functions.found !== record.functions.hit) {
       failures.push(`${filePath} function coverage ${record.functions.hit}/${record.functions.found}`);
     }
-
-    if (record.hasBranchData) {
-      filesWithBranches += 1;
-      if (record.branches.found !== record.branches.hit) {
-        failures.push(`${filePath} branch coverage ${record.branches.hit}/${record.branches.found}`);
-      }
-    }
   }
 
-  return { failures, filesWithBranches, filesChecked: absoluteSourceFiles.length };
+  return { failures, filesChecked: absoluteSourceFiles.length };
 }
 
 // Every .js file under `dir`, subfolders (src/languages) included.
@@ -113,7 +89,8 @@ export function checkLineThreshold(lcovText, absoluteSourceFiles, minPercent) {
   return { failures, filesChecked: absoluteSourceFiles.length };
 }
 
-// `src` gates a folder at 100%; `scripts:85` gates each file's lines at 85%.
+// `src` gates a folder's lines and functions at 100%; `scripts:85` gates each
+// file's lines at 85%.
 // A colon followed by no path separator is a threshold, so `scripts:abc` is
 // refused while a Windows path such as `C:\repo\src` stays a folder.
 export function parseGate(arg) {
@@ -154,12 +131,9 @@ export function main(argv, { log = console.log, error = console.error } = {}) {
   const full = gates.filter((gate) => gate.minPercent === null);
   const partial = gates.filter((gate) => gate.minPercent !== null);
   const failures = [];
-  let filesWithBranches = 0;
 
   for (const gate of full) {
-    const result = checkCoverage(lcov, sourceFiles(path.resolve(gate.dir)));
-    failures.push(...result.failures);
-    filesWithBranches += result.filesWithBranches;
+    failures.push(...checkCoverage(lcov, sourceFiles(path.resolve(gate.dir))).failures);
   }
   for (const gate of partial) {
     failures.push(...checkLineThreshold(lcov, sourceFiles(path.resolve(gate.dir)), gate.minPercent).failures);
@@ -172,15 +146,7 @@ export function main(argv, { log = console.log, error = console.error } = {}) {
 
   if (full.length > 0) {
     const dirs = full.map((gate) => gate.dir).join(", ");
-    if (filesWithBranches > 0) {
-      log(`Coverage is 100% for ${dirs} line, function, branch coverage.`);
-    } else {
-      error(
-        `Note: ${lcovPath} contains no branch records, so the branch gate was skipped. ` +
-        "Use a coverage reporter that emits BRDA/BRF/BRH records to enforce branch coverage."
-      );
-      log(`Coverage is 100% for ${dirs} line and function coverage.`);
-    }
+    log(`Coverage is 100% for ${dirs} line and function coverage; branch coverage is not gated.`);
   }
   for (const gate of partial) {
     log(`Line coverage is at least ${gate.minPercent}% for every file in ${gate.dir}.`);
