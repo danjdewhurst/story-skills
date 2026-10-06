@@ -1,6 +1,6 @@
 ---
 name: revision-continuity
-description: This skill should be used when the user asks to "revise a chapter", "continuity check", "find inconsistencies", "audit character state", "check timeline consistency", "developmental edit", "structural revision", "revision passes", "what pass next", "pacing check" as a revision pass, or "clue check", or to prepare existing story material for the next revision pass. NOT for planning book structure (use plot-structure), scene-level craft (use scene-craft), or voice consistency (use voice-style).
+description: This skill should be used when the user asks to "revise a chapter", "continuity check", "find inconsistencies", "audit character state", "check timeline consistency", "developmental edit", "structural revision", "revision passes", "what pass next", "pacing check" as a revision pass, "clue check", "cut to a word count", or "length pass", or to prepare existing story material for the next revision pass. NOT for planning book structure (use plot-structure), scene-level craft (use scene-craft), or voice consistency (use voice-style).
 ---
 
 # Revision Continuity
@@ -30,7 +30,7 @@ story next .                     # with story status revising, recommends the ne
 The default ladder is `structure`, `character`, `theme`, `continuity`,
 `pacing`, `line`, `copyedit`, `proof`. Each entry is `{pass, status}` with
 status `pending`, `in-progress`, or `done`; add a custom kebab-case pass
-(`fact-check`, `sensitivity`) with `story passes . --start <name>`, which
+(`fact-check`, `length`, `sensitivity`) with `story passes . --start <name>`, which
 appends it as `in-progress`. The checks per pass, as `story passes .`
 prints them, and the checklists in `references/pass-checklists.md` that
 each pass works through:
@@ -60,6 +60,7 @@ are clean or every remaining finding is a recorded decision. Set story
    - **Pacing waveform** - tension per chapter and dead zones (`story pacing .`)
    - **Reveal economy** - every reveal earned by planted setup and spaced out (`story clues .`)
    - **Removability audit (darling-killing)** - scenes whose removal would change nothing downstream
+   - **Length pass** - cut or expand to a target word count from a per-chapter and per-arc budget (`story progress .`, `story pacing .`; a custom `length` pass)
    - **Voice differentiation** - each speaker sounds like themselves (`story voices .`)
    - **Line edit** - clarity, voice, rhythm, dialogue, and sensory detail without changing plot facts (the `line-editing` skill)
    - **Copyedit** - style baseline and surface-detail consistency, not prose quality (the `line-editing` skill)

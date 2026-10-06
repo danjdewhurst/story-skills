@@ -651,7 +651,7 @@ It also uses line-editing's [`language-conventions.md`](../skills/line-editing/r
 
 **Purpose.** Revises existing chapters without breaking continuity: targeted edits, audits, developmental and structural passes, and checks before the next chapter. It also tracks a full revision as a ladder of named passes. See [Continuity and analysis](continuity.md) for the checks it relies on.
 
-**Triggers.** "Revise a chapter", "continuity check", "find inconsistencies", "audit character state", "check timeline consistency", "developmental edit", "structural revision", "revision passes", "what pass next", "pacing check" (as a revision pass), "clue check", or a request to prepare existing material for the next revision pass.
+**Triggers.** "Revise a chapter", "continuity check", "find inconsistencies", "audit character state", "check timeline consistency", "developmental edit", "structural revision", "revision passes", "what pass next", "pacing check" (as a revision pass), "clue check", "cut to a word count", "length pass", or a request to prepare existing material for the next revision pass.
 
 **Not for.** Planning book structure ([plot-structure](#plot-structure)), scene-level craft ([scene-craft](#scene-craft)), voice consistency ([voice-style](#voice-style)). It runs the sentence-level line edit, copyedit, and proof passes by handing them to [line-editing](#line-editing), which owns the "line edit" and "polish this chapter" triggers.
 
@@ -665,7 +665,7 @@ story passes . --done pacing     # mark it done
 story next .                     # with status: revising, recommends the next unfinished pass
 ```
 
-The default ladder is `structure`, `character`, `theme`, `continuity`, `pacing`, `line`, `copyedit`, `proof`. `--start` with a new kebab-case name (`fact-check`, `sensitivity`) appends a custom pass as `in-progress`. A pass is marked done only when its checks are clean or every remaining finding is a recorded decision. [Revision passes](writing-workflows.md#revision-passes) shows the ladder in use.
+The default ladder is `structure`, `character`, `theme`, `continuity`, `pacing`, `line`, `copyedit`, `proof`. `--start` with a new kebab-case name (`fact-check`, `length`, `sensitivity`) appends a custom pass as `in-progress`. A pass is marked done only when its checks are clean or every remaining finding is a recorded decision. [Revision passes](writing-workflows.md#revision-passes) shows the ladder in use.
 
 | Pass | Checks `story passes` lists | Workflow |
 |------|-----------------------------|----------|
@@ -678,7 +678,7 @@ The default ladder is `structure`, `character`, `theme`, `continuity`, `pacing`,
 | `copyedit` | `story prose` and `style-sheet.md` | Copyedit ([line-editing](#line-editing)) |
 | `proof` | `story build --format print`, `story build --format html` | Proof ([line-editing](#line-editing)) |
 
-**Pass types.** It asks which pass you want unless you have said: continuity audit, developmental revision, reverse outline, theme audit, pacing waveform (`story pacing`), reveal economy (`story clues`), removability audit, voice differentiation (`story voices`), line edit, copyedit, fact check, or proof/polish, then follows that pass's checklist in [`pass-checklists.md`](../skills/revision-continuity/references/pass-checklists.md). The line edit, copyedit, and proof hand off to `line-editing` for the full procedure. [Pick a pass](writing-workflows.md#2-pick-a-pass) describes each one and how to ask for it.
+**Pass types.** It asks which pass you want unless you have said: continuity audit, developmental revision, reverse outline, theme audit, pacing waveform (`story pacing`), reveal economy (`story clues`), removability audit, length pass (`story progress` and `story pacing`), voice differentiation (`story voices`), line edit, copyedit, fact check, or proof/polish, then follows that pass's checklist in [`pass-checklists.md`](../skills/revision-continuity/references/pass-checklists.md). The line edit, copyedit, and proof hand off to `line-editing` for the full procedure. [Pick a pass](writing-workflows.md#2-pick-a-pass) describes each one and how to ask for it.
 
 **Workflow.**
 
