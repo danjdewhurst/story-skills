@@ -1209,6 +1209,8 @@ story progress . --date 2026-09-24
 |-------|-------|---------|
 | `story.md` | `target-words` | Word target for the book (positive integer) |
 | `story.md` | `deadline` | Due date, `YYYY-MM-DD` |
+| `story.md` | `daily-target-words` | Words a writing day aims for (positive integer) |
+| `story.md` | `writing-days` | The weekdays you plan to write, such as `[mon, tue, thu, fri]`; default every day |
 | `chapters/chapter-NN.md` | `target-words` | Word target for the chapter (positive integer) |
 | `progress.md` | `sessions` | The log: a list of `date` and `words` entries |
 
@@ -1222,6 +1224,14 @@ Deadline: 2027-03-31 (188 days left): 474 words a day needed
 Sessions: 4 logged; last 2026-09-24 (+26 words since)
 Pace: 85 words a day over the last 4 sessions
 Projected finish at this pace: 2029-08-10
+Today: +233 words
+Streak: 1 day (longest 1)
+
+Last 4 weeks:
+- 2026-08-31: 0 words on 0 days
+- 2026-09-07: 0 words on 0 days
+- 2026-09-14: 640 words on 2 days
+- 2026-09-21: 233 words on 1 day
 
 Chapter targets:
 - chapter-01: 993 of 3,500 words (28%)
@@ -1232,6 +1242,9 @@ Progress checked: 0 errors, 0 warnings, 0 dismissed
 - **Sessions** shows the change in words since the last logged session.
 - **Pace** is the words gained per calendar day across the last seven logged sessions. It needs at least two sessions on different days.
 - **Projected finish** extends that pace from today to the target. It is omitted when the pace rounds to zero or is negative, when the finish would be more than 100 years away, or when the target is met.
+- **Today** is the words gained since the last session logged before today, measured from the manuscript as it is now, so it counts words not yet logged. It is left out until a session before today exists. A day's words are always a gain against the session before it, because each session records the whole manuscript: the first session is only the starting point.
+- **Streak** counts the days in a row that gained words, ending today or, while today has none yet, yesterday. With `daily-target-words`, a day must reach the target to count. Days outside `writing-days` never break the streak, and count when you write on them anyway. A day with no session counts as a day without writing, so log every writing day; a log that skips days credits their words to the next session.
+- **Last 4 weeks** sums the words gained in each week, Monday to Sunday, ending with the current week, and the days that gained words. With `daily-target-words`, each week shows its target too: the daily target times the writing days in that week.
 - **Chapter targets** lists only chapters that set `target-words`.
 
 Without `target-words`, the first line reads `Progress: <n> words (no target-words in story.md)`. Without sessions, the sessions line reads `Sessions: none logged (run story progress --log after a writing session)`. The unmodified example shows both:
@@ -1242,6 +1255,24 @@ Progress: 993 words (no target-words in story.md)
 Sessions: none logged (run story progress --log after a writing session)
 Progress checked: 0 errors, 0 warnings, 0 dismissed
 ```
+
+Add `daily-target-words: 250` and `writing-days: [mon, wed, thu, fri]` to the same `story.md`, and the day after the last session measures today against the target:
+
+```text
+$ story progress . --date 2026-09-25
+...
+Today: +26 of 250 words (224 to go)
+Streak: 0 days (longest 1; writing days mon, wed, thu, fri)
+
+Last 4 weeks:
+- 2026-08-31: 0 of 1,000 words on 0 days
+- 2026-09-07: 0 of 1,000 words on 0 days
+- 2026-09-14: 640 of 1,000 words on 2 days
+- 2026-09-21: 233 of 1,000 words on 2 days
+...
+```
+
+The 207 words logged on Thursday 2026-09-24 fell short of 250, so that day broke the streak. A book counted in characters sets `daily-target-characters` instead.
 
 `--log` records today's total in `progress.md`, creating the file if needed (`type: progress-log`) and replacing any entry for the same date, then prints `Logged <n> words for <date> in <file>` before the report. It keeps the file body and any other frontmatter. It refuses to write if `progress.md` does not parse or has invalid sessions, since rewriting would drop them; run `story validate .` to see each problem. `--date YYYY-MM-DD` sets "today", for the log and the calculations. It defaults to your local date, and an impossible date is refused (`progress --date date must be a real YYYY-MM-DD calendar day, got 2026-02-30`).
 

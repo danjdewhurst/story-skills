@@ -6,6 +6,34 @@ import { parseClockDate } from "./continuity.js";
 
 export const PROGRESS_FILE = "progress.md";
 const PACE_SESSIONS = 7;
+const HISTORY_WEEKS = 4;
+
+// story.md writing-days entries, Monday first. Full names are accepted too.
+export const WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+const WEEKDAY_NAMES = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+
+// The weekday of a writing-days entry ("mon" for mon, Mon, or Monday), or
+// null for anything else.
+export function weekdayName(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const text = value.trim().toLowerCase();
+  const index = WEEKDAY_NAMES.findIndex((name, position) => text === name || text === WEEKDAYS[position]);
+  return index === -1 ? null : WEEKDAYS[index];
+}
+
+// The scheduled writing days from story.md writing-days, Monday first and
+// without repeats, or null when the field is unset or holds no weekday.
+export function writingDays(value) {
+  const days = new Set((Array.isArray(value) ? value : []).map(weekdayName).filter((day) => day !== null));
+  return days.size === 0 ? null : WEEKDAYS.filter((day) => days.has(day));
+}
+
+// Epoch days to the weekday, 0 for Monday: 1970-01-01 was a Thursday.
+function weekdayIndex(days) {
+  return (((days + 3) % 7) + 7) % 7;
+}
 
 // Projections further out than this are not a date anyone can plan by.
 const PROJECTION_HORIZON_DAYS = 100 * 366;
@@ -54,7 +82,7 @@ export function cleanSessions(value) {
 // the last session carry both counts too. A session without the unit's
 // count (one logged before the book was counted in characters) is left out
 // of `sessions`, the last session, and the pace.
-export function computeProgress({ unit = "words", words, characters = null, target, deadline, today, chapters, sessions }) {
+export function computeProgress({ unit = "words", words, characters = null, target, deadline, today, chapters, sessions, dailyTarget = null, writingDays: scheduled = null }) {
   const characterBook = unit === "characters";
   const inUnit = (entry) => (characterBook ? entry.characters ?? null : entry.words);
   const length = characterBook ? characters : words;
@@ -80,7 +108,8 @@ export function computeProgress({ unit = "words", words, characters = null, targ
     sessions: measured.length,
     lastSession: null,
     pace: null,
-    projected: null
+    projected: null,
+    daily: computeDaily({ measured: measured.map((session) => ({ date: session.date, count: inUnit(session) })), length, todayDays, dailyTarget, scheduled })
   };
 
   const deadlineDate = deadline ? parseClockDate(deadline) : undefined;
@@ -111,6 +140,90 @@ export function computeProgress({ unit = "words", words, characters = null, targ
     }
   }
   return result;
+}
+
+// Words written per day, today's against the daily target, the streak, and
+// the last weeks, from the session log. Each session records the whole
+// manuscript, so a day's words are the gain since the session before it;
+// the first session is only the baseline. Today's words are measured live,
+// from the manuscript now against the last session before today. A day
+// counts toward the streak when it gained words (at least the daily target,
+// when one is set). Days outside writing-days never break a streak, and
+// today does not break it before it is written.
+function computeDaily({ measured, length, todayDays, dailyTarget, scheduled }) {
+  const byDay = new Map();
+  for (const session of measured) {
+    const days = parseClockDate(session.date).days;
+    if (days <= todayDays) {
+      // A repeated date (which validate reports) keeps the later entry.
+      byDay.set(days, session.count);
+    }
+  }
+  const logged = [...byDay.keys()].sort((left, right) => left - right);
+  const gains = new Map();
+  for (let index = 1; index < logged.length; index += 1) {
+    gains.set(logged[index], byDay.get(logged[index]) - byDay.get(logged[index - 1]));
+  }
+  const before = logged.filter((days) => days < todayDays);
+  if (before.length > 0) {
+    gains.set(todayDays, length - byDay.get(before[before.length - 1]));
+  }
+
+  const scheduledDays = scheduled === null ? null : new Set(scheduled);
+  const isScheduled = (days) => scheduledDays === null || scheduledDays.has(WEEKDAYS[weekdayIndex(days)]);
+  const counts = (days) => gains.has(days) && gains.get(days) > 0 && (dailyTarget === null || gains.get(days) >= dailyTarget);
+  const first = logged.length > 0 ? logged[0] : todayDays;
+
+  let current = 0;
+  for (let days = counts(todayDays) ? todayDays : todayDays - 1; days >= first; days -= 1) {
+    if (counts(days)) {
+      current += 1;
+    } else if (isScheduled(days)) {
+      break;
+    }
+  }
+  let longest = 0;
+  let run = 0;
+  for (let days = first; days <= todayDays; days += 1) {
+    if (counts(days)) {
+      run += 1;
+      longest = Math.max(longest, run);
+    } else if (isScheduled(days) && days !== todayDays) {
+      run = 0;
+    }
+  }
+
+  const written = gains.has(todayDays) ? gains.get(todayDays) : null;
+  const monday = todayDays - weekdayIndex(todayDays);
+  const weeks = [];
+  for (let back = HISTORY_WEEKS - 1; back >= 0; back -= 1) {
+    const start = monday - back * 7;
+    let total = 0;
+    let days = 0;
+    let planned = 0;
+    for (let day = start; day < start + 7; day += 1) {
+      if (gains.has(day)) {
+        total += gains.get(day);
+        days += gains.get(day) > 0 ? 1 : 0;
+      }
+      planned += isScheduled(day) ? 1 : 0;
+    }
+    weeks.push({ start: formatDate(start), end: formatDate(start + 6), written: total, days, target: dailyTarget === null ? null : dailyTarget * planned });
+  }
+
+  return {
+    target: dailyTarget,
+    writingDays: scheduled,
+    today: {
+      date: formatDate(todayDays),
+      scheduled: isScheduled(todayDays),
+      written,
+      remaining: dailyTarget === null || written === null ? null : Math.max(0, dailyTarget - written),
+      met: dailyTarget === null || written === null ? null : written >= dailyTarget
+    },
+    streak: { current, longest },
+    weeks
+  };
 }
 
 export function formatProgress(progress) {
@@ -150,6 +263,7 @@ export function formatProgress(progress) {
   if (progress.projected) {
     lines.push(`Projected finish at this pace: ${progress.projected}`);
   }
+  lines.push(...formatDaily(progress.daily, progress.lastSession !== null, noun));
 
   if (progress.chapters.length > 0) {
     lines.push("", "Chapter targets:");
@@ -158,6 +272,40 @@ export function formatProgress(progress) {
     }
   }
   return `${lines.join("\n")}\n`;
+}
+
+// Today against the daily target, the streak, and the weekly history. Only
+// a project with a log or a daily target prints them.
+function formatDaily(daily, hasSessions, noun) {
+  if (!hasSessions && daily.target === null) {
+    return [];
+  }
+  const lines = [];
+  const { today, target } = daily;
+  const off = today.scheduled ? "" : " (not a writing day)";
+  if (today.written === null) {
+    if (target !== null) {
+      lines.push(`Today: ${formatNumber(target)} ${noun}s a day target (no session logged before today to measure from)${off}`);
+    }
+  } else {
+    const gained = `${today.written >= 0 ? "+" : ""}${formatNumber(today.written)}`;
+    if (target === null) {
+      lines.push(`Today: ${gained} ${noun}s${off}`);
+    } else {
+      lines.push(`Today: ${gained} of ${formatNumber(target)} ${noun}s (${today.met ? "target met" : `${formatNumber(today.remaining)} to go`})${off}`);
+    }
+  }
+  if (!hasSessions) {
+    return lines;
+  }
+  const days = daily.writingDays === null ? "" : `; writing days ${daily.writingDays.join(", ")}`;
+  lines.push(`Streak: ${plural(daily.streak.current, "day")} (longest ${formatNumber(daily.streak.longest)}${days})`);
+  lines.push("", `Last ${daily.weeks.length} weeks:`);
+  for (const week of daily.weeks) {
+    const amount = week.target === null ? formatNumber(week.written) : `${formatNumber(week.written)} of ${formatNumber(week.target)}`;
+    lines.push(`- ${week.start}: ${amount} ${noun}s on ${plural(week.days, "day")}`);
+  }
+  return lines;
 }
 
 export function localDate(now = new Date()) {

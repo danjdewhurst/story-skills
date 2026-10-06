@@ -1194,14 +1194,16 @@ $ story similarity --against ../notes --min-words 3
 story progress [path] [--log] [--date <YYYY-MM-DD>]
 ```
 
-Reports the manuscript word count against `target-words` in `story.md`, the days left to `deadline` and the words a day needed to meet it, per-chapter `target-words`, and pace from the session log in `progress.md`.
+Reports the manuscript word count against `target-words` in `story.md`, the days left to `deadline` and the words a day needed to meet it, per-chapter `target-words`, and pace from the session log in `progress.md`. Once a session is logged, it also reports today's words (against `daily-target-words` when set), the current and longest writing streak, and the words written in each of the last four weeks; see [Story progress](continuity.md#story-progress) for how each is counted.
+
+In `--json`, `data.daily` holds `target` (the daily target, or null), `writingDays` (the `writing-days` as `mon` to `sun`, or null), `today` (`date`, `scheduled`, `written`, `remaining`, and `met`; `written` is null with no session logged before today), `streak` (`current` and `longest`, in days), and `weeks`, oldest first (`start` and `end`, Monday to Sunday, `written`, `days` that gained words, and `target`, the daily target times the writing days in that week, or null).
 
 A book [counted in characters](project-format.md#counting-in-characters) reports characters against `target-characters` instead (`Progress: 52,300 of 120,000 characters (43.6%)`), and `--log` records `characters` beside `words` in the session. In `--json`, `data.unit` is `words` or `characters`. `words` is the word count in every book, and `characterCount` (top level, `logged`, each chapter, and `lastSession`) the character count, or null in a book counted in words; `target`, `percent`, `remaining`, `perDay`, `since`, and `pace` are in the unit. Sessions logged with no `characters` are left out of the pace and reported as a `session-without-characters` warning.
 
 | Option | Effect |
 |---|---|
 | `--log` | Record today's total word count in `progress.md`, creating the file if needed. A second log on the same date replaces the first |
-| `--date <YYYY-MM-DD>` | Use this date as "today", for the deadline and for `--log`. Default: the local date |
+| `--date <YYYY-MM-DD>` | Use this date as "today", for the deadline, today's words, the streak, the weekly history, and `--log`. Default: the local date |
 
 `--log` refuses to rewrite a `progress.md` that does not parse or has malformed sessions, and names each problem.
 
@@ -1217,6 +1219,13 @@ Progress: 993 of 90,000 words (1.1%)
 Remaining: 89,007 words
 Deadline: 2027-03-31 (192 days left): 464 words a day needed
 Sessions: 1 logged; last 2026-09-20 (+0 words since)
+Streak: 0 days (longest 0)
+
+Last 4 weeks:
+- 2026-08-24: 0 words on 0 days
+- 2026-08-31: 0 words on 0 days
+- 2026-09-07: 0 words on 0 days
+- 2026-09-14: 0 words on 0 days
 Progress checked: 0 errors, 0 warnings, 0 dismissed
 ```
 

@@ -28,7 +28,7 @@ import { addedPassNotes, readPasses, updatePasses, validatePasses } from "./pass
 import { buildPacing } from "./pacing.js";
 import { compareChapters, mapLabels, proseParagraphs } from "./compare.js";
 import { compareSimilarity, similarityOptions } from "./similarity.js";
-import { PROGRESS_FILE, cleanSessions, computeProgress, localDate, withSession } from "./progress.js";
+import { PROGRESS_FILE, cleanSessions, computeProgress, localDate, withSession, writingDays } from "./progress.js";
 import {
   BASELINE_CHECKS,
   PROSE_THRESHOLDS,
@@ -70,6 +70,7 @@ import {
 import {
   sessionsWithoutCharacters,
   sampleProblem,
+  validateDailyTarget,
   validateDeadline,
   validateProgressLog,
   requireInteger
@@ -669,7 +670,9 @@ export function projectProgress(root, options = {}) {
     requireInteger(data, unit.targetField, "story.md", errors, 1);
   }
   validateDeadline(data, errors);
+  validateDailyTarget(data, errors);
   const target = data[unit.targetField];
+  const dailyTarget = data[unit.dailyTargetField];
   return {
     ok: errors.length === 0,
     errors,
@@ -682,6 +685,8 @@ export function projectProgress(root, options = {}) {
       target: Number.isInteger(target) && target > 0 ? target : null,
       deadline: typeof data.deadline === "string" ? data.deadline : null,
       today,
+      dailyTarget: Number.isInteger(dailyTarget) && dailyTarget > 0 ? dailyTarget : null,
+      writingDays: writingDays(data["writing-days"]),
       chapters: project.chapters.map((chapter) => ({ id: chapter.id, words: chapter.wordCount, characters: chapter.count, target: chapter.targetCount })),
       sessions: cleanSessions(project.progressLog?.data.sessions)
     })

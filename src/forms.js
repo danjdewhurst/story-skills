@@ -18,11 +18,11 @@ export const STORY_FORMS = new Map([
 
 // The units a length is counted in, by story.md `count-unit`: the noun the
 // output prints, the chapter field that records the count, and the target
-// fields. Chinese and Japanese count characters (10万字), every other
+// fields (the book and the daily target). Chinese and Japanese count characters (10万字), every other
 // language words.
 export const COUNT_UNITS = new Map([
-  ["words", { name: "words", noun: "word", title: "Words", countField: "word-count", targetField: "target-words" }],
-  ["characters", { name: "characters", noun: "character", title: "Characters", countField: "character-count", targetField: "target-characters" }]
+  ["words", { name: "words", noun: "word", title: "Words", countField: "word-count", targetField: "target-words", dailyTargetField: "daily-target-words" }],
+  ["characters", { name: "characters", noun: "character", title: "Characters", countField: "character-count", targetField: "target-characters", dailyTargetField: "daily-target-characters" }]
 ]);
 
 // The project's count unit: story.md `count-unit` when it names one, else

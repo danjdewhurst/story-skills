@@ -9068,8 +9068,8 @@ var STORY_FORMS = new Map([
   ["chapter-book", { min: 4000, max: 15000, target: 1e4 }]
 ]);
 var COUNT_UNITS = new Map([
-  ["words", { name: "words", noun: "word", title: "Words", countField: "word-count", targetField: "target-words" }],
-  ["characters", { name: "characters", noun: "character", title: "Characters", countField: "character-count", targetField: "target-characters" }]
+  ["words", { name: "words", noun: "word", title: "Words", countField: "word-count", targetField: "target-words", dailyTargetField: "daily-target-words" }],
+  ["characters", { name: "characters", noun: "character", title: "Characters", countField: "character-count", targetField: "target-characters", dailyTargetField: "daily-target-characters" }]
 ]);
 function countUnit(storyData, pack) {
   const value = storyData?.["count-unit"];
@@ -9137,6 +9137,24 @@ function tweeSource(story) {
 // src/progress.js
 var PROGRESS_FILE = "progress.md";
 var PACE_SESSIONS = 7;
+var HISTORY_WEEKS = 4;
+var WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+var WEEKDAY_NAMES = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+function weekdayName(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const text = value.trim().toLowerCase();
+  const index = WEEKDAY_NAMES.findIndex((name, position) => text === name || text === WEEKDAYS[position]);
+  return index === -1 ? null : WEEKDAYS[index];
+}
+function writingDays(value) {
+  const days = new Set((Array.isArray(value) ? value : []).map(weekdayName).filter((day) => day !== null));
+  return days.size === 0 ? null : WEEKDAYS.filter((day) => days.has(day));
+}
+function weekdayIndex(days) {
+  return ((days + 3) % 7 + 7) % 7;
+}
 var PROJECTION_HORIZON_DAYS = 100 * 366;
 function withSession(sessions, date, counts) {
   let found = false;
@@ -9165,7 +9183,7 @@ function cleanSessions(value) {
   }
   return sessions.sort((left, right) => left.date.localeCompare(right.date, "en"));
 }
-function computeProgress({ unit = "words", words, characters = null, target, deadline, today, chapters, sessions }) {
+function computeProgress({ unit = "words", words, characters = null, target, deadline, today, chapters, sessions, dailyTarget = null, writingDays: scheduled = null }) {
   const characterBook = unit === "characters";
   const inUnit = (entry) => characterBook ? entry.characters ?? null : entry.words;
   const length = characterBook ? characters : words;
@@ -9189,7 +9207,8 @@ function computeProgress({ unit = "words", words, characters = null, target, dea
     sessions: measured.length,
     lastSession: null,
     pace: null,
-    projected: null
+    projected: null,
+    daily: computeDaily({ measured: measured.map((session) => ({ date: session.date, count: inUnit(session) })), length, todayDays, dailyTarget, scheduled })
   };
   const deadlineDate = deadline ? parseClockDate(deadline) : undefined;
   if (deadlineDate) {
@@ -9214,6 +9233,76 @@ function computeProgress({ unit = "words", words, characters = null, target, dea
     }
   }
   return result;
+}
+function computeDaily({ measured, length, todayDays, dailyTarget, scheduled }) {
+  const byDay = new Map;
+  for (const session of measured) {
+    const days = parseClockDate(session.date).days;
+    if (days <= todayDays) {
+      byDay.set(days, session.count);
+    }
+  }
+  const logged = [...byDay.keys()].sort((left, right) => left - right);
+  const gains = new Map;
+  for (let index = 1;index < logged.length; index += 1) {
+    gains.set(logged[index], byDay.get(logged[index]) - byDay.get(logged[index - 1]));
+  }
+  const before = logged.filter((days) => days < todayDays);
+  if (before.length > 0) {
+    gains.set(todayDays, length - byDay.get(before[before.length - 1]));
+  }
+  const scheduledDays = scheduled === null ? null : new Set(scheduled);
+  const isScheduled = (days) => scheduledDays === null || scheduledDays.has(WEEKDAYS[weekdayIndex(days)]);
+  const counts = (days) => gains.has(days) && gains.get(days) > 0 && (dailyTarget === null || gains.get(days) >= dailyTarget);
+  const first = logged.length > 0 ? logged[0] : todayDays;
+  let current = 0;
+  for (let days = counts(todayDays) ? todayDays : todayDays - 1;days >= first; days -= 1) {
+    if (counts(days)) {
+      current += 1;
+    } else if (isScheduled(days)) {
+      break;
+    }
+  }
+  let longest = 0;
+  let run = 0;
+  for (let days = first;days <= todayDays; days += 1) {
+    if (counts(days)) {
+      run += 1;
+      longest = Math.max(longest, run);
+    } else if (isScheduled(days) && days !== todayDays) {
+      run = 0;
+    }
+  }
+  const written = gains.has(todayDays) ? gains.get(todayDays) : null;
+  const monday = todayDays - weekdayIndex(todayDays);
+  const weeks = [];
+  for (let back = HISTORY_WEEKS - 1;back >= 0; back -= 1) {
+    const start = monday - back * 7;
+    let total = 0;
+    let days = 0;
+    let planned = 0;
+    for (let day = start;day < start + 7; day += 1) {
+      if (gains.has(day)) {
+        total += gains.get(day);
+        days += gains.get(day) > 0 ? 1 : 0;
+      }
+      planned += isScheduled(day) ? 1 : 0;
+    }
+    weeks.push({ start: formatDate(start), end: formatDate(start + 6), written: total, days, target: dailyTarget === null ? null : dailyTarget * planned });
+  }
+  return {
+    target: dailyTarget,
+    writingDays: scheduled,
+    today: {
+      date: formatDate(todayDays),
+      scheduled: isScheduled(todayDays),
+      written,
+      remaining: dailyTarget === null || written === null ? null : Math.max(0, dailyTarget - written),
+      met: dailyTarget === null || written === null ? null : written >= dailyTarget
+    },
+    streak: { current, longest },
+    weeks
+  };
 }
 function formatProgress(progress) {
   const characters = progress.unit === "characters";
@@ -9250,6 +9339,7 @@ function formatProgress(progress) {
   if (progress.projected) {
     lines.push(`Projected finish at this pace: ${progress.projected}`);
   }
+  lines.push(...formatDaily(progress.daily, progress.lastSession !== null, noun));
   if (progress.chapters.length > 0) {
     lines.push("", "Chapter targets:");
     for (const chapter of progress.chapters) {
@@ -9259,6 +9349,37 @@ function formatProgress(progress) {
   return `${lines.join(`
 `)}
 `;
+}
+function formatDaily(daily, hasSessions, noun) {
+  if (!hasSessions && daily.target === null) {
+    return [];
+  }
+  const lines = [];
+  const { today, target } = daily;
+  const off = today.scheduled ? "" : " (not a writing day)";
+  if (today.written === null) {
+    if (target !== null) {
+      lines.push(`Today: ${formatNumber2(target)} ${noun}s a day target (no session logged before today to measure from)${off}`);
+    }
+  } else {
+    const gained = `${today.written >= 0 ? "+" : ""}${formatNumber2(today.written)}`;
+    if (target === null) {
+      lines.push(`Today: ${gained} ${noun}s${off}`);
+    } else {
+      lines.push(`Today: ${gained} of ${formatNumber2(target)} ${noun}s (${today.met ? "target met" : `${formatNumber2(today.remaining)} to go`})${off}`);
+    }
+  }
+  if (!hasSessions) {
+    return lines;
+  }
+  const days = daily.writingDays === null ? "" : `; writing days ${daily.writingDays.join(", ")}`;
+  lines.push(`Streak: ${plural2(daily.streak.current, "day")} (longest ${formatNumber2(daily.streak.longest)}${days})`);
+  lines.push("", `Last ${daily.weeks.length} weeks:`);
+  for (const week of daily.weeks) {
+    const amount = week.target === null ? formatNumber2(week.written) : `${formatNumber2(week.written)} of ${formatNumber2(week.target)}`;
+    lines.push(`- ${week.start}: ${amount} ${noun}s on ${plural2(week.days, "day")}`);
+  }
+  return lines;
 }
 function localDate(now = new Date) {
   const pad = (value) => String(value).padStart(2, "0");
@@ -15568,7 +15689,7 @@ import path13 from "node:path";
 
 // src/frontmatter-keys.js
 var FRONTMATTER_KEYS = {
-  story: ["title", "schema-version", "series", "series-title", "book-number", "follows", "precedes", "genre", "sub-genre", "setting-era", "status", "themes", "pov", "tense", "premise", "counter-premise", "author", "contact", "season-goal", "target-words", "target-characters", "count-unit", "language", "isbn", "publisher", "publication-date", "description", "keywords", "subjects", "copyright", "ifid", "cover-alt", "ai-disclosure", "chapter-label", "writing-mode", "chapter-numerals", "contents-label", "labels", "authors", "form", "draft-mode", "cover", "deadline", "revision-passes", "cli-defaults", "severity"],
+  story: ["title", "schema-version", "series", "series-title", "book-number", "follows", "precedes", "genre", "sub-genre", "setting-era", "status", "themes", "pov", "tense", "premise", "counter-premise", "author", "contact", "season-goal", "target-words", "target-characters", "count-unit", "language", "isbn", "publisher", "publication-date", "description", "keywords", "subjects", "copyright", "ifid", "cover-alt", "ai-disclosure", "chapter-label", "writing-mode", "chapter-numerals", "contents-label", "labels", "authors", "form", "draft-mode", "cover", "deadline", "daily-target-words", "daily-target-characters", "writing-days", "revision-passes", "cli-defaults", "severity"],
   character: ["pronunciation", "id", "name", "role", "status", "died-in", "revived-in", "aliases", "relationships", "locations", "tags", "arc", "arc-type", "lie", "truth", "ghost-wound", "voice-words", "voice-avoid", "progressions"],
   location: ["pronunciation", "id", "name", "type", "region", "population", "controlled-by", "notable-characters", "tags", "status", "setting", "routes", "progressions"],
   system: ["id", "name", "type", "prevalence", "pronunciation"],
@@ -16510,6 +16631,7 @@ function validateStoryFrontmatter(project, errors, warnings) {
   validatePasses(data, "story.md", errors);
   validateCliConfig(data, errors);
   validateDeadline(data, errors);
+  validateDailyTarget(data, errors);
   if (data.ifid !== undefined && !isIfid(data.ifid)) {
     errors.push(err("invalid-ifid", "story.md ifid must be a version 4 UUID, such as 3F2C9A61-7B1D-4E8A-9C3B-2A6D5E4F1B07", "story.md"));
   }
@@ -16561,9 +16683,11 @@ function validateFormRange(project, warnings) {
 function unusedTargetWarnings(project, label, data, warnings) {
   const { unit } = project;
   const other = [...COUNT_UNITS.values()].find((entry) => entry !== unit);
-  if (data[other.targetField] !== undefined && data[unit.targetField] === undefined) {
-    const why = project.story.data["count-unit"] === undefined ? `language ${project.language}` : "count-unit";
-    warnings.push(warn("unused-target", `${label} ${other.targetField} is not measured: this book counts ${unit.name} (${why}), so set ${unit.targetField}`, label));
+  for (const field of ["targetField", "dailyTargetField"]) {
+    if (data[other[field]] !== undefined && data[unit[field]] === undefined) {
+      const why = project.story.data["count-unit"] === undefined ? `language ${project.language}` : "count-unit";
+      warnings.push(warn("unused-target", `${label} ${other[field]} is not measured: this book counts ${unit.name} (${why}), so set ${unit[field]}`, label));
+    }
   }
 }
 function validateIndexFrontmatter(project, errors) {
@@ -17138,6 +17262,18 @@ function validateDeadline(data, errors) {
     if (deadlineError !== "") {
       errors.push(err("invalid-date", `story.md deadline ${deadlineError}`, "story.md"));
     }
+  }
+}
+function validateDailyTarget(data, errors) {
+  for (const unit of COUNT_UNITS.values()) {
+    requireInteger(data, unit.dailyTargetField, "story.md", errors, 1);
+  }
+  const days = data["writing-days"];
+  if (days === undefined) {
+    return;
+  }
+  if (!Array.isArray(days) || days.length === 0 || days.some((day) => weekdayName(day) === null)) {
+    errors.push(err("unsupported-value", `story.md frontmatter field writing-days must be a list of weekdays (${WEEKDAYS.join(", ")}, or full names), got ${Array.isArray(days) ? `[${days.join(", ")}]` : days}`, "story.md"));
   }
 }
 function validateProgressLog(project, errors) {
@@ -20627,7 +20763,9 @@ function projectProgress(root, options = {}) {
     requireInteger(data, unit.targetField, "story.md", errors, 1);
   }
   validateDeadline(data, errors);
+  validateDailyTarget(data, errors);
   const target = data[unit.targetField];
+  const dailyTarget = data[unit.dailyTargetField];
   return {
     ok: errors.length === 0,
     errors,
@@ -20640,6 +20778,8 @@ function projectProgress(root, options = {}) {
       target: Number.isInteger(target) && target > 0 ? target : null,
       deadline: typeof data.deadline === "string" ? data.deadline : null,
       today,
+      dailyTarget: Number.isInteger(dailyTarget) && dailyTarget > 0 ? dailyTarget : null,
+      writingDays: writingDays(data["writing-days"]),
       chapters: project.chapters.map((chapter) => ({ id: chapter.id, words: chapter.wordCount, characters: chapter.count, target: chapter.targetCount })),
       sessions: cleanSessions(project.progressLog?.data.sessions)
     })
@@ -22174,7 +22314,8 @@ var COMMANDS = [
     usage: "progress [path]",
     summary: [
       "Show words against target-words, deadline, chapter",
-      "targets, and logged sessions; --log records today"
+      "targets, logged sessions, the daily target, and the",
+      "writing streak; --log records today"
     ],
     project: "positional",
     options: ["log", "date", "json"],

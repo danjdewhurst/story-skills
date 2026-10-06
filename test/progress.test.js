@@ -186,3 +186,103 @@ describe("formatProgress", () => {
     expect(computeProgress({ ...done, deadline: "2026-12-01", today: "2026-09-21" }).deadline.perDay).toBe(0);
   });
 });
+
+describe("daily targets and streaks", () => {
+  // 2026-09-14 is a Monday. Each session is the whole manuscript that day.
+  const log = [
+    { date: "2026-09-14", words: 100 },
+    { date: "2026-09-15", words: 400 },
+    { date: "2026-09-17", words: 700 },
+    { date: "2026-09-18", words: 1000 },
+    { date: "2026-09-21", words: 1100 }
+  ];
+  const daily = (options) => computeProgress({ words: 1250, target: null, deadline: null, today: "2026-09-22", chapters: [], sessions: log, ...options }).daily;
+
+  test("today is measured live against the last session before it", () => {
+    expect(daily({}).today).toEqual({ date: "2026-09-22", scheduled: true, written: 150, remaining: null, met: null });
+    expect(daily({ dailyTarget: 200 }).today).toMatchObject({ written: 150, remaining: 50, met: false });
+    expect(daily({ dailyTarget: 100 }).today).toMatchObject({ remaining: 0, met: true });
+    // A session logged today does not stop the live measure.
+    expect(daily({ today: "2026-09-21", words: 1300 }).today.written).toBe(300);
+  });
+
+  test("the streak counts gaining days, and a missed day breaks it", () => {
+    // 15, 17, 18, 21, 22 gained words; 16, 19, and 20 did not.
+    expect(daily({}).streak).toEqual({ current: 2, longest: 2 });
+    // Weekends off: the 19th and 20th no longer break the run.
+    expect(daily({ writingDays: ["mon", "tue", "wed", "thu", "fri"] }).streak).toEqual({ current: 4, longest: 4 });
+    // A target of 200: the 21st (+100) and today (+150) fall short.
+    expect(daily({ dailyTarget: 200, writingDays: ["mon", "tue", "thu", "fri"] }).streak).toEqual({ current: 0, longest: 3 });
+  });
+
+  test("today does not break the streak before it is written", () => {
+    expect(daily({ words: 1100 }).streak).toEqual({ current: 1, longest: 2 });
+    expect(daily({ words: 1100 }).today.written).toBe(0);
+    expect(daily({ words: 1100, today: "2026-09-24" }).streak.current).toBe(0);
+  });
+
+  test("weeks run Monday to Sunday, oldest first, with each week's target", () => {
+    const { weeks } = daily({ dailyTarget: 250, writingDays: ["mon", "wed"] });
+    expect(weeks.map((week) => week.start)).toEqual(["2026-08-31", "2026-09-07", "2026-09-14", "2026-09-21"]);
+    expect(weeks[2]).toEqual({ start: "2026-09-14", end: "2026-09-20", written: 900, days: 3, target: 500 });
+    expect(weeks[3]).toEqual({ start: "2026-09-21", end: "2026-09-27", written: 250, days: 2, target: 500 });
+    expect(daily({}).weeks[3].target).toBeNull();
+  });
+
+  test("sparse, out-of-order, future, and falling logs", () => {
+    const sparse = computeProgress({
+      words: 500,
+      target: null,
+      deadline: null,
+      today: "2026-09-10",
+      chapters: [],
+      sessions: [{ date: "2026-12-01", words: 9000 }, { date: "2026-09-08", words: 600 }, { date: "2026-01-01", words: 0 }]
+    }).daily;
+    // The future session is ignored; the eight-month gap is one gain on the 8th.
+    expect(sparse.today.written).toBe(-100);
+    expect(sparse.streak).toEqual({ current: 0, longest: 1 });
+    expect(sparse.weeks[3]).toMatchObject({ start: "2026-09-07", written: 500, days: 1 });
+
+    const none = computeProgress({ words: 10, target: null, deadline: null, today: "2026-09-10", chapters: [], sessions: [] }).daily;
+    expect(none.today.written).toBeNull();
+    expect(none.streak).toEqual({ current: 0, longest: 0 });
+  });
+
+  test("formatProgress prints today, the streak, and the weeks", () => {
+    const text = formatProgress(computeProgress({ words: 1250, target: null, deadline: null, today: "2026-09-22", chapters: [], sessions: log, dailyTarget: 200, writingDays: ["mon", "tue", "thu", "fri"] }));
+    expect(text).toContain("Today: +150 of 200 words (50 to go)\nStreak: 0 days (longest 3; writing days mon, tue, thu, fri)\n\nLast 4 weeks:\n- 2026-08-31: 0 of 800 words on 0 days\n");
+    expect(text).toContain("- 2026-09-21: 250 of 800 words on 2 days\n");
+
+    const sunday = formatProgress(computeProgress({ words: 1250, target: null, deadline: null, today: "2026-09-20", chapters: [], sessions: log, writingDays: ["mon"] }));
+    expect(sunday).toContain("Today: +250 words (not a writing day)\nStreak: 4 days (longest 4; writing days mon)\n");
+
+    const unmeasured = formatProgress(computeProgress({ words: 10, target: null, deadline: null, today: "2026-09-20", chapters: [], sessions: [], dailyTarget: 500 }));
+    expect(unmeasured).toContain("Today: 500 words a day target (no session logged before today to measure from)\n");
+    expect(unmeasured).not.toContain("Streak");
+  });
+
+  test("story.md daily-target-words and writing-days reach progress and validate", () => {
+    const { root, cwd } = progressProject("daily-target-words: 100\nwriting-days: [Mon, tuesday, fri]");
+    writeMarkdown(path.join(root, "progress.md"), "type: progress-log\nsessions:\n  - date: 2026-09-20\n    words: 120", "");
+    const progress = projectProgress(root, { date: "2026-09-21" });
+    expect(progress.daily).toMatchObject({ target: 100, writingDays: ["mon", "tue", "fri"], today: { written: 130, met: true }, streak: { current: 1, longest: 1 } });
+    expect(messages(validateProject(root).errors)).toEqual([]);
+    expect(checkProjectSchema(root)).toEqual([]);
+
+    const json = invoke(cwd, ["progress", root, "--date", "2026-09-21", "--json"]);
+    expect(JSON.parse(json.out).data.daily.streak).toEqual({ current: 1, longest: 1 });
+
+    const bad = progressProject("daily-target-words: 0\nwriting-days: [mon, someday]");
+    const errors = messages(validateProject(bad.root).errors);
+    expect(errors).toContain("story.md frontmatter field daily-target-words must be at least 1");
+    expect(errors).toContain("story.md frontmatter field writing-days must be a list of weekdays (mon, tue, wed, thu, fri, sat, sun, or full names), got [mon, someday]");
+    expect(projectProgress(bad.root, { date: "2026-09-21" }).ok).toBe(false);
+    expect(messages(validateProject(progressProject("writing-days: fri").root).errors).join("\n")).toContain("writing-days must be a list of weekdays");
+    expect(messages(validateProject(progressProject("writing-days: [1, mon]").root).errors).join("\n")).toContain("writing-days must be a list of weekdays");
+  });
+
+  test("a book counted in words warns about daily-target-characters", () => {
+    const { root } = progressProject("daily-target-characters: 800");
+    expect(messages(validateProject(root).warnings).join("\n")).toContain("story.md daily-target-characters is not measured: this book counts words (language en), so set daily-target-words");
+  });
+});
