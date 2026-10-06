@@ -461,6 +461,18 @@ The [`editorial-review`](../skills/editorial-review/SKILL.md) skill asks before 
 
 A paragraph label is the paragraph's position in its chapter, so it changes when you add or remove paragraphs earlier in that chapter. Because this workflow republishes on every push, a note made last week may point at a paragraph that has since moved. Readers therefore quote the build stamp printed at the top of the copy and the paragraph's first few words along with the label; the issue form asks for both. Tag the commit when you send readers the link for a round, for example `beta-round-1`. To find where an old label's paragraph is now, run `story compare . --ref beta-round-1 --anchor ch03-p12` (repeat `--anchor` for several notes): it prints the paragraph's current label, whether its text changed, or its first few words when it is gone. A build stamp names a commit, so `--ref` can also take the short commit from the stamp. See [Import, export, and builds](manuscripts.md#html-review-copy) for how labels are numbered.
 
+### Story bible on GitHub Pages
+
+The same workflow can publish the [story bible site](manuscripts.md#story-bible-site-codex) beside the review copy, so readers can look up who someone is or when something happened. Add a step after **Build the review copy** that writes the codex into the Pages folder:
+
+```yaml
+      - name: Build the story bible
+        if: steps.chapters.outputs.has-chapters == 'true'
+        run: story build "$STORY_DIR" --format codex --out "$GITHUB_WORKSPACE/review-site/codex"
+```
+
+`STORY_VERSION` must name a release that has the `codex` format. The site then serves the bible at `https://<owner>.github.io/<repository>/codex/`. Leave out `--spoilers` here: without it the codex holds no entity notes, deaths, clues, or resolutions, so it is safe for readers who have not finished the book. A `--spoilers` build belongs in the workflow artifact or on your own machine, never on a public site.
+
 ## Manuscript note issue form
 
 [`ISSUE_TEMPLATE/manuscript-note.yml`](../templates/github/ISSUE_TEMPLATE/manuscript-note.yml) is a GitHub issue form for readers of the review copy. Each note becomes an issue labelled `manuscript-note`, with the paragraph label in its title and body.

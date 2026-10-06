@@ -691,6 +691,12 @@ function canPairEmphasis(opener, closer) {
   return opener.delimiter === closer.delimiter && !ruleOfThree;
 }
 
+// Inline markdown (emphasis, code spans, hard breaks) as HTML, as the
+// review copy sets a paragraph.
+export function inlineHtml(text) {
+  return inlineRuns(String(text)).map((run) => runMarkup(run, escapeHtml, "<br>")).join("");
+}
+
 // HTML or XHTML markup for one run; `escape` is the matching text escaper
 // and `lineBreak` the matching break element.
 function runMarkup(run, escape, lineBreak) {

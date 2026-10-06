@@ -929,11 +929,12 @@ export const COMMANDS = [
       "renders print or shunn to PDF),",
       "narration (audiobook script), metadata (retailer",
       "sheet), fountain (screenplay scene skeleton),",
-      "twee (Twine story from chapter choices), or ink",
-      "(ink story from chapter choices)"
+      "twee (Twine story from chapter choices), ink",
+      "(ink story from chapter choices), or codex (story",
+      "bible as linked HTML pages in dist/codex/)"
     ],
     project: "positional",
-    options: ["out", "format", "shunn", "trim", "stamp", "note-url", "pdf", "pdf-engine"],
+    options: ["out", "format", "shunn", "trim", "stamp", "note-url", "pdf", "pdf-engine", "spoilers"],
     run({ parsed, io, cwd, root, overrides, defaulted }) {
       const pdf = isTruthy(parsed.options.pdf);
       const result = buildBook(root(), {
@@ -946,10 +947,13 @@ export const COMMANDS = [
         pdf,
         // A story.md default engine waits for a build that asks for a PDF.
         pdfEngine: pdf || !defaulted.has("pdf-engine") ? parsed.options["pdf-engine"] : undefined,
-        cwd
+        cwd,
+        spoilers: isTruthy(parsed.options.spoilers)
       });
       const as = result.pdf ? `${result.format} PDF (${result.engine})` : result.format;
-      io.stdout.write(`Built ${result.chapters} chapters as ${as} to ${result.outFile}\n`);
+      io.stdout.write(result.format === "codex"
+        ? `Built a codex of ${result.pages} pages to ${result.outFile}\n`
+        : `Built ${result.chapters} chapters as ${as} to ${result.outFile}\n`);
       return writeFindings(io, checkedWarnings(result.warnings, overrides));
     }
   },

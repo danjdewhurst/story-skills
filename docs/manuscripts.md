@@ -30,7 +30,7 @@ All output shown was captured by running the commands against copies of the exam
 flowchart LR
   draft["Existing draft<br/>(.md, .markdown, .txt)"] -->|story import| project["Story project<br/>story.md, chapters/, matter/, plot/arcs/"]
   project -->|story export| manuscript["dist/manuscript.md"]
-  project -->|story build| dist["dist/<br/>.md, .epub, .docx, .shunn.md,<br/>.html, .print.html, .pdf, .narration.md, .metadata.md, .fountain, .twee, .ink"]
+  project -->|story build| dist["dist/<br/>.md, .epub, .docx, .shunn.md,<br/>.html, .print.html, .pdf, .narration.md, .metadata.md, .fountain, .twee, .ink,<br/>codex/"]
   project -->|story synopsis| synopsis["Synopsis<br/>(stdout or --out)"]
 ```
 
@@ -596,6 +596,7 @@ The warning is harmless, and the default `dist/` path avoids it. `story build` w
 | `fountain` | Screenplay scene skeleton in Fountain, from the scene records | `dist/<story-id>.fountain` | No prose at all |
 | `twee` | Twine story in Twee 3: one passage per chapter, linked by chapter `choices` | `dist/<story-id>.twee` | No |
 | `ink` | ink story for inkle's Inky and inklecate: one knot per chapter, with chapter `choices` as choices | `dist/<story-id>.ink` | No |
+| `codex` | Story bible as a static site of linked HTML pages: characters, places, factions, artifacts, systems, arcs, timeline, threads, and progress | `dist/codex/` (a folder) | No prose at all |
 
 The story id is the kebab-case title from `story.md`. Build every format of the example *The Last Ember* like this:
 
@@ -629,17 +630,18 @@ The confirmation always counts chapters, even for the metadata sheet and the scr
 | Option | Effect |
 |--------|--------|
 | `[path]` or `--path <path>` | Project root. Defaults to the current directory. |
-| `--format <name>` | `markdown` (or `md`), `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, or `ink`. Case-insensitive. Defaults to `markdown`. |
+| `--format <name>` | `markdown` (or `md`), `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, or `codex`. Case-insensitive. Defaults to `markdown`. |
 | `--shunn` | With `--format docx`, apply Shunn formatting. An error with every other format. |
 | `--trim <size>` | With `--format print`, the trim size: `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5`. Case-insensitive. Defaults to `5.5x8.5`. An error with every other format. |
 | `--pdf` | With `--format print` or `--format shunn`, render to PDF with an installed engine. An error with every other format. See [PDF output](#pdf-output). |
 | `--pdf-engine <name\|path>` | With `--pdf`, the engine to use: `prince`, `weasyprint`, `pagedjs-cli`, `chrome`, or the path to one. |
-| `--out <file>` | Output file instead of the default in `dist/`. |
+| `--spoilers` | With `--format codex`, include notes, statuses, deaths, knowledge, clues, and resolutions. An error with every other format. |
+| `--out <file>` | Output file instead of the default in `dist/`; for `codex`, a folder. |
 
 Any other format is an error:
 
 ```text
-Unsupported build format: pdf. Supported formats: markdown, epub, docx, shunn, html, print, narration, metadata, fountain, twee, ink
+Unsupported build format: pdf. Supported formats: markdown, epub, docx, shunn, html, print, narration, metadata, fountain, twee, ink, codex
 ```
 
 For a book PDF, build the [print interior](#print-interior) with `--pdf`. For a manuscript PDF, build the [Shunn manuscript](#shunn-standard-manuscript-format) with `--pdf`. Both need a paged-media engine installed; see [PDF output](#pdf-output).
@@ -1125,6 +1127,28 @@ The supply boat backs off the landing before your boots are dry. ...
 
 Open the file in [Inky](https://github.com/inkle/inky) to play it, or compile it with `inklecate -o gull-rock.json dist/the-gull-rock-light.ink`.
 
+### Story bible site (codex)
+
+`story build --format codex` writes the story bible as a small static website in `dist/codex/`, for browsing the cast and world the way World Anvil, Campfire, or NovelCrafter's codex show them. It is built from the same views the other commands print (`timeline`, `clues`, `grid`, `progress`, and `mentions`), so the site and the terminal never disagree.
+
+```text
+dist/codex/
+  index.html            every entity, grouped by kind, with counts
+  characters/<id>.html  one page per character
+  locations/<id>.html   ... and per location, faction, artifact, system, and arc
+  timeline.html         dated scenes in story-time order, undated ones, POV balance, presence
+  threads.html          open questions and promises (with --spoilers: all of them, and the clue grid)
+  progress.html         length against target, chapters, the plot grid, and the session log
+```
+
+Each entity page shows the entity's fields, its relationships, the chapters it appears in (listed in a chapter's or scene's frontmatter, or named in drafted prose), and the other entity pages that link to it: a location page lists the characters whose `locations` name it. Every name links to its page. The pages are plain HTML with inline CSS, a dark-mode palette, and the book's language, direction, and fonts, as the [review copy](#html-review-copy) sets them; there is no script and nothing is loaded from elsewhere, so the folder works opened from disk or served from any static host. The site's own headings are in English.
+
+**Spoilers.** By default the codex is safe to share with readers: it leaves out each entity file's notes (its markdown body), character, faction, artifact, and arc statuses, deaths and revivals, `arc` lines, artifact owners and locations, `progressions`, `knowledge-state`, the clue grid, chapter hooks and scene outcomes, and resolved questions and promises with their payoffs. Add `--spoilers` for the author's whole bible, with all of these, the story synopsis, and each entity file's notes rendered as HTML. A spoiler build is for you and your collaborators; do not publish it where readers will find it.
+
+Like every build, the codex is deterministic and carries no date: the progress page shows only what does not change from day to day, so it leaves out streaks, pace, and days to the deadline (see `story progress` for those). A rebuild clears the pages an earlier codex wrote before writing the new ones, so a removed character's page goes too. `--out` names the folder; it is refused when it holds the project, is project source, or already holds files that are not an earlier codex, so `--out dist` with other builds in it is refused rather than cleared.
+
+To publish the codex with GitHub Pages, see [Story bible on GitHub Pages](automation.md#story-bible-on-github-pages).
+
 ### How prose is converted for EPUB, DOCX, Shunn, HTML, and print
 
 The markdown export copies prose as written, and the narration script nearly does (see [Narration script](#narration-script)). The EPUB, DOCX, Shunn, HTML, and print builds convert it to paragraphs:
@@ -1175,7 +1199,7 @@ Traditional Mongolian (`mn-Mong`) is vertical too, but its columns run left to r
 
 ### Reproducible builds
 
-Builds are deterministic: the same sources produce byte-identical files. The HTML, print, narration, metadata, twee, and ink builds contain no dates or timestamps (an HTML build prints a `--stamp` label only when you pass one), so a diff between two builds shows only what changed in the book. EPUB and DOCX packages date every ZIP entry 1980-01-01, and drop control characters that XML does not allow. Entries are deflated at a fixed level, which keeps repeat builds identical, and their names carry the ZIP UTF-8 name flag; the EPUB `mimetype` entry stays first and uncompressed as the OCF container format requires. The EPUB `dcterms:modified` date comes from the `SOURCE_DATE_EPOCH` environment variable (whole seconds since the Unix epoch) when it is set, and is `2000-01-01T00:00:00Z` otherwise, including when the value is not a whole number of seconds or falls after the year 9999:
+Builds are deterministic: the same sources produce byte-identical files. The HTML, print, narration, metadata, twee, ink, and codex builds contain no dates or timestamps (an HTML build prints a `--stamp` label only when you pass one), so a diff between two builds shows only what changed in the book. EPUB and DOCX packages date every ZIP entry 1980-01-01, and drop control characters that XML does not allow. Entries are deflated at a fixed level, which keeps repeat builds identical, and their names carry the ZIP UTF-8 name flag; the EPUB `mimetype` entry stays first and uncompressed as the OCF container format requires. The EPUB `dcterms:modified` date comes from the `SOURCE_DATE_EPOCH` environment variable (whole seconds since the Unix epoch) when it is set, and is `2000-01-01T00:00:00Z` otherwise, including when the value is not a whole number of seconds or falls after the year 9999:
 
 ```shell
 SOURCE_DATE_EPOCH=1700000000 story build . --format epub
@@ -1271,7 +1295,7 @@ The result is a draft, not submission copy. Literary agents expect present tense
   ```text
   Refusing to overwrite submission/synopsis-1-page.md: files in feedback/, submission/, publishing/, adaptations/ may hold hand-written work. Delete it first to regenerate it, or use a path such as dist/ instead
   ```
-- `--out` must name a file. `--out dist`, an existing folder, or any path ending in `/` is refused with `--out <path> is a directory: give a file path`, whether or not the folder exists yet; an empty `--out` is refused with `--out needs a file path`.
+- `--out` must name a file, except for `--format codex`, which takes a folder (see [Story bible site](#story-bible-site-codex)). `--out dist`, an existing folder, or any path ending in `/` is refused with `--out <path> is a directory: give a file path`, whether or not the folder exists yet; an empty `--out` is refused with `--out needs a file path`.
 
 Treat everything in `dist/` as disposable. It is regenerated from the markdown on every build, so never edit a built file to fix the book: change the chapter or matter file and build again. `story validate` and `story links` do not read `dist/`, and `story rename` and `story remove` never rewrite references inside it. `story init` and `story import` write a `.gitignore` that lists `dist/` when the project has none. They never edit an existing one, and print a note when it does not ignore `dist/`: add the line yourself unless you want to commit a particular build. A project created by an older version or by hand needs the line added too.
 
@@ -1296,7 +1320,8 @@ Treat everything in `dist/` as disposable. It is regenerated from the markdown o
 | `Duplicate chapter number N: ...` | Two chapters share a `number` | Renumber one of them, then run `story reindex .`. |
 | `... matter file names must be kebab-case to build` | A `matter/` file name is not kebab-case | Rename the file to a kebab-case name, such as `about-me.md`, then run `story reindex .`. |
 | `story.md cover <path> ...` | The cover path is missing, outside the project, or not a supported image | Fix `cover` in `story.md`, or remove it. |
-| `Unsupported build format: <name>. ...` | An unknown `--format` | Use `markdown`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, or `ink`. |
+| `Unsupported build format: <name>. ...` | An unknown `--format` | Use `markdown`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, or `codex`. |
+| `Refusing to write the codex into <path>: it holds other files. ...` | `--format codex` with an `--out` folder that already holds files from something else, such as `dist` | Use a new or empty folder, such as `dist/codex`. |
 | `Cannot build twee until these are fixed: ...` or `Cannot build ink ...` | A chapter's `choices` is malformed or leads to a missing chapter, a chapter file name is not kebab-case, or `ifid` is malformed | Fix each listed problem; `story validate` and `story links` report most of them too. |
 | `Unsupported trim size: <size>. ...` | An unknown `--trim` with `--format print` | Use `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5`. |
 | `Unsupported synopsis length: <n>. Supported pages: 1, 3` | An unsupported `--pages` value | Use `1` or `3`. |
