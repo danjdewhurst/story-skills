@@ -201,24 +201,29 @@ The CLI uses its own YAML parser, which supports a deliberate subset of YAML:
 | Decimal | `travel-hours: 1.5` | the number `1.5` |
 | Boolean | `sequel: true` | `true` or `false` |
 | Double-quoted string | `title: "Dawn: Part One"` | JSON-unescaped string |
-| Single-quoted string | `title: 'Night'` | the text between the quotes |
-| Empty value | `payoff:` or `payoff: ""` | an empty string |
+| Single-quoted string | `title: 'Night'`, `title: 'It''s Late'` | the text between the quotes, with `''` read as `'` |
+| Empty value | `payoff:`, `payoff: ""`, `payoff: ~`, or `payoff: null` | an empty string |
 | Empty list | `tags: []` | an empty list |
-| Block list | `themes:` then `  - loyalty` | a list of scalars |
+| Block list | `themes:` then `  - loyalty` (or `- loyalty` at the start of the line) | a list of scalars |
+| Flow list | `themes: [loyalty, "grief, old"]` | a list of scalars |
 | List of mappings | `relationships:` then `  - character: kael-voss` and `    type: sibling` | a list of objects |
+| Literal block scalar | `summary: \|` then indented lines | the lines joined with line breaks |
+| Folded block scalar | `summary: >` then indented lines | the lines joined with spaces; a blank line becomes a line break |
 | Comment line | `# note` on its own line | ignored |
+| Inline comment | `title: Ash # draft` | `Ash`; the comment is ignored |
 
-Keep to these rules, because anything else is either an error or parses differently from standard YAML:
+Keep to these rules, because anything else is an error:
 
 - Keys contain only letters, digits, `_`, and `-`. A duplicate key is an error.
-- List items are indented exactly two spaces (`  - item`). Mapping keys inside a list item are indented exactly four spaces. Deeper nesting, four-space list items, and block scalars (`>` or `|`) fail with `Unsupported frontmatter line`.
-- Flow lists are not parsed: `themes: [a, b]` is stored as the single string `[a, b]`, and a field that must be a list then fails validation. Always use block lists.
-- A list item that starts with a key-like word followed by a colon is read as a mapping. `  - https://example.com/tides` becomes `{https: //example.com/tides}` and fails as a list of strings. Quote such items: `  - "https://example.com/tides"`. (`story add research --source` quotes them for you.)
-- `#` starts a comment only at the beginning of a line. `title: Ash # draft` keeps `# draft` as part of the title. A comment line or a blank line inside a list is an error: the next item fails with `Unsupported frontmatter line`. Keep comments and blank lines between top-level entries.
-- Single-quoted strings are taken literally: `'it''s'` stays `it''s`. Use double quotes when you need escapes.
-- `null` and `~` are plain strings, not null.
+- Every item of a list has the same indent, which may be none. The keys of a mapping item line up under its first key. Comment lines and blank lines may sit between items. A list inside a list item, or a mapping inside a mapping, is not supported, except a flow list as a mapping item's value (`  - filter-words: [sintió, vio]`).
+- A list item needs a space after a key's colon to be read as a mapping, so `  - https://example.com/tides` stays a string.
+- `#` starts a comment at the beginning of a line, or after a space or tab. `Issue#4` and `C#` keep their `#`, as does a `#` inside quotes: `title: "Ash # Ember"`.
+- A block scalar's text is every following line indented past its key. `|` keeps the line breaks and `>` folds them into spaces; both end with one line break unless you write `|-` or `>-` (none) or `|+` or `>+` (keep trailing blank lines).
+- A value that starts with `[` is a flow list, except a `[TODO` placeholder, which stays text. Quote other text that starts with `[`, `{`, `*`, `&`, `!`, `|`, or `>`, such as `note: "[sic] as written"`. Flow mappings (`{a: b}`), lists inside a flow list, anchors, aliases, and tags are not supported.
 - Dates such as `2026-09-24` stay strings.
 - The frontmatter ends at the first line holding only `---` (trailing spaces allowed). `----` or `--- # end` does not close it, and a file whose block never closes fails with `has unclosed YAML frontmatter`.
+
+An error names the file and the line, and shows how to write the value instead, for example `chapters/chapter-02.md: Unsupported frontmatter line: author: me (line 4). Nested fields are not supported. Write a list of key: value items, such as relationships: then   - character: sera-voss`.
 
 Fields the tools do not know are kept and ignored. The example character files carry an `age` field, for instance. Add your own fields freely, but stay within the syntax above.
 
@@ -229,6 +234,7 @@ Several commands edit frontmatter in place: `story wordcount --write`, `story ad
 - Comment lines, blank lines, unchanged entries (with their original quoting and number formatting), and unchanged list items keep their exact text, including their own line ending in a file that mixes LF and CRLF.
 - The body is untouched, except that `story rename` and `story move` update links to a renamed file, and `story move` updates a moved chapter's `# Chapter N:` heading and bare chapter and scene ids in `plot/timeline.md`, arc bodies, and `plot/_index.md`. When a rename changes one key of a list item, the item's other keys keep their text.
 - A file whose content does not change is not written at all.
+- A changed entry is written in the standard form: a changed flow list becomes a block list, a changed block scalar becomes a double-quoted string with `\n` for each line break, and an inline comment on a changed line is dropped. New items in a block list take the indent of the items already there. A list inside a list item is written as a flow list.
 
 When the CLI writes a new value, it double-quotes strings that this parser or another YAML parser would otherwise misread: empty strings; strings that look like numbers (including `0x1F`, `1e3`, and `.inf`), booleans (`true`, `yes`, `off`, in any case), `null`, or `~`; strings that start with a YAML indicator such as `[`, `{`, `*`, `&`, `!`, `|`, `>`, `%`, `@`, a backtick, or `-`; strings with leading or trailing spaces; and strings containing `:`, `#`, a quote, or a control character. So `story add chapter "[Redacted]"` writes `title: "[Redacted]"`. Dates stay bare.
 

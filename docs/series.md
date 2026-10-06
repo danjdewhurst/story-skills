@@ -368,7 +368,7 @@ knowledge-state:
 - `story series` matches the character id plus the fact id, never the `knows` text, so the wording can differ between books. The two example books describe the Whisper Gate route differently and still match.
 - Add `learned-in` only in the book where the character discovers the fact on the page. In every later book, carry the entry without `learned-in`, because the character already knew it when the book began.
 - Fact ids are kebab-case, and a character lists a given fact once per book. `story continuity` checks both rules; see [Continuity and analysis](continuity.md).
-- Do not explain the rule in an inline comment after `learned-in`. The frontmatter parser keeps `# ...` as part of the value, and `story continuity` then reports a missing chapter.
+- Do not explain the rule in an inline comment after `learned-in`. A command that rewrites the entry, such as `story rename`, drops the comment.
 - Give ids to the reveals, secrets, and discoveries that another book depends on. Everyday knowledge does not need one.
 
 ## Writing against canon

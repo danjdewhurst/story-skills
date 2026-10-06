@@ -26,4 +26,4 @@ mice-threads:
   - character
 ```
 
-The field is agent-facing. `story validate` and `story continuity` do not read it, so closing rules are a manual audit. Use a block list. A flow sequence such as `[event, character]` is stored as one string.
+The field is agent-facing. `story validate` and `story continuity` do not read it, so closing rules are a manual audit. Use a block list or a flow list such as `[event, character]`.

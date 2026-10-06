@@ -84,7 +84,7 @@ knowledge-state:
 ```
 
 - Fact ids are kebab-case, and each character lists a given fact only once per book. `story continuity` checks both rules.
-- Add `learned-in` only in the book where the character discovers the fact on the page. In later books, carry the entry without `learned-in`. Do not put that rule in an inline comment: the parser keeps `# ...` as part of the chapter id, and `story continuity` then reports a missing chapter.
+- Add `learned-in` only in the book where the character discovers the fact on the page. In later books, carry the entry without `learned-in`. Do not put that rule in an inline comment: a command that rewrites the entry drops the comment.
 - Reuse the exact id in every book. The checker matches the character id plus the fact id, never the `knows` text.
 - Give ids to the reveals, secrets, and discoveries a later or earlier book depends on. Everyday knowledge does not need one.
 

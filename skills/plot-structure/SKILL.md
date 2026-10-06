@@ -32,7 +32,7 @@ A story project must already exist (created via the story-init skill). Verify by
    - Type (main, subplot, character, thematic)
    - Which characters are involved
    - Which themes it serves
-   - Which MICE threads the arc carries (optional `mice-threads:` frontmatter, written as a block list with one `- event` or `- character` item per line, not a `[event, character]` flow list; see `references/mice-quotient.md`)
+   - Which MICE threads the arc carries (optional `mice-threads:` frontmatter, written as a block list with one `- event` or `- character` item per line, or as a `[event, character]` flow list; see `references/mice-quotient.md`)
 5. Build the arc through conversation: setup, escalations, climax, resolution
 6. Write the file using `references/arc-template.md` (or scaffold it with `story add arc "{Name}" --type main --character {id} --theme {theme}`, then fill in the sections)
 7. Save to `plot/arcs/{arc-name-kebab}.md`
