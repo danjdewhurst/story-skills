@@ -604,7 +604,7 @@ The warning is harmless, and the default `dist/` path avoids it. `story build` w
 
 | `--format` | Output | Default file | Includes matter |
 |------------|--------|--------------|-----------------|
-| `markdown` (default) or `md` | Markdown manuscript, as `story export` | `dist/<story-id>.md` | Yes |
+| `markdown` (default) or `md` | Markdown manuscript, as `story export` | `dist/<story-id>.md` (`dist/manuscript.book.md` when the story id is `manuscript`, so it does not replace `story export`'s `dist/manuscript.md`) | Yes |
 | `epub` | EPUB 3 ebook | `dist/<story-id>.epub` | Yes |
 | `docx` | Word document | `dist/<story-id>.docx` | Yes |
 | `docx` with `--shunn` | Word document in Shunn manuscript format | `dist/<story-id>.shunn.docx` | No |
