@@ -238,6 +238,36 @@ characters:
     expect(items("chapter-03")).not.toContain("died in chapter-02");
   });
 
+  test("story context shows continuity/state.md only on a path from current-chapter", () => {
+    const root = diamond();
+    setState(root, 2, {
+      "character-state": `  - character: mara-finn
+    location: the-bridge
+`
+    });
+    const scanned = scanProject(root);
+    const state = (target) => buildContext(scanned, target, () => "", { budget: 100000 }).sections
+      .find((section) => section.id === "pov").items
+      .find((entry) => entry.id === "state:mara-finn");
+    // Chapter 3 is the sibling branch: no reader goes from 2 to 3.
+    expect(state("chapter-03").text).not.toContain("the-bridge");
+    expect(state("chapter-03").text).toContain("describes chapter 2 (chapter-02), which no path of choices leads from to chapter-03");
+    // Chapter 4 follows chapter 2 on the fight path.
+    expect(state("chapter-04").text).toContain("As of chapter 2: location the-bridge");
+    expect(state("chapter-04").text).not.toContain("left out");
+  });
+
+  test("story context keeps a current-chapter that names no chapter", () => {
+    const root = diamond();
+    setState(root, 0, {
+      "character-state": `  - character: mara-finn
+    location: the-bridge
+`
+    });
+    const scanned = scanProject(root);
+    expect(JSON.stringify(buildContext(scanned, "chapter-03", () => "", { budget: 100000 }))).toContain("As of chapter 0: location the-bridge");
+  });
+
   test("an object left in different states by the branches is reported once", () => {
     const root = diamond();
     writeMarkdown(path.join(root, "worldbuilding", "artifacts", "brass-key.md"), `

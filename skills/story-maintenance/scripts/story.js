@@ -13550,10 +13550,15 @@ ${body}`)));
     const stateSources = new Set;
     const currentChapter = project.continuity ? Number(project.continuity.data["current-chapter"]) : NaN;
     if (Number.isInteger(currentChapter) && currentChapter < targetNumber) {
-      for (const entry of asList(project.continuity.data["character-state"])) {
-        if (isMapping(entry) && idText(entry.character) === pov) {
-          state.push(`- As of chapter ${currentChapter}: ${describeMapping(entry, ["character"])}`);
-          stateSources.add(statePath);
+      const current = project.chapters.find((chapter) => chapter.number === currentChapter);
+      const onPath = !chronology.branching || !current || chronology.readAfter(target.chapter.id, current.id);
+      const entries = asList(project.continuity.data["character-state"]).filter((entry) => isMapping(entry) && idText(entry.character) === pov);
+      if (entries.length > 0) {
+        stateSources.add(statePath);
+        if (onPath) {
+          state.push(...entries.map((entry) => `- As of chapter ${currentChapter}: ${describeMapping(entry, ["character"])}`));
+        } else {
+          state.push(`- ${statePath} describes chapter ${currentChapter} (${current.id}), which no path of choices leads from to ${target.chapter.id}; its state is left out.`);
         }
       }
     }

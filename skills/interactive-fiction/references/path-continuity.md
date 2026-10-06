@@ -62,7 +62,8 @@ question, and clue against the paths by hand.
 against the paths that lead there.
 
 - Set `current-chapter` to the passage you last drafted. On a branch the
-  snapshot describes that branch.
+  snapshot describes that branch, and `story context` shows it only for
+  passages a path leads to from there.
 - An object change made before a split still holds on a branch that does
   not change it again.
 - A character who learns the same fact on two branches takes one

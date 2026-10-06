@@ -79,7 +79,7 @@ Once any chapter has `choices`, `story continuity` (and `story check`, which rep
 - **Deaths and revivals.** A death on one branch is not a posthumous appearance on a sibling branch. At a rejoin, a death on any incoming branch counts, so listing the character in that chapter's `characters` or `pov` is a `posthumous-appearance` error. `revived-in` ends the death only when every path from the death passes through the revival chapter. Learning after death and status progressions use the same rule.
 - **Dates.** Two chapters on one path dated on different days compare by date, so a flashback reached later stays earlier. Dates in a `story.md` custom `calendar` compare the same way. Chapters on sibling branches never compare.
 - **Knowledge.** `story knowledge <id> --at <chapter>` and `story context` list a fact once it is learned on some path to the chapter. At a rejoin, a fact learned on only one incoming branch is listed as known, so check that every incoming branch teaches it before the rejoin prose uses it. One `knowledge-state` entry per branch for the same `fact` is not a `state-duplicate-fact` error.
-- **Context.** `story context` takes previous scenes, open promises, clues, and questions, and progressions only from chapters on a path to the target. At a rejoin that is every incoming branch.
+- **Context.** `story context` takes previous scenes, open promises, clues, and questions, and progressions only from chapters on a path to the target. At a rejoin that is every incoming branch. It shows the `continuity/state.md` character state only when `current-chapter` comes before the target on some path; on a sibling branch it prints a line saying the snapshot is left out.
 - **Prop custody.** A destroyed or lost artifact is gone only on paths after its `since` chapter.
 - **`continuity/state.md`.** It is checked against the chapters on a path to `current-chapter`. When those branches last set an artifact's `owner` or `location` differently, it warns `state-differs-by-path`.
 - **Loops and unreachable chapters.** Two chapters that each lead to the other, and any chapter no path reaches (`story links` warns `unreachable-chapter`), compare by date and then by number, as in a linear book.
@@ -93,7 +93,6 @@ These read the chapters in number order, so sibling branches can produce finding
 - `story timeline`, which marks a sibling ending dated before the one numbered ahead of it as told "after later events"
 - `story grid`, whose columns are every chapter side by side in number order, whichever path reaches each
 - `story pacing` runs, `story next`, the `progression-out-of-order` list order, and `story series` and `story diagram` lifelines
-- the `continuity/state.md` lines in `story context`, included whenever `current-chapter` is numbered below the target, even on another branch. Set `current-chapter` to the passage last drafted on the target's own path.
 
 ### Sibling-ending clock warnings
 
