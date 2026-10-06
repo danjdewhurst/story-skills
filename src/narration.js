@@ -1,6 +1,6 @@
 import { fillLabel, joinNames } from "./languages/index.js";
 import { compareText } from "./languages/locale.js";
-import { characterCount, flattenHeadings, isSceneBreak, plainLinks, wordCount } from "./markdown.js";
+import { characterCount, flattenHeadings, isSceneBreak, plainLinks, trimSourceSpace, wordCount } from "./markdown.js";
 
 // Audiobook narration script: a pronunciation guide from the bible, opening
 // and closing credits, and each section with its estimated finished runtime.
@@ -104,9 +104,11 @@ function narrationBody(body) {
   // section, and links read as their text, as in every other build.
   return flattenHeadings(plainLinks(String(body).replace(/\r\n?/g, "\n")))
     .replace(/\\\n/g, "\n")
-    .split(/\n[ \t]*\n\s*/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean)
+    // Typed spaces stay, so a paragraph keeps its ideographic-space indent
+    // (see trimSourceSpace).
+    .split(/\n[ \t]*\n[ \t\n\v\f\r\u2028\u2029]*/)
+    .map(trimSourceSpace)
+    .filter((paragraph) => paragraph.trim() !== "")
     .map((paragraph) => (isSceneBreak(paragraph) ? "[pause]" : paragraph))
     .join("\n\n");
 }

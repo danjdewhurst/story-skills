@@ -183,6 +183,50 @@ export function isSceneBreak(paragraph) {
   return text === "#" || /^([*_~-])( ?\1){2,}$/.test(text);
 }
 
+// Whitespace that only lays out the markdown source: ASCII spaces, tabs,
+// and line ends, and the Unicode line and paragraph separators. A space a
+// writer types as text is not layout and stays: the no-break space and
+// the narrow no-break space French sets inside « » and before ? and !, and
+// the ideographic space that indents a Japanese or Chinese paragraph.
+// JavaScript's \s and trim() take all of them.
+const SOURCE_SPACE = new Set([" ", "\t", "\n", "\v", "\f", "\r", "\u2028", "\u2029"]);
+const SOURCE_SPACE_RUN = /[ \t\n\v\f\r\u2028\u2029]+/g;
+
+// Each run of layout whitespace as one space.
+export function collapseSourceSpace(text) {
+  return String(text).replace(SOURCE_SPACE_RUN, " ");
+}
+
+// trim() for layout whitespace only.
+export function trimSourceSpace(text) {
+  const value = String(text);
+  let start = 0;
+  let end = value.length;
+  while (start < end && SOURCE_SPACE.has(value[start])) {
+    start += 1;
+  }
+  while (end > start && SOURCE_SPACE.has(value[end - 1])) {
+    end -= 1;
+  }
+  return value.slice(start, end);
+}
+
+// A chapter or matter body without the blank lines at either end, even
+// ones that hold only typed spaces, but with the typed space that opens
+// its first line of text (a paragraph indent) kept.
+export function trimBlankLines(text) {
+  const lines = String(text).split("\n");
+  let start = 0;
+  let end = lines.length;
+  while (start < end && lines[start].trim() === "") {
+    start += 1;
+  }
+  while (end > start && lines[end - 1].trim() === "") {
+    end -= 1;
+  }
+  return trimSourceSpace(lines.slice(start, end).join("\n"));
+}
+
 export function wordCount(markdown) {
   return splitWords(markdown).length;
 }

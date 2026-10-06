@@ -1269,6 +1269,7 @@ The markdown export copies prose as written, and the narration script nearly doe
 | In the chapter prose | In EPUB, DOCX, Shunn, HTML, and print output |
 |----------------------|---------------------------------|
 | Blank line | Paragraph break. Other line breaks inside a paragraph become spaces. |
+| Runs of spaces, tabs, and line breaks | One space. Spaces typed as text stay as typed: a no-break space (U+00A0) or narrow no-break space (U+202F), as French sets inside « » and before ? and !, and the ideographic space (U+3000) that indents a Japanese or Chinese paragraph, the first paragraph of a chapter included. |
 | A backslash, or two or more spaces, at the end of a line inside a paragraph | A hard line break, so verse, lyrics, and a letter's sign-off keep their lines: `<br>` in HTML and print, `<br/>` in EPUB, a line break in DOCX, and a backslash break in the `.shunn.md` build. The `\` never shows. |
 | `**bold**` or `__bold__` | Bold (the `.shunn.md` build keeps the markup) |
 | `*italic*` or `_italic_` | Italic (the `.shunn.md` build keeps the markup). Underscores inside a word, as in `snake_case`, stay literal. |
