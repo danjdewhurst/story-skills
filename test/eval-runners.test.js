@@ -177,6 +177,10 @@ describe("unwrapping a fenced reply", () => {
     expect(unwrapFence(after)).toBe(after);
     const listAfter = `Here's the draft:\n\`\`\`\n${prose}\n\`\`\`\n- changed the ending`;
     expect(unwrapFence(listAfter)).toBe(listAfter);
+    // One line of prose after the fence may be the draft's last sentence.
+    const lastLine = `Here's the draft:\n\`\`\`\n${prose}\n\`\`\`\nThe key stayed in his pocket.`;
+    expect(unwrapFence(lastLine)).toBe(lastLine);
+    expect(unwrapFence(`Here's the draft:\n\`\`\`\n${prose}\n\`\`\`\nI hope this works for the chapter.`)).toBe(prose);
     const longLeadIn = `One.\nTwo.\nThree:\n\`\`\`\n${prose}\n\`\`\``;
     expect(unwrapFence(longLeadIn)).toBe(longLeadIn);
     const noColon = `He read the note aloud.\n\`\`\`\n${prose}\n\`\`\``;

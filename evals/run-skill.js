@@ -178,11 +178,16 @@ function isLeadIn(lines) {
   return /:\s*$/.test(lines[lines.length - 1]);
 }
 
-// A one-line sign-off after the closing fence, such as "Let me know if you
-// want changes." Anything longer, or shaped like content, is not one.
+// A one-line conversational sign-off after the closing fence, such as "Let me
+// know if you want changes." Only an opening addressed to the user counts: a
+// line of prose after the fence may be the draft's last sentence, and
+// dropping it would score a different draft.
+const SIGN_OFF_RE =
+  /^(?:let me know|(?:i )?hope (?:this|that|it)|feel free|would you like|do you want|want me to|shall i|should i|happy to|i(?:'d| would) be happy|if you(?:'d)? like|i can (?:also )?(?:adjust|revise|change|expand|trim|tweak))\b/i;
+
 function isSignOff(lines) {
   if (lines.length === 0) return true;
-  return lines.length === 1 && lines[0].length <= 160 && !fenceLine(lines[0]) && !/^\s*(?:#|[-*+>]\s|\d+[.)]\s|---\s*$)/.test(lines[0]);
+  return lines.length === 1 && lines[0].length <= 160 && SIGN_OFF_RE.test(lines[0].trim());
 }
 
 /**
