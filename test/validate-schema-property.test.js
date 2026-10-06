@@ -215,7 +215,9 @@ function generate(rng, key, property, examples) {
   if (Array.isArray(base) && base.length > 0 && base[0] !== null && typeof base[0] === "object") {
     const item = { ...base[0] };
     const subKey = rng.random() < 0.2 ? "unknown-key" : rng.pick(Object.keys(item));
-    if (subKey !== "unknown-key" && rng.random() < 0.2) {
+    // Removing an item's only key would leave an empty mapping, which
+    // frontmatter cannot write.
+    if (subKey !== "unknown-key" && rng.random() < 0.2 && Object.keys(item).length > 1) {
       delete item[subKey];
     } else {
       item[subKey] = "@RAW@";
