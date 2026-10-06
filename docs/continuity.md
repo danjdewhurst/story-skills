@@ -48,6 +48,7 @@ For flags and exit codes of every command, see the [CLI reference](cli-reference
 | [`story prose [path\|-]`](#story-prose) | Where does the prose lean on filter words, adverbs, said-bookisms, or off-sheet spellings? |
 | [`story voices [path\|-]`](#story-voices) | How does each character talk, and do any two sound alike? |
 | [`story names <name...>`](#story-names) | Is this candidate name already taken, or too close to one in use? |
+| [`story mentions [<kind> <id>]`](#story-mentions) | Where does the prose name this character, place, or thing, and does each chapter's frontmatter agree with its prose? |
 | [`story diagram <kind>`](#story-diagram) | What do the family tree, route map, timeline, clue flow, or arc map look like? |
 | [`story progress [path]`](#story-progress) | How far along is the draft against its targets and deadline? |
 | [`story compare [path]`](#story-compare) | How much did this revision pass change? |
@@ -57,7 +58,7 @@ For flags and exit codes of every command, see the [CLI reference](cli-reference
 | [`story next [path]`](#story-next) | What should I do next? |
 | [`story doctor [path]`](#story-doctor) | What is broken and how do I repair it? |
 
-Most commands take the project as an optional positional path or `--path`. `knowledge`, `names`, and `diagram` take only `--path`, because their positional arguments are a character id, candidate names, and a diagram kind.
+Most commands take the project as an optional positional path or `--path`. `knowledge`, `names`, `mentions`, and `diagram` take only `--path`, because their positional arguments are a character id, candidate names, an entity kind and id, and a diagram kind.
 
 Only `continuity` and `names` fail because of what the story says: `continuity` on a contradiction, `names` on a candidate that is already taken. The others exit 1 only on files that do not parse, and 2 on bad arguments. `pacing`, `clues`, `prose`, `voices`, and `similarity` findings are always warnings, and `report`, `next`, and `doctor` exit 0 whatever the checks find. For when each command exits 1, see [Output streams and exit codes](cli-reference.md#output-streams-and-exit-codes).
 
@@ -70,6 +71,7 @@ Every finding starts with a severity and, usually, a file path. Match the rest o
 | `lists <id>, who died in`, `who died before the story`, `has died-in`, `died-in references missing chapter`, `learn something in` | `continuity` | [Deaths and posthumous appearances](#deaths-and-posthumous-appearances) |
 | `whose progressions make them deceased`, `sets status … while <id> is dead`, `when they die in`, `which still holds when they are revived` | `continuity` | [Status progressions](#status-progressions) |
 | `POV character <id> is not listed in characters`, `but its scenes are told by`, `does not list them in characters or mentions`, `does not list that location`, `who has status: cut`, `Chapter numbering skips` | `continuity` | [Casts and locations](#casts-and-locations) |
+| `in mentions but never names it` | `mentions` | [Story mentions](#story-mentions) |
 | `pays off in … before it is planted`, `resolves in … before it is introduced`, `no payoff chapter`, `no planted chapter`, `no plant chapter`, `has no resolved chapter`, `status is still open`, `status is still planned` | `continuity` | [Promises, questions, and clues](#promises-questions-and-clues) |
 | `has no payoff yet`, `payoff chapter … has passed`, `has no resolution yet` | `continuity` | [Unfired setups](#unfired-setups-the-chekhov-warning) |
 | `story.md is complete but` | `continuity` | [Finishing the book](#finishing-the-book) |
@@ -130,7 +132,7 @@ The report itself (timeline sections, pacing and clue grids, prose counts, voice
 | `worldbuilding/locations/*.md` | `routes` |
 | `worldbuilding/factions/*.md` | the file itself: a faction id is accepted as an `object-state` `owner` |
 | `plot/arcs/*.md` | `characters` |
-| `chapters/chapter-NN.md` | `number`, `status`, `pov`, `characters`, `mentions`, `locations`, `date`, `time`, `strand` |
+| `chapters/chapter-NN.md` | `number`, `status`, `pov`, `characters`, `mentions`, `locations`, `date`, `time`, `strand`, and the names in its prose |
 | `scenes/*.md` | `chapter`, `scene`, `pov`, `characters`, `mentions`, `location`, `state-changes`, `date`, `time`, `travel-hours` |
 | `continuity/promises/*.md` | `status`, `planted`, `payoff` |
 | `continuity/questions/*.md` | `status`, `introduced`, `resolved` |
@@ -218,6 +220,7 @@ These checks keep the scene records and the chapter frontmatter in step, so the 
 | warning | `<chapter or scene> POV character <id> is not listed in characters` | Add the POV character to `characters`. |
 | warning | `<chapter> has POV <id> but its scenes are told by <ids>` | The chapter's `pov` matches none of its scenes' `pov` values. Correct whichever is wrong. Scenes with no `pov` are not counted. |
 | warning | `<scene> lists <id> but <chapter> does not list them in characters or mentions` | Add the character to the parent chapter's `characters` or `mentions`. |
+| warning | `<chapter> names character <id> ("<name>") but does not list them in characters or mentions` | The chapter's prose names a character its `pov`, `characters`, and `mentions` leave out. Add them to `characters` if they are on the page, or to `mentions` if they are only talked about or remembered. If the name belongs to someone or something else (a word that is also a name), exempt the finding. See [Story mentions](#story-mentions) for how names are matched. Code `named-not-listed`. |
 | warning | `<scene> is set in <location> but <chapter> does not list that location` | Add the location to the chapter's `locations`. |
 | warning | `<chapter or scene> lists <id>, who has status: cut; drop them from pov and characters` | Finish the cut: take the character out of `pov` and `characters`, or set their `status` back if they return. |
 | warning | `<arc> lists <id>, who has status: cut; drop them from characters` | Take the character out of the arc's `characters`. |
@@ -575,7 +578,7 @@ Each entry sets a `reason`, and either a `pattern` or a `code` with a `file`, `c
 
 Prefer `code` with `file` (or `chapter`): the code names the rule and the file names the one place, so rewording a message never stops the entry from matching or makes it match something new. A `pattern` still works, alone or with the other keys, and every log written before `code`, `file`, and `chapter` existed behaves as it did. Copy the code and file from the finding, or from `story continuity --json`, where each diagnostic has `code`, `file`, and `chapter`.
 
-These findings carry a chapter: `posthumous-appearance`, `deceased-in-cast`, `progression-deceased-in-cast`, `progression-death-conflict`, `pov-not-in-cast`, `pov-scene-mismatch`, `scene-cast-not-in-chapter`, `scene-location-not-in-chapter`, `cut-character-in-cast`, `posthumous-learning`, `deceased-learning`, `progression-deceased-learning`, `learner-not-in-cast`, `knowledge-not-recorded`, `state-tracks-dead-character`, `state-location-drift`, `object-not-recorded`, `state-object-drift`, `state-differs-by-path`, `gone-artifact-used`, `gone-artifact-mentioned`, `malformed-date`, `malformed-time`, `negative-travel-hours`, `travel-hours-undated`, `clock-backward`, `travel-too-fast`, `route-same-time`, and `route-too-fast`.
+These findings carry a chapter: `posthumous-appearance`, `deceased-in-cast`, `progression-deceased-in-cast`, `progression-death-conflict`, `pov-not-in-cast`, `pov-scene-mismatch`, `named-not-listed`, `mention-not-named`, `scene-cast-not-in-chapter`, `scene-location-not-in-chapter`, `cut-character-in-cast`, `posthumous-learning`, `deceased-learning`, `progression-deceased-learning`, `learner-not-in-cast`, `knowledge-not-recorded`, `state-tracks-dead-character`, `state-location-drift`, `object-not-recorded`, `state-object-drift`, `state-differs-by-path`, `gone-artifact-used`, `gone-artifact-mentioned`, `malformed-date`, `malformed-time`, `negative-travel-hours`, `travel-hours-undated`, `clock-backward`, `travel-too-fast`, `route-same-time`, and `route-too-fast`.
 
 Their chapter is where the problem shows up: the chapter of the chapter or scene file the finding is about (a scene's `chapter` field), the `learned-in` chapter of a learning event, `current-chapter` for `state-tracks-dead-character`, `state-location-drift`, and `state-differs-by-path`, the chapter of the scene that last set the object for `object-not-recorded` and `state-object-drift`, and for `progression-death-conflict` the chapter of the death, the progression, or the revival it names. `story continuity --json` shows each finding's `chapter`. Findings about a whole character, promise, question, or clue, or about `story.md`, carry no chapter: match those with `file`. A scene with no `chapter` field gives its findings no chapter.
 
@@ -1096,6 +1099,36 @@ Each candidate gets one verdict on stdout: `taken` (an error), `check` (a warnin
 
 The command exits 1 when any candidate clashes, and 0 when there are only warnings. Titles and articles (`Lord`, `Captain`, `The`, and so on) are skipped when finding a given name, so `Captain Mara Dole` clashes with Mara Quill. It checks only the current project; for a series, run it in each book. The [`character-management`](../skills/character-management/SKILL.md) and [`worldbuilding`](../skills/worldbuilding/SKILL.md) skills run it before settling a name, and [`story prose`](#story-prose) catches similar first names among characters already in the bible.
 
+## Story mentions
+
+```shell
+story mentions character edran-vale --path .
+story mentions --path .
+```
+
+`story mentions <kind> <id>` lists every place the chapter prose names one character, location, faction, artifact, system, or glossary term, with its file, line, and column, and says which chapters name it without listing it in their frontmatter, or list it without naming it. Run it before `story rename` or `story remove`, which change ids but never prose.
+
+It looks for the entity's `name`, its `aliases`, a character's given name, and each of these without leading titles or articles (`Hollow` for `The Hollow`; the titles come from the language pack). Only chapter prose is read: the outline, HTML comments, and code fences are skipped. Names match as written and as whole words: a character called Rose is not found in "a rose", and a place called Bath is not found in "Bathsheba", but `Maren's` and `Vale-born` count. Only the first letter of a name of two or more words may differ in case. Where two names overlap, the longest wins, so `Edran Vale` is not also a mention of a place called Vale. Chinese and Japanese names match inside a run of characters, and Thai names at the segmenter's word breaks.
+
+`story continuity` runs half of this on every drafted chapter: it warns `named-not-listed` when the prose names a character that `pov`, `characters`, and `mentions` all leave out (see [Casts and locations](#casts-and-locations)). To keep it quiet on ordinary prose:
+
+- Only characters are checked. A place is often named without being where the chapter happens, and an artifact has no list for being on the page.
+- A one-word name that opens a sentence is not counted when the chapter also uses it as an ordinary word, so "Rose from her chair" in a chapter that has "a rose" in it is not a mention of Rose.
+- A name two characters share is not counted, since it does not say which one is meant.
+- Outline chapters and `status: cut` characters are not checked.
+
+With no kind and id, `story mentions` runs the same check and adds `mention-not-named`: a character or artifact in a chapter's `mentions` that its prose never names. This one is not part of `continuity`, because a chapter often refers to someone only by relationship ("her father", "Grandmother"). When the warning is right, the mention is stale; when the chapter uses a name the bible lacks, add it to the entity's `aliases`. From [`examples/the-left-luggage-office`](../examples/the-left-luggage-office/):
+
+```text
+$ story mentions --path .
+Mentions checked: 0 errors, 3 warnings, 0 dismissed
+warning: chapters/chapter-02.md lists character folake-achebe in mentions but never names it; add the name the chapter uses as an alias, or drop the mention [mention-not-named]
+warning: chapters/chapter-02.md lists character raymond-sallis in mentions but never names it; add the name the chapter uses as an alias, or drop the mention [mention-not-named]
+warning: chapters/chapter-03.md lists character folake-achebe in mentions but never names it; add the name the chapter uses as an alias, or drop the mention [mention-not-named]
+```
+
+Chapter 2 calls Folake "a woman in a green coat" and chapter 3 calls her "F.", so these chapters refer to people without naming them. Both codes can be exempted per chapter or turned off with a `story.md` `severity` entry.
+
 ## Story diagram
 
 ```shell
@@ -1520,6 +1553,7 @@ Work down from P0. P0 and P1 items are mechanical and have a command to run. P2 
 |--------|----------|
 | Start of a session | `story next .` |
 | Before naming a character, place, or term | `story names "<candidate>" --path .` |
+| Before renaming or removing a character, place, or term | `story mentions <kind> <id> --path .` |
 | After drafting or revising a chapter | `story wordcount . --write`, `story reindex .`, `story links .`, `story validate .`, `story continuity .`, `story pacing .` |
 | Before drafting a chapter or scene | `story context <chapter-or-scene-id> --path .` |
 | Before writing a scene that turns on a secret | `story knowledge <id> --at <chapter-id>` |

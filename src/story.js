@@ -21,6 +21,7 @@ import { buildGrid } from "./grid.js";
 import { buildDiagram } from "./diagram.js";
 import { buildVoices } from "./voices.js";
 import { checkNames, existingNames } from "./names.js";
+import { MENTION_KINDS, auditMentions, entityMentions, mentionNames } from "./mentions.js";
 import { labelledParagraphs, paragraphLabels } from "./html.js";
 import { htmlBook } from "./packaging.js";
 import { addedPassNotes, readPasses, updatePasses, validatePasses } from "./passes.js";
@@ -779,6 +780,29 @@ export function namesReport(root, candidates) {
   const result = checkNames(list, existingNames(project), project.pack);
   const errors = [...project.fileErrors, ...result.errors];
   return { ok: errors.length === 0, errors, warnings: result.warnings, results: result.results };
+}
+
+// Where chapter prose names one entity (`kind` and `id`), or, with neither,
+// each drafted chapter's unlisted names and unnamed mentions as warnings.
+export function mentionsReport(root, { kind, id } = {}) {
+  if ((kind === undefined) !== (id === undefined)) {
+    throw usageError("Usage: story mentions [<kind> <id>] [--path <project>]");
+  }
+  const project = scanProject(root);
+  const errors = [...project.fileErrors];
+  if (kind === undefined) {
+    const warnings = auditMentions(project, { unnamed: true });
+    return { ok: errors.length === 0, errors, warnings, mode: "audit", kind: null, id: null, names: null, chapters: null, matches: null };
+  }
+  const entityKind = normalizeKind(kind);
+  if (!MENTION_KINDS.includes(entityKind)) {
+    throw usageError(`story mentions looks for names, so it takes ${MENTION_KINDS.join(", ")}, not ${entityKind}`);
+  }
+  const entityId = String(id).trim();
+  if (!mentionNames(project).some((entry) => entry.kind === entityKind && entry.id === entityId)) {
+    throw usageError(`${entityKind} ${entityId} does not exist`);
+  }
+  return { ok: errors.length === 0, errors, warnings: [], mode: "entity", kind: entityKind, id: entityId, ...entityMentions(project, entityKind, entityId) };
 }
 
 // Dialogue fingerprints per character from attributed speech. Advisory.

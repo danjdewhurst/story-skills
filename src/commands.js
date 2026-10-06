@@ -14,6 +14,7 @@ import { previewChanges } from "./preview.js";
 import { workflowPinActions } from "./workflows.js";
 import { isTruthy } from "./options.js";
 import { STDIN_ARG, readStdin, stdinText } from "./stdin.js";
+import { formatMentions } from "./mentions.js";
 import { formatNames } from "./names.js";
 import { formatPacing } from "./pacing.js";
 import { DEFAULT_PASSES, formatPasses, nextPass, passChecks } from "./passes.js";
@@ -42,6 +43,7 @@ import {
   formatProjectReport,
   fixProject,
   knowledgeAtChapter,
+  mentionsReport,
   migrateProject,
   moveEntity,
   namesReport,
@@ -473,6 +475,29 @@ export const COMMANDS = [
       }
       io.stdout.write(formatNames(report));
       return reportResult(io, report, "Names checked", "Name check failed");
+    }
+  },
+  {
+    name: "mentions",
+    usage: "mentions [<kind> <id>]",
+    summary: [
+      "List each place chapter prose names an entity, by",
+      "name, given name, or alias; with no entity, warn",
+      "about names a chapter does not list and mentions",
+      "it never names"
+    ],
+    project: "flag",
+    args: 2,
+    options: ["json"],
+    run({ parsed, io, root, overrides }) {
+      const report = applySeverity(mentionsReport(root(), { kind: parsed.positionals[1], id: parsed.positionals[2] }), overrides);
+      if (wantsJson(parsed)) {
+        return reportJson(io, "mentions", report);
+      }
+      if (report.mode === "entity") {
+        io.stdout.write(formatMentions(report));
+      }
+      return reportResult(io, report, "Mentions checked", "Mention check failed");
     }
   },
   {

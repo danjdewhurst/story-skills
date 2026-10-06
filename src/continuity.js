@@ -4,6 +4,7 @@ import { err, warn } from "./findings.js";
 import { kebabCase } from "./markdown.js";
 import { chapterChronology, deathWindow } from "./chronology.js";
 import { progressionDeathAt, progressionDeathFrom, progressionStatusAt, statusProgressions } from "./deaths.js";
+import { auditMentions } from "./mentions.js";
 import { happensAfter } from "./progressions.js";
 
 const CHEKHOV_CHAPTER_GAP = 3;
@@ -46,6 +47,7 @@ export function checkContinuity(project) {
   checkChapterCasts(project, warnings);
   checkSceneCasts(project, warnings);
   checkCutCharacters(project, warnings);
+  warnings.push(...auditMentions(project));
   checkChapterSequence(project, warnings);
   checkPromises(project, context, errors, warnings);
   checkQuestions(project, context, errors, warnings);

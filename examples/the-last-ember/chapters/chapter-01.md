@@ -7,6 +7,8 @@ locations:
 characters:
   - sera-voss
   - kael-voss
+mentions:
+  - lord-maren
 arcs-advanced:
   - seras-reclamation
 status: draft

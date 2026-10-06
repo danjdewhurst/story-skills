@@ -25,7 +25,9 @@ export function givenName(name, pack = languagePack()) {
   return index === -1 ? "" : words[index];
 }
 
-export function existingNames(project) {
+// Every name and alias in the bible, as { kind, id, name, full, role,
+// given, file }. Cut characters are left out unless `cut` is true.
+export function existingNames(project, { cut = false } = {}) {
   const pack = project.pack ?? languagePack();
   const names = [];
   // `given` marks the one word a reader knows the name by; only character
@@ -38,7 +40,7 @@ export function existingNames(project) {
     }
   };
   for (const character of project.characters) {
-    if (character.status === "cut") {
+    if (character.status === "cut" && !cut) {
       continue;
     }
     const first = givenName(character.name, pack);

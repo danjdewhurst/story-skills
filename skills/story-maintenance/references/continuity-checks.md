@@ -120,6 +120,14 @@ Run `story prose .` when the user asks for a prose check or before sharing a dra
 
 See the `voice-style` skill for acting on them.
 
+## mentions
+
+Run `story mentions <kind> <id> --path <project>` to list every place the chapter prose names a character, location, faction, artifact, system, or glossary term, and before `story rename` or `story remove`, which never change prose.
+
+- It looks for the `name`, `aliases`, a character's given name, and each without leading titles or articles (`Hollow` for `The Hollow`). Names match as written and as whole words, so `Rose` is not found in "a rose"; possessives count. Outlines, HTML comments, and code fences are skipped.
+- `story continuity` warns `named-not-listed` when a drafted chapter's prose names a character that its `pov`, `characters`, and `mentions` leave out. Add them to `characters` if they are on the page, or `mentions` if they are only talked about. A one-word name that opens a sentence is not counted when the chapter also uses it as a plain word.
+- `story mentions` with no entity also warns `mention-not-named` for a character or artifact in `mentions` that the prose never names. A chapter that refers to someone only by relationship ("her father") triggers it, so read the chapter before acting: add the name the chapter uses to the entity's `aliases`, drop a stale mention, or exempt it.
+
 ## names
 
 Run `story names <name...>` before naming a character, place, faction, artifact, system, or glossary term. It checks candidates against every existing name and alias.
