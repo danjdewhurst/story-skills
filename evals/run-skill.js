@@ -157,10 +157,70 @@ function claudeCall(spawn, model, prompt, systemText, sysFile) {
   throw lastErr || new Error("claude call failed");
 }
 
+const FENCE_RE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
+
+function fenceLine(line) {
+  const m = line.match(FENCE_RE);
+  if (!m) return null;
+  const info = m[2].trim();
+  // A backtick fence's info string cannot hold a backtick (CommonMark).
+  if (m[1][0] === "`" && info.includes("`")) return null;
+  return { char: m[1][0], len: m[1].length, info };
+}
+
+// A short lead-in such as "Here's the draft:" above the fence: one or two
+// lines, the last ending in a colon. A heading or a frontmatter delimiter is
+// draft, never a lead-in.
+function isLeadIn(lines) {
+  if (lines.length === 0) return true;
+  if (lines.length > 2) return false;
+  if (lines.some((l) => l.length > 200 || /^\s*(?:#|---\s*$)/.test(l))) return false;
+  return /:\s*$/.test(lines[lines.length - 1]);
+}
+
+// A one-line sign-off after the closing fence, such as "Let me know if you
+// want changes." Anything longer, or shaped like content, is not one.
+function isSignOff(lines) {
+  if (lines.length === 0) return true;
+  return lines.length === 1 && lines[0].length <= 160 && !fenceLine(lines[0]) && !/^\s*(?:#|[-*+>]\s|\d+[.)]\s|---\s*$)/.test(lines[0]);
+}
+
+/**
+ * Unwraps a reply that is one fenced block, after an optional lead-in (see
+ * isLeadIn) and before an optional one-line sign-off. The outer fence may use
+ * backticks or tildes, three or more, with any info string. Fences inside the
+ * draft stay: inside the outer block, a fence with an info string, or one that
+ * cannot close the outer fence (another character, or shorter), opens a nested
+ * block. A reply with several top-level blocks, or with content around the
+ * block, comes back unchanged.
+ */
+export function unwrapFence(text) {
+  const lines = text.split("\n");
+  const nonBlank = (arr) => arr.filter((l) => l.trim() !== "");
+  const open = lines.findIndex((l) => fenceLine(l));
+  if (open < 0 || !isLeadIn(nonBlank(lines.slice(0, open)))) return text;
+  const outer = fenceLine(lines[open]);
+  let inner = null;
+  let close = -1;
+  for (let i = open + 1; i < lines.length && close < 0; i++) {
+    const f = fenceLine(lines[i]);
+    if (!f) continue;
+    if (inner) {
+      if (f.char === inner.char && f.len >= inner.len && !f.info) inner = null;
+    } else if (f.char === outer.char && f.len >= outer.len && !f.info) {
+      close = i;
+    } else {
+      inner = f;
+    }
+  }
+  // An unclosed fence runs to the end of the reply, as in CommonMark.
+  if (close < 0) return lines.slice(open + 1).join("\n");
+  if (!isSignOff(nonBlank(lines.slice(close + 1)))) return text;
+  return lines.slice(open + 1, close).join("\n");
+}
+
 export function stripPreamble(text, keep = "chapter-text") {
-  let t = text.trim();
-  t = t.replace(/^```(?:json|markdown|md|text)?\s*\n/, "");
-  t = t.replace(/\n```\s*$/, "").trim();
+  const t = unwrapFence(text.trim()).trim();
   const lines = t.split("\n");
   const preambleRe = /^(?:here(?:'s| is)|sure|certainly|of course|okay|ok)\b[^.!?]{0,60}:\s*$/i;
   while (lines.length > 0 && preambleRe.test(lines[0].trim())) lines.shift();

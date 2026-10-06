@@ -36,6 +36,17 @@ PATH with working credentials. Run it before and after any change to a
 skill's instructions or references and compare the reports, and read the
 drafts, since a pass count says nothing about whether the prose reads well.
 
+Before saving a draft, the runner unwraps a reply that is one fenced block.
+It drops a lead-in of one or two lines ending in a colon ("Here's the
+draft:") and a one-line sign-off after the fence, then strips the outer
+fence: backticks or tildes, three or more, with any info string. Fences
+inside the draft stay. A reply with several top-level blocks, more than a
+line after the closing fence, or a longer lead-in is saved as written, and a
+heading or frontmatter `---` is never taken for a lead-in. Earlier runs
+stripped a fence only at the very start of the reply, so a fenced draft
+after a lead-in kept its fence and the checker skipped the fenced prose; such
+drafts now score on their content.
+
 After the checker, the runner makes a second model call that lists every
 canon claim the draft makes that the context does not state or imply: a new
 named character, a new world rule, a resolved mystery, a changed fact. One

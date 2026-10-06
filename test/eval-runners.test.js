@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { makeTempDir } from "./helpers.js";
 import { main as compareMain } from "../evals/compare-outputs.js";
-import { main as runSkillMain, stripPreamble } from "../evals/run-skill.js";
+import { main as runSkillMain, stripPreamble, unwrapFence } from "../evals/run-skill.js";
 import { checkDraft, loadFixture } from "../evals/run-evals.js";
 
 // Both runners call `claude -p` through an injected spawn, so these tests
@@ -134,6 +134,57 @@ describe("run-skill with a stubbed model", () => {
     expect(runSkillMain(["--out", out, "canon-keeping"], { spawn: missing.spawn })).toBe(1);
     expect(missing.calls).toHaveLength(1);
     expect(output()).toContain("FAIL draft call: Claude Code CLI (`claude`) not found on PATH.");
+  });
+});
+
+describe("unwrapping a fenced reply", () => {
+  const prose = "The boat came in at six.\n\nTomas said nothing.";
+  const chapterFile = "---\ntitle: One\n---\n\n# Chapter 1: One\n\n## Chapter Text\n\nYou go on.\n";
+
+  test("strips one outer fence after a lead-in line, with any info string or fence character", () => {
+    expect(stripPreamble(`Here's the draft:\n\`\`\`markdown\n${prose}\n\`\`\``)).toBe(`${prose}\n`);
+    expect(stripPreamble(`Sure, here you go.\nHere's the draft:\n\n\`\`\`\n${prose}\n\`\`\`\n`)).toBe(`${prose}\n`);
+    expect(stripPreamble(`The revised scene:\n~~~~ prose\n${prose}\n~~~~`)).toBe(`${prose}\n`);
+    expect(stripPreamble(`\`\`\`text\n${prose}\n\`\`\``)).toBe(`${prose}\n`);
+    // A short sign-off after the fence goes too; an unclosed fence runs to the end.
+    expect(stripPreamble(`Draft:\n\`\`\`md\n${prose}\n\`\`\`\nLet me know if you want changes.`)).toBe(`${prose}\n`);
+    expect(stripPreamble(`Here it is:\n\`\`\`\n${prose}`)).toBe(`${prose}\n`);
+  });
+
+  test("unwraps a whole-file reply without mistaking frontmatter for a fence or lead-in", () => {
+    expect(stripPreamble(`Here is the chapter file:\n\`\`\`markdown\n${chapterFile}\`\`\``, "file")).toBe(chapterFile);
+    expect(stripPreamble(`\`\`\`markdown\n${chapterFile}\`\`\``, "chapter-text")).toBe("You go on.\n");
+    // A fence inside a bare file is draft, so the frontmatter above it stays.
+    const withCode = `${chapterFile}\n\`\`\`\nA note in the margin\n\`\`\`\n`;
+    expect(stripPreamble(withCode, "file")).toBe(withCode);
+  });
+
+  test("keeps fences inside the draft", () => {
+    const inner = `${prose}\n\n\`\`\`text\nTHE KEY IS UNDER THE STONE\n\`\`\`\n\nHe burned it.`;
+    expect(stripPreamble(`Here's the draft:\n\`\`\`markdown\n${inner}\n\`\`\``)).toBe(`${inner}\n`);
+    const shorter = `${prose}\n\n\`\`\`\nnote\n\`\`\``;
+    expect(stripPreamble(`Here's the draft:\n\`\`\`\`\n${shorter}\n\`\`\`\``)).toBe(`${shorter}\n`);
+    const tilde = `${prose}\n\n~~~\nnote\n~~~`;
+    expect(stripPreamble(`\`\`\`markdown\n${tilde}\n\`\`\``)).toBe(`${tilde}\n`);
+  });
+
+  test("leaves several blocks, or content around a block, alone", () => {
+    const two = "Here are two takes:\n```\nFirst take.\n```\n\n```\nSecond take.\n```";
+    expect(unwrapFence(two)).toBe(two);
+    const stray = "Here's the draft:\n```\nFirst take.\n```\n```";
+    expect(unwrapFence(stray)).toBe(stray);
+    const after = `Here's the draft:\n\`\`\`\n${prose}\n\`\`\`\n\nHe went back to the boat.\n\nPetra waited.`;
+    expect(unwrapFence(after)).toBe(after);
+    const listAfter = `Here's the draft:\n\`\`\`\n${prose}\n\`\`\`\n- changed the ending`;
+    expect(unwrapFence(listAfter)).toBe(listAfter);
+    const longLeadIn = `One.\nTwo.\nThree:\n\`\`\`\n${prose}\n\`\`\``;
+    expect(unwrapFence(longLeadIn)).toBe(longLeadIn);
+    const noColon = `He read the note aloud.\n\`\`\`\n${prose}\n\`\`\``;
+    expect(unwrapFence(noColon)).toBe(noColon);
+    const heading = `## Notes:\n\`\`\`\n${prose}\n\`\`\``;
+    expect(unwrapFence(heading)).toBe(heading);
+    // A backtick fence's info string cannot hold a backtick, so this is prose.
+    expect(stripPreamble("```not `a` fence\nprose")).toBe("```not `a` fence\nprose\n");
   });
 });
 
