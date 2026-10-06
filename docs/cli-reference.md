@@ -916,7 +916,11 @@ Unknown chapter chapter-09
 story context <chapter-or-scene-id> [--budget <tokens>] [--scenes <n>] [--json] [--path <project>]
 ```
 
-Prints, as markdown, the slice of the project an agent needs to draft one chapter or scene, packed into a token budget. It reads files and writes nothing. Items are added in this priority order:
+Prints, as markdown, the slice of the project an agent needs to draft one chapter or scene, packed into a token budget. It reads files and writes nothing.
+
+Run it before drafting or revising a chapter or scene, in place of opening project files one at a time. It gathers what the point-of-view character can know at that point in the book and leaves out later chapters, so a draft built from it cannot spoil them. The drafting skills run it for you (see [Writing workflows](writing-workflows.md)). Run it yourself to see what an agent will be given, to find gaps in your notes before a drafting session, or to hand a chat assistant a self-contained brief for one chapter.
+
+Items are added in this priority order:
 
 1. **Target**: the chapter or scene's POV, cast, mentions, locations, arcs, date, outcome, hook, and `target-words`, the chapter's `## Outline` (up to the `---` rule above the prose), and the chapter's planned scenes or, for a scene, its `## Purpose`.
 2. **Story essentials**: first the book's language contract from `story.md`: `language` (`en` when unset), `writing-mode` (`horizontal` when unset), `chapter-numerals` (`western` when unset), and `count-unit` (the unit lengths are counted in, including the one `language` implies). These belong to the book, not to a chapter, so they are included at every target, and they are a separate small item, so a budget too small for the rest of `story.md` still packs them. Then `story.md` genre, setting era, POV, tense, form, themes, and `premise`, plus its `## Tone & Style`, `## Setting`, and `## Central Conflict` sections; then `style-sheet.md`, when present: `dialect`, `preferred`, `watch-words`, and its body.
@@ -1016,6 +1020,23 @@ Read these files directly if you need them:
 The chapter's outline is still the starter text `story add` writes, so it is skipped. The Burned Page, The Broken Compass, and Who Burned The Mill are left out because they are planted or raised in chapter 3, and Jonas's knowledge of the firestarter's page because its `learned-in` chapter does not exist.
 
 `--budget` and `--scenes` can be set for every run with `story.md` [`cli-defaults`](#defaults-and-severity-from-storymd); a flag on the command line wins.
+
+What to do with the output:
+
+- **Something is left out to fit the budget.** Run it again with a larger `--budget`: the default of `6000` holds most chapters, and chapter 3 of the unraveled thread fits whole in about `327`. Or take the left-out items from `--json`, where each has `included: false` and the same filtered `text`. Prefer either over opening the files listed under `Left out to fit the budget`: a promise, clue, or question file can also hold payoff, evidence, and resolution plans for later chapters, which the packed item leaves out. With a 300-token budget and one previous scene, chapter 3 leaves out its previous scene:
+
+  ```shell
+  story context chapter-03 --budget 300 --scenes 1 --json \
+    | jq -r '.data.sections[].items[] | select(.included | not) | .text'
+  ```
+
+  ```text
+  - **chapter-02 scene 1: The Millpond** (POV jonas-reed, at the-mill-row, outcome no-and)
+  ```
+
+- **A section is thin or missing.** The context holds only what the project records. A card with no `Appearance` or `Voice & Speech Patterns`, a chapter with no planned scenes, or an outline skipped because it is still starter text (as for chapter 2 above) means the notes need filling in. Fill them in the entity file, or with the planning skills, then run `context` again.
+- **A fact is marked `character-knowledge` or listed under `do not reveal`.** The character may act on it, and the draft must not state it.
+- **A `warning:` line on stderr.** A file failed to parse and was left out. Run `story validate` to find and repair it.
 
 With `--json`, `data` holds `target` (`kind`, `id`, `chapter`, `number`, `title`), `budget`, `estimatedTokens`, `sections` (each `id`, `title`, and every candidate item as `{ id, label, source, text, tokens, included }`, so a script sees what the budget left out), `omitted`, and `warnings`. `source` names the project files the item draws on, comma-separated. Each warning is also a `warning` diagnostic.
 
@@ -1482,7 +1503,7 @@ Checks: validate ok (0 errors, 0 warnings), links ok (0 errors, 0 warnings), con
 Actions:
 - [P0] Fix continuity contradictions: Run story continuity . and repair 4 deterministic continuity errors.
 - [P1] Review continuity warnings: Run story continuity . and review 3 continuity warnings.
-- [P2] Review promises and payoffs: 1 setup/payoff promises need planting or payoff decisions.
+- [P2] Review promises and payoffs: 1 setup/payoff promise needs planting or a payoff decision.
 - [P2] Review open clues: 1 clues are still planned or planted.
 - [P2] Draft chapter 5: Use story add chapter "Chapter 5" --number 5, then outline scenes to advance The Ledger Trail.
 ```
@@ -1505,7 +1526,15 @@ Actions:
 story doctor [path] [--fix] [--dry-run] [--json]
 ```
 
-The same checks and actions as `next`, laid out as a health report with the project root and one line per check. Use it when you want to know what is stale or broken. Always exits 0 on a readable project, unless you pass `--fix`.
+The same checks and actions as `next`, laid out as a health report with the project root and one line per check. Always exits 0 on a readable project, unless you pass `--fix`.
+
+Use it when:
+
+- a check fails, or something looks wrong, and you want one list of what to fix, most urgent first;
+- you have changed files outside the CLI, such as pasting in prose, deleting a file, or pulling a collaborator's edits, and want word counts and registries brought back in line: `story doctor --fix`;
+- you do not use the terminal much and want one command that tells you the next step.
+
+To start a writing session, `next` gives the same actions with less around them. In scripts and CI, use [`check`](#check) or the single checks, which exit 1 on errors.
 
 ```shell
 story doctor
@@ -1524,7 +1553,7 @@ Checks:
 Actions:
 - [P0] Fix continuity contradictions: Run story continuity . and repair 4 deterministic continuity errors.
 - [P1] Review continuity warnings: Run story continuity . and review 3 continuity warnings.
-- [P2] Review promises and payoffs: 1 setup/payoff promises need planting or payoff decisions.
+- [P2] Review promises and payoffs: 1 setup/payoff promise needs planting or a payoff decision.
 - [P2] Review open clues: 1 clues are still planned or planted.
 - [P2] Draft chapter 5: Use story add chapter "Chapter 5" --number 5, then outline scenes to advance The Ledger Trail.
 ```
@@ -1541,17 +1570,81 @@ It never edits prose and never makes a choice for you: renames, missing referenc
 
 Unlike plain `doctor`, `doctor --fix` exits 1 while any check still reports an error after the repairs, so it can gate a script; warnings alone exit 0.
 
+#### A worked repair
+
+This copy of [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/) has three problems on top of the example's deliberate continuity errors: `glossary/_index.md` has been deleted, chapter 1's `word-count` has been edited to `20`, and its `characters` list has `edran-vael`, a typo for `edran-vale`.
+
 ```text
-$ story doctor --fix
-Repairs:
+$ story doctor
+# Story Doctor: The Unraveled Thread
+
+Root: ~/stories/the-unraveled-thread
+
+Checks:
+- Validate: failed (1 errors, 1 warnings)
+- Links: failed (1 errors, 0 warnings)
+- Continuity: failed (4 errors, 4 warnings)
+
+Actions:
+- [P0] Fix validation errors: Run story validate . and repair 1 schema or registry errors.
+- [P0] Fix broken references: Run story links . and repair 1 missing references or backlinks.
+- [P0] Fix continuity contradictions: Run story continuity . and repair 4 deterministic continuity errors.
+- [P1] Review continuity warnings: Run story continuity . and review 4 continuity warnings.
+- [P1] Refresh word counts: Run story wordcount . --write for 1 chapter with stale counts.
+- [P2] Review promises and payoffs: 1 setup/payoff promise needs planting or a payoff decision.
+- [P2] Review open clues: 1 clues are still planned or planted.
+- [P2] Draft chapter 5: Use story add chapter "Chapter 5" --number 5, then outline scenes to advance The Ledger Trail.
+```
+
+Preview what `--fix` would repair before letting it write:
+
+```text
+$ story doctor --fix --dry-run
+Repairs (dry run; nothing was written):
 - story migrate (missing-required-path): 1 change
   create  glossary/_index.md
 - story wordcount --write (stale-word-count): 1 change
   update  chapters/chapter-01.md
+Dry run: story doctor --fix would make 2 changes; the checks below are what would remain
 
 # Story Doctor: The Unraveled Thread
-...
+
+Root: ~/stories/the-unraveled-thread
+
+Checks:
+- Validate: ok (0 errors, 0 warnings)
+- Links: failed (1 errors, 0 warnings)
+- Continuity: failed (4 errors, 4 warnings)
+
+Actions:
+- [P0] Fix broken references: Run story links . and repair 1 missing references or backlinks.
+- [P0] Fix continuity contradictions: Run story continuity . and repair 4 deterministic continuity errors.
+- [P1] Review continuity warnings: Run story continuity . and review 4 continuity warnings.
+- [P2] Review promises and payoffs: 1 setup/payoff promise needs planting or a payoff decision.
+- [P2] Review open clues: 1 clues are still planned or planted.
+- [P2] Draft chapter 5: Use story add chapter "Chapter 5" --number 5, then outline scenes to advance The Ledger Trail.
 ```
+
+The missing registry and the stale count are repaired; the typo is not, because choosing the right id is a decision. `story doctor --fix` makes the same two changes and prints the same report, headed `Repairs:`, and both exit 1 because errors remain.
+
+#### Acting on what remains
+
+Work down the action list, P0 first, and run `story doctor` again after each round:
+
+- **P0 and P1 actions** each name the check that lists their findings. Run it to see each file and the problem in it:
+
+  ```text
+  $ story links
+  Link check failed: 1 errors, 0 warnings, 0 dismissed
+  error: chapters/chapter-01.md references missing character edran-vael
+  ```
+
+  Here, correct `edran-vael` to `edran-vale` in the chapter's frontmatter. When the entity's own id is wrong, change it with [`rename`](#rename), which updates every reference. [Finding codes](#finding-codes) lists what each code means, and [Continuity and analysis](continuity.md) explains each continuity finding and its fix.
+- **A finding that is intended**, such as a posthumous appearance or a deliberate gap, should not be repaired. List it in [`continuity/exemptions.md`](continuity.md#exemptions), or turn a warning code down with a `story.md` [`severity`](#defaults-and-severity-from-storymd) entry. `doctor` counts findings after both.
+- **P2 actions** are writing decisions, not repairs: what to plant, pay off, or draft next.
+- **A P3 line**, `Project is mechanically healthy`, means nothing is blocking the next writing pass.
+
+With `--json`, gate on `data.checks`, since plain `doctor` still exits 0 when a check fails (see [JSON output](#json-output)).
 
 ## Craft and revision commands
 
