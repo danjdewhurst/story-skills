@@ -50,6 +50,7 @@ See the `interactive-fiction` skill, or `adaptation` to convert a linear book.
 
 - It is spoiler-safe by default (no entity notes, statuses, deaths, knowledge, clues, or resolutions); add `--spoilers` only for the author's own copy, never for one readers will see.
 - `--out` names a folder, and a rebuild replaces an earlier codex there.
+- Its headings, columns, and notes follow `story.md` `language`, like other build labels; to reword one, add a `codex-` entry under `labels` (see docs/manuscripts.md#build-labels).
 
 ## epub
 

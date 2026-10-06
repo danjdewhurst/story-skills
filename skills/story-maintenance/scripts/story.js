@@ -1754,7 +1754,106 @@ var ar_default = {
     "narration-closing-anonymous": "النهاية. استمعتم إلى {title}، بصوت {narrator}.",
     "screenplay-credit": "تأليف",
     "screenplay-source": "مقتبس من عمل {authors}",
-    "screenplay-source-anonymous": "مقتبس من عمل أدبي"
+    "screenplay-source-anonymous": "مقتبس من عمل أدبي",
+    "codex-story-bible": "دليل القصة",
+    "codex-index-title": "{title}: دليل القصة",
+    "codex-timeline": "الخط الزمني",
+    "codex-threads": "الخيوط والقرائن",
+    "codex-progress": "التقدّم",
+    "codex-characters": "الشخصيات",
+    "codex-locations": "الأماكن",
+    "codex-factions": "الفصائل",
+    "codex-artifacts": "القطع الأثرية",
+    "codex-systems": "الأنظمة",
+    "codex-arcs": "الأقواس السردية",
+    "codex-character": "الشخصية",
+    "codex-location": "المكان",
+    "codex-faction": "الفصيل",
+    "codex-artifact": "القطعة الأثرية",
+    "codex-system": "النظام",
+    "codex-arc": "القوس السردي",
+    "codex-chapters": "الفصول",
+    "codex-scenes": "المشاهد",
+    "codex-questions": "الأسئلة",
+    "codex-promises": "الوعود",
+    "codex-clues": "القرائن",
+    "codex-note-spoilers": "دليل القصة كاملًا بما يكشف أحداثها: ملاحظات الكيانات، وحالاتها، والوفيات، وما تعرفه الشخصيات، والقرائن، وكيف يُحسم كل خيط.",
+    "codex-note-safe": "دليل القصة من دون كشف أحداثها: من وما في القصة، وأين يظهر. حُذفت الملاحظات والحالات والوفيات وما تعرفه الشخصيات والقرائن والحلول؛ ابنِ الدليل باستخدام {flag} للحصول عليه كاملًا.",
+    "codex-no-entities": "لا توجد شخصيات أو أماكن أو كيانات أخرى بعد.",
+    "codex-relationships": "العلاقات",
+    "codex-appears-in": "يظهر في",
+    "codex-advanced-in": "يتقدّم في",
+    "codex-linked-from": "مذكور في",
+    "codex-changes": "التغييرات",
+    "codex-change": "ابتداءً من {chapter}: تصبح قيمة {field} {value}",
+    "codex-knows": "يعرف",
+    "codex-known-from-start": "معروف منذ البداية",
+    "codex-learned-in": "عُرف في {chapter}",
+    "codex-notes": "ملاحظات",
+    "codex-role": "الدور",
+    "codex-aliases": "أسماء أخرى",
+    "codex-status": "الحالة",
+    "codex-dies-in": "يموت في",
+    "codex-revived-in": "يعود إلى الحياة في",
+    "codex-type": "النوع",
+    "codex-region": "المنطقة",
+    "codex-setting": "البيئة",
+    "codex-notable-characters": "شخصيات بارزة",
+    "codex-routes": "الطرق",
+    "codex-hours": "{hours} س",
+    "codex-members": "الأعضاء",
+    "codex-owner": "المالك",
+    "codex-themes": "الموضوعات",
+    "codex-pronunciation": "النطق",
+    "codex-date": "التاريخ",
+    "codex-time": "الوقت",
+    "codex-scene": "المشهد",
+    "codex-chapter": "الفصل",
+    "codex-pov": "المنظور",
+    "codex-told-late": "مروي خارج الترتيب",
+    "codex-flashback": "استرجاع إلى {date}",
+    "codex-no-dates": "لا مشاهد أو فصول مؤرّخة بعد. أضف إلى المشاهد الحقل {field} لتحديد موقعها في زمن القصة.",
+    "codex-timeline-note": "أحداث القصة مرتّبة بحسب زمن القصة، كما يعرضها {command}.",
+    "codex-undated": "غير مؤرّخ",
+    "codex-point-of-view": "وجهة النظر",
+    "codex-words": "الكلمات",
+    "codex-share": "النسبة",
+    "codex-unspecified": "غير محدّد",
+    "codex-presence": "الحضور",
+    "codex-first": "الأول",
+    "codex-last": "الأخير",
+    "codex-longest-gap": "أطول غياب",
+    "codex-death": "الوفاة",
+    "codex-dies-in-chapter": "يموت في الفصل {n}",
+    "codex-threads-note": "الأسئلة المفتوحة والوعود فقط، من دون أجوبتها أو الوفاء بها. تتطلب القرائن والخيوط المحسومة {flag}.",
+    "codex-none": "لا شيء.",
+    "codex-question": "السؤال",
+    "codex-raised-in": "طُرح في",
+    "codex-resolved-in": "حُسم في",
+    "codex-promise": "الوعد",
+    "codex-planted-in": "زُرع في",
+    "codex-paid-off-in": "تحقّق في",
+    "codex-clue": "القرينة",
+    "codex-clues-note": "يشير P إلى الفصل الذي تُزرع فيه القرينة، وR إلى الفصل الذي تُكشف فيه، وx إلى كليهما، كما يطبعها {command}.",
+    "codex-clue-totals-one": "القرائن المزروعة: {planted} من {total}، المكشوفة: {revealed}، المضلِّلة: {herrings}.",
+    "codex-clue-totals": "القرائن المزروعة: {planted} من {total}، المكشوفة: {revealed}، المضلِّلة: {herrings}.",
+    "codex-red-herring": "قرينة مضلِّلة",
+    "codex-significance-delayed": "دلالة مؤجَّلة",
+    "codex-total-words": "مجموع الكلمات",
+    "codex-total-characters": "مجموع الحروف",
+    "codex-target-words": "الكلمات المستهدفة",
+    "codex-target-characters": "الحروف المستهدفة",
+    "codex-done": "المنجز",
+    "codex-remaining": "المتبقي",
+    "codex-deadline": "الموعد النهائي",
+    "codex-target": "الهدف",
+    "codex-character-count": "الحروف",
+    "codex-plot-grid": "شبكة الحبكة",
+    "codex-grid-note": "الأقواس السردية بحسب الفصل، كما يطبعها {command}: يشير x إلى أن الفصل أو أحد مشاهده يدفع القوس إلى الأمام.",
+    "codex-unknown": "غير معروف",
+    "codex-hook": "الخطّاف",
+    "codex-outcomes": "النتائج",
+    "codex-session-log": "سجل جلسات الكتابة"
   }
 };
 
@@ -1858,7 +1957,106 @@ var de_default = {
     "narration-closing-anonymous": "Ende. Sie hörten {title}, gelesen von {narrator}.",
     "screenplay-credit": "Geschrieben von",
     "screenplay-source": "Nach einer Vorlage von {authors}",
-    "screenplay-source-anonymous": "Nach einer literarischen Vorlage"
+    "screenplay-source-anonymous": "Nach einer literarischen Vorlage",
+    "codex-story-bible": "Story-Bible",
+    "codex-index-title": "{title}: Story-Bible",
+    "codex-timeline": "Zeitleiste",
+    "codex-threads": "Handlungsstränge und Hinweise",
+    "codex-progress": "Fortschritt",
+    "codex-characters": "Figuren",
+    "codex-locations": "Schauplätze",
+    "codex-factions": "Fraktionen",
+    "codex-artifacts": "Artefakte",
+    "codex-systems": "Systeme",
+    "codex-arcs": "Erzählbögen",
+    "codex-character": "Figur",
+    "codex-location": "Schauplatz",
+    "codex-faction": "Fraktion",
+    "codex-artifact": "Artefakt",
+    "codex-system": "System",
+    "codex-arc": "Erzählbogen",
+    "codex-chapters": "Kapitel",
+    "codex-scenes": "Szenen",
+    "codex-questions": "Fragen",
+    "codex-promises": "Versprechen",
+    "codex-clues": "Hinweise",
+    "codex-note-spoilers": "Story-Bible mit Spoilern: Notizen zu den Einträgen, Status, Tode, Wissen, Hinweise und die Auflösung jedes Handlungsstrangs.",
+    "codex-note-safe": "Spoilerfreie Story-Bible: wer und was in der Geschichte vorkommt und wo. Notizen, Status, Tode, Wissen, Hinweise und Auflösungen fehlen; mit {flag} entsteht die vollständige Story-Bible.",
+    "codex-no-entities": "Noch keine Figuren, Orte oder anderen Einträge.",
+    "codex-relationships": "Beziehungen",
+    "codex-appears-in": "Kommt vor in",
+    "codex-advanced-in": "Vorangetrieben in",
+    "codex-linked-from": "Verlinkt von",
+    "codex-changes": "Änderungen",
+    "codex-change": "Ab {chapter}: {field} wird zu {value}",
+    "codex-knows": "Wissen",
+    "codex-known-from-start": "von Anfang an bekannt",
+    "codex-learned-in": "erfährt es in {chapter}",
+    "codex-notes": "Notizen",
+    "codex-role": "Rolle",
+    "codex-aliases": "Aliasnamen",
+    "codex-status": "Status",
+    "codex-dies-in": "Stirbt in",
+    "codex-revived-in": "Wiederbelebt in",
+    "codex-type": "Typ",
+    "codex-region": "Region",
+    "codex-setting": "Umgebung",
+    "codex-notable-characters": "Wichtige Figuren",
+    "codex-routes": "Routen",
+    "codex-hours": "{hours} Std.",
+    "codex-members": "Mitglieder",
+    "codex-owner": "Besitzer",
+    "codex-themes": "Themen",
+    "codex-pronunciation": "Aussprache",
+    "codex-date": "Datum",
+    "codex-time": "Zeit",
+    "codex-scene": "Szene",
+    "codex-chapter": "Kapitel",
+    "codex-pov": "Perspektivfigur",
+    "codex-told-late": "nicht chronologisch erzählt",
+    "codex-flashback": "Rückblende auf {date}",
+    "codex-no-dates": "Noch keine datierten Szenen oder Kapitel. Geben Sie Szenen ein Feld {field}, um sie in der erzählten Zeit einzuordnen.",
+    "codex-timeline-note": "Ereignisse in der Reihenfolge der erzählten Zeit, wie {command} sie auflistet.",
+    "codex-undated": "Ohne Datum",
+    "codex-point-of-view": "Erzählperspektive",
+    "codex-words": "Wörter",
+    "codex-share": "Anteil",
+    "codex-unspecified": "nicht angegeben",
+    "codex-presence": "Auftritte",
+    "codex-first": "Erster Auftritt",
+    "codex-last": "Letzter Auftritt",
+    "codex-longest-gap": "Längste Lücke",
+    "codex-death": "Tod",
+    "codex-dies-in-chapter": "stirbt in Kapitel {n}",
+    "codex-threads-note": "Nur offene Fragen und Versprechen, ohne Antworten und Einlösungen. Hinweise und aufgelöste Handlungsstränge erfordern {flag}.",
+    "codex-none": "Keine.",
+    "codex-question": "Frage",
+    "codex-raised-in": "Aufgeworfen in",
+    "codex-resolved-in": "Aufgelöst in",
+    "codex-promise": "Versprechen",
+    "codex-planted-in": "Angelegt in",
+    "codex-paid-off-in": "Eingelöst in",
+    "codex-clue": "Hinweis",
+    "codex-clues-note": "P markiert das Kapitel, in dem ein Hinweis gelegt wird, R das Kapitel, in dem er aufgedeckt wird, und x beides, wie {command} sie ausgibt.",
+    "codex-clue-totals-one": "{planted} von {total} gelegt, {revealed} aufgedeckt, {herrings} falsche Fährte.",
+    "codex-clue-totals": "{planted} von {total} gelegt, {revealed} aufgedeckt, {herrings} falsche Fährten.",
+    "codex-red-herring": "falsche Fährte",
+    "codex-significance-delayed": "Bedeutung zeigt sich später",
+    "codex-total-words": "Wörter gesamt",
+    "codex-total-characters": "Zeichen gesamt",
+    "codex-target-words": "Wortziel",
+    "codex-target-characters": "Zeichenziel",
+    "codex-done": "Erreicht",
+    "codex-remaining": "Verbleibend",
+    "codex-deadline": "Abgabetermin",
+    "codex-target": "Ziel",
+    "codex-character-count": "Zeichen",
+    "codex-plot-grid": "Handlungsraster",
+    "codex-grid-note": "Erzählbögen nach Kapitel, wie {command} sie ausgibt: x, wo ein Kapitel oder eine seiner Szenen den Bogen vorantreibt.",
+    "codex-unknown": "unbekannt",
+    "codex-hook": "Hook",
+    "codex-outcomes": "Ergebnisse",
+    "codex-session-log": "Schreibprotokoll"
   },
   checks: {
     filterWords: [
@@ -3123,7 +3321,106 @@ var en_default = {
     "narration-closing-anonymous": "The end. You have been listening to {title}, narrated by {narrator}.",
     "screenplay-credit": "Written by",
     "screenplay-source": "Based on the {form} by {authors}",
-    "screenplay-source-anonymous": "Based on the {form}"
+    "screenplay-source-anonymous": "Based on the {form}",
+    "codex-story-bible": "Story bible",
+    "codex-index-title": "{title}: story bible",
+    "codex-timeline": "Timeline",
+    "codex-threads": "Threads and clues",
+    "codex-progress": "Progress",
+    "codex-characters": "Characters",
+    "codex-locations": "Locations",
+    "codex-factions": "Factions",
+    "codex-artifacts": "Artifacts",
+    "codex-systems": "Systems",
+    "codex-arcs": "Arcs",
+    "codex-character": "Character",
+    "codex-location": "Location",
+    "codex-faction": "Faction",
+    "codex-artifact": "Artifact",
+    "codex-system": "System",
+    "codex-arc": "Arc",
+    "codex-chapters": "Chapters",
+    "codex-scenes": "Scenes",
+    "codex-questions": "Questions",
+    "codex-promises": "Promises",
+    "codex-clues": "Clues",
+    "codex-note-spoilers": "Story bible with spoilers: entity notes, statuses, deaths, knowledge, clues, and how every thread resolves.",
+    "codex-note-safe": "Spoiler-safe story bible: who and what the story holds and where they appear. Notes, statuses, deaths, knowledge, clues, and resolutions are left out; build with {flag} for the full bible.",
+    "codex-no-entities": "No characters, places, or other entities yet.",
+    "codex-relationships": "Relationships",
+    "codex-appears-in": "Appears in",
+    "codex-advanced-in": "Advanced in",
+    "codex-linked-from": "Linked from",
+    "codex-changes": "Changes",
+    "codex-change": "From {chapter}: {field} becomes {value}",
+    "codex-knows": "Knows",
+    "codex-known-from-start": "known from the start",
+    "codex-learned-in": "learned in {chapter}",
+    "codex-notes": "Notes",
+    "codex-role": "Role",
+    "codex-aliases": "Aliases",
+    "codex-status": "Status",
+    "codex-dies-in": "Dies in",
+    "codex-revived-in": "Revived in",
+    "codex-type": "Type",
+    "codex-region": "Region",
+    "codex-setting": "Setting",
+    "codex-notable-characters": "Notable characters",
+    "codex-routes": "Routes",
+    "codex-hours": "{hours} h",
+    "codex-members": "Members",
+    "codex-owner": "Owner",
+    "codex-themes": "Themes",
+    "codex-pronunciation": "Pronunciation",
+    "codex-date": "Date",
+    "codex-time": "Time",
+    "codex-scene": "Scene",
+    "codex-chapter": "Chapter",
+    "codex-pov": "POV",
+    "codex-told-late": "told out of order",
+    "codex-flashback": "flashback to {date}",
+    "codex-no-dates": "No dated scenes or chapters yet. Give scenes a {field} to place them in story time.",
+    "codex-timeline-note": "Story events in story-time order, as {command} lists them.",
+    "codex-undated": "Undated",
+    "codex-point-of-view": "Point of view",
+    "codex-words": "Words",
+    "codex-share": "Share",
+    "codex-unspecified": "unspecified",
+    "codex-presence": "Presence",
+    "codex-first": "First",
+    "codex-last": "Last",
+    "codex-longest-gap": "Longest gap",
+    "codex-death": "Death",
+    "codex-dies-in-chapter": "dies in chapter {n}",
+    "codex-threads-note": "Open questions and promises only, without their answers or payoffs. Clues and resolved threads need {flag}.",
+    "codex-none": "None.",
+    "codex-question": "Question",
+    "codex-raised-in": "Raised in",
+    "codex-resolved-in": "Resolved in",
+    "codex-promise": "Promise",
+    "codex-planted-in": "Planted in",
+    "codex-paid-off-in": "Paid off in",
+    "codex-clue": "Clue",
+    "codex-clues-note": "P marks the chapter that plants a clue, R the one that reveals it, and x both, as {command} prints them.",
+    "codex-clue-totals-one": "{planted} of {total} planted, {revealed} revealed, {herrings} red herring.",
+    "codex-clue-totals": "{planted} of {total} planted, {revealed} revealed, {herrings} red herrings.",
+    "codex-red-herring": "red herring",
+    "codex-significance-delayed": "significance delayed",
+    "codex-total-words": "Total words",
+    "codex-total-characters": "Total characters",
+    "codex-target-words": "Target words",
+    "codex-target-characters": "Target characters",
+    "codex-done": "Done",
+    "codex-remaining": "Remaining",
+    "codex-deadline": "Deadline",
+    "codex-target": "Target",
+    "codex-character-count": "Characters",
+    "codex-plot-grid": "Plot grid",
+    "codex-grid-note": "Arcs by chapter, as {command} prints them: x where a chapter or one of its scenes advances the arc.",
+    "codex-unknown": "unknown",
+    "codex-hook": "Hook",
+    "codex-outcomes": "Outcomes",
+    "codex-session-log": "Session log"
   }
 };
 
@@ -3193,7 +3490,106 @@ var es_default = {
     "narration-closing-anonymous": "Fin. Ha escuchado {title}, narrado por {narrator}.",
     "screenplay-credit": "Escrito por",
     "screenplay-source": "Basado en la obra de {authors}",
-    "screenplay-source-anonymous": "Basado en la obra original"
+    "screenplay-source-anonymous": "Basado en la obra original",
+    "codex-story-bible": "Biblia de la historia",
+    "codex-index-title": "{title}: biblia de la historia",
+    "codex-timeline": "Cronología",
+    "codex-threads": "Tramas y pistas",
+    "codex-progress": "Progreso",
+    "codex-characters": "Personajes",
+    "codex-locations": "Lugares",
+    "codex-factions": "Facciones",
+    "codex-artifacts": "Artefactos",
+    "codex-systems": "Sistemas",
+    "codex-arcs": "Arcos",
+    "codex-character": "Personaje",
+    "codex-location": "Lugar",
+    "codex-faction": "Facción",
+    "codex-artifact": "Artefacto",
+    "codex-system": "Sistema",
+    "codex-arc": "Arco",
+    "codex-chapters": "Capítulos",
+    "codex-scenes": "Escenas",
+    "codex-questions": "Preguntas",
+    "codex-promises": "Promesas",
+    "codex-clues": "Pistas",
+    "codex-note-spoilers": "Biblia de la historia con revelaciones de la trama: notas de las entidades, estados, muertes, conocimientos, pistas y la resolución de cada trama.",
+    "codex-note-safe": "Biblia de la historia sin revelaciones de la trama: quién y qué aparece en la historia, y dónde. Se omiten notas, estados, muertes, conocimientos, pistas y resoluciones; genérela con {flag} para obtener la biblia completa.",
+    "codex-no-entities": "Aún no hay personajes, lugares ni otras entidades.",
+    "codex-relationships": "Relaciones",
+    "codex-appears-in": "Aparece en",
+    "codex-advanced-in": "Avanza en",
+    "codex-linked-from": "Mencionado en",
+    "codex-changes": "Cambios",
+    "codex-change": "Desde {chapter}: {field} pasa a ser {value}",
+    "codex-knows": "Sabe",
+    "codex-known-from-start": "sabido desde el principio",
+    "codex-learned-in": "descubierto en {chapter}",
+    "codex-notes": "Notas",
+    "codex-role": "Papel",
+    "codex-aliases": "Alias",
+    "codex-status": "Estado",
+    "codex-dies-in": "Muere en",
+    "codex-revived-in": "Revive en",
+    "codex-type": "Tipo",
+    "codex-region": "Región",
+    "codex-setting": "Ambientación",
+    "codex-notable-characters": "Personajes destacados",
+    "codex-routes": "Rutas",
+    "codex-hours": "{hours} h",
+    "codex-members": "Miembros",
+    "codex-owner": "Propietario",
+    "codex-themes": "Temas",
+    "codex-pronunciation": "Pronunciación",
+    "codex-date": "Fecha",
+    "codex-time": "Hora",
+    "codex-scene": "Escena",
+    "codex-chapter": "Capítulo",
+    "codex-pov": "PDV",
+    "codex-told-late": "narrado fuera de orden",
+    "codex-flashback": "retrospectiva: {date}",
+    "codex-no-dates": "Aún no hay escenas ni capítulos con fecha. Dé a las escenas un campo {field} para situarlas en el tiempo de la historia.",
+    "codex-timeline-note": "Los acontecimientos en el orden cronológico de la historia, tal como los lista {command}.",
+    "codex-undated": "Sin fecha",
+    "codex-point-of-view": "Punto de vista",
+    "codex-words": "Palabras",
+    "codex-share": "Porcentaje",
+    "codex-unspecified": "sin especificar",
+    "codex-presence": "Presencia",
+    "codex-first": "Primero",
+    "codex-last": "Último",
+    "codex-longest-gap": "Mayor ausencia",
+    "codex-death": "Muerte",
+    "codex-dies-in-chapter": "muere en el capítulo {n}",
+    "codex-threads-note": "Solo preguntas abiertas y promesas, sin sus respuestas ni su cumplimiento. Las pistas y las tramas resueltas requieren {flag}.",
+    "codex-none": "Ninguno.",
+    "codex-question": "Pregunta",
+    "codex-raised-in": "Planteada en",
+    "codex-resolved-in": "Resuelta en",
+    "codex-promise": "Promesa",
+    "codex-planted-in": "Sembrada en",
+    "codex-paid-off-in": "Cumplida en",
+    "codex-clue": "Pista",
+    "codex-clues-note": "P marca el capítulo que siembra una pista, R el que la revela y x ambos, tal como los muestra {command}.",
+    "codex-clue-totals-one": "Pistas sembradas: {planted} de {total}; reveladas: {revealed}; pista falsa: {herrings}.",
+    "codex-clue-totals": "Pistas sembradas: {planted} de {total}; reveladas: {revealed}; pistas falsas: {herrings}.",
+    "codex-red-herring": "pista falsa",
+    "codex-significance-delayed": "importancia revelada más tarde",
+    "codex-total-words": "Total de palabras",
+    "codex-total-characters": "Total de caracteres",
+    "codex-target-words": "Objetivo de palabras",
+    "codex-target-characters": "Objetivo de caracteres",
+    "codex-done": "Completado",
+    "codex-remaining": "Pendiente",
+    "codex-deadline": "Fecha límite",
+    "codex-target": "Objetivo",
+    "codex-character-count": "Caracteres",
+    "codex-plot-grid": "Cuadrícula de tramas",
+    "codex-grid-note": "Arcos por capítulo, tal como los muestra {command}: x donde un capítulo o una de sus escenas hace avanzar el arco.",
+    "codex-unknown": "desconocido",
+    "codex-hook": "Gancho",
+    "codex-outcomes": "Resultados",
+    "codex-session-log": "Registro de sesiones"
   },
   checks: {
     filterWords: [
@@ -3823,7 +4219,106 @@ var fa_default = {
     "narration-closing-anonymous": "پایان. شما {title} را با صدای {narrator} شنیدید.",
     "screenplay-credit": "نوشتهٔ",
     "screenplay-source": "برگرفته از اثری از {authors}",
-    "screenplay-source-anonymous": "برگرفته از یک اثر ادبی"
+    "screenplay-source-anonymous": "برگرفته از یک اثر ادبی",
+    "codex-story-bible": "مرجع داستان",
+    "codex-index-title": "{title}: مرجع داستان",
+    "codex-timeline": "خط زمانی",
+    "codex-threads": "رشته‌ها و سرنخ‌ها",
+    "codex-progress": "پیشرفت",
+    "codex-characters": "شخصیت‌ها",
+    "codex-locations": "مکان‌ها",
+    "codex-factions": "جناح‌ها",
+    "codex-artifacts": "اشیا",
+    "codex-systems": "سامانه‌ها",
+    "codex-arcs": "قوس‌ها",
+    "codex-character": "شخصیت",
+    "codex-location": "مکان",
+    "codex-faction": "جناح",
+    "codex-artifact": "شیء",
+    "codex-system": "سامانه",
+    "codex-arc": "قوس",
+    "codex-chapters": "فصل‌ها",
+    "codex-scenes": "صحنه‌ها",
+    "codex-questions": "پرسش‌ها",
+    "codex-promises": "وعده‌ها",
+    "codex-clues": "سرنخ‌ها",
+    "codex-note-spoilers": "مرجع داستان با لو دادن رویدادها: یادداشت‌های موجودیت‌ها، وضعیت‌ها، مرگ‌ها، دانسته‌ها، سرنخ‌ها و اینکه هر رشته چگونه گره‌گشایی می‌شود.",
+    "codex-note-safe": "مرجع داستان بدون لو دادن رویدادها: چه کسانی و چه چیزهایی در داستان هست و کجا ظاهر می‌شوند. یادداشت‌ها، وضعیت‌ها، مرگ‌ها، دانسته‌ها، سرنخ‌ها و گره‌گشایی‌ها کنار گذاشته شده‌اند؛ برای مرجع کامل با {flag} بسازید.",
+    "codex-no-entities": "هنوز شخصیت، مکان یا موجودیت دیگری نیست.",
+    "codex-relationships": "روابط",
+    "codex-appears-in": "حضور در",
+    "codex-advanced-in": "پیشرفت در",
+    "codex-linked-from": "ارجاع‌شده در",
+    "codex-changes": "تغییرات",
+    "codex-change": "از {chapter}: {field} به {value} تغییر می‌کند",
+    "codex-knows": "دانسته‌ها",
+    "codex-known-from-start": "از آغاز",
+    "codex-learned-in": "دانسته‌شده در {chapter}",
+    "codex-notes": "یادداشت‌ها",
+    "codex-role": "نقش",
+    "codex-aliases": "نام‌های دیگر",
+    "codex-status": "وضعیت",
+    "codex-dies-in": "مرگ در",
+    "codex-revived-in": "بازگشت به زندگی در",
+    "codex-type": "گونه",
+    "codex-region": "منطقه",
+    "codex-setting": "فضا",
+    "codex-notable-characters": "شخصیت‌های برجسته",
+    "codex-routes": "مسیرها",
+    "codex-hours": "{hours} ساعت",
+    "codex-members": "اعضا",
+    "codex-owner": "مالک",
+    "codex-themes": "درون‌مایه‌ها",
+    "codex-pronunciation": "تلفظ",
+    "codex-date": "تاریخ",
+    "codex-time": "زمان",
+    "codex-scene": "صحنه",
+    "codex-chapter": "فصل",
+    "codex-pov": "زاویهٔ دید",
+    "codex-told-late": "روایت خارج از ترتیب",
+    "codex-flashback": "بازگشت به گذشته: {date}",
+    "codex-no-dates": "هنوز صحنه یا فصل تاریخ‌داری نیست. برای جای دادن صحنه‌ها در زمان داستان، به آن‌ها {field} بدهید.",
+    "codex-timeline-note": "رویدادهای داستان به ترتیب زمان داستان، همان‌طور که {command} فهرست می‌کند.",
+    "codex-undated": "بی‌تاریخ",
+    "codex-point-of-view": "زاویهٔ دید",
+    "codex-words": "واژه‌ها",
+    "codex-share": "سهم",
+    "codex-unspecified": "نامشخص",
+    "codex-presence": "حضور",
+    "codex-first": "نخستین",
+    "codex-last": "آخرین",
+    "codex-longest-gap": "طولانی‌ترین غیبت",
+    "codex-death": "مرگ",
+    "codex-dies-in-chapter": "مرگ در فصل {n}",
+    "codex-threads-note": "فقط پرسش‌های باز و وعده‌ها، بدون پاسخ یا تحقق آن‌ها. سرنخ‌ها و رشته‌های گره‌گشایی‌شده به {flag} نیاز دارند.",
+    "codex-none": "هیچ.",
+    "codex-question": "پرسش",
+    "codex-raised-in": "طرح در",
+    "codex-resolved-in": "گره‌گشایی در",
+    "codex-promise": "وعده",
+    "codex-planted-in": "کاشته در",
+    "codex-paid-off-in": "تحقق در",
+    "codex-clue": "سرنخ",
+    "codex-clues-note": "P فصلی را نشان می‌دهد که سرنخ در آن کاشته می‌شود، R فصلی که آن را آشکار می‌کند، و x هر دو را، همان‌طور که {command} چاپ می‌کند.",
+    "codex-clue-totals-one": "{planted} از {total} کاشته‌شده، {revealed} آشکارشده، {herrings} سرنخ گمراه‌کننده.",
+    "codex-clue-totals": "{planted} از {total} کاشته‌شده، {revealed} آشکارشده، {herrings} سرنخ گمراه‌کننده.",
+    "codex-red-herring": "سرنخ گمراه‌کننده",
+    "codex-significance-delayed": "اهمیت دیرهنگام",
+    "codex-total-words": "مجموع واژه‌ها",
+    "codex-total-characters": "مجموع نویسه‌ها",
+    "codex-target-words": "واژه‌های هدف",
+    "codex-target-characters": "نویسه‌های هدف",
+    "codex-done": "انجام‌شده",
+    "codex-remaining": "باقی‌مانده",
+    "codex-deadline": "مهلت",
+    "codex-target": "هدف",
+    "codex-character-count": "نویسه‌ها",
+    "codex-plot-grid": "جدول پیرنگ",
+    "codex-grid-note": "قوس‌ها به تفکیک فصل، همان‌طور که {command} چاپ می‌کند: x یعنی آن فصل یا یکی از صحنه‌هایش قوس را پیش می‌برد.",
+    "codex-unknown": "نامعلوم",
+    "codex-hook": "قلاب",
+    "codex-outcomes": "پیامدها",
+    "codex-session-log": "گزارش جلسه‌های نوشتن"
   }
 };
 
@@ -3875,7 +4370,106 @@ var fr_default = {
     "narration-closing-anonymous": "Fin. Vous venez d’écouter {title}, lu par {narrator}.",
     "screenplay-credit": "Écrit par",
     "screenplay-source": "D’après l’œuvre de {authors}",
-    "screenplay-source-anonymous": "D’après l’œuvre originale"
+    "screenplay-source-anonymous": "D’après l’œuvre originale",
+    "codex-story-bible": "Bible de l’histoire",
+    "codex-index-title": "{title} : bible de l’histoire",
+    "codex-timeline": "Chronologie",
+    "codex-threads": "Intrigues et indices",
+    "codex-progress": "Avancement",
+    "codex-characters": "Personnages",
+    "codex-locations": "Lieux",
+    "codex-factions": "Factions",
+    "codex-artifacts": "Artefacts",
+    "codex-systems": "Systèmes",
+    "codex-arcs": "Arcs",
+    "codex-character": "Personnage",
+    "codex-location": "Lieu",
+    "codex-faction": "Faction",
+    "codex-artifact": "Artefact",
+    "codex-system": "Système",
+    "codex-arc": "Arc",
+    "codex-chapters": "Chapitres",
+    "codex-scenes": "Scènes",
+    "codex-questions": "Questions",
+    "codex-promises": "Promesses",
+    "codex-clues": "Indices",
+    "codex-note-spoilers": "Bible de l’histoire avec révélations : notes sur les entités, statuts, morts, connaissances, indices et dénouement de chaque intrigue.",
+    "codex-note-safe": "Bible de l’histoire sans révélations : qui et quoi figure dans l’histoire, et où. Les notes, statuts, morts, connaissances, indices et dénouements sont omis ; générez-la avec {flag} pour obtenir la bible complète.",
+    "codex-no-entities": "Aucun personnage, lieu ou autre entité pour l’instant.",
+    "codex-relationships": "Relations",
+    "codex-appears-in": "Apparaît dans",
+    "codex-advanced-in": "Progresse dans",
+    "codex-linked-from": "Mentionné dans",
+    "codex-changes": "Évolutions",
+    "codex-change": "À partir de {chapter} : {field} devient {value}",
+    "codex-knows": "Sait",
+    "codex-known-from-start": "connu dès le début",
+    "codex-learned-in": "appris dans {chapter}",
+    "codex-notes": "Notes",
+    "codex-role": "Rôle",
+    "codex-aliases": "Alias",
+    "codex-status": "Statut",
+    "codex-dies-in": "Meurt dans",
+    "codex-revived-in": "Ressuscite dans",
+    "codex-type": "Type",
+    "codex-region": "Région",
+    "codex-setting": "Cadre",
+    "codex-notable-characters": "Personnages notables",
+    "codex-routes": "Itinéraires",
+    "codex-hours": "{hours} h",
+    "codex-members": "Membres",
+    "codex-owner": "Propriétaire",
+    "codex-themes": "Thèmes",
+    "codex-pronunciation": "Prononciation",
+    "codex-date": "Date",
+    "codex-time": "Heure",
+    "codex-scene": "Scène",
+    "codex-chapter": "Chapitre",
+    "codex-pov": "PDV",
+    "codex-told-late": "raconté hors chronologie",
+    "codex-flashback": "retour en arrière : {date}",
+    "codex-no-dates": "Aucune scène ni aucun chapitre daté pour l’instant. Donnez aux scènes un champ {field} pour les situer dans le temps de l’histoire.",
+    "codex-timeline-note": "Les événements dans l’ordre chronologique de l’histoire, tels que {command} les liste.",
+    "codex-undated": "Non daté",
+    "codex-point-of-view": "Point de vue",
+    "codex-words": "Mots",
+    "codex-share": "Part",
+    "codex-unspecified": "non précisé",
+    "codex-presence": "Présence",
+    "codex-first": "Premier",
+    "codex-last": "Dernier",
+    "codex-longest-gap": "Plus longue absence",
+    "codex-death": "Mort",
+    "codex-dies-in-chapter": "meurt au chapitre {n}",
+    "codex-threads-note": "Uniquement les questions ouvertes et les promesses, sans leurs réponses ni leur résolution. Les indices et les intrigues résolues nécessitent {flag}.",
+    "codex-none": "Aucun.",
+    "codex-question": "Question",
+    "codex-raised-in": "Posée dans",
+    "codex-resolved-in": "Résolue dans",
+    "codex-promise": "Promesse",
+    "codex-planted-in": "Plantée dans",
+    "codex-paid-off-in": "Tenue dans",
+    "codex-clue": "Indice",
+    "codex-clues-note": "P marque le chapitre où un indice est planté, R celui où il est révélé, et x les deux, comme les affiche {command}.",
+    "codex-clue-totals-one": "Indices plantés : {planted} sur {total} ; révélés : {revealed} ; fausse piste : {herrings}.",
+    "codex-clue-totals": "Indices plantés : {planted} sur {total} ; révélés : {revealed} ; fausses pistes : {herrings}.",
+    "codex-red-herring": "fausse piste",
+    "codex-significance-delayed": "portée révélée plus tard",
+    "codex-total-words": "Total des mots",
+    "codex-total-characters": "Total des caractères",
+    "codex-target-words": "Objectif de mots",
+    "codex-target-characters": "Objectif de caractères",
+    "codex-done": "Réalisé",
+    "codex-remaining": "Restant",
+    "codex-deadline": "Échéance",
+    "codex-target": "Objectif",
+    "codex-character-count": "Caractères",
+    "codex-plot-grid": "Grille des intrigues",
+    "codex-grid-note": "Les arcs par chapitre, comme les affiche {command} : x lorsqu’un chapitre ou l’une de ses scènes fait avancer l’arc.",
+    "codex-unknown": "inconnu",
+    "codex-hook": "Accroche",
+    "codex-outcomes": "Issues",
+    "codex-session-log": "Journal des séances"
   },
   checks: {
     filterWords: [
@@ -4967,7 +5561,106 @@ var he_default = {
     "narration-closing-anonymous": "הסוף. האזנתם לספר {title}, בקריאת {narrator}.",
     "screenplay-credit": "נכתב על ידי",
     "screenplay-source": "על פי היצירה מאת {authors}",
-    "screenplay-source-anonymous": "על פי יצירה ספרותית"
+    "screenplay-source-anonymous": "על פי יצירה ספרותית",
+    "codex-story-bible": "מדריך הסיפור",
+    "codex-index-title": "{title}: מדריך הסיפור",
+    "codex-timeline": "ציר זמן",
+    "codex-threads": "חוטי עלילה ורמזים",
+    "codex-progress": "התקדמות",
+    "codex-characters": "דמויות",
+    "codex-locations": "מקומות",
+    "codex-factions": "פלגים",
+    "codex-artifacts": "חפצים",
+    "codex-systems": "מערכות",
+    "codex-arcs": "קשתות",
+    "codex-character": "דמות",
+    "codex-location": "מקום",
+    "codex-faction": "פלג",
+    "codex-artifact": "חפץ",
+    "codex-system": "מערכת",
+    "codex-arc": "קשת",
+    "codex-chapters": "פרקים",
+    "codex-scenes": "סצנות",
+    "codex-questions": "שאלות",
+    "codex-promises": "הבטחות",
+    "codex-clues": "רמזים",
+    "codex-note-spoilers": "מדריך הסיפור עם ספוילרים: הערות על הישויות, מצבים, מוות, ידע, רמזים, ואיך כל חוט עלילה נפתר.",
+    "codex-note-safe": "מדריך הסיפור ללא ספוילרים: מי ומה יש בסיפור והיכן הם מופיעים. הערות, מצבים, מוות, ידע, רמזים ופתרונות הושמטו; בנו עם {flag} לקבלת המדריך המלא.",
+    "codex-no-entities": "עדיין אין דמויות, מקומות או ישויות אחרות.",
+    "codex-relationships": "קשרים",
+    "codex-appears-in": "מופיע ב־",
+    "codex-advanced-in": "מתקדם ב־",
+    "codex-linked-from": "מקושר מ־",
+    "codex-changes": "שינויים",
+    "codex-change": "החל מ־{chapter}: {field} משתנה ל־{value}",
+    "codex-knows": "יודע",
+    "codex-known-from-start": "ידוע מההתחלה",
+    "codex-learned-in": "נודע ב־{chapter}",
+    "codex-notes": "הערות",
+    "codex-role": "תפקיד",
+    "codex-aliases": "כינויים",
+    "codex-status": "מצב",
+    "codex-dies-in": "מת ב־",
+    "codex-revived-in": "קם לתחייה ב־",
+    "codex-type": "סוג",
+    "codex-region": "אזור",
+    "codex-setting": "סביבה",
+    "codex-notable-characters": "דמויות בולטות",
+    "codex-routes": "דרכים",
+    "codex-hours": "{hours} שע׳",
+    "codex-members": "חברים",
+    "codex-owner": "בעלים",
+    "codex-themes": "נושאים",
+    "codex-pronunciation": "הגייה",
+    "codex-date": "תאריך",
+    "codex-time": "שעה",
+    "codex-scene": "סצנה",
+    "codex-chapter": "פרק",
+    "codex-pov": "נקודת מבט",
+    "codex-told-late": "מסופר שלא לפי הסדר",
+    "codex-flashback": "הבזק לאחור אל {date}",
+    "codex-no-dates": "עדיין אין סצנות או פרקים עם תאריך. הוסיפו לסצנות שדה {field} כדי למקם אותן בזמן הסיפור.",
+    "codex-timeline-note": "אירועי הסיפור לפי סדר הזמן בסיפור, כפי ש־{command} מציג אותם.",
+    "codex-undated": "ללא תאריך",
+    "codex-point-of-view": "נקודת מבט",
+    "codex-words": "מילים",
+    "codex-share": "אחוז",
+    "codex-unspecified": "לא צוין",
+    "codex-presence": "נוכחות",
+    "codex-first": "ראשון",
+    "codex-last": "אחרון",
+    "codex-longest-gap": "הפער הארוך ביותר",
+    "codex-death": "מוות",
+    "codex-dies-in-chapter": "מת בפרק {n}",
+    "codex-threads-note": "שאלות פתוחות והבטחות בלבד, בלי התשובות או המימוש שלהן. רמזים וחוטי עלילה שנפתרו דורשים {flag}.",
+    "codex-none": "אין.",
+    "codex-question": "שאלה",
+    "codex-raised-in": "הועלתה ב־",
+    "codex-resolved-in": "נפתרה ב־",
+    "codex-promise": "הבטחה",
+    "codex-planted-in": "נשתלה ב־",
+    "codex-paid-off-in": "מומשה ב־",
+    "codex-clue": "רמז",
+    "codex-clues-note": "P מסמן את הפרק שבו נשתל רמז, R את הפרק שבו הוא נחשף, ו־x את שניהם, כפי ש־{command} מדפיס אותם.",
+    "codex-clue-totals-one": "נשתלו {planted} מתוך {total}, נחשפו {revealed}, רמזים מטעים: {herrings}.",
+    "codex-clue-totals": "נשתלו {planted} מתוך {total}, נחשפו {revealed}, רמזים מטעים: {herrings}.",
+    "codex-red-herring": "רמז מטעה",
+    "codex-significance-delayed": "משמעות מתבררת בהמשך",
+    "codex-total-words": "סך המילים",
+    "codex-total-characters": "סך התווים",
+    "codex-target-words": "יעד מילים",
+    "codex-target-characters": "יעד תווים",
+    "codex-done": "הושלם",
+    "codex-remaining": "נותר",
+    "codex-deadline": "מועד אחרון",
+    "codex-target": "יעד",
+    "codex-character-count": "תווים",
+    "codex-plot-grid": "טבלת עלילה",
+    "codex-grid-note": "קשתות לפי פרק, כפי ש־{command} מדפיס אותן: x מסמן פרק שהוא או אחת הסצנות שלו מקדמים את הקשת.",
+    "codex-unknown": "לא ידוע",
+    "codex-hook": "קרס",
+    "codex-outcomes": "תוצאות",
+    "codex-session-log": "יומן כתיבה"
   }
 };
 
@@ -5010,7 +5703,106 @@ var hi_default = {
     "narration-closing-anonymous": "समाप्त। आप {title} सुन रहे थे, वाचक {narrator}।",
     "screenplay-credit": "लेखक",
     "screenplay-source": "{authors} की रचना पर आधारित",
-    "screenplay-source-anonymous": "मूल रचना पर आधारित"
+    "screenplay-source-anonymous": "मूल रचना पर आधारित",
+    "codex-story-bible": "कथा-कोश",
+    "codex-index-title": "{title}: कथा-कोश",
+    "codex-timeline": "समयरेखा",
+    "codex-threads": "कथासूत्र और सुराग",
+    "codex-progress": "प्रगति",
+    "codex-characters": "पात्र",
+    "codex-locations": "स्थान",
+    "codex-factions": "गुट",
+    "codex-artifacts": "विशेष वस्तुएँ",
+    "codex-systems": "प्रणालियाँ",
+    "codex-arcs": "चाप",
+    "codex-character": "पात्र",
+    "codex-location": "स्थान",
+    "codex-faction": "गुट",
+    "codex-artifact": "विशेष वस्तु",
+    "codex-system": "प्रणाली",
+    "codex-arc": "चाप",
+    "codex-chapters": "अध्याय",
+    "codex-scenes": "दृश्य",
+    "codex-questions": "प्रश्न",
+    "codex-promises": "वादे",
+    "codex-clues": "सुराग",
+    "codex-note-spoilers": "पूरा भेद खोलने वाला कथा-कोश: इकाइयों की टिप्पणियाँ, स्थितियाँ, मृत्यु, जानकारी, सुराग, और हर कथासूत्र का समाधान।",
+    "codex-note-safe": "भेद न खोलने वाला कथा-कोश: कहानी में कौन और क्या है, और वे कहाँ आते हैं। टिप्पणियाँ, स्थितियाँ, मृत्यु, जानकारी, सुराग और समाधान छोड़ दिए गए हैं; पूरे कथा-कोश के लिए {flag} के साथ बनाएँ।",
+    "codex-no-entities": "अभी कोई पात्र, स्थान या अन्य इकाई नहीं है।",
+    "codex-relationships": "संबंध",
+    "codex-appears-in": "इनमें उपस्थित",
+    "codex-advanced-in": "इनमें आगे बढ़ा",
+    "codex-linked-from": "इनमें उल्लेख",
+    "codex-changes": "परिवर्तन",
+    "codex-change": "{chapter} से: {field} बदलकर {value}",
+    "codex-knows": "जानकारी",
+    "codex-known-from-start": "शुरू से ज्ञात",
+    "codex-learned-in": "{chapter} में पता चला",
+    "codex-notes": "टिप्पणियाँ",
+    "codex-role": "भूमिका",
+    "codex-aliases": "अन्य नाम",
+    "codex-status": "स्थिति",
+    "codex-dies-in": "मृत्यु",
+    "codex-revived-in": "पुनर्जीवन",
+    "codex-type": "प्रकार",
+    "codex-region": "क्षेत्र",
+    "codex-setting": "परिवेश",
+    "codex-notable-characters": "प्रमुख पात्र",
+    "codex-routes": "मार्ग",
+    "codex-hours": "घंटे: {hours}",
+    "codex-members": "सदस्य",
+    "codex-owner": "स्वामी",
+    "codex-themes": "विषय",
+    "codex-pronunciation": "उच्चारण",
+    "codex-date": "तिथि",
+    "codex-time": "समय",
+    "codex-scene": "दृश्य",
+    "codex-chapter": "अध्याय",
+    "codex-pov": "दृष्टिकोण",
+    "codex-told-late": "क्रम से हटकर वर्णित",
+    "codex-flashback": "पूर्वदृश्य: {date}",
+    "codex-no-dates": "अभी कोई तिथि वाला दृश्य या अध्याय नहीं है। दृश्यों को कहानी के समय में रखने के लिए उन्हें {field} दें।",
+    "codex-timeline-note": "कहानी के समय-क्रम में घटनाएँ, जैसे {command} उन्हें सूचीबद्ध करता है।",
+    "codex-undated": "बिना तिथि",
+    "codex-point-of-view": "दृष्टिकोण",
+    "codex-words": "शब्द",
+    "codex-share": "हिस्सा",
+    "codex-unspecified": "अनिर्दिष्ट",
+    "codex-presence": "उपस्थिति",
+    "codex-first": "पहला",
+    "codex-last": "अंतिम",
+    "codex-longest-gap": "सबसे लंबा अंतराल",
+    "codex-death": "मृत्यु",
+    "codex-dies-in-chapter": "अध्याय {n} में मृत्यु",
+    "codex-threads-note": "केवल खुले प्रश्न और वादे, उनके उत्तर या पूर्ति के बिना। सुराग और सुलझे कथासूत्र देखने के लिए {flag} चाहिए।",
+    "codex-none": "कोई नहीं।",
+    "codex-question": "प्रश्न",
+    "codex-raised-in": "उठाया गया",
+    "codex-resolved-in": "सुलझाया गया",
+    "codex-promise": "वादा",
+    "codex-planted-in": "रोपा गया",
+    "codex-paid-off-in": "पूरा हुआ",
+    "codex-clue": "सुराग",
+    "codex-clues-note": "P उस अध्याय को दर्शाता है जिसमें सुराग रोपा जाता है, R उसे जिसमें वह खुलता है, और x दोनों को, जैसे {command} उन्हें छापता है।",
+    "codex-clue-totals-one": "{total} में से {planted} रोपे गए, {revealed} खुले, भ्रामक सुराग: {herrings}।",
+    "codex-clue-totals": "{total} में से {planted} रोपे गए, {revealed} खुले, भ्रामक सुराग: {herrings}।",
+    "codex-red-herring": "भ्रामक सुराग",
+    "codex-significance-delayed": "महत्व बाद में खुलता है",
+    "codex-total-words": "कुल शब्द",
+    "codex-total-characters": "कुल वर्ण",
+    "codex-target-words": "लक्ष्य शब्द",
+    "codex-target-characters": "लक्ष्य वर्ण",
+    "codex-done": "पूरा",
+    "codex-remaining": "शेष",
+    "codex-deadline": "समय-सीमा",
+    "codex-target": "लक्ष्य",
+    "codex-character-count": "वर्ण",
+    "codex-plot-grid": "कथानक तालिका",
+    "codex-grid-note": "अध्याय के अनुसार चाप, जैसे {command} उन्हें छापता है: x वहाँ है जहाँ कोई अध्याय या उसका कोई दृश्य चाप को आगे बढ़ाता है।",
+    "codex-unknown": "अज्ञात",
+    "codex-hook": "हुक",
+    "codex-outcomes": "परिणाम",
+    "codex-session-log": "लेखन सत्रों का ब्योरा"
   }
 };
 
@@ -5051,7 +5843,106 @@ var it_default = {
     "narration-closing-anonymous": "Fine. Avete ascoltato {title}, letto da {narrator}.",
     "screenplay-credit": "Scritto da",
     "screenplay-source": "Tratto dall’opera di {authors}",
-    "screenplay-source-anonymous": "Tratto dall’opera originale"
+    "screenplay-source-anonymous": "Tratto dall’opera originale",
+    "codex-story-bible": "Bibbia della storia",
+    "codex-index-title": "{title}: bibbia della storia",
+    "codex-timeline": "Cronologia",
+    "codex-threads": "Trame e indizi",
+    "codex-progress": "Avanzamento",
+    "codex-characters": "Personaggi",
+    "codex-locations": "Luoghi",
+    "codex-factions": "Fazioni",
+    "codex-artifacts": "Artefatti",
+    "codex-systems": "Sistemi",
+    "codex-arcs": "Archi",
+    "codex-character": "Personaggio",
+    "codex-location": "Luogo",
+    "codex-faction": "Fazione",
+    "codex-artifact": "Artefatto",
+    "codex-system": "Sistema",
+    "codex-arc": "Arco",
+    "codex-chapters": "Capitoli",
+    "codex-scenes": "Scene",
+    "codex-questions": "Domande",
+    "codex-promises": "Promesse",
+    "codex-clues": "Indizi",
+    "codex-note-spoilers": "Bibbia della storia con anticipazioni: note sulle entità, stati, morti, conoscenze, indizi e come si risolve ogni trama.",
+    "codex-note-safe": "Bibbia della storia senza anticipazioni: chi e cosa compare nella storia, e dove. Note, stati, morti, conoscenze, indizi e risoluzioni sono omessi; generatela con {flag} per avere la bibbia completa.",
+    "codex-no-entities": "Ancora nessun personaggio, luogo o altra entità.",
+    "codex-relationships": "Relazioni",
+    "codex-appears-in": "Compare in",
+    "codex-advanced-in": "Avanza in",
+    "codex-linked-from": "Citato in",
+    "codex-changes": "Cambiamenti",
+    "codex-change": "Da {chapter}: {field} diventa {value}",
+    "codex-knows": "Sa",
+    "codex-known-from-start": "noto fin dall’inizio",
+    "codex-learned-in": "appreso in {chapter}",
+    "codex-notes": "Note",
+    "codex-role": "Ruolo",
+    "codex-aliases": "Alias",
+    "codex-status": "Stato",
+    "codex-dies-in": "Muore in",
+    "codex-revived-in": "Torna in vita in",
+    "codex-type": "Tipo",
+    "codex-region": "Regione",
+    "codex-setting": "Ambientazione",
+    "codex-notable-characters": "Personaggi importanti",
+    "codex-routes": "Percorsi",
+    "codex-hours": "{hours} h",
+    "codex-members": "Membri",
+    "codex-owner": "Proprietario",
+    "codex-themes": "Temi",
+    "codex-pronunciation": "Pronuncia",
+    "codex-date": "Data",
+    "codex-time": "Ora",
+    "codex-scene": "Scena",
+    "codex-chapter": "Capitolo",
+    "codex-pov": "PdV",
+    "codex-told-late": "raccontato fuori ordine",
+    "codex-flashback": "flashback: {date}",
+    "codex-no-dates": "Ancora nessuna scena o capitolo con una data. Assegnate alle scene un campo {field} per collocarle nel tempo della storia.",
+    "codex-timeline-note": "Gli eventi nell’ordine cronologico della storia, come li elenca {command}.",
+    "codex-undated": "Senza data",
+    "codex-point-of-view": "Punto di vista",
+    "codex-words": "Parole",
+    "codex-share": "Percentuale",
+    "codex-unspecified": "non specificato",
+    "codex-presence": "Presenza",
+    "codex-first": "Primo",
+    "codex-last": "Ultimo",
+    "codex-longest-gap": "Assenza più lunga",
+    "codex-death": "Morte",
+    "codex-dies-in-chapter": "muore nel capitolo {n}",
+    "codex-threads-note": "Solo domande aperte e promesse, senza risposte né risoluzioni. Indizi e trame risolte richiedono {flag}.",
+    "codex-none": "Nessuno.",
+    "codex-question": "Domanda",
+    "codex-raised-in": "Posta in",
+    "codex-resolved-in": "Risolta in",
+    "codex-promise": "Promessa",
+    "codex-planted-in": "Seminata in",
+    "codex-paid-off-in": "Mantenuta in",
+    "codex-clue": "Indizio",
+    "codex-clues-note": "P indica il capitolo che semina un indizio, R quello che lo rivela e x entrambi, come li mostra {command}.",
+    "codex-clue-totals-one": "Indizi seminati: {planted} su {total}; rivelati: {revealed}; falsa pista: {herrings}.",
+    "codex-clue-totals": "Indizi seminati: {planted} su {total}; rivelati: {revealed}; false piste: {herrings}.",
+    "codex-red-herring": "falsa pista",
+    "codex-significance-delayed": "significato rivelato in seguito",
+    "codex-total-words": "Parole totali",
+    "codex-total-characters": "Caratteri totali",
+    "codex-target-words": "Obiettivo di parole",
+    "codex-target-characters": "Obiettivo di caratteri",
+    "codex-done": "Completato",
+    "codex-remaining": "Mancanti",
+    "codex-deadline": "Scadenza",
+    "codex-target": "Obiettivo",
+    "codex-character-count": "Caratteri",
+    "codex-plot-grid": "Griglia delle trame",
+    "codex-grid-note": "Archi per capitolo, come li mostra {command}: x dove un capitolo o una delle sue scene fa avanzare l’arco.",
+    "codex-unknown": "sconosciuto",
+    "codex-hook": "Gancio",
+    "codex-outcomes": "Esiti",
+    "codex-session-log": "Registro delle sessioni"
   }
 };
 
@@ -5104,7 +5995,106 @@ var ja_default = {
     "narration-closing-anonymous": "おわり。お聴きいただいたのは『{title}』、朗読は{narrator}でした。",
     "screenplay-credit": "脚本",
     "screenplay-source": "原作：{authors}",
-    "screenplay-source-anonymous": "原作に基づく"
+    "screenplay-source-anonymous": "原作に基づく",
+    "codex-story-bible": "設定資料集",
+    "codex-index-title": "{title}（設定資料集）",
+    "codex-timeline": "年表",
+    "codex-threads": "プロットと手がかり",
+    "codex-progress": "進捗",
+    "codex-characters": "登場人物",
+    "codex-locations": "場所",
+    "codex-factions": "勢力",
+    "codex-artifacts": "アイテム",
+    "codex-systems": "体系",
+    "codex-arcs": "アーク",
+    "codex-character": "登場人物",
+    "codex-location": "場所",
+    "codex-faction": "勢力",
+    "codex-artifact": "アイテム",
+    "codex-system": "体系",
+    "codex-arc": "アーク",
+    "codex-chapters": "章",
+    "codex-scenes": "場面",
+    "codex-questions": "問い",
+    "codex-promises": "伏線",
+    "codex-clues": "手がかり",
+    "codex-note-spoilers": "ネタバレありの設定資料集です。各項目のメモ、状態、死亡、知っていること、手がかり、すべてのプロットの結末を載せています。",
+    "codex-note-safe": "ネタバレなしの設定資料集です。物語に登場する人物や事物と、その登場箇所だけを載せています。メモ、状態、死亡、知っていること、手がかり、結末は省いています。完全版は {flag} を付けてビルドしてください。",
+    "codex-no-entities": "登場人物や場所などの項目はまだありません。",
+    "codex-relationships": "関係",
+    "codex-appears-in": "登場箇所",
+    "codex-advanced-in": "進展箇所",
+    "codex-linked-from": "参照元",
+    "codex-changes": "変化",
+    "codex-change": "{chapter}から：{field} が {value} になる",
+    "codex-knows": "知っていること",
+    "codex-known-from-start": "最初から知っている",
+    "codex-learned-in": "{chapter}で知る",
+    "codex-notes": "メモ",
+    "codex-role": "役割",
+    "codex-aliases": "別名",
+    "codex-status": "状態",
+    "codex-dies-in": "死亡",
+    "codex-revived-in": "復活",
+    "codex-type": "種類",
+    "codex-region": "地域",
+    "codex-setting": "舞台設定",
+    "codex-notable-characters": "主な登場人物",
+    "codex-routes": "経路",
+    "codex-hours": "{hours}時間",
+    "codex-members": "構成員",
+    "codex-owner": "所有者",
+    "codex-themes": "テーマ",
+    "codex-pronunciation": "読み",
+    "codex-date": "日付",
+    "codex-time": "時刻",
+    "codex-scene": "場面",
+    "codex-chapter": "章",
+    "codex-pov": "視点",
+    "codex-told-late": "時系列順ではなく語られる",
+    "codex-flashback": "{date}への回想",
+    "codex-no-dates": "日付のある場面や章はまだありません。場面に {field} を付けると、作中の時間軸に配置できます。",
+    "codex-timeline-note": "作中の出来事を作中時間の順に並べたものです（{command} の一覧と同じ）。",
+    "codex-undated": "日付なし",
+    "codex-point-of-view": "視点人物",
+    "codex-words": "語数",
+    "codex-share": "割合",
+    "codex-unspecified": "未指定",
+    "codex-presence": "登場状況",
+    "codex-first": "初登場",
+    "codex-last": "最終登場",
+    "codex-longest-gap": "最長の不在",
+    "codex-death": "死亡",
+    "codex-dies-in-chapter": "第{n}章で死亡",
+    "codex-threads-note": "未解決の問いと伏線だけを載せ、その答えや回収は省いています。手がかりと解決済みのプロットには {flag} が必要です。",
+    "codex-none": "なし。",
+    "codex-question": "問い",
+    "codex-raised-in": "提起",
+    "codex-resolved-in": "解決",
+    "codex-promise": "伏線",
+    "codex-planted-in": "提示",
+    "codex-paid-off-in": "回収",
+    "codex-clue": "手がかり",
+    "codex-clues-note": "P は手がかりを仕込む章、R はそれを明かす章、x はその両方を示します（{command} の出力と同じ）。",
+    "codex-clue-totals-one": "手がかり{total}件中、提示済み{planted}件、開示済み{revealed}件、ミスリード{herrings}件。",
+    "codex-clue-totals": "手がかり{total}件中、提示済み{planted}件、開示済み{revealed}件、ミスリード{herrings}件。",
+    "codex-red-herring": "ミスリード",
+    "codex-significance-delayed": "意味は後で判明",
+    "codex-total-words": "総語数",
+    "codex-total-characters": "総文字数",
+    "codex-target-words": "目標語数",
+    "codex-target-characters": "目標文字数",
+    "codex-done": "達成",
+    "codex-remaining": "残り",
+    "codex-deadline": "締め切り",
+    "codex-target": "目標",
+    "codex-character-count": "文字数",
+    "codex-plot-grid": "プロット表",
+    "codex-grid-note": "章ごとのアークです（{command} の出力と同じ）。x は、その章またはその章の場面のいずれかでアークが進むことを示します。",
+    "codex-unknown": "不明",
+    "codex-hook": "引き",
+    "codex-outcomes": "結果",
+    "codex-session-log": "執筆記録"
   }
 };
 
@@ -5148,7 +6138,106 @@ var ko_default = {
     "narration-closing-anonymous": "끝. 지금까지 들으신 작품은 『{title}』, {narrator} 낭독이었습니다.",
     "screenplay-credit": "각본",
     "screenplay-source": "원작: {authors}",
-    "screenplay-source-anonymous": "원작을 바탕으로 함"
+    "screenplay-source-anonymous": "원작을 바탕으로 함",
+    "codex-story-bible": "설정집",
+    "codex-index-title": "{title}: 설정집",
+    "codex-timeline": "연표",
+    "codex-threads": "플롯과 단서",
+    "codex-progress": "진행 상황",
+    "codex-characters": "등장인물",
+    "codex-locations": "장소",
+    "codex-factions": "세력",
+    "codex-artifacts": "아이템",
+    "codex-systems": "체계",
+    "codex-arcs": "아크",
+    "codex-character": "등장인물",
+    "codex-location": "장소",
+    "codex-faction": "세력",
+    "codex-artifact": "아이템",
+    "codex-system": "체계",
+    "codex-arc": "아크",
+    "codex-chapters": "장",
+    "codex-scenes": "장면",
+    "codex-questions": "의문",
+    "codex-promises": "복선",
+    "codex-clues": "단서",
+    "codex-note-spoilers": "스포일러가 포함된 설정집입니다. 항목별 메모, 상태, 사망, 아는 것, 단서, 그리고 모든 플롯의 결말을 담고 있습니다.",
+    "codex-note-safe": "스포일러 없는 설정집입니다. 이야기에 어떤 인물과 사물이 있고 어디에 등장하는지만 담았습니다. 메모, 상태, 사망, 아는 것, 단서, 결말은 빠져 있으며, 전체 설정집은 {flag} 옵션으로 빌드하세요.",
+    "codex-no-entities": "아직 등장인물, 장소 등의 항목이 없습니다.",
+    "codex-relationships": "관계",
+    "codex-appears-in": "등장",
+    "codex-advanced-in": "진전",
+    "codex-linked-from": "언급된 곳",
+    "codex-changes": "변화",
+    "codex-change": "{chapter}부터: {field} → {value}",
+    "codex-knows": "아는 것",
+    "codex-known-from-start": "처음부터 앎",
+    "codex-learned-in": "{chapter}에서 알게 됨",
+    "codex-notes": "메모",
+    "codex-role": "역할",
+    "codex-aliases": "별칭",
+    "codex-status": "상태",
+    "codex-dies-in": "사망",
+    "codex-revived-in": "부활",
+    "codex-type": "유형",
+    "codex-region": "지역",
+    "codex-setting": "배경",
+    "codex-notable-characters": "주요 인물",
+    "codex-routes": "경로",
+    "codex-hours": "{hours}시간",
+    "codex-members": "구성원",
+    "codex-owner": "소유자",
+    "codex-themes": "주제",
+    "codex-pronunciation": "발음",
+    "codex-date": "날짜",
+    "codex-time": "시각",
+    "codex-scene": "장면",
+    "codex-chapter": "장",
+    "codex-pov": "시점",
+    "codex-told-late": "시간 순서와 다르게 서술됨",
+    "codex-flashback": "회상: {date}",
+    "codex-no-dates": "아직 날짜가 지정된 장면이나 장이 없습니다. 장면에 {field} 필드를 지정하면 작중 시간에 배치할 수 있습니다.",
+    "codex-timeline-note": "작중 사건을 {command} 명령이 나열하는 대로 작중 시간 순서에 따라 보여 줍니다.",
+    "codex-undated": "날짜 없음",
+    "codex-point-of-view": "시점 인물",
+    "codex-words": "단어 수",
+    "codex-share": "비율",
+    "codex-unspecified": "지정 안 됨",
+    "codex-presence": "등장 현황",
+    "codex-first": "첫 등장",
+    "codex-last": "마지막 등장",
+    "codex-longest-gap": "최장 공백",
+    "codex-death": "사망",
+    "codex-dies-in-chapter": "제{n}장에서 사망",
+    "codex-threads-note": "열린 의문과 복선만 보여 주며, 답과 회수는 담지 않습니다. 단서와 해결된 플롯을 보려면 {flag} 옵션이 필요합니다.",
+    "codex-none": "없음.",
+    "codex-question": "의문",
+    "codex-raised-in": "제기",
+    "codex-resolved-in": "해결",
+    "codex-promise": "복선",
+    "codex-planted-in": "설치",
+    "codex-paid-off-in": "회수",
+    "codex-clue": "단서",
+    "codex-clues-note": "P는 단서를 심는 장, R은 단서를 밝히는 장, x는 둘 다를 나타내며, {command} 명령의 출력과 같습니다.",
+    "codex-clue-totals-one": "단서 {total}개 중 {planted}개 설치, {revealed}개 공개, 미끼 단서 {herrings}개.",
+    "codex-clue-totals": "단서 {total}개 중 {planted}개 설치, {revealed}개 공개, 미끼 단서 {herrings}개.",
+    "codex-red-herring": "미끼 단서",
+    "codex-significance-delayed": "의미는 나중에 드러남",
+    "codex-total-words": "총 단어 수",
+    "codex-total-characters": "총 글자 수",
+    "codex-target-words": "목표 단어 수",
+    "codex-target-characters": "목표 글자 수",
+    "codex-done": "완료",
+    "codex-remaining": "남은 양",
+    "codex-deadline": "마감일",
+    "codex-target": "목표",
+    "codex-character-count": "글자 수",
+    "codex-plot-grid": "플롯 표",
+    "codex-grid-note": "장별 아크로, {command} 명령의 출력과 같습니다. x는 해당 장이나 그 장의 장면 중 하나가 아크를 진전시킨 곳입니다.",
+    "codex-unknown": "알 수 없음",
+    "codex-hook": "훅",
+    "codex-outcomes": "결과",
+    "codex-session-log": "작업 기록"
   }
 };
 
@@ -5189,7 +6278,106 @@ var nl_default = {
     "narration-closing-anonymous": "Einde. U luisterde naar {title}, voorgelezen door {narrator}.",
     "screenplay-credit": "Geschreven door",
     "screenplay-source": "Naar het werk van {authors}",
-    "screenplay-source-anonymous": "Naar het oorspronkelijke werk"
+    "screenplay-source-anonymous": "Naar het oorspronkelijke werk",
+    "codex-story-bible": "Verhaalbijbel",
+    "codex-index-title": "{title}: verhaalbijbel",
+    "codex-timeline": "Tijdlijn",
+    "codex-threads": "Verhaallijnen en aanwijzingen",
+    "codex-progress": "Voortgang",
+    "codex-characters": "Personages",
+    "codex-locations": "Locaties",
+    "codex-factions": "Facties",
+    "codex-artifacts": "Artefacten",
+    "codex-systems": "Systemen",
+    "codex-arcs": "Verhaalbogen",
+    "codex-character": "Personage",
+    "codex-location": "Locatie",
+    "codex-faction": "Factie",
+    "codex-artifact": "Artefact",
+    "codex-system": "Systeem",
+    "codex-arc": "Verhaalboog",
+    "codex-chapters": "Hoofdstukken",
+    "codex-scenes": "Scènes",
+    "codex-questions": "Vragen",
+    "codex-promises": "Beloften",
+    "codex-clues": "Aanwijzingen",
+    "codex-note-spoilers": "Verhaalbijbel met spoilers: notities, statussen, sterfgevallen, kennis, aanwijzingen en hoe elke verhaallijn afloopt.",
+    "codex-note-safe": "Verhaalbijbel zonder spoilers: wie en wat er in het verhaal voorkomt en waar. Notities, statussen, sterfgevallen, kennis, aanwijzingen en ontknopingen zijn weggelaten; bouw met {flag} voor de volledige verhaalbijbel.",
+    "codex-no-entities": "Nog geen personages, plaatsen of andere elementen.",
+    "codex-relationships": "Relaties",
+    "codex-appears-in": "Komt voor in",
+    "codex-advanced-in": "Verder gebracht in",
+    "codex-linked-from": "Gelinkt vanuit",
+    "codex-changes": "Wijzigingen",
+    "codex-change": "Vanaf {chapter}: {field} wordt {value}",
+    "codex-knows": "Kennis",
+    "codex-known-from-start": "vanaf het begin bekend",
+    "codex-learned-in": "ontdekt in {chapter}",
+    "codex-notes": "Notities",
+    "codex-role": "Rol",
+    "codex-aliases": "Aliassen",
+    "codex-status": "Status",
+    "codex-dies-in": "Sterft in",
+    "codex-revived-in": "Herleeft in",
+    "codex-type": "Soort",
+    "codex-region": "Regio",
+    "codex-setting": "Omgeving",
+    "codex-notable-characters": "Belangrijke personages",
+    "codex-routes": "Routes",
+    "codex-hours": "{hours} u",
+    "codex-members": "Leden",
+    "codex-owner": "Eigenaar",
+    "codex-themes": "Thema's",
+    "codex-pronunciation": "Uitspraak",
+    "codex-date": "Datum",
+    "codex-time": "Tijd",
+    "codex-scene": "Scène",
+    "codex-chapter": "Hoofdstuk",
+    "codex-pov": "Perspectief",
+    "codex-told-late": "niet chronologisch verteld",
+    "codex-flashback": "terugblik naar {date}",
+    "codex-no-dates": "Nog geen gedateerde scènes of hoofdstukken. Geef scènes een veld {field} om ze in de verhaaltijd te plaatsen.",
+    "codex-timeline-note": "Gebeurtenissen in de volgorde van de verhaaltijd, zoals {command} ze opsomt.",
+    "codex-undated": "Zonder datum",
+    "codex-point-of-view": "Vertelperspectief",
+    "codex-words": "Woorden",
+    "codex-share": "Aandeel",
+    "codex-unspecified": "niet opgegeven",
+    "codex-presence": "Aanwezigheid",
+    "codex-first": "Eerste",
+    "codex-last": "Laatste",
+    "codex-longest-gap": "Langste onderbreking",
+    "codex-death": "Dood",
+    "codex-dies-in-chapter": "sterft in hoofdstuk {n}",
+    "codex-threads-note": "Alleen open vragen en beloften, zonder antwoorden of inlossingen. Aanwijzingen en afgeronde verhaallijnen vereisen {flag}.",
+    "codex-none": "Geen.",
+    "codex-question": "Vraag",
+    "codex-raised-in": "Opgeworpen in",
+    "codex-resolved-in": "Beantwoord in",
+    "codex-promise": "Belofte",
+    "codex-planted-in": "Geplant in",
+    "codex-paid-off-in": "Ingelost in",
+    "codex-clue": "Aanwijzing",
+    "codex-clues-note": "P markeert het hoofdstuk waarin een aanwijzing wordt geplant, R het hoofdstuk waarin die wordt onthuld, en x beide, zoals {command} ze weergeeft.",
+    "codex-clue-totals-one": "{planted} van {total} geplant, {revealed} onthuld, {herrings} dwaalspoor.",
+    "codex-clue-totals": "{planted} van {total} geplant, {revealed} onthuld, {herrings} dwaalsporen.",
+    "codex-red-herring": "dwaalspoor",
+    "codex-significance-delayed": "betekenis pas later duidelijk",
+    "codex-total-words": "Totaal aantal woorden",
+    "codex-total-characters": "Totaal aantal tekens",
+    "codex-target-words": "Streefaantal woorden",
+    "codex-target-characters": "Streefaantal tekens",
+    "codex-done": "Voltooid",
+    "codex-remaining": "Resterend",
+    "codex-deadline": "Inleverdatum",
+    "codex-target": "Doel",
+    "codex-character-count": "Tekens",
+    "codex-plot-grid": "Plotraster",
+    "codex-grid-note": "Verhaalbogen per hoofdstuk, zoals {command} ze weergeeft: x waar een hoofdstuk of een van zijn scènes de boog verder brengt.",
+    "codex-unknown": "onbekend",
+    "codex-hook": "Hook",
+    "codex-outcomes": "Uitkomsten",
+    "codex-session-log": "Sessielogboek"
   }
 };
 
@@ -5230,7 +6418,106 @@ var pl_default = {
     "narration-closing-anonymous": "Koniec. Wysłuchaliście audiobooka {title}. Czyta: {narrator}.",
     "screenplay-credit": "Scenariusz",
     "screenplay-source": "Na podstawie utworu (autor: {authors})",
-    "screenplay-source-anonymous": "Na podstawie utworu literackiego"
+    "screenplay-source-anonymous": "Na podstawie utworu literackiego",
+    "codex-story-bible": "Biblia opowieści",
+    "codex-index-title": "{title}: biblia opowieści",
+    "codex-timeline": "Oś czasu",
+    "codex-threads": "Wątki i wskazówki",
+    "codex-progress": "Postępy",
+    "codex-characters": "Postacie",
+    "codex-locations": "Miejsca",
+    "codex-factions": "Frakcje",
+    "codex-artifacts": "Artefakty",
+    "codex-systems": "Systemy",
+    "codex-arcs": "Łuki fabularne",
+    "codex-character": "Postać",
+    "codex-location": "Miejsce",
+    "codex-faction": "Frakcja",
+    "codex-artifact": "Artefakt",
+    "codex-system": "System",
+    "codex-arc": "Łuk fabularny",
+    "codex-chapters": "Rozdziały",
+    "codex-scenes": "Sceny",
+    "codex-questions": "Pytania",
+    "codex-promises": "Obietnice",
+    "codex-clues": "Wskazówki",
+    "codex-note-spoilers": "Biblia opowieści ze spoilerami: notatki, statusy, zgony, wiedza postaci, wskazówki i rozwiązanie każdego wątku.",
+    "codex-note-safe": "Biblia opowieści bez spoilerów: kto i co występuje w opowieści oraz gdzie. Notatki, statusy, zgony, wiedza postaci, wskazówki i rozwiązania są pominięte; pełną biblię zbudujesz z opcją {flag}.",
+    "codex-no-entities": "Brak postaci, miejsc i innych elementów.",
+    "codex-relationships": "Relacje",
+    "codex-appears-in": "Występuje w",
+    "codex-advanced-in": "Rozwijany w",
+    "codex-linked-from": "Odnośniki z",
+    "codex-changes": "Zmiany",
+    "codex-change": "{chapter}: {field} zmienia się na {value}",
+    "codex-knows": "Wie",
+    "codex-known-from-start": "od początku",
+    "codex-learned-in": "od: {chapter}",
+    "codex-notes": "Notatki",
+    "codex-role": "Rola",
+    "codex-aliases": "Aliasy",
+    "codex-status": "Status",
+    "codex-dies-in": "Umiera w",
+    "codex-revived-in": "Powraca do życia w",
+    "codex-type": "Typ",
+    "codex-region": "Region",
+    "codex-setting": "Sceneria",
+    "codex-notable-characters": "Ważne postacie",
+    "codex-routes": "Trasy",
+    "codex-hours": "{hours} godz.",
+    "codex-members": "Członkowie",
+    "codex-owner": "Właściciel",
+    "codex-themes": "Motywy",
+    "codex-pronunciation": "Wymowa",
+    "codex-date": "Data",
+    "codex-time": "Czas",
+    "codex-scene": "Scena",
+    "codex-chapter": "Rozdział",
+    "codex-pov": "Perspektywa",
+    "codex-told-late": "opowiedziane poza kolejnością",
+    "codex-flashback": "retrospekcja: {date}",
+    "codex-no-dates": "Brak scen i rozdziałów z datą. Nadaj scenom pole {field}, aby umieścić je w czasie fabuły.",
+    "codex-timeline-note": "Wydarzenia w kolejności czasu fabuły, tak jak wypisuje je {command}.",
+    "codex-undated": "Bez daty",
+    "codex-point-of-view": "Punkt widzenia",
+    "codex-words": "Słowa",
+    "codex-share": "Udział",
+    "codex-unspecified": "nie określono",
+    "codex-presence": "Obecność",
+    "codex-first": "Pierwszy",
+    "codex-last": "Ostatni",
+    "codex-longest-gap": "Najdłuższa przerwa",
+    "codex-death": "Śmierć",
+    "codex-dies-in-chapter": "umiera w rozdziale {n}",
+    "codex-threads-note": "Tylko otwarte pytania i obietnice, bez odpowiedzi i spełnień. Wskazówki i rozwiązane wątki wymagają opcji {flag}.",
+    "codex-none": "Brak.",
+    "codex-question": "Pytanie",
+    "codex-raised-in": "Postawione w",
+    "codex-resolved-in": "Rozwiązane w",
+    "codex-promise": "Obietnica",
+    "codex-planted-in": "Zasiana w",
+    "codex-paid-off-in": "Spełniona w",
+    "codex-clue": "Wskazówka",
+    "codex-clues-note": "P oznacza rozdział, w którym wskazówka zostaje podsunięta, R ten, w którym zostaje ujawniona, a x oba naraz, tak jak wypisuje je {command}.",
+    "codex-clue-totals-one": "Podsunięte: {planted} z {total}, ujawnione: {revealed}, fałszywy trop: {herrings}.",
+    "codex-clue-totals": "Podsunięte: {planted} z {total}, ujawnione: {revealed}, fałszywe tropy: {herrings}.",
+    "codex-red-herring": "fałszywy trop",
+    "codex-significance-delayed": "znaczenie wychodzi na jaw później",
+    "codex-total-words": "Słowa łącznie",
+    "codex-total-characters": "Znaki łącznie",
+    "codex-target-words": "Docelowa liczba słów",
+    "codex-target-characters": "Docelowa liczba znaków",
+    "codex-done": "Wykonano",
+    "codex-remaining": "Pozostało",
+    "codex-deadline": "Termin",
+    "codex-target": "Cel",
+    "codex-character-count": "Znaki",
+    "codex-plot-grid": "Siatka fabuły",
+    "codex-grid-note": "Łuki fabularne według rozdziałów, tak jak wypisuje je {command}: x tam, gdzie rozdział lub jedna z jego scen rozwija łuk.",
+    "codex-unknown": "nieznane",
+    "codex-hook": "Haczyk",
+    "codex-outcomes": "Rezultaty",
+    "codex-session-log": "Dziennik sesji"
   }
 };
 
@@ -5246,7 +6533,25 @@ var pt_pt_default = {
     "review-note-link": "A ligação Nota ao lado de cada etiqueta abre uma nota com estes dados já preenchidos.",
     "anchor-title": "Ligação para {label}",
     "narration-closing": "Fim. Ouviu {title}, escrito por {authors}, narrado por {narrator}.",
-    "narration-closing-anonymous": "Fim. Ouviu {title}, narrado por {narrator}."
+    "narration-closing-anonymous": "Fim. Ouviu {title}, narrado por {narrator}.",
+    "codex-timeline": "Cronologia",
+    "codex-factions": "Fações",
+    "codex-artifacts": "Artefactos",
+    "codex-faction": "Fação",
+    "codex-artifact": "Artefacto",
+    "codex-note-spoilers": "Bíblia da história com revelações do enredo: notas das entidades, estados, mortes, conhecimentos, pistas e a resolução de cada trama.",
+    "codex-note-safe": "Bíblia da história sem revelações do enredo: quem e o que existe na história, e onde aparece. Notas, estados, mortes, conhecimentos, pistas e resoluções ficam de fora; gere com {flag} para obter a bíblia completa.",
+    "codex-relationships": "Relações",
+    "codex-changes": "Alterações",
+    "codex-status": "Estado",
+    "codex-no-dates": "Ainda não há cenas nem capítulos com data. Atribua às cenas um campo {field} para as situar no tempo da história.",
+    "codex-share": "Percentagem",
+    "codex-target-words": "Objetivo de palavras",
+    "codex-target-characters": "Objetivo de caracteres",
+    "codex-target": "Objetivo",
+    "codex-plot-grid": "Grelha de tramas",
+    "codex-grid-note": "Arcos por capítulo, como {command} os mostra: x onde um capítulo ou uma das suas cenas faz avançar o arco.",
+    "codex-session-log": "Registo de sessões"
   }
 };
 
@@ -5287,7 +6592,106 @@ var pt_default = {
     "narration-closing-anonymous": "Fim. Você ouviu {title}, narrado por {narrator}.",
     "screenplay-credit": "Escrito por",
     "screenplay-source": "Baseado na obra de {authors}",
-    "screenplay-source-anonymous": "Baseado na obra original"
+    "screenplay-source-anonymous": "Baseado na obra original",
+    "codex-story-bible": "Bíblia da história",
+    "codex-index-title": "{title}: bíblia da história",
+    "codex-timeline": "Linha do tempo",
+    "codex-threads": "Tramas e pistas",
+    "codex-progress": "Progresso",
+    "codex-characters": "Personagens",
+    "codex-locations": "Locais",
+    "codex-factions": "Facções",
+    "codex-artifacts": "Artefatos",
+    "codex-systems": "Sistemas",
+    "codex-arcs": "Arcos",
+    "codex-character": "Personagem",
+    "codex-location": "Local",
+    "codex-faction": "Facção",
+    "codex-artifact": "Artefato",
+    "codex-system": "Sistema",
+    "codex-arc": "Arco",
+    "codex-chapters": "Capítulos",
+    "codex-scenes": "Cenas",
+    "codex-questions": "Perguntas",
+    "codex-promises": "Promessas",
+    "codex-clues": "Pistas",
+    "codex-note-spoilers": "Bíblia da história com revelações do enredo: notas das entidades, status, mortes, conhecimentos, pistas e a resolução de cada trama.",
+    "codex-note-safe": "Bíblia da história sem revelações do enredo: quem e o que existe na história, e onde aparece. Notas, status, mortes, conhecimentos, pistas e resoluções ficam de fora; gere com {flag} para obter a bíblia completa.",
+    "codex-no-entities": "Ainda não há personagens, locais nem outras entidades.",
+    "codex-relationships": "Relacionamentos",
+    "codex-appears-in": "Aparece em",
+    "codex-advanced-in": "Avança em",
+    "codex-linked-from": "Citado em",
+    "codex-changes": "Mudanças",
+    "codex-change": "A partir de {chapter}: {field} passa a ser {value}",
+    "codex-knows": "Sabe",
+    "codex-known-from-start": "sabido desde o início",
+    "codex-learned-in": "descoberto em {chapter}",
+    "codex-notes": "Notas",
+    "codex-role": "Papel",
+    "codex-aliases": "Outros nomes",
+    "codex-status": "Situação",
+    "codex-dies-in": "Morre em",
+    "codex-revived-in": "Ressuscita em",
+    "codex-type": "Tipo",
+    "codex-region": "Região",
+    "codex-setting": "Ambientação",
+    "codex-notable-characters": "Personagens importantes",
+    "codex-routes": "Rotas",
+    "codex-hours": "{hours} h",
+    "codex-members": "Membros",
+    "codex-owner": "Proprietário",
+    "codex-themes": "Temas",
+    "codex-pronunciation": "Pronúncia",
+    "codex-date": "Data",
+    "codex-time": "Hora",
+    "codex-scene": "Cena",
+    "codex-chapter": "Capítulo",
+    "codex-pov": "Ponto de vista",
+    "codex-told-late": "narrado fora de ordem",
+    "codex-flashback": "flashback: {date}",
+    "codex-no-dates": "Ainda não há cenas nem capítulos com data. Dê às cenas um campo {field} para situá-las no tempo da história.",
+    "codex-timeline-note": "Os acontecimentos na ordem cronológica da história, como {command} os lista.",
+    "codex-undated": "Sem data",
+    "codex-point-of-view": "Ponto de vista",
+    "codex-words": "Palavras",
+    "codex-share": "Porcentagem",
+    "codex-unspecified": "não especificado",
+    "codex-presence": "Presença",
+    "codex-first": "Primeiro",
+    "codex-last": "Último",
+    "codex-longest-gap": "Maior ausência",
+    "codex-death": "Morte",
+    "codex-dies-in-chapter": "morre no capítulo {n}",
+    "codex-threads-note": "Só perguntas em aberto e promessas, sem as respostas nem o cumprimento. Pistas e tramas resolvidas exigem {flag}.",
+    "codex-none": "Nenhum.",
+    "codex-question": "Pergunta",
+    "codex-raised-in": "Levantada em",
+    "codex-resolved-in": "Resolvida em",
+    "codex-promise": "Promessa",
+    "codex-planted-in": "Plantada em",
+    "codex-paid-off-in": "Cumprida em",
+    "codex-clue": "Pista",
+    "codex-clues-note": "P marca o capítulo que planta uma pista, R o que a revela e x os dois, como {command} os exibe.",
+    "codex-clue-totals-one": "Pistas plantadas: {planted} de {total}; reveladas: {revealed}; pista falsa: {herrings}.",
+    "codex-clue-totals": "Pistas plantadas: {planted} de {total}; reveladas: {revealed}; pistas falsas: {herrings}.",
+    "codex-red-herring": "pista falsa",
+    "codex-significance-delayed": "importância revelada depois",
+    "codex-total-words": "Total de palavras",
+    "codex-total-characters": "Total de caracteres",
+    "codex-target-words": "Meta de palavras",
+    "codex-target-characters": "Meta de caracteres",
+    "codex-done": "Concluído",
+    "codex-remaining": "Faltam",
+    "codex-deadline": "Prazo",
+    "codex-target": "Meta",
+    "codex-character-count": "Caracteres",
+    "codex-plot-grid": "Grade de tramas",
+    "codex-grid-note": "Arcos por capítulo, como {command} os exibe: x onde um capítulo ou uma de suas cenas faz o arco avançar.",
+    "codex-unknown": "desconhecido",
+    "codex-hook": "Gancho",
+    "codex-outcomes": "Resultados",
+    "codex-session-log": "Registro de sessões"
   }
 };
 
@@ -5328,7 +6732,106 @@ var ru_default = {
     "narration-closing-anonymous": "Конец. Вы слушали книгу «{title}». Читает {narrator}.",
     "screenplay-credit": "Сценарий",
     "screenplay-source": "По произведению (автор: {authors})",
-    "screenplay-source-anonymous": "По литературному произведению"
+    "screenplay-source-anonymous": "По литературному произведению",
+    "codex-story-bible": "Библия книги",
+    "codex-index-title": "{title}: библия книги",
+    "codex-timeline": "Хронология",
+    "codex-threads": "Сюжетные линии и улики",
+    "codex-progress": "Ход работы",
+    "codex-characters": "Персонажи",
+    "codex-locations": "Места",
+    "codex-factions": "Фракции",
+    "codex-artifacts": "Артефакты",
+    "codex-systems": "Системы",
+    "codex-arcs": "Арки",
+    "codex-character": "Персонаж",
+    "codex-location": "Место",
+    "codex-faction": "Фракция",
+    "codex-artifact": "Артефакт",
+    "codex-system": "Система",
+    "codex-arc": "Арка",
+    "codex-chapters": "Главы",
+    "codex-scenes": "Сцены",
+    "codex-questions": "Вопросы",
+    "codex-promises": "Обещания",
+    "codex-clues": "Улики",
+    "codex-note-spoilers": "Библия книги со спойлерами: заметки, статусы, смерти, знания персонажей, улики и развязка каждой линии.",
+    "codex-note-safe": "Библия книги без спойлеров: кто и что есть в истории и где они появляются. Заметки, статусы, смерти, знания, улики и развязки опущены; для полной версии соберите с {flag}.",
+    "codex-no-entities": "Пока нет ни персонажей, ни мест, ни других элементов.",
+    "codex-relationships": "Отношения",
+    "codex-appears-in": "Появляется в",
+    "codex-advanced-in": "Развивается в",
+    "codex-linked-from": "Упоминания",
+    "codex-changes": "Изменения",
+    "codex-change": "{chapter}: {field} — {value}",
+    "codex-knows": "Знает",
+    "codex-known-from-start": "известно с самого начала",
+    "codex-learned-in": "узнаёт: {chapter}",
+    "codex-notes": "Заметки",
+    "codex-role": "Роль",
+    "codex-aliases": "Другие имена",
+    "codex-status": "Статус",
+    "codex-dies-in": "Умирает в",
+    "codex-revived-in": "Воскресает в",
+    "codex-type": "Тип",
+    "codex-region": "Регион",
+    "codex-setting": "Обстановка",
+    "codex-notable-characters": "Важные персонажи",
+    "codex-routes": "Маршруты",
+    "codex-hours": "{hours} ч",
+    "codex-members": "Участники",
+    "codex-owner": "Владелец",
+    "codex-themes": "Темы",
+    "codex-pronunciation": "Произношение",
+    "codex-date": "Дата",
+    "codex-time": "Время",
+    "codex-scene": "Сцена",
+    "codex-chapter": "Глава",
+    "codex-pov": "Фокал",
+    "codex-told-late": "вне хронологии",
+    "codex-flashback": "ретроспектива: {date}",
+    "codex-no-dates": "Пока нет сцен или глав с датами. Укажите у сцен поле {field}, чтобы расположить их во времени истории.",
+    "codex-timeline-note": "События истории в хронологическом порядке, как их выводит {command}.",
+    "codex-undated": "Без даты",
+    "codex-point-of-view": "Точка зрения",
+    "codex-words": "Слова",
+    "codex-share": "Доля",
+    "codex-unspecified": "не указано",
+    "codex-presence": "Присутствие",
+    "codex-first": "Первая",
+    "codex-last": "Последняя",
+    "codex-longest-gap": "Самый долгий перерыв",
+    "codex-death": "Смерть",
+    "codex-dies-in-chapter": "умирает в главе {n}",
+    "codex-threads-note": "Только открытые вопросы и обещания, без ответов и их реализации. Для улик и разрешённых линий нужен {flag}.",
+    "codex-none": "Нет.",
+    "codex-question": "Вопрос",
+    "codex-raised-in": "Возникает в",
+    "codex-resolved-in": "Разрешается в",
+    "codex-promise": "Обещание",
+    "codex-planted-in": "Заложено в",
+    "codex-paid-off-in": "Реализовано в",
+    "codex-clue": "Улика",
+    "codex-clues-note": "P отмечает главу, где улика заложена, R — где она раскрыта, x — и то и другое, как в выводе {command}.",
+    "codex-clue-totals-one": "Заложено улик: {planted} из {total}, раскрыто: {revealed}, ложный след: {herrings}.",
+    "codex-clue-totals": "Заложено улик: {planted} из {total}, раскрыто: {revealed}, ложных следов: {herrings}.",
+    "codex-red-herring": "ложный след",
+    "codex-significance-delayed": "значение раскрывается позже",
+    "codex-total-words": "Всего слов",
+    "codex-total-characters": "Всего знаков",
+    "codex-target-words": "Цель (слова)",
+    "codex-target-characters": "Цель (знаки)",
+    "codex-done": "Готово",
+    "codex-remaining": "Осталось",
+    "codex-deadline": "Срок",
+    "codex-target": "Цель",
+    "codex-character-count": "Знаки",
+    "codex-plot-grid": "Сюжетная сетка",
+    "codex-grid-note": "Арки по главам, как их выводит {command}: x там, где глава или одна из её сцен развивает арку.",
+    "codex-unknown": "неизвестно",
+    "codex-hook": "Крючок",
+    "codex-outcomes": "Итоги",
+    "codex-session-log": "Журнал сессий"
   }
 };
 
@@ -5372,7 +6875,106 @@ var sv_default = {
     "narration-closing-anonymous": "Slut. Du har lyssnat på {title}, uppläst av {narrator}.",
     "screenplay-credit": "Skriven av",
     "screenplay-source": "Baserad på verket av {authors}",
-    "screenplay-source-anonymous": "Baserad på originalverket"
+    "screenplay-source-anonymous": "Baserad på originalverket",
+    "codex-story-bible": "Berättelsebibel",
+    "codex-index-title": "{title}: berättelsebibel",
+    "codex-timeline": "Tidslinje",
+    "codex-threads": "Handlingstrådar och ledtrådar",
+    "codex-progress": "Framsteg",
+    "codex-characters": "Karaktärer",
+    "codex-locations": "Platser",
+    "codex-factions": "Fraktioner",
+    "codex-artifacts": "Artefakter",
+    "codex-systems": "System",
+    "codex-arcs": "Berättelsebågar",
+    "codex-character": "Karaktär",
+    "codex-location": "Plats",
+    "codex-faction": "Fraktion",
+    "codex-artifact": "Artefakt",
+    "codex-system": "System",
+    "codex-arc": "Berättelsebåge",
+    "codex-chapters": "Kapitel",
+    "codex-scenes": "Scener",
+    "codex-questions": "Frågor",
+    "codex-promises": "Löften",
+    "codex-clues": "Ledtrådar",
+    "codex-note-spoilers": "Berättelsebibel med spoilers: anteckningar, status, dödsfall, kunskap, ledtrådar och hur varje tråd får sin upplösning.",
+    "codex-note-safe": "Spoilerfri berättelsebibel: vem och vad berättelsen rymmer och var de förekommer. Anteckningar, status, dödsfall, kunskap, ledtrådar och upplösningar är utelämnade; bygg med {flag} för hela berättelsebibeln.",
+    "codex-no-entities": "Inga karaktärer, platser eller andra poster ännu.",
+    "codex-relationships": "Relationer",
+    "codex-appears-in": "Förekommer i",
+    "codex-advanced-in": "Förs framåt i",
+    "codex-linked-from": "Länkas från",
+    "codex-changes": "Förändringar",
+    "codex-change": "Från {chapter}: {field} blir {value}",
+    "codex-knows": "Vet",
+    "codex-known-from-start": "känt från början",
+    "codex-learned-in": "får veta i {chapter}",
+    "codex-notes": "Anteckningar",
+    "codex-role": "Roll",
+    "codex-aliases": "Alias",
+    "codex-status": "Status",
+    "codex-dies-in": "Dör i",
+    "codex-revived-in": "Återupplivas i",
+    "codex-type": "Typ",
+    "codex-region": "Region",
+    "codex-setting": "Miljö",
+    "codex-notable-characters": "Viktiga karaktärer",
+    "codex-routes": "Rutter",
+    "codex-hours": "{hours} tim",
+    "codex-members": "Medlemmar",
+    "codex-owner": "Ägare",
+    "codex-themes": "Teman",
+    "codex-pronunciation": "Uttal",
+    "codex-date": "Datum",
+    "codex-time": "Tid",
+    "codex-scene": "Scen",
+    "codex-chapter": "Kapitel",
+    "codex-pov": "Perspektiv",
+    "codex-told-late": "berättas utanför tidsordningen",
+    "codex-flashback": "tillbakablick till {date}",
+    "codex-no-dates": "Inga daterade scener eller kapitel ännu. Ge scener fältet {field} för att placera dem i berättelsens tid.",
+    "codex-timeline-note": "Berättelsens händelser i kronologisk ordning, som {command} listar dem.",
+    "codex-undated": "Odaterat",
+    "codex-point-of-view": "Berättarperspektiv",
+    "codex-words": "Ord",
+    "codex-share": "Andel",
+    "codex-unspecified": "ej angivet",
+    "codex-presence": "Närvaro",
+    "codex-first": "Första",
+    "codex-last": "Sista",
+    "codex-longest-gap": "Längsta uppehåll",
+    "codex-death": "Död",
+    "codex-dies-in-chapter": "dör i kapitel {n}",
+    "codex-threads-note": "Endast öppna frågor och löften, utan svar eller infrianden. Ledtrådar och avslutade trådar kräver {flag}.",
+    "codex-none": "Inga.",
+    "codex-question": "Fråga",
+    "codex-raised-in": "Väcks i",
+    "codex-resolved-in": "Besvaras i",
+    "codex-promise": "Löfte",
+    "codex-planted-in": "Planteras i",
+    "codex-paid-off-in": "Infrias i",
+    "codex-clue": "Ledtråd",
+    "codex-clues-note": "P markerar kapitlet där en ledtråd planteras, R kapitlet där den avslöjas och x båda, som {command} skriver ut dem.",
+    "codex-clue-totals-one": "{planted} av {total} planterade, {revealed} avslöjade, {herrings} villospår.",
+    "codex-clue-totals": "{planted} av {total} planterade, {revealed} avslöjade, {herrings} villospår.",
+    "codex-red-herring": "villospår",
+    "codex-significance-delayed": "betydelsen framgår senare",
+    "codex-total-words": "Totalt antal ord",
+    "codex-total-characters": "Totalt antal tecken",
+    "codex-target-words": "Mål för antal ord",
+    "codex-target-characters": "Mål för antal tecken",
+    "codex-done": "Klart",
+    "codex-remaining": "Återstår",
+    "codex-deadline": "Slutdatum",
+    "codex-target": "Mål",
+    "codex-character-count": "Tecken",
+    "codex-plot-grid": "Handlingsrutnät",
+    "codex-grid-note": "Berättelsebågar per kapitel, som {command} skriver ut dem: x där ett kapitel eller en av dess scener för bågen framåt.",
+    "codex-unknown": "okänt",
+    "codex-hook": "Krok",
+    "codex-outcomes": "Utfall",
+    "codex-session-log": "Skrivlogg"
   }
 };
 
@@ -5422,7 +7024,106 @@ var tr_default = {
     "narration-closing-anonymous": "Son. {title} adlı kitabı dinlediniz. Seslendiren: {narrator}.",
     "screenplay-credit": "Yazan",
     "screenplay-source": "{authors} tarafından yazılan eserden uyarlanmıştır",
-    "screenplay-source-anonymous": "Özgün bir eserden uyarlanmıştır"
+    "screenplay-source-anonymous": "Özgün bir eserden uyarlanmıştır",
+    "codex-story-bible": "Hikâye rehberi",
+    "codex-index-title": "{title}: hikâye rehberi",
+    "codex-timeline": "Zaman çizelgesi",
+    "codex-threads": "Olay örgüsü ve ipuçları",
+    "codex-progress": "İlerleme",
+    "codex-characters": "Karakterler",
+    "codex-locations": "Mekânlar",
+    "codex-factions": "Hizipler",
+    "codex-artifacts": "Nesneler",
+    "codex-systems": "Sistemler",
+    "codex-arcs": "Arklar",
+    "codex-character": "Karakter",
+    "codex-location": "Mekân",
+    "codex-faction": "Hizip",
+    "codex-artifact": "Nesne",
+    "codex-system": "Sistem",
+    "codex-arc": "Ark",
+    "codex-chapters": "Bölümler",
+    "codex-scenes": "Sahneler",
+    "codex-questions": "Sorular",
+    "codex-promises": "Vaatler",
+    "codex-clues": "İpuçları",
+    "codex-note-spoilers": "Sürprizbozanlı hikâye rehberi: notlar, durumlar, ölümler, bilgiler, ipuçları ve her olay örgüsünün nasıl çözüldüğü.",
+    "codex-note-safe": "Sürprizbozansız hikâye rehberi: hikâyede kimlerin ve nelerin bulunduğu ve nerelerde geçtikleri. Notlar, durumlar, ölümler, bilgiler, ipuçları ve çözümler dışarıda bırakılmıştır; rehberin tamamı için {flag} ile derleyin.",
+    "codex-no-entities": "Henüz karakter, mekân ya da başka bir öge yok.",
+    "codex-relationships": "İlişkiler",
+    "codex-appears-in": "Geçtiği bölümler",
+    "codex-advanced-in": "İlerlediği bölümler",
+    "codex-linked-from": "Bahsedildiği yerler",
+    "codex-changes": "Değişiklikler",
+    "codex-change": "{chapter} itibarıyla {field}: {value}",
+    "codex-knows": "Bildikleri",
+    "codex-known-from-start": "başından beri biliyor",
+    "codex-learned-in": "öğrendiği bölüm: {chapter}",
+    "codex-notes": "Notlar",
+    "codex-role": "Rol",
+    "codex-aliases": "Diğer adları",
+    "codex-status": "Durum",
+    "codex-dies-in": "Öldüğü bölüm",
+    "codex-revived-in": "Dirildiği bölüm",
+    "codex-type": "Tür",
+    "codex-region": "Bölge",
+    "codex-setting": "Ortam",
+    "codex-notable-characters": "Önemli karakterler",
+    "codex-routes": "Güzergâhlar",
+    "codex-hours": "{hours} sa",
+    "codex-members": "Üyeler",
+    "codex-owner": "Sahibi",
+    "codex-themes": "Temalar",
+    "codex-pronunciation": "Okunuşu",
+    "codex-date": "Tarih",
+    "codex-time": "Saat",
+    "codex-scene": "Sahne",
+    "codex-chapter": "Bölüm",
+    "codex-pov": "Bakış açısı",
+    "codex-told-late": "kronolojik sıranın dışında",
+    "codex-flashback": "geriye dönüş: {date}",
+    "codex-no-dates": "Henüz tarihli sahne ya da bölüm yok. Sahneleri hikâye zamanına yerleştirmek için onlara {field} alanı ekleyin.",
+    "codex-timeline-note": "Hikâyedeki olaylar, {command} çıktısındaki gibi hikâye zamanı sırasıyla.",
+    "codex-undated": "Tarihsiz",
+    "codex-point-of-view": "Bakış açısı",
+    "codex-words": "Kelime",
+    "codex-share": "Pay",
+    "codex-unspecified": "belirtilmemiş",
+    "codex-presence": "Yer alma",
+    "codex-first": "İlk",
+    "codex-last": "Son",
+    "codex-longest-gap": "En uzun ara",
+    "codex-death": "Ölüm",
+    "codex-dies-in-chapter": "{n}. bölümde ölür",
+    "codex-threads-note": "Yalnızca açık sorular ve vaatler; cevapları ve karşılıkları gösterilmez. İpuçları ve çözülmüş olay örgüleri için {flag} gerekir.",
+    "codex-none": "Yok.",
+    "codex-question": "Soru",
+    "codex-raised-in": "Sorulduğu bölüm",
+    "codex-resolved-in": "Çözüldüğü bölüm",
+    "codex-promise": "Vaat",
+    "codex-planted-in": "Yerleştirildiği bölüm",
+    "codex-paid-off-in": "Karşılandığı bölüm",
+    "codex-clue": "İpucu",
+    "codex-clues-note": "P bir ipucunun yerleştirildiği bölümü, R açığa çıktığı bölümü, x ise ikisini birden gösterir; {command} çıktısındaki gibi.",
+    "codex-clue-totals-one": "{total} ipucundan {planted} tanesi yerleştirildi, {revealed} tanesi açığa çıktı; yanıltıcı ipucu: {herrings}.",
+    "codex-clue-totals": "{total} ipucundan {planted} tanesi yerleştirildi, {revealed} tanesi açığa çıktı; yanıltıcı ipucu: {herrings}.",
+    "codex-red-herring": "yanıltıcı ipucu",
+    "codex-significance-delayed": "önemi sonradan anlaşılır",
+    "codex-total-words": "Toplam kelime",
+    "codex-total-characters": "Toplam karakter",
+    "codex-target-words": "Hedef kelime",
+    "codex-target-characters": "Hedef karakter",
+    "codex-done": "Tamamlanan",
+    "codex-remaining": "Kalan",
+    "codex-deadline": "Son tarih",
+    "codex-target": "Hedef",
+    "codex-character-count": "Karakter sayısı",
+    "codex-plot-grid": "Olay örgüsü tablosu",
+    "codex-grid-note": "{command} çıktısındaki gibi bölümlere göre arklar: x, bir bölümün ya da sahnelerinden birinin arkı ilerlettiği yeri gösterir.",
+    "codex-unknown": "bilinmiyor",
+    "codex-hook": "Kanca",
+    "codex-outcomes": "Sonuçlar",
+    "codex-session-log": "Çalışma günlüğü"
   }
 };
 
@@ -5463,7 +7164,106 @@ var uk_default = {
     "narration-closing-anonymous": "Кінець. Ви слухали книжку «{title}». Читає {narrator}.",
     "screenplay-credit": "Сценарій",
     "screenplay-source": "За твором (автор: {authors})",
-    "screenplay-source-anonymous": "За літературним твором"
+    "screenplay-source-anonymous": "За літературним твором",
+    "codex-story-bible": "Біблія твору",
+    "codex-index-title": "{title}: біблія твору",
+    "codex-timeline": "Хронологія",
+    "codex-threads": "Сюжетні лінії та зачіпки",
+    "codex-progress": "Хід роботи",
+    "codex-characters": "Персонажі",
+    "codex-locations": "Місця",
+    "codex-factions": "Фракції",
+    "codex-artifacts": "Артефакти",
+    "codex-systems": "Системи",
+    "codex-arcs": "Арки",
+    "codex-character": "Персонаж",
+    "codex-location": "Місце",
+    "codex-faction": "Фракція",
+    "codex-artifact": "Артефакт",
+    "codex-system": "Система",
+    "codex-arc": "Арка",
+    "codex-chapters": "Розділи",
+    "codex-scenes": "Сцени",
+    "codex-questions": "Питання",
+    "codex-promises": "Обіцянки",
+    "codex-clues": "Зачіпки",
+    "codex-note-spoilers": "Біблія твору зі спойлерами: нотатки, статуси, смерті, знання персонажів, зачіпки та розв’язка кожної лінії.",
+    "codex-note-safe": "Біблія твору без спойлерів: хто і що є в історії та де вони з’являються. Нотатки, статуси, смерті, знання, зачіпки й розв’язки пропущено; для повної версії зберіть із {flag}.",
+    "codex-no-entities": "Поки що немає ні персонажів, ні місць, ні інших елементів.",
+    "codex-relationships": "Стосунки",
+    "codex-appears-in": "З’являється в",
+    "codex-advanced-in": "Розвивається в",
+    "codex-linked-from": "Згадки",
+    "codex-changes": "Зміни",
+    "codex-change": "{chapter}: {field} — {value}",
+    "codex-knows": "Знає",
+    "codex-known-from-start": "відомо від самого початку",
+    "codex-learned-in": "дізнається: {chapter}",
+    "codex-notes": "Нотатки",
+    "codex-role": "Роль",
+    "codex-aliases": "Інші імена",
+    "codex-status": "Статус",
+    "codex-dies-in": "Помирає в",
+    "codex-revived-in": "Воскресає в",
+    "codex-type": "Тип",
+    "codex-region": "Регіон",
+    "codex-setting": "Обстановка",
+    "codex-notable-characters": "Важливі персонажі",
+    "codex-routes": "Маршрути",
+    "codex-hours": "{hours} год",
+    "codex-members": "Учасники",
+    "codex-owner": "Власник",
+    "codex-themes": "Теми",
+    "codex-pronunciation": "Вимова",
+    "codex-date": "Дата",
+    "codex-time": "Час",
+    "codex-scene": "Сцена",
+    "codex-chapter": "Розділ",
+    "codex-pov": "Точка зору",
+    "codex-told-late": "поза хронологією",
+    "codex-flashback": "ретроспекція: {date}",
+    "codex-no-dates": "Поки що немає сцен чи розділів із датами. Додайте сценам поле {field}, щоб розмістити їх у часі історії.",
+    "codex-timeline-note": "Події історії в хронологічному порядку, як їх виводить {command}.",
+    "codex-undated": "Без дати",
+    "codex-point-of-view": "Точка зору",
+    "codex-words": "Слова",
+    "codex-share": "Частка",
+    "codex-unspecified": "не вказано",
+    "codex-presence": "Присутність",
+    "codex-first": "Перший",
+    "codex-last": "Останній",
+    "codex-longest-gap": "Найдовша перерва",
+    "codex-death": "Смерть",
+    "codex-dies-in-chapter": "помирає в розділі {n}",
+    "codex-threads-note": "Лише відкриті питання та обіцянки, без відповідей і їх реалізації. Для зачіпок і розв’язаних ліній потрібен {flag}.",
+    "codex-none": "Немає.",
+    "codex-question": "Питання",
+    "codex-raised-in": "Виникає в",
+    "codex-resolved-in": "Розв’язується в",
+    "codex-promise": "Обіцянка",
+    "codex-planted-in": "Закладено в",
+    "codex-paid-off-in": "Реалізовано в",
+    "codex-clue": "Зачіпка",
+    "codex-clues-note": "P позначає розділ, де зачіпку закладено, R — де її розкрито, x — і те, і те, як у виводі {command}.",
+    "codex-clue-totals-one": "Закладено зачіпок: {planted} з {total}, розкрито: {revealed}, хибний слід: {herrings}.",
+    "codex-clue-totals": "Закладено зачіпок: {planted} з {total}, розкрито: {revealed}, хибних слідів: {herrings}.",
+    "codex-red-herring": "хибний слід",
+    "codex-significance-delayed": "значення розкривається пізніше",
+    "codex-total-words": "Усього слів",
+    "codex-total-characters": "Усього знаків",
+    "codex-target-words": "Мета (слова)",
+    "codex-target-characters": "Мета (знаки)",
+    "codex-done": "Готово",
+    "codex-remaining": "Залишилося",
+    "codex-deadline": "Термін",
+    "codex-target": "Мета",
+    "codex-character-count": "Знаки",
+    "codex-plot-grid": "Сюжетна сітка",
+    "codex-grid-note": "Арки за розділами, як їх виводить {command}: x там, де розділ або одна з його сцен розвиває арку.",
+    "codex-unknown": "невідомо",
+    "codex-hook": "Гачок",
+    "codex-outcomes": "Підсумки",
+    "codex-session-log": "Журнал сесій"
   }
 };
 
@@ -5515,7 +7315,106 @@ var zh_default = {
     "narration-closing-anonymous": "全书完。您收听的是《{title}》，演播{narrator}。",
     "screenplay-credit": "编剧",
     "screenplay-source": "改编自{authors}的作品",
-    "screenplay-source-anonymous": "改编自原著"
+    "screenplay-source-anonymous": "改编自原著",
+    "codex-story-bible": "设定集",
+    "codex-index-title": "{title}（设定集）",
+    "codex-timeline": "时间线",
+    "codex-threads": "情节线与线索",
+    "codex-progress": "进度",
+    "codex-characters": "人物",
+    "codex-locations": "地点",
+    "codex-factions": "势力",
+    "codex-artifacts": "道具",
+    "codex-systems": "体系",
+    "codex-arcs": "弧线",
+    "codex-character": "人物",
+    "codex-location": "地点",
+    "codex-faction": "势力",
+    "codex-artifact": "道具",
+    "codex-system": "体系",
+    "codex-arc": "弧线",
+    "codex-chapters": "章节",
+    "codex-scenes": "场景",
+    "codex-questions": "悬念",
+    "codex-promises": "伏笔",
+    "codex-clues": "线索",
+    "codex-note-spoilers": "含剧透的设定集：条目备注、状态、死亡、知情信息、线索，以及每条情节线的结局。",
+    "codex-note-safe": "无剧透的设定集：只列出故事中有哪些人和事物，以及它们在哪里出现。备注、状态、死亡、知情信息、线索和结局均不收录；加上 {flag} 构建即可得到完整的设定集。",
+    "codex-no-entities": "还没有人物、地点或其他条目。",
+    "codex-relationships": "关系",
+    "codex-appears-in": "出现于",
+    "codex-advanced-in": "推进于",
+    "codex-linked-from": "被提及于",
+    "codex-changes": "变化",
+    "codex-change": "自{chapter}起：{field} 变为 {value}",
+    "codex-knows": "知情",
+    "codex-known-from-start": "一开始就知道",
+    "codex-learned-in": "于{chapter}得知",
+    "codex-notes": "备注",
+    "codex-role": "身份",
+    "codex-aliases": "别名",
+    "codex-status": "状态",
+    "codex-dies-in": "死于",
+    "codex-revived-in": "复活于",
+    "codex-type": "类型",
+    "codex-region": "区域",
+    "codex-setting": "环境",
+    "codex-notable-characters": "主要人物",
+    "codex-routes": "路线",
+    "codex-hours": "{hours}小时",
+    "codex-members": "成员",
+    "codex-owner": "持有者",
+    "codex-themes": "主题",
+    "codex-pronunciation": "读音",
+    "codex-date": "日期",
+    "codex-time": "时间",
+    "codex-scene": "场景",
+    "codex-chapter": "章节",
+    "codex-pov": "视角",
+    "codex-told-late": "未按时间顺序叙述",
+    "codex-flashback": "闪回至{date}",
+    "codex-no-dates": "还没有标注日期的场景或章节。为场景添加 {field}，即可将其放入故事时间。",
+    "codex-timeline-note": "按故事时间顺序排列的故事事件，与 {command} 列出的一致。",
+    "codex-undated": "无日期",
+    "codex-point-of-view": "视角人物",
+    "codex-words": "词数",
+    "codex-share": "占比",
+    "codex-unspecified": "未指定",
+    "codex-presence": "出场情况",
+    "codex-first": "首次出场",
+    "codex-last": "最后出场",
+    "codex-longest-gap": "最长间隔",
+    "codex-death": "死亡",
+    "codex-dies-in-chapter": "死于第{n}章",
+    "codex-threads-note": "仅列出未解的悬念和伏笔，不含答案和回收。线索和已解决的情节线需要 {flag}。",
+    "codex-none": "无。",
+    "codex-question": "悬念",
+    "codex-raised-in": "提出于",
+    "codex-resolved-in": "解开于",
+    "codex-promise": "伏笔",
+    "codex-planted-in": "埋下于",
+    "codex-paid-off-in": "回收于",
+    "codex-clue": "线索",
+    "codex-clues-note": "P 表示埋下线索的章节，R 表示揭示线索的章节，x 表示两者兼有，与 {command} 的输出一致。",
+    "codex-clue-totals-one": "共{total}条线索，已埋下{planted}条，已揭示{revealed}条，误导线索{herrings}条。",
+    "codex-clue-totals": "共{total}条线索，已埋下{planted}条，已揭示{revealed}条，误导线索{herrings}条。",
+    "codex-red-herring": "误导线索",
+    "codex-significance-delayed": "意义延后揭示",
+    "codex-total-words": "总词数",
+    "codex-total-characters": "总字数",
+    "codex-target-words": "目标词数",
+    "codex-target-characters": "目标字数",
+    "codex-done": "已完成",
+    "codex-remaining": "剩余",
+    "codex-deadline": "截稿日期",
+    "codex-target": "目标",
+    "codex-character-count": "字数",
+    "codex-plot-grid": "情节表",
+    "codex-grid-note": "按章节排列的弧线，与 {command} 的输出一致：x 表示该章或其中某个场景推进了这条弧线。",
+    "codex-unknown": "未知",
+    "codex-hook": "钩子",
+    "codex-outcomes": "结果",
+    "codex-session-log": "写作记录"
   }
 };
 
@@ -5552,7 +7451,106 @@ var labels = {
   "narration-closing-anonymous": "全書完。您收聽的是《{title}》，朗讀{narrator}。",
   "screenplay-credit": "編劇",
   "screenplay-source": "改編自{authors}的作品",
-  "screenplay-source-anonymous": "改編自原著"
+  "screenplay-source-anonymous": "改編自原著",
+  "codex-story-bible": "設定集",
+  "codex-index-title": "{title}（設定集）",
+  "codex-timeline": "時間軸",
+  "codex-threads": "情節線與線索",
+  "codex-progress": "進度",
+  "codex-characters": "人物",
+  "codex-locations": "地點",
+  "codex-factions": "勢力",
+  "codex-artifacts": "道具",
+  "codex-systems": "體系",
+  "codex-arcs": "弧線",
+  "codex-character": "人物",
+  "codex-location": "地點",
+  "codex-faction": "勢力",
+  "codex-artifact": "道具",
+  "codex-system": "體系",
+  "codex-arc": "弧線",
+  "codex-chapters": "章節",
+  "codex-scenes": "場景",
+  "codex-questions": "懸念",
+  "codex-promises": "伏筆",
+  "codex-clues": "線索",
+  "codex-note-spoilers": "含劇透的設定集：條目備註、狀態、死亡、知情資訊、線索，以及每條情節線的結局。",
+  "codex-note-safe": "無劇透的設定集：只列出故事中有哪些人和事物，以及它們在哪裡出現。備註、狀態、死亡、知情資訊、線索和結局均不收錄；加上 {flag} 建置即可得到完整的設定集。",
+  "codex-no-entities": "還沒有人物、地點或其他條目。",
+  "codex-relationships": "關係",
+  "codex-appears-in": "出現於",
+  "codex-advanced-in": "推進於",
+  "codex-linked-from": "被提及於",
+  "codex-changes": "變化",
+  "codex-change": "自{chapter}起：{field} 變為 {value}",
+  "codex-knows": "知情",
+  "codex-known-from-start": "一開始就知道",
+  "codex-learned-in": "於{chapter}得知",
+  "codex-notes": "備註",
+  "codex-role": "身分",
+  "codex-aliases": "別名",
+  "codex-status": "狀態",
+  "codex-dies-in": "死於",
+  "codex-revived-in": "復活於",
+  "codex-type": "類型",
+  "codex-region": "區域",
+  "codex-setting": "環境",
+  "codex-notable-characters": "主要人物",
+  "codex-routes": "路線",
+  "codex-hours": "{hours}小時",
+  "codex-members": "成員",
+  "codex-owner": "持有者",
+  "codex-themes": "主題",
+  "codex-pronunciation": "讀音",
+  "codex-date": "日期",
+  "codex-time": "時間",
+  "codex-scene": "場景",
+  "codex-chapter": "章節",
+  "codex-pov": "視角",
+  "codex-told-late": "未按時間順序敘述",
+  "codex-flashback": "閃回至{date}",
+  "codex-no-dates": "還沒有標注日期的場景或章節。為場景加上 {field}，即可將其放入故事時間。",
+  "codex-timeline-note": "依故事時間順序排列的故事事件，與 {command} 列出的一致。",
+  "codex-undated": "無日期",
+  "codex-point-of-view": "視角人物",
+  "codex-words": "詞數",
+  "codex-share": "占比",
+  "codex-unspecified": "未指定",
+  "codex-presence": "出場情況",
+  "codex-first": "首次出場",
+  "codex-last": "最後出場",
+  "codex-longest-gap": "最長間隔",
+  "codex-death": "死亡",
+  "codex-dies-in-chapter": "死於第{n}章",
+  "codex-threads-note": "僅列出未解的懸念和伏筆，不含答案和回收。線索和已解決的情節線需要 {flag}。",
+  "codex-none": "無。",
+  "codex-question": "懸念",
+  "codex-raised-in": "提出於",
+  "codex-resolved-in": "解開於",
+  "codex-promise": "伏筆",
+  "codex-planted-in": "埋下於",
+  "codex-paid-off-in": "回收於",
+  "codex-clue": "線索",
+  "codex-clues-note": "P 表示埋下線索的章節，R 表示揭示線索的章節，x 表示兩者兼有，與 {command} 的輸出一致。",
+  "codex-clue-totals-one": "共{total}條線索，已埋下{planted}條，已揭示{revealed}條，誤導線索{herrings}條。",
+  "codex-clue-totals": "共{total}條線索，已埋下{planted}條，已揭示{revealed}條，誤導線索{herrings}條。",
+  "codex-red-herring": "誤導線索",
+  "codex-significance-delayed": "意義延後揭示",
+  "codex-total-words": "總詞數",
+  "codex-total-characters": "總字數",
+  "codex-target-words": "目標詞數",
+  "codex-target-characters": "目標字數",
+  "codex-done": "已完成",
+  "codex-remaining": "剩餘",
+  "codex-deadline": "截稿日期",
+  "codex-target": "目標",
+  "codex-character-count": "字數",
+  "codex-plot-grid": "情節表",
+  "codex-grid-note": "依章節排列的弧線，與 {command} 的輸出一致：x 表示該章或其中某個場景推進了這條弧線。",
+  "codex-unknown": "未知",
+  "codex-hook": "鉤子",
+  "codex-outcomes": "結果",
+  "codex-session-log": "寫作紀錄"
 };
 var zh_hant_default = [
   { code: "zh-hant", name: "Chinese (Traditional)", script: "Hant", labels },
@@ -21723,18 +23721,18 @@ import path14 from "node:path";
 
 // src/codex.js
 var CODEX_KINDS = [
-  { kind: "character", dir: "characters", title: "Characters", list: (project) => project.characters },
-  { kind: "location", dir: "locations", title: "Locations", list: (project) => project.locations },
-  { kind: "faction", dir: "factions", title: "Factions", list: (project) => project.factions },
-  { kind: "artifact", dir: "artifacts", title: "Artifacts", list: (project) => project.artifacts },
-  { kind: "system", dir: "systems", title: "Systems", list: (project) => project.systems },
-  { kind: "arc", dir: "arcs", title: "Arcs", list: (project) => project.arcs }
+  { kind: "character", dir: "characters", title: "codex-characters", list: (project) => project.characters },
+  { kind: "location", dir: "locations", title: "codex-locations", list: (project) => project.locations },
+  { kind: "faction", dir: "factions", title: "codex-factions", list: (project) => project.factions },
+  { kind: "artifact", dir: "artifacts", title: "codex-artifacts", list: (project) => project.artifacts },
+  { kind: "system", dir: "systems", title: "codex-systems", list: (project) => project.systems },
+  { kind: "arc", dir: "arcs", title: "codex-arcs", list: (project) => project.arcs }
 ];
 var SECTION_PAGES = [
-  { file: "index.html", title: "Story bible" },
-  { file: "timeline.html", title: "Timeline" },
-  { file: "threads.html", title: "Threads and clues" },
-  { file: "progress.html", title: "Progress" }
+  { file: "index.html", title: "codex-story-bible" },
+  { file: "timeline.html", title: "codex-timeline" },
+  { file: "threads.html", title: "codex-threads" },
+  { file: "progress.html", title: "codex-progress" }
 ];
 function codexPages(project, { spoilers = false } = {}) {
   const meta = publishingMeta(project.story.data);
@@ -21744,6 +23742,7 @@ function codexPages(project, { spoilers = false } = {}) {
     title: project.title,
     authors: joinNames(meta.authors, meta.labels),
     language: meta.language,
+    labels: meta.labels,
     type: typesetting(meta.language),
     chapters: [...project.chapters].sort((left, right) => left.number - right.number || left.id.localeCompare(right.id, "en")),
     entities: new Map(CODEX_KINDS.map((entry) => [entry.kind, new Map(entry.list(project).map((entity) => [entity.id, entity]))])),
@@ -21831,27 +23830,27 @@ function linkedFields(site, kind, entity) {
   const ids = (value) => asArray(value).map(idText).filter((id) => id !== "");
   if (kind === "character") {
     return [
-      { label: "Relationships", kind: "character", ids: entity.relationships.map((entry) => idText(entry?.character)).filter((id) => id !== "") },
-      { label: "Locations", kind: "location", ids: ids(entity.locations) }
+      { label: "codex-relationships", kind: "character", ids: entity.relationships.map((entry) => idText(entry?.character)).filter((id) => id !== "") },
+      { label: "codex-locations", kind: "location", ids: ids(entity.locations) }
     ];
   }
   if (kind === "location") {
     return [
-      { label: "Notable characters", kind: "character", ids: ids(entity.notableCharacters) },
-      { label: "Routes", kind: "location", ids: entity.routes.map((route) => idText(route?.to)).filter((id) => id !== "") }
+      { label: "codex-notable-characters", kind: "character", ids: ids(entity.notableCharacters) },
+      { label: "codex-routes", kind: "location", ids: entity.routes.map((route) => idText(route?.to)).filter((id) => id !== "") }
     ];
   }
   if (kind === "faction") {
     return [
-      { label: "Members", kind: "character", ids: ids(entity.members) },
-      { label: "Locations", kind: "location", ids: ids(entity.locations) }
+      { label: "codex-members", kind: "character", ids: ids(entity.members) },
+      { label: "codex-locations", kind: "location", ids: ids(entity.locations) }
     ];
   }
   if (kind === "artifact") {
-    return site.spoilers ? [{ label: "Owner", kind: "character", ids: ids(entity.owner) }, { label: "Location", kind: "location", ids: ids(entity.location) }] : [];
+    return site.spoilers ? [{ label: "codex-owner", kind: "character", ids: ids(entity.owner) }, { label: "codex-location", kind: "location", ids: ids(entity.location) }] : [];
   }
   if (kind === "arc") {
-    return [{ label: "Characters", kind: "character", ids: ids(entity.characters) }];
+    return [{ label: "codex-characters", kind: "character", ids: ids(entity.characters) }];
   }
   return [];
 }
@@ -21866,32 +23865,32 @@ function indexPage(site) {
       const detail = summaryLine(site, entry.kind, entity);
       return `<li>${entityLink(site, entry.kind, entity.id, 0)}${detail === "" ? "" : ` <span class="muted">${escapeHtml(detail)}</span>`}</li>`;
     });
-    return `<section id="${entry.dir}"><h2>${entry.title} <span class="count">${entities.length}</span></h2>
+    return `<section id="${entry.dir}"><h2>${label2(site, entry.title)} <span class="count">${entities.length}</span></h2>
 <ul class="entities">
 ${items.join(`
 `)}
 </ul></section>`;
   }).filter((section) => section !== "");
   const counts = [
-    ["Chapters", project.chapters.length],
-    ["Scenes", project.scenes.length],
+    ["codex-chapters", project.chapters.length],
+    ["codex-scenes", project.scenes.length],
     ...CODEX_KINDS.map((entry) => [entry.title, site.entities.get(entry.kind).size]),
-    ["Questions", project.questions.length],
-    ["Promises", project.promises.length],
-    ...site.spoilers ? [["Clues", project.clues.length]] : []
+    ["codex-questions", project.questions.length],
+    ["codex-promises", project.promises.length],
+    ...site.spoilers ? [["codex-clues", project.clues.length]] : []
   ];
   const synopsis = typeof project.story.data.synopsis === "string" ? project.story.data.synopsis.trim() : "";
   const body = [
     `<h1>${escapeHtml(site.title)}</h1>`,
     site.authors === "" ? "" : `<p class="byline">${escapeHtml(site.authors)}</p>`,
     synopsis === "" || !site.spoilers ? "" : `<p>${inlineHtml(synopsis)}</p>`,
-    `<p class="note">${site.spoilers ? "Story bible with spoilers: entity notes, statuses, deaths, knowledge, clues, and how every thread resolves." : "Spoiler-safe story bible: who and what the story holds and where they appear. Notes, statuses, deaths, knowledge, clues, and resolutions are left out; build with <code>--spoilers</code> for the full bible."}</p>`,
+    `<p class="note">${site.spoilers ? label2(site, "codex-note-spoilers") : label2(site, "codex-note-safe", { flag: "<code>--spoilers</code>" })}</p>`,
     `<table class="facts"><tbody>
-${counts.map(([label, count]) => `<tr><th scope="row">${label}</th><td>${count}</td></tr>`).join(`
+${counts.map(([key, count]) => `<tr><th scope="row">${label2(site, key)}</th><td>${count}</td></tr>`).join(`
 `)}
 </tbody></table>`,
     ...sections,
-    sections.length === 0 ? "<p>No characters, places, or other entities yet.</p>" : ""
+    sections.length === 0 ? `<p>${label2(site, "codex-no-entities")}</p>` : ""
   ];
   return page(site, "index.html", site.title, body);
 }
@@ -21901,17 +23900,17 @@ function entityPage(site, entry, entity) {
   const name = displayName(entity);
   const facts = factRows(site, entry.kind, entity, depth);
   const body = [
-    `<p class="kind">${escapeHtml(KIND_NAMES2[entry.kind])}</p>`,
+    `<p class="kind">${kindName(site, entry.kind)}</p>`,
     `<h1>${escapeHtml(name)}</h1>`,
     facts.length === 0 ? "" : `<table class="facts"><tbody>
-${facts.map(([label, value]) => `<tr><th scope="row">${escapeHtml(label)}</th><td>${value}</td></tr>`).join(`
+${facts.map(([field, value]) => `<tr><th scope="row">${field}</th><td>${value}</td></tr>`).join(`
 `)}
 </tbody></table>`
   ];
   if (entry.kind === "character" && entity.relationships.length > 0) {
     const items = entity.relationships.filter((relation) => relation && typeof relation === "object" && idText(relation.character) !== "").map((relation) => `<li>${entityLink(site, "character", idText(relation.character), depth)}${relation.type === undefined ? "" : ` <span class="muted">${escapeHtml(String(relation.type))}</span>`}</li>`);
     if (items.length > 0) {
-      body.push(`<h2>Relationships</h2>
+      body.push(`<h2>${label2(site, "codex-relationships")}</h2>
 <ul>
 ${items.join(`
 `)}
@@ -21920,7 +23919,7 @@ ${items.join(`
   }
   const chapters = site.appearances.get(`${entry.kind} ${entity.id}`) ?? [];
   if (chapters.length > 0) {
-    const heading = entry.kind === "arc" ? "Advanced in" : "Appears in";
+    const heading = label2(site, entry.kind === "arc" ? "codex-advanced-in" : "codex-appears-in");
     body.push(`<h2>${heading}</h2>
 <ol class="chapters">
 ${chapters.map((id) => `<li>${chapterLabel(site, id)}</li>`).join(`
@@ -21930,9 +23929,9 @@ ${chapters.map((id) => `<li>${chapterLabel(site, id)}</li>`).join(`
   const backlinks = site.references.get(`${entry.kind} ${entity.id}`) ?? [];
   if (backlinks.length > 0) {
     const sorted = [...backlinks].sort((left, right) => kindOrder(left.kind) - kindOrder(right.kind) || left.id.localeCompare(right.id, "en"));
-    body.push(`<h2>Linked from</h2>
+    body.push(`<h2>${label2(site, "codex-linked-from")}</h2>
 <ul>
-${sorted.map((ref) => `<li>${entityLink(site, ref.kind, ref.id, depth)} <span class="muted">${escapeHtml(KIND_NAMES2[ref.kind])}</span></li>`).join(`
+${sorted.map((ref) => `<li>${entityLink(site, ref.kind, ref.id, depth)} <span class="muted">${kindName(site, ref.kind)}</span></li>`).join(`
 `)}
 </ul>`);
   }
@@ -21946,9 +23945,9 @@ function spoilerSections(site, kind, entity) {
   const progressions = Array.isArray(entity.frontmatter?.progressions) ? entity.frontmatter.progressions : [];
   const changes = sortProgressions(progressions, chapterChronology(site.project)).map(progressionEntry).filter((change) => change !== null);
   if (changes.length > 0) {
-    sections.push(`<h2>Changes</h2>
+    sections.push(`<h2>${label2(site, "codex-changes")}</h2>
 <ul>
-${changes.map((change) => `<li>From ${chapterLabel(site, change.from)}: ${escapeHtml(change.field)} becomes ${escapeHtml(plainValue(change.value))}</li>`).join(`
+${changes.map((change) => `<li>${label2(site, "codex-change", { chapter: chapterLabel(site, change.from), field: escapeHtml(change.field), value: escapeHtml(plainValue(change.value)) })}</li>`).join(`
 `)}
 </ul>`);
   }
@@ -21957,9 +23956,9 @@ ${changes.map((change) => `<li>From ${chapterLabel(site, change.from)}: ${escape
     if (knowledge.length > 0) {
       const items = knowledge.map((entry) => {
         const learned = idText(entry["learned-in"]);
-        return `<li>${escapeHtml(String(entry.knows).trim())} <span class="muted">${learned === "" ? "known from the start" : `learned in ${chapterLabel(site, learned)}`}</span></li>`;
+        return `<li>${escapeHtml(String(entry.knows).trim())} <span class="muted">${learned === "" ? label2(site, "codex-known-from-start") : label2(site, "codex-learned-in", { chapter: chapterLabel(site, learned) })}</span></li>`;
       });
-      sections.push(`<h2>Knows</h2>
+      sections.push(`<h2>${label2(site, "codex-knows")}</h2>
 <ul>
 ${items.join(`
 `)}
@@ -21968,7 +23967,7 @@ ${items.join(`
   }
   const notes = notesHtml(site, entity);
   if (notes !== "") {
-    sections.push(`<h2>Notes</h2>
+    sections.push(`<h2>${label2(site, "codex-notes")}</h2>
 <div class="notes">
 ${notes}
 </div>`);
@@ -21978,81 +23977,82 @@ ${notes}
 function timelinePage(site) {
   const timeline = buildTimeline(site.project);
   const row = (entry) => {
-    const flags = [entry.toldLate ? "told out of order" : "", entry.flashbackTo === "" ? "" : `flashback to ${entry.flashbackTo}`].filter(Boolean).join("; ");
-    return `<tr><td>${escapeHtml(entry.date)}</td><td>${escapeHtml(entry.time)}</td><td>${escapeHtml(String(entry.title))}</td><td>${chapterLabel(site, entry.orphanOf || (typeof entry.chapterNumber === "number" ? chapterIdOf(site, entry.chapterNumber) : entry.chapterNumber))}</td><td>${entry.pov === "" ? "" : entityLink(site, "character", entry.pov, 0)}</td><td>${entry.location === "" ? "" : entityLink(site, "location", idText(entry.location), 0)}</td><td>${escapeHtml(flags)}</td></tr>`;
+    const flags = [entry.toldLate ? label2(site, "codex-told-late") : "", entry.flashbackTo === "" ? "" : label2(site, "codex-flashback", { date: escapeHtml(entry.flashbackTo) })].filter(Boolean).join("; ");
+    return `<tr><td>${escapeHtml(entry.date)}</td><td>${escapeHtml(entry.time)}</td><td>${escapeHtml(String(entry.title))}</td><td>${chapterLabel(site, entry.orphanOf || (typeof entry.chapterNumber === "number" ? chapterIdOf(site, entry.chapterNumber) : entry.chapterNumber))}</td><td>${entry.pov === "" ? "" : entityLink(site, "character", entry.pov, 0)}</td><td>${entry.location === "" ? "" : entityLink(site, "location", idText(entry.location), 0)}</td><td>${flags}</td></tr>`;
   };
-  const head = "<thead><tr><th>Date</th><th>Time</th><th>Scene</th><th>Chapter</th><th>POV</th><th>Location</th><th>Notes</th></tr></thead>";
-  const body = [`<h1>Timeline</h1>`];
+  const head = `<thead><tr>${columns(site, ["codex-date", "codex-time", "codex-scene", "codex-chapter", "codex-pov", "codex-location", "codex-notes"])}</tr></thead>`;
+  const body = [`<h1>${label2(site, "codex-timeline")}</h1>`];
   if (timeline.chronology.length === 0) {
-    body.push("<p>No dated scenes or chapters yet. Give scenes a <code>date</code> to place them in story time.</p>");
+    body.push(`<p>${label2(site, "codex-no-dates", { field: "<code>date</code>" })}</p>`);
   } else {
-    body.push(`<p class="note">Story events in story-time order, as <code>story timeline</code> lists them.</p>`, `<div class="scroll"><table>${head}<tbody>
+    body.push(`<p class="note">${label2(site, "codex-timeline-note", { command: "<code>story timeline</code>" })}</p>`, `<div class="scroll"><table>${head}<tbody>
 ${timeline.chronology.map(row).join(`
 `)}
 </tbody></table></div>`);
   }
   if (timeline.undated.length > 0) {
-    body.push(`<h2>Undated</h2>
+    body.push(`<h2>${label2(site, "codex-undated")}</h2>
 <div class="scroll"><table>${head}<tbody>
 ${timeline.undated.map(row).join(`
 `)}
 </tbody></table></div>`);
   }
   if (timeline.pov.length > 0) {
-    body.push(`<h2>Point of view</h2>
-<table><thead><tr><th>POV</th><th>Chapters</th><th>Words</th><th>Share</th></tr></thead><tbody>
-${timeline.pov.map((entry) => `<tr><td>${entry.pov === "unspecified" ? "unspecified" : entityLink(site, "character", entry.pov, 0)}</td><td>${entry.chapters}</td><td>${entry.words}</td><td>${Math.round(entry.share)}%</td></tr>`).join(`
+    body.push(`<h2>${label2(site, "codex-point-of-view")}</h2>
+<table><thead><tr>${columns(site, ["codex-pov", "codex-chapters", "codex-words", "codex-share"])}</tr></thead><tbody>
+${timeline.pov.map((entry) => `<tr><td>${entry.pov === "unspecified" ? label2(site, "codex-unspecified") : entityLink(site, "character", entry.pov, 0)}</td><td>${entry.chapters}</td><td>${entry.words}</td><td>${Math.round(entry.share)}%</td></tr>`).join(`
 `)}
 </tbody></table>`);
   }
   if (timeline.presence.length > 0) {
-    const died = (entry) => site.spoilers && entry.died !== null ? `dies in chapter ${entry.died}` : "";
-    body.push(`<h2>Presence</h2>
-<table><thead><tr><th>Character</th><th>Chapters</th><th>First</th><th>Last</th><th>Longest gap</th>${site.spoilers ? "<th>Death</th>" : ""}</tr></thead><tbody>
-${timeline.presence.map((entry) => `<tr><td>${entityLink(site, "character", entry.id, 0)}</td><td>${entry.chapters}</td><td>${entry.first ?? ""}</td><td>${entry.last ?? ""}</td><td>${entry.longestGap}</td>${site.spoilers ? `<td>${escapeHtml(died(entry))}</td>` : ""}</tr>`).join(`
+    const died = (entry) => site.spoilers && entry.died !== null ? label2(site, "codex-dies-in-chapter", { n: entry.died }) : "";
+    body.push(`<h2>${label2(site, "codex-presence")}</h2>
+<table><thead><tr>${columns(site, ["codex-character", "codex-chapters", "codex-first", "codex-last", "codex-longest-gap", ...site.spoilers ? ["codex-death"] : []])}</tr></thead><tbody>
+${timeline.presence.map((entry) => `<tr><td>${entityLink(site, "character", entry.id, 0)}</td><td>${entry.chapters}</td><td>${entry.first ?? ""}</td><td>${entry.last ?? ""}</td><td>${entry.longestGap}</td>${site.spoilers ? `<td>${died(entry)}</td>` : ""}</tr>`).join(`
 `)}
 </tbody></table>`);
   }
-  return page(site, "timeline.html", "Timeline", body);
+  return page(site, "timeline.html", fillLabel(site.labels, "codex-timeline"), body);
 }
 function threadsPage(site) {
   const { project } = site;
-  const body = ["<h1>Threads and clues</h1>"];
+  const body = [`<h1>${label2(site, "codex-threads")}</h1>`];
   const questions = [...project.questions].filter((question) => site.spoilers || question.status === "open");
   const promises = [...project.promises].filter((promise) => site.spoilers || promise.status === "planned" || promise.status === "planted");
   const characters = (ids) => asArray(ids).map(idText).filter((id) => id !== "").map((id) => entityLink(site, "character", id, 0)).join(", ");
   if (!site.spoilers) {
-    body.push(`<p class="note">Open questions and promises only, without their answers or payoffs. Clues and resolved threads need <code>--spoilers</code>.</p>`);
+    body.push(`<p class="note">${label2(site, "codex-threads-note", { flag: "<code>--spoilers</code>" })}</p>`);
   }
-  body.push("<h2>Questions</h2>");
+  body.push(`<h2>${label2(site, "codex-questions")}</h2>`);
   if (questions.length === 0) {
-    body.push("<p>None.</p>");
+    body.push(`<p>${label2(site, "codex-none")}</p>`);
   } else {
-    body.push(`<table><thead><tr><th>Question</th><th>Raised in</th>${site.spoilers ? "<th>Status</th><th>Resolved in</th>" : ""}<th>Characters</th></tr></thead><tbody>
+    body.push(`<table><thead><tr>${columns(site, ["codex-question", "codex-raised-in", ...site.spoilers ? ["codex-status", "codex-resolved-in"] : [], "codex-characters"])}</tr></thead><tbody>
 ${questions.map((question) => `<tr><td>${escapeHtml(String(question.title))}</td><td>${chapterLabel(site, question.introduced)}</td>${site.spoilers ? `<td>${escapeHtml(String(question.status))}</td><td>${chapterLabel(site, question.resolved)}</td>` : ""}<td>${characters(question.characters)}</td></tr>`).join(`
 `)}
 </tbody></table>`);
   }
-  body.push("<h2>Promises</h2>");
+  body.push(`<h2>${label2(site, "codex-promises")}</h2>`);
   if (promises.length === 0) {
-    body.push("<p>None.</p>");
+    body.push(`<p>${label2(site, "codex-none")}</p>`);
   } else {
-    body.push(`<table><thead><tr><th>Promise</th><th>Planted in</th>${site.spoilers ? "<th>Status</th><th>Paid off in</th>" : ""}<th>Arcs</th><th>Characters</th></tr></thead><tbody>
+    body.push(`<table><thead><tr>${columns(site, ["codex-promise", "codex-planted-in", ...site.spoilers ? ["codex-status", "codex-paid-off-in"] : [], "codex-arcs", "codex-characters"])}</tr></thead><tbody>
 ${promises.map((promise) => `<tr><td>${escapeHtml(String(promise.title))}</td><td>${chapterLabel(site, promise.planted)}</td>${site.spoilers ? `<td>${escapeHtml(String(promise.status))}</td><td>${chapterLabel(site, promise.payoff)}</td>` : ""}<td>${asArray(promise.arcs).map(idText).filter((id) => id !== "").map((id) => entityLink(site, "arc", id, 0)).join(", ")}</td><td>${characters(promise.characters)}</td></tr>`).join(`
 `)}
 </tbody></table>`);
   }
   if (site.spoilers) {
     const matrix = buildClueMatrix(project);
-    body.push("<h2>Clues</h2>");
+    body.push(`<h2>${label2(site, "codex-clues")}</h2>`);
     if (matrix.rows.length === 0) {
-      body.push("<p>None.</p>");
+      body.push(`<p>${label2(site, "codex-none")}</p>`);
     } else {
       const clues = new Map(project.clues.map((clue) => [clue.id, clue]));
-      body.push(`<p class="note">P marks the chapter that plants a clue, R the one that reveals it, and x both, as <code>story clues</code> prints them. ${matrix.totals.planted} of ${matrix.totals.clues} planted, ${matrix.totals.revealed} revealed, ${matrix.totals.redHerrings} red ${matrix.totals.redHerrings === 1 ? "herring" : "herrings"}.</p>`);
-      const head = `<tr><th>Clue</th><th>Status</th>${matrix.chapters.map((chapter) => `<th>${chapter.number}</th>`).join("")}</tr>`;
+      const totals = { planted: matrix.totals.planted, total: matrix.totals.clues, revealed: matrix.totals.revealed, herrings: matrix.totals.redHerrings };
+      body.push(`<p class="note">${label2(site, "codex-clues-note", { command: "<code>story clues</code>" })} ${label2(site, matrix.totals.redHerrings === 1 ? "codex-clue-totals-one" : "codex-clue-totals", totals)}</p>`);
+      const head = `<tr>${columns(site, ["codex-clue", "codex-status"])}${matrix.chapters.map((chapter) => `<th>${chapter.number}</th>`).join("")}</tr>`;
       const rows = matrix.rows.map((row) => {
-        const tags = [row.redHerring ? "red herring" : "", row.significanceDelayed ? "significance delayed" : ""].filter(Boolean).join(", ");
+        const tags = [row.redHerring ? label2(site, "codex-red-herring") : "", row.significanceDelayed ? label2(site, "codex-significance-delayed") : ""].filter(Boolean).join(", ");
         const who = characters(clues.get(row.id)?.characters);
         return `<tr><td>${escapeHtml(String(row.title))}${tags === "" ? "" : ` <span class="muted">${tags}</span>`}${who === "" ? "" : `<br><span class="muted">${who}</span>`}</td><td>${escapeHtml(String(row.status))}</td>${row.cells.map((cell) => `<td class="cell">${cell === "." ? "" : cell}</td>`).join("")}</tr>`;
       });
@@ -22062,13 +24062,14 @@ ${rows.join(`
 </tbody></table></div>`);
     }
   }
-  return page(site, "threads.html", "Threads and clues", body);
+  return page(site, "threads.html", fillLabel(site.labels, "codex-threads"), body);
 }
 function progressPage(site) {
   const { project } = site;
   const data = project.story.data;
   const unit = project.unit;
   const characterBook = unit.name === "characters";
+  const countColumn = characterBook ? "codex-character-count" : "codex-words";
   const target = data[unit.targetField];
   const progress = computeProgress({
     unit: unit.name,
@@ -22082,14 +24083,14 @@ function progressPage(site) {
   });
   const length = characterBook ? progress.characterCount : progress.words;
   const facts = [
-    [`Total ${unit.name}`, String(length)],
-    ...progress.target === null ? [] : [[`Target ${unit.name}`, String(progress.target)], ["Done", `${Math.min(100, Math.floor(progress.percent))}%`], ["Remaining", String(progress.remaining)]],
-    ...typeof data.deadline === "string" && data.deadline.trim() !== "" ? [["Deadline", data.deadline.trim()]] : []
+    [`codex-total-${unit.name}`, String(length)],
+    ...progress.target === null ? [] : [[`codex-target-${unit.name}`, String(progress.target)], ["codex-done", `${Math.min(100, Math.floor(progress.percent))}%`], ["codex-remaining", String(progress.remaining)]],
+    ...typeof data.deadline === "string" && data.deadline.trim() !== "" ? [["codex-deadline", data.deadline.trim()]] : []
   ];
   const body = [
-    "<h1>Progress</h1>",
+    `<h1>${label2(site, "codex-progress")}</h1>`,
     `<table class="facts"><tbody>
-${facts.map(([label, value]) => `<tr><th scope="row">${escapeHtml(label)}</th><td>${escapeHtml(value)}</td></tr>`).join(`
+${facts.map(([key, value]) => `<tr><th scope="row">${label2(site, key)}</th><td>${escapeHtml(value)}</td></tr>`).join(`
 `)}
 </tbody></table>`,
     progress.target === null ? "" : `<p><meter min="0" max="100" value="${Math.min(100, Math.floor(progress.percent))}">${Math.min(100, Math.floor(progress.percent))}%</meter></p>`
@@ -22101,21 +24102,21 @@ ${facts.map(([label, value]) => `<tr><th scope="row">${escapeHtml(label)}</th><t
       const goal = targets.get(chapter.id);
       return `<tr><td>${chapterLabel(site, chapter.id)}</td><td>${escapeHtml(String(chapter.status))}</td><td>${chapter.pov === "" ? "" : entityLink(site, "character", chapter.pov, 0)}</td><td>${count}</td><td>${goal === undefined ? "" : `${goal.target} (${Math.floor(goal.percent)}%)`}</td></tr>`;
     });
-    body.push(`<h2>Chapters</h2>
-<div class="scroll"><table><thead><tr><th>Chapter</th><th>Status</th><th>POV</th><th>${characterBook ? "Characters" : "Words"}</th><th>Target</th></tr></thead><tbody>
+    body.push(`<h2>${label2(site, "codex-chapters")}</h2>
+<div class="scroll"><table><thead><tr>${columns(site, ["codex-chapter", "codex-status", "codex-pov", countColumn, "codex-target"])}</tr></thead><tbody>
 ${rows.join(`
 `)}
 </tbody></table></div>`);
   }
   if (site.grid.rows.length > 0 && site.grid.chapters.length > 0) {
-    const head = `<tr><th>Arc</th>${site.grid.chapters.map((chapter) => `<th>${chapter.number}</th>`).join("")}</tr>`;
-    const rows = site.grid.rows.map((row) => `<tr><td>${row.known ? entityLink(site, "arc", row.id, 0) : `${escapeHtml(row.id)} <span class="muted">unknown</span>`}</td>${row.cells.map((cell) => `<td class="cell">${cell ? "x" : ""}</td>`).join("")}</tr>`);
+    const head = `<tr>${columns(site, ["codex-arc"])}${site.grid.chapters.map((chapter) => `<th>${chapter.number}</th>`).join("")}</tr>`;
+    const rows = site.grid.rows.map((row) => `<tr><td>${row.known ? entityLink(site, "arc", row.id, 0) : `${escapeHtml(row.id)} <span class="muted">${label2(site, "codex-unknown")}</span>`}</td>${row.cells.map((cell) => `<td class="cell">${cell ? "x" : ""}</td>`).join("")}</tr>`);
     if (site.spoilers) {
-      rows.push(`<tr><td>Hook</td>${site.grid.chapters.map((chapter) => `<td>${escapeHtml(chapter.hook)}</td>`).join("")}</tr>`);
-      rows.push(`<tr><td>Outcomes</td>${site.grid.chapters.map((chapter) => `<td>${escapeHtml(chapter.outcomes.join(", "))}</td>`).join("")}</tr>`);
+      rows.push(`<tr><td>${label2(site, "codex-hook")}</td>${site.grid.chapters.map((chapter) => `<td>${escapeHtml(chapter.hook)}</td>`).join("")}</tr>`);
+      rows.push(`<tr><td>${label2(site, "codex-outcomes")}</td>${site.grid.chapters.map((chapter) => `<td>${escapeHtml(chapter.outcomes.join(", "))}</td>`).join("")}</tr>`);
     }
-    body.push(`<h2>Plot grid</h2>
-<p class="note">Arcs by chapter, as <code>story grid</code> prints them: x where a chapter or one of its scenes advances the arc.</p>
+    body.push(`<h2>${label2(site, "codex-plot-grid")}</h2>
+<p class="note">${label2(site, "codex-grid-note", { command: "<code>story grid</code>" })}</p>
 <div class="scroll"><table class="grid"><thead>${head}</thead><tbody>
 ${rows.join(`
 `)}
@@ -22123,15 +24124,23 @@ ${rows.join(`
   }
   const sessions = cleanSessions(project.progressLog?.data.sessions).filter((session) => !characterBook || session.characters !== null);
   if (sessions.length > 0) {
-    body.push(`<h2>Session log</h2>
-<table><thead><tr><th>Date</th><th>${characterBook ? "Characters" : "Words"}</th></tr></thead><tbody>
+    body.push(`<h2>${label2(site, "codex-session-log")}</h2>
+<table><thead><tr>${columns(site, ["codex-date", countColumn])}</tr></thead><tbody>
 ${sessions.map((session) => `<tr><td>${escapeHtml(session.date)}</td><td>${characterBook ? session.characters : session.words}</td></tr>`).join(`
 `)}
 </tbody></table>`);
   }
-  return page(site, "progress.html", "Progress", body);
+  return page(site, "progress.html", fillLabel(site.labels, "codex-progress"), body);
 }
-var KIND_NAMES2 = { character: "Character", location: "Location", faction: "Faction", artifact: "Artifact", system: "System", arc: "Arc" };
+function label2(site, key, values = {}) {
+  return fillLabel(site.labels, key, values, escapeHtml);
+}
+function columns(site, keys) {
+  return keys.map((key) => `<th>${label2(site, key)}</th>`).join("");
+}
+function kindName(site, kind) {
+  return label2(site, `codex-${kind}`);
+}
 function kindOrder(kind) {
   return CODEX_KINDS.findIndex((entry) => entry.kind === kind);
 }
@@ -22147,70 +24156,70 @@ function summaryLine(site, kind, entity) {
 }
 function factRows(site, kind, entity, depth) {
   const rows = [];
-  const text = (label, value) => {
+  const text = (key, value) => {
     const shown = plainValue(value);
     if (shown !== "") {
-      rows.push([label, escapeHtml(shown)]);
+      rows.push([label2(site, key), escapeHtml(shown)]);
     }
   };
-  const links = (label, linkKind, ids) => {
+  const links = (key, linkKind, ids) => {
     const list = asArray(ids).map(idText).filter((id) => id !== "");
     if (list.length > 0) {
-      rows.push([label, list.map((id) => entityLink(site, linkKind, id, depth)).join(", ")]);
+      rows.push([label2(site, key), list.map((id) => entityLink(site, linkKind, id, depth)).join(", ")]);
     }
   };
   const spoilers = site.spoilers;
   if (kind === "character") {
-    text("Role", entity.role);
-    text("Aliases", entity.aliases);
-    links("Locations", "location", entity.locations);
+    text("codex-role", entity.role);
+    text("codex-aliases", entity.aliases);
+    links("codex-locations", "location", entity.locations);
     if (spoilers) {
-      text("Status", entity.status);
-      text("Arc", entity.arc);
+      text("codex-status", entity.status);
+      text("codex-arc", entity.arc);
       if (entity.diedIn !== "") {
-        rows.push(["Dies in", chapterLabel(site, entity.diedIn)]);
+        rows.push([label2(site, "codex-dies-in"), chapterLabel(site, entity.diedIn)]);
       }
       if (entity.revivedIn !== "") {
-        rows.push(["Revived in", chapterLabel(site, entity.revivedIn)]);
+        rows.push([label2(site, "codex-revived-in"), chapterLabel(site, entity.revivedIn)]);
       }
     }
   } else if (kind === "location") {
-    text("Type", entity.type);
-    text("Region", entity.region);
-    text("Setting", entity.setting);
-    links("Notable characters", "character", entity.notableCharacters);
+    text("codex-type", entity.type);
+    text("codex-region", entity.region);
+    text("codex-setting", entity.setting);
+    links("codex-notable-characters", "character", entity.notableCharacters);
     const routes = entity.routes.filter((route) => route && typeof route === "object" && idText(route.to) !== "");
     if (routes.length > 0) {
-      rows.push(["Routes", routes.map((route) => {
-        const detail = [typeof route.hours === "number" ? `${route.hours} h` : "", typeof route.mode === "string" ? route.mode : ""].filter(Boolean).join(", ");
-        return `${entityLink(site, "location", idText(route.to), depth)}${detail === "" ? "" : ` <span class="muted">${escapeHtml(detail)}</span>`}`;
+      rows.push([label2(site, "codex-routes"), routes.map((route) => {
+        const detail = [typeof route.hours === "number" ? label2(site, "codex-hours", { hours: route.hours }) : "", typeof route.mode === "string" ? escapeHtml(route.mode) : ""].filter(Boolean).join(", ");
+        return `${entityLink(site, "location", idText(route.to), depth)}${detail === "" ? "" : ` <span class="muted">${detail}</span>`}`;
       }).join("<br>")]);
     }
   } else if (kind === "faction") {
-    text("Type", entity.type);
-    links("Members", "character", entity.members);
-    links("Locations", "location", entity.locations);
+    text("codex-type", entity.type);
+    links("codex-members", "character", entity.members);
+    links("codex-locations", "location", entity.locations);
     if (spoilers) {
-      text("Status", entity.status);
+      text("codex-status", entity.status);
     }
   } else if (kind === "artifact") {
-    text("Type", entity.type);
+    text("codex-type", entity.type);
     if (spoilers) {
-      text("Status", entity.status);
-      links("Owner", "character", entity.owner);
-      links("Location", "location", entity.location);
+      text("codex-status", entity.status);
+      links("codex-owner", "character", entity.owner);
+      links("codex-location", "location", entity.location);
     }
   } else if (kind === "system") {
-    text("Type", entity.type);
+    text("codex-type", entity.type);
   } else if (kind === "arc") {
-    text("Type", entity.type);
-    links("Characters", "character", entity.characters);
-    text("Themes", entity.themes);
+    text("codex-type", entity.type);
+    links("codex-characters", "character", entity.characters);
+    text("codex-themes", entity.themes);
     if (spoilers) {
-      text("Status", entity.status);
+      text("codex-status", entity.status);
     }
   }
-  text("Pronunciation", entity.pronunciation);
+  text("codex-pronunciation", entity.pronunciation);
   return rows;
 }
 function plainValue(value) {
@@ -22243,7 +24252,7 @@ function chapterLabel(site, id) {
     return escapeHtml(text);
   }
   const title = String(chapter.title ?? "").trim();
-  return escapeHtml(title === "" ? `Chapter ${chapter.number}` : `${chapter.number}. ${title}`);
+  return escapeHtml(title === "" ? fillLabel(site.labels, "chapter", { n: chapter.number }) : `${chapter.number}. ${title}`);
 }
 function chapterIdOf(site, number) {
   return site.chapters.find((chapter) => chapter.number === number)?.id ?? String(number);
@@ -22380,10 +24389,10 @@ function page(site, path, title, body) {
   const depth = path.split("/").length - 1;
   const up = "../".repeat(depth);
   const nav = [
-    ...SECTION_PAGES.map((entry) => ({ href: `${up}${entry.file}`, title: entry.title, current: entry.file === path })),
-    ...CODEX_KINDS.filter((entry) => site.entities.get(entry.kind).size > 0).map((entry) => ({ href: `${up}index.html#${entry.dir}`, title: entry.title, current: false }))
+    ...SECTION_PAGES.map((entry) => ({ href: `${up}${entry.file}`, title: label2(site, entry.title), current: entry.file === path })),
+    ...CODEX_KINDS.filter((entry) => site.entities.get(entry.kind).size > 0).map((entry) => ({ href: `${up}index.html#${entry.dir}`, title: label2(site, entry.title), current: false }))
   ];
-  const fullTitle = path === "index.html" ? `${site.title}: story bible` : `${title} - ${site.title}`;
+  const fullTitle = path === "index.html" ? fillLabel(site.labels, "codex-index-title", { title: site.title }) : `${title} - ${site.title}`;
   return `<!DOCTYPE html>
 ${htmlRoot(site.language)}
 <head>
@@ -22424,7 +24433,7 @@ blockquote { margin: 0 0 1rem; margin-inline-start: 1rem; padding-inline-start: 
 </style>
 </head>
 <body>
-<header class="site"><span class="book">${escapeHtml(site.title)}</span><nav aria-label="Story bible">${nav.map((entry) => `<a href="${entry.href}"${entry.current ? ' aria-current="page"' : ""}>${escapeHtml(entry.title)}</a>`).join("")}</nav></header>
+<header class="site"><span class="book">${escapeHtml(site.title)}</span><nav aria-label="${label2(site, "codex-story-bible")}">${nav.map((entry) => `<a href="${entry.href}"${entry.current ? ' aria-current="page"' : ""}>${entry.title}</a>`).join("")}</nav></header>
 <main>
 ${body.filter((part) => part !== "").join(`
 `)}
