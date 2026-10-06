@@ -2,13 +2,15 @@
 /**
  * Check relative links and #anchors in the repository's markdown.
  *
- * Covers README.md, CONTRIBUTING.md, and every .md file under docs/,
- * skills/, and templates/, plus README.md files under examples/. A link to a
- * file or folder must exist; a #fragment on a link to a markdown file (or on
- * a bare #fragment link) must match a heading slug or an explicit
- * <a id/name> anchor there. Fenced code, inline code, HTML comments, links
- * with a scheme (https:, mailto:), and template placeholders such as
- * {name-kebab}.md are skipped. Run from anywhere; exits non-zero on failure.
+ * Covers the .md files at the repository root and directly in .github/,
+ * every .md file under docs/, skills/, and templates/, and README.md files
+ * under examples/ and evals/. A link to a file or folder must exist inside
+ * the repository, since GitHub cannot serve a path above it; a #fragment on
+ * a link to a markdown file (or on a bare #fragment link) must match a
+ * heading slug or an explicit <a id/name> anchor there. Fenced code, inline
+ * code, HTML comments, links with a scheme (https:, mailto:), and template
+ * placeholders such as {name-kebab}.md are skipped. Run from anywhere; exits
+ * non-zero on failure.
  */
 
 import fs from "node:fs";
@@ -17,15 +19,33 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-const ROOT_FILES = ["README.md", "CONTRIBUTING.md"];
+// Folders whose own .md files are checked, without their subfolders.
+const SHALLOW_DIRS = [".", ".github"];
 const MARKDOWN_DIRS = ["docs", "skills", "templates"];
-const README_DIRS = ["examples"];
+const README_DIRS = ["examples", "evals"];
+
+function entries(dir) {
+  return fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+}
+
+// Only regular files, so CLAUDE.md, a symlink to AGENTS.md, is checked once.
+function shallow(dir, out) {
+  if (!fs.existsSync(dir)) {
+    return out;
+  }
+  for (const entry of entries(dir)) {
+    if (entry.isFile() && entry.name.endsWith(".md")) {
+      out.push(path.join(dir, entry.name));
+    }
+  }
+  return out;
+}
 
 function walk(dir, accept, out) {
   if (!fs.existsSync(dir)) {
     return out;
   }
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
+  for (const entry of entries(dir)) {
     // Directory symlinks are not followed: plugins/story-skills points back
     // at the repository root.
     if (entry.name === "node_modules" || entry.name.startsWith(".")) {
@@ -42,7 +62,10 @@ function walk(dir, accept, out) {
 }
 
 export function markdownFiles(root = ROOT) {
-  const files = ROOT_FILES.map((name) => path.join(root, name)).filter((file) => fs.existsSync(file));
+  const files = [];
+  for (const dir of SHALLOW_DIRS) {
+    shallow(path.join(root, dir), files);
+  }
   for (const dir of MARKDOWN_DIRS) {
     walk(path.join(root, dir), (name) => name.endsWith(".md"), files);
   }
@@ -249,6 +272,12 @@ export function checkFile(file, root = ROOT, cache = new Map()) {
       : filePart.startsWith("/")
         ? path.join(root, filePart)
         : path.resolve(path.dirname(file), filePart);
+    // A target above the root may exist on this disk, but GitHub cannot serve it.
+    const fromRoot = path.relative(path.resolve(root), resolved);
+    if (fromRoot === ".." || fromRoot.startsWith(`..${path.sep}`) || path.isAbsolute(fromRoot)) {
+      failures.push(`${relative}:${line}: ${target} points outside the repository`);
+      continue;
+    }
     if (!fs.existsSync(resolved)) {
       failures.push(`${relative}:${line}: ${target} points at a missing file`);
       continue;

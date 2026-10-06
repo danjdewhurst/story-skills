@@ -48,7 +48,7 @@ All scripts live in `package.json`.
 | `bun run test:examples` | `scripts/check-examples.js` | Changes to examples, the project format, validation, or the schema |
 | `bun run check:metadata` | `scripts/check-metadata.js` | Changes to skills, plugin manifests, templates, or versions |
 | `bun run check:evals` | `scripts/check-evals.js` | Changes to eval fixtures or skill names |
-| `bun run check:links` | `scripts/check-links.js`, which checks relative links and `#anchors` in `README.md`, `CONTRIBUTING.md`, `docs/`, `skills/`, `templates/`, and example READMEs, skipping code, external links, and `{placeholder}` paths | Changes to any of that markdown, or to a heading something links to |
+| `bun run check:links` | `scripts/check-links.js`, which checks relative links and `#anchors` in the markdown at the repository root (`README.md`, `CHANGELOG.md`, `AGENTS.md`, and the rest) and in `.github/`, `docs/`, `skills/`, `templates/`, `evals/README.md`, and example READMEs, skipping code, external links, and `{placeholder}` paths. A link that leaves the repository fails even when its target exists on disk | Changes to any of that markdown, or to a heading something links to |
 | `bun run eval:selftest` | `evals/run-evals.js --all evals/examples` | Changes to the eval checker or fixtures |
 | `bun run build:fallback` | `scripts/build-fallback.js`, a `bun build` of `bin/story.js` into the skill folder | After any change to `src/` |
 | `bun run check:fallback` | `scripts/check-fallback.js` | Confirms the committed fallback matches a fresh build from the pinned Bun |
