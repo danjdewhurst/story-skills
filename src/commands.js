@@ -40,6 +40,7 @@ import {
   moveEntity,
   namesReport,
   pacingReport,
+  projectCheck,
   projectPasses,
   projectActions,
   projectProgress,
@@ -54,6 +55,7 @@ import {
   similarityReport,
   storyTimeline,
   synopsisBook,
+  uniqueCheckFindings,
   validateLinks,
   validateProject,
   voicesReport
@@ -225,6 +227,29 @@ export const COMMANDS = [
     project: "positional",
     options: ["json"],
     run: ({ parsed, io, root, overrides }) => reportCheck(parsed, io, "continuity", applySeverity(checkProjectContinuity(root()), overrides), "Continuity is consistent", "Continuity check failed")
+  },
+  {
+    name: "check",
+    usage: "check [path]",
+    summary: [
+      "Run validate, links, and continuity over one scan",
+      "and report each finding once; --strict fails on",
+      "warnings too"
+    ],
+    project: "positional",
+    options: ["strict", "json"],
+    run({ parsed, io, root, overrides }) {
+      const result = projectCheck(root(), { overrides, strict: isTruthy(parsed.options.strict) });
+      if (wantsJson(parsed)) {
+        return writeJsonResult(io, {
+          command: "check",
+          ok: result.ok,
+          data: { ...checkCounts(result), strict: result.strict, checks: checkSummaries(result.checks) },
+          diagnostics: Object.entries(result.findings).flatMap(([name, check]) => diagnosticsFrom(check, name))
+        });
+      }
+      return reportResult(io, result, "Checks passed", "Checks failed");
+    }
   },
   {
     name: "knowledge",
@@ -828,26 +853,24 @@ function checkCounts(result) {
 }
 
 // report, next, and doctor run validate, links, and continuity: their
-// findings become diagnostics coded by check, and the data summarizes each
-// check. These commands exit 0 whatever the checks find, so ok is true.
+// findings become diagnostics coded by check, each listed once (see
+// uniqueCheckFindings), and the data summarizes each check. These commands
+// exit 0 whatever the checks find, so ok is true.
 function reportProjectJson(io, command, report) {
   const { validation, links, continuity, ...rest } = report;
   const checks = { validate: validation, links, continuity };
-  // A file that fails to parse is reported by every check; list it once,
-  // under the first check that raised it.
-  const seen = new Set();
-  const diagnostics = Object.entries(checks)
-    .flatMap(([name, check]) => diagnosticsFrom(check, name))
-    .filter((entry) => {
-      const key = `${entry.severity}\n${entry.message}`;
-      return !seen.has(key) && seen.add(key);
-    });
+  const diagnostics = Object.entries(uniqueCheckFindings(checks)).flatMap(([name, check]) => diagnosticsFrom(check, name));
   return writeJsonResult(io, {
     command,
     ok: true,
-    data: { ...rest, checks: Object.fromEntries(Object.entries(checks).map(([name, check]) => [name, { ok: check.ok, ...checkCounts(check) }])) },
+    data: { ...rest, checks: checkSummaries(checks) },
     diagnostics
   });
+}
+
+// Each check's own result as --json summarizes it.
+function checkSummaries(checks) {
+  return Object.fromEntries(Object.entries(checks).map(([name, check]) => [name, { ok: check.ok, ...checkCounts(check) }]));
 }
 
 function reportResult(io, result, successMessage, failureMessage) {

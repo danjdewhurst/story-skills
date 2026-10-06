@@ -21,7 +21,7 @@ The `story` CLI is deterministic: the same project always produces the same find
 
 | Goal | How |
 |---|---|
-| Stop a broken chapter from merging | Run `story validate`, `story links`, and `story continuity` on every push and pull request. [`templates/github/story-checks.yml`](../templates/github/story-checks.yml) does this. |
+| Stop a broken chapter from merging | Run `story check`, which runs `validate`, `links`, and `continuity`, on every push and pull request. [`templates/github/story-checks.yml`](../templates/github/story-checks.yml) does this. |
 | Draft chapters on a schedule | Let Claude Code draft the next chapter and open a pull request for you to review. [`templates/github/draft-next-chapter.yml`](../templates/github/draft-next-chapter.yml) does this. |
 | Give reviewers a current, citable copy of the book | Build the HTML review copy on every push to `main` and publish it to GitHub Pages; readers file notes through an issue form. [`templates/github/review-copy.yml`](../templates/github/review-copy.yml) and [`templates/github/ISSUE_TEMPLATE/manuscript-note.yml`](../templates/github/ISSUE_TEMPLATE/manuscript-note.yml) do this. |
 | Catch problems before they are committed | Run the same checks from a git pre-commit hook. See [Checking before each commit](#checking-before-each-commit). |
@@ -206,13 +206,19 @@ cli-defaults:
 
 The same holds with `--json`: a promoted warning is a diagnostic with `"severity": "error"`, `ok` is `false`, and the run exits 1. Run `story validate` after editing either field: it rejects an unknown command, flag, warning code, or level, and while either field is invalid the other commands refuse to run, exiting 3, rather than silently skip a severity your job relies on.
 
-To fail on every warning, including those without a code, there is no `--strict` flag, but you can fail on any `warning:` line:
+To fail on every warning from `validate`, `links`, and `continuity`, run `story check --strict`, which reports each warning as an error and exits 1:
+
+```shell
+story check . --strict
+```
+
+Other commands have no `--strict` flag, but you can fail on any `warning:` line:
 
 ```shell
 set -o pipefail
-story validate . 2>&1 | tee validate.log
-if grep -q '^warning:' validate.log; then
-  echo "story validate reported warnings"
+story prose . 2>&1 | tee prose.log
+if grep -q '^warning:' prose.log; then
+  echo "story prose reported warnings"
   exit 1
 fi
 ```
@@ -235,7 +241,7 @@ Story Skills ships three workflows and one issue form in [`templates/github/`](.
 
 | Template | Copy to | Runs on | Needs | What it does |
 |---|---|---|---|---|
-| [`story-checks.yml`](../templates/github/story-checks.yml) | `.github/workflows/` | Push to `main`, every pull request | Nothing | Runs `validate`, `links`, `continuity`, and `report --actionable`. |
+| [`story-checks.yml`](../templates/github/story-checks.yml) | `.github/workflows/` | Push to `main`, every pull request | Nothing | Runs `check` (`validate`, `links`, and `continuity`) and `report --actionable`. |
 | [`draft-next-chapter.yml`](../templates/github/draft-next-chapter.yml) | `.github/workflows/` | Weekday schedule, manual dispatch | `ANTHROPIC_API_KEY` secret, the skills committed to the repository | Drafts the next chapter with Claude Code in a read-only job, then checks the commit and opens a pull request from a second job. |
 | [`review-copy.yml`](../templates/github/review-copy.yml) | `.github/workflows/` | Push to `main`, manual dispatch | GitHub Pages set to deploy from GitHub Actions | Runs the checks, builds the HTML review copy, and publishes it to GitHub Pages. |
 | [`ISSUE_TEMPLATE/manuscript-note.yml`](../templates/github/ISSUE_TEMPLATE/manuscript-note.yml) | `.github/ISSUE_TEMPLATE/` | A reader opening an issue | A `manuscript-note` label | Gives readers a form for a note on one paragraph of the review copy. |
@@ -280,12 +286,10 @@ To make the checks block merging, add the `story-checks` job as a required statu
 
 | Step | Command | Fails the job when |
 |---|---|---|
-| Validate structure, frontmatter, and registries | `story validate "$STORY_DIR"` | The project has validation errors. |
-| Check cross-references and backlinks | `story links "$STORY_DIR"` | A reference or backlink is broken. |
-| Check continuity contracts | `story continuity "$STORY_DIR"` | A continuity contract is broken. |
+| Check structure, references, and continuity | `story check "$STORY_DIR"` | `validate`, `links`, or `continuity` reports an error. |
 | Report project health | `story report "$STORY_DIR" --actionable` | Never. It prints inventory, check results, and next actions to the job log. |
 
-The steps run in order and stop at the first failure, so a validation error hides link and continuity results until it is fixed. Warnings show in the log but do not fail the job.
+[`story check`](cli-reference.md#check) runs all three checks over one scan and lists every finding before it fails, so a validation error does not hide link and continuity results. Warnings show in the log but do not fail the job; add `--strict` to the `story check` line to fail on them too.
 
 If a continuity finding is intentional, record it in `continuity/exemptions.md` rather than weakening the workflow. The finding is then reported as dismissed. See [Exemptions](continuity.md#exemptions) and [Project format reference](project-format.md).
 
@@ -426,7 +430,7 @@ The address of the site is shown on the run's `deploy` job, on the `github-pages
 The `build` job:
 
 1. Checks out the repository without persisting the token (`persist-credentials: false`) and sets up Node 24.
-2. Runs `story validate`, `story links`, and `story continuity`. If any of them fails, nothing is built or published, so readers never get a copy with broken references or a contradicted continuity contract. Readers keep the last good copy.
+2. Runs `story check`, which runs `validate`, `links`, and `continuity`. If any of them fails, nothing is built or published, so readers never get a copy with broken references or a contradicted continuity contract. Readers keep the last good copy.
 3. Looks for a chapter file in `$STORY_DIR/chapters`. With none, the remaining steps and the `deploy` job are skipped.
 4. Builds the review copy with `story build "$STORY_DIR" --format html --stamp "$(date -u +%Y-%m-%d) ${GITHUB_SHA::7}" --out "$GITHUB_WORKSPACE/review-site/index.html"`. The stamp prints the build date and short commit at the top of the copy, so readers can say which build a note refers to. `--note-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/issues/new?template=manuscript-note.yml"` puts a **Note** link beside every paragraph label that opens the issue form with the label, the build, and the paragraph's first few words already filled in. The `--out` path is absolute because a relative `--out` is resolved against the project root and may not leave it; see [Output paths](manuscripts.md#output-paths-and-what-is-disposable).
 5. Uploads `index.html` as a workflow artifact named `review-copy`, which you can download from the run page.

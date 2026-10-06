@@ -46,14 +46,11 @@ jobs:
         with:
           node-version: 24
 
-      - name: Validate structure, frontmatter, and registries
-        run: npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story validate "$STORY_DIR"
-
-      - name: Check cross-references and backlinks
-        run: npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story links "$STORY_DIR"
-
-      - name: Check continuity contracts
-        run: npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story continuity "$STORY_DIR"
+      # story check runs validate, links, and continuity over one scan and
+      # reports every finding before failing. Add --strict to fail on
+      # warnings too.
+      - name: Check structure, references, and continuity
+        run: npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story check "$STORY_DIR"
 
       - name: Report project health
         run: npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story report "$STORY_DIR" --actionable

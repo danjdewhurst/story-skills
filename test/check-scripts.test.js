@@ -542,11 +542,13 @@ describe("github workflows", () => {
   });
 
   test("story templates invoke the deterministic story checks", () => {
-    for (const relativePath of ["templates/github/story-checks.yml", "templates/github/draft-next-chapter.yml", "templates/github/review-copy.yml"]) {
-      const template = readRepo(relativePath);
-      for (const command of ["story validate", "story links", "story continuity"]) {
-        expect(template).toContain(command);
-      }
+    // story check runs validate, links, and continuity in one scan.
+    for (const relativePath of ["templates/github/story-checks.yml", "templates/github/review-copy.yml"]) {
+      expect(readRepo(relativePath)).toContain("story check \"$STORY_DIR\"");
+    }
+    const draft = readRepo("templates/github/draft-next-chapter.yml");
+    for (const command of ["story validate", "story links", "story continuity"]) {
+      expect(draft).toContain(command);
     }
   });
 

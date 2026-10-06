@@ -50,6 +50,7 @@ Absolute paths in output are shortened to `~/stories/...`.
 | | [`reindex [path]`](#reindex) | Rebuild registry tables from entity files | Yes |
 | | [`wordcount [path]`](#wordcount) | Count chapter prose words | With `--write` |
 | | [`links [path]`](#links) | Check cross-references and backlinks | No |
+| | [`check [path]`](#check) | Run `validate`, `links`, and `continuity` in one scan | No |
 | Analysis | [`continuity [path]`](#continuity) | Check deaths, casts, promises, questions, clues, prop custody, clock and travel time, routes, and state | No |
 | | [`knowledge <id>`](#knowledge) | List what a character knew at a chapter, marked reader-knowledge or character-knowledge | No |
 | | [`context <id>`](#context) | Pack drafting context for a chapter or scene; unread flashback facts are marked do not reveal | No |
@@ -248,13 +249,13 @@ Project validation failed: 1 errors, 0 warnings, 0 dismissed
 error: chapters/chapter-03.md has 1 [TODO marker in its prose, which every build prints: resolve it or move it into an HTML comment [todo-markers]
 ```
 
-Defaults apply with `--json` too, and to `prose -` and `voices -` inside a project; `--json` itself cannot be a default. With `--json`, a promoted warning is a diagnostic with `severity` `"error"` and makes `ok` false, and an `off` warning is a `dismissed` diagnostic. `story prose --json` reports the limits it used in `data.thresholds`. A flag on the command line always wins over a default: `story build --format epub` still builds an EPUB, and it also drops any default `--trim`, `--stamp`, `--note-url`, or `--shunn`, which belong with a particular format. Likewise `--ref` or `--against` on `compare` drops a default for the other. `level: off` reports a warning as `dismissed:` instead. A `severity` entry names any warning by the code its line ends with (see [Finding codes](#finding-codes)), and applies wherever that warning is reported: in the check that raises it, in the checks `report`, `next`, and `doctor` summarise, and in the warnings `build`, `export`, `context`, `add`, `rename`, `move`, and `remove` print after their output, which then exit 1 when a promoted warning is among them. Errors cannot be demoted or turned off, so an entry naming an error code is rejected. `story validate` rejects unknown commands, flags, codes, and levels; while either field is invalid, other commands refuse to run until it is fixed and exit 3. The [Project format reference](project-format.md#cli-defaults-and-severity) lists every rule.
+Defaults apply with `--json` too, and to `prose -` and `voices -` inside a project; `--json` itself cannot be a default. With `--json`, a promoted warning is a diagnostic with `severity` `"error"` and makes `ok` false, and an `off` warning is a `dismissed` diagnostic. `story prose --json` reports the limits it used in `data.thresholds`. A flag on the command line always wins over a default: `story build --format epub` still builds an EPUB, and it also drops any default `--trim`, `--stamp`, `--note-url`, or `--shunn`, which belong with a particular format. Likewise `--ref` or `--against` on `compare` drops a default for the other. `level: off` reports a warning as `dismissed:` instead. A `severity` entry names any warning by the code its line ends with (see [Finding codes](#finding-codes)), and applies wherever that warning is reported: in the check that raises it, in the checks `check` runs and `report`, `next`, and `doctor` summarise, and in the warnings `build`, `export`, `context`, `add`, `rename`, `move`, and `remove` print after their output, which then exit 1 when a promoted warning is among them. Errors cannot be demoted or turned off, so an entry naming an error code is rejected. `story validate` rejects unknown commands, flags, codes, and levels; while either field is invalid, other commands refuse to run until it is fixed and exit 3. The [Project format reference](project-format.md#cli-defaults-and-severity) lists every rule.
 
 ### Output streams and exit codes
 
 The CLI prints results to stdout and diagnostics to stderr.
 
-- `validate`, `links`, and `continuity` write everything to **stderr**: a summary line, then one line per `error:`, `warning:`, and `dismissed:` finding. Nothing goes to stdout. A `warning:` line ends with the warning's [code](#finding-codes) in brackets, as does an `error:` line for a warning `severity` promoted.
+- `validate`, `links`, `continuity`, and `check` write everything to **stderr**: a summary line, then one line per `error:`, `warning:`, and `dismissed:` finding. Nothing goes to stdout. A `warning:` line ends with the warning's [code](#finding-codes) in brackets, as does an `error:` line for a warning `severity` promoted.
 - `compare`, `similarity`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `names`, and `series` write their report to stdout, then the same summary and finding lines to stderr.
 - `diagram` writes the Mermaid source (or, with `--out`, a confirmation) to stdout. If the project has a file that fails to parse, it writes the summary and error lines to stderr instead.
 - All other commands write a short confirmation or report to stdout.
@@ -268,16 +269,16 @@ The examples on this page show stdout and stderr together, as a terminal does.
 | `0` | The command succeeded. For checks, there were no errors. Warnings and dismissed findings do not change the exit code, unless `severity` in `story.md` promotes a warning to an error. |
 | `1` | Findings: a check reported at least one `error:` line. |
 | `2` | Usage error: an unknown command or option, a missing or invalid option value, an unexpected argument or option, a missing required argument (such as `knowledge` without `--at`), an id that does not exist, or an `import` source that is missing or cannot be read. |
-| `3` | Not a usable story project: no `story.md`, invalid `cli-defaults` or `severity` in `story.md` (for commands other than `validate`, `report`, `next`, and `doctor`), a file the command needs cannot be read or parsed or is a symlink, a newer schema than this CLI knows, or nothing to build from. |
+| `3` | Not a usable story project: no `story.md`, invalid `cli-defaults` or `severity` in `story.md` (for commands other than `validate`, `check`, `report`, `next`, and `doctor`), a file the command needs cannot be read or parsed or is a symlink, a newer schema than this CLI knows, or nothing to build from. |
 | `4` | Refused or failed write: the target already exists, is project source or outside the project, is a symlink, is locked by another story command, changed on disk meanwhile, or the file system refused it. |
 
 Findings keep `1`, so `story validate || exit 1` fails on errors as it always has. Before these codes were split, every failure exited `1`; a script that tested for `1` to catch a usage error, a missing project, or a refused write should test for `2`, `3`, or `4` instead, or for any non-zero code. The codes are exported as `EXIT_CODES` from `src/exit-codes.js`.
 
-`report`, `next`, and `doctor` summarise check results but always exit 0 on a readable project. `prose`, `pacing`, `clues`, and `voices` report every craft finding as a warning, so they exit 1 only when a file fails to parse or a [`severity`](#defaults-and-severity-from-storymd) entry in `story.md` promotes one of their warnings to an error. `passes` exits 0 unless it refuses a change: `2` for a bad pass name, `3` for a `story.md` it cannot safely rewrite, `4` when the write fails. `names` exits 1 when a candidate clashes with an existing name. Use `validate`, `links`, and `continuity` when you need a failing exit code, for example in CI (see [Automation and CI](automation.md)).
+`report`, `next`, and `doctor` summarise check results but always exit 0 on a readable project. `prose`, `pacing`, `clues`, and `voices` report every craft finding as a warning, so they exit 1 only when a file fails to parse or a [`severity`](#defaults-and-severity-from-storymd) entry in `story.md` promotes one of their warnings to an error. `passes` exits 0 unless it refuses a change: `2` for a bad pass name, `3` for a `story.md` it cannot safely rewrite, `4` when the write fails. `names` exits 1 when a candidate clashes with an existing name. Use `check` (or `validate`, `links`, and `continuity` one at a time) when you need a failing exit code, for example in CI (see [Automation and CI](automation.md)).
 
 ### JSON output
 
-`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. It works on the check and analysis commands: `validate`, `links`, `continuity`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, and `similarity`. Other commands refuse it (`--json does not apply to story wordcount`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`.
+`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. It works on the check and analysis commands: `validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, and `similarity`. Other commands refuse it (`--json does not apply to story wordcount`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`.
 
 Every result has the same envelope:
 
@@ -286,9 +287,11 @@ Every result has the same envelope:
 | `apiVersion` | `"story/v2"`. Fields may be added within a version; renaming, removing, or retyping one changes it. `story/v1`, in 0.16.0, put the check name in `code`; `story/v2` puts the rule code there and the check name in `check`. |
 | `command` | The command that ran, such as `"continuity"`. |
 | `ok` | `true` exactly when the command exits `0`. |
-| `data` | The command's result: counts for `validate`, `links`, and `continuity`; the report, grid, or profile for the others. `null` when the command stopped before producing one. Fields a project does not set are `null`, not missing. |
+| `data` | The command's result: counts for `validate`, `links`, and `continuity`, and for `check` also `strict` and a `checks` summary; the report, grid, or profile for the others. `null` when the command stopped before producing one. Fields a project does not set are `null`, not missing. |
 | `diagnostics` | One entry per finding, in the order the text output prints them: `severity` (`error`, `warning`, or `dismissed`), `file` (the project file the finding is about, `stdin` for a finding about a passage piped to `prose -` or `voices -`, or `null` when it is about no one file), `message` (the line the text output prints after `error:` or `warning:`, without the trailing `[code]`), `code` (the finding's rule, from [Finding codes](#finding-codes)), and `check` (the check that raised it: `validate`, `links`, `continuity`, or the command's own name). A dismissed finding also has `exemption`, the reason from `continuity/exemptions.md`, or `severity <code> is off in story.md`, and `exemptionIndex`, the position of the matching entry in the `exemptions` list (`0` for the first), or `null` for a `severity` entry. Every diagnostic has `chapter`, the chapter id for the `continuity` findings that [carry one](continuity.md#exemptions), else `null`. |
 | `writes` | Absolute paths of the files the command wrote. Only `progress --log` writes. |
+
+`check` puts the same `checks` summary in `data`, beside the error, warning, and dismissed counts of its own diagnostics; see [check](#check).
 
 `report`, `next`, and `doctor` put a `checks` summary in `data` (`ok` and error, warning, and dismissed counts for `validate`, `links`, and `continuity`) and list each check's findings in `diagnostics`. They still exit `0`, so their `ok` is `true` even when a check fails: read `data.checks` to gate on them. `report --json` always includes `actions`.
 
@@ -564,12 +567,10 @@ Run these after any change to story files. The usual sequence after an editing s
 ```shell
 story wordcount . --write
 story reindex .
-story links .
-story validate .
-story continuity .
+story check .
 ```
 
-`wordcount --write` comes first because it rewrites chapter frontmatter and then reindexes, so the registries reflect the new counts before the checks run.
+`wordcount --write` comes first because it rewrites chapter frontmatter and then reindexes, so the registries reflect the new counts before the checks run. `story check` runs `validate`, `links`, and `continuity` in one go; run them one at a time to see one check's findings.
 
 ### validate
 
@@ -736,6 +737,45 @@ Links are valid: 0 errors, 0 warnings, 0 dismissed
 ```
 
 The linking rules are in [Core concepts](concepts.md#links-and-backlinks) and the [Project format reference](project-format.md#references-and-backlinks).
+
+### check
+
+```text
+story check [path] [--strict]
+```
+
+Runs [`validate`](#validate), [`links`](#links), and [`continuity`](#continuity) over one scan of the project and exits once, with the same [exit codes](#output-streams-and-exit-codes): `1` when any of them reports an error. Each check alone misses problems the others catch: `validate` passes a chapter with `pov: nobody-here`, which only `links` reports.
+
+Each finding is reported once. A file that fails to parse, which every check reports, is listed under `validate`, and a chapter or scene date such as `2024-13-45` is reported as the `validate` error (`invalid-date`), not again as the `continuity` warning (`malformed-date`). [`severity`](#defaults-and-severity-from-storymd) entries in `story.md` and [continuity exemptions](continuity.md#exemptions) apply as they do in each check, and `check`, like `validate`, still runs while `cli-defaults` or `severity` is invalid and reports the problem.
+
+| Option | Effect |
+|---|---|
+| `--strict` | Fail on warnings too: every warning is reported as an error and the run exits 1. Dismissed findings stay dismissed. |
+
+Using [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/), whose only findings come from `continuity`:
+
+```shell
+story check examples/the-unraveled-thread
+```
+
+```text
+Checks failed: 4 errors, 3 warnings, 0 dismissed
+error: chapters/chapter-04.md lists edran-vale, who died in chapter-02; move posthumous appearances to mentions
+error: continuity/promises/the-broken-compass.md pays off in chapter-02 before it is planted in chapter-03
+error: continuity/questions/who-burned-the-mill.md resolves in chapter-02 before it is introduced in chapter-03
+error: continuity/state.md knowledge-state[0] references missing chapter chapter-05
+warning: chapters/chapter-03.md POV character nessa-thorn is not listed in characters [pov-not-in-cast]
+warning: continuity/promises/the-sealed-letter.md was planted in chapter-01, 3 chapters ago, and has no payoff yet [promise-unpaid]
+warning: continuity/state.md object-state[0] status active conflicts with worldbuilding/artifacts/vales-compass.md status destroyed [state-status-conflict]
+```
+
+A clean project:
+
+```text
+Checks passed: 0 errors, 0 warnings, 0 dismissed
+```
+
+With `--json`, each diagnostic's `check` names the check that raised it, and `data` holds the counts of those diagnostics, `strict`, and `checks`: each check's own `ok` and counts, as `story validate`, `links`, or `continuity` would report them alone (so `--strict` and the duplicates left out above do not change them).
 
 ## Analysis commands
 
@@ -2343,7 +2383,7 @@ The output is a scaffold. The [submission skill](../skills/submission/SKILL.md) 
 
 Every error and warning has a stable kebab-case code. Text output ends each warning line with it, `warning: chapters/chapter-01.md has 1 [TODO marker in its prose, ... [todo-markers]`, and `--json` gives it as each diagnostic's `code`. A [`severity`](#defaults-and-severity-from-storymd) entry in `story.md` names a warning by its code. Codes never change once released: a reworded message keeps its code, and a code is never reused for another rule.
 
-An error means the project is broken or a check failed, so it cannot be turned down: `severity` accepts only warning codes. A [continuity exemption](continuity.md#exemptions) can name a code too, with a `file`, `chapter`, or `pattern` to narrow it to one finding; it can dismiss any warning code `severity` accepts and the errors `continuity` reports. A code can appear under more than one command, such as `unreachable-chapter`, which `links` reports and a Twee `build` repeats; an override applies wherever it is reported. `report`, `next`, and `doctor` run `validate`, `links`, and `continuity`, so they report those commands' codes.
+An error means the project is broken or a check failed, so it cannot be turned down: `severity` accepts only warning codes. A [continuity exemption](continuity.md#exemptions) can name a code too, with a `file`, `chapter`, or `pattern` to narrow it to one finding; it can dismiss any warning code `severity` accepts and the errors `continuity` reports. A code can appear under more than one command, such as `unreachable-chapter`, which `links` reports and a Twee `build` repeats; an override applies wherever it is reported. `check`, `report`, `next`, and `doctor` run `validate`, `links`, and `continuity`, so they report those commands' codes.
 
 **Codes by command**
 

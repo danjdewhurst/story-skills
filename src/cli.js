@@ -59,8 +59,8 @@ function formatCommandsHelp() {
 
 // Commands that still run when story.md cli-defaults or severity is invalid,
 // ignoring both, because they report the problem: validate lists it, and
-// report, next, and doctor include it in their checks.
-const CONFIG_REPAIR_COMMANDS = new Set(["validate", "report", "next", "doctor"]);
+// check, report, next, and doctor include it in their checks.
+const CONFIG_REPAIR_COMMANDS = new Set(["validate", "check", "report", "next", "doctor"]);
 
 export function runCli(argv, io) {
   let configured = [];

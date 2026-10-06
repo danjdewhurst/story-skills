@@ -106,12 +106,14 @@ export {
   moveEntity
 } from "./mutate.js";
 export {
+  projectCheck,
   projectReport,
   formatProjectReport,
   projectActions,
   formatActionReport,
   formatDoctorReport,
-  shellWord
+  shellWord,
+  uniqueCheckFindings
 } from "./report.js";
 export {
   exportManuscript,

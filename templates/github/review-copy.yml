@@ -72,10 +72,7 @@ jobs:
           node-version: 24
 
       - name: Check the project before publishing it
-        run: |
-          npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story validate "$STORY_DIR"
-          npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story links "$STORY_DIR"
-          npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story continuity "$STORY_DIR"
+        run: npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story check "$STORY_DIR"
 
       # story build exits 3 with "No chapters found to export" on a project
       # that has no chapters yet, such as one fresh from story init.

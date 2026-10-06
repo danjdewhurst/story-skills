@@ -25,6 +25,68 @@ function projectChecks(project, overrides) {
   };
 }
 
+// A finding code one check reports, and the code of the finding another
+// check reports about the same problem more precisely: a chapter date of
+// 2024-13-45 is a validate invalid-date error and a continuity
+// malformed-date warning. On the same file, the first is left out.
+const SUPERSEDED_BY = new Map([["malformed-date", "invalid-date"]]);
+
+// The checks' results with each finding reported once: a finding another
+// check already raised (a file that fails to parse is reported by every
+// check) is kept under the first check, in the given order, and one
+// SUPERSEDED_BY names is dropped when the more precise finding is there.
+// Every other field of each result is kept.
+export function uniqueCheckFindings(checks) {
+  const reported = new Set();
+  for (const check of Object.values(checks)) {
+    for (const finding of [...check.errors, ...check.warnings]) {
+      reported.add(`${finding.code}\n${finding.file}`);
+    }
+  }
+  const seen = new Set();
+  const keep = (severity, finding) => {
+    const by = SUPERSEDED_BY.get(finding.code);
+    if (by !== undefined && reported.has(`${by}\n${finding.file}`)) {
+      return false;
+    }
+    const key = `${severity}\n${finding.code}\n${finding.file}\n${finding.message}`;
+    return !seen.has(key) && Boolean(seen.add(key));
+  };
+  return Object.fromEntries(Object.entries(checks).map(([name, check]) => [name, {
+    ...check,
+    errors: check.errors.filter((finding) => keep("error", finding)),
+    warnings: check.warnings.filter((finding) => keep("warning", finding)),
+    dismissed: (check.dismissed ?? []).filter((entry) => keep("dismissed", entry.finding))
+  }]));
+}
+
+// story check: validate, links, and continuity over one scan. `checks` holds
+// each check's own result, as the command of that name reports it;
+// `findings` holds them again with each finding reported once (see
+// uniqueCheckFindings) and, with `strict`, every warning made an error.
+// errors, warnings, and dismissed are those findings in check order.
+export function projectCheck(root, options = {}) {
+  const project = scanProject(root);
+  const { validation, links, continuity } = projectChecks(project, options.overrides);
+  const checks = { validate: validation, links, continuity };
+  const unique = uniqueCheckFindings(checks);
+  const findings = options.strict
+    ? Object.fromEntries(Object.entries(unique).map(([name, check]) => [name, { ...check, errors: [...check.errors, ...check.warnings], warnings: [] }]))
+    : unique;
+  const all = Object.values(findings);
+  const errors = all.flatMap((check) => check.errors);
+  return {
+    root: project.root,
+    ok: errors.length === 0,
+    errors,
+    warnings: all.flatMap((check) => check.warnings),
+    dismissed: all.flatMap((check) => check.dismissed),
+    strict: Boolean(options.strict),
+    checks,
+    findings
+  };
+}
+
 export function projectReport(root, options = {}) {
   const project = scanProject(root);
   const { validation, links, continuity } = projectChecks(project, options.overrides);

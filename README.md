@@ -169,6 +169,7 @@ The CLI is for maintenance only. Agents write story content directly to markdown
 | `story validate [path]` | Check required files, schema version, YAML frontmatter, registries, and word-count warnings |
 | `story links [path]` | Check character, location, chapter, and arc cross-references and backlinks |
 | `story continuity [path]` | Check deterministic continuity contracts: deaths, promises and payoffs, questions, casts, durable state, and travel times along location routes |
+| `story check [path] --strict` | Run validate, links, and continuity in one scan, listing each finding once; `--strict` fails on warnings too |
 | `story series [path]` | Order linked sequels and prequels by chronology and check shared canon: deaths, casts, knowledge fact ids, names, and destroyed artifacts |
 | `story reindex [path]` | Rebuild registry tables from the current markdown files |
 | `story wordcount [path] --write` | Count chapter prose and update chapter frontmatter plus the chapter registry; Chinese and Japanese books count characters (`count-unit`) |
@@ -220,7 +221,7 @@ Every command and option is in the [CLI reference](docs/cli-reference.md). For a
 
 A story project with deterministic checks is one an agent can advance unattended. The [`templates/github/`](templates/github/) workflows turn a story repository into a self-drafting book:
 
-- [`story-checks.yml`](templates/github/story-checks.yml) runs `story validate`, `story links`, `story continuity`, and `story report --actionable` on every push and pull request, so a chapter PR can't merge with a continuity contradiction.
+- [`story-checks.yml`](templates/github/story-checks.yml) runs `story check` (validate, links, and continuity in one scan) and `story report --actionable` on every push and pull request, so a chapter PR can't merge with a continuity contradiction.
 - [`draft-next-chapter.yml`](templates/github/draft-next-chapter.yml) runs [Claude Code](https://github.com/anthropics/claude-code-action) on a schedule. It asks `story next` for the next action, drafts the next chapter with the chapter-writing skill, updates scene records and continuity state, and commits it within word, turn, and spend budgets. The agent cannot push. A second job, on a fresh runner, checks that the commit touches only the story's own markdown and holds no secret, runs the checks, pushes the branch, and opens a pull request for review: ready when the checks pass, a draft listing the failures when they do not. When `story next` suggests no chapter (the story is revising or complete, or every arc is resolved), it stops without drafting.
 
 Copy both files into `.github/workflows/` in the repository that holds your story project, add an `ANTHROPIC_API_KEY` secret, and review one chapter PR each morning.

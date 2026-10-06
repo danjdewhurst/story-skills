@@ -8655,6 +8655,7 @@ var OPTIONS = [
   { name: "min-words", value: "<n>", help: ["Shortest shared run of words similarity reports", "(default 8, at least 5)"] },
   { name: "pages", value: "<n>", help: ["Synopsis length for synopsis (1 or 3)"] },
   { name: "actionable", help: ["Include next actions in report"] },
+  { name: "strict", help: ["Fail check on warnings as well as errors"] },
   { name: "json", help: ["Print one JSON result object (apiVersion,", "command, ok, data, diagnostics, writes) instead", "of text, for the check and analysis commands"] },
   { name: "id", value: "<kebab-id>", help: ["Explicit id for add or rename, for a name with", "no ASCII letters or digits"] },
   { name: "number", value: "<n>", help: ["Chapter number for add chapter or move chapter"] },
@@ -19381,6 +19382,54 @@ function projectChecks(project, overrides) {
     continuity: applySeverity(checkContinuity(project), overrides)
   };
 }
+var SUPERSEDED_BY = new Map([["malformed-date", "invalid-date"]]);
+function uniqueCheckFindings(checks) {
+  const reported = new Set;
+  for (const check of Object.values(checks)) {
+    for (const finding of [...check.errors, ...check.warnings]) {
+      reported.add(`${finding.code}
+${finding.file}`);
+    }
+  }
+  const seen = new Set;
+  const keep = (severity, finding) => {
+    const by = SUPERSEDED_BY.get(finding.code);
+    if (by !== undefined && reported.has(`${by}
+${finding.file}`)) {
+      return false;
+    }
+    const key = `${severity}
+${finding.code}
+${finding.file}
+${finding.message}`;
+    return !seen.has(key) && Boolean(seen.add(key));
+  };
+  return Object.fromEntries(Object.entries(checks).map(([name, check]) => [name, {
+    ...check,
+    errors: check.errors.filter((finding) => keep("error", finding)),
+    warnings: check.warnings.filter((finding) => keep("warning", finding)),
+    dismissed: (check.dismissed ?? []).filter((entry) => keep("dismissed", entry.finding))
+  }]));
+}
+function projectCheck(root, options = {}) {
+  const project = scanProject(root);
+  const { validation, links, continuity } = projectChecks(project, options.overrides);
+  const checks = { validate: validation, links, continuity };
+  const unique = uniqueCheckFindings(checks);
+  const findings = options.strict ? Object.fromEntries(Object.entries(unique).map(([name, check]) => [name, { ...check, errors: [...check.errors, ...check.warnings], warnings: [] }])) : unique;
+  const all = Object.values(findings);
+  const errors = all.flatMap((check) => check.errors);
+  return {
+    root: project.root,
+    ok: errors.length === 0,
+    errors,
+    warnings: all.flatMap((check) => check.warnings),
+    dismissed: all.flatMap((check) => check.dismissed),
+    strict: Boolean(options.strict),
+    checks,
+    findings
+  };
+}
 function projectReport(root, options = {}) {
   const project = scanProject(root);
   const { validation, links, continuity } = projectChecks(project, options.overrides);
@@ -21212,6 +21261,29 @@ var COMMANDS = [
     run: ({ parsed, io, root, overrides }) => reportCheck(parsed, io, "continuity", applySeverity(checkProjectContinuity(root()), overrides), "Continuity is consistent", "Continuity check failed")
   },
   {
+    name: "check",
+    usage: "check [path]",
+    summary: [
+      "Run validate, links, and continuity over one scan",
+      "and report each finding once; --strict fails on",
+      "warnings too"
+    ],
+    project: "positional",
+    options: ["strict", "json"],
+    run({ parsed, io, root, overrides }) {
+      const result = projectCheck(root(), { overrides, strict: isTruthy(parsed.options.strict) });
+      if (wantsJson(parsed)) {
+        return writeJsonResult(io, {
+          command: "check",
+          ok: result.ok,
+          data: { ...checkCounts(result), strict: result.strict, checks: checkSummaries(result.checks) },
+          diagnostics: Object.entries(result.findings).flatMap(([name, check]) => diagnosticsFrom(check, name))
+        });
+      }
+      return reportResult(io, result, "Checks passed", "Checks failed");
+    }
+  },
+  {
     name: "knowledge",
     usage: "knowledge <id>",
     summary: [
@@ -21775,18 +21847,16 @@ function checkCounts(result) {
 function reportProjectJson(io, command, report) {
   const { validation, links, continuity, ...rest } = report;
   const checks = { validate: validation, links, continuity };
-  const seen = new Set;
-  const diagnostics = Object.entries(checks).flatMap(([name, check]) => diagnosticsFrom(check, name)).filter((entry) => {
-    const key = `${entry.severity}
-${entry.message}`;
-    return !seen.has(key) && seen.add(key);
-  });
+  const diagnostics = Object.entries(uniqueCheckFindings(checks)).flatMap(([name, check]) => diagnosticsFrom(check, name));
   return writeJsonResult(io, {
     command,
     ok: true,
-    data: { ...rest, checks: Object.fromEntries(Object.entries(checks).map(([name, check]) => [name, { ok: check.ok, ...checkCounts(check) }])) },
+    data: { ...rest, checks: checkSummaries(checks) },
     diagnostics
   });
+}
+function checkSummaries(checks) {
+  return Object.fromEntries(Object.entries(checks).map(([name, check]) => [name, { ok: check.ok, ...checkCounts(check) }]));
 }
 function reportResult(io, result, successMessage, failureMessage) {
   const dismissed = result.dismissed ?? [];
@@ -21861,7 +21931,7 @@ function formatCommandsHelp() {
   }
   return lines;
 }
-var CONFIG_REPAIR_COMMANDS = new Set(["validate", "report", "next", "doctor"]);
+var CONFIG_REPAIR_COMMANDS = new Set(["validate", "check", "report", "next", "doctor"]);
 function runCli(argv, io) {
   let configured = [];
   const jsonCommand = COMMANDS_BY_NAME.get(commandWord(argv));
