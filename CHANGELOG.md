@@ -27,6 +27,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - `story mentions` and `rename --prose` print a control character in an excerpt as U+FFFD, so an escape sequence in a chapter no longer reaches the terminal. ([#546](https://github.com/danjdewhurst/story-skills/issues/546))
 - `story mentions` and `rename --prose` find a name at the right place in text where a CJK compatibility ideograph changes length when composed to NFC. Before, such a name could get the wrong column and excerpt, and `rename --prose` skipped it as an alias. ([#588](https://github.com/danjdewhurst/story-skills/issues/588))
 - `story prose` analyses a line of prose that opens with `#`, such as `#1 on the list was Mara`; only a heading (one to six `#` and a space) is dropped. ([#588](https://github.com/danjdewhurst/story-skills/issues/588))
+- `story links` and `story check` accept an abandoned promise, clue, or question whose chapters were never written, as `story continuity` already did. Any of its chapter fields may keep a scheduled `chapter-NN`, so cutting a planned thread needs only `status: abandoned`. `story add` follows the same rule and now also refuses `--status dropped` with an unwritten `--planted` chapter, which `story links` rejects. ([#582](https://github.com/danjdewhurst/story-skills/issues/582))
 
 ### Security
 

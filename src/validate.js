@@ -67,6 +67,7 @@ import {
   newerSchemaVersion,
   newerSchemaMessage,
   canonicalChapterId,
+  mayScheduleChapter,
   mapOutsideLinks,
   WINDOWS_RESERVED_ID,
   isKebabId,
@@ -283,8 +284,8 @@ export function validateLinksOf(project) {
   const hasChapter = (id) => chapters.has(id);
   // A promise or clue may schedule its chapters ahead of drafting: a
   // `chapter-NN` with no file yet is a plan, not a broken link, until the
-  // status says the setup or payoff is already on the page. `continuity`
-  // reads the same ids by their number.
+  // status says the setup or payoff is already on the page (see
+  // mayScheduleChapter). `continuity` reads the same ids by their number.
   // An id whose number belongs to an existing chapter (`chapter-1` beside
   // `chapter-01`) is a typo, and chapter numbers start at 1.
   // A scheduled id must also use the spelling story add chapter writes
@@ -298,6 +299,7 @@ export function validateLinksOf(project) {
     const number = match ? Number.parseInt(match[1], 10) : 0;
     return number > 0 && !existingNumbers.has(number) && id === canonicalChapterId(number);
   };
+  const threadChapter = (kind, entry, field) => (mayScheduleChapter(kind, field, entry.status) ? hasScheduledChapter : hasChapter);
   const hasArc = (id) => arcs.has(id);
   // `mentions` may name characters or artifacts; prop custody checks read
   // artifact ids there.
@@ -499,9 +501,10 @@ export function validateLinksOf(project) {
   for (const question of project.questions) {
     const label = relative(project, question.file);
     // A question can be planned for a chapter not written yet; its answer
-    // must be on the page before `resolved` names a chapter.
-    checkIdReference(errors, label, question.introduced, "chapter", question.status === "open" ? hasScheduledChapter : hasChapter);
-    checkIdReference(errors, label, question.resolved, "chapter", hasChapter);
+    // must be on the page before `resolved` names a chapter, unless the
+    // question was abandoned.
+    checkIdReference(errors, label, question.introduced, "chapter", threadChapter("question", question, "introduced"));
+    checkIdReference(errors, label, question.resolved, "chapter", threadChapter("question", question, "resolved"));
     for (const characterId of question.characters) {
       checkIdReference(errors, label, characterId, "character", hasCharacter);
     }
@@ -509,8 +512,8 @@ export function validateLinksOf(project) {
 
   for (const promise of project.promises) {
     const label = relative(project, promise.file);
-    checkIdReference(errors, label, promise.planted, "chapter", promise.status === "planned" ? hasScheduledChapter : hasChapter);
-    checkIdReference(errors, label, promise.payoff, "chapter", promise.status === "paid-off" ? hasChapter : hasScheduledChapter);
+    checkIdReference(errors, label, promise.planted, "chapter", threadChapter("promise", promise, "planted"));
+    checkIdReference(errors, label, promise.payoff, "chapter", threadChapter("promise", promise, "payoff"));
     for (const arcId of promise.arcs) {
       checkIdReference(errors, label, arcId, "arc", hasArc);
     }
@@ -521,8 +524,8 @@ export function validateLinksOf(project) {
 
   for (const clue of project.clues) {
     const label = relative(project, clue.file);
-    checkIdReference(errors, label, clue.planted, "chapter", clue.status === "planned" ? hasScheduledChapter : hasChapter);
-    checkIdReference(errors, label, clue.payoff, "chapter", clue.status === "paid-off" ? hasChapter : hasScheduledChapter);
+    checkIdReference(errors, label, clue.planted, "chapter", threadChapter("clue", clue, "planted"));
+    checkIdReference(errors, label, clue.payoff, "chapter", threadChapter("clue", clue, "payoff"));
     for (const arcId of clue.arcs) {
       checkIdReference(errors, label, arcId, "arc", hasArc);
     }
