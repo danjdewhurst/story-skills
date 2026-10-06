@@ -24,7 +24,9 @@ too often to trust.
   rules.
 - Word-count limits are the market's own. `word-count-norms.md` gives the
   usual bands for short story, novelette, and novella; a story that sits
-  over a market's limit does not go to that market.
+  over a market's limit does not go to that market unless the user cuts it
+  first, with `revision-continuity`'s
+  [length pass](../../revision-continuity/references/pass-checklists.md#length-pass).
 - Many markets open only in reading periods or for themed calls. Record the
   window the user gives you in the tracker Notes.
 
