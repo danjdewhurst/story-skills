@@ -31,6 +31,24 @@ not pursue legal action against researchers who follow this policy, avoid
 harming users or disrupting services, and give us a chance to fix
 confirmed issues before disclosing them.
 
+## Verifying Releases
+
+npm releases are published with
+[npm provenance](https://docs.npmjs.com/generating-provenance-statements),
+shown on the package page and checked by `npm audit signatures`.
+
+The standalone binaries and their `story-skills_<version>_checksums.txt`
+carry a signed build provenance attestation from releases after 0.21.0.
+Check a download with the [GitHub CLI](https://cli.github.com/):
+
+```shell
+gh attestation verify story-skills_<version>_<os>_<arch>.tar.gz --repo danjdewhurst/story-skills
+```
+
+A passing check means the file was built by this repository's
+`publish.yml` workflow. See
+[Getting started](docs/getting-started.md) for checksum verification.
+
 ## Scope
 
 This policy covers the code and plugin manifests in this repository

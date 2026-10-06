@@ -478,6 +478,14 @@ describe("check-examples helpers", () => {
 
 describe("github workflows", () => {
   const workflowFiles = [".github/workflows/ci.yml", "templates/github/story-checks.yml", "templates/github/draft-next-chapter.yml", "templates/github/review-copy.yml"];
+  // Every workflow this repository runs, including publish, CodeQL, and
+  // Scorecard, which run with write tokens.
+  const repoWorkflowFiles = fs
+    .readdirSync(path.join(repoRoot, ".github/workflows"))
+    .filter((name) => /\.ya?ml$/.test(name))
+    .sort()
+    .map((name) => `.github/workflows/${name}`);
+  const pinnedFiles = [...new Set([...repoWorkflowFiles, ...workflowFiles])];
 
   test("each workflow declares top-level structure", () => {
     for (const relativePath of workflowFiles) {
@@ -489,14 +497,15 @@ describe("github workflows", () => {
   });
 
   test("every actions reference is SHA-pinned with a version comment", () => {
-    // Repo workflow and user-facing templates are all gated: a moving tag
+    // Repo workflows and user-facing templates are all gated: a moving tag
     // must never silently change what any of them run.
-    for (const relativePath of workflowFiles) {
+    expect(repoWorkflowFiles).toEqual(expect.arrayContaining([".github/workflows/ci.yml", ".github/workflows/codeql.yml", ".github/workflows/publish.yml", ".github/workflows/scorecard.yml"]));
+    for (const relativePath of pinnedFiles) {
       const refs = usesRefs(readRepo(relativePath));
       expect(refs.length, relativePath).toBeGreaterThan(0);
       for (const { ref, comment, line } of refs) {
         expect(`${relativePath}: ${line}`).toContain("#");
-        expect(ref).toMatch(/^[\w-]+\/[\w.-]+@[0-9a-f]{40}$/);
+        expect(ref).toMatch(/^[\w-]+\/[\w.-]+(\/[\w.-]+)*@[0-9a-f]{40}$/);
         expect(comment).toMatch(/^v\d/);
       }
     }

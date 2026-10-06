@@ -14,6 +14,7 @@ Why it works this way: [*Story Skills: a continuity compiler for AI-written fict
 
 [![npm](https://img.shields.io/npm/v/story-skills)](https://www.npmjs.com/package/story-skills)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/danjdewhurst/story-skills/badge)](https://scorecard.dev/viewer/?uri=github.com/danjdewhurst/story-skills)
 [![Agent Skills](https://img.shields.io/badge/Agent_Skills-SKILL.md-blue)](https://agentskills.io)
 [![Codex](https://img.shields.io/badge/Codex-plugin-10A37F)](https://developers.openai.com/codex)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-plugin-blueviolet)](https://docs.anthropic.com/en/docs/claude-code)
