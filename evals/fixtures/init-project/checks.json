@@ -1,0 +1,41 @@
+{
+  "banned": [
+    "isbn",
+    "publisher",
+    "publication-date",
+    "keywords",
+    "subjects",
+    "cover-alt",
+    "ai-disclosure",
+    "language: en-US",
+    "dialect: american"
+  ],
+  "banned_regex": [
+    "\\bstory init\\s+\"",
+    "--(?:title|form|genre|sub-genre|setting-era|pov|tense|synopsis|theme)\\s+\"",
+    "--language\\b",
+    "\\blanguage:\\s*[\"']?en[\"']?\\s*(?:\\n|$)",
+    "\\bstatus:\\s*(?!planning\\b)[a-z]",
+    "\\bstory init\\s+'The Keeper's Key'"
+  ],
+  "brief": "Set up the project from the user's answers. Return the exact command you would run in a fenced shell block, then, in a second fenced block, the full story.md frontmatter as it should read once setup is finished. No commentary.",
+  "max_words": 220,
+  "min_words_ratio": 0.5,
+  "name": "init-project",
+  "required": [
+    "story init",
+    "'The Keeper'\\''s Key'",
+    "--form 'novella'",
+    "schema-version: 2",
+    "status: planning",
+    "form: novella",
+    "pov: first-person",
+    "tense: past",
+    "language: en-GB",
+    "premise:",
+    "counter-premise:",
+    "grief",
+    "duty"
+  ],
+  "skill": "story-init"
+}

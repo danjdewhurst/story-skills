@@ -1,0 +1,38 @@
+{
+  "banned": [
+    "died-in",
+    "status: deceased",
+    "status: retired",
+    "role: retired",
+    "role: minor",
+    "role: supporting"
+  ],
+  "banned_regex": [
+    "(?:^|\\n)(?:scar|title|injury|burn|burns|left-hand|hand|retired)\\s*:",
+    "\\bfield:\\s*(?:aliases|tags|relationships|locations|voice-words|voice-avoid|status|role)\\b",
+    "(?:^|\\n)aliases:\\s*\\n(?:[ \\t]+-[^\\n]*\\n)*?[ \\t]+-[^\\n]*retired",
+    "(?:^|\\n)tags:\\s*\\n(?:[ \\t]+-[^\\n]*\\n)*?[ \\t]+-[^\\n]*(?:retired|scar|burn)",
+    "\\bfrom:\\s*chapter-0?[1-5]\\b",
+    "\\bfrom:\\s*chapter-09\\b[\\s\\S]*\\bfrom:\\s*chapter-06\\b"
+  ],
+  "brief": "Record both changes in characters/tomas-reyes.md so chapters before them never see them. Keep every opening value as it is. Return only the updated frontmatter.",
+  "max_words": 120,
+  "min_words_ratio": 0.2,
+  "name": "character-progression",
+  "required": [
+    "Tomas Reyes",
+    "role: protagonist",
+    "status: alive",
+    "the keeper",
+    "ana-reyes",
+    "petra-lindqvist",
+    "greywidow-light",
+    "progressions:",
+    "from: chapter-06",
+    "from: chapter-09",
+    "scar",
+    "left hand",
+    "retired keeper"
+  ],
+  "skill": "character-management"
+}

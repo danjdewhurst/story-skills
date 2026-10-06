@@ -3,7 +3,10 @@
 Regression tests for the fiction-writing skills. Each fixture is a drafting
 brief seeded with known canon (established facts that must survive) and
 known traps (inventions, resolved mysteries, or slop a lazy draft would
-introduce). A passing draft keeps the canon, springs none of the traps, and
+introduce). Fixtures for the skills that write files rather than prose (a
+query letter, a synthesis, a style sheet, a character's frontmatter) work
+the same way: the canon is what the file must keep, and the traps are what
+the skill must not invent or decide for the user. A passing draft keeps the canon, springs none of the traps, and
 reads as written by one person. The checker (`run-evals.js`) is
 dependency-free Node.
 
@@ -146,6 +149,17 @@ hand before/after skill changes, with results recorded below.
 | `line-editing-ar` | An Arabic passage with straight quotes, Latin commas and question marks, and the style sheet's watch words (فجأة, a named feeling) must come back in «» with `،` and `؟` and the watch words cut. Evaluates `line-editing` with its language conventions. |
 | `branch-rejoin` | The prose of a branching chapter where two branches rejoin, true on both paths, under 150 words and ending on the choice. Where Tobias lies or where his coat is (each differs by path), the ship "you saw" (only one branch saw it), either ending, frontmatter, or Twine link syntax fails. The runner keeps only the text under `## Chapter Text`, so the fixture checks prose, not the chapter's `choices`. Evaluates the `interactive-fiction` skill. |
 | `context-boundary` | A chapter drafted from `story context` output with the whole-book outline open beside it: it stays inside the target length and uses nothing the packed context leaves out (the logbook, the fuse wire, who left the key). Evaluates `chapter-writing`'s use of `story context`. The runner gives the model no tools, so the fixture supplies the command's output: it tests staying inside the budget and the spoiler boundary, not the choice to run the command. |
+| `query-letter` | A query letter from a finished book's facts: the title in capitals, the word count rounded to `71,000` (not `71,482`), and `[TODO` placeholders for the agent, comps, and bio the author has not supplied. The ending (the logbook, going ashore with Petra), invented comps after "readers of", credentials, and any question mark fail. Evaluates the `submission` skill. |
+| `triage-synthesis` | A round-3 synthesis from three human readers' notes: the POV slip two readers found is convergent, the pacing split is adjudicated, the Thursday contradiction is accepted, and the romance a reader wants is declined with a reason from the premise. A `ready` verdict, a romance in the revision plan, "the author disagrees", or labelling the round simulated fails. Evaluates the `feedback-triage` skill. |
+| `reconcile-diff` | The reconcile loop on a discovered chapter, written as its post-hoc notes: Ewan as a candidate for approval, the Petra-every-Thursday contradiction put to the user, the cracked prism as enrichment, and the second keyhole as dangling. Claiming to have created files, updating the bible to the chapter's version unasked, or naming who left the key fails. Evaluates the `discovery-drafting` skill. |
+| `sensitivity-brief` | A reading brief for a sensitivity reader with lived experience of sight loss: the three chapters, the author's specific questions, and `[TODO` for the deadline, fee, and credit the author has not settled. An invented fee or date, unpaid or "volunteer" reading, or a promise that the read certifies the portrayal fails. Evaluates the `editorial-review` skill. |
+| `character-progression` | Two later changes to Tomas (a burned hand from chapter 6, retired keeper from chapter 9) recorded as `progressions` in story order, with every opening value kept. A top-level `scar` or `title` field, a progression on a list field such as `aliases`, a change to `status` or `role`, or a progression before chapter 6 fails. Evaluates the `character-management` skill. |
+| `copyright-page` | The copyright matter page from what the author supplied: `order: 0`, `heading: false`, her copyright line, the UK moral rights line, and the cover credit, with `[TODO` for the ISBNs and edition month. An invented ISBN, imprint, editor, release month, or permission credit for the pending epigraph fails. Evaluates the `publishing` skill. |
+| `research-note` | A research note opened with no sources available: `status: open`, `confidence: low`, a question, and a search plan that names primary sources. Marking it verified, raising confidence, listing a source or URL, or stating a recalled fact (pumping "every two hours", a dated manual) as found fails. Evaluates the `research` skill. |
+| `init-project` | The `story init` command and the finished `story.md` frontmatter from the user's answers: every value single-quoted (the title as `'The Keeper'\''s Key'`), `language: en-GB` added after init, and `status: planning`. A double-quoted value, a `--language` flag (there is none), `language: en`, or publishing metadata asked for at init fails. Evaluates the `story-init` skill. |
+| `maintenance-triage` | What to do with a `story check` report: run `story reindex` and `story wordcount --write` for the mechanical findings, and leave the open promise, the author's deliberate `[TODO`, and the continuity state to the author or `revision-continuity`. Marking the promise paid off or abandoned, changing `story.md`'s status to hide the error, silencing a warning, or removing the `[TODO` fails. Evaluates the `story-maintenance` skill. |
+| `location-routes` | The supply-boat route and a chapter 9 automation recorded in Greywidow Light's frontmatter: a `routes` entry to `skerry-harbour` with `hours: 1.5`, and a `status` progression from chapter 9 while the opening `status: manned` stays. A top-level `power` or changed `status`, a progression on `notable-characters`, or a summed round trip fails. Evaluates the `worldbuilding` skill. |
+| `style-sheet` | A style sheet filled from two approved chapters: British dialect, *lamp room*, plain *said*, and the *Okay*/*OK* inconsistency put to the author instead of decided. A `preferred` entry choosing either form, an American dialect, or the agent-drafted chapter 3 listed in `samples` fails. Evaluates the `voice-style` skill. |
 
 ## Skill coverage
 
@@ -155,26 +169,35 @@ Each fixture runs under the skill its `checks.json` names in `skill`.
 | --- | --- |
 | `adaptation` | `screenplay-fountain` |
 | `chapter-writing` | `anti-slop`, `canon-keeping`, `context-boundary`, `drafting-ar`, `drafting-fr`, `drafting-ja`, `no-invention`, `promise-payoff`, `question-stays-open` |
+| `character-management` | `character-progression` |
+| `discovery-drafting` | `reconcile-diff` |
+| `editorial-review` | `sensitivity-brief` |
+| `feedback-triage` | `triage-synthesis` |
 | `genre-craft` | `genre-craft-mystery` |
 | `interactive-fiction` | `branch-rejoin` |
 | `line-editing` | `line-editing-ar`, `line-editing-fr`, `line-editing-ja`, `voice-preservation` |
 | `plot-structure` | `plot-beats` |
 | `premise-workshop` | `premise-logline` |
+| `publishing` | `copyright-page` |
 | `reader-panel` | `reader-panel` |
+| `research` | `research-note` |
 | `revision-continuity` | `revision-continuity` |
 | `scene-craft` | `deep-pov`, `scene-sequel` |
 | `series-continuity` | `series-continuity` |
+| `story-init` | `init-project` |
+| `story-maintenance` | `maintenance-triage` |
+| `submission` | `query-letter` |
 | `theme-craft` | `motif-restraint` |
 | `verse-craft` | `verse-limerick` |
+| `voice-style` | `style-sheet` |
+| `worldbuilding` | `location-routes` |
 
-Twenty-five fixtures cover thirteen of the 24 skills. These eleven have none:
-`character-management`, `discovery-drafting`, `editorial-review`,
-`feedback-triage`, `publishing`, `research`, `story-init`,
-`story-maintenance`, `submission`, `voice-style`, and `worldbuilding`. They
-have no behavioural regression net and rely on human review. A skill is
-worth a fixture when a substring checker can tell a good output from a bad
-one; a fixture that passes whatever the skill does is worse than an honest
-gap. Keep this table current when you add a fixture.
+Thirty-six fixtures cover all 24 skills. Most skills have one fixture, so
+the net is thin: one fixture catches the regression it was written for, not
+every way the skill can go wrong. A skill is worth another fixture when a
+substring checker can tell a good output from a bad one; a fixture that
+passes whatever the skill does is worse than an honest gap. Keep this table
+current when you add a fixture.
 
 ## Check format
 
