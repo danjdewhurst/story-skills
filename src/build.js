@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { chapterChronology } from "./chronology.js";
 import { entityStateAt } from "./progressions.js";
-import { isPlanning, lstatIfExists, nearestExistingAncestor, portablePath, projectPath, removeFile, writeFile } from "./files.js";
+import { isPlanning, lstatIfExists, nearestExistingAncestor, portablePath, projectPath, removeDirectory, removeFile, writeFile } from "./files.js";
 import { CODEX_GENERATOR, CODEX_KINDS, codexPages } from "./codex.js";
 import { PROGRESS_FILE } from "./progress.js";
 import {
@@ -278,9 +278,12 @@ function removeStaleCodexPages(directory, written) {
     if (lstatIfExists(folder)?.isDirectory() !== true) {
       continue;
     }
-    stalePages(folder).forEach((file) => removeFile(file));
-    if (folder !== directory && fs.readdirSync(folder).length === 0) {
-      fs.rmdirSync(folder);
+    const stale = stalePages(folder);
+    stale.forEach((file) => removeFile(file));
+    // Counted before the pages go, so a --dry-run, which deletes none, sees
+    // the folder the real build would empty.
+    if (folder !== directory && fs.readdirSync(folder).length === (isPlanning() ? stale.length : 0)) {
+      removeDirectory(folder);
     }
   }
 }

@@ -97,6 +97,10 @@ describe("--dry-run for builds and exports", () => {
     const characters = path.join(root, "dist", "codex", "characters");
     const page = fs.readdirSync(characters).find((name) => name.endsWith(".html"));
     fs.copyFileSync(path.join(characters, page), path.join(characters, "ghost.html"));
+    // An empty entity folder, and one only a stale page keeps, both go.
+    fs.mkdirSync(path.join(root, "dist", "codex", "systems"));
+    fs.mkdirSync(path.join(root, "dist", "codex", "factions"));
+    fs.copyFileSync(path.join(characters, page), path.join(root, "dist", "codex", "factions", "old-guild.html"));
     // A rebuild of an unchanged book writes the same bytes, which the tree
     // comparison cannot see, so the book changes first.
     fs.appendFileSync(path.join(root, "chapters", "chapter-01.md"), "\nA last line.\n");
@@ -105,6 +109,8 @@ describe("--dry-run for builds and exports", () => {
     expect(epub.planned).toEqual([{ action: "update", path: "dist/the-unraveled-thread.epub" }]);
     const codex = expectTextParity({ parent, cwd: root, base: root, argv: ["build", "--format", "codex"], command: "build", rewrites: true });
     expect(codex.planned).toContainEqual({ action: "delete", path: "dist/codex/characters/ghost.html" });
+    expect(codex.planned).toContainEqual({ action: "delete", path: "dist/codex/factions" });
+    expect(codex.planned).toContainEqual({ action: "delete", path: "dist/codex/systems" });
   });
 
   test("export --dry-run plans an --out outside the project, folders and all", () => {
@@ -132,19 +138,35 @@ describe("--dry-run for builds and exports", () => {
   test.skipIf(CHMOD_IGNORED)("a dry run refuses a folder the build cannot write to", () => {
     const { root } = copyExample();
     const locked = path.join(makeTempDir(), "locked");
-    fs.mkdirSync(locked, { mode: 0o555 });
+    fs.mkdirSync(locked);
+    // A writable file in a folder that is not: the write's temporary file
+    // cannot be made beside it.
+    fs.writeFileSync(path.join(locked, "kept.md"), "old");
+    fs.chmodSync(locked, 0o555);
     try {
-      for (const out of [path.join(locked, "book.md"), path.join(locked, "drafts", "book.md")]) {
+      for (const out of [path.join(locked, "book.md"), path.join(locked, "drafts", "book.md"), path.join(locked, "kept.md")]) {
         const preview = invoke(root, ["export", "--out", out, "--dry-run"]);
         const real = invoke(root, ["export", "--out", out]);
         expect(preview.code).toBe(real.code);
         expect(preview.code).not.toBe(0);
         expect(preview.err).toBe(real.err);
-        expect(fs.readdirSync(locked)).toEqual([]);
+        expect(fs.readdirSync(locked)).toEqual(["kept.md"]);
       }
     } finally {
       fs.chmodSync(locked, 0o755);
     }
+  });
+
+  test("a dry run is refused when a folder holds the write's temporary file's place", () => {
+    const { root } = copyExample();
+    fs.mkdirSync(path.join(root, "dist", `.book.md.story-${process.pid}.tmp`), { recursive: true });
+    const preview = invoke(root, ["export", "--out", "dist/book.md", "--dry-run"]);
+    const real = invoke(root, ["export", "--out", "dist/book.md"]);
+    expect(preview.code).toBe(4);
+    // The real write fails cleaning up its temporary file, with a less
+    // helpful message; both are refused writes.
+    expect(preview.code).toBe(real.code);
+    expect(preview.err).toBe("Cannot write to dist/book.md: it is a folder, not a file\n");
   });
 
   // A stub engine is a script with a shebang, which Windows cannot run.
@@ -300,6 +322,55 @@ describe("--dry-run for init and import", () => {
     const missing = invoke(parent, ["import", "nowhere.md", "--title", "Gone", "--dry-run"]);
     expect(missing.code).toBe(2);
     expect(missing.err).toContain("Import source not found");
+  });
+
+  test("import --dry-run lists the missing folders above a new project", () => {
+    const parent = makeTempDir();
+    fs.writeFileSync(path.join(parent, "draft.md"), "# One\n\nText.\n");
+    const base = path.join(parent, "books", "drafts", "new");
+    const { planned } = expectTextParity({ parent, cwd: parent, base, argv: ["import", "draft.md", "--title", "New", "--dir", "books/drafts/new"], command: "import" });
+    expect(planned.slice(0, 3)).toEqual([
+      { action: "mkdir", path: "." },
+      { action: "mkdir", path: ".." },
+      { action: "mkdir", path: "../.." }
+    ].sort((a, b) => (a.path < b.path ? -1 : 1)));
+  });
+
+  test.skipIf(CHMOD_IGNORED)("import --dry-run is refused in a folder the import cannot write to", () => {
+    const parent = makeTempDir();
+    fs.writeFileSync(path.join(parent, "draft.md"), "# One\n\nText.\n");
+    const locked = path.join(parent, "locked");
+    fs.mkdirSync(locked, { mode: 0o555 });
+    try {
+      for (const dir of ["locked/new", "locked/deeper/new"]) {
+        const preview = invoke(parent, ["import", "draft.md", "--title", "New", "--dir", dir, "--dry-run"]);
+        const real = invoke(parent, ["import", "draft.md", "--title", "New", "--dir", dir]);
+        expect(preview.code).not.toBe(0);
+        expect(preview.code).toBe(real.code);
+        expect(preview.err).toBe(real.err);
+      }
+    } finally {
+      fs.chmodSync(locked, 0o755);
+    }
+  });
+
+  // Windows makes symlinks only with extra privileges.
+  test.skipIf(process.platform === "win32")("import --dry-run treats a symlinked story.md above it as the real import does", () => {
+    const { parent, root } = copyExample();
+    const shelf = path.join(parent, "shelf");
+    fs.mkdirSync(shelf);
+    fs.symlinkSync(path.join(root, "story.md"), path.join(shelf, "story.md"));
+    fs.writeFileSync(path.join(parent, "draft.md"), "# One\n\nText.\n");
+    expectTextParity({ parent, cwd: shelf, base: path.join(shelf, "new"), argv: ["import", "../draft.md", "--title", "New"], command: "import" });
+
+    // A dangling symlink where a parent folder would be.
+    fs.symlinkSync(path.join(parent, "nowhere"), path.join(parent, "dangling"));
+    const argv = ["import", "draft.md", "--title", "New", "--dir", "dangling/new"];
+    const preview = invoke(parent, [...argv, "--dry-run"]);
+    const real = invoke(parent, argv);
+    expect(preview.code).not.toBe(0);
+    expect(preview.code).toBe(real.code);
+    expect(preview.err).toBe(real.err);
   });
 
   test("import --dry-run is refused where the real import is, and writes nothing", () => {
