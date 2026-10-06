@@ -32,7 +32,7 @@ bun install
 bun run story -- --help
 ```
 
-The pin is not cosmetic. `skills/story-maintenance/scripts/story.js` is a committed Bun build of the CLI, and `check:fallback` compares it byte for byte against a fresh build. Bun renames generated identifiers between releases, so building that bundle with a different Bun rewrites hundreds of lines that change nothing, and the check fails on an untouched checkout. `build:fallback` and `check:fallback` both stop with an explanation when `bun --version` does not match the pin, and `check:metadata` keeps the pin, `bun-version` in [`ci.yml`](../.github/workflows/ci.yml), and the version named above in step. Moving the project to a newer Bun is those three edits plus `bun run build:fallback` and the regenerated bundle in the same commit.
+The pin is not cosmetic. `skills/story-maintenance/scripts/story.js` is a committed Bun build of the CLI, and `check:fallback` compares it byte for byte against a fresh build. Bun renames generated identifiers between releases, so building that bundle with a different Bun rewrites hundreds of lines that change nothing, and the check fails on an untouched checkout. `build:fallback` and `check:fallback` both stop with an explanation when `bun --version` does not match the pin, and `check:metadata` keeps the pin, every `bun-version` in [`.github/workflows/`](../.github/workflows/) (the jobs in `ci.yml` and the release binaries in `publish.yml`), and the version named above in step. Moving the project to a newer Bun is those edits plus `bun run build:fallback` and the regenerated bundle in the same commit.
 
 `bun run story -- <args>` runs the CLI straight from `src/`. Everything after `--` is passed to `story`, so `bun run story -- validate examples/the-last-ember` validates an example project.
 
@@ -465,6 +465,7 @@ Metadata is aligned for story-skills@0.22.1.
 - `.codex-plugin/plugin.json` `skills` must be `./skills/`.
 - Every directory in `skills/` must contain a `SKILL.md` whose frontmatter `name` equals the directory name and whose `description` is non-empty.
 - `STORY_VERSION` in `templates/github/story-checks.yml`, `templates/github/draft-next-chapter.yml`, and `templates/github/review-copy.yml` must equal the package version.
+- Every `bun-version` in `.github/workflows/` must equal the Bun version `packageManager` pins in `package.json`, and `ci.yml` must set one. The failure names the file and line. `docs/development.md` must name the same version as `bun@X.Y.Z`.
 - Version examples in `README.md` and `docs/*.md` must name the package version. `scripts/doc-versions.js` defines them: a line holding only a version (`--version` output), `story-skills@X.Y.Z`, `story-skills#vX.Y.Z`, `STORY_VERSION: "X.Y.Z"`, `git checkout vX.Y.Z`, and the `Releasing X.Y.Z -> ...` transcript. Other version mentions, such as "newer than 0.8.2" or a `--ref v0.8.0` example, are not checked. The failure names the file and line.
 - `.claude-plugin/marketplace.json` and `.agents/plugins/marketplace.json` must name the package, list a plugin with the package name, and carry no version that differs from the package. The Codex entry must point at `./plugins/story-skills`, and that path must exist.
 
@@ -588,7 +589,7 @@ Both plugin manifests pick up new skills automatically: `.codex-plugin/plugin.js
 
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on pushes to `main` and on every pull request. A new run on a pull request cancels the one in progress. Each push to `main` gets a concurrency group of its own, so a later push never cancels a `main` run or leaves it pending: the Publish workflow needs a finished run for every release commit; see [Publishing to npm](#publishing-to-npm). The workflow file is the source of truth for which checks run and in what order.
 
-Every job checks out with `persist-credentials: false`, since none pushes. The `test` job installs the Bun version pinned by `packageManager` in `package.json` (`check:metadata` fails if `bun-version` drifts from the pin) and runs, in order:
+Every job checks out with `persist-credentials: false`, since none pushes. The `test` job installs the Bun version pinned by `packageManager` in `package.json` (`check:metadata` fails if any `bun-version` in a workflow drifts from the pin) and runs, in order:
 
 1. `bun install`
 2. `bun run check:metadata`
