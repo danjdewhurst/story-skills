@@ -34,11 +34,13 @@ export function relativeLinks(markdown) {
   return [...links].sort();
 }
 
-function run(command, args, cwd) {
+function execRun(command, args, cwd) {
   return execFileSync(command, args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
 }
 
-function main() {
+// Returns the exit status. `run(command, args, cwd)` stands in for
+// execFileSync, so tests can stand in for npm without packing anything.
+export function checkPackage({ run = execRun, root = repoRoot, log = console.log, error: logError = console.error } = {}) {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "story-skills-pack-"));
   try {
     const packDir = path.join(work, "pack");
@@ -46,9 +48,9 @@ function main() {
     fs.mkdirSync(packDir);
     fs.mkdirSync(installDir);
 
-    const packed = JSON.parse(run(npm, ["pack", "--json", "--pack-destination", packDir], repoRoot));
+    const packed = JSON.parse(run(npm, ["pack", "--json", "--pack-destination", packDir], root));
     const tarball = path.join(packDir, packed[0].filename);
-    const version = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf8")).version;
+    const version = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;
 
     fs.writeFileSync(path.join(installDir, "package.json"), '{ "name": "story-skills-pack-check", "private": true }\n');
     run(npm, ["install", "--no-audit", "--no-fund", "--ignore-scripts", tarball], installDir);
@@ -80,22 +82,25 @@ function main() {
     try {
       requireFromInstall.resolve("story-skills/src/cli.js");
     } catch (error) {
-      if (error.code !== "ERR_PACKAGE_PATH_NOT_EXPORTED") throw error;
+      // Node reports an unexported subpath as ERR_PACKAGE_PATH_NOT_EXPORTED;
+      // Bun reports MODULE_NOT_FOUND. Either way it does not resolve.
+      if (error.code !== "ERR_PACKAGE_PATH_NOT_EXPORTED" && error.code !== "MODULE_NOT_FOUND") throw error;
       leaked = false;
     }
     if (leaked) {
       throw new Error("story-skills/src/cli.js resolves, but src/ should not be exported");
     }
 
-    console.log(`Packed tarball ${packed[0].filename} installs and runs story ${version}`);
+    log(`Packed tarball ${packed[0].filename} installs and runs story ${version}`);
+    return 0;
   } catch (error) {
-    console.error(`Package check failed: ${error.message}`);
-    process.exitCode = 1;
+    logError(`Package check failed: ${error.message}`);
+    return 1;
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
   }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main();
+  process.exitCode = checkPackage();
 }

@@ -100,28 +100,43 @@ function compareVersions(a, b) {
   return 0;
 }
 
-function run(command, args, options = {}) {
-  return execFileSync(command, args, {
-    cwd: repoRoot,
-    encoding: "utf8",
-    stdio: options.inherit ? ["ignore", "inherit", "inherit"] : ["ignore", "pipe", "pipe"],
-  });
+// Everything that reaches outside the process goes through these, so tests
+// drive the whole release with a stubbed `run` and a temporary root: a test
+// never starts a real git, gh, npm, or bun process.
+export function releaseDeps(overrides = {}) {
+  const root = overrides.root ?? repoRoot;
+  return {
+    root,
+    run: (command, args, options = {}) =>
+      execFileSync(command, args, {
+        cwd: root,
+        encoding: "utf8",
+        stdio: options.inherit ? ["ignore", "inherit", "inherit"] : ["ignore", "pipe", "pipe"],
+      }),
+    log: console.log,
+    error: console.error,
+    today: () => new Date().toISOString().slice(0, 10),
+    ...overrides
+  };
 }
 
-function git(...args) {
-  return run("git", args).trim();
-}
+// A check that refuses the release. runRelease prints it as
+// "Release aborted: <message>" and returns 1.
+export class ReleaseAbort extends Error {}
 
 function fail(message) {
-  console.error(`Release aborted: ${message}`);
-  process.exit(1);
+  throw new ReleaseAbort(message);
+}
+
+function git(deps, ...args) {
+  return deps.run("git", args).trim();
 }
 
 // Releases are cut with Bun, so a missing binary should read as a setup problem
 // rather than a `spawnSync bun ENOENT` stack trace.
-function runBun(args, options = {}) {
+function runBun(deps, args, options = {}) {
   try {
-    return run("bun", args, options);
+    return deps.run("bun", args, options);
   } catch (error) {
     const missing = missingBunMessage(error);
     if (!missing) {
@@ -133,10 +148,10 @@ function runBun(args, options = {}) {
 
 // The tag push triggers .github/workflows/publish.yml, which publishes to npm
 // through trusted publishing. Check here that the version is still free.
-function checkNpm(name, nextVersion) {
+function checkNpm(deps, name, nextVersion) {
   let published = "";
   try {
-    published = run("npm", ["view", `${name}@${nextVersion}`, "version"]).trim();
+    published = deps.run("npm", ["view", `${name}@${nextVersion}`, "version"]).trim();
   } catch (error) {
     if (!isAbsentNpmVersion(error)) {
       fail(`could not check npm for ${name}@${nextVersion}: ${error.stderr || error.message}`);
@@ -147,44 +162,50 @@ function checkNpm(name, nextVersion) {
   }
 }
 
-function preflight(nextVersion, tag, name) {
-  if (git("rev-parse", "--abbrev-ref", "HEAD") !== RELEASE_BRANCH) {
+function preflight(deps, nextVersion, tag, name) {
+  if (git(deps, "rev-parse", "--abbrev-ref", "HEAD") !== RELEASE_BRANCH) {
     fail(`releases are cut from ${RELEASE_BRANCH}.`);
   }
-  if (git("status", "--porcelain") !== "") {
+  if (git(deps, "status", "--porcelain") !== "") {
     fail("working tree is not clean. Commit or stash your changes first.");
   }
-  git("fetch", "origin", RELEASE_BRANCH, "--tags");
-  if (git("rev-parse", "HEAD") !== git("rev-parse", `origin/${RELEASE_BRANCH}`)) {
+  git(deps, "fetch", "origin", RELEASE_BRANCH, "--tags");
+  if (git(deps, "rev-parse", "HEAD") !== git(deps, "rev-parse", `origin/${RELEASE_BRANCH}`)) {
     fail(`local ${RELEASE_BRANCH} does not match origin/${RELEASE_BRANCH}. Pull or push first.`);
   }
-  const changelogProblem = changelogProblemFor(fs.readFileSync(path.join(repoRoot, CHANGELOG_FILE), "utf8"));
+  const changelogProblem = changelogProblemFor(fs.readFileSync(path.join(deps.root, CHANGELOG_FILE), "utf8"));
   if (changelogProblem) {
     fail(changelogProblem);
   }
-  if (git("tag", "--list", tag) !== "") {
+  if (git(deps, "tag", "--list", tag) !== "") {
     fail(`tag ${tag} already exists.`);
   }
   try {
-    run("gh", ["auth", "status"]);
+    deps.run("gh", ["auth", "status"]);
   } catch {
     fail("gh is not installed or not logged in. Run `gh auth login`.");
   }
+  // fail() throws, so it stays outside the try: inside, the catch would
+  // swallow "already exists" and report it as a failed lookup.
+  let releaseExists = true;
   try {
-    run("gh", ["release", "view", tag]);
-    fail(`GitHub release ${tag} already exists.`);
+    deps.run("gh", ["release", "view", tag]);
   } catch (error) {
     if (!isAbsentGitHubRelease(error)) {
       fail(`could not check GitHub release ${tag}: ${error.stderr || error.message}`);
     }
+    releaseExists = false;
   }
-  checkNpm(name, nextVersion);
+  if (releaseExists) {
+    fail(`GitHub release ${tag} already exists.`);
+  }
+  checkNpm(deps, name, nextVersion);
 
   for (const script of PREFLIGHT) {
-    console.log(`\n> bun run ${script}`);
-    runBun(["run", script], { inherit: true });
+    deps.log(`\n> bun run ${script}`);
+    runBun(deps, ["run", script], { inherit: true });
   }
-  console.log(`\nPreflight passed for ${nextVersion}.`);
+  deps.log(`\nPreflight passed for ${nextVersion}.`);
 }
 
 // A release with nothing under Unreleased would publish an empty changelog
@@ -240,34 +261,50 @@ export function updateVersionFiles(root, nextVersion) {
   return updated;
 }
 
-function writeVersions(currentVersion, nextVersion) {
+function writeVersions(deps, currentVersion, nextVersion) {
   // The changelog goes first: it is the one rewrite that can refuse (a section
   // for this version already exists), and it should refuse before any bump.
-  const date = new Date().toISOString().slice(0, 10);
-  const changelog = updateChangelog(repoRoot, currentVersion, nextVersion, date);
-  console.log(`Moved the Unreleased entries in ${CHANGELOG_FILE} under ${nextVersion} - ${date}`);
-  const updated = updateVersionFiles(repoRoot, nextVersion);
+  const date = deps.today();
+  const changelog = updateChangelog(deps.root, currentVersion, nextVersion, date);
+  deps.log(`Moved the Unreleased entries in ${CHANGELOG_FILE} under ${nextVersion} - ${date}`);
+  const updated = updateVersionFiles(deps.root, nextVersion);
   for (const relativePath of updated) {
-    console.log(`Bumped ${relativePath} to ${nextVersion}`);
+    deps.log(`Bumped ${relativePath} to ${nextVersion}`);
   }
   updated.push(changelog);
   // The bundled fallback inlines src/version.js, so rebuild it with the bump.
-  runBun(["run", "build:fallback"], { inherit: true });
-  runBun(["run", "check:metadata"], { inherit: true });
+  runBun(deps, ["run", "build:fallback"], { inherit: true });
+  runBun(deps, ["run", "check:metadata"], { inherit: true });
   return updated;
 }
 
-function main(argv) {
+// Runs the release and returns its exit status. Bad arguments print the usage
+// and a refused check prints "Release aborted: ..."; both return 1. Any other
+// error propagates, as an uncaught exception did before.
+export function runRelease(argv, overrides = {}) {
+  const deps = releaseDeps(overrides);
   let bump;
   let dryRun;
   try {
     ({ bump, dryRun } = parseReleaseArgs(argv));
   } catch (error) {
-    console.error(error.message);
-    process.exit(1);
+    deps.error(error.message);
+    return 1;
   }
+  try {
+    release(deps, bump, dryRun);
+  } catch (error) {
+    if (!(error instanceof ReleaseAbort)) {
+      throw error;
+    }
+    deps.error(`Release aborted: ${error.message}`);
+    return 1;
+  }
+  return 0;
+}
 
-  const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf8"));
+function release(deps, bump, dryRun) {
+  const packageJson = JSON.parse(fs.readFileSync(path.join(deps.root, "package.json"), "utf8"));
   let nextVersion;
   try {
     nextVersion = bumpVersion(packageJson.version, bump);
@@ -275,27 +312,27 @@ function main(argv) {
     fail(error.message);
   }
   const tag = `v${nextVersion}`;
-  console.log(`Releasing ${packageJson.version} -> ${nextVersion} (${tag})`);
+  deps.log(`Releasing ${packageJson.version} -> ${nextVersion} (${tag})`);
 
-  preflight(nextVersion, tag, packageJson.name);
+  preflight(deps, nextVersion, tag, packageJson.name);
   if (dryRun) {
-    console.log(`Dry run: would bump ${[...VERSION_FILES, VERSION_MODULE].join(", ")}, the STORY_VERSION templates, and the version examples in README.md and docs/, move the ${CHANGELOG_FILE} Unreleased entries under ${nextVersion}, rebuild the fallback, commit, tag ${tag}, push, and create the GitHub release. The tag push publishes ${packageJson.name}@${nextVersion} to npm from GitHub Actions.`);
+    deps.log(`Dry run: would bump ${[...VERSION_FILES, VERSION_MODULE].join(", ")}, the STORY_VERSION templates, and the version examples in README.md and docs/, move the ${CHANGELOG_FILE} Unreleased entries under ${nextVersion}, rebuild the fallback, commit, tag ${tag}, push, and create the GitHub release. The tag push publishes ${packageJson.name}@${nextVersion} to npm from GitHub Actions.`);
     return;
   }
 
-  const updated = writeVersions(packageJson.version, nextVersion);
-  git("add", ...updated, FALLBACK_FILE);
-  git("commit", "-m", `chore: release ${nextVersion}`);
-  git("tag", "-a", tag, "-m", tag);
-  git(...releasePushArgs(tag));
-  console.log(`Pushed ${RELEASE_BRANCH} and ${tag}`);
+  const updated = writeVersions(deps, packageJson.version, nextVersion);
+  git(deps, "add", ...updated, FALLBACK_FILE);
+  git(deps, "commit", "-m", `chore: release ${nextVersion}`);
+  git(deps, "tag", "-a", tag, "-m", tag);
+  git(deps, ...releasePushArgs(tag));
+  deps.log(`Pushed ${RELEASE_BRANCH} and ${tag}`);
 
-  const releaseUrl = run("gh", ["release", "create", tag, "--title", tag, "--generate-notes", "--verify-tag"]).trim();
-  console.log(`Created GitHub release: ${releaseUrl}`);
+  const releaseUrl = deps.run("gh", ["release", "create", tag, "--title", tag, "--generate-notes", "--verify-tag"]).trim();
+  deps.log(`Created GitHub release: ${releaseUrl}`);
 
-  console.log(`The Publish workflow is publishing ${packageJson.name}@${nextVersion} to npm: https://github.com/danjdewhurst/story-skills/actions/workflows/publish.yml`);
+  deps.log(`The Publish workflow is publishing ${packageJson.name}@${nextVersion} to npm: https://github.com/danjdewhurst/story-skills/actions/workflows/publish.yml`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main(process.argv.slice(2));
+  process.exitCode = runRelease(process.argv.slice(2));
 }

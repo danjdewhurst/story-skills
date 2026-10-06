@@ -13,8 +13,6 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-const FIXTURES_DIR = path.join(ROOT, "evals", "fixtures");
-const EXAMPLES_DIR = path.join(ROOT, "evals", "examples");
 
 const KNOWN_VOICE_KEYS = new Set([
   "contraction_rate",
@@ -22,15 +20,6 @@ const KNOWN_VOICE_KEYS = new Set([
   "hedge_rate",
   "mean_word_length",
 ]);
-
-const errors = [];
-const warnings = [];
-const check = (cond, msg) => {
-  if (!cond) errors.push(msg);
-};
-const warn = (msg) => {
-  warnings.push(msg);
-};
 
 function isNumber(v) {
   return typeof v === "number" && !Number.isNaN(v);
@@ -176,30 +165,39 @@ export function checkFixtureSkill(failures, skillsDir, skillName, fixtureName, e
   return failures;
 }
 
-function main() {
-  if (!fs.existsSync(FIXTURES_DIR)) {
-    console.log("FAIL evals/fixtures: missing directory");
+// Checks evals/fixtures and evals/examples under `root` and returns the exit
+// status, printing each line through `log`.
+export function checkEvals(root = ROOT, log = console.log) {
+  const fixturesDir = path.join(root, "evals", "fixtures");
+  const examplesDir = path.join(root, "evals", "examples");
+  const errors = [];
+  const warnings = [];
+  const check = (cond, msg) => {
+    if (!cond) errors.push(msg);
+  };
+  if (!fs.existsSync(fixturesDir)) {
+    log("FAIL evals/fixtures: missing directory");
     return 1;
   }
-  if (!fs.existsSync(EXAMPLES_DIR)) {
-    console.log("FAIL evals/examples: missing directory");
+  if (!fs.existsSync(examplesDir)) {
+    log("FAIL evals/examples: missing directory");
     return 1;
   }
   const fixtures = fs
-    .readdirSync(FIXTURES_DIR, { withFileTypes: true })
+    .readdirSync(fixturesDir, { withFileTypes: true })
     .filter((e) => e.isDirectory())
     .map((e) => e.name)
     .sort();
   check(fixtures.length > 0, "evals/fixtures: no fixtures found");
 
   for (const name of fixtures) {
-    const dir = path.join(FIXTURES_DIR, name);
+    const dir = path.join(fixturesDir, name);
     check(
       fs.existsSync(path.join(dir, "input.md")),
       `${name}: missing input.md`
     );
     check(
-      fs.existsSync(path.join(EXAMPLES_DIR, `${name}.md`)),
+      fs.existsSync(path.join(examplesDir, `${name}.md`)),
       `evals/examples/${name}.md: missing known-good draft`
     );
     const checksPath = path.join(dir, "checks.json");
@@ -222,7 +220,7 @@ function main() {
       typeof checks.brief === "string" && checks.brief.trim().length > 0,
       `${name}/checks.json: brief must be a non-empty string`
     );
-    checkFixtureSkill(errors, path.join(ROOT, "skills"), checks.skill, name, (skillPath) =>
+    checkFixtureSkill(errors, path.join(root, "skills"), checks.skill, name, (skillPath) =>
       fs.existsSync(skillPath)
     );
     for (const key of ["required", "banned", "banned_regex"]) {
@@ -323,7 +321,7 @@ function main() {
     checkFixtureOverlaps(errors, warnings, name, checks, inputText);
   }
 
-  for (const file of fs.readdirSync(EXAMPLES_DIR).sort()) {
+  for (const file of fs.readdirSync(examplesDir).sort()) {
     if (!file.endsWith(".md")) continue;
     check(
       fixtures.includes(path.basename(file, ".md")),
@@ -332,16 +330,16 @@ function main() {
   }
 
   if (errors.length > 0) {
-    for (const e of errors) console.log(`FAIL ${e}`);
-    for (const w of warnings) console.log(`WARN ${w}`);
-    console.log(`${errors.length} problem(s) found`);
+    for (const e of errors) log(`FAIL ${e}`);
+    for (const w of warnings) log(`WARN ${w}`);
+    log(`${errors.length} problem(s) found`);
     return 1;
   }
-  for (const w of warnings) console.log(`WARN ${w}`);
-  console.log("all eval fixture checks passed");
+  for (const w of warnings) log(`WARN ${w}`);
+  log("all eval fixture checks passed");
   return 0;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  process.exit(main());
+  process.exit(checkEvals());
 }

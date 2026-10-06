@@ -16,18 +16,20 @@ export function buildBundle(outFile, run = spawnSync) {
   });
 }
 
-function main() {
-  requirePinnedBun();
-
-  const build = buildBundle(FALLBACK_PATH);
-  if (build.status !== 0) {
-    process.stderr.write(build.stderr || build.stdout || "");
-    process.exit(build.status ?? 1);
+// Returns the exit status. `build(outFile)` stands in for buildBundle, so
+// tests can run it without Bun.
+export function buildFallback({ build = buildBundle, log = console.log, writeError = (text) => process.stderr.write(text) } = {}) {
+  const result = build(FALLBACK_PATH);
+  if (result.status !== 0) {
+    writeError(result.stderr || result.stdout || "");
+    return result.status ?? 1;
   }
 
-  console.log(`Built ${path.relative(repoRoot, FALLBACK_PATH)}.`);
+  log(`Built ${path.relative(repoRoot, FALLBACK_PATH)}.`);
+  return 0;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main();
+  requirePinnedBun();
+  process.exitCode = buildFallback();
 }

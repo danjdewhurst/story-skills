@@ -96,11 +96,17 @@ function sha256(text) {
   return crypto.createHash("sha256").update(text, "utf8").digest("hex");
 }
 
-function claudeText(model, prompt, systemText) {
-  const sysFile = path.join(
-    fs.mkdtempSync(path.join(os.tmpdir(), "story-eval-")),
-    "system.txt"
-  );
+// The system prompt goes through a temp file, removed once the call is done.
+function claudeText(spawn, model, prompt, systemText) {
+  const sysDir = fs.mkdtempSync(path.join(os.tmpdir(), "story-eval-"));
+  try {
+    return claudeCall(spawn, model, prompt, systemText, path.join(sysDir, "system.txt"));
+  } finally {
+    fs.rmSync(sysDir, { recursive: true, force: true });
+  }
+}
+
+function claudeCall(spawn, model, prompt, systemText, sysFile) {
   fs.writeFileSync(sysFile, systemText, "utf8");
   const args = [
     "-p", prompt,
@@ -111,7 +117,7 @@ function claudeText(model, prompt, systemText) {
   ];
   let lastErr = null;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    const res = spawnSync("claude", args, {
+    const res = spawn("claude", args, {
       encoding: "utf8",
       timeout: CLAUDE_TIMEOUT_MS,
       maxBuffer: 16 * 1024 * 1024,
@@ -207,7 +213,9 @@ export function buildJudgePrompt(inputText, draft) {
   return fillTemplate(JUDGE_PROMPT, { context: inputText, draft });
 }
 
-export function main(argv) {
+// `spawn` stands in for child_process.spawnSync, so tests can answer for the
+// model without a `claude` binary.
+export function main(argv, { spawn = spawnSync } = {}) {
   const opts = parseArgs(argv);
   const { names, unknown } = selectFixtures(opts.fixtures);
   if (unknown.length > 0) {
@@ -253,7 +261,7 @@ export function main(argv) {
     fs.writeFileSync(path.join(opts.out, `${name}.system.sha256`), `${sha256(systemPrompt)}\n`, "utf8");
     let draft;
     try {
-      draft = stripPreamble(claudeText(opts.model, prompt, systemPrompt));
+      draft = stripPreamble(claudeText(spawn, opts.model, prompt, systemPrompt));
     } catch (err) {
       console.log(`  FAIL draft call: ${err.message}`);
       allOk = false;
@@ -271,7 +279,7 @@ export function main(argv) {
     if (opts.judge) {
       const judgePrompt = buildJudgePrompt(inputText, draft);
       try {
-        const raw = claudeText(opts.judgeModel, judgePrompt, BASELINE_HEADER);
+        const raw = claudeText(spawn, opts.judgeModel, judgePrompt, BASELINE_HEADER);
         fs.writeFileSync(path.join(opts.out, `${name}.judge-raw.txt`), raw, "utf8");
         claims = parseJudgeJson(raw);
         fs.writeFileSync(path.join(opts.out, `${name}.claims.json`), JSON.stringify(claims, null, 2) + "\n", "utf8");
