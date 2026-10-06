@@ -107,6 +107,32 @@ describe("check-metadata", () => {
     expect(failures).toEqual([]);
     expect(packageJson.version).toBe(VERSION);
   });
+
+  // #570: only ci.yml was read, so a drifted publish.yml passed.
+  test("reads every workflow, publish.yml included (#570)", () => {
+    const root = makeTempDir("story-metadata-");
+    const copy = (relativePath, filter) =>
+      fs.cpSync(path.join(repoRoot, relativePath), path.join(root, relativePath), { recursive: true, filter });
+    for (const relativePath of [
+      "package.json", "CHANGELOG.md", "README.md", "src/version.js", "docs", "templates/github",
+      ".github/workflows", ".codex-plugin", ".claude-plugin", ".agents"
+    ]) {
+      copy(relativePath);
+    }
+    copy("skills", (source) => fs.statSync(source).isDirectory() || path.basename(source) === "SKILL.md");
+    fs.mkdirSync(path.join(root, "plugins", "story-skills"), { recursive: true });
+    expect(metadataFailures(root).failures).toEqual([]);
+
+    const pinned = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).packageManager.replace("bun@", "");
+    const publishPath = path.join(root, ".github", "workflows", "publish.yml");
+    const publish = fs.readFileSync(publishPath, "utf8");
+    const line = publish.split("\n").findIndex((text) => text.trim() === `bun-version: ${pinned}`) + 1;
+    expect(line).toBeGreaterThan(0);
+    fs.writeFileSync(publishPath, publish.replace(`bun-version: ${pinned}`, "bun-version: 1.0.0"));
+    expect(metadataFailures(root).failures).toEqual([
+      `.github/workflows/publish.yml:${line} bun-version mismatch: expected ${pinned}, got 1.0.0`
+    ]);
+  });
 });
 
 describe("homebrew-formula entry point", () => {

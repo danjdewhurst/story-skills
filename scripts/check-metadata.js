@@ -60,17 +60,52 @@ export function checkTemplateStoryVersion(failures, packageVersion, templatesDir
   return failures;
 }
 
-// The value of a `bun-version:` line, without quotes or a trailing comment.
-function bunVersionValue(raw) {
-  const value = raw.replace(/(^|\s)#.*$/, "").trim();
-  const quoted = /^(["'])(.*)\1$/.exec(value);
-  return quoted ? quoted[2] : value;
+// setup-bun inputs that choose a Bun, as a block or flow mapping key, quoted
+// or not, with or without a space before the colon.
+const SETUP_BUN_KEY = /(?:^|[\s{,])(?:-\s+)?(["']?)(bun-version|bun-version-file|bun-download-url)\1[ \t]*:(?=\s|$)/g;
+// Bun's install script, which takes the version as a `bun-vX.Y.Z` argument.
+const INSTALL_SCRIPT = /\bbun\.(?:sh|com)\/install/;
+
+function withoutComment(line) {
+  return line.replace(/(^|\s)#.*$/, "");
+}
+
+function indentOf(line) {
+  return /^\s*/.exec(line)[0].length;
+}
+
+// The scalar after a key on line `index`: the text inside quotes, the rest of
+// the line (up to the next `,` or `}` in a flow mapping), or, for an empty
+// value or a block scalar (`>-`, `|`), the more indented lines below it.
+function scalarValue(lines, index, rest, flow) {
+  const text = rest.trimStart();
+  const quoted = /^(["'])(.*?)\1/.exec(text);
+  if (quoted) {
+    return quoted[2];
+  }
+  const value = (flow ? text.split(/[,}]/)[0] : text).trim();
+  if (value !== "" && !/^[>|][-+0-9]*$/.test(value)) {
+    return value;
+  }
+  const below = [];
+  for (let next = index + 1; next < lines.length; next += 1) {
+    const line = withoutComment(lines[next]);
+    if (line.trim() === "") {
+      continue;
+    }
+    if (indentOf(line) <= indentOf(lines[index])) {
+      break;
+    }
+    below.push(line.trim());
+  }
+  return below.join(" ");
 }
 
 // The committed fallback bundle only reproduces byte for byte on the pinned
 // Bun, and publish.yml builds the release binaries, so every job in every
 // workflow must install the version `packageManager` names. `workflows` maps
-// each file name in .github/workflows to its text.
+// each file name in .github/workflows to its text. Lines are read, not YAML:
+// a Bun installed some other way (npm, a container image) is not seen.
 export function checkWorkflowBunPin(failures, packageManager, workflows) {
   const pinned = parsePinnedBunVersion(packageManager);
   if (!pinned) {
@@ -80,16 +115,32 @@ export function checkWorkflowBunPin(failures, packageManager, workflows) {
 
   let ciPins = 0;
   for (const [name, text] of Object.entries(workflows)) {
-    text.split(/\r?\n/).forEach((line, index) => {
-      const match = /^\s*(?:-\s+)?bun-version:(.*)$/.exec(line);
-      if (!match) {
-        return;
+    const lines = text.split(/\r?\n/);
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = withoutComment(lines[index]);
+      const where = `.github/workflows/${name}:${index + 1}`;
+      for (const match of line.matchAll(SETUP_BUN_KEY)) {
+        const key = match[2];
+        if (key !== "bun-version") {
+          failures.push(`${where} sets ${key}, which check:metadata cannot compare with the pin; use bun-version: ${pinned}`);
+          continue;
+        }
+        ciPins += name === "ci.yml" ? 1 : 0;
+        const flow = /\{[^}]*$/.test(line.slice(0, match.index + 1));
+        const value = scalarValue(lines, index, line.slice(match.index + match[0].length), flow);
+        expectEqual(failures, `${where} bun-version`, pinned, value);
       }
-      if (name === "ci.yml") {
-        ciPins += 1;
+      if (!INSTALL_SCRIPT.test(line)) {
+        continue;
       }
-      expectEqual(failures, `.github/workflows/${name}:${index + 1} bun-version`, pinned, bunVersionValue(match[1]));
-    });
+      const version = /\bbun-v(\S+?)["']?(?:\s|$)/.exec(line);
+      if (!version) {
+        failures.push(`${where} runs Bun's install script without bun-v${pinned}`);
+        continue;
+      }
+      ciPins += name === "ci.yml" ? 1 : 0;
+      expectEqual(failures, `${where} Bun install script`, pinned, version[1]);
+    }
   }
 
   if (ciPins === 0) {

@@ -479,19 +479,73 @@ describe("check-metadata bun pin", () => {
       '          bun-version: "1.4.2"',
       "          bun-version: '1.4.2' # the pin",
       "          bun-version: 1.4.2   ",
-      "        - bun-version: 1.4.2",
+      "        - bun-version: 1.3.0",
       "          # bun-version: 0.0.1 is a comment",
-      "          bun-version-file: package.json",
+      "          run: echo ok # bun-version: 0.0.1",
       "          bun-version: 1.4.2 # 1.3.0 is older",
       "          bun-version: latest",
       "          bun-version: ${{ matrix.bun }}",
-      "          bun-version:"
+      "          bun-version:",
+      "        name: next step"
     ].join("\r\n");
     expect(checkWorkflowBunPin([], "bun@1.4.2", { "ci.yml": ci })).toEqual([
+      ".github/workflows/ci.yml:4 bun-version mismatch: expected 1.4.2, got 1.3.0",
       ".github/workflows/ci.yml:8 bun-version mismatch: expected 1.4.2, got latest",
       ".github/workflows/ci.yml:9 bun-version mismatch: expected 1.4.2, got ${{ matrix.bun }}",
       ".github/workflows/ci.yml:10 bun-version mismatch: expected 1.4.2, got "
     ]);
+  });
+
+  test("reads every YAML form of the key and the value (#570)", () => {
+    const ci = [
+      "          bun-version : 1.3.0",
+      '          "bun-version": 1.3.1',
+      "          'bun-version' : '1.3.2'",
+      "        with: { bun-version: 1.3.3, no-cache: true }",
+      "        with: {no-cache: true,bun-version: '1.3.4'}",
+      "        with: { bun-version: 1.4.2 }",
+      "          bun-version: >-",
+      "            1.3.5",
+      "          bun-version: |",
+      "            1.4.2",
+      "          bun-version:",
+      "            1.3.6",
+      "          bun-version: >-",
+      "            1.4.2",
+      "            1.3.7",
+      "          my-bun-version: 0.0.1"
+    ].join("\n");
+    expect(checkWorkflowBunPin([], "bun@1.4.2", { "ci.yml": ci })).toEqual([
+      ".github/workflows/ci.yml:1 bun-version mismatch: expected 1.4.2, got 1.3.0",
+      ".github/workflows/ci.yml:2 bun-version mismatch: expected 1.4.2, got 1.3.1",
+      ".github/workflows/ci.yml:3 bun-version mismatch: expected 1.4.2, got 1.3.2",
+      ".github/workflows/ci.yml:4 bun-version mismatch: expected 1.4.2, got 1.3.3",
+      ".github/workflows/ci.yml:5 bun-version mismatch: expected 1.4.2, got 1.3.4",
+      ".github/workflows/ci.yml:7 bun-version mismatch: expected 1.4.2, got 1.3.5",
+      ".github/workflows/ci.yml:11 bun-version mismatch: expected 1.4.2, got 1.3.6",
+      ".github/workflows/ci.yml:13 bun-version mismatch: expected 1.4.2, got 1.4.2 1.3.7"
+    ]);
+  });
+
+  test("refuses setup-bun inputs and install scripts that bypass the pin (#570)", () => {
+    const publish = [
+      "          bun-version-file: package.json",
+      '          "bun-download-url": https://example.com/bun.zip',
+      "        with: { bun-version-file: .bun-version }",
+      "        run: curl -fsSL https://bun.sh/install | bash",
+      '        run: curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.0"',
+      "        run: curl -fsSL https://bun.com/install | bash -s bun-v1.4.2",
+      "        run: echo done # curl https://bun.sh/install | bash"
+    ].join("\n");
+    expect(checkWorkflowBunPin([], "bun@1.4.2", { "ci.yml": "          bun-version: 1.4.2\n", "publish.yml": publish })).toEqual([
+      ".github/workflows/publish.yml:1 sets bun-version-file, which check:metadata cannot compare with the pin; use bun-version: 1.4.2",
+      ".github/workflows/publish.yml:2 sets bun-download-url, which check:metadata cannot compare with the pin; use bun-version: 1.4.2",
+      ".github/workflows/publish.yml:3 sets bun-version-file, which check:metadata cannot compare with the pin; use bun-version: 1.4.2",
+      ".github/workflows/publish.yml:4 runs Bun's install script without bun-v1.4.2",
+      ".github/workflows/publish.yml:5 Bun install script mismatch: expected 1.4.2, got 1.3.0"
+    ]);
+    // A pinned install script is a pin for ci.yml.
+    expect(checkWorkflowBunPin([], "bun@1.4.2", { "ci.yml": 'run: curl -fsSL https://bun.sh/install | bash -s "bun-v1.4.2"\n' })).toEqual([]);
   });
 
   test("readWorkflows reads every yml and yaml file in .github/workflows", () => {
