@@ -935,11 +935,22 @@ describe("the published README only links to files the package ships (#401)", ()
     const markdown = [
       '<img src="assets/a.svg"> [docs](docs/x.md#part) [site](https://example.com/y.md)',
       "[top](#top) [mail](mailto:a@b.c) [abs](/root.md) [space](docs/a%20b.md)",
+      '[titled](CONTRIBUTING.md "Contributing") [angle](<evals/README.md>) <a href=\'SECURITY.md\'>s</a>',
+      "[ref]: CODE_OF_CONDUCT.md",
+      "[ref-url]: https://example.com/z.md",
       "```shell",
       "[not](code/link.md)",
       "```"
     ].join("\n");
-    expect(relativeLinks(markdown)).toEqual(["assets/a.svg", "docs/a b.md", "docs/x.md"]);
+    expect(relativeLinks(markdown)).toEqual([
+      "CODE_OF_CONDUCT.md",
+      "CONTRIBUTING.md",
+      "SECURITY.md",
+      "assets/a.svg",
+      "docs/a b.md",
+      "docs/x.md",
+      "evals/README.md"
+    ]);
   });
 
   test("every relative README link is inside package.json files", () => {
