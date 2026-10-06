@@ -18,12 +18,22 @@ the chapter files.
 
 1. Settle the chapters first: `story reindex .`,
    `story wordcount . --write`, and `story check .`.
-2. With the user's approval, commit and tag the version sent, so the
-   return can be compared against it:
+2. Commit and tag the version sent, so the return can be compared
+   against it. Check that `.gitignore` lists `dist/` (`story init` writes
+   one that does; add the line if it is missing), so earlier builds stay
+   out of the commit. Then run `git status --untracked-files=all -- .`
+   and show the user what it lists. With the user's approval, commit the
+   project folder only (skip the commit when the status lists nothing)
+   and tag that commit:
 
    ```shell
-   git add -A && git commit -m "Manuscript sent to editor, round 1" && git tag sent-to-editor-1
+   git add -A -- .
+   git commit -m "Manuscript sent to editor, round 1" -- .
+   git tag sent-to-editor-1
    ```
+
+   The `-- .` keeps files outside the project, and anything staged
+   earlier, out of the commit.
 
    Never push, move, or delete tags without approval. Without git,
    copy the project folder beside it (`../{project}-sent-to-editor-1`).
