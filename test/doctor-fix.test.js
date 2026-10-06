@@ -175,9 +175,39 @@ describe("story doctor --fix", () => {
     const before = readAll(root);
     const result = invoke(root, ["doctor", "--fix"]);
     expect(result.code).toBe(1);
-    expect(result.out).toContain("- Stopped: Cannot migrate: fix this file first");
+    expect(result.out).toContain("- Stopped: Cannot fix: fix this file first");
     expect(result.out).not.toContain("- story wordcount");
     expect(readAll(root)).toEqual(before);
+  });
+
+  test("stops before writing when plot/_index.md does not parse", () => {
+    const root = newProject();
+    breakMechanically(root);
+    fs.writeFileSync(path.join(root, "plot", "_index.md"), "---\ntype: plot-index\ntype: again\n---\n");
+    const before = readAll(root);
+    const result = invoke(root, ["doctor", "--fix"]);
+    expect(result.code).toBe(1);
+    expect(result.out).toContain("- Stopped: Cannot fix: fix this file first (story validate reports it):\n- plot/_index.md: Duplicate frontmatter key: type");
+    expect(result.out).not.toContain("- story ");
+    expect(readAll(root)).toEqual(before);
+
+    fs.writeFileSync(path.join(root, "plot", "_index.md"), "---\ntype: plot-index\n");
+    expect(invoke(root, ["doctor", "--fix"]).out).toContain("- Stopped: Cannot fix: fix this file first (story validate reports it):\n- plot/_index.md has unclosed YAML frontmatter");
+    expect(readAll(root)).toEqual({ ...before, [path.join("plot", "_index.md")]: "---\ntype: plot-index\n" });
+  });
+
+  test("lists the files a repair wrote before it stopped", () => {
+    const root = newProject();
+    breakMechanically(root);
+    // A symlinked registry stops migrate's reindex after it has created
+    // glossary/_index.md.
+    const registry = path.join(root, "characters", "_index.md");
+    fs.renameSync(registry, path.join(root, "..", "characters-index.md"));
+    fs.symlinkSync(path.join(root, "..", "characters-index.md"), registry);
+    const result = invoke(root, ["doctor", "--fix"]);
+    expect(result.out).toContain("- story migrate (missing-required-path): 1 change\n  create  glossary/_index.md\n- Stopped: ");
+    expect(result.out).not.toContain("- story wordcount");
+    expect(result.code).toBe(1);
   });
 
   test.skipIf(process.getuid?.() === 0)("a refused write stops the run with exit 4", () => {

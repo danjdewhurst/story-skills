@@ -18933,27 +18933,63 @@ function fixProject(root, options = {}) {
   return withProjectLock(root, () => {
     const before = projectActions(root, options);
     const raised = new Set([...before.validation.errors, ...before.validation.warnings].map((finding) => finding.code));
+    const due = DOCTOR_REPAIRS.map((repair) => ({ ...repair, codes: repair.codes.filter((code) => raised.has(code)) })).filter((repair) => repair.codes.length > 0);
     const repairs = [];
     let stopped = null;
-    for (const repair of DOCTOR_REPAIRS) {
-      const codes = repair.codes.filter((code) => raised.has(code));
-      if (codes.length === 0 || repair.command === "reindex" && repairs.length > 0) {
+    try {
+      if (due.length > 0) {
+        assertRepairable(root);
+      }
+    } catch (error) {
+      stopped = projectErrorMessage(error);
+    }
+    for (const repair of stopped === null ? due : []) {
+      if (repair.command === "reindex" && repairs.length > 0) {
         continue;
       }
-      try {
-        const { changes } = recordChanges(root, () => repair.run(root));
-        repairs.push({ command: repair.command, codes, changes });
-      } catch (error) {
-        if (error?.exitCode !== EXIT_CODES.project) {
-          throw error;
+      const { result: error, changes } = recordChanges(root, () => {
+        try {
+          repair.run(root);
+          return null;
+        } catch (caught) {
+          return caught;
         }
-        stopped = error.message;
+      });
+      if (error !== null) {
+        stopped = projectErrorMessage(error);
+      }
+      if (error === null || changes.length > 0) {
+        repairs.push({ command: repair.command, codes: repair.codes, changes });
+      }
+      if (error !== null) {
         break;
       }
     }
     const after = repairs.length > 0 ? projectActions(root, options) : before;
     return { ...after, repairs, stopped };
   });
+}
+function assertRepairable(root) {
+  const project = scanProject(root);
+  assertProjectParses(project, "fix");
+  const plotPath = path16.join(project.root, "plot", "_index.md");
+  if (fs11.existsSync(plotPath)) {
+    const label = path16.join("plot", "_index.md");
+    const source = readRegistrySource(plotPath, project.root);
+    try {
+      parseFrontmatter(source, label);
+    } catch (error) {
+      const message = String(error?.message);
+      throw projectError(`Cannot fix: fix this file first (story validate reports it):
+- ${message.startsWith(label) ? message : `${label}: ${message}`}`);
+    }
+  }
+}
+function projectErrorMessage(error) {
+  if (error?.exitCode !== EXIT_CODES.project) {
+    throw error;
+  }
+  return error.message;
 }
 var ENTITY_ENUM_OPTIONS = {
   character: [["role", CHARACTER_ROLES], ["status", CHARACTER_STATUSES]],

@@ -815,36 +815,80 @@ const DOCTOR_REPAIRS = [
 // findings call for, and diagnoses it again, all under the project lock, so
 // the report is what remains for the writer to do. Returns that second
 // diagnosis (see projectActions) with `repairs`, one { command, codes,
-// changes } per repair applied, and `stopped`, the message of a repair
-// that could not run (a file that does not parse), after which none of the
+// changes } per repair run, and `stopped`, the message of the error that
+// stopped a repair (a file that does not parse), after which none of the
 // later ones is tried; null when every due repair ran.
 export function fixProject(root, options = {}) {
   return withProjectLock(root, () => {
     const before = projectActions(root, options);
     const raised = new Set([...before.validation.errors, ...before.validation.warnings].map((finding) => finding.code));
+    const due = DOCTOR_REPAIRS
+      .map((repair) => ({ ...repair, codes: repair.codes.filter((code) => raised.has(code)) }))
+      .filter((repair) => repair.codes.length > 0);
     const repairs = [];
     let stopped = null;
-    for (const repair of DOCTOR_REPAIRS) {
-      const codes = repair.codes.filter((code) => raised.has(code));
-      if (codes.length === 0 || (repair.command === "reindex" && repairs.length > 0)) {
+    try {
+      if (due.length > 0) {
+        assertRepairable(root);
+      }
+    } catch (error) {
+      stopped = projectErrorMessage(error);
+    }
+    for (const repair of stopped === null ? due : []) {
+      if (repair.command === "reindex" && repairs.length > 0) {
         continue;
       }
-      try {
-        const { changes } = recordChanges(root, () => repair.run(root));
-        repairs.push({ command: repair.command, codes, changes });
-      } catch (error) {
-        // A project error is raised before the repair writes anything; a
-        // refused write (a lock, a file changed on disk) stops the command.
-        if (error?.exitCode !== EXIT_CODES.project) {
-          throw error;
+      // The changes are kept even when the repair stops part way, so the
+      // report lists every file written.
+      const { result: error, changes } = recordChanges(root, () => {
+        try {
+          repair.run(root);
+          return null;
+        } catch (caught) {
+          return caught;
         }
-        stopped = error.message;
+      });
+      if (error !== null) {
+        stopped = projectErrorMessage(error);
+      }
+      if (error === null || changes.length > 0) {
+        repairs.push({ command: repair.command, codes: repair.codes, changes });
+      }
+      if (error !== null) {
         break;
       }
     }
     const after = repairs.length > 0 ? projectActions(root, options) : before;
     return { ...after, repairs, stopped };
   });
+}
+
+// Every repair ends in a reindex, which needs each entity file and the plot
+// registry to parse. Checking them first means a repair does not stop on
+// one after it has already written.
+function assertRepairable(root) {
+  const project = scanProject(root);
+  assertProjectParses(project, "fix");
+  const plotPath = path.join(project.root, "plot", "_index.md");
+  if (fs.existsSync(plotPath)) {
+    const label = path.join("plot", "_index.md");
+    const source = readRegistrySource(plotPath, project.root);
+    try {
+      parseFrontmatter(source, label);
+    } catch (error) {
+      const message = String(error?.message);
+      throw projectError(`Cannot fix: fix this file first (story validate reports it):\n- ${message.startsWith(label) ? message : `${label}: ${message}`}`);
+    }
+  }
+}
+
+// A project error (a file that does not parse) stops the repairs and is
+// reported; any other error (a refused write, a lock) stops the command.
+function projectErrorMessage(error) {
+  if (error?.exitCode !== EXIT_CODES.project) {
+    throw error;
+  }
+  return error.message;
 }
 
 const ENTITY_ENUM_OPTIONS = {
