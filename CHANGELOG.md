@@ -11,6 +11,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 ### Fixed
 
 - Skill descriptions route requests more cleanly. genre-craft, discovery-drafting, and theme-craft read "asks about" instead of the ungrammatical "asks to" before a noun. "Character arc" now triggers only character-management; theme-craft lists "thematic arc" instead and points character records back. chapter-writing, discovery-drafting, story-init, and series-continuity gain NOT clauses, and chapter-writing ("write a scene") and scene-craft ("plan a scene") now point at each other. ([#389](https://github.com/danjdewhurst/story-skills/issues/389))
+- story-maintenance keeps one or two lines per command in `SKILL.md` and moves the rules behind its check commands (`continuity`, `clues`, `add clue`, `pacing`, `voices`, `prose`, `names`, `timeline`, `knowledge`, `context`, `passes`, `compare`, and `similarity`) to the new `references/continuity-checks.md`, with every rule kept. Its description now asks for "run the continuity, pacing, clue, voice, or name checks" rather than "check continuity" or "check pacing", and gains a NOT clause that sends judging a finding or revising the story to revision-continuity, plot-structure, voice-style, or genre-craft. ([#388](https://github.com/danjdewhurst/story-skills/issues/388))
 
 ## [0.21.0] - 2026-10-04
 
