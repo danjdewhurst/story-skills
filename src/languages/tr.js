@@ -29,6 +29,8 @@ export default {
     "note-title": "Not yaz: {label}",
     "anchor-title": "Bağlantı: {label}",
     by: "",
+    byline: "{names}",
+    "edited-by": "Editör: {names}",
     "approximate-words": "Yaklaşık {words} kelime",
     "approximate-characters": "Yaklaşık {characters} karakter",
     "narration-opening": "{title}. Yazan: {authors}. Seslendiren: {narrator}.",

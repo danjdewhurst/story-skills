@@ -10,7 +10,7 @@ import { FRONTMATTER_KEYS, nearMissKeys } from "./frontmatter-keys.js";
 import { isPathInside, lstatIfExists, portablePath, projectPath, readTextFile, TEMPORARY_FILE_PATTERN } from "./files.js";
 import { kebabCase } from "./markdown.js";
 import { COUNT_UNITS, STORY_FORMS, formRangeWarning, formRanges } from "./forms.js";
-import { validatePublishing } from "./publishing.js";
+import { validateNames, validatePublishing } from "./publishing.js";
 import { SCENE_SETTINGS } from "./fountain.js";
 import { isIfid } from "./twee.js";
 import { CHAPTER_NUMERALS, validateChapterNumerals } from "./numerals.js";
@@ -1351,6 +1351,7 @@ function validateChapters(project, errors, warnings) {
       requireScalar(data, "time-skip", label, errors);
     }
     validateEnum(data, "hook", CHAPTER_HOOKS, label, errors);
+    validateNames(data, "author", label, errors);
     errors.push(...chapterChoices(chapter, label).problems);
     if (data.numbered !== undefined && typeof data.numbered !== "boolean") {
       errors.push(err("field-not-boolean", `${label} numbered must be true or false`, label));

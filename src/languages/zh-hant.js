@@ -29,6 +29,8 @@ const labels = {
   "note-title": "為 {label} 寫意見",
   "anchor-title": "連結到 {label}",
   by: "",
+  byline: "{names}",
+  "edited-by": "{names} 編",
   "approximate-words": "約{words}詞",
   "approximate-characters": "約{characters}字",
   "narration-opening": "《{title}》。作者：{authors}。朗讀：{narrator}。",

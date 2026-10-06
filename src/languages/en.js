@@ -228,6 +228,11 @@ export default {
     // The Shunn manuscript's title block. An empty `by` leaves its line out,
     // for a language that writes a byline as the name alone.
     by: "by",
+    // A story's own author under its heading in a collection or anthology
+    // (chapter `author`), and the editor's credit on the title pages
+    // (story.md `editor`). {names} is the names joined with `and`.
+    byline: "by {names}",
+    "edited-by": "Edited by {names}",
     "approximate-words": "Approximately {words} words",
     "approximate-characters": "Approximately {characters} characters",
     // The narration script's spoken credits.

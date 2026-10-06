@@ -69,6 +69,8 @@ export default {
     "note-title": "Anmerkung zu {label} schreiben",
     "anchor-title": "Link zu {label}",
     by: "von",
+    byline: "von {names}",
+    "edited-by": "Herausgegeben von {names}",
     "approximate-words": "Etwa {words} Wörter",
     "approximate-characters": "Etwa {characters} Zeichen",
     "narration-opening": "{title}. Geschrieben von {authors}. Gelesen von {narrator}.",

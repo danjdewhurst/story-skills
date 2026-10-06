@@ -7,7 +7,8 @@
 import { typesetting } from "./typesetting.js";
 import { CLASSIC_STYLE, styleFonts } from "./build-style.js";
 import { usageError } from "./exit-codes.js";
-import { fillLabel, joinNames } from "./languages/index.js";
+import { fillLabel } from "./languages/index.js";
+import { creditLines, leadNames } from "./publishing.js";
 import { wordSpans } from "./words.js";
 
 // Trim sizes and how much text a typical page holds, for the page estimate.
@@ -109,9 +110,10 @@ export function reviewHtml(book, { stamp = "", noteUrl = "", style = CLASSIC_STY
       body.push({ quote: paragraph.quote, markup: `<p id="${anchor}"><a class="anchor" href="#${anchor}" title="${escapeHtml(label("anchor-title", { label: anchor }))}">${anchor}</a>${note}${paragraph.html}</p>` });
     }
     const heading = part.heading ? `<h2>${escapeHtml(part.title)}</h2>` : `<h2 class="visually-hidden">${escapeHtml(part.title)}</h2>`;
-    sections.push(`<section id="${sectionId}" class="${part.kind}">${heading}\n${withBlockquotes(body).join("\n")}\n</section>`);
+    const partByline = (part.byline ?? "") === "" ? "" : `<p class="byline">${escapeHtml(part.byline)}</p>\n`;
+    sections.push(`<section id="${sectionId}" class="${part.kind}">${heading}\n${partByline}${withBlockquotes(body).join("\n")}\n</section>`);
   }
-  const byline = book.authors.length === 0 ? "" : `<p class="byline">${escapeHtml(joinNames(book.authors, labels))}</p>`;
+  const byline = bookCredits(book).map((line) => `<p class="byline">${escapeHtml(line)}</p>`).join("\n");
   // The note under the title, a sentence at a time: the labels' text is
   // escaped and the code spans they place are markup.
   const sentence = (key, values) => fillLabel(labels, key, values, escapeHtml);
@@ -158,7 +160,7 @@ p:hover .note-link, p:target .note-link, .note-link:focus { opacity: 1; }
 [dir="rtl"] .anchor { left: auto; right: -5.5rem; text-align: left; }
 @media (max-width: 52rem) { [dir="rtl"] .anchor { text-align: right; } }
 ${noteUrl === "" ? "" : `[dir="rtl"] .note-link { left: auto; right: -5.5rem; text-align: left; }
-`}` : ""}${type.vertical ? REVIEW_VERTICAL : ""}${reviewStyleRules(style, type, fonts)}</style>
+`}` : ""}${type.vertical ? REVIEW_VERTICAL : ""}${reviewStyleRules(style, type, fonts, hasBylines(book))}</style>
 ${extraStyle(style)}</head>
 <body>
 <main>
@@ -203,7 +205,10 @@ p.scene-break { margin: 0 0.8em; }
 
 // story.md build-style rules for the review copy, after its own: "" when
 // the style leaves every choice to the review copy's defaults.
-function reviewStyleRules(style, type, fonts) {
+function reviewStyleRules(style, type, fonts, bylines = false) {
+  // A story's byline (chapter `author`) sits between a chapter's heading
+  // and its first paragraph, so the rules that start a chapter look past it.
+  const opening = bylines ? ["section > h2 + p:not(.byline)", "section > h2 + p.byline + p"] : ["section > h2 + p"];
   const rules = [];
   if (fonts.heading !== null) {
     rules.push(`header h1, section > h2 { font-family: ${fonts.heading}; }`);
@@ -215,14 +220,14 @@ function reviewStyleRules(style, type, fonts) {
   if (style.paragraphs === "indented") {
     rules.push(
       "section p { margin-block-end: 0; text-indent: 1.5em; }",
-      "section > h2 + p, .scene-break + p, blockquote p, section.front p, section.back p { text-indent: 0; }",
+      `${opening.join(", ")}, .scene-break + p, blockquote p, section.front p, section.back p { text-indent: 0; }`,
       "section.front p, section.back p { margin-block-end: 1rem; }"
     );
   }
   if (style.dropCaps === true && type.cased && !type.vertical) {
     // Only beside the margin labels: on a narrow screen a label opens the
     // paragraph and would take the initial.
-    rules.push(`@media (min-width: 52.01rem) { section.chapter > h2 + p::first-letter { ${DROP_CAP_RULE} } }`);
+    rules.push(`@media (min-width: 52.01rem) { ${opening.map((selector) => `section.chapter > ${selector.replace(/^section > /, "")}::first-letter`).join(", ")} { ${DROP_CAP_RULE} } }`);
   }
   return rules.length === 0 ? "" : `${rules.join("\n")}\n`;
 }
@@ -255,7 +260,7 @@ function extraStyle(style) {
 
 // story.md build-style rules for the print interior, after its own: ""
 // when the style leaves every choice to the interior's defaults.
-function printStyleRules(style, type, fonts) {
+function printStyleRules(style, type, fonts, bylines = false) {
   const rules = [];
   if (fonts.heading !== null) {
     rules.push(`h1 { font-family: ${fonts.heading}; }`);
@@ -268,7 +273,7 @@ function printStyleRules(style, type, fonts) {
     rules.push(`p { text-indent: 0; ${type.vertical ? "margin-left" : "margin-bottom"}: 0.7em; }`);
   }
   if (style.dropCaps === true && type.cased && !type.vertical) {
-    rules.push(`section.chapter > h1 + p.first::first-letter { ${DROP_CAP_RULE} }`);
+    rules.push(`${bylines ? "section.chapter > h1 + p.first::first-letter, section.chapter > h1 + p.byline + p.first::first-letter" : "section.chapter > h1 + p.first::first-letter"} { ${DROP_CAP_RULE} }`);
   }
   return rules.length === 0 ? "" : `${rules.join("\n")}\n`;
 }
@@ -281,7 +286,9 @@ export function printHtml(book, trimName = DEFAULT_TRIM, style = CLASSIC_STYLE) 
   }
   const pages = estimateBookPages(book, trimName);
   const inside = insideMargin(pages);
-  const author = joinNames(book.authors, book.labels);
+  const author = leadNames(bookMeta(book));
+  const credits = bookCredits(book);
+  const bylines = hasBylines(book);
   // An RTL or vertical book opens from the other side: its recto pages are
   // left-hand pages, so chapters start on the left and the running heads
   // swap. The margins follow the physical page, so the spine side does not
@@ -315,7 +322,7 @@ export function printHtml(book, trimName = DEFAULT_TRIM, style = CLASSIC_STYLE) 
     // A back page without a heading still resets the running head, so it
     // does not carry the previous section's title.
     const heading = part.heading
-      ? `<h1>${escapeHtml(part.title)}</h1>`
+      ? `<h1>${escapeHtml(part.title)}</h1>${(part.byline ?? "") === "" ? "" : `\n<p class="byline">${escapeHtml(part.byline)}</p>`}`
       : part.placement === "back" ? `<div class="running-head" aria-hidden="true"></div>` : "";
     // Matter kinds already carry their placement (front, back copyright-page).
     sections.push(`<section id="${part.key}" class="${part.kind}">${heading}\n${withBlockquotes(paragraphs).join("\n")}\n</section>`);
@@ -364,8 +371,9 @@ section.chapter > h1, section.back > h1, section.back > .running-head { string-s
 h1 { font-size: 16pt; font-weight: normal; text-align: center; margin: 1.5in 0 0.5in; break-after: avoid; }
 p { margin: 0; text-indent: 1.5em; text-align: justify; widows: 2; orphans: 2; }
 p.first, p.scene-break + p { text-indent: 0; }
-${type.cased && style.dropCaps === null ? `/* A raised initial: floated drop caps render inconsistently across engines. */
-section.chapter > h1 + p.first::first-letter { font-size: 2.4em; line-height: 1; }
+${bylines ? `p.byline { text-align: center; text-indent: 0; margin: -0.3in 0 0.4in;${type.cased ? " font-style: italic;" : ""} break-after: avoid; }
+` : ""}${type.cased && style.dropCaps === null ? `/* A raised initial: floated drop caps render inconsistently across engines. */
+${bylines ? "section.chapter > h1 + p.first::first-letter, section.chapter > h1 + p.byline + p.first::first-letter" : "section.chapter > h1 + p.first::first-letter"} { font-size: 2.4em; line-height: 1; }
 ` : ""}p.scene-break { text-align: center; text-indent: 0; margin: 0.8em 0; break-after: avoid; }
 blockquote { margin: 0.8em 1.5em; }
 blockquote p { text-indent: 0; text-align: start; }
@@ -373,10 +381,10 @@ section.front p, section.back p { text-indent: 0; margin-bottom: 0.6em; text-ali
 section.front:not(.copyright-page) p { text-align: center; }
 @media screen { body { max-width: ${trim.width}; margin: 2rem auto; padding: 0 1rem; } section { margin-top: 3rem; } }
 ${type.vertical ? `${PRINT_VERTICAL}@media screen { body { max-width: none; max-height: ${trim.height}; margin: auto 2rem; padding: 1rem 0; } section { margin-top: 0; margin-right: 3rem; } }
-` : ""}${printStyleRules(style, type, fonts)}</style>
+` : ""}${printStyleRules(style, type, fonts, bylines)}</style>
 ${extraStyle(style)}</head>
 <body>
-<section class="title-page"><h1>${escapeHtml(book.title)}</h1>${author === "" ? "" : `<p class="author">${escapeHtml(author)}</p>`}</section>
+<section class="title-page"><h1>${escapeHtml(book.title)}</h1>${credits.map((line) => `<p class="author">${escapeHtml(line)}</p>`).join("")}</section>
 ${beforeToc.join("\n")}
 <nav class="toc"><h1>${escapeHtml(fillLabel(book.labels, "contents"))}</h1><ol>
 ${toc.join("\n")}
@@ -385,6 +393,21 @@ ${afterToc.join("\n")}
 </body>
 </html>
 `;
+}
+
+// The book's authors, editors, and labels, as publishing.js reads them.
+function bookMeta(book) {
+  return { authors: book.authors ?? [], editors: book.editors ?? [], labels: book.labels };
+}
+
+// The title page's credit lines: the authors, then "Edited by" the editors.
+function bookCredits(book) {
+  return creditLines(bookMeta(book));
+}
+
+// Whether any chapter prints its own author under its heading.
+function hasBylines(book) {
+  return book.parts.some((part) => (part.byline ?? "") !== "");
 }
 
 // Sentences joined with a space, except after a full stop that carries its

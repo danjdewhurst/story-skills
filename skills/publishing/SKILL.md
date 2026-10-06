@@ -105,7 +105,8 @@ before production starts.
 Fill the `story.md` fields with `references/metadata-checklist.md`:
 `isbn`, `publisher`, `publication-date`, `language`, `description`,
 `keywords`, `subjects`, `copyright`, `cover-alt`, `ai-disclosure`, and
-`authors` for co-written books. Take the description from
+`authors` for co-written books, or `editor` for an anthology (each
+story's writer then goes in its chapter's `author`). Take the description from
 `submission/blurb.md` when it exists (the `submission` skill drafts it).
 Write the description and keywords in the book's language. `subjects`
 holds BISAC codes only; when the author's distributors ask for Thema,

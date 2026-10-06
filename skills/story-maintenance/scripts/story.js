@@ -1746,6 +1746,8 @@ var ar_default = {
     "note-title": "اكتب ملاحظة على {label}",
     "anchor-title": "رابط إلى {label}",
     by: "بقلم",
+    byline: "بقلم {names}",
+    "edited-by": "تحرير {names}",
     "approximate-words": "نحو {words} كلمة",
     "approximate-characters": "نحو {characters} حرف",
     "narration-opening": "{title}. تأليف {authors}. بصوت {narrator}.",
@@ -1949,6 +1951,8 @@ var de_default = {
     "note-title": "Anmerkung zu {label} schreiben",
     "anchor-title": "Link zu {label}",
     by: "von",
+    byline: "von {names}",
+    "edited-by": "Herausgegeben von {names}",
     "approximate-words": "Etwa {words} Wörter",
     "approximate-characters": "Etwa {characters} Zeichen",
     "narration-opening": "{title}. Geschrieben von {authors}. Gelesen von {narrator}.",
@@ -3313,6 +3317,8 @@ var en_default = {
     "note-title": "Write a note on {label}",
     "anchor-title": "Link to {label}",
     by: "by",
+    byline: "by {names}",
+    "edited-by": "Edited by {names}",
     "approximate-words": "Approximately {words} words",
     "approximate-characters": "Approximately {characters} characters",
     "narration-opening": "{title}. Written by {authors}. Narrated by {narrator}.",
@@ -3482,6 +3488,8 @@ var es_default = {
     "note-title": "Escribir una nota sobre {label}",
     "anchor-title": "Enlace a {label}",
     by: "por",
+    byline: "por {names}",
+    "edited-by": "Edición de {names}",
     "approximate-words": "Aproximadamente {words} palabras",
     "approximate-characters": "Aproximadamente {characters} caracteres",
     "narration-opening": "{title}. Escrito por {authors}. Narrado por {narrator}.",
@@ -4211,6 +4219,8 @@ var fa_default = {
     "note-title": "نوشتن یادداشت برای {label}",
     "anchor-title": "پیوند به {label}",
     by: "نوشتهٔ",
+    byline: "نوشتهٔ {names}",
+    "edited-by": "به کوشش {names}",
     "approximate-words": "حدود {words} واژه",
     "approximate-characters": "حدود {characters} نویسه",
     "narration-opening": "{title}. نوشتهٔ {authors}. با صدای {narrator}.",
@@ -4362,6 +4372,8 @@ var fr_default = {
     "note-title": "Écrire une note sur {label}",
     "anchor-title": "Lien vers {label}",
     by: "par",
+    byline: "par {names}",
+    "edited-by": "Sous la direction de {names}",
     "approximate-words": "Environ {words} mots",
     "approximate-characters": "Environ {characters} caractères",
     "narration-opening": "{title}. Écrit par {authors}. Lu par {narrator}.",
@@ -5553,6 +5565,8 @@ var he_default = {
     "note-title": "כתיבת הערה על {label}",
     "anchor-title": "קישור אל {label}",
     by: "מאת",
+    byline: "מאת {names}",
+    "edited-by": "בעריכת {names}",
     "approximate-words": "כ־{words} מילים",
     "approximate-characters": "כ־{characters} תווים",
     "narration-opening": "{title}. מאת {authors}. בקריאת {narrator}.",
@@ -5695,6 +5709,8 @@ var hi_default = {
     "note-title": "{label} पर टिप्पणी लिखें",
     "anchor-title": "{label} का लिंक",
     by: "लेखक",
+    byline: "लेखक: {names}",
+    "edited-by": "संपादक: {names}",
     "approximate-words": "लगभग {words} शब्द",
     "approximate-characters": "लगभग {characters} वर्ण",
     "narration-opening": "{title}। लेखक: {authors}। वाचक: {narrator}।",
@@ -5835,6 +5851,8 @@ var it_default = {
     "note-title": "Scrivete una nota su {label}",
     "anchor-title": "Link a {label}",
     by: "di",
+    byline: "di {names}",
+    "edited-by": "A cura di {names}",
     "approximate-words": "Circa {words} parole",
     "approximate-characters": "Circa {characters} caratteri",
     "narration-opening": "{title}. Scritto da {authors}. Letto da {narrator}.",
@@ -5987,6 +6005,8 @@ var ja_default = {
     "note-title": "{label} にコメントを書く",
     "anchor-title": "{label} へのリンク",
     by: "",
+    byline: "{names}",
+    "edited-by": "{names} 編",
     "approximate-words": "約{words}語",
     "approximate-characters": "約{characters}字",
     "narration-opening": "『{title}』。作、{authors}。朗読、{narrator}。",
@@ -6130,6 +6150,8 @@ var ko_default = {
     "note-title": "{label} 의견 쓰기",
     "anchor-title": "{label} 링크",
     by: "",
+    byline: "{names}",
+    "edited-by": "{names} 엮음",
     "approximate-words": "약 {words}단어",
     "approximate-characters": "약 {characters}자",
     "narration-opening": "『{title}』. {authors} 지음. {narrator} 낭독.",
@@ -6270,6 +6292,8 @@ var nl_default = {
     "note-title": "Notitie schrijven bij {label}",
     "anchor-title": "Link naar {label}",
     by: "door",
+    byline: "door {names}",
+    "edited-by": "Onder redactie van {names}",
     "approximate-words": "Ongeveer {words} woorden",
     "approximate-characters": "Ongeveer {characters} tekens",
     "narration-opening": "{title}. Geschreven door {authors}. Voorgelezen door {narrator}.",
@@ -6410,6 +6434,8 @@ var pl_default = {
     "note-title": "Napisz uwagę do {label}",
     "anchor-title": "Link do {label}",
     by: "",
+    byline: "{names}",
+    "edited-by": "Redakcja: {names}",
     "approximate-words": "Około {words} słów",
     "approximate-characters": "Około {characters} znaków",
     "narration-opening": "{title}. Autor: {authors}. Czyta: {narrator}.",
@@ -6584,6 +6610,8 @@ var pt_default = {
     "note-title": "Escrever uma nota sobre {label}",
     "anchor-title": "Link para {label}",
     by: "por",
+    byline: "por {names}",
+    "edited-by": "Organização de {names}",
     "approximate-words": "Aproximadamente {words} palavras",
     "approximate-characters": "Aproximadamente {characters} caracteres",
     "narration-opening": "{title}. Escrito por {authors}. Narrado por {narrator}.",
@@ -6724,6 +6752,8 @@ var ru_default = {
     "note-title": "Написать замечание к {label}",
     "anchor-title": "Ссылка на {label}",
     by: "",
+    byline: "{names}",
+    "edited-by": "Составитель: {names}",
     "approximate-words": "Около {words} слов",
     "approximate-characters": "Около {characters} знаков",
     "narration-opening": "{title}. Автор: {authors}. Читает {narrator}.",
@@ -6867,6 +6897,8 @@ var sv_default = {
     "note-title": "Skriv en anteckning om {label}",
     "anchor-title": "Länk till {label}",
     by: "av",
+    byline: "av {names}",
+    "edited-by": "Redigerad av {names}",
     "approximate-words": "Cirka {words} ord",
     "approximate-characters": "Cirka {characters} tecken",
     "narration-opening": "{title}. Skriven av {authors}. Uppläst av {narrator}.",
@@ -7016,6 +7048,8 @@ var tr_default = {
     "note-title": "Not yaz: {label}",
     "anchor-title": "Bağlantı: {label}",
     by: "",
+    byline: "{names}",
+    "edited-by": "Editör: {names}",
     "approximate-words": "Yaklaşık {words} kelime",
     "approximate-characters": "Yaklaşık {characters} karakter",
     "narration-opening": "{title}. Yazan: {authors}. Seslendiren: {narrator}.",
@@ -7156,6 +7190,8 @@ var uk_default = {
     "note-title": "Написати зауваження до {label}",
     "anchor-title": "Посилання на {label}",
     by: "",
+    byline: "{names}",
+    "edited-by": "Упорядник: {names}",
     "approximate-words": "Близько {words} слів",
     "approximate-characters": "Близько {characters} знаків",
     "narration-opening": "{title}. Автор: {authors}. Читає {narrator}.",
@@ -7307,6 +7343,8 @@ var zh_default = {
     "note-title": "为 {label} 写意见",
     "anchor-title": "链接到 {label}",
     by: "",
+    byline: "{names}",
+    "edited-by": "{names} 编",
     "approximate-words": "约{words}词",
     "approximate-characters": "约{characters}字",
     "narration-opening": "《{title}》。作者：{authors}。演播：{narrator}。",
@@ -7443,6 +7481,8 @@ var labels = {
   "note-title": "為 {label} 寫意見",
   "anchor-title": "連結到 {label}",
   by: "",
+  byline: "{names}",
+  "edited-by": "{names} 編",
   "approximate-words": "約{words}詞",
   "approximate-characters": "約{characters}字",
   "narration-opening": "《{title}》。作者：{authors}。朗讀：{narrator}。",
@@ -8659,6 +8699,26 @@ function textDirection(language) {
   }
   return RTL_LANGUAGES.has(primary) || RTL_LANGUAGES.has(macrolanguage) ? "rtl" : "ltr";
 }
+function nameList(value) {
+  const names = typeof value === "string" ? [value] : Array.isArray(value) ? value : [];
+  return names.filter((name) => typeof name === "string" && name.trim() !== "" && !isPlaceholder(name)).map((name) => name.trim());
+}
+function creditLines(meta) {
+  const lines = [];
+  if (meta.authors.length > 0) {
+    lines.push(joinNames(meta.authors, meta.labels));
+  }
+  if (meta.editors.length > 0) {
+    lines.push(fillLabel(meta.labels, "edited-by", { names: joinNames(meta.editors, meta.labels) }));
+  }
+  return lines;
+}
+function leadNames(meta) {
+  return joinNames(meta.authors.length > 0 ? meta.authors : meta.editors, meta.labels);
+}
+function chapterByline(names, labels) {
+  return names.length === 0 ? "" : fillLabel(labels, "byline", { names: joinNames(names, labels) });
+}
 function publishingMeta(data) {
   const text = (field) => typeof data[field] === "string" && !isPlaceholder(data[field]) ? data[field].trim() : "";
   const list = (field) => Array.isArray(data[field]) ? data[field].filter((item) => typeof item === "string" && item.trim() !== "" && !isPlaceholder(item)).map((item) => item.trim()) : [];
@@ -8667,6 +8727,7 @@ function publishingMeta(data) {
   const pack = languagePack(projectLanguage(data));
   return {
     authors: authors.length > 0 ? authors : author === "" ? [] : [author],
+    editors: nameList(data.editor),
     language: text("language") || "en",
     writingMode: text("writing-mode") || "horizontal",
     chapterNumerals: chapterNumerals(data),
@@ -8721,6 +8782,7 @@ function validatePublishing(data, errors, warnings) {
       errors.push(err("field-not-list", `story.md frontmatter field ${field} must be a list of text`, "story.md"));
     }
   }
+  validateNames(data, "editor", "story.md", errors);
   if (data.labels !== undefined) {
     if (!Array.isArray(data.labels) || !data.labels.every(isEntry)) {
       errors.push(err("field-not-list", "story.md frontmatter field labels must be a list of label: text entries, such as - chapter: Teil {n}", "story.md"));
@@ -8762,7 +8824,7 @@ function validatePublishing(data, errors, warnings) {
   if (Array.isArray(data.keywords) && data.keywords.length > MAX_KEYWORDS) {
     warnings.push(warn("too-many-keywords", `story.md lists ${data.keywords.length} keywords; most retailers accept ${MAX_KEYWORDS}`, "story.md"));
   }
-  for (const field of [...SCALAR_FIELDS, "authors", "keywords", "subjects"]) {
+  for (const field of [...SCALAR_FIELDS, "authors", "editor", "keywords", "subjects"]) {
     const values = Array.isArray(data[field]) ? data[field] : [data[field]];
     if (values.some(isPlaceholder)) {
       warnings.push(warn("todo-placeholder", `story.md ${field} is still a [TODO] placeholder; builds leave it out`, "story.md"));
@@ -8770,6 +8832,16 @@ function validatePublishing(data, errors, warnings) {
   }
   if (data.author !== undefined && data.authors !== undefined) {
     warnings.push(warn("author-and-authors", "story.md sets both author and authors; builds use authors", "story.md"));
+  }
+}
+function validateNames(data, field, label, errors) {
+  const value = data[field];
+  if (value === undefined) {
+    return;
+  }
+  const names = Array.isArray(value) ? value : [value];
+  if (names.some((name) => typeof name !== "string" || name.trim() === "")) {
+    errors.push(err("field-not-text", `${label} frontmatter field ${field} must be a name or a list of names, such as ${field}: Ada Writer`, label));
   }
 }
 function normalizeIsbn(value) {
@@ -8807,6 +8879,7 @@ function metadataSheet(input) {
     ["Title", title],
     ["Series", series],
     ["Author(s)", meta.authors.join("; ")],
+    ...meta.editors.length === 0 ? [] : [["Editor(s)", meta.editors.join("; ")]],
     ["ISBN", meta.isbn],
     ["Publisher", meta.publisher],
     ["Publication date", meta.publicationDate],
@@ -8824,7 +8897,7 @@ function metadataSheet(input) {
     ["AI disclosure", meta.aiDisclosure]
   ];
   const checks = [
-    ["Author named (`author` or `authors`)", meta.authors.length > 0],
+    ["Author named (`author` or `authors`, or an anthology's `editor`)", meta.authors.length > 0 || meta.editors.length > 0],
     ["ISBN for this edition (`isbn`), or a retailer-assigned identifier", meta.isbn !== ""],
     ["Publisher or imprint (`publisher`)", meta.publisher !== ""],
     ["Publication date (`publication-date`)", meta.publicationDate !== ""],
@@ -16021,14 +16094,14 @@ import path6 from "node:path";
 
 // src/frontmatter-keys.js
 var FRONTMATTER_KEYS = {
-  story: ["title", "schema-version", "series", "series-title", "book-number", "follows", "precedes", "genre", "sub-genre", "setting-era", "status", "themes", "pov", "tense", "premise", "counter-premise", "author", "contact", "season-goal", "target-words", "target-characters", "count-unit", "language", "isbn", "publisher", "publication-date", "description", "keywords", "subjects", "copyright", "ifid", "cover-alt", "ai-disclosure", "chapter-label", "writing-mode", "chapter-numerals", "contents-label", "labels", "authors", "form", "draft-mode", "cover", "deadline", "daily-target-words", "daily-target-characters", "writing-days", "calendar", "revision-passes", "build-style", "cli-defaults", "severity"],
+  story: ["title", "schema-version", "series", "series-title", "book-number", "follows", "precedes", "genre", "sub-genre", "setting-era", "status", "themes", "pov", "tense", "premise", "counter-premise", "author", "contact", "season-goal", "target-words", "target-characters", "count-unit", "language", "isbn", "publisher", "publication-date", "description", "keywords", "subjects", "copyright", "ifid", "cover-alt", "ai-disclosure", "chapter-label", "writing-mode", "chapter-numerals", "contents-label", "labels", "authors", "editor", "form", "draft-mode", "cover", "deadline", "daily-target-words", "daily-target-characters", "writing-days", "calendar", "revision-passes", "build-style", "cli-defaults", "severity"],
   character: ["pronunciation", "id", "name", "role", "status", "died-in", "revived-in", "aliases", "relationships", "locations", "tags", "arc", "arc-type", "lie", "truth", "ghost-wound", "voice-words", "voice-avoid", "progressions"],
   location: ["pronunciation", "id", "name", "type", "region", "population", "controlled-by", "notable-characters", "tags", "status", "setting", "routes", "progressions"],
   system: ["id", "name", "type", "prevalence", "pronunciation"],
   faction: ["pronunciation", "id", "name", "type", "status", "members", "locations", "tags", "progressions"],
   artifact: ["pronunciation", "id", "name", "type", "status", "owner", "location", "tags"],
   arc: ["id", "name", "type", "status", "characters", "themes", "acts", "mice-threads"],
-  chapter: ["id", "title", "number", "numbered", "status", "pov", "word-count", "target-words", "character-count", "target-characters", "arcs-advanced", "characters", "mentions", "locations", "mode", "date", "time", "strand", "episode-question", "hook", "time-skip", "choices"],
+  chapter: ["id", "title", "number", "numbered", "author", "status", "pov", "word-count", "target-words", "character-count", "target-characters", "arcs-advanced", "characters", "mentions", "locations", "mode", "date", "time", "strand", "episode-question", "hook", "time-skip", "choices"],
   scene: ["id", "title", "chapter", "scene", "status", "pov", "location", "characters", "mentions", "arcs-advanced", "state-changes", "date", "time", "travel-hours", "sequel", "outcome", "dilemma", "flashback-to", "setting"],
   question: ["id", "title", "status", "introduced", "resolved", "characters"],
   promise: ["id", "title", "status", "planted", "payoff", "arcs", "characters"],
@@ -16415,12 +16488,15 @@ function reviewHtml(book, { stamp = "", noteUrl = "", style = CLASSIC_STYLE } = 
       body.push({ quote: paragraph.quote, markup: `<p id="${anchor}"><a class="anchor" href="#${anchor}" title="${escapeHtml(label("anchor-title", { label: anchor }))}">${anchor}</a>${note}${paragraph.html}</p>` });
     }
     const heading = part.heading ? `<h2>${escapeHtml(part.title)}</h2>` : `<h2 class="visually-hidden">${escapeHtml(part.title)}</h2>`;
+    const partByline = (part.byline ?? "") === "" ? "" : `<p class="byline">${escapeHtml(part.byline)}</p>
+`;
     sections.push(`<section id="${sectionId}" class="${part.kind}">${heading}
-${withBlockquotes(body).join(`
+${partByline}${withBlockquotes(body).join(`
 `)}
 </section>`);
   }
-  const byline = book.authors.length === 0 ? "" : `<p class="byline">${escapeHtml(joinNames(book.authors, labels))}</p>`;
+  const byline = bookCredits(book).map((line) => `<p class="byline">${escapeHtml(line)}</p>`).join(`
+`);
   const sentence = (key, values) => fillLabel(labels, key, values, escapeHtml);
   const code = (text) => `<code>${escapeHtml(text)}</code>`;
   const intro = joinSentences([
@@ -16465,7 +16541,7 @@ p:hover .note-link, p:target .note-link, .note-link:focus { opacity: 1; }
 [dir="rtl"] .anchor { left: auto; right: -5.5rem; text-align: left; }
 @media (max-width: 52rem) { [dir="rtl"] .anchor { text-align: right; } }
 ${noteUrl === "" ? "" : `[dir="rtl"] .note-link { left: auto; right: -5.5rem; text-align: left; }
-`}` : ""}${type.vertical ? REVIEW_VERTICAL : ""}${reviewStyleRules(style, type, fonts)}</style>
+`}` : ""}${type.vertical ? REVIEW_VERTICAL : ""}${reviewStyleRules(style, type, fonts, hasBylines(book))}</style>
 ${extraStyle(style)}</head>
 <body>
 <main>
@@ -16502,7 +16578,8 @@ h1 { margin: 1in 0 0 0.5in; }
 blockquote { margin: 1.5em 0.8em; }
 p.scene-break { margin: 0 0.8em; }
 `;
-function reviewStyleRules(style, type, fonts) {
+function reviewStyleRules(style, type, fonts, bylines = false) {
+  const opening = bylines ? ["section > h2 + p:not(.byline)", "section > h2 + p.byline + p"] : ["section > h2 + p"];
   const rules = [];
   if (fonts.heading !== null) {
     rules.push(`header h1, section > h2 { font-family: ${fonts.heading}; }`);
@@ -16512,10 +16589,10 @@ function reviewStyleRules(style, type, fonts) {
     rules.push(`section > h2 { ${heading} }`);
   }
   if (style.paragraphs === "indented") {
-    rules.push("section p { margin-block-end: 0; text-indent: 1.5em; }", "section > h2 + p, .scene-break + p, blockquote p, section.front p, section.back p { text-indent: 0; }", "section.front p, section.back p { margin-block-end: 1rem; }");
+    rules.push("section p { margin-block-end: 0; text-indent: 1.5em; }", `${opening.join(", ")}, .scene-break + p, blockquote p, section.front p, section.back p { text-indent: 0; }`, "section.front p, section.back p { margin-block-end: 1rem; }");
   }
   if (style.dropCaps === true && type.cased && !type.vertical) {
-    rules.push(`@media (min-width: 52.01rem) { section.chapter > h2 + p::first-letter { ${DROP_CAP_RULE} } }`);
+    rules.push(`@media (min-width: 52.01rem) { ${opening.map((selector) => `section.chapter > ${selector.replace(/^section > /, "")}::first-letter`).join(", ")} { ${DROP_CAP_RULE} } }`);
   }
   return rules.length === 0 ? "" : `${rules.join(`
 `)}
@@ -16539,7 +16616,7 @@ function extraStyle(style) {
 ${style.cssText}</style>
 ` : "";
 }
-function printStyleRules(style, type, fonts) {
+function printStyleRules(style, type, fonts, bylines = false) {
   const rules = [];
   if (fonts.heading !== null) {
     rules.push(`h1 { font-family: ${fonts.heading}; }`);
@@ -16552,7 +16629,7 @@ function printStyleRules(style, type, fonts) {
     rules.push(`p { text-indent: 0; ${type.vertical ? "margin-left" : "margin-bottom"}: 0.7em; }`);
   }
   if (style.dropCaps === true && type.cased && !type.vertical) {
-    rules.push(`section.chapter > h1 + p.first::first-letter { ${DROP_CAP_RULE} }`);
+    rules.push(`${bylines ? "section.chapter > h1 + p.first::first-letter, section.chapter > h1 + p.byline + p.first::first-letter" : "section.chapter > h1 + p.first::first-letter"} { ${DROP_CAP_RULE} }`);
   }
   return rules.length === 0 ? "" : `${rules.join(`
 `)}
@@ -16565,7 +16642,9 @@ function printHtml(book, trimName = DEFAULT_TRIM, style = CLASSIC_STYLE) {
   }
   const pages = estimateBookPages(book, trimName);
   const inside = insideMargin(pages);
-  const author = joinNames(book.authors, book.labels);
+  const author = leadNames(bookMeta(book));
+  const credits = bookCredits(book);
+  const bylines = hasBylines(book);
   const type = typesetting(book.language, book.writingMode);
   const fonts = styleFonts(style, type);
   const rtl = type.rtl;
@@ -16590,7 +16669,8 @@ function printHtml(book, trimName = DEFAULT_TRIM, style = CLASSIC_STYLE) {
     if (part.kind === "chapter") {
       toc.push(`<li><a href="#${part.key}">${escapeHtml(part.title)}</a></li>`);
     }
-    const heading = part.heading ? `<h1>${escapeHtml(part.title)}</h1>` : part.placement === "back" ? `<div class="running-head" aria-hidden="true"></div>` : "";
+    const heading = part.heading ? `<h1>${escapeHtml(part.title)}</h1>${(part.byline ?? "") === "" ? "" : `
+<p class="byline">${escapeHtml(part.byline)}</p>`}` : part.placement === "back" ? `<div class="running-head" aria-hidden="true"></div>` : "";
     sections.push(`<section id="${part.key}" class="${part.kind}">${heading}
 ${withBlockquotes(paragraphs).join(`
 `)}
@@ -16638,8 +16718,9 @@ section.chapter > h1, section.back > h1, section.back > .running-head { string-s
 h1 { font-size: 16pt; font-weight: normal; text-align: center; margin: 1.5in 0 0.5in; break-after: avoid; }
 p { margin: 0; text-indent: 1.5em; text-align: justify; widows: 2; orphans: 2; }
 p.first, p.scene-break + p { text-indent: 0; }
-${type.cased && style.dropCaps === null ? `/* A raised initial: floated drop caps render inconsistently across engines. */
-section.chapter > h1 + p.first::first-letter { font-size: 2.4em; line-height: 1; }
+${bylines ? `p.byline { text-align: center; text-indent: 0; margin: -0.3in 0 0.4in;${type.cased ? " font-style: italic;" : ""} break-after: avoid; }
+` : ""}${type.cased && style.dropCaps === null ? `/* A raised initial: floated drop caps render inconsistently across engines. */
+${bylines ? "section.chapter > h1 + p.first::first-letter, section.chapter > h1 + p.byline + p.first::first-letter" : "section.chapter > h1 + p.first::first-letter"} { font-size: 2.4em; line-height: 1; }
 ` : ""}p.scene-break { text-align: center; text-indent: 0; margin: 0.8em 0; break-after: avoid; }
 blockquote { margin: 0.8em 1.5em; }
 blockquote p { text-indent: 0; text-align: start; }
@@ -16647,10 +16728,10 @@ section.front p, section.back p { text-indent: 0; margin-bottom: 0.6em; text-ali
 section.front:not(.copyright-page) p { text-align: center; }
 @media screen { body { max-width: ${trim.width}; margin: 2rem auto; padding: 0 1rem; } section { margin-top: 3rem; } }
 ${type.vertical ? `${PRINT_VERTICAL}@media screen { body { max-width: none; max-height: ${trim.height}; margin: auto 2rem; padding: 1rem 0; } section { margin-top: 0; margin-right: 3rem; } }
-` : ""}${printStyleRules(style, type, fonts)}</style>
+` : ""}${printStyleRules(style, type, fonts, bylines)}</style>
 ${extraStyle(style)}</head>
 <body>
-<section class="title-page"><h1>${escapeHtml(book.title)}</h1>${author === "" ? "" : `<p class="author">${escapeHtml(author)}</p>`}</section>
+<section class="title-page"><h1>${escapeHtml(book.title)}</h1>${credits.map((line) => `<p class="author">${escapeHtml(line)}</p>`).join("")}</section>
 ${beforeToc.join(`
 `)}
 <nav class="toc"><h1>${escapeHtml(fillLabel(book.labels, "contents"))}</h1><ol>
@@ -16662,6 +16743,15 @@ ${afterToc.join(`
 </body>
 </html>
 `;
+}
+function bookMeta(book) {
+  return { authors: book.authors ?? [], editors: book.editors ?? [], labels: book.labels };
+}
+function bookCredits(book) {
+  return creditLines(bookMeta(book));
+}
+function hasBylines(book) {
+  return book.parts.some((part) => (part.byline ?? "") !== "");
 }
 function joinSentences(sentences) {
   return sentences.filter((sentence) => sentence !== "").reduce((text, sentence) => text === "" || /[。！？]$/u.test(text) ? `${text}${sentence}` : `${text} ${sentence}`, "");
@@ -17202,7 +17292,8 @@ function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
   const rtl = type.rtl;
   const root = `xml:lang="${lang}" lang="${lang}"${rtl ? ` dir="rtl"` : ""}`;
   const style = manuscript.style ?? CLASSIC_STYLE;
-  const stylesheet = epubStylesheet(type, style);
+  const bylines = manuscript.chapters.some((chapter) => (chapter.byline ?? "") !== "");
+  const stylesheet = epubStylesheet(type, style, bylines);
   const extra = style.cssText ?? "";
   const head = [
     stylesheet === "" ? "" : `<link rel="stylesheet" type="text/css" href="style.css"/>`,
@@ -17237,7 +17328,7 @@ function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
     coverMeta.push(`<meta name="cover" content="cover-image"/>`);
     coverSpine.push(`<itemref idref="cover"/>`);
   }
-  const creator = meta.authors.map((name) => `<dc:creator>${xmlEscape(name)}</dc:creator>`).join("");
+  const creator = epubCreators(meta, manuscript.chapters);
   const identifier = meta.isbn === "" ? xmlEscape(storyId) : `urn:isbn:${meta.isbn}`;
   const optional = [
     meta.publisher === "" ? "" : `<dc:publisher>${xmlEscape(meta.publisher)}</dc:publisher>`,
@@ -17261,7 +17352,20 @@ function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
     ...documents.map((doc) => ({ name: `OEBPS/${doc.id}.xhtml`, content: doc.content }))
   ], writeOptions);
 }
-function epubStylesheet(type, style = CLASSIC_STYLE) {
+function epubCreators(meta, chapters) {
+  const credited = new Set([...meta.authors, ...meta.editors]);
+  const contributors = [...new Set(chapters.flatMap((chapter) => chapter.authors ?? []))].filter((name) => !credited.has(name));
+  if (meta.editors.length === 0 && contributors.length === 0) {
+    return meta.authors.map((name) => `<dc:creator>${xmlEscape(name)}</dc:creator>`).join("");
+  }
+  const entry = (element, id, name, role) => `<dc:${element} id="${id}">${xmlEscape(name)}</dc:${element}><meta refines="#${id}" property="role" scheme="marc:relators">${role}</meta>`;
+  return [
+    ...meta.authors.map((name, index) => entry("creator", `author-${index + 1}`, name, "aut")),
+    ...meta.editors.map((name, index) => entry("creator", `editor-${index + 1}`, name, "edt")),
+    ...contributors.map((name, index) => entry("contributor", `contributor-${index + 1}`, name, "aut"))
+  ].join("");
+}
+function epubStylesheet(type, style = CLASSIC_STYLE, bylines = false) {
   const rules = [];
   if (type.vertical) {
     rules.push("html { -epub-writing-mode: vertical-rl; -webkit-writing-mode: vertical-rl; writing-mode: vertical-rl; }");
@@ -17275,6 +17379,7 @@ function epubStylesheet(type, style = CLASSIC_STYLE) {
 `)}
 `;
   }
+  const opening = bylines ? ["h1 + p:not(.byline)", "h1 + p.byline + p"] : ["h1 + p"];
   if (fonts.heading !== null) {
     rules.push(`h1 { font-family: ${fonts.heading}; }`);
   }
@@ -17284,13 +17389,16 @@ function epubStylesheet(type, style = CLASSIC_STYLE) {
   }
   const after = type.vertical ? "0 0 0 0.8em" : "0 0 0.8em";
   if (style.paragraphs === "indented") {
-    rules.push("p { margin: 0; text-indent: 1.5em; }", "h1 + p, p.scene-break + p, blockquote p, body.matter p { text-indent: 0; }", `body.matter p { margin: ${after}; }`);
+    rules.push("p { margin: 0; text-indent: 1.5em; }", `${opening.join(", ")}, p.scene-break + p, blockquote p, body.matter p { text-indent: 0; }`, `body.matter p { margin: ${after}; }`);
   } else if (style.paragraphs === "block") {
     rules.push(`p { margin: ${after}; text-indent: 0; }`);
   }
   rules.push("p.scene-break { text-align: center; text-indent: 0; margin: 1em 0; }");
+  if (bylines) {
+    rules.push(`p.byline { text-align: center; text-indent: 0; margin: ${after}; }`);
+  }
   if (style.dropCaps === true && type.cased && !type.vertical) {
-    rules.push(`body.chapter > h1 + p::first-letter { ${DROP_CAP_RULE} }`);
+    rules.push(`${opening.map((selector) => `body.chapter > ${selector}::first-letter`).join(", ")} { ${DROP_CAP_RULE} }`);
   }
   return `${rules.join(`
 `)}
@@ -17328,7 +17436,8 @@ function xhtmlDocument(title, root, head, bodyType, content, bodyClass = "") {
 function chapterXhtml(chapter, root, head, markup) {
   const heading = chapter.heading;
   const title = String(chapter.title ?? "").trim() || heading;
-  return xhtmlDocument(title, root, head, "bodymatter chapter", `<h1>${xmlEscape(heading)}</h1>${xhtmlParagraphs(chapter.body, markup)}`, markup.styled ? "chapter" : "");
+  const byline = (chapter.byline ?? "") === "" ? "" : `<p class="byline"><em>${xmlEscape(chapter.byline)}</em></p>`;
+  return xhtmlDocument(title, root, head, "bodymatter chapter", `<h1>${xmlEscape(heading)}</h1>${byline}${xhtmlParagraphs(chapter.body, markup)}`, markup.styled ? "chapter" : "");
 }
 function matterXhtml(entry, placement, root, head, markup) {
   const heading = entry.heading ? `<h1>${xmlEscape(entry.title)}</h1>` : "";
@@ -17367,6 +17476,7 @@ function htmlBook(manuscript) {
       placement: "body",
       title: chapter.heading,
       heading: true,
+      byline: chapter.byline ?? "",
       words: wordCount(chapter.body),
       ...characters(chapter.body),
       paragraphs: paragraphs(chapter.body)
@@ -17377,6 +17487,7 @@ function htmlBook(manuscript) {
     title: manuscript.title,
     ...manuscript.unit === "characters" ? { unit: "characters" } : {},
     authors: manuscript.meta.authors,
+    editors: manuscript.meta.editors ?? [],
     language: manuscript.meta.language,
     writingMode: manuscript.meta.writingMode,
     labels: manuscript.meta.labels,
@@ -17387,9 +17498,12 @@ function htmlBook(manuscript) {
 function writeDocx(outFile, manuscript, writeOptions = {}) {
   const script = docxScript(manuscript.meta);
   const bodyParts = [paragraphXml(script, manuscript.title, "Title")];
-  const pushSection = (heading, body) => {
+  const pushSection = (heading, body, byline = "") => {
     if (heading !== null) {
       bodyParts.push(paragraphXml(script, heading, "Heading1"));
+    }
+    if (byline !== "") {
+      bodyParts.push(paragraphXml(script, byline, "Byline"));
     }
     for (const paragraph of markdownParagraphs(body)) {
       bodyParts.push(paragraph.sceneBreak ? paragraphXml(script, "* * *", "SceneBreak") : paragraphXml(script, paragraph.text, paragraph.quote ? "Quote" : "", inlineRuns(paragraph.text)));
@@ -17398,7 +17512,7 @@ function writeDocx(outFile, manuscript, writeOptions = {}) {
   const pushMatter = (entry) => pushSection(entry.heading ? entry.title : null, entry.body);
   manuscript.front.forEach(pushMatter);
   for (const chapter of manuscript.chapters) {
-    pushSection(chapter.heading, chapter.body);
+    pushSection(chapter.heading, chapter.body, chapter.byline ?? "");
   }
   manuscript.back.forEach(pushMatter);
   writeZip(outFile, docxPackageEntries(script, bodyParts.join("")), writeOptions);
@@ -17447,7 +17561,7 @@ function docxPackageEntries(script, body, page = "") {
   ];
 }
 function docxStyles(script) {
-  return `<?xml version="1.0" encoding="UTF-8"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` + `<w:docDefaults><w:rPrDefault><w:rPr>${script.fonts}<w:sz w:val="24"/><w:szCs w:val="24"/>${script.lang}</w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="360" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>` + `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/><w:pPr><w:ind w:firstLine="720"/></w:pPr></w:style>` + `<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:rPr>${script.bold}<w:sz w:val="56"/>${script.sizeCs ? `<w:szCs w:val="56"/>` : ""}</w:rPr></w:style>` + `<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="480" w:after="240"/><w:ind w:firstLine="0"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr>${script.bold}<w:sz w:val="32"/>${script.sizeCs ? `<w:szCs w:val="32"/>` : ""}</w:rPr></w:style>` + `<w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:before="120" w:after="120"/><w:ind w:left="720" w:right="720" w:firstLine="0"/></w:pPr></w:style>` + `<w:style w:type="paragraph" w:customStyle="1" w:styleId="SceneBreak"><w:name w:val="Scene Break"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:before="240" w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr></w:style>` + `</w:styles>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` + `<w:docDefaults><w:rPrDefault><w:rPr>${script.fonts}<w:sz w:val="24"/><w:szCs w:val="24"/>${script.lang}</w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="360" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>` + `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/><w:pPr><w:ind w:firstLine="720"/></w:pPr></w:style>` + `<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:rPr>${script.bold}<w:sz w:val="56"/>${script.sizeCs ? `<w:szCs w:val="56"/>` : ""}</w:rPr></w:style>` + `<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="480" w:after="240"/><w:ind w:firstLine="0"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr>${script.bold}<w:sz w:val="32"/>${script.sizeCs ? `<w:szCs w:val="32"/>` : ""}</w:rPr></w:style>` + `<w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:before="120" w:after="120"/><w:ind w:left="720" w:right="720" w:firstLine="0"/></w:pPr></w:style>` + `<w:style w:type="paragraph" w:customStyle="1" w:styleId="SceneBreak"><w:name w:val="Scene Break"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:before="240" w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr></w:style>` + `<w:style w:type="paragraph" w:customStyle="1" w:styleId="Byline"><w:name w:val="Byline"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:rPr>${script.italic}</w:rPr></w:style>` + `</w:styles>`;
 }
 var SHUNN_FONT = `<w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/>`;
 var SHUNN_SIZE = `<w:sz w:val="24"/>`;
@@ -17471,11 +17585,18 @@ function shunnLength(meta) {
   return meta.characters === undefined ? fillLabel(meta.labels, "approximate-words", { words: shunnWordCount(meta.words, meta.pack) }) : fillLabel(meta.labels, "approximate-characters", { characters: shunnWordCount(meta.characters, meta.pack) });
 }
 function shunnByline(meta) {
-  if (!meta.author) {
-    return [];
+  const lines = [];
+  if (meta.author) {
+    const by = fillLabel(meta.labels, "by");
+    lines.push(...by === "" ? [meta.author] : [by, meta.author]);
   }
-  const by = fillLabel(meta.labels, "by");
-  return by === "" ? [meta.author] : [by, meta.author];
+  if (meta.editors) {
+    lines.push(meta.editors);
+  }
+  return lines;
+}
+function shunnChapterByline(chapter, meta) {
+  return meta.shortForm ? "" : chapter.byline ?? "";
 }
 function shunnTitlePageXml(script, meta) {
   const line = (text, decoration) => shunnParagraphXml(script, shunnRunXml(script, text, decoration), true);
@@ -17500,6 +17621,10 @@ function writeShunnDocx(outFile, manuscript, meta, writeOptions = {}, paperName 
     const body = markdownParagraphs(chapter.body);
     if (!meta.shortForm) {
       paragraphs.push(shunnChapterHeadingXml(script, chapter.heading));
+      const byline = shunnChapterByline(chapter, meta);
+      if (byline !== "") {
+        paragraphs.push(shunnParagraphXml(script, shunnRunXml(script, byline), true));
+      }
     } else if (body.length === 0) {
       continue;
     } else if (sections++ > 0) {
@@ -17528,6 +17653,10 @@ function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {}) {
     const body = markdownParagraphs(chapter.body);
     if (!meta.shortForm) {
       lines.push("\f", `# ${chapter.heading}`, "");
+      const byline = shunnChapterByline(chapter, meta);
+      if (byline !== "") {
+        lines.push(byline, "");
+      }
     } else if (body.length === 0) {
       continue;
     } else if (sections++ > 0) {
@@ -17552,7 +17681,7 @@ function shunnHtml(manuscript, meta, paperName = DEFAULT_PAPER) {
   const language = manuscript.meta?.language ?? "en";
   const type = typesetting(language, "horizontal");
   const fonts = `"Courier New", Courier, ${type.fonts.latin ? "monospace" : type.fonts.body}`;
-  const head = [meta.author, meta.title].filter((part) => part !== "").map((part) => `"${cssString(part)} / "`).join(" ");
+  const head = [meta.lead ?? meta.author, meta.title].filter((part) => part !== "").map((part) => `"${cssString(part)} / "`).join(" ");
   const sceneBreak = meta.shortForm ? "#" : "* * *";
   const paragraphMarkup = (paragraph) => ({
     quote: Boolean(paragraph.quote),
@@ -17563,8 +17692,10 @@ function shunnHtml(manuscript, meta, paperName = DEFAULT_PAPER) {
   for (const chapter of manuscript.chapters) {
     const paragraphs = markdownParagraphs(chapter.body);
     if (!meta.shortForm) {
+      const byline = shunnChapterByline(chapter, meta);
       body.push(`<section class="chapter"><h2>${escapeHtml(chapter.heading)}</h2>
-${withBlockquotes(paragraphs.map(paragraphMarkup)).join(`
+${byline === "" ? "" : `<p class="byline">${escapeHtml(byline)}</p>
+`}${withBlockquotes(paragraphs.map(paragraphMarkup)).join(`
 `)}
 </section>`);
       continue;
@@ -17600,7 +17731,7 @@ p { margin: 0; text-indent: 0.5in; text-align: start; widows: 2; orphans: 2; }
 .short-form { margin-top: 2em; }
 .chapter { break-before: page; }
 .chapter h2 { text-align: center; margin: 2.25in 0 1em; break-after: avoid; }
-p.break { text-align: center; text-indent: 0; }
+p.break, p.byline { text-align: center; text-indent: 0; }
 blockquote { margin: 0 0.5in; }
 blockquote p { text-indent: 0; }
 </style>
@@ -20368,6 +20499,7 @@ function validateChapters(project, errors, warnings) {
       requireScalar(data, "time-skip", label, errors);
     }
     validateEnum(data, "hook", CHAPTER_HOOKS, label, errors);
+    validateNames(data, "author", label, errors);
     errors.push(...chapterChoices(chapter, label).problems);
     if (data.numbered !== undefined && typeof data.numbered !== "boolean") {
       errors.push(err("field-not-boolean", `${label} numbered must be true or false`, label));
@@ -23839,7 +23971,7 @@ function codexPages(project, { spoilers = false } = {}) {
     project,
     spoilers,
     title: project.title,
-    authors: joinNames(meta.authors, meta.labels),
+    credits: creditLines(meta),
     language: meta.language,
     labels: meta.labels,
     type: typesetting(meta.language),
@@ -23981,7 +24113,7 @@ ${items.join(`
   const synopsis = typeof project.story.data.synopsis === "string" ? project.story.data.synopsis.trim() : "";
   const body = [
     `<h1>${escapeHtml(site.title)}</h1>`,
-    site.authors === "" ? "" : `<p class="byline">${escapeHtml(site.authors)}</p>`,
+    ...site.credits.map((line) => `<p class="byline">${escapeHtml(line)}</p>`),
     synopsis === "" || !site.spoilers ? "" : `<p>${inlineHtml(synopsis)}</p>`,
     `<p class="note">${site.spoilers ? label2(site, "codex-note-spoilers") : label2(site, "codex-note-safe", { flag: "<code>--spoilers</code>" })}</p>`,
     `<table class="facts"><tbody>
@@ -24199,7 +24331,8 @@ ${facts.map(([key, value]) => `<tr><th scope="row">${label2(site, key)}</th><td>
     const rows = site.chapters.map((chapter) => {
       const count = characterBook ? chapter.count : chapter.wordCount;
       const goal = targets.get(chapter.id);
-      return `<tr><td>${chapterLabel(site, chapter.id)}</td><td>${escapeHtml(String(chapter.status))}</td><td>${chapter.pov === "" ? "" : entityLink(site, "character", chapter.pov, 0)}</td><td>${count}</td><td>${goal === undefined ? "" : `${goal.target} (${Math.floor(goal.percent)}%)`}</td></tr>`;
+      const byline = chapterByline(nameList(chapter.frontmatter?.author), site.labels);
+      return `<tr><td>${chapterLabel(site, chapter.id)}${byline === "" ? "" : ` <span class="byline">${escapeHtml(byline)}</span>`}</td><td>${escapeHtml(String(chapter.status))}</td><td>${chapter.pov === "" ? "" : entityLink(site, "character", chapter.pov, 0)}</td><td>${count}</td><td>${goal === undefined ? "" : `${goal.target} (${Math.floor(goal.percent)}%)`}</td></tr>`;
     });
     body.push(`<h2>${label2(site, "codex-chapters")}</h2>
 <div class="scroll"><table><thead><tr>${columns(site, ["codex-chapter", "codex-status", "codex-pov", countColumn, "codex-target"])}</tr></thead><tbody>
@@ -24708,7 +24841,7 @@ function exportManuscript(root, options = {}) {
   };
   manuscript.front.forEach(pushMatter);
   for (const chapter of manuscript.chapters) {
-    lines.push(`# ${chapter.heading}`, "", chapter.body, "");
+    lines.push(`# ${chapter.heading}`, "", ...chapter.byline === "" ? [] : [`*${chapter.byline}*`, ""], chapter.body, "");
   }
   manuscript.back.forEach(pushMatter);
   writeFile(output.outFile, `${lines.join(`
@@ -25212,6 +25345,8 @@ function shunnMeta(project) {
   return {
     title: project.title,
     author: joinNames(meta.authors, meta.labels),
+    lead: leadNames(meta),
+    editors: meta.editors.length === 0 ? "" : fillLabel(meta.labels, "edited-by", { names: joinNames(meta.editors, meta.labels) }),
     labels: meta.labels,
     contact: asArray(data.contact),
     words: project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0),
@@ -25252,9 +25387,12 @@ function bookChapters(project, action = "build") {
     }
     unnumberedSoFar += numbered ? 0 : 1;
     const displayNumber = numbered ? chapter.number - unnumberedSoFar : null;
+    const authors = nameList(markdown.data.author);
     const entry = {
       number: chapter.number,
       title,
+      authors,
+      byline: chapterByline(authors, meta.labels),
       numbered,
       displayNumber,
       heading: numbered ? chapterHeading(displayNumber, title, meta.labels, meta.chapterNumerals) : title,
@@ -25291,7 +25429,7 @@ function manuscriptParts(project, action = "build") {
   }
   return {
     title: project.title,
-    author: joinNames(meta.authors, meta.labels),
+    author: leadNames(meta),
     meta,
     unit: project.unit.name,
     front,

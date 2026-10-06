@@ -145,8 +145,13 @@ A collection gathers one author's stories; an anthology gathers several
 authors' stories, usually under an editor. The steps below fit both. Each
 story stays an ordinary Story Skills project; the book is one more project
 with each story as a chapter, titled by a `chapter-heading: "{title}"` label
-and with no `form`. `docs/series.md`, Short-story collections and
-anthologies, gives the layout, the anthology byline, and the builds.
+and with no `form`. In an anthology, put the editor in `story.md` `editor`
+and each story's writer in its chapter's `author` (a name, or a list for a
+co-written story), never in the prose: builds print it under the story's
+title and keep it out of the word count. Ask the user for every name; do
+not guess a byline. Run `story validate .` after setting them.
+`docs/series.md`, Short-story collections and anthologies, gives the
+layout, the bylines, and the builds.
 
 1. **Choose the stories.** List the candidates with each one's word count,
    form, and publication history from the tracker. Ask the user which to

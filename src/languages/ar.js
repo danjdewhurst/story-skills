@@ -31,6 +31,8 @@ export default {
     "note-title": "اكتب ملاحظة على {label}",
     "anchor-title": "رابط إلى {label}",
     by: "بقلم",
+    byline: "بقلم {names}",
+    "edited-by": "تحرير {names}",
     "approximate-words": "نحو {words} كلمة",
     "approximate-characters": "نحو {characters} حرف",
     "narration-opening": "{title}. تأليف {authors}. بصوت {narrator}.",
