@@ -162,4 +162,18 @@ status: alive
     expect(accepts(fields["publication-date"], "[TODOS]")).toBe(false);
     expect(accepts(fields.subjects, ["fiction"])).toBe(false);
   });
+
+  // Without a language the book is English, which validate rejects for
+  // both (#467). Which set languages qualify is left to validate.
+  test("writing-mode vertical and chapter-numerals native need a language", () => {
+    const story = schema.properties.story;
+    const base = { title: "T", "schema-version": 2, genre: "fantasy", status: "drafting", themes: [], pov: "first", tense: "past" };
+    const errors = (extra) => validateAgainstSchema({ ...base, ...extra }, story, schema);
+    expect(errors({})).toEqual([]);
+    expect(errors({ "writing-mode": "vertical" })).toEqual(["$: missing required language"]);
+    expect(errors({ "chapter-numerals": "native" })).toEqual(["$: missing required language"]);
+    expect(errors({ "writing-mode": "vertical", language: "ja" })).toEqual([]);
+    expect(errors({ "chapter-numerals": "native", language: "ar" })).toEqual([]);
+    expect(errors({ "writing-mode": "horizontal", "chapter-numerals": "western" })).toEqual([]);
+  });
 });
