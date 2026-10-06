@@ -10,7 +10,7 @@ The CLI never writes story content for you. It scaffolds files, rebuilds registr
 - [Command summary](#command-summary)
 - [How the CLI behaves](#how-the-cli-behaves)
 - [Setup commands](#setup-commands): `init`, `import`, `migrate`
-- [Maintenance commands](#maintenance-commands): `validate`, `reindex`, `wordcount`, `links`
+- [Maintenance commands](#maintenance-commands): `validate`, `reindex`, `wordcount`, `links`, `check`
 - [Analysis commands](#analysis-commands): `continuity`, `knowledge`, `context`, `compare`, `similarity`, `progress`, `timeline`, `prose`, `series`, `report`, `next`, `doctor`
 - [Craft and revision commands](#craft-and-revision-commands): `pacing`, `clues`, `voices`, `names`, `diagram`, `passes`
 - [Entity commands](#entity-commands): `add`, `rename`, `move`, `remove`
@@ -74,7 +74,7 @@ Absolute paths in output are shortened to `~/stories/...`.
 | | [`move <kind> <id>`](#move) | Renumber a chapter or move a scene and update references | Yes |
 | | [`remove <kind> <id>`](#remove) | Delete an entity and scrub references | Yes |
 | Output | [`export [path]`](#export) | Write a combined manuscript markdown file | Yes |
-| | [`build [path]`](#build) | Build markdown, EPUB, DOCX, Shunn, HTML, print, narration, metadata, Fountain, or Twine output in `dist/` | Yes |
+| | [`build [path]`](#build) | Build `markdown`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, or `ink` output in `dist/` | Yes |
 | | [`synopsis [path]`](#synopsis) | Print or write a 1- or 3-page synopsis from arcs | With `--out` |
 
 ## How the CLI behaves
@@ -127,7 +127,7 @@ Every command except `init` and `import` works on one story project: a directory
 
 | Commands | How to give the project | Default |
 |---|---|---|
-| `validate`, `reindex`, `wordcount`, `links`, `continuity`, `compare`, `similarity`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `series`, `passes`, `report`, `next`, `doctor`, `migrate`, `export`, `build`, `synopsis` | A positional `[path]` **or** `--path <path>` | Current directory |
+| `validate`, `reindex`, `wordcount`, `links`, `check`, `continuity`, `compare`, `similarity`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `series`, `passes`, `report`, `next`, `doctor`, `migrate`, `export`, `build`, `synopsis` | A positional `[path]` **or** `--path <path>` | Current directory |
 | `knowledge`, `context`, `names`, `diagram`, `add`, `rename`, `move`, `remove` | `--path <path>` only, because their positionals are ids, names, or a diagram kind | Current directory |
 | `init`, `import` | Neither. They create a new project; use `--dir` to choose where | A directory named after the story id |
 
