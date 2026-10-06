@@ -4,6 +4,7 @@ import { checkSet, languagePack } from "./languages/index.js";
 import { lowerCase } from "./languages/locale.js";
 import { foldLatin, splitWords } from "./markdown.js";
 import { editDistance } from "./prose.js";
+import { UNSPACED_LETTERS } from "./words.js";
 
 // Collision check for candidate names before they enter the bible. An exact
 // clash with an existing name or alias is an error; look-alikes and a shared
@@ -14,13 +15,34 @@ const MAJOR_ROLES = new Set(["protagonist", "antagonist", "deuteragonist", "narr
 
 const NO_WORDS = new Set();
 
+const UNSPACED_LETTER = new RegExp(`[${UNSPACED_LETTERS}]`, "u");
+// The interpuncts that part a foreign name written in Japanese (ジョン・スミス)
+// or Chinese (哈利·波特).
+const NAME_DOT = /[・·]/u;
+const EDGE_PUNCTUATION = /^[^\p{L}\p{M}\p{N}]+|[^\p{L}\p{M}\p{N}]+$/gu;
+
+// The words of a name. Prose splits Chinese and Japanese into a word per
+// character and Thai, Lao, Khmer, and Burmese by dictionary, but a name in
+// those scripts is one word unless spaces or an interpunct part it, so
+// 大島源治 is one word and 大島 源治 two. Every other name splits as prose
+// does.
+export function nameWords(name) {
+  const text = String(name);
+  if (!UNSPACED_LETTER.test(text)) {
+    return splitWords(text);
+  }
+  return text.trim().split(/\s+/u).flatMap((part) => (UNSPACED_LETTER.test(part)
+    ? part.split(NAME_DOT).map((word) => word.replace(EDGE_PUNCTUATION, "")).filter((word) => word !== "")
+    : splitWords(part)));
+}
+
 // The first word of a name that is not a title or article ("Lord Maren" is
 // known as Maren), or "" when the name is all titles. The titles are the
 // language pack's `titleWords`; without them every name keeps its first
 // word.
 export function givenName(name, pack = languagePack()) {
   const titles = checkSet(pack, "titleWords") ?? NO_WORDS;
-  const words = splitWords(String(name));
+  const words = nameWords(name);
   const index = words.findIndex((word) => !titles.has(lowerCase(word, pack).replace(/[.’']/g, "")));
   return index === -1 ? "" : words[index];
 }

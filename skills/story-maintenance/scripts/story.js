@@ -7322,9 +7322,19 @@ function leadingHeadingLength(masked) {
 import path4 from "node:path";
 var MAJOR_ROLES = new Set(["protagonist", "antagonist", "deuteragonist", "narrator"]);
 var NO_WORDS = new Set;
+var UNSPACED_LETTER2 = new RegExp(`[${UNSPACED_LETTERS}]`, "u");
+var NAME_DOT = /[・·]/u;
+var EDGE_PUNCTUATION = /^[^\p{L}\p{M}\p{N}]+|[^\p{L}\p{M}\p{N}]+$/gu;
+function nameWords(name) {
+  const text = String(name);
+  if (!UNSPACED_LETTER2.test(text)) {
+    return splitWords(text);
+  }
+  return text.trim().split(/\s+/u).flatMap((part) => UNSPACED_LETTER2.test(part) ? part.split(NAME_DOT).map((word) => word.replace(EDGE_PUNCTUATION, "")).filter((word) => word !== "") : splitWords(part));
+}
 function givenName(name, pack = languagePack()) {
   const titles = checkSet(pack, "titleWords") ?? NO_WORDS;
-  const words = splitWords(String(name));
+  const words = nameWords(name);
   const index = words.findIndex((word) => !titles.has(lowerCase(word, pack).replace(/[.’']/g, "")));
   return index === -1 ? "" : words[index];
 }
@@ -7813,11 +7823,11 @@ function speakerPatterns(characters, pack, rules) {
 }
 var NON_WORD = /[^\p{L}\p{N}]+/u;
 var SPACED_LETTER2 = `(?![${UNSPACED_LETTERS}])[\\p{L}\\p{N}]`;
-var UNSPACED_LETTER2 = new RegExp(`[${UNSPACED_LETTERS}]`, "u");
+var UNSPACED_LETTER3 = new RegExp(`[${UNSPACED_LETTERS}]`, "u");
 function attribute(paragraph, allSpeakers, pack) {
   const narration = `${splitOpenSpeech(paragraph, pack).narration} `;
   const words = new Set(narration.split(NON_WORD));
-  const speakers = allSpeakers.filter((speaker) => [...speaker.keys].some((key) => key === "" || words.has(key) || UNSPACED_LETTER2.test(key) && narration.includes(key)));
+  const speakers = allSpeakers.filter((speaker) => [...speaker.keys].some((key) => key === "" || words.has(key) || UNSPACED_LETTER3.test(key) && narration.includes(key)));
   for (const form of ["subject", "inverted"]) {
     const tagged = speakers.filter((speaker) => speaker[form] !== null && speaker[form].test(narration));
     if (tagged.length === 1) {
@@ -11210,9 +11220,6 @@ function mentionNames(project) {
     }
   };
   for (const entry of existingNames(project, { cut: true })) {
-    if (entry.name !== entry.full && !entry.full.split(/\s+/u).includes(entry.name)) {
-      continue;
-    }
     add(entry.kind, entry.id, entry.name);
     const words = entry.name.split(/\s+/);
     const first = words.findIndex((word) => !titles?.has(lowerCase(word, pack).replace(/[.’']/g, "")));
@@ -22410,7 +22417,7 @@ var COMMANDS = [
     args: Infinity,
     options: ["json"],
     run({ parsed, io, cwd, root, overrides }) {
-      const report = applySeverity(namesReport(root(), nameWords(parsed, 1, cwd, "names")), overrides);
+      const report = applySeverity(namesReport(root(), nameWords2(parsed, 1, cwd, "names")), overrides);
       if (wantsJson(parsed)) {
         const { results, ...rest } = report;
         return reportJson(io, "names", { ...rest, names: results });
@@ -22652,7 +22659,7 @@ var COMMANDS = [
       const options = {
         ...entityOptions(parsed),
         kind: parsed.positionals[1],
-        name: nameWords(parsed, 2, cwd, "add").join(" ")
+        name: nameWords2(parsed, 2, cwd, "add").join(" ")
       };
       return runWrite(context, "add", (projectRoot) => createEntity(projectRoot, options), (result) => `${result.resumed ? "Finished an interrupted add of" : "Created"} ${result.kind} ${result.id}: ${result.file}
 `);
@@ -22672,7 +22679,7 @@ var COMMANDS = [
         kind: parsed.positionals[1],
         id: parsed.positionals[2],
         newId: parsed.options.id,
-        name: nameWords(parsed, 3, cwd, "rename").join(" ")
+        name: nameWords2(parsed, 3, cwd, "rename").join(" ")
       };
       return runWrite(context, "rename", (projectRoot) => renameEntity(projectRoot, options), (result) => `${result.resumed ? "Finished an interrupted rename of" : "Renamed"} ${result.kind} ${result.oldId} to ${result.id}: ${result.file}
 `);
@@ -22780,7 +22787,7 @@ var COMMANDS = [
     }
   }
 ];
-function nameWords(parsed, from, cwd, command) {
+function nameWords2(parsed, from, cwd, command) {
   const words = parsed.positionals.slice(from);
   for (const word of words) {
     if (word === "." || word === ".." || /[\\/]/.test(word) && fs15.existsSync(path22.join(path22.resolve(cwd, word), "story.md"))) {
