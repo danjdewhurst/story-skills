@@ -1390,11 +1390,11 @@ Dates take a day, a month name, and a year, then an era name or abbreviation, in
 - `3rd of Thaw, 302 Age of Embers`
 - `302-02-03 AE` (year, month number, day)
 - `3 Thaw 302` (no era: the last era, the present one)
-- `Windday, 3 Thaw 302 AE` (a leading weekday, which must be the right one)
+- `Rootday, 3 Thaw 302 AE` (a leading weekday, which must be the right one)
 
 Year 1 of a backward era is the year just before year 1 of the era after it, so the day after `6 Embertide 1 BW` is `1 Frostwane 1 AE`.
 
-`story validate` errors (`invalid-calendar`) on a calendar it cannot read, and then reads no dates against it. Under a valid calendar, a chapter or scene `date` that starts with a digit or a weekday must be a day of the calendar: `31 Thaw 302 AE` in a 30-day month, an unknown month or era, a year past an era's `years`, or the wrong weekday is an `invalid-date` error that says why. Other text, such as `the night of the fire`, is free text, which `story continuity` warns about (`malformed-date`) as before. `story add chapter` and `story add scene` take `--date` in the calendar. A `YYYY-MM-DD` value is read as year, month number, and day of the calendar. `deadline`, `publication-date`, and progress sessions are real-world dates, and stay `YYYY-MM-DD`.
+`story validate` errors (`invalid-calendar`) on a calendar it cannot read, and then reads no dates against it. Under a valid calendar, a chapter or scene `date` that starts with a digit or a weekday must be a day of the calendar: `31 Thaw 302 AE` in a 30-day month, an unknown month or era, a year past an era's `years`, a wrong ordinal (`3nd`), or the wrong weekday is an `invalid-date` error that says why. Other text, such as `the night of the fire`, is free text, which `story continuity` warns about (`malformed-date`) as before. `story add chapter` and `story add scene` take `--date` in the calendar. A `YYYY-MM-DD` value is read as year, month number, and day of the calendar. `deadline`, `publication-date`, and progress sessions are real-world dates, and stay `YYYY-MM-DD`.
 
 ### Route travel
 
