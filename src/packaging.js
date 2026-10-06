@@ -714,7 +714,7 @@ function runMarkup(run, escape, lineBreak) {
 // end), carried through inlineRuns as one character and written as each
 // format's break: <br> in HTML, <br/> in EPUB, <w:br/> in DOCX. Verse,
 // lyrics, and letter sign-offs keep their lines.
-const LINE_BREAK = "\uE001";
+export const LINE_BREAK = "\uE001";
 
 // The body as paragraphs: { sceneBreak: true } for a thematic break (three
 // or more of the same marker, optionally spaced), otherwise { text, quote }

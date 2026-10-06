@@ -18,7 +18,7 @@ import { idText } from "./continuity.js";
 import { chapterChronology } from "./chronology.js";
 import { sortProgressions, progressionEntry } from "./progressions.js";
 import { escapeHtml, htmlRoot } from "./html.js";
-import { inlineHtml } from "./packaging.js";
+import { inlineHtml, LINE_BREAK } from "./packaging.js";
 import { typesetting } from "./typesetting.js";
 import { publishingMeta } from "./publishing.js";
 import { joinNames } from "./languages/index.js";
@@ -394,9 +394,11 @@ function progressPage(site) {
     }
     body.push(`<h2>Plot grid</h2>\n<p class="note">Arcs by chapter, as <code>story grid</code> prints them: x where a chapter or one of its scenes advances the arc.</p>\n<div class="scroll"><table class="grid"><thead>${head}</thead><tbody>\n${rows.join("\n")}\n</tbody></table></div>`);
   }
-  const sessions = cleanSessions(project.progressLog?.data.sessions);
+  // A book counted in characters lists only the sessions that logged them,
+  // as `story progress` measures it.
+  const sessions = cleanSessions(project.progressLog?.data.sessions).filter((session) => !characterBook || session.characters !== null);
   if (sessions.length > 0) {
-    body.push(`<h2>Session log</h2>\n<table><thead><tr><th>Date</th><th>${characterBook ? "Characters" : "Words"}</th></tr></thead><tbody>\n${sessions.map((session) => `<tr><td>${escapeHtml(session.date)}</td><td>${characterBook ? session.characters ?? "" : session.words}</td></tr>`).join("\n")}\n</tbody></table>`);
+    body.push(`<h2>Session log</h2>\n<table><thead><tr><th>Date</th><th>${characterBook ? "Characters" : "Words"}</th></tr></thead><tbody>\n${sessions.map((session) => `<tr><td>${escapeHtml(session.date)}</td><td>${characterBook ? session.characters : session.words}</td></tr>`).join("\n")}\n</tbody></table>`);
   }
   return page(site, "progress.html", "Progress", body);
 }
@@ -550,7 +552,18 @@ function notesHtml(site, entity) {
   let fence = null;
   const flushParagraph = () => {
     if (paragraph.length > 0) {
-      out.push(`<p>${inlineHtml(plainLinks(paragraph.join(" ").trim()))}</p>`);
+      // A line ending in a backslash or two spaces keeps its break, as in
+      // the review copy, so verse and addresses keep their lines.
+      const text = paragraph.map((line, index) => {
+        if (index === paragraph.length - 1) {
+          return line.trim();
+        }
+        if (/\\$/.test(line)) {
+          return `${line.slice(0, -1).trim()}${LINE_BREAK}`;
+        }
+        return / {2,}$/.test(line) ? `${line.trim()}${LINE_BREAK}` : `${line.trim()} `;
+      }).join("");
+      out.push(`<p>${inlineHtml(plainLinks(text))}</p>`);
       paragraph = [];
     }
   };
@@ -582,7 +595,10 @@ function notesHtml(site, entity) {
   let titleSkipped = false;
   for (const line of lines) {
     if (fence !== null) {
-      if (line.trim().startsWith(fence.marker)) {
+      // A closing fence is the opening fence's character, at least as many
+      // times, alone on its line.
+      const closing = line.trim();
+      if (closing.length >= fence.marker.length && closing === fence.marker[0].repeat(closing.length)) {
         out.push(`<pre><code>${escapeHtml(fence.lines.join("\n"))}</code></pre>`);
         fence = null;
       } else {
@@ -642,7 +658,7 @@ function notesHtml(site, entity) {
       out.push(`<blockquote><p>${inlineHtml(plainLinks(quote[1]))}</p></blockquote>`);
       continue;
     }
-    paragraph.push(line.trim());
+    paragraph.push(line);
   }
   if (fence !== null) {
     out.push(`<pre><code>${escapeHtml(fence.lines.join("\n"))}</code></pre>`);

@@ -122,10 +122,21 @@ describe("build --format codex", () => {
     const second = readSite(buildBook(root, { format: "codex", spoilers: true }).outFile);
     expect(second).toEqual(first);
 
+    // Pages added by hand, without the generator tag, are kept.
+    fs.writeFileSync(path.join(root, "dist", "codex", "about.html"), "<p>About</p>", "utf8");
+    fs.writeFileSync(path.join(root, "dist", "codex", "characters", "notes.html"), "<p>Notes</p>", "utf8");
     fs.rmSync(path.join(root, "worldbuilding", "artifacts", "brass-key.md"));
     const third = readSite(buildBook(root, { format: "codex" }).outFile);
     expect(Object.keys(third)).not.toContain("artifacts/brass-key.html");
     expect(fs.existsSync(path.join(root, "dist", "codex", "artifacts"))).toBe(false);
+    expect(third["about.html"]).toBe("<p>About</p>");
+    expect(third["characters/notes.html"]).toBe("<p>Notes</p>");
+  });
+
+  test("refuses to build while the session log does not parse", () => {
+    const { root } = project();
+    fs.writeFileSync(path.join(root, "progress.md"), "---\nsessions: [\n---\n", "utf8");
+    expect(() => buildBook(root, { format: "codex" })).toThrow("Cannot build the codex: fix this file first");
   });
 
   test("covers scenes, factions, systems, routes, progressions, knowledge, notes markup, and the session log", () => {
@@ -143,6 +154,10 @@ describe("build --format codex", () => {
       "|-----|-----|",
       "| Mara | sister |",
       "",
+      "Line one  ",
+      "line two\\",
+      "line three",
+      "",
       "A first paragraph",
       "| Year | Event |",
       "| 1901 | Born |",
@@ -154,6 +169,7 @@ describe("build --format codex", () => {
       "> A quote",
       "",
       "```",
+      "```js",
       "# not a heading",
       "```",
       "",
@@ -173,7 +189,8 @@ describe("build --format codex", () => {
     expect(tobiasPage).toContain("<thead><tr><th>Kin</th><th>Tie</th></tr></thead><tbody>\n<tr><td>Mara</td><td>sister</td></tr>");
     expect(tobiasPage).toContain("<p>A first paragraph</p>\n<div class=\"scroll\"><table><tbody>\n<tr><td>Year</td><td>Event</td></tr>\n<tr><td>1901</td><td>Born</td></tr>");
     expect(tobiasPage).toContain("<ul>\n<li>one continued</li>\n</ul>\n<ol>\n<li>first</li>\n</ol>\n<p>Plain line</p>\n<blockquote><p>A quote</p></blockquote>");
-    expect(tobiasPage).toContain("<pre><code># not a heading</code></pre>\n<pre><code>left open</code></pre>");
+    expect(tobiasPage).toContain("<pre><code>```js\n# not a heading</code></pre>\n<pre><code>left open</code></pre>");
+    expect(tobiasPage).toContain("<p>Line one<br>line two<br>line three</p>");
 
     expect(site["locations/harbour.html"]).toContain('<a href="../locations/lamp-house.html">Lamp House</a> <span class="muted">1 h, boat</span><br>nowhere');
     expect(site["locations/lamp-house.html"]).toContain('<a href="../factions/keepers.html">The Keepers</a> <span class="muted">Faction</span>');
@@ -202,7 +219,10 @@ describe("build --format codex", () => {
     const { root } = project({ language: "ja" });
     const chapter = path.join(root, "chapters", "chapter-01.md");
     fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace("number: 1\n", "number: 1\ntarget-characters: 100\n"), "utf8");
+    // A session logged before the book was counted in characters is left out.
+    fs.writeFileSync(path.join(root, "progress.md"), "---\ntype: progress-log\nsessions:\n  - date: 2020-05-01\n    words: 10\n  - date: 2020-05-02\n    words: 12\n    characters: 40\n---\n\n# Progress Log\n", "utf8");
     const site = readSite(buildBook(root, { format: "codex" }).outFile);
+    expect(site["progress.html"]).toContain("<tbody>\n<tr><td>2020-05-02</td><td>40</td></tr>\n</tbody>");
     expect(site["progress.html"]).toContain('<tr><th scope="row">Total characters</th>');
     expect(site["progress.html"]).toContain("<th>Characters</th><th>Target</th>");
     expect(site["progress.html"]).toMatch(/<td>100 \(\d+%\)<\/td>/);
