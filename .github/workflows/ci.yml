@@ -80,11 +80,10 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      # File-system calls are several times slower on these runners, so the
-      # slowest tests and the temp-folder cleanup get longer than the 5s
-      # default.
+      # test/setup.js gives every test 60s rather than Bun's 5s default, since
+      # file-system calls are several times slower on these runners.
       - name: Run tests
-        run: bun run test --timeout 60000
+        run: bun run test
 
   node:
     name: Node ${{ matrix.node }}

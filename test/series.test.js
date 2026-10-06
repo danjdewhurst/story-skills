@@ -511,17 +511,19 @@ describe("series traversal limits", () => {
   });
 
   test("does not false-fail at exactly 100 books with reciprocal links", () => {
+    // Bare story.md folders rather than full scaffolds: the limit counts
+    // books, and 100 scaffolds took over 5s on a slow CI runner (#464).
     const cwd = makeTempDir();
-    const books = [];
-    for (let index = 0; index < 100; index += 1) {
-      books.push(book(cwd, `Saga ${index}`));
+    const names = Array.from({ length: 100 }, (_, index) => `saga-${index}`);
+    for (const [index, name] of names.entries()) {
+      const links = index === 0
+        ? "follows:\n" + names.slice(1).map((other) => `  - ../${other}\n`).join("")
+        : `precedes:\n  - ../${names[0]}\n`;
+      fs.mkdirSync(path.join(cwd, name));
+      fs.writeFileSync(path.join(cwd, name, "story.md"), `---\ntitle: Saga ${index}\n${links}---\n`, "utf8");
     }
-    const first = path.basename(books[0]);
-    setStory(books[0], { follows: books.slice(1).map((root) => `../${path.basename(root)}`) });
-    for (const other of books.slice(1)) {
-      setStory(other, { precedes: [`../${first}`] });
-    }
-    const report = seriesReport(books[0]);
+    const report = seriesReport(path.join(cwd, names[0]));
+    expect(report.books).toHaveLength(100);
     expect(messages(report.errors).join("\n")).not.toContain("book limit");
   });
 

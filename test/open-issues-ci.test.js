@@ -1,13 +1,11 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { makeTempDir, removeTempDirs } from "./helpers.js";
+import { makeTempDir } from "./helpers.js";
 
 const repoRoot = path.resolve(import.meta.dir, "..");
 const readRepo = (relativePath) => fs.readFileSync(path.join(repoRoot, relativePath), "utf8");
-
-afterEach(removeTempDirs);
 
 // The `with:` block directly under each actions/checkout step.
 function checkoutBlocks(text) {
