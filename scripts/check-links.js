@@ -56,20 +56,26 @@ function blank(text) {
   return text.replace(/[^\n]/g, " ");
 }
 
-// Replaces YAML frontmatter, fenced code blocks, and HTML comments with
-// spaces, keeping every newline so offsets map to the same line numbers as
-// the source.
+// Drops block-quote markers, so fences and headings inside a quote are seen.
+function unquote(line) {
+  return line.replace(/^(?: {0,3}> ?)+/, "");
+}
+
+// Replaces YAML frontmatter, fenced code blocks (quoted ones too), and HTML
+// comments with spaces, keeping every newline so offsets map to the same
+// line numbers as the source. A leading --- is frontmatter only when a
+// closing --- or ... follows; otherwise it is a thematic break.
 export function maskBlocks(text) {
   const lines = text.split("\n");
   let fence = null;
-  let frontmatter = lines[0]?.trimEnd() === "---";
+  let frontmatter = lines[0]?.trimEnd() === "---" && lines.some((line, i) => i > 0 && /^(---|\.\.\.)\s*$/.test(line));
   for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i];
+    const line = unquote(lines[i]);
     if (frontmatter) {
       if (i > 0 && /^(---|\.\.\.)\s*$/.test(line)) {
         frontmatter = false;
       }
-      lines[i] = blank(line);
+      lines[i] = blank(lines[i]);
       continue;
     }
     if (fence) {
@@ -77,13 +83,13 @@ export function maskBlocks(text) {
       if (close && close[1][0] === fence[0] && close[1].length >= fence.length) {
         fence = null;
       }
-      lines[i] = blank(line);
+      lines[i] = blank(lines[i]);
       continue;
     }
     const open = /^ {0,3}(`{3,}|~{3,})/.exec(line);
     if (open && !(open[1][0] === "`" && line.slice(open[0].length).includes("`"))) {
       fence = open[1];
-      lines[i] = blank(line);
+      lines[i] = blank(lines[i]);
     }
   }
   return lines.join("\n").replace(/<!--[\s\S]*?-->/g, blank);
@@ -128,21 +134,31 @@ export function anchorsFor(text) {
     seen.set(base, count + 1);
     anchors.add(count === 0 ? base : `${base}-${count}`);
   };
-  for (let i = 0; i < lines.length; i += 1) {
-    const atx = /^ {0,3}#{1,6}(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$/.exec(lines[i]);
-    if (atx) {
+  // The paragraph a setext underline would turn into a heading, or null
+  // inside a list item or table, where an underline is a thematic break.
+  let paragraph = [];
+  for (const line of lines.map(unquote)) {
+    const atx = /^ {0,3}#{1,6}(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$/.exec(line);
+    if (line.trim() === "") {
+      paragraph = [];
+    } else if (atx) {
       add(atx[1] ?? "");
-      continue;
-    }
-    // Setext: a paragraph line underlined with === or ---.
-    const next = lines[i + 1];
-    if (next !== undefined && /^ {0,3}(=+|-+)[ \t]*$/.test(next) && lines[i].trim() !== "" && !/^ {0,3}([-*+>|]|\d+[.)])/.test(lines[i])) {
-      add(lines[i].trim());
-      i += 1;
+      paragraph = [];
+    } else if (/^ {0,3}(=+|-+)[ \t]*$/.test(line)) {
+      if (paragraph?.length) {
+        add(paragraph.join(" "));
+      }
+      paragraph = [];
+    } else if (/^ {0,3}([*_])[ \t]*(\1[ \t]*){2,}$/.test(line)) {
+      paragraph = [];
+    } else if (/^ {0,3}([-*+](\s|$)|\d+[.)](\s|$)|\|)/.test(line)) {
+      paragraph = null;
+    } else if (paragraph) {
+      paragraph.push(line.trim());
     }
   }
-  for (const match of maskCode(text).matchAll(/<a\s[^>]*?\b(?:id|name)\s*=\s*["']([^"']+)["']/gi)) {
-    anchors.add(match[1]);
+  for (const match of maskCode(text).matchAll(/<a\s[^>]*?\b(?:id|name)\s*=\s*(?:["']([^"']+)["']|([^\s"'=<>`]+))/gi)) {
+    anchors.add(match[1] ?? match[2]);
   }
   return anchors;
 }
@@ -176,8 +192,15 @@ export function extractLinks(text) {
   for (const match of masked.matchAll(/^ {0,3}\[(?:[^[\]\\]|\\.)+\]:[ \t]*(<[^<>\n]*>|\S+)/gm)) {
     push(match[1], match.index);
   }
-  for (const match of masked.matchAll(/<(?:a|img|source)\s[^>]*?\b(?:href|src|srcset)\s*=\s*["']([^"']+)["']/gi)) {
-    push(match[1], match.index);
+  for (const tag of masked.matchAll(/<(?:a|img|source)\s[^>]*>/gi)) {
+    for (const match of tag[0].matchAll(/\s(href|src|srcset)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/gi)) {
+      const value = match[2] ?? match[3] ?? match[4];
+      // srcset lists candidates as "path 2x, path 640w".
+      const targets = match[1].toLowerCase() === "srcset" ? value.split(",").map((candidate) => candidate.trim().split(/\s+/)[0]) : [value];
+      for (const target of targets) {
+        push(target, tag.index);
+      }
+    }
   }
   return links;
 }
