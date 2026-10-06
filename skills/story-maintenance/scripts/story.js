@@ -17272,7 +17272,7 @@ function validateDailyTarget(data, errors) {
   if (days === undefined) {
     return;
   }
-  if (!Array.isArray(days) || days.length === 0 || days.some((day) => weekdayName(day) === null)) {
+  if (!Array.isArray(days) || days.some((day) => weekdayName(day) === null)) {
     errors.push(err("unsupported-value", `story.md frontmatter field writing-days must be a list of weekdays (${WEEKDAYS.join(", ")}, or full names), got ${Array.isArray(days) ? `[${days.join(", ")}]` : days}`, "story.md"));
   }
 }
