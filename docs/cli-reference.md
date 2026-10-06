@@ -1367,10 +1367,10 @@ The fixed limits suit a generic writer. List files or folders of your own prose 
 ```yaml
 samples:
   - ../book-one
-  - research/approved-chapter-drafts
+  - chapters/chapter-01.md
 ```
 
-Each entry is a path relative to the project folder. A folder holding `story.md` contributes its chapters, and any other folder its `.md`, `.markdown`, and `.txt` files (not `_index.md` registries), as [`similarity --against`](#similarity) reads them. This project's own chapters are never a sample: they are what is compared, so an entry naming the project or its `chapters/` warns `style-sample-own-chapters`. From all the samples together `prose` builds a profile:
+Each entry is a path relative to the project folder. A folder holding `story.md` contributes its chapters, and any other folder its `.md`, `.markdown`, and `.txt` files (not `_index.md` registries), as [`similarity --against`](#similarity) reads them. A chapter of this book named on its own, such as an opening the author has approved, is a sample: it is part of the profile, so `prose` does not compare it with the profile, and the text report says so under its heading. A folder never makes this book's chapters samples, since every chapter would then be compared with itself: an entry naming the project, its `chapters/`, or a folder inside it warns `style-sample-own-chapters`, and a folder that holds this book (`..`) reads only the other books in it. From all the samples together `prose` builds a profile:
 - average sentence length and its spread;
 - average paragraph length;
 - the share of words inside dialogue;
@@ -1389,7 +1389,7 @@ The report prints the profile, and each chapter's paragraph length, dialogue sha
 
 With a baseline, the fixed `--max-filter-words` and `--max-adverbs` warnings are off: your own rate is the measure. Said-bookisms, uniform sentences, spellings, and similar names are checked as before. The samples need at least 2,000 words of narration. With fewer, `prose` warns `prose-baseline-small` and keeps the fixed limits. A sample entry that names nothing warns `style-sample-missing`, one that cannot be read (not UTF-8, say) warns `style-sample-unreadable`, and the rest are used. Signature words leave out the names in this project's bible, but not names from another book's cast.
 
-The baseline is on whenever `samples` lists something. `--baseline false` (or `baseline: false` in `cli-defaults`) turns it off for a run, and `--baseline` with no samples is a usage error. A drift is a prompt to reread the chapter, not a rule: a fight scene should run shorter than the book's average. `--json` adds the profile as `data.baseline` (or `null`) and each chapter's figures as `chapters[].baseline`.
+The baseline is on whenever `samples` lists something. `--baseline false` (or `baseline: false` in `cli-defaults`) turns it off for a run, and `--baseline` with no samples is a usage error. A drift is a prompt to reread the chapter, not a rule: a fight scene should run shorter than the book's average. `--json` adds the profile as `data.baseline` (or `null`) and each chapter's figures as `chapters[].baseline`, with `chapters[].sample: true` on a chapter that is itself a sample.
 
 `story prose -` lints a passage from stdin instead of the chapters, with the style sheet, samples, and character names of the project given by `--path` or the current directory (and the default rules outside a project). The passage is reported as `stdin`, and similar character names, a bible finding, are left out. A whole chapter file can be piped: its frontmatter is skipped and only its prose (the text under `## Chapter Text`) is linted, as for a chapter in the project. A chapter or scene file in the project that fails to parse does not fail a passage check, since the passage stands in for them; a broken style sheet or character file still does.
 
@@ -3013,7 +3013,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `stale-exemption` | warning | A continuity exemption's `file` is not a file in the project, or its `chapter` is not a chapter, so it matches nothing. |
 | `style-use-equals-avoid` | error | A style-sheet `preferred` entry uses and avoids the same word. |
 | `style-sample-missing` | warning | A style-sheet `samples` entry names no file or folder. |
-| `style-sample-own-chapters` | warning | A style-sheet `samples` entry names this project or its chapters, which the samples are compared with. |
+| `style-sample-own-chapters` | warning | A style-sheet `samples` entry names this project, its `chapters/` folder, or a folder inside it, which would compare every chapter with itself. Name approved chapter files one by one. |
 | `unknown-word-list` | warning | A style-sheet `replace-words` or `add-words` entry names no word list, so the checks ignore it. |
 | `duplicate-session-date` | error | `progress.md` logs the same date twice. |
 | `research-no-sources` | warning | A verified research note lists no sources. |

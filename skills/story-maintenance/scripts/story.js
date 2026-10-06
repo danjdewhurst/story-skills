@@ -10795,7 +10795,9 @@ function formatProseReport(report) {
     if (runs("dialogue-tags")) {
       lines.push(`  Dialogue tags: ${formatCounts(analysis.plainTags, 4) || "none plain"}; said-bookisms: ${formatCounts(analysis.bookisms, 5) || "none"}`);
     }
-    if (chapter.baseline && profile.usable) {
+    if (chapter.sample) {
+      lines.push("  A sample: part of the baseline, so not compared with it");
+    } else if (chapter.baseline && profile.usable) {
       const figures = chapter.baseline;
       const signature = figures.signatureWordsUsed === null ? "" : `, signature words ${figures.signatureWordsUsed} of ${profile.signatureWords.length}`;
       lines.push(`  Against the baseline: paragraphs ${formatRate(figures.paragraphMean)} words, ${formatRate(figures.dialogueShare)}% dialogue${signature}`);
@@ -19731,8 +19733,9 @@ function sampleProblem(project, sample) {
   const real = canonicalPath(target);
   const self = canonicalPath(project.root);
   const chapters = path11.join(self, "chapters");
-  if (real === self || real === chapters || isPathInside(chapters, real)) {
-    return warn("style-sample-own-chapters", `${STYLE_SHEET_FILE} samples entry ${sample} names this project's own chapters, which are what the samples are compared with: list an earlier book or approved drafts kept elsewhere`, STYLE_SHEET_FILE);
+  const file = fs9.statSync(real, { throwIfNoEntry: false })?.isFile() ?? false;
+  if (real === self || real === chapters || isPathInside(chapters, real) && !file) {
+    return warn("style-sample-own-chapters", `${STYLE_SHEET_FILE} samples entry ${sample} names this project's chapters as a whole, which are what the samples are compared with: list the approved chapter files one by one, or an earlier book`, STYLE_SHEET_FILE);
   }
   return null;
 }
@@ -25856,12 +25859,13 @@ function proseReport(root, options = {}) {
   const warnings = [];
   const names = [...project.characters.map((character) => character.name), ...existingNames(project).map((entry) => entry.name)];
   const rules = proseRules(project.styleSheet?.data, names, project.pack);
-  const profile = proseBaseline(project, rules, options, warnings);
+  const sampled = new Set;
+  const profile = proseBaseline(project, rules, options, warnings, sampled);
   const chapters = [];
   for (const chapter of project.chapters) {
     const label = relative(project, chapter.file);
     const prose = chapterProse(readMarkdown(chapter.file, project.root).body, " ");
-    chapters.push(lintProse(label, chapter.title, prose, rules, thresholds, profile, warnings));
+    chapters.push(lintProse(label, chapter.title, prose, rules, thresholds, profile, warnings, sampled.has(canonicalPath(chapter.file))));
   }
   const phrases = repeatedPhrases(chapters.map((chapter) => chapter.analysis), PROSE_THRESHOLDS, project.pack);
   const similar = similarNames(project.characters, project.pack);
@@ -25883,7 +25887,7 @@ function proseReport(root, options = {}) {
     skipped: proseSkipped(rules, profile)
   };
 }
-function lintProse(label, title, prose, rules, thresholds, profile, warnings) {
+function lintProse(label, title, prose, rules, thresholds, profile, warnings, sample = false) {
   const analysis = analyzeChapter(prose, rules);
   const compared = profile !== null && profile.usable;
   warnings.push(...chapterFindings(label, analysis, thresholds, { baseline: compared, pack: rules.pack }));
@@ -25891,10 +25895,13 @@ function lintProse(label, title, prose, rules, thresholds, profile, warnings) {
     return { file: label, title, analysis };
   }
   const figures = baselineFigures(analysis, profile, contentWords(prose, rules));
+  if (sample) {
+    return { file: label, title, analysis, baseline: figures, sample: true };
+  }
   warnings.push(...baselineFindings(label, analysis, figures, profile, undefined, rules.pack));
   return { file: label, title, analysis, baseline: figures };
 }
-function proseBaseline(project, rules, options, warnings) {
+function proseBaseline(project, rules, options, warnings, sampled = new Set) {
   const listed = asArray(project?.styleSheet?.data?.samples).filter((entry) => typeof entry === "string" && entry.trim() !== "");
   const wanted = options.baseline === undefined ? listed.length > 0 : isTruthy(options.baseline);
   if (!wanted) {
@@ -25919,9 +25926,12 @@ function proseBaseline(project, rules, options, warnings) {
     }
     const target = path15.resolve(project.root, sample);
     const real = canonicalPath(target);
+    if (own.has(real)) {
+      sampled.add(real);
+    }
     let documents;
     try {
-      documents = referenceDocuments(real, (file) => displayPath(project.root, target, real, file), self).filter((document) => !own.has(canonicalPath(document.path)));
+      documents = referenceDocuments(real, (file) => displayPath(project.root, target, real, file), self).filter((document) => own.has(real) || !own.has(canonicalPath(document.path)));
     } catch (error) {
       warnings.push(warn("style-sample-unreadable", `${STYLE_SHEET_FILE} samples entry ${sample} cannot be read, so it is left out: ${error.message}`, STYLE_SHEET_FILE));
       continue;

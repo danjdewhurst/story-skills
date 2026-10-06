@@ -935,13 +935,16 @@ The filter-word, adverb, and said-bookism limits are defaults: `--max-filter-wor
 
 ### Against your own prose
 
-Fixed limits flag a writer whose style is deliberately adverb-heavy or long-sentenced, and they miss a chapter that has drifted from that writer's own voice. List some of your own prose as `samples` in the style sheet, such as an earlier book or chapters you are happy with:
+Fixed limits flag a writer whose style is deliberately adverb-heavy or long-sentenced, and they miss a chapter that has drifted from that writer's own voice. List some of your own prose as `samples` in the style sheet, such as an earlier book, or chapters of this one you are happy with, each named on its own:
 
 ```yaml
 # style-sheet.md
 samples:
   - ../book-one
+  - chapters/chapter-01.md
 ```
+
+A chapter listed as a sample is part of the profile, so it is not compared with it. Naming `chapters/` as a whole warns `style-sample-own-chapters`, since every chapter would be compared with itself.
 
 `story prose` then builds a profile from the samples. It covers sentence length and spread, paragraph length, the share of words in dialogue, filter-word and adverb rates, and the 20 content words you use most. The report prints the profile above the chapters. A chapter that drifts too far from it, either way, warns: `chapters/chapter-07.md sentences average 14.2 words, longer than your samples' 9.8 (tolerance 30%) [prose-baseline-sentences]`. With samples, your own filter-word and adverb rates replace the fixed limits.
 

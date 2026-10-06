@@ -75,7 +75,7 @@ story passes . --start line
 1. Read `story.md` (POV, tense, Tone & Style), the style sheet's Voice
    section, and the chapter. Run `story prose .` for the chapter's counts.
    If the style sheet has no `samples`, suggest the author list an
-   earlier book or chapters they are happy with (see the `voice-style`
+   earlier book or chapter files they are happy with (see the `voice-style`
    skill), so the counts are measured against their own voice. A
    `prose-baseline-*` warning shows where a chapter drifts from it: use
    it to find passages to reread, and keep any drift the author meant.

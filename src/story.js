@@ -904,13 +904,14 @@ export function proseReport(root, options = {}) {
   const warnings = [];
   const names = [...project.characters.map((character) => character.name), ...existingNames(project).map((entry) => entry.name)];
   const rules = proseRules(project.styleSheet?.data, names, project.pack);
-  const profile = proseBaseline(project, rules, options, warnings);
+  const sampled = new Set();
+  const profile = proseBaseline(project, rules, options, warnings, sampled);
   const chapters = [];
   for (const chapter of project.chapters) {
     // Chapters that failed to parse are already in fileErrors, not here.
     const label = relative(project, chapter.file);
     const prose = chapterProse(readMarkdown(chapter.file, project.root).body, " ");
-    chapters.push(lintProse(label, chapter.title, prose, rules, thresholds, profile, warnings));
+    chapters.push(lintProse(label, chapter.title, prose, rules, thresholds, profile, warnings, sampled.has(canonicalPath(chapter.file))));
   }
   const phrases = repeatedPhrases(chapters.map((chapter) => chapter.analysis), PROSE_THRESHOLDS, project.pack);
   const similar = similarNames(project.characters, project.pack);
@@ -934,8 +935,9 @@ export function proseReport(root, options = {}) {
 }
 
 // One chapter's (or passage's) analysis and findings, measured against the
-// baseline when there is one.
-function lintProse(label, title, prose, rules, thresholds, profile, warnings) {
+// baseline when there is one. A chapter that is itself a sample is the
+// measure, so it is not judged against the baseline.
+function lintProse(label, title, prose, rules, thresholds, profile, warnings, sample = false) {
   const analysis = analyzeChapter(prose, rules);
   const compared = profile !== null && profile.usable;
   warnings.push(...chapterFindings(label, analysis, thresholds, { baseline: compared, pack: rules.pack }));
@@ -943,6 +945,9 @@ function lintProse(label, title, prose, rules, thresholds, profile, warnings) {
     return { file: label, title, analysis };
   }
   const figures = baselineFigures(analysis, profile, contentWords(prose, rules));
+  if (sample) {
+    return { file: label, title, analysis, baseline: figures, sample: true };
+  }
   warnings.push(...baselineFindings(label, analysis, figures, profile, undefined, rules.pack));
   return { file: label, title, analysis, baseline: figures };
 }
@@ -950,8 +955,9 @@ function lintProse(label, title, prose, rules, thresholds, profile, warnings) {
 // The profile of the author's own prose, from the style sheet's `samples`:
 // on whenever samples are listed, unless --baseline false turns it off.
 // --baseline with no samples is a usage error, since there is nothing to
-// compare with.
-function proseBaseline(project, rules, options, warnings) {
+// compare with. A chapter of this project named on its own is a sample; its
+// real path goes into `sampled`, so the report does not judge it.
+function proseBaseline(project, rules, options, warnings, sampled = new Set()) {
   const listed = asArray(project?.styleSheet?.data?.samples).filter((entry) => typeof entry === "string" && entry.trim() !== "");
   const wanted = options.baseline === undefined ? listed.length > 0 : isTruthy(options.baseline);
   if (!wanted) {
@@ -976,11 +982,15 @@ function proseBaseline(project, rules, options, warnings) {
     }
     const target = path.resolve(project.root, sample);
     const real = canonicalPath(target);
+    if (own.has(real)) {
+      sampled.add(real);
+    }
     let documents;
     try {
-      // This project's chapters are what is being compared, never a sample.
+      // Only a chapter named on its own is a sample: a folder never makes
+      // this project's chapters samples.
       documents = referenceDocuments(real, (file) => displayPath(project.root, target, real, file), self)
-        .filter((document) => !own.has(canonicalPath(document.path)));
+        .filter((document) => own.has(real) || !own.has(canonicalPath(document.path)));
     } catch (error) {
       // prose is advisory: one sample it cannot read is reported, not fatal.
       warnings.push(warn("style-sample-unreadable", `${STYLE_SHEET_FILE} samples entry ${sample} cannot be read, so it is left out: ${error.message}`, STYLE_SHEET_FILE));

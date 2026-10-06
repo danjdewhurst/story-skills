@@ -724,8 +724,12 @@ export function sampleProblem(project, sample) {
   const real = canonicalPath(target);
   const self = canonicalPath(project.root);
   const chapters = path.join(self, "chapters");
-  if (real === self || real === chapters || isPathInside(chapters, real)) {
-    return warn("style-sample-own-chapters", `${STYLE_SHEET_FILE} samples entry ${sample} names this project's own chapters, which are what the samples are compared with: list an earlier book or approved drafts kept elsewhere`, STYLE_SHEET_FILE);
+  // A chapter file the author approved, named on its own, is a sample, and
+  // prose leaves it out of the comparison. The project or a folder of its
+  // chapters is not: every chapter would be compared with itself.
+  const file = fs.statSync(real, { throwIfNoEntry: false })?.isFile() ?? false;
+  if (real === self || real === chapters || (isPathInside(chapters, real) && !file)) {
+    return warn("style-sample-own-chapters", `${STYLE_SHEET_FILE} samples entry ${sample} names this project's chapters as a whole, which are what the samples are compared with: list the approved chapter files one by one, or an earlier book`, STYLE_SHEET_FILE);
   }
   return null;
 }

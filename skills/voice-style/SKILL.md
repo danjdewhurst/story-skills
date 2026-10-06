@@ -68,7 +68,10 @@ pass by reading (see `references/prose-checks.md`, Other languages).
      British book)
    - `samples`: files or folders of the author's own prose that sound right,
      relative to the project folder: an earlier book (`../book-one`) or
-     chapters the author has approved. Ask the user which; never list prose
+     chapters the author has approved, each file named on its own
+     (`chapters/chapter-01.md`, never `chapters/`, which warns
+     `style-sample-own-chapters`). A listed chapter is the measure, so
+     `story prose` does not compare it. Ask the user which; never list prose
      the agent drafted and the author has not approved, or the profile
      measures the agent's voice. With at least 2,000 words of narration,
      `story prose` compares each chapter with the samples instead of fixed
