@@ -20616,20 +20616,26 @@ function sampleProblem(project, sample) {
   return null;
 }
 function sampleDuplicate(project, sample, seen) {
-  const real = samplePath(path11.resolve(project.root, sample));
+  const real = resolvedSample(path11.resolve(project.root, sample));
+  if (real === null) {
+    return null;
+  }
   const first = seen.get(real);
   if (first === undefined) {
     seen.set(real, sample);
     return null;
   }
   const repeat = sample === first ? "is already listed" : `names the same file or folder as ${first}`;
-  return warn("style-sample-duplicate", `${STYLE_SHEET_FILE} samples entry ${sample} ${repeat}, so story prose reads it once: remove one of them`, STYLE_SHEET_FILE);
+  return warn("style-sample-duplicate", `${STYLE_SHEET_FILE} samples entry ${sample} ${repeat}, so story prose leaves it out: remove one of them`, STYLE_SHEET_FILE);
 }
 function samplePath(file) {
+  return resolvedSample(file) ?? canonicalPath(file);
+}
+function resolvedSample(file) {
   try {
     return fs7.realpathSync.native(file);
   } catch {
-    return file;
+    return null;
   }
 }
 function readRegistryValidationData(file, root, label, errors) {
@@ -26954,7 +26960,7 @@ function proseReport(root, options = {}) {
   for (const chapter of project.chapters) {
     const label = relative(project, chapter.file);
     const prose = chapterProse(readMarkdown(chapter.file, project.root).body, " ");
-    chapters.push(lintProse(label, chapter.title, prose, rules, thresholds, profile, warnings, sampled.has(canonicalPath(chapter.file))));
+    chapters.push(lintProse(label, chapter.title, prose, rules, thresholds, profile, warnings, sampled.has(samplePath(chapter.file))));
   }
   const phrases = repeatedPhrases(chapters.map((chapter) => chapter.analysis), PROSE_THRESHOLDS, project.pack);
   const similar = similarNames(project.characters, project.pack);
@@ -27001,7 +27007,7 @@ function proseBaseline(project, rules, options, warnings, sampled = new Set) {
   }
   const samples = [];
   const self = canonicalPath(project.root);
-  const own = new Set(project.chapters.map((chapter) => canonicalPath(chapter.file)));
+  const own = new Set(project.chapters.map((chapter) => samplePath(chapter.file)));
   const entries = new Map;
   const read = new Set;
   for (const entry of listed) {
@@ -27017,12 +27023,14 @@ function proseBaseline(project, rules, options, warnings, sampled = new Set) {
     }
     const target = path15.resolve(project.root, sample);
     const real = canonicalPath(target);
-    if (own.has(real)) {
-      sampled.add(real);
+    const key = samplePath(target);
+    const chapter = own.has(key);
+    if (chapter) {
+      sampled.add(key);
     }
     let documents;
     try {
-      documents = referenceDocuments(real, (file) => displayPath(project.root, target, real, file), self).filter((document) => own.has(real) || !own.has(canonicalPath(document.path)));
+      documents = referenceDocuments(real, (file) => displayPath(project.root, target, real, file), self).filter((document) => chapter || !own.has(samplePath(document.path)));
     } catch (error) {
       warnings.push(warn("style-sample-unreadable", `${STYLE_SHEET_FILE} samples entry ${sample} cannot be read, so it is left out: ${error.message}`, STYLE_SHEET_FILE));
       continue;
