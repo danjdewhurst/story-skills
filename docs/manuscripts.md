@@ -1179,8 +1179,8 @@ The presets:
 
 | Preset | Fonts | Headings | Scene break | Drop caps | Paragraphs |
 |--------|-------|----------|-------------|-----------|------------|
-| `classic` | Georgia | Each build's own | `* * *` | Print interior's enlarged first letter | Each build's own: indented in print, blocks in the review copy, the reading system's in the EPUB |
-| `modern` | Georgia text, sans-serif headings (Avenir Next, Segoe UI, Helvetica Neue, Arial) | `left` | `• • •` | None | `block` |
+| `classic` | Georgia (an EPUB keeps the reader's font) | Each build's own | `* * *` | Print interior's enlarged first letter | Each build's own: indented in print, blocks in the review copy, the reading system's in the EPUB |
+| `modern` | Classic text, sans-serif headings (Avenir Next, Segoe UI, Helvetica Neue, Arial) | `left` | `• • •` | None | `block` |
 | `elegant` | Palatino, Book Antiqua, or Iowan Old Style | `small-caps` | `❦` | `true` | `indented` |
 
 A key set in `build-style` beats the preset's choice, so `preset: elegant` with `drop-caps: false` keeps everything elegant but the drop cap. A key cannot be set twice.

@@ -126,14 +126,15 @@ export function epubStylesheet(type, style = CLASSIC_STYLE) {
   if (type.vertical) {
     rules.push("html { -epub-writing-mode: vertical-rl; -webkit-writing-mode: vertical-rl; writing-mode: vertical-rl; }");
   }
+  // A body font only when the script or the style chooses one, so a
+  // Latin-script book keeps the reader's own font otherwise.
+  const fonts = styleFonts(style, type);
+  if (!type.fonts.latin || fonts.body !== type.fonts.body) {
+    rules.push(`body { font-family: ${fonts.body}; }`);
+  }
   if (!style.styled) {
-    if (!type.fonts.latin) {
-      rules.push(`body { font-family: ${type.fonts.body}; }`);
-    }
     return rules.length === 0 ? "" : `${rules.join("\n")}\n`;
   }
-  const fonts = styleFonts(style, type);
-  rules.push(`body { font-family: ${fonts.body}; }`);
   if (fonts.heading !== null) {
     rules.push(`h1 { font-family: ${fonts.heading}; }`);
   }

@@ -68,7 +68,6 @@ describe("build-style presets", () => {
     );
     const epub = epubEntries(root);
     expect(epub.get("OEBPS/style.css")).toBe([
-      'body { font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif; }',
       `h1 { font-family: ${sans}; }`,
       "h1 { text-align: left; font-weight: bold; }",
       "p { margin: 0 0 0.8em; text-indent: 0; }",
@@ -131,6 +130,11 @@ describe("build-style presets", () => {
     const epub = epubEntries(root);
     expect(epub.get("OEBPS/chapter-01.xhtml")).toContain('<p class="scene-break">&lt;§&gt; &quot;x&quot;</p>');
     expect(epub.get("OEBPS/style.css")).toStartWith('body { font-family: "Source Serif 4", "Iowan Old Style", serif; }\n');
+  });
+
+  test("a styled EPUB that chooses no font leaves the reader's own", () => {
+    const root = project("build-style:\n  - scene-break: \"~\"\n");
+    expect(epubEntries(root).get("OEBPS/style.css")).toBe("p.scene-break { text-align: center; text-indent: 0; margin: 1em 0; }\n");
   });
 
   test("a book in another script keeps its script's fonts", () => {
