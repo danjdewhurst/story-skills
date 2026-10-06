@@ -689,6 +689,8 @@ The package metadata comes from `story.md`:
 - `language` sets `dc:language` and the `lang` of every document. It defaults to `en`.
 - `publisher`, `publication-date`, `description`, each `subjects` code, and `copyright` become `dc:publisher`, `dc:date`, `dc:description`, `dc:subject`, and `dc:rights`. Fields that are not set are left out.
 
+The look of the text is left to the reading system unless `story.md` has a [build style](#build-styles), which adds `style.css` and, with `css`, the writer's own `extra.css`.
+
 Each document is tagged for reading systems: chapters as `bodymatter chapter`, matter pages as `frontmatter` or `backmatter`, a copyright page as `copyright-page`, and the cover page as `cover`. A hidden landmarks list points at the first chapter, so readers open at the story. The package also carries EPUB Accessibility discovery metadata: a textual access mode (plus a visual one when there is a cover), a table of contents, a single reading order, structural navigation, no hazards, and, when there is a cover, a described cover image.
 
 The copy of *The Last Ember* with the fields from [The generated copyright page](#the-generated-copyright-page) and no cover produces this metadata (abridged):
@@ -810,7 +812,7 @@ How the labels are made:
 | Back matter page | `matter-back-<id>` | `back-<id>-p1`, such as `back-acknowledgments-p1` |
 | Generated copyright page | `matter-front-copyright` | `front-copyright-p1` |
 
-Paragraphs are numbered from 1 within each chapter or page. A scene break is drawn as `* * *` and takes no number: in *Harbor of Second Light*, `ch01-p37` is the last paragraph before the break and `ch01-p38` the first after it. Prose is converted as in the [table below](#how-prose-is-converted-for-epub-docx-shunn-html-and-print), and all text is HTML-escaped. A matter page with `heading: false` gets a visually hidden heading, so screen readers still announce it. The label is faint until the reader hovers over or links to a paragraph; on a narrow screen it sits above the paragraph.
+Paragraphs are numbered from 1 within each chapter or page. A scene break is drawn as `* * *`, or as a [build style](#build-styles)'s `scene-break`, and takes no number: in *Harbor of Second Light*, `ch01-p37` is the last paragraph before the break and `ch01-p38` the first after it. Prose is converted as in the [table below](#how-prose-is-converted-for-epub-docx-shunn-html-and-print), and all text is HTML-escaped. A matter page with `heading: false` gets a visually hidden heading, so screen readers still announce it. The label is faint until the reader hovers over or links to a paragraph; on a narrow screen it sits above the paragraph.
 
 A label depends only on its chapter's printed number and that chapter's own paragraphs, so editing chapter 5 never moves a label in chapter 3. A label is a position, not a permanent id: revising a chapter shifts the labels after the edit within that chapter, and `story move` changes the chapter part. Name the build with `--stamp` (`story build . --format html --stamp beta-round-1` prints `Review copy, build beta-round-1.` at the top), tag the commit you shared, and ask readers to quote the paragraph's first few words with the label. To find where an old label's paragraph is now, run `story compare . --ref <tag> --anchor <label>` (repeat `--anchor` for several notes). It labels the tagged version exactly as this build does and reports the paragraph's current label, whether its text is unchanged or edited, or its first few words when it is gone:
 
@@ -870,7 +872,7 @@ The layout:
 - **Page order.** A title page with the title and author; the copyright page, if there is one, on the page after it; a contents page listing the chapters with page numbers; the other front matter; the chapters; the back matter. The title page, contents, other front matter pages, chapters, and back matter pages each start on a right-hand page.
 - **Running heads and page numbers.** Left-hand pages show the author at the top (the title when no author is set); right-hand pages show the current chapter title, or nothing on a back matter page with `heading: false`. Chapter and back matter pages have a centred page number at the foot. Front matter pages and blank pages have neither.
 - **Margins.** 0.75 in top and bottom, 0.5 in on the outside edge. The inside (gutter) margin widens with the estimated page count so text does not disappear into the spine: 0.625 in up to 150 pages, 0.75 in up to 300, 0.875 in up to 500, and 1 in beyond.
-- **Text.** 11 pt Georgia, or a similar serif, at 1.4 line spacing, justified and hyphenated, with indented paragraphs. The first paragraph of a chapter, and the first after a scene break, is not indented, and a chapter's first letter is enlarged. Scene breaks are centred asterisks. A book in another script gets fonts for it, and a script without capitals (Japanese, Arabic, Hindi) keeps its first letter at size and drops the small caps and italic running heads; see [Typesetting other scripts](#typesetting-other-scripts).
+- **Text.** 11 pt Georgia, or a similar serif, at 1.4 line spacing, justified and hyphenated, with indented paragraphs. The first paragraph of a chapter, and the first after a scene break, is not indented, and a chapter's first letter is enlarged. Scene breaks are centred asterisks. A book in another script gets fonts for it, and a script without capitals (Japanese, Arabic, Hindi) keeps its first letter at size and drops the small caps and italic running heads; see [Typesetting other scripts](#typesetting-other-scripts). A [build style](#build-styles) in `story.md` changes the fonts, headings, scene breaks, first letter, and paragraphs.
 - **Matter pages.** Paragraphs are not indented. Front matter pages are centred, apart from the copyright page, which is left-aligned at 9 pt.
 
 The page estimate follows this layout: two pages for the title page and its back (the copyright page or a blank), the contents (a page per 25 chapters), and then each matter page, chapter, and back matter page rounded up to whole pages at the trim's words per page, with about a third of a page for a heading's sink and half a blank page on average for starting on a right-hand page. A 60-chapter, 80,000-word book at 6x9 comes to about 336 pages, not the 267 its words alone would fill. It is still for planning; the rendered PDF's real page count is what printers use to price the book and size the spine. Check the rendered PDF against your printer's current requirements for margins, bleed, and fonts before ordering a proof. Opened in a browser, the file shows the text in one column at the trim width, which is useful for proofreading but is not the paged layout.
@@ -1149,6 +1151,55 @@ Like every build, the codex is deterministic and carries no date: the progress p
 
 To publish the codex with GitHub Pages, see [Story bible on GitHub Pages](automation.md#story-bible-on-github-pages).
 
+### Build styles
+
+The EPUB, the HTML review copy, and the print interior share one look: Georgia, centred chapter headings, indented paragraphs, and asterisks for scene breaks. A `build-style` block in `story.md` changes it. Pick a preset, override any part of it, and add a stylesheet of your own if you need more:
+
+```yaml
+build-style:
+  - preset: elegant
+    scene-break: "~"
+    css: styles/book.css
+```
+
+The frontmatter has no nested fields, so `build-style` is a list of `key: value` entries like `cli-defaults`, usually one. *Harbor of Second Light* uses `preset: elegant` with `scene-break: "~"`.
+
+| Key | Values | Effect |
+|-----|--------|--------|
+| `preset` | `classic` (default), `modern`, `elegant` | A set of the choices below. |
+| `body-font` | font names, comma-separated | The text font, such as `Iowan Old Style, Georgia, serif`. Names are quoted for you; the generic families (`serif`, `sans-serif`, `system-ui`, and the rest) stay bare. |
+| `heading-font` | font names, comma-separated | The chapter heading and title font. Running heads and page numbers in the print interior use it too. |
+| `heading-style` | `centered`, `small-caps`, `left` | Chapter headings centred, centred in spaced small capitals, or bold and set flush with the start of the line (the right in a right-to-left book). |
+| `scene-break` | one line of text | What a scene break prints, such as `"* * *"`, `"~"`, or `"❦"`. Quote it: YAML reads an unquoted `*` as an alias. |
+| `drop-caps` | `true`, `false` | A drop cap about three lines deep on each chapter's first paragraph, or none. Unset, the print interior keeps its enlarged first letter. |
+| `paragraphs` | `indented`, `block` | A first-line indent with no space between paragraphs, or no indent with space between them. |
+| `css` | a `.css` file in the project | An extra stylesheet added after the build's own rules, so it can override them. |
+
+The presets:
+
+| Preset | Fonts | Headings | Scene break | Drop caps | Paragraphs |
+|--------|-------|----------|-------------|-----------|------------|
+| `classic` | Georgia | Each build's own | `* * *` | Print interior's enlarged first letter | Each build's own: indented in print, blocks in the review copy, the reading system's in the EPUB |
+| `modern` | Georgia text, sans-serif headings (Avenir Next, Segoe UI, Helvetica Neue, Arial) | `left` | `• • •` | None | `block` |
+| `elegant` | Palatino, Book Antiqua, or Iowan Old Style | `small-caps` | `❦` | `true` | `indented` |
+
+A key set in `build-style` beats the preset's choice, so `preset: elegant` with `drop-caps: false` keeps everything elegant but the drop cap. A key cannot be set twice.
+
+Without `build-style`, or with `preset: classic` and nothing else, every build is byte for byte what it was before the field existed. A styled EPUB adds `style.css` with the style's rules and marks its scene breaks (`<p class="scene-break">`) and its chapter and matter documents (`class="chapter"`, `class="matter"`) for them. Any choice the style leaves unset stays with the reading system, as before.
+
+**Other scripts.** A preset's fonts are Latin fonts, so a book in another script keeps the fonts for its script (see [Typesetting other scripts](#typesetting-other-scripts)) and takes the rest of the preset. A `body-font` or `heading-font` you name comes first, followed by the script's fonts, so a character your font lacks still has one. Small capitals and drop caps need a script with capitals, as the enlarged first letter does, and are left out of vertical text.
+
+**The extra stylesheet.** `css` names a UTF-8 `.css` file inside the project, no larger than 5 MiB, and not a symlink. The review copy and print interior carry it in a second `<style>` element after their own; the EPUB stores it as `extra.css`, lists it in the package manifest, and links it from every document after `style.css`. One file serves all three formats, so scope a rule when it should reach only one: `main` exists only in the review copy, `.title-page` only in the print interior, and `@page` rules matter only to a paged-media engine. Keep the file self-contained: an `@import` or `url()` that points at another file is not packaged. Line endings and a byte order mark are normalised, so the build is the same on every system.
+
+The Shunn manuscript (`--format shunn`, `--format docx --shunn`, and their PDFs) follows a fixed submission format, and the DOCX build uses Word styles you change in Word, so neither reads `build-style`.
+
+`story validate` reports `invalid-build-style` for a value that is not a list of entries, an unknown key, a key set twice, a preset, heading style, or paragraph style it does not know, a font list with characters CSS could misread (`;`, `{`, `}`, `<`, `>`, `/`, `\`, or parentheses), a blank or multi-line scene break, a `drop-caps` other than `true` or `false`, and a `css` path that is not a `.css` file, is outside the project, is missing, is a symlink, or contains `</style`. The EPUB, HTML, and print builds stop on the same problems:
+
+```text
+Cannot build until story.md build-style is fixed:
+story.md build-style css styles/book.css does not exist
+```
+
 ### How prose is converted for EPUB, DOCX, Shunn, HTML, and print
 
 The markdown export copies prose as written, and the narration script nearly does (see [Narration script](#narration-script)). The EPUB, DOCX, Shunn, HTML, and print builds convert it to paragraphs:
@@ -1174,7 +1225,7 @@ Lists and other markdown are not converted and appear as their literal text. Kee
 
 The book's `language` decides its script: the tag's script subtag when it has one (`sr-Latn`, `zh-Hant`), else the language's usual script (`ja` is Japanese, `zh-TW` and `yue` Traditional Chinese, `cmn` Simplified, `ru` Cyrillic, `fa` Arabic, `chr` Cherokee), else Latin. The tag is read as the language packs read it, the same on every runtime: an old or three-letter code counts as its modern one (`iw` is Hebrew, `jpn` Japanese), and `zh-yue` is Cantonese. Only the subtag right after the language is a script, so an extension or private-use subtag (`ar-u-nu-latn`, `en-x-hani`) never changes it. A Latin-script book builds exactly as an English one does. For other scripts:
 
-- **Fonts.** The HTML review copy, the print interior, and the EPUB name serif fonts for the script: system fonts on macOS, Windows, and Android first, then Noto, then the generic `serif`. Japanese, for example, is `"Hiragino Mincho ProN", "Yu Mincho", YuMincho, "MS Mincho", "Noto Serif JP", "Noto Serif CJK JP", serif`. There are stacks for Japanese, Simplified and Traditional Chinese, Korean, Arabic, Hebrew, Devanagari, Thai, Cherokee, and Cyrillic and Greek; other scripts use the Latin stack, and the browser finds each missing character in a font of its own. An EPUB in a Latin script has no stylesheet, so the reader's own font applies; another script's EPUB adds `style.css` with the font stack.
+- **Fonts.** The HTML review copy, the print interior, and the EPUB name serif fonts for the script: system fonts on macOS, Windows, and Android first, then Noto, then the generic `serif`. Japanese, for example, is `"Hiragino Mincho ProN", "Yu Mincho", YuMincho, "MS Mincho", "Noto Serif JP", "Noto Serif CJK JP", serif`. There are stacks for Japanese, Simplified and Traditional Chinese, Korean, Arabic, Hebrew, Devanagari, Thai, Cherokee, and Cyrillic and Greek; other scripts use the Latin stack, and the browser finds each missing character in a font of its own. An EPUB in a Latin script has no stylesheet, so the reader's own font applies, unless a [build style](#build-styles) sets one; another script's EPUB adds `style.css` with the font stack.
 - **Capitals.** Small caps, the print interior's enlarged first letter, and italic running heads need a script with capitals and italics. A script without them, such as Japanese, Chinese, Arabic, Hebrew, Devanagari, or Thai, leaves them out. `ja-Latn` (romaji) keeps them.
 - **DOCX.** Any `language` but `en` is written, in its usual form (`jpn` as `ja`, `zh-hant-tw` as `zh-Hant-TW`), as Word's language for the text (`w:lang`), with its East Asian or complex-script language too where the script needs one, so Word checks spelling and breaks lines for it. Japanese, Chinese, and Korean text uses MS Mincho, SimSun (Simplified), PMingLiU (Traditional), or Batang; Hindi uses Mangal and Thai Tahoma. A right-to-left book marks every paragraph, run, and the section right to left, and bold and italic reach complex-script text.
 

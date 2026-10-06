@@ -15,6 +15,7 @@ import { SCENE_SETTINGS } from "./fountain.js";
 import { isIfid } from "./twee.js";
 import { CHAPTER_NUMERALS, validateChapterNumerals } from "./numerals.js";
 import { validateWritingMode, WRITING_MODES } from "./typesetting.js";
+import { validateBuildStyle } from "./build-style.js";
 import { validateCliConfig } from "./config.js";
 import { validatePasses } from "./passes.js";
 import { CHAPTER_HOOKS, SCENE_OUTCOMES } from "./pacing.js";
@@ -1008,6 +1009,7 @@ function validateStoryFrontmatter(project, errors, warnings) {
     validateChapterNumerals(data, errors);
   }
   validateCover(project, errors);
+  validateBuildStyle(data, errors, project.root);
   validatePasses(data, "story.md", errors);
   validateCliConfig(data, errors);
   validateDeadline(data, errors);

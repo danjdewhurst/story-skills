@@ -6,7 +6,8 @@ import { Buffer } from "node:buffer";
 import fs from "node:fs";
 import { deflateRawSync } from "node:zlib";
 import { writeFile } from "./files.js";
-import { cssString, escapeHtml, withBlockquotes } from "./html.js";
+import { cssString, DROP_CAP_RULE, escapeHtml, headingRule, withBlockquotes } from "./html.js";
+import { CLASSIC_STYLE, styleFonts } from "./build-style.js";
 import { fillLabel, languagePack } from "./languages/index.js";
 import { formatNumber } from "./languages/locale.js";
 import { characterCount, flattenHeadings, isSceneBreak, plainLinks, withoutFenceMarkers, wordCount } from "./markdown.js";
@@ -39,13 +40,23 @@ export function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
   const type = typesetting(meta.language, meta.writingMode);
   const rtl = type.rtl;
   const root = `xml:lang="${lang}" lang="${lang}"${rtl ? ` dir="rtl"` : ""}`;
-  const stylesheet = epubStylesheet(type);
-  const head = stylesheet === "" ? "" : `<link rel="stylesheet" type="text/css" href="style.css"/>`;
+  // story.md build-style: its rules join style.css, and its extra
+  // stylesheet is extra.css, linked after it so it can override them.
+  const style = manuscript.style ?? CLASSIC_STYLE;
+  const stylesheet = epubStylesheet(type, style);
+  const extra = style.cssText ?? "";
+  const head = [
+    stylesheet === "" ? "" : `<link rel="stylesheet" type="text/css" href="style.css"/>`,
+    extra === "" ? "" : `<link rel="stylesheet" type="text/css" href="extra.css"/>`
+  ].join("");
+  // A styled book marks its scene breaks and its chapter and matter bodies
+  // for the stylesheet; an unstyled one keeps the plain markup.
+  const markup = { styled: style.styled, sceneBreak: style.sceneBreak ?? "* * *" };
   const documents = [];
   const pushMatter = (placement) => (entry) => documents.push({
     id: `${placement}-${entry.id}`,
     label: entry.title,
-    content: matterXhtml(entry, placement, root, head)
+    content: matterXhtml(entry, placement, root, head, markup)
   });
   manuscript.front.forEach(pushMatter("front"));
   // Duplicate chapter numbers are refused up front in manuscriptParts, so ids
@@ -55,7 +66,7 @@ export function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
     documents.push({
       id: `chapter-${String(chapter.number).padStart(2, "0")}`,
       label: chapter.heading,
-      content: chapterXhtml(chapter, root, head),
+      content: chapterXhtml(chapter, root, head, markup),
       bodymatter: true
     });
   }
@@ -95,27 +106,53 @@ export function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
     // a fixed offset in the archive.
     { name: "mimetype", content: "application/epub+zip", stored: true },
     { name: "META-INF/container.xml", content: `<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>` },
-    { name: "OEBPS/content.opf", content: `<?xml version="1.0" encoding="UTF-8"?><package version="3.0" unique-identifier="book-id" xmlns="http://www.idpf.org/2007/opf"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book-id">${identifier}</dc:identifier><dc:title>${xmlEscape(manuscript.title)}</dc:title>${creator}<dc:language>${lang}</dc:language>${optional}<meta property="dcterms:modified">${modified}</meta>${accessibility}${coverMeta.join("")}${type.vertical ? `<meta name="primary-writing-mode" content="vertical-rl"/>` : ""}</metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>${stylesheet === "" ? "" : `<item id="style" href="style.css" media-type="text/css"/>`}${coverItems.join("")}${items.join("")}</manifest><spine${rtl || type.vertical ? ` page-progression-direction="rtl"` : ""}>${coverSpine.join("")}${spine.join("")}</spine></package>` },
+    { name: "OEBPS/content.opf", content: `<?xml version="1.0" encoding="UTF-8"?><package version="3.0" unique-identifier="book-id" xmlns="http://www.idpf.org/2007/opf"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book-id">${identifier}</dc:identifier><dc:title>${xmlEscape(manuscript.title)}</dc:title>${creator}<dc:language>${lang}</dc:language>${optional}<meta property="dcterms:modified">${modified}</meta>${accessibility}${coverMeta.join("")}${type.vertical ? `<meta name="primary-writing-mode" content="vertical-rl"/>` : ""}</metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>${stylesheet === "" ? "" : `<item id="style" href="style.css" media-type="text/css"/>`}${extra === "" ? "" : `<item id="extra-style" href="extra.css" media-type="text/css"/>`}${coverItems.join("")}${items.join("")}</manifest><spine${rtl || type.vertical ? ` page-progression-direction="rtl"` : ""}>${coverSpine.join("")}${spine.join("")}</spine></package>` },
     { name: "OEBPS/nav.xhtml", content: navXhtml(manuscript.title, documents, root, meta.labels, head) },
     ...(stylesheet === "" ? [] : [{ name: "OEBPS/style.css", content: stylesheet }]),
+    ...(extra === "" ? [] : [{ name: "OEBPS/extra.css", content: extra }]),
     ...coverEntries,
     ...documents.map((doc) => ({ name: `OEBPS/${doc.id}.xhtml`, content: doc.content }))
   ], writeOptions);
 }
 
 // The EPUB's stylesheet, or "" when the reading system's defaults serve: a
-// Latin-script book has none. A book in another script names fonts for it,
-// and a vertical book is set in columns (with the -epub- prefix older
-// reading systems read).
-function epubStylesheet(type) {
+// Latin-script book without a build-style has none. A book in another
+// script names fonts for it, and a vertical book is set in columns (with
+// the -epub- prefix older reading systems read). A build-style adds its
+// fonts, headings, paragraphs, scene breaks, and drop caps; a choice it
+// leaves unset stays with the reading system.
+export function epubStylesheet(type, style = CLASSIC_STYLE) {
   const rules = [];
   if (type.vertical) {
     rules.push("html { -epub-writing-mode: vertical-rl; -webkit-writing-mode: vertical-rl; writing-mode: vertical-rl; }");
   }
-  if (!type.fonts.latin) {
-    rules.push(`body { font-family: ${type.fonts.body}; }`);
+  if (!style.styled) {
+    if (!type.fonts.latin) {
+      rules.push(`body { font-family: ${type.fonts.body}; }`);
+    }
+    return rules.length === 0 ? "" : `${rules.join("\n")}\n`;
   }
-  return rules.length === 0 ? "" : `${rules.join("\n")}\n`;
+  const fonts = styleFonts(style, type);
+  rules.push(`body { font-family: ${fonts.body}; }`);
+  if (fonts.heading !== null) {
+    rules.push(`h1 { font-family: ${fonts.heading}; }`);
+  }
+  const heading = headingRule(style.headingStyle, type);
+  if (heading !== "") {
+    rules.push(`h1 { ${heading} }`);
+  }
+  // Space after a paragraph is below it, or to its left in vertical columns.
+  const after = type.vertical ? "0 0 0 0.8em" : "0 0 0.8em";
+  if (style.paragraphs === "indented") {
+    rules.push("p { margin: 0; text-indent: 1.5em; }", "h1 + p, p.scene-break + p, blockquote p, body.matter p { text-indent: 0; }", `body.matter p { margin: ${after}; }`);
+  } else if (style.paragraphs === "block") {
+    rules.push(`p { margin: ${after}; text-indent: 0; }`);
+  }
+  rules.push("p.scene-break { text-align: center; text-indent: 0; margin: 1em 0; }");
+  if (style.dropCaps === true && type.cased && !type.vertical) {
+    rules.push(`body.chapter > h1 + p::first-letter { ${DROP_CAP_RULE} }`);
+  }
+  return `${rules.join("\n")}\n`;
 }
 
 // `root` is the html element's language (and direction) attributes,
@@ -146,28 +183,31 @@ function epubAccessibilityMeta(hasCover, labels) {
   ].join("");
 }
 
-function xhtmlParagraphs(body) {
+// `markup` is { styled, sceneBreak } from writeEpub.
+function xhtmlParagraphs(body, markup) {
+  const sceneBreak = markup.styled ? `<p class="scene-break">${xmlEscape(markup.sceneBreak)}</p>` : "<p>* * *</p>";
   return withBlockquotes(markdownParagraphs(body).map((paragraph) => ({
     quote: Boolean(paragraph.quote),
-    markup: paragraph.sceneBreak ? "<p>* * *</p>" : `<p>${inlineRuns(paragraph.text).map((run) => runMarkup(run, xmlEscape, "<br/>")).join("")}</p>`
+    markup: paragraph.sceneBreak ? sceneBreak : `<p>${inlineRuns(paragraph.text).map((run) => runMarkup(run, xmlEscape, "<br/>")).join("")}</p>`
   }))).join("");
 }
 
-function xhtmlDocument(title, root, head, bodyType, content) {
-  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(title)}</title>${head}</head><body epub:type="${bodyType}">${content}</body></html>`;
+function xhtmlDocument(title, root, head, bodyType, content, bodyClass = "") {
+  const classes = bodyClass === "" ? "" : ` class="${bodyClass}"`;
+  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(title)}</title>${head}</head><body epub:type="${bodyType}"${classes}>${content}</body></html>`;
 }
 
-function chapterXhtml(chapter, root, head) {
+function chapterXhtml(chapter, root, head, markup) {
   const heading = chapter.heading;
   // XHTML needs a non-blank <title>; an untitled chapter uses its heading.
   const title = String(chapter.title ?? "").trim() || heading;
-  return xhtmlDocument(title, root, head, "bodymatter chapter", `<h1>${xmlEscape(heading)}</h1>${xhtmlParagraphs(chapter.body)}`);
+  return xhtmlDocument(title, root, head, "bodymatter chapter", `<h1>${xmlEscape(heading)}</h1>${xhtmlParagraphs(chapter.body, markup)}`, markup.styled ? "chapter" : "");
 }
 
-function matterXhtml(entry, placement, root, head) {
+function matterXhtml(entry, placement, root, head, markup) {
   const heading = entry.heading ? `<h1>${xmlEscape(entry.title)}</h1>` : "";
   const bodyType = entry.copyright ? `${placement}matter copyright-page` : `${placement}matter`;
-  return xhtmlDocument(entry.title, root, head, bodyType, `${heading}${xhtmlParagraphs(entry.body)}`);
+  return xhtmlDocument(entry.title, root, head, bodyType, `${heading}${xhtmlParagraphs(entry.body, markup)}`, markup.styled ? "matter" : "");
 }
 
 // The manuscript as HTML parts for the review and print builds. Paragraph
