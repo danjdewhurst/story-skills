@@ -38,7 +38,10 @@ describe("check-coverage gates", () => {
     expect(parseGate("src")).toEqual({ dir: "src", minPercent: null });
     expect(parseGate("scripts:85")).toEqual({ dir: "scripts", minPercent: 85 });
     expect(parseGate("evals:72.5")).toEqual({ dir: "evals", minPercent: 72.5 });
-    expect(() => parseGate("evals:101")).toThrow("at most 100");
+    expect(parseGate("C:\\repo\\src")).toEqual({ dir: "C:\\repo\\src", minPercent: null });
+    expect(() => parseGate("evals:101")).toThrow('Coverage threshold for evals must be a number from 0 to 100, got "101"');
+    expect(() => parseGate("scripts:abc")).toThrow('got "abc"');
+    expect(() => parseGate("scripts:")).toThrow('got ""');
   });
 
   test("a line floor fails low and missing files, and passes an empty one", () => {
@@ -84,7 +87,10 @@ describe("check-coverage gates", () => {
       `Coverage is below the gate:\n${fullFile} line coverage 3/4\n${partialFile} line coverage 50.0% (5/10) is below 80%`
     );
 
-    expect(run("", `${dir}:900`)).toMatchObject({ status: 1, err: `Coverage threshold for ${dir} must be at most 100, got 900` });
+    expect(run("", `${dir}:900`)).toMatchObject({ status: 1, err: `Coverage threshold for ${dir} must be a number from 0 to 100, got "900"` });
+    const missingDir = path.join(dir, "nope");
+    expect(run("", `${missingDir}:80`)).toMatchObject({ status: 1, err: `Coverage folder ${missingDir} does not exist` });
+    expect(run("", fullFile)).toMatchObject({ status: 1, err: `Coverage folder ${fullFile} does not exist` });
     const io = capture();
     expect(checkCoverageMain([lcovPath], io)).toBe(1);
     expect(io.err()).toBe(COVERAGE_USAGE);
@@ -136,10 +142,13 @@ describe("build-binaries entry point", () => {
     const out = path.join(makeTempDir("story-binaries-"), "dist");
     const calls = [];
     const io = capture();
-    buildBinaries(["--host", "--smoke", "--target", "windows-x64", "--out", out], { spawn: fakeSpawn(calls), log: io.log });
+    // A second target that is never the host, so one build archives as a zip
+    // and the other as a tarball on any machine.
     const host = hostTarget();
+    const other = TARGETS.find((target) => target.name === (host.os === "windows" ? "linux-x64" : "windows-x64"));
+    buildBinaries(["--host", "--smoke", "--target", other.name, "--out", out], { spawn: fakeSpawn(calls), log: io.log });
     const files = fs.readdirSync(out).sort();
-    expect(files).toEqual([archiveName(VERSION, host), archiveName(VERSION, TARGETS.at(-1)), checksumsName(VERSION)].sort());
+    expect(files).toEqual([archiveName(VERSION, host), archiveName(VERSION, other), checksumsName(VERSION)].sort());
     expect(calls.filter((call) => call.startsWith("bun build"))).toHaveLength(2);
     expect(calls.some((call) => call.endsWith(" --version"))).toBe(true);
     expect(io.out()).toContain(`Smoke-tested ${host.name}`);
