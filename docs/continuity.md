@@ -1402,7 +1402,7 @@ Checks:
 Next Actions:
 - [P0] Fix continuity contradictions: Run story continuity examples/the-unraveled-thread and repair 4 deterministic continuity errors.
 - [P1] Review continuity warnings: Run story continuity examples/the-unraveled-thread and review 3 continuity warnings.
-- [P2] Review promises and payoffs: 1 setup/payoff promises need planting or payoff decisions.
+- [P2] Review promises and payoffs: 1 setup/payoff promise needs planting or a payoff decision.
 - [P2] Review open clues: 1 clues are still planned or planted.
 - [P2] Draft chapter 5: Use story add chapter "Chapter 5" --number 5 --path examples/the-unraveled-thread, then outline scenes to advance The Ledger Trail.
 ```
@@ -1438,7 +1438,7 @@ Actions:
 - [P0] Fix continuity contradictions: Run story continuity . and repair 4 deterministic continuity errors.
 - [P1] Review continuity warnings: Run story continuity . and review 3 continuity warnings.
 - [P1] Revision pass: character: Wants, arcs, motivation, and who knows what when. Run story voices, story knowledge <id> --at <chapter>, story diagram relationships. Mark it with story passes --done character.
-- [P2] Review promises and payoffs: 1 setup/payoff promises need planting or payoff decisions.
+- [P2] Review promises and payoffs: 1 setup/payoff promise needs planting or a payoff decision.
 - [P2] Review open clues: 1 clues are still planned or planted.
 ```
 
@@ -1462,7 +1462,7 @@ Checks:
 Actions:
 - [P0] Fix continuity contradictions: Run story continuity examples/the-unraveled-thread and repair 4 deterministic continuity errors.
 - [P1] Review continuity warnings: Run story continuity examples/the-unraveled-thread and review 3 continuity warnings.
-- [P2] Review promises and payoffs: 1 setup/payoff promises need planting or payoff decisions.
+- [P2] Review promises and payoffs: 1 setup/payoff promise needs planting or a payoff decision.
 - [P2] Review open clues: 1 clues are still planned or planted.
 - [P2] Draft chapter 5: Use story add chapter "Chapter 5" --number 5 --path examples/the-unraveled-thread, then outline scenes to advance The Ledger Trail.
 ```
