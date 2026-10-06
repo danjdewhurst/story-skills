@@ -252,7 +252,7 @@ Parsing rules worth knowing when you add a flag:
 2. Import it in `src/commands.js` and add an entry to `COMMANDS` at the place you want it to appear in help. Use `project: "positional"` if the command takes `[path]`.
 3. Add any new flags to `OPTIONS` (see below).
 4. Add focused tests. `test/registry.test.js` checks automatically that every command is well formed, appears in help, and resolves its project path correctly; you still need behaviour tests for the command itself (see `test/cli.test.js` for the `invoke` pattern).
-5. Update the user-facing docs: the [CLI reference](cli-reference.md), the command list in [`skills/story-maintenance/SKILL.md`](../skills/story-maintenance/SKILL.md) (with a check command's rules in [`references/continuity-checks.md`](../skills/story-maintenance/references/continuity-checks.md)), and the "Companion CLI" section of the README.
+5. Update the user-facing docs: the [CLI reference](cli-reference.md), the command list in [`skills/story-maintenance/SKILL.md`](../skills/story-maintenance/SKILL.md) (with a check command's rules in [`references/continuity-checks.md`](../skills/story-maintenance/references/continuity-checks.md), an editing command's detail in [`references/editing-commands.md`](../skills/story-maintenance/references/editing-commands.md), and a build format's in [`references/builds.md`](../skills/story-maintenance/references/builds.md)), and the "Companion CLI" section of the README.
 6. Rebuild and check the fallback: `bun run build:fallback`, then `bun run check:fallback`.
 7. Run `bun run test:coverage`. The coverage gate requires every line and function in `src/` to be covered.
 
