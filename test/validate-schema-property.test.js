@@ -43,12 +43,15 @@ const EXCEPTIONS = [
   { kind: "story", field: "publication-date", side: "validate", match: /real YYYY-MM-DD calendar day/, reason: "as for deadline" },
   { kind: "chapter", field: "date", side: "validate", match: /real YYYY-MM-DD calendar day/, reason: "as for deadline; the schema allows any text, since continuity only warns about a date not shaped YYYY-MM-DD" },
   { kind: "scene", field: "date", side: "validate", match: /real YYYY-MM-DD calendar day/, reason: "as for chapter date" },
-  { kind: "story", field: "publication-date", side: "schema", match: /does not match/, reason: "validate reads a blank value or a [TODO] placeholder in a publishing field as not set yet, and warns (todo-placeholder); the schema describes finished values" },
-  { kind: "story", field: "language", side: "schema", match: /does not match/, reason: "as for publication-date" },
-  { kind: "story", field: "subjects", side: "schema", match: /does not match/, reason: "as for publication-date: a [TODO] subject is a todo-placeholder warning" },
   { kind: "story", field: "calendar", side: "validate", match: /^invalid-calendar: story\.md calendar (?:entry \d+ (?:must name exactly one of month, era, or weekdays|first-weekday must be one of the weekdays|repeats weekdays|weekdays needs at least one name)|needs at least one month entry|era .+ (?:counts backward, but only the first era may|needs years)|.+ appears more than once)/, reason: "a calendar entry must be exactly one kind, with months, unique names, and eras in a readable order, which needs counting and comparing across entries" },
-  { kind: "story", field: "subjects", side: "schema", match: /does not match/, reason: "as for publication-date: a [TODO] subject is not set yet" },
+  // Whether a language has its own numerals or is set in vertical columns
+  // comes from how the CLI resolves its tag: aliases (jpn, chi), extlang and
+  // grandfathered tags (zh-yue, zh-min-nan), macrolanguage packs, script
+  // subtags (ja-Latn), and regions that pick Chinese characters (zh-TW). A
+  // pattern copied from those tables would drift from them, so the schema
+  // checks only the enum.
   { kind: "story", field: "chapter-numerals", side: "validate", match: /^unsupported-chapter-numerals/, reason: "native numerals need a language that has its own, which depends on the language field" },
+  { kind: "story", field: "writing-mode", side: "validate", match: /^unsupported-writing-mode/, reason: "vertical needs a language set in vertical columns, which depends on the language field" },
   { kind: "story", field: "cli-defaults", side: "validate", match: /^invalid-cli-config/, reason: "a cli-defaults entry's other keys are flags, checked against the command and option registries" },
   { kind: "story", field: "severity", side: "validate", match: /^invalid-cli-config/, reason: "an unknown key in a severity entry is rejected, and the schema checker has no additionalProperties" },
   { kind: "story", field: "build-style", side: "validate", match: /^invalid-build-style: story\.md build-style (?:key \S+ is not a style setting|sets \S+ more than once|css .* (?:does not exist|must be inside the project|is not|Refusing))/, reason: "an unknown or repeated build-style key is rejected, which the schema checker cannot express, and the css file must exist inside the project" },

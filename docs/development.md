@@ -422,9 +422,9 @@ Examples match schemas/story.schema.json: harbor-of-second-light, the-fall-of-th
 
 It fails when `validate` rejects the file and the schema accepts it, or the other way round.
 
-A few differences are deliberate and listed in `EXCEPTIONS` with the reason, such as a chapter number that must match its file name, an ISBN checksum, a real calendar date, or an unquoted number read as an id. Add to that list only when one side cannot express the rule. Otherwise fix whichever side is wrong. When you add a field, add it to both, and the test will tell you if they disagree.
+A few differences are deliberate and listed in `EXCEPTIONS` with the reason, such as a chapter number that must match its file name, an ISBN checksum, a real calendar date, an unquoted number read as an id, or `writing-mode: vertical` and `chapter-numerals: native`, which depend on how the CLI resolves the `language` tag. Add to that list only when one side cannot express the rule. Otherwise fix whichever side is wrong. When you add a field, add it to both, and the test will tell you if they disagree.
 
-`bun run test` runs a fixed seed. To search further, run more iterations or another seed, and write what it finds to a file:
+`bun run test` runs a fixed seed, and CI also runs seeds 1 to 5. To search further, run more iterations or another seed, and write what it finds to a file:
 
 ```shell
 STORY_PROPERTY_RUNS=20000 STORY_PROPERTY_SEED=7 STORY_PROPERTY_REPORT=/tmp/drift.json bun test test/validate-schema-property.test.js

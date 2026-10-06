@@ -143,4 +143,23 @@ status: alive
       "$.characters[Bad_Name].id: \"Bad_Name\" does not match ^[a-z0-9]+(?:-[a-z0-9]+)*$"
     ]);
   });
+
+  // story validate reads these as not set yet and only warns (#467).
+  test("publishing fields accept a [TODO] placeholder, as validate does", () => {
+    const fields = schema.properties.story.properties;
+    const accepts = (property, value) => validateAgainstSchema(value, property, schema).length === 0;
+    for (const value of ["[TODO]", "[todo: pick one]", "  [TODO: date]"]) {
+      expect(accepts(fields.language, value), value).toBe(true);
+      expect(accepts(fields["publication-date"], value), value).toBe(true);
+      expect(accepts(fields.subjects, [value]), value).toBe(true);
+    }
+    expect(accepts(fields["publication-date"], "  ")).toBe(true);
+    expect(accepts(fields.language, " en-GB ")).toBe(true);
+    expect(accepts(fields.subjects, [" FIC022000 "])).toBe(true);
+    expect(accepts(fields.language, "english")).toBe(false);
+    expect(accepts(fields.language, "")).toBe(false);
+    expect(accepts(fields["publication-date"], "TODO")).toBe(false);
+    expect(accepts(fields["publication-date"], "[TODOS]")).toBe(false);
+    expect(accepts(fields.subjects, ["fiction"])).toBe(false);
+  });
 });
