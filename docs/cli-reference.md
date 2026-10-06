@@ -12,7 +12,7 @@ The CLI never writes story content for you. It scaffolds files, rebuilds registr
 - [Setup commands](#setup-commands): `init`, `import`, `migrate`
 - [Maintenance commands](#maintenance-commands): `validate`, `reindex`, `wordcount`, `links`, `check`, `list`
 - [Analysis commands](#analysis-commands): `continuity`, `knowledge`, `context`, `compare`, `similarity`, `progress`, `timeline`, `prose`, `series`, `report`, `next`, `doctor`
-- [Craft and revision commands](#craft-and-revision-commands): `pacing`, `clues`, `grid`, `voices`, `names`, `mentions`, `diagram`, `passes`
+- [Craft and revision commands](#craft-and-revision-commands): `pacing`, `clues`, `grid`, `voices`, `names`, `mentions`, `diagram`, `passes`, `snapshot`
 - [Entity commands](#entity-commands): `add`, `rename`, `move`, `remove`
 - [Output commands](#output-commands): `export`, `build`, `synopsis`
 - [Finding codes](#finding-codes): every error and warning code, by command
@@ -72,6 +72,7 @@ Absolute paths in output are shortened to `~/stories/...`.
 | | [`mentions [<kind> <id>]`](#mentions) | List where chapter prose names an entity, or audit every chapter's names against its frontmatter | No |
 | | [`diagram <kind>`](#diagram) | Print Mermaid source for relationships, locations, timeline, clues, or arcs | With `--out` |
 | | [`passes [path]`](#passes) | Show and update the named revision passes in `story.md` | With `--init`, `--start`, or `--done` |
+| | [`snapshot <name>`](#snapshot) | Save a named copy of the project's markdown in `.snapshots/` to compare with later; `--list` shows them | Without `--list` |
 | Entities | [`add <kind> <name>`](#add) | Create an entity file and reindex | Yes |
 | | [`rename <kind> <id> <name>`](#rename) | Rename an entity and update references | Yes |
 | | [`move <kind> <id>`](#move) | Renumber a chapter or move a scene and update references | Yes |
@@ -131,7 +132,7 @@ Every command except `init` and `import` works on one story project: a directory
 | Commands | How to give the project | Default |
 |---|---|---|
 | `validate`, `reindex`, `wordcount`, `links`, `check`, `continuity`, `compare`, `similarity`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `grid`, `voices`, `series`, `passes`, `report`, `next`, `doctor`, `migrate`, `export`, `build`, `synopsis` | A positional `[path]` **or** `--path <path>` | Current directory |
-| `knowledge`, `context`, `list`, `names`, `mentions`, `diagram`, `add`, `rename`, `move`, `remove` | `--path <path>` only, because their positionals are ids, names, or an entity or diagram kind | Current directory |
+| `knowledge`, `context`, `list`, `names`, `mentions`, `diagram`, `snapshot`, `add`, `rename`, `move`, `remove` | `--path <path>` only, because their positionals are ids, names, or an entity or diagram kind | Current directory |
 | `init`, `import` | Neither. They create a new project; use `--dir` to choose where | A directory named after the story id |
 
 Relative paths resolve against the current working directory. These are equivalent:
@@ -252,7 +253,7 @@ Project validation failed: 1 errors, 0 warnings, 0 dismissed
 error: chapters/chapter-03.md has 1 [TODO marker in its prose, which every build prints: resolve it or move it into an HTML comment [todo-markers]
 ```
 
-Defaults apply with `--json` too, and to `prose -` and `voices -` inside a project; `--json` itself cannot be a default. With `--json`, a promoted warning is a diagnostic with `severity` `"error"` and makes `ok` false, and an `off` warning is a `dismissed` diagnostic. `story prose --json` reports the limits it used in `data.thresholds`. A flag on the command line always wins over a default: `story build --format epub` still builds an EPUB, and it also drops any default `--trim`, `--stamp`, `--note-url`, or `--shunn`, which belong with a particular format. Likewise `--ref` or `--against` on `compare` drops a default for the other. `level: off` reports a warning as `dismissed:` instead. A `severity` entry names any warning by the code its line ends with (see [Finding codes](#finding-codes)), and applies wherever that warning is reported: in the check that raises it, in the checks `check` runs and `report`, `next`, and `doctor` summarise, and in the warnings `build`, `export`, `context`, `add`, `rename`, `move`, and `remove` print after their output, which then exit 1 when a promoted warning is among them. Errors cannot be demoted or turned off, so an entry naming an error code is rejected. `story validate` rejects unknown commands, flags, codes, and levels; while either field is invalid, other commands refuse to run until it is fixed and exit 3. The [Project format reference](project-format.md#cli-defaults-and-severity) lists every rule.
+Defaults apply with `--json` too, and to `prose -` and `voices -` inside a project; `--json` itself cannot be a default. With `--json`, a promoted warning is a diagnostic with `severity` `"error"` and makes `ok` false, and an `off` warning is a `dismissed` diagnostic. `story prose --json` reports the limits it used in `data.thresholds`. A flag on the command line always wins over a default: `story build --format epub` still builds an EPUB, and it also drops any default `--trim`, `--stamp`, `--note-url`, or `--shunn`, which belong with a particular format. Likewise `--ref`, `--against`, or `--snapshot` on `compare` drops a default for the others. `level: off` reports a warning as `dismissed:` instead. A `severity` entry names any warning by the code its line ends with (see [Finding codes](#finding-codes)), and applies wherever that warning is reported: in the check that raises it, in the checks `check` runs and `report`, `next`, and `doctor` summarise, and in the warnings `build`, `export`, `context`, `add`, `rename`, `move`, and `remove` print after their output, which then exit 1 when a promoted warning is among them. Errors cannot be demoted or turned off, so an entry naming an error code is rejected. `story validate` rejects unknown commands, flags, codes, and levels; while either field is invalid, other commands refuse to run until it is fixed and exit 3. The [Project format reference](project-format.md#cli-defaults-and-severity) lists every rule.
 
 ### Output streams and exit codes
 
@@ -281,7 +282,7 @@ Findings keep `1`, so `story validate || exit 1` fails on errors as it always ha
 
 ### JSON output
 
-`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. It works on the check and analysis commands: `validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `list`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, `mentions`, and `compare`; on the commands that print text to keep: `diagram`, `grid`, `synopsis`, and `passes`; and on the commands that change the project in place: `add`, `rename`, `move`, `remove`, `reindex`, `migrate`, `wordcount`, and `doctor --fix`. Other commands refuse it (`--json does not apply to story export`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`.
+`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. It works on the check and analysis commands: `validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `list`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, `mentions`, and `compare`; on the commands that print text to keep: `diagram`, `grid`, `synopsis`, and `passes`; and on the commands that change the project in place: `add`, `rename`, `move`, `remove`, `reindex`, `migrate`, `wordcount`, `doctor --fix`, and `snapshot`. Other commands refuse it (`--json does not apply to story export`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`.
 
 Every result has the same envelope:
 
@@ -335,7 +336,7 @@ The write commands (`add`, `rename`, `move`, `remove`, `reindex`, `migrate`, and
 
 ### Previewing changes with --dry-run
 
-`add`, `rename`, `move`, `remove`, `reindex`, `migrate`, `wordcount --write`, and `doctor --fix` take `--dry-run`. It lists the files the command would create, update, or delete, and the folders it would make, and changes nothing:
+`add`, `rename`, `move`, `remove`, `reindex`, `migrate`, `wordcount --write`, `doctor --fix`, and `snapshot` take `--dry-run`. It lists the files the command would create, update, or delete, and the folders it would make, and changes nothing:
 
 ```text
 $ story rename character edran-vale "Edran Vane" --dry-run
@@ -442,7 +443,7 @@ story init "The Salt Road"
 
 With `--force` on a directory that already has a `story.md`, `init` keeps that `story.md`, prints `Updated story project: <dir>` instead of `Created`, and takes the story id for any new registry from the kept title. A title that differs from the kept one, and any `story.md` option you passed (`--genre`, `--form`, `--synopsis`, and so on), is named in a warning, since it was not applied: `warning: story.md already exists and was kept, so the title and --genre were not applied. Edit story.md to change them.`
 
-The `.gitignore` lists `dist/`, so builds stay out of commits, plus `.story.lock` and the `.*.story-*.tmp` and `.story-*.tmp` files an interrupted command can leave behind, and common OS and editor files (`.DS_Store`, `Thumbs.db`, `*.swp`, `*.swo`, `*~`). `init` writes it only when the project has none, `--force` included, and never edits an existing one; a symlinked `.gitignore` is left alone and not read, and one that is not UTF-8 text is kept without a check. When a kept `.gitignore` has no `dist/` rule (`dist`, `dist/`, `/dist/`, `dist/*`, `dist/**`, or `**/dist/`), or a later negation such as `!dist/book.epub` re-includes part of it, `init` still succeeds and prints a note on stderr:
+The `.gitignore` lists `dist/`, so builds stay out of commits, plus `.story.lock` and the `.*.story-*.tmp` and `.story-*.tmp` files an interrupted command can leave behind, and common OS and editor files (`.DS_Store`, `Thumbs.db`, `*.swp`, `*.swo`, `*~`). It does not list `.snapshots/` (see [snapshot](#snapshot)). `init` writes it only when the project has none, `--force` included, and never edits an existing one; a symlinked `.gitignore` is left alone and not read, and one that is not UTF-8 text is kept without a check. When a kept `.gitignore` has no `dist/` rule (`dist`, `dist/`, `/dist/`, `dist/*`, `dist/**`, or `**/dist/`), or a later negation such as `!dist/book.epub` re-includes part of it, `init` still succeeds and prints a note on stderr:
 
 ```text
 note: .gitignore was kept and does not ignore dist/, so builds would be committed. Add a dist/ line to keep them out.
@@ -1087,7 +1088,7 @@ It exits 2 with `Unknown chapter or scene <id>` for an id that is neither, with 
 ### compare
 
 ```text
-story compare [path] (--ref <git-ref> | --against <path>) [--anchor <label>...] [--json]
+story compare [path] (--ref <git-ref> | --against <path> | --snapshot <name>) [--anchor <label>...] [--json]
 ```
 
 Compares the current chapters with an earlier draft and reports word changes per chapter, chapters added and removed, and the share of each changed chapter's paragraphs that are unchanged. With `--anchor`, it instead finds where paragraphs a reader cited in an earlier review copy are now. You must give exactly one source for the earlier draft.
@@ -1096,10 +1097,11 @@ Compares the current chapters with an earlier draft and reports word changes per
 |---|---|
 | `--ref <git-ref>` | Read the earlier chapters from a git branch, tag, or commit (with `~` and `^` suffixes); any name git accepts works, except one starting with `-`. The project must be inside a git repository, and its folder must exist at the ref. It reads with `git show` and never writes to the repository |
 | `--against <path>` | Read the earlier chapters from another copy of the project on disk, resolved against the current directory. It must be a story project with a `story.md` |
+| `--snapshot <name>` | Read the earlier chapters from a snapshot saved with [`snapshot`](#snapshot), in the project's `.snapshots/` folder. The name is matched by its kebab-case id, so `"Draft 1"` and `draft-1` are the same snapshot. `--ref` is always a git ref and `--snapshot` always a snapshot, so a tag and a snapshot that share a name are never confused |
 | `--anchor <label>` | A paragraph label from a review copy of the earlier draft, such as `ch03-p12` (repeatable). Prints where each paragraph is in the current text instead of the chapter comparison |
 | `--json` | Print the comparison as a JSON result (see below) |
 
-Chapters are matched by id (`chapter-01`, `chapter-02`, and so on), except that a chapter whose paragraphs match a chapter under another id better is paired with it and listed as `chapter-03 Title (moved from chapter-02): ...`, and the summary line adds `N moved`. That is how chapters renumbered by [`move`](#move) show up. A pair under different ids needs at least half the paragraphs of the longer version to match word for word. With `--ref`, old drafts without frontmatter are still compared. Every file in the current project, and with `--against` in the other project, must parse, or `compare` stops with an error. A chapter is `unchanged` only when its paragraphs are the same and in the same order; scene-break lines and code between closed fences are not compared.
+Chapters are matched by id (`chapter-01`, `chapter-02`, and so on), except that a chapter whose paragraphs match a chapter under another id better is paired with it and listed as `chapter-03 Title (moved from chapter-02): ...`, and the summary line adds `N moved`. That is how chapters renumbered by [`move`](#move) show up. A pair under different ids needs at least half the paragraphs of the longer version to match word for word. With `--ref`, old drafts without frontmatter are still compared. Every file in the current project, and with `--against` or `--snapshot` in the earlier draft, must parse, or `compare` stops with an error. A chapter is `unchanged` only when its paragraphs are the same and in the same order; scene-break lines and code between closed fences are not compared.
 
 With `../thread-draft-1` a copy of the project taken before the chapter 3 edit shown under [wordcount](#wordcount):
 
@@ -1153,13 +1155,16 @@ ch09-p3: no such label in git ref beta-round-1
 Comparison complete: 0 errors, 0 warnings, 0 dismissed
 ```
 
-With `--json`, `data.mode` is `chapters` or, with `--anchor`, `anchors`, and `data.label` names the earlier draft (`git ref <ref>` or the absolute `--against` path). A chapter comparison fills `chapters` (each `id`, `title`, `status` of `unchanged`, `changed`, `added`, or `removed`, `before` and `after` words, `unchanged` as the share of paragraphs kept from 0 to 1, and `movedFrom`, the old id or `null`), `beforeChapters`, `afterChapters`, `beforeWords`, and `afterWords`, and sets `anchors` to `null`. A label mapping fills `anchors` (each `label`, `status` of `unchanged`, `edited`, `not-found`, or `unknown`, `to`, `similarity`, and `excerpt`, `null` where the status has none) and sets the chapter fields to `null`.
+With `--json`, `data.mode` is `chapters` or, with `--anchor`, `anchors`, and `data.label` names the earlier draft (`git ref <ref>`, the absolute `--against` path, or `snapshot <id>`). A chapter comparison fills `chapters` (each `id`, `title`, `status` of `unchanged`, `changed`, `added`, or `removed`, `before` and `after` words, `unchanged` as the share of paragraphs kept from 0 to 1, and `movedFrom`, the old id or `null`), `beforeChapters`, `afterChapters`, `beforeWords`, and `afterWords`, and sets `anchors` to `null`. A label mapping fills `anchors` (each `label`, `status` of `unchanged`, `edited`, `not-found`, or `unknown`, `to`, `similarity`, and `excerpt`, `null` where the status has none) and sets the chapter fields to `null`.
 
 Errors:
 
 ```text
 $ story compare
-compare needs exactly one of --ref <git-ref> or --against <project-path>
+compare needs exactly one of --ref <git-ref>, --against <project-path>, or --snapshot <name>
+
+$ story compare --snapshot draft-9
+No snapshot named draft-9: story snapshot --list shows them: draft-1, pre-beta-edit
 
 $ story compare --ref main
 compare --ref needs the project inside a git repository
@@ -2105,6 +2110,51 @@ Revision pass names must be kebab-case, got Bad_Name
 
 See [Writing workflows](writing-workflows.md) for where passes fit in a revision.
 
+### snapshot
+
+```text
+story snapshot <name> [--force] [--dry-run] [--json] [--path <path>]
+story snapshot --list [--json] [--path <path>]
+```
+
+Saves a named copy of the project's markdown in `.snapshots/<id>/`, so a draft can be kept and compared with later without git. The id is the kebab-case form of the name (`"Before line edit"` is saved as `before-line-edit`). The copy holds every markdown file a scan reads, under the same paths: `story.md`, the style sheet, chapters, scenes, every entity file and registry. It leaves out what scans leave out: `dist/`, `node_modules/`, dot-folders (so a snapshot never holds an earlier snapshot, or `.git/`), subfolders with their own `story.md`, and every file that is not markdown, such as a cover image. Beside the copy, `snapshot.json` records the name as typed, the `id`, the time it was `created` (UTC), and the number of `chapters`, `words` (plus `characters` in a project counted in characters), and `files` copied.
+
+Every scan skips dot-folders, so `validate`, `links`, `continuity`, `check`, `reindex`, `wordcount`, `export`, `build`, and the rest never read `.snapshots/`: a project with snapshots checks, counts, and builds exactly as it does without them. Compare with a snapshot through [`compare --snapshot <name>`](#compare).
+
+| Option | Effect |
+|---|---|
+| `--force` | Replace a snapshot of the same name. The old copy is replaced whole: files the project no longer has are deleted from it |
+| `--list` | List the snapshots, oldest first, instead of taking one. A folder in `.snapshots/` without a readable `snapshot.json` is listed by its name, with its date and counts unknown |
+| `--dry-run` | List the files it would create, update, or delete, and change nothing (see [Previewing changes](#previewing-changes-with---dry-run)) |
+| `--json` | Print the snapshot, or with `--list` the snapshots, as a JSON result (see below) |
+| `--path <path>` | Project root (default: current directory) |
+
+Every chapter must parse, as for `compare`, so the word count and a later comparison see the whole book. A name already taken is refused with exit 4 (a refused write); `--dry-run` refuses it too. The snapshot is written under the project [lock](#where-commands-write), through the same guarded writes as every other command, so `.snapshots/` cannot be a symlink out of the project.
+
+```shell
+story snapshot "Draft 1"
+```
+
+```text
+Saved snapshot draft-1 in .snapshots/draft-1/ (4 chapters, 111 words; 32 files)
+Compare with it later: story compare --snapshot draft-1
+```
+
+```shell
+story snapshot --list
+```
+
+```text
+Snapshots: 2
+
+- draft-1 (Draft 1): 2026-03-02 18:40 UTC, 4 chapters, 111 words
+- pre-beta-edit: 2026-04-11 09:05 UTC, 4 chapters, 131 words
+```
+
+With `--json`, a snapshot's `data` holds the manifest fields (`name`, `id`, `created`, `chapters`, `words`, `files`), `dir` (`.snapshots/<id>`), `replaced`, `dryRun`, and `changes`; `--list` gives `data.snapshots`, each with `name`, `id`, `created`, `chapters`, and `words` (`null` where the manifest is missing).
+
+`init` does not add `.snapshots/` to the `.gitignore` it writes. A writer without git does not need it, and in a git repository a committed snapshot is a plain copy that git stores compactly; a writer who uses git can tag drafts and use `compare --ref` instead, and add `.snapshots/` to `.gitignore` to keep any snapshots out of commits.
+
 ## Entity commands
 
 `add`, `rename`, `move`, and `remove` take the project from `--path` (default: the current directory), because their positional arguments are the entity kind, id, and name. Each one reindexes the registries when it finishes.
@@ -3034,11 +3084,13 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--book-number` | `<n>` | `init` | Positive integer |
 | `--follows` | `<path>` | `init` | Repeatable |
 | `--precedes` | `<path>` | `init` | Repeatable |
-| `--force` | | `init`, `import` | Boolean |
+| `--force` | | `init`, `import`, `snapshot` | Boolean; for `snapshot`, replaces a snapshot of the same name |
 | `--write` | | `wordcount` | Boolean |
 | `--log` | | `progress` | Boolean |
-| `--ref` | `<git-ref>` | `compare` | Exclusive with `--against` |
-| `--against` | `<path>` | `compare`, `similarity` | For `compare`, exclusive with `--ref`. For `similarity`, required: a file, folder, or git ref |
+| `--ref` | `<git-ref>` | `compare` | Exclusive with `--against` and `--snapshot` |
+| `--against` | `<path>` | `compare`, `similarity` | For `compare`, exclusive with `--ref` and `--snapshot`. For `similarity`, required: a file, folder, or git ref |
+| `--snapshot` | `<name>` | `compare` | Exclusive with `--ref` and `--against`; a snapshot saved with `snapshot` |
+| `--list` | | `snapshot` | Boolean; lists the snapshots instead of taking one |
 | `--path` | `<path>` | Every command except `init` and `import` | Project root |
 | `--out` | `<file>` | `export`, `build`, `synopsis`, `diagram` | Relative to the project root |
 | `--format` | `<name>` | `build`, `grid` | For `build`: `markdown`, `md`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`. For `grid`: `markdown` (default), `csv` |

@@ -18,7 +18,7 @@ If you write in claude.ai and don't use a terminal, [Writers: start here](writer
 
 - An agent that supports [Agent Skills](https://agentskills.io) (`SKILL.md`), such as Claude Code, Codex, GitHub Copilot in VS Code, Cursor, Windsurf, Gemini CLI, or OpenCode.
 - Node 18 or newer if you want to run the `story` CLI. The CLI has no runtime dependencies.
-- Optionally, git. A story project is a folder of markdown files, so version control works well with it and some features rely on it, such as `story compare --ref`.
+- Optionally, git. A story project is a folder of markdown files, so version control works well with it and some features rely on it, such as `story compare --ref`. Without git, `story snapshot` keeps named drafts to compare with instead.
 
 The skills do the creative work: asking questions, outlining, and drafting. The CLI does the mechanical work: registries, word counts, link checks, validation, continuity checks, and exports. You can use the skills without installing the CLI, because the `story-maintenance` skill includes its own copy of the CLI. See [Core concepts](concepts.md) for how the two parts fit together.
 

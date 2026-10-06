@@ -116,16 +116,16 @@ If `story` is not installed, use `bun run story --` from the Story Skills reposi
 Take a snapshot before a revision pass that touches more than one chapter, and name it after the draft it preserves (`draft-1`, `pre-beta-edit`).
 
 - **Git projects:** check `git status`, and make sure `.gitignore` lists `dist/` (`story init` writes one that does, but older or hand-made projects may lack it) so build output such as EPUB and DOCX files stays out of every snapshot and `story compare --ref` baseline; add the line if it is missing. Ask the user before committing anything; with approval, commit the current state and tag it: `git add -A && git commit -m "Draft 1 before developmental pass" && git tag draft-1`. Never push, rewrite history, or delete tags without explicit approval.
-- **Projects without git:** offer to run `git init` first. If the user declines, copy the whole project folder beside it (`../the-tide-room-draft-1`), never into the project, where `story` commands would scan the copy.
+- **Projects without git:** offer to run `git init` first. If the user declines, take a named snapshot: `story snapshot draft-1 --path .` copies the project's markdown to `.snapshots/draft-1/`, which every `story` command skips. It refuses a name already taken; ask before replacing one with `--force`. `story snapshot --list --path .` shows the snapshots there are. Never copy the project into a folder of its own by hand, where `story` commands would scan the copy.
 
 After the pass, compare with the snapshot and report the result:
 
 ```shell
 story compare . --ref draft-1
-story compare . --against ../the-tide-room-draft-1
+story compare . --snapshot draft-1
 ```
 
-`story compare` lists each chapter's word change, added and removed chapters, and the share of paragraphs left unchanged, so the user can see how deep the pass went. Chapters are matched by id, but a chapter renumbered by `story move` whose paragraphs still mostly match is paired with its old id and shown as `(moved from chapter-NN)`. A chapter that was renumbered and also heavily rewritten (under half its paragraphs unchanged) shows as one removed and one added; compare those by content (read the old and new text side by side). It only reads git; it never commits or tags.
+`story compare` lists each chapter's word change, added and removed chapters, and the share of paragraphs left unchanged, so the user can see how deep the pass went. Chapters are matched by id, but a chapter renumbered by `story move` whose paragraphs still mostly match is paired with its old id and shown as `(moved from chapter-NN)`. A chapter that was renumbered and also heavily rewritten (under half its paragraphs unchanged) shows as one removed and one added; compare those by content (read the old and new text side by side). It only reads git or the snapshot; it never commits, tags, or changes a snapshot.
 
 ## Structural Edits
 

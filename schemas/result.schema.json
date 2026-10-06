@@ -8,7 +8,7 @@
   "properties": {
     "apiVersion": { "const": "story/v2" },
     "command": {
-      "enum": ["validate", "links", "continuity", "check", "series", "next", "doctor", "report", "knowledge", "context", "timeline", "prose", "voices", "pacing", "clues", "progress", "similarity", "add", "rename", "remove", "move", "reindex", "migrate", "wordcount", "names", "mentions", "compare", "passes", "diagram", "synopsis", "grid", "list"]
+      "enum": ["validate", "links", "continuity", "check", "series", "next", "doctor", "report", "knowledge", "context", "timeline", "prose", "voices", "pacing", "clues", "progress", "similarity", "add", "rename", "remove", "move", "reindex", "migrate", "wordcount", "names", "mentions", "compare", "passes", "diagram", "synopsis", "grid", "list", "snapshot"]
     },
     "ok": { "type": "boolean", "description": "True exactly when the command exits 0." },
     "data": { "type": ["object", "null"] },
@@ -39,6 +39,7 @@
     { "if": { "properties": { "command": { "const": "synopsis" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-synopsis" } } } },
     { "if": { "properties": { "command": { "const": "grid" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-grid" } } } },
     { "if": { "properties": { "command": { "const": "list" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-list" } } } },
+    { "if": { "properties": { "command": { "const": "snapshot" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-snapshot" } } } },
     { "if": { "properties": { "data": { "type": "null" } } }, "then": { "properties": { "ok": { "const": false } } } }
   ],
   "$defs": {
@@ -494,7 +495,7 @@
       "required": ["mode", "label", "chapters", "beforeChapters", "afterChapters", "beforeWords", "afterWords", "anchors"],
       "properties": {
         "mode": { "enum": ["chapters", "anchors"] },
-        "label": { "type": "string", "description": "\"git ref <ref>\", or the absolute path of the --against project." },
+        "label": { "type": "string", "description": "\"git ref <ref>\", the absolute path of the --against project, or \"snapshot <id>\"." },
         "chapters": {
           "type": ["array", "null"],
           "items": {
@@ -562,6 +563,54 @@
         "text": { "type": "string", "description": "The Mermaid source." },
         "outFile": { "type": ["string", "null"], "description": "The absolute path --out wrote, else null." }
       }
+    },
+    "data-snapshot": {
+      "type": "object",
+      "$comment": "story snapshot <name> reports the snapshot taken, as a write command does (dryRun and changes); story snapshot --list reports data.snapshots.",
+      "allOf": [
+        {
+          "if": { "required": ["dryRun"] },
+          "then": {
+            "required": ["name", "id", "created", "chapters", "words", "files", "dir", "replaced", "dryRun", "changes"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1, "description": "The name as typed." },
+              "id": { "type": "string", "minLength": 1, "description": "The kebab-case id, the snapshot's folder name." },
+              "created": { "type": "string", "minLength": 1, "description": "When the snapshot was taken, an ISO 8601 UTC time." },
+              "chapters": { "$ref": "#/$defs/count" },
+              "words": { "$ref": "#/$defs/count" },
+              "characters": { "$ref": "#/$defs/count", "description": "Only in a project counted in characters." },
+              "files": { "$ref": "#/$defs/count", "description": "Markdown files copied." },
+              "dir": { "type": "string", "minLength": 1, "description": "The snapshot folder, relative to the project root: .snapshots/<id>." },
+              "replaced": { "type": "boolean", "description": "True when --force replaced a snapshot of the same name." },
+              "dryRun": { "type": "boolean" },
+              "changes": { "type": "array", "items": { "$ref": "#/$defs/change" } }
+            }
+          }
+        },
+        {
+          "if": { "required": ["snapshots"] },
+          "then": {
+            "properties": {
+              "snapshots": {
+                "type": "array",
+                "description": "Oldest first; a folder without a readable snapshot.json comes last, with a null date and counts.",
+                "items": {
+                  "type": "object",
+                  "required": ["name", "id", "created", "chapters", "words"],
+                  "properties": {
+                    "name": { "type": "string", "minLength": 1 },
+                    "id": { "type": "string", "minLength": 1 },
+                    "created": { "type": ["string", "null"] },
+                    "chapters": { "type": ["integer", "null"], "minimum": 0 },
+                    "words": { "type": ["integer", "null"], "minimum": 0 },
+                    "characters": { "type": "integer", "minimum": 0 }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
     },
     "data-grid": {
       "type": "object",

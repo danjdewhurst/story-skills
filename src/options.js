@@ -29,14 +29,17 @@ export const OPTIONS = [
     help: [
       "Let init/import use an existing directory: add",
       "missing starter files, never overwrite existing",
-      "ones; import also replaces every chapter-NN.md file"
+      "ones; import also replaces every chapter-NN.md",
+      "file; snapshot replaces a same-named snapshot"
     ]
   },
   { name: "write", help: ["Update chapter word-count frontmatter"] },
   { name: "log", help: ["Record today's word count in progress.md"] },
   { name: "ref", value: "<git-ref>", help: ["Earlier draft as a git branch, tag, or commit", "for compare"] },
   { name: "against", value: "<path>", help: ["Earlier draft as another project folder for", "compare; text to check for similarity (a file,", "folder, or git ref)"] },
+  { name: "snapshot", value: "<name>", help: ["Earlier draft as a snapshot saved by story", "snapshot, for compare"] },
   { name: "anchor", value: "<label>", repeatable: true, help: ["Review-copy paragraph label (ch03-p12) to find", "in the current text for compare; repeatable"] },
+  { name: "list", help: ["List the saved snapshots for snapshot"] },
   { name: "path", value: "<path>", help: ["Project root for every command except init and", "import"] },
   { name: "out", value: "<file>", help: ["Output path for export/build/synopsis/diagram"] },
   { name: "format", value: "<name>", help: ["Output format for build (markdown, epub, docx,", "shunn, html, print, narration, metadata,", "fountain, twee, ink) or grid (markdown, csv)"] },
@@ -63,7 +66,7 @@ export const OPTIONS = [
   { name: "fix", help: ["Apply doctor's safe repairs (migrate, reindex,", "wordcount --write), then report what remains"] },
   { name: "strict", help: ["Fail check on warnings as well as errors"] },
   { name: "json", help: ["Print one JSON result object (apiVersion,", "command, ok, data, diagnostics, writes) instead", "of text, for the check, analysis, and write", "commands"] },
-  { name: "dry-run", help: ["List the files add, rename, remove, move,", "reindex, migrate, wordcount --write, or doctor", "--fix would create, update, or delete, and", "change nothing"] },
+  { name: "dry-run", help: ["List the files add, rename, remove, move,", "reindex, migrate, wordcount --write, doctor", "--fix, or snapshot would create, update, or", "delete, and change nothing"] },
   { name: "id", value: "<kebab-id>", help: ["Explicit id for add or rename, for a name with", "no ASCII letters or digits"] },
   { name: "number", value: "<n>", help: ["Chapter number for add chapter or move chapter"] },
   { name: "chapter", value: "<id>", help: ["Chapter id for add scene or move scene"] },
