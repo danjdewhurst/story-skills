@@ -68,6 +68,9 @@ describe("story names", () => {
     expect(nameWords("Dr. O'Neil-Smith")).toEqual(["Dr", "O'Neil-Smith"]);
     expect(givenName("大島源治")).toBe("大島源治");
     expect(givenName("ジョン・スミス")).toBe("ジョン");
+    expect(nameWords("王小明(John)")).toEqual(["王小明", "John"]);
+    expect(nameWords("大島源治（おおしま）")).toEqual(["大島源治", "おおしま"]);
+    expect(givenName("王小明(John)")).toBe("王小明");
   });
 
   test("an unspaced Japanese or Chinese name is compared whole, not character by character", () => {
@@ -86,6 +89,8 @@ describe("story names", () => {
     const zh = createStoryProject({ cwd, title: "灯塔", dir: "dengta", force: false, language: "zh" }).root;
     writeMarkdown(path.join(zh, "characters", "wang-xiaoming.md"), "name: 王小明\nrole: supporting\nstatus: alive", "# 王\n");
     writeMarkdown(path.join(zh, "characters", "harry.md"), "name: 哈利·波特\nrole: minor\nstatus: alive", "# 哈利\n");
+    writeMarkdown(path.join(zh, "characters", "li-wei.md"), "name: 李伟(Wei)\nrole: minor\nstatus: alive", "# 李\n");
+    expect(messages(namesReport(zh, ["李伟"]).errors)).toEqual(["\"李伟\" clashes with character li-wei (李伟)"]);
     const zhReport = namesReport(zh, ["王", "小明", "王小明", "哈利", "波"]);
     expect(messages(zhReport.errors)).toEqual([
       "\"王小明\" clashes with character wang-xiaoming (王小明)",

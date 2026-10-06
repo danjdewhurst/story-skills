@@ -17,13 +17,15 @@ const NO_WORDS = new Set();
 
 const UNSPACED_LETTER = new RegExp(`[${UNSPACED_LETTERS}]`, "u");
 // The interpuncts that part a foreign name written in Japanese (ジョン・スミス)
-// or Chinese (哈利·波特).
-const NAME_DOT = /[・·]/u;
+// or Chinese (哈利·波特), and brackets around a reading set against a name
+// (王小明(John), 大島源治（おおしま）).
+const NAME_DOT = /[・·()（）[\]［］【】「」『』]/u;
 const EDGE_PUNCTUATION = /^[^\p{L}\p{M}\p{N}]+|[^\p{L}\p{M}\p{N}]+$/gu;
 
 // The words of a name. Prose splits Chinese and Japanese into a word per
 // character and Thai, Lao, Khmer, and Burmese by dictionary, but a name in
-// those scripts is one word unless spaces or an interpunct part it, so
+// those scripts is one word unless spaces, an interpunct, or a bracketed
+// reading part it, so
 // 大島源治 is one word and 大島 源治 two. Every other name splits as prose
 // does.
 export function nameWords(name) {

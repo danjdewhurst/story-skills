@@ -7323,7 +7323,7 @@ import path4 from "node:path";
 var MAJOR_ROLES = new Set(["protagonist", "antagonist", "deuteragonist", "narrator"]);
 var NO_WORDS = new Set;
 var UNSPACED_LETTER2 = new RegExp(`[${UNSPACED_LETTERS}]`, "u");
-var NAME_DOT = /[・·]/u;
+var NAME_DOT = /[・·()（）[\]［］【】「」『』]/u;
 var EDGE_PUNCTUATION = /^[^\p{L}\p{M}\p{N}]+|[^\p{L}\p{M}\p{N}]+$/gu;
 function nameWords(name) {
   const text = String(name);
