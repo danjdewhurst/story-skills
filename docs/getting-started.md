@@ -22,7 +22,7 @@ The skills do the creative work: asking questions, outlining, and drafting. The 
 
 ## Install the skills
 
-Pick the method for your agent. Each method installs the 23 skills in [`skills/`](../skills/); the Gemini CLI and Agent Skills CLI installers can also install a single skill.
+Pick the method for your agent. Each method installs the 24 skills in [`skills/`](../skills/); the Gemini CLI and Agent Skills CLI installers can also install a single skill.
 
 ### Claude Code
 

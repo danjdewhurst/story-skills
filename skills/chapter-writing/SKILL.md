@@ -146,6 +146,10 @@ Present a summary of all updates made.
 
 Within a chapter, separate scenes with `---`. Each scene should have a clear POV character (even if the same as the previous scene) and location.
 
+## Branching Books
+
+When any chapter has `choices` in its frontmatter, the book branches: a chapter may be reached by more than one path, and its prose must hold on each. Draft it with the `interactive-fiction` skill, which follows this workflow and adds the rules for branches, rejoins, endings, and path continuity.
+
 ## Revision Handoff
 
 When asked to revise or continuity-check an existing chapter, use the `revision-continuity` skill; for line edits, copyedits, and proofing, use the `line-editing` skill. This skill owns new drafting and chapter creation; `revision-continuity` owns targeted edits, continuity audits, and post-draft cleanup.

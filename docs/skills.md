@@ -1,6 +1,6 @@
 # Skills catalogue
 
-This page is for writers and agent operators who want to know what each of the 23 Story Skills does and which one to reach for. For every skill it covers when an agent picks it up, which files it reads and writes, which `story` commands it runs, and the reference files it loads.
+This page is for writers and agent operators who want to know what each of the 24 Story Skills does and which one to reach for. For every skill it covers when an agent picks it up, which files it reads and writes, which `story` commands it runs, and the reference files it loads.
 
 **On this page**
 
@@ -67,6 +67,7 @@ Every skill that drafts, edits, or critiques prose reads `language` in `story.md
 | Fix a flat scene, an info dump, an opening, or a chapter ending | [scene-craft](#scene-craft) | "Fix the info dump in chapter 2" |
 | Keep spelling, voice, and house style consistent, or lint prose | [voice-style](#voice-style) | "Set up a style sheet for this book" |
 | Write a poem, limerick, or song, or check that verse scans | [verse-craft](#verse-craft) | "Does this limerick scan?" |
+| Plan, draft, or revise a branching book whose chapters carry choices | [interactive-fiction](#interactive-fiction) | "Plan where the branches rejoin" |
 | Revise or continuity-check existing chapters, or work through revision passes | [revision-continuity](#revision-continuity) | "Continuity-check chapter 3" |
 | Line edit, copyedit, proofread, or make the voices distinct | [line-editing](#line-editing) | "Line edit chapter 3" |
 | Get a simulated first read before human readers see the draft | [reader-panel](#reader-panel) | "Give me a simulated beta read" |
@@ -75,7 +76,7 @@ Every skill that drafts, edits, or critiques prose reads `language` in `story.md
 | Write a sequel, prequel, or companion book | [series-continuity](#series-continuity) | "Start a prequel to The Last Ember" |
 | Query agents, write a blurb, or track submissions | [submission](#submission) | "Help me query agents" |
 | Self-publish: ISBNs, metadata, print interior, launch, rights | [publishing](#publishing) | "Help me self-publish this book" |
-| Make an audiobook script, screenplay, picture book, comic, or translation | [adaptation](#adaptation) | "Make an audiobook narration script" |
+| Make an audiobook script, screenplay, picture book, comic, or translation, or turn a linear book into an interactive edition | [adaptation](#adaptation) | "Make an audiobook narration script" |
 | Find out what a character knew at a given chapter | [story-maintenance](#story-maintenance) (`story knowledge`) | "What did Kael know by chapter 4?" |
 | Validate, reindex, count words, export, build, or draw a diagram | [story-maintenance](#story-maintenance) | "Validate my story project" |
 
@@ -98,6 +99,7 @@ flowchart LR
     subgraph draft [Draft]
         cw[chapter-writing]
         dd[discovery-drafting]
+        ifc[interactive-fiction]
     end
     draft --> rev[revision-continuity]
     rev --> le[line-editing]
@@ -118,6 +120,7 @@ The main handoffs:
 
 - `premise-workshop` hands a brief (title, logline, premise, form, genre) to `story-init`.
 - `chapter-writing` owns new drafting, `revision-continuity` owns structural and continuity edits to existing chapters, and `line-editing` owns the sentence-level passes that follow them.
+- `interactive-fiction` drafts and revises a branching book, using chapter-writing's workflow and revision-continuity's passes with the branching rules added. `adaptation` turns a linear book into an interactive edition project, which `interactive-fiction` then drafts.
 - `discovery-drafting` passes batches to `revision-continuity` at the midpoint and when the draft is complete.
 - `reader-panel` writes simulated persona reads as a feedback round for `feedback-triage`, which weighs them as simulated.
 - `feedback-triage` produces a revision plan, and `revision-continuity` carries it out. `editorial-review` routes sensitivity reads and editor letters into `feedback-triage`.
@@ -143,6 +146,7 @@ The main handoffs:
 | [scene-craft](#scene-craft) | `scenes/*.md` planning fields and sections, chapter `hook` | `reindex`, `links`, `validate`, `continuity`, `pacing` |
 | [voice-style](#voice-style) | `style-sheet.md`, character `voice-words`/`voice-avoid`, chapter prose | `prose`, `voices`, `names`, `validate`, `wordcount --write`, `links`, `rename character` |
 | [verse-craft](#verse-craft) | Standalone poem files, or verse in chapter prose and `matter/` | `add matter`, `wordcount --write`, `links`, `validate` (story verse only) |
+| [interactive-fiction](#interactive-fiction) | Chapter `choices`, branch chapters and scenes, `continuity/state.md`, `notes/branch-map.md` | `add chapter`, `context`, `move`, `remove chapter`, `build --format twee`/`ink`, `wordcount --write`, `reindex`, `links`, `validate`, `continuity` |
 | [revision-continuity](#revision-continuity) | Chapters and every dependent record, `story.md` `revision-passes` | `report`, `passes`, `next`, `move`, `wordcount --write`, `reindex`, `links`, `validate`, `continuity`, `doctor`, `pacing`, `clues`, `voices`, `prose`, `timeline`, `diagram`, `compare`, `series` |
 | [line-editing](#line-editing) | Chapter prose, `style-sheet.md`, character voice fields | `passes`, `prose`, `voices`, `build --format narration`/`html`/`print`, `wordcount --write`, `links`, `validate` |
 | [reader-panel](#reader-panel) | `feedback/round-N/{persona}.md`, marked `source: simulated` | `build --format html --stamp`, `context`, `prose` (line editor), `reindex`, `links`, `validate` |
@@ -613,6 +617,34 @@ It also uses line-editing's [`language-conventions.md`](../skills/line-editing/r
 - [`meter-and-scansion.md`](../skills/verse-craft/references/meter-and-scansion.md): feet and meters, finding a word's stress, the scansion table format, which departures are allowed, and the syllabic, quantitative, mora-based, and tonal traditions of other languages.
 - [`rhyme.md`](../skills/verse-craft/references/rhyme.md): kinds of rhyme, scheme notation, forced-rhyme tells, rhymes readers have seen too often, and rhyme in other languages.
 
+### interactive-fiction
+
+**Purpose.** Plans, drafts, and revises a branching book: a project whose chapters are passages joined by `choices` in their frontmatter. It shapes the choice graph with you, drafts each passage so its prose holds on every path that reaches it, keeps continuity by path, and builds the book as Twine or ink. [`examples/the-gull-rock-light`](../examples/the-gull-rock-light/) is a small example.
+
+**Triggers.** "Write a branching story", "plan the branches", "choice graph", "add a choice", "gamebook", "draft a branch", "where the branches rejoin", "add an ending", "unreachable chapter", "path continuity", "state-differs-by-path".
+
+**Not for.** Turning a finished linear book into an interactive edition ([adaptation](#adaptation), which hands the edition project back here for drafting), drafting a linear chapter ([chapter-writing](#chapter-writing)), or a linear continuity audit ([revision-continuity](#revision-continuity)).
+
+**Hard rules.** It never invents a branch, ending, or choice you have not agreed. It never writes rejoin prose that is true on only one incoming path, and never silences `state-differs-by-path` with an `object-state` entry the rejoin's prose does not make true. Ink logic goes in a built copy under `adaptations/interactive/`, never in chapters.
+
+**Workflow.**
+
+1. **Plan the graph.** Agrees a structure (branch and bottleneck, gauntlet, time cave, sorting hat, hub), numbers chapters so each choice leads to a higher number, scaffolds each passage with `story add chapter --status outline`, writes the `choices` by hand, and checks the skeleton with `story links .` before any prose. Flags the CLI does not track go in `notes/branch-map.md`.
+2. **Draft a passage** with chapter-writing's outline-first workflow, from `story context`, which in a branching book holds only what was drafted and learned on a path to the chapter. At a rejoin it reads every incoming branch and writes only what is true on all of them; at a branch point it ends on the decision; an ending has no `choices` and `hook: resolution`.
+3. **Revise** with revision-continuity's passes plus the branching checks: `unreachable-chapter`, accidental endings, loops with no way out, `state-differs-by-path`, and the checks that still read chapter numbers (promise, question, and clue ledgers, the clock and routes, pacing).
+4. **Build** with `story build . --format twee` or `--format ink`, after adding `ifid` to `story.md`.
+
+**Reads.** `story.md`, `chapters/_index.md` and every chapter's `choices`, `story context` for the passage being drafted, and every chapter that leads to a rejoin.
+
+**Writes.** Chapter files and their `choices`, scene records, `continuity/state.md` (one `knowledge-state` entry per branch for a fact learned on two branches), `continuity/exemptions.md` for findings that only reflect branch order, `notes/branch-map.md`, and built copies under `adaptations/interactive/`.
+
+**CLI.** `story add chapter`, `story context`, `story move chapter` (which rewrites every `to`), `story remove chapter`, and `story build --format twee`/`ink`, then `story wordcount . --write`, `story reindex .`, `story links .`, `story validate .`, and `story continuity .`.
+
+**References.**
+
+- [`choice-graph.md`](../skills/interactive-fiction/references/choice-graph.md): branching structures and their cost, designing choices, numbering, rejoins, endings, and the scope check.
+- [`path-continuity.md`](../skills/interactive-fiction/references/path-continuity.md): what `story continuity` follows by path and what still reads chapter numbers, `state-differs-by-path` and the other branching findings, and the hand checklist.
+
 ## Revising and reviewing
 
 ### revision-continuity
@@ -985,7 +1017,7 @@ npx skills add forjd/better-writing
 
 ## Testing skill changes
 
-The [`evals/`](../evals/) directory holds regression fixtures for the fiction-writing skills (twenty-four fixtures across twelve skills, including drafting and line editing in French, Japanese, and Arabic, listed by skill in its [skill coverage table](../evals/README.md#skill-coverage)). Each fixture is a drafting or editing brief seeded with canon that must survive and traps a lazy draft would spring. Agents using the skills never load it. See the [Development guide](development.md#evals) and [`evals/README.md`](../evals/README.md) before changing a skill's instructions.
+The [`evals/`](../evals/) directory holds regression fixtures for the fiction-writing skills (twenty-five fixtures across thirteen skills, including drafting and line editing in French, Japanese, and Arabic, listed by skill in its [skill coverage table](../evals/README.md#skill-coverage)). Each fixture is a drafting or editing brief seeded with canon that must survive and traps a lazy draft would spring. Agents using the skills never load it. See the [Development guide](development.md#evals) and [`evals/README.md`](../evals/README.md) before changing a skill's instructions.
 
 ## See also
 

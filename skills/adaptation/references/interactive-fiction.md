@@ -178,6 +178,8 @@ choices:
 
 [`examples/the-gull-rock-light`](../../../examples/the-gull-rock-light/)
 is a small branch-and-bottleneck story built this way.
+The `interactive-fiction` skill covers drafting and revising such a
+project: rejoins, endings, and path continuity.
 
 `story build --format ink` builds the same project as ink, with the same
 checks: one knot per chapter (`chapter-03` becomes `chapter_03`), a sticky

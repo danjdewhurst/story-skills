@@ -144,6 +144,7 @@ hand before/after skill changes, with results recorded below.
 | `line-editing-fr` | A French passage with straight quotes, no space before `?`, and filler (*Soudain, elle s'aperçut que*, *perdue dans ses pensées*) must come back in guillemets with French spacing and the filler cut, the rest unchanged. Evaluates `line-editing` with its language conventions. |
 | `line-editing-ja` | A Japanese passage with curly quotes, Arabic numerals in vertical text, `。」`, `・・・`, a half-width `?`, and padding must come back in 「」 with kanji numerals, `……`, and `？`. Evaluates `line-editing` with its language conventions. |
 | `line-editing-ar` | An Arabic passage with straight quotes, Latin commas and question marks, and the style sheet's watch words (فجأة, a named feeling) must come back in «» with `،` and `؟` and the watch words cut. Evaluates `line-editing` with its language conventions. |
+| `branch-rejoin` | A branching chapter drafted where two branches rejoin: the chapter file with its two `choices` to the endings, and prose true on both paths. Where Tobias lies or where his coat is (each differs by path), the ship "you saw" (only one branch saw it), either ending, or Twine link syntax in the text fails. Evaluates the `interactive-fiction` skill. |
 | `context-boundary` | A chapter drafted from `story context` output with the whole-book outline open beside it: it stays inside the target length and uses nothing the packed context leaves out (the logbook, the fuse wire, who left the key). Evaluates `chapter-writing`'s use of `story context`. The runner gives the model no tools, so the fixture supplies the command's output: it tests staying inside the budget and the spoiler boundary, not the choice to run the command. |
 
 ## Skill coverage
@@ -155,6 +156,7 @@ Each fixture runs under the skill its `checks.json` names in `skill`.
 | `adaptation` | `screenplay-fountain` |
 | `chapter-writing` | `anti-slop`, `canon-keeping`, `context-boundary`, `drafting-ar`, `drafting-fr`, `drafting-ja`, `no-invention`, `promise-payoff`, `question-stays-open` |
 | `genre-craft` | `genre-craft-mystery` |
+| `interactive-fiction` | `branch-rejoin` |
 | `line-editing` | `line-editing-ar`, `line-editing-fr`, `line-editing-ja`, `voice-preservation` |
 | `plot-structure` | `plot-beats` |
 | `premise-workshop` | `premise-logline` |
@@ -165,7 +167,7 @@ Each fixture runs under the skill its `checks.json` names in `skill`.
 | `theme-craft` | `motif-restraint` |
 | `verse-craft` | `verse-limerick` |
 
-Twenty-four fixtures cover twelve of the 23 skills. These eleven have none:
+Twenty-five fixtures cover thirteen of the 24 skills. These eleven have none:
 `character-management`, `discovery-drafting`, `editorial-review`,
 `feedback-triage`, `publishing`, `research`, `story-init`,
 `story-maintenance`, `submission`, `voice-style`, and `worldbuilding`. They

@@ -149,6 +149,8 @@ panels, captions, balloons, and SFX in
 Follow `references/interactive-fiction.md`. Map the linear scenes to nodes,
 choose a branching structure with the author, and record the branch map in
 `adaptations/interactive/branch-map.md`.
+Once the interactive edition project exists, draft and revise its chapters
+with the `interactive-fiction` skill.
 
 - **Twine:** make the interactive edition its own project (copy the
   source project without `dist/`, as for a translation), one chapter per
