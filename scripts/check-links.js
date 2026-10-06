@@ -113,10 +113,16 @@ export function slugify(text) {
 
 // Reduces heading markdown to the text GitHub renders, which is what it slugs.
 export function headingText(raw) {
-  return raw
+  // Strip HTML tags until none are left, so a tag split by another tag
+  // (<<b>a>) cannot survive one pass.
+  let text = raw;
+  for (let previous = null; previous !== text;) {
+    previous = text;
+    text = text.replace(/<[^<>]*>/g, "");
+  }
+  return text
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
     .replace(/!?\[([^\]]*)\]\[[^\]]*\]/g, "$1")
-    .replace(/<[^>]+>/g, "")
     .replace(/`/g, "")
     .replace(/(^|[^\p{L}\p{N}])(_{1,3})(?=\S)(.+?)(?<=\S)\2(?![\p{L}\p{N}])/gu, "$1$3")
     .replace(/\\([!-/:-@[-`{-~])/g, "$1")
