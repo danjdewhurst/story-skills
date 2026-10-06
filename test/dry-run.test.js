@@ -301,6 +301,71 @@ describe("--dry-run", () => {
     expect(snapshot(sibling)).toEqual(siblingBefore);
   });
 
+  test("a dry run reports links outside the project, into linked books, and inside it as the real run does", () => {
+    const parent = makeTempDir();
+    for (const name of ["the-last-ember", "the-fall-of-the-citadel"]) {
+      fs.cpSync(path.join(examplesRoot, name), path.join(parent, name), { recursive: true });
+    }
+    const root = path.join(parent, "the-last-ember");
+    const sibling = path.join(parent, "the-fall-of-the-citadel");
+    fs.writeFileSync(path.join(parent, "notes.md"), "# Notes\n");
+    fs.mkdirSync(path.join(parent, "folder.md"));
+    writeMarkdown(path.join(parent, "drafts", "old", "chapter-one.md"), "title: Old");
+    // Files of the linked book that a dry run does not copy: build output,
+    // and a project nested inside it.
+    fs.mkdirSync(path.join(sibling, "dist"));
+    fs.writeFileSync(path.join(sibling, "dist", "recap.md"), "# Recap\n");
+    writeMarkdown(path.join(sibling, "spin-off", "story.md"), "title: Spin Off");
+    fs.writeFileSync(path.join(sibling, "spin-off", "notes.md"), "# Notes\n");
+    fs.symlinkSync(path.join(parent, "notes.md"), path.join(parent, "notes-link.md"));
+    fs.symlinkSync(path.join(parent, "nowhere.md"), path.join(parent, "dangling.md"));
+    const links = [
+      "../../notes.md",
+      "../../gone.md",
+      "../../folder.md",
+      "../../notes-link.md",
+      "../../drafts/old/chapter-one.md",
+      "../../drafts/new/chapter-two.md",
+      "../../the-fall-of-the-citadel/characters/king-aldric.md",
+      "../../the-fall-of-the-citadel/characters/nobody.md",
+      "../../the-fall-of-the-citadel/dist/recap.md",
+      "../../the-fall-of-the-citadel/spin-off/notes.md",
+      "../characters/sera-voss.md",
+      "../characters/nobody.md",
+      "../../dangling.md"
+    ];
+    fs.appendFileSync(path.join(root, "plot", "timeline.md"), `\n${links.map((link, index) => `[link ${index}](${link})`).join("\n")}\n`);
+    fs.appendFileSync(path.join(root, "matter", "epigraph.md"), "\n[notes](../../notes.md)\n");
+
+    const parity = (argv) => {
+      const preview = invokeJson(root, [...argv, "--dry-run", "--json"]);
+      const real = invokeJson(root, [...argv, "--json"]);
+      expect(preview.code).toBe(real.code);
+      expect(preview.envelope.diagnostics).toEqual(real.envelope.diagnostics);
+      return real.envelope.diagnostics;
+    };
+    const findings = parity(["doctor", "--fix"])
+      .filter((entry) => /link/.test(entry.code))
+      .map((entry) => `${entry.code} ${entry.message}`);
+    const outside = (file, link) => `link-outside-project ${file} links to ${link} which resolves outside the project`;
+    const missing = (link) => `broken-link plot/timeline.md links to missing file ${link}`;
+    expect(findings.sort()).toEqual([
+      outside("plot/timeline.md", links[0]),
+      missing(links[1]),
+      outside("plot/timeline.md", links[2]),
+      outside("plot/timeline.md", links[3]),
+      outside("plot/timeline.md", links[4]),
+      missing(links[5]),
+      missing(links[7]),
+      missing(links[11]),
+      missing(links[12]),
+      outside("matter/epigraph.md", "../../notes.md")
+    ].sort());
+    parity(["rename", "character", "sera-voss", "Sera Vane"]);
+    // The preview made nothing beside the project.
+    expect(fs.readdirSync(parent).sort()).toEqual(["dangling.md", "drafts", "folder.md", "notes-link.md", "notes.md", "the-fall-of-the-citadel", "the-last-ember"]);
+  });
+
   test("a dry run copies no more linked books than the series book limit", () => {
     const parent = makeTempDir();
     for (let index = 0; index < MAX_SERIES_BOOKS + 3; index += 1) {
