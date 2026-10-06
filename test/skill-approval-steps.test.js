@@ -31,9 +31,10 @@ function markdownFiles(dir) {
   }).sort();
 }
 
-// The steps of a markdown file, each with the line it starts on.
+// The steps of a markdown file, each with the line it starts on. Line
+// endings are normalised, so a CRLF checkout splits the same way.
 function steps(text) {
-  const lines = text.split("\n");
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
   const result = [];
   let current = null;
   const flush = () => {
@@ -70,7 +71,7 @@ function steps(text) {
 }
 
 const skillSteps = markdownFiles(skillsDir).flatMap((file) => steps(fs.readFileSync(file, "utf8"))
-  .map((step) => ({ ...step, where: `${path.relative(skillsDir, file)}:${step.line}` })));
+  .map((step) => ({ ...step, where: `${path.relative(skillsDir, file).split(path.sep).join("/")}:${step.line}` })));
 
 describe("skills guard commands that delete or freeze prose (#543)", () => {
   test("the step parser splits list items and fences", () => {
@@ -78,6 +79,18 @@ describe("skills guard commands that delete or freeze prose (#543)", () => {
     expect(parsed.map((step) => step.line)).toEqual([1, 3, 5, 8, 9]);
     expect(parsed[0].text).toContain("still one");
     expect(parsed[2].text).toBe("git tag x");
+  });
+
+  test("the step parser reads CRLF files as it reads LF files", () => {
+    for (const file of markdownFiles(skillsDir)) {
+      const text = fs.readFileSync(file, "utf8").replace(/\r\n/g, "\n");
+      expect(steps(text.replace(/\n/g, "\r\n"))).toEqual(steps(text));
+    }
+  });
+
+  test("step locations use forward slashes on every platform", () => {
+    expect(skillSteps.every((step) => !step.where.includes("\\"))).toBe(true);
+    expect(skillSteps.some((step) => step.where.startsWith("feedback-triage/SKILL.md:"))).toBe(true);
   });
 
   test("every story remove chapter or scene instruction has a --dry-run in the same step", () => {
