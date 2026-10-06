@@ -9,7 +9,7 @@ import { formatComparison, formatLabelMapping } from "./compare.js";
 import { applySeverity } from "./config.js";
 import { FINDING_CODES, warn } from "./findings.js";
 import { importManuscript } from "./import.js";
-import { planChanges, recordChanges } from "./files.js";
+import { lstatIfExists, planChanges, recordChanges } from "./files.js";
 import { diagnosticsFrom, resultData, wantsJson, writeJsonResult } from "./json.js";
 import { previewChanges, previewNewProject } from "./preview.js";
 import { workflowPinActions } from "./workflows.js";
@@ -24,7 +24,7 @@ import { formatStateChanges } from "./progressions.js";
 import { formatProseReport } from "./prose.js";
 import { formatSeriesReport } from "./series.js";
 import { formatSimilarity } from "./similarity.js";
-import { SNAPSHOTS_DIR, SNAPSHOT_MANIFEST, existingSnapshot, formatRestore, formatRestorePreview, formatSnapshot, formatSnapshotList, listSnapshots, restoreSnapshot, snapshotId, snapshotProject } from "./snapshots.js";
+import { SNAPSHOTS_DIR, SNAPSHOT_MANIFEST, existingSnapshot, formatRestore, formatRestorePreview, formatSnapshot, formatSnapshotList, listSnapshots, restoreSnapshot, restoreSources, snapshotId, snapshotProject } from "./snapshots.js";
 import { formatTimeline } from "./timeline.js";
 import { formatVoices } from "./voices.js";
 import {
@@ -1090,6 +1090,8 @@ function runRestore(context, name) {
     if (target === projectRoot) {
       return;
     }
+    // The copy has no nested projects or symlinks to refuse a target.
+    restoreSources(projectRoot, restore);
     const folder = path.join(projectRoot, SNAPSHOTS_DIR);
     const { directory } = existingSnapshot(projectRoot, restore);
     for (const entry of fs.readdirSync(folder, { withFileTypes: true })) {
@@ -1097,7 +1099,8 @@ function runRestore(context, name) {
       if (entry.isDirectory()) {
         fs.mkdirSync(copy, { recursive: true });
         const manifest = path.join(folder, entry.name, SNAPSHOT_MANIFEST);
-        if (fs.existsSync(manifest)) {
+        // Only a real manifest file, as --list reads one.
+        if (lstatIfExists(manifest)?.isFile()) {
           fs.copyFileSync(manifest, path.join(copy, SNAPSHOT_MANIFEST));
         }
       }

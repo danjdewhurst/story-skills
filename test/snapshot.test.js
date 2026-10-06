@@ -340,7 +340,31 @@ describe("story snapshot --restore", () => {
     const nested = invoke(cwd, ["snapshot", "--restore", "draft-one", "--path", root]);
     expect(nested.code).toBe(4);
     expect(nested.err).toContain("spinoff/notes.md would be written into spinoff/, which is now a story project of its own. Nothing was changed");
+    // The preview copy has no nested projects, so it checks the real one.
+    expect(invoke(cwd, ["snapshot", "--restore", "draft-one", "--dry-run", "--path", root]).err).toContain("which is now a story project of its own");
     expect(fs.readdirSync(path.join(root, ".snapshots")).sort()).toEqual(["by-hand", "draft-one"]);
+  });
+
+  test("refuses to write through a symlinked folder, such as one into another snapshot", () => {
+    const { cwd, root } = project();
+    invoke(cwd, ["snapshot", "draft", "--path", root]);
+    invoke(cwd, ["snapshot", "other", "--path", root]);
+    writeMarkdown(path.join(root, ".snapshots", "draft", "notes", "idea.md"), "title: Idea");
+    fs.symlinkSync(path.join(root, ".snapshots", "other"), path.join(root, "notes"), "junction");
+    const refused = invoke(cwd, ["snapshot", "--restore", "draft", "--path", root]);
+    expect(refused.code).toBe(4);
+    expect(refused.err).toContain("Cannot restore snapshot draft: notes/ is a symlink, and notes/idea.md would be written through it. Nothing was changed");
+    expect(fs.existsSync(path.join(root, ".snapshots", "other", "idea.md"))).toBe(false);
+    expect(fs.readdirSync(path.join(root, ".snapshots")).sort()).toEqual(["draft", "other"]);
+  });
+
+  test("--dry-run skips another snapshot's symlinked manifest, as --list does", () => {
+    const { cwd, root } = revised();
+    fs.mkdirSync(path.join(root, ".snapshots", "odd"));
+    fs.symlinkSync(path.join(makeTempDir(), "missing.json"), path.join(root, ".snapshots", "odd", "snapshot.json"));
+    const preview = invoke(cwd, ["snapshot", "--restore", "draft-one", "--dry-run", "--path", root]);
+    expect(preview.code).toBe(0);
+    expect(preview.out).toContain("delete  chapters/chapter-03.md\n");
   });
 
   test("restores over a chapter that no longer parses, keeping it in the safety snapshot", () => {
@@ -353,6 +377,13 @@ describe("story snapshot --restore", () => {
     expect(restored.code).toBe(0);
     expect(fs.readFileSync(chapter, "utf8")).toContain("First paragraph.");
     expect(fs.readFileSync(path.join(root, ".snapshots", "before-restore-good-1", "chapters", "chapter-01.md"), "utf8")).toContain("title: [broken");
+
+    // Its undo puts the broken chapter back, and leaves the reindex for later.
+    const undo = invoke(cwd, ["snapshot", "--restore", "before-restore-good-1", "--path", root]);
+    expect(undo.code).toBe(0);
+    expect(undo.out).toContain("Registries not rebuilt: some restored files do not parse. Fix them (story validate lists them), then run story reindex\n");
+    expect(fs.readFileSync(chapter, "utf8")).toContain("title: [broken");
+    expect(json(invoke(cwd, ["snapshot", "--restore", "good", "--json", "--path", root])).data.reindexed).toBe(true);
   });
 
   test("--dry-run says when the project already matches", () => {
@@ -377,6 +408,11 @@ describe("story similarity --snapshot", () => {
     expect(data.passages[0]).toMatchObject({ file: "chapters/chapter-01.md", words: 13 });
     expect(invoke(cwd, ["similarity", root, "--snapshot", "draft-one", "--against", "x"]).err).toContain("one of --against <file|folder|git-ref> or --snapshot <name>, not both");
     expect(invoke(cwd, ["similarity", root, "--snapshot", "nope"]).err).toContain("No snapshot named nope");
+    // A snapshot folder without story.md is not read as loose text.
+    writeMarkdown(path.join(root, ".snapshots", "by-hand", "notes.md"), "title: Notes", "The lighthouse keeper climbed the stairs every night before the storm came in.");
+    const loose = invoke(cwd, ["similarity", root, "--snapshot", "by-hand"]);
+    expect(loose.code).toBe(3);
+    expect(loose.err).toContain("Cannot check similarity with snapshot by-hand: .snapshots/by-hand has no story.md");
 
     // --snapshot on the command line drops a cli-defaults --against.
     const story = path.join(root, "story.md");

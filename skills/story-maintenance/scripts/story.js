@@ -21560,19 +21560,16 @@ function restoreSnapshotUnlocked(root, options) {
   requireStoryFile(projectRoot);
   const { directory, id } = existingSnapshot(projectRoot, options.name);
   const manifest = listSnapshots(projectRoot).snapshots.find((snapshot) => snapshot.id === id);
-  if (lstatIfExists(path13.join(directory, "story.md"))?.isFile() !== true) {
-    throw refusedError(`Cannot restore snapshot ${id}: ${SNAPSHOTS_DIR}/${id} has no story.md, so it is not a whole project. Nothing was changed`);
+  const saved = restoreSources(projectRoot, options.name);
+  let parses = true;
+  try {
+    assertProjectParses(scanProject(directory), "rebuild the registries");
+  } catch {
+    parses = false;
   }
-  assertProjectParses(scanProject(directory), `restore snapshot ${id}, nothing was changed`);
-  const saved = new Map(markdownFiles(directory).map((file) => [projectPath(directory, file), file]));
   const writes = [];
   for (const [relative, source] of saved) {
     const target = path13.join(projectRoot, ...relative.split("/"));
-    for (let folder = path13.dirname(target);folder !== projectRoot; folder = path13.dirname(folder)) {
-      if (fs11.existsSync(path13.join(folder, "story.md"))) {
-        throw refusedError(`Cannot restore snapshot ${id}: ${relative} would be written into ${projectPath(projectRoot, folder)}/, which is now a story project of its own. Nothing was changed`);
-      }
-    }
     const text = readTextFile(source);
     const existing = lstatIfExists(target);
     if (existing?.isFile() && fs11.readFileSync(target).equals(Buffer.from(text, "utf8"))) {
@@ -21583,7 +21580,7 @@ function restoreSnapshotUnlocked(root, options) {
   const deletes = markdownFiles(projectRoot).map((file) => ({ path: projectPath(projectRoot, file), target: file })).filter((file) => !saved.has(file.path));
   const restored = { name: manifest?.name ?? id, id };
   if (writes.length === 0 && deletes.length === 0) {
-    return { restored, safety: null, created: [], updated: [], deleted: [], warnings: [] };
+    return { restored, safety: null, created: [], updated: [], deleted: [], reindexed: false, warnings: [] };
   }
   const safetyId = nextSafetyId(projectRoot, id);
   const safety = snapshotProjectUnlocked(projectRoot, { name: safetyId, id: safetyId, now: options.now, unparsed: true });
@@ -21597,7 +21594,9 @@ function restoreSnapshotUnlocked(root, options) {
       removeFile(file.target);
       done.deleted.push(file.path);
     }
-    reindexProject(projectRoot);
+    if (parses) {
+      reindexProject(projectRoot);
+    }
   } catch (error) {
     const changed = done.created.length + done.updated.length + done.deleted.length;
     const state = changed === 0 ? "no file was restored" : `the project is part restored (${changed} of ${writes.length + deletes.length} files changed)`;
@@ -21607,7 +21606,35 @@ ${state[0].toUpperCase()}${state.slice(1)}. Snapshot ${safetyId} holds the proje
       exitCode: code === EXIT_CODES.findings ? EXIT_CODES.refused : code
     });
   }
-  return { restored, safety: { id: safety.id, dir: safety.dir }, ...done, warnings: [] };
+  return { restored, safety: { id: safety.id, dir: safety.dir }, ...done, reindexed: parses, warnings: [] };
+}
+function restoreSources(root, name) {
+  const projectRoot = path13.resolve(root);
+  const { directory, id } = existingSnapshot(projectRoot, name);
+  if (lstatIfExists(path13.join(directory, "story.md"))?.isFile() !== true) {
+    throw refusedError(`Cannot restore snapshot ${id}: ${SNAPSHOTS_DIR}/${id} has no story.md, so it is not a whole project. Nothing was changed`);
+  }
+  const saved = new Map(markdownFiles(directory).map((file) => [projectPath(directory, file), file]));
+  const checked = new Set;
+  for (const relative of saved.keys()) {
+    const parts = relative.split("/").slice(0, -1);
+    for (let depth = 1;depth <= parts.length; depth += 1) {
+      const folder = parts.slice(0, depth).join("/");
+      if (checked.has(folder)) {
+        continue;
+      }
+      checked.add(folder);
+      const full = path13.join(projectRoot, ...parts.slice(0, depth));
+      const stats = lstatIfExists(full);
+      if (stats?.isSymbolicLink()) {
+        throw refusedError(`Cannot restore snapshot ${id}: ${folder}/ is a symlink, and ${relative} would be written through it. Nothing was changed`);
+      }
+      if (stats !== null && fs11.existsSync(path13.join(full, "story.md"))) {
+        throw refusedError(`Cannot restore snapshot ${id}: ${relative} would be written into ${folder}/, which is now a story project of its own. Nothing was changed`);
+      }
+    }
+  }
+  return saved;
 }
 function nextSafetyId(projectRoot, id) {
   const prefix = `before-restore-${id}-`;
@@ -21633,6 +21660,7 @@ function formatRestore(result) {
     ...result.updated.map((file) => `  update  ${file}`),
     ...result.created.map((file) => `  create  ${file}`),
     ...result.deleted.map((file) => `  delete  ${file}`),
+    ...result.reindexed ? [] : ["Registries not rebuilt: some restored files do not parse. Fix them (story validate lists them), then run story reindex"],
     `Undo it: story snapshot --restore ${result.safety.id}`
   ];
   return `${lines.join(`
@@ -23490,8 +23518,11 @@ function similarityReport(root, options = {}) {
   const chapters = labelledChapters(project, (file) => relative(project, file));
   if (snapshotName !== "") {
     const snapshot = existingSnapshot(project.root, snapshotName);
-    const self = canonicalPath(project.root);
     const label = `snapshot ${snapshot.id}`;
+    if (lstatIfExists(path15.join(snapshot.directory, "story.md"))?.isFile() !== true) {
+      throw projectError(`Cannot check similarity with ${label}: .snapshots/${snapshot.id} has no story.md, so it is not a whole project`);
+    }
+    const self = canonicalPath(project.root);
     const references = referenceDocuments(canonicalPath(snapshot.directory), (file) => projectPath(self, file), self);
     const report = compareSimilarity(chapters, references, { minWords, label });
     const warnings = report.reference.words === 0 ? [warn("similarity-no-reference-text", `${label} has no chapter text to compare with`)] : [];
@@ -26033,6 +26064,7 @@ function runRestore(context, name) {
     if (target === projectRoot) {
       return;
     }
+    restoreSources(projectRoot, restore);
     const folder = path19.join(projectRoot, SNAPSHOTS_DIR);
     const { directory } = existingSnapshot(projectRoot, restore);
     for (const entry of fs17.readdirSync(folder, { withFileTypes: true })) {
@@ -26040,7 +26072,7 @@ function runRestore(context, name) {
       if (entry.isDirectory()) {
         fs17.mkdirSync(copy, { recursive: true });
         const manifest = path19.join(folder, entry.name, SNAPSHOT_MANIFEST);
-        if (fs17.existsSync(manifest)) {
+        if (lstatIfExists(manifest)?.isFile()) {
           fs17.copyFileSync(manifest, path19.join(copy, SNAPSHOT_MANIFEST));
         }
       }

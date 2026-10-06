@@ -594,7 +594,7 @@
         {
           "if": { "required": ["restored"] },
           "then": {
-            "required": ["restored", "safety", "created", "updated", "deleted", "dryRun", "changes"],
+            "required": ["restored", "safety", "created", "updated", "deleted", "reindexed", "dryRun", "changes"],
             "properties": {
               "restored": {
                 "type": "object",
@@ -617,6 +617,7 @@
               "created": { "type": "array", "items": { "type": "string" }, "description": "Markdown files written back that the project did not have, relative to the project root." },
               "updated": { "type": "array", "items": { "type": "string" }, "description": "Markdown files rewritten to the snapshot's text." },
               "deleted": { "type": "array", "items": { "type": "string" }, "description": "Markdown files the snapshot does not have, deleted from the project." },
+              "reindexed": { "type": "boolean", "description": "False when nothing changed, or when a restored file does not parse, so the registries were left for story reindex after the fix." },
               "dryRun": { "type": "boolean" },
               "changes": { "type": "array", "description": "Every file created, updated, or deleted, the safety snapshot's and the registries reindex rebuilt included.", "items": { "$ref": "#/$defs/change" } }
             }

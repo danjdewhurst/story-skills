@@ -230,7 +230,8 @@ export function existingSnapshot(root, value) {
 // projects, and files that are not markdown are never touched. Before any
 // change the project as it is is saved as snapshot before-restore-<id>-<n>,
 // so the restore can itself be undone, and a restore that fails part way
-// names it. The registries are rebuilt afterwards.
+// names it. The registries are rebuilt afterwards when every restored file
+// parses.
 export function restoreSnapshot(root, options = {}) {
   return withProjectLock(root, () => restoreSnapshotUnlocked(root, options));
 }
@@ -240,24 +241,20 @@ function restoreSnapshotUnlocked(root, options) {
   requireStoryFile(projectRoot);
   const { directory, id } = existingSnapshot(projectRoot, options.name);
   const manifest = listSnapshots(projectRoot).snapshots.find((snapshot) => snapshot.id === id);
-  // A snapshot that would leave the project without story.md, or with a
-  // file reindex cannot read, is refused before anything changes.
-  if (lstatIfExists(path.join(directory, "story.md"))?.isFile() !== true) {
-    throw refusedError(`Cannot restore snapshot ${id}: ${SNAPSHOTS_DIR}/${id} has no story.md, so it is not a whole project. Nothing was changed`);
+  const saved = restoreSources(projectRoot, options.name);
+  // A safety snapshot keeps a chapter that did not parse, so a snapshot
+  // with one is still restored, and its undo works; only the reindex,
+  // which needs every file to parse, is left for after the fix.
+  let parses = true;
+  try {
+    assertProjectParses(scanProject(directory), "rebuild the registries");
+  } catch {
+    parses = false;
   }
-  assertProjectParses(scanProject(directory), `restore snapshot ${id}, nothing was changed`);
 
-  const saved = new Map(markdownFiles(directory).map((file) => [projectPath(directory, file), file]));
   const writes = [];
   for (const [relative, source] of saved) {
     const target = path.join(projectRoot, ...relative.split("/"));
-    // A folder that has since become a project of its own is not this
-    // project's to write into.
-    for (let folder = path.dirname(target); folder !== projectRoot; folder = path.dirname(folder)) {
-      if (fs.existsSync(path.join(folder, "story.md"))) {
-        throw refusedError(`Cannot restore snapshot ${id}: ${relative} would be written into ${projectPath(projectRoot, folder)}/, which is now a story project of its own. Nothing was changed`);
-      }
-    }
     const text = readTextFile(source);
     const existing = lstatIfExists(target);
     if (existing?.isFile() && fs.readFileSync(target).equals(Buffer.from(text, "utf8"))) {
@@ -270,7 +267,7 @@ function restoreSnapshotUnlocked(root, options) {
     .filter((file) => !saved.has(file.path));
   const restored = { name: manifest?.name ?? id, id };
   if (writes.length === 0 && deletes.length === 0) {
-    return { restored, safety: null, created: [], updated: [], deleted: [], warnings: [] };
+    return { restored, safety: null, created: [], updated: [], deleted: [], reindexed: false, warnings: [] };
   }
 
   const safetyId = nextSafetyId(projectRoot, id);
@@ -285,7 +282,9 @@ function restoreSnapshotUnlocked(root, options) {
       removeFile(file.target);
       done.deleted.push(file.path);
     }
-    reindexProject(projectRoot);
+    if (parses) {
+      reindexProject(projectRoot);
+    }
   } catch (error) {
     const changed = done.created.length + done.updated.length + done.deleted.length;
     const state = changed === 0 ? "no file was restored" : `the project is part restored (${changed} of ${writes.length + deletes.length} files changed)`;
@@ -294,7 +293,42 @@ function restoreSnapshotUnlocked(root, options) {
       exitCode: code === EXIT_CODES.findings ? EXIT_CODES.refused : code
     });
   }
-  return { restored, safety: { id: safety.id, dir: safety.dir }, ...done, warnings: [] };
+  return { restored, safety: { id: safety.id, dir: safety.dir }, ...done, reindexed: parses, warnings: [] };
+}
+
+// The markdown files of a snapshot that a restore writes back, by their
+// project path, after checking the project can take each one: the
+// snapshot must hold story.md, and no folder on the way to a file may be a
+// symlink or a project of its own now. `--dry-run` runs this on the real
+// project before its preview, since the scratch copy leaves nested
+// projects out. A refusal comes before anything changes.
+export function restoreSources(root, name) {
+  const projectRoot = path.resolve(root);
+  const { directory, id } = existingSnapshot(projectRoot, name);
+  if (lstatIfExists(path.join(directory, "story.md"))?.isFile() !== true) {
+    throw refusedError(`Cannot restore snapshot ${id}: ${SNAPSHOTS_DIR}/${id} has no story.md, so it is not a whole project. Nothing was changed`);
+  }
+  const saved = new Map(markdownFiles(directory).map((file) => [projectPath(directory, file), file]));
+  const checked = new Set();
+  for (const relative of saved.keys()) {
+    const parts = relative.split("/").slice(0, -1);
+    for (let depth = 1; depth <= parts.length; depth += 1) {
+      const folder = parts.slice(0, depth).join("/");
+      if (checked.has(folder)) {
+        continue;
+      }
+      checked.add(folder);
+      const full = path.join(projectRoot, ...parts.slice(0, depth));
+      const stats = lstatIfExists(full);
+      if (stats?.isSymbolicLink()) {
+        throw refusedError(`Cannot restore snapshot ${id}: ${folder}/ is a symlink, and ${relative} would be written through it. Nothing was changed`);
+      }
+      if (stats !== null && fs.existsSync(path.join(full, "story.md"))) {
+        throw refusedError(`Cannot restore snapshot ${id}: ${relative} would be written into ${folder}/, which is now a story project of its own. Nothing was changed`);
+      }
+    }
+  }
+  return saved;
 }
 
 // before-restore-<id>-<n>: one more than the highest n a safety snapshot of
@@ -323,6 +357,7 @@ export function formatRestore(result) {
     ...result.updated.map((file) => `  update  ${file}`),
     ...result.created.map((file) => `  create  ${file}`),
     ...result.deleted.map((file) => `  delete  ${file}`),
+    ...(result.reindexed ? [] : ["Registries not rebuilt: some restored files do not parse. Fix them (story validate lists them), then run story reindex"]),
     `Undo it: story snapshot --restore ${result.safety.id}`
   ];
   return `${lines.join("\n")}\n`;

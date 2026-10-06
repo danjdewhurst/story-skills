@@ -485,8 +485,13 @@ export function similarityReport(root, options = {}) {
     // A snapshot in .snapshots/, found as compare --snapshot finds it; its
     // files are named by their place in the project folder.
     const snapshot = existingSnapshot(project.root, snapshotName);
-    const self = canonicalPath(project.root);
     const label = `snapshot ${snapshot.id}`;
+    // Without story.md its notes and registries would be read as reference
+    // text, not just its chapters.
+    if (lstatIfExists(path.join(snapshot.directory, "story.md"))?.isFile() !== true) {
+      throw projectError(`Cannot check similarity with ${label}: .snapshots/${snapshot.id} has no story.md, so it is not a whole project`);
+    }
+    const self = canonicalPath(project.root);
     const references = referenceDocuments(canonicalPath(snapshot.directory), (file) => projectPath(self, file), self);
     const report = compareSimilarity(chapters, references, { minWords, label });
     const warnings = report.reference.words === 0 ? [warn("similarity-no-reference-text", `${label} has no chapter text to compare with`)] : [];
