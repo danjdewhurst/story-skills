@@ -546,10 +546,11 @@ describe("github workflows", () => {
     for (const relativePath of ["templates/github/story-checks.yml", "templates/github/review-copy.yml"]) {
       expect(readRepo(relativePath)).toContain("story check \"$STORY_DIR\"");
     }
+    // The draft workflow tells the agent to run story check, and its publish
+    // gate runs each check on its own so the pull request lists each result.
     const draft = readRepo("templates/github/draft-next-chapter.yml");
-    for (const command of ["story validate", "story links", "story continuity"]) {
-      expect(draft).toContain(command);
-    }
+    expect(draft).toContain("story check ${{ env.STORY_DIR }}");
+    expect(draft).toContain("for check in validate links continuity; do");
   });
 
   test("the review copy template builds html and publishes it with Pages", () => {
@@ -706,8 +707,8 @@ describe("github workflows", () => {
     const bashPrefixes = [...allowed.matchAll(/Bash\(([^)]+)\)/g)].map(([, rule]) => rule.replace(/(:\*| \*)$/, ""));
     // Every story command the prompt tells the agent to run, in backticks or
     // on a line of its own.
-    const commands = [...prompt.matchAll(/\bstory (?:next|context|wordcount|reindex|validate|links|continuity)\b[^`\n]*/g)].map(([command]) => command.trim());
-    expect(commands.length).toBeGreaterThanOrEqual(7);
+    const commands = [...prompt.matchAll(/\bstory (?:next|context|wordcount|reindex|check|validate|links|continuity)\b[^`\n]*/g)].map(([command]) => command.trim());
+    expect(commands.length).toBeGreaterThanOrEqual(6);
     for (const command of commands) {
       // Claude Code matches rules against the literal command text, so quotes
       // or shell variables in the prompt would never match an unquoted rule.
