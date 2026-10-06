@@ -273,6 +273,16 @@ describe("story prose with samples", () => {
     expect(text).toContain("A sample: part of the baseline, so not compared with it");
   });
 
+  test.skipIf(process.platform === "win32")("a symlink loop in chapters/ named as a sample is unreadable, not fatal", () => {
+    const { root } = project({ chapter: prose(40, 14) });
+    fs.symlinkSync("loop.md", path.join(root, "chapters", "loop.md"));
+    writeMarkdown(path.join(root, "style-sheet.md"), "type: style-sheet\ndialect: unspecified\nsamples:\n  - chapters/loop.md", "# Style Sheet\n");
+    expect(validateProject(root).warnings.map((warning) => warning.code)).not.toContain("style-sample-own-chapters");
+    const report = proseReport(root);
+    expect(codes(report)).toContain("style-sample-unreadable");
+    expect(report.baseline.samples).toEqual([]);
+  });
+
   test("a sample that cannot be read is reported and left out, and the run goes on", () => {
     const { root } = project({ samples: prose(400, 8), chapter: prose(40, 14) });
     fs.writeFileSync(path.join(root, "research", "latin1.txt"), Buffer.from([0x63, 0x61, 0x66, 0xe9]));
