@@ -561,6 +561,7 @@ Body`);
       del: "x\u007fy",
       c1: "\u0080\u009f",
       bom: "\ufeffmark",
+      nonchar: "\ufffe\uffff",
       cr: "a\rb",
       tags: ["Sera\u2028Voss", "plain"],
       items: [{ id: "a", tags: ["b\u2029c", "d"] }]
@@ -572,10 +573,11 @@ Body`);
     expect(yaml).toContain('del: "x\\u007fy"\n');
     expect(yaml).toContain('c1: "\\u0080\\u009f"\n');
     expect(yaml).toContain('bom: "\\ufeffmark"\n');
+    expect(yaml).toContain('nonchar: "\\ufffe\\uffff"\n');
     expect(yaml).toContain('cr: "a\\rb"\n');
     expect(yaml).toContain('  - "Sera\\u2028Voss"\n');
     expect(yaml).toContain('    tags: ["b\\u2029c", d]\n');
-    expect(yaml).not.toMatch(/[\r\u007f-\u009f\u2028\u2029\ufeff]/);
+    expect(yaml).not.toMatch(/[\r\u007f-\u009f\u2028\u2029\ufeff\ufffe\uffff]/);
     expect(parseFrontmatter(`${yaml}Body`).data).toEqual(data);
 
     const replaced = replaceFrontmatter("---\nname: Sera\n---\nBody", { name: "Sera\u2028Voss" });
@@ -590,6 +592,11 @@ Body`);
     for (const yaml of ["name: Sera\rVoss", "# a\rcomment", "tags:\n  - a\rb", "summary: |\n  a\rb"]) {
       expect(() => parseFrontmatter(`---\n${yaml}\n---\nBody`, "story.md")).toThrow("Unsupported line break: a carriage return with no line feed after it (line ");
     }
+    for (const markdown of ["---\nname: B\r\r\n---\nBody", "---\r\ntitle: A\r\nname: B\r\r\n---\r\nBody"]) {
+      expect(() => parseFrontmatter(markdown)).toThrow("Unsupported line break");
+      expect(() => replaceFrontmatter(markdown, { name: "C" })).toThrow("Unsupported line break");
+    }
+    expect(parseFrontmatter("---\nname: B\r\n---\nBody").data).toEqual({ name: "B" });
     expect(() => parseFrontmatter("---\r\ntitle: A\r\nname: B\rC\r\n---\r\nBody")).toThrow('a carriage return with no line feed after it (line 3). Remove it, or write it as \\r inside a double-quoted value, such as note: "a\\rb"');
   });
 
@@ -681,6 +688,66 @@ Body`);
     expect(replaceFrontmatter(flow, { tags: ["Sera", { id: "x" }] })).toBe("---\ntags: # mixed\n  - Sera\n  - id: x\n---\nBody");
     expect(replaceFrontmatter("---\r\nn: 1 # one\r\n---\r\nBody", { n: 2 })).toBe("---\r\nn: 2 # one\r\n---\r\nBody");
   });
+  test("reads a line separator, no-break space, or byte order mark before # or at a value's edge as text", () => {
+    const parsed = parseFrontmatter("---\na: Sera\u2028# x\nb: Sera\u00a0# x\nc: \u00a0Sera\u3000\nd: \ufeffSera\u2029\ne: Ash\t# draft\ntags: [a\u00a0, \u3000b] # note\nitems:\n  - x\u00a0# y\n---\nBody");
+
+    expect(parsed.data).toEqual({ a: "Sera\u2028# x", b: "Sera\u00a0# x", c: "\u00a0Sera\u3000", d: "\ufeffSera\u2029", e: "Ash", tags: ["a\u00a0", "\u3000b"], items: ["x\u00a0# y"] });
+    const next = replaceFrontmatter("---\na: Sera\u2028# x\ne: Ash\t# draft\n---\nBody", { a: "Kael", e: "Ember" });
+    expect(next).toBe("---\na: Kael\ne: Ember\t# draft\n---\nBody");
+    expect(stringifyFrontmatter({ a: "Sera\u00a0", b: "\u3000Sera" })).toBe('---\na: "Sera\u00a0"\nb: "\u3000Sera"\n---\n\n');
+  });
+
+  test("splits a comment off a long run of spaces in linear time", () => {
+    const spaces = " ".repeat(300000);
+    const markdown = `---\ngenre: a${spaces}b #c\nnote: "a"${spaces}x #c\ntags: [${Array.from({ length: 50000 }, (_, index) => `t${index}`).join(", ")}]\n---\nBody`;
+    const started = performance.now();
+    const { data } = parseFrontmatter(markdown);
+    expect(data.genre).toBe(`a${spaces}b`);
+    expect(data.note).toBe(`"a"${spaces}x`);
+    const next = replaceFrontmatter(markdown, { ...data, genre: "x", tags: [...data.tags].reverse() });
+    expect(next).toContain("genre: x #c\n");
+    expect(next).toContain("tags: [t49999, t49998, ");
+    // Linear work takes milliseconds; the quadratic version took minutes.
+    expect(performance.now() - started).toBeLessThan(10000);
+  });
+
+  test("quotes a flow list's first entry when it starts with the word TODO", () => {
+    const markdown = "---\ncharacters: [sera-voss, kael-voss]  # cast\n---\nBody";
+    const renamed = replaceFrontmatter(markdown, { characters: ["todo-mbeki", "kael-voss"] });
+    expect(renamed).toBe('---\ncharacters: ["todo-mbeki", kael-voss]  # cast\n---\nBody');
+    expect(parseFrontmatter(renamed).data.characters).toEqual(["todo-mbeki", "kael-voss"]);
+    expect(replaceFrontmatter("---\ntags: [a, todo]\n---\nBody", { tags: ["todo", "a"] })).toBe('---\ntags: ["todo", a]\n---\nBody');
+
+    const nested = { items: [["Todo Mbeki", "TODO"], { id: "a", tags: ["todo", "todo"] }] };
+    const yaml = stringifyFrontmatter(nested);
+    expect(yaml).toContain('  - ["Todo Mbeki", TODO]\n');
+    expect(yaml).toContain('    tags: ["todo", todo]\n');
+    expect(parseFrontmatter(`${yaml}Body`).data).toEqual(nested);
+    expect(parseFrontmatter("---\nnote: [TODO: author to supply]\n---\nBody").data.note).toBe("[TODO: author to supply]");
+  });
+
+  test("keeps a list item's comments by key, and rewrites CRLF list items with CRLF", () => {
+    const markdown = "---\nrel:\n  - id: foo # the id\n    type: sibling # kin\n  - kael-voss # brother\n  - id: bar # other\n---\nBody";
+    // Reordered keys keep their own comments; a mapping that replaces a
+    // scalar, or a scalar that replaces a mapping, keeps none.
+    const next = replaceFrontmatter(markdown, { rel: [{ type: "rival", id: "foo2" }, { name: "y" }, "z"] });
+    expect(next).toBe("---\nrel:\n  - type: rival # kin\n    id: foo2 # the id\n  - name: y\n  - z\n---\nBody");
+    expect(replaceFrontmatter(markdown, { rel: ["a", "b", "c"] })).toBe("---\nrel:\n  - a\n  - b # brother\n  - c\n---\nBody");
+
+    const crlf = "---\r\nrel:\r\n  - character: kael-voss # sibling\r\n    type: sibling\r\n    note: kept\r\ntags:\r\n  - a # first\r\n  - b\r\n---\r\nBody";
+    expect(replaceFrontmatter(crlf, { rel: [{ character: "kael-storm", type: "sibling", note: "kept" }], tags: ["c", "b"] }))
+      .toBe("---\r\nrel:\r\n  - character: kael-storm # sibling\r\n    type: sibling\r\n    note: kept\r\ntags:\r\n  - c # first\r\n  - b\r\n---\r\nBody");
+  });
+
+  test("keeps flow lists in list items and comments on empty keys", () => {
+    const item = "---\nitems:\n  - ['A', 1.10] # pair\n---\nBody";
+    expect(replaceFrontmatter(item, { items: [["A", 1.1, "B"]] })).toBe("---\nitems:\n  - ['A', 1.10, B] # pair\n---\nBody");
+
+    const keyed = "---\nitems:\n  - id: a\n    tags: ['A', 1.10] # pair\n---\nBody";
+    expect(replaceFrontmatter(keyed, { items: [{ id: "a", tags: ["A", 1.1, "B"] }] })).toBe("---\nitems:\n  - id: a\n    tags: ['A', 1.10, B] # pair\n---\nBody");
+
+    expect(replaceFrontmatter("---\nnote: # todo\n---\nBody", { note: "Filled in" })).toBe("---\nnote: Filled in # todo\n---\nBody");
+  });
 });
 
 // mulberry32: a small seeded generator, so a failure can be replayed.
@@ -711,7 +778,7 @@ describe("frontmatter round trip property", () => {
   // indicators, quotes, comment and flow markers, line breaks and line
   // separators, control characters, other scripts, and words YAML reads as
   // booleans, nulls, numbers, or dates.
-  const PIECES = ["a", "Sera", "voss", " ", "  ", "\t", ":", ": ", "#", " #", "\"", "'", "''", "\\", ",", "[", "]", "{", "}", "-", "- ", "|", ">", "&", "*", "!", "%", "@", "`", "~", "?", "\n", "\r", "\r\n", "\u2028", "\u2029", "\u0085", "\u007f", "\u0080", "\u009f", "\u00a0", "\ufeff", "\u0000", "\u001b", "é", "東京", "🔥", "true", "True", "FALSE", "null", "Null", "yes", "off", "0", "007", "1.10", "1e21", "-3.5", ".inf", "0x1F", "2026-09-24", "[TODO", "---"];
+  const PIECES = ["a", "Sera", "voss", " ", "  ", "\t", ":", ": ", "#", " #", "\"", "'", "''", "\\", ",", "[", "]", "{", "}", "-", "- ", "|", ">", "&", "*", "!", "%", "@", "`", "~", "?", "\n", "\r", "\r\n", "\u2028", "\u2029", "\u0085", "\u007f", "\u0080", "\u009f", "\u00a0", "\ufeff", "\u0000", "\u001b", "é", "東京", "🔥", "true", "True", "FALSE", "null", "Null", "yes", "off", "0", "007", "1.10", "1e21", "-3.5", ".inf", "0x1F", "2026-09-24", "[TODO", "todo", "TODO", "Todo Mbeki", "---", "\ufffe", "\uffff", "\u3000"];
   const NUMBERS = [0, 1, -7, 3.5, 0.1, 12345678901234567890, Number.MAX_SAFE_INTEGER, 1e21, -1.2345e25, 1.5e-7, 5e-324, Number.MAX_VALUE];
   const KEYS = ["title", "name", "tags", "word-count", "a_b", "x1", "7", "TRUE", "pov", "characters", "summary", "z"];
 
@@ -780,9 +847,60 @@ describe("frontmatter round trip property", () => {
     return next;
   };
 
-  const isScalarList = (entry) => Array.isArray(entry) && entry.length > 0 && entry.every((item) => item === null || typeof item !== "object");
-  // A flow list as the writer formats the entries of a nested list.
-  const flowList = (items) => stringifyFrontmatter({ x: [items] }).split("\n")[2].slice("  - ".length);
+  const isScalarList = (entry) => Array.isArray(entry) && entry.every((item) => item === null || typeof item !== "object");
+  // Raw characters the writer must never put in a file.
+  const RAW = /[\r\u007f-\u009f\u2028\u2029\ufeff\ufffe\uffff]/;
+  // The text the writer gives one flow list entry.
+  const written = (item) => stringifyFrontmatter({ x: [[item]] }).split("\n")[2].slice("  - [".length, -1);
+  // A value as a person might type it, in a style the writer never uses
+  // (single quotes, True and FALSE), so the test can tell text kept from the
+  // source from text written again.
+  const hand = (item) => {
+    if (typeof item === "string" && !/[\u0000-\u001f]/.test(item) && !RAW.test(item)) {
+      return `'${item.replace(/'/g, "''")}'`;
+    }
+    return typeof item === "boolean" ? (item ? "True" : "FALSE") : written(item);
+  };
+  const handFlow = (items, gap) => (items.length === 0 ? "[ ]" : `[${gap}${items.map(hand).join(`${gap},${gap}`)}${gap}]`);
+
+  // A hand-written document: each entry a scalar, a flow list with spaces
+  // inside its brackets, or a block list, with extra spaces after the colon
+  // or dash, and sometimes a comment on its first line.
+  const handDocument = (rng, data) => {
+    const blocks = {};
+    const flow = new Set();
+    const pads = {};
+    for (const [key, entry] of Object.entries(data)) {
+      const pad = rng.pick([" ", "   "]);
+      pads[key] = pad;
+      let lines;
+      if (!Array.isArray(entry)) {
+        lines = [`${key}:${pad}${hand(entry)}`];
+      } else if (isScalarList(entry) && (entry.length === 0 || rng.random() < 0.5)) {
+        lines = [`${key}:${pad}${handFlow(entry, rng.pick(["", " ", "  "]))}`];
+        // An empty [] that gains items becomes a block list.
+        if (entry.length > 0) {
+          flow.add(key);
+        }
+      } else {
+        lines = [`${key}:`];
+        for (const item of entry) {
+          if (Array.isArray(item)) {
+            lines.push(`  - [${item.map(hand).join(", ")}]`);
+          } else if (isPlainObject(item)) {
+            Object.entries(item).forEach(([childKey, value], index) => {
+              lines.push(`${index === 0 ? "  - " : "    "}${childKey}: ${Array.isArray(value) ? `[${value.map(hand).join(", ")}]` : hand(value)}`);
+            });
+          } else {
+            lines.push(`  -${pad}${hand(item)}`);
+          }
+        }
+      }
+      blocks[key] = lines;
+    }
+    return { blocks, flow, pads };
+  };
+  const isPlainObject = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
   test(`stringified values read back as themselves (seed ${SEED}, ${RUNS} runs)`, () => {
     if (process.env.STORY_PROPERTY_SEED === "random") {
@@ -793,7 +911,7 @@ describe("frontmatter round trip property", () => {
       const data = document(rng);
       const yaml = stringifyFrontmatter(data);
       try {
-        expect(yaml).not.toMatch(/[\r\u007f-\u009f\u2028\u2029\ufeff]/);
+        expect(yaml).not.toMatch(RAW);
         expect(parseFrontmatter(`${yaml}Body`).data).toEqual(data);
       } catch (error) {
         throw new Error(`run ${run} (seed ${SEED}) wrote ${JSON.stringify(yaml)}: ${error.message}`);
@@ -805,40 +923,51 @@ describe("frontmatter round trip property", () => {
     const rng = generator(SEED + 1);
     for (let run = 0; run < RUNS; run += 1) {
       const original = document(rng);
-      const blocks = {};
+      const { blocks, flow, pads } = handDocument(rng, original);
       const commented = new Set();
-      const flowKeys = new Set();
-      for (const [key, entry] of Object.entries(original)) {
-        let lines = stringifyFrontmatter({ [key]: entry }).split("\n").slice(1, -3);
-        if (isScalarList(entry) && rng.random() < 0.5) {
-          lines = [`${key}: ${flowList(entry)}`];
-          flowKeys.add(key);
-        }
+      for (const [key, lines] of Object.entries(blocks)) {
         if (rng.random() < 0.5) {
           lines[0] += `  # c-${key}`;
           commented.add(key);
         }
-        blocks[key] = lines.join("\n");
       }
-      const markdown = `---\n${Object.values(blocks).join("\n")}\n---\nBody`;
+      const markdown = `---\n${Object.values(blocks).map((lines) => lines.join("\n")).join("\n")}\n---\nBody`;
       const data = edit(rng, original);
       try {
         expect(parseFrontmatter(markdown).data).toEqual(original);
         const next = replaceFrontmatter(markdown, data);
+        expect(next).not.toMatch(RAW);
         expect(parseFrontmatter(next).data).toEqual(data);
         expect(replaceFrontmatter(next, data)).toBe(next);
+        const nextLines = next.split("\n");
         for (const key of Object.keys(data)) {
           if (!Object.hasOwn(original, key)) {
             continue;
           }
+          const keyLine = nextLines.find((line) => line.startsWith(`${key}:`));
           if (Bun.deepEquals(original[key], data[key], true)) {
-            expect(next).toContain(`\n${blocks[key]}\n`);
+            expect(next).toContain(`\n${blocks[key].join("\n")}\n`);
           }
+          // A comment stays on its entry's first line.
           if (commented.has(key)) {
-            expect(next).toContain(`  # c-${key}\n`);
+            expect(keyLine).toEndWith(`  # c-${key}`);
           }
-          if (flowKeys.has(key) && isScalarList(data[key])) {
-            expect(next).toContain(`\n${key}: [`);
+          if (!Array.isArray(data[key]) || !Array.isArray(original[key])) {
+            continue;
+          }
+          const kept = data[key].filter((item) => !isPlainObject(item) && !Array.isArray(item)
+            && original[key].some((entry) => Bun.deepEquals(entry, item, true)) && hand(item) !== written(item));
+          if (flow.has(key) && isScalarList(data[key]) && data[key].length > 0) {
+            // A flow list stays one, and an entry still in it keeps its text.
+            expect(keyLine.slice(key.length + 1).trimStart()).toStartWith("[");
+            for (const item of kept) {
+              expect(keyLine).toContain(hand(item));
+            }
+          } else if (!flow.has(key)) {
+            // An item still in a block list keeps its line.
+            for (const item of kept) {
+              expect(nextLines).toContain(`  -${pads[key]}${hand(item)}`);
+            }
           }
         }
       } catch (error) {

@@ -7,7 +7,7 @@ export const FRONTMATTER_PATTERN = /^(?:\uFEFF)?---[ \t]*\r?\n(?:([\s\S]*?)\r?\n
 const OPENING_PATTERN = /^(?:\uFEFF)?---[ \t]*\r?\n/;
 
 export function parseFrontmatter(markdown, filePath = "markdown") {
-  const match = FRONTMATTER_PATTERN.exec(markdown);
+  const match = FRONTMATTER_PARTS_PATTERN.exec(markdown);
   if (!match) {
     if (OPENING_PATTERN.test(markdown)) {
       throw projectError(`${filePath} has unclosed YAML frontmatter: add a line holding only --- after the last field`);
@@ -15,13 +15,21 @@ export function parseFrontmatter(markdown, filePath = "markdown") {
     throw projectError(`${filePath} is missing YAML frontmatter`);
   }
 
-  const raw = match[1] ?? "";
+  const [whole, , raw = "", separator] = match;
   return {
-    data: parseYaml(raw),
-    body: markdown.slice(match[0].length),
+    data: parseYamlBlocks(yamlSource(raw, separator)).data,
+    body: markdown.slice(whole.length),
     raw
   };
 }
+
+// The text a top-level scalar was written as, such as True or 007, or
+// undefined, so a message can show the value as the file spells it.
+export function scalarText(data, key) {
+  return data?.[SCALAR_TEXT]?.[key];
+}
+
+const SCALAR_TEXT = Symbol("scalarText");
 
 export function stringifyFrontmatter(data) {
   const lines = ["---"];
@@ -64,10 +72,9 @@ export function replaceFrontmatter(markdown, data, bodyOverride) {
   const eol = opening.endsWith("\r\n") ? "\r\n" : "\n";
   const closing = `${separator ?? eol}${closingLine}`;
   // Source lines keep a trailing "\r" when they end in CRLF, so untouched
-  // lines keep their own line ending in a file that mixes LF and CRLF. The
-  // last line's ending belongs to the closing delimiter; carry it over too.
+  // lines keep their own line ending in a file that mixes LF and CRLF.
   const crlfClose = closing.startsWith("\r");
-  const { data: original, blocks } = parseYamlBlocks(raw !== "" && crlfClose ? `${raw}\r` : raw);
+  const { data: original, blocks } = parseYamlBlocks(yamlSource(raw, separator));
   const generatedEnd = eol === "\r\n" ? "\r" : "";
   const lines = [];
   const written = new Set();
@@ -111,6 +118,13 @@ export function replaceFrontmatter(markdown, data, bodyOverride) {
 // delimiter line.
 const FRONTMATTER_PARTS_PATTERN = /^((?:\uFEFF)?---[ \t]*\r?\n)(?:([\s\S]*?)(\r?\n))?(---[ \t]*(?:\r?\n|$))/;
 
+// The YAML source as parseYamlBlocks reads it. The last line's ending belongs
+// to the closing delimiter, so a CRLF there gives the line its "\r" back, as
+// every other CRLF line has; a carriage return left before it is then stray.
+function yamlSource(raw, separator) {
+  return raw !== "" && separator === "\r\n" ? `${raw}\r` : raw;
+}
+
 // Newly written lines end with lineEnd ("\r" in a CRLF file) before the "\n"
 // join; reused source lines keep the ending they already have. original is
 // the entry's parsed block: its list items, the indent they share, the blank
@@ -126,26 +140,15 @@ function stringifyEntry(key, value, original = {}, lineEnd = "") {
   const originalItems = original.items ?? [];
   const indent = original.indent ?? "  ";
   const lines = [`${key}:${original.comment ?? ""}${lineEnd}`, ...(original.leading ?? [])];
-  // Original items keyed by value, each key a queue in file order, so every
-  // item keeps its original formatting in one pass over long lists.
-  const unused = new Map();
-  for (const candidate of originalItems) {
-    const itemKey = valueKey(candidate.value);
-    if (!unused.has(itemKey)) {
-      unused.set(itemKey, { items: [], next: 0 });
-    }
-    unused.get(itemKey).items.push(candidate);
-  }
+  // Every item still in the list keeps its original formatting.
+  const take = unusedByValue(originalItems);
   const reused = new Set();
   const matches = value.map((item) => {
-    const queue = unused.get(valueKey(item));
-    const reuse = queue?.items[queue.next];
-    if (reuse && isDeepEqual(reuse.value, item)) {
-      queue.next += 1;
+    const reuse = take(item);
+    if (reuse) {
       reused.add(reuse);
-      return reuse;
     }
-    return null;
+    return reuse;
   });
   value.forEach((item, index) => {
     if (matches[index]) {
@@ -163,7 +166,7 @@ function stringifyEntry(key, value, original = {}, lineEnd = "") {
     if (partial) {
       reused.add(partial);
       lines.push(...partial.before);
-      const fresh = stringifyItem(key, item, indent, partial.keyLines);
+      const fresh = stringifyItem(key, item, indent, partial);
       Object.keys(item).forEach((childKey, childIndex) => {
         const source = partial.keyLines[childIndex];
         lines.push(...source.before);
@@ -174,13 +177,13 @@ function stringifyEntry(key, value, original = {}, lineEnd = "") {
     // A replaced item keeps the comment lines above the item it replaces,
     // and its trailing comments.
     const positional = originalItems[index];
-    let sources = [];
+    let replaced;
     if (positional && !reused.has(positional)) {
       reused.add(positional);
       lines.push(...positional.before);
-      sources = positional.keyLines ?? [positional];
+      replaced = positional;
     }
-    lines.push(...stringifyItem(key, item, indent, sources).map((line) => `${line}${lineEnd}`));
+    lines.push(...stringifyItem(key, item, indent, replaced).map((line) => `${line}${lineEnd}`));
   });
   return lines;
 }
@@ -193,11 +196,42 @@ function inlineText(value, source = {}) {
 }
 
 function flowText(value, entries) {
-  const unused = [...entries];
-  return `[${value.map((item) => {
-    const at = unused.findIndex((entry) => isDeepEqual(entry.value, item));
-    return at < 0 ? formatFlowEntry(item) : unused.splice(at, 1)[0].text;
-  }).join(", ")}]`;
+  const take = unusedByValue(entries);
+  return flowList(value, (item) => take(item)?.text ?? formatFlowEntry(item));
+}
+
+// A flow list of value's entries, each written by textOf. A list whose first
+// entry starts with the word TODO would read as the `[TODO ...]` placeholder
+// text, so that entry is quoted.
+function flowList(value, textOf) {
+  const texts = value.map(textOf);
+  if (/^TODO\b/i.test(texts[0] ?? "")) {
+    texts[0] = quote(String(value[0]));
+  }
+  return `[${texts.join(", ")}]`;
+}
+
+// Takes, for each value asked for, the next unused entry ({ value }) equal to
+// it in file order, or undefined. Entries are queued by value, so a long list
+// is matched in one pass.
+function unusedByValue(entries) {
+  const queues = new Map();
+  for (const entry of entries) {
+    const entryKey = valueKey(entry.value);
+    if (!queues.has(entryKey)) {
+      queues.set(entryKey, { entries: [], next: 0 });
+    }
+    queues.get(entryKey).entries.push(entry);
+  }
+  return (value) => {
+    const queue = queues.get(valueKey(value));
+    const entry = queue?.entries[queue.next];
+    if (entry && isDeepEqual(entry.value, value)) {
+      queue.next += 1;
+      return entry;
+    }
+    return undefined;
+  };
 }
 
 function isNested(value) {
@@ -210,17 +244,19 @@ function sameKeys(left, right) {
   return leftKeys.length === rightKeys.length && leftKeys.every((childKey, index) => childKey === rightKeys[index]);
 }
 
-// sources are the parsed lines an item replaces: the item itself for a
-// scalar, or each key's lines for a mapping, matched by position.
-function stringifyItem(key, item, indent = "  ", sources = []) {
+// original is the parsed item this one replaces, if any: a scalar item keeps
+// a scalar item's trailing comment, and each key of a mapping item keeps the
+// comment of the same key. A comment whose key is gone is dropped.
+function stringifyItem(key, item, indent = "  ", original = {}) {
   if (!isPlainObject(item)) {
-    return [`${indent}- ${inlineText(item, sources[0])}`];
+    return [`${indent}- ${inlineText(item, original.keyLines ? undefined : original)}`];
   }
   const entries = Object.entries(item);
   if (entries.length === 0) {
     throw new Error('Cannot stringify empty mapping in ' + key);
   }
-  return entries.map(([childKey, childValue], index) => `${indent}${index === 0 ? "- " : "  "}${childKey}: ${inlineText(childValue, sources[index])}`);
+  const keyed = new Map((original.keyLines ?? []).map((source) => [source.key, source]));
+  return entries.map(([childKey, childValue], index) => `${indent}${index === 0 ? "- " : "  "}${childKey}: ${inlineText(childValue, keyed.get(childKey))}`);
 }
 
 // A lookup key for a parsed value; isDeepEqual confirms each match.
@@ -245,17 +281,15 @@ function isDeepEqual(left, right) {
   return false;
 }
 
-function parseYaml(source) {
-  return parseYamlBlocks(source).data;
-}
-
 // Values match [^\r], not `.`: YAML 1.2 reads U+2028 and U+2029 as ordinary
 // characters, and a line holds no carriage return by the time it is matched.
+// Only a space or tab separates, as in YAML; JavaScript's \s and trim() also
+// take U+2028, U+2029, no-break spaces, and a byte order mark, which are text.
 const KEY_PATTERN = /^([A-Za-z0-9_-]+):([^\r]*)$/;
 // A list item's first key needs a space after its colon, so `- https://x`
 // stays a string, as in YAML.
-const ITEM_KEY_PATTERN = /^([A-Za-z0-9_-]+):(\s[^\r]*)?$/;
-const LIST_ITEM_PATTERN = /^( *)-(\s[^\r]*)?$/;
+const ITEM_KEY_PATTERN = /^([A-Za-z0-9_-]+):([ \t][^\r]*)?$/;
+const LIST_ITEM_PATTERN = /^( *)-([ \t][^\r]*)?$/;
 // `|` or `>`, then an optional chomping indicator and indentation digit in
 // either order.
 const BLOCK_HEADER_PATTERN = /^([|>])(?:([-+])([1-9])?|([1-9])([-+])?)?$/;
@@ -269,6 +303,7 @@ function parseYamlBlocks(source, firstLine = 2) {
   const rawLines = source === "" ? [] : source.split("\n");
   const lines = rawLines.map((line) => line.replace(/\r$/, ""));
   const data = Object.create(null);
+  const texts = Object.create(null);
   const blocks = [];
 
   // Every parse error names the file line and says how to write it instead.
@@ -320,7 +355,7 @@ function parseYamlBlocks(source, firstLine = 2) {
     if (first === "&" || first === "*" || first === "!") {
       fail(index, `Anchors, aliases, and tags are not supported. Quote the value, such as note: ${JSON.stringify(value)}`);
     }
-    return { value: parseScalar(value), comment };
+    return { value: parseScalar(value), text: value, comment };
   };
 
   const parseFlowList = (value, index) => {
@@ -331,7 +366,7 @@ function parseYamlBlocks(source, firstLine = 2) {
     const items = [];
     let at = 1;
     for (;;) {
-      while (at < end && /\s/.test(value[at])) {
+      while (at < end && isSpace(value[at])) {
         at += 1;
       }
       if (at >= end) {
@@ -345,7 +380,7 @@ function parseYamlBlocks(source, firstLine = 2) {
         }
         item = value.slice(at, close + 1);
         at = close + 1;
-        while (at < end && /\s/.test(value[at])) {
+        while (at < end && isSpace(value[at])) {
           at += 1;
         }
         if (at < end && value[at] !== ",") {
@@ -356,7 +391,7 @@ function parseYamlBlocks(source, firstLine = 2) {
         while (stop < end && value[stop] !== ",") {
           stop += 1;
         }
-        item = value.slice(at, stop).trim();
+        item = trimSpaces(value.slice(at, stop));
         at = stop;
         if (item === "") {
           fail(index, "Remove the empty entry between two commas, such as characters: [sera-voss, kael-voss]");
@@ -364,7 +399,7 @@ function parseYamlBlocks(source, firstLine = 2) {
         if (/[[\]{}]/.test(item)) {
           fail(index, "Lists inside lists are not supported. Quote an entry that holds brackets or braces, such as tags: [\"[draft]\", final]");
         }
-        if (/:(\s|$)/.test(item)) {
+        if (/:([ \t]|$)/.test(item)) {
           fail(index, "Flow mappings are not supported. Quote an entry that holds a colon, such as tags: [\"note: draft\"]");
         }
         if (/^[&*!]/.test(item)) {
@@ -478,11 +513,11 @@ function parseYamlBlocks(source, firstLine = 2) {
       const itemStart = index;
       const before = rawLines.slice(gap, itemStart);
       const rest = match[2] ?? "";
-      const itemText = rest.trimStart();
+      const itemText = trimSpaces(rest);
       const childIndent = indent + 1 + rest.length - itemText.length;
       const objectMatch = ITEM_KEY_PATTERN.exec(itemText);
       if (!objectMatch) {
-        if (/^-(\s|$)/.test(itemText)) {
+        if (/^-([ \t]|$)/.test(itemText)) {
           fail(index, nestedHint(itemText));
         }
         const holder = Object.create(null);
@@ -497,7 +532,7 @@ function parseYamlBlocks(source, firstLine = 2) {
       const item = Object.create(null);
       const { end, comment, flow } = readValue(item, objectMatch[1], objectMatch[2] ?? "", index, childIndent);
       index = end;
-      const keyLines = [{ before: [], lines: rawLines.slice(itemStart, index), comment, flow }];
+      const keyLines = [{ key: objectMatch[1], before: [], lines: rawLines.slice(itemStart, index), comment, flow }];
       const childPattern = new RegExp(`^ {${childIndent}}([A-Za-z0-9_-]+):([^\\r]*)$`);
       while (index < lines.length) {
         const next = nextContent(index);
@@ -511,7 +546,7 @@ function parseYamlBlocks(source, firstLine = 2) {
         const keyGap = index;
         const source = readValue(item, child[1], child[2], next, childIndent);
         index = source.end;
-        keyLines.push({ before: rawLines.slice(keyGap, next), lines: rawLines.slice(next, index), comment: source.comment, flow: source.flow });
+        keyLines.push({ key: child[1], before: rawLines.slice(keyGap, next), lines: rawLines.slice(next, index), comment: source.comment, flow: source.flow });
       }
       items.push(item);
       sources.push({ before, lines: rawLines.slice(itemStart, index), childIndent, keyLines });
@@ -548,6 +583,9 @@ function parseYamlBlocks(source, firstLine = 2) {
     }
     if (!parsed.empty) {
       data[key] = parsed.value;
+      if (parsed.text !== undefined) {
+        texts[key] = parsed.text;
+      }
       blocks.push({ key, lines: [rawLines[index]], items: [], comment, flow: parsed.flow });
       index += 1;
       continue;
@@ -581,7 +619,10 @@ function parseYamlBlocks(source, firstLine = 2) {
     index = list.nextIndex;
   }
 
-  return { data: toPlainObject(data), blocks };
+  // Not enumerable, so the data compares and serializes as before.
+  const plain = toPlainObject(data);
+  Object.defineProperty(plain, SCALAR_TEXT, { value: texts });
+  return { data: plain, blocks };
 }
 
 function isBlankOrComment(line) {
@@ -607,11 +648,12 @@ function topLevelHint(line) {
 }
 
 // The value text, and its trailing comment with the spaces before it (or ""),
-// so a rewrite can keep the comment. A comment starts at a `#` with
-// whitespace before it; a `#` inside quotes or a quoted flow list entry, or
-// straight after other text (`#1`, `C#`), is part of the value.
+// so a rewrite can keep the comment. A comment starts at a `#` with a space
+// or tab before it; a `#` inside quotes or a quoted flow list entry, or
+// straight after other text (`#1`, `C#`, or a no-break space), is part of
+// the value.
 function splitComment(text) {
-  const value = text.trimStart();
+  const value = trimSpaces(text);
   let close = -1;
   if (value[0] === '"' || value[0] === "'") {
     close = quoteEnd(value, 0);
@@ -619,15 +661,36 @@ function splitComment(text) {
     close = flowListEnd(value);
   }
   const rest = value.slice(close + 1);
-  if (close >= 0 && /^(?:\s+#[^\r]*|\s*)$/.test(rest)) {
-    return { value: value.slice(0, close + 1), comment: rest.includes("#") ? rest : "" };
+  if (close >= 0 && (rest === "" || /^[ \t]+#/.test(rest))) {
+    return { value: value.slice(0, close + 1), comment: rest };
   }
-  const hash = /\s#/.exec(text);
+  const hash = /[ \t]#/.exec(text);
   if (!hash) {
-    return { value: text.trim(), comment: "" };
+    return { value, comment: "" };
   }
-  const before = text.slice(0, hash.index);
-  return { value: before.trim(), comment: text.slice(before.replace(/[ \t]+$/, "").length) };
+  // The comment takes every space and tab before its #, found by stepping
+  // back once, so a long run of spaces costs linear time.
+  let start = hash.index;
+  while (start > 0 && isSpace(text[start - 1])) {
+    start -= 1;
+  }
+  return { value: trimSpaces(text.slice(0, start)), comment: text.slice(start) };
+}
+
+function isSpace(char) {
+  return char === " " || char === "\t";
+}
+
+function trimSpaces(text) {
+  let start = 0;
+  let end = text.length;
+  while (start < end && isSpace(text[start])) {
+    start += 1;
+  }
+  while (end > start && isSpace(text[end - 1])) {
+    end -= 1;
+  }
+  return text.slice(start, end);
 }
 
 // The index of the quote that closes the one at start, or -1. Double quotes
@@ -657,14 +720,14 @@ function flowListEnd(text) {
       return at;
     }
     // A comment hides the rest of the line, closing bracket included.
-    if (char === "#" && /\s/.test(text[at - 1])) {
+    if (char === "#" && isSpace(text[at - 1])) {
       return -1;
     }
     if (char === ",") {
       entryStart = true;
       continue;
     }
-    if (/\s/.test(char)) {
+    if (isSpace(char)) {
       continue;
     }
     if (entryStart && (char === '"' || char === "'")) {
@@ -690,7 +753,7 @@ function foldLines(lines) {
       blanks += 1;
       continue;
     }
-    const indented = /^\s/.test(line);
+    const indented = isSpace(line[0]);
     if (previous === null) {
       out += "\n".repeat(blanks);
     } else if (previous === "text" && !indented) {
@@ -729,7 +792,7 @@ function toPlainObject(value) {
 }
 
 function parseScalar(value) {
-  const trimmed = value.trim();
+  const trimmed = trimSpaces(value);
 
   // A null is read as an empty value, like a key with nothing after it.
   if (/^(?:~|null|Null|NULL)$/.test(trimmed)) {
@@ -774,7 +837,7 @@ function parseScalar(value) {
 function formatScalar(value) {
   // A list inside a list item is written as a flow list.
   if (Array.isArray(value)) {
-    return `[${value.map(formatFlowEntry).join(", ")}]`;
+    return flowList(value, formatFlowEntry);
   }
 
   if (typeof value === "number") {

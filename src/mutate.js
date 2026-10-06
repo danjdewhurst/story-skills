@@ -163,6 +163,7 @@ export function createStoryProject(options) {
   if (!title) {
     throw usageError("A story title is required");
   }
+  requireSingleLineName(title, "story", "title");
 
   const cwd = options.cwd ?? process.cwd();
   const root = newProjectRoot({ title, cwd, dir: options.dir });
@@ -2008,7 +2009,7 @@ export function splitChapter(root, options) {
     if (title === "") {
       throw usageError("--title cannot be empty: leave it out to use the chapter's title with (continued)");
     }
-    requireSingleLineName(title, "chapter");
+    requireSingleLineName(title, "chapter", "title");
   }
   refuseBranching(project, "split");
 
