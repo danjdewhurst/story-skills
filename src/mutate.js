@@ -872,7 +872,7 @@ function assertRepairable(root) {
   assertProjectParses(project, "fix");
   const plotPath = path.join(project.root, "plot", "_index.md");
   if (fs.existsSync(plotPath)) {
-    const label = path.join("plot", "_index.md");
+    const label = "plot/_index.md";
     const source = readRegistrySource(plotPath, project.root);
     try {
       parseFrontmatter(source, label);
