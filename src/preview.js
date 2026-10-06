@@ -64,7 +64,7 @@ export function previewNewProject(root, run) {
       // A symlinked story.md does not make a project, so it is not copied.
       if (lstatIfExists(story)?.isFile()) {
         fs.mkdirSync(mirror(folder), { recursive: true });
-        copyFile(story, mirror(story));
+        copyRegularFile(story, mirror(story));
       }
       if (path.dirname(folder) === folder) {
         break;
@@ -77,7 +77,7 @@ export function previewNewProject(root, run) {
     } else if (stats?.isDirectory()) {
       copyProject(target, copyRoot, { realSource: realPath(target), copyRoot });
     } else if (stats) {
-      copyFile(target, copyRoot);
+      copyRegularFile(target, copyRoot);
     }
     if (isFolder) {
       fs.chmodSync(mirror(ancestor), copyMode(ancestor, true));
@@ -341,7 +341,7 @@ function copyProject(source, target, roots, depth = 0) {
       // target exists would otherwise be a file link, and unusable.
       fs.symlinkSync(linkTarget(fs.readlinkSync(from), roots), to, isFolder(from) ? "dir" : "file");
     } else if (entry.isFile() && entry.name !== LOCK_FILE && entry.name !== TAKEOVER_FILE) {
-      copyFile(from, to);
+      copyRegularFile(from, to);
     }
     // A FIFO, socket, or device is never read by a command, so it is not
     // copied (reading a FIFO would block).
@@ -357,7 +357,7 @@ function copyProject(source, target, roots, depth = 0) {
 // unreadable file stays unreadable. The copy is read as a command reads
 // it, so a file swapped for a FIFO or a symlink since the folder was
 // listed is refused rather than followed or waited on.
-function copyFile(from, to) {
+function copyRegularFile(from, to) {
   const { size } = fs.statSync(from);
   if ((from.endsWith(".md") || path.basename(from) === ".gitignore") && size <= MAX_READ_BYTES && allowed(from, fs.constants.R_OK)) {
     fs.writeFileSync(to, readFileBytes(from));

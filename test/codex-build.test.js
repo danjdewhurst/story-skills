@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
@@ -258,10 +259,28 @@ describe("build --format codex", () => {
     fs.mkdirSync(codex);
     fs.symlinkSync(outside, path.join(codex, "index.html"));
     expect(() => buildBook(root, { format: "codex" })).toThrow("Refusing to write the codex into dist/codex: it holds other files");
-    // Read, /dev/zero would hold the build forever.
+    // Read, /dev/zero would hold the build forever. In a child, so a read
+    // that never ends fails the test rather than stalling the suite.
     fs.rmSync(path.join(codex, "index.html"));
     fs.symlinkSync("/dev/zero", path.join(codex, "index.html"));
-    expect(() => buildBook(root, { format: "codex" })).toThrow("it holds other files");
+    const result = spawnSync(process.execPath, [path.join(import.meta.dir, "..", "bin", "story.js"), "build", root, "--format", "codex"], { encoding: "utf8", timeout: 20000 });
+    expect(result.signal).toBeNull();
+    expect(result.status).toBe(4);
+    expect(result.stderr).toContain("Refusing to write the codex into dist/codex: it holds other files");
+  });
+
+  test("recognises an earlier codex page of any size from the top of the page (#548)", () => {
+    const { root } = project();
+    const codex = buildBook(root, { format: "codex", spoilers: true }).outFile;
+    // Codex pages over the 5 MiB read limit: the index, and a page this
+    // build no longer writes.
+    const pad = (file) => fs.appendFileSync(file, `<!--${" ".repeat(5 * 1024 * 1024)}-->`);
+    pad(path.join(codex, "index.html"));
+    fs.copyFileSync(path.join(codex, "artifacts", "brass-key.html"), path.join(codex, "artifacts", "stale.html"));
+    pad(path.join(codex, "artifacts", "stale.html"));
+    buildBook(root, { format: "codex", spoilers: true });
+    expect(fs.existsSync(path.join(codex, "artifacts", "stale.html"))).toBe(false);
+    expect(fs.statSync(path.join(codex, "index.html")).size).toBeLessThan(5 * 1024 * 1024);
   });
 
   test("--spoilers applies only to the codex, and the CLI reports the pages", () => {

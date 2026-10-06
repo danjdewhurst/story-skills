@@ -75,12 +75,14 @@ describe("story doctor workflow pins", () => {
     fs.symlinkSync(outside, path.join(repo, ".github", "workflows", "linked.yml"));
     expect(pinLines(invoke(root, ["doctor"]).out)).toEqual([]);
     // /dev/zero, or a FIFO (where mkfifo exists), would hold doctor
-    // forever if it were read.
+    // forever if it were read. In a child, so a read that never ends fails
+    // the test rather than stalling the suite.
     fs.symlinkSync("/dev/zero", path.join(repo, ".github", "workflows", "zero.yml"));
     spawnSync("mkfifo", [path.join(repo, ".github", "workflows", "pipe.yml")]);
-    const result = invoke(root, ["doctor"]);
-    expect(result.code).toBe(0);
-    expect(pinLines(result.out)).toEqual([]);
+    const result = spawnSync(process.execPath, [path.join(import.meta.dir, "..", "bin", "story.js"), "doctor", root], { encoding: "utf8", timeout: 20000 });
+    expect(result.signal).toBeNull();
+    expect(result.status).toBe(0);
+    expect(pinLines(result.stdout)).toEqual([]);
   });
 
   test("flags a legacy STORY_REF, keeping a newer release than the CLI", () => {

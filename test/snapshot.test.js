@@ -310,6 +310,17 @@ describe("story snapshot --restore", () => {
     expect(real.data).toMatchObject({ restored: { name: "Draft One", id: "draft-one" }, safety: { id: "before-restore-draft-one-1" }, deleted: ["chapters/chapter-03.md", "notes/idea.md"] });
   });
 
+  test("--dry-run goes on past a manifest --list cannot read, as the real run does (#548)", () => {
+    const { cwd, root } = revised();
+    // Over the 5 MiB read limit, so --list names the snapshot by its folder.
+    fs.writeFileSync(path.join(root, ".snapshots", "draft-one", "snapshot.json"), " ".repeat(5 * 1024 * 1024 + 1));
+    expect(listSnapshots(root).snapshots.map((snapshot) => snapshot.id)).toEqual(["draft-one"]);
+    const preview = json(invoke(cwd, ["snapshot", "--restore", "draft-one", "--dry-run", "--json", "--path", root]));
+    expect(preview.data.restored).toEqual({ name: "draft-one", id: "draft-one" });
+    const real = json(invoke(cwd, ["snapshot", "--restore", "draft-one", "--json", "--path", root]));
+    expect(real.data.changes).toEqual(preview.data.changes);
+  });
+
   test("a restore that fails part way names the safety snapshot", () => {
     const { cwd, root } = revised();
     // A folder where the snapshot has chapter 2, so writing it fails after
