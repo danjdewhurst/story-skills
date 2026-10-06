@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
 // src/cli.js
-import path20 from "node:path";
+import path21 from "node:path";
 
 // src/commands.js
-import fs14 from "node:fs";
-import path19 from "node:path";
+import fs15 from "node:fs";
+import path20 from "node:path";
 
 // src/clues.js
 import path from "node:path";
@@ -21348,6 +21348,96 @@ function realPath2(target) {
   }
 }
 
+// src/workflows.js
+import fs14 from "node:fs";
+import path19 from "node:path";
+
+// src/version.js
+var VERSION = "0.21.0";
+
+// src/workflows.js
+var PIN_LINE = /^\s*(STORY_VERSION|STORY_REF)\s*:\s*["']?([^"'\s#]*)/;
+var VERSION_PATTERN = /^v?(\d+)\.(\d+)\.(\d+)/;
+function workflowPinActions(projectRoot, cwd = projectRoot) {
+  const actions = [];
+  for (const pin of workflowPins(projectRoot)) {
+    const where = `${path19.relative(cwd, pin.file) || pin.file}:${pin.line}`;
+    const parsed = parseVersion(pin.value);
+    if (pin.name === "STORY_REF") {
+      const target = parsed && compareVersions(parsed, parseVersion(VERSION)) > 0 ? parsed.join(".") : VERSION;
+      actions.push(action2("Rename workflow STORY_REF", `${where} sets the legacy STORY_REF; change the line to STORY_VERSION: "${target}" and copy the install step from the current template (see Upgrading the workflows in docs/automation.md).`));
+    } else if (parsed && compareVersions(parsed, parseVersion(VERSION)) < 0) {
+      actions.push(action2("Update workflow CLI version", `${where} installs story-skills ${parsed.join(".")}, older than this CLI (${VERSION}); after story check passes locally, change the line to STORY_VERSION: "${VERSION}".`));
+    }
+  }
+  return actions;
+}
+function workflowPins(projectRoot) {
+  const pins = [];
+  for (const file of workflowFiles(projectRoot)) {
+    let text;
+    try {
+      text = fs14.readFileSync(file, "utf8");
+    } catch {
+      continue;
+    }
+    text.split(/\r?\n/).forEach((content, index) => {
+      const match = PIN_LINE.exec(content);
+      if (match) {
+        pins.push({ file, line: index + 1, name: match[1], value: match[2] });
+      }
+    });
+  }
+  return pins;
+}
+function workflowFiles(projectRoot) {
+  const dirs = [projectRoot];
+  const gitRoot = findGitRoot(projectRoot);
+  if (gitRoot !== null && gitRoot !== projectRoot) {
+    dirs.push(gitRoot);
+  }
+  const files = [];
+  for (const dir of dirs) {
+    const workflows = path19.join(dir, ".github", "workflows");
+    let names;
+    try {
+      names = fs14.readdirSync(workflows);
+    } catch {
+      continue;
+    }
+    for (const name of names.filter((entry) => /\.ya?ml$/.test(entry)).sort()) {
+      files.push(path19.join(workflows, name));
+    }
+  }
+  return files;
+}
+function findGitRoot(start) {
+  let dir = path19.resolve(start);
+  while (!fs14.existsSync(path19.join(dir, ".git"))) {
+    const parent = path19.dirname(dir);
+    if (parent === dir) {
+      return null;
+    }
+    dir = parent;
+  }
+  return dir;
+}
+function parseVersion(value) {
+  const match = VERSION_PATTERN.exec(value);
+  return match ? match.slice(1, 4).map(Number) : null;
+}
+function compareVersions(left, right) {
+  for (let index = 0;index < 3; index += 1) {
+    if (left[index] !== right[index]) {
+      return left[index] - right[index];
+    }
+  }
+  return 0;
+}
+function action2(title, detail) {
+  return { priority: "P3", title, detail };
+}
+
 // src/commands.js
 var STDIN_LABEL = "stdin";
 var ADD_OPTIONS = [
@@ -21439,7 +21529,7 @@ var COMMANDS = [
       reportKeptStory(io, result, "the title");
       reportGitignore(io, result);
       for (const linkedBook of result.linkedBooks) {
-        io.stdout.write(`Updated series links in ${path19.join(linkedBook, "story.md")}
+        io.stdout.write(`Updated series links in ${path20.join(linkedBook, "story.md")}
 `);
       }
       return 0;
@@ -21912,7 +22002,7 @@ var COMMANDS = [
     project: "positional",
     options: ["fix", ...WRITE_OPTIONS],
     run(context) {
-      const { parsed, io, root, overrides } = context;
+      const { parsed, io, cwd, root, overrides } = context;
       const options = { displayPath: displayPath2(parsed), overrides };
       if (isTruthy(parsed.options.fix)) {
         return runDoctorFix(context, options);
@@ -21920,7 +22010,8 @@ var COMMANDS = [
       if (isTruthy(parsed.options["dry-run"])) {
         throw usageError("--dry-run previews doctor --fix: add --fix");
       }
-      const report = projectActions(root(), options);
+      const projectRoot = root();
+      const report = withWorkflowPins(projectActions(projectRoot, options), projectRoot, cwd);
       if (wantsJson(parsed)) {
         return reportProjectJson(io, "doctor", report);
       }
@@ -22077,7 +22168,7 @@ var COMMANDS = [
 function nameWords(parsed, from, cwd, command) {
   const words = parsed.positionals.slice(from);
   for (const word of words) {
-    if (word === "." || word === ".." || /[\\/]/.test(word) && fs14.existsSync(path19.join(path19.resolve(cwd, word), "story.md"))) {
+    if (word === "." || word === ".." || /[\\/]/.test(word) && fs15.existsSync(path20.join(path20.resolve(cwd, word), "story.md"))) {
       throw usageError(`"${word}" looks like a project path: story ${command} takes the project as --path ${word}`);
     }
   }
@@ -22088,9 +22179,9 @@ function pipedText(io, command) {
 }
 function passageRoot(parsed, cwd, required) {
   if (parsed.options.path !== undefined) {
-    return path19.resolve(cwd, parsed.options.path);
+    return path20.resolve(cwd, parsed.options.path);
   }
-  return required || fs14.existsSync(path19.join(cwd, "story.md")) ? path19.resolve(cwd) : null;
+  return required || fs15.existsSync(path20.join(cwd, "story.md")) ? path20.resolve(cwd) : null;
 }
 function runWrite({ parsed, io, root, overrides }, command, write, describe) {
   const projectRoot = root();
@@ -22109,13 +22200,14 @@ function runWrite({ parsed, io, root, overrides }, command, write, describe) {
   io.stdout.write(dryRun ? formatPreview(command, changes) : describe(result));
   return writeFindings(io, findings);
 }
-function runDoctorFix({ parsed, io, root }, options) {
+function runDoctorFix({ parsed, io, cwd, root }, options) {
   const projectRoot = root();
   const dryRun = isTruthy(parsed.options["dry-run"]);
   const fix = (target) => fixProject(target, options);
   const { result: report, changes } = dryRun ? previewChanges(projectRoot, fix) : recordChanges(projectRoot, () => fix(projectRoot));
   const ok = report.validation.ok && report.links.ok && report.continuity.ok;
-  const { repairs, stopped, ...diagnosis } = report;
+  const { repairs, stopped, ...rest } = report;
+  const diagnosis = withWorkflowPins(rest, projectRoot, cwd);
   if (wantsJson(parsed)) {
     return reportProjectJson(io, "doctor", { ...diagnosis, fix: { dryRun, repairs, stopped, changes } }, {
       ok,
@@ -22125,6 +22217,9 @@ function runDoctorFix({ parsed, io, root }, options) {
   io.stdout.write(`${formatRepairs(repairs, stopped, changes, dryRun)}
 ${formatDoctorReport(diagnosis)}`);
   return ok ? EXIT_CODES.ok : EXIT_CODES.findings;
+}
+function withWorkflowPins(report, projectRoot, cwd) {
+  return { ...report, actions: [...report.actions, ...workflowPinActions(projectRoot, cwd)] };
 }
 function formatRepairs(repairs, stopped, changes, dryRun) {
   const lines = [dryRun ? "Repairs (dry run; nothing was written):" : "Repairs:"];
@@ -22149,7 +22244,7 @@ function formatRepairs(repairs, stopped, changes, dryRun) {
 `;
 }
 function writtenFiles(projectRoot, changes) {
-  return changes.filter((change) => change.action === "create" || change.action === "update").map((change) => path19.join(projectRoot, change.path));
+  return changes.filter((change) => change.action === "create" || change.action === "update").map((change) => path20.join(projectRoot, change.path));
 }
 function formatPreview(command, changes) {
   const lines = changes.map((change) => `${change.action.padEnd(7)} ${change.path}
@@ -22160,7 +22255,7 @@ function formatPreview(command, changes) {
 }
 function writeResultData(projectRoot, result) {
   const { warnings, changed, root, ...data } = result;
-  return typeof data.file === "string" ? { ...data, file: path19.relative(projectRoot, data.file).split(path19.sep).join("/") } : data;
+  return typeof data.file === "string" ? { ...data, file: path20.relative(projectRoot, data.file).split(path20.sep).join("/") } : data;
 }
 function entityOptions(parsed) {
   const { json, "dry-run": dryRun, ...options } = parsed.options;
@@ -22252,9 +22347,6 @@ function printFindings(io, result) {
 function findingLine(finding) {
   return FINDING_CODES[finding.code] === "warning" ? `${finding.message} [${finding.code}]` : finding.message;
 }
-
-// src/version.js
-var VERSION = "0.21.0";
 
 // src/cli.js
 var COMMANDS_BY_NAME = new Map(COMMANDS.map((command) => [command.name, command]));
@@ -22370,7 +22462,7 @@ Run story --help to list commands.
   }
 }
 function configRoot(cwd, parsed, root) {
-  return parsed.positionals[1] === "-" ? path20.resolve(cwd, lastOptionValue(parsed.options.path) ?? ".") : root();
+  return parsed.positionals[1] === "-" ? path21.resolve(cwd, lastOptionValue(parsed.options.path) ?? ".") : root();
 }
 function projectConfig(command, root) {
   const config = readCliConfig(root);
@@ -22435,8 +22527,8 @@ function describeError(error, cwd) {
   if (!reason || typeof error.path !== "string") {
     return `${error.message}${hint}`;
   }
-  const relativePath = path20.relative(cwd, error.path);
-  const shown = relativePath !== "" && !relativePath.startsWith("..") && !path20.isAbsolute(relativePath) ? relativePath : error.path;
+  const relativePath = path21.relative(cwd, error.path);
+  const shown = relativePath !== "" && !relativePath.startsWith("..") && !path21.isAbsolute(relativePath) ? relativePath : error.path;
   return `Cannot ${FILE_ERROR_ACTIONS[error.syscall] ?? "use"} ${shown}: ${reason}${hint}`;
 }
 function commandUsageError(command, parsed) {
@@ -22463,18 +22555,18 @@ function lastOptionValue(value) {
 function resolveRoot(cwd, parsed, name) {
   const flagPath = lastOptionValue(parsed.options.path);
   if (COMMANDS_BY_NAME.get(name)?.project !== "positional") {
-    return path20.resolve(cwd, flagPath ?? ".");
+    return path21.resolve(cwd, flagPath ?? ".");
   }
   const positionalPath = parsed.positionals[1];
   if (positionalPath !== undefined && flagPath !== undefined) {
-    const resolvedPositional = path20.resolve(cwd, positionalPath);
-    const resolvedFlag = path20.resolve(cwd, flagPath);
+    const resolvedPositional = path21.resolve(cwd, positionalPath);
+    const resolvedFlag = path21.resolve(cwd, flagPath);
     if (resolvedPositional !== resolvedFlag) {
       throw usageError(`Conflicting project paths: ${positionalPath} and --path ${flagPath}. Use either a positional path or --path, not both.`);
     }
     return resolvedFlag;
   }
-  return path20.resolve(cwd, flagPath ?? positionalPath ?? ".");
+  return path21.resolve(cwd, flagPath ?? positionalPath ?? ".");
 }
 
 // bin/story.js
