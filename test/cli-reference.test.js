@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { BUILD_EXTENSIONS } from "../src/build.js";
+import { BUILD_EXTENSIONS, BUILD_FORMAT_ALIASES } from "../src/build.js";
 import { COMMANDS } from "../src/commands.js";
 import { OPTIONS } from "../src/options.js";
 
@@ -89,7 +89,14 @@ describe("docs/cli-reference.md", () => {
       expect(formatRow).toContain(`\`${format}\``);
       expect(help).toMatch(new RegExp(`\\b${format}\\b`));
     }
+    for (const [alias, format] of Object.entries(BUILD_FORMAT_ALIASES)) {
+      expect(formatRow).toContain(`\`${format}\` (or \`${alias}\`)`);
+    }
     expect(sorted(tableFormats)).toEqual(sorted(buildFormats));
-    expect(sorted(codeWords(summaryRow.split(" | ")[2]).filter((word) => !word.startsWith("dist")))).toEqual(sorted(buildFormats));
+    // The row is "| | [`build [path]`](#build) | Build ... | Yes |", so cell 2 is
+    // the description.
+    const description = summaryRow.split(" | ")[2];
+    expect(description).toStartWith("Build ");
+    expect(sorted(codeWords(description).filter((word) => !word.startsWith("dist")))).toEqual(sorted(buildFormats));
   });
 });
