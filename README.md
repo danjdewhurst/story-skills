@@ -160,6 +160,7 @@ The CLI is for maintenance only. Agents write story content directly to markdown
 | `story add matter "Dedication"` | Add a front (default) or `--placement back` matter page such as a dedication, epigraph, or acknowledgments |
 | `story add character "李明" --id li-ming` | Give the id by hand for a name the CLI cannot slug (Cyrillic and Greek names are transliterated), so the name keeps its own script |
 | `story names "Seren" "Kestrel Row"` | Check candidate names against every name, alias, and glossary term before using them: clashes fail, look-alikes warn |
+| `story mentions character sera-voss` | List every place chapter prose names an entity (name, given name, or alias), and which chapters name it without listing it; with no entity, check every chapter's names against its frontmatter |
 | `story rename character sera-voss "Sera Vale"` | Rename an entity and update kebab-case references |
 | `story move chapter chapter-03 --number 4` | Renumber a chapter, or move a scene with `story move scene <id> --chapter <id>`, renaming the files and rewriting every reference to the old id |
 | `story remove promise old-setup` | Remove an entity and scrub metadata references |

@@ -137,6 +137,7 @@ export const FINDING_CODES = {
   "progression-death-conflict": "warning",
   "pov-not-in-cast": "warning",
   "pov-scene-mismatch": "warning",
+  "named-not-listed": "warning",
   "scene-cast-not-in-chapter": "warning",
   "scene-location-not-in-chapter": "warning",
   "cut-character-in-cast": "warning",
@@ -243,6 +244,8 @@ export const FINDING_CODES = {
   "voice-avoid": "warning",
   "voice-words-unused": "warning",
   "voice-sound-alike": "warning",
+  // story mentions
+  "mention-not-named": "warning",
   // story names
   "name-clash": "error",
   "name-look-alike": "warning",
@@ -350,6 +353,8 @@ export const CHAPTER_CODES = [
   "progression-death-conflict",
   "pov-not-in-cast",
   "pov-scene-mismatch",
+  "named-not-listed",
+  "mention-not-named",
   "scene-cast-not-in-chapter",
   "scene-location-not-in-chapter",
   "cut-character-in-cast",

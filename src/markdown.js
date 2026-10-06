@@ -435,19 +435,24 @@ const NEXT_SECTION = /^ {0,3}##(?:[ \t]|\r?$)/m;
 // masked text, so none written inside a comment or code fence counts; the
 // prose is then sliced from the original at the same offset.
 function proseSection(markdownBody) {
-  const masked = maskMarkup(markdownBody);
+  return markdownBody.slice(proseStart(markdownBody));
+}
+
+// The offset in a chapter body where its prose starts: after `## Chapter
+// Text`, after the outline, or after the leading heading.
+export function proseStart(markdownBody, masked = maskMarkup(markdownBody)) {
   const chapterTextMatch = sectionHeadingPattern("Chapter Text").exec(masked);
   if (chapterTextMatch) {
-    return markdownBody.slice(chapterTextMatch.index + chapterTextMatch[0].length);
+    return chapterTextMatch.index + chapterTextMatch[0].length;
   }
 
   const outlineMatch = sectionHeadingPattern("Outline").exec(masked);
   if (!outlineMatch) {
-    return markdownBody.slice(leadingHeadingLength(masked));
+    return leadingHeadingLength(masked);
   }
 
   const start = outlineMatch.index + outlineMatch[0].length;
-  return markdownBody.slice(outlineDivider(masked, start) ?? start);
+  return outlineDivider(masked, start) ?? start;
 }
 
 // The offset just past the `---` that closes the outline, or null. Only a

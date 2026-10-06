@@ -12,7 +12,7 @@ The CLI never writes story content for you. It scaffolds files, rebuilds registr
 - [Setup commands](#setup-commands): `init`, `import`, `migrate`
 - [Maintenance commands](#maintenance-commands): `validate`, `reindex`, `wordcount`, `links`, `check`
 - [Analysis commands](#analysis-commands): `continuity`, `knowledge`, `context`, `compare`, `similarity`, `progress`, `timeline`, `prose`, `series`, `report`, `next`, `doctor`
-- [Craft and revision commands](#craft-and-revision-commands): `pacing`, `clues`, `grid`, `voices`, `names`, `diagram`, `passes`
+- [Craft and revision commands](#craft-and-revision-commands): `pacing`, `clues`, `grid`, `voices`, `names`, `mentions`, `diagram`, `passes`
 - [Entity commands](#entity-commands): `add`, `rename`, `move`, `remove`
 - [Output commands](#output-commands): `export`, `build`, `synopsis`
 - [Finding codes](#finding-codes): every error and warning code, by command
@@ -68,6 +68,7 @@ Absolute paths in output are shortened to `~/stories/...`.
 | | [`grid [path]`](#grid) | Print the plot grid of arcs by chapter, with hooks and scene outcomes, as markdown or CSV | No |
 | | [`voices [path\|-]`](#voices) | Fingerprint each character's tagged dialogue, in the chapters or a passage piped to stdin | No |
 | | [`names <name...>`](#names) | Check candidate names for clashes and look-alikes | No |
+| | [`mentions [<kind> <id>]`](#mentions) | List where chapter prose names an entity, or audit every chapter's names against its frontmatter | No |
 | | [`diagram <kind>`](#diagram) | Print Mermaid source for relationships, locations, timeline, clues, or arcs | With `--out` |
 | | [`passes [path]`](#passes) | Show and update the named revision passes in `story.md` | With `--init`, `--start`, or `--done` |
 | Entities | [`add <kind> <name>`](#add) | Create an entity file and reindex | Yes |
@@ -129,7 +130,7 @@ Every command except `init` and `import` works on one story project: a directory
 | Commands | How to give the project | Default |
 |---|---|---|
 | `validate`, `reindex`, `wordcount`, `links`, `check`, `continuity`, `compare`, `similarity`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `grid`, `voices`, `series`, `passes`, `report`, `next`, `doctor`, `migrate`, `export`, `build`, `synopsis` | A positional `[path]` **or** `--path <path>` | Current directory |
-| `knowledge`, `context`, `names`, `diagram`, `add`, `rename`, `move`, `remove` | `--path <path>` only, because their positionals are ids, names, or a diagram kind | Current directory |
+| `knowledge`, `context`, `names`, `mentions`, `diagram`, `add`, `rename`, `move`, `remove` | `--path <path>` only, because their positionals are ids, names, or a diagram kind | Current directory |
 | `init`, `import` | Neither. They create a new project; use `--dir` to choose where | A directory named after the story id |
 
 Relative paths resolve against the current working directory. These are equivalent:
@@ -257,7 +258,7 @@ Defaults apply with `--json` too, and to `prose -` and `voices -` inside a proje
 The CLI prints results to stdout and diagnostics to stderr.
 
 - `validate`, `links`, `continuity`, and `check` write everything to **stderr**: a summary line, then one line per `error:`, `warning:`, and `dismissed:` finding. Nothing goes to stdout. A `warning:` line ends with the warning's [code](#finding-codes) in brackets, as does an `error:` line for a warning `severity` promoted.
-- `compare`, `similarity`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `names`, and `series` write their report to stdout, then the same summary and finding lines to stderr.
+- `compare`, `similarity`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `names`, `mentions`, and `series` write their report to stdout, then the same summary and finding lines to stderr.
 - `diagram` writes the Mermaid source (or, with `--out`, a confirmation) to stdout, and `grid` the plot grid. If the project has a file that fails to parse, they write the summary and error lines to stderr instead.
 - All other commands write a short confirmation or report to stdout.
 - Errors that stop a command (a bad option, a missing project, an unknown id) print one line to stderr.
@@ -279,7 +280,7 @@ Findings keep `1`, so `story validate || exit 1` fails on errors as it always ha
 
 ### JSON output
 
-`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. It works on the check and analysis commands: `validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, and `compare`; on the commands that print text to keep: `diagram`, `grid`, `synopsis`, and `passes`; and on the commands that change the project in place: `add`, `rename`, `move`, `remove`, `reindex`, `migrate`, `wordcount`, and `doctor --fix`. Other commands refuse it (`--json does not apply to story export`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`.
+`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. It works on the check and analysis commands: `validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, `mentions`, and `compare`; on the commands that print text to keep: `diagram`, `grid`, `synopsis`, and `passes`; and on the commands that change the project in place: `add`, `rename`, `move`, `remove`, `reindex`, `migrate`, `wordcount`, and `doctor --fix`. Other commands refuse it (`--json does not apply to story export`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`.
 
 Every result has the same envelope:
 
@@ -1654,7 +1655,7 @@ With `--json`, gate on `data.checks`, since plain `doctor` still exits 0 when a 
 
 ## Craft and revision commands
 
-These commands read chapters, scenes, and the story bible to answer craft questions: is the pacing slack, do the clues play fair, do the characters sound different, is a new name safe to use. They never change story files. Their findings are advisory warnings, except `names`, which reports an exact clash as an error. `diagram --out` writes only the file you name, and `passes` writes only the `revision-passes` entry in `story.md`.
+These commands read chapters, scenes, and the story bible to answer craft questions: is the pacing slack, do the clues play fair, do the characters sound different, is a new name safe to use, where does the prose name a character. They never change story files. Their findings are advisory warnings, except `names`, which reports an exact clash as an error. `diagram --out` writes only the file you name, and `passes` writes only the `revision-passes` entry in `story.md`.
 
 The rules behind each report, and how to act on them, are in [Continuity and analysis](continuity.md).
 
@@ -1863,6 +1864,42 @@ Name check failed: 1 errors, 2 warnings, 0 dismissed
 error: "Sera" clashes with character sera-voss (Sera)
 warning: "Kaelan" looks like character kael-voss (Kael Voss) [name-look-alike]
 warning: "Marek" looks like character lord-maren (Lord Maren) [name-look-alike]
+```
+
+### mentions
+
+```text
+story mentions [<kind> <id>] [--json] [--path <project>]
+```
+
+With a kind and id, lists every place the chapter prose names that entity, one line per match on stdout: the chapter file, line, and column, the name as written, and the line around it. The kind is `character`, `location`, `faction`, `artifact`, `system`, or `term` (plurals work too). A summary line follows, then each chapter whose frontmatter lists the entity but whose prose never names it, and each chapter that names it without listing it (`pov`, `characters`, or `mentions` for a character, `locations` for a location, `mentions` for an artifact). Use it before a [`rename`](#rename) or [`remove`](#remove), since neither changes prose.
+
+The names looked for are the entity's `name`, its `aliases` (characters and glossary terms), a character's given name (`Edran` for `Captain Edran Vale`), and any name without its leading titles or articles (`Hollow` for `The Hollow`), from the language pack's title list. Only chapter prose is read: not the outline, HTML comments, or code fences. A name matches:
+
+- **As written.** A character called `Rose` is not found in "a rose". Only the first letter of a name of two or more words may be either case, so `The Hollow` matches "the Hollow"; a one-word name written in lower case also matches with a capital.
+- **As whole words.** `Bath` does not match "Bathsheba". Possessives (`Maren's`) and hyphenated compounds count. In Chinese and Japanese a name matches inside a run of characters, and in Thai at the word breaks the segmenter finds, as for [`prose`](#prose) watch words.
+- **Once per place.** Where names overlap, the longest wins, so `Edran Vale` is not also a mention of a location called `Vale`. A name two entities share counts for both.
+
+With no kind and id, `mentions` checks every drafted chapter's prose against its frontmatter and reports two warnings:
+
+- `named-not-listed`: the prose names a character the chapter lists in none of `pov`, `characters`, or `mentions`. [`continuity`](#continuity) reports this one too.
+- `mention-not-named`: a character or artifact in the chapter's `mentions` is never named in its prose. Only `mentions` is checked: a character in `characters` is often only "I" or "she" on the page. Add the name the chapter uses as an alias, or drop the mention. A chapter that refers to someone only by relationship ("her father") warns here, which is why `continuity` leaves this check out.
+
+`mentions` exits 0 unless a chapter fails to parse or a `severity` entry promotes one of its warnings. An unknown kind or id, or a kind without an id, is a usage error (exit 2).
+
+With `--json`, `data.mode` is `entity` or, with no kind and id, `audit`. An entity report fills `kind`, `id`, `names`, `chapters` (each `chapter`, `file`, `count`, and `listed`, `null` for a kind chapters do not list), and `matches` (each `chapter`, `file`, `line`, `column`, `text`, and `excerpt`); an audit sets them to `null` and reports its findings as diagnostics.
+
+In [`examples/the-last-ember`](../examples/the-last-ember/):
+
+```shell
+story mentions character lord-maren --path examples/the-last-ember
+```
+
+```text
+chapters/chapter-01.md:57:37: Maren: "Double patrols on the outer walls. Maren's brought in soldiers from the southern garrisons — not loc…
+chapters/chapter-01.md:61:138: Maren: …in the lower warrens has been talking about the Lost Heir. Maren's people are jumpy."
+2 mentions of character lord-maren (Lord Maren, Maren, The Iron Lord, Iron Lord, The Usurper, Usurper) in 1 chapter
+Mentions checked: 0 errors, 0 warnings, 0 dismissed
 ```
 
 ### diagram
@@ -2249,7 +2286,7 @@ Fill in the body sections by hand, or ask an agent to, after `add`. For what eac
 story rename <kind> <id> <new name> [--id <kebab-id>] [--dry-run] [--json] [--path <project>]
 ```
 
-Sets the entity's name or title and, when the new name gives a different id, renames the file and rewrites every reference to the old id. References are the id-valued frontmatter fields (such as `characters`, `pov`, `locations`, `owner`, `planted`, `learned-in`, a location route's `to`, and the entries in `continuity/state.md`) and markdown links that resolve to the entity's file. It looks for them in every markdown file in the project except under `dist/`, `node_modules/`, dot-folders, and folders nested more than 10 levels deep, which are skipped silently. Prose is never changed, so update names in the chapter text yourself. A `pattern`, `file`, or `chapter` in `continuity/exemptions.md` that names the old id as a whole token (`chapters/chapter-02.md has POV ann`, `characters/ann.md`) is updated to the new id, so each dismissal stays with its finding; `move` does the same.
+Sets the entity's name or title and, when the new name gives a different id, renames the file and rewrites every reference to the old id. References are the id-valued frontmatter fields (such as `characters`, `pov`, `locations`, `owner`, `planted`, `learned-in`, a location route's `to`, and the entries in `continuity/state.md`) and markdown links that resolve to the entity's file. It looks for them in every markdown file in the project except under `dist/`, `node_modules/`, dot-folders, and folders nested more than 10 levels deep, which are skipped silently. Prose is never changed: list the old name's places in the chapter text with [`story mentions`](#mentions) before renaming, and update them yourself. A `pattern`, `file`, or `chapter` in `continuity/exemptions.md` that names the old id as a whole token (`chapters/chapter-02.md has POV ann`, `characters/ann.md`) is updated to the new id, so each dismissal stays with its finding; `move` does the same.
 
 Chapter and scene ids come from their numbers, so renaming one changes only its title; to change the number, use [`move`](#move). `rename` also updates the entity's first heading when it shows the old name, such as `# Ilse Marrow` or `# Chapter 1: Low Tide`.
 
@@ -2360,7 +2397,7 @@ As with `rename`, every file is parsed before anything is written, so a file tha
 story remove <kind> <id> [--dry-run] [--json] [--path <project>]
 ```
 
-Deletes the entity file and scrubs its id from every reference field, searching the same markdown files as `rename`. List entries are removed, single-value fields are cleared, and whole entries in `relationships`, `character-state`, `knowledge-state`, `object-state`, location `routes`, and chapter `choices` are dropped when they are about the removed entity. Removing a chapter that `choices` lead to also warns, naming the chapters that lost a choice, since one left with none becomes an ending, or, when those were the last choices in the book, that the book is linear again. A `progressions` entry whose `value` was the removed id keeps its chapter and field, with the value cleared. Prose and markdown links in file bodies are never changed, so `remove` lists the files that still link to the removed file (a registry's own sections included) or, for a chapter or scene, still name its id in `plot/timeline.md`, `plot/_index.md`, or an arc, and any `continuity/exemptions.md` entries whose `pattern` or `file` names the id, which no longer match anything (`warning: characters/_index.md, plot/arcs/main.md still mention character bo in links in the text, which remove does not change: edit them, then run story links`). Names in prose are not listed; find them by hand, for example with `grep -rn brass-sounding-line .`. As with `rename`, every file is parsed before anything is deleted, so a file that fails to parse, or an entity file, registry, or fixed project file with no frontmatter, leaves the project unchanged. References are scrubbed before the entity file is deleted, so an interrupted `remove` can simply be run again.
+Deletes the entity file and scrubs its id from every reference field, searching the same markdown files as `rename`. List entries are removed, single-value fields are cleared, and whole entries in `relationships`, `character-state`, `knowledge-state`, `object-state`, location `routes`, and chapter `choices` are dropped when they are about the removed entity. Removing a chapter that `choices` lead to also warns, naming the chapters that lost a choice, since one left with none becomes an ending, or, when those were the last choices in the book, that the book is linear again. A `progressions` entry whose `value` was the removed id keeps its chapter and field, with the value cleared. Prose and markdown links in file bodies are never changed, so `remove` lists the files that still link to the removed file (a registry's own sections included) or, for a chapter or scene, still name its id in `plot/timeline.md`, `plot/_index.md`, or an arc, and any `continuity/exemptions.md` entries whose `pattern` or `file` names the id, which no longer match anything (`warning: characters/_index.md, plot/arcs/main.md still mention character bo in links in the text, which remove does not change: edit them, then run story links`). Names in prose are not listed; find them first with [`story mentions <kind> <id>`](#mentions). As with `rename`, every file is parsed before anything is deleted, so a file that fails to parse, or an entity file, registry, or fixed project file with no frontmatter, leaves the project unchanged. References are scrubbed before the entity file is deleted, so an interrupted `remove` can simply be run again.
 
 `remove chapter` refuses while scenes still point at the chapter, so remove those first:
 
@@ -2715,6 +2752,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `progression-death-conflict` | warning | A status progression contradicts `died-in` or `revived-in`: another status still holds at the death chapter or is set while the character is dead, or `deceased` still holds at the revival. |
 | `pov-not-in-cast` | warning | A POV character is not in the chapter or scene's `characters`. |
 | `pov-scene-mismatch` | warning | A chapter's POV tells none of its scenes. |
+| `named-not-listed` | warning | A drafted chapter's prose names a character its `pov`, `characters`, and `mentions` leave out. `mentions` with no entity reports it too. |
 | `scene-cast-not-in-chapter` | warning | A scene lists a character its chapter does not. |
 | `scene-location-not-in-chapter` | warning | A scene is set somewhere its chapter does not list. |
 | `cut-character-in-cast` | warning | A chapter or scene lists a character with `status: cut`. |
@@ -2846,6 +2884,12 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `voice-avoid` | warning | A character says a phrase from their `voice-avoid` list. |
 | `voice-words-unused` | warning | A character never says a phrase from their `voice-words` list. |
 | `voice-sound-alike` | warning | Two characters' dialogue fingerprints are close. |
+
+### Codes: mentions
+
+| Code | Level | Reported when |
+|---|---|---|
+| `mention-not-named` | warning | With no entity: a character or artifact in a drafted chapter's `mentions` is never named in its prose. |
 
 ### Codes: names
 

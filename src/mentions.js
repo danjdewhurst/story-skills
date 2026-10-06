@@ -1,0 +1,302 @@
+import path from "node:path";
+import { warn } from "./findings.js";
+import { checkSet, languagePack } from "./languages/index.js";
+import { lowerCase, upperCase } from "./languages/locale.js";
+import { escapeRegExp, maskMarkup, proseStart } from "./markdown.js";
+import { existingNames } from "./names.js";
+import { readMarkdown } from "./scan.js";
+import { wholeWords, wordMatcher } from "./words.js";
+
+// Where chapter prose names the bible's entities: `story mentions` lists
+// each place, and `story continuity` compares them with each chapter's
+// `characters`, `mentions`, and `locations`.
+//
+// A name matches as written, so a character called Rose is not found in
+// "a rose", and as whole words, which in Chinese, Japanese, and Thai are
+// found as story prose finds watch words. Only the first letter of a name
+// of two or more words may differ in case ("The Hollow" matches "the
+// Hollow"); a one-word name written in lower case also matches with a
+// capital, at the start of a sentence. Possessives (Maren's) and hyphenated
+// compounds (Vale-born) count. Each place in the text goes to the longest
+// name found there, so "Edran Vale" is not also a mention of a location
+// called Vale; a name two entities share counts for both.
+
+// The entity kinds with a name to look for, as story mentions takes them.
+export const MENTION_KINDS = ["character", "location", "faction", "artifact", "system", "term"];
+
+// Every name and alias to look for, cut characters included, each once per
+// entity, with its pattern. A name that opens with titles or articles (the
+// pack's `titleWords`) is also looked for without them, so "The Hollow" is
+// found in "the whole Hollow" and "Captain Edran Vale" as "Edran Vale".
+export function mentionNames(project) {
+  const pack = project.pack ?? languagePack();
+  const titles = checkSet(pack, "titleWords");
+  const seen = new Set();
+  const names = [];
+  const add = (kind, id, name) => {
+    const key = `${kind} ${id} ${name}`;
+    if (name !== "" && !seen.has(key)) {
+      seen.add(key);
+      names.push({ kind, id, name, pattern: namePattern(name, pack) });
+    }
+  };
+  for (const entry of existingNames(project, { cut: true })) {
+    // A given name is looked for only when it is a whole word of the name as
+    // spaced: 大島源治 is split into characters to find one, but has no word
+    // to be known by.
+    if (entry.name !== entry.full && !entry.full.split(/\s+/u).includes(entry.name)) {
+      continue;
+    }
+    add(entry.kind, entry.id, entry.name);
+    const words = entry.name.split(/\s+/);
+    const first = words.findIndex((word) => !titles?.has(lowerCase(word, pack).replace(/[.’']/g, "")));
+    if (titles && first > 0) {
+      add(entry.kind, entry.id, words.slice(first).join(" "));
+    }
+  }
+  return names;
+}
+
+function namePattern(name, pack) {
+  const words = name.split(/\s+/);
+  const body = words.map((word, index) => {
+    const escape = (part) => escapeRegExp(part).replace(/['’]/g, "['’]");
+    const [first, ...others] = Array.from(word);
+    if (index > 0 || /['’]/.test(first)) {
+      return escape(word);
+    }
+    const rest = escape(others.join(""));
+    const upper = upperCase(first, pack);
+    const lower = lowerCase(first, pack);
+    // A lower-case one-word name may open a sentence; the first word of a
+    // longer name may be either case. Otherwise the case is as written.
+    const variants = words.length > 1 ? [first, upper, lower] : first === lower ? [first, upper] : [first];
+    const unique = [...new Set(variants)].map(escapeRegExp);
+    return `${unique.length === 1 ? unique[0] : `(?:${unique.join("|")})`}${rest}`;
+  }).join("\\s+");
+  return new RegExp(wholeWords(body, name), "gu");
+}
+
+// The chapter's prose as it sits in its file, with comments and code
+// fences blanked so offsets and line numbers still match the file, and
+// `offset`, where the prose starts in the file. Null when the file cannot
+// be read, which the scan has already reported.
+export function chapterText(project, chapter) {
+  let markdown;
+  try {
+    markdown = readMarkdown(chapter.file, project.root);
+  } catch {
+    return null;
+  }
+  const masked = maskMarkup(markdown.body);
+  const start = proseStart(markdown.body, masked);
+  return { raw: markdown.rawMarkdown, text: masked.slice(start), offset: markdown.rawMarkdown.length - markdown.body.length + start };
+}
+
+// The names `names` finds in `text`, as { start, end, text, entities },
+// in text order. Overlapping matches go to the longest; a span two names
+// match exactly goes to every entity they belong to.
+export function findMentions(text, names) {
+  const find = wordMatcher(text);
+  const spans = new Map();
+  for (const entry of names) {
+    for (const [start, end] of find(entry.pattern)) {
+      const key = `${start}:${end}`;
+      const span = spans.get(key) ?? { start, end, entities: [] };
+      if (!span.entities.some((entity) => entity.kind === entry.kind && entity.id === entry.id)) {
+        span.entities.push({ kind: entry.kind, id: entry.id });
+      }
+      spans.set(key, span);
+    }
+  }
+  const ordered = [...spans.values()].sort((left, right) => (right.end - right.start) - (left.end - left.start) || left.start - right.start);
+  const taken = [];
+  const kept = [];
+  for (const span of ordered) {
+    if (taken.some(([start, end]) => span.start < end && start < span.end)) {
+      continue;
+    }
+    taken.push([span.start, span.end]);
+    kept.push({ ...span, text: text.slice(span.start, span.end) });
+  }
+  return kept.sort((left, right) => left.start - right.start);
+}
+
+// Whether a one-word name at `start` opens a sentence while the chapter
+// also uses it as an ordinary lower-case word ("Rose from her chair" in a
+// chapter with "a rose"), so the capital may be the sentence's, not the
+// name's. Used only by the continuity check; story mentions lists every
+// match.
+export function ambiguousMention(text, mention, pack, find = wordMatcher(text)) {
+  if (/\s/u.test(mention.text)) {
+    return false;
+  }
+  const lower = lowerCase(mention.text, pack);
+  if (lower === mention.text || !opensSentence(text, mention.start)) {
+    return false;
+  }
+  return find(new RegExp(wholeWords(escapeRegExp(lower), lower), "gu"), { first: true }).length > 0;
+}
+
+function opensSentence(text, start) {
+  const before = text.slice(Math.max(0, start - 200), start).replace(/[ \t"'“”‘’«»„()[\]*_>#—–-]+$/u, "");
+  if (before === "" || before.endsWith("\n")) {
+    return true;
+  }
+  return /[.!?…]$/u.test(before.trimEnd());
+}
+
+// Mentions with the line and column they are on in the chapter file, and
+// the line itself, trimmed.
+export function locateMentions(chapterProse, mentions) {
+  const { raw, offset } = chapterProse;
+  let line = 1;
+  let lineStart = 0;
+  let position = 0;
+  return mentions.map((mention) => {
+    const at = offset + mention.start;
+    for (; position < at; position += 1) {
+      if (raw[position] === "\n") {
+        line += 1;
+        lineStart = position + 1;
+      }
+    }
+    const lineEnd = raw.indexOf("\n", at);
+    const lineText = raw.slice(lineStart, lineEnd === -1 ? raw.length : lineEnd).replace(/\r$/, "");
+    return { ...mention, line, column: at - lineStart + 1, excerpt: excerpt(lineText, at - lineStart, mention.text.length) };
+  });
+}
+
+const EXCERPT_RADIUS = 60;
+
+function excerpt(lineText, column, length) {
+  const from = Math.max(0, column - EXCERPT_RADIUS);
+  const to = Math.min(lineText.length, column + length + EXCERPT_RADIUS);
+  return `${from > 0 ? "…" : ""}${lineText.slice(from, to).trim()}${to < lineText.length ? "…" : ""}`;
+}
+
+// The ids a chapter's frontmatter lists for an entity kind, or null for a
+// kind chapters do not list.
+export function listedIds(chapter, kind) {
+  if (kind === "character") {
+    return new Set([chapter.pov, ...chapter.characters, ...chapter.mentions].filter(Boolean));
+  }
+  if (kind === "location") {
+    return new Set(chapter.locations);
+  }
+  if (kind === "artifact") {
+    return new Set(chapter.mentions);
+  }
+  return null;
+}
+
+// Findings on names in each drafted chapter's prose. `named-not-listed`:
+// the prose names a character its frontmatter lists in none of `pov`,
+// `characters`, or `mentions`. With `unnamed`, also `mention-not-named`: a
+// character or artifact in its `mentions` that the prose never names.
+// story continuity runs only the first; story mentions with no entity runs
+// both, since a mention by relationship alone ("her father") is common.
+// Characters in `characters` are never checked for a name, since a POV "I"
+// or a pronoun is often all the page gives them. Locations are named in
+// passing more often than they are visited, and artifacts have no list
+// for being present, so neither is checked for a missing listing. Cut
+// characters are left to the cut-character checks.
+export function auditMentions(project, { unnamed = false } = {}) {
+  const warnings = [];
+  const drafted = project.chapters.filter((chapter) => chapter.status !== "outline");
+  if (drafted.length === 0) {
+    return warnings;
+  }
+  const pack = project.pack ?? languagePack();
+  const cut = new Set(project.characters.filter((character) => character.status === "cut").map((character) => character.id));
+  const names = mentionNames(project);
+  const known = new Set(names.map((entry) => `${entry.kind} ${entry.id}`));
+  for (const chapter of drafted) {
+    const prose = chapterText(project, chapter);
+    if (prose === null || prose.text.trim() === "") {
+      continue;
+    }
+    const label = path.relative(project.root, chapter.file);
+    const find = wordMatcher(prose.text);
+    const mentions = findMentions(prose.text, names);
+    const named = new Set();
+    const unlisted = new Map();
+    const listed = listedIds(chapter, "character");
+    for (const mention of mentions) {
+      for (const entity of mention.entities) {
+        named.add(`${entity.kind} ${entity.id}`);
+      }
+      // A name two entities share does not say which one is meant.
+      if (mention.entities.length !== 1) {
+        continue;
+      }
+      const [{ kind, id }] = mention.entities;
+      if (kind !== "character" || cut.has(id) || listed.has(id) || unlisted.has(id)) {
+        continue;
+      }
+      if (!ambiguousMention(prose.text, mention, pack, find)) {
+        unlisted.set(id, mention.text);
+      }
+    }
+    for (const id of [...unlisted.keys()].sort()) {
+      warnings.push(warn("named-not-listed", `${label} names character ${id} ("${unlisted.get(id)}") but does not list them in characters or mentions`, label, chapter.id));
+    }
+    if (!unnamed) {
+      continue;
+    }
+    for (const id of [...new Set(chapter.mentions)].sort()) {
+      if (id === chapter.pov || cut.has(id)) {
+        continue;
+      }
+      const kind = known.has(`character ${id}`) ? "character" : known.has(`artifact ${id}`) ? "artifact" : null;
+      // A missing id is a links error, not this check's.
+      if (kind !== null && !named.has(`${kind} ${id}`)) {
+        warnings.push(warn("mention-not-named", `${label} lists ${kind} ${id} in mentions but never names it; add the name the chapter uses as an alias, or drop the mention`, label, chapter.id));
+      }
+    }
+  }
+  return warnings;
+}
+
+// story mentions: every place chapter prose names one entity.
+export function entityMentions(project, kind, id) {
+  const entries = mentionNames(project);
+  const own = entries.filter((entry) => entry.kind === kind && entry.id === id);
+  const chapters = [];
+  const matches = [];
+  for (const chapter of project.chapters) {
+    const prose = chapterText(project, chapter);
+    if (prose === null) {
+      continue;
+    }
+    const file = path.relative(project.root, chapter.file).split(path.sep).join("/");
+    const found = locateMentions(prose, findMentions(prose.text, entries).filter((mention) => mention.entities.some((entity) => entity.kind === kind && entity.id === id)));
+    const listed = listedIds(chapter, kind);
+    if (found.length > 0 || listed?.has(id)) {
+      chapters.push({ chapter: chapter.id, file, count: found.length, listed: listed === null ? null : listed.has(id) });
+    }
+    for (const mention of found) {
+      matches.push({ chapter: chapter.id, file, line: mention.line, column: mention.column, text: mention.text, excerpt: mention.excerpt });
+    }
+  }
+  return { names: own.map((entry) => entry.name), chapters, matches };
+}
+
+export function formatMentions(report) {
+  const lines = report.matches.map((match) => `${match.file}:${match.line}:${match.column}: ${match.text}: ${match.excerpt}`);
+  const heading = `${report.kind} ${report.id} (${report.names.join(", ")})`;
+  if (report.matches.length === 0) {
+    lines.push(`No mentions of ${heading} in chapter prose`);
+  } else {
+    const chapters = report.chapters.filter((chapter) => chapter.count > 0).length;
+    lines.push(`${report.matches.length} ${report.matches.length === 1 ? "mention" : "mentions"} of ${heading} in ${chapters} ${chapters === 1 ? "chapter" : "chapters"}`);
+  }
+  for (const chapter of report.chapters) {
+    if (chapter.listed === false) {
+      lines.push(`${chapter.file} names it but does not list it`);
+    } else if (chapter.listed && chapter.count === 0) {
+      lines.push(`${chapter.file} lists it but its prose never names it`);
+    }
+  }
+  return `${lines.join("\n")}\n`;
+}

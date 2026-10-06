@@ -7,7 +7,8 @@ locations:
 characters:
   - bo
   - wick
-mentions: []
+mentions:
+  - old-pike
 arcs-advanced: []
 status: draft
 hook: decision
