@@ -282,6 +282,15 @@ describe("#132 validate rejects non-string text fields", () => {
     expect(errors).toContain('characters/kael-voss.md frontmatter field name must be text: quote it as name: "7"');
   });
 
+  test("the quote hint spells the value as the file does", () => {
+    const root = copyExample("the-last-ember");
+    editFile(path.join(root, "chapters", "chapter-01.md"), (text) => text.replace(/^title: .*$/m, "title: True # draft"));
+    editFile(path.join(root, "characters", "kael-voss.md"), (text) => text.replace(/^name: .*$/m, "name: 007"));
+    const errors = messages(validateProject(root).errors);
+    expect(errors).toContain('chapters/chapter-01.md frontmatter field title must be text: quote it as title: "True"');
+    expect(errors).toContain('characters/kael-voss.md frontmatter field name must be text: quote it as name: "007"');
+  });
+
   test("validate fails wherever the schema rejects a number in a text field", () => {
     const root = copyExample("the-last-ember");
     const files = ["story.md", "chapters/chapter-01.md", "characters/kael-voss.md", "worldbuilding/locations/ashen-citadel.md", "glossary/terms/ember-sight.md"]

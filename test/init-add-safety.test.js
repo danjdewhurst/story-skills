@@ -38,13 +38,18 @@ describe("init", () => {
     expect(messages(validateProject(path.join(cwd, "tk")).errors)).toEqual([]);
   });
 
-  test("a title with a line or paragraph separator is written escaped and validates", () => {
+  test("refuses a title with a line break, so it cannot add lines to story.md", () => {
     const cwd = makeTempDir();
-    expect(invoke(cwd, ["init", "Night\u2028Train", "--dir", "night"]).code).toBe(0);
-    const story = path.join(cwd, "night", "story.md");
-    expect(fs.readFileSync(story, "utf8")).toContain('title: "Night\\u2028Train"\n');
-    expect(frontmatter(story).title).toBe("Night\u2028Train");
-    expect(messages(validateProject(path.join(cwd, "night")).errors)).toEqual([]);
+    for (const title of ["Night\nTrain", "X\n## Synopsis\nInjected", "Night\rTrain", "Night\u2028Train", "Night\u2029Train"]) {
+      const result = invoke(cwd, ["init", title, "--dir", "night"]);
+      expect(result.code).toBe(2);
+      expect(result.err).toContain("A story title must be a single line");
+    }
+    expect(fs.readdirSync(cwd)).toEqual([]);
+    expect(invoke(cwd, ["init", "Night Train", "--dir", "night"]).code).toBe(0);
+    const story = fs.readFileSync(path.join(cwd, "night", "story.md"), "utf8");
+    expect(story).toContain("\n# Night Train\n");
+    expect(story).not.toContain("Injected");
   });
 
   test("--force adds missing starter files and never overwrites existing ones", () => {
@@ -241,6 +246,7 @@ describe("add", () => {
       expect(result.code).toBe(2);
       expect(result.err).toContain("A character name must be a single line");
     }
+    expect(fs.readdirSync(path.join(root, "characters"))).toEqual(["_index.md"]);
     createEntity(root, { kind: "character", name: "Sera Voss" });
     const renamed = invoke(cwd, ["rename", "character", "sera-voss", "Sera\u2028Storm", "--path", root]);
     expect(renamed.code).toBe(2);

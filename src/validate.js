@@ -6,7 +6,7 @@ import { idText, storyDateError } from "./continuity.js";
 import { chapterChronology } from "./chronology.js";
 import { characterLifeline, diesAgainIn } from "./deaths.js";
 import { validateProgressions } from "./progressions.js";
-import { parseFrontmatter } from "./frontmatter.js";
+import { parseFrontmatter, scalarText } from "./frontmatter.js";
 import { FRONTMATTER_KEYS, nearMissKeys } from "./frontmatter-keys.js";
 import { isPathInside, lstatIfExists, portablePath, projectPath, readTextFile, TEMPORARY_FILE_PATTERN } from "./files.js";
 import { kebabCase } from "./markdown.js";
@@ -1008,7 +1008,8 @@ function validateTextFields(project, errors) {
     for (const field of fields) {
       const value = data?.[field];
       if (typeof value === "number" || typeof value === "boolean") {
-        errors.push(err("field-not-text", `${label} frontmatter field ${field} must be text: quote it as ${field}: "${value}"`, label));
+        // Quote the value as written: `title: True` becomes "True", not "true".
+        errors.push(err("field-not-text", `${label} frontmatter field ${field} must be text: quote it as ${field}: "${scalarText(data, field) ?? value}"`, label));
       } else if (Array.isArray(value) && !errors.some((error) => error.file === label && error.message.includes(` ${field} `))) {
         // Another check may already have said the field cannot be a list.
         errors.push(err("field-not-text", `${label} frontmatter field ${field} must be text, not a list`, label));

@@ -183,6 +183,9 @@ describe("story split", () => {
     expect(() => splitChapter(root, { id: "chapter-02" })).toThrow("split requires --at <marker>");
     expect(() => splitChapter(root, { id: "chapter-09", at: "1" })).toThrow("chapter chapter-09 does not exist");
     expect(() => splitChapter(root, { id: "chapter-02", at: "1", title: " " })).toThrow("--title cannot be empty");
+    for (const title of ["Two\nParts", "Two\rParts", "Two\u2028Parts", "Two\u2029Parts"]) {
+      expect(() => splitChapter(root, { id: "chapter-02", at: "1", title })).toThrow("A chapter title must be a single line");
+    }
     setProse(root, "chapter-04", "They landed.\n\n* * *\n\n<!-- later -->\n");
     const ending = snapshot(root);
     expect(() => splitChapter(root, { id: "chapter-04", at: "1" })).toThrow("is at the end of the chapter text of chapter-04");
