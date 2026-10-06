@@ -494,16 +494,30 @@ var MAX_READ_BYTES = 5 * 1024 * 1024;
 function readTextFile(filePath) {
   const stats = fs.lstatSync(filePath);
   if (stats.isSymbolicLink()) {
-    throw projectError(`Refusing to read through symlink: ${filePath}`);
+    throw projectError(`${filePath}: Refusing to read through symlink`);
   }
   if (!stats.isFile()) {
-    throw projectError(`Refusing to read ${filePath}: not a regular file`);
+    throw projectError(`${filePath}: Refusing to read: not a regular file`);
   }
   if (stats.size > MAX_READ_BYTES) {
-    throw projectError(`Refusing to read oversized file ${filePath}: ${stats.size} bytes exceeds the ${MAX_READ_BYTES} byte limit`);
+    throw projectError(`${filePath}: Refusing to read oversized file: ${stats.size} bytes exceeds the ${MAX_READ_BYTES} byte limit`);
   }
   return decodeUtf8(fs.readFileSync(filePath), filePath);
 }
+var FILE_ERROR_REASONS = {
+  EACCES: "permission denied",
+  EPERM: "permission denied",
+  ENOENT: "no such file or folder",
+  EISDIR: "it is a folder, not a file",
+  ENOTDIR: "a part of the path is not a folder",
+  EROFS: "the file system is read-only",
+  ENOSPC: "no space left on the device",
+  ENAMETOOLONG: "the name is too long",
+  EDQUOT: "the disk quota is exceeded",
+  EFBIG: "the file is too large",
+  EIO: "an input/output error",
+  EBUSY: "the file is in use"
+};
 var UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 function decodeUtf8(buffer, filePath) {
   try {
@@ -676,7 +690,7 @@ function assertLexicallyInsideRoot(filePath, root) {
 }
 function rejectSymlinkTarget(filePath, action) {
   if (lstatIfExists(filePath)?.isSymbolicLink()) {
-    throw projectError(`Refusing to ${action} through symlink: ${filePath}`);
+    throw projectError(`${filePath}: Refusing to ${action} through symlink`);
   }
 }
 function lstatIfExists(filePath) {
@@ -10583,7 +10597,7 @@ function scanProject(root) {
   try {
     story = readMarkdown(storyPath, projectRoot);
   } catch (error) {
-    scanErrors.push(err("unreadable-file", `story.md: ${error.message}`, "story.md"));
+    scanErrors.push(err("unreadable-file", fileErrorMessage("story.md", error), "story.md"));
     story = { data: { title: path6.basename(projectRoot) }, body: "", rawMarkdown: "", unreadable: true };
   }
   const storyId = deriveStoryId(story.data.title, projectRoot);
@@ -10594,7 +10608,7 @@ function scanProject(root) {
     try {
       continuity = readMarkdown(continuityPath, projectRoot);
     } catch (error) {
-      scanErrors.push(err("unreadable-file", `${path6.join("continuity", "state.md")}: ${error.message}`, path6.join("continuity", "state.md")));
+      scanErrors.push(err("unreadable-file", fileErrorMessage(path6.join("continuity", "state.md"), error), path6.join("continuity", "state.md")));
       continuity = null;
     }
   }
@@ -11925,8 +11939,7 @@ function readEntityFiles(root, relativeDir, mapEntity, scanErrors) {
       Object.defineProperty(entity, "frontmatter", { value: markdown.data, enumerable: false });
       entities.push(entity);
     } catch (error) {
-      const message = error.message.startsWith(`${fullPath} `) ? error.message.slice(fullPath.length + 1) : error.message;
-      scanErrors.push(err("unreadable-file", `${label}: ${message}`, label));
+      scanErrors.push(err("unreadable-file", fileErrorMessage(label, error), label));
     }
   }
   return entities;
@@ -11967,7 +11980,7 @@ function readExemptions(root, scanErrors) {
   try {
     raw = readTextFile(exemptionsPath);
   } catch (error) {
-    scanErrors.push(err("unreadable-file", `${path6.join("continuity", "exemptions.md")}: ${relativePathError(error, exemptionsPath, root).message}`, path6.join("continuity", "exemptions.md")));
+    scanErrors.push(err("unreadable-file", fileErrorMessage(path6.join("continuity", "exemptions.md"), relativePathError(error, exemptionsPath, root)), path6.join("continuity", "exemptions.md")));
     return [];
   }
   let data;
@@ -11987,7 +12000,7 @@ function readOptionalRootFile(root, name, scanErrors) {
     const markdown = readMarkdown(filePath, root);
     return { file: filePath, data: markdown.data, rawMarkdown: markdown.rawMarkdown };
   } catch (error) {
-    scanErrors.push(err("unreadable-file", `${name}: ${error.message}`, name));
+    scanErrors.push(err("unreadable-file", fileErrorMessage(name, error), name));
     return null;
   }
 }
@@ -12000,7 +12013,7 @@ function readStyleSheet(root, scanErrors) {
     const markdown = readMarkdown(filePath, root);
     return { file: filePath, data: markdown.data, body: markdown.body };
   } catch (error) {
-    scanErrors.push(err("unreadable-file", `${STYLE_SHEET_FILE}: ${error.message}`, STYLE_SHEET_FILE));
+    scanErrors.push(err("unreadable-file", fileErrorMessage(STYLE_SHEET_FILE, error), STYLE_SHEET_FILE));
     return null;
   }
 }
@@ -12022,7 +12035,19 @@ function readMarkdown(filePath, root) {
 }
 function relativePathError(error, filePath, root) {
   const relativePath = path6.relative(root, filePath);
+  const reason = typeof error.code === "string" && error.path === filePath ? FILE_ERROR_REASONS[error.code] : undefined;
+  if (reason) {
+    return projectError(`${relativePath}: Cannot read: ${reason}`);
+  }
   return projectError(error.message.split(filePath).join(relativePath).split(path6.resolve(root, relativePath)).join(relativePath));
+}
+function fileErrorMessage(label, error) {
+  for (const prefix of [`${label}: `, `${label} `]) {
+    if (error.message.startsWith(prefix)) {
+      return `${label}: ${error.message.slice(prefix.length)}`;
+    }
+  }
+  return `${label}: ${error.message}`;
 }
 function safeRead(filePath, root) {
   if (!fs3.existsSync(filePath)) {
@@ -15345,8 +15370,7 @@ function validateProjectOf(project) {
     let markdown;
     try {
       markdown = safeRead(path11.join(projectRoot, indexPath), projectRoot);
-    } catch (error) {
-      errors.push(err("unreadable-file", `${indexPath}: ${error.message}`, indexPath));
+    } catch {
       continue;
     }
     for (const [link, file] of links) {
@@ -15642,7 +15666,7 @@ function validateTimelineAndArcBodyRefs(project, chapters, errors, hasScheduledC
         checkBodyLinkTarget(project, path11.join("plot", "timeline.md"), target, errors);
       }
     } catch (error) {
-      const message = `${path11.join("plot", "timeline.md")}: ${error.message}`;
+      const message = fileErrorMessage(path11.join("plot", "timeline.md"), relativePathError(error, timelinePath, project.root));
       if (!hasMessage(errors, message)) {
         errors.push(err("unreadable-file", message, path11.join("plot", "timeline.md")));
       }
@@ -15654,7 +15678,7 @@ function validateTimelineAndArcBodyRefs(project, chapters, errors, hasScheduledC
     try {
       body = readMarkdown(arc.file, project.root).body ?? "";
     } catch (error) {
-      const message = label + ": " + error.message;
+      const message = fileErrorMessage(label, error);
       if (!hasMessage(errors, message)) {
         errors.push(err("unreadable-file", message, label));
       }
@@ -15673,7 +15697,7 @@ function validateMatterBodyLinks(project, errors) {
     try {
       body = readMarkdown(matter.file, project.root).body ?? "";
     } catch (error) {
-      const message = `${label}: ${error.message}`;
+      const message = fileErrorMessage(label, error);
       if (!hasMessage(errors, message)) {
         errors.push(err("unreadable-file", message, label));
       }
@@ -15785,7 +15809,7 @@ function readValidationData(file, root, label, errors) {
   try {
     return readMarkdown(file, root).data;
   } catch (error) {
-    const message = `${label}: ${error.message}`;
+    const message = fileErrorMessage(label, error);
     if (!hasMessage(errors, message)) {
       errors.push(err("unreadable-file", message, label));
     }
@@ -21877,20 +21901,6 @@ function handleOutputError(error, proc) {
   } catch {}
   proc.exit(1);
 }
-var FILE_ERROR_REASONS = {
-  EACCES: "permission denied",
-  EPERM: "permission denied",
-  ENOENT: "no such file or folder",
-  EISDIR: "it is a folder, not a file",
-  ENOTDIR: "a part of the path is not a folder",
-  EROFS: "the file system is read-only",
-  ENOSPC: "no space left on the device",
-  ENAMETOOLONG: "the name is too long",
-  EDQUOT: "the disk quota is exceeded",
-  EFBIG: "the file is too large",
-  EIO: "an input/output error",
-  EBUSY: "the file is in use"
-};
 var FILE_ERROR_ACTIONS = { open: "open", scandir: "list", stat: "check", statx: "check", lstat: "check", rename: "replace", mkdir: "create the folder", unlink: "delete", rmdir: "delete", copyfile: "copy", access: "write to", write: "write to", rm: "delete" };
 function describeError(error, cwd) {
   const hint = typeof error.hint === "string" ? `. ${error.hint}` : "";

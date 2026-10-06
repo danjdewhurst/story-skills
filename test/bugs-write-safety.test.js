@@ -141,7 +141,7 @@ describe("invalid UTF-8 (#195)", () => {
     const offset = bytes.indexOf(0x93);
     const validation = invoke(root, ["validate"]);
     expect(validation.code).toBe(1);
-    expect(validation.out + validation.err).toContain(`is not valid UTF-8 (byte 0x93 at offset ${offset}): re-save it as UTF-8`);
+    expect(validation.out + validation.err).toContain(`${path.join("chapters", "chapter-01.md")}: is not valid UTF-8 (byte 0x93 at offset ${offset}): re-save it as UTF-8`);
     expect(() => computeWordCounts(root, { write: true })).toThrow("is not valid UTF-8");
     expect(() => createEntity(root, { kind: "character", name: "Mara" })).toThrow("is not valid UTF-8");
     expect(fs.readFileSync(chapter).equals(bytes)).toBe(true);
@@ -153,6 +153,35 @@ describe("invalid UTF-8 (#195)", () => {
     expect(readTextFile(file)).toBe("﻿Café £5 �");
     fs.writeFileSync(file, Buffer.concat([Buffer.from("ok � "), Buffer.from([0xa3])]));
     expect(() => readTextFile(file)).toThrow("is not valid UTF-8 (byte 0xa3 at offset 7)");
+  });
+});
+
+describe("unreadable files name their path once (#383)", () => {
+  test("validate names a non-UTF-8, oversized, unreadable, or symlinked file once", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    createEntity(root, { kind: "chapter", name: "Two", number: 2 });
+    createEntity(root, { kind: "character", name: "Mara" });
+    fs.appendFileSync(path.join(root, "chapters", "chapter-01.md"), Buffer.from([0xff]));
+    fs.appendFileSync(path.join(root, "characters", "_index.md"), Buffer.from([0xff]));
+    fs.writeFileSync(path.join(root, "chapters", "chapter-02.md"), "a".repeat(5 * 1024 * 1024 + 1));
+    fs.symlinkSync(path.join(root, "story.md"), path.join(root, "continuity", "exemptions.md"));
+    if (!isRoot) {
+      fs.chmodSync(path.join(root, "characters", "mara.md"), 0o000);
+    }
+    const errors = messages(validateProject(root).errors);
+    for (const error of errors) {
+      const [label] = error.split(": ");
+      expect(error.slice(label.length)).not.toContain(label);
+      expect(error).not.toContain(root);
+    }
+    expect(errors).toContain(`${path.join("chapters", "chapter-01.md")}: is not valid UTF-8 (byte 0xff at offset ${fs.statSync(path.join(root, "chapters", "chapter-01.md")).size - 1}): re-save it as UTF-8`);
+    expect(errors).toContain(`${path.join("chapters", "chapter-02.md")}: Refusing to read oversized file: ${5 * 1024 * 1024 + 1} bytes exceeds the ${5 * 1024 * 1024} byte limit`);
+    expect(errors).toContain(`${path.join("continuity", "exemptions.md")}: Refusing to read through symlink`);
+    expect(errors.filter((error) => error.startsWith(`${path.join("characters", "_index.md")}: is not valid UTF-8`))).toHaveLength(1);
+    if (!isRoot) {
+      expect(errors).toContain(`${path.join("characters", "mara.md")}: Cannot read: permission denied`);
+    }
   });
 });
 

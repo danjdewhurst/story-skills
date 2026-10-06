@@ -7,20 +7,37 @@ export const MAX_READ_BYTES = 5 * 1024 * 1024;
 
 // Reads a project text file. A symlink, a device, a FIFO, or a file over
 // the size cap is refused, so a cloned project cannot point a read at
-// /dev/zero or at a file outside itself.
+// /dev/zero or at a file outside itself. Every refusal starts with the
+// path, so a caller that labels the file can drop it rather than repeat it.
 export function readTextFile(filePath) {
   const stats = fs.lstatSync(filePath);
   if (stats.isSymbolicLink()) {
-    throw projectError(`Refusing to read through symlink: ${filePath}`);
+    throw projectError(`${filePath}: Refusing to read through symlink`);
   }
   if (!stats.isFile()) {
-    throw projectError(`Refusing to read ${filePath}: not a regular file`);
+    throw projectError(`${filePath}: Refusing to read: not a regular file`);
   }
   if (stats.size > MAX_READ_BYTES) {
-    throw projectError(`Refusing to read oversized file ${filePath}: ${stats.size} bytes exceeds the ${MAX_READ_BYTES} byte limit`);
+    throw projectError(`${filePath}: Refusing to read oversized file: ${stats.size} bytes exceeds the ${MAX_READ_BYTES} byte limit`);
   }
   return decodeUtf8(fs.readFileSync(filePath), filePath);
 }
+
+// Plain words for the file-system error codes a command can hit.
+export const FILE_ERROR_REASONS = {
+  EACCES: "permission denied",
+  EPERM: "permission denied",
+  ENOENT: "no such file or folder",
+  EISDIR: "it is a folder, not a file",
+  ENOTDIR: "a part of the path is not a folder",
+  EROFS: "the file system is read-only",
+  ENOSPC: "no space left on the device",
+  ENAMETOOLONG: "the name is too long",
+  EDQUOT: "the disk quota is exceeded",
+  EFBIG: "the file is too large",
+  EIO: "an input/output error",
+  EBUSY: "the file is in use"
+};
 
 const UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
@@ -255,7 +272,7 @@ export function assertLexicallyInsideRoot(filePath, root) {
 
 function rejectSymlinkTarget(filePath, action) {
   if (lstatIfExists(filePath)?.isSymbolicLink()) {
-    throw projectError(`Refusing to ${action} through symlink: ${filePath}`);
+    throw projectError(`${filePath}: Refusing to ${action} through symlink`);
   }
 }
 
