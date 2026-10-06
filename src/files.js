@@ -492,3 +492,16 @@ export function isPathInside(root, target) {
   const relativePath = path.relative(root, target);
   return !path.isAbsolute(relativePath) && (relativePath === "" || !relativePath.split(path.sep).includes(".."));
 }
+
+// A git folder on the way to a path, as typed or behind a symlinked folder
+// (`lnk -> .git`). No story command writes a repository's own files, and a
+// generated file such as `--out .git/config` would replace git's settings.
+// Windows also reads `.git.`, `.git ` and the short name `GIT~1` as `.git`.
+const GIT_DIRECTORY_NAME = /^(?:\.git[. ]*|git~\d+)$/i;
+
+export function isInsideGitDirectory(target) {
+  const resolved = path.resolve(target);
+  const { ancestor, missing } = nearestExistingAncestor(resolved, fs.existsSync);
+  const real = path.join(fs.realpathSync.native(ancestor), ...missing);
+  return [resolved, real].some((candidate) => candidate.split(/[\\/]/).some((name) => GIT_DIRECTORY_NAME.test(name)));
+}

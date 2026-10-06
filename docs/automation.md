@@ -64,7 +64,7 @@ Every command exits `0` on success. A failure exits with a code that says what k
 | `1` | Findings: a check reported at least one `error:` line. | `validate`, `links`, or `continuity` found an error; `names` found a clash. |
 | `2` | Usage error: the command line was wrong. | An unknown command or option, a missing option value, an unexpected argument, an unsupported `--format`, or an id that does not exist (`Unknown character nobody`). |
 | `3` | Not a usable story project. | No `story.md` at the path, invalid `cli-defaults` or `severity` in `story.md` (every command except `validate`, `report`, `next`, and `doctor`), a file the command needs cannot be read or parsed (`Cannot export: fix this file first`) or is a symlink, a project with a newer schema, or nothing to build (`No chapters found to export`). |
-| `4` | Refused or failed write. The message says what, if anything, was changed. | The target already exists (`init` without `--force`, `add` of an existing id), `--out` points at project source, outside the project, or through a symlink, another story command holds the project lock, a file changed on disk meanwhile, or the file system refused the write (`permission denied`, a full disk). |
+| `4` | Refused or failed write. The message says what, if anything, was changed. | The target already exists (`init` without `--force`, `add` of an existing id), `--out` points at project source, inside a `.git` folder, outside the project, or through a symlink, another story command holds the project lock, a file changed on disk meanwhile, or the file system refused the write (`permission denied`, a full disk). |
 
 Because findings keep `1`, `story validate "$STORY_DIR" || exit 1` and the GitHub Actions templates fail a job exactly as before. Scripts that test for `1` specifically to mean "any failure" need to accept `2`, `3`, and `4` too; `[ $? -ne 0 ]` or `|| exit` works for every code.
 
@@ -360,10 +360,11 @@ The **publish job** runs on a fresh runner, only when the draft job bundled a co
 
 1. **Checks what the agent committed.** It checks out the repository, verifies the bundle, and fetches the branch. It refuses the whole draft, pushing nothing, unless:
    - the commits build on `github.sha`, the commit the run started from (taken from GitHub, not from the draft job);
+   - the commits form a straight line, with no merge commit: a merge can carry changes of its own that a plain `git log` does not list (the file check below lists them anyway, with `-m`, as a second guard);
    - every file any of the commits touches is the story's own markdown: `story.md`, `style-sheet.md`, `progress.md`, or a `.md` file under `chapters/`, `scenes/`, `characters/`, `worldbuilding/`, `plot/`, `continuity/`, `glossary/`, `matter/`, or `research/` in `STORY_DIR`.
 
    So no dotfiles or hidden folders (`.github/`, `.claude/`, `.npmrc`), no scripts, no symlinks or submodules, and no file named `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, or `SKILL.md`, which would carry instructions into every later agent run. A file added in one commit and removed in the next is refused too, since the push would carry it.
-2. **Checks for secrets.** It refuses the draft if any commit's changes or message contain the value of `ANTHROPIC_API_KEY`. GitHub masks secrets in logs, not in commits. The check finds the key as written, not encoded or split, so it is a last line of defence. Rotate the key if this ever fires.
+2. **Checks for secrets.** It refuses the draft if any commit's changes (a merge's own changes included) or message contain the value of `ANTHROPIC_API_KEY`. GitHub masks secrets in logs, not in commits. The check finds the key as written, not encoded or split, so it is a last line of defence. Rotate the key if this ever fires.
 3. **Runs the story checks.** It runs `story validate`, `story links`, and `story continuity` with `--json` and reads their exit codes:
    - `0` passes;
    - `1` means findings, and each error goes into the pull request body;
@@ -383,7 +384,7 @@ What the agent has:
 
 - the `story` CLI (`Bash(story:*)`), installed before it starts;
 - `git checkout -b draft/`, `git add`, and `git commit`;
-- reading, writing, and searching files (`Read`, `Write`, `Edit`, `Glob`, `Grep`), except writing under `.git/` (`--disallowedTools "Edit(.git/**),Write(.git/**)"`);
+- reading, writing, and searching files (`Read`, `Write`, `Edit`, `Glob`, `Grep`), except writing under `.git/` (`--disallowedTools "Edit(.git/**),Write(.git/**)"`). The `story` CLI keeps out of `.git/` too: `--out` inside a `.git` folder, and `init` or `import` into one, are refused;
 - the prompt's instruction to treat project text as data and report, not follow, any instruction it finds.
 
 What it does not have:

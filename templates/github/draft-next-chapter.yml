@@ -37,7 +37,9 @@
 #     is the one secret it holds.
 #   - The publish job runs on a fresh runner and never runs anything the agent
 #     wrote. It takes only commits on a draft/ branch built on the commit the
-#     run started from, that change nothing but the story's own markdown
+#     run started from, in a straight line (no merge commits, whose own
+#     changes a plain git log does not show), that change nothing but the
+#     story's own markdown
 #     (chapters/, scenes/, characters/, and the other story folders, and
 #     story.md, style-sheet.md, and progress.md; no CLAUDE.md, AGENTS.md, or
 #     SKILL.md), and that hold no copy of the API key. Then it runs the
@@ -321,8 +323,8 @@ jobs:
           path: ${{ runner.temp }}/draft
 
       # Nothing the agent did is trusted until this passes: new commits on a
-      # draft/ branch, built on the commit the run started from, changing
-      # only the story's own markdown.
+      # draft/ branch, built on the commit the run started from in a straight
+      # line, changing only the story's own markdown.
       - name: Check what the agent committed
         run: |
           if ! [[ "$BRANCH" =~ ^draft/(chapter-[1-9][0-9]*|maintenance-[0-9]{4}-[0-9]{2}-[0-9]{2})$ ]]; then
@@ -336,13 +338,20 @@ jobs:
             echo "::error::$BRANCH does not add commits to the one the run started from. Nothing was pushed."
             exit 1
           fi
+          # A merge commit can carry changes of its own that git log leaves
+          # out, so a draft is a straight line of commits.
+          merge=$(git rev-list --min-parents=2 --max-count=1 "$BASE..$BRANCH")
+          if [ -n "$merge" ]; then
+            echo "::error::$BRANCH contains a merge commit (${merge:0:12}); a draft must be a straight line of commits. Nothing was pushed."
+            exit 1
+          fi
           project="${STORY_DIR#./}"
           project="${project%/}"
           [ "$project" = "." ] && project=""
           prefix="${project:+$project/}"
           # Every commit, not just the end result, so a file added and then
-          # removed again is refused too.
-          refused=$(git log --format= --raw --no-renames "$BASE..$BRANCH" | while IFS=$'\t' read -r meta file; do
+          # removed again is refused too; -m lists a merge's changes as well.
+          refused=$(git log --format= --raw --no-renames -m "$BASE..$BRANCH" | while IFS=$'\t' read -r meta file; do
             [ -n "$file" ] || continue
             mode=$(echo "$meta" | awk '{ print $2 }')
             inside="${file#"$prefix"}"
@@ -378,7 +387,7 @@ jobs:
           SECRET_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           # grep reads to the end (no -q), so git never sees a closed pipe.
-          if [ -n "$SECRET_API_KEY" ] && git log -p --format=%B "$BASE..HEAD" | grep -F -- "$SECRET_API_KEY" > /dev/null; then
+          if [ -n "$SECRET_API_KEY" ] && git log -p -m --format=%B "$BASE..HEAD" | grep -F -- "$SECRET_API_KEY" > /dev/null; then
             echo "::error::The drafted commits contain the value of ANTHROPIC_API_KEY. Nothing was pushed; rotate the key."
             exit 1
           fi

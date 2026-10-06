@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { chapterChronology } from "./chronology.js";
 import { entityStateAt } from "./progressions.js";
-import { isPlanning, lstatIfExists, nearestExistingAncestor, portablePath, projectPath, removeDirectory, removeFile, writeFile } from "./files.js";
+import { isInsideGitDirectory, isPlanning, lstatIfExists, nearestExistingAncestor, portablePath, projectPath, removeDirectory, removeFile, writeFile } from "./files.js";
 import { CODEX_GENERATOR, CODEX_KINDS, codexPages } from "./codex.js";
 import { PROGRESS_FILE } from "./progress.js";
 import {
@@ -787,6 +787,9 @@ function isCopyrightMatter(entry) {
 const HAND_EDITED_DIRECTORIES = ["feedback", "submission", "publishing", "adaptations"];
 
 function assertNotProjectSource(project, outFile) {
+  if (isInsideGitDirectory(outFile)) {
+    throw refusedError(`Refusing to write generated output to ${projectPath(project.root, outFile)}: it is inside a .git folder. Use a path such as dist/ instead`);
+  }
   // Check the path as typed and the real path behind any symlinked folder
   // (`lnk -> chapters`), case-insensitively for case-insensitive disks,
   // where `/users/me/book` can name the project at `/Users/me/Book`.
