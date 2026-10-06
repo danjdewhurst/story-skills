@@ -12890,11 +12890,11 @@ Add notes on the story's voice, texture, and emotional register.
 
 `;
 }
-function cell2(value) {
+function registryCell(value) {
   return String(value ?? "").replace(/[ \t]*(?:\r?\n|\r)[ \t]*/g, " ").trim().replace(/(\\*)\|/g, "$1$1\\|");
 }
 function characterIndex(storyId, characters, relationshipMap, familyTrees) {
-  const rows = characters.length === 0 ? ["| *No characters yet* | | | |"] : characters.map((character) => `| ${cell2(character.name)} | ${cell2(character.role)} | ${cell2(character.status)} | [${character.id}](${character.id}.md) |`);
+  const rows = characters.length === 0 ? ["| *No characters yet* | | | |"] : characters.map((character) => `| ${registryCell(character.name)} | ${registryCell(character.role)} | ${registryCell(character.status)} | [${character.id}](${character.id}.md) |`);
   return `${stringifyFrontmatter({ type: "character-registry", story: storyId })}# Characters
 
 ## Registry
@@ -12914,10 +12914,10 @@ ${familyTrees || "*No family trees defined yet.*"}
 `;
 }
 function worldIndex(storyId, locations, systems, factions, artifacts, overview) {
-  const locationRows = locations.length === 0 ? ["| *No locations yet* | | | |"] : locations.map((location) => `| ${cell2(location.name)} | ${cell2(titleCaseSlug(location.type))} | ${cell2(location.region)} | [${location.id}](locations/${location.id}.md) |`);
-  const systemRows = systems.length === 0 ? ["| *No systems yet* | | |"] : systems.map((system) => `| ${cell2(system.name)} | ${cell2(titleCaseSlug(system.type))} | [${system.id}](systems/${system.id}.md) |`);
-  const factionRows = factions.length === 0 ? ["| *No factions yet* | | | |"] : factions.map((faction) => `| ${cell2(faction.name)} | ${cell2(titleCaseSlug(faction.type))} | ${cell2(faction.status)} | [${faction.id}](factions/${faction.id}.md) |`);
-  const artifactRows = artifacts.length === 0 ? ["| *No artifacts yet* | | | |"] : artifacts.map((artifact) => `| ${cell2(artifact.name)} | ${cell2(titleCaseSlug(artifact.type))} | ${cell2(artifact.status)} | [${artifact.id}](artifacts/${artifact.id}.md) |`);
+  const locationRows = locations.length === 0 ? ["| *No locations yet* | | | |"] : locations.map((location) => `| ${registryCell(location.name)} | ${registryCell(titleCaseSlug(location.type))} | ${registryCell(location.region)} | [${location.id}](locations/${location.id}.md) |`);
+  const systemRows = systems.length === 0 ? ["| *No systems yet* | | |"] : systems.map((system) => `| ${registryCell(system.name)} | ${registryCell(titleCaseSlug(system.type))} | [${system.id}](systems/${system.id}.md) |`);
+  const factionRows = factions.length === 0 ? ["| *No factions yet* | | | |"] : factions.map((faction) => `| ${registryCell(faction.name)} | ${registryCell(titleCaseSlug(faction.type))} | ${registryCell(faction.status)} | [${faction.id}](factions/${faction.id}.md) |`);
+  const artifactRows = artifacts.length === 0 ? ["| *No artifacts yet* | | | |"] : artifacts.map((artifact) => `| ${registryCell(artifact.name)} | ${registryCell(titleCaseSlug(artifact.type))} | ${registryCell(artifact.status)} | [${artifact.id}](artifacts/${artifact.id}.md) |`);
   return `${stringifyFrontmatter({ type: "world-registry", story: storyId })}# Worldbuilding
 
 ## World Overview
@@ -12954,7 +12954,7 @@ ${artifactRows.join(`
 `;
 }
 function plotIndex(storyId, structure, arcs, storyStructure, themeTracking) {
-  const arcRows = arcs.length === 0 ? ["| *No arcs yet* | | | |"] : arcs.map((arc) => `| ${cell2(arc.name)} | ${cell2(arc.type)} | ${cell2(arc.status)} | [${arc.id}](arcs/${arc.id}.md) |`);
+  const arcRows = arcs.length === 0 ? ["| *No arcs yet* | | | |"] : arcs.map((arc) => `| ${registryCell(arc.name)} | ${registryCell(arc.type)} | ${registryCell(arc.status)} | [${arc.id}](arcs/${arc.id}.md) |`);
   return `${stringifyFrontmatter({ type: "plot-registry", story: storyId, structure })}# Plot Structure
 
 ## Story Structure
@@ -12976,7 +12976,7 @@ ${themeTracking || `| Theme | Arcs | Chapters |
 `;
 }
 function chapterIndex(storyId, chapters, unit = COUNT_UNITS.get("words")) {
-  const rows = chapters.length === 0 ? ["| *No chapters yet* | | | | | |"] : chapters.map((chapter) => `| ${cell2(chapter.number)} | ${cell2(chapter.title)} | ${cell2(chapter.pov)} | ${cell2(chapter.status)} | ${cell2(chapter.count)} | [${chapter.id}](${path5.basename(chapter.file)}) |`);
+  const rows = chapters.length === 0 ? ["| *No chapters yet* | | | | | |"] : chapters.map((chapter) => `| ${registryCell(chapter.number)} | ${registryCell(chapter.title)} | ${registryCell(chapter.pov)} | ${registryCell(chapter.status)} | ${registryCell(chapter.count)} | [${chapter.id}](${path5.basename(chapter.file)}) |`);
   const total = chapters.reduce((sum, chapter) => sum + chapter.count, 0);
   const heading = `${unit.noun[0].toUpperCase()}${unit.noun.slice(1)} Count`;
   return `${stringifyFrontmatter({ type: "chapter-registry", story: storyId })}# Chapters
@@ -13000,7 +13000,7 @@ function timeline(storyId) {
 `;
 }
 function sceneIndex(storyId, scenes) {
-  const rows = scenes.length === 0 ? ["| *No scenes yet* | | | | | |"] : scenes.map((scene) => `| ${cell2(scene.chapter)} | ${cell2(scene.scene)} | ${cell2(scene.title)} | ${cell2(scene.pov)} | ${cell2(scene.status)} | [${scene.id}](${scene.id}.md) |`);
+  const rows = scenes.length === 0 ? ["| *No scenes yet* | | | | | |"] : scenes.map((scene) => `| ${registryCell(scene.chapter)} | ${registryCell(scene.scene)} | ${registryCell(scene.title)} | ${registryCell(scene.pov)} | ${registryCell(scene.status)} | [${scene.id}](${scene.id}.md) |`);
   return `${stringifyFrontmatter({ type: "scene-registry", story: storyId })}# Scenes
 
 ## Registry
@@ -13047,7 +13047,7 @@ frontmatter above; the tables below are optional notes it does not read.
 `;
 }
 function questionIndex(storyId, questions) {
-  const rows = questions.length === 0 ? ["| *No questions yet* | | | |"] : questions.map((question) => `| ${cell2(question.title)} | ${cell2(question.status)} | ${cell2(question.introduced)} | [${question.id}](${question.id}.md) |`);
+  const rows = questions.length === 0 ? ["| *No questions yet* | | | |"] : questions.map((question) => `| ${registryCell(question.title)} | ${registryCell(question.status)} | ${registryCell(question.introduced)} | [${question.id}](${question.id}.md) |`);
   return `${stringifyFrontmatter({ type: "question-registry", story: storyId })}# Continuity Questions
 
 ## Registry
@@ -13059,7 +13059,7 @@ ${rows.join(`
 `;
 }
 function promiseIndex(storyId, promises) {
-  const rows = promises.length === 0 ? ["| *No promises yet* | | | |"] : promises.map((promise) => `| ${cell2(promise.title)} | ${cell2(promise.status)} | ${cell2(promise.planted)} | [${promise.id}](${promise.id}.md) |`);
+  const rows = promises.length === 0 ? ["| *No promises yet* | | | |"] : promises.map((promise) => `| ${registryCell(promise.title)} | ${registryCell(promise.status)} | ${registryCell(promise.planted)} | [${promise.id}](${promise.id}.md) |`);
   return `${stringifyFrontmatter({ type: "promise-registry", story: storyId })}# Promises And Payoffs
 
 ## Registry
@@ -13071,7 +13071,7 @@ ${rows.join(`
 `;
 }
 function clueIndex(storyId, clues) {
-  const rows = clues.length === 0 ? ["| *No clues yet* | | | |"] : clues.map((clue) => `| ${cell2(clue.title)} | ${cell2(clue.status)} | ${cell2(clue.planted)} | [${clue.id}](${clue.id}.md) |`);
+  const rows = clues.length === 0 ? ["| *No clues yet* | | | |"] : clues.map((clue) => `| ${registryCell(clue.title)} | ${registryCell(clue.status)} | ${registryCell(clue.planted)} | [${clue.id}](${clue.id}.md) |`);
   return `${stringifyFrontmatter({ type: "clue-registry", story: storyId })}# Clue Ledger
 
 ## Registry
@@ -13083,7 +13083,7 @@ ${rows.join(`
 `;
 }
 function glossaryIndex(storyId, terms) {
-  const rows = terms.length === 0 ? ["| *No terms yet* | | |"] : terms.map((term) => `| ${cell2(term.term)} | ${cell2(term.category)} | [${term.id}](terms/${term.id}.md) |`);
+  const rows = terms.length === 0 ? ["| *No terms yet* | | |"] : terms.map((term) => `| ${registryCell(term.term)} | ${registryCell(term.category)} | [${term.id}](terms/${term.id}.md) |`);
   return `${stringifyFrontmatter({ type: "glossary-registry", story: storyId })}# Glossary
 
 ## Registry
@@ -13095,7 +13095,7 @@ ${rows.join(`
 `;
 }
 function matterIndex(storyId, pages) {
-  const rows = pages.length === 0 ? ["| *No matter pages yet* | | | |"] : pages.map((page) => `| ${cell2(page.title)} | ${cell2(page.placement)} | ${cell2(page.order)} | [${page.id}](${page.id}.md) |`);
+  const rows = pages.length === 0 ? ["| *No matter pages yet* | | | |"] : pages.map((page) => `| ${registryCell(page.title)} | ${registryCell(page.placement)} | ${registryCell(page.order)} | [${page.id}](${page.id}.md) |`);
   return `${stringifyFrontmatter({ type: "matter-registry", story: storyId })}# Front And Back Matter
 
 ## Registry
@@ -13107,7 +13107,7 @@ ${rows.join(`
 `;
 }
 function researchIndex(storyId, notes) {
-  const rows = notes.length === 0 ? ["| *No research notes yet* | | | |"] : notes.map((note) => `| ${cell2(note.title)} | ${cell2(note.status)} | ${cell2(note.usedIn.join(", "))} | [${note.id}](${note.id}.md) |`);
+  const rows = notes.length === 0 ? ["| *No research notes yet* | | | |"] : notes.map((note) => `| ${registryCell(note.title)} | ${registryCell(note.status)} | ${registryCell(note.usedIn.join(", "))} | [${note.id}](${note.id}.md) |`);
   return `${stringifyFrontmatter({ type: "research-registry", story: storyId })}# Research
 
 ## Registry
@@ -23492,7 +23492,7 @@ function renameEntity(root, options) {
   const newFile = path12.join(project.root, config.dir, `${newId}.md`);
   assertSafeProjectPath(newFile, project.root);
   if (!fs8.existsSync(oldFile)) {
-    if (newFile !== oldFile && fs8.existsSync(newFile) && readMarkdown(newFile, project.root).data[config.titleField] === name && replaceEntityReferences(project.root, kind, oldId, newId, new Map).size === 0) {
+    if (newFile !== oldFile && fs8.existsSync(newFile) && readMarkdown(newFile, project.root).data[config.titleField] === name && registryAwaitsRetitle(project.root, kind, newFile, name) && replaceEntityReferences(project.root, kind, oldId, newId, new Map).size === 0) {
       const reindexed = reindexProject(project.root);
       return { kind, oldId, id: newId, file: newFile, changed: [newFile].concat(reindexed.changed), resumed: true };
     }
@@ -23551,6 +23551,17 @@ function renameEntity(root, options) {
     result.warnings = warnings.concat(prose.warnings);
   }
   return result;
+}
+function registryAwaitsRetitle(root, kind, file, name) {
+  const dir = entityConfig(kind).dir;
+  const registry = [dir, path12.posix.dirname(dir)].map((entry) => path12.posix.join(entry, "_index.md")).find((entry) => REGISTRY_FILES.has(entry));
+  const registryPath = registry && path12.join(root, registry);
+  if (!registryPath || !fs8.existsSync(registryPath)) {
+    return false;
+  }
+  const cell = `[${path12.basename(file, ".md")}](${projectPath(path12.dirname(registryPath), file)}) |`;
+  const row = safeRead(registryPath, root).split(/\r?\n/).find((line) => line.startsWith("| ") && line.trimEnd().endsWith(cell));
+  return row !== undefined && !row.startsWith(`| ${registryCell(name)} |`);
 }
 function planProseRename(project, kind, id, name) {
   if (!MENTION_KINDS.includes(kind)) {
@@ -25947,7 +25958,7 @@ function narrationScript(manuscript, guide) {
   } else {
     lines.push("| Name | Say it | Kind |", "| --- | --- | --- |");
     for (const entry of guide) {
-      lines.push(`| ${cell3(entry.name)} | ${cell3(entry.pronunciation)} | ${entry.kind} |`);
+      lines.push(`| ${cell2(entry.name)} | ${cell2(entry.pronunciation)} | ${entry.kind} |`);
     }
   }
   const credit = (key) => fillLabel(labels, authors === "" ? `${key}-anonymous` : key, { title: manuscript.title, authors, narrator });
@@ -25994,7 +26005,7 @@ function formatRuntime(words, rate = NARRATION_WORDS_PER_MINUTE) {
   const minutes = Math.round(words / rate);
   return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
 }
-function cell3(value) {
+function cell2(value) {
   return String(value).replace(/\s+/g, " ").trim().replace(/(\\*)\|/g, "$1$1\\|");
 }
 

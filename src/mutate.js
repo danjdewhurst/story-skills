@@ -113,6 +113,7 @@ import {
   glossaryIndex,
   matterIndex,
   researchIndex,
+  registryCell,
   styleSheet,
   requireSingleLineName,
   buildEntity,
@@ -1253,10 +1254,13 @@ export function renameEntity(root, options) {
   if (!fs.existsSync(oldFile)) {
     // A rename killed after deleting the old file missed only the reindex:
     // every reference was rewritten before the file moved. So resume only
-    // when the target has the requested name and nothing still names the old
-    // id; otherwise the old id is simply missing, and an unrelated entity
-    // that happens to have this name must not absorb its references.
+    // when the target has the requested name, nothing still names the old
+    // id, and the registry still shows the reindex is missing (see
+    // registryAwaitsRetitle); otherwise the old id is simply missing (a typo,
+    // or a rename that already finished), and an unrelated entity that
+    // happens to have this name must not absorb its references.
     if (newFile !== oldFile && fs.existsSync(newFile) && readMarkdown(newFile, project.root).data[config.titleField] === name
+      && registryAwaitsRetitle(project.root, kind, newFile, name)
       && replaceEntityReferences(project.root, kind, oldId, newId, new Map()).size === 0) {
       const reindexed = reindexProject(project.root);
       return { kind, oldId, id: newId, file: newFile, changed: [newFile].concat(reindexed.changed), resumed: true };
@@ -1329,6 +1333,23 @@ export function renameEntity(root, options) {
     result.warnings = warnings.concat(prose.warnings);
   }
   return result;
+}
+
+// Whether the registry row for `file` still shows another name than `name`:
+// the reference rewrite of a rename pointed the old entity's row at the new
+// file, and only the reindex after the delete gives it the new name. A rename
+// that finished, or an entity that merely has this name, is listed under it,
+// and a registry that does not list the file at all is no evidence either.
+function registryAwaitsRetitle(root, kind, file, name) {
+  const dir = entityConfig(kind).dir;
+  const registry = [dir, path.posix.dirname(dir)].map((entry) => path.posix.join(entry, "_index.md")).find((entry) => REGISTRY_FILES.has(entry));
+  const registryPath = registry && path.join(root, registry);
+  if (!registryPath || !fs.existsSync(registryPath)) {
+    return false;
+  }
+  const cell = `[${path.basename(file, ".md")}](${projectPath(path.dirname(registryPath), file)}) |`;
+  const row = safeRead(registryPath, root).split(/\r?\n/).find((line) => line.startsWith("| ") && line.trimEnd().endsWith(cell));
+  return row !== undefined && !row.startsWith(`| ${registryCell(name)} |`);
 }
 
 // rename --prose: the chapter prose edits for the new name (see

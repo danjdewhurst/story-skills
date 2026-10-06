@@ -650,14 +650,14 @@ Add notes on the story's voice, texture, and emotional register.
 // unescaped (or lose the backslash); other markdown escapes are kept. A
 // block scalar's closing newline would leave a trailing space, so the cell
 // is trimmed.
-function cell(value) {
+export function registryCell(value) {
   return String(value ?? "").replace(/[ \t]*(?:\r?\n|\r)[ \t]*/g, " ").trim().replace(/(\\*)\|/g, "$1$1\\|");
 }
 
 export function characterIndex(storyId, characters, relationshipMap, familyTrees) {
   const rows = characters.length === 0
     ? ["| *No characters yet* | | | |"]
-    : characters.map((character) => `| ${cell(character.name)} | ${cell(character.role)} | ${cell(character.status)} | [${character.id}](${character.id}.md) |`);
+    : characters.map((character) => `| ${registryCell(character.name)} | ${registryCell(character.role)} | ${registryCell(character.status)} | [${character.id}](${character.id}.md) |`);
 
   return `${stringifyFrontmatter({ type: "character-registry", story: storyId })}# Characters
 
@@ -680,16 +680,16 @@ ${familyTrees || "*No family trees defined yet.*"}
 export function worldIndex(storyId, locations, systems, factions, artifacts, overview) {
   const locationRows = locations.length === 0
     ? ["| *No locations yet* | | | |"]
-    : locations.map((location) => `| ${cell(location.name)} | ${cell(titleCaseSlug(location.type))} | ${cell(location.region)} | [${location.id}](locations/${location.id}.md) |`);
+    : locations.map((location) => `| ${registryCell(location.name)} | ${registryCell(titleCaseSlug(location.type))} | ${registryCell(location.region)} | [${location.id}](locations/${location.id}.md) |`);
   const systemRows = systems.length === 0
     ? ["| *No systems yet* | | |"]
-    : systems.map((system) => `| ${cell(system.name)} | ${cell(titleCaseSlug(system.type))} | [${system.id}](systems/${system.id}.md) |`);
+    : systems.map((system) => `| ${registryCell(system.name)} | ${registryCell(titleCaseSlug(system.type))} | [${system.id}](systems/${system.id}.md) |`);
   const factionRows = factions.length === 0
     ? ["| *No factions yet* | | | |"]
-    : factions.map((faction) => `| ${cell(faction.name)} | ${cell(titleCaseSlug(faction.type))} | ${cell(faction.status)} | [${faction.id}](factions/${faction.id}.md) |`);
+    : factions.map((faction) => `| ${registryCell(faction.name)} | ${registryCell(titleCaseSlug(faction.type))} | ${registryCell(faction.status)} | [${faction.id}](factions/${faction.id}.md) |`);
   const artifactRows = artifacts.length === 0
     ? ["| *No artifacts yet* | | | |"]
-    : artifacts.map((artifact) => `| ${cell(artifact.name)} | ${cell(titleCaseSlug(artifact.type))} | ${cell(artifact.status)} | [${artifact.id}](artifacts/${artifact.id}.md) |`);
+    : artifacts.map((artifact) => `| ${registryCell(artifact.name)} | ${registryCell(titleCaseSlug(artifact.type))} | ${registryCell(artifact.status)} | [${artifact.id}](artifacts/${artifact.id}.md) |`);
 
   return `${stringifyFrontmatter({ type: "world-registry", story: storyId })}# Worldbuilding
 
@@ -726,7 +726,7 @@ ${artifactRows.join("\n")}
 export function plotIndex(storyId, structure, arcs, storyStructure, themeTracking) {
   const arcRows = arcs.length === 0
     ? ["| *No arcs yet* | | | |"]
-    : arcs.map((arc) => `| ${cell(arc.name)} | ${cell(arc.type)} | ${cell(arc.status)} | [${arc.id}](arcs/${arc.id}.md) |`);
+    : arcs.map((arc) => `| ${registryCell(arc.name)} | ${registryCell(arc.type)} | ${registryCell(arc.status)} | [${arc.id}](arcs/${arc.id}.md) |`);
 
   return `${stringifyFrontmatter({ type: "plot-registry", story: storyId, structure })}# Plot Structure
 
@@ -752,7 +752,7 @@ ${themeTracking || `| Theme | Arcs | Chapters |
 export function chapterIndex(storyId, chapters, unit = COUNT_UNITS.get("words")) {
   const rows = chapters.length === 0
     ? ["| *No chapters yet* | | | | | |"]
-    : chapters.map((chapter) => `| ${cell(chapter.number)} | ${cell(chapter.title)} | ${cell(chapter.pov)} | ${cell(chapter.status)} | ${cell(chapter.count)} | [${chapter.id}](${path.basename(chapter.file)}) |`);
+    : chapters.map((chapter) => `| ${registryCell(chapter.number)} | ${registryCell(chapter.title)} | ${registryCell(chapter.pov)} | ${registryCell(chapter.status)} | ${registryCell(chapter.count)} | [${chapter.id}](${path.basename(chapter.file)}) |`);
   const total = chapters.reduce((sum, chapter) => sum + chapter.count, 0);
   const heading = `${unit.noun[0].toUpperCase()}${unit.noun.slice(1)} Count`;
 
@@ -780,7 +780,7 @@ export function timeline(storyId) {
 export function sceneIndex(storyId, scenes) {
   const rows = scenes.length === 0
     ? ["| *No scenes yet* | | | | | |"]
-    : scenes.map((scene) => `| ${cell(scene.chapter)} | ${cell(scene.scene)} | ${cell(scene.title)} | ${cell(scene.pov)} | ${cell(scene.status)} | [${scene.id}](${scene.id}.md) |`);
+    : scenes.map((scene) => `| ${registryCell(scene.chapter)} | ${registryCell(scene.scene)} | ${registryCell(scene.title)} | ${registryCell(scene.pov)} | ${registryCell(scene.status)} | [${scene.id}](${scene.id}.md) |`);
 
   return `${stringifyFrontmatter({ type: "scene-registry", story: storyId })}# Scenes
 
@@ -831,7 +831,7 @@ frontmatter above; the tables below are optional notes it does not read.
 export function questionIndex(storyId, questions) {
   const rows = questions.length === 0
     ? ["| *No questions yet* | | | |"]
-    : questions.map((question) => `| ${cell(question.title)} | ${cell(question.status)} | ${cell(question.introduced)} | [${question.id}](${question.id}.md) |`);
+    : questions.map((question) => `| ${registryCell(question.title)} | ${registryCell(question.status)} | ${registryCell(question.introduced)} | [${question.id}](${question.id}.md) |`);
 
   return `${stringifyFrontmatter({ type: "question-registry", story: storyId })}# Continuity Questions
 
@@ -846,7 +846,7 @@ ${rows.join("\n")}
 export function promiseIndex(storyId, promises) {
   const rows = promises.length === 0
     ? ["| *No promises yet* | | | |"]
-    : promises.map((promise) => `| ${cell(promise.title)} | ${cell(promise.status)} | ${cell(promise.planted)} | [${promise.id}](${promise.id}.md) |`);
+    : promises.map((promise) => `| ${registryCell(promise.title)} | ${registryCell(promise.status)} | ${registryCell(promise.planted)} | [${promise.id}](${promise.id}.md) |`);
 
   return `${stringifyFrontmatter({ type: "promise-registry", story: storyId })}# Promises And Payoffs
 
@@ -861,7 +861,7 @@ ${rows.join("\n")}
 export function clueIndex(storyId, clues) {
   const rows = clues.length === 0
     ? ["| *No clues yet* | | | |"]
-    : clues.map((clue) => `| ${cell(clue.title)} | ${cell(clue.status)} | ${cell(clue.planted)} | [${clue.id}](${clue.id}.md) |`);
+    : clues.map((clue) => `| ${registryCell(clue.title)} | ${registryCell(clue.status)} | ${registryCell(clue.planted)} | [${clue.id}](${clue.id}.md) |`);
 
   return `${stringifyFrontmatter({ type: "clue-registry", story: storyId })}# Clue Ledger
 
@@ -876,7 +876,7 @@ ${rows.join("\n")}
 export function glossaryIndex(storyId, terms) {
   const rows = terms.length === 0
     ? ["| *No terms yet* | | |"]
-    : terms.map((term) => `| ${cell(term.term)} | ${cell(term.category)} | [${term.id}](terms/${term.id}.md) |`);
+    : terms.map((term) => `| ${registryCell(term.term)} | ${registryCell(term.category)} | [${term.id}](terms/${term.id}.md) |`);
 
   return `${stringifyFrontmatter({ type: "glossary-registry", story: storyId })}# Glossary
 
@@ -891,7 +891,7 @@ ${rows.join("\n")}
 export function matterIndex(storyId, pages) {
   const rows = pages.length === 0
     ? ["| *No matter pages yet* | | | |"]
-    : pages.map((page) => `| ${cell(page.title)} | ${cell(page.placement)} | ${cell(page.order)} | [${page.id}](${page.id}.md) |`);
+    : pages.map((page) => `| ${registryCell(page.title)} | ${registryCell(page.placement)} | ${registryCell(page.order)} | [${page.id}](${page.id}.md) |`);
 
   return `${stringifyFrontmatter({ type: "matter-registry", story: storyId })}# Front And Back Matter
 
@@ -906,7 +906,7 @@ ${rows.join("\n")}
 export function researchIndex(storyId, notes) {
   const rows = notes.length === 0
     ? ["| *No research notes yet* | | | |"]
-    : notes.map((note) => `| ${cell(note.title)} | ${cell(note.status)} | ${cell(note.usedIn.join(", "))} | [${note.id}](${note.id}.md) |`);
+    : notes.map((note) => `| ${registryCell(note.title)} | ${registryCell(note.status)} | ${registryCell(note.usedIn.join(", "))} | [${note.id}](${note.id}.md) |`);
 
   return `${stringifyFrontmatter({ type: "research-registry", story: storyId })}# Research
 

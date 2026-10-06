@@ -282,3 +282,46 @@ describe("edits saved while rename, remove, or move runs", () => {
     expect(fs.existsSync(path.join(root, "chapters", "chapter-01.md"))).toBe(true);
   });
 });
+
+describe("interrupted renames (#579)", () => {
+  // Runs a rename that is killed once it has deleted the old file, at the
+  // first registry write of its reindex.
+  function killedBeforeReindex(oldFile, run) {
+    const original = fs.renameSync;
+    fs.renameSync = (from, to) => {
+      if (!fs.existsSync(oldFile) && path.basename(String(to)) === "_index.md") {
+        throw new Error("killed before the reindex");
+      }
+      return original(from, to);
+    };
+    try {
+      expect(run).toThrow("killed before the reindex");
+    } finally {
+      fs.renameSync = original;
+    }
+  }
+
+  test("rename refuses an id that never existed, though an entity has the new name", () => {
+    const root = project("No Such Person");
+    createEntity(root, { kind: "character", name: "Sera Voss" });
+    const before = snapshot(root);
+    expect(() => renameEntity(root, { kind: "character", id: "no-such-person", name: "Sera Voss" })).toThrow("character no-such-person does not exist");
+    fs.rmSync(path.join(root, "characters", "_index.md"));
+    expect(() => renameEntity(root, { kind: "character", id: "no-such-person", name: "Sera Voss" })).toThrow("character no-such-person does not exist");
+    fs.writeFileSync(path.join(root, "characters", "_index.md"), before[path.join("characters", "_index.md")]);
+    expect(snapshot(root)).toEqual(before);
+  });
+
+  test("a rename killed after deleting the old file is finished by a rerun, once", () => {
+    const root = project("Stopped Rename");
+    createEntity(root, { kind: "character", name: "Mara Quill" });
+    createEntity(root, { kind: "chapter", name: "One", number: 1, character: "mara-quill" });
+    killedBeforeReindex(path.join(root, "characters", "mara-quill.md"), () => renameEntity(root, { kind: "character", id: "mara-quill", name: "Mara Tide" }));
+    expect(read(root, "characters", "_index.md")).toContain("| Mara Quill | supporting | alive | [mara-tide](mara-tide.md) |");
+
+    expect(renameEntity(root, { kind: "character", id: "mara-quill", name: "Mara Tide" })).toMatchObject({ id: "mara-tide", resumed: true });
+    expect(read(root, "characters", "_index.md")).toContain("| Mara Tide | supporting | alive | [mara-tide](mara-tide.md) |");
+    // Finished, the rename leaves no evidence, so a rerun is refused.
+    expect(() => renameEntity(root, { kind: "character", id: "mara-quill", name: "Mara Tide" })).toThrow("character mara-quill does not exist");
+  });
+});
