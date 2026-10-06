@@ -423,6 +423,16 @@ describe("Shunn manuscript HTML", () => {
     expect(html).toContain("\"A \\\"Quoted\\\" \\3C /style\\3E  Title / \"");
     expect(html).toContain("<h1>A &quot;Quoted&quot; &lt;/style&gt; Title</h1>");
   });
+
+  // CSS reads a form feed as a line break, which ended the author's string
+  // in the running head and let the text after it add CSS rules.
+  test("a form feed in the author stays inside the running head's CSS string", () => {
+    const html = shunnHtml(manuscript([{ heading: "Chapter 1", body: "One." }]), { ...meta, author: "Ann\f}} body { display: none } x {", labels: { by: "by", "approximate-words": "Approximately {words} words" } });
+    // The head's CSS string tokens, each a quote, then anything but a quote,
+    // backslash, or line break, or a backslash and the character it escapes.
+    const head = /@top-right \{ content: ((?:"(?:[^"\\\n\r\f]|\\[\s\S])*" )*)counter\(page\);/.exec(html);
+    expect(head?.[1]).toBe('"Ann }} body { display: none } x { / " "A \\"Quoted\\" \\3C /style\\3E  Title / " ');
+  });
 });
 
 // A real paged-media engine, when this machine has one: the PDF it writes

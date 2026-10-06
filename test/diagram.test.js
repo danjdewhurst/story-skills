@@ -248,21 +248,21 @@ describe("story diagram", () => {
 
   // Mermaid 10 ends timeline text at "#" or ";", "#5;" drew a control
   // character, "<br>" broke the line, and a colon in a date section stopped
-  // the diagram rendering at all.
+  // the diagram rendering at all. A calendar's month names may hold any of them.
   test("timeline text writes comment, entity, and directive marks as numeric entity codes", () => {
     const cwd = makeTempDir();
     const { root } = createStoryProject({ cwd, title: "Room #5; 50%", force: false });
     const storyPath = path.join(root, "story.md");
-    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace(/\n---\n/, "\ncalendar:\n  - month: \"Thaw: Early\"\n    days: 30\n  - era: Age of Embers\n    abbrev: AE\n---\n"), "utf8");
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace(/\n---\n/, "\ncalendar:\n  - month: \"Thaw: #1; 5% <i>\"\n    days: 30\n  - era: Age of Embers\n    abbrev: AE\n---\n"), "utf8");
     writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft", "## Chapter Text\n\nWords.\n");
-    writeMarkdown(path.join(root, "scenes", "chapter-01-scene-01.md"), "title: \"Bell: a; b #1 <br> 5% %%{init: {'theme':'dark'}}%%\"\nchapter: chapter-01\nscene: 1\nstatus: draft\ndate: \"3 Thaw: Early, 12 AE\"", "# Scene\n");
+    writeMarkdown(path.join(root, "scenes", "chapter-01-scene-01.md"), "title: \"Bell: a; b #1 <br> 5% %%{init: {'theme':'dark'}}%%\"\nchapter: chapter-01\nscene: 1\nstatus: draft\ndate: \"3 Thaw: #1; 5% <i>, 12 AE\"", "# Scene\n");
     const diagram = diagramProject(root, { kind: "timeline" });
     expect(diagram.text).toBe(`timeline
   title Room #35;5#59; 50#37;
-  section 3 Thaw∶ Early, 12 AE
+  section 3 Thaw∶ #35;1#59; 5#37; #60;i>, 12 AE
     day : Bell∶ a#59; b #35;1 #60;br> 5#37; #37;#37;{init∶ {'theme'∶'dark'}}#37;#37;
 `);
-    expect(diagram.groups).toEqual([{ label: "3 Thaw: Early, 12 AE", kind: "date", nodes: ["chapter-01-scene-01"] }]);
+    expect(diagram.groups).toEqual([{ label: "3 Thaw: #1; 5% <i>, 12 AE", kind: "date", nodes: ["chapter-01-scene-01"] }]);
   });
 
   // The Mermaid text is rendered from the node and edge model; these golden

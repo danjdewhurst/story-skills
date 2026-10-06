@@ -79,12 +79,15 @@ describe("html and print builds", () => {
   // string: the rule after it hid the body, and WeasyPrint and Chrome
   // printed one blank page.
   test("the running head keeps form feeds and other control characters inside its CSS string", () => {
-    const title = "Ann\f}} body { display: none } x {\r\n\u0000\u000b\u001f\u007f\\\"<>&";
-    const html = printHtml({ title, authors: [], language: "en", words: 100, parts: [{ key: "ch01", kind: "chapter", title: "C", heading: true, words: 100, paragraphs: [] }] });
+    const name = "Ann\f}} body { display: none } x {\r\n\u0000\u000b\u001f\u007f\\\"<>&";
+    const parts = [{ key: "ch01", kind: "chapter", title: "C", heading: true, words: 100, paragraphs: [] }];
     // A CSS string token: anything but a quote, backslash, or line break,
     // or a backslash and the character it escapes.
-    const head = /@top-center \{ content: ("(?:[^"\\\n\r\f]|\\[\s\S])*"); font: /.exec(html);
-    expect(head?.[1]).toBe('"Ann }} body { display: none } x { \\0 \\B \\1F \\7F \\\\\\"\\3C \\3E \\26 "');
+    const head = (html) => /@top-center \{ content: ("(?:[^"\\\n\r\f]|\\[\s\S])*"); font: /.exec(html)?.[1];
+    const expected = '"Ann }} body { display: none } x { \\0 \\B \\1F \\7F \\\\\\"\\3C \\3E \\26 "';
+    // The author heads the left-hand pages; with no author, the title does.
+    expect(head(printHtml({ title: "T", authors: [name], language: "en", words: 100, parts }))).toBe(expected);
+    expect(head(printHtml({ title: name, authors: [], language: "en", words: 100, parts }))).toBe(expected);
   });
 
   test("the CLI builds both formats and reports unsupported ones", () => {
