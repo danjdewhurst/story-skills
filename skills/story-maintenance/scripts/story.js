@@ -20420,7 +20420,8 @@ function clueReport(root) {
 }
 function gridReport(root, options = {}) {
   const project = scanProject(root);
-  return { ok: project.fileErrors.length === 0, errors: [...project.fileErrors], warnings: [], ...buildGrid(project, options) };
+  const ok = project.fileErrors.length === 0;
+  return { ok, errors: [...project.fileErrors], warnings: [], ...buildGrid(project, ok ? options : {}) };
 }
 function diagramProject(root, options = {}) {
   const project = scanProject(root);

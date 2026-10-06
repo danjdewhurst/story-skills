@@ -132,6 +132,20 @@ describe("story grid", () => {
     expect(err).toContain("Grid failed");
   });
 
+  test("a range naming an unreadable chapter reports the parse error, not an unknown chapter", () => {
+    const root = sampleProject();
+    fs.writeFileSync(path.join(root, "chapters", "chapter-04.md"), "---\ntitle: [\n---\n", "utf8");
+    const text = invoke(root, ["grid", "--from", "chapter-04"]);
+    expect(text.code).toBe(1);
+    expect(text.err).toContain("chapters/chapter-04.md");
+    expect(text.err).not.toContain("is not a chapter");
+    const json = invoke(root, ["grid", "--to", "4", "--json"]);
+    expect(json.code).toBe(1);
+    const envelope = JSON.parse(json.out);
+    expect(validateAgainstSchema(envelope, schema)).toEqual([]);
+    expect(envelope.diagnostics.some((entry) => entry.file === path.join("chapters", "chapter-04.md"))).toBe(true);
+  });
+
   test("--json reports the chapters and arc rows", () => {
     const root = sampleProject();
     const { code, out, err } = invoke(root, ["grid", "--from", "chapter-02", "--json"]);

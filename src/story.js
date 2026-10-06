@@ -716,10 +716,13 @@ export function clueReport(root) {
 }
 
 // The plot grid: arcs by chapter, with each chapter's hook and scene
-// outcomes. `from` and `to` narrow the chapters shown.
+// outcomes. `from` and `to` narrow the chapters shown. A chapter that fails
+// to parse is missing from the scan, so while any file does, the range is
+// not resolved: the parse error, not an unknown --from, is the failure.
 export function gridReport(root, options = {}) {
   const project = scanProject(root);
-  return { ok: project.fileErrors.length === 0, errors: [...project.fileErrors], warnings: [], ...buildGrid(project, options) };
+  const ok = project.fileErrors.length === 0;
+  return { ok, errors: [...project.fileErrors], warnings: [], ...buildGrid(project, ok ? options : {}) };
 }
 
 // Mermaid source for one diagram kind, printed or written to --out.
