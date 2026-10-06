@@ -755,7 +755,7 @@ Checks that references between entities point at entities that exist and that tw
 - the `from` chapter of each progression on a character, location, or faction, which may be a scheduled `chapter-NN` with no chapter file yet
 - arc characters, faction members and locations, and artifact owners and locations
 - chapter and scene POV, `characters`, `mentions` (a character or an artifact), locations, and `arcs-advanced`, and each scene's chapter
-- the chapter, character, and arc ids in questions, promises, and clues, and the `used-in` chapters of research notes. A promise or clue `payoff`, its `planted` while `status: planned`, an `open` question's `introduced`, and a research note's `used-in` may name a scheduled `chapter-NN` that has no chapter file yet, unless its number is 0 or belongs to an existing chapter under another id (`chapter-1` beside `chapter-01`)
+- the chapter, character, and arc ids in questions, promises, and clues, and the `used-in` chapters of research notes. A promise or clue `payoff`, its `planted` while `status: planned`, an `open` question's `introduced`, any chapter of an `abandoned` promise, clue, or question, and a research note's `used-in` may name a scheduled `chapter-NN` that has no chapter file yet, unless its number is 0 or belongs to an existing chapter under another id (`chapter-1` beside `chapter-01`)
 - chapter ids and markdown links in the bodies of `plot/timeline.md` and arc files, and markdown links in the bodies of `matter/` pages
 - the `follows` and `precedes` links in `story.md`, which must point at story projects that link back
 
@@ -2376,7 +2376,7 @@ $ story add promise "The Ledger" --payoff chapter-1
 --payoff chapter-1: did you mean chapter-01?
 ```
 
-A status that says the chapter is on the page needs it written, as `story links` does: `--resolved` on a question, `--planted` with `--status planted` or `paid-off`, `--payoff` with `--status paid-off`, and `--introduced` on a question whose status is not `open` must name an existing chapter (`--resolved chapter-05 is not written yet: a question's resolved chapter must exist. Add --resolved once the answer is drafted`). Without `--status`, a promise or clue planted in an unwritten chapter is `planned`.
+A status that says the chapter is on the page needs it written, as `story links` does: `--resolved` on a question, `--planted` with `--status planted`, `paid-off`, or `dropped`, `--payoff` with `--status paid-off`, and `--introduced` on a question whose status is not `open` must name an existing chapter (`--resolved chapter-05 is not written yet: a question's resolved chapter must exist. Add --resolved once the answer is drafted`). With `--status abandoned` none of them has to, since the thread was cut. Without `--status`, a promise or clue planted in an unwritten chapter is `planned`.
 
 `add scene` needs an existing chapter. With no chapters it fails with `No chapters yet: add one with story add chapter before adding a scene`, and a `--chapter` id with no chapter file fails with `chapter chapter-99 does not exist: add it with story add chapter, or pass --chapter with an existing chapter id`.
 
