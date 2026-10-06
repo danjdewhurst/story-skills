@@ -21356,17 +21356,20 @@ import path19 from "node:path";
 var VERSION = "0.21.0";
 
 // src/workflows.js
-var PIN_LINE = /^\s*(STORY_VERSION|STORY_REF)\s*:\s*["']?([^"'\s#]*)/;
+var ENV_LINE = /^\s*(STORY_VERSION|STORY_REF|STORY_PACKAGE)\s*:\s*["']?([^"'\s#]*)/;
 var VERSION_PATTERN = /^v?(\d+)\.(\d+)\.(\d+)/;
 function workflowPinActions(projectRoot, cwd = projectRoot) {
+  const current = parseVersion(VERSION);
   const actions = [];
   for (const pin of workflowPins(projectRoot)) {
     const where = `${path19.relative(cwd, pin.file) || pin.file}:${pin.line}`;
     const parsed = parseVersion(pin.value);
-    if (pin.name === "STORY_REF") {
-      const target = parsed && compareVersions(parsed, parseVersion(VERSION)) > 0 ? parsed.join(".") : VERSION;
+    if (pin.name === "STORY_REF" && parsed === null) {
+      actions.push(action2("Rename workflow STORY_REF", `${where} sets the legacy STORY_REF to ${pin.value || "an empty value"}; replace the line with STORY_PACKAGE: "github:danjdewhurst/story-skills#${pin.value || "<ref>"}" and copy the install step from the current template (see Upgrading the workflows in docs/automation.md).`));
+    } else if (pin.name === "STORY_REF") {
+      const target = compareVersions(parsed, current) > 0 ? parsed.join(".") : VERSION;
       actions.push(action2("Rename workflow STORY_REF", `${where} sets the legacy STORY_REF; change the line to STORY_VERSION: "${target}" and copy the install step from the current template (see Upgrading the workflows in docs/automation.md).`));
-    } else if (parsed && compareVersions(parsed, parseVersion(VERSION)) < 0) {
+    } else if (parsed && !pin.overridden && compareVersions(parsed, current) < 0) {
       actions.push(action2("Update workflow CLI version", `${where} installs story-skills ${parsed.join(".")}, older than this CLI (${VERSION}); after story check passes locally, change the line to STORY_VERSION: "${VERSION}".`));
     }
   }
@@ -21381,12 +21384,13 @@ function workflowPins(projectRoot) {
     } catch {
       continue;
     }
-    text.split(/\r?\n/).forEach((content, index) => {
-      const match = PIN_LINE.exec(content);
-      if (match) {
-        pins.push({ file, line: index + 1, name: match[1], value: match[2] });
+    const lines = text.split(/\r?\n/).map((content, index) => ({ match: ENV_LINE.exec(content), line: index + 1 })).filter((entry) => entry.match);
+    const overridden = lines.some((entry) => entry.match[1] === "STORY_PACKAGE");
+    for (const { match, line } of lines) {
+      if (match[1] !== "STORY_PACKAGE") {
+        pins.push({ file, line, name: match[1], value: match[2], overridden });
       }
-    });
+    }
   }
   return pins;
 }
@@ -22219,7 +22223,12 @@ ${formatDoctorReport(diagnosis)}`);
   return ok ? EXIT_CODES.ok : EXIT_CODES.findings;
 }
 function withWorkflowPins(report, projectRoot, cwd) {
-  return { ...report, actions: [...report.actions, ...workflowPinActions(projectRoot, cwd)] };
+  const pins = workflowPinActions(projectRoot, cwd);
+  if (pins.length === 0) {
+    return report;
+  }
+  const actions = report.actions.filter((item) => item.title !== "Project is mechanically healthy");
+  return { ...report, actions: [...actions, ...pins] };
 }
 function formatRepairs(repairs, stopped, changes, dryRun) {
   const lines = [dryRun ? "Repairs (dry run; nothing was written):" : "Repairs:"];

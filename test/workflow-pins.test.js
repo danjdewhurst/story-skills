@@ -77,6 +77,32 @@ describe("story doctor workflow pins", () => {
     ]);
   });
 
+  test("suggests STORY_PACKAGE for a legacy STORY_REF that names a branch or commit", () => {
+    const { root } = newRepo();
+    writeWorkflow(root, "story-checks.yml", `env:\n  STORY_REF: "main"\n`);
+    expect(pinLines(invoke(root, ["doctor"]).out)).toEqual([
+      `- [P3] Rename workflow STORY_REF: .github/workflows/story-checks.yml:2 sets the legacy STORY_REF to main; replace the line with STORY_PACKAGE: "github:danjdewhurst/story-skills#main" and copy the install step from the current template (see Upgrading the workflows in docs/automation.md).`
+    ]);
+  });
+
+  test("skips an older STORY_VERSION that an active STORY_PACKAGE overrides", () => {
+    const { root } = newRepo();
+    writeWorkflow(root, "a.yml", `env:\n  STORY_VERSION: "${older}"\n  STORY_PACKAGE: "github:danjdewhurst/story-skills#main"\n`);
+    writeWorkflow(root, "b.yml", `env:\n  STORY_VERSION: "${older}"\n  # STORY_PACKAGE: "github:danjdewhurst/story-skills#main"\n`);
+    const lines = pinLines(invoke(root, ["doctor"]).out);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain(".github/workflows/b.yml:2 installs");
+  });
+
+  test("drops the healthy action when a workflow needs upgrading", () => {
+    const { root } = newRepo();
+    expect(invoke(root, ["doctor"]).out).toContain("Project is mechanically healthy");
+    writeWorkflow(root, "story-checks.yml", `env:\n  STORY_VERSION: "${older}"\n`);
+    const out = invoke(root, ["doctor"]).out;
+    expect(out).not.toContain("Project is mechanically healthy");
+    expect(out).toContain("Update workflow CLI version");
+  });
+
   test("appears in doctor --fix and --json, but not in next or report", () => {
     const { root } = newRepo();
     writeWorkflow(root, "story-checks.yml", `env:\n  STORY_VERSION: "${older}"\n`);

@@ -601,7 +601,7 @@ Templates from 0.21.0 and earlier pinned a git tag with `STORY_REF: "v0.20.0"` a
 - [P3] Rename workflow STORY_REF: .github/workflows/review-copy.yml:47 sets the legacy STORY_REF; change the line to STORY_VERSION: "<cli>" and copy the install step from the current template (see Upgrading the workflows in docs/automation.md).
 ```
 
-A legacy `STORY_REF` that names a release newer than the CLI keeps that release in the suggested line.
+A legacy `STORY_REF` that names a release newer than the CLI keeps that release in the suggested line, and one that names a branch or commit gets a `STORY_PACKAGE` line instead. A workflow with an uncommented `STORY_PACKAGE` line gets no `STORY_VERSION` note, since its install step does not use that pin. When there is a workflow note, the `Project is mechanically healthy` action is left out.
 
 It reads only the `STORY_VERSION:` and `STORY_REF:` lines, ignores commented-out ones, and says nothing when there is no workflows folder. `story next` and `story report` leave it out. Keeping your local CLI current and running `story doctor` now and then is enough to notice a stale pin.
 
@@ -623,7 +623,7 @@ To get a pull request instead, [Renovate](https://docs.renovatebot.com/) can bum
 }
 ```
 
-Renovate then opens a pull request that changes the pin, and `story-checks.yml` runs on it with the new release, so you see what it reports before merging. Read the changelog before you merge it.
+Renovate then opens a pull request that changes the pin, and `story-checks.yml` runs on it with the new release, so you see what it reports before merging. Read the changelog before you merge it. This tests the new release only while `STORY_PACKAGE` is commented out: a workflow with `STORY_PACKAGE` set keeps installing that package, so the pull request changes a pin nothing uses. Comment out or remove `STORY_PACKAGE` once the fix it tracked is released.
 
 ## Checking before each commit
 
