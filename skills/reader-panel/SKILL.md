@@ -184,3 +184,7 @@ story validate .
 - **`references/sensitivity-reader.md`** - The sensitivity persona: flags portrayals for a paid human reader, never clears one
 - **`references/continuity-reader.md`** - The continuity-minded reader: facts, names, objects, timeline, and character knowledge within the range
 - **`references/first-page-reader.md`** - The first-page reader: whether they would keep reading, and where they would stop
+
+## Shared Conventions
+
+Every story skill follows the shared conventions in [`../story-maintenance/references/conventions.md`](../story-maintenance/references/conventions.md), resolved relative to this skill folder. Read it before creating, renaming, or linking story files. If that file is missing because this skill was installed without `story-maintenance`, the essentials are: kebab-case ids and filenames, YAML frontmatter on every file, `_index.md` files as the authoritative registries, bidirectional links between entities, `characters` for who is on the page and `mentions` for who is only referred to, `status: deceased` plus `died-in: chapter-{NN}` for deaths, and no project-local generator or build scripts (run only the installed or bundled Story CLI).

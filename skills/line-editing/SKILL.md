@@ -215,3 +215,7 @@ story validate .
 - **`references/read-aloud-guide.md`** - Running a read-aloud pass with the narration build and OS text-to-speech, and what to listen for
 - **`references/language-conventions.md`** - Dialogue and punctuation conventions by language (quote marks, dialogue dashes, spacing before punctuation, Spanish ¿¡, CJK brackets), and how to record them in the style sheet
 - **`references/edit-note-format.md`** - How to present edits to the author: before/after with rationale, batching, and recording accepted and rejected changes
+
+## Shared Conventions
+
+Every story skill follows the shared conventions in [`../story-maintenance/references/conventions.md`](../story-maintenance/references/conventions.md), resolved relative to this skill folder. Read it before creating, renaming, or linking story files. If that file is missing because this skill was installed without `story-maintenance`, the essentials are: kebab-case ids and filenames, YAML frontmatter on every file, `_index.md` files as the authoritative registries, bidirectional links between entities, `characters` for who is on the page and `mentions` for who is only referred to, `status: deceased` plus `died-in: chapter-{NN}` for deaths, and no project-local generator or build scripts (run only the installed or bundled Story CLI).

@@ -283,21 +283,6 @@ If `story` is not installed, use `bun run story --` from the Story Skills reposi
 
 - **`references/title-logline.md`** - Title craft (comps, hook phrasing, title as promise) and the logline recipe
 
-## Conventions
+## Shared Conventions
 
-These conventions apply across ALL story skills:
-
-- **Kebab-case filenames** for all entity files (e.g., `sera-voss.md`, `ashen-citadel.md`)
-- **YAML frontmatter** on every file for structured metadata
-- **Schema version** - `story.md` frontmatter includes `schema-version: 2`
-- **`_index.md`** files are authoritative registries for each domain
-- **`story.md`** is the top-level bible read by all skills for context
-- **`style-sheet.md`** records voice and house style; skills that write or revise prose read it
-- **Bidirectional cross-links** - when referencing another entity, update both files
-- **Character identifiers** use the kebab-case filename without extension (e.g., `sera-voss`)
-- **Death tracking** - when a character dies on the page, set `status: deceased` and `died-in: chapter-{NN}` so `story continuity` can flag posthumous appearances
-- **`mentions` vs `characters`** - chapter and scene frontmatter lists characters present in-scene under `characters`; characters who are only referenced, remembered, recorded, or seen in flashback go under `mentions`
-- **Scene identifiers** use `chapter-{NN}-scene-{NN}` and live in `scenes/`
-- **Continuity state** lives in `continuity/state.md`, with open questions, promises, and clues tracked under `continuity/questions/`, `continuity/promises/`, and `continuity/clues/`
-- **Markdown-first artifacts** - create and edit story content directly in the target `.md` files. Do not create project-local build scripts, generator scripts, or bulk writer scripts (for example `build-*.js`) to emit story files.
-- **CLI helpers stay external** - the only JavaScript helper agents should run is the installed or bundled Story CLI (`story`, `bun run story --`, or `story-maintenance/scripts/story.js`) for deterministic maintenance. Do not copy it into the user's story project, and remove any unavoidable scratch helper before finishing.
+Every story skill follows the shared conventions in [`../story-maintenance/references/conventions.md`](../story-maintenance/references/conventions.md), resolved relative to this skill folder. Read it before creating, renaming, or linking story files. If that file is missing because this skill was installed without `story-maintenance`, the essentials are: kebab-case ids and filenames, YAML frontmatter on every file, `_index.md` files as the authoritative registries, bidirectional links between entities, `characters` for who is on the page and `mentions` for who is only referred to, `status: deceased` plus `died-in: chapter-{NN}` for deaths, and no project-local generator or build scripts (run only the installed or bundled Story CLI).

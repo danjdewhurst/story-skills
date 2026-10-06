@@ -230,7 +230,7 @@ It doesn't ask for the other publishing metadata (`isbn`, `publisher`, `descript
 
 - [`title-logline.md`](../skills/story-init/references/title-logline.md): title craft (comps, hook phrasing, the title as a promise) and the logline recipe. The `submission` skill reuses it for the pitch.
 
-`story-init` also defines the conventions every other skill follows: kebab-case ids, YAML frontmatter on every file, `_index.md` files as authoritative registries, bidirectional links, `status: deceased` plus `died-in` for deaths, `characters` versus `mentions`, and no project-local generator scripts. [Core concepts](concepts.md) explains them.
+Every skill follows the same conventions: kebab-case ids, YAML frontmatter on every file, `_index.md` files as authoritative registries, bidirectional links, `status: deceased` plus `died-in` for deaths, `characters` versus `mentions`, and no project-local generator scripts. They are listed in story-maintenance's [`conventions.md`](../skills/story-maintenance/references/conventions.md), which every `SKILL.md` links under "Shared Conventions" with a one-line summary for a skill installed on its own. [Core concepts](concepts.md) explains them.
 
 ## Planning
 

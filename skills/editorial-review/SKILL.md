@@ -234,3 +234,7 @@ story wordcount . --write
 - **`references/real-people-and-permissions.md`** - Real-people and defamation-risk pass, permissions for epigraphs, lyrics, and quotations, and the matter-file permission fields
 - **`references/editor-rounds.md`** - Sending a manuscript to a human editor, snapshot tags, taking DOCX edits back into markdown, and HTML review copies with paragraph anchors
 - **`references/collaboration.md`** - Multi-author projects, git branching per author, CODEOWNERS for shared worlds, and backups
+
+## Shared Conventions
+
+Every story skill follows the shared conventions in [`../story-maintenance/references/conventions.md`](../story-maintenance/references/conventions.md), resolved relative to this skill folder. Read it before creating, renaming, or linking story files. If that file is missing because this skill was installed without `story-maintenance`, the essentials are: kebab-case ids and filenames, YAML frontmatter on every file, `_index.md` files as the authoritative registries, bidirectional links between entities, `characters` for who is on the page and `mentions` for who is only referred to, `status: deceased` plus `died-in: chapter-{NN}` for deaths, and no project-local generator or build scripts (run only the installed or bundled Story CLI).

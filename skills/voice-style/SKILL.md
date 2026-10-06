@@ -200,3 +200,7 @@ story links .
 - **`references/style-sheet-guide.md`** - What goes in each style-sheet section, the frontmatter format, and how to extract a voice description from sample prose
 - **`references/prose-checks.md`** - What each `story prose` count measures, its threshold, when to keep the flagged text, and what to do for a book not in English
 - **`../line-editing/references/language-conventions.md`** - Dialogue and punctuation conventions by language, for the style sheet's Dialogue And Punctuation section
+
+## Shared Conventions
+
+Every story skill follows the shared conventions in [`../story-maintenance/references/conventions.md`](../story-maintenance/references/conventions.md), resolved relative to this skill folder. Read it before creating, renaming, or linking story files. If that file is missing because this skill was installed without `story-maintenance`, the essentials are: kebab-case ids and filenames, YAML frontmatter on every file, `_index.md` files as the authoritative registries, bidirectional links between entities, `characters` for who is on the page and `mentions` for who is only referred to, `status: deceased` plus `died-in: chapter-{NN}` for deaths, and no project-local generator or build scripts (run only the installed or bundled Story CLI).

@@ -258,3 +258,7 @@ story build . --format metadata
 - **`references/launch-plan.md`** - Distribution and exclusivity, routes outside the US and UK, pricing considerations including fixed book prices, and the T-90 to T+30 launch timeline with ARCs, newsletter, and ad testing
 - **`references/contract-red-flags.md`** - Clause-by-clause red flags for publishing and rights contracts, and where to get a professional review
 - **`references/rights-one-sheet.md`** - Rights inventory template by language and territory, and one-sheets for foreign, audio, and film rights
+
+## Shared Conventions
+
+Every story skill follows the shared conventions in [`../story-maintenance/references/conventions.md`](../story-maintenance/references/conventions.md), resolved relative to this skill folder. Read it before creating, renaming, or linking story files. If that file is missing because this skill was installed without `story-maintenance`, the essentials are: kebab-case ids and filenames, YAML frontmatter on every file, `_index.md` files as the authoritative registries, bidirectional links between entities, `characters` for who is on the page and `mentions` for who is only referred to, `status: deceased` plus `died-in: chapter-{NN}` for deaths, and no project-local generator or build scripts (run only the installed or bundled Story CLI).

@@ -93,7 +93,7 @@ start — arcs get built during reconciliation.
 - Cut threads are logged, not erased: abandoned promises/questions keep
   `status: abandoned` with a reason; cut characters keep their file with
   `status: cut`.
-- Bidirectional links and kebab-case ids follow the story-init conventions
+- Bidirectional links and kebab-case ids follow the shared story conventions
   exactly — discovery changes when the bible is written, not how.
 
 ## CLI Maintenance
@@ -116,3 +116,7 @@ story continuity .
 - **`references/reconcile-loop.md`** - The core loop: extract entities/promises → reverse-outline → diff against the bible → reconcile; `mode: discovered` flag
 - **`references/dead-ends.md`** - Recognizing and cutting dead ends: cut/fold/prune, abandoned ledger entries, the darling log
 - **`references/drafting-cadence.md`** - Daily targets, batch reviews, session shape, recovering a broken cadence
+
+## Shared Conventions
+
+Every story skill follows the shared conventions in [`../story-maintenance/references/conventions.md`](../story-maintenance/references/conventions.md), resolved relative to this skill folder. Read it before creating, renaming, or linking story files. If that file is missing because this skill was installed without `story-maintenance`, the essentials are: kebab-case ids and filenames, YAML frontmatter on every file, `_index.md` files as the authoritative registries, bidirectional links between entities, `characters` for who is on the page and `mentions` for who is only referred to, `status: deceased` plus `died-in: chapter-{NN}` for deaths, and no project-local generator or build scripts (run only the installed or bundled Story CLI).

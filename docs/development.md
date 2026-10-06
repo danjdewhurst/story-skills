@@ -535,6 +535,7 @@ Conventions the existing skills follow:
 - After any step that adds, removes, renames, or revises story entities, tell the agent which maintenance commands to run: `story reindex`, `story wordcount --write`, `story links`, and/or `story validate`.
 - Include the standard "CLI Maintenance" paragraph telling the agent to prefer `story`, then `bun run story --` from a checkout, then the bundled fallback `node ../story-maintenance/scripts/story.js`, and to do the checks by hand if no CLI is available. Copy it from an existing skill.
 - Keep projects markdown-first. Skills must not tell agents to create project-local generator or build scripts that emit story content.
+- End every `SKILL.md` with the "Shared Conventions" section that links [`skills/story-maintenance/references/conventions.md`](../skills/story-maintenance/references/conventions.md) and repeats its summary. Copy it from an existing skill: `test/skill-conventions.test.js` checks that every skill has it and that the summaries match. When a shared convention changes, edit `conventions.md` and, if the summary changes, every copy of it.
 
 When you add, rename, or remove a skill:
 

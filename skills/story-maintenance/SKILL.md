@@ -17,7 +17,7 @@ Prefer the first available command:
 2. `bun run story -- <command>` - when working from this repository
 3. `node scripts/story.js <command>` - bundled fallback, resolving `scripts/story.js` relative to this skill folder
 
-If none of these are available, perform the requested maintenance manually using the conventions in `story-init`.
+If none of these are available, perform the requested maintenance manually using the shared conventions in `references/conventions.md`.
 
 Run the installed or bundled CLI in place. Do not copy `scripts/story.js` into the user's story project, and do not create project-local build scripts, generator scripts, or bulk writer scripts to generate story content. Story projects should remain markdown-first, plus explicitly requested exports such as `dist/manuscript.md`.
 
@@ -153,3 +153,7 @@ Use:
 - If a command stops with `Cannot reindex: fix these files first` (or `Cannot count words: ...`, `Cannot build: ...`), repair the frontmatter of each listed file, then rerun it. `rename`, `move`, and `remove` report `<file>: <error>; nothing was changed` for the same cause, and `<file> is missing YAML frontmatter; nothing was changed` when an entity file, a CLI registry (the `_index.md` in an entity folder, `matter/`, or `research/`), or fixed project file (`story.md`, `style-sheet.md`, `progress.md`, `plot/timeline.md`, `continuity/state.md`, `continuity/exemptions.md`) has none; plain skill notes such as `continuity/motifs.md`, or an `_index.md` in a folder of the user's own such as `notes/`, do not block them.
 - A file-system failure reads `Cannot <open|list|check|replace|delete|write to> <path>: <reason>` (such as `permission denied`); fix the file or folder permissions, or the path, rather than the story content.
 - If `story reindex` fails on a corrupt `plot/_index.md`, do not hand-edit story content to work around it: restore the index frontmatter from git, or delete `plot/_index.md` so reindex rebuilds it, then rerun.
+
+## Shared Conventions
+
+Every story skill follows the shared conventions in [`references/conventions.md`](references/conventions.md): kebab-case ids and filenames, YAML frontmatter on every file, `_index.md` files as the authoritative registries, bidirectional links between entities, `characters` for who is on the page and `mentions` for who is only referred to, `status: deceased` plus `died-in: chapter-{NN}` for deaths, and no project-local generator or build scripts (run only the installed or bundled Story CLI). Other skills link to that file and repeat this summary, so update both together.
