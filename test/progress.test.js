@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { checkProjectSchema } from "../scripts/check-schema.js";
 import { runCli } from "../src/cli.js";
-import { computeProgress, formatProgress, localDate } from "../src/progress.js";
+import { computeProgress, formatProgress, historyWeeks, localDate } from "../src/progress.js";
 import { createStoryProject, formatProjectReport, projectProgress, projectReport, validateProject } from "../src/story.js";
 import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
@@ -227,6 +227,62 @@ describe("daily targets and streaks", () => {
     expect(weeks[2]).toEqual({ start: "2026-09-14", end: "2026-09-20", written: 900, days: 3, target: 500 });
     expect(weeks[3]).toEqual({ start: "2026-09-21", end: "2026-09-27", written: 250, days: 2, target: 500 });
     expect(daily({}).weeks[3].target).toBeNull();
+  });
+
+  test("weeks sets how many weeks of history, ending with the current week", () => {
+    const one = daily({ weeks: 1 }).weeks;
+    expect(one).toEqual([{ start: "2026-09-21", end: "2026-09-27", written: 250, days: 2, target: null }]);
+    const long = daily({ weeks: 52 }).weeks;
+    expect(long).toHaveLength(52);
+    expect(long[0].start).toBe("2025-09-29");
+    expect(long.slice(-4)).toEqual(daily({}).weeks);
+
+    const text = (weeks) => formatProgress(computeProgress({ words: 1250, target: null, deadline: null, today: "2026-09-22", chapters: [], sessions: log, weeks }));
+    expect(text(1)).toContain("\nThis week:\n- 2026-09-21: 250 words on 2 days\n");
+    expect(text(6)).toContain("\nLast 6 weeks:\n- 2026-08-17: 0 words on 0 days\n");
+  });
+
+  test("historyWeeks accepts a whole number 1 to 52, default 4", () => {
+    expect(historyWeeks({})).toBe(4);
+    expect(historyWeeks({ weeks: "1" })).toBe(1);
+    expect(historyWeeks({ weeks: 52 })).toBe(52);
+    expect(historyWeeks({ weeks: " 12 " })).toBe(12);
+    for (const weeks of ["0", "53", "-1", "2.5", "abc", "", "1e1"]) {
+      expect(() => historyWeeks({ weeks })).toThrow("--weeks must be a whole number 1 to 52, such as 4");
+    }
+  });
+
+  test("story progress --weeks reaches text and JSON, and a bad value is a usage error", () => {
+    const { root, cwd } = progressProject();
+    writeMarkdown(path.join(root, "progress.md"), "type: progress-log\nsessions:\n  - date: 2026-09-01\n    words: 100", "");
+    const text = invoke(cwd, ["progress", root, "--date", "2026-09-21", "--weeks", "8"]);
+    expect(text.code).toBe(0);
+    expect(text.out).toContain("Last 8 weeks:\n- 2026-08-03: 0 words on 0 days\n");
+
+    const json = invoke(cwd, ["progress", root, "--date", "2026-09-21", "--weeks", "12", "--json"]);
+    expect(JSON.parse(json.out).data.daily.weeks).toHaveLength(12);
+
+    for (const weeks of ["0", "53", "two"]) {
+      const bad = invoke(cwd, ["progress", root, "--weeks", weeks]);
+      expect(bad.code).toBe(2);
+      expect(bad.err).toContain("--weeks must be a whole number 1 to 52");
+    }
+    // A bad --weeks stops --log before it writes.
+    const before = fs.readFileSync(path.join(root, "progress.md"), "utf8");
+    expect(invoke(cwd, ["progress", root, "--log", "--weeks", "99"]).code).toBe(2);
+    expect(fs.readFileSync(path.join(root, "progress.md"), "utf8")).toBe(before);
+  });
+
+  test("story.md cli-defaults can set --weeks, and validate checks it", () => {
+    const { root, cwd } = progressProject("cli-defaults:\n  - command: progress\n    weeks: 2");
+    writeMarkdown(path.join(root, "progress.md"), "type: progress-log\nsessions:\n  - date: 2026-09-01\n    words: 100", "");
+    expect(messages(validateProject(root).errors)).toEqual([]);
+    expect(invoke(cwd, ["progress", root, "--date", "2026-09-21"]).out).toContain("Last 2 weeks:\n");
+    // A flag on the command line wins over the default.
+    expect(invoke(cwd, ["progress", root, "--date", "2026-09-21", "--weeks", "3"]).out).toContain("Last 3 weeks:\n");
+
+    const bad = progressProject("cli-defaults:\n  - command: progress\n    weeks: 60");
+    expect(messages(validateProject(bad.root).errors).join("\n")).toContain("cli-defaults[0]: --weeks must be a whole number 1 to 52");
   });
 
   test("sparse, out-of-order, future, and falling logs", () => {

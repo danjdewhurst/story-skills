@@ -1094,7 +1094,7 @@
             },
             "weeks": {
               "type": "array",
-              "description": "The last four weeks, Monday to Sunday, oldest first, ending with the current week.",
+              "description": "The last --weeks weeks (default 4, 1 to 52), Monday to Sunday, oldest first, ending with the current week.",
               "items": {
                 "type": "object",
                 "required": ["start", "end", "written", "days", "target"],

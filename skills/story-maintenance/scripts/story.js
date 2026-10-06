@@ -9031,6 +9031,7 @@ var OPTIONS = [
   },
   { name: "write", help: ["Update chapter word-count frontmatter"] },
   { name: "log", help: ["Record today's word count in progress.md"] },
+  { name: "weeks", value: "<n>", help: ["Weeks of writing history for progress (1 to 52,", "default 4)"] },
   { name: "ref", value: "<git-ref>", help: ["Earlier draft as a git branch, tag, or commit", "for compare"] },
   { name: "against", value: "<path>", help: ["Earlier draft as another project folder for", "compare; text to check for similarity (a file,", "folder, or git ref)"] },
   { name: "snapshot", value: "<name>", help: ["Earlier draft as a snapshot saved by story", "snapshot, for compare or similarity"] },
@@ -9489,6 +9490,18 @@ function tweeSource(story) {
 var PROGRESS_FILE = "progress.md";
 var PACE_SESSIONS = 7;
 var HISTORY_WEEKS = 4;
+var MAX_HISTORY_WEEKS = 52;
+function historyWeeks(options = {}) {
+  const raw = options.weeks;
+  if (raw === undefined) {
+    return HISTORY_WEEKS;
+  }
+  const text = String(raw).trim();
+  if (!/^\d+$/.test(text) || Number(text) < 1 || Number(text) > MAX_HISTORY_WEEKS) {
+    throw usageError(`--weeks must be a whole number 1 to ${MAX_HISTORY_WEEKS}, such as ${HISTORY_WEEKS}`);
+  }
+  return Number(text);
+}
 var WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 var WEEKDAY_NAMES = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 function weekdayName(value) {
@@ -9534,7 +9547,7 @@ function cleanSessions(value) {
   }
   return sessions.sort((left, right) => left.date.localeCompare(right.date, "en"));
 }
-function computeProgress({ unit = "words", words, characters = null, target, deadline, today, chapters, sessions, dailyTarget = null, writingDays: scheduled = null }) {
+function computeProgress({ unit = "words", words, characters = null, target, deadline, today, chapters, sessions, dailyTarget = null, writingDays: scheduled = null, weeks = HISTORY_WEEKS }) {
   const characterBook = unit === "characters";
   const inUnit = (entry) => characterBook ? entry.characters ?? null : entry.words;
   const length = characterBook ? characters : words;
@@ -9559,7 +9572,7 @@ function computeProgress({ unit = "words", words, characters = null, target, dea
     lastSession: null,
     pace: null,
     projected: null,
-    daily: computeDaily({ measured: measured.map((session) => ({ date: session.date, count: inUnit(session) })), length, todayDays, dailyTarget, scheduled })
+    daily: computeDaily({ measured: measured.map((session) => ({ date: session.date, count: inUnit(session) })), length, todayDays, dailyTarget, scheduled, weeks })
   };
   const deadlineDate = deadline ? parseClockDate(deadline) : undefined;
   if (deadlineDate) {
@@ -9585,7 +9598,7 @@ function computeProgress({ unit = "words", words, characters = null, target, dea
   }
   return result;
 }
-function computeDaily({ measured, length, todayDays, dailyTarget, scheduled }) {
+function computeDaily({ measured, length, todayDays, dailyTarget, scheduled, weeks: historyLength }) {
   const byDay = new Map;
   for (const session of measured) {
     const days = parseClockDate(session.date).days;
@@ -9627,7 +9640,7 @@ function computeDaily({ measured, length, todayDays, dailyTarget, scheduled }) {
   const written = gains.has(todayDays) ? gains.get(todayDays) : null;
   const monday = todayDays - weekdayIndex(todayDays);
   const weeks = [];
-  for (let back = HISTORY_WEEKS - 1;back >= 0; back -= 1) {
+  for (let back = historyLength - 1;back >= 0; back -= 1) {
     const start = monday - back * 7;
     let total = 0;
     let days = 0;
@@ -9725,7 +9738,7 @@ function formatDaily(daily, hasSessions, noun) {
   }
   const days = daily.writingDays === null ? "" : `; writing days ${daily.writingDays.join(", ")}`;
   lines.push(`Streak: ${plural2(daily.streak.current, "day")} (longest ${formatNumber2(daily.streak.longest)}${days})`);
-  lines.push("", `Last ${daily.weeks.length} weeks:`);
+  lines.push("", daily.weeks.length === 1 ? "This week:" : `Last ${daily.weeks.length} weeks:`);
   for (const week of daily.weeks) {
     const amount = week.target === null ? formatNumber2(week.written) : `${formatNumber2(week.written)} of ${formatNumber2(week.target)}`;
     lines.push(`- ${week.start}: ${amount} ${noun}s on ${plural2(week.days, "day")}`);
@@ -15427,7 +15440,7 @@ function parseDefaults(raw, errors) {
       continue;
     }
     defaults[name] = parseCommandDefaults(command, item, label, errors);
-    const thresholds = { prose: proseThresholds, similarity: similarityOptions }[name];
+    const thresholds = { prose: proseThresholds, similarity: similarityOptions, progress: historyWeeks }[name];
     if (thresholds !== undefined) {
       try {
         thresholds(defaults[name]);
@@ -23651,6 +23664,7 @@ function projectProgress(root, options = {}) {
   if (dateError !== "" || today.trim() === "") {
     throw usageError(`progress --date ${dateError || "must be a YYYY-MM-DD date"}`);
   }
+  const weeks = historyWeeks(options);
   let project = scanProject(root);
   const words = project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
   const unit = project.unit;
@@ -23698,6 +23712,7 @@ function projectProgress(root, options = {}) {
       today,
       dailyTarget: Number.isInteger(dailyTarget) && dailyTarget > 0 ? dailyTarget : null,
       writingDays: writingDays(data["writing-days"]),
+      weeks,
       chapters: project.chapters.map((chapter) => ({ id: chapter.id, words: chapter.wordCount, characters: chapter.count, target: chapter.targetCount })),
       sessions: cleanSessions(project.progressLog?.data.sessions)
     })
@@ -25405,11 +25420,12 @@ var COMMANDS = [
     usage: "progress [path]",
     summary: [
       "Show words against target-words, deadline, chapter",
-      "targets, logged sessions, the daily target, and the",
-      "writing streak; --log records today"
+      "targets, logged sessions, the daily target, the",
+      "writing streak, and weekly totals (--weeks);",
+      "--log records today"
     ],
     project: "positional",
-    options: ["log", "date", ...WRITE_OPTIONS],
+    options: ["log", "date", "weeks", ...WRITE_OPTIONS],
     run({ parsed, io, root, overrides }) {
       const log = isTruthy(parsed.options.log);
       const dryRun = isTruthy(parsed.options["dry-run"]);
@@ -25417,7 +25433,7 @@ var COMMANDS = [
         throw usageError("--dry-run previews progress --log: add --log");
       }
       const projectRoot = root();
-      const { result, changes } = runOrPreview(dryRun, projectRoot, (target) => projectProgress(target, { log, date: parsed.options.date }));
+      const { result, changes } = runOrPreview(dryRun, projectRoot, (target) => projectProgress(target, { log, date: parsed.options.date, weeks: parsed.options.weeks }));
       const progress = applySeverity(result, overrides);
       if (wantsJson(parsed)) {
         return reportJson(io, "progress", { ...progress, dryRun, changes }, { writes: dryRun ? [] : writtenFiles(projectRoot, changes) });

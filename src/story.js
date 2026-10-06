@@ -30,7 +30,7 @@ import { buildPacing } from "./pacing.js";
 import { compareChapters, mapLabels, proseParagraphs } from "./compare.js";
 import { compareSimilarity, similarityOptions } from "./similarity.js";
 import { existingSnapshot } from "./snapshots.js";
-import { PROGRESS_FILE, cleanSessions, computeProgress, localDate, withSession, writingDays } from "./progress.js";
+import { PROGRESS_FILE, cleanSessions, computeProgress, historyWeeks, localDate, withSession, writingDays } from "./progress.js";
 import {
   BASELINE_CHECKS,
   PROSE_THRESHOLDS,
@@ -665,6 +665,7 @@ export function projectProgress(root, options = {}) {
   if (dateError !== "" || today.trim() === "") {
     throw usageError(`progress --date ${dateError || "must be a YYYY-MM-DD date"}`);
   }
+  const weeks = historyWeeks(options);
   let project = scanProject(root);
   const words = project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
   // A project counted in characters logs its characters beside its words
@@ -720,6 +721,7 @@ export function projectProgress(root, options = {}) {
       today,
       dailyTarget: Number.isInteger(dailyTarget) && dailyTarget > 0 ? dailyTarget : null,
       writingDays: writingDays(data["writing-days"]),
+      weeks,
       chapters: project.chapters.map((chapter) => ({ id: chapter.id, words: chapter.wordCount, characters: chapter.count, target: chapter.targetCount })),
       sessions: cleanSessions(project.progressLog?.data.sessions)
     })
