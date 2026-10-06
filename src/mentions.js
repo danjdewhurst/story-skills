@@ -5,6 +5,7 @@ import { lowerCase, upperCase } from "./languages/locale.js";
 import { escapeRegExp, maskMarkup, proseStart } from "./markdown.js";
 import { existingNames } from "./names.js";
 import { readMarkdown } from "./scan.js";
+import { nfc } from "./unicode.js";
 import { wholeWords, wordMatcher } from "./words.js";
 
 // Where chapter prose names the bible's entities: `story mentions` lists
@@ -19,7 +20,10 @@ import { wholeWords, wordMatcher } from "./words.js";
 // capital, at the start of a sentence. Possessives (Maren's) and hyphenated
 // compounds (Vale-born) count. Each place in the text goes to the longest
 // name found there, so "Edran Vale" is not also a mention of a location
-// called Vale; a name two entities share counts for both.
+// called Vale; a name two entities share counts for both. Names and prose
+// are compared in NFC, so a name typed with é or が finds prose written
+// with e + U+0301 or か + U+3099, and the other way round; lines, columns,
+// and excerpts are those of the file as written.
 
 // The entity kinds with a name to look for, as story mentions takes them.
 export const MENTION_KINDS = ["character", "location", "faction", "artifact", "system", "term"];
@@ -27,7 +31,7 @@ export const MENTION_KINDS = ["character", "location", "faction", "artifact", "s
 const BLANKED = "\u0000";
 
 // Every name and alias to look for, cut characters included, each once per
-// entity, with its pattern. A name that opens with titles or articles (the
+// entity, in NFC, with its pattern. A name that opens with titles or articles (the
 // pack's `titleWords`) is also looked for without them, so "The Hollow" is
 // found in "the whole Hollow" and "Captain Edran Vale" as "Edran Vale".
 export function mentionNames(project) {
@@ -43,8 +47,9 @@ export function mentionNames(project) {
     }
   };
   for (const entry of existingNames(project, { cut: true })) {
-    add(entry.kind, entry.id, entry.name);
-    const words = entry.name.split(/\s+/);
+    const name = nfc(entry.name);
+    add(entry.kind, entry.id, name);
+    const words = name.split(/\s+/);
     const first = words.findIndex((word) => !titles?.has(lowerCase(word, pack).replace(/[.’']/g, "")));
     if (titles && first > 0) {
       add(entry.kind, entry.id, words.slice(first).join(" "));
@@ -137,8 +142,9 @@ export function ambiguousMention(text, mention, pack, find = wordMatcher(text)) 
   if (/\s/u.test(mention.text)) {
     return false;
   }
-  const lower = lowerCase(mention.text, pack);
-  if (lower === mention.text || !opensSentence(text, mention.start)) {
+  const written = nfc(mention.text);
+  const lower = lowerCase(written, pack);
+  if (lower === written || !opensSentence(text, mention.start)) {
     return false;
   }
   return find(new RegExp(wholeWords(escapeRegExp(lower), lower), "gu"), { first: true }).length > 0;

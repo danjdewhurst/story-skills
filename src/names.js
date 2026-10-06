@@ -4,6 +4,7 @@ import { checkSet, languagePack } from "./languages/index.js";
 import { lowerCase } from "./languages/locale.js";
 import { foldLatin, splitWords } from "./markdown.js";
 import { editDistance } from "./prose.js";
+import { nfc } from "./unicode.js";
 import { UNSPACED_LETTERS } from "./words.js";
 
 // Collision check for candidate names before they enter the bible. An exact
@@ -27,9 +28,10 @@ const EDGE_PUNCTUATION = /^[^\p{L}\p{M}\p{N}]+|[^\p{L}\p{M}\p{N}]+$/gu;
 // those scripts is one word unless spaces, an interpunct, or a bracketed
 // reading part it, so
 // 大島源治 is one word and 大島 源治 two. Every other name splits as prose
-// does.
+// does. The words are in NFC, so a name spelled with か + U+3099 gives the
+// same words as one spelled with が.
 export function nameWords(name) {
-  const text = String(name);
+  const text = nfc(name);
   if (!UNSPACED_LETTER.test(text)) {
     return splitWords(text);
   }
@@ -68,7 +70,7 @@ export function existingNames(project, { cut = false } = {}) {
       continue;
     }
     const first = givenName(character.name, pack);
-    const single = first !== "" && first === String(character.name).trim();
+    const single = first !== "" && first === nfc(String(character.name).trim());
     add("character", character, String(character.name), character.role, single);
     if (first !== "" && !single) {
       add("character", character, first, character.role, true, character.name);

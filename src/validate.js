@@ -23,6 +23,7 @@ import { PROGRESS_FILE, WEEKDAYS, cleanSessions, weekdayName } from "./progress.
 import { plural } from "./plural.js";
 import { STYLE_LISTS, STYLE_LIST_FIELDS, styleListEntries, styleWords } from "./languages/style.js";
 import { lowerCase } from "./languages/locale.js";
+import { nfc } from "./unicode.js";
 import { canonicalPath, isBookNumber, seriesLinks, validateSeriesLinks } from "./series.js";
 import { err, warn } from "./findings.js";
 import { EXEMPTIONS_FILE, exemptionFile, exemptionProblems, isChapterId } from "./exemptions.js";
@@ -1662,7 +1663,7 @@ function validateStyleSheet(project, errors, warnings) {
       }
     }
     if (typeof entry.use === "string" && typeof entry.avoid === "string"
-      && lowerCase(entry.use.trim(), project.pack) === lowerCase(entry.avoid.trim(), project.pack)) {
+      && lowerCase(nfc(entry.use.trim()), project.pack) === lowerCase(nfc(entry.avoid.trim()), project.pack)) {
       errors.push(err("style-use-equals-avoid", `${entryLabel} use and avoid must differ`, label));
     }
   });
