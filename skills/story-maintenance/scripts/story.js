@@ -19850,7 +19850,7 @@ function buildBook(root, options = {}) {
   if (format === "codex") {
     return buildCodex(project, options.out, Boolean(options.spoilers));
   }
-  const extension = options.pdf ? PDF_EXTENSIONS[format] : BUILD_EXTENSIONS[format];
+  const extension = options.pdf ? PDF_EXTENSIONS[format] : options.shunn ? SHUNN_DOCX_EXTENSION : BUILD_EXTENSIONS[format];
   const output = resolveOutputPath(project, options.out, `dist/${fileStem(project.storyId)}.${extension}`);
   if (options.pdf) {
     return buildPdf(project, format, trim, output, options);
@@ -20465,6 +20465,7 @@ var BUILD_EXTENSIONS = {
   ink: "ink",
   codex: ""
 };
+var SHUNN_DOCX_EXTENSION = "shunn.docx";
 var PDF_EXTENSIONS = { print: "pdf", shunn: "shunn.pdf" };
 var BUILD_FORMAT_ALIASES = { md: "markdown" };
 function normalizeBuildFormat(value) {

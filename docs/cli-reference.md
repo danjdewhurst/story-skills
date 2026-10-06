@@ -2703,7 +2703,7 @@ Builds a disposable book file in `dist/`. Builds are deterministic: the same sou
 | `markdown` | `dist/<story-id>.md` | The same manuscript as `export`, with LF line endings |
 | `epub` | `dist/<story-id>.epub` | EPUB 3 with a navigation document, front and back matter, and accessibility metadata. Reads `author` or `authors`, `language`, `isbn`, `publisher`, `publication-date`, `description`, `subjects`, `copyright`, `cover`, and `cover-alt` from `story.md` when set |
 | `docx` | `dist/<story-id>.docx` | Word document with headings and paragraphs |
-| `docx` with `--shunn` | `dist/<story-id>.docx` | Shunn format: Courier New 12pt, double-spaced, title page |
+| `docx` with `--shunn` | `dist/<story-id>.shunn.docx` | Shunn format: Courier New 12pt, double-spaced, title page |
 | `shunn` | `dist/<story-id>.shunn.md` | Shunn manuscript markdown: title, byline, approximate word count (characters for a book counted in characters), `contact` lines, page breaks between chapters; no matter pages |
 | `html` | `dist/<story-id>.html` | A single-file review copy for readers: contents list, and a label on every paragraph (`ch03-p12` is chapter 3, paragraph 12) that readers quote with their notes. A label is the paragraph's chapter and position in this build, so an earlier edit in the chapter renumbers it and `move` changes its chapter part; readers should quote the `--stamp` build label and the paragraph's first few words too |
 | `print` | `dist/<story-id>.print.html` | A print interior as HTML with CSS paged media, sized to `--trim`, with a title page, contents, and page numbers. Render it to PDF with a paged-media engine such as Paged.js, WeasyPrint, or Prince |

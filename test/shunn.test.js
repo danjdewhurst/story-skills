@@ -123,9 +123,20 @@ describe("shunn manuscript format", () => {
 
     const docx = invoke(cwd, ["build", root, "--format", "docx", "--shunn"]);
     expect(docx.code).toBe(0);
-    expect(docx.out).toContain("shunn-story.docx");
-    const text = readArchiveText(path.join(root, "dist", "shunn-story.docx"));
+    expect(docx.out).toContain(`Built 2 chapters as docx to ${path.join(root, "dist", "shunn-story.shunn.docx")}`);
+    const text = readArchiveText(path.join(root, "dist", "shunn-story.shunn.docx"));
     expect(text).toContain(`<w:br w:type="page"/>`);
+  });
+
+  test("docx and docx --shunn write separate default files", () => {
+    const { root } = shunnProject();
+
+    const shunn = buildBook(root, { format: "docx", shunn: true }).outFile;
+    const plain = buildBook(root, { format: "docx" }).outFile;
+    expect(path.relative(root, shunn)).toBe(path.join("dist", "shunn-story.shunn.docx"));
+    expect(path.relative(root, plain)).toBe(path.join("dist", "shunn-story.docx"));
+    expect(readArchiveText(shunn)).toContain("Courier New");
+    expect(readArchiveText(plain)).not.toContain("Courier New");
   });
 
   test("cli rejects unknown build formats", () => {

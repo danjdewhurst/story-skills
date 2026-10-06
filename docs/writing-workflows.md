@@ -1506,7 +1506,7 @@ story build . --format docx --shunn
 story build . --format shunn
 ```
 
-The first writes a Shunn-format Word file to `dist/<story-id>.docx`; the second writes a Shunn-format markdown file to `dist/<story-id>.shunn.md`. Shunn builds leave out `matter/` pages. For self-publishing, the skill hands off to [Publishing](#publishing) for the EPUB and print builds. Builds go to `dist/`; see [Import, export, and builds](manuscripts.md#build-a-book) for formats and output paths.
+The first writes a Shunn-format Word file to `dist/<story-id>.shunn.docx`; the second writes a Shunn-format markdown file to `dist/<story-id>.shunn.md`. Shunn builds leave out `matter/` pages. For self-publishing, the skill hands off to [Publishing](#publishing) for the EPUB and print builds. Builds go to `dist/`; see [Import, export, and builds](manuscripts.md#build-a-book) for formats and output paths.
 
 To check the pitch facts against one page, the skill also builds the metadata sheet:
 

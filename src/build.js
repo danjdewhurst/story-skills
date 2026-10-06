@@ -113,7 +113,7 @@ export function buildBook(root, options = {}) {
   if (format === "codex") {
     return buildCodex(project, options.out, Boolean(options.spoilers));
   }
-  const extension = options.pdf ? PDF_EXTENSIONS[format] : BUILD_EXTENSIONS[format];
+  const extension = options.pdf ? PDF_EXTENSIONS[format] : options.shunn ? SHUNN_DOCX_EXTENSION : BUILD_EXTENSIONS[format];
   const output = resolveOutputPath(project, options.out, `dist/${fileStem(project.storyId)}.${extension}`);
 
   if (options.pdf) {
@@ -848,6 +848,10 @@ export const BUILD_EXTENSIONS = {
   // A folder of pages, dist/codex/, rather than one file.
   codex: ""
 };
+
+// The file extension of a --format docx --shunn build, so it does not
+// replace the plain DOCX build in dist/.
+export const SHUNN_DOCX_EXTENSION = "shunn.docx";
 
 // The file extension of each format --pdf renders.
 export const PDF_EXTENSIONS = { print: "pdf", shunn: "shunn.pdf" };
