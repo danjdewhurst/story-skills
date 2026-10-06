@@ -227,7 +227,7 @@ export function checkEvals(root = ROOT, log = console.log) {
     checkFixtureSkill(errors, path.join(root, "skills"), checks.skill, name, (skillPath) =>
       fs.existsSync(skillPath)
     );
-    for (const key of ["required", "banned", "banned_regex"]) {
+    for (const key of ["required", "required_regex", "banned", "banned_regex"]) {
       if (key in checks) {
         check(
           Array.isArray(checks[key]) && checks[key].every((s) => typeof s === "string" && s.trim() !== ""),
@@ -298,6 +298,7 @@ export function checkEvals(root = ROOT, log = console.log) {
     check(
       nonemptyStrings(checks.required) ||
         nonemptyStrings(checks.banned) ||
+        nonemptyStrings(checks.required_regex) ||
         nonemptyStrings(checks.banned_regex) ||
         checks.max_words_ratio !== undefined ||
         checks.min_words_ratio !== undefined ||
@@ -307,14 +308,16 @@ export function checkEvals(root = ROOT, log = console.log) {
         checks.requires_first_person === true ||
         checks.requires_past_tense === true ||
         voiceActive,
-      `${name}/checks.json: defines no required, banned, banned_regex, length, structural, or voice_drift checks`
+      `${name}/checks.json: defines no required, required_regex, banned, banned_regex, length, structural, or voice_drift checks`
     );
-    for (const pattern of checks.banned_regex || []) {
-      if (typeof pattern !== "string") continue;
-      try {
-        new RegExp(pattern, "iu");
-      } catch (err) {
-        errors.push(`${name}/checks.json: banned_regex /${pattern}/ does not compile (${err.message})`);
+    for (const key of ["required_regex", "banned_regex"]) {
+      for (const pattern of Array.isArray(checks[key]) ? checks[key] : []) {
+        if (typeof pattern !== "string") continue;
+        try {
+          new RegExp(pattern, "iu");
+        } catch (err) {
+          errors.push(`${name}/checks.json: ${key} /${pattern}/ does not compile (${err.message})`);
+        }
       }
     }
 
