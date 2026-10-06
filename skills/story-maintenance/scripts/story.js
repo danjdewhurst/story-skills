@@ -222,6 +222,10 @@ function writeWholeFile(filePath, contents, options) {
       throw error;
     }
     const action = existing?.nlink > 1 ? "replace hard-linked" : "write to";
+    if (!created && error.code === "EEXIST") {
+      const shown = (file) => options.root ? projectPath(path.resolve(options.root), file) : file;
+      throw Object.assign(new Error(`Cannot ${action} ${shown(target)}: something is already at the name of its temporary file, ${shown(temporary)}, so it was left as it is. Run the command again`), { code: error.code, path: target, syscall: "write" });
+    }
     throw Object.assign(new Error(`Cannot ${action} ${target}: ${error.code ?? error.message}`), { code: error.code, path: target, syscall: "write" });
   }
 }
@@ -20238,7 +20242,12 @@ function collectStrayFileWarnings(project, warnings) {
       warnings.push(warn("symlinked-file", `${linkPath} is a symlink and is ignored: replace it with the file itself`, linkPath));
     }
   }
-  for (const leftover of temporaryFiles(root).map((file) => portablePath(file)).sort()) {
+  const leftovers = temporaryFiles(root).map(([file, kind]) => [portablePath(file), kind]).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
+  for (const [leftover, kind] of leftovers) {
+    if (kind) {
+      warnings.push(warn("interrupted-write", `${leftover} has the name of a story temporary file but is ${kind}, which story never makes; delete it`, leftover));
+      continue;
+    }
     const name = TEMPORARY_FILE_PATTERN.exec(path11.posix.basename(leftover))?.[1];
     const target = name ? ` to ${path11.posix.join(path11.posix.dirname(leftover), name)}` : "";
     warnings.push(warn("interrupted-write", `${leftover} was left by an interrupted write${target}; delete it once the files beside it look right`, leftover));
@@ -20248,15 +20257,24 @@ function temporaryFiles(root, depth = 0, relativeDir = "") {
   const found = [];
   for (const entry of fs9.readdirSync(path11.join(root, relativeDir), { withFileTypes: true })) {
     const relativePath = path11.join(relativeDir, entry.name);
-    if (entry.isDirectory() && !SKIPPED_SCAN_DIRECTORIES.has(entry.name) && !entry.name.startsWith(".")) {
+    if (TEMPORARY_FILE_PATTERN.test(entry.name) || /^\.story-\d+\.tmp$/.test(entry.name)) {
+      found.push([relativePath, entryKind(entry)]);
+    } else if (entry.isDirectory() && !SKIPPED_SCAN_DIRECTORIES.has(entry.name) && !entry.name.startsWith(".")) {
       if (depth < MAX_SCAN_DEPTH) {
         found.push(...temporaryFiles(root, depth + 1, relativePath));
       }
-    } else if (entry.isFile() && (TEMPORARY_FILE_PATTERN.test(entry.name) || /^\.story-\d+\.tmp$/.test(entry.name))) {
-      found.push(relativePath);
     }
   }
   return found;
+}
+function entryKind(entry) {
+  if (entry.isFile()) {
+    return null;
+  }
+  if (entry.isSymbolicLink()) {
+    return "a symlink";
+  }
+  return entry.isDirectory() ? "a folder" : "not a regular file";
 }
 function checkIdReference(errors, label, value, kind, exists, file = label) {
   const text = String(value ?? "");

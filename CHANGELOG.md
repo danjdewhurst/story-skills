@@ -8,6 +8,10 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ## [Unreleased]
 
+### Fixed
+
+- A write that finds something already at its temporary file's name now says so in plain words (`Cannot write to chapters/chapter-01.md: something is already at the name of its temporary file, chapters/.chapter-01.md.story-<random>.tmp, so it was left as it is. Run the command again`) instead of ending in `EEXIST`. `story validate` now also reports a symlink, folder, or other entry that is not a regular file at a temporary file's name (`interrupted-write`), without following a symlink; before, it reported only regular files there. ([#602](https://github.com/danjdewhurst/story-skills/issues/602))
+
 ## [0.22.1] - 2026-10-06
 
 ### Changed

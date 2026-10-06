@@ -837,28 +837,49 @@ function collectStrayFileWarnings(project, warnings) {
     }
   }
 
-  for (const leftover of temporaryFiles(root).map((file) => portablePath(file)).sort()) {
+  const leftovers = temporaryFiles(root)
+    .map(([file, kind]) => [portablePath(file), kind])
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  for (const [leftover, kind] of leftovers) {
+    if (kind) {
+      warnings.push(warn("interrupted-write", `${leftover} has the name of a story temporary file but is ${kind}, which story never makes; delete it`, leftover));
+      continue;
+    }
     const name = TEMPORARY_FILE_PATTERN.exec(path.posix.basename(leftover))?.[1];
     const target = name ? ` to ${path.posix.join(path.posix.dirname(leftover), name)}` : "";
     warnings.push(warn("interrupted-write", `${leftover} was left by an interrupted write${target}; delete it once the files beside it look right`, leftover));
   }
 }
 
-// Temporary files writeFile leaves when a process is killed before its
-// rename; `.story-<pid>.tmp` is the older name without the target.
+// Every entry at a temporary file's name, as [path, kind]: kind is null for
+// a regular file, which writeFile leaves when a process is killed before its
+// rename, and says what else is there otherwise (a symlink or folder put at
+// the name, say). `.story-<pid>.tmp` is the older name without the target.
 function temporaryFiles(root, depth = 0, relativeDir = "") {
   const found = [];
   for (const entry of fs.readdirSync(path.join(root, relativeDir), { withFileTypes: true })) {
     const relativePath = path.join(relativeDir, entry.name);
-    if (entry.isDirectory() && !SKIPPED_SCAN_DIRECTORIES.has(entry.name) && !entry.name.startsWith(".")) {
+    if (TEMPORARY_FILE_PATTERN.test(entry.name) || /^\.story-\d+\.tmp$/.test(entry.name)) {
+      found.push([relativePath, entryKind(entry)]);
+    } else if (entry.isDirectory() && !SKIPPED_SCAN_DIRECTORIES.has(entry.name) && !entry.name.startsWith(".")) {
       if (depth < MAX_SCAN_DEPTH) {
         found.push(...temporaryFiles(root, depth + 1, relativePath));
       }
-    } else if (entry.isFile() && (TEMPORARY_FILE_PATTERN.test(entry.name) || /^\.story-\d+\.tmp$/.test(entry.name))) {
-      found.push(relativePath);
     }
   }
   return found;
+}
+
+// What a temporary file's name holds when it is not a regular file. The
+// type comes from the entry itself, so a symlink is never followed.
+function entryKind(entry) {
+  if (entry.isFile()) {
+    return null;
+  }
+  if (entry.isSymbolicLink()) {
+    return "a symlink";
+  }
+  return entry.isDirectory() ? "a folder" : "not a regular file";
 }
 
 function checkIdReference(errors, label, value, kind, exists, file = label) {

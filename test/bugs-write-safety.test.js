@@ -210,7 +210,7 @@ describe("atomic writes (#190, #197)", () => {
     fs.symlinkSync(outside, planted);
     const spy = spyOn(crypto, "randomBytes").mockImplementation(() => bytes);
     try {
-      expect(() => writeFile(target, "new")).toThrow(`Cannot write to ${target}: EEXIST`);
+      expect(() => writeFile(target, "new")).toThrow(`Cannot write to ${target}: something is already at the name of its temporary file, ${planted}, so it was left as it is. Run the command again`);
     } finally {
       spy.mockRestore();
     }
@@ -244,9 +244,36 @@ describe("atomic writes (#190, #197)", () => {
       spy.mockRestore();
     }
     expect(refused.code).toBe(4);
-    expect(refused.err).toContain(`${path.join("chapters", "chapter-01.md")}: EEXIST`);
+    expect(refused.err).toBe(`Cannot write to chapters/chapter-01.md: something is already at the name of its temporary file, chapters/.chapter-01.md.story-${bytes.toString("hex")}.tmp, so it was left as it is. Run the command again\n`);
     expect(fs.readFileSync(outside, "utf8")).toBe("untouched\n");
     expect(read(root, "chapters/chapter-01.md")).not.toContain("word-count: 3");
+  });
+
+  test("a file at the name a write picks is named in a plain refusal, and a rerun writes (#602)", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    const chapter = path.join(root, "chapters", "chapter-01.md");
+    fs.appendFileSync(chapter, "\nThe ember woke.\n");
+    const before = read(root, "chapters/chapter-01.md");
+    const bytes = Buffer.from("00112233aabbccdd", "hex");
+    const planted = path.join(root, "chapters", `.chapter-01.md.story-${bytes.toString("hex")}.tmp`);
+    fs.writeFileSync(planted, "someone else's");
+    const spy = spyOn(crypto, "randomBytes").mockImplementation(() => bytes);
+    let refused;
+    try {
+      refused = invoke(root, ["wordcount", "--write"]);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(refused.code).toBe(4);
+    expect(refused.err).toBe(`Cannot write to chapters/chapter-01.md: something is already at the name of its temporary file, chapters/.chapter-01.md.story-${bytes.toString("hex")}.tmp, so it was left as it is. Run the command again\n`);
+    expect(read(root, "chapters/chapter-01.md")).toBe(before);
+    // Not this write's file, so it is neither written nor removed.
+    expect(fs.readFileSync(planted, "utf8")).toBe("someone else's");
+
+    // A rerun picks another name.
+    expect(invoke(root, ["wordcount", "--write"]).code).toBe(0);
+    expect(read(root, "chapters/chapter-01.md")).toContain("word-count: 3");
   });
 
   test("a read-only file stays refused", () => {
@@ -272,6 +299,41 @@ describe("atomic writes (#190, #197)", () => {
     expect(warnings).toContain(`${".story.md.story-9f2c41d07a3b6e85.tmp"} was left by an interrupted write to ${"story.md"}; delete it once the files beside it look right`);
     expect(warnings).toContain(`${"chapters/.chapter-01.md.story-4242.tmp"} was left by an interrupted write to ${"chapters/chapter-01.md"}; delete it once the files beside it look right`);
     expect(warnings).toContain(`${"chapters/.story-687110.tmp"} was left by an interrupted write; delete it once the files beside it look right`);
+  });
+
+  test("validate reports a folder at a temporary file's name as one story never makes (#602)", () => {
+    const root = newProject();
+    fs.mkdirSync(path.join(root, "chapters", ".chapter-01.md.story-4242.tmp"));
+    fs.mkdirSync(path.join(root, ".story-687110.tmp"));
+    const found = validateProject(root).warnings.filter((warning) => warning.code === "interrupted-write");
+    expect(found.map((warning) => warning.message)).toEqual([
+      ".story-687110.tmp has the name of a story temporary file but is a folder, which story never makes; delete it",
+      "chapters/.chapter-01.md.story-4242.tmp has the name of a story temporary file but is a folder, which story never makes; delete it"
+    ]);
+  });
+
+  // Windows makes symlinks only with extra privileges, and has no FIFOs.
+  test.skipIf(process.platform === "win32")("validate reports a symlink or FIFO at a temporary file's name without following it (#602)", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    const outsideDir = makeTempDir();
+    const outsideFile = path.join(outsideDir, "outside.txt");
+    fs.writeFileSync(outsideFile, "untouched\n");
+    // A link to a regular file is still a link, not an interrupted write's file.
+    fs.symlinkSync(outsideFile, path.join(root, "chapters", ".chapter-01.md.story-0123456789abcdef.tmp"));
+    fs.symlinkSync(outsideDir, path.join(root, ".story.md.story-4242.tmp"));
+    fs.symlinkSync(path.join(outsideDir, "missing"), path.join(root, "chapters", ".story-687110.tmp"));
+    expect(spawnSync("mkfifo", [path.join(root, "chapters", ".chapter-01.md.story-fedcba9876543210.tmp")]).status).toBe(0);
+
+    const found = validateProject(root).warnings.filter((warning) => warning.code === "interrupted-write");
+    expect(found.map((warning) => [warning.file, warning.message])).toEqual([
+      [".story.md.story-4242.tmp", ".story.md.story-4242.tmp has the name of a story temporary file but is a symlink, which story never makes; delete it"],
+      ["chapters/.chapter-01.md.story-0123456789abcdef.tmp", "chapters/.chapter-01.md.story-0123456789abcdef.tmp has the name of a story temporary file but is a symlink, which story never makes; delete it"],
+      ["chapters/.chapter-01.md.story-fedcba9876543210.tmp", "chapters/.chapter-01.md.story-fedcba9876543210.tmp has the name of a story temporary file but is not a regular file, which story never makes; delete it"],
+      ["chapters/.story-687110.tmp", "chapters/.story-687110.tmp has the name of a story temporary file but is a symlink, which story never makes; delete it"]
+    ]);
+    expect(fs.readFileSync(outsideFile, "utf8")).toBe("untouched\n");
+    expect(fs.readdirSync(outsideDir)).toEqual(["outside.txt"]);
   });
 });
 
