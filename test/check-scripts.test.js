@@ -73,6 +73,54 @@ function allNeeds(jobs, id) {
   return [...new Set(direct.flatMap((need) => [need, ...allNeeds(jobs, need)]))].sort();
 }
 
+// What would let publish.yml reach npm around the gate, one line per problem.
+// Comments are ignored, so only what a job runs counts.
+function publishGateProblems(text) {
+  const jobs = workflowJobs(text);
+  const code = (job = "") => job.split("\n").filter((line) => !/^\s*#/.test(line)).join("\n");
+  const problems = [];
+  // Any package publish, however it is written, belongs to the npm job alone.
+  for (const [id, job] of Object.entries(jobs)) {
+    if (id !== "publish" && /\b(?:npm|pnpm|yarn|bun)\s+publish\b/.test(code(job))) {
+      problems.push(`${id} runs a package publish`);
+    }
+  }
+  if (!/\bnpm\s+publish\b/.test(code(jobs.publish))) {
+    problems.push("publish does not run npm publish");
+  }
+  // npm runs only behind both gate jobs, and nothing on the way may run past
+  // a failure: no always(), cancelled(), or failure() condition, and no
+  // continue-on-error, in publish or any job it needs.
+  const npmPath = jobs.publish ? ["publish", ...allNeeds(jobs, "publish")] : [];
+  for (const gate of ["verify", "ci"]) {
+    if (!npmPath.includes(gate)) {
+      problems.push(`publish does not need ${gate}`);
+    }
+  }
+  for (const id of npmPath) {
+    for (const line of code(jobs[id]).split("\n")) {
+      if (/\b(?:always|cancelled|failure)\(\)|continue-on-error:/.test(line)) {
+        problems.push(`${id} has ${line.trim()}`);
+      }
+    }
+  }
+  // The gate jobs run the workflow's own commit; every other checkout builds
+  // the commit verify checked.
+  for (const [id, job] of Object.entries(jobs)) {
+    for (const step of code(job).split(/^ {6}- /m).filter((step) => /uses: actions\/checkout@/.test(step))) {
+      const ref = /^\s+ref: (.*)$/m.exec(step)?.[1];
+      if (id === "verify" || id === "ci") {
+        if (ref) {
+          problems.push(`${id} checks out ${ref}, not the workflow's own commit`);
+        }
+      } else if (ref !== "${{ needs.verify.outputs.sha }}") {
+        problems.push(`${id} checks out ${ref ?? "the run's ref"}, not the verified commit`);
+      }
+    }
+  }
+  return problems;
+}
+
 // Lists each action that more than one SHA pins across the given files, so a
 // bump that reaches ci.yml but not another workflow or a template is caught.
 function actionPinConflicts(files) {
@@ -696,7 +744,9 @@ describe("github workflows", () => {
   });
 
   test("publish reaches npm only behind the gate, the binaries, and the npm environment (#544)", () => {
-    const jobs = workflowJobs(readRepo(".github/workflows/publish.yml"));
+    const text = readRepo(".github/workflows/publish.yml");
+    expect(publishGateProblems(text)).toEqual([]);
+    const jobs = workflowJobs(text);
     expect(Object.keys(jobs)).toEqual(["verify", "ci", "binaries", "release-assets", "publish", "homebrew"]);
     expect(allNeeds(jobs, "verify")).toEqual([]);
     expect(allNeeds(jobs, "ci")).toEqual(["verify"]);
@@ -718,28 +768,104 @@ describe("github workflows", () => {
     expect(jobs.ci).toMatch(/ {4}permissions:\n {6}contents: read\n {6}actions: read\n {4}steps:/);
     expect(Number(/^ {4}timeout-minutes: (\d+)$/m.exec(jobs.ci)[1]) * 60_000).toBeGreaterThan(CI_WAIT.timeoutMs);
 
-    // Only the publish job runs npm publish, and it does so from the npm
-    // environment. release-assets' OIDC token signs attestations only.
-    const npmJobs = Object.keys(jobs).filter((id) => /^\s+npm publish$/m.test(jobs[id]));
-    expect(npmJobs).toEqual(["publish"]);
+    // Only the npm job is in the npm environment. release-assets' OIDC token
+    // signs attestations only.
     expect(jobs.publish).toMatch(/^ {4}environment: npm$/m);
     expect(Object.keys(jobs).filter((id) => jobs[id].includes("id-token: write"))).toEqual(["release-assets", "publish"]);
     expect(Object.keys(jobs).filter((id) => /^ {4}environment:/m.test(jobs[id]))).toEqual(["publish"]);
 
-    // Every later job builds the commit verify checked, never the tag by name.
+    // The tag is named only through verify's output.
     for (const id of ["binaries", "release-assets", "publish", "homebrew"]) {
-      expect(jobs[id], id).toContain("ref: ${{ needs.verify.outputs.sha }}");
       expect(jobs[id], id).toContain("TAG: ${{ needs.verify.outputs.tag }}");
       expect(jobs[id], id).not.toContain("refs/tags/${{");
       expect(jobs[id], id).not.toContain("inputs.tag");
     }
   });
 
-  test("the gate's CI lookup matches ci.yml (#544)", () => {
+  test("the publish gate check catches each way around the gate (#544)", () => {
+    const text = readRepo(".github/workflows/publish.yml");
+    const edited = (from, to) => {
+      expect(text).toContain(from);
+      return publishGateProblems(text.replace(from, to));
+    };
+    // A condition or continue-on-error that runs past a failure.
+    for (const condition of ["${{ always() }}", "${{ !cancelled() }}", "failure() || success()"]) {
+      expect(edited("    environment: npm\n", `    if: ${condition}\n    environment: npm\n`)).toEqual([`publish has if: ${condition}`]);
+    }
+    expect(edited("      - name: Publish to npm\n", "      - name: Publish to npm\n        if: always()\n")).toEqual(["publish has if: always()"]);
+    expect(edited("        run: node scripts/publish-gate.js verify\n", "        continue-on-error: true\n        run: node scripts/publish-gate.js verify\n")).toEqual([
+      "verify has continue-on-error: true"
+    ]);
+    // publish must reach both gate jobs, directly or through the jobs it needs.
+    expect(edited("    needs: [verify, ci, release-assets]\n", "    needs: [verify, binaries]\n")).toEqual(["publish does not need ci"]);
+    expect(edited("    needs: [verify, ci, release-assets]\n", "    needs: [release-assets]\n")).toEqual([]);
+    expect(edited("    needs: [verify, ci, release-assets]\n", "")).toEqual([
+      "publish does not need verify",
+      "publish does not need ci"
+    ]);
+    // A package publish in any other job, however it is written.
+    const sneak = (command) => edited("      - name: Keep the checksums for the tap\n", `      - name: Ship it\n        run: ${command}\n\n      - name: Keep the checksums for the tap\n`);
+    for (const command of ["npm publish", "npm publish --provenance --access public", "npm  publish --tag next", "cd dist && npm publish", "pnpm publish", "bun publish"]) {
+      expect(sneak(command), command).toEqual(["release-assets runs a package publish"]);
+    }
+    expect(edited("          npm publish\n", "          npm publish --provenance --access public\n")).toEqual([]);
+    expect(edited("          npm publish\n", "          echo done\n")).toEqual(["publish does not run npm publish"]);
+    // A checkout of anything but the verified commit after verify.
+    expect(edited("          ref: ${{ needs.verify.outputs.sha }}\n", "          ref: refs/tags/${{ env.TAG }}\n")).toEqual([
+      "binaries checks out refs/tags/${{ env.TAG }}, not the verified commit"
+    ]);
+    expect(edited("          ref: ${{ needs.verify.outputs.sha }}\n", "")).toEqual(["binaries checks out the run's ref, not the verified commit"]);
+    expect(edited("          fetch-depth: 0\n", "          fetch-depth: 0\n          ref: ${{ inputs.tag }}\n")).toEqual([
+      "verify checks out ${{ inputs.tag }}, not the workflow's own commit"
+    ]);
+  });
+
+  test("release-assets attaches nothing once the tag has moved (#544)", () => {
+    const jobs = workflowJobs(readRepo(".github/workflows/publish.yml"));
+    expect(jobs["release-assets"]).toContain("RELEASE_SHA: ${{ needs.verify.outputs.sha }}");
+    const match = /- name: Attach the binaries and skill zips to the GitHub release\n(?:.*\n)*? {8}run: \|\n((?: {10}.*\n)+)/.exec(jobs["release-assets"]);
+    const script = match[1].replace(/^ {10}/gm, "");
+    // Runs the step with a fake gh that logs its calls and names `tagged` as
+    // the tag's commit, or fails the lookup when tagged is empty.
+    const attach = (tagged) => {
+      const bin = makeTempDir("fake-gh-");
+      const log = path.join(bin, "gh.log");
+      fs.writeFileSync(
+        path.join(bin, "gh"),
+        `#!/bin/sh\nprintf '%s\\n' "$*" >> "${log}"\ncase "$1" in\n  api) [ -n "$TAGGED" ] || exit 1; printf '%s\\n' "$TAGGED" ;;\nesac\n`,
+        { mode: 0o755 }
+      );
+      const result = spawnSync("bash", ["--noprofile", "--norc", "-eo", "pipefail", "-c", script], {
+        encoding: "utf8",
+        env: { PATH: `${bin}${path.delimiter}${process.env.PATH}`, TAG: "v1.2.3", RELEASE_SHA: "a".repeat(40), GITHUB_REPOSITORY: "danjdewhurst/story-skills", TAGGED: tagged }
+      });
+      return { status: result.status, out: result.stdout, calls: fs.readFileSync(log, "utf8").trim().split("\n") };
+    };
+    const same = attach("a".repeat(40));
+    expect(same.status).toBe(0);
+    expect(same.calls).toEqual([
+      "release view v1.2.3 --repo danjdewhurst/story-skills",
+      "api repos/danjdewhurst/story-skills/commits/refs/tags/v1.2.3 --jq .sha",
+      "release upload v1.2.3 dist/binaries/* --repo danjdewhurst/story-skills --clobber"
+    ]);
+    const moved = attach("b".repeat(40));
+    expect(moved.status).toBe(1);
+    expect(moved.out).toContain(`::error::Tag v1.2.3 now points at ${"b".repeat(40)}, not ${"a".repeat(40)}, the commit this run built and checked. Nothing was attached.`);
+    expect(moved.calls.some((call) => call.startsWith("release upload"))).toBe(false);
+    const unreadable = attach("");
+    expect(unreadable.status).not.toBe(0);
+    expect(unreadable.calls.some((call) => call.startsWith("release upload"))).toBe(false);
+  });
+
+  test("the gate's CI lookup matches ci.yml, whose main runs never cancel each other (#544)", () => {
     // publish-gate.js asks for ci.yml's push runs on main by file name.
     expect(readRepo("scripts/publish-gate.js")).toContain('const CI_WORKFLOW = "ci.yml";');
     const ci = readRepo(".github/workflows/ci.yml");
     expect(ci).toMatch(/^on:\n {2}push:\n {4}branches: \[main\]\n/m);
+    // Pull requests share a group per ref and cancel; each push gets its own
+    // group, so a later push neither cancels a main run nor leaves it pending.
+    expect(ci).toContain("concurrency:\n  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}\n");
+    expect(ci).toContain("  cancel-in-progress: ${{ github.event_name == 'pull_request' }}\n");
   });
 
   test("ci runs the release-gate checks and the Node fallback", () => {

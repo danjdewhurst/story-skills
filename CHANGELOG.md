@@ -14,7 +14,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ### Security
 
-- npm releases now come only from a commit on `main` whose CI run passed. The Publish workflow checks that the `vX.Y.Z` tag names the `package.json` version at a commit on `main`, waits for that commit's CI run, and publishes from the protected `npm` environment once the binaries and release assets are done. A manual run must be dispatched on `main` or on the tag. ([#544](https://github.com/danjdewhurst/story-skills/issues/544))
+- The Publish workflow publishes a tag to npm only if it is on the release commit of its `package.json` version on `main`, and only after that commit's CI run on `main` has passed. npm now goes after the binaries and release assets, from a job in the `npm` environment, and a manual run must be dispatched on `main` or on the tag. A later push to `main` no longer cancels the CI run of the commit before it. ([#544](https://github.com/danjdewhurst/story-skills/issues/544))
 
 ## [0.22.1] - 2026-10-06
 

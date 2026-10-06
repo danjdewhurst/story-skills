@@ -36,8 +36,17 @@ confirmed issues before disclosing them.
 npm releases are published with
 [npm provenance](https://docs.npmjs.com/generating-provenance-statements),
 shown on the package page and checked by `npm audit signatures`.
-They are published only from a release tag on a commit on `main`
-whose CI run passed, by a job in the protected `npm` environment.
+
+Only repository admins can create `v*` release tags, and nobody can
+move or delete one. A tag push, or a manual run on `main`, publishes
+to npm only the release commit of a version on `main`, only after
+that commit's CI run has passed, and only from a job in the `npm`
+environment, which admits only `v*` tags and `main`. These checks live
+in the workflow file, so a run dispatched on another branch uses that
+branch's copy. Until the npm trusted publisher is bound to the `npm`
+environment, a maintainer step still to be taken, someone with write
+access could publish from an edited workflow on a branch. See
+[What the release checks guarantee](docs/development.md#what-the-release-checks-guarantee).
 
 The standalone binaries and their `story-skills_<version>_checksums.txt`
 carry a signed build provenance attestation from releases after 0.21.0.

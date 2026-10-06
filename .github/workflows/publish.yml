@@ -2,10 +2,10 @@ name: Publish
 
 # `bun run release` pushes main and a vX.Y.Z tag together, and this workflow
 # publishes that version. First the gate (scripts/publish-gate.js): `verify`
-# checks that the tag names package.json's version at a commit on main, and
-# `ci` waits for the CI run on main for that commit to pass. Every later job
-# checks out the commit `verify` checked, not the tag, so a moved tag cannot
-# swap it.
+# checks that the tag is on the release commit of package.json's version on
+# main, and `ci` waits for the CI run on main for that commit to pass. Every
+# later job checks out the commit `verify` checked, not the tag, so a moved
+# tag cannot swap it.
 #
 # Behind the gate it builds the standalone `story` binaries, each on its own
 # OS so it can be smoke-tested there (and so macOS builds are signed as they
@@ -22,7 +22,10 @@ name: Publish
 # A manual run re-publishes an existing tag. Dispatch it on the tag, which
 # keeps the attestations (`gh workflow run publish.yml --ref vX.Y.Z -f
 # tag=vX.Y.Z`), or on main. The gate refuses any other ref, and the `npm`
-# environment admits only v* tags and main.
+# environment admits only v* tags and main. A run uses the copy of this file
+# at the ref it runs on, so the gate binds runs on main and on release tags,
+# which tag rulesets let only admins create and nobody move or delete. See
+# "What the release checks guarantee" in docs/development.md for the rest.
 on:
   push:
     tags: ["v*"]
@@ -231,13 +234,21 @@ jobs:
           subject-path: dist/binaries/*
 
       # `bun run release` creates the GitHub release right after pushing the
-      # tag, so give it a few minutes to appear.
+      # tag, so give it a few minutes to appear. The release is found by its
+      # tag, so check just before the upload that the tag still names the
+      # commit this run built; a failed lookup fails the step.
       - name: Attach the binaries and skill zips to the GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SHA: ${{ needs.verify.outputs.sha }}
         run: |
           for attempt in $(seq 1 30); do
             if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+              tagged="$(gh api "repos/$GITHUB_REPOSITORY/commits/refs/tags/$TAG" --jq .sha)"
+              if [ "$tagged" != "$RELEASE_SHA" ]; then
+                echo "::error::Tag $TAG now points at $tagged, not $RELEASE_SHA, the commit this run built and checked. Nothing was attached."
+                exit 1
+              fi
               gh release upload "$TAG" dist/binaries/* --repo "$GITHUB_REPOSITORY" --clobber
               exit 0
             fi
@@ -255,9 +266,13 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
-  # The only job that can publish to npm. The npm environment admits only v*
-  # tags and main, and it runs only after the gate, the binaries, and the
-  # release assets have all passed.
+  # The npm job: the only one that publishes a package, and the only one in
+  # the npm environment, which admits only v* tags and main. It runs after
+  # the gate, the binaries, and the release assets have all passed.
+  # release-assets also gets an OIDC token, to sign attestations, and until
+  # the trusted publisher on npmjs.com names the npm environment, npm would
+  # accept that token too; test/check-scripts.test.js fails if any other job
+  # publishes a package.
   publish:
     name: Publish to npm
     needs: [verify, ci, release-assets]
