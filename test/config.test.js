@@ -272,11 +272,22 @@ describe("cli-defaults", () => {
     expect(invoke(cwd, ["prose", root, "--max-adverbs", "1"]).err).toContain("adverbs per 1,000 narration words (over 1)");
   });
 
-  test("boolean defaults take true or false, and --flag false on the command line still wins", () => {
+  test("boolean defaults take true or false, and --flag=false on the command line still wins", () => {
     const { root, cwd } = project();
     configure(root, "cli-defaults:\n  - command: report\n    actionable: yes");
     expect(invoke(cwd, ["report", root]).out).toContain("Next Actions");
-    expect(invoke(cwd, ["report", root, "--actionable", "false"]).out).not.toContain("Next Actions");
+    const off = invoke(cwd, ["report", root, "--actionable=false"]);
+    expect(off.code).toBe(0);
+    expect(off.out).toContain("# ");
+    expect(off.out).not.toContain("Next Actions");
+  });
+
+  test("an error names a false boolean default as --flag=false", () => {
+    const { root, cwd } = project();
+    configure(root, "cli-defaults:\n  - command: build\n    pdf: false");
+    const result = invoke(cwd, ["build", root, "--pdf-engine", "chrome"]);
+    expect(result.code).toBe(2);
+    expect(result.err).toBe("--pdf-engine applies only with --pdf (story.md cli-defaults set --pdf=false)\n");
   });
 
   test("an alias on the command line overrides a default set through the other name", () => {

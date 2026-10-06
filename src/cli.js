@@ -2,7 +2,7 @@ import path from "node:path";
 import { COMMANDS } from "./commands.js";
 import { NO_OVERRIDES, applyDefaults, findingOverrides, readCliConfig } from "./config.js";
 import { failureDiagnostic, writeJsonResult } from "./json.js";
-import { documentedOptions, formatOptionsHelp, isBooleanLiteralToken, isTruthy, parseArgs, suggestion, takesValue } from "./options.js";
+import { documentedOptions, formatOptionsHelp, isBooleanLiteralToken, isBooleanOption, isPathOption, isTruthy, parseArgs, suggestion, takesValue } from "./options.js";
 import { KIND_ALIASES } from "./scan.js";
 import { VERSION } from "./version.js";
 import { EXIT_CODES, exitCodeFor, projectError, usageError } from "./exit-codes.js";
@@ -192,7 +192,9 @@ function configuredHint(error, configured) {
 
 // The command word, read from the raw arguments so it is known even when
 // they fail to parse: the first argument that is neither an option nor an
-// option's value (`story --json validate` and `story --path x validate`).
+// option's value (`story --json validate` and `story --path x validate`). A
+// boolean word right after a flag is skipped too, as parseArgs refuses it,
+// so `story --json false validate` still reports that as JSON.
 function commandWord(argv) {
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -202,7 +204,8 @@ function commandWord(argv) {
     if (!arg.startsWith("-")) {
       return arg;
     }
-    if (arg.startsWith("--") && !arg.includes("=") && takesValue(arg.slice(2))) {
+    const name = arg.startsWith("--") && !arg.includes("=") ? arg.slice(2) : null;
+    if (name !== null && (takesValue(name) || (isBooleanOption(name) && isBooleanLiteralToken(argv[index + 1])))) {
       index += 1;
     }
   }
@@ -299,11 +302,15 @@ function kindUsageError(command, parsed) {
   return stray === undefined ? null : `--${stray} does not apply to story ${command.name} ${kind}: story help ${command.name} lists the options each kind reads`;
 }
 
-// An empty project path, such as `--path "$UNSET"`, would quietly mean the
-// current directory, so it is refused, as an empty --out is.
+// An empty path, such as `--path "$UNSET"` or `--dir "$UNSET"`, would quietly
+// mean the current directory, so it is refused, as an empty --out is.
 function emptyPathError(command, parsed) {
-  if (parsed.options.path !== undefined && String(lastOptionValue(parsed.options.path)).trim() === "") {
-    return "--path cannot be empty: give the project folder, or leave --path out to use the current directory";
+  for (const [key, value] of Object.entries(parsed.options)) {
+    if (isPathOption(key) && [].concat(value).some((item) => String(item).trim() === "")) {
+      return key === "path"
+        ? "--path cannot be empty: give the project folder, or leave --path out to use the current directory"
+        : `--${key} cannot be empty: give a path, or leave --${key} out`;
+    }
   }
   if (command.project === "positional" && parsed.positionals[1]?.trim() === "") {
     return "The project path cannot be empty: give the project folder, or leave it out to use the current directory";

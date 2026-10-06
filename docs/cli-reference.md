@@ -155,7 +155,7 @@ story validate the-last-ember --path the-salt-road
 Conflicting project paths: the-last-ember and --path the-salt-road. Use either a positional path or --path, not both.
 ```
 
-An empty path is a usage error rather than the current directory, so a script that runs `story reindex --path "$BOOK"` with `BOOK` unset changes nothing: `--path cannot be empty: give the project folder, or leave --path out to use the current directory`. An empty positional path is refused the same way.
+An empty path is a usage error rather than the current directory, so a script that runs `story reindex --path "$BOOK"` with `BOOK` unset changes nothing: `--path cannot be empty: give the project folder, or leave --path out to use the current directory`. An empty positional path is refused the same way, and so is an empty `--dir`, `--follows`, `--precedes`, or `--against` (`--dir cannot be empty: give a path, or leave --dir out`).
 
 `prose -` and `voices -` read a passage from stdin instead of the chapters. The `-` takes the place of the positional path, so give the project with `--path` or run from its directory (see [Reading from stdin](#reading-from-stdin)).
 
@@ -206,7 +206,7 @@ pandoc draft.docx -t markdown | story import - --title "The Lost Coast"
 - Options can appear anywhere after the command: `story build --format epub .` and `story build . --format epub` are the same.
 - Value options take the next argument (`--out book.md`) or an inline value (`--out=book.md`). Use the inline form when the value itself starts with `--` or is `-h` or `-v`, which would otherwise be read as an option.
 - Positional arguments may start with a single dash, so `story add term "-ism"` works. A lone `--` ends the options: everything after it is positional, so `story init -- --Untitled` creates a story titled `--Untitled`. Put any options before the `--`.
-- Boolean flags (`--force`, `--write`, `--log`, `--shunn`, `--init`, `--actionable`, `--json`, `--dry-run`, `--sequel`, `--significance-delayed`, `--red-herring`, `--heading`) are true when present. They take a value only in the inline form: `true`, `false`, `yes`, `no`, `on`, `off`, `1`, or `0`. So `--write=false` turns writing off, while `--write=maybe` is an error. The word after a flag is never its value, so `story add chapter --dry-run No Way Back` previews a chapter titled `No Way Back` and writes nothing. A bare `true` or `false` there is refused rather than read as an argument (`--heading false is ambiguous: write --heading=false to set the flag, or put false after -- to keep it as an argument`).
+- Boolean flags (`--force`, `--write`, `--log`, `--shunn`, `--init`, `--actionable`, `--json`, `--dry-run`, `--sequel`, `--significance-delayed`, `--red-herring`, `--heading`) are true when present. They take a value only in the inline form: `true`, `false`, `yes`, `no`, `on`, `off`, `1`, or `0`, in any case. So `--write=false` turns writing off, while `--write=maybe` is an error. The word after a flag is never its value, and one of those boolean words there, in any case, is refused (exit 2) rather than read as an argument, since either reading could turn a dry run into a write. So `story add chapter --dry-run No Way Back` writes nothing and says `--dry-run No is ambiguous: write --dry-run=false to turn the flag off, or put --dry-run after No, or No after --, to keep No as an argument`; `story add chapter No Way Back --dry-run` and `story add chapter --dry-run -- No Way Back` preview the chapter.
 - Repeatable options collect every value. Only the plural list forms (`--characters`, `--locations`, `--mentions`, `--members`, `--arcs`, `--aliases`, `--themes`, and `--acts`) split on commas, so `--character ilse-marrow --character tobin-reyes` and `--characters ilse-marrow,tobin-reyes` produce the same list. A singular flag keeps each value whole, so `--alias "Rite of Ash, the"` is one alias. `--sources`, `--follows`, and `--precedes` keep each value whole too.
 - A singular flag and its plural alias combine, so `add chapter --character ivo-pell --characters mara-quill` lists both; `add` also drops repeated values from a list. `add character --arc` is single-valued and has no plural alias.
 - For options that are not repeatable, the last value wins: `--out a.md --out b.md` writes `b.md`.
@@ -2267,7 +2267,7 @@ Created character li-ming: ~/stories/the-salt-road/characters/li-ming.md
 story add <kind> <name> [options] [--dry-run] [--json] [--path <project>]
 ```
 
-Creates an entity file with starter frontmatter and body sections, then reindexes. It refuses to overwrite an existing file, and refuses an id that Windows reserves as a file name (`con`, `prn`, `aux`, `nul`, `com1` to `com9`, `lpt1` to `lpt9`): `Cannot use character id con: Windows reserves the file name con.md. Choose a longer name, such as "con character"`. Each kind accepts only its own options (see the table below) plus `--id`, `--dry-run`, `--json`, and `--path`, and `story help add` lists them. An option that only another kind reads is an error, as is one no kind reads:
+Creates an entity file with starter frontmatter and body sections, then reindexes. It refuses to overwrite an existing file, and refuses an id that Windows reserves as a file name (`con`, `prn`, `aux`, `nul`, `com1` to `com9`, `lpt1` to `lpt9`): `Cannot use character id con: Windows reserves the file name con.md. Choose a longer name, such as "con character"`. Each kind accepts only its own options (see the table below) plus `--dry-run`, `--json`, and `--path`, and `story help add` lists them. Every kind but `chapter` and `scene` also takes `--id`. An option that only another kind reads is an error, as is one no kind reads:
 
 ```text
 $ story add scene "Night Watch" --chapter chapter-01 --number 5
@@ -2287,14 +2287,14 @@ $ story add villain "Lord Maren"
 Unsupported entity kind: villain: expected one of character, location, system, faction, artifact, arc, chapter, scene, question, promise, clue, term, matter, research
 ```
 
-`--id` sets the id instead of deriving it from the name, which is how a name in a script with no transliteration table gets a file (see [Entity kinds](#entity-kinds)). The value must already be kebab-case, so `add` never quietly rewrites it, and it is refused for chapters and scenes, whose ids come from their numbers:
+`--id` sets the id instead of deriving it from the name, which is how a name in a script with no transliteration table gets a file (see [Entity kinds](#entity-kinds)). The value must already be kebab-case, so `add` never quietly rewrites it, and it is refused for chapters and scenes, whose ids come from their numbers (`--number` for a chapter, `--chapter` and `--scene` for a scene):
 
 ```text
 $ story add character "Пётр" --id Petr
 character id must be a kebab-case id, got "Petr"
 
 $ story add chapter "Low Tide" --id opening
---id does not apply to a chapter: a chapter id comes from its number. Use --number for a chapter, or --chapter and --scene for a scene
+--id does not apply to story add chapter: story help add lists the options each kind reads
 ```
 
 An `--id` that names an existing entity is refused the same way a derived one is (`characters/petr.md already exists`). So is an id that a kind sharing a reference field already uses, since those references could no longer tell the two apart: characters and factions share `owner` and `controlled-by`, and characters and artifacts share `mentions` (`raven is already a character id, and controlled-by and owner references could not tell the faction from the character. Choose another name, or pass --id`).
@@ -2382,7 +2382,7 @@ A status that says the chapter is on the page needs it written, as `story links`
 
 `add scene` also adds its `location` to the chapter's `locations` and each of its `characters` to the chapter's `characters`, unless the chapter already lists that character in `mentions`. Only ids that have an entity file are copied; an unknown id stays on the scene, where `story links` reports it.
 
-Location and system `--type`, location `--status`, and system `--prevalence` are free text; an empty `--type` is refused. `--date` must be a real `YYYY-MM-DD` day, or a day of the book's [custom calendar](project-format.md#custom-calendars) when `story.md` has one; `--time` is `HH:MM` or one of `dawn`, `morning`, `midday`, `afternoon`, `evening`, `night`; `--travel-hours` is a number zero or above; `--number` and `--scene` are positive integers; `--order` is a non-negative integer. Fields that hold one id refuse a repeated flag or a comma list: `--location` on `add artifact` and `add scene`, `--chapter` and `--pov` on `add scene`, `--owner`, `--controlled-by`, `--planted`, `--payoff`, `--introduced`, and `--resolved` (`--location takes one id for a scene, got port-kestrel, salt-market`). Repeating `--arc` on `add character` writes a list that `story validate` rejects. Other single-value flags keep the last value given.
+Location and system `--type`, location `--status`, and system `--prevalence` are free text; an empty `--type` is refused. `--date` must be a real `YYYY-MM-DD` day, or a day of the book's [custom calendar](project-format.md#custom-calendars) when `story.md` has one; `--time` is `HH:MM` or one of `dawn`, `morning`, `midday`, `afternoon`, `evening`, `night`; `--travel-hours` is a number zero or above; `--number` and `--scene` are positive integers; `--order` is a non-negative integer. Fields that hold one id refuse a repeated flag: `--location` on `add artifact` and `add scene`, `--chapter` and `--pov` on `add scene`, `--owner`, `--controlled-by`, `--planted`, `--payoff`, `--introduced`, and `--resolved` (`--location takes one id for a scene, got port-kestrel, salt-market`). A singular flag keeps a comma, so a comma list in any singular id flag is refused as not an id (`--location "port-kestrel,salt-market" must be a kebab-case id (such as port-kestrel)`), and one in `--risk` as an unsupported risk. Repeating `--arc` on `add character` writes a list that `story validate` rejects. Other single-value flags keep the last value given.
 
 `--source` and `--sources` keep each value whole, because citations contain commas. Repeat the flag for more sources. The other plural list options split on commas.
 

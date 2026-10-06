@@ -6,13 +6,21 @@ import path from "node:path";
 import { isTruthy, parseArgs, runCli } from "../src/cli.js";
 import { COMMANDS } from "../src/commands.js";
 import { parseFrontmatter } from "../src/frontmatter.js";
-import { KIND_ALIASES } from "../src/scan.js";
+import { KIND_ALIASES, buildEntity, scanProject } from "../src/scan.js";
 import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
   const code = runCli(argv, io);
   return { code, out: io.output(), err: io.error() };
+}
+
+// Every file under root with its text, to show a command changed nothing.
+function snapshotFiles(root) {
+  return Object.fromEntries(fs.readdirSync(root, { recursive: true })
+    .filter((file) => fs.statSync(path.join(root, file)).isFile())
+    .sort()
+    .map((file) => [file, fs.readFileSync(path.join(root, file), "utf8")]));
 }
 
 function addMinimalChapter(root) {
@@ -128,44 +136,64 @@ describe("cli", () => {
   });
 
   test("a boolean flag takes a value only as --flag=value, never the next word (#549)", () => {
-    expect(parseArgs(["add", "chapter", "--dry-run", "No", "Way", "Back"])).toEqual({
+    expect(parseArgs(["init", "--force", "Alpha", "Beta"])).toEqual({
+      positionals: ["init", "Alpha", "Beta"],
+      options: { force: true }
+    });
+    // A boolean word after a bare flag, in any case, is refused rather than
+    // read as the flag's value or as a title word.
+    expect(() => parseArgs(["add", "chapter", "--dry-run", "No", "Way", "Back"])).toThrow("--dry-run No is ambiguous: write --dry-run=false to turn the flag off, or put --dry-run after No, or No after --, to keep No as an argument");
+    expect(() => parseArgs(["init", "A", "--force", "true"])).toThrow("--force true is ambiguous: write --force=true to turn the flag on");
+    for (const word of ["true", "false", "yes", "no", "on", "off", "1", "0", "True", "FALSE", "On", "NO"]) {
+      expect(() => parseArgs(["init", "--force", word])).toThrow(`--force ${word} is ambiguous`);
+    }
+    expect(parseArgs(["add", "chapter", "No", "Way", "Back", "--dry-run"])).toEqual({
       positionals: ["add", "chapter", "No", "Way", "Back"],
       options: { "dry-run": true }
     });
-    expect(parseArgs(["init", "--force", "On", "the", "Road"])).toEqual({
-      positionals: ["init", "On", "the", "Road"],
-      options: { force: true }
-    });
-    for (const word of ["yes", "no", "on", "off", "1", "0", "True", "FALSE"]) {
-      expect(parseArgs(["init", "--force", word]).positionals).toEqual(["init", word]);
-    }
-    // The old `--flag false` form is refused rather than read as a title word.
-    expect(() => parseArgs(["init", "A", "--force", "false"])).toThrow("--force false is ambiguous: write --force=false to set the flag, or put false after -- to keep it as an argument");
-    expect(() => parseArgs(["check", "--strict", "true"])).toThrow("--strict true is ambiguous: write --strict=true");
-    expect(parseArgs(["init", "--force", "--", "false", "start"])).toEqual({
-      positionals: ["init", "false", "start"],
-      options: { force: true }
+    expect(parseArgs(["add", "chapter", "--dry-run", "--", "No", "Way", "Back"])).toEqual({
+      positionals: ["add", "chapter", "No", "Way", "Back"],
+      options: { "dry-run": true }
     });
   });
 
-  test("a dry run with a title that starts with a boolean word writes nothing (#549)", () => {
+  test("a boolean word after a flag never turns into a write (#549)", () => {
     const cwd = makeTempDir();
     expect(invoke(cwd, ["init", "Tide"]).code).toBe(0);
     const root = path.join(cwd, "tide");
-    const preview = invoke(root, ["add", "chapter", "--dry-run", "No", "Way", "Back"]);
+    expect(invoke(root, ["add", "character", "Mara"]).code).toBe(0);
+    const before = snapshotFiles(root);
+    for (const argv of [
+      ["add", "chapter", "--dry-run", "No", "Way", "Back"],
+      ["add", "matter", "Dedication", "--heading", "no"],
+      ["add", "clue", "Key", "--red-herring", "False"],
+      ["add", "scene", "Arrival", "--sequel", "no"],
+      ["rename", "character", "mara", "Mara Vell", "--prose", "0"]
+    ]) {
+      const result = invoke(root, argv);
+      expect(result.code).toBe(2);
+      expect(result.err).toContain("is ambiguous: write --");
+    }
+    expect(snapshotFiles(root)).toEqual(before);
+    const preview = invoke(root, ["add", "chapter", "No", "Way", "Back", "--dry-run"]);
     expect(preview.code).toBe(0);
     expect(preview.out).toContain("create  chapters/chapter-01.md");
-    expect(fs.existsSync(path.join(root, "chapters", "chapter-01.md"))).toBe(false);
-    const refused = invoke(root, ["add", "matter", "Dedication", "--heading", "false"]);
-    expect(refused.code).toBe(2);
-    expect(refused.err).toContain("write --heading=false");
-    expect(fs.existsSync(path.join(root, "matter", "dedication-false.md"))).toBe(false);
-    expect(invoke(cwd, ["init", "--force", "On", "the", "Road"]).code).toBe(0);
+    expect(snapshotFiles(root)).toEqual(before);
+    // init --force with a boolean word refuses before it touches a folder.
+    fs.mkdirSync(path.join(cwd, "book"));
+    expect(invoke(cwd, ["init", "Book", "--dir", "book", "--force", "FALSE"]).code).toBe(2);
+    expect(fs.readdirSync(path.join(cwd, "book"))).toEqual([]);
+    expect(invoke(cwd, ["init", "On", "the", "Road", "--force"]).code).toBe(0);
     expect(fs.readFileSync(path.join(cwd, "on-the-road", "story.md"), "utf8")).toContain("title: On the Road");
-    // --json is on whatever follows it, so the refusal is a JSON envelope.
-    const json = invoke(root, ["validate", "--json", "false"]);
-    expect(json.code).toBe(2);
-    expect(JSON.parse(json.out).diagnostics[0].message).toContain("--json false is ambiguous");
+    // --json is on whatever follows it, so the refusal is a JSON envelope,
+    // also when the flag comes before the command.
+    for (const argv of [["validate", "--json", "false"], ["--json", "false", "validate"], ["--json", "No", "validate"]]) {
+      const json = invoke(root, argv);
+      expect(json.code).toBe(2);
+      expect(json.err).toBe("");
+      expect(JSON.parse(json.out)).toMatchObject({ command: "validate", ok: false });
+      expect(JSON.parse(json.out).diagnostics[0].message).toContain(`--json ${argv.includes("No") ? "No" : "false"} is ambiguous`);
+    }
   });
 
   test("isTruthy coerces strings, arrays, and misc values", () => {
@@ -323,22 +351,64 @@ describe("cli", () => {
     expect(invoke(root, ["add", "Characters", "Mira", "--hook", "cliffhanger"]).err).toContain("--hook does not apply to story add character:");
     expect(invoke(root, ["add", "artifact", "Key", "--locations", "port"]).err).toContain("--locations does not apply to story add artifact:");
     expect(fs.existsSync(path.join(root, "characters", "mira.md"))).toBe(false);
+    // A chapter or scene id comes from its number.
+    expect(invoke(root, ["add", "chapter", "Low Tide", "--id", "opening"]).err).toBe("--id does not apply to story add chapter: story help add lists the options each kind reads\n");
+    const json = invoke(root, ["add", "system", "Tithe", "--owner", "mara", "--json"]);
+    expect(json.code).toBe(2);
+    expect(JSON.parse(json.out)).toMatchObject({ command: "add", ok: false, diagnostics: [{ code: "usage-error", message: "--owner does not apply to story add system: story help add lists the options each kind reads" }] });
     // An unknown kind is reported as one, not as a stray option.
     expect(invoke(root, ["add", "villain", "Maren", "--hook", "cliffhanger"]).err).toContain("Unsupported entity kind: villain");
-    // --id, --dry-run, and --json apply to every kind.
-    expect(invoke(root, ["add", "term", "Ember Rite", "--id", "rite", "--dry-run"]).code).toBe(0);
+    // --dry-run applies to every kind, and --id to every kind but chapter and scene.
+    const add = COMMANDS.find((command) => command.name === "add");
+    for (const [kind, options] of Object.entries(add.kinds)) {
+      const result = invoke(root, ["add", kind, "Sample Thing", "--dry-run", ...(options.includes("id") ? ["--id", "sample-id"] : [])]);
+      expect({ kind, code: result.code, err: result.err }).toEqual({ kind, code: 0, err: "" });
+    }
+    expect(add.kinds.chapter.includes("id") || add.kinds.scene.includes("id")).toBe(false);
     expect(invoke(root, ["add", "scene", "Night Watch", "--chapter", "chapter-01", "--scene", "5"]).code).toBe(0);
     const help = invoke(root, ["help", "add"]).out;
-    expect(help).toContain("Options by kind (every kind also takes --path, --json, --dry-run, and --id):\n");
-    expect(help).toContain("\n  system      --type --prevalence\n");
+    expect(help).toContain("Options by kind (every kind also takes --path, --json, and --dry-run):\n");
+    expect(help).toContain("\n  system      --id --type --prevalence\n");
     expect(help).not.toContain("--characters");
   });
 
-  test("every add kind has its own option list", () => {
+  test("each add kind lists exactly the options its builder reads", () => {
+    // A value for every add option that differs from the builder's default.
+    const values = {
+      id: "custom-id", number: "7", chapter: "chapter-01", scene: "9", type: "zz-type", role: "zz-role", status: "zz-status",
+      mode: "discovered", date: "2026-01-02", time: "dawn", "travel-hours": "3", dilemma: "Stay or go", sequel: true,
+      outcome: "yes-but", hook: "cliffhanger", location: "port", locations: "port", character: "mara", characters: "mara",
+      mention: "ivo", mentions: "ivo", member: "mara", members: "mara", owner: "mara", arc: "long-road", arcs: "long-road",
+      introduced: "chapter-01", resolved: "chapter-01", planted: "chapter-01", payoff: "chapter-02", "significance-delayed": true,
+      "red-herring": true, category: "zz-category", alias: "Rite", aliases: "Rite", region: "North", population: "Few",
+      "controlled-by": "council", prevalence: "rare", acts: "I", act: "I", placement: "back", order: "5", heading: false,
+      source: "Book", sources: "Book", "used-in": "chapter-01", accuracy: "blended", confidence: "high", method: "fact",
+      risk: "legal", theme: "grief", themes: "grief", pov: "mara"
+    };
     const add = COMMANDS.find((command) => command.name === "add");
+    const named = add.options.filter((name) => name !== "dry-run" && name !== "json");
+    expect(Object.keys(values).sort()).toEqual([...named].sort());
     expect(Object.keys(add.kinds).sort()).toEqual([...new Set(Object.values(KIND_ALIASES))].sort());
-    for (const options of Object.values(add.kinds)) {
-      expect(options.every((name) => add.options.includes(name))).toBe(true);
+    const cwd = makeTempDir();
+    expect(invoke(cwd, ["init", "Builders"]).code).toBe(0);
+    const root = path.join(cwd, "builders");
+    expect(invoke(root, ["add", "chapter", "One"]).code).toBe(0);
+    expect(invoke(root, ["add", "chapter", "Two"]).code).toBe(0);
+    const project = scanProject(root);
+    const render = (kind, options) => {
+      const entity = buildEntity(project, kind, "Sample Name", options);
+      return `${entity.id}\n${entity.markdown}`;
+    };
+    for (const [kind, listed] of Object.entries(add.kinds)) {
+      const base = render(kind, {});
+      for (const name of named) {
+        if ((kind === "chapter" || kind === "scene") && name === "id") {
+          expect(() => render(kind, { id: values.id })).toThrow(`--id does not apply to a ${kind}`);
+          continue;
+        }
+        const reads = render(kind, { [name]: values[name] }) !== base;
+        expect({ kind, name, reads }).toEqual({ kind, name, reads: listed.includes(name) });
+      }
     }
   });
 
@@ -352,10 +422,25 @@ describe("cli", () => {
     expect(frontmatter("glossary", "terms", "ember-rite.md").aliases).toEqual(["Ash Rite", "Burning", "Rite of Ash, the"]);
     expect(invoke(root, ["add", "arc", "Long Road", "--act", "Act I, the fall", "--acts", "II,III", "--theme", "Ash, salt"]).code).toBe(0);
     expect(frontmatter("plot", "arcs", "long-road.md")).toMatchObject({ acts: ["II", "III", "Act I, the fall"], themes: ["Ash, salt"] });
-    // A comma in a singular id flag is not an id, so it is refused.
-    const ids = invoke(root, ["add", "chapter", "One", "--character", "mara,ivo"]);
-    expect(ids.code).toBe(2);
-    expect(ids.err).toContain('--character "mara,ivo" must be a kebab-case id');
+    expect(invoke(root, ["add", "chapter", "One", "--locations", "port,dock", "--mentions", "ivo,sal", "--arcs", "tide,salt", "--characters", "mara,ivo"]).code).toBe(0);
+    expect(frontmatter("chapters", "chapter-01.md")).toMatchObject({ locations: ["port", "dock"], mentions: ["ivo", "sal"], "arcs-advanced": ["tide", "salt"], characters: ["mara", "ivo"] });
+    expect(invoke(root, ["add", "faction", "Guild", "--members", "mara,ivo"]).code).toBe(0);
+    expect(frontmatter("worldbuilding", "factions", "guild.md").members).toEqual(["mara", "ivo"]);
+    // A comma in a singular id flag is not an id, and one in --risk is not a
+    // risk, so both are refused.
+    for (const [argv, message] of [
+      [["add", "chapter", "Two", "--character", "mara,ivo"], '--character "mara,ivo" must be a kebab-case id'],
+      [["add", "chapter", "Two", "--mention", "ivo,sal"], '--mention "ivo,sal" must be a kebab-case id'],
+      [["add", "chapter", "Two", "--arc", "tide,salt"], '--arc "tide,salt" must be a kebab-case id'],
+      [["add", "faction", "Crew", "--member", "mara,ivo"], '--member "mara,ivo" must be a kebab-case id'],
+      [["add", "research", "Tides", "--used-in", "chapter-01,chapter-02"], '--used-in "chapter-01,chapter-02" must be a kebab-case id'],
+      [["add", "research", "Tides", "--risk", "legal,medical"], 'Unsupported risk "legal,medical"']
+    ]) {
+      const result = invoke(root, argv);
+      expect(result.code).toBe(2);
+      expect(result.err).toContain(message);
+    }
+    expect(fs.existsSync(path.join(root, "chapters", "chapter-02.md"))).toBe(false);
   });
 
   test("an empty --path or project path is refused, as an empty --out is (#576)", () => {
@@ -368,9 +453,24 @@ describe("cli", () => {
       expect(result.err).toBe("--path cannot be empty: give the project folder, or leave --path out to use the current directory\n");
     }
     expect(fs.existsSync(path.join(root, "characters", "mira.md"))).toBe(false);
-    const positional = invoke(root, ["validate", ""]);
-    expect(positional.code).toBe(2);
-    expect(positional.err).toBe("The project path cannot be empty: give the project folder, or leave it out to use the current directory\n");
+    for (const argv of [["validate", ""], ["validate", " "]]) {
+      const positional = invoke(root, argv);
+      expect(positional.code).toBe(2);
+      expect(positional.err).toBe("The project path cannot be empty: give the project folder, or leave it out to use the current directory\n");
+    }
+    // --dir, --follows, --precedes, and --against are paths too.
+    const before = snapshotFiles(root);
+    for (const [argv, flag] of [
+      [["import", "ms.md", "--title", "T", "--dir", "", "--force"], "dir"],
+      [["init", "Sequel", "--follows", ".", "--follows", ""], "follows"],
+      [["init", "Prequel", "--precedes", " "], "precedes"],
+      [["compare", "--against="], "against"]
+    ]) {
+      const result = invoke(root, argv);
+      expect(result.code).toBe(2);
+      expect(result.err).toBe(`--${flag} cannot be empty: give a path, or leave --${flag} out\n`);
+    }
+    expect(snapshotFiles(root)).toEqual(before);
     const json = invoke(root, ["check", "", "--json"]);
     expect(json.code).toBe(2);
     expect(JSON.parse(json.out).diagnostics[0].message).toContain("The project path cannot be empty");
