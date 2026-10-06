@@ -15137,6 +15137,68 @@ function formatPacing(pacing) {
 import fs7 from "node:fs";
 import path11 from "node:path";
 
+// src/frontmatter-keys.js
+var FRONTMATTER_KEYS = {
+  story: ["title", "schema-version", "series", "series-title", "book-number", "follows", "precedes", "genre", "sub-genre", "setting-era", "status", "themes", "pov", "tense", "premise", "counter-premise", "author", "contact", "season-goal", "target-words", "target-characters", "count-unit", "language", "isbn", "publisher", "publication-date", "description", "keywords", "subjects", "copyright", "ifid", "cover-alt", "ai-disclosure", "chapter-label", "writing-mode", "chapter-numerals", "contents-label", "labels", "authors", "form", "draft-mode", "cover", "deadline", "revision-passes", "cli-defaults", "severity"],
+  character: ["pronunciation", "id", "name", "role", "status", "died-in", "revived-in", "aliases", "relationships", "locations", "tags", "arc", "arc-type", "lie", "truth", "ghost-wound", "voice-words", "voice-avoid", "progressions"],
+  location: ["pronunciation", "id", "name", "type", "region", "population", "controlled-by", "notable-characters", "tags", "status", "setting", "routes", "progressions"],
+  system: ["id", "name", "type", "prevalence", "pronunciation"],
+  faction: ["pronunciation", "id", "name", "type", "status", "members", "locations", "tags", "progressions"],
+  artifact: ["pronunciation", "id", "name", "type", "status", "owner", "location", "tags"],
+  arc: ["id", "name", "type", "status", "characters", "themes", "acts", "mice-threads"],
+  chapter: ["id", "title", "number", "numbered", "status", "pov", "word-count", "target-words", "character-count", "target-characters", "arcs-advanced", "characters", "mentions", "locations", "mode", "date", "time", "strand", "episode-question", "hook", "time-skip", "choices"],
+  scene: ["id", "title", "chapter", "scene", "status", "pov", "location", "characters", "mentions", "arcs-advanced", "state-changes", "date", "time", "travel-hours", "sequel", "outcome", "dilemma", "flashback-to", "setting"],
+  question: ["id", "title", "status", "introduced", "resolved", "characters"],
+  promise: ["id", "title", "status", "planted", "payoff", "arcs", "characters"],
+  clue: ["id", "title", "status", "planted", "payoff", "significance-delayed", "red-herring", "arcs", "characters"],
+  term: ["pronunciation", "id", "term", "category", "aliases"],
+  research: ["id", "title", "status", "sources", "used-in", "accuracy", "confidence", "method", "risk", "reviewed-by"],
+  matter: ["id", "title", "placement", "order", "heading", "permission", "rights-holder", "credit"],
+  characterState: ["character", "location", "physical", "emotional", "knowledge"],
+  objectState: ["artifact", "owner", "location", "status", "since"],
+  knowledgeState: ["character", "knows", "fact", "learned-in"]
+};
+var EVERY_KEY = new Set(Object.values(FRONTMATTER_KEYS).flat());
+var PREFIX_KEYS = new Set(["since", "learned-in", "died-in"]);
+function nearMissKey(key, known) {
+  if (known.includes(key) || EVERY_KEY.has(key)) {
+    return;
+  }
+  const normalized = key.trim().toLowerCase().replace(/[\s_]+/g, "-");
+  const squashed = normalized.replace(/-/g, "");
+  const exact = known.find((candidate) => normalized === candidate || squashed === candidate.replace(/-/g, "") || PREFIX_KEYS.has(candidate) && normalized.startsWith(`${candidate}-`));
+  if (exact !== undefined || EVERY_KEY.has(normalized) || normalized.length < 4) {
+    return exact;
+  }
+  let best;
+  let bestDistance = Infinity;
+  for (const candidate of known) {
+    const limit = candidate.length >= 6 ? 2 : candidate.length >= 4 ? 1 : 0;
+    const distance = limit === 0 ? Infinity : typoDistance(normalized, candidate);
+    if (distance <= limit && distance < bestDistance) {
+      best = candidate;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+function typoDistance(a, b) {
+  const rows = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1;j <= b.length; j += 1) {
+    rows[0][j] = j;
+  }
+  for (let i = 1;i <= a.length; i += 1) {
+    for (let j = 1;j <= b.length; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      rows[i][j] = Math.min(rows[i - 1][j] + 1, rows[i][j - 1] + 1, rows[i - 1][j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        rows[i][j] = Math.min(rows[i][j], rows[i - 2][j - 2] + 1);
+      }
+    }
+  }
+  return rows[a.length][b.length];
+}
+
 // src/fountain.js
 var SCENE_SETTINGS = new Map([
   ["interior", "INT."],
@@ -15292,22 +15354,22 @@ function validateProjectOf(project) {
   for (const scanError of project.fileErrors ?? []) {
     errors.push(scanError);
   }
-  validateStoryFrontmatter(project, errors);
+  validateStoryFrontmatter(project, errors, warnings);
   validateIndexFrontmatter(project, errors);
   validateCharacters(project, errors, warnings);
   validateLocations(project, errors, warnings);
-  validateSystems(project, errors);
-  validateFactions(project, errors);
-  validateArtifacts(project, errors);
-  validateArcs(project, errors);
+  validateSystems(project, errors, warnings);
+  validateFactions(project, errors, warnings);
+  validateArtifacts(project, errors, warnings);
+  validateArcs(project, errors, warnings);
   validateChapters(project, errors, warnings);
-  validateScenes(project, errors);
+  validateScenes(project, errors, warnings);
   validateContinuityState(project, errors, warnings);
-  validateQuestions(project, errors);
-  validatePromises(project, errors);
-  validateClues(project, errors);
+  validateQuestions(project, errors, warnings);
+  validatePromises(project, errors, warnings);
+  validateClues(project, errors, warnings);
   validateExemptions(project, errors, warnings);
-  validateGlossaryTerms(project, errors);
+  validateGlossaryTerms(project, errors, warnings);
   validateStyleSheet(project, errors, warnings);
   validateMatter(project, errors, warnings);
   validateResearch(project, errors, warnings);
@@ -15792,6 +15854,13 @@ function readValidationData(file, root, label, errors) {
     return null;
   }
 }
+function readEntityData(file, root, label, errors, warnings, kind) {
+  const data = readValidationData(file, root, label, errors);
+  if (data) {
+    warnNearMissKeys(data, FRONTMATTER_KEYS[kind], label, warnings);
+  }
+  return data;
+}
 function hasMessage(findings, message) {
   return findings.some((finding) => finding.message === message);
 }
@@ -15949,11 +16018,12 @@ function validateTextFields(project, errors) {
     }
   }
 }
-function validateStoryFrontmatter(project, errors) {
+function validateStoryFrontmatter(project, errors, warnings) {
   if (project.story.unreadable) {
     return;
   }
   const data = project.story.data;
+  warnNearMissKeys(data, FRONTMATTER_KEYS.story, "story.md", warnings);
   requireFields(data, ["title", "schema-version", "genre", "status", "themes", "pov", "tense"], "story.md", errors);
   requireScalar(data, "title", "story.md", errors);
   requireScalar(data, "genre", "story.md", errors);
@@ -16103,7 +16173,7 @@ function validateCharacters(project, errors, warnings) {
   const chronology = chapterChronology(project);
   for (const character of project.characters) {
     const label = relative2(project, character.file);
-    const data = readValidationData(character.file, project.root, label, errors);
+    const data = readEntityData(character.file, project.root, label, errors, warnings, "character");
     if (!data) {
       continue;
     }
@@ -16130,7 +16200,6 @@ function validateCharacters(project, errors, warnings) {
     validateStringArray(data, "voice-words", label, errors);
     validateStringArray(data, "voice-avoid", label, errors);
     validateRelationships(data, label, errors);
-    warnNearMissKeys(data, ["died-in", "revived-in"], label, warnings);
     validateProgressions(data, label, PROGRESSION_RULES.character, chronology, errors);
     for (const [index, item] of asArray(data.progressions).entries()) {
       if (item && typeof item === "object" && item.field === "status" && item.value === "deceased" && idText(item.from) !== character.diedIn) {
@@ -16143,7 +16212,7 @@ function validateLocations(project, errors, warnings) {
   const chronology = chapterChronology(project);
   for (const location of project.locations) {
     const label = relative2(project, location.file);
-    const data = readValidationData(location.file, project.root, label, errors);
+    const data = readEntityData(location.file, project.root, label, errors, warnings, "location");
     if (!data) {
       continue;
     }
@@ -16180,10 +16249,10 @@ function validateLocations(project, errors, warnings) {
     validateProgressions(data, label, PROGRESSION_RULES.location, chronology, errors);
   }
 }
-function validateSystems(project, errors) {
+function validateSystems(project, errors, warnings) {
   for (const system of project.systems) {
     const label = relative2(project, system.file);
-    const data = readValidationData(system.file, project.root, label, errors);
+    const data = readEntityData(system.file, project.root, label, errors, warnings, "system");
     if (!data) {
       continue;
     }
@@ -16196,11 +16265,11 @@ function validateSystems(project, errors) {
     }
   }
 }
-function validateFactions(project, errors) {
+function validateFactions(project, errors, warnings) {
   const chronology = chapterChronology(project);
   for (const faction of project.factions) {
     const label = relative2(project, faction.file);
-    const data = readValidationData(faction.file, project.root, label, errors);
+    const data = readEntityData(faction.file, project.root, label, errors, warnings, "faction");
     if (!data) {
       continue;
     }
@@ -16217,10 +16286,10 @@ function validateFactions(project, errors) {
     validateProgressions(data, label, PROGRESSION_RULES.faction, chronology, errors);
   }
 }
-function validateArtifacts(project, errors) {
+function validateArtifacts(project, errors, warnings) {
   for (const artifact of project.artifacts) {
     const label = relative2(project, artifact.file);
-    const data = readValidationData(artifact.file, project.root, label, errors);
+    const data = readEntityData(artifact.file, project.root, label, errors, warnings, "artifact");
     if (!data) {
       continue;
     }
@@ -16236,10 +16305,10 @@ function validateArtifacts(project, errors) {
     validateStringArray(data, "tags", label, errors);
   }
 }
-function validateArcs(project, errors) {
+function validateArcs(project, errors, warnings) {
   for (const arc of project.arcs) {
     const label = relative2(project, arc.file);
-    const data = readValidationData(arc.file, project.root, label, errors);
+    const data = readEntityData(arc.file, project.root, label, errors, warnings, "arc");
     if (!data) {
       continue;
     }
@@ -16260,7 +16329,7 @@ function validateChapters(project, errors, warnings) {
   const seenNumbers = new Map;
   for (const chapter of project.chapters) {
     const label = relative2(project, chapter.file);
-    const data = readValidationData(chapter.file, project.root, label, errors);
+    const data = readEntityData(chapter.file, project.root, label, errors, warnings, "chapter");
     if (!data) {
       continue;
     }
@@ -16337,11 +16406,11 @@ function validateChapters(project, errors, warnings) {
     }
   }
 }
-function validateScenes(project, errors) {
+function validateScenes(project, errors, warnings) {
   const seenKeys = new Map;
   for (const scene of project.scenes) {
     const label = relative2(project, scene.file);
-    const data = readValidationData(scene.file, project.root, label, errors);
+    const data = readEntityData(scene.file, project.root, label, errors, warnings, "scene");
     if (!data) {
       continue;
     }
@@ -16410,9 +16479,9 @@ function validateScenes(project, errors) {
   }
 }
 var STATE_ENTRY_KEYS = {
-  "character-state": ["character", "location", "physical", "emotional", "knowledge"],
-  "object-state": ["artifact", "owner", "location", "status", "since"],
-  "knowledge-state": ["character", "knows", "learned-in", "fact"]
+  "character-state": FRONTMATTER_KEYS.characterState,
+  "object-state": FRONTMATTER_KEYS.objectState,
+  "knowledge-state": FRONTMATTER_KEYS.knowledgeState
 };
 function validateContinuityState(project, errors, warnings) {
   const label = path11.join("continuity", "state.md");
@@ -16450,10 +16519,10 @@ function validateContinuityState(project, errors, warnings) {
     errors.push(storyIdMismatch(label, project));
   }
 }
-function validateQuestions(project, errors) {
+function validateQuestions(project, errors, warnings) {
   for (const question of project.questions) {
     const label = relative2(project, question.file);
-    const data = readValidationData(question.file, project.root, label, errors);
+    const data = readEntityData(question.file, project.root, label, errors, warnings, "question");
     if (!data) {
       continue;
     }
@@ -16467,10 +16536,10 @@ function validateQuestions(project, errors) {
     validateStringArray(data, "characters", label, errors);
   }
 }
-function validatePromises(project, errors) {
+function validatePromises(project, errors, warnings) {
   for (const promise of project.promises) {
     const label = relative2(project, promise.file);
-    const data = readValidationData(promise.file, project.root, label, errors);
+    const data = readEntityData(promise.file, project.root, label, errors, warnings, "promise");
     if (!data) {
       continue;
     }
@@ -16485,10 +16554,10 @@ function validatePromises(project, errors) {
     validateStringArray(data, "characters", label, errors);
   }
 }
-function validateClues(project, errors) {
+function validateClues(project, errors, warnings) {
   for (const clue of project.clues) {
     const label = relative2(project, clue.file);
-    const data = readValidationData(clue.file, project.root, label, errors);
+    const data = readEntityData(clue.file, project.root, label, errors, warnings, "clue");
     if (!data) {
       continue;
     }
@@ -16546,10 +16615,10 @@ function validateExemptions(project, errors, warnings) {
     }
   }
 }
-function validateGlossaryTerms(project, errors) {
+function validateGlossaryTerms(project, errors, warnings) {
   for (const term of project.glossaryTerms) {
     const label = relative2(project, term.file);
-    const data = readValidationData(term.file, project.root, label, errors);
+    const data = readEntityData(term.file, project.root, label, errors, warnings, "term");
     if (!data) {
       continue;
     }
@@ -16679,7 +16748,7 @@ function validateResearch(project, errors, warnings) {
   const chapterStatus = new Map(project.chapters.map((chapter) => [chapter.id, chapter.status]));
   for (const note of project.research) {
     const label = relative2(project, note.file);
-    const data = readValidationData(note.file, project.root, label, errors);
+    const data = readEntityData(note.file, project.root, label, errors, warnings, "research");
     if (!data) {
       continue;
     }
@@ -16721,7 +16790,7 @@ function validateMatter(project, errors, warnings) {
     if (matter.empty) {
       warnings.push(warn("empty-matter", `${label} has no text and is left out of export and build`, label));
     }
-    const data = readValidationData(matter.file, project.root, label, errors);
+    const data = readEntityData(matter.file, project.root, label, errors, warnings, "matter");
     if (!data) {
       continue;
     }
@@ -16795,14 +16864,9 @@ function validateStringArray(data, field, label, errors) {
     }
   }
 }
-var PREFIX_KEYS = new Set(["since", "learned-in", "died-in"]);
 function warnNearMissKeys(data, keys, label, warnings, file = label) {
   for (const key of Object.keys(data)) {
-    if (keys.includes(key)) {
-      continue;
-    }
-    const normalized = key.trim().toLowerCase().replace(/[\s_]+/g, "-");
-    const intended = keys.find((known) => normalized === known || PREFIX_KEYS.has(known) && normalized.startsWith(`${known}-`) || normalized === known.replace(/-/g, ""));
+    const intended = nearMissKey(key, keys);
     if (intended !== undefined && !Object.hasOwn(data, intended)) {
       warnings.push(warn("near-miss-key", `${label} has ${key}; did you mean ${intended}?`, file));
     }

@@ -2384,7 +2384,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `field-below-minimum` | error | A number is below its minimum, such as chapter `number: 0`. |
 | `unsupported-value` | error | A field holds a value outside its allowed set. |
 | `id-not-kebab` | error | A file name, id, or id reference is not kebab-case. |
-| `near-miss-key` | warning | A key is a near miss for a known one, such as `died_in` for `died-in`. |
+| `near-miss-key` | warning | A frontmatter key is a near miss for one its file's kind defines, such as `died_in` for `died-in`, `arcs_advanced` for `arcs-advanced`, or `stauts` for `status`, so its value would be ignored. |
 | `wrong-type` | error | A registry or project file has the wrong `type`. |
 | `story-id-mismatch` | error | A registry's `story` does not match the project's story id. |
 | `entry-not-mapping` | error | A list entry that must be a mapping (an exemption, a progression, a state entry) is not. |

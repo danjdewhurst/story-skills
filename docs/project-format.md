@@ -227,6 +227,8 @@ An error names the file and the line, and shows how to write the value instead, 
 
 Fields the tools do not know are kept and ignored. The example character files carry an `age` field, for instance. Add your own fields freely, but stay within the syntax above.
 
+Because an unknown field is ignored, a misspelt one drops its data silently, so `story validate` warns (`near-miss-key`) about a field that looks like a misspelling of one the file's kind defines: a different case, `_` or a space for `-`, a dropped hyphen, or up to two typed-wrong letters in a longer name. On a chapter, `arcs_advanced` gives `chapters/chapter-03.md has arcs_advanced; did you mean arcs-advanced?` and `stauts` gives `did you mean status?`. It stays quiet when the intended field is also set, for fields shorter than four letters, for names far from every known field, and for a field another kind of file defines, such as `location` on a chapter.
+
 ### How the CLI rewrites frontmatter
 
 Several commands edit frontmatter in place: `story wordcount --write`, `story add` (for backlinks), `story rename`, `story move`, `story remove`, `story reindex` (for the `story` field), `story migrate`, `story progress --log` (which rewrites `progress.md`), `story passes` with `--init`, `--start`, or `--done` (which rewrites `revision-passes` in `story.md`), and `story init --follows` or `--precedes` (which adds the backlink to the linked book's `story.md`). They rewrite only the entries whose values changed:
